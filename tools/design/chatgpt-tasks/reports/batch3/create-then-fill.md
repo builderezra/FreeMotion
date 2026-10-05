@@ -1,0 +1,35 @@
+# Create-then-fill failure-path audit
+
+Snapshot: 28104a3e83e01ac3880db3fac604a7444c7235aa (main snapshot; branch chatgpt/create-then-fill).
+
+Method: I read creation/fill sequences in storage, Home, app, media-library and scene modules and searched REQUESTS.md plus audits/*.json. I did not execute the app, force quota errors, or crash it at await boundaries. Results are source analysis; failure triggers not reproduced are UNVERIFIED.
+
+## Excluded already-recorded issue
+
+The full-phone New Project failure is covered by #941. REQUESTS.md:33166 says “941 — The seventh real-input bug hunt (26 Sep) — 16 findings, all 16 confirmed by a skeptic and fixed.” Current create() checks its document write, projects-index write and open result, and removes the newly minted document on storage refusal (js/storage.js:2578–2599). I do not list that known defect again.
+
+## Remaining paths
+
+1. **Project-file import creates a blank card before applying the imported scene; apply failure has no rollback. Medium, failure UNVERIFIED.** importObject validates, calls projects.create(), then calls applyScene() (js/storage.js:1989–2000: “const pid = await FM.projects.create(...)” followed by “const ok = await FM.storage.applyScene(obj);”). On false it only displays “That project file could not be opened” and returns (js/storage.js:2000–2005); it does not remove the new project shell. Trigger: sceneFileProblem accepts an object that applyScene later refuses, or an unexpected failure in apply. User may be left on an empty new card/project and see the error; prior project is not intentionally overwritten. sceneFileProblem is intended to catch this disagreement, so likelihood is low. Not reproduced.
+
+2. **Template workspace is created before pack adoption/hydration and lacks the element route's failure cleanup. Medium, UNVERIFIED.** useAsNew creates a project, then _adopt replaces its project/layers and awaits hydratePack (js/storage.js:3171–3190 and :3202–3210; quote: “await hydratePack(re.layers, pack.media, re.map, packKey);”). openForEdit similarly creates a templateDraft before awaiting _adopt (js/storage.js:3241–3254). If cloning or hydration throws after create, there is no compensation removing that newly-created shell/draft. Element editing explicitly reopens the return project and discards its draft on insert failure (js/storage.js:3490–3517: “if (!ok) { ... discardDraft ... }”), while the template route has no matching cleanup branch. The user could be left with an empty/partial template project or draft. Concrete throw and UI outcome not reproduced.
+
+3. **Embedded-font import can persist a blob without successfully persisting its font index. Low/medium, quota scenario UNVERIFIED.** applyEmbedded converts/registers a font, writes font:<id>, appends to the index array and calls writeJSON without checking its boolean result (js/storage.js:3742–3758: “writeJSON(FONT_INDEX, idx);”). If localStorage refuses that final write, import continues without a catalog entry; after reload the embedded font is unavailable and the IDB blob is orphaned for cleanup. Unlike interactive import, this path gives no specific save-failure result. Not executed.
+
+4. **Interactive font import stages decode → IDB → index and compensates on normal write failures. No confirmed defect.** FontFace load failure returns before storage (js/storage.js:3696–3702); IDB refusal returns null with a toast (:3703–3711); failed index write attempts to delete the just-created blob (:3712–3718). A process kill between successful IDB put and index write can leave an orphan font blob, but no font is listed as imported. Crash timing is UNVERIFIED.
+
+5. **Template/element pack creation has explicit error handling; interruption may leave unindexed packs. Low, crash timing UNVERIFIED.** Template save writes the pack, then metadata/index, compensating if the index write fails (js/storage.js:3071–3098). Element save and saveFromProject use the same pack-first/index-second sequence and compensating delete (:3414–3425; :3432–3447). If the process is killed after the successful IDB put but before index commit/cleanup, an unindexed pack can remain. Startup prune is intended to collect unindexed tpl:/elem: records (:2985–2987). This is likely orphan storage, not loss of source project layers. No process kill was performed.
+
+6. **Media import inserts/commits the layer before asynchronous media persistence is known to have landed. Medium, quota trigger UNVERIFIED; generic media-save issue not asserted as new.** FM.addMediaLayer places the record in memory, inserts the layer and commits history before storage.save and mediaLib.add (js/app.js:3028–3109; quote: “FM.insertLayer(layer);” followed later by “FM.storage.save();”). A rejected IDB put can leave the clip usable only for the current session; after reload the layer may have no source. The storage path reports refusals (js/storage.js:790–806). This is the already-audited failed-media-save class; I do not present it as a novel issue.
+
+7. **Media Library use decodes before adding a layer, so decoder failure does not leave a half-layer. Checked safe path.** It awaits loadImageFile/loadVideoFile before FM.addMediaLayer, catches failure with “Could not open that file,” and returns false (js/medialib.js:246–257). A project-switch guard revokes a pending URL before insertion (:249–252). No layer/card exists yet when decoding fails.
+
+8. **Ordinary non-media layers have no asynchronous fill stage. Checked safe path.** Text/null/shape/camera/adjustment constructors call makeLayer, insert, refresh and commit synchronously (js/app.js:3128–3161; constructor js/scene.js:681). No awaited decoder or IDB creation follows their initial population. A generic thrown exception is possible, but no concrete post-create fill step was found.
+
+9. **Project duplication and linked-copy creation compensate ordinary partial storage failures. Checked defensive paths.** duplicateFrom writes document/card, tracks copied media keys, and deletes those plus the new document/index if a later media copy fails (js/storage.js:2629–2682; :2647–2656 and :2658–2682). createLinked checks the index write and removes its new document when that fails (:2700–2727). Mid-cleanup process termination is possible but not reproduced; the source explicitly tracks the partial result.
+
+## Creation inventory reviewed
+
+Central project creation is FM.projects.create() at js/storage.js:2545–2600. Callers include Home New Project (js/home.js:3049), import (storage.js:1989–2009), duplication/linked copies (:2629–2727), templates (:3172–3254) and elements (:3490–3517). Timeline layers use FM.makeLayer (js/scene.js:681) and are inserted by app.js; media decoding is awaited before Media Library insertion (medialib.js:246–257), while imported media uses FM.addMediaLayer and then asynchronous persistence. Library objects include templates, elements, fonts, layer/effect presets and media tiles. I found no additional create-then-fill failure in preset creation. Findings distinguish actual gaps from staged writes with compensations.
+
+No app execution, failure injection, or source modification was performed.

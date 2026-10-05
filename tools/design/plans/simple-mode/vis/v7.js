@@ -1,8 +1,8 @@
 /* V7 · How it is built (DESIGN §1, §3.7, §10.1, §10.3, §10.4 4a, §18 V7).
  *
  * One page, three ideas, drawn from ONE live document (Beach day):
- *   1. The project in the middle, with Full and Quick as two lenses on it. Both lenses are drawn from the same
- *      {project, layers}; Quick's rows come from the kit's classifier (E.classify), which never writes. Tap a layer
+ *   1. The project in the middle, with Full and Simple as two lenses on it. Both lenses are drawn from the same
+ *      {project, layers}; Simple's rows come from the kit's classifier (E.classify), which never writes. Tap a layer
  *      anywhere and it lights up in all three.
  *   2. The runner (§3.7) as a rail a dot travels down: tap → gate → locked → blockers → adopt → apply → one commit.
  *      Seven examples. The clip maths is the kit's engine run for real; the gate and the busy check are the design's
@@ -48,11 +48,11 @@
 
   const SCN = [
     { id: 'solo', chip: 'Just you', make: beach,
-      say: 'You delete Waves in Quick. Nobody else is in the project.' },
+      say: 'You delete Waves in Simple. Nobody else is in the project.' },
     { id: 'sam', chip: 'With Sam', make: beach, friend: { phase: 'together' }, mode: 'clip',
       say: 'The “together” release. Sam has the same project open in Full and is not touching these clips. You delete Waves.' },
     { id: 'old', chip: 'Old project', make: unadopted,
-      say: 'Beach day as it was made in Full, never edited in Quick. Quick still shows the clips. You delete Waves.' },
+      say: 'Beach day as it was made in Full, never edited in Simple. Simple still shows the clips. You delete Waves.' },
     { id: 'lock', chip: 'Locked clip', make: lockedSunset,
       say: 'Sunset is locked. Deleting Waves would slide Sunset along.' },
     { id: 'before', chip: 'Sam, before “together”', make: beach, friend: { phase: 'before' }, mode: 'abs',
@@ -66,7 +66,7 @@
   /* ------------------------------------------------------------------ the words (one plain sentence each) */
   const STAGES = [
     { id: 'tap', name: 'Your tap', code: 'edit', icon: 'delete', idle: 'The edit you asked for',
-      plain: 'Every Quick edit starts as one request: what you tapped, and where the playhead was.',
+      plain: 'Every Simple edit starts as one request: what you tapped, and where the playhead was.',
       how: '<code>FM.spine.edit(label, makePlan)</code>. One edit runs at a time; up to 4 more taps wait in line, in the order you made them.' },
     { id: 'gate', grp: 'The checks', name: 'Friends check', code: 'gate', icon: 'personAdd', idle: 'Is a friend who can edit in here?',
       plain: 'While a friend who can edit is in the project, edits that move other clips wait until the “together” release. Text, looks and sound always work.',
@@ -103,7 +103,7 @@
       how: 'Draws <code>layers</code> top to bottom, each at its own <code>start</code> and <code>duration</code>. Full’s edits write those numbers directly, as today, and never move other clips.' },
     doc: { plain: 'There is one project, saved once. Both editors read it and change it. Nothing is ever converted.',
       how: '<code>{project, layers}</code>, each layer with its own <code>start</code>. The only new saved keys are <code>sm.main</code> (on the clip row), <code>sm.stay</code> (stays put) and <code>sm.tail</code> (ends with the video).' },
-    quick: { plain: 'Quick reads the same layers as clips end to end, with titles, captions and sound in their own rows. It works this out every time and saves nothing.',
+    quick: { plain: 'Simple reads the same layers as clips end to end, with titles, captions and sound in their own rows. It works this out every time and saves nothing.',
       how: '<code>FM.spine.classify(scene)</code> builds <code>R</code>: the clip row in <code>start</code> order, which clip each thing sits on, and the rows. Never saved.' },
     none: { plain: 'Tap a layer in any of the three. It is the same layer every time: saved once, shown two ways.', how: '' }
   };
@@ -235,7 +235,7 @@
       if (paths.length) { rows.push({ kind: 'ch', text: quote(nameOf(lb)) + ' ' + (bits.length ? bits.join(', ') : 'refitted'), paths }); ops += paths.length; }
     });
     if (!near(a.project.duration, b.project.duration)) { rows.push({ kind: 'ch', text: 'The video is now ' + sec(b.project.duration) + ' long', paths: ['project/duration'] }); ops++; }
-    if (JSON.stringify(a.project.sm || {}) !== JSON.stringify(b.project.sm || {})) { rows.push({ kind: 'ch', text: 'The project is marked as arranged in Quick', paths: ['project/sm'] }); ops++; }
+    if (JSON.stringify(a.project.sm || {}) !== JSON.stringify(b.project.sm || {})) { rows.push({ kind: 'ch', text: 'The project is marked as arranged in Simple', paths: ['project/sm'] }); ops++; }
     return { rows, ops, saved };
   }
 
@@ -449,13 +449,13 @@
     const u = R.units[id], n = '<b>' + esc(quote(nameOf(l))) + '</b>';
     let p;
     if (R.isMain(id)) {
-      p = n + ' is one layer. Full gives it its own row. Quick shows it as clip ' + (R.idx[id] + 1) + ' of ' + R.main.length +
+      p = n + ' is one layer. Full gives it its own row. Simple shows it as clip ' + (R.idx[id] + 1) + ' of ' + R.main.length +
         (R.adopted && E.hasFlag(l, 'main') ? ', because it is saved as a clip-row clip.' : ', worked out on the spot: it fills the picture and carries on from the clip before.');
     } else if (u && u.kind === 'captions') {
-      p = 'The captions are one layer with ' + l.captions.length + ' lines. Full shows it as one row. Quick shows every line, and each line rides on the clip under it.';
+      p = 'The captions are one layer with ' + l.captions.length + ' lines. Full shows it as one row. Simple shows every line, and each line rides on the clip under it.';
     } else if (u && u.host) {
       const h = R.layer(u.host);
-      p = n + ' starts on ' + esc(quote(nameOf(h))) + ', so in Quick it sits in the ' + (SECWORD[u.section] || 'Overlay') + ' row and goes wherever ' + esc(nameOf(h)) + ' goes.';
+      p = n + ' starts on ' + esc(quote(nameOf(h))) + ', so in Simple it sits in the ' + (SECWORD[u.section] || 'Overlay') + ' row and goes wherever ' + esc(nameOf(h)) + ' goes.';
     } else if (u && u.section === 'audio') {
       p = n + ' stays put: music does not follow clips.' + (E.hasFlag(l, 'tail') ? ' It ends with the video.' : ' When clips first move, it is marked to stay put.');
     } else p = n + ' is one layer, shown in both.';
@@ -810,7 +810,7 @@
     /* ============ 1 · the middle ============ */
     const p1 = el('section', 'v7-part');
     p1.innerHTML = '<p class="v7-eb"><b>1</b> · One project</p><h3 class="v7-h3">One project in the middle, two ways of looking at it</h3>' +
-      '<p class="v7-lede">Full and Quick are two lenses on the same saved project. Tap a layer in any of the three to find it in the other two. Tap a heading to see what it is.</p>';
+      '<p class="v7-lede">Full and Simple are two lenses on the same saved project. Tap a layer in any of the three to find it in the other two. Tap a heading to see what it is.</p>';
     const trio = el('div', 'v7-trio');
     const lensCard = (key, name, sub, ed) => {
       const f = el('figure', 'fm v7-lens');
@@ -819,7 +819,7 @@
       f.appendChild(h); return { f, h };
     };
     const fullC = lensCard('full', 'Full', 'every layer on its own row', 'full');
-    const quickC = lensCard('quick', 'Quick', 'clips end to end, the rest in rows', 'quick');
+    const quickC = lensCard('quick', 'Simple', 'clips end to end, the rest in rows', 'quick');
     const docC = el('div', 'v7-doc');
     const docH = el('button', 'v7-dh', '<span class="di">' + ico('doc') + '</span><span class="t"><b>The project</b><small>Beach day · saved once, on the device</small></span><span class="qm">' + V.icon('help') + '</span>');
     docH.type = 'button'; docH.setAttribute('aria-pressed', 'false'); docH.dataset.what = 'doc';
@@ -844,7 +844,7 @@
       if (sel && !cur.layers.some(l => l.id === sel)) { sel = null; if (what === 'layer') what = 'none'; }
       fullL.draw(cur, { sel, animate }); quickL.draw(cur, { sel, animate }); docL.draw(cur, { sel, animate });
       const P = cur.project;
-      docFoot.textContent = 'project · ' + P.width + '×' + P.height + ' · ' + sec(P.duration) + (P.sm && P.sm.adopted ? ' · arranged in Quick' : '');
+      docFoot.textContent = 'project · ' + P.width + '×' + P.height + ' · ' + sec(P.duration) + (P.sm && P.sm.adopted ? ' · arranged in Simple' : '');
       [fullC.h, docH, quickC.h].forEach(b => b.setAttribute('aria-pressed', String(what === b.dataset.what)));
       say1.classList.toggle('picked', what !== 'none');
       let t = PART1[what] || PART1.none;
@@ -859,7 +859,7 @@
 
     /* ============ 2 · the path ============ */
     const p2 = el('section', 'v7-part');
-    p2.innerHTML = '<p class="v7-eb"><b>2</b> · One path</p><h3 class="v7-h3">Every Quick edit takes the same path</h3>' +
+    p2.innerHTML = '<p class="v7-eb"><b>2</b> · One path</p><h3 class="v7-h3">Every Simple edit takes the same path</h3>' +
       '<p class="v7-lede">A few checks, then the change, saved as one step, then sent to friends. Pick an example and press Play. Tap any stage to see what it does.</p>';
     const chips = el('div', 'v7-chips'); chips.setAttribute('role', 'group'); chips.setAttribute('aria-label', 'Examples');
     SCN.forEach(s => { const b = el('button', 'v7-chip', esc(s.chip)); b.type = 'button'; b.dataset.scn = s.id; b.addEventListener('click', () => choose(s.id, true)); chips.appendChild(b); });
@@ -874,7 +874,7 @@
 
     /* the app, as you would see it */
     const app = el('div', 'fm v7-app');
-    app.innerHTML = '<div class="v7-abar"><span class="ed">Quick</span><span class="an">Beach day</span><span class="v7-who"></span></div><div class="v7-alz"></div><div class="fm-tray"></div>';
+    app.innerHTML = '<div class="v7-abar"><span class="ed">Simple</span><span class="an">Beach day</span><span class="v7-who"></span></div><div class="v7-alz"></div><div class="fm-tray"></div>';
     side.appendChild(app);
     const aEd = app.querySelector('.ed'), aWho = app.querySelector('.v7-who'), aLz = app.querySelector('.v7-alz'), tray = app.querySelector('.fm-tray');
     tray.setAttribute('role', 'status'); tray.setAttribute('aria-live', 'polite');
@@ -1036,7 +1036,7 @@
     /* the app strip */
     function drawApp(phase, animate) {
       const full = !!sc.full;
-      aEd.textContent = full ? 'Full' : 'Quick'; aEd.classList.toggle('full', full);
+      aEd.textContent = full ? 'Full' : 'Simple'; aEd.classList.toggle('full', full);
       aWho.innerHTML = sc.friend ? '<i>S</i>Sam · ' + (opt.viewer ? 'Viewer' : 'Full') : '';
       aQuick.el.style.display = full ? 'none' : ''; aFull.el.style.display = full ? '' : 'none';
       const line = lastOC && lastOC.line;
@@ -1046,7 +1046,7 @@
       (full ? aFull : aQuick).draw(cur, o);
       tray.style.display = full ? 'none' : '';
       fullNote.style.display = full ? '' : 'none';
-      fullNote.innerHTML = phase === 'done' ? 'Moved. Nothing else moved with it. Back in Quick, the <b>1 s gap</b> shows as a block with a chip you tap to close. Quick never closes it by itself.'
+      fullNote.innerHTML = phase === 'done' ? 'Moved. Nothing else moved with it. Back in Simple, the <b>1 s gap</b> shows as a block with a chip you tap to close. Simple never closes it by itself.'
         : 'Full: drag Sunset along its row. Full edits never move other clips.';
       const pop = app.querySelector('.v7-pop'); if (pop) pop.remove();
       if (full) { tray.innerHTML = ''; return; }

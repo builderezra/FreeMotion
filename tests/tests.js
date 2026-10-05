@@ -5457,8 +5457,11 @@
         /* A control ADDED AFTER these hashes were frozen stays at its default here — that default is what every saved project
            gets, and each such control carries its own byte-identity test. Pushing it to 75% would change the picture for a
            reason that has nothing to do with masks. Listed by name so a new one is a visible edit, not a silent pass. */
-        const ADDED_AFTER_560 = { dropshadow: ['opacity'] };   // queue 904, v16.48
-        (FM.fxRegistry.paramsOf(id) || []).forEach(pd => { if (typeof pd.max === 'number' && typeof pd.min === 'number' && pd.key !== 'seed' && !(ADDED_AFTER_560[id] || []).includes(pd.key)) e.params[pd.key] = pd.min + (pd.max - pd.min) * 0.75; }); return e; };
+        const ADDED_AFTER_560 = { dropshadow: ['opacity', 'spread', 'smooth'] };   // queue 904, v16.48 · #482 6.3: Spread, Smoothness
+        /* A range WIDENED after the hashes were frozen keeps its old top here (#482 6.3: Distance 60 -> 300, Softness 20 -> 80),
+           so 75% is still the 45 px and 15 px these pictures were drawn with. */
+        const MAX_AT_560 = { dropshadow: { distance: 60, softness: 20 } };
+        (FM.fxRegistry.paramsOf(id) || []).forEach(pd => { const mx = (MAX_AT_560[id] && MAX_AT_560[id][pd.key] != null) ? MAX_AT_560[id][pd.key] : pd.max; if (typeof pd.max === 'number' && typeof pd.min === 'number' && pd.key !== 'seed' && !(ADDED_AFTER_560[id] || []).includes(pd.key)) e.params[pd.key] = pd.min + (mx - pd.min) * 0.75; }); return e; };
       build(L, mask, fx);
       FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.scene.selectedId = null;
       const cv = document.createElement('canvas'); cv.width = 320; cv.height = 240; const ctx = cv.getContext('2d');
@@ -43534,6 +43537,10 @@
          back in, so the panel already has the way out. Narrowing the range would not help: at 95% the wedge still misses
          this fixture's layer entirely. The opposite ends (centre at 0%) keep the layer, and are not listed. */
       'radialwipe:centery=max': 1, 'radialrepeat:centerx=max': 1, 'radialrepeat:centery=max': 1,
+      /* SHADOW ONLY (#482 6.3) is the layer swapped for its shadow — by design. The shadow is black by default and this
+         fixture's ground is black, so the swap reads as nothing; on any other ground it is the shadow, and '482 6.3 Drop
+         Shadow - Spread grows…' proves it is drawn. */
+      'dropshadow:shadowonly=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -118111,6 +118118,1313 @@
       FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
       try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
     }
+  });
+
+
+
+
+
+  /* ═══ #482 / #966 POLISH BATCH 6 (light) — 6.1 Vignette and 6.2 Light, Soft and Dark Glow ════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 6
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 6.1 answers C50: the vignette was a circle out to the frame's
+   * half-diagonal, so on a 9:16 phone frame the top and bottom took about four times the darkening of the sides. 6.2 answers
+   * C23 (a glow stopped dead at the layer's own pixels, so a title could not glow into the space round it) and C49 (a hard
+   * threshold step left a contour where a gradient crossed it). C8 (one vignette renderer) was #986's and is not redone here;
+   * its three tests stay as they are. The rule that makes it safe (§0.3): every new key's default is the old look, because a
+   * filter recipe gets every key it does not set from makeInstance. Pinned against hashes captured on v17.21 (28104a3e) BEFORE
+   * the first edit (tools/design/482/polish6/light/defaults6.js), with polish 1's fixture on three plates: the export (t 0.7),
+   * a half-size preview (t 1.3) and a 0.3 phone plate (t 2.1). */
+  const NEW6L = {
+    vignette: { round: 100, feather: 100, x: 50, y: 50, mode: 0, color: '#000000', hilite: 0 },
+    lightglow: { knee: 0, passes: 1, outside: 0, blend: 0, from: 0 },
+    softglow: { knee: 0, passes: 1, outside: 0, blend: 0, from: 0 },
+    darkglow: { knee: 0, passes: 1, outside: 0, blend: 0 },
+  };
+  function shots6l(layers, PW, PH) {
+    PW = PW || 240; PH = PH || 180;
+    return [[1, 0.7, 0], [0.5, 1.3, 0], [0.3, 2.1, 1]].map(([rs, t, stamp]) => {
+      const cv = offscreen(Math.round(PW * rs), Math.round(PH * rs));
+      if (stamp) { cv.__fmRS = rs; cv.__fmOX = 0; cv.__fmOY = 0; }
+      const x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: PW, height: PH, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  const px6l = (r, x, y) => { const i = (y * r.w + x) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2], r.d[i + 3]]; };
+  /* The export against a half-size preview: each 2x2 block of the export averaged, against the preview's pixel. */
+  function parity6l(e, p) {
+    let worst = 0;
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) for (let c = 0; c < 4; c++) {
+      const a = (e.d[((2 * y) * e.w + 2 * x) * 4 + c] + e.d[((2 * y) * e.w + 2 * x + 1) * 4 + c] + e.d[((2 * y + 1) * e.w + 2 * x) * 4 + c] + e.d[((2 * y + 1) * e.w + 2 * x + 1) * 4 + c]) / 4;
+      worst = Math.max(worst, Math.abs(a - p.d[(y * p.w + x) * 4 + c]));
+    }
+    return worst;
+  }
+
+  test('482 6.0 Vignette and the three Glows - every new control is in the catalogue at a default that draws the old look, and the 56 library filters and saved and new vignettes and glows render byte for byte as on v17.21', { item: '482', budgetMs: 120000 }, function () {
+    /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
+       render-time fill (queue 784) agrees with that default. */
+    Object.keys(NEW6L).forEach(type => {
+      const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+      Object.keys(NEW6L[type]).forEach(k => {
+        const pd = ps.filter(q => q && q.key === k)[0], want = NEW6L[type][k];
+        if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+        if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+        if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+        const fill = FM._fxFillValue(type, k);
+        if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+      });
+    });
+    const row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+    const vc = row('vignette', 'color');
+    if (vc.type !== 'color' || vc.overriddenBy !== 'mode' || vc.liveWhen !== 2) throw new Error('the Vignette Colour row does not say it only counts under Mode Colour (type ' + vc.type + ', overriddenBy ' + vc.overriddenBy + ', liveWhen ' + vc.liveWhen + ')');
+    ['lightglow', 'softglow'].forEach(t => { const c = row(t, 'color'); if (c.overriddenBy !== 'from' || c.liveWhen !== 0) throw new Error('the ' + t + ' Glow colour does not say it only counts under Colour from Chosen colour (overriddenBy ' + c.overriddenBy + ', liveWhen ' + c.liveWhen + ')'); });
+    if (row('glow', 'color').overriddenBy || row('faded', 'fadecol').overriddenBy || !row('faded', 'fadecol').key) throw new Error('CONTROL: a colour row on an effect with no gate (Glow, Faded Film) is gated too');
+    if (row('darkglow', 'from').key) throw new Error('Dark Glow has a Colour from control - it has no colour to take');
+    /* …and at the defaults the old code runs: both readers answer null, which is what sends the kernels down their old loops. */
+    if (FM._vignette6(FM.fxRegistry.makeInstance('vignette').params, 0.5) !== null) throw new Error('a new Vignette does not take the old gradient');
+    ['lightglow', 'softglow', 'darkglow'].forEach(t => { if (FM._glow6Opts(FM.fxRegistry.makeInstance(t).params, 0.5, t !== 'darkglow') !== null) throw new Error('a new ' + t + ' does not take the old kernel'); });
+    if (FM._vignette6({}, 0.5) !== null || FM._glow6Opts({}, 0.5, true) !== null) throw new Error('a saved Vignette or Glow with none of the new keys does not take the old code');
+    /* …and a saved value survives the load sanitiser, at a non-default value for each key. */
+    const SET = { vignette: { round: 0, feather: 240, x: 30, y: 70, mode: 2, color: '#3366ff', hilite: 60 }, lightglow: { knee: 40, passes: 3, outside: 1, blend: 2, from: 1 },
+      softglow: { knee: 25, passes: 2, outside: 1, blend: 1, from: 1 }, darkglow: { knee: 70, passes: 2, outside: 1, blend: 1 } };
+    const lay = [{ id: 'l4826l', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: Object.keys(SET).map(t => ({ type: t, enabled: true, params: Object.assign({}, SET[t]) })) }];
+    FM.storage._sanitizeLayers(lay);
+    Object.keys(SET).forEach(t => {
+      const got = (lay[0].effects || []).filter(e => e.type === t)[0];
+      if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
+      Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    });
+    /* 2. THE PICTURES, against v17.21: new instances (every new key spelled out at its default) on a clip and a shape, saved
+       instances with only the old keys (a keyframed Amount, a coloured glow, Soft Glow at Radius 400), a turned clip, two
+       vignettes, a vignette under a glow, a 9:16 frame — and every library filter, several of which carry a Vignette, a Light
+       Glow or a Soft Glow. (The same capture on text layers matched too; text is left out here because a hash of a glyph
+       depends on the font having loaded.) */
+    const HEAD = { 'vignette/new/image': 'a1b0fcc6/fd97be8a/079558be', 'vignette/new/shape': '0354a2ad/fa237aba/9f058392', 'vignette/saved0': 'a1b0fcc6/fd97be8a/079558be', 'vignette/saved1': '3cdeaea3/7d4c7190/c3fff14e', 'vignette/saved2': '771e086c/3ff9fbb9/a637cc57', 'vignette/saved3': 'a24ebbba/3eefe4e0/cd2e67d4', 'vignette/turned': '635d5076/054f00eb/bdd11f23',
+      'lightglow/new/image': 'de7739a3/50e95599/e9719abe', 'lightglow/new/shape': '3999ea27/7dab0371/bb577e30', 'lightglow/saved0': 'de7739a3/50e95599/e9719abe', 'lightglow/saved1': '4146690d/cea1d27a/469057e6', 'lightglow/saved2': '0f44cc98/d97f473c/9578c33b', 'lightglow/turned': '428f3395/3629582c/3d1b83eb',
+      'softglow/new/image': '2313991c/14f7b616/41e03268', 'softglow/new/shape': 'a794638c/7c58305f/e7ea7e3d', 'softglow/saved0': '2313991c/14f7b616/41e03268', 'softglow/saved1': 'e210f8c6/4a26c52f/15f94880', 'softglow/saved2': '2a178ea9/c1557fd8/cba45f24', 'softglow/turned': 'ff79f67a/23167c56/bdfb3e14',
+      'darkglow/new/image': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/new/shape': '1632b83f/5ee145c1/52fec795', 'darkglow/saved0': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/saved1': '19c1f079/f2b3f244/c2c5b04b', 'darkglow/turned': 'b2bf37bb/8f2959c2/b51e33bf',
+      'vignette/two': 'c980b5eb/48320ab8/5ded4a65', 'vignette+lightglow': 'd384b0a2/c77913cb/3338f54b', 'vignette/916': 'aa743808/6ee64211/92a8396d' };
+    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170/be58f9d4', bleach: '1977b932/76d5d015/ba6e10b2', crossproc: 'acf0a29a/9d14facb/dc96297e', faded: 'a8e3abe0/a929108a/dc05b899', vhs: 'bdccef7c/0184d197/20969b19', crt: '3feeb8ae/f60a6812/150aac2e', super8: '8b1d335f/ea2c4e6c/17aa5210', oldfilm: 'd0622b4f/6f4a53b3/f89904f8', dreamy: 'eab5ec29/4247011c/29d9bb5d', goldenhour: 'ee5aed2f/4b233a42/da504085', leak: 'c2c748d2/87bb9ddd/ce931043', neonnight: '08607532/7c0377ff/4abf756c', comic: 'bc2fcaa9/51c97a8b/4893b084', poster: '2b7f3ca4/52708d5d/302b3b24', thermal: 'e9f15dba/7a794c09/ecd25db2', nightvis: '7da0c88d/48579343/1451e314', blackout: '47650b5d/85d01e92/aa9a8e22', coldsteel: '1c0c3370/939023f0/b8ed9c8d', bloodline: 'a37b429d/b263bf4f/6d3175e5', static: '3019a5c0/4e2326e2/27291a77', nightdrive: '6380c2e1/b6e2a474/ca429a21', overdrive: '6cf2492b/56809eb8/f9ab38af', whiteout: '6556ce3e/5a6bebdb/73b83b9d', silver: 'dacb5546/7d6000f3/db5b741f', noir: '8f65ef53/bb24bfcb/f1dc70ad', platinum: 'aff4ae77/33607f4f/22c8c41e', ink: '33db7275/294ba8d1/fff6673d', fog: 'a782a9c4/9d1a16e7/20b20252', newsprint: 'd152da6e/ce85482d/5e432742', poppy: 'e816a502/03770590/cff55b40', candy: 'e15bfa73/6d0e4269/9ed50f33', sunbaked: '362d46b3/5f693c48/7b6ae8bc', ash: '6e86014e/270f0a6c/c080a681', midnight: '91d88f6d/33e67930/77296bf8', ultraviolet: '67f9268e/e9fe1dab/6afb1b12', tropic: '63da082f/7f7f98aa/ed762ae9', popsicle: '57df7430/4bf81d13/a5c6edd5', hivis: '138d623f/a6c1fa8c/cc12d3c7', matte: 'badc4502/b215d215/84f073fa', ember: 'd708d744/352f47b8/12001d60', halo: '9f8a302c/19eb5be6/946507eb', moonbeam: '9e67006e/3f091acc/ba90a2f5', copperplate: 'e615f9ed/dad40cf8/9b1ced60', polaroid: '5204851d/aea53a15/34478585', kodachrome: '74022162/90930e37/e93a3f48', technicolor: 'bb3ee832/a1d09dff/32864c22', blueprint: '5e54dee2/56dc9473/2e2b369f', riso: 'ae8c0657/b084d9b9/7a02b349', infrared: 'f130bcec/fbfe26ed/26d342e1', xerox: '0980cf2d/94fba5dd/d0637982', acidwash: 'f0a25738/daca65ad/6e124a82', moonlight: '172c152f/6a125aec/01662260', lowkey: 'df424918/5e2981c7/c302dc1d', arctic: '41b5af55/c53d1c0f/ee82a4cc', desert: 'd3ae8c56/4be4b22e/169980e4', datamosh: 'da587345/ecb2b369/c6e1743b' };
+    const all = FM.filters.all();
+    if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
+    const tex = fix482(), ids = [], moved = [], got = {};
+    const clip = o => { o = o || {}; const L = FM.makeLayer('image', { name: '4826l clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; if (o.scale) L.transform.scale = o.scale; if (o.rot) L.transform.rotation = o.rot; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#e0d0a0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 4, v: b, e: 'linear' }] });
+    const SAVED = {
+      vignette: [{ amount: 0.6, size: 35 }, { amount: 0.9, size: 10 }, { amount: 0.3, size: 60 }, { amount: kf(0.2, 0.9), size: 25 }],
+      lightglow: [{ amount: 0.6, radius: 6, threshold: 60, color: '#ffffff' }, { amount: 0.8, radius: 26, threshold: 45, color: '#ffd080' }, { amount: 0.4, radius: 10, threshold: 30 }],
+      softglow: [{ amount: 0.6, radius: 100, threshold: 35, color: '#ffffff' }, { amount: 0.45, radius: 130, threshold: 40, color: '#80c0ff' }, { amount: 0.9, radius: 400, threshold: 22 }],
+      darkglow: [{ amount: 0.6, radius: 6, threshold: 40 }, { amount: 0.9, radius: 20, threshold: 70 }],
+    };
+    try {
+      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots6l([L]); if (h !== HEAD_FILTERS[f.id]) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
+      Object.keys(SAVED).forEach(type => {
+        [['image', clip], ['shape', shape]].forEach(([kind, mk]) => { const L = mk(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/new/' + kind] = shots6l([L]); });
+        SAVED[type].forEach((p, i) => { const L = clip(); L.effects = [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(p)) }]; got[type + '/saved' + i] = shots6l([L]); });
+        const T = clip({ scale: 0.6, rot: 15 }); T.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/turned'] = shots6l([T]);
+      });
+      { const L = clip(); L.effects = [FM.fxRegistry.makeInstance('vignette'), { type: 'vignette', enabled: true, params: { amount: 0.5, size: 20 } }]; got['vignette/two'] = shots6l([L]); }
+      { const L = clip(); L.effects = [FM.fxRegistry.makeInstance('lightglow'), FM.fxRegistry.makeInstance('vignette')]; got['vignette+lightglow'] = shots6l([L]); }
+      { const S = FM.makeLayer('shape', { shape: 'rect', x: 54, y: 96, shapeW: 108, shapeH: 192, fill: '#c0c0c0' }); S.start = 0; S.duration = 4; S.effects = [FM.fxRegistry.makeInstance('vignette')]; got['vignette/916'] = shots6l([S], 108, 192); }
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.21 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
+  });
+
+  /* 6.1 VIGNETTE (C50). Measured on v17.21 on a flat 216x384 (9:16) frame at the defaults: the circle darkened top-centre by
+     0.47 and mid-left by 0.12 — the dark bands top and bottom. Roundness 0 is the ellipse through the frame's corners: 0.32
+     and 0.315, the corner unchanged at 0.585. */
+  test('482 6.1 Vignette - Roundness 0 darkens the sides of a 9:16 frame as much as the top, on a shape and on a 9:16 clip in a 16:9 project, Feather widens and sharpens the fade, Centre moves it, Lighten and Colour lay white or a colour, Protect highlights spares a white lamp, and the preview matches the export', { item: '482', budgetMs: 90000 }, function () {
+    const W = 216, H = 384, bad = [];
+    const flat = (fx, fill) => { const s = FM.makeLayer('shape', { shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: fill || '#c8c8c8' }); s.start = 0; s.duration = 4; s.effects = fx; return s; };
+    const V = p => _986fx('vignette', p);
+    const bare = _986shot([flat([])], 0.5, W, H);
+    const dk = (r, x, y, b) => 1 - px6l(r, x, y)[0] / px6l(b || bare, x, y)[0];
+    /* THE SHAPE, on a shape filling a 9:16 frame */
+    const c = _986shot([flat([V({})])], 0.5, W, H), e = _986shot([flat([V({ round: 0 })])], 0.5, W, H);
+    const cl = dk(c, 2, H / 2), ct = dk(c, W / 2, 2), el = dk(e, 2, H / 2), et = dk(e, W / 2, 2);
+    if (!(ct > cl * 2.5)) throw new Error('CONTROL: the default circle darkens top-centre ' + ct.toFixed(3) + ' and mid-left ' + cl.toFixed(3) + ' - the fixture does not show C50');
+    if (!(Math.abs(el - et) <= 0.1 * Math.max(el, et))) bad.push('Roundness 0 darkens mid-left ' + el.toFixed(3) + ' and top-centre ' + et.toFixed(3) + ' on a 9:16 frame - not within 10 percent of each other (the circle: ' + cl.toFixed(3) + ' and ' + ct.toFixed(3) + ')');
+    if (Math.abs(dk(e, 2, 2) - dk(c, 2, 2)) > 0.03) bad.push('Roundness 0 moved the corner from ' + dk(c, 2, 2).toFixed(3) + ' to ' + dk(e, 2, 2).toFixed(3) + ' - the corners must stay where it is darkest');
+    if (dk(e, W / 2, H / 2) !== 0) bad.push('Roundness 0 darkened the centre');
+    /* …and on a 9:16 CLIP in a 16:9 project: fitted to the clip's own frame, not the project's */
+    const cv = offscreen(90, 160), cg = cv.getContext('2d'); cg.fillStyle = '#c8c8c8'; cg.fillRect(0, 0, 90, 160);
+    const had = FM.media.get('_4826lclip');
+    FM.media.set('_4826lclip', { kind: 'image', el: cv, width: 90, height: 160, duration: 0 });
+    try {
+      const clip = fx => { const l = FM.makeLayer('image', { x: 160, y: 90, start: 0, duration: 4 }); l.id = '_4826lclip'; l.transform.scale = 1; l.effects = fx; return l; };
+      const b0 = _986shot([clip([])], 0.5, 320, 180), c0 = _986shot([clip([V({})])], 0.5, 320, 180), e0 = _986shot([clip([V({ round: 0 })])], 0.5, 320, 180);
+      const ml = [116, 90], tc = [160, 11];
+      const c0l = dk(c0, ml[0], ml[1], b0), c0t = dk(c0, tc[0], tc[1], b0), e0l = dk(e0, ml[0], ml[1], b0), e0t = dk(e0, tc[0], tc[1], b0);
+      if (!(c0t > c0l * 2.5)) throw new Error('CONTROL: on the 9:16 clip the circle darkens its top ' + c0t.toFixed(3) + ' and its side ' + c0l.toFixed(3));
+      if (!(Math.abs(e0l - e0t) <= 0.1 * Math.max(e0l, e0t))) bad.push('on a 9:16 clip in a 16:9 project Roundness 0 darkens the clip side ' + e0l.toFixed(3) + ' and top ' + e0t.toFixed(3) + ' - it is not fitted to the clip frame');
+      if (px6l(e0, 100, 90)[0] !== px6l(b0, 100, 90)[0]) bad.push('the vignette reached past the clip onto the frame beside it');
+    } finally { if (had) FM.media.set('_4826lclip', had); else FM.media.remove('_4826lclip'); }
+    /* FEATHER: 300 starts the fade nearer the middle, 30 is a sharper ring; along the diagonal, a share q of the way out */
+    const diag = (r, q) => dk(r, Math.round(W / 2 + q * W / 2), Math.round(H / 2 + q * H / 2));
+    const f300 = _986shot([flat([V({ feather: 300 })])], 0.5, W, H), f30 = _986shot([flat([V({ feather: 30 })])], 0.5, W, H);
+    if (diag(c, 0.2) !== 0) throw new Error('CONTROL: the default fade already reaches 20 percent of the way out');
+    if (!(diag(f300, 0.2) > 0.1)) bad.push('Feather 300 does not start the fade nearer the middle (' + diag(f300, 0.2).toFixed(3) + ' at 20 percent out)');
+    if (!(diag(f30, 0.8) > 0.58 && diag(c, 0.8) < 0.45)) bad.push('Feather 30 is not a sharper ring: at 80 percent out it darkens ' + diag(f30, 0.8).toFixed(3) + ' against ' + diag(c, 0.8).toFixed(3) + ' by default');
+    if (!(diag(f30, 0.4) < diag(c, 0.4))) bad.push('Feather 30 darkens more inside the ring than the default');
+    /* CENTRE moves the shape: centred left, the right edge is the far one */
+    const cx = _986shot([flat([V({ x: 20 })])], 0.5, W, H), cy = _986shot([flat([V({ y: 80 })])], 0.5, W, H);
+    if (Math.abs(dk(c, 2, H / 2) - dk(c, W - 3, H / 2)) > 0.01) throw new Error('CONTROL: the centred vignette is not even left to right');
+    if (!(dk(cx, W - 3, H / 2) > dk(cx, 2, H / 2) + 0.25)) bad.push('Centre X 20 did not move it left: left edge ' + dk(cx, 2, H / 2).toFixed(3) + ', right edge ' + dk(cx, W - 3, H / 2).toFixed(3));
+    if (!(dk(cy, W / 2, 2) > dk(cy, W / 2, H - 3) + 0.25)) bad.push('Centre Y 80 did not move it down: top ' + dk(cy, W / 2, 2).toFixed(3) + ', bottom ' + dk(cy, W / 2, H - 3).toFixed(3));
+    /* MODE: Lighten lays white, Colour lays the colour; Colour with black is the old Darken */
+    const li = _986shot([flat([V({ mode: 1 })])], 0.5, W, H), co = _986shot([flat([V({ mode: 2, color: '#ff0000' })])], 0.5, W, H), cb = _986shot([flat([V({ mode: 2, color: '#000000' })])], 0.5, W, H);
+    const k0 = px6l(bare, 2, 2), kl = px6l(li, 2, 2), kc = px6l(co, 2, 2);
+    if (!(kl[0] > k0[0] + 25 && kl[0] === kl[2])) bad.push('Lighten did not lift the corner toward white: ' + k0 + ' -> ' + kl);
+    if (px6l(li, W / 2, H / 2)[0] !== k0[0]) bad.push('Lighten changed the centre');
+    if (!(kc[0] > kc[1] + 100 && kc[1] === kc[2])) bad.push('Colour red did not lay red in the corner: ' + kc);
+    if (Math.abs(px6l(cb, 2, 2)[0] - px6l(c, 2, 2)[0]) > 1) bad.push('Colour black differs from Darken at the corner: ' + px6l(cb, 2, 2) + ' against ' + px6l(c, 2, 2));
+    /* PROTECT HIGHLIGHTS: a white lamp in a dark corner keeps its light; the grey beside it still takes the vignette */
+    const lamp = offscreen(W, H), lg = lamp.getContext('2d'); lg.fillStyle = '#808080'; lg.fillRect(0, 0, W, H); lg.fillStyle = '#ffffff'; lg.fillRect(6, 6, 20, 20);
+    const had2 = FM.media.get('_4826llamp');
+    FM.media.set('_4826llamp', { kind: 'image', el: lamp, width: W, height: H, duration: 0 });
+    let p0, p1;
+    try {
+      const lc = fx => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = '_4826llamp'; l.transform.scale = 1; l.effects = fx; return l; };
+      p0 = _986shot([lc([V({ amount: 0.9, size: 10 })])], 0.5, W, H); p1 = _986shot([lc([V({ amount: 0.9, size: 10, hilite: 100 })])], 0.5, W, H);
+      if (!(px6l(p0, 16, 16)[0] < 150)) throw new Error('CONTROL: the vignette left the white lamp at ' + px6l(p0, 16, 16)[0]);
+      if (!(px6l(p1, 16, 16)[0] >= 250)) bad.push('Protect highlights 100 left the white lamp at ' + px6l(p1, 16, 16)[0] + ' (' + px6l(p0, 16, 16)[0] + ' without it)');
+      if (Math.abs(px6l(p1, 40, 16)[0] - px6l(p0, 40, 16)[0]) > 2) bad.push('Protect highlights spared the mid grey beside the lamp too: ' + px6l(p0, 40, 16)[0] + ' -> ' + px6l(p1, 40, 16)[0]);
+      const pp = _986shot([lc([V({ amount: 0.9, size: 10, hilite: 100 })])], 0.5, W, H, 0.5);
+      const w = parity6l(p1, pp); if (w > 3) bad.push('Protect highlights: the half-size preview differs from the export by up to ' + w.toFixed(1) + ' levels');
+    } finally { if (had2) FM.media.set('_4826llamp', had2); else FM.media.remove('_4826llamp'); }
+    /* THE PREVIEW IS THE EXPORT, for each control */
+    [{ round: 0 }, { feather: 250 }, { feather: 20 }, { x: 25, y: 70 }, { mode: 1 }, { mode: 2, color: '#2040ff' }, { round: 30, feather: 160, x: 60, mode: 2, color: '#ff8000' }].forEach(o => {
+      const w = parity6l(_986shot([flat([V(o)])], 0.5, W, H), _986shot([flat([V(o)])], 0.5, W, H, 0.5));
+      if (w > 3) bad.push(JSON.stringify(o) + ': the half-size preview differs from the export by up to ' + w.toFixed(1) + ' levels');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 6.2 LIGHT, SOFT AND DARK GLOW (C23, C49). Measured on v17.21: a Light Glow on white text wrote nothing outside the glyphs
+     (alpha 0 at 3 px out); on a 256-level ramp the glow jumped 10 levels from one column to the next where the ramp crossed
+     the threshold (Dark Glow the same). With the new controls: alpha 47 at 3 px, and a ramp step of 2. */
+  test('482 6.2 Light, Soft and Dark Glow - Glow past the edges puts a halo 3 px outside white text and a dark haze round dark text, Threshold softness takes the contour out of a ramp, Smoothness reaches further, Add, Soft light, Subtract and Colour from each change the glow, and the preview matches the export', { item: '482', budgetMs: 90000 }, function () {
+    const bad = [];
+    /* THE BACKLOG'S OWN TEST: white text, Light Glow, Glow past the edges — every row of the glyphs' left edges has light 3 px out */
+    const W = 240, H = 120;
+    const txt = (fx, col) => { const L = FM.makeLayer('text', { text: 'HIM', x: 120, y: 60, fontSize: 72, color: col || '#ffffff' }); L.start = 0; L.duration = 4; L.effects = fx; return L; };
+    const edge3 = (type, col) => {
+      const plain = _986shot([txt([], col)], 0.5, W, H, null, null), off = _986shot([txt([_986fx(type)], col)], 0.5, W, H, null, null), on = _986shot([txt([_986fx(type, { outside: 1 })], col)], 0.5, W, H, null, null);
+      let n = 0, lit = 0, litOff = 0;
+      for (let y = 0; y < H; y++) for (let x = 4; x < W; x++) {
+        if (px6l(plain, x, y)[3] > 200 && px6l(plain, x - 1, y)[3] <= 200) {   // a left edge of a glyph
+          if (px6l(plain, x - 3, y)[3] !== 0) continue;
+          n++; if (px6l(on, x - 3, y)[3] > 0) lit++; if (px6l(off, x - 3, y)[3] > 0) litOff++;
+        }
+      }
+      if (!(n > 30)) throw new Error('CONTROL: found only ' + n + ' glyph edges with empty space 3 px out - the text did not draw');
+      if (litOff) throw new Error('CONTROL: with Glow past the edges Off ' + type + ' already wrote ' + litOff + ' pixels 3 px outside the glyphs');
+      if (lit < n * 0.9) bad.push(type + ' with Glow past the edges On lit ' + lit + ' of ' + n + ' pixels 3 px outside the glyphs (alpha > 0) - the glow still stops at the layer');
+      return on;
+    };
+    const onL = edge3('lightglow');
+    edge3('softglow');
+    const onD = edge3('darkglow', '#181818');
+    /* …and the halo is the glow's colour: white round white text, black round dark text */
+    let wl = 0, dkl = 0;
+    for (let i = 0; i < onL.d.length; i += 4) if (onL.d[i + 3] > 0 && onL.d[i + 3] < 120) { if (onL.d[i] < 250) wl++; }
+    for (let i = 0; i < onD.d.length; i += 4) if (onD.d[i + 3] > 0 && onD.d[i + 3] < 120) { if (onD.d[i] > 30) dkl++; }
+    if (wl > 40) bad.push('the Light Glow halo round white text is not white in ' + wl + ' pixels');
+    if (dkl > 40) bad.push('the Dark Glow haze round dark text is not dark in ' + dkl + ' pixels');
+    /* THRESHOLD SOFTNESS (C49): a 256-level ramp, Amount 1, Radius 3 — the biggest step from one column to the next */
+    const ramp = offscreen(256, 40), rg = ramp.getContext('2d'); for (let x = 0; x < 256; x++) { rg.fillStyle = 'rgb(' + x + ',' + x + ',' + x + ')'; rg.fillRect(x, 0, 1, 40); }
+    const ids = ['_4826lramp', '_4826ltwo', '_4826lred', '_4826ldk'], had = ids.map(k => FM.media.get(k));
+    FM.media.set('_4826lramp', { kind: 'image', el: ramp, width: 256, height: 40, duration: 0 });
+    const img = (id, w, h, fx) => { const l = FM.makeLayer('image', { x: w / 2, y: h / 2, start: 0, duration: 4 }); l.id = id; l.transform.scale = 1; l.effects = fx; return l; };
+    const jump = (type, knee) => { const r = _986shot([img('_4826lramp', 256, 40, [_986fx(type, { knee: knee, amount: 1, radius: 3 })])], 0.5, 256, 40); let j = 0; for (let x = 1; x < 256; x++) j = Math.max(j, Math.abs(px6l(r, x, 20)[0] - px6l(r, x - 1, 20)[0])); return j; };
+    try {
+      ['lightglow', 'darkglow'].forEach(type => {
+        const j0 = jump(type, 0), j1 = jump(type, 100);
+        if (!(j0 >= 8)) throw new Error('CONTROL: ' + type + ' at Threshold softness 0 steps only ' + j0 + ' levels along the ramp - the fixture does not show C49');
+        if (!(j1 <= 4)) bad.push(type + ' at Threshold softness 100 still steps ' + j1 + ' levels between two columns of a smooth ramp (' + j0 + ' at 0) - the contour is still there');
+      });
+      /* SMOOTHNESS: three passes reach further than one — 10 px out from a white block with Radius 6 */
+      const blk = (type, o, fill) => { const s = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 60, shapeW: 60, shapeH: 40, fill: fill }); s.start = 0; s.duration = 4; s.effects = [_986fx(type, Object.assign({ outside: 1 }, o))]; return s; };
+      [['lightglow', '#ffffff'], ['darkglow', '#202020']].forEach(([type, fill]) => {
+        const a1 = _986shot([blk(type, {}, fill)], 0.5, 200, 120, null, null), a3 = _986shot([blk(type, { passes: 3 }, fill)], 0.5, 200, 120, null, null);
+        if (px6l(a1, 60, 60)[3] !== 0) throw new Error('CONTROL: ' + type + ' at one pass already reaches 10 px out');
+        if (!(px6l(a3, 60, 60)[3] > 0)) bad.push(type + ' at Smoothness 3 does not reach 10 px out from the block (alpha ' + px6l(a3, 60, 60)[3] + ') - three passes should spread three radii');
+        if (!(px6l(a3, 67, 60)[3] > px6l(a3, 64, 60)[3] && px6l(a3, 64, 60)[3] > px6l(a3, 60, 60)[3])) bad.push(type + ' at Smoothness 3 does not fade away from the block: alpha ' + [67, 64, 60].map(x => px6l(a3, x, 60)[3]).join(', ') + ' at 3, 6 and 10 px out');
+      });
+      /* BLEND: a dark grey (#404040) beside a white patch and a black bar beside it */
+      const two = offscreen(120, 60), tg = two.getContext('2d'); tg.fillStyle = '#404040'; tg.fillRect(0, 0, 120, 60); tg.fillStyle = '#ffffff'; tg.fillRect(50, 20, 20, 20); tg.fillStyle = '#000000'; tg.fillRect(74, 20, 6, 20);
+      FM.media.set('_4826ltwo', { kind: 'image', el: two, width: 120, height: 60, duration: 0 });
+      const bl = b => _986shot([img('_4826ltwo', 120, 60, [_986fx('lightglow', { blend: b, amount: 1, radius: 8 })])], 0.5, 120, 60);
+      const s0 = bl(0), s1 = bl(1), s2 = bl(2), src = _986shot([img('_4826ltwo', 120, 60, [])], 0.5, 120, 60);
+      if (!(px6l(s0, 46, 30)[0] > px6l(src, 46, 30)[0] + 20)) throw new Error('CONTROL: Screen did not lift the grey beside the white patch');
+      if (!(px6l(s1, 46, 30)[0] > px6l(s0, 46, 30)[0] + 10)) bad.push('Add is no brighter than Screen on a dark grey beside the light: ' + px6l(s1, 46, 30)[0] + ' against ' + px6l(s0, 46, 30)[0]);
+      if (!(px6l(s0, 76, 30)[0] > 10 && px6l(s2, 76, 30)[0] === 0)) bad.push('Soft light lifted black (' + px6l(s2, 76, 30)[0] + '; Screen ' + px6l(s0, 76, 30)[0] + ') - it should keep black black');
+      if (!(px6l(s2, 46, 30)[0] > px6l(src, 46, 30)[0] + 5 && px6l(s2, 46, 30)[0] < px6l(s0, 46, 30)[0])) bad.push('Soft light is not a gentler lift than Screen: ' + px6l(s2, 46, 30)[0] + ' against ' + px6l(s0, 46, 30)[0] + ' (source ' + px6l(src, 46, 30)[0] + ')');
+      const dkc = offscreen(120, 60), dg = dkc.getContext('2d'); dg.fillStyle = '#c0c0c0'; dg.fillRect(0, 0, 120, 60); dg.fillStyle = '#000000'; dg.fillRect(50, 20, 20, 20);
+      FM.media.set('_4826ldk', { kind: 'image', el: dkc, width: 120, height: 60, duration: 0 });
+      const db = b => _986shot([img('_4826ldk', 120, 60, [_986fx('darkglow', { blend: b, amount: 1, radius: 8 })])], 0.5, 120, 60);
+      const d0 = db(0), d1 = db(1), d2 = db(2);
+      if (!(px6l(d0, 46, 30)[0] < 180)) throw new Error('CONTROL: Dark Glow did not darken the light grey beside the black patch');
+      if (!(px6l(d1, 46, 30)[0] < px6l(d0, 46, 30)[0] - 10)) bad.push('Subtract is no darker than Multiply: ' + px6l(d1, 46, 30)[0] + ' against ' + px6l(d0, 46, 30)[0]);
+      if (!(px6l(d2, 46, 30)[0] > px6l(d0, 46, 30)[0] && px6l(d2, 46, 30)[0] < 192)) bad.push('Soft light is not a gentler darkening than Multiply: ' + px6l(d2, 46, 30)[0] + ' against ' + px6l(d0, 46, 30)[0]);
+      /* COLOUR FROM: a bright orange patch on grey glows orange onto the grey; the chosen white glow does not */
+      const red = offscreen(120, 60), rd = red.getContext('2d'); rd.fillStyle = '#606060'; rd.fillRect(0, 0, 120, 60); rd.fillStyle = '#ff6020'; rd.fillRect(50, 20, 20, 20);
+      FM.media.set('_4826lred', { kind: 'image', el: red, width: 120, height: 60, duration: 0 });
+      ['lightglow', 'softglow'].forEach(type => {
+        const f = v => _986shot([img('_4826lred', 120, 60, [_986fx(type, { from: v, amount: 1, radius: type === 'softglow' ? 400 : 8, threshold: 30 })])], 0.5, 120, 60);
+        const c0 = px6l(f(0), 47, 30), c1 = px6l(f(1), 47, 30);
+        if (Math.abs(c0[0] - c0[2]) > 2 || !(c0[0] > 0x60 + 10)) throw new Error('CONTROL: the chosen white ' + type + ' does not lift the grey evenly beside the patch: ' + c0);
+        if (!(c1[0] - c1[2] > 15)) bad.push(type + ' Colour from Source colour does not glow orange onto the grey beside an orange patch: ' + c1 + ' (white glow ' + c0 + ')');
+      });
+    } finally { ids.forEach((k, i) => { if (had[i]) FM.media.set(k, had[i]); else FM.media.remove(k); }); }
+    /* THE PREVIEW IS THE EXPORT: every new control on, over a background, export against a half-size preview (480x320, so
+       Soft Glow's radius is not held at its 4 px floor on the small plate) */
+    [['lightglow', '#ffffff', '#000000', { from: 1, blend: 1 }], ['softglow', '#ffffff', '#000000', { from: 1, blend: 2 }], ['darkglow', '#202020', '#e0e0e0', { blend: 1 }]].forEach(([type, fill, bg, extra]) => {
+      const rr = () => { const s = FM.makeLayer('shape', { shape: 'rect', x: 240, y: 160, shapeW: 120, shapeH: 80, fill: fill }); s.start = 0; s.duration = 4; s.effects = [_986fx(type, Object.assign({ outside: 1, passes: 2, knee: 40 }, extra))]; return s; };
+      const w = parity6l(_986shot([rr()], 0.5, 480, 320, null, bg), _986shot([rr()], 0.5, 480, 320, 0.5, bg));
+      if (w > 4) bad.push(type + ': the half-size preview differs from the export by up to ' + w.toFixed(1) + ' levels');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 6.2 on the phone's cropped readback (#692 route 2). Light and Dark Glow read back only the layer's box plus a margin of
+     3 x Radius + 8 plate px; Glow past the edges now writes into that margin, and three passes of a box of radius R reach
+     exactly 3R. So the cropped picture must be the full one, byte for byte, at the largest Radius and Smoothness. */
+  test('482 6.2 Light and Dark Glow - the halo past the edges at Smoothness 3 and the largest Radius is whole on the cropped readback, in the middle and at the edge of the frame, and through the real dispatcher', { item: '482', budgetMs: 90000 }, function () {
+    const PW = 900, PH = 700, bad = [];
+    const mk = (rx, ry, rw, rh, dark) => { const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) { const i = (y * PW + x) * 4, edge = x < rx + 2 || x >= rx + rw - 2 || y < ry + 2 || y >= ry + rh - 2;
+        a[i] = dark ? 20 + (x % 30) : 200 + ((x * 7) % 55); a[i + 1] = dark ? 20 + (y % 25) : 180 + ((y * 11) % 70); a[i + 2] = dark ? 30 : 230; a[i + 3] = edge ? 140 : 255; }
+      return a; };
+    for (const type of ['lightglow', 'darkglow']) {
+      const params = Object.assign({}, FM.fxRegistry.makeInstance(type).params, { outside: 1, passes: 3, radius: 80, knee: 50 });
+      for (const [rx, ry, rw, rh, where] of [[420, 320, 60, 50, 'middle'], [0, 300, 60, 50, 'left edge']]) {
+        const data = mk(rx, ry, rw, rh, type === 'darkglow');
+        // the halo is there at all, 100 px out — past one Radius, so only three passes reach it (the kernel straight, on the whole plate)
+        const full = new Uint8ClampedArray(data); FM._FX_TABLES.PIXEL_FX[type](full, PW, PH, params, 0.3);
+        const probe = ((ry + rh / 2) * PW + rx + rw + 100) * 4 + 3;
+        if (!(full[probe] > 0)) { bad.push(type + ' (' + where + '): no halo 100 px past the block at Radius 80 and Smoothness 3 (alpha ' + full[probe] + ')'); continue; }
+        const r = FM._cropIdentity(type, data, PW, PH, params, 0.3, 1);
+        if (!r || r.same !== true) bad.push(type + ' (' + where + '): the cropped readback differs from the full plate in ' + (r ? r.diff : '?') + ' bytes - the margin cuts the halo');
+        else if (!(r.area < r.plate * 0.8)) bad.push(type + ' (' + where + '): the crop covered ' + Math.round(r.area * 100 / r.plate) + ' percent of the plate - nothing was cropped, so nothing was proved');
+      }
+    }
+    // …and through renderScene, the crop on against the crop off
+    const render = (mode, type) => { const c = offscreen(400, 300); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 150, shapeW: 70, shapeH: 50, fill: type === 'darkglow' ? '#202020' : '#ffe0a0', start: 0, duration: 4 });
+      L.effects = [_986fx(type, { outside: 1, passes: 3, radius: 20, knee: 30 })];
+      const m0 = FM._cropMode; FM._cropMode = mode; const c0 = FM._cropStats.crops;
+      try { FM.renderScene(c.getContext('2d'), { project: { width: 400, height: 300, fps: 30, duration: 4, background: null }, layers: [L], selectedId: null, selectedIds: [] }, 0.5); } finally { FM._cropMode = m0; }
+      return { px: c.getContext('2d').getImageData(0, 0, 400, 300).data, crops: FM._cropStats.crops - c0 }; };
+    for (const type of ['lightglow', 'darkglow']) {
+      const on = render(0, type), off = render(-1, type);
+      let d = 0; for (let i = 0; i < on.px.length; i++) if (on.px[i] !== off.px[i]) d++;
+      if (!(on.crops >= 1)) bad.push(type + ': the crop path did not run');
+      if (d) bad.push(type + ': through the dispatcher the cropped glow differs from the full one in ' + d + ' bytes');
+      if (!(on.px[(150 * 400 + 200 + 35 + 30) * 4 + 3] > 0)) bad.push(type + ': through the dispatcher there is no halo 30 px past the block');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT THE PANEL, at a phone's 390 px and at a 1280 px PC window: every new row is on screen inside the inspector,
+     its name is not cut off, and each option button shows its whole label. The Vignette Colour greys out unless Mode is
+     Colour, and the Glow colour of Light and Soft Glow greys out under Colour from Source colour, where it does nothing. */
+  test('482 6.1 and 6.2 panels - the new Vignette and Glow rows fit the effect panel at 390 and 1280 px, the Vignette Colour is greyed out unless Mode is Colour, and the Glow colour is greyed out under Source colour', { item: '482', budgetMs: 90000 }, async function () {
+    const LABELS = { vignette: ['Roundness', 'Feather', 'Centre X', 'Centre Y', 'Mode', 'Colour', 'Protect highlights'], lightglow: ['Threshold softness', 'Smoothness', 'Glow past the edges', 'Blend', 'Colour from', 'Glow'],
+      softglow: ['Threshold softness', 'Smoothness', 'Glow past the edges', 'Blend', 'Colour from', 'Glow'], darkglow: ['Threshold softness', 'Smoothness', 'Glow past the edges', 'Blend'] };
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const rowOf = label => {
+      const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label, #inspector-panel .fx-row.fx-open .kf-color-row > label'));
+      const lab = labs.filter(e => (e.textContent || '').trim() === label)[0];
+      return lab ? { lab: lab, row: lab.closest('.fx-scrub-row, .fx-seg-row, .kf-color-row') } : null;
+    };
+    const show = async (type, set) => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S4826l', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; if (set) set(inst.params);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const check = async where => {
+      for (const type of Object.keys(LABELS)) {
+        await show(type);
+        const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+        for (const label of LABELS[type]) {
+          const r = rowOf(label);
+          if (!r || !r.row) throw new Error(where + ': the open ' + type + ' shows no ' + label + ' row');
+          r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+          const rr = r.row.getBoundingClientRect();
+          if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+          if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + r.lab.scrollWidth + ' px of text in ' + r.lab.clientWidth + ')');
+          [].slice.call(r.row.querySelectorAll('.fx-seg-btn')).forEach(b => {
+            const br = b.getBoundingClientRect();
+            if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
+          });
+          const tag = r.row.querySelector('.fx-ovr-tag');
+          if (tag) { const tb = tag.getBoundingClientRect(); if (tb.right > panel.right + 1 || tag.scrollWidth > tag.clientWidth + 1) throw new Error(where + ': the greyed ' + type + ' ' + label + ' pill does not fit: ' + JSON.stringify(tag.textContent)); }
+        }
+      }
+      await show('vignette');
+      if (!rowOf('Colour').row.classList.contains('fx-overridden')) throw new Error(where + ': the Vignette Colour looks live under Mode Darken, where it does nothing');
+      if (rowOf('Roundness').row.classList.contains('fx-overridden')) throw new Error(where + ': CONTROL - Roundness is greyed out, and nothing switches it off');
+      await show('vignette', p => { p.mode = 2; });
+      if (rowOf('Colour').row.classList.contains('fx-overridden')) throw new Error(where + ': the Vignette Colour is greyed out under Mode Colour');
+      for (const type of ['lightglow', 'softglow']) {
+        await show(type);
+        if (rowOf('Glow').row.classList.contains('fx-overridden')) throw new Error(where + ': the ' + type + ' Glow colour is greyed out under Chosen colour, where it is the colour');
+        await show(type, p => { p.from = 1; });
+        if (!rowOf('Glow').row.classList.contains('fx-overridden')) throw new Error(where + ': the ' + type + ' Glow colour looks live under Source colour, where it does nothing');
+      }
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
+
+
+
+  /* ═══ #482 / #966 POLISH BATCH 6 — DROP SHADOW (6.3) AND STROKE COLOUR (6.4) ════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 6
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md): Drop Shadow gains Spread, Smoothness and Shadow only, and its
+   * Distance and Softness reach 300 and 80 px; Stroke Colour gains Offset, the gap that makes the sticker double outline.
+   * C22 (no shadow under a soft edge) was fixed by #986 in v17.14 and is VERIFIED here, not redone. The rule that makes it
+   * safe (§0.3): every new key's default is the old picture. Every hash below was captured on v17.21 (28104a3e) BEFORE the
+   * first edit: a textured clip at half size, an ellipse, and a card with a half see-through rim (the C22 path), at the
+   * export (240 wide, t 0.7), a half-size preview (120, t 1.3) and a phone-sized plate (67, t 0.5). Pictures:
+   * tools/design/482/polish6. */
+  function shots4826(layers) {
+    return [[240, 0.7], [120, 1.3], [67, 0.5]].map(([w, t]) => {
+      const cv = offscreen(w, Math.round(w * 3 / 4)), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  function ghost4826() {   // a card whose rim is half see-through and whose middle is solid: the C22 path and the solid path in one
+    const c = offscreen(120, 80), g = c.getContext('2d');
+    g.fillStyle = 'rgba(235,235,250,0.5)'; g.fillRect(0, 0, 120, 80);
+    g.fillStyle = 'rgba(90,200,140,1)'; g.beginPath(); g.arc(60, 40, 22, 0, Math.PI * 2); g.fill();
+    return c;
+  }
+  function lay4826(kind, effs, ids) {
+    let l;
+    if (kind === 'image') { l = FM.makeLayer('image', { x: 110, y: 85, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: fix482(), width: 200, height: 150 }); ids.push(l.id); l.transform.scale = 0.5; }
+    else if (kind === 'ghost') { l = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: ghost4826(), width: 120, height: 80 }); ids.push(l.id); l.transform.scale = 1; }
+    else l = FM.makeLayer('shape', { shape: 'ellipse', x: 100, y: 80, shapeW: 110, shapeH: 70, fill: '#c06040', start: 0, duration: 4 });
+    l.start = 0; l.duration = 4; l.effects = effs || []; return l;
+  }
+  /* A synthetic plate for the kernels themselves: a block with a two-pixel 140-alpha rim, a half see-through block and a
+     one-pixel hairline, every channel moving — a soft edge, a see-through layer and a hairline are where a shadow or an
+     outline goes wrong. */
+  function plate4826(W, H) {
+    const a = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4; let al = 0;
+      if (x >= 40 && x < 100 && y >= 30 && y < 75) al = (x < 42 || x >= 98 || y < 32 || y >= 73) ? 140 : 255;
+      else if (x >= 108 && x < 140 && y >= 20 && y < 50) al = 110;
+      else if (x === 60 && y >= 82 && y < 100) al = 255;
+      if (al) { a[i] = 200 - ((x * 7) % 90); a[i + 1] = 80 + ((y * 11) % 120); a[i + 2] = 40 + ((x + y) % 150); a[i + 3] = al; }
+    }
+    return a;
+  }
+  function khash4826(a) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < a.length; i++) { h ^= a[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const fx4826 = (type, set) => { const e = FM.fxRegistry.makeInstance(type); if (!e) throw new Error('no registry entry for ' + type); Object.assign(e.params, set || {}); return e; };
+  const DSPICS4826 = [
+    ['new', () => FM.fxRegistry.makeInstance('dropshadow'), ['image', 'shape', 'ghost']],
+    ['saved', () => ({ type: 'dropshadow', enabled: true, params: { distance: 30, angle: 45, softness: 10, opacity: 70, color: '#203080' } }), ['image', 'shape', 'ghost']],
+    ['empty', () => ({ type: 'dropshadow', enabled: true, params: {} }), ['shape']],
+    ['kf', () => ({ type: 'dropshadow', enabled: true, params: { distance: { kf: [{ t: 0, v: 4 }, { t: 2, v: 50 }] }, softness: 3, angle: 200, color: '#000000' } }), ['shape', 'ghost']],
+    ['oldmax', () => ({ type: 'dropshadow', enabled: true, params: { distance: 60, softness: 20, angle: 300, color: '#401010' } }), ['shape']],
+  ];
+  const STPICS4826 = [
+    ['new', () => FM.fxRegistry.makeInstance('stroke'), ['image', 'shape', 'ghost']],
+    ['saved', () => ({ type: 'stroke', enabled: true, params: { width: 10, color: '#ff3366' } }), ['shape', 'ghost']],
+    ['empty', () => ({ type: 'stroke', enabled: true, params: {} }), ['shape']],
+    ['centre', () => fx4826('stroke', { position: 1, width: 8 }), ['shape']],
+    ['inside', () => fx4826('stroke', { position: 2, width: 6 }), ['image']],
+    ['round', () => fx4826('stroke', { shape: 1, width: 9, color: '#20e0ff' }), ['shape', 'ghost']],
+    ['soft', () => fx4826('stroke', { softness: 3, width: 7 }), ['ghost']],
+    ['kf', () => ({ type: 'stroke', enabled: true, params: { width: { kf: [{ t: 0, v: 2 }, { t: 2, v: 20 }] }, color: '#ffffff' } }), ['shape']],
+  ];
+  const DSKERN4826 = [['defaults', {}], ['soft0', { softness: 0 }], ['dist0', { distance: 0, softness: 8 }], ['oldmax', { distance: 60, softness: 20, angle: 300 }], ['op40', { opacity: 40, color: '#ff0000' }]];
+  const STKERN4826 = [['defaults', {}, 1], ['centre', { position: 1 }, 1], ['inside', { position: 2 }, 1], ['round', { shape: 1 }, 1], ['soft', { softness: 4 }, 1], ['w60', { width: 60 }, 1], ['defaults-half', {}, 0.5], ['round-half', { shape: 1, width: 10 }, 0.5]];
+  function pics4826(only) {
+    const out = {}, ids = [];
+    try {
+      if (only !== 'stroke') DSPICS4826.forEach(([n, mk, kinds]) => kinds.forEach(k => { out['ds/' + n + '/' + k] = shots4826([lay4826(k, [mk()], ids)]); }));
+      if (only !== 'dropshadow') {
+        STPICS4826.forEach(([n, mk, kinds]) => kinds.forEach(k => { out['st/' + n + '/' + k] = shots4826([lay4826(k, [mk()], ids)]); }));
+        /* a clip's own outline (layer.stroke on media) runs the stroke kernel with no effect row at all */
+        const m = lay4826('image', [], ids); m.stroke = { enabled: true, width: 6, color: '#ffcc00', position: 'outside', round: false }; out['st/media/image'] = shots4826([m]);
+        const m2 = lay4826('ghost', [], ids); m2.stroke = { enabled: true, width: 5, color: '#ffcc00', position: 'outside', round: true }; out['st/media-round/ghost'] = shots4826([m2]);
+      }
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    const K = FM._FX_TABLES.PIXEL_FX, W = 160, H = 120;
+    if (only !== 'stroke') DSKERN4826.forEach(([n, set]) => { const a = plate4826(W, H); K.dropshadow(a, W, H, Object.assign({}, FM.fxRegistry.makeInstance('dropshadow').params, set), 0.4); out['kds/' + n] = khash4826(a); });
+    if (only !== 'dropshadow') STKERN4826.forEach(([n, set, ps]) => { const a = plate4826(W, H); K.stroke(a, W, H, Object.assign({}, FM.fxRegistry.makeInstance('stroke').params, set), 0.4, ps); out['kst/' + n] = khash4826(a); });
+    return out;
+  }
+  /* The 56 library filters, one render each, folded into one hash: none carries a Drop Shadow or a Stroke, so none may move. */
+  function filters4826() {
+    const ids = [], hs = [];
+    try {
+      FM.filters.all().map(f => f.id).sort().forEach(id => {
+        const l = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: fix482(), width: 200, height: 150 }); ids.push(l.id);
+        l.start = 0; l.duration = 4; l.effects = [FM.filters.makeInstance(id)];
+        const cv = offscreen(120, 90), x = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: [l], selectedId: null, selectedIds: [] }, 0.9);
+        hs.push(id + ':' + hash482(x, cv));
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    let h = 0x811c9dc5 >>> 0; hs.join('|').split('').forEach(ch => { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; });
+    return { n: hs.length, hash: ('00000000' + h.toString(16)).slice(-8) };
+  }
+  /* Captured on v17.21 (28104a3e) before the first edit — identical in the 900 px and the 380 px runner, and stable across two
+     captures in one page. `ds/` and `st/` are renders through the app (export / half preview / phone plate); `kds/` and `kst/`
+     the kernels on plate4826; the filters are all 56 library looks folded into one hash. */
+  const HEAD4826 = {
+    'ds/new/image': '7df7c328/a3b6799b/eed02955', 'ds/new/shape': '9e5b4abc/68ec1192/08a40e51', 'ds/new/ghost': 'e74c4543/9eba8ba1/fdbe8c4b',
+    'ds/saved/image': '65669169/b66f726c/9a4c04f7', 'ds/saved/shape': 'b7c9dc56/e9ea4e59/bffb0496', 'ds/saved/ghost': 'e72ca888/a79dcb0e/ec27c250',
+    'ds/empty/shape': '9e5b4abc/68ec1192/08a40e51', 'ds/kf/shape': '6b2373c3/f08f2318/4772c032', 'ds/kf/ghost': '99ebbf09/c975a208/18097824',
+    'ds/oldmax/shape': 'f228316f/f54004a6/f3d98d09', 'kds/defaults': '061fee11', 'kds/soft0': '14c4d129',
+    'kds/dist0': '70445236', 'kds/oldmax': '45014e86', 'kds/op40': 'a1130913',
+    'st/new/image': '25ec9aea/617296be/63ab28ad', 'st/new/shape': '267efc27/b02cada2/06bb4451', 'st/new/ghost': '85b19f60/c7f3ba79/e17011df',
+    'st/saved/shape': 'd18d097b/f572b4c6/1216df0d', 'st/saved/ghost': '876095c0/81666a79/a7470377', 'st/empty/shape': '267efc27/b02cada2/06bb4451',
+    'st/centre/shape': '47b04164/5894f3e8/1b7b88eb', 'st/inside/image': '642032ec/9c32d0a3/146a94b9', 'st/round/shape': '914d8dd3/7b39382e/98068699',
+    'st/round/ghost': 'ce21e810/bf59fcd5/55066203', 'st/soft/ghost': '2678a3b0/7a2b9e49/e17011df', 'st/kf/shape': '64996853/ec59717e/1e597955',
+    'st/media/image': '920a7172/eb06a9aa/69e8f09d', 'st/media-round/ghost': 'dd755750/1f9128d5/c4a843db', 'kst/defaults': 'fb3533a9',
+    'kst/centre': 'a705f44d', 'kst/inside': 'd7fb8c21', 'kst/round': '2b30cb19',
+    'kst/soft': 'c0549635', 'kst/w60': '9f3da4b5', 'kst/defaults-half': '5ad5becd',
+    'kst/round-half': '4fcf29c9',
+  };
+  const FILTERS4826 = { n: 56, hash: '18d12cdf' };
+  /* The half both item tests share: each new control DECLARED in the catalogue (so the load sanitiser keeps it — the
+     whitelist-drift lesson) at a default that is the old look, filled at render time with that same value (queue 784 would
+     otherwise restyle every saved instance the first time it drew), surviving a save at a non-default value. */
+  function declared4826(type, NEW, SET) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + want.label + ' (' + k + ') control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.label !== want.label) throw new Error('the ' + type + ' ' + k + ' control is labelled ' + JSON.stringify(pd.label) + ', not ' + want.label);
+      if (pd.default !== want.def) throw new Error(type + ' ' + want.label + ' defaults to ' + pd.default + ', not ' + want.def + ' - the value that draws the old look');
+      if (inst.params[k] !== want.def) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want.def);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want.def) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want.def + ' - every saved ' + type + ' would change the first time it drew');
+      ['min', 'max', 'unit', 'type', 'overriddenBy', 'liveWhen', 'liveAbove'].forEach(f => { if (want[f] !== undefined && pd[f] !== want[f]) throw new Error(type + ' ' + want.label + ' ' + f + ' is ' + JSON.stringify(pd[f]) + ', not ' + JSON.stringify(want[f])); });
+    });
+    const lay = [{ id: 'l4826', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: type, enabled: true, params: Object.assign({}, SET) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (got.params[k] !== SET[k]) throw new Error('a saved ' + type + ' ' + k + ' of ' + SET[k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+  }
+  function unmoved4826(only) {
+    const now = pics4826(only), moved = Object.keys(now).filter(k => now[k] !== HEAD4826[k]).map(k => k + ' ' + HEAD4826[k] + ' -> ' + now[k]);
+    if (Object.keys(now).length < 10) throw new Error('setup: only ' + Object.keys(now).length + ' pictures were drawn');
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.21 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  }
+  const ds4826 = (set) => Object.assign({}, FM.fxRegistry.makeInstance('dropshadow').params, { color: '#000000' }, set);
+
+  /* 6.3 — THE OLD SHADOWS DO NOT MOVE. */
+  test('482 6.3 Drop Shadow - Spread, Smoothness and Shadow only are in the catalogue at defaults that draw the old shadow byte for byte as on v17.21, Distance reaches 300 and Softness 80 with their defaults unchanged, a saved value survives the load sanitiser, and the 56 library filters do not move', { item: '482', budgetMs: 120000 }, function () {
+    declared4826('dropshadow', {
+      spread: { label: 'Spread', def: 0, min: 0, max: 100, unit: '%', overriddenBy: 'softness', liveAbove: 0 },
+      smooth: { label: 'Smoothness', def: 1, min: 1, max: 3, overriddenBy: 'softness', liveAbove: 0 },
+      shadowonly: { label: 'Shadow only', def: 0, type: 'segment' },
+      distance: { label: 'Distance', def: 18, min: 0, max: 300, unit: 'px' },
+      softness: { label: 'Softness', def: 6, min: 0, max: 80, unit: 'px' },
+    }, { distance: 240, softness: 70, spread: 60, smooth: 3, shadowonly: 1, opacity: 80, angle: 30 });
+    const so = (FM.fxRegistry.paramsOf('dropshadow') || []).filter(q => q.key === 'shadowonly')[0];
+    if (JSON.stringify(so.options || []) !== JSON.stringify([[0, 'Off'], [1, 'On']])) throw new Error('Shadow only offers ' + JSON.stringify(so.options) + ', not Off / On');
+    const px = FM._pxParamKeys('dropshadow') || [];
+    if (px.indexOf('distance') < 0 || px.indexOf('softness') < 0 || px.indexOf('spread') >= 0) throw new Error('the px controls are ' + px.join(', ') + ' - Distance and Softness must scale with the preview plate and Spread (a share of the Softness) must not');
+    if (FM._FX_TABLES.PIXEL_FX.dropshadow.length >= 6) throw new Error('the drop shadow kernel names ' + FM._FX_TABLES.PIXEL_FX.dropshadow.length + ' parameters, which opts it out of the plate scaling (#691) - its preview would stop matching the export');
+    /* no library filter carries one, so its default cannot move them — and they do not move */
+    const carry = FM.filters.all().filter(f => (FM.filters.makeInstance(f.id).effects || []).some(e => e.type === 'dropshadow' || e.type === 'stroke')).map(f => f.id);
+    if (carry.length) throw new Error('setup: the library filters ' + carry.join(', ') + ' now carry a Drop Shadow or a Stroke - pin them by name');
+    const f = filters4826();
+    if (f.n !== FILTERS4826.n || f.hash !== FILTERS4826.hash) throw new Error('the ' + f.n + ' library filters render ' + f.hash + ', not ' + FILTERS4826.hash + ' as on v17.21 - one of them moved (queue 675\'s distance test names which)');
+    unmoved4826('dropshadow');
+    /* CONTROL: the pinned fixture can see the new controls at all */
+    const ids = [];
+    try {
+      const base = shots4826([lay4826('ghost', [FM.fxRegistry.makeInstance('dropshadow')], ids)]);
+      [['Spread 100', { spread: 100 }], ['Smoothness 3', { smooth: 3 }], ['Shadow only', { shadowonly: 1 }]].forEach(([what, set]) => {
+        if (shots4826([lay4826('ghost', [fx4826('dropshadow', set)], ids)]) === base) throw new Error('CONTROL: ' + what + ' draws the default picture on this fixture - the pinned hashes cannot see the new control, so they prove nothing');
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+  });
+
+  /* 6.3 — WHAT THE NEW CONTROLS DO, on the kernel and through the app. MEASURED on v17.21 with a 60x40 block, Distance 30
+     to the right and Softness 12: 6 px past the shadow's edge the alpha is 71 whatever Spread says (none exists), 20 px past it
+     is 0 whatever Smoothness says, Shadow only leaves the block standing, and Distance 200 / Softness 50 draw at 60 / 20. */
+  test('482 6.3 Drop Shadow - Spread grows a hard round shadow, Smoothness carries a softer edge further, Shadow only hides the layer and keeps its whole shadow, Distance 200 and Softness 50 reach that far, the skip and the crop stay byte-identical, and the preview matches the export', { item: '482', budgetMs: 120000 }, function () {
+    const K = FM._FX_TABLES.PIXEL_FX.dropshadow, W = 240, H = 200;
+    const block = (w) => { const a = new Uint8ClampedArray((w || W) * H * 4); for (let y = 50; y < 90; y++) for (let x = 60; x < 120; x++) { const i = (y * (w || W) + x) * 4; a[i] = 200; a[i + 1] = 80; a[i + 2] = 60; a[i + 3] = 255; } return a; };
+    const run = (set, w) => { const a = block(w); K(a, w || W, H, ds4826(Object.assign({ distance: 30, angle: 0, softness: 12 }, set)), 0.3); return a; };
+    const A = (a, x, y, w) => a[(y * (w || W) + x) * 4 + 3];
+    const E = 149, Y = 70, bad = [];   // the shadow's right edge (block 60..119 shifted 30) and a row through its middle
+    /* CONTROL: the fixture's default shadow is the old box ramp — 6 px past the edge about 7/25 of full */
+    const s0 = run({});
+    if (!(A(s0, E + 6, Y) > 50 && A(s0, E + 6, Y) < 100 && A(s0, E + 13, Y) === 0)) throw new Error('CONTROL: the default shadow reads ' + A(s0, E + 6, Y) + ' at 6 px and ' + A(s0, E + 13, Y) + ' at 13 px past its edge - not the old 12 px box ramp');
+    /* SPREAD: 100 = solid out to the Softness, then nothing; round at the corner; 50 sits between */
+    const s100 = run({ spread: 100 }), s50 = run({ spread: 50 });
+    if (!(A(s100, E + 6, Y) >= 250 && A(s100, E + 12, Y) >= 250 && A(s100, E + 14, Y) === 0)) bad.push('Spread 100 reads ' + [6, 12, 14].map(k => A(s100, E + k, Y)).join(' / ') + ' at 6 / 12 / 14 px past the edge - not a hard shadow grown by the 12 px Softness');
+    if (!(A(s100, E + 8, 89 + 8) >= 250 && A(s100, E + 10, 89 + 10) === 0)) bad.push('Spread 100 at the corner reads ' + A(s100, E + 8, 97) + ' at (8,8) and ' + A(s100, E + 10, 99) + ' at (10,10) - the grown corner is square, not round');
+    if (!(A(s50, E + 6, Y) > A(s0, E + 6, Y) + 20 && A(s50, E + 6, Y) < A(s100, E + 6, Y) - 20)) bad.push('Spread 50 reads ' + A(s50, E + 6, Y) + ' 6 px out, between ' + A(s0, E + 6, Y) + ' (0) and ' + A(s100, E + 6, Y) + ' (100)?');
+    /* SMOOTHNESS: three passes carry the edge further and soften its start */
+    const m3 = run({ smooth: 3 });
+    if (!(A(m3, E + 20, Y) > 0 && A(s0, E + 20, Y) === 0)) bad.push('Smoothness 3 reads ' + A(m3, E + 20, Y) + ' 20 px out (Smoothness 1 reads ' + A(s0, E + 20, Y) + ') - the softer edge does not reach further');
+    const ramp = (a) => { let mx = 0; for (let k = -10; k < 25; k++) mx = Math.max(mx, Math.abs((A(a, E + k + 1, Y) - A(a, E + k, Y)) - (A(a, E + k, Y) - A(a, E + k - 1, Y)))); return mx; };
+    if (!(ramp(m3) < ramp(s0))) bad.push('Smoothness 3 bends its edge as sharply as Smoothness 1 (' + ramp(m3) + ' vs ' + ramp(s0) + ') - it is not smoother');
+    /* SHADOW ONLY: the block is gone; where it hid its own shadow the shadow now shows */
+    const so = run({ shadowonly: 1 });
+    if (A(so, 70, Y) !== 0) bad.push('Shadow only leaves the layer at alpha ' + A(so, 70, Y) + ' where no shadow falls - the layer is still there');
+    const iu = (Y * W + 105) * 4;
+    if (!(so[iu + 3] >= 250 && so[iu] === 0 && so[iu + 1] === 0)) bad.push('Shadow only draws ' + [so[iu], so[iu + 1], so[iu + 2], so[iu + 3]].join(',') + ' where the layer covered its own shadow - not the black shadow');
+    if (s0[iu] !== 200) throw new Error('CONTROL: with Shadow only off the layer is not on top of its shadow (' + s0[iu] + ')');
+    const so0 = run({ shadowonly: 1, opacity: 0 }); let lit = 0; for (let i = 3; i < so0.length; i += 4) if (so0[i]) lit++;
+    if (lit) bad.push('Shadow only at Opacity 0 leaves ' + lit + ' pixels - it should leave nothing at all');
+    /* REACH: Distance 200 and Softness 50 on a wider plate */
+    const WW = 420, far = run({ distance: 200, softness: 0 }, WW), wide = run({ distance: 30, softness: 50 }, WW);
+    if (!(A(far, 300, Y, WW) >= 250 && A(far, 150, Y, WW) === 0)) bad.push('Distance 200 puts the shadow at ' + A(far, 300, Y, WW) + ' 200 px away and ' + A(far, 150, Y, WW) + ' 30 px away - it still stops at 60');
+    if (!(A(wide, E + 35, Y, WW) > 0)) bad.push('Softness 50 reads 0 35 px past the shadow edge - it still stops at 20');
+    /* C22 (#986) holds with the new controls: a 140-alpha rim over the shadow is darker than with no shadow */
+    { const p = plate4826(160, 120), q = plate4826(160, 120); K(p, 160, 120, ds4826({ distance: 6, angle: 0, softness: 6, spread: 50, smooth: 2 }), 0.3);
+      const i = (50 * 160 + 98) * 4;   // the block's right rim (alpha 140), over its own shadow
+      const lum = (a) => a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11;
+      if (!(p[i + 3] > q[i + 3] && lum(p) < lum(q) - 10)) bad.push('with Spread and Smoothness the soft rim over the shadow is ' + [p[i], p[i + 1], p[i + 2], p[i + 3]].join(',') + ' against ' + [q[i], q[i + 1], q[i + 2], q[i + 3]].join(',') + ' with no shadow - the C22 seam is back'); }
+    /* THE SKIP STAYS A SKIP: bounded and unbounded draw the same bytes, every quadrant, cut by the plate edge, every new control */
+    const CASES = [[{ spread: 40, smooth: 3 }, 70, 60], [{ spread: 100 }, 0, 0], [{ smooth: 2, angle: 225, distance: 40 }, 0, 0], [{ shadowonly: 1, spread: 30, smooth: 2 }, 70, 60],
+      [{ spread: 70, smooth: 3, angle: 315, softness: 30 }, 170, 140], [{ distance: 220, angle: 90, softness: 25, smooth: 3 }, 70, 30], [{ spread: 50, angle: 180, distance: 50 }, 10, 60]];
+    const mk = (rx, ry) => { const a = new Uint8ClampedArray(W * H * 4); for (let y = ry; y < Math.min(H, ry + 60); y++) for (let x = rx; x < Math.min(W, rx + 80); x++) { const i = (y * W + x) * 4, edge = (x < rx + 2 || y < ry + 2 || x >= rx + 78 || y >= ry + 58); a[i] = 200; a[i + 1] = 90; a[i + 2] = 60; a[i + 3] = edge ? 140 : 255; } return a; };
+    CASES.forEach(([set, rx, ry]) => {
+      const pr = ds4826(Object.assign({ distance: 18, angle: 135, softness: 6 }, set));
+      const a = mk(rx, ry); K(a, W, H, pr, 0.3, 1);
+      const b = mk(rx, ry); K(b, W, H, pr, 0.3, 1, FM._fxBoundsScan(b, W, H));
+      if (khash4826(a) !== khash4826(b)) bad.push('bounded and unbounded differ with ' + JSON.stringify(set) + ' at ' + rx + ',' + ry + ' - the skip is no longer a skip');
+    });
+    /* …and through the cropped readback, at the tightest reach the margin has to cover (distance 0, all the softness as blur) */
+    const big = () => { const PW = 640, PH = 520, a = new Uint8ClampedArray(PW * PH * 4); for (let y = 230; y < 290; y++) for (let x = 280; x < 360; x++) { const i = (y * PW + x) * 4; a[i] = 200; a[i + 1] = 90; a[i + 2] = 60; a[i + 3] = 255; } return a; };
+    [{ distance: 0, softness: 80, smooth: 3 }, { distance: 0, softness: 60, spread: 50, smooth: 3 }, { distance: 120, angle: 30, softness: 40, spread: 20, smooth: 3 }].forEach(set => {
+      const r = FM._cropIdentity('dropshadow', big(), 640, 520, ds4826(set), 0.3, 1);
+      if (!r || r.same !== true) bad.push('the cropped readback differs with ' + JSON.stringify(set) + ' (' + (r ? r.diff + ' bytes' : 'no result') + ') - the crop margin no longer covers the shadow');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));   // what the controls DO first: the preview check below needs them working
+    /* PREVIEW = EXPORT through the app: the half-size preview is the export at half size, within the plate's rounding.
+       MEASURED on the build: 0.65 / 0.39 / 0.57 levels off on average, against 11.3 / 9.3 / 31.1 for a different shadow — 3 sits between. */
+    const shot = (set, rs) => {
+      const c = offscreen(Math.round(240 * rs), Math.round(180 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      const L = FM.makeLayer('shape', { shape: 'ellipse', x: 90, y: 70, shapeW: 90, shapeH: 60, fill: '#e0a040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; L.effects = [fx4826('dropshadow', set)];
+      FM.renderScene(g, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#ffffff' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
+      return g.getImageData(0, 0, c.width, c.height).data;
+    };
+    const off = (ex, pv) => { let s = 0, n = 0; for (let y = 0; y < 90; y++) for (let x = 0; x < 120; x++) { let e = 0; for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) e += ex[((2 * y + dy) * 240 + 2 * x + dx) * 4 + 1]; s += Math.abs(e / 4 - pv[(y * 120 + x) * 4 + 1]); n++; } return s / n; };
+    [['Spread 60 + Smoothness 3', { distance: 40, angle: 45, softness: 16, spread: 60, smooth: 3 }, { distance: 40, angle: 45, softness: 16 }], ['Shadow only', { distance: 40, angle: 45, softness: 10, shadowonly: 1 }, { distance: 40, angle: 45, softness: 10 }],
+     ['Distance 150', { distance: 150, angle: 20, softness: 30, smooth: 2 }, { distance: 60, angle: 20, softness: 20 }]].forEach(([what, set, other]) => {
+      const ex = shot(set, 1), pv = shot(set, 0.5), d = off(ex, pv), ctl = off(shot(other, 1), pv);
+      if (!(ctl > d * 2 && ctl > 2)) throw new Error('CONTROL: ' + what + ' - the preview is as close to a different shadow (' + ctl.toFixed(2) + ') as to its own export (' + d.toFixed(2) + '), so this comparison sees nothing');
+      if (d > 3) bad.push(what + ': the half-size preview is ' + d.toFixed(2) + ' levels off the export on average (a different shadow is ' + ctl.toFixed(2) + ' off)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 6.4 — STROKE COLOUR'S OFFSET, the sticker double outline. MEASURED on v17.21 with a 40x30 block, Width 4: 2 px out is the
+     red outline and 12 px out is empty whatever Offset says (no such control) — the reverse of a 10 px gap. */
+  test('482 6.4 Stroke Colour - Offset puts a clear gap between the layer and its outline when Position is Outside, round corners stay round, Centre and Inside ignore it, the defaults draw the old outline byte for byte as on v17.21, and the preview matches the export', { item: '482', budgetMs: 120000 }, function () {
+    const K = FM._FX_TABLES.PIXEL_FX.stroke, W = 160, H = 120, bad = [];
+    const block = () => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 45; y < 75; y++) for (let x = 60; x < 100; x++) { const i = (y * W + x) * 4; a[i] = 40; a[i + 1] = 120; a[i + 2] = 220; a[i + 3] = 255; } return a; };
+    const run = (set, ps) => { const a = block(); K(a, W, H, Object.assign({}, FM.fxRegistry.makeInstance('stroke').params, { color: '#ff0000', width: 4 }, set), 0.3, ps || 1); return a; };
+    const px = (a, x, y) => { const i = (y * W + x) * 4; return [a[i], a[i + 1], a[i + 2], a[i + 3]]; };
+    const red = (v) => v[3] >= 250 && v[0] >= 250 && v[1] === 0 && v[2] === 0, clear = (v) => v[3] === 0;
+    const R = 99, Y = 60;   // the block's last column, and a row through its middle
+    /* CONTROL: Offset 0 is the old outline, 1-4 px out */
+    const g0 = run({});
+    if (!(red(px(g0, R + 2, Y)) && clear(px(g0, R + 5, Y)))) throw new Error('CONTROL: the plain outline reads ' + px(g0, R + 2, Y) + ' at 2 px and ' + px(g0, R + 5, Y) + ' at 5 px out - not the 4 px red outline');
+    /* Offset 10 + Width 4: clear for 10 px, the outline from 11 to 14, clear again */
+    const g10 = run({ gap: 10 });
+    [[2, 'clear'], [5, 'clear'], [10, 'clear'], [11, 'red'], [12, 'red'], [14, 'red'], [15, 'clear']].forEach(([k, want]) => {
+      const v = px(g10, R + k, Y); if (!(want === 'red' ? red(v) : clear(v))) bad.push('Offset 10 reads ' + v.join(',') + ' ' + k + ' px out, not ' + want);
+    });
+    if (px(g10, 80, Y).join(',') !== px(g0, 80, Y).join(',')) bad.push('Offset 10 changed the layer itself (' + px(g10, 80, Y) + ')');
+    /* round corners: the ring follows the corner on a circle; square corners keep the square ring */
+    const gr = run({ gap: 10, shape: 1 }), gs = run({ gap: 10 });
+    if (!(px(gr, R + 8, 74 + 8)[3] >= 250 && px(gr, R + 11, 74 + 11)[3] === 0 && px(gr, R + 6, 74 + 6)[3] === 0)) bad.push('Offset 10 with Round corners reads alpha ' + [px(gr, R + 6, 80)[3], px(gr, R + 8, 82)[3], px(gr, R + 11, 85)[3]].join(' / ') + ' at the corner diagonal 6 / 8 / 11 px - the gap does not run round the corner');
+    if (!(px(gs, R + 11, 74 + 11)[3] >= 250)) bad.push('Offset 10 with Square corners has no square corner at (11,11)');
+    /* soft: the outer edge fades and the gap stays clear */
+    const gf = run({ gap: 10, softness: 2 });
+    if (!(clear(px(gf, R + 5, Y)) && px(gf, R + 11, Y)[3] >= 250 && px(gf, R + 13, Y)[3] > 0 && px(gf, R + 13, Y)[3] < 250 && px(gf, R + 14, Y)[3] === 0)) bad.push('Offset 10 with Softness 2 reads ' + [5, 11, 13, 14].map(k => px(gf, R + k, Y)[3]).join(' / ') + ' at 5 / 11 / 13 / 14 px - the outer edge should fade out by 14 and the gap stay clear');
+    /* Centre and Inside sit on the edge: Offset does nothing there */
+    [[1, 'Centre'], [2, 'Inside']].forEach(([pos, name]) => { if (khash4826(run({ position: pos, gap: 25 })) !== khash4826(run({ position: pos }))) bad.push('Offset changes the ' + name + ' outline, where it should do nothing (it is greyed out there)'); });
+    /* the phone plate: the gap scales with the outline */
+    const gh = run({ gap: 10 }, 0.5);   // gap 5, width 2 plate px
+    if (!(clear(px(gh, R + 5, Y)) && red(px(gh, R + 6, Y)) && red(px(gh, R + 7, Y)) && clear(px(gh, R + 8, Y)))) bad.push('on a half-size plate Offset 10 reads ' + [5, 6, 7, 8].map(k => px(gh, R + k, Y)[3]).join(' / ') + ' at 5-8 px out - not a 5 px gap and a 2 px outline');
+    /* PREVIEW = EXPORT through the app: the ring sits at the same place on the half-size preview */
+    const ring = (rs) => {
+      const c = offscreen(Math.round(240 * rs), Math.round(180 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 90, shapeW: 80, shapeH: 60, fill: '#2060e0', start: 0, duration: 4 }); L.start = 0; L.duration = 4;
+      L.effects = [fx4826('stroke', { gap: 12, width: 6, color: '#ff0000' })];
+      FM.renderScene(g, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
+      const d = g.getImageData(0, 0, c.width, c.height).data, y = Math.round(90 * rs), hit = [];
+      for (let x = Math.round(140 * rs); x < c.width; x++) { const i = (y * c.width + x) * 4; if (d[i] > 128 && d[i + 2] < 100) hit.push(x / rs); }
+      return hit.length ? { lo: hit[0], hi: hit[hit.length - 1] } : null;
+    };
+    const ex = ring(1), pv = ring(0.5);
+    if (!ex || !pv) bad.push('the outline did not draw through the app (export ' + JSON.stringify(ex) + ', preview ' + JSON.stringify(pv) + ')');
+    else {
+      if (!(ex.lo >= 151 && ex.lo <= 154 && ex.hi >= 156 && ex.hi <= 159)) bad.push('in the export the ring runs ' + ex.lo + '-' + ex.hi + ' px, not 152-158 (a 12 px gap and a 6 px outline off an edge at 140)');
+      if (Math.abs(pv.lo - ex.lo) > 2 || Math.abs(pv.hi - ex.hi) > 2) bad.push('the half-size preview puts the ring at ' + pv.lo + '-' + pv.hi + ' px and the export at ' + ex.lo + '-' + ex.hi);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+    /* …declared so the sanitiser keeps it, at a default that is the old outline, and the old outlines do not move */
+    declared4826('stroke', { gap: { label: 'Offset', def: 0, min: 0, max: 60, unit: 'px', overriddenBy: 'position', liveWhen: 0 } }, { gap: 25, width: 6, position: 0 });
+    if ((FM._pxParamKeys('stroke') || []).indexOf('gap') < 0) throw new Error('Offset is not a px control, so the crop margin would not cover the gap it adds');
+    unmoved4826('stroke');
+  });
+
+  /* THE NEW ROWS FIT THE PANEL at 390 and 1280 px, and the ones another control switches off say so. */
+  test('482 6.3 and 6.4 panels - Spread, Smoothness, Shadow only and Offset fit the effect panel at 390 and 1280 px, Spread and Smoothness grey out at Softness 0, and Offset greys out for Centre and Inside', { item: '482', budgetMs: 90000 }, async function () {
+    /* the sliders with their number box on the label's line; the option rows and the greying on their own (no number box) */
+    await panel482b('dropshadow', ['Distance', 'Angle', 'Softness', 'Spread', 'Smoothness', 'Opacity'], [], { boxOnLine: true });
+    await panel482b('dropshadow', ['Shadow only'], [[{}, [], ['Spread', 'Smoothness']], [{ softness: 0 }, ['Spread', 'Smoothness'], ['Distance', 'Opacity']]]);
+    await panel482b('stroke', ['Width', 'Softness', 'Offset'], [], { boxOnLine: true });
+    await panel482b('stroke', ['Position', 'Corners'], [[{}, [], ['Offset']], [{ position: 1 }, ['Offset'], ['Width']], [{ position: 2 }, ['Offset'], ['Width']]]);
+  });
+
+
+  /* ═══ #482 BATCH 6 (shadow) — THE REVIEW'S FINDINGS ═══════════════════════════════════════════════════════════════════════
+   * A review of the 6.3 build measured four faults its own tests could not see, because each lived at a setting they never
+   * used: a layer with MORE THAN ONE opacity on it, a layer the frame cuts, an eased keyframe, and Spread near 100%. Each test
+   * below drives exactly that setting, and each measured number in a comment is from the build (c8da2855) and the fix. */
+
+  /* SPREAD AT EACH PART'S OWN STRENGTH. MEASURED on the build through the app (export 240x180, a 100x60 card, Distance 30 at
+     0 degrees, Softness 10, white ground): a 50% card beside its own shadow reads 127 at Spread 0, 10, 30 and 100 alone, and 0
+     (solid black) at Spread 10 the moment a 20x20 opaque spot sits on the card; a 45% card with the spot did not grow at all at
+     Spread 100 (255 where the card alone reads 140); and a 60% card read 102 while its spot was off-frame and 0 from the frame
+     the spot crossed the edge. */
+  test('482 6.3 Drop Shadow - Spread grows every part of the layer at its own strength: a see-through card keeps its own shadow strength and still grows beside an opaque spot, the spot spreads solid, and a spot sliding in from off-frame leaves the card alone', { item: '482', budgetMs: 120000 }, function () {
+    const ids = [], bad = [];
+    const card = (a, spot) => { const c = offscreen(100, 60), g = c.getContext('2d'); g.fillStyle = 'rgba(20,40,200,' + a + ')'; g.fillRect(0, 0, 100, 60); if (spot != null) { g.fillStyle = 'rgb(200,40,20)'; g.fillRect(spot, 38, 20, 20); } return c; };
+    /* green on the white ground: 255 where there is no shadow, 255 - the shadow's alpha where there is (outside the card) */
+    const shot = (el, left, set, rs) => {
+      rs = rs || 1;
+      const l = FM.makeLayer('image', { x: left + 50, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: el, width: 100, height: 60 }); ids.push(l.id);
+      l.start = 0; l.duration = 4; l.transform.scale = 1;
+      l.effects = [fx4826('dropshadow', Object.assign({ distance: 30, angle: 0, softness: 10, color: '#000000' }, set))];
+      const c = offscreen(Math.round(240 * rs), Math.round(180 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#ffffff' }, layers: [l], selectedId: null, selectedIds: [] }, 0.5);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      return (x, y) => d[(Math.round(y * rs) * c.width + Math.round(x * rs)) * 4 + 1];
+    };
+    try {
+      /* the card spans x 60-159, y 60-119; its shadow starts at 90. (175, 72) is beside the card, clear of its top edge's blur and 26 px from the spot's rows. */
+      const alone0 = shot(card(0.5), 60, { spread: 0 }), alone30 = shot(card(0.5), 60, { spread: 30 });
+      if (!(Math.abs(alone0(175, 72) - 127) <= 3 && Math.abs(alone0(175, 90) - 127) <= 3)) throw new Error('CONTROL: the 50% card alone casts ' + alone0(175, 72) + ' / ' + alone0(175, 90) + ' beside itself, not about 127 - the fixture is not a half see-through card');
+      if (!(alone30(195, 90) < alone0(195, 90) - 8)) throw new Error('CONTROL: Spread 30 does not grow the card alone (' + alone30(195, 90) + ' against ' + alone0(195, 90) + ' at Spread 0, 6 px past its edge) - Spread does nothing');
+      /* the spot sits at card x 75-94, rows 98-117: its own shadow is at x 165-184 */
+      [0.5, 0.45, 0.7].forEach(a => {
+        [10, 30, 100].forEach(sp => {
+          const al = shot(card(a), 60, { spread: sp }), wi = shot(card(a, 75), 60, { spread: sp });
+          [[175, 72, 'beside the card'], [195, 72, 'where the card grew'], [175, 85, 'above the spot']].forEach(([x, y, where]) => {
+            if (Math.abs(wi(x, y) - al(x, y)) > 2) bad.push('a ' + Math.round(a * 100) + '% card at Spread ' + sp + ' reads ' + wi(x, y) + ' ' + where + ' with an opaque spot on it and ' + al(x, y) + ' without - the spot changed the card\'s own shadow');
+          });
+        });
+      });
+      /* …and the spot spreads SOLID: at Spread 100 its grown shadow is black, where the card's is its own 127 */
+      { const wi = shot(card(0.5, 75), 60, { spread: 100 }), al = shot(card(0.5), 60, { spread: 100 });
+        if (!(wi(192, 107) <= 8 && Math.abs(al(192, 107) - 127) <= 3)) bad.push('at Spread 100 the opaque spot\'s grown shadow reads ' + wi(192, 107) + ' (the card alone ' + al(192, 107) + ') 8 px past the spot\'s shadow - the solid part does not spread solid'); }
+      /* A SPOT SLIDING IN FROM OFF-FRAME (card x from -35 to 0, the spot at card x 10-29) does not touch the card's shadow */
+      const ref = shot(card(0.6), 0, { spread: 20 })(115, 72);
+      const slide = [-35, -25, -15, -5, 0].map(L => shot(card(0.6, 10), L, { spread: 20 })(L + 115, 72));
+      if (slide.some(v => Math.abs(v - ref) > 2)) bad.push('a 60% card at Spread 20 reads ' + slide.join(' / ') + ' beside itself as its opaque spot slides in from off-frame (card x -35 to 0), against ' + ref + ' for the card alone - the shadow pops as the spot crosses the edge');
+      /* PREVIEW = EXPORT for the spread of a mixed layer: over the card and its shadow the half-size preview is the export at
+         half size — and much nearer it than a different shadow. Softness 12 at Spread 50 halves into whole plate pixels (6 solid,
+         6 soft -> 3 and 3); an odd split rounds a pixel one way on the half plate, which is the plate's rounding, not the spread.
+         MEASURED on the fix: 1.02 levels off on average, against 29.2 for a different shadow (Spread 0: 0.77; the odd 3 + 7 split
+         of Softness 10 at Spread 30: 4.4, and 6.8 on the build). */
+      { const ex = shot(card(0.5, 75), 60, { spread: 50, softness: 12 }), pv = shot(card(0.5, 75), 60, { spread: 50, softness: 12 }, 0.5), other = shot(card(0.5, 75), 60, { spread: 100, softness: 12 });
+        const off = (e) => { let sum = 0, n = 0; for (let y = 50; y < 130; y += 2) for (let x = 80; x < 210; x += 2) { sum += Math.abs(pv(x, y) - (e(x, y) + e(x + 1, y) + e(x, y + 1) + e(x + 1, y + 1)) / 4); n++; } return sum / n; };
+        const d = off(ex), ctl = off(other);
+        if (!(ctl > 2 * d && ctl > 2)) bad.push('CONTROL: the preview is as near a different shadow (' + ctl.toFixed(2) + ') as its own export (' + d.toFixed(2) + ') - this comparison sees nothing');
+        else if (d > 3) bad.push('Spread 50 on the card with a spot: the half-size preview is ' + d.toFixed(2) + ' levels off the export on average (a different shadow is ' + ctl.toFixed(2) + ' off)'); }
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    /* THE GROWTH ITSELF, against a brute-force max over the disc with its anti-aliased rim, on a mixed-alpha plate and a word */
+    const GD = FM._greyDilateDisc;
+    if (!GD) bad.push('no FM._greyDilateDisc - the grey-level spread is not reachable');
+    else {
+      const brute = (A, w, h, r) => { const G = new Float32Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let m = 0; for (let dy = -r - 1; dy <= r + 1; dy++) for (let dx = -r - 1; dx <= r + 1; dx++) { const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= w || Y >= h) continue; const dd = Math.hypot(dx, dy), k = dd <= r ? 1 : (dd < r + 1 ? r + 1 - dd : 0), v = A[Y * w + X] * k; if (v > m) m = v; } G[y * w + x] = m; } return G; };
+      const word = () => { const c = offscreen(70, 40), g = c.getContext('2d'); g.fillStyle = 'rgba(255,255,255,0.55)'; g.fillRect(4, 4, 30, 30); g.fillStyle = '#fff'; g.font = 'bold 26px Arial'; g.textBaseline = 'middle'; g.fillText('Sg', 30, 22); const dd = g.getImageData(0, 0, 70, 40).data, A = new Uint8Array(70 * 40); for (let i = 0; i < A.length; i++) A[i] = dd[i * 4 + 3]; return A; };
+      [[3], [6]].forEach(([r]) => { const A = word(), got = GD(A, 70, 40, r), want = brute(A, 70, 40, r); let over = 0, under = 0; for (let i = 0; i < A.length; i++) { if (got[i] > want[i] + 0.01) over++; if (want[i] - got[i] > 3.01) under++; }
+        if (over || under) bad.push('the spread at ' + r + ' px differs from the brute-force max on ' + over + ' pixels above it and ' + under + ' more than 3 levels under it'); }); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SHADOW ONLY ON A LAYER THE FRAME CUTS. MEASURED on the build: a 200x30 bar spanning x 100-299 in a 240-wide frame, Distance
+     30 at 180 degrees, Softness 0, Shadow only On: row 60 is shadow from 70 to 209 and the white ground from 210 to 239 — the
+     shadow of the bar's off-frame part was never drawn, and with Shadow only nothing covers the hole. */
+  test('482 6.3 Drop Shadow - Shadow only draws the shadow of a layer the frame cuts right up to the frame edge, with and without Spread, in the export and the half-size preview, and a layer inside the frame keeps its own ends', { item: '482', budgetMs: 120000 }, function () {
+    const ids = [], bad = [];
+    const block = (w, h) => { const c = offscreen(w, h), g = c.getContext('2d'); g.fillStyle = '#d02020'; g.fillRect(0, 0, w, h); return c; };
+    const shot = (el, cx, cy, set, rs) => {
+      rs = rs || 1;
+      const l = FM.makeLayer('image', { x: cx, y: cy, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: el, width: el.width, height: el.height }); ids.push(l.id);
+      l.start = 0; l.duration = 4; l.transform.scale = 1;
+      l.effects = [fx4826('dropshadow', Object.assign({ distance: 30, angle: 180, softness: 0, color: '#000000' }, set))];
+      const c = offscreen(Math.round(240 * rs), Math.round(180 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#ffffff' }, layers: [l], selectedId: null, selectedIds: [] }, 0.5);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      return (x, y) => d[(Math.round(y * rs) * c.width + Math.round(x * rs)) * 4 + 1];   // green: 255 ground, 0 black shadow, 32 the red bar
+    };
+    const runOf = (px, y, x0, x1, step) => { const o = []; for (let x = x0; x <= x1; x += step) o.push(px(x, y)); return o; };
+    try {
+      /* CONTROL: Shadow only OFF — the bar covers the gap, as it always did (the shadow 70-99, then the bar) */
+      const off = shot(block(200, 30), 200, 60, {});
+      if (!(off(85, 60) === 0 && off(150, 60) === 32 && off(235, 60) === 32 && off(60, 60) === 255)) throw new Error('CONTROL: with Shadow only off the cut bar reads ' + [off(60, 60), off(85, 60), off(150, 60), off(235, 60)].join(' / ') + ' at x 60 / 85 / 150 / 235 - not ground, shadow, bar, bar');
+      /* the bar crossing the right edge: the shadow runs from 70 to the frame edge, in the export and the half preview */
+      [['the export', 1], ['the half-size preview', 0.5]].forEach(([where, rs]) => {
+        const on = shot(block(200, 30), 200, 60, { shadowonly: 1 }, rs), row = runOf(on, 60, 72, 236, 4);
+        if (row.some(v => v > 12) || on(60, 60) < 240) bad.push('with Shadow only, the bar the frame cuts reads ' + row.join(',') + ' along row 60 from x 72 to 236 in ' + where + ' (and ' + on(60, 60) + ' at x 60) - its shadow stops short of the frame edge');
+      });
+      /* …with Spread and Smoothness too (the grown buffer): to the edge, and still solid there */
+      { const on = shot(block(200, 30), 200, 60, { shadowonly: 1, softness: 8, spread: 50, smooth: 2 }); const row = runOf(on, 60, 90, 236, 6);
+        if (row.some(v => v > 20)) bad.push('with Shadow only and Spread 50, the cut bar reads ' + row.join(',') + ' along row 60 from x 90 to 236 - its shadow stops short of the frame edge'); }
+      /* a block the BOTTOM edge cuts, shadow straight up (270 degrees): the shadow reaches the bottom of the frame */
+      { const on = shot(block(60, 100), 120, 170, { shadowonly: 1, angle: 270, softness: 6 }), col = runOf((y) => on(120, y), 0, 100, 176, 8);
+        if (col.some(v => v > 20)) bad.push('with Shadow only, a block the bottom edge cuts reads ' + col.join(',') + ' down column 120 from y 100 to 176 - its shadow stops short of the bottom'); }
+      /* a bar INSIDE the frame (x 20-219) keeps its own end: the shadow stops 30 px short of where the bar ended */
+      { const inside = shot(block(200, 30), 120, 60, { shadowonly: 1 });
+        if (!(inside(150, 60) <= 12 && inside(185, 60) <= 12 && inside(195, 60) >= 240 && inside(230, 60) >= 240)) bad.push('with Shadow only, a bar inside the frame reads ' + [150, 185, 195, 230].map(x => inside(x, 60)).join(' / ') + ' at x 150 / 185 / 195 / 230 - its shadow should end at 189'); }
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    /* THE SKIP AND THE CROP stay byte-identical for a layer on the edge: bounded = unbounded, and the cropped readback = the full */
+    { const K = FM._FX_TABLES.PIXEL_FX.dropshadow, W = 240, H = 200;
+      const mk = () => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 60; y < 100; y++) for (let x = 150; x < W; x++) { const i = (y * W + x) * 4; a[i] = 200; a[i + 1] = 80; a[i + 2] = 60; a[i + 3] = (x < 152 || y < 62 || y >= 98) ? 140 : 255; } return a; };
+      [{ shadowonly: 1 }, { shadowonly: 1, spread: 60, softness: 10, smooth: 2, angle: 160 }, { shadowonly: 1, angle: 200, distance: 45, softness: 5 }].forEach(set => {
+        const pr = ds4826(Object.assign({ distance: 30, angle: 180, softness: 0 }, set));
+        const a = mk(); K(a, W, H, pr, 0.3, 1); const b = mk(); K(b, W, H, pr, 0.3, 1, FM._fxBoundsScan(b, W, H));
+        if (khash4826(a) !== khash4826(b)) bad.push('bounded and unbounded differ with ' + JSON.stringify(set) + ' on a layer the edge cuts - the skip is no longer a skip');
+        const r = FM._cropIdentity('dropshadow', mk(), W, H, pr, 0.3, 1);
+        if (!r || r.same !== true) bad.push('the cropped readback differs with ' + JSON.stringify(set) + ' on a layer the edge cuts (' + (r ? r.diff + ' bytes' : 'no result') + ')');
+      }); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE OLD CEILING FOR A SAVED RANGE. MEASURED: Distance keyed 10 -> 60 with the graph editor's Overshoot ease evaluates 64.0
+     at t 1.37; v17.21 clamped it to 60 and the build drew 64 (the shadow's right edge 169 -> 173 px). Softness keyed 2 -> 20
+     with Overshoot (21.4) and Distance 20 -> 60 with Elastic (65 at t 0.4) moved the same way. Compared here against a STATIC
+     60 / 20 at the same moment, so no pinned hash is needed: equal bytes are the old ceiling. */
+  test('482 6.3 Drop Shadow - a saved Distance or Softness eased past its old top still stops there as on v17.21, while a value or a keyframe past the old top reaches past it', { item: '482', budgetMs: 90000 }, function () {
+    const bad = [];
+    const pic = (params, t, rs) => {
+      rs = rs || 1;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 90, y: 80, shapeW: 60, shapeH: 40, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4;
+      L.effects = [{ type: 'dropshadow', enabled: true, params: JSON.parse(JSON.stringify(params)) }];
+      const c = offscreen(Math.round(240 * rs), Math.round(180 * rs)); if (rs !== 1) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#ffffff' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return khash4826(g.getImageData(0, 0, c.width, c.height).data);
+    };
+    const D = (v) => ({ distance: v, angle: 0, softness: 4, color: '#000000' }), S = (v) => ({ distance: 20, angle: 0, softness: v, color: '#000000' });
+    const kd = (a, b, e) => ({ kf: [{ t: 0, v: a }, { t: 2, v: b, e: e }] });
+    /* CONTROL: the eases really leave the old range */
+    const ov = FM.evalProp(kd(10, 60, 'overshoot'), 1.37), os = FM.evalProp(kd(2, 20, 'overshoot'), 1.37), el = FM.evalProp(kd(20, 60, 'elastic'), 0.4);
+    if (!(ov > 62 && os > 21 && el > 62)) throw new Error('CONTROL: the eased keyframes evaluate ' + [ov, os, el].map(v => v.toFixed(2)).join(' / ') + ' - they do not leave the old range, so this proves nothing');
+    /* SAVED: inside the old range, the eased overshoot draws exactly the old top */
+    [['Distance 10 -> 60 Overshoot', D(kd(10, 60, 'overshoot')), D(60), [1.0, 1.37, 1.5, 1.7]], ['Softness 2 -> 20 Overshoot', S(kd(2, 20, 'overshoot')), S(20), [1.0, 1.37, 1.5]], ['Distance 20 -> 60 Elastic', D(kd(20, 60, 'elastic')), D(60), [0.4, 1.0]]].forEach(([what, keyed, top, ts]) => {
+      ts.forEach(t => { if (pic(keyed, t) !== pic(top, t)) bad.push(what + ' at t ' + t + ' draws past the old top - on v17.21 it stopped there, and the frames he made moved'); });
+    });
+    /* NEW: a value past the old top reaches past it, and a keyframed one eases past its own top */
+    if (pic(D(120), 1) === pic(D(60), 1)) bad.push('Distance 120 draws the same shadow as Distance 60 - it still stops at 60');
+    if (pic(S(40), 1) === pic(S(20), 1)) bad.push('Softness 40 draws the same shadow as Softness 20 - it still stops at 20');
+    if (pic(D(kd(10, 120, 'overshoot')), 2) !== pic(D(120), 2)) bad.push('Distance keyed 10 -> 120 does not land on Distance 120');
+    if (pic(D(kd(10, 120, 'overshoot')), 1.37) === pic(D(120), 1.37)) bad.push('Distance keyed 10 -> 120 with Overshoot is clamped at 120 - a new range should ease past its top');
+    if (pic(S(kd(2, 40, 'overshoot')), 1.37) === pic(S(40), 1.37)) bad.push('Softness keyed 2 -> 40 with Overshoot is clamped at 40 - a new range should ease past its top');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SMOOTHNESS WHERE IT DOES NOTHING. MEASURED on the build at Softness 12: Spread 100 and Spread 96 drew Smoothness 1, 2 and 3
+     byte-identical (no blur pass ran: a rounded 96% of 12 was all 12), while the panel greyed the row only at Softness 0. */
+  test('482 6.3 Drop Shadow - below Spread 100 Smoothness always changes the shadow, and at Spread 100 (no blur left) the panel greys it and says why, re-judging it the moment Spread or Softness moves, at 390 and 1280 px', { item: '482', budgetMs: 120000 }, async function () {
+    const K = FM._FX_TABLES.PIXEL_FX.dropshadow, W = 160, H = 120, bad = [];
+    const run = (set) => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 40; y < 80; y++) for (let x = 40; x < 100; x++) { const i = (y * W + x) * 4; a[i] = 200; a[i + 3] = 255; } K(a, W, H, ds4826(Object.assign({ softness: 12, distance: 10, angle: 0 }, set)), 0.3); return khash4826(a); };
+    /* CONTROL: at Spread 100 the shadow is hard, so the three Smoothness values are one picture */
+    const h100 = [1, 2, 3].map(m => run({ spread: 100, smooth: m }));
+    if (!(h100[0] === h100[1] && h100[1] === h100[2])) throw new Error('CONTROL: Spread 100 draws ' + h100.join(' / ') + ' for Smoothness 1 / 2 / 3 - it is not the hard shadow, so greying Smoothness there would hide a working control');
+    [96, 99, 91].forEach(sp => {
+      const hs = [1, 2, 3].map(m => run({ spread: sp, smooth: m }));
+      if (new Set(hs).size !== 3) bad.push('Spread ' + sp + ' draws Smoothness 1 / 2 / 3 as ' + hs.join(' / ') + ' - the slider moves and the shadow does not');
+      if (hs[0] === h100[0]) bad.push('Spread ' + sp + ' draws the Spread 100 hard shadow - below 100% a pixel of the Softness should stay soft');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    /* THE PANEL: greyed at Spread 100 (and at Softness 0), live below it */
+    await panel482b('dropshadow', ['Smoothness'], [[{ spread: 100 }, ['Smoothness'], ['Spread', 'Softness', 'Distance']], [{ spread: 96, softness: 12 }, [], ['Smoothness', 'Spread']], [{ spread: 100, softness: 0 }, ['Smoothness', 'Spread'], ['Distance', 'Softness']]]);
+    /* …says why, and re-judges as the controlling slider moves (a greyed row is pointer-events:none, so a stale grey is a lock) */
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'P482s', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' }); L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance('dropshadow'); inst._expanded = true; inst.params.spread = 100; L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(250);
+      const rowOf = label => { const lab = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label')).filter(e => (e.textContent || '').trim() === label)[0]; return lab ? lab.closest('.fx-scrub-row, .fx-seg-row') : null; };
+      const grey = l => { const r = rowOf(l); if (!r) throw new Error('no ' + l + ' row'); return r.classList.contains('fx-overridden') ? ((r.querySelector('.fx-ovr-tag') || {}).textContent || '?') : ''; };
+      const type = async (l, v) => { const b = rowOf(l).querySelector('.fx-scrub-val'); b.value = String(v); b.dispatchEvent(new Event('change', { bubbles: true })); await sleep(120); };
+      if (grey('Smoothness') !== 'Not used when Spread is 100%') bad.push('at Spread 100 the Smoothness row says ' + JSON.stringify(grey('Smoothness')) + ', not Not used when Spread is 100%');
+      await type('Spread', 50);
+      if (inst.params.spread !== 50) throw new Error('setup: typing 50 into Spread left it at ' + inst.params.spread);
+      if (grey('Smoothness')) bad.push('Spread moved from 100 to 50 and Smoothness is still greyed (' + grey('Smoothness') + ') - and a greyed row cannot be touched');
+      await type('Softness', 0);
+      if (!grey('Spread') || !grey('Smoothness')) bad.push('Softness moved to 0 and Spread / Smoothness read ' + JSON.stringify(grey('Spread')) + ' / ' + JSON.stringify(grey('Smoothness')) + ' - they do nothing there and still look live');
+      await type('Softness', 8);
+      if (grey('Spread') || grey('Smoothness')) bad.push('Softness moved back to 8 and Spread / Smoothness are still greyed');
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+
+
+
+
+  /* ═══ #482 POLISH BATCH 6 (flares) — 6.5 Lens Flare, 6.6 Linear and Spin Streaks, 6.7 Glow Scan ══════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 6
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 6.5 answers C38 (the flare's core and six rays were welded) and
+   * 6.7 answers C35 (Glow Scan was frame-relative and phase-locked to project time). The rule that makes it safe (§0.3): every
+   * new key's default is the old look. No library filter is built on these four effects, but all 56 are re-hashed anyway, and
+   * new and saved instances are pinned against hashes captured on v17.21 (28104a3e) BEFORE the first edit, with polish 1's
+   * fixture (a textured 200x150 clip and an ellipse in a 240x180 project) at the export (240 wide, t 0.7 and 0.35) and a
+   * half-size preview (120 wide, t 1.3). */
+  function shots6(layers) {
+    return [[240, 0.7], [120, 1.3], [240, 0.35]].map(([w, t]) => {
+      const cv = offscreen(w, w * 3 / 4), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 240, height: 180, fps: 30, duration: 4, background: '#102030' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+      return hash482(x, cv);
+    }).join('/');
+  }
+  const NEW6 = { lensflare: { size: 100, rays: 6, rotation: 0, ghosts: 0, halo: 0, streak: 0 }, linstreaks: { both: 0, threshold: 0, color: '#ffffff' },
+    spinstreaks: { threshold: 0, dir: 0 }, glowscan: { angle: 30, span: 0, pause: 0, loop: 0 } };
+
+  test('482 6.0 Lens Flare, Linear and Spin Streaks and Glow Scan - every new control is in the catalogue at a default that draws the old look, and the 56 library filters and saved and new flares, streaks and scans render byte for byte as on v17.21', { item: '482', budgetMs: 120000 }, function () {
+    /* 1. DECLARED, so the load sanitiser keeps them, at a default that is the old look, and the render-time fill agrees. */
+    Object.keys(NEW6).forEach(type => {
+      const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+      Object.keys(NEW6[type]).forEach(k => {
+        const pd = ps.filter(q => q && q.key === k)[0], want = NEW6[type][k];
+        if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+        if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+        if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+        const fill = FM._fxFillValue(type, k);
+        if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+      });
+    });
+    const SET = { lensflare: { size: 180, rays: 9, rotation: -40, ghosts: 5, halo: 0.6, streak: 0.7 }, linstreaks: { both: 1, threshold: 55, color: '#40a0ff' },
+      spinstreaks: { threshold: 40, dir: 1 }, glowscan: { direction: 4, angle: -65, span: 1, pause: 1.5, loop: 1 } };
+    const lay = [{ id: 'l4826', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: Object.keys(SET).map(t => ({ type: t, enabled: true, params: Object.assign({}, SET[t]) })) }];
+    FM.storage._sanitizeLayers(lay);
+    Object.keys(SET).forEach(t => {
+      const got = (lay[0].effects || []).filter(e => e.type === t)[0];
+      if (!got) throw new Error('the load sanitiser dropped the whole ' + t);
+      Object.keys(SET[t]).forEach(k => { if (got.params[k] !== SET[t][k]) throw new Error('a saved ' + t + ' ' + k + ' of ' + SET[t][k] + ' comes back from the load sanitiser as ' + got.params[k]); });
+    });
+    /* 2. THE PICTURES, against v17.21: a new instance (every new key at its default) on a clip and on an ellipse, and saved
+       instances holding only the old keys — the default flare, a moved two-colour one, every Glow Scan direction. */
+    const HEAD = { 'lensflare/new/image': 'a5eb45bc/e068126b/a5eb45bc', 'lensflare/new/shape': 'f017597b/a7d29d52/f017597b', 'lensflare/saved0/image': 'a5eb45bc/e068126b/a5eb45bc', 'lensflare/saved0/shape': 'f017597b/a7d29d52/f017597b',
+      'lensflare/saved1/image': '81a42512/06f53a54/81a42512', 'lensflare/saved1/shape': 'd516f9ae/f0b914a8/d516f9ae', 'lensflare/saved2/image': '1c2bcd3a/2a2fd902/1c2bcd3a', 'lensflare/saved2/shape': '98b5b2f2/d91f0123/98b5b2f2',
+      'linstreaks/new/image': '2e35c1a8/b1390d8e/2e35c1a8', 'linstreaks/new/shape': '368ac31b/d4b7ec90/368ac31b', 'linstreaks/saved0/image': '2e35c1a8/b1390d8e/2e35c1a8', 'linstreaks/saved0/shape': '368ac31b/d4b7ec90/368ac31b',
+      'linstreaks/saved1/image': 'b32b4129/c4c6b89d/b32b4129', 'linstreaks/saved1/shape': '1cf98588/e7c5ee7b/1cf98588',
+      'spinstreaks/new/image': '8c6bda15/1fcf6ade/8c6bda15', 'spinstreaks/new/shape': '5b02afb8/e7bd075a/5b02afb8', 'spinstreaks/saved0/image': '8c6bda15/1fcf6ade/8c6bda15', 'spinstreaks/saved0/shape': '5b02afb8/e7bd075a/5b02afb8',
+      'spinstreaks/saved1/image': '217b7ef6/43587c51/217b7ef6', 'spinstreaks/saved1/shape': '8f106870/54946fbd/8f106870',
+      'glowscan/new/image': 'e9d0635a/9df85d52/8f125992', 'glowscan/new/shape': '706ebe18/aa3c47dc/9731fe31', 'glowscan/saved0/image': 'e9d0635a/9df85d52/8f125992', 'glowscan/saved0/shape': '706ebe18/aa3c47dc/9731fe31',
+      'glowscan/saved1/image': '8402597d/760395a0/b702a6c6', 'glowscan/saved1/shape': '108d2cac/9c5adb97/5d766f4e', 'glowscan/saved2/image': '529e1515/650c2851/01e0cfcc', 'glowscan/saved2/shape': '5e325498/bfb5626f/dde238c4',
+      'glowscan/saved3/image': 'b4cf29e1/922f456a/16759aa6', 'glowscan/saved3/shape': 'c8775204/055c519e/44ecc0c7' };
+    const SAVED = {
+      lensflare: [{ x: 0.3, y: 0.3, intensity: 1 }, { x: 0.75, y: 0.2, intensity: 1.6, color: '#ffd080', color2: '#80b0ff' }, { x: 0.5, y: 0.6, intensity: 0.6 }],
+      linstreaks: [{ length: 30, angle: 90 }, { length: 55, angle: 30, samples: 16 }],
+      spinstreaks: [{ amount: 0.5 }, { amount: 0.8, centerx: 30, centery: 65, decay: 0.2, samples: 20 }],
+      glowscan: [{ speed: 1.5, width: 60, color: '#ffffff' }, { speed: 1, width: 30, amount: 0.6, direction: 1, color: '#80ffcc' }, { speed: 0.7, width: 90, direction: 2, color: '#ffffff' }, { speed: 2.3, width: 20, direction: 3, color: '#ff8040' }],
+    };
+    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
+    const all = FM.filters.all();
+    if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
+    const tex = fix482(), ids = [], moved = [];
+    const clip = () => { const L = FM.makeLayer('image', { name: '4826 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
+    const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
+    const got = {};
+    try {
+      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots5([L]); if (h !== HEAD_FILTERS[f.id]) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
+      Object.keys(SAVED).forEach(type => {
+        ['image', 'shape'].forEach(kind => { const L = kind === 'image' ? clip() : shape(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/new/' + kind] = shots6([L]); });
+        SAVED[type].forEach((p, i) => { ['image', 'shape'].forEach(kind => { const L = kind === 'image' ? clip() : shape(); L.effects = [{ type: type, enabled: true, params: Object.assign({}, p) }]; got[type + '/saved' + i + '/' + kind] = shots6([L]); }); });
+      });
+    } finally { ids.forEach(id => FM.media.remove(id)); }
+    if (Object.keys(got).length !== Object.keys(HEAD).length) throw new Error('setup: ' + Object.keys(got).length + ' pictures rendered against ' + Object.keys(HEAD).length + ' pinned');
+    Object.keys(got).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    if (moved.length) throw new Error(moved.length + ' pictures differ from v17.21 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
+  });
+
+
+  /* Batch 6 helpers. A flat dark plate through a kernel at the export scale; a renderScene of one layer at the export (240 wide)
+     and at a half-size preview (120 wide), and the export shrunk to the preview's size for comparing the two. */
+  function plate6(W, H, v) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return d; }
+  function lf6(W, H, p, ps) { const d = plate6(W, H, 20); FM._pixelFx.lensflare(d, W, H, Object.assign({ x: 0.5, y: 0.5, intensity: 1 }, p), 0.5, ps || 1); return d; }
+  /* The bright lobes met going once round a circle about (cx, cy), as their centre angles in degrees (0 = right, 90 = down). */
+  function lobes6(d, W, cx, cy, r, ch) {
+    const v = [];
+    for (let a = 0; a < 720; a++) { const th = a / 2 * Math.PI / 180; v.push(d[(Math.round(cy + r * Math.sin(th)) * W + Math.round(cx + r * Math.cos(th))) * 4 + (ch || 0)]); }
+    const lo = Math.min.apply(null, v), hi = Math.max.apply(null, v);
+    if (hi - lo < 6) return [];
+    const cut = lo + (hi - lo) * 0.5, s0 = v.findIndex(x => x < cut), out = [];
+    let inL = false, sum = 0, n = 0;
+    for (let k = 0; k <= 720; k++) {
+      const on = v[(s0 + k) % 720] >= cut;
+      if (on && !inL) { inL = true; sum = 0; n = 0; }
+      if (on) { sum += (s0 + k) / 2; n++; }
+      if (!on && inL) { inL = false; out.push(((sum / n) % 360 + 360) % 360); }
+    }
+    return out;
+  }
+  function scene6(w, layer, t, PW, PH) {
+    PW = PW || 240; PH = PH || 180;
+    const cv = offscreen(w, Math.round(w * PH / PW)), x = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(x, { project: { width: PW, height: PH, fps: 30, duration: 6, background: '#000000' }, layers: [layer], selectedId: null, selectedIds: [] }, t);
+    return cv;
+  }
+  function shrink6(cv, w, h) { const c = offscreen(w, h), g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingQuality = 'high'; g.drawImage(cv, 0, 0, w, h); return g.getImageData(0, 0, w, h).data; }
+  function mad6(a, b) { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return s / (a.length / 4 * 3); }
+  /* Preview against export for one effect on a full-frame layer: [how far the half-size preview is from the export shrunk, the same
+     for the effect at its defaults (the jitter every effect has between the two plates), how far the new controls move the picture]. */
+  function parity6(type, set, mk) {
+    const lay = p => { const L = mk(); const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, p); L.effects = [e]; return L; };
+    const pv = (p, t) => scene6(120, lay(p), t).getContext('2d').getImageData(0, 0, 120, 90).data;
+    const ex = (p, t) => shrink6(scene6(240, lay(p), t), 120, 90);
+    const T = 0.5;
+    return { got: mad6(ex(set, T), pv(set, T)), base: mad6(ex({}, T), pv({}, T)), moved: mad6(ex(set, T), ex({}, T)) };
+  }
+
+  /* 6.5 LENS FLARE. The core was W x 0.18 and the rays six, welded (C38). Rays are counted as bright lobes on a ring 60 px out
+     with the core shrunk (Core size 40) so the ring meets rays and not core. Ghost 1 sits 1.35 of the way from the light to the
+     middle of the plate; the ring is 0.3 of the short side out (54 px on 240x180); the streak runs level with the light. */
+  test('482 6.5 Lens Flare - Rays 8 and 16 draw 8 and 16 rays, Rotation turns them, Core size shrinks and grows the core, Ghosts, Ring and Anamorphic streak each light their own place in their own colour, and the half-size preview draws them where the export does', { item: '482', budgetMs: 60000 }, function () {
+    const P = FM._pixelFx; if (!P || !P.lensflare) throw new Error('the Lens Flare kernel is not reachable');
+    const W = 240, H = 180, at = (d, x, y, c) => d[(Math.round(y) * W + Math.round(x)) * 4 + (c || 0)];
+    const n6 = lobes6(lf6(W, H, { size: 40 }), W, 120, 90, 60).length;
+    if (n6 !== 6) throw new Error('CONTROL: the default flare shows ' + n6 + ' rays on the ring, not 6 - the ring is not reading the rays');
+    const bad = [];
+    [8, 16, 3, 1].forEach(n => { const got = lobes6(lf6(W, H, { size: 40, rays: n }), W, 120, 90, 60).length; if (got !== n) bad.push('Rays ' + n + ' draws ' + got + ' rays round the light'); });
+    if (lobes6(lf6(W, H, { size: 40, rays: 0 }), W, 120, 90, 60).length) bad.push('Rays 0 still draws rays');
+    const r0 = lobes6(lf6(W, H, { size: 40 }), W, 120, 90, 60), r30 = lobes6(lf6(W, H, { size: 40, rotation: 30 }), W, 120, 90, 60);
+    const off = (a, by) => { const o = ((a - by) % 60 + 60) % 60; return Math.min(o, 60 - o); };
+    if (r0.some(a => off(a, 0) > 2)) bad.push('CONTROL: the default rays are not at 0, 60, 120... (' + r0.map(a => a.toFixed(1)) + ')');
+    if (r30.length !== 6 || r30.some(a => off(a, 30) > 2)) bad.push('Rotation 30 puts the rays at ' + r30.map(a => a.toFixed(1)) + ' degrees, not 30, 90, 150...');
+    const core = (s, r) => at(lf6(W, H, { rays: 0, size: s }), 120 + r, 90);
+    if (!(core(40, 30) < core(100, 30) - 40)) bad.push('Core size 40 is no smaller than 100: 30 px out it reads ' + core(40, 30) + ' against ' + core(100, 30));
+    if (!(core(200, 80) > core(100, 80) + 40)) bad.push('Core size 200 is no bigger than 100: 80 px out it reads ' + core(200, 80) + ' against ' + core(100, 80));
+    const g0 = lf6(W, H, { x: 0.25, y: 0.25, rays: 0 }), g1 = lf6(W, H, { x: 0.25, y: 0.25, rays: 0, ghosts: 1 });
+    const gR = at(g1, 141, 106) - at(g0, 141, 106), gB = at(g1, 141, 106, 2) - at(g0, 141, 106, 2);
+    if (!(gR > 25)) bad.push('Ghosts 1 lifts the point 1.35 of the way from the light through the middle by ' + gR + ' levels - no ghost there');
+    if (!(gR > gB + 10)) bad.push('the first ghost is not warm in a warm flare (red +' + gR + ', blue +' + gB + ')');
+    if (at(g1, 200, 160) !== at(g0, 200, 160)) bad.push('Ghosts 1 lit a pixel nowhere near the ghost');
+    const h0 = lf6(W, H, { x: 0.75, y: 0.25, rays: 0 }), h1 = lf6(W, H, { x: 0.75, y: 0.25, rays: 0, ghosts: 1 });
+    if (!(at(h1, 99, 106) - at(h0, 99, 106) > 25)) bad.push('with the light top right, the first ghost is not at (99, 106) - the ghosts do not swing round with the light');
+    const q0 = lf6(W, H, { size: 40, rays: 0 }), q1 = lf6(W, H, { size: 40, rays: 0, halo: 1 });
+    let pr = 0, pb = 0, br = -1, bb = -1;
+    for (let r = 40; r <= 70; r++) { const dr = at(q1, 120 + r, 90) - at(q0, 120 + r, 90), db = at(q1, 120 + r, 90, 2) - at(q0, 120 + r, 90, 2); if (dr > br) { br = dr; pr = r; } if (db > bb) { bb = db; pb = r; } }
+    if (!(br > 40 && Math.abs(pr - 54) <= 4)) bad.push('Ring 1 lifts red most ' + pr + ' px out by ' + br + ' - no ring 54 px round the light');
+    if (!(pr > pb)) bad.push('the ring is not red outside blue (red peaks ' + pr + ' px out, blue ' + pb + ')');
+    if (at(q1, 120 + 20, 90) !== at(q0, 120 + 20, 90)) bad.push('Ring 1 lit a pixel 20 px from the light, well inside the ring');
+    const s0 = lf6(W, H, { size: 40, rays: 0 }), s1 = lf6(W, H, { size: 40, rays: 0, streak: 1, color2: '#3070ff' });
+    const sB = at(s1, 200, 90, 2) - at(s0, 200, 90, 2), sR = at(s1, 200, 90) - at(s0, 200, 90);
+    if (!(sB > 40)) bad.push('Anamorphic streak 1 lifts the point 80 px right of the light by only ' + sB + ' levels');
+    if (!(sB > 2 * sR)) bad.push('the streak is not in the Rays & streak colour (#3070ff: blue +' + sB + ', red +' + sR + ')');
+    if (at(s1, 40, 90, 2) - at(s0, 40, 90, 2) < 40) bad.push('the streak runs only one way from the light');
+    if (at(s1, 120, 10, 2) !== at(s0, 120, 10, 2)) bad.push('the streak lit a point 80 px ABOVE the light - it should be a level line');
+    /* PREVIEW = EXPORT: every new control is a fraction of the plate, so a half-size plate (120x90, scale 0.5) puts the ring, the
+       first ghost and the streak where the export does, at half the distance. */
+    const h = (p) => lf6(120, 90, p, 0.5), ah = (d, x, y, c) => d[(Math.round(y) * 120 + Math.round(x)) * 4 + (c || 0)];
+    const hq0 = h({ size: 40, rays: 0 }), hq1 = h({ size: 40, rays: 0, halo: 1 });
+    let hpr = 0, hbr = -1; for (let r = 15; r <= 40; r++) { const dr = ah(hq1, 60 + r, 45) - ah(hq0, 60 + r, 45); if (dr > hbr) { hbr = dr; hpr = r; } }
+    if (Math.abs(hpr * 2 - pr) > 2) bad.push('the ring is ' + hpr + ' px out on the half-size plate and ' + pr + ' on the export - not half the distance');
+    const hg0 = h({ x: 0.25, y: 0.25, rays: 0 }), hg1 = h({ x: 0.25, y: 0.25, rays: 0, ghosts: 1 });
+    if (!(ah(hg1, 70.5, 53) - ah(hg0, 70.5, 53) > 25)) bad.push('on the half-size plate the first ghost is not at (70.5, 53), half of the export (141, 106)');
+    const hs0 = h({ size: 40, rays: 0 }), hs1 = h({ size: 40, rays: 0, streak: 1, color2: '#3070ff' }), hsB = ah(hs1, 100, 45, 2) - ah(hs0, 100, 45, 2);
+    if (!(hsB > 0.6 * sB && hsB < 1.4 * sB)) bad.push('on the half-size plate the streak lifts its point by ' + hsB + ' against ' + sB + ' on the export');
+    if (bad.length) throw new Error(bad.join(' · '));
+    /* …and through FM.renderScene with every new control on: the half-size preview against the export shrunk to it. MEASURED: 2.06
+       levels apart (the default flare 1.13, the jitter every flare has between the two plates); one new control drawn in project
+       pixels instead of plate fractions adds its own share of the 31.1 the controls move the picture by (the ring alone 5.2, the
+       ghosts 3.7), so the line sits between: within 1.5 of the default's jitter and under an eighth of the move. */
+    const mk = () => { const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 240, shapeH: 180, fill: '#141414', start: 0, duration: 6 }); L.start = 0; L.duration = 6; return L; };
+    const pp = parity6('lensflare', { x: 0.3, y: 0.3, size: 70, rays: 9, rotation: 20, ghosts: 8, halo: 1, streak: 1, color2: '#80b0ff' }, mk);
+    if (!(pp.moved > 4)) throw new Error('CONTROL: the new controls moved the picture only ' + pp.moved.toFixed(2) + ' levels - the parity check below would prove nothing');
+    if (!(pp.got < pp.base + 1.5 && pp.got < pp.moved / 8)) throw new Error('the half-size preview of a flare with every new control is ' + pp.got.toFixed(2) + ' levels from the export (the default flare: ' + pp.base.toFixed(2) + ', the controls move it ' + pp.moved.toFixed(2) + ')');
+  });
+
+  /* 6.6 LINEAR STREAKS. A 3x3 white dot on a dark plate, Angle 0: the old streak runs right of the dot only. */
+  test('482 6.6 Linear Streaks - Both ways smears a bright dot to both sides, Only above keeps a mid-grey block from smearing while white still does, Tint colours the streak and white is the old streak, and the half-size preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX; if (!K || !K.linstreaks) throw new Error('the Linear Streaks kernel is not reachable');
+    const W = 120, H = 60;
+    const scene = () => { const d = plate6(W, H, 20); for (let y = 29; y <= 31; y++) for (let x = 59; x <= 61; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; }
+      for (let y = 45; y <= 55; y++) for (let x = 15; x <= 25; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 128; } return d; };
+    const run = p => { const d = scene(); K.linstreaks(d, W, H, Object.assign({ length: 30, angle: 0 }, p), 0, 1); return d; };
+    const lift = (d, x, y, c) => d[(y * W + x) * 4 + (c || 0)] - 20;
+    const bad = [], one = run({}), both = run({ both: 1 });
+    if (!(lift(one, 70, 30) > 10)) throw new Error('CONTROL: the old streak does not light 10 px right of the dot (+' + lift(one, 70, 30) + ')');
+    if (lift(one, 50, 30) !== 0) throw new Error('CONTROL: the old streak already lights 10 px LEFT of the dot (+' + lift(one, 50, 30) + ')');
+    if (!(lift(both, 50, 30) > 10)) bad.push('Both ways leaves the left of the dot dark (+' + lift(both, 50, 30) + ')');
+    if (Math.abs(lift(both, 50, 30) - lift(both, 70, 30)) > 3) bad.push('Both ways is lopsided: +' + lift(both, 50, 30) + ' left, +' + lift(both, 70, 30) + ' right');
+    const g0 = lift(one, 35, 50), g60 = lift(run({ threshold: 60 }), 35, 50), w60 = lift(run({ threshold: 60 }), 70, 30);
+    if (!(g0 > 5)) bad.push('CONTROL: the mid-grey block does not streak at Only above 0 (+' + g0 + ')');
+    if (g60 !== 0) bad.push('Only above 60 still smears the mid-grey block (+' + g60 + ' 10 px right of it)');
+    if (Math.abs(w60 - lift(one, 70, 30)) > 1) bad.push('Only above 60 changed the white dot streak (+' + w60 + ', was +' + lift(one, 70, 30) + ') - white is above any cut');
+    const blue = run({ color: '#0000ff' });
+    if (!(lift(blue, 70, 30, 2) > 10 && lift(blue, 70, 30, 0) === 0 && lift(blue, 70, 30, 1) === 0)) bad.push('Tint blue does not make a blue streak (' + [0, 1, 2].map(c => '+' + lift(blue, 70, 30, c)) + ')');
+    if (lift(blue, 60, 30, 0) !== 235) bad.push('Tint changed the dot itself');
+    const white = run({ color: '#ffffff', both: 0, threshold: 0 });
+    for (let i = 0; i < one.length; i++) if (white[i] !== one[i]) { bad.push('a white Tint, One way and 0 % is not the old streak (byte ' + i + ')'); break; }
+    /* Linear Streaks runs on the CROPPED readback (CROP_FX, #692): the layer's box plus three times Length. Both ways reaches
+       Length the other way too, so the crop must still give the whole plate's picture, byte for byte. */
+    { const CW = 160, CH = 120, cd = new Uint8ClampedArray(CW * CH * 4);
+      for (let y = 40; y < 80; y++) for (let x = 50; x < 110; x++) { const i = (y * CW + x) * 4, v = ((x * 7 + y * 13) % 200) + 55; cd[i] = v; cd[i + 1] = 255 - v; cd[i + 2] = (v * 3) & 255; cd[i + 3] = 255; }
+      [{ length: 40, angle: 30, both: 1 }, { length: 25, angle: 200, both: 1, threshold: 40, color: '#60a0ff' }].forEach(p => {
+        const r = FM._cropIdentity('linstreaks', cd, CW, CH, p, 0, 1);
+        if (!r || r.same !== true) bad.push('the cropped readback differs from the whole plate at ' + JSON.stringify(p) + ' (' + (r && r.diff) + ' bytes)');
+      }); }
+    if (bad.length) throw new Error(bad.join(' · '));
+    const tex = fix482(), id = '_4826ls';
+    FM.media.set(id, { kind: 'image', el: tex, width: 200, height: 150 });
+    try {
+      const mk = () => { const L = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 6 }); L.id = id; L.start = 0; L.duration = 6; return L; };
+      // MEASURED: 1.70 levels apart with the new controls, 1.64 at the defaults; the controls move the picture 3.32
+      const pp = parity6('linstreaks', { length: 40, angle: 30, both: 1, threshold: 30, color: '#60a0ff' }, mk);
+      if (!(pp.moved > 3)) throw new Error('CONTROL: the new controls moved the picture only ' + pp.moved.toFixed(2) + ' levels');
+      if (!(pp.got < Math.max(2 * pp.base, 1.5))) throw new Error('the half-size preview of Linear Streaks with the new controls is ' + pp.got.toFixed(2) + ' levels from the export (at its defaults: ' + pp.base.toFixed(2) + ')');
+    } finally { FM.media.remove(id); }
+  });
+
+  /* 6.6 SPIN STREAKS. A white dot 40 px straight above the centre: the old trail runs clockwise from it, i.e. to the right. */
+  test('482 6.6 Spin Streaks - Anticlockwise trails a dot the other way round the centre, Only above keeps a mid-grey block in place while white still sweeps, the bounded path matches the whole plate, and the half-size preview matches the export', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX; if (!K || !K.spinstreaks) throw new Error('the Spin Streaks kernel is not reachable');
+    const W = 121, H = 121;
+    const scene = (bg) => { const d = bg ? new Uint8ClampedArray(W * H * 4) : plate6(W, H, 20);
+      const box = (x0, y0, x1, y1, v) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } };
+      if (bg) box(15, 12, 105, 100, 20);
+      box(57, 17, 63, 23, 255); box(20, 50, 35, 70, 128); return d; };
+    const run = (p, bg, bb) => { const d = scene(bg); K.spinstreaks(d, W, H, Object.assign({ amount: 0.6 }, p), 0, 1, bb ? FM._fxBounds(d, W, H) : undefined); return d; };
+    const lift = (d, x, y) => d[(y * W + x) * 4] - scene()[(y * W + x) * 4];
+    const bad = [], cw = run({}), acw = run({ dir: 1 });
+    // 12 degrees round from the dot, either way: (60.5 + 40 sin 12, 60.5 - 40 cos 12) = (68.8, 21.4) and its mirror (52.2, 21.4)
+    if (!(lift(cw, 69, 21) > 15)) throw new Error('CONTROL: the old trail does not reach 12 degrees clockwise of the dot (+' + lift(cw, 69, 21) + ')');
+    if (!(lift(cw, 52, 21) < 3)) throw new Error('CONTROL: the old trail already runs anticlockwise of the dot (+' + lift(cw, 52, 21) + ')');
+    if (!(lift(acw, 52, 21) > 15 && lift(acw, 69, 21) < 3)) bad.push('Anticlockwise does not trail the other way: +' + lift(acw, 52, 21) + ' anticlockwise, +' + lift(acw, 69, 21) + ' clockwise of the dot');
+    // Only above 70: the block (luma 0.5) is more than the 10 % fade below the cut, so it must not move at all
+    let moved0 = 0, moved70 = 0; const t70 = run({ threshold: 70 });
+    for (let y = 42; y <= 78; y++) for (let x = 10; x <= 45; x++) { moved0 = Math.max(moved0, Math.abs(lift(cw, x, y))); moved70 = Math.max(moved70, Math.abs(lift(t70, x, y))); }
+    if (!(moved0 > 10)) bad.push('CONTROL: the mid-grey block does not spin at Only above 0 (' + moved0 + ')');
+    if (moved70 > 1) bad.push('Only above 70 still moves the mid-grey block and the dark round it (up to ' + moved70 + ' levels)');
+    if (!(lift(t70, 69, 21) > 15)) bad.push('Only above 70 stopped the white dot sweeping (+' + lift(t70, 69, 21) + ')');
+    [{ dir: 1 }, { threshold: 40 }, { dir: 1, threshold: 40, centerx: 30, centery: 70 }, { dir: 1, amount: 1, samples: 20 }].forEach(p => {
+      const a = run(p, true, false), b = run(p, true, true);
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { bad.push('the bounded path differs from the whole plate at ' + JSON.stringify(p) + ' (byte ' + i + ')'); break; }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    const tex = fix482(), id = '_4826ss';
+    FM.media.set(id, { kind: 'image', el: tex, width: 200, height: 150 });
+    try {
+      const mk = () => { const L = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 6 }); L.id = id; L.start = 0; L.duration = 6; return L; };
+      // MEASURED: 2.65 levels apart with the new controls, 3.55 at the defaults; the controls move the picture 16.9
+      const pp = parity6('spinstreaks', { dir: 1, threshold: 45 }, mk);
+      if (!(pp.moved > 3)) throw new Error('CONTROL: the new controls moved the picture only ' + pp.moved.toFixed(2) + ' levels');
+      if (!(pp.got < Math.max(2 * pp.base, 1.5))) throw new Error('the half-size preview of Spin Streaks with the new controls is ' + pp.got.toFixed(2) + ' levels from the export (at its defaults: ' + pp.base.toFixed(2) + ')');
+    } finally { FM.media.remove(id); }
+  });
+
+  /* 6.7 GLOW SCAN. C35: the band sat at phase x FRAME height on project time, so a title got a sliver of it. The title test is the
+     backlog's: a 100 px title in the middle of a 9:16 frame, Sweeps across Layer, the band on the title through the first half of
+     the cycle. The rest drive the kernel on a flat grey plate, with the clip handed in as the dispatcher does (its 8th argument). */
+  test('482 6.7 Glow Scan - Sweeps across Layer puts the band on a 100 px title through the first half of the sweep, Angle sends it any way, Wait rests before and between sweeps, Once sweeps a single time on the clip clock, every frame is the same however it is reached, and the half-size preview matches the export', { item: '482', budgetMs: 90000 }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX; if (!K || !K.glowscan) throw new Error('the Glow Scan kernel is not reachable');
+    /* 1. THE TITLE. 300x1000 frame, a 200x100 grey title in the middle; 40 moments through one 1.5 Hz sweep. "Lit" is the
+       title's mean brightened by more than 20 levels. */
+    const title = span => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 500, shapeW: 200, shapeH: 100, fill: '#404040', start: 0, duration: 6 }); L.start = 0; L.duration = 6;
+      const e = FM.fxRegistry.makeInstance('glowscan'); if (span) e.params.span = 1; L.effects = [e]; return L; };
+    const lit = span => { const out = []; for (let k = 0; k < 40; k++) { const cv = scene6(300, title(span), k / 60, 300, 1000), d = cv.getContext('2d').getImageData(50, 450, 200, 100).data;
+      let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i]; out.push(s / (d.length / 4) - 64 > 20); } return out; };
+    // MEASURED: across the Frame the title is lit in 7 of the 40 moments (17.5 %), across the Layer in 21 (52.5 %), from moment 10
+    const fr = lit(false), ly = lit(true), share = a => a.filter(Boolean).length / a.length;
+    if (!(share(fr) <= 0.25)) throw new Error('CONTROL: across the Frame the band already lights the title ' + Math.round(share(fr) * 100) + '% of the sweep - the fixture does not show C35');
+    if (!(share(ly) >= 0.4 && share(ly) >= 2.5 * share(fr))) throw new Error('Sweeps across Layer lights the 100 px title only ' + Math.round(share(ly) * 100) + '% of the sweep (across the Frame: ' + Math.round(share(fr) * 100) + '%)');
+    if (!(ly.indexOf(true) >= 0 && ly.indexOf(true) < 20)) throw new Error('Sweeps across Layer does not reach the title in the first half of the sweep (first lit at moment ' + ly.indexOf(true) + ' of 40)');
+    /* 2. ANGLE, WAIT, ONCE, THE CLIP CLOCK — on the kernel. */
+    const W = 100, H = 100, clip = { start: 0, duration: 10 };
+    const run = (p, t, layer) => { const d = plate6(W, H, 100); K.glowscan(d, W, H, Object.assign({ speed: 1.5, width: 20, amount: 1, color: '#ffffff' }, p), t, 1, null, layer || clip); return d; };
+    const v = (d, x, y) => d[(y * W + x) * 4];
+    const dark = d => { for (let i = 0; i < d.length; i += 4) if (d[i] !== 100) return false; return true; };
+    const bad = [];
+    const a0 = run({ direction: 4, angle: 0 }, 1 / 6);   // phase 0.25: a column 25 px in
+    if (!(v(a0, 25, 5) > 200 && v(a0, 25, 95) > 200 && v(a0, 75, 50) === 100)) bad.push('Angle 0 does not draw an upright band 25 px in, travelling right (' + v(a0, 25, 5) + ', ' + v(a0, 25, 95) + ', ' + v(a0, 75, 50) + ')');
+    const a90 = run({ direction: 4, angle: 90 }, 1 / 6), down = run({ direction: 0 }, 1 / 6);
+    let worst = 0; for (let i = 0; i < a90.length; i++) worst = Math.max(worst, Math.abs(a90[i] - down[i]));
+    if (worst > 1) bad.push('Angle 90 is not Down (' + worst + ' levels apart)');
+    const a45 = run({ direction: 4, angle: 45 }, 0.2);
+    if (Math.abs(v(a45, 20, 60) - v(a45, 60, 20)) > 1 || Math.abs(v(a45, 30, 30) - v(a45, 60, 20)) < 20) bad.push('Angle 45 does not draw a diagonal band');
+    const w = (t, p) => run(Object.assign({ pause: 1 }, p), t);
+    if (!dark(w(0.5))) bad.push('Wait 1 s draws a band 0.5 s into the clip - the first sweep should wait');
+    if (!(v(w(1 + 1 / 3), 50, 50) > 200)) bad.push('Wait 1 s: the sweep after the wait is not across the middle at 1.33 s (' + v(w(1 + 1 / 3), 50, 50) + ')');
+    if (!dark(w(2.167))) bad.push('Wait 1 s draws a band during the second wait (2.17 s)');
+    if (!(v(w(3.0), 50, 50) > 200)) bad.push('Wait 1 s does not sweep again after the second wait (3.0 s)');
+    if (!dark(w(1))) bad.push('Wait 1 s: the band does not start off the top edge (a half band showed at 1.0 s)');
+    const o = (t, layer) => run({ loop: 1 }, t, layer);
+    if (!(v(o(1 / 3), 50, 50) > 200)) bad.push('Once does not sweep across the middle at 0.33 s');
+    if (!dark(o(1)) || !dark(o(5))) bad.push('Once sweeps again after the first sweep');
+    if (!(v(run({}, 1), 50, 50) > 200)) bad.push('CONTROL: Loop has no band across the middle at 1.0 s');
+    const late = { start: 2, duration: 6 };
+    if (!(v(o(2 + 1 / 3, late), 50, 50) > 200)) bad.push('Once on a clip that starts at 2 s does not sweep at 2.33 s - it is not on the clip clock');
+    if (!dark(o(1 / 3, late))) bad.push('Once on a clip that starts at 2 s swept at 0.33 s project time');
+    const split = { start: 3, duration: 3, fxTimeOffset: 2 };
+    if (!dark(o(3 + 1 / 3, split))) bad.push('Once on the second half of a split clip swept again where the half starts');
+    /* 3. STATELESS: the same moment, reached directly or after other moments, is the same frame. */
+    const p3 = { direction: 4, angle: -50, pause: 0.7, span: 0 };
+    const first = run(p3, 2.05); run(p3, 0.4); run(p3, 3.9); const again = run(p3, 2.05);
+    for (let i = 0; i < first.length; i++) if (first[i] !== again[i]) { bad.push('the frame at 2.05 s changed after other moments were drawn'); break; }
+    if (bad.length) throw new Error(bad.join(' · '));
+    /* 4. PREVIEW = EXPORT, on the title with every new control on. */
+    const mk = () => { const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 90, shapeW: 150, shapeH: 50, fill: '#405060', start: 0, duration: 6 }); L.start = 0; L.duration = 6; return L; };
+    // MEASURED: 0.24 levels apart with the new controls, 0.17 at the defaults; the controls move the picture 11.2
+    const pp = parity6('glowscan', { direction: 4, angle: 30, span: 1, pause: 0.2 }, mk);
+    if (!(pp.moved > 1)) throw new Error('CONTROL: the new controls moved the picture only ' + pp.moved.toFixed(2) + ' levels');
+    if (!(pp.got < Math.max(2 * pp.base, 1.5))) throw new Error('the half-size preview of Glow Scan with the new controls is ' + pp.got.toFixed(2) + ' levels from the export (at its defaults: ' + pp.base.toFixed(2) + ')');
+  });
+
+  /* THE PANEL: every new row fits at 390 and 1280 px, Rotation says it is off while Rays is 0, and Angle says it is off unless
+     Sweeps is Angle — each greyed row naming why in a pill that fits the row. */
+  test('482 6.5 to 6.7 the new Lens Flare, Streaks and Glow Scan rows fit the effect panel at 390 and 1280 px, Rotation greys out at Rays 0 and Angle unless Sweeps is Angle', { item: '482', budgetMs: 90000 }, async function () {
+    const LABELS = { lensflare: ['Core size', 'Rays', 'Rotation', 'Ghosts', 'Ring', 'Anamorphic streak', 'Rays & streak'], linstreaks: ['Streaks', 'Only above', 'Tint'],
+      spinstreaks: ['Only above', 'Direction'], glowscan: ['Sweeps', 'Angle', 'Sweeps across', 'Wait between sweeps', 'Repeat'] };
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const rowOf = label => {
+      const labs = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label, #inspector-panel .fx-row.fx-open .kf-color-row > label'));
+      const lab = labs.filter(e => (e.textContent || '').trim() === label)[0];
+      return lab ? { lab: lab, row: lab.closest('.fx-scrub-row, .fx-seg-row, .kf-color-row') } : null;
+    };
+    const show = async (type, set) => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S4826', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; if (set) set(inst.params);
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const greyed = async (where, label, why) => {
+      const r = rowOf(label); if (!r) throw new Error(where + ': no ' + label + ' row');
+      if (!r.row.classList.contains('fx-overridden')) throw new Error(where + ': ' + label + ' looks live where it does nothing');
+      const tag = r.row.querySelector('.fx-ovr-tag');
+      if (!tag || tag.textContent.indexOf(why) < 0) throw new Error(where + ': greyed ' + label + ' does not say why (' + JSON.stringify(tag && tag.textContent) + ')');
+      r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+      const tb = tag.getBoundingClientRect(), rb = r.row.getBoundingClientRect(), panel = document.getElementById('inspector-panel').getBoundingClientRect();
+      if (tb.left < rb.left - 1 || tb.right > rb.right + 1 || rb.right > panel.right + 1 || tag.scrollWidth > tag.clientWidth + 1) throw new Error(where + ': the ' + label + ' pill spans ' + Math.round(tb.left) + '-' + Math.round(tb.right) + ' in a row at ' + Math.round(rb.left) + '-' + Math.round(rb.right));
+    };
+    const live = (where, label) => { const r = rowOf(label); if (!r || r.row.classList.contains('fx-overridden')) throw new Error(where + ': ' + label + ' is greyed out where it does something'); };
+    const check = async where => {
+      for (const type of Object.keys(LABELS)) {
+        await show(type);
+        const panel = document.getElementById('inspector-panel').getBoundingClientRect();
+        for (const label of LABELS[type]) {
+          const r = rowOf(label);
+          if (!r) throw new Error(where + ': the open ' + type + ' shows no ' + label + ' row');
+          r.row.scrollIntoView({ block: 'nearest' }); await sleep(20);
+          const rr = r.row.getBoundingClientRect();
+          if (!(rr.width > 0 && rr.height > 0) || rr.left < panel.left - 1 || rr.right > panel.right + 1) throw new Error(where + ': ' + type + ' ' + label + ' row is at ' + Math.round(rr.left) + '-' + Math.round(rr.right) + ' px in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+          if (r.lab.scrollWidth > r.lab.clientWidth + 1) throw new Error(where + ': the ' + type + ' label ' + label + ' is cut off (' + r.lab.scrollWidth + ' px of text in ' + r.lab.clientWidth + ')');
+          [].slice.call(r.row.querySelectorAll('.fx-seg-btn')).forEach(b => {
+            const br = b.getBoundingClientRect();
+            if (b.scrollWidth > b.clientWidth + 1 || br.right > rr.right + 1 || br.left < rr.left - 1) throw new Error(where + ': the ' + type + ' ' + label + ' option ' + b.textContent + ' does not fit (' + b.scrollWidth + ' px of text in ' + b.clientWidth + ', at ' + Math.round(br.left) + '-' + Math.round(br.right) + ')');
+          });
+        }
+      }
+      await show('lensflare'); live(where, 'Rotation');
+      await show('lensflare', p => { p.rays = 0; }); await greyed(where, 'Rotation', 'Rays');
+      await show('glowscan'); await greyed(where, 'Angle', 'Angle');
+      await show('glowscan', p => { p.direction = 4; }); live(where, 'Angle');
+      const note = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-range-note')).filter(n => /first sweep waits/.test(n.textContent))[0];
+      if (!note) throw new Error(where + ': Wait between sweeps does not say the first sweep waits too');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+
+  /* A SCAN THAT RESTS IS NOT TOLD IT DOES NOTHING. The open effect's "changes nothing" check looks at the playhead and seven
+     moments spread through the clip (fx-thumbs noopTimes). A Once sweep is 0.67 s at the start of the clip, and a 5 s wait puts
+     the first sweep at 5-5.67 s of the clip: on a 10 s clip every one of those eight moments misses the band, and the panel
+     would tell him a working effect is broken — the line he has fought the app over (#460, #477, queue 690's Spin). The sweep's
+     own middle (FM.fxNoopMoments) is offered as a moment to look at. CONTROLS: Strength 0 really does nothing and is still told
+     so; the Once scan really is at rest 9.33 s in, where a looping scan would be right across the layer. */
+  test('482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is', { item: '482', budgetMs: 60000 }, function () {
+    const saved = FM.scene.layers.slice(), t0 = FM.time;
+    try {
+      const L = FM.makeLayer('shape', { name: '4826 scan', shape: 'rect', x: FM.scene.project.width / 2, y: FM.scene.project.height / 2, shapeW: 300, shapeH: 160, fill: '#405060', start: 1, duration: 10 });
+      L.start = 1; L.duration = 10;
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      const put = set => { const e = FM.fxRegistry.makeInstance('glowscan'); Object.assign(e.params, set); L.effects = [e]; FM.time = L.start; };
+      const say = set => { put(set); return FM.fxThumbs.effectDoesNothing(L, 0); };
+      if (say({ amount: 0, loop: 1 }) !== true) throw new Error('CONTROL: a Glow Scan at Strength 0 is not measured as doing nothing - the check is not running');
+      if (say({}) !== false) throw new Error('CONTROL: the default Glow Scan is measured as doing nothing');
+      // 10.33 s: a looping scan is half way down the frame there, right across the layer — a Once scan has long finished
+      put({ loop: 1 });
+      if (FM.fxThumbs.effectDoesNothing(L, 0, 10 + 1 / 3) !== true) throw new Error('CONTROL: a Once scan is not at rest 9.33 s into the clip - it swept again, so this fixture shows nothing');
+      [{ loop: 1 }, { pause: 5 }, { loop: 1, pause: 2, span: 1 }].forEach(set => {
+        const v = say(set);
+        if (v !== false) throw new Error('a Glow Scan with ' + JSON.stringify(set) + ' on a 10 s clip is measured as ' + (v === true ? 'doing nothing' : 'unknown') + ' - its sweep falls between the moments the check looks at, so the panel tells him a working effect changes nothing');
+      });
+    } finally { FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.time = t0; }
+  });
+
+
+  /* 6.6 LINEAR STREAKS, REVIEW. Both ways was first added as a side loop with a ternary per tap INSIDE the tap loop, and it ran
+     at One way too, where it adds nothing: measured on a 1080x1920 plate at the defaults, 126 against 159 ms with the v17.21 and
+     the build kernels interleaved in one page (bytes identical), and a saved 16-tap streak 264 against 315-346 ms. Every saved
+     streak is One way, Only above 0 and white, so every project using it got a quarter slower. A time limit cannot hold that down
+     on a shared machine, so this reads THE SOURCE: those three settings must take the v17.21 loop, letter for letter (white space
+     aside), behind ONE test made before the pixel loop starts, and return before the new loop. Both ways is checked first, so on
+     v17.21, which never had a second side, this fails on the missing feature and not on the text. */
+  test('482 6.6 Linear Streaks - One way with Only above 0 and a white Tint runs the v17.21 pixel loop letter for letter, chosen once before the pixels, so saved streaks draw at the old speed, while Both ways still smears both sides', { item: '482' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX; if (!K || !K.linstreaks) throw new Error('the Linear Streaks kernel is not reachable');
+    const W = 120, H = 60, d = plate6(W, H, 20);
+    for (let y = 29; y <= 31; y++) for (let x = 59; x <= 61; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; }
+    K.linstreaks(d, W, H, { length: 30, angle: 0, both: 1 }, 0, 1);
+    if (!(d[(30 * W + 50) * 4] - 20 > 10)) throw new Error('Both ways leaves the left of the dot dark (+' + (d[(30 * W + 50) * 4] - 20) + ') - there is no second side, so there is nothing for One way to be kept apart from');
+    const OLD = 'for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } }';
+    const norm = v => String(v).replace(/\s+/g, ''), src = norm(K.linstreaks), old = norm(OLD), guard = norm('if(lsSides===1&&!lsGate&&!lsTint){');
+    const at = src.indexOf(old);
+    if (at < 0) throw new Error('the v17.21 Linear Streaks pixel loop is not in the kernel any more - One way runs the Both ways loop, with a side loop and two ternaries per tap, about a quarter slower on every saved streak');
+    if (src.indexOf(old, at + 1) >= 0) throw new Error('the v17.21 loop is in the kernel twice - this check cannot tell which one One way runs');
+    if (src.slice(at - guard.length, at) !== guard) throw new Error('the v17.21 loop is not behind if(lsSides===1&&!lsGate&&!lsTint){, the once-per-call test for One way, Only above 0 and white: ' + src.slice(Math.max(0, at - 60), at));
+    if (src.slice(at + old.length, at + old.length + 8) !== 'return;}') throw new Error('the v17.21 loop does not return when it is done, so the Both ways loop runs after it as well');
+    if (src.indexOf(old) > src.indexOf('lsSide<lsSides')) throw new Error('the side loop comes before the v17.21 loop, so it is still in the path One way takes');
   });
 
 

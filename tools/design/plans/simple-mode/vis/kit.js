@@ -1,4 +1,4 @@
-/* Quick and Full — visualizer kit (window.VIS).
+/* Simple and Full — visualizer kit (window.VIS).
  *
  * Plain JS, no build, no libraries. Three parts:
  *   1. VIS.SAMPLE  — three projects as plain data in the design's model (DESIGN.md §2.2)
@@ -6,8 +6,11 @@
  *   3. mock drawing + the hub (only when a document exists, so the engine also runs under
  *      `osascript -l JavaScript` for engine-tests.js)
  *
- * Working names on screen: "Quick" = the Simple editor, "Full" = today's editor. In code the design's
+ * Names on screen: "Simple" = the new editor, "Full" = today's editor (his D1 pick, 1 Oct). In code the design's
  * names are kept (sm.main, sm.stay, spine) so this file can be read beside DESIGN.md.
+ *
+ * 1 Oct (his rule, DESIGN §0.4): Full is drawn exactly as today. Its play bar is ⋯ · ⧉ · ◐ · |◀ and its PC row has no
+ * switch; the only way to switch is VIS.cog, the ⚙ cog's third block (cog/COG-DESIGN.md). Simple's bar has no switch either.
  */
 (function (G) {
   'use strict';
@@ -50,7 +53,7 @@
       { id: 'c1', type: 'video', name: 'Arriving', start: 0, duration: 3.4, trimStart: 0.5, srcDur: 8.2, speed: 1,
         look: ['#9ad1a8', '#3f7d6b'], sm: { main: true } },
       { id: 'song', type: 'video', audioOnly: true, name: 'Summer song', start: 0, duration: 14.2, trimStart: 0,
-        srcDur: 95, speed: 1, sm: { stay: true, tail: true, tailEnd: 14.2 },
+        srcDur: 95, speed: 1, sm: { stay: true },                  // D17 B (his pick): music never ends with the video
         kf: { volume: [{ t: 12.2, v: 1 }, { t: 14.2, v: 0 }] } }
     ]
   };
@@ -881,7 +884,8 @@
         const u = R.units[id]; const l = m.get(u.lead.id); if (!l || R.isMain(id) || P.removes.has(id) || u.host || R.neverPinned(u)) continue;
         if (l.sm && (l.sm.stay || l.sm.main)) continue;
         setFlag(l, 'stay', true);
-        const tailOk = !['captions', 'fullOnly', 'background', 'block'].includes(u.kind) && !(l.type === 'video' && !l.audioOnly && audible(l));
+        // D17 B (his pick, 1 Oct): a sound unit never gets sm.tail, so a long song runs on in black, as in Full (§4.5)
+        const tailOk = !['captions', 'fullOnly', 'background', 'block'].includes(u.kind) && u.section !== 'audio' && !l.audioOnly && !(l.type === 'video' && !l.audioOnly && audible(l));
         // ends with the video: its span (after this plan) ends at the new end, or, at adoption, it covered the whole track (§4.5)
         const wholeAtAdopt = P._adopted && R.main.length && Math.abs(u.end - R.trackEnd) <= R.eps && u.start <= R.main[0].start + R.eps;
         if (tailOk && mainIds.length && (Math.abs(endOf(l) - newTE) <= R.eps + 1e-9 || wholeAtAdopt)) { setFlag(l, 'tail', true); l.sm.tailEnd = endOf(l); }
@@ -889,6 +893,7 @@
       // the tail fit: an sm.tail item whose end is still where it was last fitted follows the new end (4b keys)
       if (mainIds.length) docN.layers.forEach(l => {
         if (!hasFlag(l, 'tail')) return;
+        if (l.audioOnly) { setFlag(l, 'tail', false); return; }   // D17 B: a stray flag on a sound is cleared, never fitted
         const De = l.duration, fitted = l.sm.tailEnd == null || Math.abs(endOf(l) - l.sm.tailEnd) <= R.eps;
         if (!fitted) return;
         const Dn = Math.max(R.minLen, newTE - l.start);
@@ -1000,7 +1005,7 @@
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.8-2.4 2-2.4 3.7"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/>',
     notes: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
     personAdd: '<circle cx="9" cy="8" r="3.5"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><path d="M19 7.5v6M16 10.5h6"/>',
-    /* The switch glyph (DESIGN §6.1; the final glyph is D16): it shows the editor you are IN. Quick = a row of clips,
+    /* The switch glyph (DESIGN §6.1; the final glyph is D16): it shows the editor you are IN. Simple = a row of clips,
        Full = stacked bars, and the way back from Full = ‹ plus the row of clips. The same paths V1 draws; V12's shots match. */
     quick: '<rect x="2" y="7.5" width="6" height="9" rx="1.6"/><rect x="9" y="7.5" width="6" height="9" rx="1.6"/><rect x="16" y="7.5" width="6" height="9" rx="1.6"/>',
     full: '<rect x="3" y="4" width="10" height="4" rx="1.3"/><rect x="8" y="10" width="13" height="4" rx="1.3"/><rect x="5" y="16" width="9" height="4" rx="1.3"/>',
@@ -1033,7 +1038,16 @@
     link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
-    share: '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.9l7.6-3.8M8.2 13.1l7.6 3.8"/>'
+    share: '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.9l7.6-3.8M8.2 13.1l7.6 3.8"/>',
+    /* Full's own play-bar buttons, as today: ⧉ Layer actions and ◐ the add-row switch (index.html #btn-layermenu, #btn-addside) */
+    layers: '<rect x="3.5" y="8" width="12.5" height="12.5" rx="2"/><path d="M8 8V5.5a2 2 0 0 1 2-2h8.5a2 2 0 0 1 2 2V14a2 2 0 0 1-2 2H16"/>',
+    addside: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>',
+    /* the cog's three blocks (cog/COG-DESIGN.md §3): Editor, Friends, Canvas, and the ⤢ that opens a block */
+    edblock: '<rect x="3" y="4.5" width="18" height="15" rx="2.6"/><path d="M8.6 4.5v15M11.6 9.3h6M11.6 12.3h4.4M11.6 15.3h6"/>',
+    friends: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.2 19.5a5.8 5.8 0 0 1 11.6 0"/><path d="M15.5 5.6a3.1 3.1 0 0 1 0 6M17.6 14a5.6 5.6 0 0 1 3.2 5.5"/>',
+    canvas: '<rect x="7" y="3" width="10" height="18" rx="2.2"/>',
+    expand: '<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>',
+    swap: '<path d="M4 9h14l-3.5-3.5M20 15H6l3.5 3.5"/>'
   };
   VIS.ICONS = ICONS;
   VIS.icon = (name, cls) => '<svg viewBox="0 0 24 24" class="ico' + (cls ? ' ' + cls : '') + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[name] || ICONS.more) + '</svg>';
@@ -1098,7 +1112,7 @@
     ],
     sound: [
       { id: 'volume', label: 'Volume', icon: 'sound' }, { id: 'fade', label: 'Fade', icon: 'fade' },
-      { id: 'endswith', label: 'Ends with the video', icon: 'endswith' }, { id: 'sndspeed', label: 'Speed', icon: 'speed' },
+      { id: 'sndspeed', label: 'Speed', icon: 'speed' },                // no Ends with the video switch (D17 B, his pick)
       { id: 'voice', label: 'Voice', icon: 'voice' }, { id: 'stay', label: 'Stay put', icon: 'pin' },
       { id: 'delete', label: 'Delete', icon: 'delete' }
     ],
@@ -1111,7 +1125,7 @@
      segment as effect, text as text, everything else (stickers, pictures, shapes, blocks) as an overlay. */
   VIS.itemTrayKind = u => !u ? null : u.kind === 'captions' ? 'captions' : u.section === 'audio' ? 'sound'
     : u.kind === 'effect' ? 'effect' : u.kind === 'text' ? 'text' : 'overlay';
-  /* The picked item's row, with its states: Stay put / Stays with the sound / Ends with the video pressed when on, and a
+  /* The picked item's row, with its states: Stay put / Stays with the sound pressed when on, and a
      video-only tool left out on anything that is not a video. The main clip's row is VIS.CLIP_TRAY. */
   VIS.itemTray = function (R, id) {
     const u = R && R.units && R.units[id]; const k = VIS.itemTrayKind(u); if (!k) return [];
@@ -1190,14 +1204,25 @@
   VIS.linkLine = function (host, x, y1, y2, color) { const k = el('div', 'fm-link'); k.style.left = x + 'px'; k.style.top = y1 + 'px'; k.style.height = Math.max(0, y2 - y1) + 'px'; k.style.color = color || '#fff'; host.appendChild(k); return k; };
 
   /* ---------------------------------- frames ---------------------------------- */
+  /* The left end of the phone's play bar (DESIGN §0.4 V1-V2, §6.1, §15.1, D18). Neither editor has a switch here: the switch is
+     the ⚙ cog's third block (VIS.cog). Full keeps today's ⋯ · ⧉ · ◐ · |◀ exactly; Simple is ⋯ · ✂ · (empty) · |◀, so |◀ sits
+     under the same thumb in both (D18 A). */
+  const ibtn = (ic, label, act) => '<button type="button" class="fm-ibtn" data-act="' + (act || ic) + '" aria-label="' + label + '" title="' + label + '">' + VIS.icon(ic) + '</button>';
+  function leftSideHTML(editor) {
+    return editor === 'full'
+      ? ibtn('more', 'Timeline options') + ibtn('layers', 'Layer actions', 'layermenu') + ibtn('addside', 'Move the add-layer row', 'addside') + ibtn('toStart', 'To start')
+      : ibtn('more', 'More') + ibtn('split', 'Split') + '<span class="fm-ibtn fm-slotgap" aria-hidden="true"></span>' + ibtn('toStart', 'To start');
+  }
   function playbarHTML(editor) {
-    const ib = (ic, label, extra) => '<button type="button" class="fm-ibtn' + (extra || '') + '" data-act="' + ic + '" aria-label="' + label + '" title="' + label + '">' + VIS.icon(ic) + '</button>';
-    // §6.1: the icon shows the editor you are IN (a row of clips in Quick, stacked bars in Full); the words name the action
-    const to = editor === 'full' ? 'Quick' : 'Full';
-    const sw = '<button type="button" class="fm-ibtn fm-swslot" data-act="switch" aria-label="Switch to ' + to + ' editor" title="Switch to ' + to + ' editor">' + VIS.icon(editor === 'full' ? 'full' : 'quick') + '</button>';
-    return '<div class="fm-side">' + ib('more', 'More') + ib('split', 'Split') + sw + ib('toStart', 'To start') + '</div>' +
+    return '<div class="fm-side fm-left">' + leftSideHTML(editor) + '</div>' +
       '<button type="button" class="fm-time" data-act="play" aria-label="Play">00:00:00</button>' +
-      '<div class="fm-side">' + ib('toEnd', 'To end') + ib('undo', 'Undo') + ib('redo', 'Redo') + ib('fit', 'Full screen') + '</div>';
+      '<div class="fm-side">' + ibtn('toEnd', 'To end') + ibtn('undo', 'Undo') + ibtn('redo', 'Redo') + ibtn('fit', 'Full screen') + '</div>';
+  }
+  /* the PC row's left end: Full as today (‹ · ⧉ · ◐ · |◀), Simple ‹ · ✂ · |◀ (§15.1). No switch in either. */
+  function pcLeftHTML(editor) {
+    return editor === 'full'
+      ? ibtn('back', 'Projects') + ibtn('layers', 'Layer actions', 'layermenu') + ibtn('addside', 'Move the add-layer row', 'addside') + ibtn('toStart', 'To start')
+      : ibtn('back', 'Projects') + ibtn('split', 'Split') + ibtn('toStart', 'To start');
   }
   VIS.phoneFrame = function (host, opts) {
     opts = opts || {};
@@ -1224,7 +1249,7 @@
     box.appendChild(root); outer.appendChild(box); host.appendChild(outer);
     const q = s => root.querySelector(s);
     const f = { root, outer, scale: 1, topbar: q('.fm-topbar'), stage: q('.fm-stagewrap'), playbar: q('.fm-playbar'), time: q('.fm-time'),
-                timeline: q('.fm-tlwrap'), tray: q('.fm-tray'), say: q('.fm-say'), tools: q('.fm-tools'), switchBtn: q('.fm-swslot') };
+                timeline: q('.fm-tlwrap'), tray: q('.fm-tray'), say: q('.fm-say'), tools: q('.fm-tools'), switchBtn: null, editor: opts.editor === 'full' ? 'full' : 'quick' };
     f.stage.style.height = (opts.stageH || 210) + 'px';
     f.timeline.style.height = (opts.tlH || 210) + 'px';
     if (opts.editor !== 'full' && opts.tools !== false) f.toolbar = VIS.toolbar(f.tools, opts.tools || VIS.QUICK_TOOLS, { onClick: opts.onTool });
@@ -1233,6 +1258,8 @@
     f.setTime(0);
     f.setSay = html => { f.say.innerHTML = html; };
     f.on = (act, fn) => root.addEventListener('click', e => { const b = e.target.closest('[data-act="' + act + '"]'); if (b && root.contains(b)) fn(e, b); });
+    /* a page that flips editors redraws the play bar's left end, so Full always shows today's buttons */
+    f.setEditor = ed => { f.editor = ed === 'full' ? 'full' : 'quick'; q('.fm-playbar .fm-left').innerHTML = leftSideHTML(f.editor); };
     f.fit = () => {
       // Hidden (another page is open, a folded card): measure nothing and keep the last size. Reading 0 here used to
       // fall back to full size and pin the box at 394 px, which then held a narrow grid cell open for good (QA, V1).
@@ -1263,8 +1290,8 @@
     const fitSoon = () => { if (fitQueued) return; fitQueued = true; requestAnimationFrame(() => { fitQueued = false; f.fit(); }); };
     if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(fitSoon); ro.observe(outer); ro.observe(root); }
     else window.addEventListener('resize', fitSoon);
-    // §8.8 (his #171): in Quick, Notes hides while a clip or an item is picked. visibility, not display, so ? never slides.
-    // Read from the drawing itself (a picked tile, item or bar in Quick's timeline), so every page gets it without a call.
+    // §8.8 (his #171): in Simple, Notes hides while a clip or an item is picked. visibility, not display, so ? never slides.
+    // Read from the drawing itself (a picked tile, item or bar in Simple's timeline), so every page gets it without a call.
     const syncPick = () => { const on = !!f.timeline.querySelector('.fm-quick .sel'); if (root.classList.contains('fm-picked') !== on) root.classList.toggle('fm-picked', on); };
     if (typeof MutationObserver !== 'undefined') new MutationObserver(syncPick).observe(f.timeline, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
     trayWheel(f.tray);
@@ -1293,9 +1320,8 @@
       '<div class="fm-bandrow">' +
         '<div class="fm-band"><div class="fm-panel"></div><div class="fm-tray"><div class="fm-say"></div></div><div class="fm-tools"></div></div>' +
         '<div class="fm-tlpanel"><div class="fm-transport">' +
-          ib('back', 'Projects') + ib('split', 'Split') +
-          '<button type="button" class="fm-switch" data-act="switch" aria-label="Switch to ' + (opts.editor === 'full' ? 'Quick' : 'Full') + ' editor" title="Switch to ' + (opts.editor === 'full' ? 'Quick' : 'Full') + ' editor">' + VIS.icon(opts.editor === 'full' ? 'full' : 'quick') + '<span>' + (opts.editor === 'full' ? 'Quick' : 'Full') + '</span></button>' +
-          ib('toStart', 'To start') + '<button type="button" class="fm-time" data-act="play" aria-label="Play">00:00:00</button>' + ib('toEnd', 'To end') +
+          '<span class="fm-pcleft">' + pcLeftHTML(opts.editor) + '</span>' +
+          '<button type="button" class="fm-time" data-act="play" aria-label="Play">00:00:00</button>' + ib('toEnd', 'To end') +
           ib('undo', 'Undo') + ib('redo', 'Redo') + ib('help', 'Help') + ib('notes', 'Notes') + ib('gear', 'Settings') +
           '<button type="button" class="fm-export" data-act="export">' + VIS.icon('export') + 'Export</button>' + ib('more', 'More') + ib('fit', 'Full screen') +
         '</div><div class="fm-tlwrap"></div></div>' +
@@ -1303,7 +1329,9 @@
     box.appendChild(root); outer.appendChild(box); host.appendChild(outer);
     const q = s => root.querySelector(s);
     const f = { root, outer, stage: q('.fm-stagewrap'), band: q('.fm-band'), panel: q('.fm-panel'), tray: q('.fm-tray'), say: q('.fm-say'),
-                tools: q('.fm-tools'), transport: q('.fm-transport'), time: q('.fm-time'), timeline: q('.fm-tlwrap'), switchBtn: q('.fm-switch'), scale: 1 };
+                tools: q('.fm-tools'), transport: q('.fm-transport'), time: q('.fm-time'), timeline: q('.fm-tlwrap'), switchBtn: null, scale: 1,
+                editor: opts.editor === 'full' ? 'full' : 'quick' };
+    f.setEditor = ed => { f.editor = ed === 'full' ? 'full' : 'quick'; q('.fm-pcleft').innerHTML = pcLeftHTML(f.editor); };
     if (opts.editor !== 'full' && opts.tools !== false) f.toolbar = VIS.toolbar(f.tools, opts.tools || VIS.QUICK_TOOLS, { onClick: opts.onTool });
     f.setTime = (t, fps) => { f.time.textContent = VIS.tc(t, fps); };
     f.setSay = html => { f.say.innerHTML = html; };
@@ -1323,6 +1351,190 @@
     else window.addEventListener('resize', f.fit);
     trayWheel(f.tray);
     return f;
+  };
+
+  /* ---------------------------------- the ⚙ cog and its third block (cog/COG-DESIGN.md; DESIGN §6) ----------------------------------
+     The ONE place either editor switches (his rule, 1 Oct). ⚙ opens three blocks, one big: Canvas settings is big the first time,
+     as today, with Friends and the new Editor block small above it. "What should you use?" (or a tap on the Editor bar away from
+     the switch) makes the Editor block big, the way the Friends and Canvas bars do. The switch flips at once: the knob slides,
+     and about 260 ms later the cog closes and opts.onSwitch(to) runs, so a page's animation plays as the scrim fades (§6.3). It
+     stays open while Canvas settings holds picks not applied, or while Friends is the big block (D23 A, DESIGN §21). opts.warn(to) may return a warning (§6.4): Stay leaves
+     everything as it was; the other answer runs opts.onWarnOk(to) and then switches. The cog reopens on the last of Canvas and
+     Friends, never on the Editor explanation (DESIGN §21: it "stays small unless you want the explanation"). */
+  const COG_PIC = {
+    quick: '<svg viewBox="0 0 64 34" aria-hidden="true"><rect x="6" y="3" width="17" height="6" rx="3" fill="#9fb6c0"/><rect x="2" y="12" width="19" height="12" rx="2.4" fill="#cfe2e8"/><rect x="22.5" y="12" width="19" height="12" rx="2.4" fill="#cfe2e8"/><rect x="43" y="12" width="19" height="12" rx="2.4" fill="#cfe2e8"/><rect x="2" y="27" width="60" height="4" rx="2" fill="#6f8a95"/></svg>',
+    full: '<svg viewBox="0 0 64 34" aria-hidden="true"><rect x="10" y="2" width="24" height="6" rx="3" fill="#5ac7ed"/><rect x="2" y="10" width="30" height="6" rx="3" fill="#5ac7ed" opacity=".8"/><rect x="24" y="18" width="36" height="6" rx="3" fill="#5ac7ed" opacity=".9"/><rect x="8" y="26" width="34" height="6" rx="3" fill="#5ac7ed" opacity=".7"/></svg>'
+  };
+  function cogSwitchHTML(cur, names, big) {
+    const to = cur === 'full' ? 'quick' : 'full', label = 'Switch to ' + (to === 'quick' ? names[0] : names[1]) + ' editor';
+    return '<button type="button" class="fm-cog-sw' + (big ? ' big' : '') + ' on-' + cur + '" data-cog="switch" aria-label="' + esc(label) + '" title="' + esc(label) + '">' +
+      '<span class="knob" aria-hidden="true"></span><span class="w wq">' + esc(names[0]) + '</span><span class="arr" aria-hidden="true">' + VIS.icon('swap') + '</span><span class="w wf">' + esc(names[1]) + '</span></button>';
+  }
+  function cogBlocksHTML(st) {
+    const pc = st.layout === 'pc', n = st.names, cur = st.editor, isBig = b => st.big === b;
+    const exp = '<span class="fm-cog-exp" aria-hidden="true">' + VIS.icon('expand') + '</span>';
+    const ic = name => '<span class="fm-cog-ic" aria-hidden="true">' + VIS.icon(name) + '</span>';
+    const what = '<button type="button" class="fm-cog-what" data-cog="what" aria-expanded="' + isBig('editor') + '">What should' + (pc ? ' ' : '<br>') + 'you use?</button>';
+    let ed;
+    if (isBig('editor')) {
+      const card = k => '<div class="fm-cog-card' + (cur === k ? ' cur' : '') + '"><span class="pic">' + COG_PIC[k] + '</span><div><b>' + esc(k === 'quick' ? n[0] : n[1]) + '</b>' +
+        (cur === k ? '<span class="here">You’re here</span>' : '') + '<p>' + esc(k === 'quick'
+          ? 'Clips one after another, with text, captions and music. Gaps close up by themselves. Best for a quick video, or if you’ve never edited.'
+          : 'Everything FreeMotion does: layers anywhere, keyframes, masks, 3D and every effect. For animation, and anything ' + n[0] + ' can’t do.') + '</p></div></div>';
+      ed = '<section class="fm-cog-blk ed big" data-blk="editor" aria-label="What should you use?"><h4>What should you use?</h4>' +
+        '<div class="fm-cog-swrow">' + cogSwitchHTML(cur, n, true) + '<span class="you">You’re in ' + esc(cur === 'quick' ? n[0] : n[1]) + '</span></div>' +
+        card('quick') + card('full') + '<p class="fm-cog-foot">Same project in both. Nothing is converted, and you can switch back any time.</p></section>';
+    } else {
+      ed = '<section class="fm-cog-blk ed small" data-blk="editor" aria-label="Editor">' + (pc ? '<div class="hd">' + ic('edblock') + '<b>Editor</b></div>' : ic('edblock')) +
+        cogSwitchHTML(cur, n, false) + what + '</section>';
+    }
+    const fr = isBig('friends')
+      ? '<section class="fm-cog-blk fr big" data-blk="friends" aria-label="Work with friends"><h4>Work with friends</h4><p class="sub">Off</p>' +
+        '<ol><li>Turn on Work with friends below, then tap Start sharing</li><li>Send your friend the link</li><li>They tap it — you’re both editing</li></ol>' +
+        '<p class="dim">Share this project live and edit it together, each on your own phone or computer. It stays off until you turn it on.</p>' +
+        '<div class="row"><span><b>Work with friends</b><small>Off — turn it on here, and off again any time</small></span><i class="tog" aria-hidden="true"></i></div>' +
+        '<button type="button" class="fm-cog-btn wide" data-cog="done">Done</button></section>'
+      : '<section class="fm-cog-blk fr small" data-blk="friends" aria-label="Friends">' + ic('friends') + '<span class="tx"><b>Friends</b><small>Share live with friends</small></span>' + exp + '</section>';
+    const asp = [['16:9', 18, 11], ['9:16', 11, 18], ['4:5', 13, 16], ['1:1', 15, 15], ['4:3', 17, 13], ['Custom', 15, 15]];
+    const cv = isBig('canvas')
+      ? '<section class="fm-cog-blk cv big" data-blk="canvas" aria-label="Canvas settings"><h4>Canvas settings</h4><div class="asp">' +
+        asp.map((a, i) => '<button type="button" class="ch' + ((st.aspect == null ? 1 : st.aspect) === i ? ' on' : '') + '" data-cog="aspect" data-i="' + i + '"><i style="width:' + a[1] + 'px;height:' + a[2] + 'px"' + (i === 5 ? ' class="dash"' : '') + '></i>' + a[0] + '</button>').join('') + '</div>' +
+        '<div class="row"><span>Resolution</span><span class="sel">1080p (FHD) ▾</span></div><div class="row"><span>Frame rate</span><span class="sel">30 fps ▾</span></div>' +
+        '<div class="row"><span>Background</span><span class="sw"><i class="on" style="background:#000"></i><i style="background:#fff"></i><i style="background:#00b140"></i></span></div>' +
+        '<div class="row"><span>Size</span><b>1080 × 1920</b></div>' +
+        '<div class="acts"><button type="button" class="fm-cog-btn" data-cog="appsettings">App settings…</button><span class="sp"></span><button type="button" class="fm-cog-btn" data-cog="cancel">Cancel</button><button type="button" class="fm-cog-btn primary" data-cog="apply">Apply</button></div></section>'
+      : '<section class="fm-cog-blk cv small" data-blk="canvas" aria-label="Canvas">' + ic('canvas') + '<span class="tx"><b>Canvas <span class="pill">App settings…</span></b><small>9:16 · 1080 × 1920 · 30 fps</small></span>' + exp + '</section>';
+    return ed + fr + cv;
+  }
+  function offsetIn(node, root) { let x = 0, y = 0, n = node; while (n && n !== root) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; } return { x, y }; }
+  VIS.cogStill = function (host, o) {
+    o = o || {};
+    const w = el('div', 'fm fm-cog-still ' + (o.layout === 'pc' ? 'pc' : 'phone') + ' big-' + (o.big || 'canvas'));
+    w.innerHTML = cogBlocksHTML({ layout: o.layout || 'phone', big: o.big || 'canvas', editor: o.editor || 'full', names: o.names || ['Simple', 'Full'] });
+    w.setAttribute('aria-hidden', 'true'); try { w.inert = true; } catch (e) { /* old browsers */ }
+    host.appendChild(w);
+    return w;
+  };
+  VIS.cog = function (f, opts) {
+    opts = opts || {};
+    const root = f.root, pc = root.classList.contains('fm-pc'), names = opts.names || ['Simple', 'Full'];
+    const motion = () => !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const cur = () => ((typeof opts.editor === 'function' ? opts.editor() : f.editor) === 'full' ? 'full' : 'quick');
+    let big = opts.start || 'canvas', last = big, layer = null, box = null, note = null, live = null, pending = false, busy = false, aspect = 1, back = null, shown = null;
+    function render(knob) {
+      if (!box) return;
+      box.className = 'fm-cog-box ' + (pc ? 'pc' : 'phone') + ' big-' + big;
+      box.innerHTML = cogBlocksHTML({ layout: pc ? 'pc' : 'phone', big, editor: knob || cur(), names, aspect });
+      place();
+    }
+    function place() {
+      if (!pc || !box) return;
+      const g = root.querySelector('.fm-transport [data-act="gear"]');
+      const W = root.clientWidth, H = root.clientHeight, h = box.offsetHeight, w = box.offsetWidth;
+      let right = 8, top = Math.round((H - h) / 2);
+      if (g) {
+        const p = offsetIn(g, root);
+        right = Math.max(8, Math.min(W - w - 8, W - (p.x + g.offsetWidth) - 12));
+        top = Math.max(8, Math.min(H - h - 8, p.y - 10 - h));
+      }
+      box.style.right = right + 'px'; box.style.top = top + 'px';
+    }
+    function say(t) { if (!note) return; note.textContent = t || ''; note.hidden = !t; }
+    function grow() {
+      if (!motion() || !box) return;
+      const b = box.querySelector('.fm-cog-blk.big');
+      if (b && b.animate) b.animate([{ opacity: 0, transform: 'translateY(8px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 240, easing: 'cubic-bezier(.2,.85,.25,1.06)' });
+    }
+    function setBig(b) { if (b === big) return; big = b; if (b !== 'editor') last = b; say('');   /* §21: the cog reopens on Canvas or Friends, never on the explanation ("stays small unless you want the explanation") */ render(); grow(); const h = box.querySelector('.fm-cog-blk.big h4, .fm-cog-blk.big [data-cog]'); if (h && h.focus) { h.tabIndex = -1; try { h.focus({ preventScroll: true }); } catch (e) { /* fine */ } } }
+    function open(which) {
+      if (layer) return;
+      big = which && which !== 'last' ? which : last;
+      back = document.activeElement;
+      layer = el('div', 'fm-cog');
+      layer.setAttribute('role', 'dialog'); layer.setAttribute('aria-modal', 'true'); layer.setAttribute('aria-label', 'Settings');
+      layer.innerHTML = '<div class="fm-cog-scrim"></div><p class="fm-cog-note" role="status" hidden></p><p class="fm-cog-live" aria-live="polite"></p>';
+      box = el('div', 'fm-cog-box');
+      layer.appendChild(box);
+      note = layer.querySelector('.fm-cog-note'); live = layer.querySelector('.fm-cog-live');
+      root.appendChild(layer);
+      render();
+      if (motion() && layer.animate) { layer.querySelector('.fm-cog-scrim').animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180 }); grow(); }
+      layer.addEventListener('click', onClick);
+      layer.addEventListener('keydown', onKey);
+      const sw = box.querySelector('[data-cog="switch"]'); if (sw) try { sw.focus({ preventScroll: true }); } catch (e) { /* fine */ }
+      if (opts.onOpen) opts.onOpen();
+    }
+    function close(done) {
+      if (!layer) { if (done) done(); return; }
+      const l = layer; layer = null; box = null; note = null; live = null; pending = false; busy = false;
+      const fin = () => { l.remove(); if (done) done(); };
+      if (motion() && l.animate) { l.style.pointerEvents = 'none'; l.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' }).finished.then(fin, fin); }
+      else fin();
+      if (back && back.isConnected && back.focus) try { back.focus({ preventScroll: true }); } catch (e) { /* fine */ }
+      if (opts.onClose) opts.onClose();
+    }
+    function ask(w, to) {
+      const a = el('div', 'fm-cog-ask');
+      a.setAttribute('role', 'alertdialog'); a.setAttribute('aria-label', w.title || 'Switch?');
+      a.innerHTML = '<div class="card"><b>' + esc(w.title || ('Switch to ' + (to === 'quick' ? names[0] : names[1]) + '?')) + '</b><p>' + esc(w.text) + '</p>' +
+        '<div class="acts"><button type="button" class="fm-cog-btn" data-ask="stay">' + esc(w.cancel || 'Stay') + '</button><button type="button" class="fm-cog-btn primary" data-ask="ok">' + esc(w.ok || 'Switch anyway') + '</button></div></div>';
+      layer.appendChild(a);
+      a.addEventListener('click', e => {
+        e.stopPropagation();
+        const b = e.target.closest('[data-ask]');
+        if (!b && e.target !== a) return;
+        a.remove();
+        if (b && b.dataset.ask === 'ok') { if (opts.onWarnOk) opts.onWarnOk(to); go(to); }
+        else { const sw = box && box.querySelector('[data-cog="switch"]'); if (sw) sw.focus(); say('Nothing changed. ' + (w.stayed || '')); }
+      });
+      const okB = a.querySelector('[data-ask="stay"]'); if (okB) okB.focus();
+    }
+    function go(to) {
+      busy = true;
+      box.querySelectorAll('.fm-cog-sw').forEach(s => { s.classList.remove('on-quick', 'on-full'); s.classList.add('on-' + to); });
+      if (live) live.textContent = (to === 'quick' ? names[0] : names[1]) + ' editor';
+      setTimeout(() => {
+        if (!layer) return;
+        busy = false;
+        if (pending || big === 'friends') {              // D23 A: unapplied canvas picks, or Friends open, keep the cog open (DESIGN §21)
+          if (opts.onSwitch) opts.onSwitch(to, { stayed: true });
+          render(); say(pending ? 'Canvas settings has picks you haven’t applied, so the cog stays open. Apply or Cancel when you’re ready.' : '');
+          return;
+        }
+        close();
+        if (opts.onSwitch) opts.onSwitch(to, { stayed: false });
+      }, motion() ? 260 : 0);
+    }
+    function onClick(e) {
+      const t = e.target;
+      if (t.classList.contains('fm-cog-scrim')) { close(); return; }
+      if (busy) return;
+      const c = t.closest('[data-cog]');
+      if (c) {
+        e.stopPropagation();
+        const k = c.dataset.cog;
+        if (k === 'switch') {
+          if (opts.refuse) { const r = opts.refuse(); if (r) { c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake'); say(r); return; } }
+          const to = cur() === 'quick' ? 'full' : 'quick', w = opts.warn ? opts.warn(to) : null;
+          if (w) ask(w, to); else go(to);
+        } else if (k === 'what') setBig('editor');
+        else if (k === 'aspect') { aspect = +c.dataset.i; pending = aspect !== 1; render(); say(pending ? 'A new shape, not applied yet.' : ''); }
+        else if (k === 'apply' || k === 'cancel' || k === 'done') { if (k === 'cancel') aspect = 1; close(); }
+        else if (k === 'appsettings') say('App settings… opens the app’s settings, as today.');
+        return;
+      }
+      const blk = t.closest('.fm-cog-blk.small');
+      if (blk) { e.stopPropagation(); setBig(blk.dataset.blk); }
+    }
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); const a = layer && layer.querySelector('.fm-cog-ask'); if (a) a.querySelector('[data-ask="stay"]').click(); else close(); } }
+    root.addEventListener('click', e => {
+      const g = e.target.closest('[data-act="settings"], [data-act="gear"]');
+      if (!g || !root.contains(g) || layer) return;
+      e.stopPropagation();
+      shown = g; open('last');
+    }, true);
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => place()).observe(root);
+    return { open, close, isOpen: () => !!layer, get big() { return big; }, refresh: () => render() };
   };
 
   /* ---------------------------------- the picture ---------------------------------- */
@@ -1443,7 +1655,7 @@
     return api;
   };
 
-  /* Quick: sections above the clip row (captions, text, overlays, effects, behind), the clip row, the sound row (DESIGN §8.2/8.3).
+  /* Simple: sections above the clip row (captions, text, overlays, effects, behind), the clip row, the sound row (DESIGN §8.2/8.3).
      opts.open: 'all' (PC: every section open), or a section key (phone: that one open, the rest folded), or null (auto). */
   VIS.drawQuick = function (host, doc, opts) {
     opts = opts || {};
@@ -1597,6 +1809,19 @@
         lane.appendChild(chip);
       }
     });
+    /* D17 B (his pick) and §5.4: anything that runs past the last clip (a long song, most often) makes the video run on in
+       black. The band says how long and what runs past; it is not a clip and cannot be picked. */
+    const runEnd = doc.project.duration || 0;
+    if (R.main.length && runEnd > R.trackEnd + 0.05) {
+      const past = doc.layers.filter(l => l.type !== 'camera' && l.type !== 'group' && !E.hasFlag(l, 'tail') && l.start + l.duration > R.trackEnd + 0.05);
+      const what = past.length === 1 ? (past[0].audioOnly ? 'the song' : (past[0].text || past[0].name || 'one thing')) : past.length + ' things';
+      const runFor = runEnd - R.trackEnd, len = runFor >= 60 ? Math.floor(runFor / 60) + ':' + String(Math.round(runFor % 60)).padStart(2, '0') : VIS.fmt(runFor);
+      const bw = Math.max(4, runFor * api.pps), long = past.length ? ' · ' + esc(what) + ' runs past the clips' : '';
+      const bl = el('div', 'fm-black' + (bw >= 240 ? ' long' : ''), '<span>Black · ' + len + (bw >= 240 ? long : '') + '</span>');
+      bl.style.left = (R.trackEnd * api.pps) + 'px'; bl.style.width = bw + 'px';
+      bl.title = 'The video runs on in black for ' + len + ' after the last clip' + (past.length ? ': ' + (past.length === 1 ? what + ' runs' : what + ' run') + ' past the clips' : '');
+      lane.appendChild(bl); api.black = bl;
+    }
     if (opts.addButton !== false) {
       const add = el('button', 'fm-addclip', VIS.icon('add')); add.type = 'button'; add.setAttribute('aria-label', 'Add clips'); add.title = 'Add clips';
       add.style.left = (R.trackEnd * api.pps + 8) + 'px';
@@ -1640,19 +1865,19 @@
     { name: 'Next steps', ids: ['v10', 'v11', 'v12'] }
   ];
   const PLAN = {
-    v1: { title: 'The switch', blurb: 'One button flips between Quick and Full. Every clip keeps its place, and the playhead and what you picked stay put.' },
+    v1: { title: 'The switch', blurb: 'In the ⚙ cog, a third block beside Canvas settings and Friends. One tap flips between Simple and Full; Full itself does not change.' },
     v2: { title: 'The first ten seconds', blurb: 'What someone new sees: New project, pick four clips, they land end to end, tap one.' },
-    v3: { title: 'Quick on a phone', blurb: 'Trim, delete, split, move and speed up real clips. Titles, stickers and captions go with their clip.' },
+    v3: { title: 'Simple on a phone', blurb: 'Trim, delete, split, move and speed up real clips. Titles, stickers and captions go with their clip.' },
     v4: { title: 'Phone and PC', blurb: 'The same tools, in the same order, with the same names, on both. Tap a tool on one and see it on the other.' },
-    v5: { title: 'An old project in Quick', blurb: 'A messy project made in Full, opened in Quick. Nothing is saved until you make an edit.' },
-    v6: { title: 'Two people, two editors', blurb: 'Sam in Quick and you in Full, on the same project at the same time, and what each release fixes.' },
+    v5: { title: 'An old project in Simple', blurb: 'A messy project made in Full, opened in Simple. Nothing is saved until you make an edit.' },
+    v6: { title: 'Two people, two editors', blurb: 'Sam in Simple and you in Full, on the same project at the same time, and what each release fixes.' },
     v7: { title: 'How it is built', blurb: 'One project in the middle, two ways of looking at it, and the one path every edit goes through.' },
     v8: { title: 'The data', blurb: 'The only new things saved in a project, and everything that is worked out instead of saved.' },
     v9: { title: 'The ripple maths', blurb: 'Before and after, for every kind of edit, down to the keyframes and the caption timings.' },
-    v10: { title: 'Your decisions', blurb: 'Every choice that is yours to make, each with a picture and a recommended pick. One button sends your answers.' },
+    v10: { title: 'Your decisions', blurb: 'Six choices still open, each with pictures and a recommended pick. Your 1 Oct answers are shown, greyed, with your words.' },
     v11: { title: 'The roadmap', blurb: 'What you can hold after each phase, drawn as the screen you would see. Phase 1 first.' },
-    // "Chrome" is designer talk, and reads as the Google browser (QA 29 Sep); v12.js now registers this name itself
-    v12: { title: 'Buttons on the video', blurb: 'The buttons that sit over the video, checked at phone and PC sizes, alone and with a friend.' }
+    // 1 Oct: was "Buttons on the video", which showed a switch put into Full; v12.js registers this name itself
+    v12: { title: 'The switch in the cog', blurb: 'Real pictures of the app with the cog’s third block, small and open, on a phone and a PC, and the warning.' }
   };
   const regs = new Map();
   const hub = { ready: false };
@@ -1764,12 +1989,12 @@
     VIS.open = id => open(id, true);
   }
 
-  /* The sample strip under the header: Beach day in a phone, Quick and Full, tap to pick. It is the kit's own smoke test. */
+  /* The sample strip under the header: Beach day in a phone, Simple and Full, tap to pick. It is the kit's own smoke test. */
   function initSample() {
     const host = document.getElementById('vis-sample-demo'); if (!host) return;
     const doc = VIS.sample('beach');
     let editor = 'quick', sel = null, t = 4.6;
-    const seg = el('div', 'h-seg', '<button type="button" data-ed="quick">Quick</button><button type="button" data-ed="full">Full</button>');
+    const seg = el('div', 'h-seg', '<button type="button" data-ed="quick">Simple</button><button type="button" data-ed="full">Full</button>');
     seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Editor');
     host.appendChild(seg);
     const frameHost = el('div'); frameHost.style.width = '100%'; host.appendChild(frameHost);
@@ -1792,7 +2017,6 @@
       else if (sel && R.isMain(sel)) { f.tray.innerHTML = ''; VIS.toolbar(f.tray, VIS.CLIP_TRAY); }
       else if (sel) { f.tray.innerHTML = ''; VIS.toolbar(f.tray, VIS.itemTray(R, sel)); }
       else f.setSay('<b>4 clips</b> · 0:14 · tap a clip to pick it');
-      f.on('switch', () => { editor = editor === 'quick' ? 'full' : 'quick'; draw(); });
     }
     let openSec = null;
     seg.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; editor = b.dataset.ed; draw(); });

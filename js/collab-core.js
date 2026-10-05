@@ -38,8 +38,10 @@ window.FM = window.FM || {};
      Bumped to 6 by #482 polish batch 5 (grading depth): Highlights & Shadows gained Whites, Blacks, Tonal width, Local
      radius and Colour correction; Teal & Orange gained Splits by, Protect skin, Balance and Keep brightness; Tint gained
      Method and Range width; Duotone gained Blend; Gradient Map gained three colours, Reverse and Blend; Cross Process gained
-     a variant; Exposure gained Gamma and Work in. */
-  C.SCHEMA_REV = 6;
+     a variant; Exposure gained Gamma and Work in.
+     Bumped to 7 by #482 polish batch 6: Vignette, Light / Soft / Dark Glow, Drop Shadow, Stroke, Lens Flare, Linear and Spin
+     Streaks and Glow Scan gained controls. */
+  C.SCHEMA_REV = 7;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -238,7 +240,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 836365476955739;   // #482 polish batch 5 (SCHEMA_REV 6): eight grading effects gained controls
+  C.SCHEMA_FP = 1911166791531509;   // #482 polish batch 6 (SCHEMA_REV 7): eight glow/shadow/vignette/flare effects gained controls
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *

@@ -1,8 +1,13 @@
 /* V6 — Two people, two editors, live (DESIGN §10: 10.2 the gate, 10.3 what people see, 10.4 Phase 4 "together" 4a–4d,
  * 10.5 Phase 5 all-or-nothing, 10.6 what is left, 10.7 his own devices; §3.11 the lines; §3.12 where they show; §11 undo).
  *
- * Two devices, Sam (a friend, Editor role) in Quick and Ezra (the owner), both in Beach day. Nine scripted moments (DESIGN §18
- * V6), each played for three releases: "Phases 2–3" (the gate: clips stay put while someone else can edit, ending with what the
+ * 1 Oct (his rule, DESIGN §0.4): Full shows nothing new. Phase 4 ("together") and Phase 5 are HELD, because they change how
+ * Full behaves in a session (§0.4 B29-B37), so this page plays only the release that ships: moving clips stays put while
+ * someone else can edit (D14 A, for good). On Ezra's side in Full the people chip is today's (no editor glyph, §0.4 V10), and
+ * no line or toast of Simple's ever shows there (V12). The Phase 4/5 scripts below are kept for the record and never played.
+ *
+ * Two devices, Sam (a friend, Editor role) in Simple and Ezra (the owner), both in Beach day. Nine scripted moments (DESIGN §18
+ * V6), each written for three releases: "Phases 2–3" (the gate: clips stay put while someone else can edit, ending with what the
  * gate prevents), "Phase 4" (together: clip time on the wire, a lease protects content, keep my frame / authorship / pre-flight,
  * the glide and "Sam moved N clips", undo puts back only its own layers' order, "This is me") and "Phase 5" (all-or-nothing).
  * Moment 9 is his own Mac + iPhone in one session: the owner's "Your phone can edit · clips stay put" + Options › Make it a
@@ -15,7 +20,7 @@
  *
  * Both devices run VIS.engine: each side is its own E.editor (its own copy, as each device has); a change is cloned onto the
  * other copy when "it reaches" it. Every step is replayed from the start, so Back / dots / Next are exact. Ezra can flip his own
- * device to Quick or Full at any time. Every other control on the devices answers with a short "not part of this page" note.
+ * device to Simple or Full at any time. Every other control on the devices answers with a short "not part of this page" note.
  *
  * CSS is injected once (id v6-css), hub side under .v6, mock side under .v6 .fm, so index.html needs no extra <link>.
  */
@@ -43,7 +48,7 @@
   const LAYOUT = { quick: { stageH: 230, tlH: 221 }, full: { stageH: 150, tlH: 356 } };   // both devices end up ~658 px tall
   const TWO_AT = 740;                               // the page width from which both devices sit side by side at full size
 
-  /* the two editor glyphs worn on a face (§10.3): Quick = one row of clips, Full = a row per layer */
+  /* the two editor glyphs worn on a face (§10.3): Simple = one row of clips, Full = a row per layer */
   const GQ = '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x=".6" y="3.4" width="3.3" height="5.2" rx=".9" fill="currentColor"/><rect x="4.35" y="3.4" width="3.3" height="5.2" rx=".9" fill="currentColor"/><rect x="8.1" y="3.4" width="3.3" height="5.2" rx=".9" fill="currentColor"/></svg>';
   const GF = '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="1.3" width="6.6" height="2.4" rx=".7" fill="currentColor"/><rect x="3" y="4.8" width="8" height="2.4" rx=".7" fill="currentColor"/><rect x="2" y="8.3" width="6" height="2.4" rx=".7" fill="currentColor"/></svg>';
   const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -173,7 +178,7 @@
   /* Each step: say (the narration), by (who acts: 'sam' | 'ez'), lag (the other device gets it a beat later), look (which
      device a narrow screen shows: one side, or [first, then] when the change reaches the other one), hypo (the "without the
      stop" step), anims, run(S). Internal codes in result checks ('4a'…'5') only pick the "Phase 4 / Phase 5" tag. */
-  const HELLO = "You're both in Beach day: Sam in Quick on her phone, you in Full. Each face shows which editor that person is in.";
+  const HELLO = "You're both in Beach day: Sam in Simple on her phone, you in Full. Each face shows which editor that person is in.";
   const SAME4 = 'Phase 5 changes nothing in this moment. It is about undo and two moves at the same time (moment 5).';
   const SAME5 = 'Phase 5 changes nothing in this moment.';
   const CASES = [
@@ -188,7 +193,7 @@
             run(S) { both(S, addZoomKey); S.ez.tool.key = true; S.ez.tool.val = .7; if (S.phase >= 4) S.sam.hold = { id: 'c3', kind: 'kf' }; } }
         ];
         if (p < 4) return s.concat([
-          { say: 'Sam drags the end of Waves to make it 1 s shorter. Quick stops her straight away and says why. Nothing moves.', by: 'sam',
+          { say: 'Sam drags the end of Waves to make it 1 s shorter. Simple stops her straight away and says why. Nothing moves.', by: 'sam',
             run(S) { S.sam.shake = 'c2'; S.sam.msg = GATE; } },
           { say: "Without that stop: Sam's trim would also send her old copy of Sandcastle's animation. Your keyframe would vanish on both phones, and nobody would be told.",
             hypo: true, by: 'sam', lag: true, look: ['sam', 'ez'],
@@ -225,7 +230,7 @@
       steps(p) {
         const s = [{ say: "You open Crop on Sunset. While it's open, Sunset is yours: on Sam's phone it wears your colour.", pulse: true, look: 'ez', run() {} }];
         if (p < 4) return s.concat([
-          { say: 'Sam taps Delete on Arriving, the first clip. Quick stops her straight away and says why.', by: 'sam',
+          { say: 'Sam taps Delete on Arriving, the first clip. Simple stops her straight away and says why.', by: 'sam',
             run(S) { S.sam.hl = 'delete'; S.sam.msg = GATE; } },
           { say: "Without that stop: Sunset is yours while you crop, so it couldn't move. Everything before it would slide 3.4 s earlier and leave a hole nobody asked for.",
             hypo: true, by: 'sam', lag: true, look: ['sam', 'ez'],
@@ -266,7 +271,7 @@
             run(S) { both(S, d => setText(d, 'Beach day with Mia!')); S.ez.tool.text = 'Beach day with Mia!'; } }
         ];
         if (p < 4) return s.concat([
-          { say: 'Sam taps Delete on Waves. Quick stops her straight away and says why.', by: 'sam',
+          { say: 'Sam taps Delete on Waves. Simple stops her straight away and says why.', by: 'sam',
             run(S) { S.sam.hl = 'delete'; S.sam.msg = GATE; } },
           { say: "Without that stop: the title rides on Waves, so Sam's delete would take it too, words and all, while you're still typing.",
             hypo: true, by: 'sam', lag: true, look: ['sam', 'ez'],
@@ -305,7 +310,7 @@
             run(S) { both(S, d => setOpacity(d, .4)); S.ez.tool.val = .4; if (S.phase >= 4) S.sam.hold = { id: 'c2', kind: 'kf' }; } }
         ];
         if (p < 4) return s.concat([
-          { say: 'Sam holds Sunset to drag it to the front. Quick stops her straight away and says why.', by: 'sam',
+          { say: 'Sam holds Sunset to drag it to the front. Simple stops her straight away and says why.', by: 'sam',
             run(S) { S.sam.shake = 'c4'; S.sam.msg = GATE; } },
           { say: "Without that stop: Sam's move would send her own copy of Waves, fade and all. Your 40% would jump back to 100% on both phones.",
             hypo: true, by: 'sam', lag: true, look: ['sam', 'ez'],
@@ -340,12 +345,12 @@
       id: 'undo', title: 'Sam undoes', sub: 'after you moved a clip', open: 'overlay',
       sam: { t: 8.0, sel: 'c3' }, ez: { t: 12.0, sel: 'c4', tool: null },
       steps(p) {
-        const s = [{ say: "You're both in Beach day: Sam in Quick, you in Full. Sam is looking at Sandcastle.", pulse: true, look: 'sam', run() {} }];
+        const s = [{ say: "You're both in Beach day: Sam in Simple, you in Full. Sam is looking at Sandcastle.", pulse: true, look: 'sam', run() {} }];
         const move = { say: p < 4 ? "You drag Sunset 1 s later in Full. Moving one clip in Full still works, and Sam's phone shows the new 1 s gap."
                                    : "You drag Sunset 1 s later in Full. On Sam's phone it glides over in your colour, and a 1 s gap appears.",
           by: 'ez', lag: true, look: ['ez', 'sam'], run(S) { both(S, d => shiftLayer(lay(d, 'c4'), 1)); S.ez.sel = 'c4'; } };
         if (p < 4) return s.concat([
-          { say: 'Sam taps Delete on Sandcastle. Quick stops her and says why. An undo that would move clips is held the same way.', by: 'sam',
+          { say: 'Sam taps Delete on Sandcastle. Simple stops her and says why. An undo that would move clips is held the same way.', by: 'sam',
             run(S) { S.sam.hl = 'delete'; S.sam.msg = GATE; } },
           move,
           { say: "Without that stop: Sam deletes Sandcastle, then taps Undo. Her undo would put back her own copy of every clip, and your move of Sunset would quietly disappear.",
@@ -397,10 +402,10 @@
       sam: { t: 8.0, sel: 'cap', tool: { kind: 'text', label: 'Cc', text: 'Castle time' } },
       ez: { t: 1.6, sel: 'c1', hold: { id: 'cap', kind: 'lease', cue: 'Castle time' } },
       steps(p) {
-        const s = [{ say: "Sam has been typing captions on her phone for a few minutes. She's on “Castle time”, over Sandcastle. You're in Quick too, on Arriving. On your phone her caption wears her colour.",
+        const s = [{ say: "Sam has been typing captions on her phone for a few minutes. She's on “Castle time”, over Sandcastle. You're in Simple too, on Arriving. On your phone her caption wears her colour.",
           pulse: true, look: 'sam', run() {} }];
         if (p < 4) return s.concat([
-          { say: 'You tap Delete on Arriving. Quick stops you and says why: Sam can edit too, so clips stay put.', by: 'ez',
+          { say: 'You tap Delete on Arriving. Simple stops you and says why: Sam can edit too, so clips stay put.', by: 'ez',
             run(S) { S.ez.hl = 'delete'; S.ez.msg = GATE_OWNER; } },
           { say: "Without that stop: Sam has the captions open, so they couldn't move. The clips would slide 3.4 s earlier without them, and every caption would sit over the wrong clip.",
             hypo: true, by: 'ez', lag: true, look: ['ez', 'sam'],
@@ -443,7 +448,7 @@
       sam: { t: 8.2, sel: null }, ez: { t: 8.2, sel: 'sticker', tool: null },
       steps(p) {
         return [
-          { say: "You're in Full, Sam is in Quick, both on Sandcastle. You've picked the shell sticker.", pulse: true, look: 'ez', run() {} },
+          { say: "You're in Full, Sam is in Simple, both on Sandcastle. You've picked the shell sticker.", pulse: true, look: 'ez', run() {} },
           { say: 'You delete the sticker.', by: 'ez', lag: true, look: ['ez', 'sam'],
             run(S) { both(S, d => { d.layers = d.layers.filter(l => l.id !== 'sticker'); }); S.ez.sel = null; } },
           { say: 'Sam adds a title over Sandcastle and types “So fun!”. It lands on top of the picture on both phones.', by: 'sam', lag: true, look: ['sam', 'ez'],
@@ -475,7 +480,7 @@
       result(p) {
         if (p < 4) return { checks: [[1, '', 'The sticker came back.'],
           [0, '', "Sam's title dropped behind every clip. It is gone from both pictures, and nobody was told."]],
-          note: "This happens in today's app too. Phase 4 changes Undo so it puts back only your own things." };
+          note: "This happens in today's app too, and Full's Undo stays exactly as it is. An Undo made in Simple puts back only its own things." };
         return { checks: [[1, '4a', 'The sticker came back to its own place.'], [1, '4a', "Sam's title stayed on top, where she put it. Undo puts back only your own things."]],
           note: p === 5 ? SAME5 : '' };
       }
@@ -486,9 +491,9 @@
       setup(d) { d.layers.unshift(E.clone(SAM_TITLE)); },
       sam: { t: 8.2, sel: null }, ez: { t: 8.2, sel: 'c3' },
       steps(p) {
-        const s = [{ say: "Earlier, Sam put a title on Sandcastle: “Castle for Mia”. The shell sticker on it is yours. You're both in Quick.", pulse: true, look: 'ez', run() {} }];
+        const s = [{ say: "Earlier, Sam put a title on Sandcastle: “Castle for Mia”. The shell sticker on it is yours. You're both in Simple.", pulse: true, look: 'ez', run() {} }];
         if (p < 4) return s.concat([
-          { say: 'You tap Delete on Sandcastle. Quick stops you and says why: Sam can edit too, so clips stay put.', by: 'ez',
+          { say: 'You tap Delete on Sandcastle. Simple stops you and says why: Sam can edit too, so clips stay put.', by: 'ez',
             run(S) { S.ez.hl = 'delete'; S.ez.msg = GATE_OWNER; } },
           { say: "Without that stop: what's on a clip goes with it, so your delete would take Sam's title too. It would just vanish from her phone.",
             hypo: true, by: 'ez', lag: true, look: ['ez', 'sam'],
@@ -520,10 +525,10 @@
       id: 'mine', title: 'Your phone and Mac', sub: 'both in one session', open: 'text', ezEd: 'quick', who: WHO_SELF,
       sam: { t: 8.2, sel: null }, ez: { t: 8.2, sel: 'c3' },
       steps(p) {
-        const intro = 'Your Mac started sharing Beach day, and you opened the link on your phone. The link joins as an Editor, so your phone can edit too. Both are in Quick.';
+        const intro = 'Your Mac started sharing Beach day, and you opened the link on your phone. The link joins as an Editor, so your phone can edit too. Both are in Simple.';
         if (p < 4) return [
           { say: intro, pulse: true, look: 'ez', run() {} },
-          { say: 'On your Mac you tap Delete on Sandcastle. Quick stops you, because your phone could be moving clips at the same moment. The line calls it “your phone”, not “Ezra”.', by: 'ez',
+          { say: 'On your Mac you tap Delete on Sandcastle. Simple stops you, because your phone could be moving clips at the same moment. The line calls it “your phone”, not “Ezra”.', by: 'ez',
             run(S) { S.ez.hl = 'delete'; S.ez.msg = { text: 'Your phone can edit · clips stay put', btns: ['Options ›'] }; } },
           { say: 'You tap Options ›. Two choices: Make it a Viewer, or Open in Full.', by: 'ez',
             run(S) { S.ez.msg = { text: 'Your phone can edit · clips stay put', btns: ['Options ›'] }; S.ez.press = 'Options ›'; S.ez.menu = ['Make it a Viewer', 'Open in Full']; } },
@@ -554,7 +559,7 @@
       result(p) {
         if (p < 4) return { checks: [[1, '', 'Your Mac says why moving clips stopped, and calls the other device “your phone”.'],
           [1, '', 'Options › then Make it a Viewer fixes it in two taps. Your phone can ask to edit again.'],
-          [0, '', 'Before Phase 4 your two devices count as two people: while both can edit, moving clips stays off on both.']],
+          [0, '', 'Your two devices count as two people: while both can edit, moving clips stays off on both.']],
           note: 'To skip this every time: in Share, set “Whoever you give the link to” to Viewer.' };
         return { checks: [[1, '4d', 'Moving clips works on both devices at once. Nothing stops you.'],
           [1, '4c', 'Until you mark it, your phone counts as someone else, so its title was kept.'],
@@ -565,7 +570,7 @@
   ];
 
   const PHASES = [
-    { p: 3, label: 'Phases 2–3', desc: 'Before “together”. Moving clips stops while someone else can edit. Looks, text, captions and sound still work live.' },
+    { p: 3, label: 'Phases 2–3', desc: 'Moving clips stops while someone else can edit, and stays that way (D14b A, recommended; still open). Looks, text, captions and sound work live. Moving clips together (Phase 4) is held: it would change how Full behaves when a friend is in, so it is built only if you say yes, knowing that.' },
     { p: 4, label: 'Phase 4', desc: '“Together”. Moving clips works live, and each of you sees it happen.' },
     { p: 5, label: 'Phase 5', desc: '“All-or-nothing”. A change that can\'t land whole doesn\'t land at all.' }
   ];
@@ -576,9 +581,9 @@
     '5': 'Phase 5: a change lands whole, or not at all'
   };
   const FEATS = [
-    { ph: 'Phase 1', from: 1, text: 'Faces show which editor each person is in: “Sam · Quick”. What someone is holding wears their colour.' },
-    { ph: 'Phase 2', from: 2, until: 3, text: 'The stop: “Clips stay put while you both edit”. Looks, text, captions and sound work live.',
-      lifted: 'The stop lifts while everyone is online. It still holds when someone who can edit is offline.' },
+    { ph: 'Phase 1', from: 1, text: 'In Simple, faces show which editor each person is in: “Sam · Simple”. In Full, faces look exactly as they do today. What someone is holding wears their colour.' },
+    { ph: 'Phase 2', from: 2, text: 'The stop, in Simple: “Clips stay put while you both edit”. Looks, text, captions and sound work live. Full works as it does today.' },
+    { ph: 'Held', from: 99, text: 'Phases 4 and 5, moving clips together: held. Each would change how Full behaves when a friend is in (a friend’s move gliding in, your playhead moving with it, new lines in Full), so they are built only if you say yes on D14.' },
     { ph: 'Phase 4', from: 4, text: 'Keyframes ride inside their clip, so moving it never loses them. While Sam drags a clip, it wears her outline on your phone, marked “Sam · clip row”.' },
     { ph: 'Phase 4', from: 4, text: 'A clip you\'re holding can still slide in time. What\'s in it stays yours. A caption someone is typing slides with its clip, words untouched.' },
     { ph: 'Phase 4', from: 4, text: 'Your picture stays on the same frame when clips move under you. Your things are kept when someone else deletes their clip. A change to what you\'re holding waits, with a line naming you. Undo puts back only your own things.' },
@@ -783,16 +788,17 @@
   function mount(host) {
     injectCSS();
     let ci = clamp(parseInt(store('v6.case') || '0', 10) || 0, 0, CASES.length - 1);
-    let phase = [3, 4, 5].includes(+store('v6.phase')) ? +store('v6.phase') : 4;
+    let phase = 3;                                   // Phases 4-5 are held (D14 A): only the release that ships is played
     let cs = CASES[ci], ezEditor = cs.ezEd || 'full', steps = cs.steps(phase), k = 0, S = null, playing = false, gen = 0, timers = [];
     let mode = 'two', shown = 'sam', lastW = 0;
     const W = () => cs.who || WHO_FRIEND;
 
     const root = el('div', 'v6');
     root.innerHTML =
-      '<p class="v6-intro">Pick a moment and a release, then press Play. Watch what one person does, and what reaches the other. On a narrow screen one device shows at a time, and the page switches to the one that changes.</p>' +
+      '<p class="v6-intro">Pick a moment, then press Play. Watch what one person does, and what reaches the other. On a narrow screen one device shows at a time, and the page switches to the one that changes.</p>' +
       '<div><p class="v6-lbl" id="v6-cl">The moment</p><div class="v6-cases" role="group" aria-labelledby="v6-cl"></div></div>' +
-      '<div><p class="v6-lbl" id="v6-rl">Which release</p><div class="h-seg v6-rel" role="group" aria-labelledby="v6-rl"></div><p class="v6-reldesc"></p></div>' +
+      '<div hidden><p class="v6-lbl" id="v6-rl">Which release</p><div class="h-seg v6-rel" role="group" aria-labelledby="v6-rl"></div></div>' +
+      '<p class="v6-reldesc h-note"></p>' +
       '<div class="v6-box">' +
         '<div class="v6-player">' +
           '<button type="button" class="h-btn v6-back" aria-label="Back a step" title="Back (←)">' + CHEV_L + '</button>' +
@@ -809,8 +815,8 @@
         '</div>' +
       '</div>' +
       '<div class="v6-result h-card" hidden></div>' +
-      '<section class="v6-feats-wrap" aria-labelledby="v6-fh"><h3 id="v6-fh">What each release adds</h3><ul class="v6-feats"></ul>' +
-      '<p class="h-note">Tap Next or use <kbd>←</kbd> <kbd>→</kbd> to step. Drag along the numbers at the top of a timeline to move that person\'s playhead; the other device shows it as a dashed line. Full / Quick above your device switches your editor, and the other device shows the change. On a narrow screen, the two tabs (or a tap on an “On …” box) swap devices.</p></section>';
+      '<section class="v6-feats-wrap" aria-labelledby="v6-fh"><h3 id="v6-fh">What you get, and what is held</h3><ul class="v6-feats"></ul>' +
+      '<p class="h-note">Tap Next or use <kbd>←</kbd> <kbd>→</kbd> to step. Drag along the numbers at the top of a timeline to move that person\'s playhead; the other device shows it as a dashed line. Full / Simple above your device stands in for the switch in your ⚙ cog; Sam’s phone shows the change, and your side in Full shows nothing new. On a narrow screen, the two tabs (or a tap on an “On …” box) swap devices.</p></section>';
     host.appendChild(root);
     const $ = s => root.querySelector(s);
     const casesEl = $('.v6-cases'), relEl = $('.v6-rel'), relDesc = $('.v6-reldesc'), dotsEl = $('.v6-dots'), narr = $('.v6-narr'), box = $('.v6-box'),
@@ -996,7 +1002,7 @@
         (R.note ? '<p class="v6-rnote">' + esc(R.note) + '</p>' : '');
     }
     function drawFeats() {
-      featsEl.innerHTML = FEATS.map(f => {
+      featsEl.innerHTML = FEATS.filter(f => f.from !== 4 && f.from !== 5).map(f => {
         const inIt = f.from <= phase || (f.from === 2 && phase >= 3);
         const lifted = f.until && phase > f.until;
         const cls = lifted ? 'lifted' : inIt ? 'on' : 'off';
@@ -1006,9 +1012,9 @@
     function faceHTML(side, editor) { const w = W()[side]; return '<span class="v6-face" style="--who:' + w.color + '">' + w.ch + '<span class="g">' + (editor === 'quick' ? GQ : GF) + '</span></span>'; }
     function drawWho() {
       const w = W();
-      views.sam.who.innerHTML = faceHTML('sam', 'quick') + '<span>' + esc(w.sam.head) + '</span><span class="v6-edname">· Quick</span>';
+      views.sam.who.innerHTML = faceHTML('sam', 'quick') + '<span>' + esc(w.sam.head) + '</span><span class="v6-edname">· Simple</span>';
       views.ez.who.innerHTML = faceHTML('ez', ezEditor) + '<span>' + esc(w.ez.head) + '</span>';
-      const seg = el('div', 'h-seg v6-edseg', '<button type="button" data-ed="full">Full</button><button type="button" data-ed="quick">Quick</button>');
+      const seg = el('div', 'h-seg v6-edseg', '<button type="button" data-ed="full">Full</button><button type="button" data-ed="quick">Simple</button>');
       seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Your editor');
       seg.querySelectorAll('button').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.ed === ezEditor)); b.addEventListener('click', () => flipEditor(b.dataset.ed)); });
       views.ez.who.appendChild(seg);
@@ -1041,7 +1047,7 @@
       if (t.classList.contains('fm-opener') || t.closest('.fm-toast')) return;         // section openers and the Full-side Show work
       if (t.dataset.act === 'switch' && side === 'ez') return;                          // your switch works
       e.stopPropagation(); e.preventDefault();
-      if (t.dataset.act === 'switch') { inert(side, W().sam.name + ' stays in Quick on this page.'); return; }
+      if (t.dataset.act === 'switch') { inert(side, W().sam.name + ' stays in Simple on this page.'); return; }
       if (t.dataset.show && S) {                                                        // a line's Show picks the item
         const P = S[side]; P.sel = t.dataset.show; P.msg = null; P.tool = null; drawSide(side, {}); return;
       }
@@ -1059,8 +1065,6 @@
         V.f.root.insertBefore(el('div', 'v6-winbar', '<i></i><i></i><i></i><span>Beach day — FreeMotion · narrow window</span>'), V.f.root.firstChild);
         V.f.fit();
       }
-      if (side === 'ez') V.f.on('switch', () => flipEditor());
-      else V.f.switchBtn.title = V.f.switchBtn.ariaLabel = w.name + ' stays in Quick on this page';
     }
     function ppsFor(f, editor) {
       const inner = (parseFloat(f.root.style.width) || 394) - 14;
@@ -1126,8 +1130,8 @@
       drawToast(side, V, P, editor);
       drawExtras(side, V, P, editor);
       drawBubble(side, P, editor);
-      /* the glide (§10.4 4d): a person's own edits always move smoothly in Quick; a friend's ripple glides only from Phase 4 and
-         only in Quick, tinted in the mover's colour for a second; Full rebuilds and outlines the moved clips instead (§8.10). */
+      /* the glide (§10.4 4d): a person's own edits always move smoothly in Simple; a friend's ripple glides only from Phase 4 and
+         only in Simple, tinted in the mover's colour for a second; Full rebuilds and outlines the moved clips instead (§8.10). */
       if (old) {
         const glide = !reduced() && how.anim && (how.recv ? (S.phase >= 4 && !S.hypo && editor === 'quick') : true);
         const tint = !!how.recv && how.forward && S.phase >= 4 && !S.hypo;
@@ -1140,9 +1144,11 @@
 
     function stageExtras(side, P, pic, how) {
       const V = views[side], f = V.f, oSide = other(side), o = S.who[oSide], oEd = oSide === 'sam' ? 'quick' : ezEditor;
+      // §0.4 V10: the editor glyph and word are drawn in Simple only; in Full the chip is today's (a face and a name)
+      const inFull = (side === 'sam' ? 'quick' : ezEditor) === 'full';
       const pres = el('div', 'v6-pres' + (how.pulse ? ' pulse' : ''),
-        '<span class="v6-pchip"><span class="v6-pface" style="--who:' + o.color + '">' + o.ch + '<span class="g">' + (oEd === 'quick' ? GQ : GF) + '</span></span>' +
-        esc(o.chip) + ' · ' + (oEd === 'quick' ? 'Quick' : 'Full') + '</span>');
+        '<span class="v6-pchip"><span class="v6-pface" style="--who:' + o.color + '">' + o.ch + (inFull ? '' : '<span class="g">' + (oEd === 'quick' ? GQ : GF) + '</span>') + '</span>' +
+        esc(o.chip) + (inFull ? '' : ' · ' + (oEd === 'quick' ? 'Simple' : 'Full')) + '</span>');
       f.stage.appendChild(pres);
       const live = VIS.chip(side === 'sam' ? 'Live · Ezra' : 'LIVE', 'live'); live.classList.add('v6-livechip'); f.stage.appendChild(live);
       if (side === 'ez' && P.tool && P.tool.kind === 'crop') {
@@ -1180,7 +1186,7 @@
       if (P.shake && how.forward) { const it = api.items.get(P.shake); if (it) it.classList.add('v6-shake'); }
       (P.marks || []).forEach(m => {
         const it = api.items.get(m.on), l = lay(doc(P), m.on); if (!it || !l) return;
-        if (m.kind === 'kept' && V.editor === 'quick') return;                 // Quick draws no keyframes
+        if (m.kind === 'kept' && V.editor === 'quick') return;                 // Simple draws no keyframes
         const d = el('i', 'v6-' + m.kind, m.kind === 'lost' ? '✕' : ''); d.style.left = ((m.at - l.start) * api.pps) + 'px';
         d.title = m.kind === 'lost' ? (l.type === 'text' ? 'Under every clip now' : 'Your keyframe was here') : 'Your keyframe, on the same frame'; it.appendChild(d);
         if (m.kind === 'lost') keepInView(api, it);
@@ -1228,11 +1234,8 @@
     }
     function drawToast(side, V, P, editor) {
       const t0 = V.f.root.querySelector(':scope > .fm-toast');
-      if (editor === 'full' && P.msg) {
-        const m = P.msg;
-        const act = m.btns && m.show ? { label: 'Show', run: () => { if (S) { S[side].sel = m.show; S[side].msg = null; drawSide(side, {}); } } } : null;
-        VIS.toast(V.f.root, m.text, act, { ms: 0, bottom: 64 });
-      } else if (t0) t0.classList.remove('show');
+      // §0.4 V4, V12: Full never shows Simple's lines or a new toast. Simple's lines live in Simple's tray only.
+      if (t0) t0.classList.remove('show');
     }
     /* the Options › menu, the Share panel's people, and a pressed play-bar button */
     function drawExtras(side, V, P, editor) {
@@ -1260,13 +1263,13 @@
     function drawBubble(side, P, editor) {
       const b = views[side].bubble; b.classList.remove('wait');
       const bits = [];
-      if (P.msg) bits.push('<span class="q">“' + esc(P.msg.text) + '”</span>' + (P.msg.btns || []).map(x => ' <span class="pill">' + esc(x) + '</span>').join(''));
+      if (P.msg && editor !== 'full') bits.push('<span class="q">“' + esc(P.msg.text) + '”</span>' + (P.msg.btns || []).map(x => ' <span class="pill">' + esc(x) + '</span>').join(''));
       if (P.menu) bits.push('<span>A menu opens: ' + P.menu.map(x => '<span class="pill">' + esc(x) + '</span>').join(' ') + '</span>');
       if (P.sheet) bits.push('<span>Share is open. Your phone\'s row is ticked “This is me (my other device)”.</span>');
       if (P.note) bits.push('<span>' + esc(P.note) + '</span>');
       if (P.kmf) bits.push('<span>The playhead moved with the clip, so the picture stayed on the same frame.</span>');
       b.classList.toggle('none', !bits.length); b.classList.toggle('hypo', !!S.hypo);
-      const where = S.who[side].on + (P.msg && editor === 'full' ? ' (a note at the bottom)' : '');
+      const where = S.who[side].on + (P.msg && editor === 'full' ? '' : '');
       b.innerHTML = '<small>' + esc(where) + '<span class="go">Show ›</span></small>' + (bits.length ? bits.join('<br>') : '<span>Nothing new.</span>');
     }
 
@@ -1315,7 +1318,7 @@
   VIS.register('v6', {
     title: 'Two people, two editors',
     group: 'Working together',
-    blurb: 'Sam edits in Quick on her phone while you edit in Full, on the same project at the same time, and each release shows what it fixes.',
+    blurb: 'Sam edits in Simple on her phone while you edit in Full, on the same project at the same time, and each release shows what it fixes.',
     mount
   });
 })();

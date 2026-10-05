@@ -1358,6 +1358,8 @@ window.FM = window.FM || {};
     const inClip = t => typeof t === 'number' && isFinite(t) && t >= s && t < s + d;   // FM.layerLocalTime's half-open window
     if (inClip(now)) out.push(now);
     if (isFinite(d) && d > 0) NOOP_SPREAD.forEach(f => { const t = s + d * f; if (inClip(t) && out.indexOf(t) < 0) out.push(t); });
+    // …and the moments an effect that rests says it is busy (a Glow Scan that waits, or sweeps Once — #482 polish 6.7)
+    if (FM.fxNoopMoments) { try { FM.fxNoopMoments(layer).forEach(t => { if (inClip(t) && out.indexOf(t) < 0) out.push(t); }); } catch (e) {} }
     if (!out.length) out.push(typeof now === 'number' && isFinite(now) ? now : s);   // a clip with no length: the old single frame
     return out;
   }

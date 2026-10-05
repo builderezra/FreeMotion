@@ -1,5 +1,5 @@
 /* V2 — The first ten seconds (DESIGN §7.1 New project, §7.3 the first ten seconds, §8.2 the tray row, §8.5 the clip tray,
- * §8.9 the words). A step-through at 380 px: Home → New project with the two cards → the phone's own picker → the clips
+ * §8.9 the words). A step-through at 380 px: Home → New project (today's dialog, unchanged, §0.4 V6) → the phone's own picker → the clips
  * load and land end to end → the one-time hint → tap a clip and its tools fill the tray row → a second batch through
  * Clips › Add clips with the line at 0 (nothing asked) → one more with the line inside clip 2 (At the end / After Clip 2, the
  * caret at that seam, §8.5 Clips row) → a mixed pick of clips and a song at Create (the song lands as music, one Undo).
@@ -148,10 +148,10 @@
   const STEPS = [
     { key: 'home', title: 'Home, on a new phone',
       text: () => 'Someone opens FreeMotion for the very first time. No projects yet, and one big + at the bottom.',
-      small: 'This is the real Home. The ▶, the words “Let’s see what you’re made of” and the arrow to the + are in the app today. Nothing on Home changes for Quick, apart from a small Quick or Full label on each project card once there are some.' },
-    { key: 'new', title: 'Quick or Full',
-      text: () => 'Two cards at the top, and Quick is already picked for someone new. They type a name, keep the phone shape, and tap Create.',
-      small: 'With Quick picked, only the name and the shape are asked. Size, frame rate and background fold into one line (More · 1080p · 30 fps · Black) that opens if you want it. Tap Full and every field comes back, exactly as today. On a phone that already has projects, like yours, Full stays picked, so your + works as it does now (decision D3).' },
+      small: 'This is the real Home. The ▶, the words “Let’s see what you’re made of” and the arrow to the + are in the app today. Nothing on Home changes for Simple.' },
+    { key: 'new', title: 'New project, as today',
+      text: () => 'Today’s New project, unchanged. They type a name, keep the phone shape, and tap Create.',
+      small: 'Nothing in this dialog is new. Which editor it opens in is this phone’s last switch in the ⚙ cog (decision D3, recommended): this page follows a phone that last switched to Simple. A phone that has never switched, like yours today, opens Full, exactly as now.' },
     { key: 'pick', title: 'The picker opens at once',
       text: () => 'That same tap on Create opens the phone’s own photo picker. They pick four beach clips and tap Add.',
       small: 'It has to open inside that one tap, or an iPhone quietly blocks it. The picks wait until the new project is ready, then go in. Try it: tap any photo to pick or unpick it. Cancel shows what happens if they close the picker.' },
@@ -171,8 +171,8 @@
       text: (n, second) => 'Now the line is inside ' + second + '. This time Clips asks one thing: At the end, or After Clip 2. A thin line on the clips shows where After Clip 2 is.',
       small: 'At the end is already picked, so tapping Add clips straight away does what it did before. After Clip 2 means the cut nearest the line, so no clip is ever cut in two to make room. Drag along the numbers while Clips is open: the words and the thin line follow. Near the front of the first clip it reads Before Clip 1.' },
     { key: 'song', title: 'A song in the pick',
-      text: () => 'Back at Create, say they also picked a song. The clips go on the clip row, and the song goes under them as music, ending with the video. One tap on {undo} takes all of it back out.',
-      small: 'Photos only has photos and videos, so on an iPhone a song is picked in Files (Choose Files). On a computer it is the normal file window. While they load, the row counts every file (Adding 5 files…). The song starts with the first clip, is cut to end with the video and fades out over its last 2 seconds. It is all one step, so one {undo} takes out the clips and the song together. A song picked on its own goes in whole, and the + Add clips row stays.' }
+      text: () => 'Back at Create, say they also picked a song. The clips go on the clip row, and the whole song goes under them as music. It is longer than the clips, so the video runs on in black after them, as Full does today (your pick, D17). One tap on {undo} takes all of it back out.',
+      small: 'Photos only has photos and videos, so on an iPhone a song is picked in Files (Choose Files). On a computer it is the normal file window. While they load, the row counts every file (Adding 5 files…). The song starts with the first clip and goes in whole: nothing trims or fades it. The black band after the last clip says how long the video runs on; to end the song with the clips, trim its end, as in Full. It is all one step, so one {undo} takes out the clips and the song together. A song picked on its own goes in whole, and the + Add clips row stays.' }
   ];
   const BRANCH = { title: 'If they close the picker',
     text: 'The new project opens empty. The whole clip row is one big + Add clips button, so their next tap opens the picker again.',
@@ -534,15 +534,10 @@ button.v2-bigrow svg { width: 18px; height: 18px; stroke-width: 2.6; }
 
     dlg.innerHTML =
       '<div class="v2-dcard" role="dialog" aria-label="New project"><div class="v2-dtitle">New project</div><div class="v2-dscroll">' +
-        '<div class="v2-kinds" role="radiogroup" aria-label="Editor">' +
-          '<button type="button" class="v2-kind" data-kind="quick" role="radio"><span class="ic">' + icon('quick', '', 33) + '</span><b>Quick</b><span class="d">Clips one after another</span><span class="tick">' + VIS.icon('check') + '</span></button>' +
-          '<button type="button" class="v2-kind" data-kind="full" role="radio"><span class="ic">' + icon('full', '', 33) + '</span><b>Full</b><span class="d">Layers anywhere, every option</span><span class="tick">' + VIS.icon('check') + '</span></button>' +
-        '</div><div class="v2-dnote" hidden>This page follows Quick. With Full, Create opens today’s editor, exactly as now.</div>' +
         '<div class="v2-lbl">Name</div><div class="v2-input"><span class="v2-typed"></span><i class="v2-caret"></i></div>' +
         '<div class="v2-lbl">Aspect ratio</div><div class="v2-aspects">' +
           ASPECTS.map((a, i) => '<button type="button" class="v2-asp" data-a="' + i + '"><i' + (a.dash ? ' class="dash"' : '') + ' style="width:' + a.fw + 'px;height:' + a.fh + 'px"></i>' + esc(a.k) + '<small>' + esc(a.sub) + '</small></button>').join('') +
         '</div>' +
-        '<button type="button" class="v2-morerow"><span><b>More</b> · 1080p · 30 fps · Black</span><span class="chev">›</span></button>' +
         '<div class="v2-fields">' +
           '<div class="v2-fld"><span>Resolution</span><span class="val">1080p (FHD) ▾</span></div>' +
           '<div class="v2-fld"><span>Frame rate</span><span class="val">30 fps ▾</span></div>' +
@@ -621,8 +616,9 @@ button.v2-bigrow svg { width: 18px; height: 18px; stroke-width: 2.6; }
       L.clips.forEach((c, j) => { const b = L.boxes[j]; if (!b) return; b.style.left = (x + 2) + 'px'; if (j < L.done) { b.classList.add('known'); b.style.width = Math.max(10, c.duration * S.pps - 4) + 'px'; } x += j < L.done ? c.duration * S.pps : 30; });
     }
     /* A pick that holds songs (§7.3 step 2): the clips Append, and each song becomes Music in the SAME step (one Undo). The
-       first song starts where the first new clip starts, further songs end to end; each is cut to end with the video and gets
-       a fade-out of min(2 s, a quarter of it). A song starting at or after the new end, or a pick with no clips, stays whole. */
+       first song starts where the first new clip starts, further songs end to end. D17 B (his pick, 1 Oct): each goes in
+       WHOLE with Stay put alone (no trim, no Ends with the video, no fade), so a long song makes the video run on in black,
+       exactly as Full does today (DESIGN §4.5). */
     function addMixed(clips, songs) {
       const ed = S.ed, before = JSON.stringify(ed.doc), T0 = E.classify(ed.doc).trackEnd;
       let res = { ok: true, newIds: [] };
@@ -634,14 +630,10 @@ button.v2-bigrow svg { width: 18px; height: 18px; stroke-width: 2.6; }
         let id = 'song', n = 2; while (taken.has(id)) id = 'song-' + (n++); taken.add(id);
         const l = { id, type: 'video', audioOnly: true, name: s.name, start: T, duration: s.dur, trimStart: 0, srcDur: s.dur, speed: 1, look: s.look };
         T += s.dur;
-        if (clips.length && l.start < end - 1e-9) {
-          l.duration = Math.min(s.dur, Math.max(E.minLen(30), end - l.start));
-          l.sm = { stay: true, tail: true, tailEnd: end };
-          l.fadeOut = Math.min(2, l.duration / 4);
-        }
+        if (clips.length) l.sm = { stay: true };
         d.layers.push(l); ids.push(id);
       });
-      if (songs.length) d.project.duration = Math.max(end, ...d.layers.filter(l => !(l.sm && l.sm.tail)).map(l => l.start + l.duration));
+      if (songs.length) d.project.duration = Math.max(end, ...d.layers.filter(l => !(l.sm && l.sm.tail)).map(l => l.start + l.duration));   // the song runs on: the video is as long as it
       const nc = clips.length, ns = songs.length;
       const words = [nc ? nc + (nc === 1 ? ' clip' : ' clips') : '', ns ? ns + (ns === 1 ? ' song' : ' songs') : ''].filter(Boolean).join(' and ');
       if (nc) ed.undoStack[ed.undoStack.length - 1].label = 'Add ' + words;
@@ -652,12 +644,7 @@ button.v2-bigrow svg { width: 18px; height: 18px; stroke-width: 2.6; }
 
     /* ---------------------------------------------------------------- drawing: the overlays -------------------------------- */
     function drawDialog() {
-      dlg.querySelectorAll('.v2-kind').forEach(b => b.setAttribute('aria-checked', String((b.dataset.kind === 'quick') === S.quick)));
-      dlg.querySelectorAll('.v2-asp').forEach(b => b.classList.toggle('on', +b.dataset.a === S.aspect));
-      const showAll = !S.quick || S.more;
-      q(dlg, '.v2-morerow').hidden = showAll;
-      q(dlg, '.v2-fields').hidden = !showAll;
-      q(dlg, '.v2-dnote').hidden = !S.fullNote;
+      dlg.querySelectorAll('.v2-asp').forEach(b => b.classList.toggle('on', +b.dataset.a === S.aspect));   // every field shows, as today
       const a = ASPECTS[S.aspect]; q(dlg, '.v2-size').textContent = a.w + ' × ' + a.h;
       const typed = q(dlg, '.v2-typed'); typed.textContent = S.name; typed.classList.toggle('sel', S.nameSel);
       q(dlg, '.v2-input').classList.toggle('focus', S.nameFocus);
@@ -806,7 +793,7 @@ button.v2-bigrow svg { width: 18px; height: 18px; stroke-width: 2.6; }
         const l = R.layer(id);
         if (!l || !l.audioOnly || !l.fadeOut) return;
         const fd = el('i', 'v2-fade'); fd.style.width = Math.max(4, l.fadeOut * S.pps) + 'px'; node.appendChild(fd);
-        node.title = l.name + ' · ends with the video · fades out over ' + VIS.fmt(l.fadeOut);
+        node.title = l.name + ' · fades out over ' + VIS.fmt(l.fadeOut);
       });
       TL.scroller.addEventListener('click', ev => {
         if (ev.target.closest('.fm-tile, .fm-item, .fm-ruler, button')) return;
@@ -1236,7 +1223,7 @@ button.v2-bigrow svg { width: 18px; height: 18px; stroke-width: 2.6; }
       if (S.branch) { S.branch = null; await goStep(2, { anim: true }); return; }
       if (S.step >= LAST) { await goStep(0, { anim: true }); return; }
       const from = S.step;
-      if (STEPS[from].key === 'new' && !S.quick) {              // Create with Full picked: say what happens, then carry on in Quick
+      if (STEPS[from].key === 'new' && !S.quick) {              // Create with Full picked: say what happens, then carry on in Simple
         S.quick = true; S.fullNote = true; drawDialog();
         if (!auto) return;
         await sleep(1400); if (my !== navGen) return;
@@ -1390,15 +1377,13 @@ button.v2-bigrow svg { width: 18px; height: 18px; stroke-width: 2.6; }
     f.on('toStart', () => { userTouch(); stopVid(); if (!hasClips()) return; S.t = 0; drawStage(); if (TL && TL.setTime) TL.setTime(0); setTimeLabel(); });
     f.on('toEnd', () => { userTouch(); stopVid(); if (!hasClips()) return; S.t = Math.max(0, read().trackEnd - 1 / 30); drawStage(); if (TL && TL.setTime) TL.setTime(S.t); setTimeLabel(); });
     f.on('more', () => { userTouch(); if (hasClips()) toast('⋯ has Sort by date taken and Close all gaps'); });
-    f.on('switch', () => { userTouch(); if (S.step >= 3 || S.branch) toast('Switching to Full is page V1'); });
-    ['fit', 'back', 'help', 'notes', 'settings', 'export'].forEach(a => f.on(a, () => { userTouch(); if (S.step >= 3 || S.branch) toast('Not part of this page'); }));
+    f.on('settings', () => { userTouch(); if (S.step >= 3 || S.branch) toast('The switch to Full is in this ⚙ cog: page V1 tries it'); });
+    ['fit', 'back', 'help', 'notes', 'export'].forEach(a => f.on(a, () => { userTouch(); if (S.step >= 3 || S.branch) toast('Not part of this page'); }));
     f.root.addEventListener('pointerdown', ev => { if (!ev.isTrusted) return; stopPlay(); if (demo && demo === gen) { gen++; demo = 0; } });
 
     /* ---- the overlays' own controls ---- */
     q(home, '.v2-plus').addEventListener('click', () => { userTouch(); if (S.step === 0) next(); });
-    dlg.querySelectorAll('.v2-kind').forEach(b => b.addEventListener('click', () => { userTouch(); S.quick = b.dataset.kind === 'quick'; S.fullNote = false; if (S.quick) S.more = false; drawDialog(); }));
     dlg.querySelectorAll('.v2-asp').forEach(b => b.addEventListener('click', () => { userTouch(); S.aspect = +b.dataset.a; drawDialog(); }));
-    q(dlg, '.v2-morerow').addEventListener('click', () => { userTouch(); S.more = true; drawDialog(); });
     q(dlg, '.v2-dcancel').addEventListener('click', () => { userTouch(); goStep(0, { anim: false }); });
     q(dlg, '.v2-create').addEventListener('click', () => { userTouch(); if (S.step === 1) next(); });
     pick.querySelectorAll('.v2-ptile').forEach(b => b.addEventListener('click', () => {

@@ -1,0 +1,225 @@
+# Effect control pass: source coverage and remaining suspects
+
+Snapshot: `28104a3e83e01ac3880db3fac604a7444c7235aa`  
+Branch: `chatgpt/dead-effect-controls`
+
+## Scope and limits
+
+I read the effect catalog and its render dispatch/kernels in `js/compositor.js`. This is a source inspection only: I did not execute the app, render every effect at min/mid/max, or compare pixels across the full ranges. Therefore full-range visual behavior, the actual perceptual sensibility of defaults, and device-specific rendering are **UNVERIFIED**. I report no new control as dead or misleading unless the source supports that conclusion; I do not restate entries already captured by #904.
+
+The requested skip is explicit in `REQUESTS.md`: “all 204 effects and all 813 controls read” and “54 survived” ([REQUESTS.md:32051-32053](../../REQUESTS.md#L32051)); #904 remains a container of earlier effect-control findings, including fixed controls and inert ranges. Those known findings are excluded here as instructed. The current snapshot catalog has 206 entries and 885 `key` controls by a declaration count of `FM.EFFECTS` (source-read, not a runtime count); the larger current count means that #904's summary is not evidence that every later-added control has been range-tested.
+
+## Suspect controls not already in #904
+
+**None confirmed from this read.** This is not a claim that all ranges work: full-range picture-change checks are **UNVERIFIED** because this pass did not run render experiments. It means I found no additional control I can responsibly label dead, partly dead, mislabeled, or badly defaulted without measured evidence.
+
+## Catalog coverage
+
+The following 206 effect entries were read. Each row inventories the controls declared by that entry and quotes its exact type/label source prefix; it does not assert that every control has been dynamically tested. This inventory is not a claim of runtime verification.
+
+- `blur` — Gaussian Blur; declared controls: `radius`; source quote: `{ type: 'blur', label: 'Gaussian Blur'` — [js/compositor.js:51](../../js/compositor.js#L51).
+- `brightness` — Brightness; declared controls: `amount`; source quote: `{ type: 'brightness', label: 'Brightness'` — [js/compositor.js:52](../../js/compositor.js#L52).
+- `contrast` — Contrast; declared controls: `amount`; source quote: `{ type: 'contrast', label: 'Contrast'` — [js/compositor.js:53](../../js/compositor.js#L53).
+- `saturate` — Saturation; declared controls: `amount`; source quote: `{ type: 'saturate', label: 'Saturation'` — [js/compositor.js:54](../../js/compositor.js#L54).
+- `hue` — Hue Shift; declared controls: `deg`; source quote: `{ type: 'hue', label: 'Hue Shift'` — [js/compositor.js:55](../../js/compositor.js#L55).
+- `grayscale` — Grayscale; declared controls: `amount`; source quote: `{ type: 'grayscale', label: 'Grayscale'` — [js/compositor.js:56](../../js/compositor.js#L56).
+- `sepia` — Sepia; declared controls: `amount`; source quote: `{ type: 'sepia', label: 'Sepia'` — [js/compositor.js:57](../../js/compositor.js#L57).
+- `invert` — Invert; declared controls: `amount`; source quote: `{ type: 'invert', label: 'Invert'` — [js/compositor.js:58](../../js/compositor.js#L58).
+- `glow` — Glow; declared controls: `radius`, `passes`, `strength`, `color`; source quote: `{ type: 'glow', label: 'Glow'` — [js/compositor.js:59](../../js/compositor.js#L59).
+- `vignette` — Vignette; declared controls: `amount`, `size`; source quote: `{ type: 'vignette', label: 'Vignette'` — [js/compositor.js:67](../../js/compositor.js#L67).
+- `chromakey` — Chroma Key; declared controls: `tolerance`, `softness`, `despill`, `color`; source quote: `{ type: 'chromakey', label: 'Chroma Key'` — [js/compositor.js:71](../../js/compositor.js#L71).
+- `lumakey` — Luma Key; declared controls: `threshold`, `softness`, `mode`; source quote: `{ type: 'lumakey', label: 'Luma Key'` — [js/compositor.js:76](../../js/compositor.js#L76).
+- `rgbsplit` — RGB Split; declared controls: `amount`, `angle`, `radial`, `green`; source quote: `{ type: 'rgbsplit', label: 'RGB Split'` — [js/compositor.js:81](../../js/compositor.js#L81).
+- `pixelate` — Pixelate; declared controls: `size`, `aspect`, `smooth`; source quote: `{ type: 'pixelate', label: 'Pixelate'` — [js/compositor.js:87](../../js/compositor.js#L87).
+- `posterize` — Posterize; declared controls: `levels`, `mix`, `channels`, `gamma`; source quote: `{ type: 'posterize', label: 'Posterize'` — [js/compositor.js:92](../../js/compositor.js#L92).
+- `mirror` — Mirror; declared controls: `mode`, `position`; source quote: `{ type: 'mirror', label: 'Mirror'` — [js/compositor.js:98](../../js/compositor.js#L98).
+- `tint` — Tint; declared controls: `amount`, `range`, `preserve`, `mode`, `soft`, `color`; source quote: `{ type: 'tint', label: 'Tint'` — [js/compositor.js:102](../../js/compositor.js#L102).
+- `threshold` — Threshold; declared controls: `level`, `softness`, `color`, `color2`; source quote: `{ type: 'threshold', label: 'Threshold'` — [js/compositor.js:115](../../js/compositor.js#L115).
+- `duotone` — Duotone; declared controls: `amount`, `balance`, `contrast`, `blend`, `color`, `color2`; source quote: `{ type: 'duotone', label: 'Duotone'` — [js/compositor.js:119](../../js/compositor.js#L119).
+- `solarize` — Solarize; declared controls: `threshold`, `softness`, `mix`, `mode`; source quote: `{ type: 'solarize', label: 'Solarize'` — [js/compositor.js:129](../../js/compositor.js#L129).
+- `gamma` — Gamma; declared controls: `gamma`, `red`, `green`, `blue`; source quote: `{ type: 'gamma', label: 'Gamma'` — [js/compositor.js:135](../../js/compositor.js#L135).
+- `temperature` — Colour Temperature; declared controls: `amount`, `tint`, `preserve`, `method`, `range`; source quote: `{ type: 'temperature', label: 'Colour Temperature'` — [js/compositor.js:141](../../js/compositor.js#L141).
+- `noise` — Noise; declared controls: `amount`, `speed`, `size`, `grain`, `color`; source quote: `{ type: 'noise', label: 'Noise'` — [js/compositor.js:151](../../js/compositor.js#L151).
+- `scanlines` — Scanlines; declared controls: `amount`, `spacing`, `thickness`, `roll`; source quote: `{ type: 'scanlines', label: 'Scanlines'` — [js/compositor.js:164](../../js/compositor.js#L164).
+- `vibrance` — Vibrance; declared controls: `amount`, `skin`, `highlights`; source quote: `{ type: 'vibrance', label: 'Vibrance'` — [js/compositor.js:171](../../js/compositor.js#L171).
+- `sharpen` — Sharpen; declared controls: `amount`, `radius`, `threshold`, `mode`; source quote: `{ type: 'sharpen', label: 'Sharpen'` — [js/compositor.js:176](../../js/compositor.js#L176).
+- `thermal` — Hot Colour; declared controls: `amount`, `palette`, `low`, `high`; source quote: `{ type: 'thermal', label: 'Hot Colour'` — [js/compositor.js:182](../../js/compositor.js#L182).
+- `dither` — Dither; declared controls: `levels`, `scale`, `matrix`, `mono`; source quote: `{ type: 'dither', label: 'Dither'` — [js/compositor.js:188](../../js/compositor.js#L188).
+- `halftone` — Halftone Dots; declared controls: `size`, `angle`, `gain`, `shape`; source quote: `{ type: 'halftone', label: 'Halftone Dots'` — [js/compositor.js:194](../../js/compositor.js#L194).
+- `wave` — Wave; declared controls: `amount`, `wavelength`, `phase`, `vertical`, `angle`; source quote: `{ type: 'wave', label: 'Wave'` — [js/compositor.js:201](../../js/compositor.js#L201).
+- `ripple` — Circular Ripple; declared controls: `amount`, `wavelength`, `phase`, `centerx`, `centery`; source quote: `{ type: 'ripple', label: 'Circular Ripple'` — [js/compositor.js:208](../../js/compositor.js#L208).
+- `twirl` — Twirl; declared controls: `amount`, `centerx`, `centery`, `radius`; source quote: `{ type: 'twirl', label: 'Twirl'` — [js/compositor.js:215](../../js/compositor.js#L215).
+- `bulge` — Pinch / Bulge; declared controls: `amount`, `centerx`, `centery`, `radius`; source quote: `{ type: 'bulge', label: 'Pinch / Bulge'` — [js/compositor.js:221](../../js/compositor.js#L221).
+- `edge` — Find Edges; declared controls: `amount`, `polarity`, `threshold`, `mix`, `blend`; source quote: `{ type: 'edge', label: 'Find Edges'` — [js/compositor.js:228](../../js/compositor.js#L228).
+- `emboss` — Emboss; declared controls: `amount`, `angle`, `mono`, `blend`; source quote: `{ type: 'emboss', label: 'Emboss'` — [js/compositor.js:244](../../js/compositor.js#L244).
+- `exposure` — Exposure; declared controls: `stops`, `offset`, `rolloff`, `gamma`, `space`; source quote: `{ type: 'exposure', label: 'Exposure'` — [js/compositor.js:253](../../js/compositor.js#L253).
+- `fisheye` — Fisheye; declared controls: `amount`, `centerx`, `centery`, `radius`; source quote: `{ type: 'fisheye', label: 'Fisheye'` — [js/compositor.js:260](../../js/compositor.js#L260).
+- `squish` — Squish; declared controls: `amount`, `spread`, `bulge`, `firmness`, `inset`, `walls`, `collide`; source quote: `{ type: 'squish', label: 'Squish'` — [js/compositor.js:268](../../js/compositor.js#L268).
+- `kaleidoscope` — Kaleidoscope; declared controls: `segments`, `phase`, `centerx`, `centery`; source quote: `{ type: 'kaleidoscope', label: 'Kaleidoscope'` — [js/compositor.js:284](../../js/compositor.js#L284).
+- `glitch` — Glitch; declared controls: `amount`, `bands`, `speed`, `split`, `dir`, `jitter`, `blocks`, `seed`, `wrap`; source quote: `{ type: 'glitch', label: 'Glitch'` — [js/compositor.js:290](../../js/compositor.js#L290).
+- `zoomblur` — Zoom Blur; declared controls: `amount`, `centerx`, `centery`, `samples`; source quote: `{ type: 'zoomblur', label: 'Zoom Blur'` — [js/compositor.js:305](../../js/compositor.js#L305).
+- `crt` — CRT; declared controls: `amount`, `scale`, `scanline`, `mask`, `vignette`; source quote: `{ type: 'crt', label: 'CRT'` — [js/compositor.js:311](../../js/compositor.js#L311).
+- `boxblur` — Box Blur; declared controls: `radius`, `aspect`, `passes`; source quote: `{ type: 'boxblur', label: 'Box Blur'` — [js/compositor.js:319](../../js/compositor.js#L319).
+- `spinblur` — Spin Blur; declared controls: `amount`, `centerx`, `centery`, `samples`; source quote: `{ type: 'spinblur', label: 'Spin Blur'` — [js/compositor.js:324](../../js/compositor.js#L324).
+- `gradientmap` — Gradient Map; declared controls: `amount`, `stops`, `midpoint`, `reverse`, `blend`, `dither`, `color`, `color2`; source quote: `{ type: 'gradientmap', label: 'Gradient Map'` — [js/compositor.js:335](../../js/compositor.js#L335).
+- `colorize` — Colourize; declared controls: `amount`, `lift`, `blend`, `color`; source quote: `{ type: 'colorize', label: 'Colourize'` — [js/compositor.js:344](../../js/compositor.js#L344).
+- `checker` — Checker; declared controls: `size`, `mix`, `ratio`, `angle`, `color`; source quote: `{ type: 'checker', label: 'Checker'` — [js/compositor.js:349](../../js/compositor.js#L349).
+- `grid` — Grid; declared controls: `size`, `thickness`, `mix`, `angle`, `color`; source quote: `{ type: 'grid', label: 'Grid'` — [js/compositor.js:355](../../js/compositor.js#L355).
+- `mosaic` — Mosaic; declared controls: `size`, `aspect`, `gap`, `sample`; source quote: `{ type: 'mosaic', label: 'Mosaic'` — [js/compositor.js:362](../../js/compositor.js#L362).
+- `lensblur` — Lens Blur; declared controls: `radius`, `bloom`, `samples`, `blades`; source quote: `{ type: 'lensblur', label: 'Lens Blur'` — [js/compositor.js:368](../../js/compositor.js#L368).
+- `dots` — Dots; declared controls: `size`, `radius`, `opacity`, `softness`, `color`; source quote: `{ type: 'dots', label: 'Dots'` — [js/compositor.js:374](../../js/compositor.js#L374).
+- `polarcoords` — Polar Coordinates; declared controls: `amount`, `mode`; source quote: `{ type: 'polarcoords', label: 'Polar Coordinates'` — [js/compositor.js:380](../../js/compositor.js#L380).
+- `bend` — Bend; declared controls: `amount`, `axis`, `position`; source quote: `{ type: 'bend', label: 'Bend'` — [js/compositor.js:384](../../js/compositor.js#L384).
+- `glass` — Glass; declared controls: `amount`, `scale`, `axis`, `seed`; source quote: `{ type: 'glass', label: 'Glass'` — [js/compositor.js:389](../../js/compositor.js#L389).
+- `lightglow` — Light Glow; declared controls: `amount`, `radius`, `threshold`, `color`; source quote: `{ type: 'lightglow', label: 'Light Glow'` — [js/compositor.js:396](../../js/compositor.js#L396).
+- `longshadow` — Long Shadow; declared controls: `length`, `angle`, `color`; source quote: `{ type: 'longshadow', label: 'Long Shadow'` — [js/compositor.js:401](../../js/compositor.js#L401).
+- `halftonelines` — Halftone Lines; declared controls: `size`, `angle`, `weight`, `softness`; source quote: `{ type: 'halftonelines', label: 'Halftone Lines'` — [js/compositor.js:402](../../js/compositor.js#L402).
+- `clouds` — Clouds; declared controls: `amount`, `scale`, `drift`, `color`; source quote: `{ type: 'clouds', label: 'Clouds'` — [js/compositor.js:408](../../js/compositor.js#L408).
+- `rays` — Sunburst; declared controls: `count`, `x`, `y`, `intensity`, `phase`, `color`; source quote: `{ type: 'rays', label: 'Sunburst'` — [js/compositor.js:413](../../js/compositor.js#L413).
+- `stripes` — Stripes; declared controls: `size`, `direction`, `duty`, `strength`, `color`; source quote: `{ type: 'stripes', label: 'Stripes'` — [js/compositor.js:420](../../js/compositor.js#L420).
+- `darkglow` — Dark Glow; declared controls: `amount`, `radius`, `threshold`; source quote: `{ type: 'darkglow', label: 'Dark Glow'` — [js/compositor.js:427](../../js/compositor.js#L427).
+- `stroke` — Stroke Colour; declared controls: `width`, `position`, `shape`, `softness`, `color`; source quote: `{ type: 'stroke', label: 'Stroke Colour'` — [js/compositor.js:432](../../js/compositor.js#L432).
+- `smoothedges` — Smooth Edges; declared controls: `radius`, `choke`, `quality`; source quote: `{ type: 'smoothedges', label: 'Smooth Edges'` — [js/compositor.js:438](../../js/compositor.js#L438).
+- `liquidglass` — Liquid Glass; declared controls: `amount`, `frost`, `clarity`, `sheen`, `bevel`, `tint`, `angle`, `color`; source quote: `{ type: 'liquidglass', label: 'Liquid Glass'` — [js/compositor.js:443](../../js/compositor.js#L443).
+- `roundcorners` — Squircle Corners; declared controls: `style`, `radius`; source quote: `{ type: 'roundcorners', label: 'Squircle Corners'` — [js/compositor.js:452](../../js/compositor.js#L452).
+- `filmgrain` — Film Grain; declared controls: `amount`, `size`, `shape`, `color`, `shadows`, `highlights`, `speed`, `soft`, `seed`; source quote: `{ type: 'filmgrain', label: 'Film Grain'` — [js/compositor.js:462](../../js/compositor.js#L462).
+- `blocknoise` — Chunk Noise; declared controls: `amount`, `size`, `aspect`, `speed`; source quote: `{ type: 'blocknoise', label: 'Chunk Noise'` — [js/compositor.js:485](../../js/compositor.js#L485).
+- `starfield` — Starfield; declared controls: `amount`, `size`, `variation`, `twinkle`, `twinklespeed`, `color`; source quote: `{ type: 'starfield', label: 'Starfield'` — [js/compositor.js:491](../../js/compositor.js#L491).
+- `curl` — Curl; declared controls: `amount`, `wavelength`, `phase`, `centerx`, `centery`; source quote: `{ type: 'curl', label: 'Curl'` — [js/compositor.js:498](../../js/compositor.js#L498).
+- `bumpmap` — Bump Map; declared controls: `amount`, `angle`, `relief`, `ambient`; source quote: `{ type: 'bumpmap', label: 'Bump Map'` — [js/compositor.js:506](../../js/compositor.js#L506).
+- `edgeglow` — Edge Glow; declared controls: `source`, `amount`, `radius`, `color`; source quote: `{ type: 'edgeglow', label: 'Edge Glow'` — [js/compositor.js:517](../../js/compositor.js#L517).
+- `contourlines` — Contour Lines; declared controls: `levels`, `smooth`, `thickness`, `paper`, `color`, `color2`; source quote: `{ type: 'contourlines', label: 'Contour Lines'` — [js/compositor.js:524](../../js/compositor.js#L524).
+- `grunge` — Grunge; declared controls: `amount`, `scale`, `darkness`, `color`; source quote: `{ type: 'grunge', label: 'Grunge'` — [js/compositor.js:530](../../js/compositor.js#L530).
+- `iridescence` — Iridescence; declared controls: `amount`, `scale`, `bands`, `blur`, `motion`, `speed`; source quote: `{ type: 'iridescence', label: 'Iridescence'` — [js/compositor.js:557](../../js/compositor.js#L557).
+- `fractalwarp` — Fractal Warp; declared controls: `amount`, `evolve`, `scale`, `detail`; source quote: `{ type: 'fractalwarp', label: 'Fractal Warp'` — [js/compositor.js:565](../../js/compositor.js#L565).
+- `motionblur` — Directional Blur; declared controls: `distance`, `angle`, `samples`; source quote: `{ type: 'motionblur', label: 'Directional Blur'` — [js/compositor.js:576](../../js/compositor.js#L576).
+- `colorbalance` — Colour Balance; declared controls: `red`, `green`, `blue`, `range`, `preserve`, `soft`; source quote: `{ type: 'colorbalance', label: 'Colour Balance'` — [js/compositor.js:578](../../js/compositor.js#L578).
+- `highlightsshadows` — Highlights & Shadows; declared controls: `highlights`, `shadows`, `whites`, `blacks`, `width`, `radius`, `sat`; source quote: `{ type: 'highlightsshadows', label: 'Highlights & Shadows'` — [js/compositor.js:584](../../js/compositor.js#L584).
+- `tiltshift` — Tilt Shift; declared controls: `center`, `softness`, `blur`, `angle`; source quote: `{ type: 'tiltshift', label: 'Tilt Shift'` — [js/compositor.js:598](../../js/compositor.js#L598).
+- `dropshadow` — Drop Shadow; declared controls: `distance`, `angle`, `softness`, `opacity`, `color`; source quote: `{ type: 'dropshadow', label: 'Drop Shadow'` — [js/compositor.js:600](../../js/compositor.js#L600).
+- `chromaticaberration` — Chromatic Aberration; declared controls: `amount`, `angle`, `radial`; source quote: `{ type: 'chromaticaberration', label: 'Chromatic Aberration'` — [js/compositor.js:601](../../js/compositor.js#L601).
+- `innerglow` — Inner Glow; declared controls: `radius`, `intensity`, `color`; source quote: `{ type: 'innerglow', label: 'Inner Glow'` — [js/compositor.js:607](../../js/compositor.js#L607).
+- `unsharpmask` — Unsharp Mask; declared controls: `amount`, `radius`, `threshold`; source quote: `{ type: 'unsharpmask', label: 'Unsharp Mask'` — [js/compositor.js:608](../../js/compositor.js#L608).
+- `hextiles` — Hexagon Tiles; declared controls: `size`; source quote: `{ type: 'hextiles', label: 'Hexagon Tiles'` — [js/compositor.js:609](../../js/compositor.js#L609).
+- `linstreaks` — Linear Streaks; declared controls: `length`, `angle`, `samples`; source quote: `{ type: 'linstreaks', label: 'Linear Streaks'` — [js/compositor.js:610](../../js/compositor.js#L610).
+- `blink` — Blink; declared controls: `rate`, `duty`, `min`, `phase`; source quote: `{ type: 'blink', label: 'Blink'` — [js/compositor.js:612](../../js/compositor.js#L612).
+- `flicker` — Flicker; declared controls: `amount`, `speed`, `seed`; source quote: `{ type: 'flicker', label: 'Flicker'` — [js/compositor.js:618](../../js/compositor.js#L618).
+- `flashdark` — Flash (darken); declared controls: `amount`, `speed`, `soft`, `floor`, `seed`, `rhythm`, `hold`; source quote: `{ type: 'flashdark', label: 'Flash (darken)'` — [js/compositor.js:625](../../js/compositor.js#L625).
+- `pulseopacity` — Breathe; declared controls: `speed`, `depth`, `phase`; source quote: `{ type: 'pulseopacity', label: 'Breathe'` — [js/compositor.js:628](../../js/compositor.js#L628).
+- `dissolve` — Dissolve; declared controls: `amount`, `direction`, `soft`, `speed`, `front`; source quote: `{ type: 'dissolve', label: 'Dissolve'` — [js/compositor.js:629](../../js/compositor.js#L629).
+- `blockdissolve` — Block Dissolve; declared controls: `amount`, `size`, `dir`, `seed`; source quote: `{ type: 'blockdissolve', label: 'Block Dissolve'` — [js/compositor.js:636](../../js/compositor.js#L636).
+- `wipe` — Wipe; declared controls: `progress`, `angle`, `softness`; source quote: `{ type: 'wipe', label: 'Wipe'` — [js/compositor.js:654](../../js/compositor.js#L654).
+- `radialwipe` — Radial Wipe; declared controls: `progress`, `start`, `centerx`, `centery`, `softness`; source quote: `{ type: 'radialwipe', label: 'Radial Wipe'` — [js/compositor.js:655](../../js/compositor.js#L655).
+- `solidmatte` — Fill Silhouette; declared controls: `amount`, `color`; source quote: `{ type: 'solidmatte', label: 'Fill Silhouette'` — [js/compositor.js:656](../../js/compositor.js#L656).
+- `mattechoker` — Matte Choker; declared controls: `choke`, `feather`, `contrast`; source quote: `{ type: 'mattechoker', label: 'Matte Choker'` — [js/compositor.js:657](../../js/compositor.js#L657).
+- `mattefringe` — Edge Halo; declared controls: `width`, `opacity`, `feather`, `color`; source quote: `{ type: 'mattefringe', label: 'Edge Halo'` — [js/compositor.js:662](../../js/compositor.js#L662).
+- `gridrepeat` — Tile Grid; declared controls: `count`, `rows`, `mirror`, `stagger`; source quote: `{ type: 'gridrepeat', label: 'Tile Grid'` — [js/compositor.js:668](../../js/compositor.js#L668).
+- `linearrepeat` — Trail; declared controls: `count`, `spacing`, `angle`, `fade`; source quote: `{ type: 'linearrepeat', label: 'Trail'` — [js/compositor.js:679](../../js/compositor.js#L679).
+- `scatterarray` — Scatter Array; declared controls: `count`, `spread`, `sizevary`, `rotate`, `fade`, `seed`; source quote: `{ type: 'scatterarray', label: 'Scatter Array'` — [js/compositor.js:686](../../js/compositor.js#L686).
+- `radialrepeat` — Ring Array; declared controls: `count`, `rotate`, `mirror`, `twist`, `centerx`, `centery`; source quote: `{ type: 'radialrepeat', label: 'Ring Array'` — [js/compositor.js:694](../../js/compositor.js#L694).
+- `mirrortile` — Mirror Tile; declared controls: `size`, `offsetx`, `offsety`, `axis`, `shape`; source quote: `{ type: 'mirrortile', label: 'Mirror Tile'` — [js/compositor.js:702](../../js/compositor.js#L702).
+- `channelremap` — Channel Remap; declared controls: `mode`, `mix`, `luma`; source quote: `{ type: 'channelremap', label: 'Channel Remap'` — [js/compositor.js:710](../../js/compositor.js#L710).
+- `gradientoverlay` — Gradient Overlay; declared controls: `angle`, `shape`, `blend`, `mid`, `dither`, `amount`, `color`, `color2`; source quote: `{ type: 'gradientoverlay', label: 'Gradient Overlay'` — [js/compositor.js:725](../../js/compositor.js#L725).
+- `lensflare` — Lens Flare; declared controls: `x`, `y`, `intensity`, `color`, `color2`; source quote: `{ type: 'lensflare', label: 'Lens Flare'` — [js/compositor.js:733](../../js/compositor.js#L733).
+- `roughenedges` — Roughen Edges; declared controls: `amount`, `scale`; source quote: `{ type: 'roughenedges', label: 'Roughen Edges'` — [js/compositor.js:734](../../js/compositor.js#L734).
+- `hexarray` — Honeycomb; declared controls: `size`, `thickness`, `opacity`, `color`; source quote: `{ type: 'hexarray', label: 'Honeycomb'` — [js/compositor.js:735](../../js/compositor.js#L735).
+- `electricedges` — Electric Edges; declared controls: `amount`, `speed`, `soft`, `color`; source quote: `{ type: 'electricedges', label: 'Electric Edges'` — [js/compositor.js:741](../../js/compositor.js#L741).
+- `glowscan` — Glow Scan; declared controls: `speed`, `width`, `amount`, `direction`, `color`; source quote: `{ type: 'glowscan', label: 'Glow Scan'` — [js/compositor.js:755](../../js/compositor.js#L755).
+- `spinstreaks` — Spin Streaks; declared controls: `amount`, `centerx`, `centery`, `decay`, `samples`; source quote: `{ type: 'spinstreaks', label: 'Spin Streaks'` — [js/compositor.js:756](../../js/compositor.js#L756).
+- `fractalridges` — Fractal Ridges; declared controls: `amount`, `scale`, `sharpness`, `seed`, `mode`, `bands`, `blend`, `speed`, `driftX`, `driftY`, `color`, `color2`; source quote: `{ type: 'fractalridges', label: 'Fractal Ridges'` — [js/compositor.js:777](../../js/compositor.js#L777).
+- `smoothbevel` — Smooth Bevel; declared controls: `depth`, `strength`, `angle`; source quote: `{ type: 'smoothbevel', label: 'Smooth Bevel'` — [js/compositor.js:795](../../js/compositor.js#L795).
+- `zoomstreaks` — Zoom Streaks; declared controls: `amount`, `centerx`, `centery`, `threshold`, `samples`; source quote: `{ type: 'zoomstreaks', label: 'Zoom Streaks'` — [js/compositor.js:797](../../js/compositor.js#L797).
+- `innerblur` — Inner Blur; declared controls: `radius`, `edge`, `bleed`, `aspect`, `passes`; source quote: `{ type: 'innerblur', label: 'Inner Blur'` — [js/compositor.js:804](../../js/compositor.js#L804).
+- `contourstrips` — Contour Strips; declared controls: `levels`, `mix`, `alternate`, `offset`, `color`, `color2`; source quote: `{ type: 'contourstrips', label: 'Contour Strips'` — [js/compositor.js:819](../../js/compositor.js#L819).
+- `innerpinch` — Inner Pinch; declared controls: `amount`, `radius`, `centerx`, `centery`; source quote: `{ type: 'innerpinch', label: 'Inner Pinch'` — [js/compositor.js:825](../../js/compositor.js#L825).
+- `crosshatch` — Crosshatch; declared controls: `spacing`, `density`, `weight`, `angle`, `color`; source quote: `{ type: 'crosshatch', label: 'Crosshatch'` — [js/compositor.js:831](../../js/compositor.js#L831).
+- `counter` — Number Roll; declared controls: `progress`, `from`, `to`, `decimals`, `group`, `wrap`; source quote: `{ type: 'counter', label: 'Number Roll'` — [js/compositor.js:838](../../js/compositor.js#L838).
+- `textprogress` — Type-On; declared controls: `progress`, `unit`, `dir`, `cursor`; source quote: `{ type: 'textprogress', label: 'Type-On'` — [js/compositor.js:841](../../js/compositor.js#L841).
+- `textrandomizer` — Scramble Text; declared controls: `progress`, `speed`, `chars`; source quote: `{ type: 'textrandomizer', label: 'Scramble Text'` — [js/compositor.js:847](../../js/compositor.js#L847).
+- `textcurve` — Text Curve; declared controls: `curve`, `mode`; source quote: `{ type: 'textcurve', label: 'Text Curve'` — [js/compositor.js:854](../../js/compositor.js#L854).
+- `textreverse` — Text Reverse; declared controls: `unit`; source quote: `{ type: 'textreverse', label: 'Text Reverse'` — [js/compositor.js:858](../../js/compositor.js#L858).
+- `textrepeat` — Text Repeat; declared controls: `count`, `sep`; source quote: `{ type: 'textrepeat', label: 'Text Repeat'` — [js/compositor.js:860](../../js/compositor.js#L860).
+- `textpad` — Text Pad; declared controls: `length`, `ch`, `side`; source quote: `{ type: 'textpad', label: 'Text Pad'` — [js/compositor.js:864](../../js/compositor.js#L864).
+- `textspacing` — Letter Spread; declared controls: `spacing`, `word`, `line`, `mode`; source quote: `{ type: 'textspacing', label: 'Letter Spread'` — [js/compositor.js:869](../../js/compositor.js#L869).
+- `texttransform` — Change Case; declared controls: `mode`; source quote: `{ type: 'texttransform', label: 'Change Case'` — [js/compositor.js:875](../../js/compositor.js#L875).
+- `timecode` — Timecode; declared controls: `mode`, `offset`, `dir`, `source`; source quote: `{ type: 'timecode', label: 'Timecode'` — [js/compositor.js:876](../../js/compositor.js#L876).
+- `bleachbypass` — Bleach Bypass; declared controls: `amount`, `desat`, `contrast`; source quote: `{ type: 'bleachbypass', label: 'Bleach Bypass'` — [js/compositor.js:883](../../js/compositor.js#L883).
+- `tealorange` — Teal & Orange; declared controls: `amount`, `pivot`, `spread`, `mode`, `skin`, `balance`, `keep`; source quote: `{ type: 'tealorange', label: 'Teal & Orange'` — [js/compositor.js:888](../../js/compositor.js#L888).
+- `crossprocess` — Cross Process; declared controls: `amount`, `variant`, `lift`, `gain`; source quote: `{ type: 'crossprocess', label: 'Cross Process'` — [js/compositor.js:905](../../js/compositor.js#L905).
+- `lightleak` — Light Leak; declared controls: `amount`, `x`, `y`, `size`, `speed`, `wander`, `flicker`, `blend`, `color`, `color2`; source quote: `{ type: 'lightleak', label: 'Light Leak'` — [js/compositor.js:914](../../js/compositor.js#L914).
+- `letterbox` — Letterbox; declared controls: `ratio`, `size`, `metric`, `orient`, `offset`, `feather`, `opacity`, `color`; source quote: `{ type: 'letterbox', label: 'Letterbox'` — [js/compositor.js:935](../../js/compositor.js#L935).
+- `border` — Border Frame; declared controls: `width`, `inset`, `radius`, `opacity`, `color`; source quote: `{ type: 'border', label: 'Border Frame'` — [js/compositor.js:947](../../js/compositor.js#L947).
+- `faded` — Faded Film; declared controls: `amount`, `lift`, `desat`, `tone`, `crush`, `rolloff`, `fadecol`; source quote: `{ type: 'faded', label: 'Faded Film'` — [js/compositor.js:954](../../js/compositor.js#L954).
+- `nightvision` — Night Vision; declared controls: `amount`, `color`, `noise`, `gain`; source quote: `{ type: 'nightvision', label: 'Night Vision'` — [js/compositor.js:966](../../js/compositor.js#L966).
+- `sketch` — Pencil Sketch; declared controls: `amount`, `darkness`, `threshold`, `tooth`; source quote: `{ type: 'sketch', label: 'Pencil Sketch'` — [js/compositor.js:972](../../js/compositor.js#L972).
+- `cube3d` — Cube; declared controls: `rotx`, `roty`, `rotz`, `size`, `shading`, `light`; source quote: `{ type: 'cube3d', label: 'Cube'` — [js/compositor.js:981](../../js/compositor.js#L981).
+- `box3d` — Box; declared controls: `rotx`, `roty`, `rotz`, `depth`, `size`, `shading`, `light`; source quote: `{ type: 'box3d', label: 'Box'` — [js/compositor.js:982](../../js/compositor.js#L982).
+- `cylinder3d` — Cylinder; declared controls: `rotx`, `roty`, `rotz`, `length`, `size`, `shading`, `light`; source quote: `{ type: 'cylinder3d', label: 'Cylinder'` — [js/compositor.js:983](../../js/compositor.js#L983).
+- `sphere3d` — Spherize; declared controls: `rotx`, `roty`, `rotz`, `size`, `shading`, `light`; source quote: `{ type: 'sphere3d', label: 'Spherize'` — [js/compositor.js:984](../../js/compositor.js#L984).
+- `ellipsoid3d` — Ellipsoid; declared controls: `rotx`, `roty`, `rotz`, `height`, `depth`, `size`, `shading`, `light`; source quote: `{ type: 'ellipsoid3d', label: 'Ellipsoid'` — [js/compositor.js:985](../../js/compositor.js#L985).
+- `torus3d` — Torus; declared controls: `rotx`, `roty`, `rotz`, `thickness`, `size`, `shading`, `light`; source quote: `{ type: 'torus3d', label: 'Torus'` — [js/compositor.js:986](../../js/compositor.js#L986).
+- `ring3d` — Ring; declared controls: `rotx`, `roty`, `rotz`, `hole`, `depth`, `size`, `shading`, `light`; source quote: `{ type: 'ring3d', label: 'Ring'` — [js/compositor.js:987](../../js/compositor.js#L987).
+- `pyramid3d` — Pyramid; declared controls: `rotx`, `roty`, `rotz`, `size`, `shading`, `light`; source quote: `{ type: 'pyramid3d', label: 'Pyramid'` — [js/compositor.js:988](../../js/compositor.js#L988).
+- `octahedron3d` — Octahedron; declared controls: `rotx`, `roty`, `rotz`, `size`, `shading`, `light`; source quote: `{ type: 'octahedron3d', label: 'Octahedron'` — [js/compositor.js:989](../../js/compositor.js#L989).
+- `hexprism3d` — Hexagonal Prism; declared controls: `rotx`, `roty`, `rotz`, `depth`, `size`, `shading`, `light`; source quote: `{ type: 'hexprism3d', label: 'Hexagonal Prism'` — [js/compositor.js:990](../../js/compositor.js#L990).
+- `starprism3d` — Star Prism; declared controls: `rotx`, `roty`, `rotz`, `points`, `inner`, `depth`, `size`, `shading`, `light`; source quote: `{ type: 'starprism3d', label: 'Star Prism'` — [js/compositor.js:991](../../js/compositor.js#L991).
+- `starpoly3d` — Spiked Star; declared controls: `rotx`, `roty`, `rotz`, `spike`, `size`, `shading`, `light`; source quote: `{ type: 'starpoly3d', label: 'Spiked Star'` — [js/compositor.js:992](../../js/compositor.js#L992).
+- `heart3d` — Heart; declared controls: `rotx`, `roty`, `rotz`, `depth`, `size`, `shading`, `light`; source quote: `{ type: 'heart3d', label: 'Heart'` — [js/compositor.js:993](../../js/compositor.js#L993).
+- `hollowbox3d` — Open Box; declared controls: `rotx`, `roty`, `rotz`, `wall`, `depth`, `size`, `shading`, `light`; source quote: `{ type: 'hollowbox3d', label: 'Open Box'` — [js/compositor.js:994](../../js/compositor.js#L994).
+- `axiscross3d` — Cross Beam; declared controls: `rotx`, `roty`, `rotz`, `arm`, `size`, `shading`, `light`; source quote: `{ type: 'axiscross3d', label: 'Cross Beam'` — [js/compositor.js:995](../../js/compositor.js#L995).
+- `pagecurl` — Page Curl; declared controls: `amount`, `angle`, `radius`, `shading`, `light`; source quote: `{ type: 'pagecurl', label: 'Page Curl'` — [js/compositor.js:996](../../js/compositor.js#L996).
+- `fliplayer` — Card Flip; declared controls: `mode`, `keep`, `pivotx`, `pivoty`; source quote: `{ type: 'fliplayer', label: 'Card Flip'` — [js/compositor.js:997](../../js/compositor.js#L997).
+- `rasterextrude` — Depth Push; declared controls: `depth`, `angle`, `darken`; source quote: `{ type: 'rasterextrude', label: 'Depth Push'` — [js/compositor.js:1003](../../js/compositor.js#L1003).
+- `wiggle` — Wiggle; declared controls: `amount`, `speed`, `amounty`, `rotate`, `scale`, `octaves`, `seed`; source quote: `{ type: 'wiggle', label: 'Wiggle'` — [js/compositor.js:1010](../../js/compositor.js#L1010).
+- `shake` — Shake; declared controls: `amount`, `speed`, `twist`, `zoom`, `jitter`, `smear`, `smearlen`, `direction`, `overscan`, `seed`; source quote: `{ type: 'shake', label: 'Shake'` — [js/compositor.js:1027](../../js/compositor.js#L1027).
+- `swing` — Swing; declared controls: `angle`, `speed`, `pivotx`, `pivoty`, `phase`, `damping`; source quote: `{ type: 'swing', label: 'Swing'` — [js/compositor.js:1043](../../js/compositor.js#L1043).
+- `spin` — Spin; declared controls: `speed`, `offset`, `pivotx`, `pivoty`; source quote: `{ type: 'spin', label: 'Spin'` — [js/compositor.js:1045](../../js/compositor.js#L1045).
+- `pulse` — Pulse; declared controls: `amount`, `speed`, `phase`, `wave`, `stretch`, `pivotx`, `pivoty`; source quote: `{ type: 'pulse', label: 'Pulse'` — [js/compositor.js:1054](../../js/compositor.js#L1054).
+- `drift` — Drift; declared controls: `x`, `y`, `wrap`; source quote: `{ type: 'drift', label: 'Drift'` — [js/compositor.js:1061](../../js/compositor.js#L1061).
+- `orbit` — Orbit; declared controls: `radius`, `speed`, `phase`, `ry`, `depth`, `face`; source quote: `{ type: 'orbit', label: 'Orbit'` — [js/compositor.js:1066](../../js/compositor.js#L1066).
+- `squeeze` — Squeeze; declared controls: `amount`, `axis`, `position`; source quote: `{ type: 'squeeze', label: 'Squeeze'` — [js/compositor.js:1071](../../js/compositor.js#L1071).
+- `tiles` — Tiles; declared controls: `mode`, `count`, `gap`, `mirror`, `source`; source quote: `{ type: 'tiles', label: 'Tiles'` — [js/compositor.js:1076](../../js/compositor.js#L1076).
+- `motionflow` — Motion Blur (Footage); declared controls: `style`, `amount`, `samples`, `threshold`, `softness`; source quote: `{ type: 'motionflow', label: 'Motion Blur (Footage)'` — [js/compositor.js:1091](../../js/compositor.js#L1091).
+- `objectblur` — Motion Blur (Object); declared controls: `shutter`, `samples`, `phase`; source quote: `{ type: 'objectblur', label: 'Motion Blur (Object)'` — [js/compositor.js:1128](../../js/compositor.js#L1128).
+- `softglow` — Soft Glow; declared controls: `amount`, `radius`, `threshold`, `color`; source quote: `{ type: 'softglow', label: 'Soft Glow'` — [js/compositor.js:1150](../../js/compositor.js#L1150).
+- `replacecolor` — Replace Colour; declared controls: `tolerance`, `mode`, `softness`, `color`, `color2`; source quote: `{ type: 'replacecolor', label: 'Replace Colour'` — [js/compositor.js:1155](../../js/compositor.js#L1155).
+- `spotcolor` — Spot Colour; declared controls: `tolerance`, `desat`, `boost`, `invert`, `color`; source quote: `{ type: 'spotcolor', label: 'Spot Colour'` — [js/compositor.js:1160](../../js/compositor.js#L1160).
+- `fourcolor` — Four-Colour Gradient; declared controls: `amount`, `blend`, `spread`, `color`, `color2`; source quote: `{ type: 'fourcolor', label: 'Four-Colour Gradient'` — [js/compositor.js:1166](../../js/compositor.js#L1166).
+- `spectralmap` — Spectral Map; declared controls: `amount`, `span`, `offset`, `saturation`; source quote: `{ type: 'spectralmap', label: 'Spectral Map'` — [js/compositor.js:1171](../../js/compositor.js#L1171).
+- `radialshadow` — Radial Shadow; declared controls: `reach`, `x`, `y`, `color`; source quote: `{ type: 'radialshadow', label: 'Radial Shadow'` — [js/compositor.js:1177](../../js/compositor.js#L1177).
+- `voronoi` — Voronoi Cells; declared controls: `cells`, `edge`, `motion`, `speed`, `wall`; source quote: `{ type: 'voronoi', label: 'Voronoi Cells'` — [js/compositor.js:1182](../../js/compositor.js#L1182).
+- `tunnel` — Tunnel; declared controls: `amount`, `radius`, `centerx`, `centery`; source quote: `{ type: 'tunnel', label: 'Tunnel'` — [js/compositor.js:1192](../../js/compositor.js#L1192).
+- `turbulentdisplace` — Turbulent Displace; declared controls: `amount`, `scale`, `evolve`, `seed`; source quote: `{ type: 'turbulentdisplace', label: 'Turbulent Displace'` — [js/compositor.js:1199](../../js/compositor.js#L1199).
+- `stretchseg` — Stretch Segment; declared controls: `y`, `height`, `amount`, `softness`; source quote: `{ type: 'stretchseg', label: 'Stretch Segment'` — [js/compositor.js:1205](../../js/compositor.js#L1205).
+- `tileshift` — Tile Shift; declared controls: `size`, `amount`; source quote: `{ type: 'tileshift', label: 'Tile Shift'` — [js/compositor.js:1211](../../js/compositor.js#L1211).
+- `tilerotate` — Tile Rotate; declared controls: `size`, `angle`; source quote: `{ type: 'tilerotate', label: 'Tile Rotate'` — [js/compositor.js:1215](../../js/compositor.js#L1215).
+- `wrapshift` — Wrap Shift; declared controls: `offsetx`, `offsety`; source quote: `{ type: 'wrapshift', label: 'Wrap Shift'` — [js/compositor.js:1220](../../js/compositor.js#L1220).
+- `palettemap` — Palette Map; declared controls: `mode`, `count`, `amount`, `color`, `color2`; source quote: `{ type: 'palettemap', label: 'Palette Map'` — [js/compositor.js:1226](../../js/compositor.js#L1226).
+- `lightning` — Lightning; declared controls: `count`, `intensity`, `thickness`, `jitter`, `forks`, `flicker`, `seed`, `angle`, `color`; source quote: `{ type: 'lightning', label: 'Lightning'` — [js/compositor.js:1236](../../js/compositor.js#L1236).
+- `displacemap` — Displacement Map; declared controls: `amount`, `channel`; source quote: `{ type: 'displacemap', label: 'Displacement Map'` — [js/compositor.js:1248](../../js/compositor.js#L1248).
+- `polardisplace` — Polar Displacement; declared controls: `radius`, `angle`, `centerx`, `centery`; source quote: `{ type: 'polardisplace', label: 'Polar Displacement'` — [js/compositor.js:1252](../../js/compositor.js#L1252).
+- `touchup` — Remove Object; declared controls: `x`, `y`, `w`, `h`, `mode`, `feather`, `strength`; source quote: `{ type: 'touchup', label: 'Remove Object'` — [js/compositor.js:1261](../../js/compositor.js#L1261).
+- `copybg` — Backdrop Clone; declared controls: (none declared); source quote: `{ type: 'copybg', label: 'Backdrop Clone'` — [js/compositor.js:1273](../../js/compositor.js#L1273).
+- `magnifybg` — Backdrop Lens; declared controls: `zoom`; source quote: `{ type: 'magnifybg', label: 'Backdrop Lens'` — [js/compositor.js:1285](../../js/compositor.js#L1285).
+- `fillbehind` — Backfill; declared controls: `blur`, `zoom`, `dim`; source quote: `{ type: 'fillbehind', label: 'Backfill'` — [js/compositor.js:1305](../../js/compositor.js#L1305).
+- `particles` — Particles; declared controls: `rate`, `lifetime`, `direction`, `spread`, `speed`, `gravity`, `sizeStart`, `sizeEnd`, `opacityStart`, `opacityEnd`, `spin`, `shape`, `blend`, `color`, `color2`; source quote: `{ type: 'particles', label: 'Particles'` — [js/compositor.js:1311](../../js/compositor.js#L1311).
+- `levels` — Levels; declared controls: `channel`, `inblack`, `inwhite`, `gamma`, `outblack`, `outwhite`; source quote: `{ type: 'levels', label: 'Levels'` — [js/compositor.js:1329](../../js/compositor.js#L1329).
+- `halation` — Halation; declared controls: `amount`, `threshold`, `tightness`, `spread`, `knee`, `color`; source quote: `{ type: 'halation', label: 'Halation'` — [js/compositor.js:1340](../../js/compositor.js#L1340).
+- `framestutter` — Frame Stutter; declared controls: `rate`, `mode`, `blend`, `duty`, `trail`, `offset`, `random`; source quote: `{ type: 'framestutter', label: 'Frame Stutter'` — [js/compositor.js:1350](../../js/compositor.js#L1350).
+- `shockwave` — Shockwave; declared controls: `radius`, `width`, `strength`, `rim`, `chroma`, `x`, `y`; source quote: `{ type: 'shockwave', label: 'Shockwave'` — [js/compositor.js:1363](../../js/compositor.js#L1363).
+- `speedlines` — Speed Lines; declared controls: `count`, `mode`, `angle`, `inner`, `aspect`, `length`, `width`, `jitter`, `spin`, `boil`, `x`, `y`, `blend`, `color`; source quote: `{ type: 'speedlines', label: 'Speed Lines'` — [js/compositor.js:1376](../../js/compositor.js#L1376).
+- `weather` — Snow & Rain; declared controls: `kind`, `amount`, `size`, `speed`, `wind`, `length`, `depth`, `opacity`, `color`; source quote: `{ type: 'weather', label: 'Snow & Rain'` — [js/compositor.js:1398](../../js/compositor.js#L1398).
+- `hslbands` — HSL Bands; declared controls: `band`, `hue`, `sat`, `lum`, `range`, `centre`, `width`; source quote: `{ type: 'hslbands', label: 'HSL Bands'` — [js/compositor.js:1411](../../js/compositor.js#L1411).
+- `timewarp` — Time Warp Scan; declared controls: `duration`, `direction`, `mode`, `barwidth`, `glow`, `loop`, `color`; source quote: `{ type: 'timewarp', label: 'Time Warp Scan'` — [js/compositor.js:1424](../../js/compositor.js#L1424).
+- `chromakeypro` — Chroma Key Pro; declared controls: `tolerance`, `softness`, `despill`, `edgedesat`, `view`, `color`; source quote: `{ type: 'chromakeypro', label: 'Chroma Key Pro'` — [js/compositor.js:1435](../../js/compositor.js#L1435).
+- `lightwrap` — Light Wrap; declared controls: `intensity`, `reach`, `radius`, `mode`; source quote: `{ type: 'lightwrap', label: 'Light Wrap'` — [js/compositor.js:1446](../../js/compositor.js#L1446).
+- `dispersion` — Dispersion; declared controls: `progress`, `direction`, `distance`, `scale`, `softness`, `glow`, `color`; source quote: `{ type: 'dispersion', label: 'Dispersion'` — [js/compositor.js:1456](../../js/compositor.js#L1456).
+- `vhstape` — VHS Tape; declared controls: `amount`, `chromableed`, `halo`, `wobble`, `tracking`, `trackspeed`, `headswitch`; source quote: `{ type: 'vhstape', label: 'VHS Tape'` — [js/compositor.js:1467](../../js/compositor.js#L1467).
+- `compresscrunch` — Compression Crunch; declared controls: `quality`, `blocksize`, `chromablock`, `ringing`, `fry`; source quote: `{ type: 'compresscrunch', label: 'Compression Crunch'` — [js/compositor.js:1480](../../js/compositor.js#L1480).
+- `temporaldenoise` — Temporal Denoise; declared controls: `strength`, `threshold`, `spatial`; source quote: `{ type: 'temporaldenoise', label: 'Temporal Denoise'` — [js/compositor.js:1490](../../js/compositor.js#L1490).
+- `lensdistort` — Lens Distortion; declared controls: `k1`, `k2`, `zoom`, `chroma`; source quote: `{ type: 'lensdistort', label: 'Lens Distortion'` — [js/compositor.js:1500](../../js/compositor.js#L1500).
+- `pixelsort` — Pixel Sort; declared controls: `density`, `low`, `high`, `length`, `direction`, `order`; source quote: `{ type: 'pixelsort', label: 'Pixel Sort'` — [js/compositor.js:1511](../../js/compositor.js#L1511).
+- `lumamatte` — Luma Matte; declared controls: `channel`, `invert`, `black`, `white`, `feather`; source quote: `{ type: 'lumamatte', label: 'Luma Matte'` — [js/compositor.js:1522](../../js/compositor.js#L1522).
+- `compoundblur` — Compound Blur; declared controls: `radius`, `levels`, `invert`; source quote: `{ type: 'compoundblur', label: 'Compound Blur'` — [js/compositor.js:1532](../../js/compositor.js#L1532).
+- `matchgrade` — Match Grade; declared controls: `amount`, `mode`; source quote: `{ type: 'matchgrade', label: 'Match Grade'` — [js/compositor.js:1538](../../js/compositor.js#L1538).
+- `filter` — Filter; declared controls: `strength`; source quote: `{ type: 'filter', label: 'Filter'` — [js/compositor.js:1556](../../js/compositor.js#L1556).

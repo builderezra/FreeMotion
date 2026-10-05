@@ -12,8 +12,11 @@
   .h-head { gap: 10px; padding-bottom: 16px; }
   .h-head > .h-eyebrow { font-size: 11px; letter-spacing: .05em; }
   .h-names { gap: 4px 14px; font-size: 14px; }
+  .h-rule-line { font-size: 14px; }
   .h-main { padding-top: 14px; gap: 16px; }
 }
+.h-rule-line { margin: 0; max-width: 62ch; font-size: 15px; line-height: 1.45; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--h-rule); background: var(--h-surface); color: var(--h-muted); }
+.h-rule-line b { color: var(--h-ink); }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,20 +25,21 @@
 <div class="h-page" id="vis-hub">
   <header class="h-head">
     <p class="h-eyebrow">FreeMotion · the simple editor · design pages</p>
-    <h1 class="h-title">Quick <span class="amp">&amp;</span> Full</h1>
-    <p class="h-lede"><q>Any project opens in either editor, nothing gets converted, clips stick together in Quick, the things on a clip go with it, and you and a friend can each use a different editor on the same project at the same time.</q></p>
+    <h1 class="h-title">Simple <span class="amp">&amp;</span> Full</h1>
+    <p class="h-lede"><q>Any project opens in either editor, nothing gets converted, clips stick together in Simple, the things on a clip go with it, and you and a friend can each use a different editor on the same project at the same time.</q></p>
     <ul class="h-names">
-      <li class="h-tag"><span class="h-dot"></span><span><b>Quick</b> is the new, simple editor</span></li>
+      <li class="h-tag"><span class="h-dot"></span><span><b>Simple</b> is the new editor</span></li>
       <li class="h-tag"><span class="h-dot full"></span><span><b>Full</b> is today's editor</span></li>
-      <li>The real names are yours to pick (decision D1)</li>
+      <li>The names you picked (D1)</li>
     </ul>
+    <p class="h-rule-line"><b>Your rule, 1 Oct:</b> the original editor, Full, stays exactly as it is, in looks and in what it does. The one change you would see in it is a small third block in the ⚙ cog, beside Canvas settings and Friends, with the switch and <b>What should you use?</b></p>
   </header>
 
   <!-- Beach day folds away. QA (29 Sep): on a phone every page started about 1,420 px down, under a full sample phone. -->
   <div class="h-fold" id="vis-sample-fold">
     <button type="button" class="h-fold-sum" aria-expanded="false" aria-controls="vis-sample">
       <span class="h-fold-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M9 15.5h2.4M13 15.5h2M9 18.2h6"/><path d="M10.6 7.2v4.6l3.8-2.3z" fill="currentColor" stroke="none"/></svg></span>
-      <span class="h-fold-txt"><span class="h-fold-name" id="vis-sample-title">Beach day</span><span class="h-fold-sub">The sample project. Try it in Quick and in Full.</span></span>
+      <span class="h-fold-txt"><span class="h-fold-name" id="vis-sample-title">Beach day</span><span class="h-fold-sub">The sample project. Try it in Simple and in Full.</span></span>
       <span class="h-fold-cue" aria-hidden="true"><span class="h-fold-show">Show</span><span class="h-fold-hide">Hide</span></span>
     </button>
     <section class="h-sample" id="vis-sample" aria-labelledby="vis-sample-title" hidden>
@@ -53,7 +57,7 @@
     <main class="h-view" id="vis-view"></main>
   </div>
 
-  <footer class="h-foot">Design only. Built from DESIGN.md (29 Sep 2026). The clip maths on every page is the real rule set from the design, run on the sample projects.</footer>
+  <footer class="h-foot">Design only. Built from DESIGN.md (29 Sep 2026; revised 1 Oct for your rule (Full unchanged, the switch in the ⚙ cog) and your picks). The clip maths on every page is the real rule set from the design, run on the sample projects.</footer>
 </div>
 
 <script src="kit.js"></script>
