@@ -121517,4 +121517,32 @@
       if (Math.abs(L2.start + L2.duration - 6) > 1e-9) throw new Error('the muted overlay runs on past the new end: ' + L2.start + '..' + (L2.start + L2.duration) + ' with the video ending at 6');
     }, { project: { sm: { adopted: true, v: 1 } } });
   });
+
+  test('simple P2.1 · review a trim never shortens a clip under twice the crossfade on its OTHER side, so a blend never turns into a red overlap (§3.1)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const seamOf = (name, v) => { const R = FM.spine.classify(FM.scene), e = R.main.find(x => x.id === v.L(name).id); return e && e.seam ? e.seam.kind + ' ' + e.seam.amt : 'none'; };
+    /* (1) D on a clip that fades in over the one before it: the p|c blend is on the side the tail trim does not touch */
+    await smP2((W, H) => [(() => { const c = smV('C', 4, 6, W, H); c.transform.opacity = smKf([[4, 0], [5, 1]]); return c; })(), smV('P', 0, 5, W, H)], async function (v) {
+      if (seamOf('C', v) !== 'blend 1') throw new Error('CONTROL: P|C is not a 1 s crossfade: ' + seamOf('C', v));
+      const doc0 = v.doc(), n0 = v.steps();
+      const ok = await FM.spine.cmd.trimTail(v.L('C').id, 5.5); await v.idle();
+      if (ok !== false || v.doc() !== doc0 || v.steps() !== n0) throw new Error('D cut the fading clip to ' + v.L('C').duration + ' s under its 1 s crossfade: the seam is now ' + seamOf('C', v));
+      if (FM.spine.lastRefusal !== 'fadesBefore') throw new Error('refused with the wrong line: ' + FM.spine.lastRefusal + ' “' + v.say() + '”');
+      /* CONTROL: exactly 2 × the fade is allowed, and the crossfade survives */
+      if (!(await FM.spine.cmd.trimTail(v.L('C').id, 6))) throw new Error('CONTROL: D to twice the fade was refused: “' + v.say() + '”');
+      await v.idle();
+      if (seamOf('C', v) !== 'blend 1') throw new Error('CONTROL: the crossfade did not survive a trim to twice its length: ' + seamOf('C', v));
+    });
+    /* (2) A on a clip the NEXT one fades in over: the c|n blend is on the side the head trim does not check */
+    await smP2((W, H) => [(() => { const n = smV('N', 5, 6, W, H); n.transform.opacity = smKf([[5, 0], [6, 1]]); return n; })(), smV('C', 0, 6, W, H)], async function (v) {
+      if (seamOf('N', v) !== 'blend 1') throw new Error('CONTROL: C|N is not a 1 s crossfade: ' + seamOf('N', v));
+      const doc0 = v.doc(), n0 = v.steps();
+      const ok = await FM.spine.cmd.trimHead(v.L('C').id, 4.5); await v.idle();
+      if (ok !== false || v.doc() !== doc0 || v.steps() !== n0) throw new Error('A cut the clip to ' + v.L('C').duration + ' s under the 1 s crossfade after it: the seam is now ' + seamOf('N', v));
+      if (FM.spine.lastRefusal !== 'fadesNext') throw new Error('refused with the wrong line: ' + FM.spine.lastRefusal + ' “' + v.say() + '”');
+      if (!(await FM.spine.cmd.trimHead(v.L('C').id, 4))) throw new Error('CONTROL: A to twice the fade was refused: “' + v.say() + '”');
+      await v.idle();
+      if (seamOf('N', v) !== 'blend 1') throw new Error('CONTROL: the crossfade did not survive a head trim to twice its length: ' + seamOf('N', v));
+    });
+  });
 })();

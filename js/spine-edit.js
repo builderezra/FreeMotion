@@ -468,6 +468,9 @@ window.FM = window.FM || {};
       if (newDur < 2 * n.seam.amt - SLACK) return refusePlan('fadesNext');
       if (blendOwner(c, n, map) === L) return refusePlan('fadeOwned', { a: S.itemWord(L, R), b: S.itemWord(map.get(n.id), R) });
     }
+    /* the blend with the clip BEFORE counts too (§3.1: "a trim of either clip stops at newDuration ≥ 2·amt"): its seam does
+       not move, but a shorter c lowers blendMax under amt and the crossfade would read as a red overlap */
+    if (i > 0 && c.seam && c.seam.kind === 'blend' && newDur < 2 * c.seam.amt - SLACK) return refusePlan('fadesBefore');
     const r = FM.trimClipEdge(L, 'tail', newDur - d0, srcDurOf(L));
     if (o.typed && Math.abs(r.duration - newDur) > 1 / fps()) return refusePlan(newDur > d0 ? 'shortSource' : 'nothingMore');
     const dt = r.duration - d0;
@@ -515,6 +518,10 @@ window.FM = window.FM || {};
       if (d0 - h < 2 * c.seam.amt - SLACK) return refusePlan('fadesBefore');
       if (blendOwner(p, c, map) === L) return refusePlan('fadeOwned', { a: S.itemWord(map.get(p.id), R), b: S.itemWord(L, R) });
     }
+    /* …and the blend with the clip AFTER (§3.1, either clip): n slides back by the trim and keeps its overlap, so a c shorter
+       than 2·amt would turn the crossfade into a red overlap */
+    const nx = R.main[i + 1] || null;
+    if (nx && nx.seam && nx.seam.kind === 'blend' && d0 - h < 2 * nx.seam.amt - SLACK) return refusePlan('fadesNext');
     const r = FM.trimClipEdge(L, 'head', h, srcDurOf(L));
     const Lnd = r.landed;
     if (o.typed && Math.abs(Lnd - h) > 1 / fps()) return refusePlan(h < 0 ? 'videoStart' : 'nothingMore');
