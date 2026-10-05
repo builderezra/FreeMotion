@@ -69,7 +69,7 @@ window.FM = window.FM || {};
   function wireSay() {
     if (!sayEl || sayEl._wired) return;
     sayEl._wired = true;
-    document.addEventListener('pointerdown', e => { ptrDown = true; if (sayEl.textContent && !sayEl.contains(e.target)) clearSay(); }, true);
+    document.addEventListener('pointerdown', e => { ptrDown = true; const ln = lineOf(); if (ln && ln.textContent && !sayEl.contains(e.target)) clearSay(); }, true);
     document.addEventListener('pointerup', () => { ptrDown = false; }, true);
     document.addEventListener('pointercancel', () => { ptrDown = false; }, true);
     /* A REFUSED SWITCH IS SAID HERE WHEN THE COG IS CLOSED (Phase 1 review R1). The cog block shows its own refusal line, but an
@@ -81,7 +81,9 @@ window.FM = window.FM || {};
       const t = ev.detail && ev.detail.text; if (t) sayLine(t);
     });
   }
-  function clearSay() { clearTimeout(sayT); if (sayEl) sayEl.textContent = ''; }
+  /* Phase 2.2: #sm-say is the TRAY ROW (§8.2): its .sm-line takes the row while Simple speaks, #sm-tray shows otherwise */
+  const lineOf = () => (sayEl && sayEl.querySelector('.sm-line')) || sayEl;
+  function clearSay() { clearTimeout(sayT); const ln = lineOf(); if (ln) ln.textContent = ''; if (sayEl) sayEl.classList.remove('sm-saying', 'sm-say-has-b'); }
   function armClear(ms) {
     clearTimeout(sayT);
     sayT = setTimeout(function again() {
@@ -106,8 +108,9 @@ window.FM = window.FM || {};
     opts = opts || {};
     if (opts.live) { if (liveEl) liveEl.textContent = text; pulse(opts.pulse); return; }
     if (!sayEl) return;
-    sayEl.textContent = '';
-    const tx = el('span', 'sm-say-t', text); tx.title = text; sayEl.appendChild(tx);
+    const ln = lineOf();
+    ln.textContent = ''; sayEl.classList.add('sm-saying');
+    const tx = el('span', 'sm-say-t', text); tx.title = text; ln.appendChild(tx);
     const btns = (opts.buttons || []).slice(0, 2);
     if (opts.full && !btns.length) btns.push({ label: (W().lines || {}).openFull || 'Open in Full', fn: () => { if (FM.editor) FM.editor.request('full', { hop: true }); } });   // a hop: the guard, no memory (R1)
     const t0 = performance.now(); let up = !ptrDown;
@@ -117,7 +120,7 @@ window.FM = window.FM || {};
       const b = el('button', 'sm-say-b', bd.label); b.type = 'button'; b.setAttribute('aria-disabled', 'true');
       b.addEventListener('pointerdown', ev => { if (!armed()) { ev.preventDefault(); ev.stopPropagation(); } });
       b.addEventListener('click', ev => { ev.stopPropagation(); if (!armed()) { ev.preventDefault(); return; } clearSay(); try { bd.fn(); } catch (e) {} });
-      sayEl.appendChild(b);
+      ln.appendChild(b);
     });
     sayEl.classList.toggle('sm-say-has-b', btns.length > 0);
     if (btns.length) setTimeout(function arm() { if (!sayEl.isConnected || !sayEl.querySelector('.sm-say-b')) return; if (!armed()) { setTimeout(arm, 60); return; } sayEl.querySelectorAll('.sm-say-b').forEach(b => b.setAttribute('aria-disabled', 'false')); }, 400);
@@ -271,6 +274,18 @@ window.FM = window.FM || {};
       add.style.left = (xOf(R.trackEnd) + 8) + 'px';
       add.addEventListener('click', ev => { ev.stopPropagation(); FM.simpleTimeline.pickFiles(); });
       mainEl.appendChild(add);
+      /* THE BLACK BAND (DESIGN §5.4, his D17 B): when something runs past the last clip the video runs on in black there.
+         The band says so; a tap names what runs past, with End with the video for pictures (a song is left as it is). */
+      const P0 = scene.project, past = (P0.duration || 0) - R.trackEnd;
+      if (R.trackEnd > 0 && past > 1e-9 && FM.spine.overrun) {
+        const o = FM.spine.overrun(R), n = o.pictures.length + o.sounds.length + o.ends.length;
+        const band = el('button', 'sm-band'); band.type = 'button';
+        band.style.left = (xOf(R.trackEnd) + 52) + 'px'; band.style.width = Math.max(40, past * p - 52) + 'px';
+        const t = ((W().lines || {}).blackBand || (s => 'Black ' + s.toFixed(1) + 's'))(past, n);
+        band.appendChild(el('span', 'sm-band-t', t)); band.title = t; band.setAttribute('aria-label', t);
+        band.addEventListener('click', ev => { ev.stopPropagation(); FM.simpleTimeline.explainBand(); });
+        mainEl.appendChild(band);
+      }
 
       // ── sound: lane 0 drawn, a count badge where more lanes exist ──
       soundEl.textContent = '';
@@ -294,6 +309,18 @@ window.FM = window.FM || {};
       if (s) { const r = s.getBoundingClientRect(), b = secEl.getBoundingClientRect(); if (r.top < b.top || r.bottom > b.bottom) secEl.scrollTop += (r.top - b.top) - 4; }
       else secEl.scrollTop = secEl.scrollHeight;   // bottom-aligned: the sections nearest the clips show first
       this.updatePlayhead();
+      if (FM.simpleTools && FM.simpleTools.sync) FM.simpleTools.sync();   // Phase 2.2: the tray follows what it shows
+    },
+    /* the black band's line: what runs past, by name; End with the video when a picture does */
+    explainBand() {
+      const L = W().lines || {}, R0 = R || FM.spine.read(FM.scene), o = FM.spine.overrun(R0), P = FM.scene.project;
+      const past = l => (+l.start || 0) + (+l.duration || 0) - R0.trackEnd;
+      const all = o.pictures.concat(o.ends, o.sounds);
+      if (!all.length) return;
+      let text;
+      if (all.length === 1) { const l = all[0]; text = (o.sounds.length ? L.songRuns : L.runsPast)(FM.spine.itemWord(l, R0), past(l)); if (o.ends.length) text += ' · ' + L.keptEnd; }
+      else text = L.morePast(all.length);
+      sayLine(text, { buttons: o.pictures.length ? [{ label: L.endWith || 'End with the video', fn: () => FM.spine.cmd.endWithVideo() }] : [] });
     },
     updatePlayhead() {
       if (!scroller) return;
@@ -305,16 +332,17 @@ window.FM = window.FM || {};
     /* The phone sheet docks UNDER #sm-say in Simple (§14.2 mobile row, T19): the sections, the clips, the sound row and any
        line Simple is saying all stay in view, and none of them moves when the sheet appears. */
     dockBottom() { const e = sayEl || mainEl; return e ? e.getBoundingClientRect().bottom : 0; },
-    pickFiles() {
+    /* Phase 2.2: the + is Append (§3.6): one step that lays the clips end to end BEFORE an end card, which moves along.
+       `given` lets the suite hand it files (a picker cannot be driven). */
+    pickFiles(given) {
+      if (given && given.length) return FM.spine.cmd.append(Array.from(given));
       const inp = el('input'); inp.type = 'file'; inp.multiple = true; inp.accept = 'video/*,image/*,audio/*';
-      inp.addEventListener('change', () => {
-        const files = Array.from(inp.files || []);
-        if (files.length && FM.importFiles) FM.importFiles(files, { at: R ? R.trackEnd : 0 });
-      });
+      inp.addEventListener('change', () => { const files = Array.from(inp.files || []); if (files.length) FM.spine.cmd.append(files); });
       inp.click();
     },
     xOf(t) { return origin() + t * pps(); },   // #sm-inner coordinates, for the suite's x-invariance check
     read: () => R,
+    clearSay: clearSay,   // Phase 2.2: a selection change dismisses a line (§3.12 rule 1b)
     _say: sayLine
   };
   if (FM.spine && FM.spine._setSink) FM.spine._setSink(sayLine);

@@ -55,6 +55,9 @@ window.FM = window.FM || {};
       var key = multi ? 'multi:' + ids.length : id;
       if (key !== lastSyncKey) { userClosed = false; lastSyncKey = key; }   // a NEW selection always gets the sheet back
       if (!has) { insp.style.top = ''; insp.style.maxHeight = ''; close(); userClosed = false; return; }
+      /* SIMPLE MODE P2.2 (D10): in Simple a selection shows its tools in the tray row; the sheet rises only for a tray tool
+         that has a panel ("More"). simpleTools.sheetHeld is false whenever Simple is not on screen, so Full is today's. */
+      if (FM.simpleTools && FM.simpleTools.sheetHeld && FM.simpleTools.sheetHeld(id)) { insp.style.top = ''; insp.style.maxHeight = ''; close(); return; }
       /* HOLDING TO MULTI-SELECT DOES NOT RAISE THE SHEET (queue 624, rule 16 reading (a)). One layer in select mode is the
          first frame of a paint-select: the finger is still on the timeline, about to drag down for more rows, and a sheet
          thrown over that is the thing he photographed. With two or more the multi sheet comes up as before. */
