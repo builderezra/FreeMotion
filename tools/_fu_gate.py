@@ -605,7 +605,39 @@ def selftest():
     if other_queues('- v17.30 — queue 980 (partial), queue 980 again') != []:
         fails.append('queue 980 twice reads as another item')
     fails += selftest_repo()
+    fails += selftest_ship_order(os.path.abspath(os.path.join(os.path.dirname(__file__), 'ship.sh')))
     return fails, n_trig
+
+
+def selftest_ship_order(path):
+    """WHERE tools/ship.sh asks (review of v1, finding 10): once before prove.sh and the suite passes, and AGAIN after the
+    last of them and immediately before `git add -A`, with nothing between that second check and the add that could
+    change the tree — or an edit made during the ninety-minute suite is committed under the earlier PASS. check() itself
+    refuses a changed tree (selftest_repo, step 5); this proves ship.sh still asks it at the moment that matters."""
+    fails = []
+    try:
+        src = io.open(path, encoding='utf-8').read()
+    except OSError:
+        return ['tools/ship.sh could not be read for the gate-order check']
+    code = '\n'.join(l for l in src.split('\n') if not l.lstrip().startswith('#'))
+    calls = [m.start() for m in re.finditer(r'python3 tools/_fu_gate\.py check\b', code)]
+    selft = code.find('python3 tools/_fu_gate.py selftest')
+    prove = code.find('tools/prove.sh')
+    suite = [m.start() for m in re.finditer(r'tests/_cdp\.py', code)]
+    add = code.find('git add -A')
+    if len(calls) != 2:
+        return ['tools/ship.sh asks the full-unchanged gate %d time(s), not twice (before the proof, and again just before the commit)' % len(calls)]
+    if not (0 <= selft < calls[0] < prove):
+        fails.append('tools/ship.sh does not run the gate self-test, then the gate, before prove.sh')
+    if not (suite and suite[-1] < calls[1] < add):
+        fails.append('tools/ship.sh does not ask the gate again AFTER its last suite run and BEFORE git add -A')
+    between = code[calls[1]:add]
+    # only the refusal's own words may run there: an if, an echo (to the terminal, never redirected into a file), an exit
+    others = [l.strip() for l in between.split('\n')[1:] if l.strip() and
+              (not re.match(r'^(if |fi$|then$|echo |_WHY=|exit |\[ |_FU_)', l.strip()) or re.search(r'>>|>\s*[^&\s|]', l))]
+    if others:
+        fails.append('tools/ship.sh runs something between the second gate check and git add -A: %r' % others[:3])
+    return fails
 
 
 def selftest_repo():
@@ -733,7 +765,8 @@ def main():
                 print('   · ' + x)
             return 1
         print('✅ the full-unchanged gate self-test passed (%d trigger cases, %d step-1.2 lines over %d hunks, %d quiet lines, '
-              'the regions, the instrument lock, the other-queue rule)' % (n, len(STEP_1_2), len(set(h for h, _, _ in STEP_1_2)), len(QUIET)))
+              'the regions, the instrument lock, the other-queue rule; on a scratch repo: provenance, the instrument rule, the PASS '
+              'cache; and where ship.sh asks — before the proof and again just before the commit)' % (n, len(STEP_1_2), len(set(h for h, _, _ in STEP_1_2)), len(QUIET)))
         return 0
     if cmd == 'hash':
         print(source_hash(root))
