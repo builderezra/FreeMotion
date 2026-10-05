@@ -120664,4 +120664,45 @@
     if (bad.length) throw new Error(bad.length + ' problem(s): ' + bad.slice(0, 6).join(' · '));
   });
 
+  test('980 cog T5 with steps waiting under redo, a switch that would commit open typing warns that redo goes, and with nothing open it never warns and redo still works after switching there and back', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const ask0 = FM.ask, mode0 = FM.editor.mode(), last0 = localStorage.getItem('fm.editor.last');
+    const P = FM.scene.project;
+    const L = FM.makeLayer('text', { name: 'SM_REDO', text: 'one', x: Math.round(P.width / 2), y: Math.round(P.height / 2) });
+    L.start = 0; L.duration = 3;
+    const asked = []; let answer = false;
+    FM.ask = async function (o) { asked.push(o || {}); return answer; };
+    try {
+      if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      FM.setProp(L.transform, 'x', (FM.evalProp(L.transform.x, 0) || 0) + 40, 0); FM.history.commit();
+      FM.history.undo(); await sleep(40);
+      if (!FM.history.canRedo()) throw new Error('setup: after an edit and an undo there is nothing to redo');
+      /* nothing open: no warning, there and back, and redo is still there */
+      if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('the switch to Simple was refused with nothing open');
+      if (!(await FM.editor.request('full', { from: 'cog' }))) throw new Error('the switch back to Full was refused with nothing open');
+      if (asked.length) throw new Error('a switch with nothing open warned: ' + JSON.stringify(asked[0]));
+      if (!FM.history.canRedo()) throw new Error('switching there and back ate the redo step');
+      /* typing open: the switch would commit it, and a commit with redo waiting cuts redo off — so it must ask */
+      FM.textEdit.start(L.id); await sleep(80);
+      if (!FM.textEdit.isActive()) throw new Error('setup: the text editor did not open on the text layer');
+      answer = false;
+      const ok = await FM.editor.request('simple', { from: 'cog' }); await sleep(40);
+      if (!asked.length) throw new Error('with typing open and redo waiting, the switch went ahead without a word — the redo tail would be lost silently');
+      if (!/redo|undo|↷/i.test(JSON.stringify(asked[0]))) throw new Error('the warning does not say redo goes: ' + JSON.stringify(asked[0]));
+      if (ok || FM.editor.mode() !== 'full') throw new Error('Stay switched anyway');
+      if (!FM.textEdit.isActive()) throw new Error('Stay closed the text editor');
+      if (!FM.history.canRedo()) throw new Error('Stay lost the redo step');
+    } finally {
+      FM.ask = ask0;
+      try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(60);
+    }
+  });
+
 })();
