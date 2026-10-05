@@ -121464,4 +121464,33 @@
       if (!FM.history.canRedo()) throw new Error('the delete should be on the redo stack');
     });
   });
+
+  /* ═══ RELEASE 2.1 REVIEW FIXES (p2-confirmed findings that live in 2.1's code). Each test fails on the 2.1 tree by what
+     the command does, and each has a control that passes on both trees, so it cannot pass for the wrong reason. */
+
+  test('simple P2.1 · review A and D on a main block (a clip grouped in Full with a group look) refuse with Open in Full and move nothing (DESIGN §9.1 main blocks)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => {
+      const A = smV('A', 0, 4, W, H, { sm: { main: true } }), B = smV('B', 4, 4, W, H, { sm: { main: true } }), C = smV('C', 8, 4, W, H, { sm: { main: true } });
+      const G = FM.makeLayer('group', { name: 'G', x: 0, y: 0, start: 4, duration: 4 });
+      G.transform.opacity = 0.8;                       // a group fade in Full: the group composites as one piece, a block
+      B.parent = G.id;
+      return [C, G, B, A];
+    }, async function (v) {
+      const G = v.L('G'), B = v.L('B'), C = v.L('C');
+      if (!FM.spine.read(FM.scene).isMain(G.id)) throw new Error('CONTROL: the grouped clip is not a main block: ' + JSON.stringify(FM.spine.read(FM.scene).main.map(e => e.id)));
+      const doc0 = v.doc(), n0 = v.steps();
+      const okT = await FM.spine.cmd.trimTail(G.id, 6); await v.idle();
+      if (okT !== false || C.start !== 8 || v.doc() !== doc0)
+        throw new Error('D on a main block trimmed only the group row: group ' + G.start + '+' + G.duration + ', its clip still ' + B.start + '+' + B.duration + ', C moved to ' + C.start + ' (the clip now plays over C)');
+      if (!/Open in Full/.test(v.say()) || !Array.from(document.querySelectorAll('#sm-say .sm-say-b')).some(b => /Open in Full/.test(b.textContent)))
+        throw new Error('the refusal has no Open in Full: “' + v.say() + '”');
+      const okH = await FM.spine.cmd.trimHead(G.id, 5); await v.idle();
+      if (okH !== false || C.start !== 8 || v.doc() !== doc0 || v.steps() !== n0)
+        throw new Error('A on a main block wrote something: C at ' + C.start + ', ' + (v.steps() - n0) + ' step(s)');
+      /* CONTROL: a plain main clip before the block still trims, and the block moves as one piece with what follows */
+      const okA = await FM.spine.cmd.trimTail(v.L('A').id, 3); await v.idle();
+      if (!okA || G.start !== 3 || B.start !== 3 || C.start !== 7) throw new Error('CONTROL: D on clip A did not ripple the block as one piece: G ' + G.start + ', B ' + B.start + ', C ' + C.start + ' (it said “' + v.say() + '”)');
+    }, { project: { sm: { adopted: true, v: 1 } } });
+  });
 })();

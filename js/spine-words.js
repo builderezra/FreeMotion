@@ -65,7 +65,7 @@ window.FM = window.FM || {};
       cutKeysNext: name => name + ' has moves · trims around it come next',
       fadeOwned: (a, b) => a + ' and ' + b + ' fade into each other',
       cutShort: name => name + ' would be too short',
-      splitBlock: 'Open in Full to split this', splitOff: 'Move the playhead onto the clip to split',
+      splitBlock: 'Open in Full to split this', trimBlock: 'Open in Full to trim this', splitOff: 'Move the playhead onto the clip to split',
       splitEdge: 'Too close to the edge of the clip. Trim instead?', splitFade: 'Move the playhead out of the crossfade to split it',
       trimEdge: 'Too close to the edge of the clip',
       nothingMore: 'Nothing more to trim', videoStart: 'That’s the start of the video', shortSource: 'Not enough footage',

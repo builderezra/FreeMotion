@@ -459,6 +459,7 @@ window.FM = window.FM || {};
     const map = byIdMap(), i = mainIdx(R, id);
     if (i < 0) return refusePlan('gone');
     const c = R.main[i], n = R.main[i + 1] || null, L = map.get(c.id), ml = MINLEN();
+    if (L.type === 'group') return refusePlan('trimBlock');   // a main block: its members play their own spans, the group row is not the clip (§9.1)
     const d0 = +L.duration || 0;
     if (newDur < d0 - 1e-9 && d0 < ml - SLACK) return refusePlan('alreadyShort');
     if (newDur < ml - SLACK) return refusePlan(o.key ? 'trimEdge' : 'alreadyShort');
@@ -505,6 +506,7 @@ window.FM = window.FM || {};
     const map = byIdMap(), i = mainIdx(R, id);
     if (i < 0) return refusePlan('gone');
     const c = R.main[i], p = R.main[i - 1] || null, L = map.get(c.id), ml = MINLEN();
+    if (L.type === 'group') return refusePlan('trimBlock');   // as the tail trim: a main block refuses Trim with the block line (§9.1)
     const d0 = +L.duration || 0;
     if (h > 0 && d0 < ml - SLACK) return refusePlan('alreadyShort');
     if (d0 - h < ml - SLACK) return refusePlan(o.key ? 'trimEdge' : 'alreadyShort');
@@ -754,7 +756,7 @@ window.FM = window.FM || {};
       case 'fadeOwned': text = line('fadeOwned', o.a, o.b); buttons = [full]; break;
       case 'cutShort': text = line('cutShort', o.name); buttons = [full]; break;
       default: text = line(kind) || line('failed');
-        if (kind === 'splitBlock') buttons = [full];
+        if (kind === 'splitBlock' || kind === 'trimBlock') buttons = [full];
     }
     S.say(text, { buttons: buttons, refusal: kind, ids: o.ids });
     S.lastRefusal = kind;
