@@ -128344,4 +128344,60 @@
     }
   });
 
+  test('TBD a custom font travels in project and template files', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const response = await fetch('tests/fixtures/fonts/LiberationSans-Regular.ttf', { cache: 'no-store' });
+    if (!response.ok) throw new Error('setup: font fixture is missing');
+    const fontBytes = await response.arrayBuffer();
+    const wasOpen = FM.home.isOpen(), priorId = FM.projects.currentId(), made = [];
+    const realURL = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click;
+    const files = [];
+    let font, restored, templateId;
+    try {
+      if (wasOpen) FM.home.close();
+      const pid = await FM.projects.create({ name: 'Font share probe', width: 320, height: 240 });
+      if (!pid) throw new Error('setup: could not make the font project');
+      made.push(pid);
+      font = await FM.fonts.import(new File([fontBytes], 'font-share-probe.ttf', { type: 'font/ttf' }));
+      if (!font) throw new Error('setup: could not import the real font');
+      const layer = FM.makeLayer('text', { text: 'A useful title', x: 160, y: 120 });
+      layer.fontFamily = font.css;
+      FM.scene.layers = [layer];
+      FM.storage.markDirty(); await FM.storage.save();
+      if (!(await FM.templates.save('Font share template', pid))) throw new Error('setup: could not save template');
+      const meta = FM.templates.list().find(t => t.name === 'Font share template');
+      if (!meta) throw new Error('setup: template card missing');
+      templateId = meta.id;
+      URL.createObjectURL = blob => { files.push(blob); return 'blob:font-share-test'; };
+      HTMLAnchorElement.prototype.click = function () {};
+      await FM.storage.exportFile();
+      if (!(await FM.templates.exportFile(templateId))) throw new Error('template download failed');
+      if (files.length !== 2) throw new Error('expected project and template downloads, got ' + files.length);
+      const shared = await Promise.all(files.map(async blob => JSON.parse(await blob.text())));
+      for (const [i, data] of shared.entries()) {
+        const embedded = data.fonts && data.fonts[font.id];
+        if (!data.layers.some(l => l.type === 'text' && l.fontFamily === font.css) ||
+            !embedded || embedded.css !== font.css || !embedded.dataURL)
+          throw new Error((i ? 'template' : 'project') + ' did not carry its used custom font');
+        const encoded = embedded.dataURL.split(',')[1];
+        if (!encoded || atob(encoded).length !== fontBytes.byteLength)
+          throw new Error((i ? 'template' : 'project') + ' changed the font bytes');
+      }
+      await FM.fonts.remove(font.id);
+      if (FM.fonts.list().some(f => f.id === font.id)) throw new Error('setup: sender font was not removed');
+      font = null;
+      if (await FM.storage.applyScene(shared[1]) !== true) throw new Error('the template file could not reopen');
+      restored = FM.fonts.list().find(f => f.family === shared[1].fonts[Object.keys(shared[1].fonts)[0]].family);
+      const restoredFile = restored && await FM.fonts.getFile(restored.id);
+      if (!restoredFile || restoredFile.size !== fontBytes.byteLength || FM.scene.layers[0].fontFamily !== restored.css)
+        throw new Error('the reopened template did not restore its font and text face');
+    } finally {
+      URL.createObjectURL = realURL;
+      HTMLAnchorElement.prototype.click = realClick;
+      if (templateId) { try { await FM.templates.remove(templateId); } catch (e) {} }
+      if (font) { try { await FM.fonts.remove(font.id); } catch (e) {} }
+      if (restored) { try { await FM.fonts.remove(restored.id); } catch (e) {} }
+      await hcCleanup(made, priorId, wasOpen);
+    }
+  });
+
 })();
