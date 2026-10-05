@@ -122045,4 +122045,36 @@
       if (!okA || G.start !== 0 || v.L('B').start !== 0 || C.start !== 4) throw new Error('CONTROL: Lift off on clip A did not close the block up as one piece: G ' + G.start + ', B ' + v.L('B').start + ', C ' + C.start + ' (it said “' + v.say() + '”)');
     }, { project: { sm: { adopted: true, v: 1 } } });
   });
+
+
+  test('simple P2.2 · review Lift off then Into row brings a clip’s sound twin back with it, karaoke-linked or extracted, so the voice never lands seconds late (§4.6)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const f = new File([new Uint8Array(16)], 'take.mp4', { type: 'video/mp4' });
+    for (const how of ['karaoke', 'extracted']) {
+      await smP2((W, H) => {
+        const Bs = smSong('Bs', 3, 3, W, H); Bs.transform.opacity = 0;
+        return [smV('C', 6, 3, W, H), Bs, smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)];
+      }, async function (v) {
+        const B = v.L('B'), Bs = v.L('Bs'), C = v.L('C');
+        if (how === 'karaoke') Bs.karaokeOf = B.id;
+        else {   // FM.extractAudio's twin: a copy of the clip's own File, no link
+          FM.media.set(B.id, { kind: 'video', el: document.createElement('video'), width: v.W, height: v.H, duration: 3, file: f });
+          FM.media.set(Bs.id, { kind: 'video', el: document.createElement('video'), width: v.W, height: v.H, duration: 3, file: f });
+        }
+        try {
+          if (!FM.spine.isTwinOf(Bs, B)) throw new Error('CONTROL (' + how + '): the fixture’s sound is not B’s twin');
+          FM.selectLayer(B.id); await v.sleep(60);
+          smTool('lift').click(); await v.idle();
+          if (B.sm && B.sm.main) throw new Error('CONTROL (' + how + '): Lift off did not lift B (it said “' + v.say() + '”)');
+          if (Bs.start !== 3 || C.start !== 3) throw new Error('CONTROL (' + how + '): after Lift off B’s sound is at ' + Bs.start + ' and C at ' + C.start);
+          FM.selectLayer(B.id); await v.sleep(60);
+          smTool('into').click(); await v.idle();
+          if (!(B.sm && B.sm.main) || B.start !== 3 || C.start !== 6)
+            throw new Error(how + ': Into row did not put B back at 3 with C after it: B ' + B.start + ' ' + JSON.stringify(B.sm) + ', C ' + C.start + ' (it said “' + v.say() + '”)');
+          if (Bs.start !== B.start || Bs.duration !== B.duration)
+            throw new Error(how + ': Into row left B’s own sound at ' + Bs.start + ' while B is at ' + B.start + ' (the voice plays ' + (Bs.start - B.start) + ' s late, under C)');
+        } finally { FM.media.remove(B.id); FM.media.remove(Bs.id); }
+      });
+    }
+  });
 })();

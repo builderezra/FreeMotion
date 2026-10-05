@@ -1161,14 +1161,20 @@ window.FM = window.FM || {};
     const j = S.insertIndexAt(R, +o.start || 0);
     if (j < R.main.length && R.main[j].seam && R.main[j].seam.kind === 'blend') return refusePlan('insertFade', { a: j, b: j + 1 });
     const seam = j === 0 ? (R.main[0] ? R.main[0].start : 0) : R.main[j - 1].end;
-    const len = +o.duration || 0;
+    const len = +o.duration || 0, dO = seam - (+o.start || 0);
+    /* its sound twin travels with it (§4.6: a twin belongs to its clip's unit, never a follower). After a Lift off the twin
+       reads as a follower of whatever slid under it, so the ripple would carry it len seconds away from its picture, or a
+       karaoke twin refused as a slip (review finding 1). o is not a main entry, so twinsOf (R.followers) cannot find them. */
+    const twins = FM.scene.layers.filter(t => S.isTwinOf(t, o, R.eps));
     const rb = riderBlock(R, seam, map); if (rb) return refusePlan(rb.kind, rb);
     const plan = newPlan('Put in the clip row');
-    const rp = ripple(plan, R, j, len, new Set([id]), seam + len, true);
-    tailMove(plan, R, R.trackEnd + (rp.last == null ? len : rp.last), map);
+    const rp = ripple(plan, R, j, len, new Set([id].concat(twins.map(t => t.id))), seam + len, true);
+    tailMove(plan, R, rp.end != null ? rp.end : seam + len, map);   // o last: its end, landed at seam with its own duration
     addLand(plan, id, seam);
+    twins.forEach(t => { plan.moves.delete(t.id); addLand(plan, t.id, (+t.start || 0) + dO); });   // a land beats a move or a tail land
     plan.post.push(() => {
       S.setFlag(o, 'main', true); S.setFlag(o, 'stay', false);
+      twins.forEach(t => S.setFlag(t, 'stay', false));
       const before = j > 0 ? R.main[j - 1] : null;
       if (before) FM.moveLayers([o.id], before.id);   // main band: just above the clip before it
     });
