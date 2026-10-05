@@ -126951,4 +126951,52 @@
     }
   });
 
+  test('TBD: glass faint labels clear 4.5 contrast on editor cards and light settings', { item: 'TBD' }, function () {
+    const html = document.documentElement, body = document.body;
+    const theme0 = html.getAttribute('data-theme'), home0 = html.getAttribute('data-home');
+    const wasHomeOpen = body.classList.contains('home-open');
+    const parse = css => {
+      const m = String(css).match(/rgba?\(([^)]+)\)/);
+      if (!m) throw new Error('expected computed rgb colour: ' + css);
+      return m[1].split(',').map(Number);
+    };
+    const luminance = rgb => {
+      const a = rgb.slice(0, 3).map(n => { const v = n / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+    };
+    const contrast = (foreground, background, opacity) => {
+      const f = parse(foreground), b = parse(background);
+      const effective = f.map((n, i) => n * opacity + b[i] * (1 - opacity));
+      const light = Math.max(luminance(effective), luminance(b));
+      const dark = Math.min(luminance(effective), luminance(b));
+      return (light + 0.05) / (dark + 0.05);
+    };
+    const card = document.createElement('button'), number = document.createElement('span');
+    const scrim = document.createElement('div'), lightLabel = document.createElement('span');
+    try {
+      html.setAttribute('data-theme', 'glass'); html.removeAttribute('data-home');
+      card.className = 'cat-card'; number.className = 'cat-num'; number.textContent = '1';
+      card.appendChild(number); document.body.appendChild(card);
+      const cardStyle = getComputedStyle(card), numberStyle = getComputedStyle(number);
+      const onCard = contrast(numberStyle.color, cardStyle.backgroundColor, Number(numberStyle.opacity));
+      // --panel-3 is a hex token; resolve it through a real background to test the computed pixels.
+      card.style.background = 'var(--panel-3)';
+      const hoverSurface = contrast(numberStyle.color, getComputedStyle(card).backgroundColor, Number(numberStyle.opacity));
+      if (onCard < 4.5 || hoverSurface < 4.5)
+        throw new Error('editor shortcut contrast is ' + onCard.toFixed(2) + ':1 on its card and ' + hoverSurface.toFixed(2) + ':1 on hover');
+      card.remove();
+      html.setAttribute('data-home', 'light'); body.classList.add('home-open');
+      scrim.className = 'set-scrim'; scrim.style.background = 'var(--panel)';
+      lightLabel.style.color = 'var(--text-faint)'; lightLabel.textContent = 'Secondary text';
+      scrim.appendChild(lightLabel); body.appendChild(scrim);
+      const onLight = contrast(getComputedStyle(lightLabel).color, getComputedStyle(scrim).backgroundColor, 1);
+      if (onLight < 4.5) throw new Error('light settings faint text contrast is only ' + onLight.toFixed(2) + ':1');
+    } finally {
+      card.remove(); scrim.remove();
+      if (theme0 == null) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', theme0);
+      if (home0 == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', home0);
+      if (!wasHomeOpen) body.classList.remove('home-open');
+    }
+  });
+
 })();

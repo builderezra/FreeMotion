@@ -34,7 +34,7 @@ html[data-theme="glass"] {
   --line-soft: #122029;
   --text: #e9f4f7;            /* specular-tinted white, not pure */
   --text-dim: #93aeb9;
-  --text-faint: #63808c;
+  --text-faint: #7795a2;
   --accent: #5ac7ed;          /* hue 195° — the logo's vivid cyan, lifted for contrast */
   --accent-2: #37a8d4;
   --am-green: #5ce0c8;        /* the add/export green re-tuned toward the logo's mint */
@@ -70,6 +70,10 @@ html[data-theme="glass"] {
     var(--bg);
 }
 html[data-theme="glass"] body { background: transparent; }
+
+/* Shortcut numerals use the faint text tone on panel-2 cards. Their extra opacity reduction
+   pushed that small text below readable contrast even after the shared token was corrected. */
+html[data-theme="glass"] .cat-num { opacity: 1; }
 
 /* ---- the material -------------------------------------------------------------------------- */
 /* One reusable recipe: translucent tint + backdrop blur + a lit top rim + depth shadow. */
@@ -1122,7 +1126,7 @@ html[data-home="light"] body.home-open #shortcuts-overlay {
   --line-soft: rgba(16, 30, 52, .08);
   --text: #10151f;
   --text-dim: #5a6478;
-  --text-faint: #7d8798;
+  --text-faint: #66707f;
   --glass-tint-strong: rgba(247, 249, 252, .96);
   --glass-rim: rgba(255, 255, 255, .9);
   --glass-rim-soft: rgba(16, 30, 52, .10);
