@@ -122307,4 +122307,28 @@
       if (!Array.from(document.querySelectorAll('#sm-say .sm-say-b')).some(b => /Open in Full/.test(b.textContent))) throw new Error('the refusal has no Open in Full: “' + v.say() + '”');
     });
   });
+
+
+  test('simple P2.2 · review Move earlier on the last clip takes the end card to the new end of the clips, after a gap and after an overlap (§3.6 Reorder row)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    /* (a) a 2 s gap before the last clip: the clips now end at 15, the card must not wait at 17 after 2 s of black */
+    await smP2((W, H) => [smT('End', 17, 3, W, H), smV('C', 12, 5, W, H), smV('B', 5, 5, W, H), smV('A', 0, 5, W, H)], async function (v) {
+      if (FM.spine.read(FM.scene).tail.indexOf(v.L('End').id) < 0) throw new Error('CONTROL (a): the end card is not in the tail');
+      FM.selectLayer(v.L('C').id); await v.sleep(60);
+      smTool('earlier').click(); await v.idle();
+      if (v.L('C').start !== 5 || v.L('B').start !== 10) throw new Error('CONTROL (a): Move earlier did not give A C B: C ' + v.L('C').start + ', B ' + v.L('B').start + ' (it said “' + v.say() + '”)');
+      const B = v.L('B');
+      if (v.L('End').start !== B.start + B.duration) throw new Error('(a) the end card did not follow the new end of the clips: it starts at ' + v.L('End').start + ', the clips end at ' + (B.start + B.duration));
+    });
+    /* (b) the last clip overlapped the one before by 1 s: the clips now end at 15, past the card at 14 */
+    await smP2((W, H) => [smT('End', 14, 3, W, H), smV('C', 9, 5, W, H), smV('B', 5, 5, W, H), smV('A', 0, 5, W, H)], async function (v) {
+      const R0 = FM.spine.read(FM.scene);
+      if (R0.tail.indexOf(v.L('End').id) < 0 || R0.main[2].seam.kind !== 'overlap') throw new Error('CONTROL (b): not B ⚠ C with an end card: ' + JSON.stringify(R0.main.map(e => e.seam)));
+      FM.selectLayer(v.L('C').id); await v.sleep(60);
+      smTool('earlier').click(); await v.idle();
+      const B = v.L('B');
+      if (v.L('C').start !== 5) throw new Error('CONTROL (b): Move earlier did not move C (it said “' + v.say() + '”)');
+      if (v.L('End').start !== B.start + B.duration) throw new Error('(b) the end card stayed at ' + v.L('End').start + ' under the clips, which now end at ' + (B.start + B.duration));
+    });
+  });
 })();

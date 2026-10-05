@@ -1106,7 +1106,7 @@ window.FM = window.FM || {};
     const at = j > i ? j - 1 : j;
     order.splice(at, 0, i);
     const dOf = k => (k > i && k < j) ? -len : (k >= j && k < i) ? len : 0;   // forward: (i, j) move −L; backward: [j, i) move +L
-    let prevEnd = null, acc = 0, cStart = null;
+    let prevEnd = null, acc = 0, cStart = null, clipEnd = null;
     order.forEach((k, pos) => {
       const e = R.main[k];
       let ns;
@@ -1122,15 +1122,22 @@ window.FM = window.FM || {};
         else ns = prop;
       }
       const d = ns - e.start;
-      if (e.slot) e.members.forEach(m => { if (d) addMove(plan, m, d); });
+      if (e.slot) { e.members.forEach(m => { if (d) addMove(plan, m, d); }); prevEnd = e.end + d; }
       else {
-        if (k === i || ns !== e.start + dOf(k)) addLand(plan, e.id, ns); else if (d) addMove(plan, e.id, d);
+        const landed = k === i || ns !== e.start + dOf(k), Lk = map.get(e.id);
+        if (landed) addLand(plan, e.id, ns); else if (d) addMove(plan, e.id, d);
         (R.followers[e.id] || []).forEach(f => { if (d) addMove(plan, f, d); });
         if (k === i) cStart = ns;
+        /* the end apply() will write, bit for bit (a landed start, else old + d), for the next seam and for the tail */
+        prevEnd = (landed ? ns : (+Lk.start || 0) + d) + (+Lk.duration || 0);
+        clipEnd = prevEnd;
       }
-      prevEnd = e.slot ? e.end + d : ns + (+map.get(e.id).duration || 0);
     });
     plan.touched.add(c.id);
+    /* §3.6 Reorder row: with c last (L = c.duration), or c moved to the end, the track end changes and the tail follows it —
+       an end card waited after seconds of black, or slid under the clips (review finding 13). The last CLIP's end, never a
+       card's: trackEnd is always a clip's end. */
+    if (clipEnd != null) tailMove(plan, R, clipEnd, map);
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
     plan.time = cStart;
     const newIndex = order.filter(k => !R.main[k].slot).indexOf(i) + 1;
