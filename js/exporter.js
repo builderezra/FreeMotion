@@ -1449,7 +1449,7 @@ window.FM = window.FM || {};
       }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'video' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'timewarp'))) {
-        resumeRenderer = (resumeRenderer || 'main') + ';c31-video-timewarp-11';
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-video-timewarp-12';
       }
       let sig = null, saved = null;
       if (XR) {

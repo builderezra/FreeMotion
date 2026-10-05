@@ -14459,7 +14459,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // The decoded historical source redraws the whole plate, preserving the order of
       // the upstream pen stencil and the layer's legacy vector stencil.
       if (!active.length || active[active.length - 1].type !== 'timewarp'
-          || active.slice(0, -1).some(fx => fx.type !== 'brightness' && fx.type !== 'contrast' && fx.type !== 'saturate' && fx.type !== 'vibrance' && fx.type !== 'colorbalance' && fx.type !== 'levels' && fx.type !== 'gamma'
+          || active.slice(0, -1).some(fx => fx.type !== 'brightness' && fx.type !== 'contrast' && fx.type !== 'saturate' && fx.type !== 'vibrance' && fx.type !== 'colorbalance' && fx.type !== 'exposure' && fx.type !== 'levels' && fx.type !== 'gamma'
             && !(penSafe && fx.type === 'penmask' && fx.maskId === mask.id))) continue;
       const p = active[active.length - 1].params || {};
       if (['duration','direction','mode','loop'].some(k => FM.isAnimated && FM.isAnimated(p[k]))) continue;

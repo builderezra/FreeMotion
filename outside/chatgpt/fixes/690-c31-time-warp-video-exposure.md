@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Exposure before decoded-video Time Warp Scan
+
+Starting commit: clean preferred Codex-only `e7fceb827eeddc4755ac9ef61123a5a7fced4765`; isolated branch `codex/690-c31-scan-exposure-video`. The exact standing #690 is `REQUESTS.md:27375-27403`, and C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. The Exposure mentions in `audits/912-audit.json` and `audits/940-hunt.json` do not name this scan finding.
+
+The decoded-video historical sampler excluded Exposure from its source-local upstream gate, so a keyed grade before Time Warp Scan could not form a cold-seek video plan. The video gate now admits it. An indexed-MP4 `{ item: 'TBD' }` regression failed first because the plan was excluded; afterward sequential and cold preview agreed at 128/64 px, the upper scan strip retained a visible historical grade, and the main MP4 retained it. The adjacent keyed Colour Balance video regression passed. Video main-MP4 resume identity advances from 11 to 12.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 369→370, exporter 178→179), `tests/tests.js` (one new regression and four existing resume-identity expectations), and this report. Node syntax and `git diff --check` passed. This closes the locally proved Exposure scan source set: moving shapes, moving stills, and decoded video. C31 remains open for other effect/source combinations. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
