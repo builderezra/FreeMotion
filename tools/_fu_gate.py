@@ -266,7 +266,99 @@ def hook_lines(root, files):
         if head_text and REGION_HEAD.search(head_text):
             for (s, e, hunk) in hunks_in_regions(diff, simple_regions(head_text)):
                 hits.append((f, '~', '%s inside lines %d–%d of HEAD' % (hunk, s, e), 'a line of one of Simple’s own functions'))
+        for (ln, sha, hunk) in simple_owned_lines(root, f, diff, head_text):
+            hits.append((f, '~', '%s changes line %d of HEAD, which Simple release %s wrote' % (hunk, ln, sha[:8]),
+                         'a line a Simple release wrote'))
     return hits
+
+
+# ─── PROVENANCE: the lines a Simple release wrote into a shared file (review of v1, finding 9) ──────────────────────────
+# The hooks see a line that NAMES something Simple. Step 1.2 also writes lines that name nothing Simple — a comment, a
+# closing brace, `const sz = size || layerSizeAt(l, t);` inside Full's own layerAABB, a helper like isPlainObj — and the
+# regions only cover Simple's own functions. Measured on BUILD-PLAN §4.1 applied to v17.23: 30 of its 131 added lines in
+# shared files would let a later one-line fix, logged as a hunt, skip the lock. So the gate also asks git WHO WROTE each
+# line a hunk changes: a line last written by a Simple release (a commit the gate would have fired on — it touched a
+# Simple-owned file, its POLISH-LOG line says queue 980, or a line it added to a shared file matches a hook) is Simple's,
+# whatever it says. A pure insertion counts when BOTH lines around it are Simple's (it lands inside a Simple block).
+_SIMPLE_SHA = {}
+
+
+def is_simple_commit(root, sha):
+    if sha in _SIMPLE_SHA:
+        return _SIMPLE_SHA[sha]
+    ok = False
+    if sha and not sha.startswith('0000000'):
+        names = sh(['git', 'show', '--format=', '--name-only', sha], root).split()
+        if any(n in SIMPLE_FILES for n in names):
+            ok = True
+        if not ok and 'POLISH-LOG.md' in names:
+            for t in sh(['git', 'show', '--format=', '-U0', sha, '--', 'POLISH-LOG.md'], root).splitlines():
+                if t.startswith('+- v') and '980' in QUEUE.findall(t):
+                    ok = True
+                    break
+        if not ok:
+            shared = [n for n in names if SHARED.match(n) and n not in SIMPLE_FILES]
+            if shared:
+                cur = None
+                for t in sh(['git', 'show', '--format=', '-U0', sha, '--'] + shared, root).splitlines():
+                    if t.startswith('+++ b/'):
+                        cur = t[6:]
+                    elif t.startswith('+') and not t.startswith('+++') and cur and hook_of(cur, t[1:]):
+                        ok = True
+                        break
+    _SIMPLE_SHA[sha] = ok
+    return ok
+
+
+def blame_lines(root, f, lines, nmax):
+    """{line: sha} for the given 1-based HEAD lines of f, in one `git blame` call."""
+    lines = sorted(set(x for x in lines if 1 <= x <= nmax))
+    if not lines:
+        return {}
+    ranges, a = [], lines[0]
+    prev = a
+    for x in lines[1:] + [None]:
+        if x is not None and x == prev + 1:
+            prev = x
+            continue
+        ranges += ['-L', '%d,%d' % (a, prev)]
+        if x is not None:
+            a = prev = x
+    out = {}
+    for t in sh(['git', 'blame', '--porcelain'] + ranges + ['HEAD', '--', f], root).splitlines():
+        m = re.match(r'^([0-9a-f]{40}) \d+ (\d+)', t)
+        if m:
+            out[int(m.group(2))] = m.group(1)
+    return out
+
+
+def simple_owned_lines(root, f, diff, head_text):
+    """[(HEAD line, sha, hunk header)] for every hunk of `diff` that changes a line a Simple release wrote."""
+    if not head_text:
+        return []
+    nmax = head_text.count('\n') + (0 if head_text.endswith('\n') else 1)
+    want, hunks = set(), []
+    for line in diff.splitlines():
+        m = HUNK.match(line)
+        if not m:
+            continue
+        a, b = int(m.group(1)), int(m.group(2)) if m.group(2) is not None else 1
+        ls = list(range(a, a + b)) if b > 0 else [a, a + 1]
+        hunks.append((line, b, ls))
+        want.update(ls)
+    if not hunks:
+        return []
+    who = blame_lines(root, f, want, nmax)
+    out = []
+    for (hdr, b, ls) in hunks:
+        shas = [(x, who.get(x)) for x in ls if 1 <= x <= nmax]
+        if b > 0:
+            hit = [(x, s) for (x, s) in shas if s and is_simple_commit(root, s)]
+        else:   # an insertion: inside a Simple block only if the lines on BOTH sides are Simple's
+            hit = shas if len(shas) == 2 and all(s and is_simple_commit(root, s) for (_, s) in shas) else []
+        if hit:
+            out.append((hit[0][0], hit[0][1], hdr))
+    return out
 
 
 def trigger(logline, files, hooks):
@@ -323,11 +415,15 @@ def check(root):
                    'ships ALONE, so any difference from HEAD is Simple’s and a rollback takes it back alone — ship the other '
                    'item(s) separately, or write them as #NNN if they are only mentioned.' % ('; '.join(why), ', '.join(others)))
     inst = instrument_changed(files)
-    if inst:
-        return 1, ('REFUSE: this is a Simple release (%s), and it changes the instrument that judges it (%s). A release cannot '
-                   'loosen its own lock: ship the instrument change in a release of its own first (one that touches no '
-                   'Simple-owned file and no Simple hook, so this gate does not fire on it), then this one against it.'
-                   % ('; '.join(why), ', '.join(inst)))
+    app = [f for f in files if is_app_path(f)]
+    if inst and app:
+        # (An instrument change with NO app file in the same release — the lock's own releases, which say queue 980 — is
+        # allowed: it cannot hide a change to Full, because it carries none, and it still needs its own PASS below, so
+        # the self-test proves the changed instrument still sees every plant.)
+        return 1, ('REFUSE: this is a Simple release (%s), and it changes the instrument that judges it (%s) as well as the '
+                   'app (%s). A release cannot loosen its own lock: ship the instrument change in a release of its own first '
+                   '(one that changes no app file), then this one against it.'
+                   % ('; '.join(why), ', '.join(inst), ', '.join(app[:4]) + (' …' if len(app) > 4 else '')))
     want = source_hash(root)
     try:
         got = open(os.path.join(root, PASS_FILE)).read().split()
@@ -487,7 +583,122 @@ def selftest():
         fails.append('a #NNN mention is read as a second queue item')
     if other_queues('- v17.30 — queue 980 (partial), queue 980 again') != []:
         fails.append('queue 980 twice reads as another item')
+    fails += selftest_repo()
     return fails, n_trig
+
+
+def selftest_repo():
+    """The rules that need a real repository — provenance, the instrument lock, the PASS cache — run against a scratch git
+    repo made here (two releases: an ordinary one, then a Simple one), and the tree edited the ways that went wrong once."""
+    import tempfile, shutil
+    fails = []
+    d = tempfile.mkdtemp(prefix='fu-gate-')
+    env = dict(os.environ)
+    if os.path.exists('/Library/Developer/CommandLineTools/usr/bin/git'):
+        env['DEVELOPER_DIR'] = '/Library/Developer/CommandLineTools'
+    env.update(GIT_AUTHOR_NAME='fu', GIT_AUTHOR_EMAIL='fu@x', GIT_COMMITTER_NAME='fu', GIT_COMMITTER_EMAIL='fu@x')
+
+    def git(*a):
+        return subprocess.run(['git'] + list(a), cwd=d, env=env, capture_output=True, text=True)
+
+    def write(rel, text):
+        p = os.path.join(d, rel)
+        os.makedirs(os.path.dirname(p) or d, exist_ok=True)
+        with io.open(p, 'w', encoding='utf-8') as fh:
+            fh.write(text)
+
+    def gate(log):
+        write('POLISH-LOG.md', LOG0 + log + '\n')
+        return check(d)
+    try:
+        git('init', '-q')
+        LOG0 = '# log\n- v1 — queue 975: an ordinary release\n'
+        A = ['function layerAABB(l, t) {', '  const box = l.box;', '  const sz = layerSizeAt(l, t);', '  return box;', '}',
+             'function after() {', '  return 2;', '}']
+        write('POLISH-LOG.md', LOG0)
+        write('js/app.js', '\n'.join(A) + '\n')
+        write('styles.css', '.a { color: red; }\n')
+        write('index.html', '<!doctype html>\n')
+        write('tools/_fu_compare.py', '# the comparer\n')
+        git('add', '-A')
+        git('commit', '-q', '-m', 'v1')
+        # the Simple release: one line of Full's function rewritten with nothing Simple on it, and a two-line block
+        B = list(A)
+        B[2] = '  const sz = size || layerSizeAt(l, t); if (!sz) return null;'
+        B[3:3] = ['  // the box at its native size', '  if (sz.w > 0) { box.w = sz.w; }']
+        LOG0 = LOG0 + '- v2 — queue 980 (partial): the engine\n'
+        write('POLISH-LOG.md', LOG0)
+        write('js/app.js', '\n'.join(B) + '\n')
+        git('add', '-A')
+        git('commit', '-q', '-m', 'v2')
+        head = git('rev-parse', 'HEAD').stdout.strip()
+        if not is_simple_commit(d, head):
+            fails.append('provenance: a commit whose POLISH-LOG line says queue 980 is not read as a Simple release')
+        if is_simple_commit(d, git('rev-parse', 'HEAD~1').stdout.strip()):
+            fails.append('provenance: an ordinary release is read as a Simple one')
+
+        def edit(lines, log='- v3 — (hunt HIGH #3) a one-line fix'):
+            write('js/app.js', '\n'.join(lines) + '\n')
+            return gate(log)
+        # (1) a hunt fix to the Simple release's line that names nothing Simple: fires (no PASS, so REFUSE)
+        C = list(B); C[2] = '  const sz = size || layerSizeAt(l, t, 1); if (!sz) return null;'
+        code, msg = edit(C)
+        if code != 1 or 'Simple release' not in msg:
+            fails.append('provenance: a hunt fix to a line the Simple release wrote did not fire (%s)' % msg[:120])
+        # (2) …and to an ordinary line next to it: quiet
+        C = list(B); C[1] = '  const box = l.box || null;'
+        code, msg = edit(C)
+        if code != 0 or msg != 'NOT-TRIGGERED':
+            fails.append('provenance: a fix to an ordinary line fired (%s)' % msg[:160])
+        # (3) an insertion INSIDE the Simple block fires; one between two ordinary lines does not
+        C = list(B); C[4:4] = ['  box.n = 1;']
+        if edit(C)[0] != 1:
+            fails.append('provenance: a line inserted inside the Simple release’s block did not fire')
+        C = list(B); C[7:7] = ['  const x = 1;']
+        if edit(C) != (0, 'NOT-TRIGGERED'):
+            fails.append('provenance: a line inserted between two ordinary lines fired')
+        write('js/app.js', '\n'.join(B) + '\n')
+        # (4) the instrument: a Simple release that also changes the comparer is refused for THAT; the lock's own
+        # release (queue 980, the instrument and nothing in the app) is not — it needs its own PASS instead
+        write('tools/_fu_compare.py', '# the comparer, loosened\n')
+        write('js/spine.js', '// Simple\n')
+        code, msg = gate('- v3 — queue 980 (partial): more')
+        if code != 1 or 'instrument' not in msg:
+            fails.append('the instrument lock: a Simple release that also changes the comparer was not refused for it (%s)' % msg[:160])
+        os.remove(os.path.join(d, 'js/spine.js'))
+        code, msg = gate('- v3 — queue 980 (partial): the lock itself')
+        if code != 1 or 'instrument' in msg or 'has not printed PASS' not in msg:
+            fails.append('the instrument lock: an instrument-only release was refused for the wrong reason (%s)' % msg[:200])
+        # (5) the PASS cache: a PASS for this exact tree lets it through; ANY later change to a source refuses it again
+        write(PASS_FILE, source_hash(d) + ' now HEAD=x\n')
+        code, msg = gate('- v3 — queue 980 (partial): the lock itself')
+        if code != 0 or not msg.startswith('OK'):
+            fails.append('the PASS cache: a PASS for the instrument-only tree was not accepted (%s)' % msg[:200])
+        write('tools/_fu_compare.py', '# the comparer\n')    # back to HEAD's: a Simple release with no instrument change
+        code, msg = gate('- v3 — queue 980 (partial): the lock itself')
+        if code != 1 or 'has not printed PASS' not in msg:
+            fails.append('the PASS cache: a PASS taken with a different comparer was accepted (%s)' % msg[:160])
+        write(PASS_FILE, source_hash(d) + ' now HEAD=x\n')
+        code, msg = gate('- v3 — queue 980 (partial): the lock itself')
+        if code != 0 or not msg.startswith('OK'):
+            fails.append('the PASS cache: a PASS for this exact tree was not accepted (%s)' % msg[:200])
+        for rel, text in (('styles.css', '.a { color: red; }\n.b{}\n'), ('js/new-file.js', '//\n'), ('index.html', '<!doctype html><p>\n')):
+            old = io.open(os.path.join(d, rel), encoding='utf-8').read() if os.path.exists(os.path.join(d, rel)) else None
+            write(rel, text)
+            code, msg = gate('- v3 — queue 980 (partial): the lock itself')
+            if code != 1 or 'has not printed PASS' not in msg:
+                fails.append('the PASS cache: a later change to %s did not invalidate it (%s)' % (rel, msg[:160]))
+            if old is None:
+                os.remove(os.path.join(d, rel))
+            else:
+                write(rel, old)
+        if gate('- v3 — queue 980 (partial): the lock itself')[0] != 0:
+            fails.append('the PASS cache: putting the tree back did not restore the PASS (the hash is not a function of the tree)')
+    except Exception as e:
+        fails.append('the repository self-test could not run: %s' % e)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    return fails
 
 
 def main():
