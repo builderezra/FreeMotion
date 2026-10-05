@@ -53786,6 +53786,19 @@
     }
   });
 
+  test('phone top bar omits keyboard help while desktop keeps it (queue 1065)', { item: 'TBD' }, function () {
+    if (document.getElementById('m-help')) throw new Error('the phone keyboard help button is still present');
+    const desktop = document.getElementById('btn-help');
+    if (!desktop || desktop.title !== 'Keyboard shortcuts (?)')
+      throw new Error('the desktop keyboard help button was changed or removed');
+    const top = document.getElementById('topbar-m');
+    const ids = ['ver-m', 'm-notes', 'm-settings', 'm-export'];
+    const children = Array.from(top.children);
+    const positions = ids.map(id => children.indexOf(document.getElementById(id)));
+    if (positions.some((n, i) => n < 0 || (i && n <= positions[i - 1])))
+      throw new Error('the phone version, notes, settings and Export controls lost their order: ' + positions);
+  });
+
   test('a corner drag on a layer scaled to nothing is refused, instead of lifting every scale keyframe off zero (queue 834 u18)', { item: '834' }, async function () {
     /* The scale drag MULTIPLIES the scale it started from, so from 0 there is nothing to multiply: the
        old base of 0.0001 made every product round to zero, the 0.02 floor caught it, and the box never
