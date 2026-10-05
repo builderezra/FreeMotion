@@ -20829,13 +20829,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       while (p && n++ < 64) { if (unitByGroup[p.id]) d++; p = byId[p.parent]; }   // n: the same parent-cycle guard `walk` carries
       u.depth = d;
     });
-    const innerOf = {};      // the DEEPEST unit holding this id — the one that actually draws it
     map = {};                // the SHALLOWEST — the one renderScene dispatches, so the whole nest goes down as one
     units.forEach(u => u.memberIds.forEach(id => {
-      if (!innerOf[id] || u.depth > innerOf[id].depth) innerOf[id] = u;
       if (!map[id] || u.depth < map[id].depth) map[id] = u;
     }));
-    units.forEach(u => { u.innerOf = innerOf; });
+    // Every unit draws only its IMMEDIATE nested unit. Routing all leaves to the deepest unit
+    // skips middle groups once three or more styled groups are nested, then draws their leaves
+    // again at the outer level. A plain transform-only group does not interrupt this ancestry.
+    units.forEach(u => { u.childOwner = Object.create(null); });
+    units.forEach(child => {
+      let p = byId[child.group.parent], n = 0;
+      while (p && n++ < 64) {
+        const parent = unitByGroup[p.id];
+        if (parent) {
+          child.memberIds.forEach(id => { parent.childOwner[id] = child; });
+          break;
+        }
+        p = byId[p.parent];
+      }
+    });
     return map;
   }
   const _mgPool = [];   // one { A, B } per NESTING DEPTH — see collectGroupUnits for why depth is the right index
@@ -20894,7 +20906,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * and then skipped wholesale — its leaves are in OUR memberIds too, and drawing them here as
        * well is the double-composite half of this bug. It goes down at the z-slot of its bottom-most
        * member, which is the same convention renderScene uses for a top-level unit. */
-      const own = u.innerOf && u.innerOf[L.id];
+      const own = u.childOwner && u.childOwner[L.id];
       if (own && own !== u) {
         if (!drawnHere.has(own.group.id)) { drawnHere.add(own.group.id); drawGroupUnit(a, own, t, scene); }
         continue;
