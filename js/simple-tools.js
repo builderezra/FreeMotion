@@ -225,6 +225,8 @@ window.FM = window.FM || {};
       }
       if (e.key === ' ' || e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.stopPropagation();
     });
+    /* …and their keyups: Full's arrow keyup commits a pending nudge, which is not the list's to commit */
+    menu.addEventListener('keyup', e => { if (/^(Arrow|Home$|End$|Escape$|Enter$| $|Backspace$|Delete$)/.test(e.key)) e.stopPropagation(); });
     document.body.appendChild(menu);
     const r = anchor.getBoundingClientRect(), mr = menu.getBoundingClientRect();
     const left = Math.max(8, Math.min(window.innerWidth - mr.width - 8, r.left));

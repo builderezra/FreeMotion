@@ -122515,7 +122515,7 @@
       const items = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i'));
       if (items.length < 2 || document.activeElement !== items[0]) throw new Error('CONTROL: the list did not open with focus on its first choice');
       press('ArrowDown'); await v.sleep(30);
-      if (JSON.stringify(v.L('A').transform.y) !== y0 || v.steps() !== n0) throw new Error('↓ in the list nudged the selected clip’s picture (a hidden canvas edit in Simple)');
+      if (JSON.stringify(v.L('A').transform.y) !== y0 || v.steps() !== n0) throw new Error('↓ in the list nudged the selected clip’s picture or committed a step (a hidden canvas edit in Simple): y ' + y0 + ' → ' + JSON.stringify(v.L('A').transform.y) + ', ' + (v.steps() - n0) + ' step(s)');
       if (document.activeElement !== items[1]) throw new Error('↓ did not move to the next choice');
       press('Backspace'); await v.idle();
       if (!v.L('A') || v.steps() !== n0) throw new Error('Backspace in the list deleted the selected clip');
