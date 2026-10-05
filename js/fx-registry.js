@@ -234,7 +234,9 @@ window.FM = window.FM || {};
         /* A COLOUR ROW INSIDE `params` (#482 polish 1.5, Faded Film's Fade colour). The def-level colour flags can only make
            keys named color…color4; `swatch` gives a colour its own key. It is the same row as every effect colour (type
            'color', keyframable), so the inspector, the load sanitiser (safeColor) and the AI vocabulary need nothing new. */
-        else if (pp.swatch) out.push({ key: pp.key, label: pp.label, type: 'color', default: pp.def || '#ffffff', keyframable: true, follows: pp.follows || '' });
+        /* …and it can be gated like a slider (#482 polish 6.1, Vignette's Colour only counts under Mode Colour): overriddenBy and
+           liveWhen ride this copy too, or the row would look live in Darken and Lighten, where it does nothing. */
+        else if (pp.swatch) { const sw = { key: pp.key, label: pp.label, type: 'color', default: pp.def || '#ffffff', keyframable: true, follows: pp.follows || '' }; if (pp.overriddenBy) { sw.overriddenBy = pp.overriddenBy; sw.liveWhen = pp.liveWhen; } out.push(sw); }
         // `legacy` is the value the RENDERER falls back to when the key is absent, which is not always
         // the schema default (byte-identity: an old instance must keep rendering as it always did).
         // The UI needs it so the highlighted button matches what actually draws.
@@ -245,7 +247,7 @@ window.FM = window.FM || {};
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
         // Radius as 8 on an instance the kernel is drawing at 3.
-        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '' });   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '', alsoGate: pp.alsoGate });   // alsoGate: #482 6.3 review (a second control that switches this one off)   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904
         /* `follows` on a SLIDER (#482 polish 2.1, Wiggle's Vertical amount) is the colour rule of polish 1.2: ABSENT, the value
            is the slider it names. makeInstance and the render-time fill both skip it, and the inspector shows the followed
            value until he moves this one — this copy is a whitelist, so a field not named here would simply not exist. */
@@ -275,7 +277,9 @@ window.FM = window.FM || {};
        inspector's `kfColorRow` (the colour row with a diamond) was already serving stroke and shadow.
        Only effect colours were wired to a plain row and flagged off. ai-ops still gates itself on
        `type === 'range'`, so the AI vocabulary is unaffected by this. */
-    if (def.color)  out.push({ key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: true });
+    /* `colorGate` (#482 polish 6.2): the first colour row gated like color3's — Light and Soft Glow's Glow colour does nothing
+       while Colour from is Source colour, so the row greys out and says why. Set on those two only. */
+    if (def.color) { const c1 = { key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: true }; if (def.colorGate) { c1.overriddenBy = def.colorGate.by; c1.liveWhen = def.colorGate.when; } out.push(c1); }
     /* `follows` (#482 polish 1.2, Light Leak's Leak edge): a colour that, ABSENT, is the colour it names. makeInstance leaves it
        out so a new instance keeps following, and the inspector's row shows the followed colour until he picks one. */
     if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '' });

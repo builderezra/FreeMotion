@@ -1,0 +1,23 @@
+# PWA update and cache review
+
+Snapshot: `28104a3e83e01ac3880db3fac604a7444c7235aa` (`main` at review start)
+
+## Source review
+
+**Confirmed scope risk — activation deletes every Cache Storage cache at the origin except `freemotion-v1`. Severity: low, conditional on the same origin hosting another cached app.** The worker enumerates the origin's cache names and deletes each other name (`sw.js:44-49`, quote: `await Promise.all(keys.map(k => (k === CACHE ? null : caches.delete(k))));`). The worker scope `/FreeMotion/` does not narrow the Cache Storage key list. If the same origin also hosts another app that uses Cache Storage, installing/activating this worker can remove its offline cache. This does not delete that app's IndexedDB or local files, but can make its next offline launch fail or require a refetch. Reproduce by creating a distinct named cache on `builderezra.github.io`, then install/update FreeMotion so a new worker activates; inspect `caches.keys()` afterward. This is a source-derived cross-app side effect, not tested on the deployed origin. Confidence: high for the code path; impact depends on another cached app being present.
+
+## Update path and expected behavior
+
+- On page load the app registers `sw.js` with `updateViaCache: 'none'`, explicitly calls `reg.update()`, and reloads once after a replacement controller takes over if a worker already controlled the page (`index.html:1169-1184`, quote: `if (reg && reg.update) { try { reg.update(); } catch (e) {} }`). During active collaboration, reload is deferred (`index.html:1175-1180`, quote: `if (window.FM && FM.collab && FM.collab.active) { FM.collab.deferReload(); return; }`). This is source review; update timing was not executed in a browser.
+- `sw.js` uses network-first for navigations and falls back to `index-fallback` or the request's cached response (`sw.js:130-175`, quote: `const cached = await c.match('index-fallback') || await c.match(req);`). A fallback shell is tagged with its displayed version (`sw.js:167-175`, quote: `await c.put(STALE_KEY, new Response(m ? m[1] : '?'));`). The app later checks the marker and compares it with the network's current version (`js/app.js:1371-1384`, quote: `const msg = FM.staleShellNotice(hit.v, { latest: latest });`). Expected offline experience: a previously cached build can open; the warning is best-effort because checking the latest version needs a network response. No offline launch was executed here.
+- Assets with a `?v=` query are same-origin cache-first, keyed by their full request URL; new version strings cause cache misses and network fetches (`sw.js:92-96,180-195`, quote: `const hit = await c.match(req);`). Assets without `?v=` go straight to network (`sw.js:180`, quote: `if (!isVersionedAsset(url)) return;`). The HTML currently has versioned styles and script URLs (`index.html:42-43,1045-1128`, representative quote: `<script src="js/app.js?v=468"></script>`).
+- A newly referenced versioned asset that has never been cached cannot be fetched offline; the worker intentionally rethrows instead of returning an empty script (`sw.js:182-194`, quote: `throw err;`). Reproduce by clearing this origin's worker cache, loading the app without network, and observing the first versioned script request fail. This is expected for the documented lazy-fill strategy, not an accidental empty-script response. An old cached HTML shell can still run with its previously cached asset URLs if those are available.
+- Old asset entries for paths still referenced by the current HTML are pruned after a successful navigation only when the `v` query differs (`sw.js:67-89`, quote: `return u.searchParams.get('v') === want ? null : c.delete(r);`). Assets whose paths are not referenced by current HTML are retained (`sw.js:87-88`, quote: `if (want == null) return null;`). Cache pruning was not executed in a browser.
+
+## Mixed HTML/script versions
+
+The version-query scheme makes a URL immutable by convention: if a script changes but its `?v=` is left unchanged, an existing cache hit is served without revalidating (`sw.js:92-96,182-188`, quote: `if (hit) return hit;`). Conversely, if a script's version is incremented but the HTML continues to reference the old URL, the page will keep requesting the old URL. This code-level consequence requires a release where HTML and asset query values are out of sync; I did not reproduce a deployment mismatch.
+
+## Execution record
+
+Read-only source review only. I did not deploy a worker, clear browser caches, simulate an offline launch, or inspect another app's origin cache. Runtime and cross-app impacts remain unverified as stated above.

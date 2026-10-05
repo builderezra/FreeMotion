@@ -77,7 +77,7 @@ function run(argv) {
     const cap = { id: 'cap', type: 'text', name: 'Captions', start: 0, duration: trackEnd, captions: cues };
     const music = { id: 'song', type: 'video', audioOnly: true, name: 'Song', start: 0, duration: trackEnd, trimStart: 0, speed: 1, srcDur: 400,
                     kf: { volume: [{ t: 1, v: 1 }, { t: trackEnd - 1, v: 0.5 }] } };
-    if (adopted) music.sm = { stay: true, tail: true, tailEnd: trackEnd };
+    if (adopted) music.sm = r() < 0.25 ? { stay: true, tail: true, tailEnd: trackEnd } : { stay: true };   // D17 B: sound gets stay alone; a stray tail (old build) must be cleared
     const layers = [cap].concat(extra);
     if (r() < 0.4) layers.push({ id: 'endcard', type: 'text', name: 'The end', text: 'The end', start: trackEnd, duration: 2 });
     clips.slice().reverse().forEach(c => layers.push(c));      // later clips higher in the stack
@@ -164,6 +164,8 @@ function run(argv) {
     if (res.arranges && R1.main.length) {
       const past = docA.layers.filter(l => l.type !== 'camera' && l.type !== 'group' && !E.hasFlag(l, 'tail') && endOf(l) > R1.trackEnd + 1e-9);
       if (!past.length) ok(near(docA.project.duration, R1.trackEnd, 1e-9), tag + ' inv11 duration ' + docA.project.duration + ' vs ' + R1.trackEnd);
+      // D17 B (his pick): a sound never ends with the video, and a sound never changes length because clips moved
+      docA.layers.forEach(l => { if (!l.audioOnly) return; ok(!E.hasFlag(l, 'tail'), tag + ' D17B sound kept a tail flag ' + l.id); });
       docA.layers.forEach(l => { if (E.hasFlag(l, 'tail') && l.sm.tailEnd === R1.trackEnd && !(l.srcDur != null && endOf(l) < R1.trackEnd - 1e-9)) ok(near(endOf(l), R1.trackEnd, 1e-9), tag + ' inv11 tail item ' + l.id + ' end ' + endOf(l)); });
     }
     // inv 12: media stays inside its source
@@ -239,7 +241,7 @@ function run(argv) {
     ok(!L(ed, 'title') && !L(ed, 'c2'), 'Waves and its title are gone');
     ok(near(L(ed, 'c3').start, 3.4), 'Sandcastle closes up to 3.4');
     ok(near(L(ed, 'sticker').start, 3.9) && near(L(ed, 'sticker').kf.scale[0].t, 3.9), 'sticker and its keyframes ride −3.7');
-    ok(near(endOf(L(ed, 'song')), 10.5) && near(ed.doc.project.duration, 10.5), 'music and the video end at 10.5');
+    ok(near(endOf(L(ed, 'song')), 14.2) && near(ed.doc.project.duration, 14.2), 'D17 B: the music keeps its 14.2 s, so the video runs on in black after 10.5');
     ok(!cueAt(ed, 'Listen to that') && !cueAt(ed, 'So cold!'), 'the two cues on Waves are cut');
     const cc = cueAt(ed, 'Castle time'); ok(cc && near(cc[0], 3.7) && near(cc[1], 5.9), 'Castle time cue rides to 3.7');
     undoBack(ed, 'deleteClip');
@@ -249,7 +251,7 @@ function run(argv) {
     ok(r.ok && near(L(ed, 'c1').duration, 2.4), 'Arriving is 2.4 s');
     ok(near(L(ed, 'c2').start, 2.4) && near(L(ed, 'title').start, 2.9), 'Waves and its title move −1.0');
     const q = cueAt(ed, 'First swim of summer'); ok(q && near(q[0], 2.0) && near(q[1], 2.4), 'the straddling cue is cut to the new end');
-    ok(near(endOf(L(ed, 'song')), 13.2), 'music follows the new end');
+    ok(near(endOf(L(ed, 'song')), 14.2) && near(ed.doc.project.duration, 14.2), 'D17 B: the music does not follow the new end');
     undoBack(ed, 'trimTail');
   });
   sample('trimTail slide-back', () => {
@@ -322,7 +324,7 @@ function run(argv) {
     const ed = fresh(); const r = ed.run('insert', { clips: [{ name: 'Ice cream', duration: 2.5, srcDur: 5 }, { name: 'Car home', duration: 3, srcDur: 7 }] });
     const R = E.classify(ed.doc);
     ok(r.ok && R.main.length === 6 && near(R.trackEnd, 19.7), 'two clips appended end to end');
-    ok(near(endOf(L(ed, 'song')), 19.7) && near(ed.doc.project.duration, 19.7), 'the music follows to the new end');
+    ok(near(endOf(L(ed, 'song')), 14.2) && near(ed.doc.project.duration, 19.7), 'D17 B: the music stays 14.2 s; the video is the clips\' 19.7');
     ok(near(endOf(L(ed, 'cap')), 19.7), 'the caption track grows over the new clips');
     const ed2 = fresh(); const r2 = ed2.run('insert', { clips: [{ name: 'Crab', duration: 1.5, srcDur: 4 }], at: 2 });
     ok(r2.ok && near(L(ed2, 'c3').start, 8.6) && near(L(ed2, 'sticker').start, 9.1), 'inserting after Waves pushes Sandcastle and its sticker +1.5');
@@ -362,7 +364,7 @@ function run(argv) {
     ok(R.units.beats.host === null, 'the music stays put');
     const ed = E.editor(doc); const r = ed.run('closeGap', { id: 'm3' });
     ok(r.ok && r.adopted && ed.doc.project.sm.adopted, 'the first arranging edit adopts, in the same step');
-    ok(E.hasFlag(L(ed, 'beats'), 'tail') && near(endOf(L(ed, 'beats')), 20.5), 'the music is fitted to the new end');
+    ok(!E.hasFlag(L(ed, 'beats'), 'tail') && E.hasFlag(L(ed, 'beats'), 'stay') && near(endOf(L(ed, 'beats')), 22), 'D17 B: the music stays put and keeps its length');
     ok(E.hasFlag(L(ed, 'mtitle'), 'stay'), 'the title was pinned');
     ed.undo(); ok(JSON.stringify(ed.doc) === j, 'undo un-adopts byte for byte');
   });

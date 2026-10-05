@@ -4,6 +4,21 @@
 is in the app yet. `DESIGN.md` says *why* (§14 code plan, §14.6 tests, §15 phases, §15.1 the Phase 1 screen, §17 decisions).
 This file says *how*: every change as exact code, anchored on quoted text, with the tests that prove it and what he will see.
 
+**Revised 1 Oct to his rules (REQUESTS #980; DESIGN.md §0.4, §6):** the original editor must not change in design or
+function, the switch is a third block in the ⚙ cog, and a swap that would lose un-undoable work warns first. So: **step 1.1
+("four Full fixes") is withdrawn** (§3; its one new function moves to 1.2); **step 1.3's play-bar ⇄, ⋯ item, back button,
+E key and Settings row are replaced by the cog block** (1.3.18) and the guard in `js/editor-mode.js` (§5.3); and **a "Full
+unchanged" group against HEAD gates every Simple release** (§3.2). Everything marked **NOT RUN** or **RE-ANCHORED, NOT RE-RUN**
+was written on 1 Oct and has not been executed; the rehearsal results below are the 29 Sep version's.
+
+**His answers of 1 Oct are folded in** (DESIGN.md §17 quotes him in full): D15 A is the go-ahead for Phase 1, from this revised
+plan only; D1 A (Simple / Full on every visible word); D11 B, the morph only; D17 B, music runs on in black as in Full; D20 A,
+PC panels inside the left band; everything else he picked is the recommended option. D3 and D14b are re-asked (his A on each
+would change Full), and D18, D22, D23 and D24 are still open. **§1.1 says what can be built now.** **Step 1.2 was re-anchored
+on 1 Oct** against v17.21 (HEAD `28104a3e`, `SCHEMA_REV 6`): every anchor was found exactly once except three in
+`js/collab-core.js`, which batches 1-5 of #482 had moved (1.2.8, 1.2.11, 1.2.12, rewritten below); the hunks were re-found by
+text, NOT re-applied or re-run.
+
 **The tree it was written and checked against:** HEAD `ea1ff320` (v17.12) **plus the uncommitted working tree at v17.13**
 (29 Sep 2026, ~12:30 AWST: `index.html`, `js/app.js`, `js/timeline.js`, `styles.css`, `tests/tests.js` and others were
 modified and not yet committed by the builder). Every anchor below was found **exactly once** in that tree. Line numbers drift
@@ -26,6 +41,10 @@ established is written down below.)
 | The whole suite on the finished copy, at 1280 | **1280: 2,138 / 2,140** and **380: 2,133 / 2,141**; every red re-run alone on both the patched copy and the base: **one real** (`967 B4 1 one name`, fixed, §8), the rest pass alone on both trees (§8) |
 | Screens, 380×667 and 1280×800 | taken and looked at (§5.8); three defects found in the earlier draft of step 1.3 and fixed before this file was written |
 
+**Since 1 Oct the table above describes the 29 Sep version**, not this one: step 1.1's six tests are gone (T15 moved to
+1.2), five 1.3 tests are re-anchored or replaced, and the cog block, the guard and the FU group have never run. Re-prove the
+whole of step 1.3 and the FU group before trusting any number here.
+
 **Not verified, said again where each comes up:** step 1.4 (live sessions) is anchors and a plan, not written or tested code;
 nothing ran on his iPhone or in Safari (Chrome headless only); 375×553 and 440×956 were not shot; `tools/ship.sh` and
 `tools/prove.sh` themselves were not run (the same comparison was run by hand); `SCHEMA_FP` is only right for the tree it was
@@ -41,18 +60,19 @@ test, and fixes what the screens and a review found (§11 lists each change).
 ## 0. The builder's checklist
 
 1. **Only after he says so.** #980 is logged "PLAN (do NOT build)" with `BUILT OUT UNTIL HE says to build the simple mode`.
-   When he says it, paste his words into #980 verbatim, add `HE ANSWERED` (so the classifier lifts the hold), record his D
-   answers there, and add the three step clauses below as a numbered checklist to tick one per release.
+   **He said it on 1 Oct: D15 A**, from this revised plan (DESIGN §17 has his words). Paste his words into #980 verbatim,
+   add `HE ANSWERED` (so the classifier lifts the hold), record his D answers there, and add the three step clauses below as a numbered checklist to tick one per release.
    **Oldest first still applies:** `queue 980 (partial)` closes nothing, so ship.sh's order gate will NOT stop a jump. Build
    a step only when `./tools/next.sh` hands #980 out, unless his go-ahead says now ("asap", "right now"); in that case write
    `JUMPED: he said build the simple mode now (<date>)` into each lower workable entry, as CLAUDE.md asks.
 2. `./tools/tick.sh`, a clean `git status`, then the **preflight** for the step (§2.4): every line must print `1`.
-3. **Ship three releases in order, 1.1 → 1.2 → 1.3**, each one `tools/ship.sh` run with its own POLISH-LOG line saying
+3. **First, the "Full unchanged" group and its `ship.sh` gate (§3.2).** Then **ship two releases in order, 1.2 → 1.3**
+   (1.1 is withdrawn, §3), each one `tools/ship.sh` run, each passing the FU group against HEAD, with its own POLISH-LOG line saying
    **`queue 980 (partial)`** (so ship.sh's close-and-order gates treat it as advancing #980, not closing it), its own `?v=`
-   bumps and its own tests appended at the end of `tests/tests.js`, before the final `})();`. Do not batch them: 1.1 and 1.2
-   change Full, and a rollback must be able to take one back alone.
-4. After 1.3 ships, send him the 380 screenshot sheet (§5.8, split with `tools/phonepages.py` if tall) and one line: *"Turn on
-   Settings → Simple editor, then ⇄ (or E)."*
+   bumps and its own tests appended at the end of `tests/tests.js`, before the final `})();`. Do not batch them, and ship no
+   other queue item in the same release: any difference from HEAD must be Simple's, and a rollback must take one back alone.
+4. After 1.3 ships, send him the 380 screenshot sheet (§5.8, split with `tools/phonepages.py` if tall) and one line: *"Tap ⚙, then
+   the Simple ⇄ Full switch in the new Editor block."*
 5. **Step 1.4** (friends see each other in Simple) is planned, not written (§6). Build it with the same method before
    Phase 2, or ship 1.3's line saying presence is not drawn in Simple yet.
 6. Phases 2–8 are outlines (§10). Each needs its own build plan, written against the tree of its day.
@@ -63,74 +83,99 @@ test, and fixes what the screens and a review found (§11 lists each change).
 
 **What ships:** nothing in the app. He opens the design pages and the decision sheet
 (<https://claude.ai/artifact/9TWddZCGHH1aNyJDiXZbZB>: V10 is the sheet, V11 draws the Phase 1 screen). **What he holds:**
-nothing new. **The gate:** his picks on D1–D21, or "do recommended", and D15 = A.
+nothing new. **The gate:** his picks. **He answered on 1 Oct** (DESIGN §17, verbatim): D15 = A, from this revised plan only.
 
-Phase 1 needs six of the 21. The rest wait for the phase that uses them, so nothing is decided behind his back:
+Phase 1 needs eight of the 24 (D2 is settled by his 1 Oct words: the cog). The rest wait for the phase that uses them, so nothing is decided behind his back:
 
-| D | What it decides in Phase 1 | "Do recommended" uses | Where it lives in this plan |
-|---|---|---|---|
-| **D15** | starting at all | **A: build Phase 1 behind a Settings switch** | this whole file |
-| **D1** | the two names on every Simple word | **A: Simple / Full** | `js/spine-words.js` only (`editor`, `settings`); change the words there and nowhere else |
-| **D2** | where ⇄ sits in Full on a phone | **B: first item inside ⋯, and a back-to-Simple button in ◐'s slot after a switch** | `#vb-editor`, `body.ed-back` in the CSS (§5.7) |
-| **D18** | Simple's play-bar order on a phone | **A: ⋯ · ✂ · ⇄ · \|◀** | the markup order of `#btn-sm-split` / `#btn-editor` (§5.7) |
-| **D16** rows 1 and 5 | the switch glyph; the gap and overlap chips | **A: the set marked recommended on V10** (three clips side by side = Simple, three staggered layer bars = Full; round `1.2s` / `⚠ 0.4s` chips) | the two inline SVGs in `#btn-editor` / `#vb-editor`; `.sm-chip-*` |
-| **D9** | old projects in Simple | **A: open as they are, nothing written** | Phase 1 never writes a flag at all |
+| D | What it decides in Phase 1 | "Do recommended" uses | Where it lives in this plan | His answer (1 Oct) |
+|---|---|---|---|---|
+| **D15** | starting at all | **A: build Phase 1, Full untouched, the switch in the ⚙ cog** | this whole file | **A, decided** (*"D15 A"*) |
+| **D1** | the two names on every Simple word | **A: Simple / Full** | `js/spine-words.js` only (`editor`, `settings`); change the words there and nowhere else | **A, decided** (*"Names: Simple / Full."*) |
+| **D2** | where the switch sits | **SETTLED 1 Oct by his words: the ⚙ cog's third block**; nothing in Full's play bar or ⋯ | 1.3.18, §5.5's cog rules | settled (*"D2 ?"*: not picked) |
+| **D18** | Simple's play-bar order on a phone (rewritten: no switch on it) | **A: ⋯ · ✂ · (gap) · \|◀**, ◐'s slot kept invisible | one CSS rule on `#btn-addside` (§5.7) | **open** (rewritten after he answered *"D18 ?"*) |
+| **D22** | a Settings row gating the cog block | **A: no Settings row** | `GATED` in `js/editor-mode.js`; 1.3.7–1.3.9 only under B | **open** (new) |
+| **D23** | does the cog close after a switch | **A: it closes, unless Canvas holds unapplied picks or Friends is big** | one `setTimeout(cvClose)` in 1.3.18 | **open** (new) |
+| **D24** | short and sideways screens: where the Editor tile goes when the small column has no room (DESIGN §21) | **B (recommended; drawn 1 Oct, DESIGN §6.5, `cog/d24-*.jpg`: the switch and "What should you use?" sit on the cog's own row; Canvas and Friends unchanged)**, once he picks: step 1.3 does not ship until it is, because today's design puts the switch off screen on his phone held sideways | the PC grid rules in §5.5 and one measure in `cvPlace` | **open** (new; options drawn first) |
+| **D16** rows 1 and 5 | the cog block's icon and its two option pictures; the gap and overlap chips | **A: the set marked recommended on V10** (three clips side by side = Simple, three staggered layer bars = Full; round `1.2s` / `⚠ 0.4s` chips) | `ED_ICON` / `ED_PIC` in 1.3.18; `.sm-chip-*` | **A, decided**, applied to the revised rows (row 1 is shown to him with the open decisions before 1.3 ships) |
+| **D9** | old projects in Simple | **A: open as they are, nothing written** | Phase 1 never writes a flag at all | **A, decided** |
 
-**Later:** D4–D8, D10, D14, D17, D19 at Phase 2; D3, D11, D12, D20, D21 at Phase 3; D13 at Phase 6. **If he picks something
-other than recommended on D1, D2, D16 or D18, only the words file, the markup order and the CSS change; the engine does not.**
+**Later phases, with his answers:** Phase 2: D4–D8 A, D10 A, D14 first half A, **D17 B** (music runs on in black, no switch),
+D19 A, all answered. Phase 3: **D11 B** (the morph only), D12 A, **D20 A** (PC panels inside the left band), D21 A, answered;
+**D3 re-asked**. Phase 4–5: **D14b re-asked** (held unless he says B). Phase 6: D13 A, answered. **If he picks something other
+than recommended on D18, D22 or D23, only one CSS rule, `GATED` or one line changes; the engine does not.**
+
+### 1.1 What can be built now (1 Oct, after his answers)
+
+His D15 A is the go-ahead for Phase 1 from this revised plan. What it unblocks, in order:
+
+| Piece | Can it be built now? | Waiting on |
+|---|---|---|
+| **The "Full unchanged" group and its `ship.sh` gate** (§3.2) | **Yes, first.** It needs no decision and guards everything after it | nothing |
+| **Step 1.2, the engine** (§4; nothing on screen, Full identical) | **Yes, right after the FU group.** No decision touches it; re-anchored 1 Oct (`SCHEMA_REV` 6 → 7, `SCHEMA_FP` measured at build time, §4.4) | nothing |
+| **Step 1.3, the view he holds** (§5) | **Can be written and proven now; it does not ship until four more are answered.** D1, D9 and D16 are in | **D18** (Simple's play-bar order), **D22** (a Settings gate or not), **D23** (does the cog close after a switch), **D24** (the switch is off screen on his phone held sideways: options drawn first). Each is one CSS rule, `GATED`, one line or the §5.5 grid; build with the recommended option and change that one place if he picks otherwise |
+| **Step 1.4, friends see each other in Simple** (§6) | **Its build plan can be written now**; no decision touches it | its own plan, then the same method |
+| **Phase 2, editing** | **After Phase 1.** Every pick it needs is in (D4–D8, D10, D14 first half, D17 B, D19); D14b does not hold it, because under either answer arranging stays off while a friend who can edit is in | Phase 1 shipped; its own build plan |
+| **Phase 3, looks and the way in** | After Phase 2. D11 B, D12, D20 A and D21 are in | **D3** (re-asked), for its Create-picker item only; the rest can go without it |
+| **Phases 4–5, moving clips with a friend in** | **No.** Held under his 1 Oct rule | **D14b** (re-asked): built only under B |
+| **Phase 6, transitions** | After Phase 3 (Phases 4–5 are held). D13 A is in | drawn options first (his design rule) |
+
+**D3 and D14b do not hold anything in Phase 1.** D18, D22, D23 and D24 hold only step 1.3's release.
 
 ---
 
 ## 2. Phase 1 at a glance
 
 DESIGN §15 ships Phase 1 as one ~2,200-line release. This plan ships it as **three releases plus a planned fourth**, so each
-is small enough to review, prove and roll back on its own, and the two that change Full land before anything visible.
+is small enough to review, prove and roll back on its own. **Since 1 Oct none of them changes Full**: each passes the FU group
+against HEAD (§3.2), and the old step 1.1 ("four Full fixes") is withdrawn (§3).
 
 | Step | What ships | He sees / holds | Files | New tests | D's |
 |---|---|---|---|---|---|
-| **1.1 Full fixes** | four Full bugs Simple stands on: animated cue effects ride with their caption track (`FM.timedLists`, Q3); the Assistant moving a clip moves its keyframes; Full's split refuses a piece under 0.1 s (Q28); a luma matte or a Follow keeps reading its source after that source is split (§3.10 rule 1) | nothing new on screen; four quiet fixes in Full | scene, ai-ops, app, behaviors, compositor (~70 lines) | 6 | none |
-| **1.2 The engine** | the `sm` sanitiser (layer, project, an effect's marker, `srcW/srcH/srcRev`, `pick`) on every load, import, undo and live batch; `SCHEMA_REV 3`; a copy is never a second main clip; native size and the pick stamp written at add time (not "sound only": §11); `handleFiles(files, {at})`; `FM.worldBox`, `FM.groupNeedsUnit`, `FM.storage.hydrating`; **`js/spine.js`** (the classifier) and **`js/spine-words.js`** | nothing on screen. One Full-visible change: a copy drops `pick` (and `sm.main`, which nothing writes yet) | 2 new files (~490 lines) + storage, compositor, collab-core, app, ai-ops, index.html (~190) | 10 | none |
-| **1.3 The view** | Settings → **Simple editor** (off by default); **`js/editor-mode.js`** (⇄, E, per-device memory, the preview flip); **`js/simple-timeline.js`** (the read-only Simple timeline, `#sm-say`, seam chips, the `+` that lays picks end to end); one dispatch in `FM.timeline.rebuild/updatePlayhead`; the CSS block | **Yes, as a preview** (§5.1) | 2 new files (~460 lines) + CSS (~100) + index, settings, timeline, app, mobile (~100) | 8 | D1, D2, D16 r1/r5, D18 |
-| **1.4 Friends** (planned) | `FM.timeline.host()` so presence, comment marks and media bars draw on Simple's boxes; presence `ed`; Watch along flushes the text editor; the host clamps `project.sm.v` | a friend's pointer and selection on the right clip whichever editor each is in | collab-presence, -comments, -media, -ui, -bridge (~150, **not written or run here**) | T8 live, T12 | none |
+| ~~**1.1 Full fixes**~~ | **withdrawn 1 Oct** (§3): all four changed Full (DESIGN §0.4 B1–B4). Its one new function, `FM.timedLists`, ships in 1.2 | — | — | — | — |
+| **before 1.2: the FU group** | `tests/full-unchanged.html`, `tools/full-unchanged.sh`, the `ship.sh` gate for `queue 980` (§3.2) | nothing; a lock | 2 new files + ship.sh | its self-test | none |
+| **1.2 The engine** | `FM.timedLists` (§3.1, a new function nothing in Full calls); the `sm` sanitiser (layer, project, an effect's marker, `srcW/srcH/srcRev`, `pick`) on every load, import, undo and live batch; `SCHEMA_REV` 6 → 7; a copy is never a second main clip; native size and the pick stamp written at add time (not "sound only": §11); `handleFiles(files, {at})`; `FM.worldBox`, `FM.groupNeedsUnit`, `FM.storage.hydrating`; **`js/spine.js`** (the classifier) and **`js/spine-words.js`** | nothing on screen, and nothing different in Full: a copy dropping `pick` (and `sm.main`, which nothing writes yet) is invisible (DESIGN §0.4 I3, I4), and FU proves it | 2 new files (~490 lines) + scene, storage, compositor, collab-core, app, ai-ops, index.html (~220) | 11 + FU | none |
+| **1.3 The view** | the ⚙ cog's third block (1.3.18) and two read-only getters (1.3.19); **`js/editor-mode.js`** (the one door `request()`, the guard and its warnings, per-device memory; no ⇄, no E); under D22 B only, the Settings row; **`js/simple-timeline.js`** (the read-only Simple timeline, `#sm-say`, seam chips, the `+` that lays picks end to end); one dispatch in `FM.timeline.rebuild/updatePlayhead`; the CSS block | **Yes, as a preview** (§5.1) | 2 new files (~480 lines) + CSS (~200) + index, timeline, app (+~150 for the cog), mobile, crop-tool, touchup-tool (~260); settings only under D22 B | 8 re-anchored + cog T1–T15 + FU | answered: D1 A, D16 A (r1/r5); **open: D18, D22, D23, D24** |
+| **1.4 Friends** (planned) | `FM.timeline.host()` so presence, comment marks and media bars draw on Simple's boxes; presence `ed` (drawn in Simple only); the host clamps `project.sm.v` (Watch along is unchanged, DESIGN §0.4 B24) | a friend's pointer and selection on the right clip whichever editor each is in | collab-presence, -comments, -media, -ui, -bridge (~150, **not written or run here**) | T8 live, T12 | none |
 
-### 2.1 What ships behind Settings → Labs
+### 2.1 What is visible, and the gate (D22)
 
-There is no "Labs" word on screen any more (§17, his #967 audit). The preview is **one row, "Simple editor"**, hint *"See any
-project as clips — an early look."* (not DESIGN's "still being tested": his #967 rule keeps that phrase on *Work with friends*
-alone, and test `967 B4 1 one name` failed on it in the full run; §8), in its own untitled group directly above *Work with friends*, **off by default**,
-saved in the settings whitelist (the #688 trap). **Everything visible in step 1.3 is behind it**: ⇄, E, the ⋯ item, the back
-button, the Simple timeline and `#sm-say`. Off means off: not one rule in the new CSS block matches, `FM.editor.onKey` returns
-before reading the key, every project opens in Full, and turning it off with a project open puts that project in Full at once
-(its card keeps his last pick for when it comes back). **Steps 1.1 and 1.2 are not behind it**: they are Full fixes and
-plumbing every build must share (a rev-2 and a rev-3 build refuse to share a live room, by design).
+**Under D22 A (recommended): no Settings row.** The only thing a person in Full sees is the ⚙ cog's third block (DESIGN §6.1),
+the one change he asked for. Everything else visible in step 1.3 is in Simple, which appears only when he taps the switch:
+the Simple timeline, `#sm-say`, ✂ in slot 2. **"Full means Full"** replaces the old "off means off": with Simple never chosen,
+not one new CSS rule matches outside the cog block (every rule is keyed on `body.ed-simple`, `#canvas-dialog.cv-ed-on` or
+`#cv-editor`), `FM.editor.onKey` answers nothing in Full, every project opens in Full until this device switches it, and the
+FU group proves Full's chrome and edits equal HEAD's (§3.2). **Under D22 B** a "Simple editor" row in Settings (hint *"See any
+project as clips — an early look."*, its own untitled group directly above *Work with friends*, off by default, in the
+settings whitelist, the #688 trap) gates the cog block: off, the cog is today's two blocks exactly. **Step 1.2 is not behind
+anything**: it is plumbing with nothing on screen (a rev-6 and a rev-7 build refuse to share a live room, by design).
 
 ### 2.2 Script order in `index.html` after 1.1–1.3
 
 ```
-js/settings.js      (1.3 bumps)
-js/collab-core.js   (1.2 bumps: SCHEMA_REV 3)
+js/settings.js      (1.3 bumps only under D22 B)
+js/collab-core.js   (1.2 bumps: SCHEMA_REV 6 → 7)
 js/statusbar.js, js/screen.js
-js/scene.js         (1.1 bumps)
+js/scene.js         (1.2 bumps: FM.timedLists)
 js/spine-words.js?v=1   NEW (1.2) — the words; spine.js reads it lazily, so their order is not load-bearing
 js/spine.js?v=1         NEW (1.2) — after scene.js; only calls FM.evalProp / FM.animatedProps at classify time
-js/eases.js, js/masks.js, js/behaviors.js (1.1 bumps), js/media.js, …
-js/compositor.js    (1.1 and 1.2 each bump)
+js/eases.js, js/masks.js, js/behaviors.js, js/media.js, …   (crop-tool.js, touchup-tool.js: 1.3 bumps, the getters)
+js/compositor.js    (1.2 bumps)
 …
 js/timeline.js      (1.3 bumps)
 js/simple-timeline.js?v=1  NEW (1.3) — after timeline.js
 … js/storage.js (1.2 bumps) …
 js/editor-mode.js?v=1      NEW (1.3) — before app.js; wires its buttons at DOMContentLoaded or at once
-js/app.js           (1.1, 1.2 and 1.3 each bump)
-… js/mobile.js (1.3 bumps) … js/ai-ops.js (1.1 and 1.2 each bump)
+js/app.js           (1.2 and 1.3 each bump)
+… js/mobile.js (1.3 bumps) … js/ai-ops.js (1.2 bumps)
 ```
 
 ### 2.3 The `?v=` bumps per step (+1 on whatever the tree has then; `ship.sh` refuses a changed file whose `?v=` did not move)
 
 | Step | Bump | New tags |
 |---|---|---|
-| 1.1 | `scene.js`, `ai-ops.js`, `app.js`, `behaviors.js`, `compositor.js` | none |
-| 1.2 | `storage.js`, `collab-core.js`, `compositor.js`, `app.js`, `ai-ops.js` | `spine-words.js?v=1`, `spine.js?v=1` right after `scene.js` |
-| 1.3 | `settings.js`, `timeline.js`, `app.js`, `mobile.js`, `styles.css` (`styles.css` is the `<link>` in the head) | `simple-timeline.js?v=1` after `timeline.js`; `editor-mode.js?v=1` right before `app.js` |
+| ~~1.1~~ | withdrawn | — |
+| 1.2 | `scene.js`, `storage.js`, `collab-core.js`, `compositor.js`, `app.js`, `ai-ops.js` | `spine-words.js?v=1`, `spine.js?v=1` right after `scene.js` |
+| 1.3 | `timeline.js`, `app.js`, `mobile.js`, `crop-tool.js`, `touchup-tool.js`, `styles.css` (`styles.css` is the `<link>` in the head); `settings.js` only under D22 B | `simple-timeline.js?v=1` after `timeline.js`; `editor-mode.js?v=1` right before `app.js` |
 
 Plus, every release: `index.html`'s version label, its POLISH-LOG line, and the REQUESTS.md summary stamp (ship.sh gates).
 
@@ -140,22 +185,9 @@ These are the first unique line of each anchor. `0` means the tree moved: find t
 hunks, adapt, and say so in #980. `2` means it is no longer unique: widen it with the next quoted line.
 
 ```bash
-# step 1.1
-grep -cF -- '  FM.shiftLayerKeyframes = function (layer, delta) {' js/scene.js
-grep -cF -- '    FM.animatedProps(layer).forEach(p => {' js/scene.js
+# step 1.1: WITHDRAWN (1 Oct). Its one surviving anchor (FM.timedLists, §3.1) is checked with step 1.2:
+# step 1.2   (re-anchored 1 Oct on v17.21, HEAD 28104a3e: all 23 print 1; the collab-core three are SCHEMA_REV 6's)
 grep -cF -- '  /* Generic versions of the above that target ANY container object + key (e.g. an effect'\''s' js/scene.js
-grep -cF -- '      case '\''start'\'': { var st = clampNum(value, 0, 600); if (st == null) return false; layer.start = st; growProject(layer); return true; }' js/ai-ops.js
-grep -cF -- '    if (t <= layer.start + 0.02 || t >= end - 0.02) { if (FM.toast) FM.toast('\''Park the playhead inside the clip to split it'\'', 1800); return; }   // a silent return here felt like a dead button' js/app.js
-grep -cF -- '    const target = FM.layerById(scene, targetId);' js/behaviors.js
-grep -cF -- '  function drawLumaMatte(ctx, layer, t, scene, fx) {' js/compositor.js
-python3 -c "import sys;print(open(sys.argv[1]).read().count(sys.argv[2]), sys.argv[1])" js/compositor.js '    const srcId = fx.params && fx.params.source;
-    const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;'
-python3 -c "import sys;print(open(sys.argv[1]).read().count(sys.argv[2]), sys.argv[1])" js/compositor.js '    const srcId = p.source;
-    const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;'
-grep -cF -- '    const rLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;' js/compositor.js
-grep -cF -- '    const mapLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;' js/compositor.js
-grep -cF -- '      const pool = collide === 2 ? scene.layers : [FM.layerById ? FM.layerById(scene, p.source) : null];' js/compositor.js
-# step 1.2
 grep -cF -- '      l.fillGradient.angle = Math.max(0, Math.min(360, +l.fillGradient.angle || 0));' js/storage.js
 grep -cF -- '    if ('\''thumbPinned'\'' in p && typeof p.thumbPinned !== '\''boolean'\'') p.thumbPinned = false;' js/storage.js
 grep -cF -- '      const out = keepUid(f, { type: f.type, enabled: f.enabled !== false, params: params });' js/storage.js
@@ -163,11 +195,11 @@ grep -cF -- '  FM.storage._sanitizeLayers = sanitizeImportedLayers;   // read by
 grep -cF -- '  function layerAABB(l, t, scene) {' js/compositor.js
 grep -cF -- '  FM._layerAABB = layerAABB;   // suite seam (queue 539)' js/compositor.js
 grep -cF -- '  function collectGroupUnits(scene, t) {' js/compositor.js
-grep -cF -- '  C.SCHEMA_REV = 2;' js/collab-core.js
+grep -cF -- '  C.SCHEMA_REV = 6;' js/collab-core.js
 grep -cF -- '      effects: [{ type: '\''blur'\'', enabled: true, params: { radius: 3 } }],' js/collab-core.js
 grep -cF -- '    const L = C.SCHEMA_FIXTURE();' js/collab-core.js
-grep -cF -- '    return P.cyrb53(P.canon(L) + '\''|'\'' + P.canon(defs) + '\''|'\'' + P.canon(C.OP_GRAMMAR) + '\''|'\'' + der + '\''|r'\'' + C.SCHEMA_REV);' js/collab-core.js
-grep -cF -- '  C.SCHEMA_FP = 7274450401628346;' js/collab-core.js
+grep -cF -- '    return P.cyrb53(P.canon(L) + '\''|'\'' + P.canon(defs) + '\''|'\'' + P.canon(adefs) + '\''|'\'' + P.canon(C.OP_GRAMMAR) + '\''|'\'' + der + '\''|r'\'' + C.SCHEMA_REV);' js/collab-core.js
+grep -cF -- '  C.SCHEMA_FP = 836365476955739;' js/collab-core.js
 grep -cF -- '  FM.addMediaLayer = function (rec) {' js/app.js
 grep -cF -- '    const start = first ? 0 : Math.min(FM.time, P.duration || 0);' js/app.js
 grep -cF -- '    const fit = Math.min(P.width / rec.width, P.height / rec.height);' js/app.js
@@ -182,13 +214,18 @@ python3 -c "import sys;print(open(sys.argv[1]).read().count(sys.argv[2]), sys.ar
 grep -cF -- '    FM.relinkSplitCopies(copies.map(c => ({ src: c.entry.snapshot, copy: c.copy })));   // queue 914.8' js/app.js
 grep -cF -- '            var copy = FM.cloneLayer(layer);' js/ai-ops.js
 grep -cF -- '  <script src="js/scene.js?v=' index.html
-# step 1.3
-grep -cF -- '      <div id="opt-bar" class="hidden" role="group" aria-label="Timeline options">' index.html
+# step 1.3   (1 Oct: the #opt-bar and #btn-tostart anchors went with the ⋯ item and the play-bar ⇄; the cog anchors are v17.21's)
 grep -cF -- '          <button id="btn-layermenu" class="tbtn" title="Layer actions">' index.html
-grep -cF -- '          <button id="btn-tostart" class="tbtn" title="Skip to previous benchmark / clip edge">' index.html
+grep -cF -- "      const cvFrBar = document.getElementById('cv-fr-bar');" js/app.js
+grep -cF -- "      const cvPairLast = () => {" js/app.js
+grep -cF -- "      const cvPairBig = () => (cvDialog.classList.contains('cv-fr-big') ? 'friends' : 'canvas');" js/app.js
+grep -cF -- "      const cvPairSwap = (to) => {" js/app.js
+grep -cF -- "      const openCanvasDialog = (opts) => {" js/app.js
+grep -cF -- "      const cvClose = () => {" js/app.js
 grep -cF -- '      <div id="timeline">' index.html
 grep -cF -- '  <script src="js/timeline.js?v=' index.html
 grep -cF -- '  <script src="js/app.js?v=' index.html
+# the next three: only under D22 B (a Settings row)
 grep -cF -- '    collabLabs: false,' js/settings.js
 grep -cF -- '      ['\''demoMode'\'', '\''showTouches'\'', '\''systemFonts'\'', '\''homeLight'\'', '\''collabLabs'\'', '\''collabCursors'\'', '\''collabSelections'\'', '\''collabCodesOnly'\''].forEach(k => { if (typeof saved[k] === '\''boolean'\'') state[k] = saved[k]; });' js/settings.js
 python3 -c "import sys;print(open(sys.argv[1]).read().count(sys.argv[2]), sys.argv[1])" js/settings.js '    if (FM.collab && FM.collab.ui) {
@@ -205,57 +242,29 @@ grep -cF -- '    function dockSheet() {' js/mobile.js
 
 ---
 
-## 3. Step 1.1: four Full fixes
+## 3. Step 1.1: withdrawn (1 Oct), and what goes first instead
 
-**POLISH-LOG line (template):** `- vX.YY — queue 980 (partial) — the Simple editor's groundwork, four fixes in Full it
-stands on: animated effects on a caption's words now move and re-speed with the caption track (they stayed behind); the
-Assistant moving a clip carries its animation; Full's split refuses a piece shorter than 0.1 s (it could leave a sliver the
-next undo turned into an overlap); a luma matte or a Follow keeps reading its source after that source is split (past the
-cut the matte vanished and the Follow froze).`
+**His rule, 1 Oct:** *"i dont want the original editor changing in design and function … dont do that"* (DESIGN.md §6.0
+has the whole message). Step 1.1 was titled "four Full fixes" and this file's own checklist said *"1.1 and 1.2 change Full"*.
+Every one of the four changes what Full does, so **step 1.1 is withdrawn** (DESIGN §0.4, `AUDIT-FULL-UNTOUCHED.md` §2a). Its
+code and tests are removed from this file (the 29 Sep version is in git history). If he ever wants one of these Full bugs
+fixed, it is its own queue item with his own yes, never a rider on Simple.
 
-**He sees:** nothing new. A caption track with an animated cue effect now keeps the effect with its words when moved; a split
-0.02–0.1 s from a clip's edge now says *"Park the playhead inside the clip to split it"*. **D's:** none. **Behind the
-switch:** no.
+| Was | What it did to Full | Now (DESIGN §0.4) |
+|---|---|---|
+| 1.1.1, 1.1.2 `shiftLayerKeyframes` / `scaleLayerKeyframes` read `FM.timedLists` | moving or re-speeding a caption track in Full moved its animated cue effects (a "deliberate Full behaviour change") | **B2**: both stay on `animatedProps`. Simple gets its own `FM.spine.shiftKeys` / `scaleKeys` (Phase 2, with the runner) |
+| 1.1.3 `FM.timedLists` (a new function) | nothing: no Full code calls it | **kept**, and ships with step 1.2 (§3.1 below) |
+| 1.1.4 `ai-ops` `case 'start'` shifts keys | Full's Assistant moving a clip moved its animation | **B3**: only with `applyOps(…, {simple: true})`, Ask in Simple (Phase 3) |
+| 1.1.5 Full's split guard 0.02 → 0.1 s | a split Full makes today was refused | **B1**: dropped; Simple's ✂ enforces `MIN_LEN` in its own plan builder (Phase 2) |
+| 1.1.6–1.1.12 Follow and layer-reference effect sources through the split lineage (`refLayerAt`) | Full's preview and export rendered differently | **B4**: dropped; Simple's link rule reads the stored id for good (DESIGN §3.10 rule 1) |
+| tests: caption cue effects move, ai-ops start, split floor, luma matte, Follow | asserted the four Full changes | removed with them. T15 (the collector) moves to step 1.2 |
 
-### 3.1 Changes
+### 3.1 What survives: `FM.timedLists`, shipped as the first hunk of step 1.2
 
-#### 1.1.1 `js/scene.js` (line 377 at the start of this step)
+A new function that nothing in Full calls; `animatedProps`, `shiftLayerKeyframes` and `scaleLayerKeyframes` are not touched.
+Bump `scene.js`'s `?v=` in step 1.2.
 
-Find (exactly once):
-
-```js
-  FM.shiftLayerKeyframes = function (layer, delta) {
-    if (!delta) return;
-    FM.animatedProps(layer).forEach(p => p.kf.forEach(k => { k.t += delta; }));
-  };
-```
-
-Replace with:
-
-```js
-  FM.shiftLayerKeyframes = function (layer, delta) {
-    if (!delta) return;
-    FM.timedLists(layer).forEach(p => p.kf.forEach(k => { k.t += delta; }));   // Simple mode P1 (Q3): cue effects ride too
-  };
-```
-
-#### 1.1.2 `js/scene.js` (line 409 at the start of this step)
-
-Find (exactly once):
-
-```js
-    FM.animatedProps(layer).forEach(p => {
-      if (p === layer.speed) return;   // the ramp describes the re-timing; it must not be re-timed by it
-```
-
-Replace with:
-
-```js
-    FM.timedLists(layer).forEach(p => {   // Simple mode P1 (Q3): cue effects stretch with the clip too
-      if (p === layer.speed) return;   // the ramp describes the re-timing; it must not be re-timed by it
-```
-
-#### 1.1.3 `js/scene.js` (line 602 at the start of this step)
+#### 1.1.3 `js/scene.js` (line 602 at the start of this step; v17.13 tree, re-find by the quoted text)
 
 Find (exactly once):
 
@@ -270,9 +279,9 @@ Replace with:
   /* ═══ EVERY TIMED KEYFRAME LIST ON A LAYER — animatedProps PLUS each caption cue's own effects (Simple mode
    * Phase 1, DESIGN.md §10.4 "one collector", Q3). A cue's effect keyframes are evaluated at raw project time
    * (compositor effectiveFx concatenates cue.effects and reads them with FM.evalProp(p, t)), so they are on the
-   * same absolute clock as every other key — but animatedProps never listed them, and moving or re-speeding a
-   * caption track left its animated cue effects behind at the old time. shiftLayerKeyframes and
-   * scaleLayerKeyframes read THIS, so the two cannot disagree about what moves.
+   * same absolute clock as every other key — but animatedProps never listed them.
+   * NOTHING IN FULL CALLS THIS (DESIGN.md §0.4 B2): Full's shiftLayerKeyframes / scaleLayerKeyframes stay on
+   * animatedProps exactly as before. Simple's own shift (FM.spine.shiftKeys, Phase 2) and the wire form read it.
    * animatedProps itself is unchanged on purpose: its 18 callers (clip diamonds, the keyframe clipboard, loop
    * modes, splitAnimated) address keys through grammars that have no form for a cue effect.
    * `{cues: false}` gives animatedProps' lists only (the Phase 2 rider procedure needs that split). */
@@ -291,165 +300,11 @@ Replace with:
    * params), so effect parameters / future props are keyframe-able just like transform. */
 ```
 
-#### 1.1.4 `js/ai-ops.js` (line 116 at the start of this step)
-
-Find (exactly once):
+#### Its test (append with step 1.2's tests, at the end of `tests/tests.js`, before the final `})();`)
 
 ```js
-      case 'start': { var st = clampNum(value, 0, 600); if (st == null) return false; layer.start = st; growProject(layer); return true; }
-```
-
-Replace with:
-
-```js
-      case 'start': { var st = clampNum(value, 0, 600); if (st == null) return false; var dSt = st - (layer.start || 0); layer.start = st; if (dSt && FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(layer, dSt); growProject(layer); return true; }   // Simple mode P1: keyframes are absolute time — a moved clip carries its animation (DESIGN.md §14.2, the ai-ops start fix)
-```
-
-#### 1.1.5 `js/app.js` (line 4905 at the start of this step)
-
-Find (exactly once):
-
-```js
-    if (t <= layer.start + 0.02 || t >= end - 0.02) { if (FM.toast) FM.toast('Park the playhead inside the clip to split it', 1800); return; }   // a silent return here felt like a dead button
-```
-
-Replace with:
-
-```js
-    /* 0.1 s, not 0.02 (Simple mode P1, DESIGN.md Q28): a half under 0.1 s is below every other floor in the app (trim,
-       FM.trimLayerHead, Simple's MIN_LEN) and only 0.05 s above sanitizeTiming's, so the next undo or host fix could turn a
-       1-frame half into an overlap. The message is the same one, because the answer is the same: move inside the clip. */
-    if (t <= layer.start + 0.1 || t >= end - 0.1) { if (FM.toast) FM.toast('Park the playhead inside the clip to split it', 1800); return; }   // a silent return here felt like a dead button
-```
-
-#### 1.1.6 `js/behaviors.js` (line 240 at the start of this step)
-
-Find (exactly once):
-
-```js
-    const target = FM.layerById(scene, targetId);
-    if (!target || !target.transform) return base;
-    const mult = num(params.mult, 1), offset = num(params.offset, 0), delay = num(params.delay, 0);
-```
-
-Replace with:
-
-```js
-    const mult = num(params.mult, 1), offset = num(params.offset, 0), delay = num(params.delay, 0);
-    /* THROUGH THE SPLIT LINEAGE (Simple mode P1, DESIGN.md §3.10 rule 1). A split hands the target's keys past the cut to
-       its second half, so reading the stored id froze a Follow at the first half's last key for the rest of the clip.
-       FM.clipAt returns the stored layer untouched for a target that was never split (one property read). */
-    const target = FM.clipAt ? FM.clipAt(scene, targetId, t - delay) : FM.layerById(scene, targetId);
-    if (!target || !target.transform || target.id === layer.id) return base;
-```
-
-#### 1.1.7 `js/compositor.js` (line 8438 at the start of this step)
-
-Find (exactly once):
-
-```js
-  function drawLumaMatte(ctx, layer, t, scene, fx) {
-```
-
-Replace with:
-
-```js
-  /* THE ONE LOOKUP FOR A LAYER-REFERENCE EFFECT'S SOURCE (Simple mode P1, DESIGN.md §3.10 rule 1). Luma Matte, Compound
-     Blur, Match Grade, the displacement maps and the collide source each did `scene.layers.find(l => l.id === srcId)`,
-     so after the source was SPLIT the matte read the first half past the cut — whose window had ended — and drawLayer
-     returned early: the matted layer vanished from the cut on, with no error. FM.clipAt picks the half that covers `t`
-     (one property read for a source that was never split); the self-reference guard is kept. */
-  function refLayerAt(scene, srcId, t, selfId) {
-    if (!srcId || !scene || !scene.layers) return null;
-    const l = FM.clipAt ? FM.clipAt(scene, srcId, t) : scene.layers.find(x => x.id === srcId);
-    return (l && l.id !== selfId) ? l : null;
-  }
-  FM._refLayerAt = refLayerAt;   // suite seam
-
-  function drawLumaMatte(ctx, layer, t, scene, fx) {
-```
-
-#### 1.1.8 `js/compositor.js` (line 8460 at the start of this step)
-
-Find (exactly once):
-
-```js
-    const srcId = fx.params && fx.params.source;
-    const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
-    // No matte chosen yet is not an error
-```
-
-Replace with:
-
-```js
-    const srcId = fx.params && fx.params.source;
-    const mLayer = refLayerAt(scene, srcId, t, layer.id);
-    // No matte chosen yet is not an error
-```
-
-#### 1.1.9 `js/compositor.js` (line 8541 at the start of this step)
-
-Find (exactly once):
-
-```js
-    const srcId = p.source;
-    const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
-```
-
-Replace with:
-
-```js
-    const srcId = p.source;
-    const mLayer = refLayerAt(scene, srcId, t, layer.id);
-```
-
-#### 1.1.10 `js/compositor.js` (line 8627 at the start of this step)
-
-Find (exactly once):
-
-```js
-    const rLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
-```
-
-Replace with:
-
-```js
-    const rLayer = refLayerAt(scene, srcId, t, layer.id);
-```
-
-#### 1.1.11 `js/compositor.js` (line 8716 at the start of this step)
-
-Find (exactly once):
-
-```js
-    const mapLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
-```
-
-Replace with:
-
-```js
-    const mapLayer = refLayerAt(scene, srcId, t, layer.id);
-```
-
-#### 1.1.12 `js/compositor.js` (line 8153 at the start of this step)
-
-Find (exactly once):
-
-```js
-      const pool = collide === 2 ? scene.layers : [FM.layerById ? FM.layerById(scene, p.source) : null];
-```
-
-Replace with:
-
-```js
-      const pool = collide === 2 ? scene.layers : [refLayerAt(scene, p.source, t, layer.id)];
-```
-
-### 3.2 Tests (append at the end of `tests/tests.js`, before the final `})();`)
-
-```js
-  /* ═══ SIMPLE MODE, PHASE 1 STEP 1.1 — THE FOUR FULL FIXES THE SIMPLE EDITOR STANDS ON (queue 980 (partial); BUILD-PLAN.md) ═══
-     Each is a Full-editor bug today, independent of Simple, and each test drives the path the app itself uses. */
+  /* ═══ SIMPLE MODE, PHASE 1 — THE ONE KEYFRAME COLLECTOR (queue 980 (partial); BUILD-PLAN.md §3.1). A new function only:
+     Full's own shifters do not read it (DESIGN.md §0.4 B2). */
 
   /* The generic walk the collector is checked against: EVERY {kf:[…]} container anywhere under the layer. It is
      deliberately not a copy of the collector — it knows nothing about which fields exist — so a list the collector
@@ -497,114 +352,74 @@ Replace with:
     var a = FM.animatedProps(C), w = smAllKfLists(C);
     if (a.length !== w.length || w.some(function (p) { return a.indexOf(p) < 0; })) throw new Error('CONTROL: without cue effects the generic walk (' + w.length + ') and animatedProps (' + a.length + ') still disagree — the walk is not a fair judge');
     if (FM.timedLists && FM.timedLists(L, { cues: false }).length !== FM.animatedProps(L).length) throw new Error('timedLists(layer, {cues:false}) is not animatedProps');
-  });
-
-  test('simple P1 · moving or re-speeding a caption track carries its animated cue effects (a Full fix)', { item: '980' }, function () {
-    var L = smKitchenSink();
-    var cueKey = L.captions[0].effects[0].params.radius.kf[0], nestKey = L.captions[1].effects[0].effects[0].params.radius.kf[1];
-    var tx = L.transform.x.kf[0];
-    FM.shiftLayerKeyframes(L, 3);   // what every Full mover calls: the clip drag, the Start field, paste, template insert
-    if (Math.abs(tx.t - 4) > 1e-9) throw new Error('CONTROL: the transform key did not move with the clip (' + tx.t + ') — the shift itself is broken');
-    if (Math.abs(cueKey.t - 4.5) > 1e-9) throw new Error('a cue effect key stayed at ' + cueKey.t + ' when its caption track moved 3 s (want 4.5): the blur plays before its words appear');
-    if (Math.abs(nestKey.t - 7.5) > 1e-9) throw new Error('a cue effect inside a filter stayed at ' + nestKey.t + ' (want 7.5)');
-    /* …and a speed change stretches them about the clip start, like every other key. The track now starts at 4. */
-    L.start = 4;
-    FM.scaleLayerKeyframes(L, 0.5);
-    if (Math.abs(cueKey.t - 4.25) > 1e-9) throw new Error('a 2x speed-up left a cue effect key at ' + cueKey.t + ' (want 4.25)');
-  });
-
-  test('simple P1 · the Assistant moving a clip carries its keyframes (ai-ops start)', { item: '980' }, function () {
-    var L = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 20, shapeH: 20, fill: '#fff' });
-    L.start = 1; L.duration = 2; L.name = 'SM_AIMOVE';
-    L.transform.x = { kf: [{ t: 1, v: 0, e: 'linear' }, { t: 3, v: 100, e: 'linear' }] };
-    var layers0 = FM.scene.layers.slice();
-    FM.scene.layers.push(L);
-    try {
-      var r = FM.aiOps.applyOps([{ op: 'setProp', ref: L.id, path: 'start', value: 5 }]);
-      if (!r || r.appliedCount !== 1) throw new Error('setProp start was not applied: ' + JSON.stringify(r && r.dropped));
-      if (L.start !== 5) throw new Error('CONTROL: the start did not change (' + L.start + ')');
-      var ks = L.transform.x.kf.map(function (k) { return k.t; });
-      if (Math.abs(ks[0] - 5) > 1e-9 || Math.abs(ks[1] - 7) > 1e-9) throw new Error('the clip moved to 5 s but its slide stayed at [' + ks.join(', ') + '] (want [5, 7]) — the animation is left behind');
-      var r2 = FM.aiOps.applyOps([{ op: 'setProp', ref: L.id, path: 'start', value: 5 }]);   // a no-op move moves nothing
-      if (r2.appliedCount !== 1 || L.transform.x.kf[0].t !== ks[0]) throw new Error('a move to the same start shifted the keys');
-    } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); try { FM.refreshAll(); } catch (e) {} }
-  });
-
-  test('simple P1 · Full split refuses a half shorter than 0.1 s, and still splits inside (Q28)', { item: '980' }, async function () {
-    var fx = importFixture();
-    try {
-      var L = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 20, shapeH: 20, fill: '#fff' });
-      L.start = 1; L.duration = 2;
-      FM.scene.layers.push(L); FM.scene.project.duration = 3;
-      FM.time = 1.05;                                  // 0.05 s in: HEAD split here and left a 0.05 s clip
-      await FM.splitLayer(L.id);
-      if (FM.scene.layers.length !== 1) throw new Error('a split 0.05 s from the start made ' + FM.scene.layers.length + ' layers — a 0.05 s half is below every other floor and the sanitiser will fight it');
-      if (!fx.toasts.some(function (m) { return /Park the playhead inside the clip/.test(m); })) throw new Error('the refused split said nothing: ' + JSON.stringify(fx.toasts));
-      FM.time = 2.95;
-      await FM.splitLayer(L.id);
-      if (FM.scene.layers.length !== 1) throw new Error('a split 0.05 s from the end went through');
-      FM.time = 1.5;                                   // POSITIVE CONTROL: inside the clip it still splits
-      await FM.splitLayer(L.id);
-      if (FM.scene.layers.length !== 2) throw new Error('CONTROL: a split 0.5 s inside the clip did not split (' + FM.scene.layers.length + ' layers)');
-    } finally { fx.restore(); }
-  });
-
-  test('simple P1 · a luma matte keeps reading its source past the cut after the source is split (a Full fix)', { item: '980' }, function () {
-    /* The matte: red square T on top, matted by a full-frame white source split at 2 s into A (0-2) and B (2-4). */
-    var A = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#ffffff' });
-    A.id = 'sm11_matteA'; A.start = 0; A.duration = 2; A.splitOf = 'sm11_lin';
-    var B = JSON.parse(JSON.stringify(A)); B.id = 'sm11_matteB'; B.start = 2; B.duration = 2;
-    var T = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 80, fill: '#ff0000' });
-    T.start = 0; T.duration = 4; T.effects = [{ type: 'lumamatte', enabled: true, params: { source: A.id } }];
-    var s = scene([T, A, B], { project: { width: 320, height: 240, fps: 30, duration: 4, background: '#000000' } });
-    var at = function (t) { var c = offscreen(320, 240), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, s, t); return px(g, 160, 120); };
-    var red = function (p) { return p[0] > 180 && p[1] < 80 && p[2] < 80; };
-    var p1 = at(1), p3 = at(3);
-    if (!red(p1)) throw new Error('CONTROL: before the cut the matted square is not red (' + [p1[0], p1[1], p1[2]] + ') — the fixture does not show a matte at all');
-    if (!red(p3)) throw new Error('past the cut the matted square vanished (' + [p3[0], p3[1], p3[2]] + '): the matte read the first half, whose window has ended');
-  });
-
-  test('simple P1 · a Follow keeps following its target past the cut after the target is split (a Full fix)', { item: '980' }, function () {
-    /* F follows the split target's x. A's keys end at 2 s (x 100); B carries 2 s → 4 s (100 → 300). */
-    var fx = importFixture();
-    try {
-      var TA = FM.makeLayer('shape', { shape: 'rect', x: 0, y: 0, shapeW: 10, shapeH: 10, fill: '#fff' });
-      TA.id = 'sm11_folA'; TA.start = 0; TA.duration = 2; TA.splitOf = 'sm11_fl';
-      TA.transform.x = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 100, e: 'linear', split: 1 }] };
-      var TB = JSON.parse(JSON.stringify(TA)); TB.id = 'sm11_folB'; TB.start = 2; TB.duration = 2;
-      TB.transform.x = { kf: [{ t: 2, v: 100, e: 'linear', split: 1 }, { t: 4, v: 300, e: 'linear' }] };
-      var F = FM.makeLayer('shape', { shape: 'rect', x: 0, y: 0, shapeW: 10, shapeH: 10, fill: '#fff' });
-      F.start = 0; F.duration = 4; F.behaviors = [{ type: 'follow', prop: 'x', enabled: true, params: { targetId: TA.id, mult: 1, offset: 0, delay: 0 } }];
-      FM.scene.layers.push(F, TA, TB);
-      var v1 = FM.behaviorValue(F, 'x', 0, 1), v3 = FM.behaviorValue(F, 'x', 0, 3);
-      if (Math.abs(v1 - 50) > 1e-6) throw new Error('CONTROL: before the cut the follower reads ' + v1 + ' (want 50)');
-      if (Math.abs(v3 - 200) > 1e-6) throw new Error('past the cut the follower reads ' + v3 + ' (want 200): it froze on the first half’s last key');
-    } finally { fx.restore(); }
+    /* FULL IS UNTOUCHED (DESIGN.md §0.4 B2): Full's own shift still moves exactly animatedProps' lists, so a caption
+       track moved in Full leaves its cue effects where they were, as on HEAD. */
+    var F = smKitchenSink(), cueKey = F.captions[0].effects[0].params.radius.kf[0];
+    FM.shiftLayerKeyframes(F, 3);
+    if (Math.abs(F.transform.x.kf[0].t - 4) > 1e-9) throw new Error('CONTROL: Full’s shift did not move the transform key — the shift itself is broken');
+    if (Math.abs(cueKey.t - 1.5) > 1e-9) throw new Error('Full’s shiftLayerKeyframes now moves cue effects (' + cueKey.t + ', want 1.5 as on HEAD) — a Full behaviour change, DESIGN §0.4 B2');
   });
 ```
 
-**Existing tests 1.1 could break:** any test that splits within 0.1 s of a clip edge (the old floor was 0.02 s), and any
-test asserting a caption track's cue-effect keys stay put when the track moves. §8 has what the whole suite said.
+(Its "fails before" message is the 29 Sep one, §7.1. The last clause passes on HEAD by design: it pins Full's behaviour, and
+the mutation that would make it fail is exactly the withdrawn 1.1.1.)
+
+### 3.2 Before step 1.2 ships: the "Full unchanged" group and its gate (DESIGN §0.4.5)
+
+Nothing in step 1.2 is visible, but it touches shared files (`storage.js`, `compositor.js`, `collab-core.js`, `app.js`,
+`ai-ops.js`), so the group must exist before it ships. **Written as a plan here; none of it is written or run yet.**
+
+1. **`tests/full-unchanged.html`** (new; plain page in the suite's folder, loads the app in an iframe exactly as
+   `tests/run.html` does). It builds the FU fixture project through the real app (3 clips from in-memory canvases, a text, a
+   song, a caption track with an animated cue effect, a group), then runs FU1–FU7 (DESIGN §0.4.5) and writes one JSON record
+   per screen: the layout record (every visible element's id / class path, rect rounded to 0.5 px, text, `aria-label`,
+   `title`, and display, visibility, opacity, color, background-color, font-size, transform), and, for FU2–FU5, the state after
+   each step (the project JSON with only `FU_INVISIBLE` masked, history depth, the toast text, the selection, `FM.time`, frame
+   hashes at three times). Synthetic pointer events only on attached elements (re-acquire after anything that rebuilds).
+2. **`tools/full-unchanged.sh`** (new): waits for the builder to be idle (no `.ship-in-progress`, `.mutation-in-progress`,
+   `.spotcheck-in-progress`); `git archive HEAD | tar -x -C "$TMP/head"` (no worktree, no stash); two free ports in
+   8790–8799 (checked with `lsof`); `tools/serve.sh` on each; `tests/_cdp.py` on each at `--width 380` (380×800) and
+   `--width 1280` (1280×800) with `?only=` the probe; compares the records (exact) and the PNGs (tolerance measured first by
+   rendering HEAD against itself twice; both numbers written into the script); prints PASS or the first differences by name;
+   kills both servers and every Chrome it started on a trap. **Self-test on every run:** a scratch copy with a 1 px margin added
+   to `#transport`, one toast word changed, and `js/app.js`'s split floor moved to 0.1 s must each turn it red, or it will not
+   print PASS. `FU_INVISIBLE` (the only document keys allowed to differ after a Full edit) is one list at the top of the
+   script, each entry citing its DESIGN §0.4.3 row: `srcW`, `srcH`, `srcRev` (I2), `pick` (I3), `sm.twin` (I5); and by name
+   `SCHEMA_REV` / `SCHEMA_FP` (N1). **The same list, and only it, masks the op payloads FU4 compares** (an `li` op carries the
+   whole layer, so a Full add now carries `srcW`; without the mask FU4 is red for an invisible field, and the temptation is to
+   loosen it by hand: DESIGN §21 F9). FU6 runs at every size in DESIGN §0.4.5 FU6 (§21 added the short and sideways ones).
+3. **`tools/ship.sh`**: when the newest POLISH-LOG line says `queue 980`, **or the diff against HEAD touches a Simple-owned file
+   (`js/spine.js`, `js/spine-words.js`, `js/simple-timeline.js`, `js/editor-mode.js`, `js/simple-tools.js`) or adds a line
+   matching `isSimple|ed-simple|FM\.editor|FM\.spine|simpleTimeline|cv-ed|cv-editor|sm-` to any other `js/*.js`,
+   `styles.css` or `index.html`** (DESIGN §21 F10: a Simple fix logged under a hunt or a later queue number would otherwise
+   skip the lock), refuse unless `tools/full-unchanged.sh` printed PASS
+   on this tree (cache the PASS by a hash of the sources, as `tools/mutate.sh` caches its green tree), and refuse if that line
+   names any other `queue NNN` (a Simple release ships alone, so any difference from HEAD is Simple's).
+
+**What he sees:** nothing; it is a lock. **Proof that the lock works:** its own self-test, plus one deliberate run of
+step 1.2 with the withdrawn 1.1.5 applied (a 0.1 s split floor) that must be refused, recorded in #980.
 
 ---
 
 ## 4. Step 1.2: the engine (nothing on screen)
 
 **POLISH-LOG line (template):** `- vX.YY — queue 980 (partial) — the Simple editor's engine, with nothing on screen yet:
-FM.spine reads any project as a main track of clips (js/spine.js, js/spine-words.js); the sanitiser keeps the Simple
-editor's keys in one shape on every load, import, undo and live batch (SCHEMA_REV 3: your phone and your Mac both need this
+FM.spine reads any project as a main track of clips (js/spine.js, js/spine-words.js; FM.timedLists, a collector nothing in
+Full calls); the sanitiser keeps the Simple
+editor's keys in one shape on every load, import, undo and live batch (SCHEMA_REV 7: your phone and your Mac both need this
 version before you next share live); a duplicate, paste or Assistant copy is never a second main clip; a clip remembers its
 size at add time and a pick of several files remembers it was one pick.`
 
-**He sees:** nothing. **D's:** none. **Behind the switch:** no.
+**He sees:** nothing, and Full behaves exactly as on HEAD (the FU group, §3.2, must pass). **D's:** none. **Behind the
+switch:** no. **Also in this release:** §3.1's `FM.timedLists` hunk and its T15 test, applied first.
 
-**The one thing that needs care: `SCHEMA_REV` 2 → 3.** A v17.x phone and this build will refuse to share a live room (the
+**The one thing that needs care: `SCHEMA_REV` 6 → 7** (+1 on whatever the tree has; each #482 polish batch has bumped it). A v17.x phone and this build will refuse to share a live room (the
 existing "update to join" path, `921 S7`). That is the gate working, but **both of his devices must be on the new build before
 he next shares live**. The template line says so.
 
 ### 4.1 Changes
 
-#### 1.2.1 `js/storage.js` (line 1537 at the start of this step)
+#### 1.2.1 `js/storage.js` (line 1542 at the start of this step)
 
 Find (exactly once):
 
@@ -719,7 +534,7 @@ Replace with:
     sanitizeSmProject(p);   // Simple mode P1 (§2.3): project.sm — v, adopted, home, muteClips, mrev, unknown plain keys kept
 ```
 
-#### 1.2.3 `js/storage.js` (line 1501 at the start of this step)
+#### 1.2.3 `js/storage.js` (line 1500 at the start of this step)
 
 Find (exactly once):
 
@@ -734,7 +549,7 @@ Replace with:
       if (f.sm === 1) out.sm = 1;   // Simple mode P1: "added in Simple" (§8.5c) — kept only as exactly 1, top level and children alike
 ```
 
-#### 1.2.4 `js/storage.js` (line 1730 at the start of this step)
+#### 1.2.4 `js/storage.js` (line 1655 at the start of this step)
 
 Find (exactly once):
 
@@ -751,23 +566,23 @@ Replace with:
   FM.storage.hydrating = function () { return !!_hydrating; };
 ```
 
-#### 1.2.5 `js/compositor.js` (line 12830 at the start of this step)
+#### 1.2.5 `js/compositor.js` (line 14823 at the start of this step; re-anchored 1 Oct: the size is now the crop at `t`, `layerSizeAt`)
 
 Find (exactly once):
 
 ```js
   function layerAABB(l, t, scene) {
-    const sz = FM.layerSize ? FM.layerSize(l) : null; if (!sz) return null;
+    const sz = layerSizeAt(l, t); if (!sz) return null;
 ```
 
-Replace with:
+Replace with (every existing caller passes three arguments, so Full's boxes are unchanged):
 
 ```js
   function layerAABB(l, t, scene, size) {
-    const sz = size || (FM.layerSize ? FM.layerSize(l) : null); if (!sz) return null;
+    const sz = size || layerSizeAt(l, t); if (!sz) return null;
 ```
 
-#### 1.2.6 `js/compositor.js` (line 12847 at the start of this step)
+#### 1.2.6 `js/compositor.js` (line 14840 at the start of this step)
 
 Find (exactly once):
 
@@ -781,11 +596,11 @@ Replace with:
   FM._layerAABB = layerAABB;   // suite seam (queue 539)
   /* THE WORLD BOX (Simple mode P1, DESIGN.md §5.2 fillsFrame): a layer's axis-aligned box in project px at `t`, through
      its whole parent chain (the compositor's own CTM), for an explicit native `size` — so the classifier and the renderer
-     cannot drift apart. `size` omitted = FM.layerSize (the cropped size), exactly what layerAABB always returned. */
+     cannot drift apart. `size` omitted = layerSizeAt(l, t) (the crop at t), exactly what layerAABB returns today. */
   FM.worldBox = function (layer, t, scene, size) { return layerAABB(layer, t, scene, size); };
 ```
 
-#### 1.2.7 `js/compositor.js` (line 15687 at the start of this step)
+#### 1.2.7 `js/compositor.js` (line 17863 at the start of this step)
 
 Find (exactly once):
 
@@ -800,24 +615,24 @@ Replace with:
   function collectGroupUnits(scene, t) {
 ```
 
-#### 1.2.8 `js/collab-core.js` (line 29 at the start of this step)
+#### 1.2.8 `js/collab-core.js` (line 42 at the start of this step; re-anchored 1 Oct, v17.21)
 
-Find (exactly once):
-
-```js
-  C.SCHEMA_REV = 2;
-```
-
-Replace with:
+Find (exactly once; the line closes the comment block that logs batches 1-5's bumps, which stays as it is):
 
 ```js
-  /* 3 — Simple mode Phase 1 (DESIGN.md §2.3, §14.2): the sanitiser now puts `layer.sm`, `project.sm`, an effect's `sm`
-     marker and the plain helper fields (srcW/srcH/srcRev, pick) in canonical form. A rev-2 build keeps them untouched,
-     so the two would normalise one project to two documents; the fixture below carries each, and SM_V is hashed in. */
-  C.SCHEMA_REV = 3;
+  C.SCHEMA_REV = 6;
 ```
 
-#### 1.2.9 `js/collab-core.js` (line 152 at the start of this step)
+Replace with (if a later batch has moved it past 6, use +1 on what is there and say so in the comment):
+
+```js
+  /* Bumped to 7 by Simple mode Phase 1 (DESIGN.md §2.3, §14.2): the sanitiser now puts `layer.sm`, `project.sm`, an
+     effect's `sm` marker and the plain helper fields (srcW/srcH/srcRev, pick) in canonical form. A rev-6 build keeps them
+     untouched, so the two would normalise one project to two documents; the fixture below carries each, and SM_V is hashed in. */
+  C.SCHEMA_REV = 7;
+```
+
+#### 1.2.9 `js/collab-core.js` (line 162 at the start of this step)
 
 Find (exactly once):
 
@@ -837,18 +652,18 @@ Replace with:
       audioFx: [{ type: 'reverb', enabled: true, params: {} }],
       behaviors: [{ type: 'wiggle', prop: 'x', enabled: true, params: {} }],
       speed: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 2, e: 'easeIn' }] },
-      // Simple mode (SCHEMA_REV 3): junk, a plain unknown sub-key and a newer build's object sub-key, side by side
+      // Simple mode (SCHEMA_REV 7): junk, a plain unknown sub-key and a newer build's object sub-key, side by side
       sm: { main: 'yes', stay: true, row: 2, future: { a: 1 } }, srcW: 1920, srcH: -4, srcRev: 0, pick: { b: 'pk1', i: 2, x: 1 }
     }];
   };
-  /* …and a project carrying Simple's project keys (SCHEMA_REV 3): `home` any string ≤ 32 is kept, `v` clamped, junk dropped. */
+  /* …and a project carrying Simple's project keys (SCHEMA_REV 7): `home` any string ≤ 32 is kept, `v` clamped, junk dropped. */
   const SCHEMA_PROJECT_FIXTURE = function () {   // not on C: the S0 test pins FM.collab's exports
     return { width: 320, height: 240, fps: 30, duration: 4, background: '#000000',
              sm: { v: 1.4, home: 'nope', adopted: 'yes', mrev: -1, later: { a: [1, 2] } } };
   };
 ```
 
-#### 1.2.10 `js/collab-core.js` (line 218 at the start of this step)
+#### 1.2.10 `js/collab-core.js` (line 221 at the start of this step)
 
 Find (exactly once):
 
@@ -866,36 +681,37 @@ Replace with:
     if (FM.storage._clampProjectDims) FM.storage._clampProjectDims(PJ);
 ```
 
-#### 1.2.11 `js/collab-core.js` (line 227 at the start of this step)
+#### 1.2.11 `js/collab-core.js` (line 236 at the start of this step; re-anchored 1 Oct: batch 3 added the audio-effect term `adefs`)
 
 Find (exactly once):
 
 ```js
-    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV);
+    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV);
 ```
 
-Replace with:
+Replace with (the `adefs` term stays exactly where it is):
 
 ```js
-    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV +
+    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV +
                     '|p' + P.canon(PJ) + '|smv' + (FM.SM_V || 0));   // SM_V moves only with a SCHEMA_REV bump (§2.3)
 ```
 
-#### 1.2.12 `js/collab-core.js` (line 233 at the start of this step)
+#### 1.2.12 `js/collab-core.js` (line 241 at the start of this step; re-anchored 1 Oct)
 
-Find (exactly once):
-
-```js
-  C.SCHEMA_FP = 7274450401628346;
-```
-
-Replace with:
+Find (exactly once; match on `  C.SCHEMA_FP = `, since the number and its comment are whatever the last batch pinned):
 
 ```js
-  C.SCHEMA_FP = 4276424858841693;   // Simple mode P1 (SCHEMA_REV 3) — measured by the gate test at ea1ff320 + BUILD-PLAN step 1.2; RE-MEASURE on the tree you ship
+  C.SCHEMA_FP = 836365476955739;   // #482 polish batch 5 (SCHEMA_REV 6): eight grading effects gained controls
 ```
 
-#### 1.2.13 `js/app.js` (line 3013 at the start of this step)
+Replace with the number §4.4's gate prints on the patched tree (the 29 Sep value, `4276424858841693`, was for v17.13 at
+SCHEMA_REV 3 and is wrong now; there is no measured value for v17.21 yet, so do not paste one from this file):
+
+```js
+  C.SCHEMA_FP = <printed by the gate>;   // Simple mode P1 (SCHEMA_REV 7): measured by `921 S1 the schema fingerprint gate` on the tree shipped
+```
+
+#### 1.2.13 `js/app.js` (line 3028 at the start of this step)
 
 Find (exactly once):
 
@@ -909,7 +725,7 @@ Replace with:
   FM.addMediaLayer = function (rec, opts) {   // opts (Simple mode P1): { at: seconds, pick: {b, i} } — Simple's + lays a pick end to end
 ```
 
-#### 1.2.14 `js/app.js` (line 3040 at the start of this step)
+#### 1.2.14 `js/app.js` (line 3055 at the start of this step)
 
 Find (exactly once):
 
@@ -926,7 +742,7 @@ Replace with:
     const layer = FM.makeLayer(rec.kind, {
 ```
 
-#### 1.2.15 `js/app.js` (line 3046 at the start of this step)
+#### 1.2.15 `js/app.js` (line 3060 at the start of this step)
 
 Find (exactly once):
 
@@ -951,7 +767,7 @@ Replace with:
     FM.media.set(layer.id, rec);
 ```
 
-#### 1.2.16 `js/app.js` (line 3118 at the start of this step)
+#### 1.2.16 `js/app.js` (line 3125 at the start of this step)
 
 Find (exactly once):
 
@@ -972,7 +788,7 @@ Replace with:
   FM.addTextLayer = function () {
 ```
 
-#### 1.2.17 `js/app.js` (line 5466 at the start of this step)
+#### 1.2.17 `js/app.js` (line 5473 at the start of this step)
 
 Find (exactly once):
 
@@ -986,7 +802,7 @@ Replace with:
   FM._handleFiles = function (files, opts) { return handleFiles(files, opts); };
 ```
 
-#### 1.2.18 `js/app.js` (line 5482 at the start of this step)
+#### 1.2.18 `js/app.js` (line 5489 at the start of this step)
 
 Find (exactly once):
 
@@ -1022,7 +838,7 @@ Replace with:
     };
 ```
 
-#### 1.2.19 `js/app.js` (line 4411 at the start of this step)
+#### 1.2.19 `js/app.js` (line 4417 at the start of this step)
 
 Find (exactly once):
 
@@ -1039,7 +855,7 @@ Replace with:
     FM.scene.layers.splice(Math.max(0, idx), 0, ...inserts);
 ```
 
-#### 1.2.20 `js/app.js` (line 4512 at the start of this step)
+#### 1.2.20 `js/app.js` (line 4517 at the start of this step)
 
 Find (exactly once):
 
@@ -1072,19 +888,19 @@ Replace with:
 ```
 
 #### 1.2.22 `index.html` (line 1055 at the start of this step)
-> `?v=` numbers here are the tree's on 29 Sep. Match the tag by its path and keep the rule: the file this step changes gets +1 on whatever is there; a new file starts at `?v=1`.
+> `?v=` numbers here are the tree's on 29 Sep (re-anchored 1 Oct to v17.21's `?v=118`; the +1 bump is §2.3's). Match the tag by its path and keep the rule: the file this step changes gets +1 on whatever is there; a new file starts at `?v=1`.
 
 
 Find (exactly once):
 
 ```html
-  <script src="js/scene.js?v=119"></script>
+  <script src="js/scene.js?v=118"></script>
 ```
 
 Replace with:
 
 ```html
-  <script src="js/scene.js?v=119"></script>
+  <script src="js/scene.js?v=118"></script>
   <script src="js/spine-words.js?v=1"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
   <script src="js/spine.js?v=1"></script>         <!-- Simple mode P1: FM.spine, the read side — after scene.js, before compositor/storage -->
 ```
@@ -1103,13 +919,28 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
   FM.spineWords = {
-    editor: {
-      simple: 'Simple', full: 'Full',
-      toSimple: 'Switch to Simple editor', toFull: 'Switch to Full editor',   // ⇄ names its ACTION (§8.10 item 1)
-      back: 'Back to Simple editor',                                          // D2-B: the back button in Full's slot 3
-      menuSimple: 'Simple editor', menuFull: 'Full editor'                     // the item inside Full's ⋯ (D2-B)
+    editor: {   // the ⚙ cog's third block (DESIGN.md §6; 1 Oct: no ⇄ in any play bar, no ⋯ item, no back button)
+      simple: 'Simple', full: 'Full', title: 'Editor',
+      toSimple: 'Switch to Simple editor', toFull: 'Switch to Full editor',   // the switch names its ACTION (§8.10 item 1)
+      liveSimple: 'Simple editor', liveFull: 'Full editor',                   // the polite live region after a switch
+      what: 'What should you use?', youreIn: 'You’re in ', here: 'You’re here',
+      simpleText: 'Clips one after another, with text, captions and music. Gaps close up by themselves. Best for a quick video, or if you’ve never edited.',
+      fullText: 'Everything FreeMotion does: layers anywhere, keyframes, masks, 3D and every effect. For animation, and anything Simple can’t do.',
+      note: 'Same project in both. Nothing is converted, and you can switch back any time.',
+      firstSimple: 'Simple editor. Switch back any time from the ⚙ cog.',     // Simple only; arriving in Full shows nothing (§0.4 V4)
+      refuse: { export: 'Wait for the export to finish', recording: 'Close the recorder first', busy: 'One moment…', drag: '', unsettled: 'Finish or close the open tool first' },
+      warn: {   // DESIGN §6.4: a switch that would lose un-undoable work asks first
+        title: 'Switch to ',
+        crop: 'Your crop isn’t applied yet. Switching closes the crop tool, and Undo can’t bring the box back.',
+        touchup: 'Your touch-up isn’t applied yet. Switching closes it, and Undo can’t bring the box back.',
+        pen: 'Your drawing isn’t finished. Switching closes the pen, and Undo can’t bring the points back.',
+        penShort: 'Your drawing has only 2 points, so it can’t be kept. Switching throws it away.',
+        redo: function (n) { return 'Switching saves what you just did as a step, so Redo can’t bring back the ' + (n === 1 ? 'step' : n + ' steps') + ' you undid.'; },
+        ok: { crop: 'Apply crop and switch', touchup: 'Apply touch-up and switch', pen: 'Finish drawing and switch', redo: 'Switch anyway' },
+        okAnyway: 'Switch anyway', okSeveral: 'Apply them and switch', stay: 'Stay'
+      }
     },
-    settings: {
+    settings: {   // only under D22 B (a Settings row gating the cog block)
       label: 'Simple editor',
       hint: 'See any project as clips — an early look.'   // NOT 'still being tested': #967's rule keeps that phrase on Work with friends alone (test 967 B4 1). Phase 2: 'Edit clip after clip — an early look.'
     },
@@ -1206,7 +1037,8 @@ window.FM = window.FM || {};
   /* ═══ THE ONE THING THAT TOUCHES `sm` ON A COPY (§12.2 route table, T6). Keep-routes (import, use-as-new, project
      duplicate, detach, Save my version, checkpoint restore, split) keep every byte, so they never call this. Strip-routes
      (duplicate, paste, extract audio, AI clone) make a copy that is NOT a second main clip and NOT a second track-end
-     song: `sm.main` and `sm.tail` go (a copied song keeps `sm.stay`), and `pick` goes (a copy was not in the pick).
+     item: `sm.main` and `sm.tail` go (a copied watermark keeps `sm.stay`), and `pick` goes (a copy was not in the pick).
+     (A song never carries `sm.tail`: D17 B, music runs on in black as in Full.)
      Returns the copies, for chaining. */
   S.STRIP_ROUTES = ['duplicate', 'paste', 'extract', 'aiClone'];
   S.onCopy = function (copies, route) {
@@ -1594,7 +1426,8 @@ window.FM = window.FM || {};
 
 ### 4.4 Re-measure `SCHEMA_FP` on the tree you ship
 
-`4276424858841693` was measured on the scratch copy (the tree above + 1.1 + 1.2). It hashes the sanitiser's output on a
+`4276424858841693` was measured on the 29 Sep scratch copy (v17.13 + 1.1 + 1.2, `SCHEMA_REV 3`) and is **stale**: batches 1-5 of
+#482 added effect and audio parameters and moved the revision to 6. There is no value for v17.21 + 1.2; measure it. It hashes the sanitiser's output on a
 fixture, **every registered effect's parameter definitions**, the op grammar and the derived writers, so an effect added or
 changed before 1.2 ships gives a different number. Run the gate alone and paste the number its failure prints (never the
 other way round):
@@ -1677,13 +1510,13 @@ python3 tests/_cdp.py --url 'http://localhost:8777/tests/run.html?only=921%20S1%
     if (JSON.stringify(n) !== n0) throw new Error('CONTROL: a layer with no Simple keys was changed by the sanitiser');
   });
 
-  test('simple P1 · T6 copy routes: duplicate, paste and the Assistant clone never make a second main clip or a second end song', { item: '980' }, async function () {
+  test('simple P1 · T6 copy routes: duplicate, paste and the Assistant clone never make a second main clip or a second end watermark', { item: '980' }, async function () {
     var fx = importFixture();
     try {
       var A = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 20, shapeH: 20, fill: '#fff' });
       A.id = 'sm6_main'; A.start = 0; A.duration = 2; A.sm = { main: true, row: 2 }; A.pick = { b: 'pk9', i: 0 };
       var S = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 20, shapeH: 20, fill: '#0f0' });
-      S.id = 'sm6_song'; S.start = 0; S.duration = 9; S.sm = { stay: true, tail: true, tailEnd: 9 };
+      S.id = 'sm6_mark'; S.start = 0; S.duration = 9; S.sm = { stay: true, tail: true, tailEnd: 9 };
       FM.scene.layers.push(A, S); FM.scene.project.duration = 9;
       var before = new Set(FM.scene.layers.map(function (l) { return l.id; }));
       var fresh = function () { return FM.scene.layers.filter(function (l) { return !before.has(l.id); }); };
@@ -1694,7 +1527,7 @@ python3 tests/_cdp.py --url 'http://localhost:8777/tests/run.html?only=921%20S1%
       };
       await FM.duplicateLayer(A.id);            check('duplicate', fresh()[0], '{"row":2}'); fresh().forEach(function (l) { before.add(l.id); });
       await FM.duplicateLayer(A.id, true);      check('duplicate in place', fresh()[0], '{"row":2}'); fresh().forEach(function (l) { before.add(l.id); });
-      await FM.duplicateLayer(S.id);            check('duplicate of the end song', fresh()[0], '{"stay":true}'); fresh().forEach(function (l) { before.add(l.id); });
+      await FM.duplicateLayer(S.id);            check('duplicate of the end watermark', fresh()[0], '{"stay":true}'); fresh().forEach(function (l) { before.add(l.id); });
       FM.scene.selectedIds = [A.id]; FM.scene.selectedId = A.id;
       FM.copySelection(); await FM.pasteClipboard();
       check('paste', fresh()[0], '{"row":2}'); fresh().forEach(function (l) { before.add(l.id); });
@@ -1704,7 +1537,7 @@ python3 tests/_cdp.py --url 'http://localhost:8777/tests/run.html?only=921%20S1%
       check('Assistant clone', ai, '{"row":2}');
       /* CONTROL: the ORIGINALS keep every byte — the strip is on the copy only. */
       if (JSON.stringify(A.sm) !== '{"main":true,"row":2}' || !A.pick) throw new Error('CONTROL: the original main clip lost its flags: ' + JSON.stringify(A.sm));
-      if (JSON.stringify(S.sm) !== '{"stay":true,"tail":true,"tailEnd":9}') throw new Error('CONTROL: the original song lost its flags');
+      if (JSON.stringify(S.sm) !== '{"stay":true,"tail":true,"tailEnd":9}') throw new Error('CONTROL: the original watermark lost its flags');
     } finally { fx.restore(); }
   });
 
@@ -1886,7 +1719,7 @@ python3 tests/_cdp.py --url 'http://localhost:8777/tests/run.html?only=921%20S1%
     if (hits.length) throw new Error('another company’s name is in Simple’s words: ' + hits.join(' · '));
     const n = scan({ a: 'Lay them out like CapCut' }, 'control', []);
     if (n.length !== 1) throw new Error('CONTROL: the scan did not catch a planted brand name');
-    const ids = ['btn-editor', 'btn-sm-split', 'vb-editor', 'sm-timeline', 'sm-say'];
+    const ids = ['btn-sm-split', 'sm-timeline', 'sm-say', 'cv-editor'];   // 1 Oct: the switch is the cog's (#cv-editor, built when the cog opens)
     const dom = ids.map(id => document.getElementById(id)).filter(Boolean).map(e => e.textContent + ' ' + (e.getAttribute('aria-label') || '') + ' ' + (e.title || '')).join(' ');
     if (BRANDS.test(dom)) throw new Error('a company name is in the Simple editor’s controls: ' + dom.match(BRANDS)[0]);
   });
@@ -1917,20 +1750,23 @@ now drops `pick`). §8 has what the whole suite said.
 
 ## 5. Step 1.3: the view he holds
 
-**POLISH-LOG line (template):** `- vX.YY — queue 980 (partial) — the Simple editor, as a preview: Settings → Simple editor
-(off by default). With it on, ⇄ on the play bar (or E) shows any project as clips — the clip row, text and overlays above
-it, sound below it, a chip wherever clips don't meet — without changing the project. Tap anything to edit it in the usual
+**POLISH-LOG line (template):** `- vX.YY — queue 980 (partial) — the Simple editor, as a preview: the ⚙ cog has a third
+block, Editor — a Simple ⇄ Full switch and "What should you use?", which opens it big like Canvas settings and Friends. The
+switch shows any project as clips — the clip row, text and overlays above it, sound below it, a chip wherever clips don't
+meet — without changing the project, and asks first if switching would lose an unapplied crop, touch-up or drawing.
+Full is unchanged. Tap anything to edit it in the usual
 panels. Splitting, deleting and closing gaps say "comes in the next update · Open in Full". The + at the end of the clips
 lays new files end to end. (A friend's pointer is not drawn in Simple yet.)`
 
-**D's used:** D1 A, D2 B, D16 rows 1 and 5 A, D18 A. **Behind the switch:** everything in this step.
+**D's used:** D1 A, D16 rows 1 and 5 A, D18 A, D22 A, D23 A (D2 is settled: the cog). **Behind the switch:** everything in
+Simple; the cog block itself is visible in Full (under D22 B, only once the Settings row is on).
 
 ### 5.1 What he sees and holds (phone at 380 px; the PC has the same pieces)
 
-- **Switch off (default):** today's app, plus one Settings row.
-- **Switch on, in Full:** on a phone, ⋯ opens with **Simple editor** as its first item (D2-B); on PC, ⇄ sits in the play
-  bar's left group. **E** switches on both.
-- **In Simple:** the play bar's left group reads **⋯ · ✂ · ⇄ · |◀** (D18-A), ✂ dimmed. Under it, fixed rows: the ruler, the
+- **In Full:** today's app exactly, plus the ⚙ cog's third block: small, it is the **Simple ⇄ Full** switch and **What should
+  you use?**; Canvas settings and Friends sit where they sit today (DESIGN §0.4 gives the one measured cost on short phones).
+  One tap on the switch, and the cog closes onto Simple.
+- **In Simple:** the play bar's left group reads **⋯ · ✂ · (gap) · |◀** (D18 A: no switch on it), ✂ dimmed. Under it, fixed rows: the ruler, the
   sections box (captions, text, overlays, Behind lowest; higher on screen = in front), the **clip row** (56 px filmstrips),
   the **sound** row, and the 52 px **`#sm-say`** row where Simple speaks, blank when idle. The picture is a little smaller
   than in Full on a small phone (the stage clamp keeps room for a panel; 180 px tall at 380×667). Every clip sits at the same
@@ -1940,27 +1776,13 @@ lays new files end to end. (A friend's pointer is not drawn in Simple yet.)`
 - **Delete / Backspace on a main clip, ✂, A / S / D, ⌘D on a main clip, a seam chip:** one line in `#sm-say` with a real
   **Open in Full** button, nothing changed. Delete on anything that is not a main clip is today's delete.
 - **`+` at the end of the clip row:** the picker; the files land end to end from the end of the main track.
-- **After Simple → Full on a phone:** a back-to-Simple button stands in ◐'s slot until he goes back (D2-B).
+- **After Simple → Full** (the cog, or Open in Full): plain Full; the cog's switch takes him back.
 
 ### 5.2 Changes to existing files
 
-#### 1.3.1 `index.html` (line 514 at the start of this step)
+#### 1.3.1 ~~`index.html`: the Simple editor item in Full's ⋯ strip~~ — WITHDRAWN 1 Oct
 
-Find (exactly once):
-
-```html
-      <div id="opt-bar" class="hidden" role="group" aria-label="Timeline options">
-        <div id="vb-rate">
-```
-
-Replace with:
-
-```html
-      <div id="opt-bar" class="hidden" role="group" aria-label="Timeline options">
-        <!-- Simple mode P1, D2-B: the editor switch is the FIRST item inside ⋯ in Full on a phone; shown only with the Settings preview on -->
-        <button id="vb-editor" class="vb-btn vb-editor" type="button" aria-label="Simple editor" title="Simple editor"><svg viewBox="0 0 24 24" fill="none"><rect x="1.5" y="6.5" width="6.4" height="11" rx="1.8" fill="currentColor" stroke="none"/><rect x="8.8" y="6.5" width="6.4" height="11" rx="1.8" fill="currentColor" stroke="none"/><rect x="16.1" y="6.5" width="6.4" height="11" rx="1.8" fill="currentColor" stroke="none"/></svg><span>Simple editor</span></button>
-        <div id="vb-rate">
-```
+It put a new item in Full's `#opt-bar` (DESIGN §0.4 V1). Full's ⋯ strip stays exactly as it is; FU1 checks it against HEAD.
 
 #### 1.3.2 `index.html` (line 537 at the start of this step)
 
@@ -1973,26 +1795,15 @@ Find (exactly once):
 Replace with:
 
 ```html
-          <!-- Simple mode P1: ✂ in slot 2 of Simple's row, dimmed and inert until Phase 2 (D18-A: ⋯ · ✂ · ⇄ · |◀) -->
+          <!-- Simple mode P1: ✂ in slot 2 of Simple's row, dimmed and inert until Phase 2 (D18 A: ⋯ · ✂ · (gap) · |◀); hidden in Full -->
           <button id="btn-sm-split" class="tbtn sm-only" type="button" aria-disabled="true" aria-label="Split at the line" title="Split at the line (S)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.5" y2="15.5"/><line x1="8.5" y1="8.5" x2="20" y2="20"/></svg></button>
           <button id="btn-layermenu" class="tbtn" title="Layer actions">
 ```
 
-#### 1.3.3 `index.html` (line 549 at the start of this step)
+#### 1.3.3 ~~`index.html`: the play-bar ⇄ `#btn-editor`~~ — WITHDRAWN 1 Oct
 
-Find (exactly once):
-
-```html
-          <button id="btn-tostart" class="tbtn" title="Skip to previous benchmark / clip edge">
-```
-
-Replace with:
-
-```html
-          <!-- Simple mode P1: ⇄ the editor switch. Slot 3 in Simple; in Full on a phone only as D2-B's back button after a switch; always in the left group on PC. The icon is the editor you are IN (§8.10). -->
-          <button id="btn-editor" class="tbtn" type="button" data-ed="full" aria-label="Switch to Simple editor" title="Switch to Simple editor (E)"><svg viewBox="0 0 24 24" class="tco ed-ico-s" fill="none"><rect x="1.5" y="6.5" width="6.4" height="11" rx="1.8" fill="currentColor" stroke="none"/><rect x="8.8" y="6.5" width="6.4" height="11" rx="1.8" fill="currentColor" stroke="none"/><rect x="16.1" y="6.5" width="6.4" height="11" rx="1.8" fill="currentColor" stroke="none"/></svg><svg viewBox="0 0 24 24" class="tco ed-ico-f" fill="none"><rect x="2" y="3" width="13" height="4.6" rx="1.5" fill="currentColor" stroke="none"/><rect x="7" y="9.7" width="15" height="4.6" rx="1.5" fill="currentColor" stroke="none"/><rect x="4" y="16.4" width="11" height="4.6" rx="1.5" fill="currentColor" stroke="none"/></svg></button>
-          <button id="btn-tostart" class="tbtn" title="Skip to previous benchmark / clip edge">
-```
+The switch is the ⚙ cog's third block in both editors (1.3.18; DESIGN §6.1). No switch is added to the play bar, so slot 3
+of Simple's row is ◐'s slot kept invisible (D18 A, §5.5).
 
 #### 1.3.4 `index.html` (line 597 at the start of this step)
 
@@ -2062,9 +1873,12 @@ Find (exactly once):
 Replace with:
 
 ```html
-  <script src="js/editor-mode.js?v=1"></script>   <!-- Simple mode P1: FM.editor — the switch, key E, per-device memory; before app.js -->
+  <script src="js/editor-mode.js?v=1"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
   <script src="js/app.js?v=467"></script>
 ```
+
+**1.3.7–1.3.9 are built only under D22 B** (a Settings row gating the cog block; DESIGN §0.4 V7). Under D22 A (recommended)
+skip them: `js/settings.js` is not touched, and `GATED` stays `false` in `js/editor-mode.js`.
 
 #### 1.3.7 `js/settings.js` (line 58 at the start of this step)
 
@@ -2078,8 +1892,8 @@ Replace with:
 
 ```js
     collabLabs: false,
-    /* Simple mode P1 (DESIGN.md §15.1): the Simple editor preview. OFF is a promise: with it off there is no ⇄, no E, no
-       Editor row, and every project opens in Full. In the saved-keys whitelist below from day one — the #688 trap. */
+    /* Simple mode P1, D22 B only (DESIGN.md §6.1): the Simple editor gate. OFF is a promise: with it off the cog has no
+       Editor block and every project opens in Full. In the saved-keys whitelist below from day one — the #688 trap. */
     simpleEditor: false,
 ```
 
@@ -2111,8 +1925,8 @@ Replace with:
 
 ```js
     /* SIMPLE EDITOR PREVIEW (Simple mode P1, DESIGN.md §15.1, decided in §17): its own untitled group directly above Work
-       with friends. The word "Labs" appears nowhere. Flipping it goes through apply() → FM.editor's settings listener, which
-       puts the open project in Full at once when it goes off (its card untouched) and back in its own editor when it comes on. */
+       with friends (D22 B only). The word "Labs" appears nowhere. Flipping it off goes through FM.editor.request (the guard:
+       it asks before closing a tool that holds work, never discards) and puts the open project in Full (its card untouched). */
     if (FM.editor) {
       const sw = (FM.spineWords && FM.spineWords.settings) || {};
       const smg = group(toggleRow(sw.label || 'Simple editor', sw.hint || 'See any project as clips — an early look.', 'simpleEditor'));
@@ -2216,8 +2030,8 @@ Find (exactly once):
 Replace with:
 
 ```js
-      /* SIMPLE MODE P1: E switches editor; in Simple, the arranging keys with no Simple command yet say so rather than do
-         Full's thing to a main clip (DESIGN.md §15.1). A no-op returning false with the Settings preview off. */
+      /* SIMPLE MODE P1: in Simple, the arranging keys with no Simple command yet say so rather than do Full's thing to a
+         main clip (DESIGN.md §15.1). In Full it answers NOTHING: there is no E key (DESIGN.md §0.4 B14). */
       if (!inEdit && FM.editor && FM.editor.onKey && FM.editor.onKey(e)) return;
       if (mod && (e.key === 'z' || e.key === 'Z')) {
         if (inEdit) return; // let field text-undo
@@ -2283,44 +2097,174 @@ Replace with:
       if (!isPhone() || !document.body.classList.contains('m-editing')) { insp.style.top = ''; insp.style.maxHeight = ''; return; }
 ```
 
+#### 1.3.18 `js/app.js`: the ⚙ cog's third block (DESIGN §6.1; COG-DESIGN.md §2–§6, §9.2) — NEW 1 Oct, NOT RUN
+
+This replaces the withdrawn 1.3.1 / 1.3.3 (Full's ⋯ item and the play-bar ⇄). The layout and the words were rendered in the
+real app at v17.21 by a throwaway prototype injected through `tools/shot.py` (COG-DESIGN §12; pictures in
+`tools/design/plans/simple-mode/cog/`); **this code was written from that prototype and from reading `js/app.js:8340-8630` at
+v17.21, and has not been run.** Anchors are v17.21's; re-find each by its quoted text. Built with `createElement` and
+`textContent` only; the two pictures and the icon are fixed SVG strings (no user data ever reaches `innerHTML`).
+
+**(a) After** `const cvFrBar = document.getElementById('cv-fr-bar');` **add** the block, built only when `FM.editor.enabled()`
+(always, under D22 A) and dropped when it is not:
+
+```js
+      /* THE THIRD BLOCK (Simple mode, his rule of 1 Oct: "the option to switch between the two editors should be in the settings
+         cog, making a third section in there … stays small unless you want the explanation"). Small: one switch and a "What should
+         you use?" button. Big: the explanation. Same pair rule: one block big, the others small (DESIGN.md §6.1). */
+      let cvEd = null, cvEdBar = null, cvEdBody = null, cvEdSwitched = false;
+      const cvEdOn = () => !!(FM.editor && FM.editor.enabled && FM.editor.enabled());
+      const ED_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M8 14h5M8 10v9"/></svg>';
+      const ED_PIC = { simple: '<svg viewBox="0 0 64 34" aria-hidden="true"><rect x="1" y="13" width="19" height="11" rx="2" fill="currentColor" opacity=".9"/><rect x="22" y="13" width="14" height="11" rx="2" fill="currentColor" opacity=".9"/><rect x="38" y="13" width="25" height="11" rx="2" fill="currentColor" opacity=".9"/><rect x="5" y="4" width="22" height="6" rx="3" fill="currentColor" opacity=".45"/><rect x="1" y="27" width="62" height="5" rx="2.5" fill="currentColor" opacity=".3"/></svg>',
+                       full: '<svg viewBox="0 0 64 34" aria-hidden="true"><rect x="16" y="1" width="30" height="6" rx="2" fill="currentColor" opacity=".55"/><rect x="4" y="9" width="24" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="26" y="17" width="34" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="25" width="40" height="6" rx="2" fill="currentColor" opacity=".7"/></svg>' };
+      const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+      const edW = () => (FM.spineWords && FM.spineWords.editor) || {};
+      const edSwitch = big => {
+        const w = edW(), b = el('button', 'ed-sw' + (big ? ' big' : ''));
+        b.type = 'button';
+        b.append(el('span', 'ed-k'), el('span', 'ed-l ed-l-s', w.simple || 'Simple'), el('span', 'ed-x', '⇄'), el('span', 'ed-l ed-l-f', w.full || 'Full'));
+        b.querySelector('.ed-k').setAttribute('aria-hidden', 'true'); b.querySelector('.ed-x').setAttribute('aria-hidden', 'true');
+        /* A tap on the switch never opens or swaps the block (as #cv-mini-app at :7138); it asks FM.editor (§6.4). */
+        b.addEventListener('click', async e => {
+          e.stopPropagation();
+          const to = FM.editor.mode() === 'simple' ? 'full' : 'simple';
+          if (!(await FM.editor.request(to, { from: 'cog' }))) return;
+          cvEdPaint(); cvEdSwitched = true;
+          /* D23 A: close, so he sees the new editor — unless Canvas holds picks he has not applied, or Friends is the big block
+             (he is in the middle of something there; closing would unmount it). DESIGN §21 F3: compare EVERY pending value with
+             the snapshot taken at open — cvSummary() leaves the background out, so a background pick was thrown away. */
+          const pending = cvPendingFp() !== cvOpenFp;
+          if (!pending && cvPairBig() !== 'friends') setTimeout(() => { if (!cvDialog.classList.contains('hidden')) cvClose(); }, 260);
+        });
+        return b;
+      };
+      const cvEdBuild = () => {
+        if (cvEd) return;
+        const w = edW();
+        cvEd = el('div'); cvEd.id = 'cv-editor'; cvEd.setAttribute('role', 'group'); cvEd.setAttribute('aria-label', w.title || 'Editor');
+        cvEdBar = el('div', 'cv-mini'); cvEdBar.id = 'cv-ed-bar';
+        const ico = el('span', 'cv-mini-ico'); ico.setAttribute('aria-hidden', 'true'); ico.innerHTML = ED_ICON;   // fixed string
+        /* ONE markup for both widths (DESIGN §21 F11): the block is built once and kept, and a window can cross 700 px while the cog
+           is up (cvOnWidth) — a phone-built bar on a PC lost its title, a PC-built one on a phone overflowed 356 px and grew the
+           bar, moving Canvas and Friends. The phone query hides `.cv-mini-t` inside #cv-ed-bar instead. */
+        { const h = el('span', 'ed-head'); h.append(ico, el('span', 'cv-mini-t', w.title || 'Editor')); cvEdBar.append(h); }
+        const what = el('button', 'ed-what', w.what || 'What should you use?'); what.type = 'button'; what.id = 'cv-ed-what'; what.setAttribute('aria-expanded', 'false');
+        const why = el('div', 'ed-why'); why.id = 'cv-ed-why'; why.setAttribute('role', 'status'); why.setAttribute('aria-live', 'polite');
+        cvEdBar.append(edSwitch(false), el('span', 'ed-gap'), what);
+        cvEdBody = el('div'); cvEdBody.id = 'cv-ed-body';
+        const now = el('div', 'ed-now'); now.append(edSwitch(true), Object.assign(el('span', 'ed-now-t'), { id: 'cv-ed-now' }));
+        cvEdBody.append(el('div', 'export-title', w.what || 'What should you use?'), now);
+        ['simple', 'full'].forEach(k => {
+          const o = el('div', 'ed-opt'); o.dataset.k = k;
+          const pic = el('span'); pic.innerHTML = ED_PIC[k];   // fixed string
+          const t = el('div'); t.append(el('b', '', k === 'simple' ? (w.simple || 'Simple') : (w.full || 'Full')), el('p', '', k === 'simple' ? w.simpleText : w.fullText));
+          o.append(pic.firstChild, t); cvEdBody.append(o);
+        });
+        cvEdBody.append(el('p', 'ed-note', w.note || ''), why);
+        cvEd.append(cvEdBar, cvEdBody);
+        cvDialog.appendChild(cvEd);
+        cvEdBar.addEventListener('click', () => cvPairSwap('editor'));   // the bar away from the switch, and "What should you use?"
+        cvEdPaint();
+      };
+      const cvEdDrop = () => { if (cvEd) { cvEd.remove(); cvEd = cvEdBar = cvEdBody = null; } cvDialog.classList.remove('cv-ed-on', 'cv-ed-big'); };
+      const cvEdSync = () => { if (cvEdOn()) { cvEdBuild(); cvDialog.classList.add('cv-ed-on'); } else cvEdDrop(); };
+      const cvEdPaint = () => {
+        if (!cvEd) return;
+        const w = edW(), m = FM.editor.mode(), to = m === 'full' ? (w.toSimple || 'Switch to Simple editor') : (w.toFull || 'Switch to Full editor');
+        cvEd.querySelectorAll('.ed-sw').forEach(b => { b.dataset.mode = m; b.setAttribute('aria-label', to); b.title = to; });
+        const now = document.getElementById('cv-ed-now'); if (now) now.textContent = (w.youreIn || 'You’re in ') + (m === 'full' ? (w.full || 'Full') : (w.simple || 'Simple'));
+        cvEd.querySelectorAll('.ed-opt').forEach(o => {
+          const here = o.dataset.k === m; o.classList.toggle('here', here);
+          const b = o.querySelector('b'), t = b.querySelector('.ed-here'); if (t) t.remove();
+          if (here) b.append(el('span', 'ed-here', w.here || 'You’re here'));
+        });
+      };
+      if (FM.editor && FM.editor.onChange) FM.editor.onChange(cvEdPaint);
+      /* A refusal is shown INSIDE the block, never as a toast under the dialog (the #921 S7 lesson, cvRoleNote below) */
+      window.addEventListener('fm-editor-refuse', e => {
+        if (!cvEd || cvDialog.classList.contains('hidden')) return;
+        const why = document.getElementById('cv-ed-why'); if (why) why.textContent = (e.detail && e.detail.text) || '';
+        cvEd.querySelectorAll('.ed-sw').forEach(b => { b.classList.remove('ed-shake'); void b.offsetWidth; b.classList.add('ed-shake'); });
+      });
+```
+
+`cvPendingFp()` (beside `cvSummary`, read-only) joins every value Apply would write: `cvCompute()`'s `w` and `h`, the fps
+`cvApply`'s caller reads (`fpsSel` / `fpsNum`), `cvBg`, `cvAspect`, and the custom W/H inputs. `openCanvasDialog` stores
+`cvOpenFp = cvPendingFp()` as its **last** line, after it has seeded every control from the project, so "picks he has not
+applied" is exactly `cvPendingFp() !== cvOpenFp`. (The earlier `cvSummaryOfProject()` compared the summary string, which has
+no background in it and names the aspect by `cvDetect`'s rule; both made it miss or invent picks: DESIGN §21 F3.)
+
+**(b) Each pair function gains its third case** (the rule is the pair's: one big, the rest small):
+
+| Function (v17.21) | Today | Change |
+|---|---|---|
+| `cvAnchorBlock` `:8358` | side → `cvCard`; stacked → the big one of two | side → `cvCard` (Canvas stays in the right column in every state); stacked → `{canvas: cvCard, friends: cvFr, editor: cvEd}[cvPairBig()]` |
+| `cvPairLast` `:8368` | `'friends'` or `'canvas'` | **unchanged** (DESIGN §21 F7: the Editor block is never remembered, so the cog opens as today) |
+| `cvPairBig` `:8369` | reads `cv-fr-big` | `cv-ed-big` → `'editor'`, else `cv-fr-big` → `'friends'`, else `'canvas'` |
+| `cvPairApply(big)` `:8381` | toggles `cv-fr-big`, `aria-expanded` on the two ⤢ | also toggles `cv-ed-big` (`big === 'editor'`) and sets `#cv-ed-what`'s `aria-expanded`; `cvEdPaint()`; **skips the `localStorage.setItem(CV_PAIR_KEY, …)` line when `big === 'editor'`** |
+| `cvPairSettle` `:8397` | clears inline styles on `[cvCard, cvFr]` | `[cvCard, cvFr, cvEd].filter(Boolean)`; also `cvEdBar.style.top = ''` |
+| `cvPairSwap(to)` `:8409` | FLIP of two blocks: one grows, one shrinks | FLIP of the blocks present (`[cvCard, cvFr, cvEd].filter(Boolean)`): the one becoming big **grows**, the big one **shrinks**, a third that was small and stays small **flies only** (its rect moves, its bar stays opaque, no content fade). Bars: `cvCard → cvMini`, `cvFr → cvFrBar`, `cvEd → cvEdBar`; content: `cvEd → [cvEdBody]`. `refocus` also knows `#cv-ed-what` |
+| bar listeners `:8463-8464` | two | `cvEdBar` is wired in `cvEdBuild` (a), and the switch stops propagation |
+| `openCanvasDialog(o)` `:8552` | `o.block` friends / last / canvas | `cvEdSync()` first (before `cvPairApply`); `o.block === 'last'` may now land on `'editor'`; no door passes `'editor'` (only the block's own button opens it big) |
+| `cvClose` `:8582` | the one close | after the settle: `if (cvEdSwitched) { cvEdSwitched = false; if (FM.editor && FM.editor.afterCogClose) FM.editor.afterCogClose(); }` (§6.3: the held animation plays as the cog closes) |
+| `FM.settings.onChange` `:8600` | re-hangs the pair | also, under D22 B only, `cvEdSync()` while the dialog is open, landing on Canvas if the Editor block was big |
+
+`cvPlace`, `cvOnWidth` and `CV_SIDE_NEED` need **no change**: the small column fits today's width (COG-DESIGN §6.2).
+
+#### 1.3.19 Two read-only getters (DESIGN §6.4) — NEW 1 Oct, NOT RUN
+
+`js/crop-tool.js` (beside `FM.cropTool.isActive`, `:183` at v17.21): `changed()` returns true when the crop box differs from
+the box it started with (compare the four edges the tool already holds, to 1e-6). `js/touchup-tool.js`: `changed()` the same
+for the touch-up box. Neither writes anything or changes what Full does; without them an untouched box would warn for
+nothing (cog T4). Bump both files' `?v=`.
+
 ### 5.3 New file `js/editor-mode.js` (whole file)
+
+**Rewritten 1 Oct to his rules and NOT RUN.** The 29 Sep version was rehearsed on a scratch copy (§13); this one changes its
+doors (no ⇄, no ⋯ item, no back button, no E, the cog is the one door) and adds the guard of DESIGN §6.4 (COG-DESIGN §7.3).
+Every tool API named in `HOLDS` / `COMMITS` was measured at v17.21 by COG-DESIGN's probe, not by running this file: check each
+against the tree first (the two marked `FIND AT BUILD TIME` are the pen's Done and the recorder's Add). cog T2 fails if a
+canvas tool in collab-presence's `LEASED` table is in none of the three lists.
 
 ```js
 /* FreeMotion — FM.editor: which editor this device shows for the open project (Simple mode Phase 1, DESIGN.md §6, §7.2).
  *
  * THE EDITOR IS A VIEW, NOT A DOCUMENT FACT. Switching writes nothing to the project, takes no undo step and sends nothing
  * to a live session (§6.2): it toggles `body.ed-simple`, and the timeline dispatches on that class. What this device last
- * chose for a project lives on ITS project card (the index entry's `editor`, per device, §2.2), never in the document.
+ * chose lives on ITS project card (the index entry's `editor`) and in `fm.editor.last`, never in the document.
  *
- * Phase 1 is a PREVIEW behind Settings → "Simple editor" (off by default). While it is off every door is hidden, E does
- * nothing and every project opens in Full (§15.1). Turning it off with a project open puts that project in Full at once
- * WITHOUT touching its card, so turning it back on returns him to where he was.
+ * ONE DOOR (his rule, 1 Oct): the ⚙ cog's third block calls request(). There is no play-bar button, no ⋯ item and no E key
+ * (DESIGN.md §0.4 V1–V3, B14). request() works out what a switch would lose and ASKS first (§6.4). apply() never closes a tool
+ * that holds unapplied work: it refuses instead, so no door — today's or a later one — can throw work away silently.
  *
- * D1 (names) and D2/D18 (where the button sits) use the recommended answers; the words live in js/spine-words.js.
+ * D22: GATED false (recommended A) = no Settings row, enabled() is always true. Under D22 B set GATED true and add the
+ * Settings row (BUILD-PLAN 1.3.7–1.3.9).
  */
 window.FM = window.FM || {};
 (function (FM) {
   'use strict';
-  const W = () => FM.spineWords || {};
-  let mode = 'full';          // what is on screen
-  let lastPid = undefined;    // the project that mode was worked out for
-  let backFor = null;         // D2-B: the project whose Simple → Full switch put the back button in Full's slot 3
+  const GATED = false;                 // D22
+  const W = () => (FM.spineWords && FM.spineWords.editor) || {};
+  let mode = 'full';                   // what is on screen
+  let lastPid = undefined;             // the project that mode was worked out for
+  let pendingFx = false;               // a switch made from the cog: its crossfade waits for the cog to close (§6.3)
+  const listeners = [];
 
   const body = () => document.body;
-  const enabled = () => !!(FM.settings && FM.settings.get && FM.settings.get('simpleEditor'));
+  const enabled = () => !GATED || !!(FM.settings && FM.settings.get && FM.settings.get('simpleEditor'));
   const openPid = () => (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null;
   const card = pid => { try { return ((FM.projects && FM.projects.list && FM.projects.list()) || []).find(p => p.id === pid) || null; } catch (e) { return null; } };
+  const safe = f => { try { return !!f(); } catch (e) { return false; } };
 
-  /* WHICH EDITOR A PROJECT OPENS IN (§7.2): this device's card first, then the project's own default (`project.sm.home`,
-     anything but 'simple' reads as Full), then Full. With the preview off, always Full. */
+  /* WHICH EDITOR A PROJECT OPENS IN (§7.2): this device's card for that project, else Full. project.sm.home is NEVER read
+     (§0.4 B27). Phase 3, under D3 A (re-asked 1 Oct), gives a NEW project's card `editor` from fm.editor.last at create, in createFromDialog. */
   function homeFor(pid) {
     if (!enabled()) return 'full';
     const c = pid ? card(pid) : null;
-    if (c && (c.editor === 'simple' || c.editor === 'full')) return c.editor;
-    const P = FM.scene && FM.scene.project;
-    return (P && P.sm && P.sm.home === 'simple') ? 'simple' : 'full';
+    return (c && c.editor === 'simple') ? 'simple' : 'full';
   }
-  function writeCard(pid, ed) {
+  function remember(pid, ed) {
+    try { localStorage.setItem('fm.editor.last', ed); } catch (e) {}
     if (!pid || !FM.projects || !FM.projects.list || !FM.projects.saveIndex) return;
     const idx = FM.projects.list(), e = idx.find(p => p.id === pid);
     if (!e || e.editor === ed) return;
@@ -2328,62 +2272,148 @@ window.FM = window.FM || {};
     FM.projects.saveIndex(idx);
   }
 
-  /* Something live that a switch must not tear out from under (§6.2): a timeline drag, or an export. It SHAKES instead. */
-  function busy() {
-    if (FM._exporting) return true;
-    return !!(FM.timeline && FM.timeline.gestureLive && FM.timeline.gestureLive());
-  }
-  function shake() {
-    const b = document.getElementById('btn-editor');
-    if (!b) return;
-    b.classList.remove('ed-shake'); void b.offsetWidth; b.classList.add('ed-shake');
-    setTimeout(() => b.classList.remove('ed-shake'), 420);
+  /* THE GUARD'S THREE LISTS (§6.4). HOLDS: a tool that can hold work NOT yet in history — closing it would lose that work, so
+     the switch asks first and then presses the tool's OWN Done (Full's Done, unchanged: the switch adds no new way to apply
+     anything). COMMITS: a tool whose close is one ordinary undo step. QUIET: a tool whose close writes nothing. */
+  const click = sel => { const b = document.querySelector(sel); if (!b) return false; b.click(); return true; };
+  const HOLDS = [
+    { id: 'crop',    live: () => FM.cropTool && FM.cropTool.isActive() && FM.cropTool.changed(),       keep: () => click('#crop-bar .cb-done') },
+    { id: 'touchup', live: () => FM.touchupTool && FM.touchupTool.isOpen() && FM.touchupTool.changed(), keep: () => click('#touchup-bar .cb-done') },
+    /* DESIGN §21 F1: the draw bar's Done is `#draw-bar .db-done` (js/draw-tool.js:788), not `.cb-done`; and under 3 points that
+       Done only toasts "Tap at least 3 points" and stays open (finish(), :691-693), so "Switch anyway" — which the warning
+       says throws the points away — must discard them itself, or apply() would see the pen still live and refuse in silence. */
+    { id: 'pen',     live: () => FM.drawTool && FM.drawTool.active && FM.drawTool.mode === 'vector' && FM.drawTool.points.length > 0,
+      keep: () => { if (FM.drawTool.points.length >= 3) return click('#draw-bar .db-done'); if (FM.drawTools) FM.drawTools.stop(); return true; } }
+    /* No voice take here (§21 F2): the recorder is #vr-overlay, fixed, inset 0, z 190 — over the cog — and no switch path closes
+       it, so a take is never lost by a switch. busyReason() refuses while it is open instead. */
+  ];
+  const COMMITS = [
+    { id: 'text',   live: () => FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive(), close: () => FM.textEdit.stop() },
+    { id: 'mask',   live: () => FM.maskTool && FM.maskTool.isActive && FM.maskTool.isActive(), close: () => FM.maskTool.stop() },
+    { id: 'points', live: () => FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive(), close: () => FM.pointEdit.stop() },
+    { id: 'wheel',  live: () => FM.hasPendingCommit && FM.hasPendingCommit(), close: () => FM.flushPendingCommit() }
+  ];
+  const QUIET = [   // open but holding nothing: closing writes nothing (an untouched crop / touch-up box, motion path, graph)
+    { id: 'crop',    live: () => FM.cropTool && FM.cropTool.isActive(),    close: () => FM.cropTool.stop() },
+    { id: 'touchup', live: () => FM.touchupTool && FM.touchupTool.isOpen(), close: () => FM.touchupTool.close() },
+    { id: 'path',    live: () => FM.motionPath && FM.motionPath.isActive && FM.motionPath.isActive(), close: () => FM.motionPath.stop() }
+  ];
+  /* STAYS: open across a switch, closed by nothing here, losing nothing. Sketching (freehand draw) commits each stroke as it
+     lands, but its own ↷ (histFuture) would die with the tool, so it must never be added to QUIET (§21 F4). */
+  const STAYS = ['draw-freehand'];
+  FM.editorGuardLists = { HOLDS: HOLDS.map(h => h.id), COMMITS: COMMITS.map(c => c.id), QUIET: QUIET.map(q => q.id).concat(['graph', 'tracker']), STAYS: STAYS, REFUSED: ['voice'] };   // cog T2 reads this: every LEASED row (draw = pen + draw-freehand) and the recorder must be in one list
+
+  /* What would stop a switch outright (§6.1 refusals). '' when nothing does. */
+  function busyReason() {
+    if (FM._exporting) return 'export';
+    if (FM.voiceRec && FM.voiceRec.isOpen && FM.voiceRec.isOpen()) return 'recording';   // §21 F2: open at all, not only recording (refusal line: "Close the recorder first")
+    if ((FM.spine && FM.spine.running) || body().classList.contains('sm-running')) return 'busy';
+    if ((FM.timeline && FM.timeline.gestureLive && FM.timeline.gestureLive()) || (FM.canvasGestureLive && FM.canvasGestureLive())) return 'drag';
+    return '';
   }
 
-  function syncButtons() {
-    const w = W().editor || {};
-    const simple = mode === 'simple';
-    const b = document.getElementById('btn-editor');
-    if (b) {
-      const label = simple ? (w.toFull || 'Switch to Full editor') : (body().classList.contains('ed-back') ? (w.back || 'Back to Simple editor') : (w.toSimple || 'Switch to Simple editor'));
-      b.setAttribute('aria-label', label); b.title = label + ' (E)';
-      b.dataset.ed = simple ? 'simple' : 'full';   // the icon shows the editor you are IN (§8.10 item 1)
-    }
-    const m = document.getElementById('vb-editor');
-    if (m) { const t = simple ? (w.menuFull || 'Full editor') : (w.menuSimple || 'Simple editor'); m.setAttribute('aria-label', t); m.title = t; const s = m.querySelector('span'); if (s) s.textContent = t; }
+  /* THE PLAN: what this switch would write and what it would lose. The swap itself writes only this device's card and
+     fm.editor.last; every HOLDS entry that is live would be lost; any step it makes while ↷ has steps loses the redo tail. */
+  /* §21 F5: the ↷ the person SEES. In a live session undo and redo go through FM.collab (js/history.js:208, :325-326), and the
+     local stack's canRedo() says nothing about it — the redo warning would be wrong in exactly the case with a friend in. */
+  const canRedoNow = () => safe(() => (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) ? FM.collab.canRedo() : FM.history.canRedo());
+  function plan(to) {
+    const p = { to: to, refuse: busyReason(), lose: [], steps: 0, writes: ['card.editor', 'fm.editor.last'] };
+    HOLDS.forEach(h => { if (safe(h.live)) p.lose.push(h.id); });
+    p.steps = COMMITS.filter(c => safe(c.live)).length + p.lose.length;   // applying a held thing is a step too
+    if (p.steps && canRedoNow()) p.lose.push('redo');
+    return p;
+  }
+  function warning(p) {
+    const w = W().warn || {}, to = p.to === 'simple' ? (W().simple || 'Simple') : (W().full || 'Full');
+    const lines = p.lose.map(id => id === 'pen' && FM.drawTool && FM.drawTool.points.length < 3 ? w.penShort : (id === 'redo' ? w.redo(FM.history.redoDepth ? FM.history.redoDepth() : 1) : w[id]));
+    const one = p.lose.length === 1 ? p.lose[0] : null;
+    return { title: (w.title || 'Switch to ') + to + '?', message: lines.join('\n'),
+             ok: one ? ((one === 'pen' && FM.drawTool.points.length < 3) ? w.okAnyway : (w.ok[one] || w.okAnyway)) : w.okSeveral,
+             cancel: w.stay || 'Stay' };
+  }
+  function refuse(kind) {
+    const r = (W().refuse || {})[kind] || '';
+    window.dispatchEvent(new CustomEvent('fm-editor-refuse', { detail: { kind: kind, text: r } }));   // the cog block shakes and shows it (§6.1)
+    return false;
   }
 
-  /* PUT AN EDITOR ON SCREEN, writing nothing (the Settings flip uses this; set() adds the card write). Returns false when
-     it refused (busy). Order per §6.2: flush the text editor, close the tools that own the canvas, then swap. */
+  /* PUT AN EDITOR ON SCREEN, writing nothing. Every door reaches this. It NEVER closes a tool that holds work: with one live
+     it refuses, so the only way past is request(), which asked. */
   function apply(next, opts) {
     next = next === 'simple' && enabled() ? 'simple' : 'full';
     opts = opts || {};
-    if (next === mode && !opts.force) { syncButtons(); return true; }
-    if (busy() && !opts.force) { shake(); return false; }
-    if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive() && FM.textEdit.stop) FM.textEdit.stop();
-    ['cropTool', 'maskTool', 'motionPath', 'touchupTool'].forEach(k => {
-      const t = FM[k];
-      try { if (t && t.isActive && t.isActive() && t.stop) t.stop(); else if (t && t.isOpen && t.isOpen() && t.close) t.close(); } catch (e) {}
-    });
+    if (next === mode && !opts.force) return true;
+    if (busyReason() && !opts.force) return false;
+    if (HOLDS.some(h => safe(h.live))) return false;
+    COMMITS.forEach(c => { if (safe(c.live)) { try { c.close(); } catch (e) {} } });
+    QUIET.forEach(q => { if (safe(q.live)) { try { q.close(); } catch (e) {} } });
+    if (FM.exitEditGroup) { try { FM.exitEditGroup(); } catch (e) {} }
     const had = document.activeElement;
     mode = next;
     body().classList.toggle('ed-simple', mode === 'simple');
-    if (mode === 'simple') body().classList.remove('ed-back');
-    const panel = document.getElementById('timeline-panel');
-    if (panel && !opts.quiet && !(FM.reducedMotion && FM.reducedMotion())) {   // Phase 1: a 150 ms crossfade (§6.3)
-      panel.classList.remove('ed-xfade'); void panel.offsetWidth; panel.classList.add('ed-xfade');
-      setTimeout(() => panel.classList.remove('ed-xfade'), 180);
-    }
+    if (opts.from === 'cog') pendingFx = true; else if (!opts.quiet) crossfade();
     if (FM.syncSelectionChrome) FM.syncSelectionChrome();
     if (!opts.noRebuild && FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();   // syncProject runs INSIDE a rebuild: no second one
     if (FM._dockSheet) requestAnimationFrame(FM._dockSheet);
-    syncButtons();
-    // focus never falls to <body> (§8.10 item 2): if what held it is gone from view, the switch takes it
+    listeners.forEach(f => { try { f(mode); } catch (e) {} });
+    /* focus never falls to <body> (§8.10 item 2): if what held it is gone from view, the cog it came from takes it */
     if (!opts.quiet && (!had || had === document.body || !had.isConnected || !had.getClientRects().length)) {
-      const b = document.getElementById('btn-editor');
-      if (b && b.getClientRects().length) { try { b.focus({ preventScroll: true }); } catch (e) {} }
+      const c = ['m-settings', 'btn-settings'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length);
+      if (c) { try { c.focus({ preventScroll: true }); } catch (e) {} }
     }
     return true;
+  }
+  /* Phase 1: a 150 ms crossfade (§6.3); the morph (D11 B: the morph only, his pick) replaces it in Phase 3. From the cog it plays when the cog closes. */
+  function crossfade() {
+    const panel = document.getElementById('timeline-panel');
+    if (!panel || (FM.reducedMotion && FM.reducedMotion())) return;
+    panel.classList.remove('ed-xfade'); void panel.offsetWidth; panel.classList.add('ed-xfade');
+    setTimeout(() => panel.classList.remove('ed-xfade'), 180);
+  }
+
+  /* THE DELIBERATE SWITCH: apply, then remember it on this device. Reached only through request() (and the suite). */
+  function set(next, opts) {
+    const from = mode;
+    if (!apply(next, opts)) return false;
+    remember(openPid(), mode);
+    if (from !== mode) announce();
+    return true;
+  }
+  function announce() {
+    const w = W();
+    /* §21 F12: #sm-live sits inside #sm-timeline, which is display:none in Full, so "Full editor" was never read out. One
+       visually hidden live region at body level (built here, `ed-live`, outside both timelines) speaks for both. */
+    let live = document.getElementById('ed-live');
+    if (!live) { live = document.createElement('div'); live.id = 'ed-live'; live.className = 'sm-vh'; live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite'); document.body.appendChild(live); }
+    if (live) live.textContent = mode === 'simple' ? (w.liveSimple || 'Simple editor') : (w.liveFull || 'Full editor');
+    /* First arrival in SIMPLE only, once per device (§6.1). Arriving in Full shows nothing (§0.4 V4). */
+    if (mode === 'simple') {
+      let seen = null; try { seen = localStorage.getItem('fm.editor.hint'); } catch (e) {}
+      if (!seen && FM.toast) { FM.toast(w.firstSimple || 'Simple editor. Switch back any time from the ⚙ cog.', 2600); try { localStorage.setItem('fm.editor.hint', '1'); } catch (e) {} }
+    }
+  }
+
+  /* THE ONE DOOR (§6.1, §6.4). Resolves true when the editor changed (or already was `to`). */
+  async function request(to, o) {
+    to = to === 'simple' ? 'simple' : 'full';
+    o = o || {};
+    if (to === mode) return true;
+    const p = plan(to);
+    if (p.refuse) return refuse(p.refuse);
+    if (p.lose.length) {
+      const ok = FM.ask ? await FM.ask(warning(p)) : false;      // Stay, Escape and the scrim answer falsy: nothing touched
+      if (!ok) return false;
+      const again = plan(to);                                    // the world may have moved while the pop-up was up
+      if (again.refuse) return refuse(again.refuse);
+      for (const id of again.lose) {
+        const h = HOLDS.find(x => x.id === id);
+        if (h && !h.keep()) return refuse('unsettled');          // the tool's own Done was not there: stay, lose nothing
+      }
+    }
+    /* §21 F1: apply() refuses while any HOLDS tool is still live (a Done that settles later, a keep that did nothing). Say so in
+       the block instead of returning a silent false that leaves the knob, the cog and him all waiting. */
+    return set(to, { from: o.from }) || refuse('unsettled');
   }
 
   FM.editor = {
@@ -2391,46 +2421,35 @@ window.FM = window.FM || {};
     isSimple: () => mode === 'simple',
     enabled: enabled,
     homeFor: homeFor,
+    plan: plan,
+    request: request,
     apply: apply,
-    /* THE SWITCH (⇄, the ⋯ item, key E): apply and remember it on this device's card for the open project. */
-    set(next) {
-      const from = mode;
-      if (!apply(next)) return false;
-      const pid = openPid();
-      writeCard(pid, mode);
-      if (from === 'simple' && mode === 'full') { backFor = pid; body().classList.add('ed-back'); }   // D2-B
-      else if (mode === 'simple') { backFor = null; body().classList.remove('ed-back'); }
-      syncButtons();
-      return true;
-    },
-    toggle() { return FM.editor.set(mode === 'simple' ? 'full' : 'simple'); },
-    /* Called first thing in every timeline rebuild: a project that just opened gets its own editor, silently. */
+    set: set,                                   // the suite's seam; the app's only caller is request()
+    onChange: f => { if (typeof f === 'function') listeners.push(f); },
+    /* The cog closed after a switch made from it (cvClose): play the held animation now that it can be seen (§6.3). */
+    afterCogClose() { if (pendingFx) { pendingFx = false; crossfade(); } },
+    /* Called first thing in every timeline rebuild: a project that just opened gets its own editor, silently. Only a real
+       change runs apply, so a rebuild in Full never flushes the text editor or closes a tool (the "off means off" test). */
     syncProject() {
       const pid = openPid();
       if (pid === lastPid) return;
-      lastPid = pid;
-      if (backFor !== pid) { backFor = null; body().classList.remove('ed-back'); }
-      /* OFF MEANS OFF, STRUCTURALLY: when the editor already on screen is the one this project wants — always, with the
-         preview off — nothing runs, so a rebuild in Full can never stop the text editor or close a tool (apply's §6.2
-         flush). Only a real change goes through apply. */
       const want = homeFor(pid);
-      if (want === mode) { syncButtons(); return; }
-      apply(want, { quiet: true, force: true, noRebuild: true });
+      if (want === mode) { lastPid = pid; return; }
+      if (apply(want, { quiet: true, force: true, noRebuild: true })) lastPid = pid;   // a held tool: retried on the next rebuild
     },
-    /* The Settings row flipped (§15.1). Off: this project goes to Full now, its card untouched. On: it returns to its home.
-       Either way, only a real change of editor runs apply (a no-op flip must not crossfade Full or flush its tools). */
-    onPreviewFlip() {
+    /* D22 B only: the Settings row flipped. Off goes through the same guard (never a silent discard); if he stays, the row
+       flips back on. On: the project returns to its own editor. */
+    async onPreviewFlip() {
+      if (!GATED) return;
       body().classList.toggle('sm-on', enabled());
-      if (!enabled()) { backFor = null; body().classList.remove('ed-back'); if (mode !== 'full') apply('full', { force: true }); else syncButtons(); }
-      else { const want = homeFor(openPid()); if (want !== mode) apply(want, { force: true }); else syncButtons(); }
+      if (!enabled()) { if (mode !== 'full' && !(await request('full', { from: 'settings' }))) FM.settings.set('simpleEditor', true); }
+      else { const want = homeFor(openPid()); if (want !== mode) apply(want, { force: true }); }
     },
-    /* KEYS (§8.3, §15.1). Returns true when it answered the key. E switches in both editors; in Simple, the arranging keys
-       that have no Simple command yet say so instead of doing Full's thing to a clip on the main track. */
+    /* KEYS (§8.3, §15.1). In Full this answers NOTHING (no E, §0.4 B14). In Simple, the arranging keys that have no Simple
+       command yet say so instead of doing Full's thing to a clip on the main track. */
     onKey(e) {
-      if (!enabled() || e.altKey) return false;
+      if (mode !== 'simple' || e.altKey) return false;
       const mod = e.metaKey || e.ctrlKey;
-      if (!mod && e.code === 'KeyE') { e.preventDefault(); if (!e.repeat) FM.editor.toggle(); return true; }
-      if (mode !== 'simple') return false;
       const S = FM.spine;
       const ids = FM.selectionIds ? FM.selectionIds() : [];
       const R = (S && S.read) ? S.read(FM.scene) : null;
@@ -2440,29 +2459,25 @@ window.FM = window.FM || {};
       if (mod && (e.key === 'd' || e.key === 'D') && onMain) { e.preventDefault(); if (S) S.say('dupNext', { full: true }); return true; }
       return false;
     },
-    _state: () => ({ mode: mode, lastPid: lastPid, backFor: backFor })   // suite seam
+    _state: () => ({ mode: mode, lastPid: lastPid, pendingFx: pendingFx })   // suite seam
   };
 
   function wire() {
-    body().classList.toggle('sm-on', enabled());
-    const b = document.getElementById('btn-editor');
-    if (b && !b._edWired) { b._edWired = true; b.addEventListener('click', () => FM.editor.toggle()); }
-    const m = document.getElementById('vb-editor');
-    if (m && !m._edWired) {
-      m._edWired = true;
-      m.addEventListener('click', () => {
-        const bar = document.getElementById('opt-bar'); if (bar) bar.classList.add('hidden');
-        FM.editor.toggle();
-      });
-    }
+    if (GATED) body().classList.toggle('sm-on', enabled());
     const sp = document.getElementById('btn-sm-split');
     if (sp && !sp._edWired) { sp._edWired = true; sp.addEventListener('click', () => { if (FM.spine) FM.spine.say('splitNext', { full: true }); }); }
-    if (FM.settings && FM.settings.onChange) FM.settings.onChange(() => { if (!!enabled() !== body().classList.contains('sm-on')) FM.editor.onPreviewFlip(); });
-    syncButtons();
+    if (GATED && FM.settings && FM.settings.onChange) FM.settings.onChange(() => { if (!!enabled() !== body().classList.contains('sm-on')) FM.editor.onPreviewFlip(); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })(window.FM);
 ```
+
+**Names to confirm at build time** (each is used above and was not read for this rewrite): `FM.cropTool.isActive` / `.stop`,
+`FM.touchupTool.isOpen` / `.close` (COG-DESIGN §7.2 measured these); `FM.drawTool.active` / `.mode` / `.points`;
+`FM.voiceRec._state` (`js/voice-rec.js:706`); `FM.maskTool`, `FM.pointEdit`, `FM.motionPath` and how each says it is open;
+`FM.hasPendingCommit` (if it does not exist, add a read-only `FM.hasPendingCommit` beside `FM.flushPendingCommit`,
+`js/canvas-edit.js:743`, which changes nothing Full does); `FM.history.canRedo` / `redoDepth`; `FM.exitEditGroup`. Adapt the
+name, never the rule: a tool that can hold unapplied work goes in `HOLDS`, full stop.
 
 ### 5.4 New file `js/simple-timeline.js` (whole file)
 
@@ -2759,40 +2774,28 @@ window.FM = window.FM || {};
 
 ### 5.5 `styles.css`: append this block at the END of the file
 
-Last in the file so it wins without `!important` fights; every rule is scoped by `body.sm-on` (the preview is on) or
-`body.ed-simple` (Simple is showing), or targets an element that only exists for Simple, so with the switch off nothing here
-matches.
+Last in the file so it wins without `!important` fights. **1 Oct:** every rule is scoped by `body.ed-simple` (Simple is
+showing), by the cog block (`#canvas-dialog.cv-ed-on`, `#cv-editor`), or targets an element that only exists for Simple, so
+in Full nothing here matches outside the cog's third block, the one change he asked for (FU1 and FU6 prove it). The rules
+for ⇄, the ⋯ item and the back button are gone with them.
 
 ```css
 
-/* ═══ SIMPLE MODE, PHASE 1 — the Simple editor preview (DESIGN.md §6, §8.1–§8.2, §15.1; BUILD-PLAN.md step 1.3) ═════════
-   Everything below is scoped by `body.sm-on` (the Settings preview is on) or `body.ed-simple` (Simple is showing), so with
-   the preview off not one rule here matches and the page is exactly what it was. */
-#btn-editor, #btn-sm-split, #vb-editor, #sm-timeline { display: none; }
-#btn-editor .ed-ico-s, #btn-editor[data-ed="full"] .ed-ico-s { display: none; }
-#btn-editor[data-ed="simple"] .ed-ico-s { display: block; }
-#btn-editor[data-ed="simple"] .ed-ico-f { display: none; }
-/* FULL, preview on. PC: ⇄ always in the left group. Phone (D2-B): the first item inside ⋯, and after a switch from Simple a
-   back-to-Simple button stands in slot 3 in ◐'s place until he goes back. */
-@media (min-width: 701px) { body.sm-on:not(.ed-simple) #btn-editor { display: inline-flex; } }
-@media (max-width: 700px) {
-  body.sm-on:not(.ed-simple) #vb-editor { display: inline-flex; }
-  body.sm-on.ed-back:not(.ed-simple) #btn-addside { display: none; }
-  body.sm-on.ed-back:not(.ed-simple) #btn-editor { display: inline-flex; box-shadow: inset 0 0 0 1.4px var(--accent); border-radius: 9px; }
-}
-/* ⋯'s strip (#opt-bar) is a 40 px column, so the item is an icon like its neighbours; its words are its aria-label and title
-   (a labelled item was 120 px wide and cut to "Simple e" at 380 — seen in the screenshots). */
-#vb-editor { align-items: center; justify-content: center; }
-#vb-editor svg { color: var(--accent); }
-#vb-editor span { display: none; }
-/* SIMPLE. The play bar's left group is ⋯ · ✂ · ⇄ · |◀ (D18-A) on the phone and ‹ ✂ ⇄ |◀ on PC: ⧉ and ◐ are Full's. */
-body.ed-simple #btn-layermenu, body.ed-simple #btn-addside, body.ed-simple #t-sel, body.ed-simple #key-rail { display: none !important; }
+/* ═══ SIMPLE MODE, PHASE 1 — the Simple editor (DESIGN.md §6, §8.1–§8.2, §15.1; BUILD-PLAN.md step 1.3) ═════════════════
+   Everything below is scoped by `body.ed-simple` (Simple is showing) or by the cog's third block (`.cv-ed-on`, `#cv-editor`),
+   so in Full nothing here matches outside that block: Full's play bar, ⋯ strip and stage are HEAD's (DESIGN.md §0.4). */
+#btn-sm-split, #sm-timeline { display: none; }
+/* SIMPLE. No switch on the play bar in either editor (the ⚙ cog is the one door, DESIGN §6.1). The phone's left group is
+   ⋯ · ✂ · (gap) · |◀ (D18 A): ⧉ gives its slot to ✂, and ◐ keeps its slot INVISIBLE so |◀ sits where it sits in Full.
+   PC: ‹ ✂ |◀. Under D18 B, make the #btn-addside rule `display: none !important` at every width. */
+body.ed-simple #btn-layermenu, body.ed-simple #t-sel, body.ed-simple #key-rail { display: none !important; }
+body.ed-simple #btn-addside { visibility: hidden !important; pointer-events: none; }
+@media (min-width: 701px) { body.ed-simple #btn-addside { display: none !important; } }
 /* Full-only doors in the view options (§8.8, T21): the Layers panel and Add camera (a camera is Full-only, §5.2) */
 body.ed-simple #vb-layers, body.ed-simple #vb-camera { display: none !important; }
-body.ed-simple #btn-sm-split, body.ed-simple #btn-editor { display: inline-flex; }
-body.ed-simple #btn-editor { color: var(--accent); }
+body.ed-simple #btn-sm-split { display: inline-flex; }
 #btn-sm-split[aria-disabled="true"] { opacity: .38; }
-#btn-editor.ed-shake { animation: ed-shake .36s ease; }
+#cv-editor .ed-sw.ed-shake { animation: ed-shake .36s ease; }
 @keyframes ed-shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
 /* ✎ hides while something is selected in Simple — by VISIBILITY, so ? never slides a slot (his #171) */
 body.ed-simple.sm-has-sel #m-notes { visibility: hidden; }
@@ -2867,25 +2870,130 @@ body.ed-simple #sm-timeline { display: flex; }
 @media (min-width: 701px) { body.ed-simple #tl-centerline { bottom: 40px; } }   /* …and stops above PC's #sm-say */
 ```
 
+**And the cog's third block (1.3.18), appended after it.** These rules are the prototype's, rendered in the real app at
+v17.21 (COG-DESIGN §12, the pictures in `cog/`), with `.ed-why` and the shake added; **not run as shipped code**. Re-check
+the pair's own class names against the tree first (`cv-pair`, `cv-side`, `cv-anchored`, `cv-up`, `cv-flying`, `cv-fr-big`,
+`.cv-mini`, `.cv-mini-ico`, `.cv-mini-t`, `.export-card`, `.export-title`, `#cv-friends`, `#cv-mini`): every rule hangs on
+`.cv-ed-on` or `#cv-editor`, which do not exist until the block is built.
+
+```css
+/* ═══ SIMPLE MODE, PHASE 1 — the ⚙ cog's third block, Editor (DESIGN.md §6.1; COG-DESIGN.md §3–§6) ════════════════════ */
+/* ── width-free: show, style, state (all keyed on .cv-ed-on, set only while the Simple editor setting is on) ── */
+#cv-editor { display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.6); }
+#canvas-dialog.cv-pair.cv-ed-on > #cv-editor { display: flex; flex-direction: column; overflow: hidden; position: relative; }
+#canvas-dialog.cv-pair.cv-ed-on:not(.cv-ed-big) > #cv-editor { order: -2; }
+#canvas-dialog.cv-pair.cv-ed-on:not(.cv-ed-big):not(.cv-flying) > #cv-editor > #cv-ed-body { display: none; }
+#canvas-dialog.cv-pair.cv-ed-on:not(.cv-ed-big) > #cv-editor > #cv-ed-bar { display: flex; }
+#canvas-dialog.cv-pair.cv-ed-big:not(.cv-flying) > #cv-editor > #cv-ed-bar { display: none; }
+#canvas-dialog.cv-pair.cv-ed-big > #cv-editor { order: 1; }
+#canvas-dialog.cv-pair.cv-ed-big:not(.cv-flying) > .export-card { padding: 0; }
+#canvas-dialog.cv-pair.cv-ed-big:not(.cv-flying) > .export-card > :not(.cv-mini) { display: none; }
+#canvas-dialog.cv-pair.cv-ed-big > .export-card > .cv-mini { display: flex; }
+#cv-ed-bar { cursor: pointer; }
+#cv-ed-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 20px 16px; }
+/* the switch: ONE button, both words, the current one in the knob */
+.ed-sw { position: relative; flex: none; display: grid; grid-template-columns: 62px 18px 62px; align-items: center; height: 36px; padding: 0 3px;
+  border-radius: 18px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text-dim); font: 700 13px/1 inherit; cursor: pointer; }
+.ed-sw::before { content: ''; position: absolute; inset: -7px -4px; }      /* a 50px-tall catch */
+.ed-k { position: absolute; top: 3px; bottom: 3px; left: 3px; width: 62px; border-radius: 15px; background: var(--accent);
+  transition: transform .22s cubic-bezier(.2,.8,.2,1); }
+.ed-sw[data-mode="full"] .ed-k { transform: translateX(80px); }
+.ed-l { position: relative; z-index: 1; text-align: center; transition: color .22s; }
+.ed-x { position: relative; z-index: 1; text-align: center; font-size: 13px; opacity: .7; }
+.ed-sw[data-mode="simple"] .ed-l-s, .ed-sw[data-mode="full"] .ed-l-f { color: #06231d; }
+.ed-sw.big { grid-template-columns: 96px 22px 96px; height: 44px; border-radius: 22px; font-size: 15px; }
+.ed-sw.big .ed-k { width: 96px; border-radius: 19px; }
+.ed-sw.big[data-mode="full"] .ed-k { transform: translateX(118px); }
+.ed-what { position: relative; flex: none; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font: 700 12px/1.15 inherit;
+  border-radius: 12px; padding: 6px 10px; cursor: pointer; text-align: center; }
+.ed-what::before { content: ''; position: absolute; inset: -6px; }
+#cv-ed-bar .ed-gap { flex: 1; }
+/* the explanation */
+#cv-ed-body .export-title { margin-bottom: 12px; }
+.ed-now { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.ed-now-t { font-size: 13px; color: var(--text-dim); }
+.ed-opt { display: grid; grid-template-columns: 64px 1fr; column-gap: 12px; align-items: start; padding: 12px; border: 1px solid var(--line);
+  border-radius: 12px; margin-bottom: 10px; background: var(--panel-2); }
+.ed-opt svg { width: 64px; height: 34px; color: var(--text-dim); margin-top: 2px; }
+.ed-opt b { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--text); }
+.ed-opt p { margin: 4px 0 0; font-size: 13px; line-height: 1.4; color: var(--text-dim); }
+.ed-opt.here { border-color: color-mix(in srgb, var(--accent) 70%, transparent); }
+.ed-opt.here svg { color: var(--accent); }
+.ed-here { font-size: 11px; font-weight: 800; color: #06231d; background: var(--accent); border-radius: 8px; padding: 2px 7px; }
+.ed-note { font-size: 12.5px; line-height: 1.4; color: var(--text-dim); margin: 4px 2px 0; }
+.ed-why { font-size: 12.5px; color: #ffb454; min-height: 0; }
+/* ── the phone ── */
+@media (max-width: 700px) {
+  #canvas-dialog.cv-pair.cv-ed-on > #cv-editor { width: min(420px, calc(100vw - 24px)); flex: none; }
+  #cv-ed-bar .cv-mini-t { display: none; }   /* one markup for both widths (DESIGN §21 F11): the phone bar has no title */
+  /* Canvas and Friends keep their exact place: the column is centred in a box one bar shorter at the bottom, and where it
+     does not fit it starts at the top reserve (a safe centre: two growing spacers, not justify-content: safe center). */
+  #canvas-dialog.cv-pair.cv-ed-on { justify-content: flex-start; padding-bottom: calc(12px + 76px + env(safe-area-inset-bottom)); }
+  #canvas-dialog.cv-pair.cv-ed-on::before, #canvas-dialog.cv-pair.cv-ed-on::after { content: ''; flex: 1 1 0; min-height: 0; }
+  #canvas-dialog.cv-pair.cv-ed-on::before { order: -10; margin-top: -10px; }   /* cancels the column gap the spacer adds */
+  #canvas-dialog.cv-pair.cv-ed-on::after { order: 10; margin-bottom: -10px; }
+  #canvas-dialog.cv-pair.cv-ed-on > .export-card,
+  #canvas-dialog.cv-pair.cv-ed-on.cv-fr-big > #cv-friends,
+  #canvas-dialog.cv-pair.cv-ed-on.cv-ed-big > #cv-editor {
+    max-height: calc(100svh - 260px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+/* ── a PC: the small column (side by side) ── */
+@media (min-width: 701px) {
+  #canvas-dialog.cv-pair.cv-ed-on > #cv-editor { width: 360px; flex: none; }
+  body.cv-anchored #canvas-dialog.cv-pair.cv-ed-on > #cv-editor { animation: cv-grow 160ms cubic-bezier(.2, .8, .3, 1); transform-origin: top right; }
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-on { grid-auto-flow: row; row-gap: 10px; grid-template-rows: 1fr auto;
+    grid-template-columns: 176px 360px; grid-template-areas: "ed cv" "fr cv"; }
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-fr-big { grid-template-columns: 360px 176px; grid-template-areas: "fr ed" "fr cv"; }
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-ed-big { grid-template-columns: 360px 176px; grid-template-areas: "ed fr" "ed cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-on { grid-template-rows: auto 1fr; grid-template-areas: "fr cv" "ed cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-fr-big { grid-template-areas: "fr cv" "fr ed"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-ed-big { grid-template-areas: "ed cv" "ed fr"; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on > .export-card { grid-area: cv; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on > #cv-friends { grid-area: fr; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on > #cv-editor { grid-area: ed; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on:not(.cv-ed-big) > #cv-editor { width: 176px; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-big > .export-card { width: 176px; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-pair.cv-side.cv-ed-on:not(.cv-ed-big) > #cv-editor { align-self: end; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-on:not(.cv-ed-big) > #cv-editor { align-self: start; }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar { flex-wrap: wrap; }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar .ed-sw { width: 148px; grid-template-columns: 58px 18px 58px; }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar .ed-k { width: 58px; }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar .ed-sw[data-mode="full"] .ed-k { transform: translateX(76px); }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar .ed-what { align-self: stretch; white-space: nowrap; padding: 8px 6px; }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar { gap: 10px; }
+  .ed-head { display: flex; align-items: center; gap: 10px; }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar .ed-gap { display: none; }
+  /* stacked fall-back: the small ones sit away from the button */
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on:not(.cv-side):not(.cv-ed-big) > #cv-editor { order: 2; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { order: -3; }
+}
+@media (prefers-reduced-motion: reduce) { .ed-k, .ed-l { transition: none; } body.cv-anchored #canvas-dialog.cv-pair.cv-ed-on > #cv-editor { animation: none; } }
+.ed-why:empty { display: none; }
+```
+
 ### 5.6 Tests
 
 ```js
-  /* ═══ SIMPLE MODE, PHASE 1 STEP 1.3 — THE VIEW HE HOLDS: the Settings preview, the switch, the read-only Simple timeline ═══ */
+  /* ═══ SIMPLE MODE, PHASE 1 STEP 1.3 — THE VIEW HE HOLDS: the switch (through the cog's one door), the read-only Simple timeline ═══
+     1 Oct: re-anchored to the cog and the guard; NOT RE-RUN. The cog block's own tests are §5.6b. */
 
-  /* A project on screen with three clips (real media records), a title and a song; the preview on; everything put back.
+  /* A project on screen with three clips (real media records), a title and a song; everything put back.
      `fn(ctx)` gets the layers and a commit counter. History commits are COUNTED, not stubbed away, so "no undo step" is real. */
   async function smView(fn, opts) {
     opts = opts || {};
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (wasHome) FM.home.close();
-    const saved = { scene: FM.scene, time: FM.time, sm: FM.settings.get('simpleEditor'), commit: FM.history.commit, save: FM.storage.save, zoom: FM.timeline.getZoom() };
+    const saved = { scene: FM.scene, time: FM.time, commit: FM.history.commit, save: FM.storage.save, zoom: FM.timeline.getZoom() };   // 1 Oct: no Settings preview (D22 A); under D22 B also save and set 'simpleEditor' here
     /* The switch remembers the editor on THIS device's card for the open project (FM.editor.set → the index entry's
        `editor`). The suite's own project is that project, so the card is put back exactly as found, or the next test
        would open in Simple. */
     const pid0 = FM.storage.openProjectId ? FM.storage.openProjectId() : null;
     const card0 = (FM.projects.list() || []).find(p => p.id === pid0);
     const ed0 = card0 ? card0.editor : undefined;
+    /* the switch also writes this device's fm.editor.last and, on a first arrival in Simple, fm.editor.hint: put both back */
+    const ls0 = {}; ['fm.editor.last', 'fm.editor.hint'].forEach(k => { try { ls0[k] = localStorage.getItem(k); } catch (e) {} });
     let commits = 0;
     FM.history.commit = function () { commits++; };
     FM.storage.save = function () {};
@@ -2897,7 +3005,6 @@ body.ed-simple #sm-timeline { display: flex; }
     FM.scene.project.duration = 12;
     FM.time = 2;
     try {
-      if (FM.editor) { FM.settings.set('simpleEditor', true); }
       FM.refreshAll(); await sleep(60);
       return await fn({ c1: c1, c2: c2, c3: c3, title: title, song: song, commits: () => commits, sleep: sleep });
     } finally {
@@ -2906,7 +3013,7 @@ body.ed-simple #sm-timeline { display: flex; }
         const idx = FM.projects.list() || [], c = idx.find(p => p.id === pid0);
         if (c && c.editor !== ed0) { if (ed0 === undefined) delete c.editor; else c.editor = ed0; FM.projects.saveIndex(idx); }
       } catch (e) {}
-      FM.settings.set('simpleEditor', !!saved.sm);
+      Object.keys(ls0).forEach(k => { try { if (ls0[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, ls0[k]); } catch (e) {} });
       FM.history.commit = saved.commit; FM.storage.save = saved.save;
       FM.scene = saved.scene; FM.time = saved.time;
       g.done();
@@ -2918,6 +3025,8 @@ body.ed-simple #sm-timeline { display: flex; }
   function smVis(el) { return !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'; }
   function smNeedEditor() { if (!FM.editor || !FM.simpleTimeline) throw new Error('FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load'); }
 
+  /* D22 B ONLY: build this test only if he picks a Settings gate. Under D22 A (recommended) there is no row, and cog T7–T9
+     (§5.6b) test the block instead. */
   test('simple P1 · the Settings row: off by default, its own group right above Work with friends, and off hides every door', { item: '980' }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const was = FM.settings.get('simpleEditor');
@@ -2940,12 +3049,13 @@ body.ed-simple #sm-timeline { display: flex; }
       sw.click(); await sleep(0);
       if (document.body.classList.contains('sm-on') || document.body.classList.contains('ed-simple')) throw new Error('turning it off left the Simple classes on');
       FM.settings.close(); await sleep(300);
-      ['btn-editor', 'btn-sm-split', 'vb-editor', 'sm-timeline'].forEach(id => { if (smVis(document.getElementById(id))) throw new Error('#' + id + ' is visible with the preview OFF'); });
+      ['btn-sm-split', 'sm-timeline', 'cv-editor'].forEach(id => { if (smVis(document.getElementById(id))) throw new Error('#' + id + ' is visible with the gate OFF'); });
     } finally { FM.settings.set('simpleEditor', !!was); if (FM.settings.isOpen()) FM.settings.close(); await sleep(300); }
   });
 
   test('simple P1 · T8 the switch writes nothing, keeps time, selection and zoom, and every clip keeps its x', { item: '980' }, async function () {
     smNeedEditor();
+    /* 1 Oct, RE-ANCHORED, NOT RE-RUN: through FM.editor.request (the cog's one door); no ⇄, no E, no preview flip. */
     await atWideWidth(async function () {
       await smView(async function (v) {
         FM.selectLayer(v.c2.id);
@@ -2954,7 +3064,7 @@ body.ed-simple #sm-timeline { display: flex; }
         const fullX = {};
         [v.c1, v.c2, v.c3].forEach(c => { const e = document.querySelector('#tl-tracks .clip[data-id="' + c.id + '"]'); fullX[c.id] = e ? e.getBoundingClientRect().left : NaN; });
         FM.selectLayer(v.c2.id);
-        if (!FM.editor.set('simple')) throw new Error('the switch refused with nothing live');
+        if (!(await FM.editor.request('simple'))) throw new Error('the switch refused with nothing live');
         await v.sleep(40);
         if (!document.body.classList.contains('ed-simple') || !smVis(document.getElementById('sm-timeline'))) throw new Error('Simple is not on screen after the switch');
         if (JSON.stringify(FM.scene) !== doc0) throw new Error('the switch wrote to the document');
@@ -2970,26 +3080,24 @@ body.ed-simple #sm-timeline { display: flex; }
         });
         if (off.length) throw new Error('clips moved across the switch: ' + off.join(' · '));
         if (document.activeElement === document.body) throw new Error('focus fell to <body> after the switch');
-        const b = document.getElementById('btn-editor');
-        if (!b || b.getAttribute('aria-label') !== 'Switch to Full editor') throw new Error('⇄ does not name its action: ' + (b && b.getAttribute('aria-label')));
-        /* E switches back; the switch shakes, not switches, during an export */
+        /* back to Full through the same door: still nothing written; the switch's own words are cog T7/T10's (§5.6b) */
+        if ((await FM.editor.request('full')) !== true || document.body.classList.contains('ed-simple')) throw new Error('the switch did not go back to Full');
+        if (JSON.stringify(FM.scene) !== doc0 || v.commits() !== commits0) throw new Error('switching back wrote to the document or took a step');
+        /* during an export the one door refuses (its line shows inside the cog block, cog T13) */
+        FM._exporting = true;
+        try { if ((await FM.editor.request('simple')) !== false || document.body.classList.contains('ed-simple')) throw new Error('the switch went through during an export'); }
+        finally { FM._exporting = false; }
+        /* NO E (DESIGN §0.4 B14): the key does nothing new in Full */
         window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true }));
         await v.sleep(20);
-        if (document.body.classList.contains('ed-simple')) throw new Error('E did not switch back to Full');
-        FM._exporting = true;
-        try { if (FM.editor.set('simple') !== false || document.body.classList.contains('ed-simple')) throw new Error('the switch went through during an export'); }
-        finally { FM._exporting = false; }
-        /* the Settings preview going off puts the project in Full AT ONCE and leaves the card as it was */
-        FM.editor.set('simple');
-        FM.settings.set('simpleEditor', false); await v.sleep(20);
-        if (document.body.classList.contains('ed-simple')) throw new Error('turning the preview off left Simple on screen');
-        if (FM.editor.homeFor(null) !== 'full') throw new Error('with the preview off a project must open in Full');
+        if (document.body.classList.contains('ed-simple')) throw new Error('E switched editor — Full must gain no key'); 
       });
     }, 1280);
   });
 
-  test('simple P1 · T19 on a phone at 380 the Simple row reads ⋯ ✂ ⇄ |◀, the clip row is hit-testable, and ✎ hides by visibility', { item: '980' }, async function () {
+  test('simple P1 · T19 on a phone at 380 the Simple row reads ⋯ ✂ (gap) |◀ with |◀ where Full has it, the clip row is hit-testable, and ✎ hides by visibility', { item: '980' }, async function () {
     smNeedEditor();
+    /* 1 Oct, RE-ANCHORED, NOT RE-RUN: no ⇄ on the play bar (D18 rewritten); ◐ keeps slot 3 invisible. */
     await atPhoneWidth(async function () {
       await smView(async function (v) {
         /* Full's own left group first: its four buttons sit flush, and at the narrowest widths they already overlap by a
@@ -3001,10 +3109,11 @@ body.ed-simple #sm-timeline { display: flex; }
         /* A shake (a refused switch in an earlier test) or the crossfade is a TRANSFORM, which getBoundingClientRect includes — finish
            every running animation so this measures the layout, not a frame of one. */
         document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
-        const ids = ['btn-opts', 'btn-sm-split', 'btn-editor', 'btn-tostart'];
-        const xs = ids.map(id => { const e = document.getElementById(id); return smVis(e) ? e.getBoundingClientRect().left : NaN; });
-        if (xs.some(isNaN) || !(xs[0] < xs[1] && xs[1] < xs[2] && xs[2] < xs[3])) throw new Error('the left group is not ⋯ ✂ ⇄ |◀ in order: ' + ids.map((id, i) => id + '@' + Math.round(xs[i])).join(' '));
+        const ids = ['btn-opts', 'btn-sm-split', 'btn-addside', 'btn-tostart'];   // ◐ (#btn-addside) holds slot 3, invisible (D18 A)
+        const xs = ids.map(id => { const e = document.getElementById(id); return e && e.getClientRects().length ? e.getBoundingClientRect().left : NaN; });
+        if (xs.some(isNaN) || !(xs[0] < xs[1] && xs[1] < xs[2] && xs[2] < xs[3])) throw new Error('the left group is not ⋯ ✂ (gap) |◀ in order: ' + ids.map((id, i) => id + '@' + Math.round(xs[i])).join(' '));
         ['btn-layermenu', 'btn-addside'].forEach(id => { if (smVis(document.getElementById(id))) throw new Error('#' + id + ' (Full’s) is visible in Simple'); });
+        if (Math.abs(document.getElementById('btn-tostart').getBoundingClientRect().left - fr[3].left) > 1) throw new Error('|◀ moved between Full and Simple — D18 A keeps it in its slot');
         const r = ids.map(id => document.getElementById(id).getBoundingClientRect());
         for (let i = 1; i < r.length; i++) if (r[i - 1].right - r[i].left > fullOver + 0.5) throw new Error(ids[i] + ' overlaps ' + ids[i - 1] + ' by ' + (r[i - 1].right - r[i].left).toFixed(2) + ' px, more than Full’s own row does (' + fullOver.toFixed(2) + ' px)');
         const sp = document.getElementById('btn-sm-split');
@@ -3114,75 +3223,84 @@ body.ed-simple #sm-timeline { display: flex; }
     await smT21(1280, ['btn-del-layer', 'btn-parent', 'btn-more-layer'], false);
   });
 
-  test('simple P1 · D2-B in Full on a phone the ⋯ strip carries a Simple editor item that fits its column and switches', { item: '980' }, async function () {
-    smNeedEditor();
-    await atPhoneWidth(async function () {
-      await smView(async function (v) {
-        const bar = document.getElementById('opt-bar'), opts = document.getElementById('btn-opts'), item = document.getElementById('vb-editor');
-        if (!item) throw new Error('there is no Simple editor item (#vb-editor) for ⋯');
-        if (bar.classList.contains('hidden')) opts.click();
-        await v.sleep(300);
-        document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
-        // CONTROL: the strip is open and holds its usual items
-        if (bar.classList.contains('hidden') || !bar.getClientRects().length) throw new Error('CONTROL: ⋯ did not open its strip');
-        const br = bar.getBoundingClientRect(), ir = item.getBoundingClientRect();
-        if (!(ir.width > 0 && ir.height > 0)) throw new Error('the Simple editor item is not drawn in the open ⋯ strip');
-        if (ir.left < br.left - 0.5 || ir.right > br.right + 0.5 || bar.scrollWidth > bar.clientWidth + 1) throw new Error('the Simple editor item (' + Math.round(ir.width) + ' px) does not fit ⋯’s ' + Math.round(br.width) + ' px column — it is cut off');
-        if (!/Simple editor/.test(item.getAttribute('aria-label') || '')) throw new Error('the icon-only item has no words: aria-label ' + item.getAttribute('aria-label'));
-        item.click(); await v.sleep(60);
-        if (!document.body.classList.contains('ed-simple')) throw new Error('tapping the ⋯ item did not switch to Simple');
-      });
-    }, 380);
-  });
+  /* 1 Oct: the D2-B test (Full's ⋯ strip carries a Simple editor item) is WITHDRAWN with the item (DESIGN.md §0.4 V1).
+     Its opposite now holds: FU1 checks that Full's ⋯ strip is HEAD's, element for element and pixel for pixel. */
 
-  test('simple P1 · off means off: with the preview off, a project opening in Full runs nothing of the switch — no text-editor flush', { item: '980' }, function () {
+  test('simple P1 · off means off: a project this device never switched opens in Full and runs nothing of the switch — no text-editor flush', { item: '980' }, function () {
     smNeedEditor();
-    /* The switch's apply() flushes the text editor and closes the canvas tools before it swaps (§6.2). It must never run in
-       Full with the preview off — but syncProject() runs inside EVERY timeline rebuild, and a new project id reaches it on
-       every open. Spied, not stubbed away: the spy counts, and the control below proves the same path does flush when the
-       preview is on and the project's home is Simple. */
-    const te = FM.textEdit, pid0 = FM.storage.openProjectId, P = FM.scene.project, had = 'sm' in P, sm0 = P.sm;
-    const was = FM.settings.get('simpleEditor'), act0 = te && te.isActive, stop0 = te && te.stop;
+    /* 1 Oct, RE-ANCHORED, NOT RE-RUN. "Off" is now "this device never chose Simple for the project" (DESIGN.md §7.2), and the
+       control seeds the project's index card with editor 'simple' instead of project.sm.home, which homeFor no longer reads
+       (DESIGN.md §0.4 B27). syncProject() runs inside EVERY timeline rebuild and a new project id reaches it on every open; the
+       switch's apply() commits the text editor before it swaps. Spied, not stubbed away: the spy counts, and the control proves
+       the same path does run when this device chose Simple. */
+    const te = FM.textEdit, pid0 = FM.storage.openProjectId, list0 = FM.projects.list, P = FM.scene.project, had = 'sm' in P, sm0 = P.sm;
+    const act0 = te && te.isActive, stop0 = te && te.stop;
     if (!te) throw new Error('setup: FM.textEdit is missing');
     let stops = 0, n = 0;
     try {
-      FM.settings.set('simpleEditor', false);
       te.isActive = function () { return true; }; te.stop = function () { stops++; };
       FM.storage.openProjectId = function () { return 'sm_offmeansoff_' + n; };
+      FM.projects.list = function () { return [{ id: 'sm_offmeansoff_1' }, { id: 'sm_offmeansoff_2', editor: 'simple' }]; };
+      P.sm = { home: 'simple' };   // a Simple-made file: it must NOT put a device that never chose Simple into Simple
       n = 1; FM.timeline.rebuild();
-      if (stops) throw new Error('with the preview OFF, opening a project flushed the text editor ' + stops + ' time(s) — the switch ran in Full');
-      if (FM.editor.mode() !== 'full' || document.body.classList.contains('ed-simple')) throw new Error('with the preview OFF a project opened in Simple');
-      /* CONTROL: preview on, and a project whose home is Simple — the same open DOES switch, flushing first */
-      FM.settings.set('simpleEditor', true);
-      P.sm = { home: 'simple' };
+      if (stops) throw new Error('a project this device never switched flushed the text editor ' + stops + ' time(s) on open — the switch ran in Full');
+      if (FM.editor.mode() !== 'full' || document.body.classList.contains('ed-simple')) throw new Error('project.sm.home "simple" put a device that never chose Simple into Simple (DESIGN §0.4 B27)');
+      /* CONTROL: this device chose Simple for project 2 — the same open DOES switch, committing the text editor first */
       n = 2; FM.timeline.rebuild();
-      if (FM.editor.mode() !== 'simple' || !stops) throw new Error('CONTROL: with the preview on, a Simple-home project opened in ' + FM.editor.mode() + ' with ' + stops + ' flush(es) — the spy is not on the path');
+      if (FM.editor.mode() !== 'simple' || !stops) throw new Error('CONTROL: a project whose card says Simple opened in ' + FM.editor.mode() + ' with ' + stops + ' flush(es) — the spy is not on the path');
     } finally {
-      te.isActive = act0; te.stop = stop0; FM.storage.openProjectId = pid0;
+      te.isActive = act0; te.stop = stop0; FM.storage.openProjectId = pid0; FM.projects.list = list0;
       if (had) P.sm = sm0; else delete P.sm;
       try { FM.editor.apply('full', { force: true, quiet: true }); } catch (e) {}
-      FM.settings.set('simpleEditor', !!was);
       try { FM.timeline.rebuild(); } catch (e) {}
     }
   });
 ```
 
-**Existing tests 1.3 could break:** tests that count the children of `#transport .t-left` or `#opt-bar` (two new buttons and
-one ⋯ item exist in the DOM, hidden); tests that walk every `.set-group` in Settings (one new group); tests of `syncKeyRail`'s
-exact condition. §8 has what the whole suite said.
+**Existing tests 1.3 could break:** tests that count the children of `#transport .t-left` (✂ exists in the DOM, hidden in
+Full); tests that walk `#canvas-dialog`'s children or measure the pair at 380×800 with Friends open (the third block's
+measured cost, DESIGN §0.4); tests of `syncKeyRail`'s exact condition; under D22 B only, tests that walk every `.set-group`.
+`#opt-bar` gains nothing (the ⋯ item is withdrawn).
+
+### 5.6b The cog block's tests (DESIGN §6.4, COG-DESIGN §10) — to write at build time, each failing first
+
+Name them `980 cog T1` … `980 cog T15`, append them after §5.6's, run each at `--width 1280` and `--width 380`, and prove
+each with `prove.sh` (its source reverted, it must fail). None is written yet.
+
+| # | Asserts | Fails on |
+|---|---|---|
+| T1 | 10 switches both ways through the cog leave history depth, autosave calls, collab ops and every storage key unchanged except this device's card `editor` and `fm.editor.last`; no `sm` key moves; `fm.cvPair` unchanged | a commit, save, op or adoption sneaking into a switch |
+| T2 | every canvas tool in collab-presence's `LEASED` table (`js/collab-presence.js:193-203`) is in `FM.editorGuardLists` (holds / commits / quiet / stays; `draw` as both `pen` and `draw-freehand`), and the voice recorder is in `REFUSED`; plus: a pen with 2 points + "Switch anyway" switches and leaves no pen open; a pen with 4 points + "Finish drawing and switch" adds one path layer (one step) and switches; Sketching open + a switch leaves it open with its own ↷ intact; the recorder open → refused with the line inside the block (DESIGN §21 F1, F2, F4) | a new tool the guard has never heard of; "Switch anyway" doing nothing; a wrong Done selector |
+| T3 | a changed crop box + switch → `FM.ask` with §6.4's words; Stay leaves the crop open with the same box and the editor unchanged; "Apply crop and switch" makes exactly one undo step, ↶ restores the old crop, and the editor switched | the silent discard of the 29 Sep `apply()` loop (M14) |
+| T4 | an untouched crop box + switch → no warning; the crop closes; no step | over-warning |
+| T5 | Redo has steps + typing in the text editor → the redo warning; Redo has steps and nothing open → no warning, and ↷ still works after switching there and back; **the same two in a live session (`withFakeNet921`), where ↷ is `FM.collab.canRedo()`** (§21 F5) | the redo tail lost silently, alone or with a friend in |
+| T6 | every other door is guarded: a project opening with a crop changed (and, under D22 B, the Settings row going off) refuses or asks, never discards | a second door |
+| T7 | with the block small, every element of `#canvas-dialog` other than `#cv-editor` has HEAD's computed style (FU6 does the rects) | a rule leaking into the old two blocks |
+| T8 | Canvas and Friends rects equal HEAD's with the block small at every FU6 size (DESIGN §0.4.5); the 380×800 Friends-open, 380×667, 375×553 and 320×568 costs equal DESIGN §0.4's numbers ±1 px; the Editor's switch is fully on screen and `elementFromPoint` finds it at every size (red at 956×440, 932×430, 844×390 until D24 is built); a window crossing 700 px with the cog open leaves the bar the height of its neighbours (§21 F11) | the pair moving; an unreachable switch; a bar built for the other width |
+| T9 | all six swaps S1↔S2↔S3 land the right big block, `aria-expanded` right, the flight lands; `fm.cvPair` remembered for Canvas / Friends and never written for the Editor; closed on the Editor block, the cog reopens on the last of Canvas / Friends | a third case missing from one pair function; the explanation coming back unasked |
+| T10 | a tap on the switch does not open the block; the bar elsewhere and "What should you use?" do; the switch's `aria-label` names the action | a switch tap opening the explanation |
+| T11 | after a switch the cog closes (D23 A); with an unapplied aspect pick, a **background pick alone**, or Friends big, it stays open and the pick / the Friends block is still there | a quick switch throwing away canvas picks (the background is what `cvSummary()` misses, §21 F3) |
+| T12 | every block on screen, Apply reachable, no sideways scroll, every control ≥ 44 px to hit, at 320×568, 375×553, 380×667, 380×800, 440×956 and 956×440 | phone fit, upright and sideways |
+| T13 | an export running → the switch refuses with its line inside the block (`elementFromPoint` finds it, not a toast under z 100); a HOLDS tool whose Done leaves it live → "Finish or close the open tool first" in the block, never a silent no-op (§21 F1) | an invisible refusal |
+| T14 | a Viewer in a live session (`withFakeNet921`) can switch, and no op is sent | switching treated as an edit |
+| T15 | reduced motion: the knob and the swap are instant | motion for someone who asked for none | §8 has what the whole suite said.
 
 ### 5.7 Where each decision lives (for a non-recommended pick)
 
-- **D2** is the `@media (max-width: 700px)` rules with `#vb-editor` and `body.ed-back`. D2-A: show `#btn-editor` in Full and
-  move `#btn-addside` into ⋯ (a Full change he must see first). D2-C: `#transport .tbtn` at 31 px from 427 px. D2-D: delete
-  those rules (the ⋯ item and back button go; E and Settings stay).
-- **D18 B** (⋯ · ⇄ · ✂ · |◀): move `#btn-sm-split` after `#btn-editor` in the markup; nothing else.
-- **D16 row 1**: the two `<svg>` bodies inside `#btn-editor` and `#vb-editor`. **Row 5**: `.sm-chip-gap` / `.sm-chip-overlap`.
+- **D2** is settled (his 1 Oct words: the cog). Nothing in the code chooses it.
+- **Answered 1 Oct:** D1 A (the words in `js/spine-words.js` already say Simple / Full), D9 A, D15 A, D16 A (rows 1 and 5 as
+  marked recommended). Nothing to change for them.
+- **D18 B** (⋯ · ✂ · |◀ packed): `body.ed-simple #btn-addside { display: none !important; }` at every width; nothing else.
+- **D16 row 1**: `ED_ICON` and `ED_PIC` in 1.3.18. **Row 5**: `.sm-chip-gap` / `.sm-chip-overlap`.
+- **D22 B** (a Settings gate): `GATED = true` in `js/editor-mode.js`, steps 1.3.7–1.3.9, and the Settings row test.
+- **D23 B** (the cog stays open after a switch): delete the `setTimeout(… cvClose …)` line in 1.3.18's switch handler.
 
 ### 5.8 The screens (checked at 380×667 and 1280×800, through the real app)
 
-Taken with `tools/shot.py` against the finished scratch copy, a four-photo project (a 1.2 s gap before photo 4), a title and a
-song. Saved outside the repo, in the session scratchpad's `simple-mode-qa/`:
+**1 Oct: these pictures are of the 29 Sep version** (⇄ on the play bar, the back button, the ⋯ item, the Settings row, all
+withdrawn); retake the sheet after 1.3 ships with the shots listed under the recipe. Taken with `tools/shot.py` against the
+finished scratch copy, a four-photo project (a 1.2 s gap before photo 4), a title and a song. Saved outside the repo, in the
+session scratchpad's `simple-mode-qa/`:
 
 | File | What it shows |
 |---|---|
@@ -3193,7 +3311,7 @@ song. Saved outside the repo, in the session scratchpad's `simple-mode-qa/`:
 | `p1-380-settings.png` | Settings: the **Simple editor** row, its own group, directly above Work with friends |
 | `p1-380-fullback.png` | Full after Simple → Full: the back-to-Simple button in ◐'s slot (D2-B) |
 | `p1-380-fullmenu.png` | Full, ⋯ open: the Simple editor item at the top of the strip |
-| `p1-1280-idle.png`, `p1-1280-selected.png`, `p1-1280-deleteline.png`, `p1-1280-fullback.png` | the same on PC: ‹ ✂ ⇄ \|◀ in the play bar, today's panel in the band, `#sm-say` along the bottom |
+| `p1-1280-idle.png`, `p1-1280-selected.png`, `p1-1280-deleteline.png`, `p1-1280-fullback.png` | the same on PC: ‹ ✂ \|◀ in the play bar (no ⇄: the switch is the cog's, D2), today's panel in the band, `#sm-say` along the bottom |
 
 **To take the sheet again after 1.3 ships (nothing to invent; re-checked by the review on the finished copy, 29 Sep).** Save
 this as `sm-sheet.js` in your scratchpad (never the repo). Its first line is prepended per shot:
@@ -3201,10 +3319,11 @@ this as `sm-sheet.js` in your scratchpad (never the repo). Its first line is pre
 ```js
 /* The §5.8 screenshot sheet's project, built through the real app: four photos laid end to end by Simple's own +
    path (FM.importFiles with {at}), a 1.2 s gap before photo 4, a title over photo 1 and a song under everything.
-   SHOT (set on the first line) picks the state: idle | selected | deleteline | gapchip | fullback | fullmenu | settings. */
+   SHOT (set on the first line) picks the state: idle | selected | deleteline | gapchip | cog | cogopen | cogwarn.
+   1 Oct: RE-ANCHORED, NOT RE-RUN. No Settings preview (D22 A); the fullback / fullmenu / settings shots are withdrawn with
+   what they showed — Full is HEAD's, and FU1 checks it. */
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 if (FM.home && FM.home.isOpen && FM.home.isOpen()) { FM.home.close(); await sleep(500); }
-FM.settings.set('simpleEditor', true);
 const P = FM.scene.project, W = P.width || 1080, H = P.height || 1920;
 const png = c => new Promise(r => { const k = document.createElement('canvas'); k.width = W; k.height = H; const g = k.getContext('2d'); g.fillStyle = c; g.fillRect(0, 0, W, H); k.toBlob(b => r(new File([b], c.slice(1) + '.png', { type: 'image/png' })), 'image/png'); });
 FM.scene.layers.slice().forEach(l => FM.scene.layers.splice(FM.scene.layers.indexOf(l), 1));
@@ -3215,24 +3334,24 @@ const T = FM.makeLayer('text', { text: 'Beach day', x: W / 2, y: H * 0.2, start:
 const S = FM.makeLayer('video', { name: 'Song', x: W / 2, y: H / 2, start: 0, duration: photos[3].start + photos[3].duration });
 S.audioOnly = true; FM.scene.layers.push(S); FM.media.set(S.id, { kind: 'video', width: 0, height: 0, duration: S.duration, hasAudio: true });
 FM.selectLayer(null); FM.time = 2; FM.refreshAll(); await sleep(200);
-if (SHOT === 'settings') { FM.settings.open(); await sleep(500); const g = document.getElementById('set-simple'); if (g) g.scrollIntoView({ block: 'center' }); await sleep(300); return 'settings'; }
+const cog = () => { const b = [document.getElementById('m-settings'), document.getElementById('btn-settings')].find(x => x && x.getClientRects().length); if (b) b.click(); };
+if (SHOT === 'cog' || SHOT === 'cogopen') { cog(); await sleep(700); if (SHOT === 'cogopen') { const w = document.getElementById('cv-ed-what'); if (w) w.click(); await sleep(600); } return SHOT; }
+if (SHOT === 'cogwarn') { FM.cropTool.start(photos[1].id); await sleep(300); /* move the box, then */ cog(); await sleep(700); const s = document.querySelector('#cv-ed-bar .ed-sw'); if (s) s.click(); await sleep(500); return SHOT; }
 FM.editor.set('simple'); await sleep(300);
 if (SHOT === 'selected' || SHOT === 'deleteline') { FM.selectLayer(photos[1].id); await sleep(400); }
 if (SHOT === 'deleteline') { FM.selectLayer(photos[0].id); await sleep(200); window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Backspace', key: 'Backspace', bubbles: true })); await sleep(200); }
 if (SHOT === 'gapchip') { const c = document.querySelector('#sm-main .sm-chip-gap'); if (c) c.click(); await sleep(200); }
-if (SHOT === 'fullback' || SHOT === 'fullmenu') { FM.editor.set('full'); await sleep(300); }
-if (SHOT === 'fullmenu') { const b = document.getElementById('btn-opts'); if (b) b.click(); await sleep(400); }
 const r = id => { const e = document.getElementById(id); if (!e) return null; const b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]; };
 return { shot: SHOT, simple: document.body.classList.contains('ed-simple'), say: (document.getElementById('sm-say') || {}).textContent || '', main: r('sm-main'), sound: r('sm-sound'), smSay: r('sm-say'), insp: r('inspector-panel'), stage: r('stage'), errors: (window.__fmErrors || []).length };
 ```
 
 ```bash
 # with tools/serve.sh on a FREE port (lsof -iTCP:<port> -sTCP:LISTEN prints nothing) — 8790–8799 are shared with other chats
-for st in idle selected deleteline gapchip fullback fullmenu settings; do
+for st in idle selected deleteline gapchip cog cogopen; do
   (echo "const SHOT='$st';"; cat "$SCRATCH/sm-sheet.js") > "$SCRATCH/shot-$st.js"
   python3 tools/shot.py --port "$PORT" --width 380 --height 667 --js-file "$SCRATCH/shot-$st.js" --wait 900 --out "$SCRATCH/p1-380-$st.png"
 done
-for st in idle selected deleteline fullback; do
+for st in idle selected deleteline cog cogopen cogwarn; do
   python3 tools/shot.py --port "$PORT" --width 1280 --height 800 --js-file "$SCRATCH/shot-$st.js" --wait 900 --out "$SCRATCH/p1-1280-$st.png"
 done
 ```
@@ -3249,8 +3368,7 @@ What they showed, and what was fixed because of it:
   380×667) so the panel keeps ≥ 200 px on a screen ≥ 694 px tall (at 380×667 the 180 px floor wins: the panel measured 168 px,
   review 29 Sep). T19 asserts both (it holds the panel at ≥ 150 px), and M6 below proves the assertion.
 - **Fixed — the playhead line ran down through `#sm-say` and the panel.** It now spans the Simple rows only.
-- **Fixed — D2-B's ⋯ item was cut to "Simple e".** ⋯'s strip is a 40 px column; the labelled item was 119 px wide. It is now
-  an icon like its neighbours, its words in `aria-label` / `title`; the new `D2-B` test asserts it fits, and M12 proves it.
+- ~~**Fixed — D2-B's ⋯ item was cut to "Simple e".**~~ Withdrawn 1 Oct with the item itself (DESIGN §0.4 V1).
 - **Seen, left for Phase 2:** on PC with nothing selected the band shows Full's Add menu, including Camera and New group
   (Phase 2 replaces it with Simple's tools; Phase 1 keeps "adding goes through today's Add", §15.1); no waveform in the sound
   row; no folded section band.
@@ -3269,13 +3387,14 @@ ways as #967 was.
 | presence draws through it | `js/collab-presence.js:1020` `function clipEl(lid) { return isId(lid) ? document.querySelector('#tl-tracks .clip[data-id="' + lid + '"]') : null; }`; `:1012` `const c = lid && document.querySelector('#tl-tracks .clip[data-id="' + lid + '"]');`; `:730` / `:996` / `:1093` `document.getElementById('tl-inner')` | each Full-only query becomes `FM.timeline.host()`: `host().box(lid)` for a clip, `host().inner` for where marks are drawn, `host().timeToX(t)` for x |
 | comment marks | `js/collab-comments.js:278-283` and `:316-324` (`FM.timeline.timeToX(…)` against Full's ruler) | the same substitution |
 | media progress bars | `js/collab-media.js:1325` `const tracks = document.getElementById('tl-tracks');` inside `M.paint` | paint on `host()`'s clip boxes |
-| presence `ed` | `js/collab-presence.js:81` `const ACTS = ['drag', 'trim', 'type', 'scrub', 'export'];`, `:236` `function sample() {`, `:280` `function cleanPr(m) {` | `ed: 'simple' \| 'full'` in the presence sample and in `cleanPr`'s whitelist (unknown values dropped); the people list reads "Sam · Simple". Presence is not a document op: no `SCHEMA_REV` bump |
-| Watch along flushes first | `js/collab-ui.js:526` `function startFollow(mid, name) {` | stop the text editor and the exclusive tools before following (§14.2) |
+| presence `ed` | `js/collab-presence.js:81` `const ACTS = ['drag', 'trim', 'type', 'scrub', 'export'];`, `:236` `function sample() {`, `:280` `function cleanPr(m) {` | `ed: 'simple' \| 'full'` in the presence sample and in `cleanPr`'s whitelist (unknown values dropped); **drawn in Simple only** ("Sam · Simple" in Simple's people list; Full's chip and list are HEAD's, DESIGN §0.4 V10). Presence is not a document op: no `SCHEMA_REV` bump |
+| ~~Watch along flushes first~~ | `js/collab-ui.js:526` `function startFollow(mid, name) {` | **withdrawn 1 Oct** (DESIGN §0.4 B24): Watch along is unchanged; Simple's pre-flight names the follower who holds a lease instead |
 | the host clamps `sm.v` | `js/collab-bridge.js:147` `project: function (p) { FM.storage._clampProjectDims(p); },` | then `if (p.sm && p.sm.v > FM.SM_V) p.sm.v = FM.SM_V;` (§2.3: only in a live room, so a file keeps its newer-build guard) |
 
-**Tests to write first:** T8's live clauses (in `withFakeNet921`: ⇄ and E switch within one frame and send no op) and T12
-(`921`-style: a remote selection outlines the Simple clip box; a remote playhead sits at the same x in both editors; ⇄ never
-intersects the people chip, LIVE pill, comments bubble or person+ door at 380×667, 440×956 and 1280). **What he sees:** in a
+**Tests to write first:** T8's live clauses (in `withFakeNet921`: the cog's switch works within one frame of the cog closing
+and sends no op) and T12 (`921`-style: a remote selection outlines the Simple clip box; a remote playhead sits at the same x in
+both editors; nothing new on the stage or the play bar in either editor at 380×667, 440×956 and 1280), plus FU4 (Full in a
+live session equals HEAD's, presence aside from `ed`). **What he sees:** in a
 session, a friend's pointer and selection on the right clip whichever editor each is in. **Until 1.4 ships:** Simple works in a
 live session (it is read-only, and panel edits are ordinary one-layer edits) but the other person's outline and playhead are
 drawn on Full's hidden timeline, so he does not see them in Simple.
@@ -3288,14 +3407,14 @@ drawn on Full's hidden timeline, so he does not see them in Simple.
 
 | Step | Test | Fails before its step as | Kind |
 |---|---|---|---|
-| 1.1 | T15 FM.timedLists lists exactly the keyframe containers a generic walk finds (cue effects included) | the collector and the generic walk disagree: 2 list(s) missed (first: {"t":1.5,"v":0,"e":"linear"}), 0 extra — on HEAD the two cue-effect lists are the missed ones | behaviour |
-| 1.1 | moving or re-speeding a caption track carries its animated cue effects (a Full fix) | a cue effect key stayed at 1.5 when its caption track moved 3 s (want 4.5): the blur plays before its words appear | behaviour |
-| 1.1 | the Assistant moving a clip carries its keyframes (ai-ops start) | the clip moved to 5 s but its slide stayed at [1, 3] (want [5, 7]) — the animation is left behind | behaviour |
-| 1.1 | Full split refuses a half shorter than 0.1 s, and still splits inside (Q28) | a split 0.05 s from the start made 2 layers — a 0.05 s half is below every other floor and the sanitiser will fight it | behaviour |
-| 1.1 | a luma matte keeps reading its source past the cut after the source is split (a Full fix) | past the cut the matted square vanished (255,255,255): the matte read the first half, whose window has ended | behaviour |
-| 1.1 | a Follow keeps following its target past the cut after the target is split (a Full fix) | past the cut the follower reads 100 (want 200): it froze on the first half’s last key | behaviour |
+| 1.2 (moved from 1.1) | T15 FM.timedLists lists exactly the keyframe containers a generic walk finds (cue effects included) | the collector and the generic walk disagree: 2 list(s) missed (first: {"t":1.5,"v":0,"e":"linear"}), 0 extra — on HEAD the two cue-effect lists are the missed ones | behaviour |
+| ~~1.1~~ withdrawn | ~~moving or re-speeding a caption track carries its animated cue effects (a Full fix)~~ | a cue effect key stayed at 1.5 when its caption track moved 3 s (want 4.5): the blur plays before its words appear | behaviour |
+| ~~1.1~~ withdrawn | ~~the Assistant moving a clip carries its keyframes (ai-ops start)~~ | the clip moved to 5 s but its slide stayed at [1, 3] (want [5, 7]) — the animation is left behind | behaviour |
+| ~~1.1~~ withdrawn | ~~Full split refuses a half shorter than 0.1 s, and still splits inside (Q28)~~ | a split 0.05 s from the start made 2 layers — a 0.05 s half is below every other floor and the sanitiser will fight it | behaviour |
+| ~~1.1~~ withdrawn | ~~a luma matte keeps reading its source past the cut after the source is split (a Full fix)~~ | past the cut the matted square vanished (255,255,255): the matte read the first half, whose window has ended | behaviour |
+| ~~1.1~~ withdrawn | ~~a Follow keeps following its target past the cut after the target is split (a Full fix)~~ | past the cut the follower reads 100 (want 200): it froze on the first half’s last key | behaviour |
 | 1.2 | T7 sanitiser: layer.sm and project.sm come out canonical, keep plain unknown keys, and a second pass changes nothing | sm.main:"yes" survived the sanitiser: {"main":"yes","stay":true,"row":2,"future":{"a":1},"_secret":1} | behaviour |
-| 1.2 | T6 copy routes: duplicate, paste and the Assistant clone never make a second main clip or a second end song | duplicate: the copy carries sm {"main":true,"row":2}, want {"row":2} — a copy of a main clip must not be a second main clip | behaviour |
+| 1.2 | T6 copy routes: duplicate, paste and the Assistant clone never make a second main clip or a second end watermark | duplicate: the copy carries sm {"main":true,"row":2}, want {"row":2} — a copy of a main clip must not be a second main clip | behaviour |
 | 1.2 | T1 classifier: a plain track, a picture-in-picture, native-size fitting, gaps, overlaps and a crossfade | FM.spine.classify is missing — js/spine.js did not load | module absent (presence only) |
 | 1.2 | T1 classifier: stacked takes, a background still, an A-roll with cutaways and an import stack | FM.spine.classify is missing — js/spine.js did not load | module absent (presence only) |
 | 1.2 | T1 classifier: what follows which clip — on a cut, long things, the sound rule, captions, hidden clips, camera | FM.spine.classify is missing — js/spine.js did not load | module absent (presence only) |
@@ -3304,14 +3423,17 @@ drawn on Full's hidden timeline, so he does not see them in Simple.
 | 1.2 | Simple’s + lays four picked photos end to end from the end of the clip row, one pick | the photos were not laid end to end from 5 s: 1, 1, 1, 1 (want 5, 10, 15, 20) | behaviour |
 | 1.2 | T20 no company name in any word the Simple editor shows, and the scan catches one | FM.spineWords is missing — js/spine-words.js did not load | module absent (presence only) |
 | 1.2 | the collab fingerprint carries the sm rules — its fixture holds sm keys that come out canonical, and SM_V moves it | the fingerprint fixture carries sm nothing at all after sanitising (want {"stay":true,"row":2,"future":{"a":1}}) — two builds that read sm differently would hash the same | behaviour |
-| 1.3 | the Settings row: off by default, its own group right above Work with friends, and off hides every door | Settings has no Simple editor row (#set-simple) | behaviour |
+| 1.3 (D22 B only) | the Settings row: off by default, its own group right above Work with friends, and off hides every door | Settings has no Simple editor row (#set-simple) | behaviour |
 | 1.3 | T8 the switch writes nothing, keeps time, selection and zoom, and every clip keeps its x | FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load | module absent (presence only) |
-| 1.3 | T19 on a phone at 380 the Simple row reads ⋯ ✂ ⇄ \|◀, the clip row is hit-testable, and ✎ hides by visibility | FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load | module absent (presence only) |
+| 1.3 (re-anchored) | T19 on a phone at 380 the Simple row reads ⋯ ✂ (gap) \|◀ with \|◀ where Full has it, the clip row is hit-testable, and ✎ hides by visibility | FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load | module absent (presence only) |
 | 1.3 | the Phase 1 lines: Delete on a main clip, ✂, S and a seam chip each say their line with Open in Full and change nothing | FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load | module absent (presence only) |
 | 1.3 | T21 at 380 in Simple none of Full’s layer doors show — ⧉, ◐, Layers, Add camera, the phone’s copy and delete — with one clip selected | FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load | module absent (presence only) |
 | 1.3 | T21 at 1280 in Simple the PC layer-action group (delete, parent, more) does not show with one clip selected | FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load | module absent (presence only) |
-| 1.3 | D2-B in Full on a phone the ⋯ strip carries a Simple editor item that fits its column and switches | FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load | module absent (presence only) |
-| 1.3 | off means off: with the preview off, a project opening in Full runs nothing of the switch — no text-editor flush | FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load | module absent (presence only); its behaviour proof is M13 |
+| ~~1.3~~ withdrawn | ~~D2-B in Full on a phone the ⋯ strip carries a Simple editor item that fits its column and switches~~ | FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load | module absent (presence only) |
+| 1.3 (re-anchored) | off means off: a project this device never switched opens in Full and runs nothing of the switch — no text-editor flush | FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load | module absent (presence only); its behaviour proof is M13 |
+
+**1 Oct:** the messages above are the 29 Sep run's. The re-anchored tests, the cog's T1–T15 (§5.6b) and the FU group
+(§3.2) have no rows yet: fill them in from a real `prove.sh` run at build time, never from this table.
 
 **About the "module absent" rows.** Thirteen of the 24 fail before their step only because a new module is not there yet
 (`FM.spine`, `FM.spineWords`, `FM.editor`). That proves presence, not behaviour, and prove.sh will call each one plain CAUGHT:
@@ -3335,16 +3457,23 @@ the #980 entry, so the proof is in the repo's own record.
 | M9 | `js/spine-words.js` | "Open in Full like CapCut" | T20 | **caught**: "another company’s name is in Simple’s words: spineWords.lines.openFull" |
 | M10 | `js/editor-mode.js` | the switch commits a history step | T8 | **caught**: "the switch took an undo step" |
 | M11 | `js/collab-core.js` | SM_V taken out of the fingerprint | the collab fingerprint carries the sm rules… | **caught**: "a build with a different SM_V has the same fingerprint" |
-| M12 | `styles.css` | ⋯'s Simple editor item gets its label back (the earlier draft's CSS) | D2-B (380) | **caught**: "the Simple editor item (119 px) does not fit ⋯’s 40 px column" |
-| M13 | `js/editor-mode.js` | `syncProject` / `onPreviewFlip` go back to the earlier draft's unconditional `apply(…, {force: true})` (review, 29 Sep) | off means off | **caught**: "with the preview OFF, opening a project flushed the text editor 1 time(s) — the switch ran in Full" |
+| ~~M12~~ | — | withdrawn 1 Oct with the ⋯ item | — | — |
+| M13 | `js/editor-mode.js` | `syncProject` goes back to the earlier draft's unconditional `apply(…, {force: true})` (review, 29 Sep) | off means off | **caught** on 29 Sep against the preview-flag version; re-prove against the re-anchored test (card-seeded control) |
+| M14 *(new, 1 Oct, not run)* | `js/editor-mode.js` | `apply()` closes every tool again with the 29 Sep loop (`cropTool.stop()` = cancel) instead of refusing on a live `HOLDS` | cog T3 | must go red: "the crop box was thrown away" |
+| M15 *(new, not run)* | `js/editor-mode.js` | `onKey` answers bare E in Full again | T8 (the E clause) | must go red: "E switched editor — Full must gain no key" |
+| M16 *(new, not run)* | `styles.css` | one cog rule loses its `.cv-ed-on` key | cog T7 / FU6 | must go red on the old two blocks' computed style |
+| M17 *(new, not run)* | `js/app.js` | Full's split floor moved to 0.1 s (the withdrawn 1.1.5) | FU2 | must go red: the 0.05 s split differs from HEAD |
 
-All twelve were caught, each run alone through the real suite page on the finished copy with the file restored after. The
+All twelve were caught (29 Sep; M12 has since been withdrawn and M14–M17 are new and not run), each run alone through the real suite page on the finished copy with the file restored after. The
 builder should repeat at least M1, M2, M3, M6, M8, M12 and M13 with `tools/mutate.sh` (which adds the green-before and
 changed-something gates), so the proofs are in the repo's own record and `tools/.weak-proofs.log` can be marked RESOLVED.
 
 ---
 
 ## 8. Existing tests: what the whole suite said
+
+**1 Oct: these runs are the 29 Sep version's** (with step 1.1 and the play-bar switch). Re-run the whole suite at both widths
+on the revised build before believing any line here.
 
 Two whole-suite runs on the finished scratch copy through `tests/_cdp.py` (each ~42 minutes on this Mac with the builder's own
 runs beside it; ship.sh's two passes will take about as long). Every red was then re-run **alone**, on the patched copy AND on
@@ -3368,11 +3497,11 @@ believing it (and check for orphaned `fm-cdp` Chrome processes first).
 
 | Risk | Size | What reduces it | If it goes wrong |
 |---|---|---|---|
-| `SCHEMA_REV 3` stops his phone and his Mac sharing live until both update | certain, brief | said in the 1.2 release line; the app already says "update to join" | update both; no data at risk |
+| `SCHEMA_REV 7` stops his phone and his Mac sharing live until both update | certain, brief | said in the 1.2 release line; the app already says "update to join" | update both; no data at risk |
 | The sanitiser rewrites a field on every load of an old project | low | it touches only `sm`, `srcW/srcH/srcRev`, `pick` and an effect's `sm`, which no project has today; T7's control proves a layer without them comes out byte-identical | `tools/rollback.sh <version before 1.2>` |
-| The 0.1 s split floor refuses a split he used to make | low | the same message as before; 0.1 s is every other floor in the app | roll back 1.1 alone |
-| The matte / Follow lineage change alters a render | low | only for a source that was split (`!p.splitOf` is one property read otherwise); it now does what the parent chain already did | roll back 1.1 alone |
-| Simple reads an odd Full project wrong (the wrong main track) | medium | it is a VIEW: nothing is written; Phase 1's classifier leaves out the link rule, masks in fillsFrame and main blocks (§11), so a masked face-cam or a keyed group can read as main; Open in Full is one tap | Settings → Simple editor off: every project is in Full at once, untouched |
+| A Simple change leaks into Full (his rule, 1 Oct) | the risk he named | the FU group against HEAD on every `queue 980` release, enforced by `ship.sh`; Simple releases ship alone; the old step 1.1 withdrawn | `tools/rollback.sh <version before it>` |
+| A switch throws away an unapplied crop or drawing | low | the guard: `apply()` refuses while a `HOLDS` tool is live; `request()` asks first and presses the tool's own Done (cog T3–T6) | — |
+| Simple reads an odd Full project wrong (the wrong main track) | medium | it is a VIEW: nothing is written; Phase 1's classifier leaves out the link rule, masks in fillsFrame and main blocks (§11), so a masked face-cam or a keyed group can read as main; Open in Full is one tap | the cog's switch back to Full: that project opens in Full from then on, untouched (under D22 B, the Settings row off puts every project in Full) |
 | The stage is smaller in Simple on a small phone (180 px instead of 267 at 380×667; about 346 instead of 382 at his 440×956, computed, not measured) | by design | keeps ≥ 200 px for the docked panel where the screen is ≥ 694 px tall (168 px at 380×667, measured); the design clamps the stage in Simple too (§8.2) | switch to Full, or off |
 | A Simple rebuild costs the phone frames | low–medium | classify is measured (500 layers within 60 ms in the suite frame, 2,000 not quadratic); filmstrips reuse Full's frames through one bounded cache of 60, 4,096 px wide at most | switch off |
 | A key that used to do something in Full does nothing in Simple | by design | only A/S/D, Delete on a main clip and ⌘D on a main clip are held, each with its line | — |
@@ -3380,13 +3509,15 @@ believing it (and check for orphaned `fm-cdp` Chrome processes first).
 
 **Rollback, in one line each** (`tools/rollback.sh` makes a NEW commit; it never rewrites history or force-pushes, keeps
 REQUESTS.md / POLISH-LOG.md / INBOX.md as they are, and asks before publishing):
-- *"Take the Simple editor out":* `tools/rollback.sh <version before 1.3>`. Keeps 1.1 and 1.2, which are invisible.
-- *"Take all of it out":* `tools/rollback.sh <version before 1.1>`.
+- *"Take the Simple editor out":* `tools/rollback.sh <version before 1.3>`. Keeps 1.2, which is invisible.
+- *"Take all of it out":* `tools/rollback.sh <version before 1.2>`.
 - `tools/rollback.sh` with no argument lists the releases, newest first, and changes nothing.
-- What a rollback leaves behind, harmlessly: `simpleEditor` in the settings (an older build ignores unknown settings),
-  `editor` on project cards (ignored), `srcW/srcH/srcRev` and `pick` on layers added meanwhile (an older build
+- What a rollback leaves behind, harmlessly: `fm.editor.last`, `fm.editor.hint` and `fm.cvPair = 'editor'` (an older build
+  reads it as Canvas), `simpleEditor` in the settings under D22 B (an older build ignores unknown settings), `editor` on
+  project cards (ignored), `srcW/srcH/srcRev` and `pick` on layers added meanwhile (an older build
   carries plain layer fields untouched). No project
-  needs repairing. **Faster than any rollback for anything visible: Settings → Simple editor → off.**
+  needs repairing. **Faster than any rollback for anything visible: the cog's switch back to Full** (under D22 B, Settings →
+  Simple editor → off).
 
 ---
 
@@ -3398,26 +3529,41 @@ speed, insert, make overlay / main, close gap, duplicate); attachments and Stay 
 the DOM-only drag preview with edge auto-scroll; Move earlier / later and Length; A/S/D/Delete/⌘D/⌘V per §8.3; the tray row
 and project tools (`js/simple-tools.js`) with the design's folded section band; comment pins `ls`/`lo`; undo labels and the
 undo queue; `#sm-say`'s Undo / Do it anyway; the persisted-roster live gate (arranging off while an editor is in the session).
+**Contained to Simple (DESIGN §0.4, 1 Oct):** `FM.trimClipEdge` used by Simple only (B7); Simple's own
+`FM.spine.shiftKeys` / `scaleKeys` over `FM.timedLists` (B2); `sm.snd` at add and Replace on Simple's routes, never
+`audioOnly` (B8); `sb` on the boundary keys `riderKeys` inserts, and Bounce skipping only those (B5); `sm.cut` and `seamAt`'s
+continuity only on marked pairs (B6); the undo queue only while `FM.spine.running` (B15–B17); comment anchors only for pins
+made in Simple (B25); Q29 and the lease pre-flight only for `ed: 's'` steps (B21, B22); no Watch-along change (B24). Every
+one is proven by the FU group against HEAD as well as by its own test.
 Also the pieces this plan moved out of Phase 1 (§11): `FM.setClipSpeed`, the `docRev` cache, the link rule, masks in
-fillsFrame, main blocks. *Size:* ~2,000 lines, the biggest phase. *Gate:* T2–T5, T9, T10, T23–T25, T28; his picks on D4–D8,
-D10, D14, D17, D19.
+fillsFrame, main blocks. **D17 B (his pick):** music is added whole with `sm.stay` and never fitted or faded; the Sound tray has
+no Ends with the video switch; `sm.tail` is written only by adoption and `pinStrays` on picture items, and `setFlag(u, 'tail',
+true)` refuses a sound unit (`audioOnly` or `sm.snd`), with its T2 clause (DESIGN §4.5). *Size:* ~2,000 lines, the biggest
+phase. *Gate:* T2–T5, T9, T10, T23–T25, T28; answered: D4–D8 A, D10 A, D14 first half A, D17 B, D19 A; FU1–FU7.
 
 **Phase 3: Make it look nice, and the way in.** *What:* Look (filters + Adjust), Captions with riders and Find speech,
-Effects segments, Ask with Simple's vocabulary, New project cards with the D3 migration, Clips › Extras, the synchronous
-picker, Home chip and ⋯ Open in Simple / Full, template routing and pack insert, Full's layer-menu Make overlay / Put in the
-clip row, the switch animation pool; **the Settings preview is removed**. *Size:* ~1,200. *Gate:* T6 (Phase 3 half), T19,
-T26, T26b; D3, D11, D12, D20, D21.
+Effects segments, Ask with Simple's vocabulary (`applyOps(…, {simple: true})`, the only place the `start` key shift runs,
+B3), Clips › Extras, the synchronous picker in Create when the device's editor is Simple (D3 A: the new card gets
+`editor: 'simple'`; the dialog unchanged), template-fill Replace while Simple is on screen, pack insert, the switch animation
+(**the morph only**, D11 B, played as the cog closes; no Fold, no Slide, no random pick); on PC each tool's panel docks inside
+the left band and scrolls (**D20 A**, DESIGN §8.3; the over-timeline sheet only when the band leaves under 64 px, a phone held
+sideways); under D22 B, the Settings gate removed. **Withdrawn 1 Oct** (DESIGN §0.4): New project cards
+and the D3 migration (V6), the Home chip and ⋯ Open in Simple / Full (V5), template routing by `home` (B27), Full's
+layer-menu items and stripe (V8, V9). *Size:* ~1,000. *Gate:* T6 (Phase 3 half), T19, T19b (the D20 A clauses), T26, T26b, FU1–FU7;
+answered: D11 B, D12 A, D20 A, D21 A; **open: D3** (re-asked; only the Create-picker item waits on it).
 
-**Phase 4: Together.** *What:* 4a clip time on the wire (keyframes relative to `kb`), 4a′ keyed caption cues, 4b the lease
+**Phase 4: Together — HELD (1 Oct, DESIGN §0.4 B29–B37).** It changes how Full behaves in a live session and cannot be
+contained piece by piece, so it is built only if he says yes knowing that (D14b, re-asked: his D14 A answered the old form, which included this phase). *What:* 4a clip time on the wire (keyframes relative to `kb`), 4a′ keyed caption cues, 4b the lease
 protects content and membership, 4c pre-flight, keep my frame and authorship `L.by`, 4d the glide, "Sam moved 4 clips", the
 gate lifted while every editor is connected. `SCHEMA_REV` bumps at 4a, 4a′, 4b and 4d. *Size:* medium-large. *Gate:* T11,
 T13–T16, T27 and a tier-3 run on real frames; **starts only after his first real Mac ↔ iPhone test.**
 
-**Phase 5: All-or-nothing.** *What:* `all:1` on both host paths, one arranging step in flight with an intent queue,
+**Phase 5: All-or-nothing — HELD with Phase 4.** *What:* `all:1` on both host paths, one arranging step in flight with an intent queue,
 CAS-checked undo, the offline outbox partitioned by path stamps, `PROTO` bump. *Size:* medium. *Gate:* T17; before Phase 6
 only if Phase 4's fuzz measures seams.
 
-**Phase 6: Transitions and clip animations.** *What:* ◇ at each cut, the picker, Use on every cut, Turn into a transition on
+**Phase 6: Transitions and clip animations.** (DESIGN §0.4 N2: the picture shows in Full's preview and export too; no new
+control in Full.) *What:* ◇ at each cut in Simple, the picker, Use on every cut, Turn into a transition on
 blends, In/Out/Combo clip animations, `FM.transitionAt`, sound stays picture-only, a `SCHEMA_REV` bump; drawn options first.
 *Size:* medium. *Gate:* T18 (export parity); D13.
 
@@ -3434,7 +3580,8 @@ C's T1–T16.
 
 | DESIGN / earlier draft says | This plan does | Why |
 |---|---|---|
-| Phase 1 is one release | three releases plus a planned fourth | each proven and rolled back alone; the Full-changing steps ship before anything visible |
+| **1 Oct:** step 1.1 "four Full fixes"; ⇄ on both play bars, the ⋯ item, the back button, E, the Settings row | 1.1 withdrawn (its `FM.timedLists` ships in 1.2); the ⚙ cog's third block is the one door, with the guard and its warnings; D22 decides any Settings gate; the FU group gates every Simple release | his rule: Full must not change in design or function; the switch lives in the cog; a swap that would lose un-undoable work warns first (DESIGN §0.4, §6) |
+| Phase 1 is one release | two releases plus a planned third (1.2, 1.3, 1.4), after the FU group | each proven and rolled back alone, and each proven to leave Full as HEAD had it |
 | `read()` cached on `FM.docRev` (§2.5) | no cache in Phase 1 | read runs only on rebuild; a cache is where staleness lives, and the forbidden alternative (a field hash) is the known bug; T1's timing test holds the cost. Add `docRev` with the Phase 2 runner |
 | the full §5.2 classifier | Phase 1 has: units (block / transparent / `sm.unit` groups), kinds, media state, derived main (background, import stacks, stacked take with the see-through exception, greedy with blend tolerance, hidden pass B), adopted main, seams (join / hairline / gap / overlap / blend / covered), slots, hosts by the start rule + the sound rule + isLong, riders, sides, pro level, lanes, anomalies | the rest (the link rule through the split lineage, moves-together anchors, main blocks, caption blocks, masks in fillsFrame, the group-opacity product in drawsPicture, the wrapper block) only changes the answer for Full-made projects with parenting, masks or keyed groups, which Phase 1 draws read-only with ✦. Each gets its T1 fixture when it lands in Phase 2, before adoption can store anything |
 | `.webm` both "audio" and "ambiguous" (§5.2) | `.webm` = audio | the round-3 T1 fixture says a Chrome `.webm` voice-over lands in Sound |
@@ -3443,18 +3590,18 @@ C's T1–T16.
 | Phase 1 stage clamp: top bar, play bar and the say row | the same, plus 200 px kept for the docked panel | today's panel docks below the Simple rows in Phase 1; without the reserve it was 85 px at 380×667 |
 | Phase 1 sections: folded band + one open section | a fixed 64 px sections box on the phone (two lanes, scrolls inside), filling the height on PC | folding is Phase 2's; the fixed box is what keeps the clip row's y constant |
 | `FM.setClipSpeed` extracted in Phase 1 | moved to Phase 2 | its only caller is Phase 2's Speed panel; a refactor with no caller cannot be proven by prove.sh |
-| T12 (chrome collision) in Phase 1 | in step 1.4 | ⇄ is on the play bar, never on the stage, so it cannot meet the stage's chips by construction; the live chips need 1.4's session tests |
+| T12 (chrome collision) in Phase 1 | in step 1.4 | nothing new is on the stage or the play bar (the switch is in the cog), so it cannot meet the stage's chips by construction; the live chips need 1.4's session tests |
 | **Earlier draft:** panel docked under the clip row, clamped at 66 % | docks under `#sm-say` with Simple's stage clamp | at 380×667 the panel covered the timeline and hid the Delete line (§5.8) |
 | **Earlier draft:** `addMediaLayer` handed its layer back through `FM._lastAddedLayer` | `addMediaLayer` returns the layer | a global side-channel is one more thing to keep in sync; callers that ignore the return are unchanged |
 | **Earlier draft:** `C.SCHEMA_REV = 2;` then `= 3;` | one line, `= 3` | two assignments of one constant read as a mistake |
 | **Earlier draft:** no T21, no fingerprint test | T21 at 380 and 1280; a fingerprint test that SM_V moves it | §15's Phase 1 gate lists T21; SM_V "only with SCHEMA_REV" needed a check |
 | **Earlier draft:** Layers and Add camera stayed reachable in Simple | hidden in Simple (`#vb-layers`, `#vb-camera`) | §14.2 styles row; a camera is Full-only |
 | the Settings hint *"See any project as clips — still being tested."* | *"See any project as clips — an early look."* | #967 (his one-name audit) made "still being tested" the Work-with-friends switch's phrase alone; `967 B4 1 one name` went red on it in the full run. Words are D1's file, so he can change it there |
-| **Earlier draft:** ⋯'s Simple editor item carried its label | icon only | the strip is 40 px wide; the label was cut off at 380 (§5.8) |
+| **Earlier draft:** ⋯'s Simple editor item carried its label | ~~icon only~~ the item is withdrawn (1 Oct) | his rule: nothing is added to Full's ⋯ strip |
 | **Earlier draft:** `smView` left the project card in Simple | puts the card back | the next test opened in Simple (T21's control caught it) |
 | §15's Phase 1 list includes `onSplit` | not in Phase 1; with the Phase 2 runner | it clears `sm.tail` on piece A (§4.5), and Phase 1 writes no `sm` at all, so there is nothing for it to clear yet (a split of a file from a newer build keeps its `sm.tail` on both halves until then) |
 | §15's Phase 1 list includes `FM.timeline.host()`, the dock hooks and presence `ed` | step 1.4 (planned, §6) | they only matter with a friend in the session; §6 has the anchors |
-| §15's Phase 1 gate lists T12b, T18, T19b and T22 | **not written in this plan** | T12b is 1.4's (a fake-net peer in Simple); T18 (export parity) has nothing to compare while Simple is read-only; T19b is the PC band budget of Phase 2's tools; T22's Phase 1 basics (⇄ names its action, focus never falls to `<body>`, 44×32 Open in Full, the chip's name) are asserted inside T8 and the Phase 1 lines test, not as a test of their own. Say so in 1.3's #980 clause rather than claim the gate |
+| §15's Phase 1 gate lists T12b, T18, T19b and T22 | **not written in this plan** | T12b is 1.4's (a fake-net peer in Simple); T18 (export parity) has nothing to compare while Simple is read-only; T19b is the PC band budget of Phase 2's tools; T22's Phase 1 basics (the cog's switch names its action, focus never falls to `<body>`, 44×32 Open in Full, the chip's name) are asserted inside T8 and the Phase 1 lines test, not as a test of their own. Say so in 1.3's #980 clause rather than claim the gate |
 | T21 (§14.6): 0, 1 and 2+ selected; `#m-group`, `#m-maskgroup`, `#m-more`, `#btn-group`, `#btn-maskgroup`; Tab onto a camera | one selection only, and the ids whose Full control is displayed with one clip selected | the other ids are hidden in Full with one clip selected too, so asserting them there proves nothing; Simple sets none of `m-editing` / `sel-mode` / `sel-multi`, which is what shows them. The 2+ case and Tab onto a camera wait for Phase 2's key scope |
 
 ## 12. Known gaps in Phase 1 (honest list)
@@ -3473,11 +3620,19 @@ C's T1–T16.
   Phase 1 only ever classifies `FM.scene`; a Phase 2 pack classify must pass its own scene down.
 - T20's stricter half (no Simple text outside `js/spine-words.js`) is not asserted: `simple-timeline.js` still writes the
   section glyphs, the ruler's `s` and the `+N` badge's `N more` title itself.
-- E is not listed on the ? shortcuts sheet yet.
+- (There is no E key since 1 Oct, so nothing to list on the ? sheet.) The cog block's layout is the prototype's, measured
+  at v17.21 in Chrome only; not seen on his iPhone or in Safari.
+- A guest's song still reads as undecided until Phase 2 writes `sm.snd` (Simple's own sound-only fact, DESIGN §0.4 B8) at add
+  and Replace.
 
 ---
 
 ## 13. Review (29 Sep, ~15:00–16:00 AWST): a skeptical pass before the builder uses this
+
+**1 Oct:** this review is of the 29 Sep version. Since then step 1.1 is withdrawn, 1.3's doors are replaced by the cog block,
+`js/editor-mode.js` is rewritten around the guard, and the FU group is added; none of that has been reviewed or run. A fresh
+review of the same kind (anchors applied by script, every new test failing first and passing after, at 1280 and 380, plus the
+FU group's self-test) comes before the builder uses this file.
 
 **How it was checked.** A fresh copy of the tree (HEAD `ea1ff320` plus the uncommitted v17.13 working tree, which the builder's
 14:49 ship did not commit) was made in the review's scratchpad, never the repo. Every hunk was applied to it in plan order,

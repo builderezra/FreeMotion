@@ -6,7 +6,8 @@
  * clicked or tapped (a mouse resting on the small computer moves it there), and the two tool rows are compared by
  * reading the labels off both drawings every time they change (a check, not a claim).
  * Under the computer: D20, a window size (900×700, 1280×800, 1920×1080, a phone sideways) and where a tool's panel
- * opens (A in the band, B over the picture, C over the timeline), with the room, picture and timeline MEASURED on the
+ * opens: A in the band is HIS PICK (1 Oct, "D20 A", not the one recommended then) and the page opens on it; B over the
+ * picture and C over the timeline stay as "not chosen" for comparison. The room, picture and timeline are MEASURED on the
  * drawing. Styles are injected once (#v4-style), so index.html is untouched. Design only: nothing here touches FreeMotion.
  */
 (function () {
@@ -22,7 +23,7 @@
   const mmss = t => { t = Math.max(0, Math.round(t)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
   const reduced = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-  /* §8.3's PC band budget. Quick raises the band's width floor so the phone's 8 tools keep their words:
+  /* §8.3's PC band budget. Simple raises the band's width floor so the phone's 8 tools keep their words:
      --insp-w: clamp(372px, 26vw, 420px). The band height is --tl-h (272 / 240 / 300 / 150-179). */
   const SIZES = [
     { id: '900', label: '900×700', W: 900, H: 700, insW: 372, tlH: 272 },
@@ -31,11 +32,11 @@
     { id: 'side', label: 'Phone sideways', W: 844, H: 390, insW: 372, tlH: 165, sideways: true }
   ];
   const D20 = [
-    { id: 'A', label: 'A · In the left panel', note: 'A: the panel squeezes into the left panel, above the tools. Nothing is covered, but it is short.' },
-    { id: 'B', label: 'B · Over the picture', note: 'B: the panel rises over the bottom left of the picture. It gets its own height, but it can cover part of the picture you are judging.' },
-    { id: 'C', label: 'C · Over the timeline', rec: true, note: 'C: the panel rises over the timeline, exactly as on the phone. The picture always stays in full view.' }
+    { id: 'A', label: 'A · In the left panel', rec: true, note: 'A, your pick: the panel opens inside the left panel, above the tools, and scrolls when it is taller than the room. The picture and the timeline are never covered.' },
+    { id: 'B', label: 'B · Over the picture', note: 'B, not chosen: the panel rises over the bottom left of the picture. It gets its own height, but it can cover part of the picture you are judging.' },
+    { id: 'C', label: 'C · Over the timeline', note: 'C, not chosen: the panel rises over the timeline, exactly as on the phone. About twice A\'s room, but the timeline is covered while it is open.' }
   ];
-  const SIDE_NOTE = 'No choice on a phone held sideways. There is almost no room in the left panel, so a tool always opens over the timeline. A, B and C are for computers.';
+  const SIDE_NOTE = 'A phone held sideways is the one exception: there is almost no room in the left panel, so a tool opens over the timeline there. Your pick, A, is for computers.';
 
   const FILTERS = { none: '', warm: 'sepia(.3) saturate(1.3) brightness(1.03)', cool: 'hue-rotate(-16deg) saturate(1.15) brightness(1.02)',
     film: 'contrast(1.12) sepia(.2) saturate(.9)', fade: 'contrast(.8) brightness(1.1) saturate(.8)', mono: 'grayscale(1) contrast(1.08)' };
@@ -69,7 +70,7 @@
     removecolour: 'Takes one colour out, like a green screen', forward: 'Puts it in front of the others', backward: 'Puts it behind the others',
     editlines: 'Change the caption lines', capstyle: 'How every caption looks', findspeech: 'Listens to the clips and writes the captions',
     capfollow: 'The captions move with the clips', capstay: 'The captions stay with the sound they were timed from',
-    fade: 'Fade in and fade out', endswith: 'Stops when the video stops', sndspeed: 'How fast this sound plays', voice: 'Changes how the voice sounds',
+    fade: 'Fade in and fade out', sndspeed: 'How fast this sound plays', voice: 'Changes how the voice sounds',
     change: 'Pick a different effect', strength: 'How strong the effect is'
   };
   // any tray tool by id: the picked thing's own row first (Volume, Look, Crop, Stay put and 🗑 are in more than one row)
@@ -77,16 +78,16 @@
   /* every button around the picture: [name, what it does, icon]. Phone "settings" and PC "gear" are the same button. */
   const ACT = {
     back: ['Projects', 'Back to all your projects', 'back'], help: ['Help', 'Help for this screen', 'help'],
-    notes: ['Notes', 'Your notes for this project', 'notes'], gear: ['Settings', 'Canvas size and settings', 'gear'],
+    notes: ['Notes', 'Your notes for this project', 'notes'], gear: ['Settings', 'Canvas size, Friends, and the switch between Simple and Full (the cog’s third block)', 'gear'],
     export: ['Export', 'Saves the finished video', 'export'], more: ['More', 'Close all gaps, loop a part, and the rest', 'more'],
-    split: ['Split', 'Cuts the clip in two at the playhead', 'split'], switch: ['Switch editor', 'Opens this project in Full (the page "The switch" shows it)', 'editor'],
+    split: ['Split', 'Cuts the clip in two at the playhead', 'split'],
     toStart: ['To start', 'Jumps to the start', 'toStart'], play: ['Play', 'Plays and pauses', 'play'], toEnd: ['To end', 'Jumps to the end', 'toEnd'],
     undo: ['Undo', 'Takes back the last change', 'undo'], redo: ['Redo', 'Puts it back again', 'redo'], fit: ['Full screen', 'Shows the picture full screen', 'fit']
   };
   const normAct = a => (a === 'settings' ? 'gear' : a);
   const NOTE = {
     type: 'Type captions opens the caption editor', speech: 'Find speech listens to your clips and writes the captions for you',
-    style: 'Style changes how every caption looks', music: 'Music from your files lands in the sound row and ends with the video',
+    style: 'Style changes how every caption looks', music: 'Music from your files lands whole in the sound row; a long song runs on in black past the clips',
     sfx: 'Sound effects land at the playhead', voice: 'Record voice records over the video from the playhead',
     saved: 'Saved elements you made before', shapes: 'Shapes: boxes, circles and lines', templates: 'Templates: a whole look in one tap',
     turn: 'Turned it a quarter turn', flip: 'Flipped it left to right', ask: 'Ask makes the change as normal edits you can undo',
@@ -174,6 +175,7 @@
 .v4-seg button[aria-pressed="true"] { background: var(--h-accent); border-color: var(--h-accent); color: var(--h-accent-ink); }
 .v4-seg button:disabled, .v4-seg button:disabled:hover { opacity: .42; cursor: not-allowed; border-style: dashed; border-color: var(--h-rule); }
 .v4-seg .rec { font-weight: 400; opacity: .85; }
+.v4-seg .not { font-weight: 400; opacity: .6; }
 .v4-try { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 14px; color: var(--h-muted); }
 .v4-stats { display: grid; gap: 6px; }
 .v4-stat { border: 1px solid var(--h-rule); border-radius: 12px; padding: 8px 12px; background: var(--h-bg); display: grid; grid-template-columns: minmax(88px, 34%) minmax(0, 1fr); column-gap: 12px; row-gap: 2px; align-items: baseline; }
@@ -277,7 +279,7 @@
     injectCSS();
     const E = V.engine;
     const ed = E.editor(V.sample('beach'));
-    const S = { sel: null, t: 4.6, tool: null, lit: null, pulse: false, openSec: null, playing: false, size: '1280', d20: 'C',
+    const S = { sel: null, t: 4.6, tool: null, lit: null, pulse: false, openSec: null, playing: false, size: '1280', d20: 'A',
                 look: { all: 'none', clip: {} }, vol: {}, crop: {}, last: null, rise: false, poolI: 0, end: 14.2, aim: null, nudge: 0, litName: '' };
     let ph, pc, phTL, pcTL, phTray = null, pcTray = null, peekKey = null;
 
@@ -680,12 +682,12 @@
        buttons, and the numbers are in rows of options instead of pixels. Sideways has no choice, so A, B and C lock. */
     d20.innerHTML =
       '<h3>On a computer, where does a tool open?</h3>' +
-      '<p class="v4-d20-intro">This is your decision D20. Pick a window size and an option, and watch where the tool panel lands in the little drawing. The big computer drawing above changes too.</p>' +
+      '<p class="v4-d20-intro"><b>Decided: A, your pick (D20).</b> A tool\'s panel opens inside the left panel and scrolls; the picture and the timeline stay in full view. Pick a window size to see how much room it gets. B and C are kept here only to compare, and the big computer drawing above follows whichever you tap.</p>' +
       '<div class="v4-d20-map"><div class="v4-map" role="img"><div class="v4-map-win">' +
         '<i class="m-stage"></i><i class="m-pic"><span>Picture</span></i><i class="m-band"><span>Left panel</span></i><i class="m-tl"><span>Timeline</span></i><i class="m-sheet"><span></span></i>' +
       '</div></div><p class="v4-map-cap">The computer, drawn simply. The blue box is the tool panel.</p></div>' +
       '<div class="v4-d20-l"><p class="v4-lbl">Window</p><div class="v4-seg" role="group" aria-label="Window size">' + SIZES.map(s => '<button type="button" data-size="' + s.id + '">' + esc(s.label) + '</button>').join('') + '</div>' +
-      '<p class="v4-lbl">Where it opens</p><div class="v4-seg" role="group" aria-label="Where a tool opens">' + D20.map(o => '<button type="button" data-d20="' + o.id + '">' + esc(o.label) + (o.rec ? ' <span class="rec">· recommended</span>' : '') + '</button>').join('') + '</div>' +
+      '<p class="v4-lbl">Where it opens</p><div class="v4-seg" role="group" aria-label="Where a tool opens">' + D20.map(o => '<button type="button" data-d20="' + o.id + '">' + esc(o.label) + (o.rec ? ' <span class="rec">· your pick</span>' : ' <span class="not">· not chosen</span>') + '</button>').join('') + '</div>' +
       '<p class="v4-d20-why" hidden></p>' +
       '<div class="v4-try"><span>Open</span><button type="button" data-try="look">Look</button><button type="button" data-try="speed">Speed</button><button type="button" data-try="captions">Captions</button></div></div>' +
       '<div class="v4-d20-r"><div class="v4-stats"></div><p class="v4-d20-note"></p></div>';
@@ -718,7 +720,7 @@
       });
       d20why.hidden = !sz.sideways; d20why.textContent = sz.sideways ? SIDE_NOTE : '';
       d20note.hidden = !!sz.sideways;
-      d20note.textContent = sz.sideways ? '' : (D20.find(o => o.id === S.d20) || D20[2]).note;
+      d20note.textContent = sz.sideways ? '' : (D20.find(o => o.id === S.d20) || D20[0]).note;
     }
     /* rows of 40 px option buttons (with a 6 px gap) that fit under a panel's 38 px title and 10 px top padding */
     const rowsFit = h => Math.max(0, Math.floor((h - 38 - 10 + 6) / 46));
@@ -761,7 +763,7 @@
       if (sheet && S.tool) {
         const nm = panelTitle(S.tool).text.split(' · ')[0];
         put(mSheet, boxIn(sheet, pc.root)); mSheet.firstChild.textContent = nm; mSheet.classList.add('on');
-        say += 'The ' + nm + ' panel is open. ' + (size().sideways ? SIDE_NOTE : (D20.find(o => o.id === S.d20) || D20[2]).note);
+        say += 'The ' + nm + ' panel is open. ' + (size().sideways ? SIDE_NOTE : (D20.find(o => o.id === S.d20) || D20[0]).note);
       } else { mSheet.classList.remove('on'); say += 'No tool panel is open.'; }
       mapBox.setAttribute('aria-label', say);
     }

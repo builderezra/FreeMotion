@@ -321,3 +321,6 @@ button.v11-set-row:focus-visible { outline: 2px solid var(--accent); outline-off
 .v11-glyph svg { width: 21px; height: 21px; }
 /* Full on a phone: only the picked layer, with a line saying so */
 .v11-solo-note { position: absolute; z-index: 25; left: 0; right: 0; bottom: 0; margin: 0; padding: 6px 10px 8px; background: var(--panel); font-size: 11px; line-height: 1.35; color: var(--text-dim); pointer-events: none; }
+
+/* 1 Oct: the cog still picture in Phase 1 (the switch is the cog's third block, DESIGN §6.1) */
+.v11-cogstill { width: 100%; max-width: 400px; min-width: 0; }

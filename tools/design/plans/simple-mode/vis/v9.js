@@ -83,17 +83,14 @@
     return d;
   }
   const shiftKeys = (l, d) => E.kfLists(l).forEach(a => a.forEach(k => { k.t += d; }));
-  /* A friend in Full dragged Sandcastle, Sunset and the sticker g later; the lines spoken over them, the song and the camera's
-     moves over them went too. */
+  /* A friend in Full dragged Sandcastle, Sunset and the sticker g later; the lines spoken over them and the camera's moves over
+     them went too. The song stays as it was (Full never stretches music, and D17 B means Simple does not either). */
   function beachWithGap(g) {
     const d = beach(), L = byId(d);
     ['c3', 'c4', 'sticker'].forEach(id => { const l = L.get(id); l.start += g; shiftKeys(l, g); });
     const cap = L.get('cap');
     cap.captions.forEach(c => { if (c.start >= 7.1 - 1e-9) { c.start += g; c.end += g; } });
     cap.duration += g;
-    const song = L.get('song');
-    song.duration += g; song.sm.tailEnd = endOf(song);
-    shiftKeys(song, g);
     L.get('cam').kf.zoom.forEach(k => { if (k.t >= 7.1) k.t += g; });
     d.project.duration += g;
     return d;
@@ -186,7 +183,7 @@
       rule: 'The clip keeps its time and goes on top. The clips after it close up, and what is on it stays with it.',
       knobs: [clipKnob('c3')], args: s => ({ id: s.id }) },
     { key: 'gap', title: 'Close a gap', pill: 'Close gap', cmd: 'closeGap', t0: 9,
-      rule: 'Quick never closes a gap by itself. When you tap it, everything after slides back by exactly the gap.',
+      rule: 'Simple never closes a gap by itself. When you tap it, everything after slides back by exactly the gap.',
       knobs: [{ type: 'range', key: 'gap', label: 'The gap Full left', def: 0.8, lim: () => ({ min: 0.2, max: 2, step: 0.1 }), fmt: sec }],
       base: s => beachWithGap(s.gap), args: () => ({ id: 'c3' }), subject: () => 'c3' },
     { key: 'endcard', title: 'An end card follows the end', pill: 'End card', cmd: s => ENDEDIT[s.edit], t0: 15,
@@ -543,7 +540,7 @@
       const e2 = r.nb && ctx.R2.entry(r.nb), other = e2 && (bl.out ? ctx.R2.main[e2.i - 1] : ctx.R2.main[e2.i + 1]);
       return 'The fade was part of ' + own + ', so it went with it' + (r.nb ? '; ' + NAME(r.nb) + ' now meets ' + (other && !other.slot ? NAME(other.id) : 'the edge of the video') + ' with a plain cut' : '') + '.';
     }
-    if (r.kind === 'removed') return 'The fade could not carry over, so it was taken off ' + own + ' and the cut is a plain one; Quick says “removed 1 crossfade”.';
+    if (r.kind === 'removed') return 'The fade could not carry over, so it was taken off ' + own + ' and the cut is a plain one; Simple says “removed 1 crossfade”.';
     const span = spanTxt(r.pb.s, r.pb.e);
     if (r.kind === 'newPartner') return own + ' ' + (bl.out ? 'faded out over ' : 'faded in over ') + NAME(r.partner) + '; now it ' + verb + NAME(r.partner2) + ' instead, over the same ' + sec(bl.amt) + ' (' + span + '). It is kept because it still fits: ' + own + ' is on top, and ' + sec(bl.amt) + ' is less than half of either clip.';
     if (r.kind === 'moved') return 'The fade moves with its clips, whole: ' + own + ' still ' + verb + NAME(r.partner) + ' for ' + sec(bl.amt) + ', now ' + span + '.';
@@ -698,16 +695,17 @@
           (ci.cut.length ? '; ' + ci.cut.length + ' sat over footage that ' + (ci.cut.every(c => c.lifted) ? 'left the clip row' : 'was cut out') + ', so ' + plural(ci.cut.length, 'it', 'they') + ' went' + (ci.steps.length ? ', and the zoom steps cleanly across the cut at ' + andList(ci.steps.map(sec)) : '') : '') + '.'
           : ci.miss.map(x => 'the key at ' + sec(x.k.t) + ' should be at ' + sec(x.t2)).join('; ') + (ci.stray.length ? '; ' + ci.stray.length + ' extra key(s)' : '') + '.' });
     }
-    // 9. the song
-    const song = after.layers.find(l => l.audioOnly && E.hasFlag(l, 'tail'));
+    // 9. the song (D17 B, his pick): it stays put, keeps its length, and nothing fits or fades it to the clips
+    const songB = before.layers.find(l => l.audioOnly), song = songB && A.get(songB.id);
     if (song) {
-      const okS = Math.abs(endOf(song) - R2.trackEnd) < TOL;
-      const past = after.project.duration > R2.trackEnd + TOL ? after.layers.filter(l => !l.audioOnly && endOf(l) > R2.trackEnd + TOL && !isTrack(l) && !isCam(l)) : [];
-      const cards = past.filter(l => R2.tail.includes(l.id)), tops = past.filter(l => !R2.tail.includes(l.id));
-      out.push({ ok: okS, title: okS ? (cards.length ? 'The song still ends with the last clip' : 'The song still ends with the video') : 'The song does not end with the video',
-        text: 'The clips now end at ' + sec(R2.trackEnd) + ', and ' + song.name + (okS ? ' ends there too.' : ' ends at ' + sec(endOf(song)) + '.') +
-          (tops.length ? ' ' + andList(tops.map(label)) + ', now on top, ' + (tops.length === 1 ? 'runs' : 'run') + ' on to ' + sec(after.project.duration) + ', so the video is that long.' : '') +
-          (cards.length ? ' The end card plays after them, to ' + sec(after.project.duration) + ', so the video is that long, and the end card has no music.' : '') });
+      const okS = Math.abs(song.start - songB.start) < TOL && Math.abs(song.duration - songB.duration) < TOL && !E.hasFlag(song, 'tail');
+      const runs = endOf(song) > R2.trackEnd + TOL, short = endOf(song) < R2.trackEnd - TOL;
+      const lenOk = Math.abs(after.project.duration - Math.max(R2.trackEnd, ...after.layers.filter(l => !isCam(l) && l.type !== 'group' && !E.hasFlag(l, 'tail')).map(endOf))) < TOL;
+      out.push({ ok: okS && lenOk, title: okS ? 'The song stays put and keeps its length' : 'The song moved or changed length',
+        text: 'The clips now end at ' + sec(R2.trackEnd) + ', and ' + song.name + ' ends at ' + sec(endOf(song)) + (okS ? ', as before.' : ' (it was ' + sec(endOf(songB)) + ').') +
+          (runs ? ' So the video runs on in black after the last clip, to ' + sec(after.project.duration) + ', as Full does today (your pick, D17).' :
+            short ? ' So the last ' + sec(R2.trackEnd - endOf(song)) + ' of the clips have no music.' : '') +
+          (lenOk ? '' : ' The video\'s length is wrong: ' + sec(after.project.duration) + '.') });
     }
     // 10. undo
     if (!ctx.local) out.push({ ok: ctx.undoOk && ctx.undoSteps === 1, title: 'One tap of Undo puts it all back',
@@ -720,7 +718,9 @@
     const sb = ctx.before.layers.find(l => l.audioOnly), sa = sb && ctx.A.get(sb.id);
     if (!sb || !sa) return '';
     const e0 = endOf(sb), e1 = endOf(sa);
-    return Math.abs(e1 - e0) < TOL ? 'The song does not move. ' : 'The song stays put and ' + (e1 < e0 ? 'gets shorter' : 'grows') + ' so it still ends with the ' + (ctx.R.tail.length ? 'last clip' : 'video') + ', now at ' + sec(e1) + '. ';
+    if (Math.abs(e1 - e0) >= TOL) return 'The song changed length, to ' + sec(e1) + '. ';
+    const te = ctx.R2.trackEnd;
+    return 'The song does not move or change length (D17)' + (e1 > te + TOL ? ', so the video runs on in black after the clips, to ' + sec(e1) + '. ' : '. ');
   }
   function camLine(ctx) {
     const ci = camInfo(ctx); if (!ci || !ci.kb.length) return '';
@@ -837,7 +837,7 @@
     },
     gap(ctx) {
       const g = ctx.s.gap, ci = cueKinds(ctx);
-      let s = 'Here a friend in Full dragged Sandcastle ' + sec(g) + ' later, leaving a gap: ' + sec(g) + ' of black. Quick draws it with an orange chip and never closes it by itself. ';
+      let s = 'Here a friend in Full dragged Sandcastle ' + sec(g) + ' later, leaving a gap: ' + sec(g) + ' of black. Simple draws it with an orange chip and never closes it by itself. ';
       s += 'Tap the chip, and Sandcastle and everything after it slide exactly ' + sec(g) + ' earlier, so it starts where Waves ends. ';
       if (ci.cut.length) s += esc(andList(ci.cut.map(r => q(r.text)))) + ' ran on into the gap; that part goes. ';
       return s + camLine(ctx) + songLine(ctx);
@@ -851,7 +851,7 @@
       if (ea) s += 'The end card follows the new end: it started at ' + sec(ec.start) + ' and now starts at <b>' + sec(ea.start) + '</b>, right where the clips end, keeping its ' + sec(ec.duration) + ' and its fade-in. ';
       s += camLine(ctx);
       const song = ctx.after.layers.find(l => l.audioOnly);
-      if (song) s += 'The song ends with the last clip, now at ' + sec(endOf(song)) + ', so the end card plays after it, with no music, as before.';
+      if (song) s += 'The song keeps its length (D17) and ends at ' + sec(endOf(song)) + (endOf(song) > R2.trackEnd + TOL ? ', so it now plays on under the end card' + (endOf(song) > ctx.after.project.duration - TOL && ea && endOf(song) > endOf(ea) + TOL ? ' and the video runs on in black after it' : '') + '.' : endOf(song) < R2.trackEnd - TOL ? ', before the clips end.' : '.');
       return s;
     },
     blendDel(ctx) {
@@ -1362,7 +1362,7 @@
 
     const root = el('div', 'v9');
     root.innerHTML =
-      '<p class="v9-lede">Every clip edit in Quick moves things by exact amounts. Pick an edit to see Beach day before and after it, on one time scale: the clips, the title and the shell sticker on them, every caption line, the camera’s zoom, the song, and the yellow keyframe dots. The coloured bands between the two show where each clip’s footage went.' +
+      '<p class="v9-lede">Every clip edit in Simple moves things by exact amounts. Pick an edit to see Beach day before and after it, on one time scale: the clips, the title and the shell sticker on them, every caption line, the camera’s zoom, the song, and the yellow keyframe dots. The coloured bands between the two show where each clip’s footage went.' +
       '<small>Changes to the sample for this page: the caption “So cold!” runs 0.3 s past the cut into Sandcastle, so a caption crosses a cut; and a slow camera zoom, made in Full, rides over the whole video. Edit 10 adds an end card; edits 11 to 13 use a copy where Waves fades out over Sandcastle.</small></p>' +
       '<div class="v9-stepbar"><button type="button" class="v9-arrow" data-d="-1" aria-label="Earlier edits">' + ARROW(-1) + '</button><nav class="v9-steps" aria-label="Edits"></nav><button type="button" class="v9-arrow" data-d="1" aria-label="Later edits">' + ARROW(1) + '</button></div>' +
       '<div class="v9-top"><p class="v9-eyebrow"></p><h3 class="v9-h"></h3><p class="v9-rule"></p><div class="v9-knobs"></div><p class="v9-what" aria-live="polite"></p></div>' +
@@ -1468,7 +1468,7 @@
       $('.v9-h').textContent = step.title;
       $('.v9-rule').innerHTML = '<span>The rule</span>' + esc(step.rule);
       if (!live) renderKnobs(step, s);
-      $('.v9-what').innerHTML = ctx.refused ? 'Quick says: “' + esc(ctx.refused) + '” Try another setting.' : SAY[step.key](ctx);
+      $('.v9-what').innerHTML = ctx.refused ? 'Simple says: “' + esc(ctx.refused) + '” Try another setting.' : SAY[step.key](ctx);
       const pn = root.querySelectorAll('.v9-pn button');
       pn[0].disabled = cur === 0; pn[0].innerHTML = cur ? '‹ ' + esc(STEPS[cur - 1].title) : '';
       pn[1].disabled = cur === STEPS.length - 1; pn[1].innerHTML = cur < STEPS.length - 1 ? esc(STEPS[cur + 1].title) + ' ›' : '';
@@ -1489,7 +1489,7 @@
       dia.appendChild(sb.root);
       S = { g, sb };
       if (ctx.refused) {
-        dia.appendChild(el('div', 'v9-refuse', 'Quick says: “' + esc(ctx.refused) + '”. Nothing changes.'));
+        dia.appendChild(el('div', 'v9-refuse', 'Simple says: “' + esc(ctx.refused) + '”. Nothing changes.'));
         sb.links(); return;
       }
       const H = g.rh, NS = 'http://www.w3.org/2000/svg';
@@ -1661,7 +1661,7 @@
     }
     function drawMoved() {
       movedEl.innerHTML = '<h4 class="v9-sub">What moved, exactly</h4>';
-      if (ctx.refused) { movedEl.appendChild(el('p', 'v9-same', 'Nothing. Quick refused this one and said why.')); return; }
+      if (ctx.refused) { movedEl.appendChild(el('p', 'v9-same', 'Nothing. Simple refused this one and said why.')); return; }
       const ch = ctx.ch;
       movedEl.appendChild(el('p', 'v9-len', Math.abs(ch.d1 - ch.d0) < TOL ? 'The video stays <b>' + esc(sec(ch.d0)) + '</b> long.' : 'The video: <b>' + esc(sec(ch.d0)) + '</b> → <b>' + esc(sec(ch.d1)) + '</b>'));
       let g = '';

@@ -1,8 +1,8 @@
-/* V5 — An old project opened in Quick (DESIGN §5 opening any project, §5.4 what Quick shows that it did not make,
+/* V5 — An old project opened in Simple (DESIGN §5 opening any project, §5.4 what Simple shows that it did not make,
  * §9 Full-editor content, §20 round 2's two blockers).
  *
- * Part 1, SAMPLE (b) "Cooking with Mia", made in Full. One phone, two editors (the switch on the play bar, or the
- * toggle above it). Quick's reading is the kit's real classifier (VIS.engine.classify), run on every draw. Every piece
+ * Part 1, SAMPLE (b) "Cooking with Mia", made in Full. One phone, two editors (the toggle above it stands in for the ⚙
+ * cog's switch; neither play bar has one, and Full's is today's, DESIGN §0.4). Simple's reading is the kit's real classifier (VIS.engine.classify), run on every draw. Every piece
  * says where it went and why (tap it in the phone, or in the list under it). The counter is measured, not claimed: it
  * is the size of the change set between the document as opened and the document now, so it reads 0 until the first
  * arranging edit (Close gap, Fix, Lift off, Put in the clip row), which is when adoption stores the clip row (§5.3).
@@ -29,9 +29,9 @@
   const ORDER = ['captions', 'text', 'overlay', 'effect', 'behind'];
 
   VIS.register('v5', {
-    title: 'An old project in Quick',
+    title: 'An old project in Simple',
     group: 'Old projects',
-    blurb: 'A messy project made in Full, switched to Quick: every piece lands in a sensible place, with a reason for each one, and nothing is saved until your first clip edit.',
+    blurb: 'A messy project made in Full, switched to Simple: every piece lands in a sensible place, with a reason for each one, and nothing is saved until your first clip edit.',
     mount: host => mountV5(host)
   });
 
@@ -86,7 +86,7 @@
     if (props.has('opacity')) return 'a fade';
     return 'moves';
   }
-  /* Where a Full layer lands in Quick. */
+  /* Where a Full layer lands in Simple. */
   function place(R, lid) {
     const uid = R.unitOf.get(lid);
     if (uid == null) return { dest: 'Not drawn: shown one by one', color: 'var(--h-faint)' };
@@ -105,32 +105,32 @@
   /* The reason, in plain words, built from the read model (so it stays true after every edit). */
   function reasons(R, lid) {
     const p = place(R, lid), out = [];
-    if (!p.u) { out.push('A group that only keeps the layers tidy. Quick shows what is inside it one by one.'); return out; }
+    if (!p.u) { out.push('A group that only keeps the layers tidy. Simple shows what is inside it one by one.'); return out; }
     const u = p.u, lead = u.lead, first = R.main[0], tEnd = R.trackEnd;
     if (p.member) {
-      out.push('Part of the ' + bold(nm(lead)) + ' block, so Quick shows it inside that one piece. <b>Open in Full</b> changes it.');
+      out.push('Part of the ' + bold(nm(lead)) + ' block, so Simple shows it inside that one piece. <b>Open in Full</b> changes it.');
       return out;
     }
     if (p.main) {
       const e = R.entry(u.id), prev = R.main[e.i - 1], n = clipNo(R, u.id);
       out.push(R.adopted && E.hasFlag(lead, 'main')
-        ? 'It is saved as a clip in the row. Quick stored that at your first clip edit.'
-        : 'It fills the whole picture, and nothing bigger covers it, so Quick puts it in the clip row.');
+        ? 'It is saved as a clip in the row. Simple stored that at your first clip edit.'
+        : 'It fills the whole picture, and nothing bigger covers it, so Simple puts it in the clip row.');
       if (!prev) out.push(e.seam.kind === 'gap' ? 'Nothing plays for the first ' + secs(e.seam.amt) + ', so the row starts with a gap block.' : 'It starts at 0:00, so it is Clip 1.');
       else if (e.seam.kind === 'join' || e.seam.kind === 'hairline') out.push('It starts right where Clip ' + (n - 1) + ' ends.');
-      else if (e.seam.kind === 'gap') out.push('There is a <b>' + secs(e.seam.amt) + ' gap</b> before it, where nothing plays. Quick draws it as a striped block, and the <b>' + secs(e.seam.amt) + '</b> button closes it. Quick never closes a gap by itself.');
+      else if (e.seam.kind === 'gap') out.push('There is a <b>' + secs(e.seam.amt) + ' gap</b> before it, where nothing plays. Simple draws it as a striped block, and the <b>' + secs(e.seam.amt) + '</b> button closes it. Simple never closes a gap by itself.');
       else if (e.seam.kind === 'overlap') out.push('It starts <b>' + secs(e.seam.amt) + '</b> before Clip ' + (n - 1) + ' ends, so the two overlap. The red <b>−' + secs(e.seam.amt) + '</b> mark fixes it: this clip and everything after it slide ' + secs(e.seam.amt) + ' later.');
-      else if (e.seam.kind === 'blend') out.push('It fades in over the clip before it, a hand-made crossfade. Quick keeps it exactly as it is.');
+      else if (e.seam.kind === 'blend') out.push('It fades in over the clip before it, a hand-made crossfade. Simple keeps it exactly as it is.');
       const fol = (R.followers[u.id] || []).map(id => bold(nm(R.layer(id))));
       if (fol.length === 1) out.push('It carries ' + fol[0] + ', which goes wherever this clip goes.');
       else if (fol.length) out.push('It carries ' + andList(fol) + '. They go wherever this clip goes.');
     } else if (u.kind === 'fullOnly') {
       const zoom = lead.kf && lead.kf.zoom && lead.kf.zoom.length > 1;
-      out.push('The camera' + (zoom ? ', doing a slow zoom in and out' : '') + '. It has nothing to show by itself, so Quick draws no row for it.');
+      out.push('The camera' + (zoom ? ', doing a slow zoom in and out' : '') + '. It has nothing to show by itself, so Simple draws no row for it.');
       out.push('The line under the timeline says <b>More in Full ›</b>, which takes you straight to it. When clips move, its moves go with them.');
     } else if (u.kind === 'block') {
-      if (lead.type === 'group') out.push('A group with ' + (lead.shadow ? 'a shadow' : 'a look of its own') + '. It has to be drawn as one piece, so Quick keeps it whole: a <b>block</b>. Quick can move it with its clip; <b>Open in Full</b> changes what is inside.');
-      else out.push('A shape that cuts a circle out of the picture under it: a mask. Quick does not edit masks, so it is a <b>block</b>, one tap from <b>Open in Full</b>.');
+      if (lead.type === 'group') out.push('A group with ' + (lead.shadow ? 'a shadow' : 'a look of its own') + '. It has to be drawn as one piece, so Simple keeps it whole: a <b>block</b>. Simple can move it with its clip; <b>Open in Full</b> changes what is inside.');
+      else out.push('A shape that cuts a circle out of the picture under it: a mask. Simple does not edit masks, so it is a <b>block</b>, one tap from <b>Open in Full</b>.');
       const h = hostLine(R, u); if (h) out.push(h);
     } else if (u.kind === 'background') {
       out.push('A still picture under the clips that covers their whole run and makes no sound: a backdrop. It sits in the hatched <b>Behind</b> row, and stays behind.');
@@ -153,7 +153,7 @@
       else out.push('It fills the picture, but a clip in the row already plays there, so it sits on top as an overlay.');
       const h = hostLine(R, u); if (h) out.push(h);
     }
-    if (levelOf(R, u) === 'look') out.push('<span class="v5-star" aria-hidden="true">✦</span> It has ' + movesWord(R, u) + ' made with keyframes. Quick plays it exactly and keeps it with it. To change it, its panel says <b>Has moves and effects · Open in Full</b>.');
+    if (levelOf(R, u) === 'look') out.push('<span class="v5-star" aria-hidden="true">✦</span> It has ' + movesWord(R, u) + ' made with keyframes. Simple plays it exactly and keeps it with it. To change it, its panel says <b>Has moves and effects · Open in Full</b>.');
     return out;
   }
 
@@ -179,7 +179,7 @@
   function describe(a, b, R0) {
     const saved = [], edit = [];
     const A = new Map(a.layers.map(l => [l.id, l])), B = new Map(b.layers.map(l => [l.id, l]));
-    if (!(a.project.sm && a.project.sm.adopted) && b.project.sm && b.project.sm.adopted) saved.push('One mark on the project: “Quick has set up the clip row.”');
+    if (!(a.project.sm && a.project.sm.adopted) && b.project.sm && b.project.sm.adopted) saved.push('One mark on the project: “Simple has set up the clip row.”');
     const add = { main: [], stay: [], tail: [] }, off = [], newMain = [], stayEdit = [];
     B.forEach((l, id) => {
       const o = A.get(id); if (!o) return;
@@ -246,12 +246,12 @@
   function mountV5(host) {
     host.classList.add('v5');
     host.innerHTML =
-      '<p class="v5-lede">Your old projects still open in Full, so nothing changes for work you already have. Any of them can open in Quick: flip the switch on the play bar, and this phone remembers that pick for that project. Quick converts nothing. It looks at the layers and works out which ones are the clips, and where everything else goes.</p>' +
+      '<p class="v5-lede">Your old projects still open in Full, so nothing changes for work you already have. Any of them can open in Simple: flip the switch in the ⚙ cog, and this phone remembers that pick for that project. Simple converts nothing. It looks at the layers and works out which ones are the clips, and where everything else goes.</p>' +
       '<section class="v5-sec" aria-labelledby="v5-b-h">' +
         '<div class="v5-headrow"><h3 class="v5-h" id="v5-b-h">Cooking with Mia</h3><span class="v5-tag">made in Full</span></div>' +
-        '<p class="h-note v5-note">Four clips with a gap and an overlap, a face cam in the corner, a lower-third group with a shadow, a camera zoom, a circle mask, a title over the whole video, and music. Flip between the two editors, then tap anything.</p>' +
+        '<p class="h-note v5-note">Four clips with a gap and an overlap, a face cam in the corner, a lower-third group with a shadow, a camera zoom, a circle mask, a title over the whole video, and music. Flip between the two editors with the buttons below (in the app, the switch in the ⚙ cog), then tap anything.</p>' +
         '<div class="v5-ctl">' +
-          '<div class="h-seg v5-edseg" role="group" aria-label="Editor"><button type="button" data-v="full">In Full</button><button type="button" data-v="quick">In Quick</button></div>' +
+          '<div class="h-seg v5-edseg" role="group" aria-label="Editor"><button type="button" data-v="full">In Full</button><button type="button" data-v="quick">In Simple</button></div>' +
           '<div class="v5-bytes" role="status" aria-live="polite"><b class="v5-bn">0</b><span>bytes saved to the project</span></div>' +
         '</div>' +
         '<div class="v5-grid">' +
@@ -263,13 +263,13 @@
         '</div>' +
         '<div class="v5-where">' +
           '<h4 class="v5-sub">Where everything went</h4>' +
-          '<p class="h-note v5-note">Every layer of the Full project, top of the stack first, and where Quick put it. Tap one for the reason.</p>' +
+          '<p class="h-note v5-note">Every layer of the Full project, top of the stack first, and where Simple put it. Tap one for the reason.</p>' +
           '<ul class="v5-wlist"></ul>' +
         '</div>' +
       '</section>' +
       '<section class="v5-sec" aria-labelledby="v5-c-h">' +
         '<div class="v5-headrow"><h3 class="v5-h" id="v5-c-h">Studio tips</h3><span class="v5-tag">a talking head with cutaways</span></div>' +
-        '<p class="h-note v5-note">She talks for 30 seconds. Three short cutaways (Cables, Lamp, Plant) sit on top of her, each over the tip it shows. Captions follow her words. An early draft of Quick read this project wrongly. Here is the fixed rule next to the old one.</p>' +
+        '<p class="h-note v5-note">She talks for 30 seconds. Three short cutaways (Cables, Lamp, Plant) sit on top of her, each over the tip it shows. Captions follow her words. An early draft of Simple read this project wrongly. Here is the fixed rule next to the old one.</p>' +
         '<div class="v5-ctl"><div class="h-seg v5-modeseg" role="group" aria-label="Which rule"><button type="button" data-v="after">After the fix</button><button type="button" data-v="before">Before the fix</button></div></div>' +
         '<div class="v5-grid">' +
           '<div class="v5-phone v5-cphone"></div>' +
@@ -284,7 +284,7 @@
             '<figure class="v5-minifig"><div class="v5-mini bad"><i class="bd"></i><i class="clip"></i><i class="bd top"></i><span class="v5-mk no">' + VIS.icon('close') + '</span></div><figcaption>Before the fix, after your first clip edit</figcaption></figure>' +
             '<figure class="v5-minifig"><div class="v5-mini"><i class="bd"></i><i class="clip"></i><span class="v5-mk yes">' + VIS.icon('check') + '</span></div><figcaption>After the fix</figcaption></figure>' +
           '</div>' +
-          '<p class="h-note v5-note">A tall video often has a blurred copy of the picture behind a wide clip, on purpose. The first draft moved everything under a clip to the front at your first clip edit, so the backdrop covered the video. Now Quick knows the backdrop is behind, shows it in the hatched <b>Behind</b> row just above the clips, and never re-stacks it.</p>' +
+          '<p class="h-note v5-note">A tall video often has a blurred copy of the picture behind a wide clip, on purpose. The first draft moved everything under a clip to the front at your first clip edit, so the backdrop covered the video. Now Simple knows the backdrop is behind, shows it in the hatched <b>Behind</b> row just above the clips, and never re-stacks it.</p>' +
         '</div>' +
       '</section>';
     const q = s => host.querySelector(s);
@@ -355,7 +355,7 @@
       hosts[prev].hidden = true; hosts[which].hidden = false;
       hosts[which].classList.remove('enter'); void hosts[which].offsetWidth; hosts[which].classList.add('enter');
       F[which].fit();
-      log(why2 || ('Switched to ' + (which === 'full' ? 'Full' : 'Quick')));
+      log(why2 || ('Switched to ' + (which === 'full' ? 'Full' : 'Simple')));
       draw();
       if (which === 'full' && S.sel) scrollFullTo(S.sel);
     }
@@ -520,15 +520,15 @@
         if (blocks) bits.push(bold(plural(blocks, 'block')) + ' (things kept as one piece)');
         if (looks) bits.push(bold(plural(looks, 'thing')) + ' with moves (marked ✦)');
         if (fo) bits.push(bold(plural(fo, 'thing')) + ' only Full shows');
-        why.innerHTML = '<h4 class="v5-sub">' + (R.adopted ? 'Your clip row' : 'What Quick worked out') + '</h4>' +
-          '<p>' + (R.adopted ? 'Since your first clip edit, the clip row is saved in the project. It now has ' : 'Quick looked at ' + plural(ed.doc.layers.length, 'layer') + ' and found ') + andList(bits) + '.</p>' +
-          '<p class="h-note">' + (S.ed === 'quick' ? 'Tap ' + orList(tapThings(R).concat('a row item')) + ' in the phone to see why it is there.' : 'Tap a layer to see where it goes in Quick.') + '</p>';
+        why.innerHTML = '<h4 class="v5-sub">' + (R.adopted ? 'Your clip row' : 'What Simple worked out') + '</h4>' +
+          '<p>' + (R.adopted ? 'Since your first clip edit, the clip row is saved in the project. It now has ' : 'Simple looked at ' + plural(ed.doc.layers.length, 'layer') + ' and found ') + andList(bits) + '.</p>' +
+          '<p class="h-note">' + (S.ed === 'quick' ? 'Tap ' + orList(tapThings(R).concat('a row item')) + ' in the phone to see why it is there.' : 'Tap a layer to see where it goes in Simple.') + '</p>';
         return;
       }
       const l = R.layer(S.sel); if (!l) { S.sel = null; drawWhy(R, null); return; }
       const p = place(R, S.sel);
       const rs = reasons(R, S.sel);
-      why.innerHTML = '<div class="v5-whyhead"><div><h4 class="v5-sub">' + esc(nm(l)) + '</h4><p class="v5-type">' + esc(typeWord(l)) + ' · ' + (S.ed === 'full' ? 'in Quick it goes to' : 'in Quick') + '</p></div>' + destChip(p) + '</div>' +
+      why.innerHTML = '<div class="v5-whyhead"><div><h4 class="v5-sub">' + esc(nm(l)) + '</h4><p class="v5-type">' + esc(typeWord(l)) + ' · ' + (S.ed === 'full' ? 'in Simple it goes to' : 'in Simple') + '</p></div>' + destChip(p) + '</div>' +
         rs.map(s => '<p>' + s + '</p>').join('');
       why.classList.remove('flash'); void why.offsetWidth; why.classList.add('flash');
     }
@@ -543,8 +543,8 @@
       const rows = S.log.map((g, i) => '<li class="' + (i === 0 ? 'new' : '') + (g.delta ? ' wrote' : '') + '"><span>' + esc(g.text) + '</span><b>' + (g.delta > 0 ? '+' : g.delta < 0 ? '−' : '') + Math.abs(g.delta) + ' bytes</b></li>').join('');
       save.innerHTML = '<h4 class="v5-sub">Saved to the project</h4>' +
         (S.bytes === 0
-          ? '<p>Nothing. Opening, switching, picking, playing and opening rows only change what is on screen. The first <b>clip edit</b> (' + firstEdits() + ') is when Quick saves its clip row.</p>'
-          : '<p>Your first clip edit saved what Quick had worked out, in the same step as the edit:</p>' +
+          ? '<p>Nothing. Opening, switching, picking, playing and opening rows only change what is on screen. The first <b>clip edit</b> (' + firstEdits() + ') is when Simple saves its clip row.</p>'
+          : '<p>Your first clip edit saved what Simple had worked out, in the same step as the edit:</p>' +
             (d.saved.length ? '<ul class="v5-saved">' + d.saved.map(s => '<li>' + s + '</li>').join('') + '</ul>' : '') +
             (d.edit.length ? '<p class="v5-lbl">And the edit itself</p><ul class="v5-saved">' + d.edit.map(s => '<li>' + s + '</li>').join('') + '</ul>' : '') +
             '<p class="h-note">Undo takes it all back, the marks too. Nothing else is ever tidied by itself.</p>') +
@@ -580,10 +580,10 @@
       if (focusId && from === 'list') { const nb = wlist.querySelector('.v5-wrow[data-id="' + (window.CSS && CSS.escape ? CSS.escape(focusId) : focusId) + '"]'); if (nb) nb.focus({ preventScroll: true }); }
     }
 
-    // first paint: Quick shown, Full hidden
+    // first paint: Simple shown, Full hidden
     hosts.full.hidden = true;
     segButtons(seg, 'quick');
-    log('Opened in Quick');
+    log('Opened in Simple');
     draw();
     host._v5 = { S, ed, F };
   }
@@ -617,7 +617,7 @@
     function del(id) { if (C.deleted) { C.deleted = null; reset(C.mode); } applyDelete(id); draw(); }
 
     f.on('play', () => toast('Drag along the numbers at the top to move the playhead.'));
-    f.on('switch', () => toast('This part stays in Quick. The switch is tried in V1.'));
+    f.on('switch', () => toast('This part stays in Simple. The switch in the ⚙ cog is tried in V1.'));
     f.on('undo', () => { if (C.deleted) putBack(); else toast('Nothing to undo'); });
     f.root.addEventListener('click', e => {
       const b = e.target.closest('[data-act]'); if (!b || !f.root.contains(b)) return;
@@ -674,7 +674,7 @@
       const alone = a1.duration - covered, silent = !!a1.muted, before = C.mode === 'before';
       const row = (ok, head, text, skip) => '<li class="' + (skip ? 'skip' : ok ? 'yes' : 'no') + '"><i>' + markSvg(skip ? null : ok) + '</i><div><b>' + head + '</b><span>' + text + '</span></div></li>';
       tests.innerHTML = '<h4 class="v5-sub">Is the talking head a backdrop?</h4>' +
-        '<p>A backdrop goes behind, and the clips on top of it become the clip row. ' + (before ? 'The first draft asked one question:' : 'Quick asks three questions, and it takes all three yeses:') + '</p>' +
+        '<p>A backdrop goes behind, and the clips on top of it become the clip row. ' + (before ? 'The first draft asked one question:' : 'Simple asks three questions, and it takes all three yeses:') + '</p>' +
         '<ol class="v5-q">' +
           row(above, 'Do the other clips all sit above it?', above ? 'Yes. ' + (cuts.length === 1 ? 'The cutaway is' : cuts.length === 2 ? 'Both cutaways are' : 'All ' + numWord(cuts.length) + ' cutaways are') + ' higher in the stack.' : 'No.') +
           row(alone <= 0.05, 'Do they cover all of it, with no holes?', alone <= 0.05 ? 'Yes.' : 'No. For ' + VIS.fmt(alone) + ' of its ' + VIS.fmt(a1.duration) + ' only the talking head shows.', before) +

@@ -73,6 +73,21 @@ if [ "$FROM_FILE" = "0" ]; then
   esac
 fi
 [ -f .mutation-in-progress ] && { echo "❌ a mutation check is still in progress — refusing to ship a mutated tree"; exit 1; }
+# LIVE MUST NOT BE AHEAD OF THIS TREE (queue 1066, 5 Oct). Another tool pushed to ssh/main (ChatGPT's v17.22, f7716576) while
+# this tree still sat on v17.21 with its own unshipped work also labelled v17.22. Nothing here looked at the remote until the
+# push, so a ship would have spent ~90 minutes on two suite passes and then been rejected as non-fast-forward. So: fetch
+# first and refuse in one second if live is not in this tree's history. If the remote cannot be reached, say so and carry
+# on — the push at the end still verifies, so an offline ship loses nothing it had before this gate.
+if git fetch -q ssh 2>/dev/null; then
+  if ! git merge-base --is-ancestor ssh/main HEAD; then
+    echo "❌ LIVE HAS MOVED ON: ssh/main ($(git rev-parse --short ssh/main)) is not in this tree's history (HEAD $(git rev-parse --short HEAD))."
+    echo "   Bring it in first — commit this work to a branch (no stash, no clean), fast-forward main to ssh/main, re-apply it"
+    echo "   (git cherry-pick --no-commit <branch>), renumber if the versions collide. Shipping now would run the whole suite and then fail at the push."
+    exit 1
+  fi
+else
+  echo "⚠️  could not reach ssh to check whether live has moved on — carrying on; the push at the end still verifies"
+fi
 # A SPOT-CHECK AND A SHIP DO NOT SHARE THE MACHINE (5 Sep). Two headless suites at once starve the timing-sensitive tests: a
 # two-commit spot-check running under the v15.71 ship's phone pass flaked test 699 ("the CONTROL swipe moved nothing") and cost
 # the whole ship. spotcheck.sh holds .spotcheck-in-progress while it runs and refuses while this lock exists; same here.

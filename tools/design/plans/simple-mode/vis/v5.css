@@ -1,4 +1,4 @@
-/* V5 — An old project in Quick. Hub-side layout (h- tokens, light and dark) and a few mock-side pieces (fm tokens). */
+/* V5 — An old project in Simple. Hub-side layout (h- tokens, light and dark) and a few mock-side pieces (fm tokens). */
 
 .v5 { display: grid; gap: 26px; min-width: 0; }
 .v5 > * { min-width: 0; }

@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 3 Oct at v17.22
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Oct at v17.23
 >
-> **State:** v17.22 — **the new Home look**: Settings, centred wordmark, Search and Profile across the top; Select and Join in keyboard-accessible menus; a local profile photo; a bottom phone dock and a soft fade as project cards scroll; light and dark, phone and PC layouts. Previous: v17.21 — **deeper colour grading** (#482 batch 5): 20 colour effects now work on adjustment layers; Highlights & Shadows gets Local radius (lifts a dark subject without milky blacks), Whites, Blacks, Tonal width and Colour boost; Teal & Orange gets Protect skin and split-by-hue; Tint, Duotone, Gradient Map, Cross Process and Exposure gain blend modes and options. **Your pick waiting: the Filters tab, A, B or C** (pictures sent; A recommended). v17.20 — **more choice on the sound effects** (#482 batch 3): Echo gets Tone / Low cut / Tape wobble, Reverb gets Pre-delay / Tone / Low cut / Width, Pitch Shift gets Fine tune and ±24, the EQs get movable corners, the Compressor gets Output / Mix and a live bar, the Limiter gets Input gain / Release, and a playing sound effect shows ■ to stop it. Saved projects sound the same until you move one. v17.19 — **more choice on the movers and rhythms** (#482 batch 2): Wiggle, Shake, Pulse, Swing, Orbit, Drift, Flash (darken), Frame Stutter, Motion Blur, Speed Lines and Glitch each gained controls — patterns so two layers move differently, Hide edges for shakes, heartbeat/bounce pulses, a swing that settles, tickers that wrap, steady and build-up strobes, uneven glitch slices and block damage. Nothing changes on a saved project until you move one. v17.18 — **on PC the New project + no longer hides behind your project cards** (#992: with enough projects it sat under them and a click opened a project instead). v17.17 — **Gradient Overlay fades stronger and weaker in the effects sheet preview** (#995, your answer), so you see its whole range before adding it; it still lands at its usual strength. v17.16 — **the last 9 of the 26 effect/sound bugs fixed** (#986 closed): more blurs and colour grades that could go missing on your iPhone now keep their look; Clouds, Starfield, Find Edges and Emboss look on the phone preview as they export; audio search finds karaoke, robot, chipmunk… v17.15 — **more choice on the film looks** (Film Grain, Light Leak, Glow, Letterbox, Faded Film, Temperature, Colour Balance — #482/#966 batch 1); one door for saving a whole look (#994); the Sketching bar says Close (#834). v17.14 — **17 effect/filter/sound bugs fixed** (#986 batch 1): a filter on an adjustment layer now works, blurs survive on your iPhone class of device, vignettes stack and match the export, shadows under soft edges, shaking/spinning clips no longer show empty corners, Chroma Key Pro on a blue screen removes blue spill, Film Grain on the phone matches the export, the Limiter really limits (saved Limiters get a little quieter), the sound-effect ▶ plays exactly what Add adds. **Your list of everything waiting on you was sent by the logging chat (#993)** and REQUESTS.md now matches it. v17.13 — **your New project + animation is the ripple** (#947, your pick — Cancel closes it at once); **“Tap here to start creating” opens the menu straight away**, with the glowing lines round the menu's edges (#981); **the old PC Share button is gone** — the cog is the way in (#983); **on PC the captions menu opens where the Add menu is**, and the timeline stays squished (#984); the clapper rests between snaps (#988); the Home arrow draws once after a refresh (#989); **Toggle dark mode** (#990); “Project 1” clears itself when you name a project (#991); narrow PC windows: every button takes its own click (#979). **Your picks waiting: #982 Join icon (A–D), #985 export (A–C), #987 note colours (A–C), #970 (A/B).** v17.12 — **your 28 Sep picks**: the original car back plus a front-view car, eye A, blue corner lines (#973); **every animation with options now plays one at random** so you can decide over time — the empty-project tap, the clapperboard, the New project + (#974, #964, #957, #947); small Notes is a box on the phone (#975); **no white scrollbar on PC** — ‹ › arrows on hover, and the New rows slide with a mouse (#976, #977); **the cog opens Friends beside Canvas settings on PC** (#978); resizing no longer resets the playhead (#955); a paused friend catches up in under a second (#971). **#970 needs your A or B** (pictures sent). v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
+> **State:** v17.23 — **more choice on glows, shadows, vignettes and flares** (#482 batch 6): a vignette that fits a 9:16 frame, glows that spill past the edges of text, a spreadable drop shadow and a shadow-only mode, a stroke with a gap (sticker outline), flares with more rays, ghosts, a ring and an anamorphic streak, two-way streaks, and a Glow Scan at any angle. The simple editor (#980) Phase 1 is being built: first a lock that refuses any release changing the editor you use today. **Your picks waiting: the Filters tab (A/B/C) and the simple editor’s D18, D22, D23, D24.** v17.22 — **the new Home look**: Settings, centred wordmark, Search and Profile across the top; Select and Join in keyboard-accessible menus; a local profile photo; a bottom phone dock and a soft fade as project cards scroll; light and dark, phone and PC layouts. Previous: v17.21 — **deeper colour grading** (#482 batch 5): 20 colour effects now work on adjustment layers; Highlights & Shadows gets Local radius (lifts a dark subject without milky blacks), Whites, Blacks, Tonal width and Colour boost; Teal & Orange gets Protect skin and split-by-hue; Tint, Duotone, Gradient Map, Cross Process and Exposure gain blend modes and options. **Your pick waiting: the Filters tab, A, B or C** (pictures sent; A recommended). v17.20 — **more choice on the sound effects** (#482 batch 3): Echo gets Tone / Low cut / Tape wobble, Reverb gets Pre-delay / Tone / Low cut / Width, Pitch Shift gets Fine tune and ±24, the EQs get movable corners, the Compressor gets Output / Mix and a live bar, the Limiter gets Input gain / Release, and a playing sound effect shows ■ to stop it. Saved projects sound the same until you move one. v17.19 — **more choice on the movers and rhythms** (#482 batch 2): Wiggle, Shake, Pulse, Swing, Orbit, Drift, Flash (darken), Frame Stutter, Motion Blur, Speed Lines and Glitch each gained controls — patterns so two layers move differently, Hide edges for shakes, heartbeat/bounce pulses, a swing that settles, tickers that wrap, steady and build-up strobes, uneven glitch slices and block damage. Nothing changes on a saved project until you move one. v17.18 — **on PC the New project + no longer hides behind your project cards** (#992: with enough projects it sat under them and a click opened a project instead). v17.17 — **Gradient Overlay fades stronger and weaker in the effects sheet preview** (#995, your answer), so you see its whole range before adding it; it still lands at its usual strength. v17.16 — **the last 9 of the 26 effect/sound bugs fixed** (#986 closed): more blurs and colour grades that could go missing on your iPhone now keep their look; Clouds, Starfield, Find Edges and Emboss look on the phone preview as they export; audio search finds karaoke, robot, chipmunk… v17.15 — **more choice on the film looks** (Film Grain, Light Leak, Glow, Letterbox, Faded Film, Temperature, Colour Balance — #482/#966 batch 1); one door for saving a whole look (#994); the Sketching bar says Close (#834). v17.14 — **17 effect/filter/sound bugs fixed** (#986 batch 1): a filter on an adjustment layer now works, blurs survive on your iPhone class of device, vignettes stack and match the export, shadows under soft edges, shaking/spinning clips no longer show empty corners, Chroma Key Pro on a blue screen removes blue spill, Film Grain on the phone matches the export, the Limiter really limits (saved Limiters get a little quieter), the sound-effect ▶ plays exactly what Add adds. **Your list of everything waiting on you was sent by the logging chat (#993)** and REQUESTS.md now matches it. v17.13 — **your New project + animation is the ripple** (#947, your pick — Cancel closes it at once); **“Tap here to start creating” opens the menu straight away**, with the glowing lines round the menu's edges (#981); **the old PC Share button is gone** — the cog is the way in (#983); **on PC the captions menu opens where the Add menu is**, and the timeline stays squished (#984); the clapper rests between snaps (#988); the Home arrow draws once after a refresh (#989); **Toggle dark mode** (#990); “Project 1” clears itself when you name a project (#991); narrow PC windows: every button takes its own click (#979). **Your picks waiting: #982 Join icon (A–D), #985 export (A–C), #987 note colours (A–C), #970 (A/B).** v17.12 — **your 28 Sep picks**: the original car back plus a front-view car, eye A, blue corner lines (#973); **every animation with options now plays one at random** so you can decide over time — the empty-project tap, the clapperboard, the New project + (#974, #964, #957, #947); small Notes is a box on the phone (#975); **no white scrollbar on PC** — ‹ › arrows on hover, and the New rows slide with a mouse (#976, #977); **the cog opens Friends beside Canvas settings on PC** (#978); resizing no longer resets the playhead (#955); a paused friend catches up in under a second (#971). **#970 needs your A or B** (pictures sent). v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -13316,6 +13316,8 @@ wait for them to report back."*
       ❓ASK: Gradient Overlay's default — Keep 0.8 or Gentler 0.5 (recommended)? ✔ reply checked 30 Sep — his reply (#995, “in the preview just made it fade stronger and weaker”) asked for the fading preview, built in v17.17, and did not pick; the logging chat re-asked Keep/Gentler alongside, so the default stays 0.8 until he says.
       The rest of this item is the #966 backlog's polish batches (tools/design/plans/2026-09-29-idle-backlog/backlog.md §A), built one batch per release under the #966 idle steer.
       ❓ASK (1 Oct): **batch 4, the Filters tab — A, B or C?** (sheet sent: tools/design/482/batch4 — A two rows with everything showing, Recommended; B one row with Clear and Add to all clips in a ▾ menu; C a This clip / All 3 switch before Add). All three carry Strength before Add, ◐ hold to compare, search + Your filters, Add to all clips. Under rule 16, A gets built when he says nothing.
+      ✅ **v17.23** (queue 482 partial): polish batch 6 (glow, shadow, vignette, flares) shipped — Vignette, the three Glows, Drop Shadow, Stroke, Lens Flare, Linear / Spin Streaks and Glow Scan gained controls (full list in POLISH-LOG v17.23); every default byte-identical; 6 review findings fixed. Next idle batch: §A batch 7 (audio choices).
+      🔨 **1 Oct, ~14:10 — batch 6 started** (backlog §A batch 6): 6.1 Vignette (roundness, feather, centre, darken / lighten / colour, protect highlights), 6.2 Light / Soft / Dark Glow (threshold softness, smoothness, glow past the edges, blend, source colour), 6.3 Drop Shadow (spread, smoothness, shadow only, longer ranges), 6.4 Stroke offset, 6.5 Lens Flare (core size, rays, rotation, ghosts, ring, anamorphic streak), 6.6 Linear / Spin Streaks, 6.7 Glow Scan (angle, sweeps across layer, wait, once). #986's single vignette renderer and shadow-under-soft-edges verified, not redone.
       ✅ **v17.21** (queue 482 partial): polish batch 5 (grading depth) shipped — 20 colour effects on adjustment layers; Highlights & Shadows, Teal & Orange, Tint, Duotone, Gradient Map, Cross Process and Exposure gained controls (full list in POLISH-LOG v17.21); every default byte-identical; 7 review findings fixed. Next idle batch: §A batch 6 (glow, shadow, vignette, flares) — batch 4 waits on his pick.
       🔨 **1 Oct, ~09:20 — batch 5 started** (backlog §A batch 5, grading depth): 5.1 colour effects on adjustment layers, 5.2 Highlights & Shadows (local radius, tonal width, whites, blacks, colour correction — C47), 5.3 Teal & Orange (by hue, protect skin, balance, keep brightness — C48), 5.4 Tint (tint over, range width), 5.5 Duotone blend, 5.6 Gradient Map (3 stops, reverse, blend), 5.7 Cross Process variant, 5.8 Exposure (gamma, linear light). Batch 4 (the Filters tab) adds buttons, so its options sheet is being drawn for his pick first (#545).
       ✅ **v17.20** (queue 482 partial): polish batch 3 (sound) shipped — Echo, Reverb, Pitch Shift, Bass & Treble, 3-Band EQ, Compressor, Limiter and the sound-effect ■ (full list in POLISH-LOG v17.20); every default sample-identical; 10 review findings fixed. Next idle batch: §A batch 4 (Filters tab — needs his picture pick first, #545).
@@ -34267,8 +34269,8 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **v17.13 — SHIPPED** (queue 979): every transport control takes its own click from 701px (the left track keeps its content width and Back moves clear); 900–964 had copy's centre under Back (clicking copy left the project), and 1161–1206 with one layer selected put ⋯ under the version chip (a click force-reloaded the app) — the band line moved 1160 → 1226px. #970's measured band stays held for his pick.
 
 
-- [ ] **980 — PLAN (do NOT build): the simple “CapCut / Premiere Pro” editor alongside today's “After Effects” one — a quick switch, project conversion, and two-mode live collab** (28 Sep, ~23:39 AWST, via INBOX — his words)
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+- [ ] **980 — BUILDING PHASE 1 (his D15 A, 1 Oct — planned first, from the revised plan): the simple “CapCut / Premiere Pro” editor alongside today's “After Effects” one — a quick switch, project conversion, and two-mode live collab** (28 Sep, ~23:39 AWST, via INBOX — his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole, as the logging chat wrote it:
 
 
@@ -34336,8 +34338,182 @@ re-opened #480, which I had marked done and had not fixed.
       - Reviewed "ready after fixes", with the review in §13.
       - **Line numbers will have drifted by the time he says go**, so re-anchor on the quoted text, as the plan says.
       - The visualizers are republished (Version 2, same link). His D1–D21 answers will arrive as their own block.
-      BUILT OUT UNTIL HE says to build the simple mode.
-      ⚠️ **Note for the build plan (30 Sep, v17.15; updated 1 Oct, v17.19):** the collab SCHEMA_REV is now **5** (the #482 polish batches 1–3 added effect and audio params) — BUILD-PLAN step 1.2's `SCHEMA_REV 3` must become **6** when it is built (one more than whatever `C.SCHEMA_REV` in js/collab-core.js says then). BUILT OUT UNTIL HE says to build the simple mode.
+      ~~BUILT OUT UNTIL HE says to build the simple mode.~~ — HE ANSWERED 1 Oct (below): D15 A, build Phase 1, but only from the REVISED plan.
+      📥 **1 Oct — three INBOX entries, moved whole as the logging chat wrote them:**
+      ### 01 Oct 2026, ~13:45 AWST — #980 simple mode: the ORIGINAL editor must not change at all; the editor switch lives in the settings cog as a THIRD section; warn before any swap that can't be undone
+
+      **His words (verbatim):** "okay so with this new editing layout i just want to make clear that i dont want the original editor changing in design and function. some of the tests you showed me mean changing stuff i dont want changed with the original editor. dont do that. the option to switch between the two editors should be in the settings cog, making a third section in there. it can be a small button that just switches between editors and should have a button that you press that says \"What should you use?\" pressing makes that pannel open up like how the other two pannels currently function, the canvas settings and the friends one. so this will just be a 3rd section but it stays small unless you want the explanation. allowing quick swapping in editors. also if swapping the editors changes anything that cant be un done make sure theres a warning."
+
+      His clauses:
+      1. The ORIGINAL (Full) editor must not change in design OR function. Some of what he was shown would change it. Don't do that.
+      2. The switch between the two editors lives in the settings cog, as a THIRD section beside Canvas settings and Friends.
+      3. That section is a small button that just switches editors…
+      4. …plus a button labelled "What should you use?" that opens the panel up, the same way the Canvas settings and Friends panels open now.
+      5. It stays small unless you want the explanation, so swapping editors is quick.
+      6. If swapping editors changes anything that can't be undone, show a warning first.
+
+      **Logger's plan (not his words):**
+      - This settles D2: the switch is in the cog, NOT on Full's play bar, NOT in Full's ⋯, and NOT on the video.
+      - It drops every D2 option, and V12's "Buttons on the video" placements, which put things into Full.
+      - The logging chat is revising DESIGN.md, BUILD-PLAN.md and the visualizers now:
+        - an audit of every change the plan makes to Full, with each removed or contained so Full's look and behaviour are byte-for-byte what they are today;
+        - the cog's third block, designed on the #945 phone pair and the #978 PC side-by-side mechanism;
+        - a structural warning on any swap that would write something un-undoable.
+      - **Still planning only. Nothing gets built until his D15.** The revised plan lands in `tools/design/plans/simple-mode/`.
+
+      ### 01 Oct 2026, ~13:56 AWST — HE ANSWERED the simple-editor decisions (#980). D15 A = BUILD Phase 1, but ONLY from the REVISED plan (the Full-untouched revision is still running)
+
+      **His words (verbatim; pasted from the decisions page's "Copy my answers"):**
+      "My picks for the simple editor: D1 A, D2 ?, D3 A, D4 A, D5 A, D6 A, D7 A, D8 A, D9 A, D10 A, D11 B, D12 A, D13 A, D14 A, D15 A, D16 A, D17 B, D18 ?, D19 A, D20 A, D21 A
+      Not the recommended one: D11 B, D17 B, D20 A.
+      Not picked yet: D2, D18.
+      Names: Simple / Full."
+
+      **Logger's note (not his words):**
+      - **Recorded:**
+        - D1 A: the names are **Simple / Full**.
+        - D3 A: two cards that remember the last pick.
+        - D4 A: things follow their clip; music stays.
+        - D5 A: deleting a clip deletes its titles too, with Undo.
+        - D6 A: a title slides back onto its clip.
+        - D7 A: a locked clip stops the edit, with "Do it anyway".
+        - D8 A: Simple never makes gaps; Full's gaps show as tap-to-close.
+        - D9 A: old projects open as they are.
+        - D10 A: clip tools sit in a row above the toolbar.
+        - D12 A: the Ask button is in Simple.
+        - D13 A: transitions never shorten the video.
+        - D14 A: friends can do looks, text, captions and sound first; moving clips comes later.
+        - **D15 A: BUILD PHASE 1.**
+        - D16 A: the recommended icon set.
+        - D19 A: beat marks stay on the music.
+        - D21 A: shapes, elements and templates are in Simple under Extras.
+      - **His three non-recommended picks** change the design, and the logging chat folds them in:
+        - **D11 B:** pick ONE switch animation now. Which one is being asked.
+        - **D17 B:** music longer than the clips means the video runs on in black, like Full does today.
+        - **D20 A:** on PC, a tool's panel opens inside the left band.
+      - **D2 is settled by his 1 Oct rule:** the switch is the cog's third block, never on Full. **D18** is being rewritten, because Simple's play bar no longer carries the switch.
+      - ⛔ **BUILDER: do NOT start from the current BUILD-PLAN.md.** Its step 1.1 makes "Full fixes", which his 1 Oct rule forbids ("i dont want the original editor changing in design and function"). The logging chat is revising the plan now: the Full-untouched audit, the cog switch, the un-undoable-swap warning, and then these picks. **A "PLAN READY — BUILD Phase 1" block will land when it is safe to start.** Until then, log this entry as approved-to-build-after-the-revised-plan.
+
+      ### 01 Oct 2026, ~14:04 AWST — HE ANSWERED D11 (#980): the switch animation is MORPH
+
+      **His words (verbatim):** "Just do the one clip on the far left, morph i think it was"
+
+      **Logger's note (not his words):** D11 B, one animation, and it is **Morph**: the far-left of V1's three side by side, where clips slide straight up or down into their new places. Fold and Slide are not built. The logging chat folds this into the revised plan (step 7b), with Morph playing as the cog panel closes into the other editor. Still wait for the "PLAN READY — BUILD Phase 1" block.
+      ⏳ PLAN PENDING: the logging chat is revising DESIGN.md / BUILD-PLAN.md so the Full editor stays byte-for-byte as it is (his 1 Oct rule), the switch is the cog's third block with “What should you use?”, a swap that cannot be undone warns first, and his picks are folded in (D11 Morph, D17 B, D20 A; D2 settled; D18 rewritten). Building starts from the “PLAN READY — BUILD Phase 1” block, never from today's BUILD-PLAN.md (its step 1.1 changes Full).
+      📥 **1 Oct, ~16:29 — moved from INBOX whole:**
+      ### 01 Oct 2026, ~16:29 AWST — PLAN READY — BUILD Phase 1 (#980), the parts his D15 A unblocks NOW. The original editor must not change (his 1 Oct rule)
+
+      **Logger's plan (not his words).** Revised to his 1 Oct rules and picks:
+      - `tools/design/plans/simple-mode/BUILD-PLAN.md`, the **revised** plan (1 Oct banner; step 1.1's "Full fixes" WITHDRAWN);
+      - `DESIGN.md` §0.4 ("Full stays exactly as it is", the contract), §6 (the switch is the cog's third block) and §17 (his answers recorded);
+      - `AUDIT-FULL-UNTOUCHED.md` and `cog/COG-DESIGN.md`.
+
+      **Build now, in this order (BUILD-PLAN §1.1 "What can be built now"):**
+      1. **The "Full unchanged" check first** (BUILD-PLAN §3.2): `tests/full-unchanged.html`, `tools/full-unchanged.sh` (it self-tests on every run), and a `ship.sh` gate that refuses any release touching Simple files or hooks if Full's layout record, pixels or behaviour differ from HEAD (FU1–FU7, DESIGN §0.4.5). This is his rule made structural. It ships on its own.
+      2. **Step 1.2, the invisible engine** (`js/spine.js`, `js/spine-words.js`, the `timedLists` hunk, `SCHEMA_REV` 6 → 7). It was re-anchored at v17.21. `SCHEMA_FP` has NO value in the plan: paste the number the fingerprint gate test prints at build time. The 1 Oct revision did not re-run the plan's tests; `prove.sh` is the first real check.
+
+      **Write and prove now, but do NOT ship yet:** step 1.3, the view with the cog's third block. It waits for his answers on D18 (Simple's play-bar order), D22 (no Settings row, recommended), D23 (the cog closes after a switch, recommended) and D24 (his phone sideways: B, the switch on the cog's own row, recommended). Those answers come as their own block. D3 holds only Phase 3's Create-picker item, and D14b holds only Phases 4–5.
+
+      **His picks to honour:**
+      - names **Simple / Full**;
+      - **Morph** only;
+      - **D17 B:** music never trimmed or faded, and the video runs on in black;
+      - **D20 A:** PC tool panels inside the left band.
+
+      Re-anchor on the quoted text, since line numbers will have drifted. Each release is logged `queue 980 (partial)`.
+      PLAN LANDED 1 Oct (~16:29): tools/design/plans/simple-mode/BUILD-PLAN.md (revised, 1 Oct banner) — build Phase 1 in its order: (1) the Full-unchanged check and its ship.sh gate, shipped on its own; (2) step 1.2, the invisible engine; (3) step 1.3 written and proven but NOT shipped until D18/D22/D23/D24. SCHEMA_REV is one more than whatever js/collab-core.js says at build time (batch 6 of #482 may take 7 first).
+      📥 **1–5 Oct — four INBOX blocks, moved whole as the logging chat wrote them:**
+      ### 01 Oct 2026, ~20:16 AWST — #980: he asked which questions are left and for Stage 2 to be worked on. The logging chat is writing the Phase 2 build plan
+
+      **His words (verbatim):** "what questions do i need to answer for the new simple version to be built? and can you work on stage 2?"
+
+      **Logger's note (not his words):**
+      - He was re-shown the six open decisions:
+        - D18, D22, D23 and D24 gate step 1.3 (the cog switch he holds);
+        - D3 gates only Phase 3's Create-picker item;
+        - D14b gates only Phases 4–5.
+      - "Stage 2" = DESIGN's Phase 2 (editing, clip after clip). The logging chat is writing `tools/design/plans/simple-mode/BUILD-PLAN-PHASE2.md`, rehearsed on a scratch copy on top of Phase 1, then reviewed. A PLAN READY block follows.
+      - **Observation:** Phase 1 has not started in the app. There is no `js/spine.js`, no FU tooling, and HEAD is v17.21. That is expected under oldest-first, because #980 sits far down the queue. He has been told it waits its turn unless he says to jump it.
+      ### 02 Oct 2026, ~07:01 AWST — PLAN READY (for AFTER Phase 1): Simple Phase 2 (#980), plus four fixes to apply to Phase 1's BUILD-PLAN.md
+
+      **Logger's plan (not his words).** `tools/design/plans/simple-mode/BUILD-PLAN-PHASE2.md` is 3,997 lines plus a §14 Review ("ready after fixes" for 2.1 and 2.2).
+      - **Phase 2 ships as releases 2.1–2.6**, each logged `queue 980 (partial)` and shipped alone, ONLY after Phase 1 has shipped.
+        - **2.1** is the engine and keys: `js/spine-edit.js` plus 34 hunks. It covers the runner, the D14 live gate, adoption, D5–D8, D17 B, delete, trims, split, close gap and duplicate.
+        - **2.2** is the tools: `js/simple-tools.js` plus 19 hunks. It covers the D10 tray, the Clips · Text · Sound · Overlay row, and D20 A inside the left band on PC.
+        - **2.3–2.6** are specified with anchors only. Their code is not written.
+      - **Rehearsal:** done on a scratch copy of HEAD 28104a3e, re-applied from the plan text alone, giving a byte-identical tree.
+        - All 42 Simple tests pass at 1280 and 380.
+        - Each release's new tests fail before it (0/14, 0/9).
+        - The G1–G4 mutations prove Full is unaffected where 2.1 and 2.2 touch shared code.
+        - 2.1 turns two existing tests red (`921 S2` and `921 S0`). Test edits 2.1.T3/T4 are in the plan, NOT re-run, because the Mac was at load 25–65.
+        - NOT run: the whole suite at 380, ship.sh/prove.sh, Safari or his iPhone.
+      - **Apply these to BUILD-PLAN.md (Phase 1) when you build it** (found by the Phase 2 rehearsal; the plan's "Fixes to BUILD-PLAN.md" section has them):
+        - the 1.3.6 anchor is `app.js?v=468`;
+        - `SCHEMA_FP` measured on v17.21 plus Phase 1 is `1486177182544587` (re-measure at build);
+        - T8 must not compare the selection the test itself changes;
+        - Open in Full uses `FM.editor.request`.
+      - **One line he may want to know** (not asked yet): in a project not yet edited in Simple, the first Delete cuts a long Full-made song at the deleted clip, per DESIGN's rule. Under his D17 B ("music never trimmed") he might read that as a trim. Leaving the song whole is a one-line change.
+      PLAN LANDED 2 Oct (Phase 2): tools/design/plans/simple-mode/BUILD-PLAN-PHASE2.md, plus four fixes to apply to Phase 1's BUILD-PLAN.md (listed in it).
+      ### 05 Oct 2026, ~15:56 AWST — GO: build Simple mode (#980) now, then the confirmed bug backlog in order, then a first-party deep audit. His remaining 6 decisions answered as RECOMMENDED
+
+      **His words (verbatim):** "lets use it to finish simple mode then the rest in order. Let me know how i can make sure that the cloud ussage is actually being used for this, and do i have to run out of usage first? Do i need to start a new cloud chat? Should i switch to the most powerful model? Tell me what to do step by step from here to get what i want" (said after: "Okay so ive been working with chatgpt for this past few days and got a lot done. I also just got $250 worth of claude cloude ussage for free and my limit for you resets in a few hours so we can start work again instead of on chatgpt... lets use it to finish simple mode then the rest in order.")
+
+      **Logger's plan (not his words). This is a GO, not just a log — treat it as the order to work in:**
+      1. **#980 Simple mode, Phase 1 then Phase 2, oldest-first inside the feature:** `tools/design/plans/simple-mode/BUILD-PLAN.md` (Phase 1) then `BUILD-PLAN-PHASE2.md` (Phase 2, already written and rehearsed). Follow the "PLAN READY" blocks already in this file's history for both.
+      2. **Then the confirmed ChatGPT bug backlog, in the order it was logged** (batches 1–4, all in `tools/design/chatgpt-tasks/reports/`): the export-audio empty-track fix first (it may explain #215/#604/#677), then the rest oldest-batch-first. These are separate, already-diagnosed items — log each with its own number via the usual process if not already numbered, and work them oldest-first alongside whatever else is open, per standing rule.
+      3. **Then a first-party deep audit**, done by the builder/a workflow directly (not ChatGPT): the same shape as ChatGPT's "big day job" (a per-file mechanical pass, an architecture map, a user guide) but held to this project's own proof standard (prove.sh-style: every finding checked against the real code before it's logged).
+
+      **His remaining 6 Simple-mode decisions are answered as RECOMMENDED**, since he is now commissioning full execution (he did not type the words "do recommended" this message, so say so plainly if he ever corrects one):
+      - **D3** (A): a new project opens in whichever editor this device last used; New project's own dialog is unchanged.
+      - **D14b** (A): moving clips live while a friend edits waits (held); Full stays untouched meanwhile.
+      - **D18** (A): Simple's phone play bar is ⋯ · ✂ · (gap) · |◀, with |◀ in Full's own spot.
+      - **D22** (A): no Settings row; the cog is the only door to the switch.
+      - **D23** (A): the cog closes after a switch.
+      - **D24** (B): on a short/sideways phone, the switch sits on the cog's own row; Canvas and Friends are unaffected.
+      - **Also recommended (Phase 2 review's open note):** the first Delete in an old project leaves a Full-made song whole rather than cutting it, matching his D17 B "music never trimmed" reading.
+
+      Record each with "ANSWERED BY EZRA (recommended, via the logging chat) 5 Oct" and his exact words above as the source, then let step 1.3 and Phase 2 proceed.
+
+      **On his usage questions** (read `mcp__ccd_session_mgmt__get_usage` for the real numbers — this is NOT something to guess at): his account is Max plan; weekly all-models usage was at 96% with the week resetting within minutes of this message; 5-hour usage was barely touched. `extraUsage.enabled` was **false** — that is almost certainly the "$250 cloud usage": a pay-as-you-go/overage pool that only draws down once the included weekly/5-hour usage is exhausted, and it has to be switched ON by him in his account's billing/usage settings (not exposed to any tool here) before it does anything. He does NOT need a separate "cloud chat" for it — it is account-wide, not tied to where a session runs. Recommended once it's on: run the builder chat on the most capable model (`claude-opus-5-5`) for this push, since token cost is explicitly not the constraint this month.
+      ANSWERED BY EZRA (recommended, via the logging chat) 5 Oct — his words above ("lets use it to finish simple mode then the rest in order"): D3 A, D14b A, D18 A, D22 A, D23 A, D24 B, and the first Delete in an old project leaves a Full-made song whole. He did not type "do recommended"; tell him plainly, and change any he corrects.
+      ### 05 Oct 2026, ~16:11 AWST — HANDOFF TO THE BUILDER (read this block FIRST): sync with live, then build Simple mode; ChatGPT's pile is off-limits; only you push
+
+      **His words (verbatim):** "my usage reset but actually i dont wanna use this chat to build the other thing i want to use the other chat and leave this one for logging . so give a handoff for the other chat but also chatgpt is still working rn so will it cause issues?" — then: "i want you to projact manage this for a while - you can take control of my computer and make sure my chatgpt and other claude chat are working at the same time and getting good stuff done. Lmk if there's any issues with this or if theres no point"
+
+      **Logger's plan (not his words). The logging chat is now also PROJECT MANAGER (his ask): it watches you and ChatGPT, keeps you in separate lanes, verifies ChatGPT's work, and feeds you through this file.**
+
+      **STEP 0 — your folder is BEHIND the live app. Do this before ANY ship (measured 5 Oct):**
+      - Live `ssh/main` = `f7716576` **v17.22 "Home layout from the approved reference"** — pushed by ChatGPT (he approved the look). Your HEAD is still `28104a3e` (v17.21).
+      - Your uncommitted work is ALSO labelled **v17.22** (POLISH-LOG: "v17.22 — queue 482 (partial) … the sixth polish batch … Vignette Roundness …"; files: `js/compositor.js` +529, `fx-registry.js`, `fx-thumbs.js`, `inspector.js`, `collab-core.js`, `index.html`, `tests/tests.js`, POLISH-LOG.md, REQUESTS.md). **That is a version collision with live.**
+      - `tools/ship.sh` does NOT check whether you are behind `ssh/main` — it would run the ~90-minute suite and then fail at the push. So: commit your in-progress work to a branch (e.g. `wip/482-batch6`) — **no `git stash`, no `git clean`** — then bring in live (`git pull --rebase ssh main` or merge f7716576), resolve `index.html` (version label + `?v=` busters), POLISH-LOG.md and REQUESTS.md, and renumber your polish batch to **v17.23**. Confirm `git merge-base --is-ancestor f7716576 HEAD` before shipping.
+      - The logging chat's own files in the dirty tree are plan docs, safe to commit as-is: `INBOX.md` (drain it as usual), `tools/design/plans/**`, `tools/design/chatgpt-tasks/**`.
+      - **(hunt MEDIUM, tooling — his "safeguards must be structural" rule)** add a gate to `tools/ship.sh`: `git fetch ssh` first and REFUSE before the suite starts if `ssh/main` is not an ancestor of HEAD ("live has moved on: pull first"). This exact trap exists today.
+
+      **STEP 1 — finish/ship your batch-6 polish (#482) on top of live, as v17.23,** so nothing of yours is left hanging.
+
+      **STEP 2 — #980 Simple mode, his explicit queue jump** ("lets use it to finish simple mode then the rest in order"):
+      - `tools/design/plans/simple-mode/BUILD-PLAN.md` (Phase 1: the FU "Full unchanged" gate first, then step 1.2 the engine, then step 1.3 the cog switch) with the 4 fixes listed in the Phase 2 plan's "Fixes to BUILD-PLAN.md", then `BUILD-PLAN-PHASE2.md` (2.1, 2.2 written in full; 2.3–2.6 anchors).
+      - `DESIGN.md` §0.4 is the contract: the ORIGINAL editor must not change in design or function. §17 has every decision answered (the "GO" block above records the last six as recommended).
+      - Plans were anchored at v17.21: re-anchor on the quoted text against v17.22 + your v17.23.
+      - Each release logged `queue 980 (partial)` and shipped alone. Show him pictures (the cog block, the D16 icons) before step 1.3 ships.
+
+      **STEP 3 — then the rest in order** (the verified ChatGPT batch 1–4 findings logged above as hunt items, the mobile ? button, etc.), oldest-first as usual.
+
+      **ChatGPT — what it is doing, and the rules (measured 5 Oct):**
+      - It works ONLY in its own clones under `/private/tmp/freemotion-*`, on a linear series of ~260 local commits on top of live v17.22 (branches `codex/690-*`, tip `codex/690-reviewed-local`): keyed-effect fixes in Time Warp Scan / Frame Stutter, an open-font catalogue (fonts/open/*, OFL), shape fixes. ~405 files, +29k lines. **None of it is pushed or verified.**
+      - **Do NOT merge, cherry-pick, pull or rebase onto any `codex/*` or `chatgpt/*` branch.** The logging chat is verifying that pile in batches and will hand you verified, ordered cherry-pick lists here, to integrate between Simple-mode releases.
+      - **You are the ONLY one who pushes to the live app.** ChatGPT is being told not to push. If live moves anyway, STEP 0's gate catches it.
+      - Lanes: ChatGPT stays in effects/compositor/fonts; Simple mode is yours. If ChatGPT's pile touches a file you are editing for Simple mode, the logging chat flags it before handing it over.
+      - CPU: one Mac. Don't run ship.sh while the load is high; the logging chat holds ChatGPT back during your ship runs (it watches `.ship-in-progress`).
+
+      **Usage:** you're on `claude-opus-5-5` at xhigh. He has a fresh Max week plus $250 of free cloud credits (he believes they need no switch); `mcp__ccd_session_mgmt__get_usage` shows the plan windows.
+      QUEUE JUMP (5 Oct): he said build Simple mode now ("lets use it to finish simple mode then the rest in order") — #980 is worked ahead of lower open items; the ship.sh behind-live gate is #1066.
+      **Phase 1, one release per step (BUILD-PLAN §0 / §1.1), ticked as each ships:**
+      1. [ ] The “Full unchanged” lock: tests/full-unchanged.html, tools/full-unchanged.sh (self-testing) and the ship.sh gate — his rule made structural. Ships on its own. (🔨 1 Oct ~18:40: building, then an adversarial review that tries to sneak a Full change past it.)
+      2. [ ] Step 1.2, the invisible engine (FM.timedLists, js/spine-words.js, js/spine.js) — nothing on screen, Full identical, proven by the lock. Ships on its own. (🔨 building after the lock.)
+      3. [ ] Step 1.3, the view he holds (the cog's third block, Simple's timeline) — D18 A, D22 A, D23 A, D24 B answered 5 Oct (recommended, via the logging chat): build and ship after the engine; show him the cog block and D16 icons first.
+      4. [ ] Phase 2 (BUILD-PLAN-PHASE2.md): editing clip after clip, after Phase 1, one release per step.
+      ⚠️ **Note for the build plan (30 Sep, v17.15; updated 1 Oct, v17.19):** the collab SCHEMA_REV is now **5** (the #482 polish batches 1–3 added effect and audio params) — BUILD-PLAN step 1.2's `SCHEMA_REV 3` must become **6** when it is built (one more than whatever `C.SCHEMA_REV` in js/collab-core.js says then). (It waited for his word to build; he gave it on 1 Oct — D15 A, Phase 1 from the revised plan, PLAN LANDED above.)
 
 
 - [x] **981 — Empty project: the add menu pops up STRAIGHT AWAY when he taps “Tap here to start creating” (no wait — the menu is see-through, so the animation still shows underneath), and the glowing white border lines appear on the add menu's edges as it opens** (29 Sep, in the builder chat — his words)
@@ -34588,4 +34764,489 @@ re-opened #480, which I had marked done and had not fixed.
       1. [ ] Capture the state at the failure (GL context lost? FM render errors? the thumb queue?) in a full 380 run, find the cause, fix it or the leak; a test that fails without the fix.
       📋 **1 Oct — instrumented.** The runner now records, against each test, anything it leaves in the shared scene (layers, an effects-sheet preview, an isolate); tests/_cdp.py prints it as `sceneLeaks` after every run, and ship.sh prints it under a red pass. A full 380 run (with batch-3 builders beside it) went 2219/2220 — the pair did NOT recur — and listed three leaks: “undo / redo grey out…” leaves a white 20x20 shape at (10,10); “the home + catches taps…” is charged with Box / Path / their copies, which really come from “notes stay with their own project…” deleting its projects without reopening the original (the app is left on a deleted project and the next scene load brings those in) — and it leaves Home open; “869: a backup…” reloads a project still holding “TplProbe”. None is pink or sits on layer A, so none explains (231,41,141) by itself; they are not changed blind, because 2,000 later tests start from the state they leave and a retry costs a 90-minute ship.
       2. [ ] When the pair recurs, read the leak list ship.sh prints under it, find the layer or override that tints layer A, and fix that test's cleanup (and the three above with it).
+      📋 **5 Oct — it recurred (v17.23's 5th ship, desktop pass) and the leak list named it:** “921 S6 review: “Back in sync” waits for the owner's welcome…” left “Shared A” / “Shared B” — the linked copy its reconnect opens. Its cleanup (q915aCleanup) switched back with projects.open(orig) WITHOUT { confirmed: true }; open() asks before leaving when the save is refused and work is on screen, nobody answers in a test, so the app stayed on the copy and the fixture read a leftover shape: (34,225,219) instead of layer A's red. Fixed: q915aCleanup passes { confirmed: true }, as hcCleanup always did. Earlier occurrences named other leftovers (a pink one, Box/Path), so this stays open until a run shows the pair gone; the leak list keeps naming whatever is left.
       JUMPED: instrumented — nothing more can be learned until the pair recurs, and ship.sh will print the evidence when it does.
+
+- [x] **997 — Give him things to tell ChatGPT to do with his spare usage, without interrupting this work (READ-ONLY reports, no code)** (1 Oct, ~14:18 AWST, via INBOX — his words) ✅ **DONE by the logging chat** (six paste-ready prompts, tools/design/chatgpt-tasks/PROMPTS.md).
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 01 Oct 2026, ~14:18 AWST — He is putting his ChatGPT usage to work on READ-ONLY reports (no code). Do not merge any chatgpt/* branch
+
+      **His words (verbatim):** "I have my ChatGPT subscription still and my usage has reset so I've got more usage. Give me a bunch of stuff to do or a bunch of stuff to say to the ChatGPT to get them to work on like I don't wanna take interrupt your work and the other chats work but just something that it can do that would improve the I don't waste my usage that I paid for on ChatGPT. I've got like the hundred dollar a month plan and honestly it burns really quick but yeah, just give me something that I can give me something I can paste into it to get it to work on for the project to help it out and yeah you can just pretty much like you know Sam a bunch of stuff that's like needing to be done that can be done simultaneously like maybe bunk hunt psycho large bug hunt or some sort of I don't know just building something maybe I don't know you decide I just know that having two things running in the same thing the same time usually mixed stuff clash so I need you to give me stuff to give it that won't  clash"
+
+      **Logger's note (not his words):**
+      - He was given six paste-ready ChatGPT prompts (`tools/design/chatgpt-tasks/PROMPTS.md`): security review, data-loss hunt, speed/memory hunt, new effects and filters design pack, free (CC0) sound-effects sourcing, and the Alight Motion identity audit.
+      - Each one is READ-ONLY. It edits no file, never pushes to main, and produces ONE report: either alone on a branch `chatgpt/<task>` at `outside/chatgpt/<task>.md`, or as text in chat.
+      - **BUILDER: never merge, rebase onto, or build from a `chatgpt/*` branch, and never act on a ChatGPT report directly.** Reports come back through the logging chat, which verifies each finding against the code (memory: the 12–19 Sep ChatGPT/Codex period shipped nothing, and its claims need checking) and logs only the confirmed ones as numbered hunt items.
+      - `git fetch --prune` will now show those branches. That is harmless; leave them alone.
+      🔒 Builder rule kept from it: never merge, rebase onto or build from a `chatgpt/*` branch, and never act on a ChatGPT report directly — findings come back verified through the logging chat as numbered hunt items.
+
+- [x] **998 — ChatGPT's six reports are in; give him the next batch of things to tell it** (1 Oct, ~18:11 AWST, via INBOX — his words) ✅ **DONE by the logging chat** (batch 2 prompts, tools/design/chatgpt-tasks/PROMPTS-batch2.md; the six reports are being verified against the code).
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 01 Oct 2026, ~18:11 AWST — ChatGPT's six read-only reports have arrived; the logging chat is verifying them. Batch 2 handed to him
+
+      **His words (verbatim):** "Heres the chatgpt's work, give me more things to tell it to do. ChatGPT completed the six read-only reports: security, data safety, performance, effects/filters design, CC0 sound sources, and Alight Motion identity. They're saved as report-only files on separate `chatgpt/*` branches under `/private/tmp/freemotion-*/outside/chatgpt/`. No app files were changed. Please don't merge or build from those branches. When convenient, verify any actionable findings against the current code and existing audits, then log only confirmed new issues through the normal queue."
+
+      **Logger's note (not his words):**
+      - ChatGPT worked in its own clones (`/private/tmp/freemotion-*`, local branches `chatgpt/*`, nothing pushed). The real repo was untouched.
+      - The reports are copied into `tools/design/chatgpt-tasks/reports/`. A verification workflow is checking every finding against the CURRENT code, `audits/*.json` and REQUESTS.md. Only CONFIRMED NEW issues will come to you, as one block with hunt-tier headers. The design reports (effects pack, CC0 sounds, identity) come vetted, as inputs, not work.
+      - **Until that block lands, do not act on the reports.**
+      - He was given batch 2 (`tools/design/chatgpt-tasks/PROMPTS-batch2.md`), with the same read-only rules: accessibility, iPhone/PWA pitfalls, export audio research (#215/#604/#677), collab robustness, test gaps, and a 20-template design pack.
+      ⏳ Builder: nothing to act on until the logging chat's verified block lands (confirmed findings arrive as hunt items).
+
+- [x] **999 — ChatGPT batch 1 verified — 11 new issues and the #671 leftover: logged as #1000–#1011** (1 Oct, via INBOX — the logging chat's verification of ChatGPT's read-only reports; NOT his words) ✅ **LOGGED**
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 01 Oct 2026, ~18:27 AWST — VERIFIED: ChatGPT batch 1 gives 11 confirmed NEW issues (1 HIGH, 10 LOW), plus one #671 leftover to reopen. Log them as hunt items
+
+      **Logger's note (not his words).** The full write-up is `tools/design/chatgpt-tasks/reports/VERIFIED.md`: each item has its current file:line, what the user sees, a fix direction and a test idea. It was checked against the current tree (v17.21; the app code had not changed since ChatGPT's snapshot), against `audits/*.json` and against REQUESTS.md. 11/11 of its claimed defects held up, and 0 were wrong.
+
+      **Log each as its own numbered item with a hunt header. Details are in VERIFIED.md §1.x:**
+      - **(hunt HIGH)** §1.1: a stale second tab (or the browser and the installed app open together) writes its old media over a newer replaced file. The project AND the Media library go back to the old clip, and the new one is lost for good.
+      - **(hunt LOW)** §1.2: an import that throws leaves an empty "Imported project" behind (the same shape #673 fixed).
+      - **(hunt LOW)** §1.3: one bad edit from a tampered collaborator half-applies on the host's copy and crashes its receive loop for about 1 s, reverting an honest guest's edit (a sanitiser type check, e.g. `fillGradient` as a string).
+      - **(hunt LOW)** §1.4: Duplicate reports success even when it could not read a clip.
+      - **(hunt LOW)** §1.5: a project file that will not open gets overwritten with a blank project on switch-away.
+      - **(hunt LOW)** §1.6: the boot cleanup deletes the media of an unreadable project.
+      - **(hunt LOW)** §1.7: opening a pre-v2.25 install with a full disk deletes the only scene.
+      - **(hunt LOW)** §1.8: no size warning when opening a huge project file.
+      - **(hunt LOW)** §1.9: group rendering rescans the whole scene once per group, every frame.
+      - **(hunt LOW)** §1.10: image fills from a previous project stay in memory all session.
+      - **(hunt LOW)** §1.11: the no-GPU blur fallback allocates two big buffers per call.
+      - **Reopen as a small item:** #671's export-failure leak. `js/exporter.js` ~1494–1498 closes the VideoFrame only on success. Test: make encode throw on frame 3, then assert every VideoFrame was closed and `encoder.state === 'closed'`.
+
+      **Design inputs, NOT work items (pointers only):**
+      - `effects-pack-VETTED.md`: a shortlist for #966's idle work (upgrades first, then two sheets of six effects, then 10 filters). Every one still needs his picture-pick (#545).
+      - `sound-effects-VETTED.md`: 79/80 CC0. A 24-sound starter set is his decision, and bundling has to fix the sw.js `?v=` caching first.
+      - `identity-VETTED.md`: held for launch (BEFORE-PUBLISHING.md alternatives and 4 stale statements).
+      🔒 Never merge, cherry-pick or rebase onto a codex/* or chatgpt/* branch; each item below is fixed here, with its own test.
+
+- [ ] **1000 — A stale second tab writes its old media over a newer replaced file (hunt HIGH #1000)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.1
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1001 — An import that throws leaves an empty "Imported project" behind (hunt LOW #1001)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.2
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1002 — A collaborator's bad edit can half-apply on the host's copy and crash its receive loop (hunt LOW #1002)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.3
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1003 — Duplicate says "done" even when it could not read a clip (hunt LOW #1003)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.4
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1004 — A project file that will not open gets overwritten with a blank one (hunt LOW #1004)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.5
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1005 — The boot cleanup deletes media that belongs to an unreadable project (hunt LOW #1005)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.6
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1006 — Opening a pre-v2.25 install with a full disk deletes the only scene (hunt LOW #1006)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.7
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1007 — Opening a huge project file has no size warning (hunt LOW #1007)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.8
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1008 — Group rendering rescans the whole scene once per group, every frame (hunt LOW #1008)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.9
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1009 — Image fills from a previous project stay in memory all session (hunt LOW #1009)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.10
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1010 — The no-GPU blur fallback allocates two big buffers per call (hunt LOW #1010)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.11
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1011 — Reopen #671's leftover: an export that fails closes its VideoFrame only on success (js/exporter.js ~1494–1498) (hunt LOW #1011)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md (batch 1 inbox block)
+      Test: make encode throw on frame 3, then assert every VideoFrame was closed and encoder.state === 'closed'. Refers to #671.
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [x] **1012 — ChatGPT batch 2 verified — the export-audio empty track, 19 more, and 6 test gaps (item 18, Home search sizes, is a taste call and is NOT queued): logged as #1013–#1038** (1 Oct, via INBOX — the logging chat's verification of ChatGPT's read-only reports; NOT his words) ✅ **LOGGED**
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 01 Oct 2026, ~20:18 AWST — VERIFIED: ChatGPT batch 2 gives 19 confirmed new issues, including the likely cause of his NO-SOUND exports (#215/#604/#677). Log them as hunt items
+
+      **Logger's note (not his words).** The full write-up is `tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md`: every item has its current file:line, what the user sees, a fix direction and a test idea. There were 47 verdicts: 21 confirmed new (19 distinct), 16 already known, 4 wrong, 6 unverifiable. As in batch 1, its citations are reliable and its severity is not. **The most important finding came from the checkers, not from ChatGPT.**
+
+      **Top of the list. Read §1a in full before touching export:**
+      - **(hunt MEDIUM; attach to #215/#604/#677)** §1a.1: the MP4 export can ship an EMPTY audio track while the export report says "TRACK WRITTEN" and the ready card says "Sound ✓":
+        - `js/exporter.js` ~1352–1366: `audioChunks = []`, and only a throw nulls `mix`.
+        - ~1372–1378 and ~1536: the muxer declares the audio track whenever `mix` is set, and `if (audioChunks)` is true for an empty array.
+        - ~1580: the report line.
+        - ~1620: the card's `hasAudio: !!mix`.
+        - `vendor/mp4-muxer.js` writes a declared track even with 0 samples.
+        - The audio-only M4A path already refuses this (~1114, `no-chunks`).
+        - **Every witness the parked entries rely on (TRACK WRITTEN, the mix peak, dropped=no) is measured BEFORE the encode**, and no one has ever counted the iPhone Safari 26 encoder's output. That is the one path matching his "locked on mute" words.
+        - **Fix first, before asking him anything:** count the encoded audio chunks and bytes. If there are 0, don't declare the track, and say so honestly ("Sound couldn't be encoded on this device"). Put the real count in the report.
+        - Test: stub a silent encoder. The report and card must say no sound, and the muxer gets no audio track. It fails on HEAD.
+        - Then his next export report tells whether the loss is in the encoder or in the Photos import. Update the asks on #215/#604/#677 accordingly.
+      - **(hunt HIGH)** §1b.2: a panorama photo import makes a canvas that changes shape on reopen. `js/app.js` ~3020–3026 caps only the short side, while `js/storage.js` ~1004–1010 caps each side at 7680.
+      - **(hunt MEDIUM)** §1b.3: a guest's offline edits skip the clash check if they edit again before the host's catch-up reply, and silently overwrite the owner's newer change (`js/collab-session.js` ~287, ~1219, ~350). Reproduced with the real collab code.
+      - **(hunt MEDIUM)** §1b.4: Volume and Position/Scale/Size/Skew values can't be reached or typed from a keyboard (`js/inspector.js` ~4384–4387, ~4540).
+
+      **The rest:** §1b items 5–21, 16 LOW items (accessibility, collab caps, the persist result discarded, GIF never offered the share sheet, one smooth scroll ignoring reduced motion). Log each as hunt LOW, **except #18 (Home search target sizes), which is a taste call: do not queue it unasked.** #17 (long project names) is visual: draw options first.
+
+      **Test gaps** (§4, `test-gaps-VETTED.md`): items 2–7 are worth adding as hunt LOW test items. A device-only checklist is listed separately.
+
+      **Templates** (§5, `templates-pack-VETTED.md`): 20 recipes are corrected, and the top 6 are to render for his pick (#545). There are decisions for him (how a pack ships; four name clashes). NOT work until he picks.
+      🔒 Never merge, cherry-pick or rebase onto a codex/* or chatgpt/* branch; each item below is fixed here, with its own test.
+
+- [ ] **1013 — The MP4 export can ship an EMPTY audio track while the report says TRACK WRITTEN and the card says Sound ✓ — likely behind his no-sound exports (hunt MEDIUM #1013)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1a item 1
+      Attach to #215 / #604 / #677: fix first (count the encoded audio chunks; 0 means no track and an honest message), then his next export report says whether the loss is the encoder or the Photos import. His GO (5 Oct) puts this first in the bug backlog.
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1014 — A panorama import makes a canvas that changes shape when the project is reopened (hunt HIGH #1014)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 2
+      Where: js/app.js:3020-3026 (fitProjectSize caps only the short side, at 2160) vs js/storage.js:1004-1010 (clampProjectDims caps each side at 7680, called at :890, :1777). The oversize warning at js/app.js:2982 checks only the short side · He sees: 16000×4000 → 8640×2160 project → reopens as 7680×2160. 9000×2000 is not capped at import and reopens as 7680×2000. The photo is then off-centre with its right edge cut, and nothing tells him. Arithmetic reproduced; the on-screen effect is inferred, not seen · Fix: Cap the long side at 7680 in fitProjectSize too, keeping the aspect ratio. Make the warning check both sides · Test: Unit: fitProjectSize(16000,4000) has both sides ≤ 7680. Round trip: import a 16000×4000 still, save, reopen, and assert the dims are unchanged and the layer is still centred. Mutation: drop the long-side cap
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1015 — Edits a guest makes while offline go out without the clash check if they edit again before the host's catch-up reply, and silently overwrite the owner's newer change (hunt MEDIUM #1015)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 3
+      Where: js/collab-session.js:287 (pushLocal entry has no queued), :1219 (runStep, the same), :1367-1371 (markOffline flags only entries that exist), :350 (q=0), js/collab-host.js:873 (CAS only when q===1), :861 (dup drop) · He sees: Owner and guest change the same thing during an outage. The guest reconnects mid-drag, and the guest's stale value wins with no clash. Reproduced in JSC with the real modules. Not specific to Undo/Redo, as ChatGPT said · Fix: Keep catchingUp from markOffline until replayOutstanding/onSnap. Mark entries created while offline or catching up as queued:true, or defer flushOutstanding until the replay · Test: Extend "921 S2 … wire is cut": guest offline, rename A, owner renames A, guest setOnline(true) and edits again *before* the tail. Assert the offline cid went out q:1, the owner's name survives and the ack carries a clash. Add an Undo variant. Prove with mutate.sh
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1016 — Volume and Position/Scale/Size/Skew values cannot be reached or changed from a keyboard (hunt MEDIUM #1016)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 4
+      Where: js/inspector.js:4384-4387 (mt-vbox-val is a plain div), :4540 (startEdit runs only from a pointer tap), Volume :5616/:5629, transforms :4732-4736, :5232-5244, :5363. Effect scrubbers :898-1076 do have number inputs, but those have no accessible name · He sees: On PC with a keyboard, there is no way to type a volume or position. Effect values can be typed · Fix: .mt-vbox-val: tabIndex 0, role=spinbutton, aria-label, Enter calls startEdit, arrow keys step. Give each .fx-scrub-val aria-label=p.label. Optionally make .fx-scrub a role=slider · Test: Tab to the Volume box, press Enter, type 50, press Enter: volume is 0.5. Every .fx-scrub-val has a name
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1017 — In the editor, Tab always cycles layers, even when a button has focus, so Tab never moves through the controls (hunt LOW #1017)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 5
+      Where: js/app.js:8956 (preventDefault unless inEdit at :8796 or an overlay owns the screen at :8771-8785). Layer head is a plain div at js/timeline.js:1345, eye/lock spans at :1349/:1369 · He sees: A keyboard user cannot Tab around the editor. Layer rows are not exposed to a screen reader. A/S/D, the arrows and ,/. do still move and trim clips (ChatGPT and the orchestrator both missed this) · Fix: Cycle layers only when activeElement is body or the timeline. Roving tabindex plus role/aria-label/aria-selected on .tl-head · Test: Focus #btn-export and press Tab: defaultPrevented is false and the selection is unchanged. Control: with focus on body, Tab still cycles
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1018 — The persistent-storage result is thrown away, so nobody can tell whether his install is protected from eviction (hunt LOW #1018)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 6
+      Where: js/storage.js:326-333 (only call site). The quota toast warnStore is at :313-324 · He sees: Nothing visible. A diagnosis gap if projects ever vanish · Fix: Store FM.storagePersisted, then show it in the quota toast and the Labs report. Otherwise stay silent · Test: Stub persisted/persist to resolve false and assert FM.storagePersisted === false. Force a quota error: the toast mentions protection
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1019 — Offline Undo/Redo steps skip the outbox op/byte cap, and acks then make the counters undercount (hunt LOW #1019)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 7
+      Where: js/collab-session.js:1219 (no accounting), :296-304 (accounting only in pushLocal), :913-914 (onAck subtracts every entry), limits js/collab-core.js:77 · He sees: Long outage plus repeated Undo of big steps: memory grows past the cap (reproduced at 25,200 ops against the 5000 cap). The cost is a slow resend, not data loss. ChatGPT's "medium" is too high · Fix: One enqueue(entry) helper for pushLocal, runStep and recoverOutbox. runStep honours outboxFull · Test: 1200-layer guest offline: big edit, then alternate undo/redo until past the cap. outboxFull becomes true and onOutboxFull fires. After the acks, an edit just over the cap still trips it
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1020 — The held-message queue is uncapped while frozen or busy. On the owner it fills at the peers' rate (hunt LOW #1020)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 8
+      Where: js/collab-session.js:117, :625 (owner), :817 (guest), :1282-1291 (drain) · He sees: Honest use: negligible. A buggy or hostile Editor during a long export could grow the owner's memory without limit · Fix: Cap by count and bytes. Past the cap, drop and resync from host.base · Test: Owner with FM._exporting=true, feed Editor txs past the cap: S._queued() stays at or below the cap. After unfreeze the live doc hashes equal to base
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1021 — The New project, Export, Canvas and export-progress dialogs have no role=dialog, aria-modal or name, and export progress and completion are silent (hunt LOW #1021)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 9
+      Where: index.html:711, 792, 795, 837, 957; js/app.js ~6142/6170/6200 (status text), ~6244 (ready card, no focus) · He sees: Screen reader only: the dialogs are not announced, and export progress and "Done" are never spoken · Fix: Markup: role, aria-modal, aria-labelledby (give the titles ids). #export-status role=status with throttled milestones. #export-bar role=progressbar. Focus the ready card · Test: A static DOM test for the four ids. An export test: the live text says Done when #export-ready unhides, and focus is inside it
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1022 — No focus trap and no focus return on those three dialogs (hunt LOW #1022)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 10
+      Where: js/app.js:5720-5727, :5861-5864, :7100-7140, :8240-8300; js/home.js:3035, :3259 · He sees: Keyboard: Tab walks the editor behind the Export scrim, and closing the dialog drops focus · Fix: One FM.modalFocus(dialog, opener) helper: inert the siblings, focus the first control, restore the opener · Test: Open Export from #btn-export: focus is inside, the editor is inert. On close, focus is back on #btn-export. Mutate the restore line
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1023 — Ordinary toasts (244 call sites, the app's main error channel) are not announced (hunt LOW #1023)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 11
+      Where: index.html:638; js/app.js:1393-1396 (strips role) · He sees: Screen reader: "storage full" and similar messages are silent · Fix: A permanent visually hidden #toast-sr role=status, written on the next frame. Not on #toast itself, because the tappable branch swaps its role · Test: FM.toast('hello') puts the text in #toast-sr. The tappable path keeps role=status
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1024 — The keyframe ◆ buttons are named just "◆" and expose no state (hunt LOW #1024)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 12
+      Where: js/inspector.js:1137-1138, 1346-1347, 1378-1379, 1408-1409 (these lines may shift: inspector.js is modified in the tree) · He sees: Screen reader hears "◆" with no parameter and no state. There are three states, so plain aria-pressed is not enough · Fix: A single helper that sets an aria-label from the state and the parameter ("Add Blur keyframe at playhead") · Test: The label contains "Animate" before the click and "Remove"/"keyframe" after it (re-acquire the button). One control from each builder
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1025 — Glass-theme --text-faint is about 4.0:1 (needs 4.5) (hunt LOW #1025)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 13
+      Where: Tokens in theme-glass.css; light-Home override theme-glass.css:1125 (#7d8798 on #f7f9fc = 3.44); .cat-num opacity styles.css (hidden on touch at :1129) · He sees: Small secondary labels are a bit faint. ChatGPT's 2.58 is for the dark theme, which no longer exists (js/settings.js:16, :123). "High" was wrong · Fix: Lighten to about #7593a0 and darken the light override to about #66707f. Design rule: show him before and after (about 66 uses) · Test: Computed colour composited over the nearest opaque background gives a ratio of at least 4.5
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1026 — Home tabs don't expose which tab is selected (hunt LOW #1026)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 14
+      Where: index.html:697-703; js/home.js:2540 (class only), :3061 · He sees: Screen reader can't hear which tab is on. home.js:2849-2852 already does aria-pressed for the aspect buttons · Fix: Set aria-pressed (or aria-selected plus role=tab) next to the class toggle · Test: Click Templates: it is true and the other three are false
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1027 — Keyframe diamonds are pointer-only. No keyboard way to read a keyframe's time or retime it (hunt LOW #1027)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 15
+      Where: js/timeline.js:2663-2671; partial path via the inspector ◆ (js/inspector.js:1137-1139) and frame stepping · He sees: Keyboard users can add and delete keyframes at the playhead but not move one · Fix: Previous/next keyframe shortcuts plus a modifier nudge that reuses the drag's retime code · Test: Next-key goes to 0.5 s. The nudge moves the key by 1/fps with its value unchanged
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1028 — The preview canvas has no accessible name (hunt LOW #1028)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 16
+      Where: index.html:414 · He sees: Screen reader announces nothing for the main surface · Fix: role="img" aria-label="Video preview" · Test: The aria-label is non-empty and the role is img
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1029 — Long project names are cut off on one line with no tooltip (hunt LOW #1029)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 17
+      Where: styles.css:5504; js/home.js:1371, 1989, 2088, 2196 (aria-label has the full name at :1360) · He sees: A long name shows "…". A visual change, so draw options first · Fix: Two-line clamp and/or a title · Test: A 60-character name shows two lines or the title equals the full name
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1030 — Comment "x min ago" mixes the host's clock with the viewer's (hunt LOW #1030)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 19
+      Where: js/collab-host.js:532-533; js/collab-comments.js:79-85; the pong's hc (js/collab-session.js:617) is never read · He sees: Only with a device clock that is manually wrong. Cosmetic · Fix: Estimate hostOffset from pongs and use it in ago() · Test: Guest clock 3 h behind: a fresh comment reads "just now"
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1031 — GIF and PNG-frame exports never offer the share sheet (hunt LOW #1031)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 20
+      Where: js/exporter.js:1730, :1800 (plain download()) · He sees: On iPhone a GIF lands in Files, not Photos · Fix: Route GIF through the ready card and deliver() · Test: Stub canShare/share: runGif offers share
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1032 — One smooth scroll ignores reduced motion (hunt LOW #1032)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 21
+      Where: js/settings.js:463 · He sees: A single short scroll in Settings · Fix: Use behavior: reduce ? 'auto' : 'smooth' · Test: Stubbed matchMedia: scrollIntoView gets 'auto'
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1033 — Test gap: one unreadable file in a multi-file pick is named and the rest still import (hunt LOW #1033)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 2
+
+- [ ] **1034 — Test gap: a GIF over the memory budget is shrunk but drawn full size, and freed on removal (hunt LOW #1034)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 3
+
+- [ ] **1035 — Test gap (needs app code): the mic going away mid-take — voice-rec listens for no track ended / mute (hunt LOW #1035)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 4
+
+- [ ] **1036 — Test gap: rotating 390 → 844 crosses into Studio and keeps the selection, panel and playhead (hunt LOW #1036)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 5
+
+- [ ] **1037 — Test gap: a JPEG with an EXIF rotation tag shows upright everywhere, including export (hunt LOW #1037)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 6
+
+- [ ] **1038 — Test gap: a custom font travels inside a template or project file (hunt LOW #1038)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 7
+
+- [x] **1039 — ChatGPT batch 3 verified — 18 new issues: logged as #1040–#1057** (1 Oct, via INBOX — the logging chat's verification of ChatGPT's read-only reports; NOT his words) ✅ **LOGGED**
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 01 Oct 2026, ~21:19 AWST — VERIFIED: ChatGPT batch 3 (12 reports) gives 18 confirmed new issues (2 MEDIUM, 16 LOW). Log them as hunt items
+
+      **Logger's note (not his words).** The full write-up is `tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md` §1, items 1–18, each with its current file:line, what the user sees, a fix direction and a test idea. There were 99 verdicts: 45 "confirmed" (mostly correct-behaviour notes), 15 known, 33 wrong, 6 unverifiable. After de-duplicating across reports and against batches 1–2, 18 real issues remain. Four of them were found by the verifiers, not ChatGPT. **ChatGPT's hit rate fell to about 33% this batch, so the verification step is essential.**
+
+      Log each as its own item, with the tier given in its heading:
+      1. **(hunt MEDIUM)** A layer with no `transform` gets through import, breaks the timeline, and after a save makes every launch fail before Home (`js/scene.js` ~562, `js/app.js` ~6847, `js/storage.js` ~1638–1650). Confirmed in a browser up to the load failing.
+      2. **(hunt MEDIUM)** Three or more nested styled groups draw the wrong picture (the inside comes out too bright and is drawn twice), and the work doubles per level, in both preview and export (`js/compositor.js` ~18402–18408, ~18467).
+      3–16. **(hunt LOW)**:
+         - embedded-font import can lose a font for good;
+         - a multi-file pick takes one undo step per file;
+         - download filenames drop non-ASCII ("Café" → "Caf");
+         - a preset on a full phone says "saved" when nothing was saved;
+         - an AI Director delete takes 2+ undos;
+         - Mask-first in the Effects sheet makes 2 undo steps;
+         - a long unbroken text run freezes the page (quadratic wrap);
+         - the boot sweep and delete still fail open on some unreadable indexes and checkpoint reads;
+         - recent colours are overwritten across windows;
+         - a plain-value `"project"` passes the import gate;
+         - two more "false is truthy" sanitiser reads;
+         - numeric strings are handled inconsistently across sanitisers;
+         - the ? shortcut sheet has gaps (1–5 condition, 1–9 card keys, Ctrl+Y, Backspace);
+         - Pixelate's Block aspect and Edges do nothing on an adjustment layer.
+      17. **(hunt LOW, needs HIS OK first: it changes how existing projects look)** Mosaic's Average mode gives cutout edges a dark fringe. Do not change it unasked.
+      18. **(hunt LOW, device run first)** Stills are decoded and kept at full resolution with no preview proxy. Measure on a phone before changing anything.
+
+      **Design input:** `effect-upgrade-specs-VETTED.md`, the six effect-upgrade specs, corrected (none was buildable as written). They are for #966's idle work, after a before/after picture for him.
+      🔒 Never merge, cherry-pick or rebase onto a codex/* or chatgpt/* branch; each item below is fixed here, with its own test.
+
+- [ ] **1040 — A layer with no transform gets through import, breaks the timeline, and after a save makes every launch fail before Home (hunt MEDIUM #1040)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 1
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1041 — Three or more nested styled groups draw the wrong picture, and the work doubles per level (hunt MEDIUM #1041)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 2
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1042 — Embedded-font import can lose a font permanently: it ignores a failed index write, and holds a stale index across awaits (hunt LOW #1042)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 3
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1043 — Picking or dropping several media files makes one undo step per file (hunt LOW #1043)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 4
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1044 — Project and template download filenames drop every non-ASCII character (hunt LOW #1044)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 5
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1045 — Saving a preset on a full phone says "saved" when nothing was saved (hunt LOW #1045)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 6
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1046 — An AI Director build, re-roll or refine that deletes a layer takes 2+ undo presses (hunt LOW #1046)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 7
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1047 — Effects sheet: picking Mask first, then another effect, makes 2 undo steps (hunt LOW #1047)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 8
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1048 — A long unbroken text run wraps in quadratic time and freezes the page (hunt LOW #1048)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 9
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1049 — The boot sweep and project delete still fail open on unreadable template, element or font indexes and on failed checkpoint reads (hunt LOW #1049)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 10
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1050 — Recent colours: each window overwrites the other's picks (hunt LOW #1050)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 11
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1051 — A project that is a plain value ("project":"x") passes the import gate and throws (hunt LOW #1051)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 12
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1052 — Two more "false is truthy" reads in the import sanitiser: camera focus/fog enabled and note remind (hunt LOW #1052)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 13
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1053 — Numeric text such as "0.5" is kept in effect params but reset to the default in audioFx, behaviours, trimPath, stroke.dash and repeater (hunt LOW #1053)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 14
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1054 — The ? shortcut sheet: the 1-5 row has no "nothing selected" condition, the 1-9 card keys are missing, and Ctrl+Y and Backspace are not listed (hunt LOW #1054)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 15
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1055 — Pixelate's Block aspect and Edges do nothing on an adjustment layer (hunt LOW #1055)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 16
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1056 — Mosaic's Average mode gives cutout edges a dark fringe (hunt LOW #1056)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 17
+      ❓ASK: this fix changes how existing projects look (it changes how existing projects look) — OK to change it? Build nothing until he says.
+
+- [ ] **1057 — Stills are decoded and kept at full source resolution, with no preview proxy (hunt LOW #1057)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 18
+      Note from the verification: device run first.
+
+- [x] **1058 — ChatGPT batch 4 verified — 6 new issues: logged as #1059–#1064** (1 Oct, via INBOX — the logging chat's verification of ChatGPT's read-only reports; NOT his words) ✅ **LOGGED**
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 01 Oct 2026, ~22:18 AWST — VERIFIED: ChatGPT batch 4 gives 4 confirmed new issues + 2 found by the checkers. Log them as hunt items
+
+      **Logger's note (not his words).** The full write-up is `tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md`. There were 45 verdicts: 4 new, 26 known, 12 wrong, 3 unverifiable. (Its F6 is batch 3 item 7, already in the block above, so don't log it twice.) **None of these explain the open no-sound, audio-cutting-out, lag or caption-drift bugs.**
+      1. **(hunt MEDIUM)** Detect speech fails on a silent first clip. It gives up with "Speech detection failed" and never tries the clip with talking in it, and this happens on the default scope too (`js/captions.js` ~522, ~527–533, ~573). Fix: skip clips with no sound, and carry on.
+      2. **(hunt LOW, but tell him: it affects his OTHER app)** FreeMotion and Listing Kit share the origin `builderezra.github.io`. Each one's service worker deletes the other's offline cache (`sw.js` ~47), and FreeMotion's version chip also switches off Listing Kit's offline copy (`index.html` ~1255–1256). The next launch with no signal shows a browser error. Fix: scope cache names and cleanup to this app's own prefix and path. (Batch 1 noted the same shared origin for localStorage, including the AI key.)
+      3. **(hunt LOW)** A sharp drop on a hold speed key (10x or more down to 1x) shifts the footage after it by a frame or more, and splitting the clip changes how much (`js/scene.js` ~956–961).
+      4. **(hunt LOW)** Motion Blur (Footage) in the Pixel Motion style is slightly softer in the preview than in the export: 480 px vs 720 px (`js/compositor.js` ~13354). Measured at about 1.4% of pixels more than 8 levels apart.
+      5. **(hunt LOW, found by the checkers)** The rotate-handle drag jumps the rotation by 360° when it crosses the left of the pivot (`js/canvas-edit.js` ~682).
+      6. **(hunt LOW, tooling)** ship.sh's cache-buster gate doesn't cover vendor files, icons, the manifest, the wordmark or the effect thumbnails.
+
+      **Yield is falling:** 4 new from 45 rows, against 18 from 99 in batch 3 and 19 from 47 in batch 2. The checkers recommend narrowing, then stopping. He has been given one big day-long job instead (a per-file mechanical audit, an architecture map and a user guide). Its results will come through the logging chat.
+      🔒 Never merge, cherry-pick or rebase onto a codex/* or chatgpt/* branch; each item below is fixed here, with its own test.
+
+- [ ] **1059 — Detect speech gives up on the first clip with no sound, so the talking clip is never tried (hunt MEDIUM #1059)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 1
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1060 — FreeMotion and his other apps on builderezra.github.io delete each other's offline cache (hunt LOW #1060)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 2
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1061 — A hold speed key that drops sharply leaves a lasting footage offset, and a split changes it (hunt LOW #1061)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 3
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1062 — Motion Blur (Footage), Pixel Motion style: the smear is built at 480 px in preview, 720 px in export (hunt LOW #1062)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 4
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1063 — Dragging the rotate handle across the left of the pivot makes the rotation box jump by 360 (hunt LOW #1063)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 5
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1064 — ship.sh's cache-buster gate misses every ?v= file that isn't js/*.js or the two stylesheets (hunt LOW #1064)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 6
+      JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+
+- [ ] **1065 — Remove the ? (keyboard shortcuts) help button from the MOBILE version (PC keeps its own)** (2 Oct, ~09:31 AWST, via INBOX — his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole, as the logging chat wrote it:
+      ### 02 Oct 2026, ~09:31 AWST — Remove the ? (keyboard shortcuts) help button from mobile
+
+      **His words (verbatim):** "quickly log that the question mark help button can be removed from mobile versions"
+
+      **Logger's plan (not his words):**
+      - Mobile's own ? button is `#m-help` (`index.html` ~366, `.m-tbtn`), in the phone top bar, order ver · ? · notes · cog · Export per queue #171. PC's ? is a SEPARATE element, `#btn-help` (~286), which rides the `t-far` row built in `js/app.js` ~7737 — **PC keeps it; his words say "from mobile versions" only.**
+      - `js/app.js` ~6965 binds the shortcuts-sheet opener to `#btn-help, #m-help` together, and `js/shortcuts.js` ~152/172 look for both ids (phone checks `m-help` first). Removing `#m-help` is safe: both call sites already use a selector list, not a single required id.
+      - Build: delete the `#m-help` button from `index.html`'s phone top bar (~360–367, including its comment block) and its `.m-tbtn` sizing if nothing else uses that class (grep first — Settings/other mobile toolbars may share `.m-tbtn`). Leave `#btn-help` and all PC code untouched. Check the phone top bar's remaining spacing (ver · notes · cog · Export) still looks balanced — screenshot at 380/440 before shipping.
+      - ❓ASK (optional, recommended: no): does the shortcuts sheet itself still need a way in on mobile (e.g. from Settings), or is it fine for phone users to simply not have one? Build the removal either way; only add a Settings entry point if he says yes.
+      - Test: at phone width, `#m-help` is not in the DOM (or is hidden) and the top bar's remaining buttons keep their order. At PC width, `#btn-help` is unchanged. Fails on HEAD.
+      Clauses (his):
+      1. [ ] The ? help button is gone from the phone layout; PC's #btn-help untouched.
+
+- [ ] **1066 — ship.sh does not check whether live (ssh/main) has moved on — it runs the ~90-minute suite and then fails at the push; refuse before the suite starts (hunt MEDIUM #1066)** (5 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Full write-up (file:line, what he sees, fix direction, test idea): the 5 Oct HANDOFF block (in #980)
+      Structural, his rule: git fetch ssh first, refuse if ssh/main is not an ancestor of HEAD ("live has moved on: pull first"). Measured 5 Oct: live was f7716576 (ChatGPT's v17.22), the tree 28104a3e.
+      🔨 5 Oct (shipped with v17.23's tooling): the gate is in tools/ship.sh, right after the mutation check — fetch, refuse if ssh/main is not an ancestor of HEAD, warn and carry on when offline. Checked both ways by hand (this tree passes; 28104a3e would be refused). Left open for one thing: a self-test that keeps it honest, like _classify.py's.
+
+- [x] **1067 — PM lane split: the verified ChatGPT bug lists are ChatGPT's to fix; the builder lands its verified commits** (5 Oct, ~16:15 AWST, via INBOX — the logging chat as project manager; NOT his words) ✅ **LOGGED**
+      Moved from INBOX.md whole:
+      ### 05 Oct 2026, ~16:15 AWST — PM lane split: the VERIFIED ChatGPT bug lists are now ChatGPT's to fix; you land them, you don't build them
+
+      **Logger's/PM's note (not his words)** — acting on his "make sure my chatgpt and other claude chat are working at the same time and getting good stuff done … without needing my input."
+      - ChatGPT's loop has been redirected (via the top of its own STATE.md, which its every-minute heartbeat reads) from more C31 Time Warp Scan permutations to the **verified bug lists**: `tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md` §1a (the empty-audio-track export defect) and §1b, `reports/VERIFIED.md` §1, `reports/batch3/VERIFIED.md` §1, `reports/batch4/VERIFIED.md` §1, plus the reopened #671 export VideoFrame leak.
+      - **When you log those items into REQUESTS.md (from the VERIFIED blocks above), mark each `JUMPED: assigned to ChatGPT via the PM — its fix arrives as a verified commit; land it, don't rebuild it`**, so the oldest-first gate never hands them to you and nothing is fixed twice. Items marked "needs his OK", "device run first" or "taste call" stay yours as normal.
+      - ChatGPT's fixes accumulate as one linear series on `codex/690-reviewed-local` (on top of live v17.22) in `/private/tmp/freemotion-*`. The PM verifies them in batches and hands you **ordered land lists** here. Land them between Simple-mode releases; Simple mode stays first.
+      - Nothing about your Simple-mode work changes.
+      Applied: every item it names carries the JUMPED line above; the needs-his-OK, device-run, taste-call and test-gap items, and #1066, stay the builder's.

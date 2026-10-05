@@ -1,13 +1,13 @@
 /* V8 — The data (DESIGN §2: what is stored, the rules for the sm key, what is deliberately not stored, the read model).
  *
  * The saved file of a small project, drawn as the text it really is, with three layers of meaning:
- *   - blue: the only new keys Quick saves (sm.main, sm.stay, sm.tail, sm.tailEnd, project.sm) — §2.2
- *   - plain: fields every FreeMotion project already has — Quick reads them and adds nothing
- *   - grey dashed pills: what Quick works out each time (order, hosts, offsets, rows and lanes, seams) — §2.4, §2.5
+ *   - blue: the only new keys Simple saves (sm.main, sm.stay, sm.tail, sm.tailEnd, project.sm) — §2.2
+ *   - plain: fields every FreeMotion project already has — Simple reads them and adds nothing
+ *   - grey dashed pills: what Simple works out each time (order, hosts, offsets, rows and lanes, seams) — §2.4, §2.5
  * Tap any key or pill for a plain-words meaning. Every pill is computed live by the kit's classifier
  * (VIS.engine.classify), and the edit buttons run the kit's real commands, so the file you see after
  * "Delete Waves" or "Close the gap" is the file the design would write. "Cooking with Mia" (made in Full)
- * starts with no Quick marks at all; its first clip edit is the adoption step (§5.3) and the marks appear.
+ * starts with no Simple marks at all; its first clip edit is the adoption step (§5.3) and the marks appear.
  * The counter and the strip are measured from the file on screen (JSON.stringify), not claimed.
  * `look` is a mock-only field (the gradient thumbnails) and is left out of the file shown here.
  */
@@ -23,7 +23,7 @@
   VIS.register('v8', {
     title: 'The data',
     group: "How it's built",
-    blurb: 'The few new things Quick saves in a project, lit up in blue, and everything it works out for itself, greyed out.',
+    blurb: 'The few new things Simple saves in a project, lit up in blue, and everything it works out for itself, greyed out.',
     mount: host => mountV8(host)
   });
 
@@ -53,7 +53,7 @@
 
   /* ------------------------------------------------------------------ meanings (§2 in plain words) */
   const TIER = {
-    new: 'New · saved by Quick',
+    new: 'New · saved by Simple',
     helper: 'A plain field · now written more often',
     old: 'Already in every project',
     derived: 'Worked out · never saved'
@@ -63,57 +63,57 @@
   function valAt(o, path) { return path.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o); }
 
   const MEAN = {
-    'sm': c => ({ tier: 'new', title: "Quick's little box",
+    'sm': c => ({ tier: 'new', title: "Simple's little box",
       body: "The only new thing on a layer. It holds a few yes-or-no marks and nothing else. Most layers never get one. Full doesn't look inside it, and an older FreeMotion keeps it untouched.",
       here: 'On ' + b(c.name) + ' it says: ' + esc(andList(Object.keys(c.v || {}).map(k => MARK_WORD[k] || k))) + '.',
       why: "It never names another layer, so copying, pasting or saving a template can't break it." }),
     'sm.main': c => {
       const n = clipNo(c.R, c.owner), N = mainClips(c.R).length;
       return { tier: 'new', title: 'In the clip row',
-        body: "This clip is one of the clips in Quick's row. That's all the mark says: not where it sits in the row, and not what rides on it.",
+        body: "This clip is one of the clips in Simple's row. That's all the mark says: not where it sits in the row, and not what rides on it.",
         here: n ? b(c.name) + ' is clip ' + n + ' of ' + N + '. That number is worked out from its start time (' + esc(sec(c.l.start)) + '), not saved.' : '',
         why: "So a full-screen picture someone adds later in Full doesn't join the row by itself. It shows as an overlay with a one-tap Put in the clip row." };
     },
     'sm.stay': c => ({ tier: 'new', title: 'Stay put',
       body: 'This keeps its place when clips before it are trimmed, moved or deleted. Music gets it by itself, and you can switch any title or sticker to Stay put.',
       here: b(c.name) + ' stays at ' + esc(sec(c.l.start)) + ' whatever happens to the clips.',
-      why: "It's a choice, so nothing else in the file could tell Quick." }),
+      why: "It's a choice, so nothing else in the file could tell Simple." }),
     'sm.tail': c => {
       const end = c.l.start + c.l.duration, te = c.R.trackEnd, same = Math.abs(end - te) <= c.R.eps + 1e-9;
       return { tier: 'new', title: 'Ends with the video',
-        body: 'When the clips get longer or shorter, this is trimmed so it ends where the last clip ends. Its fade-out comes along.',
+        body: 'When the clips get longer or shorter, this is trimmed so it ends where the last clip ends. Its moves are re-timed with it.',
         here: same ? b(c.name) + ' ends at ' + esc(sec(end)) + ', right where the last clip ends.' : b(c.name) + ' ends at ' + esc(sec(end)) + ' and the clips end at ' + esc(sec(te)) + '.',
-        why: "It's a choice, like Stay put. Only the song and things like it have it." };
+        why: "It's worked out once, for pictures that cover the whole video (a watermark, a whole-video title). Music never gets it: a long song runs on in black, your pick on D17." };
     },
     'sm.tailEnd': c => {
       const end = c.l.start + c.l.duration, fitted = Math.abs(end - c.v) <= c.R.eps + 1e-9;
       return { tier: 'new', title: 'Where it was last fitted',
-        body: 'The end, in seconds, that Quick last fitted it to. If the end has moved from here, you set the length yourself, and Quick leaves it alone from then on.',
-        here: fitted ? 'Fitted at ' + esc(sec(c.v)) + ', and ' + b(c.name) + ' still ends there, so Quick keeps fitting it.'
-          : 'Fitted at ' + esc(sec(c.v)) + ', but ' + b(c.name) + ' now ends at ' + esc(sec(end)) + ", so Quick won't touch it.",
-        why: "Without it, Quick couldn't tell an end it fitted from one you chose." };
+        body: 'The end, in seconds, that Simple last fitted it to. If the end has moved from here, you set the length yourself, and Simple leaves it alone from then on.',
+        here: fitted ? 'Fitted at ' + esc(sec(c.v)) + ', and ' + b(c.name) + ' still ends there, so Simple keeps fitting it.'
+          : 'Fitted at ' + esc(sec(c.v)) + ', but ' + b(c.name) + ' now ends at ' + esc(sec(end)) + ", so Simple won't touch it.",
+        why: "Without it, Simple couldn't tell an end it fitted from one you chose." };
     },
-    'project.sm': c => ({ tier: 'new', title: "Quick's box on the project",
-      body: 'A few facts about the whole project. A project made in Full has no box at all until your first clip edit in Quick.',
+    'project.sm': c => ({ tier: 'new', title: "Simple's box on the project",
+      body: 'A few facts about the whole project. A project made in Full has no box at all until your first clip edit in Simple.',
       why: 'Like the box on a layer, it never names a layer, and Full ignores it.' }),
     'project.sm.v': () => ({ tier: 'new', title: 'Which rules made the marks',
-      body: 'A version number. If a newer FreeMotion ever changes the rules, an older one opens the project in Quick read-only instead of getting it wrong. Full stays editable.',
+      body: 'A version number. If a newer FreeMotion ever changes the rules, an older one opens the project in Simple read-only instead of getting it wrong. Full stays editable.',
       why: "It's the one safety catch for files that travel between phones and computers." }),
-    'project.sm.adopted': c => ({ tier: 'new', title: 'Quick has saved its clip row',
-      body: 'Set by your first clip edit in Quick: a delete, a trim or a move. Until then Quick only looks and writes nothing, so opening an old project in Quick changes nothing.',
-      here: c.adoptedNow ? 'Set just now by ' + b(c.adoptedNow) + ', in the same undo step as the edit.' : b(c.doc.project.name) + ' was made in Quick, so it was set from the start.',
+    'project.sm.adopted': c => ({ tier: 'new', title: 'Simple has saved its clip row',
+      body: 'Set by your first clip edit in Simple: a delete, a trim or a move. Until then Simple only looks and writes nothing, so opening an old project in Simple changes nothing.',
+      here: c.adoptedNow ? 'Set just now by ' + b(c.adoptedNow) + ', in the same undo step as the edit.' : b(c.doc.project.name) + ' was made in Simple, so it was set from the start.',
       why: 'From here on the clip row stays as you made it, even when Full adds clips.' }),
-    'project.sm.home': () => ({ tier: 'new', title: 'Opens in Quick',
-      body: 'Which editor opens this project on a phone or computer that has never opened it. The saved word is "simple", the code\'s name for Quick.',
+    'project.sm.home': () => ({ tier: 'new', title: 'Opens in Simple',
+      body: 'Which editor opens this project on a phone or computer that has never opened it. The saved word is "simple", the code\'s name for Simple.',
       why: "It's only a starting point. Each device remembers the editor you last used, and that stays on the device, never in the file, so a friend's editor never flips." }),
     'audioOnly': () => ({ tier: 'helper', title: 'Sound only',
       body: "This layer has sound and no picture. The field isn't new. What's new is that it's written the moment a song is added.",
-      why: "Quick knows it's music even before the song file reaches a friend's phone, so it never mistakes it for a clip." }),
+      why: "Simple knows it's music even before the song file reaches a friend's phone, so it never mistakes it for a clip." }),
     'id': c => ({ tier: 'old', title: "The layer's tag",
       body: 'A tag the file uses to tell layers apart. You never see it.',
-      here: "Quick's marks never mention one, so nothing breaks when " + b(c.name) + ' is copied, pasted or saved as a template.' }),
+      here: "Simple's marks never mention one, so nothing breaks when " + b(c.name) + ' is copied, pasted or saved as a template.' }),
     'type': c => ({ tier: 'old', title: 'What kind of layer',
-      body: 'Video, image, text, shape, group or camera. Quick uses it to decide which row a thing goes in.',
+      body: 'Video, image, text, shape, group or camera. Simple uses it to decide which row a thing goes in.',
       here: b(c.name) + ' is ' + esc(TYPE_WORD(c.l)) + '.' }),
     'name': () => ({ tier: 'old', title: 'Its name', body: 'The name you see on the layer, in both editors.' }),
     'text': () => ({ tier: 'old', title: 'Its words', body: 'The words it shows on the picture.' }),
@@ -129,10 +129,10 @@
       here: b(c.name) + "'s file is " + esc(sec(c.v)) + ' long.' }),
     'speed': () => ({ tier: 'old', title: 'Speed', body: '1 is normal speed, 2 is twice as fast.' }),
     'muted': () => ({ tier: 'old', title: 'Sound off', body: "This clip's own sound is switched off." }),
-    'blendMode': () => ({ tier: 'old', title: 'How it mixes', body: '"mask-alpha" means it is a mask: it cuts a shape out of the picture under it. Quick shows it as a block (✦) and moves it whole.' }),
-    'shadow': () => ({ tier: 'old', title: 'A shadow on the group', body: 'It makes the whole group draw as one piece, so Quick treats it as a block (✦) and moves it whole.' }),
+    'blendMode': () => ({ tier: 'old', title: 'How it mixes', body: '"mask-alpha" means it is a mask: it cuts a shape out of the picture under it. Simple shows it as a block (✦) and moves it whole.' }),
+    'shadow': () => ({ tier: 'old', title: 'A shadow on the group', body: 'It makes the whole group draw as one piece, so Simple treats it as a block (✦) and moves it whole.' }),
     'transform': () => ({ tier: 'old', title: 'Where it sits', body: 'Its size and place on the picture. 1 is full size; 0.5 is the middle.' }),
-    'captions': c => ({ tier: 'old', title: 'The caption lines', body: 'Each line with its own start and end, counted from the start of this layer. Quick moves them line by line.',
+    'captions': c => ({ tier: 'old', title: 'The caption lines', body: 'Each line with its own start and end, counted from the start of this layer. Simple moves them line by line.',
       here: b(c.name) + ' has ' + plural((c.v || []).length, 'line') + '.' }),
     'kf': c => ({ tier: 'old', title: 'Its moves', body: 'Keyframes: how it changes over time. Each one carries its own time, so they come along when the layer moves.',
       here: b(c.name) + ' has ' + esc(andList(Object.keys(c.v || {}).map(k => plural(c.v[k].length, k + ' key')))) + '.' }),
@@ -142,7 +142,7 @@
     'project.fps': c => ({ tier: 'old', title: 'Frames per second', body: 'How many pictures make one second of video.', here: 'Half a frame here is ' + esc(num(1000 * 0.5 / c.v)) + ' thousandths of a second: that is how close two clips must be to count as joined.' }),
     'project.duration': c => {
       const cl = mainClips(c.R), last = cl[cl.length - 1];
-      return { tier: 'old', title: 'How long the video is', body: 'Quick keeps it equal to where the last clip ends, unless something you chose runs on past it.',
+      return { tier: 'old', title: 'How long the video is', body: 'Simple keeps it equal to where the last clip ends, unless something you chose runs on past it.',
         here: last ? b(esc(sec(c.v))) + (Math.abs(c.v - c.R.trackEnd) <= c.R.eps + 1e-9 ? ', which is where ' + b(nm(c.R.layer(last.id))) + ' ends.' : '. The last clip ends at ' + esc(sec(c.R.trackEnd)) + '.') : '' };
     }
   };
@@ -155,7 +155,7 @@
     const add = (cat, text, info) => out.push(Object.assign({ key: 'h:' + o + '|' + cat, cat, text, on: name }, info));
     const uid = unitIdOf(R, o), u = uid && R.units[uid];
     if (!u) {
-      add('folder', 'Just a folder', { title: 'Just a folder', body: "A plain group for tidying up. Quick shows what's in it one by one.", why: 'The group type already says it.' });
+      add('folder', 'Just a folder', { title: 'Just a folder', body: "A plain group for tidying up. Simple shows what's in it one by one.", why: 'The group type already says it.' });
       return out;
     }
     if (uid !== o) {
@@ -174,8 +174,8 @@
       const k = e.seam.kind, amt = e.seam.amt || 0;
       let st, sb;
       if (!prev) { if (k === 'gap') { st = sec(amt) + ' of nothing first'; sb = 'The video starts with ' + esc(sec(amt)) + ' of nothing before ' + b(name) + '.'; } else { st = 'Starts the video'; sb = b(name) + ' starts at 0 s.'; } }
-      else if (k === 'gap') { st = sec(amt) + ' gap before it'; sb = "There's " + esc(sec(amt)) + ' of nothing between ' + b(pn) + ' and ' + b(name) + '. Quick shows a gap block you tap to close.'; }
-      else if (k === 'overlap') { st = 'Overlaps ' + pn + ' by ' + sec(amt); sb = b(name) + ' starts ' + esc(sec(amt)) + ' before ' + b(pn) + ' ends, so both show for a moment. Quick shows a red chip you tap to fix it.'; }
+      else if (k === 'gap') { st = sec(amt) + ' gap before it'; sb = "There's " + esc(sec(amt)) + ' of nothing between ' + b(pn) + ' and ' + b(name) + '. Simple shows a gap block you tap to close.'; }
+      else if (k === 'overlap') { st = 'Overlaps ' + pn + ' by ' + sec(amt); sb = b(name) + ' starts ' + esc(sec(amt)) + ' before ' + b(pn) + ' ends, so both show for a moment. Simple shows a red chip you tap to fix it.'; }
       else if (k === 'blend') { st = 'Fades from ' + pn; sb = b(name) + ' fades in over the end of ' + b(pn) + '.'; }
       else { st = 'Joins ' + pn; sb = b(pn) + ' ends exactly where ' + b(name) + ' starts (to within half a frame).'; }
       add('seam', st, { title: st, body: sb, why: "It's just the difference between two numbers already in the file.", sel: o, time: e.start });
@@ -189,8 +189,8 @@
       }
       return out;
     }
-    if (u.kind === 'fullOnly') add('fullOnly', 'Only in Full ✦', { title: 'Only in Full', body: "Quick shows it with ✦ and doesn't edit it. Its moves still stay in time when clips move.", why: 'The layer type already says it.' });
-    if (u.kind === 'block') add('block', 'A block ✦', { title: 'A block', body: "A group or mask that draws as one piece. Quick moves it whole; you change what's inside it in Full.", why: 'Worked out from what the group does (a shadow, a mask).', sel: selUnitFor(R, uid) });
+    if (u.kind === 'fullOnly') add('fullOnly', 'Only in Full ✦', { title: 'Only in Full', body: "Simple shows it with ✦ and doesn't edit it. Its moves still stay in time when clips move.", why: 'The layer type already says it.' });
+    if (u.kind === 'block') add('block', 'A block ✦', { title: 'A block', body: "A group or mask that draws as one piece. Simple moves it whole; you change what's inside it in Full.", why: 'Worked out from what the group does (a shadow, a mask).', sel: selUnitFor(R, uid) });
     const sel = selUnitFor(R, uid);
     if (u.host) {
       const hn = hostName(R, u.host), he = entryOf(R, u.host), off = l.start - (he ? he.start : 0);
@@ -205,7 +205,7 @@
         why: 'The line times are already in the file.', sel });
     } else if (!E.hasFlag(l, 'stay') && R.wouldStay.includes(uid)) {
       add('wouldStay', 'Stays put', { title: 'Stays put, for now', body: "It runs the whole video, so it doesn't follow any one clip. That is worked out for now. Your first clip edit saves it as Stay put, so it can't flip later.",
-        why: 'Until your first clip edit, Quick writes nothing at all.', sel });
+        why: 'Until your first clip edit, Simple writes nothing at all.', sel });
     } else if (R.tail.includes(uid)) {
       add('tailFollow', 'Follows the end', { title: 'Follows the end', body: 'It sits after the last clip, so it moves when the video gets longer or shorter.', why: 'Worked out from where the clips end.', sel });
     }
@@ -226,14 +226,14 @@
       const names = cl.map(e => nm(R.layer(e.id)));
       add('prow', 'Clip row: ' + names.join(' → '), { title: 'The clip row', body: R.adopted
         ? 'The clips with the in-the-row mark, put in start-time order. The mark says which clips; the start times say the order.'
-        : 'The full-screen clips, in start-time order. Nothing is saved: Quick works this out fresh every time, until your first clip edit.',
+        : 'The full-screen clips, in start-time order. Nothing is saved: Simple works this out fresh every time, until your first clip edit.',
         why: 'A saved list of clips would need fixing on every copy and paste, and Full would never keep it up to date.' });
       add('pend', 'Video ends at ' + sec(R.trackEnd), { title: 'Where the video ends', body: 'Where the last clip ends. Things marked Ends with the video are fitted to this.',
         here: b(names[names.length - 1]) + ' ends at ' + esc(sec(R.trackEnd)) + '.', why: "It's the last clip's start plus its length." });
     }
     const rows = SECS.filter(s => R.lanes[s] && R.lanes[s].length).map(s => VIS.SECTION_NAME[s]);
     if (R.lanes.audio && R.lanes.audio.length) rows.push('Sound');
-    if (rows.length) add('prows', 'Rows: ' + rows.join(', '), { title: "Quick's rows", body: 'Which rows Quick draws above and below the clips, from the kinds of things in the project.', why: 'Nothing to save: the layers already say what they are.' });
+    if (rows.length) add('prows', 'Rows: ' + rows.join(', '), { title: "Simple's rows", body: 'Which rows Simple draws above and below the clips, from the kinds of things in the project.', why: 'Nothing to save: the layers already say what they are.' });
     void P;
     return out;
   }
@@ -313,7 +313,7 @@
     host.appendChild(root);
 
     const PROJ = {
-      beach: { label: 'Beach day', sub: 'made in Quick', make: () => VIS.sample('beach') },
+      beach: { label: 'Beach day', sub: 'made in Simple', make: () => VIS.sample('beach') },
       messy: { label: 'Cooking with Mia', sub: 'made in Full', make: () => VIS.sample('messy') }
     };
     const eds = {};
@@ -327,9 +327,9 @@
     let lastCount = null;
 
     root.innerHTML =
-      '<p class="v8-lede">This is how a project is saved: plain text, one block per layer. Quick adds very little to it, and the blue bits are all of it. The grey dashed notes are what Quick works out each time it opens the project. They are never saved.</p>' +
+      '<p class="v8-lede">This is how a project is saved: plain text, one block per layer. Simple adds very little to it, and the blue bits are all of it. The grey dashed notes are what Simple works out each time it opens the project. They are never saved.</p>' +
       '<ul class="v8-legend" aria-label="Key">' +
-        '<li><span class="v8-sw new">"main": true</span><span>New, saved by Quick</span></li>' +
+        '<li><span class="v8-sw new">"main": true</span><span>New, saved by Simple</span></li>' +
         '<li><span class="v8-sw old">"start": 3.4</span><span>Already in every project</span></li>' +
         '<li><span class="v8-sw der">Clip 2 of 4</span><span>Worked out, never saved</span></li>' +
       '</ul>' +
@@ -337,14 +337,14 @@
       '<div class="v8-grid">' +
         '<div class="v8-meter h-card" aria-live="polite"></div>' +
         '<div class="v8-edits"></div>' +
-        '<aside class="v8-side" aria-label="What Quick draws">' +
-          '<p class="v8-lenscap">What Quick draws from this file</p>' +
+        '<aside class="v8-side" aria-label="What Simple draws">' +
+          '<p class="v8-lenscap">What Simple draws from this file</p>' +
           '<div class="fm v8-lens"><div class="fm-tlwrap"></div></div>' +
           '<div class="v8-cardslot"></div>' +
         '</aside>' +
         '<div class="v8-filewrap">' +
           '<div class="v8-filebar">' +
-            '<button type="button" class="v8-switch" role="switch" aria-checked="true"><span class="trk" aria-hidden="true"></span><span>Show what Quick works out</span></button>' +
+            '<button type="button" class="v8-switch" role="switch" aria-checked="true"><span class="trk" aria-hidden="true"></span><span>Show what Simple works out</span></button>' +
             '<div class="v8-mini" role="group" aria-label="How much to show"><button type="button" data-short="1">Short</button><button type="button" data-short="0">Every field</button></div>' +
           '</div>' +
           '<div class="v8-file" role="group" aria-label="The saved project file"></div>' +
@@ -392,11 +392,11 @@
       m.marks.forEach(k => { strip += '<i class="mk" style="left:' + (100 * k.a / m.len).toFixed(3) + '%;width:' + (100 * (k.b - k.a) / m.len).toFixed(3) + '%"></i>'; });
       meterEl.innerHTML =
         '<div class="v8-mrow">' +
-          '<span class="v8-big' + (zero ? ' zero' : '') + '"><b>' + m.count + '</b><span>' + (zero ? 'marks from Quick. It has written nothing.' : (m.count === 1 ? 'new mark saved by Quick' : 'new marks saved by Quick')) + '</span></span>' +
+          '<span class="v8-big' + (zero ? ' zero' : '') + '"><b>' + m.count + '</b><span>' + (zero ? 'marks from Simple. It has written nothing.' : (m.count === 1 ? 'new mark saved by Simple' : 'new marks saved by Simple')) + '</span></span>' +
           '<span class="v8-dim"><b>' + facts + '</b> things worked out, never saved</span>' +
         '</div>' +
-        '<div class="v8-strip" role="img" aria-label="' + esc('The whole file, start to end. Quick\'s marks are ' + m.chars + ' of ' + m.len + ' characters.') + '">' + strip + '</div>' +
-        '<p class="v8-mcap">The whole file, start to end' + (zero ? '. No blue: nothing in it is from Quick.' : '. The blue slivers are everything Quick adds: ' + m.chars.toLocaleString('en-AU') + ' of ' + m.len.toLocaleString('en-AU') + ' characters.') + '</p>';
+        '<div class="v8-strip" role="img" aria-label="' + esc('The whole file, start to end. Simple\'s marks are ' + m.chars + ' of ' + m.len + ' characters.') + '">' + strip + '</div>' +
+        '<p class="v8-mcap">The whole file, start to end' + (zero ? '. No blue: nothing in it is from Simple.' : '. The blue slivers are everything Simple adds: ' + m.chars.toLocaleString('en-AU') + ' of ' + m.len.toLocaleString('en-AU') + ' characters.') + '</p>';
       if (lastCount != null && lastCount !== m.count && !reduced()) { const n = meterEl.querySelector('.v8-big b'); n.classList.add('v8-pulse'); }
       lastCount = m.count;
     }
@@ -425,8 +425,8 @@
       const u = el('button', 'h-btn', VIS.icon('undo') + '<span>Undo</span>'); u.type = 'button'; u.disabled = !ed().canUndo();
       u.addEventListener('click', doUndo); row.appendChild(u);
       editsEl.querySelector('.v8-status').innerHTML = S.status[S.proj] || (S.proj === 'beach'
-        ? 'Made in Quick, so its marks are already there.'
-        : 'Made in Full and just opened in Quick. The clip row and every grey note are worked out, and nothing is written.');
+        ? 'Made in Simple, so its marks are already there.'
+        : 'Made in Full and just opened in Simple. The clip row and every grey note are worked out, and nothing is written.');
     }
     function fileLine(d, undo) {
       const parts = [];
@@ -444,7 +444,7 @@
       const d = diffDocs(before, ed().doc);
       if (res.adopted) S.adoptedNow[S.proj] = x.label;
       let tail;
-      if (res.adopted) tail = ' This was your first clip edit in Quick, so it saved its clip row: the new blue marks. Full ignores them.';
+      if (res.adopted) tail = ' This was your first clip edit in Simple, so it saved its clip row: the new blue marks. Full ignores them.';
       else if (d.gone.length) tail = ' Nothing else had to change: nothing in the file points at another layer.';
       else tail = " The order isn't saved anywhere. The new start times are the new order.";
       S.status[S.proj] = b(res.say || x.label) + '. ' + esc(fileLine(d)) + esc(tail);
@@ -565,7 +565,7 @@
       if (!l) return null;
       const v = valAt(l, path);
       const fn = (isP && MEAN['project.' + path]) || MEAN[path] || (path.startsWith('transform.') && MEAN.transform) ||
-        (() => ({ tier: path.startsWith('sm.') ? 'new' : 'old', title: path, body: 'A field Quick reads and leaves as it is.' }));
+        (() => ({ tier: path.startsWith('sm.') ? 'new' : 'old', title: path, body: 'A field Simple reads and leaves as it is.' }));
       const ctx = { owner, path, v, l, R, doc, isP, name: isP ? doc.project.name : nm(l), adoptedNow: S.adoptedNow[S.proj] };
       const r = fn(ctx);
       const last = path.split('.').pop();
@@ -581,7 +581,7 @@
       if (!x) {
         return '<div class="v8-card-top"><span class="v8-tier">How to read it</span></div>' +
           '<h3 class="v8-card-h">Tap anything in the file</h3>' +
-          '<p>Blue is new: the only things Quick adds. The grey dashed notes are worked out each time the project opens and never saved. Everything else was already in every FreeMotion project.</p>' +
+          '<p>Blue is new: the only things Simple adds. The grey dashed notes are worked out each time the project opens and never saved. Everything else was already in every FreeMotion project.</p>' +
           '<p class="v8-whyl">' + (S.wide ? 'Or tap a clip or an item in the picture above to find it in the file.' : 'Or tap a clip or an item in the picture above to jump to it in the file.') + '</p>';
       }
       const tier = x.tier || 'old';
@@ -593,7 +593,7 @@
       h += '<p>' + x.body + '</p>';
       if (x.here) h += '<p class="v8-here">' + x.here + '</p>';
       if (x.why) h += '<p class="v8-whyl"><b>' + esc(WHY_LABEL[tier] || 'Why') + ':</b> ' + esc(x.why) + '</p>';
-      if (tier === 'old') h += '<p class="v8-whyl">Quick reads it and adds nothing to it. Full uses it exactly as before.</p>';
+      if (tier === 'old') h += '<p class="v8-whyl">Simple reads it and adds nothing to it. Full uses it exactly as before.</p>';
       if (!S.wide && x.sel) h += '<div class="fm v8-cardtl"><div class="fm-tlwrap"></div></div>';
       return h;
     }
@@ -615,7 +615,7 @@
       if (tw && x) drawTL(tw, x.sel, false, x.time);
     }
 
-    /* ---------------- the Quick timeline (the kit's own drawing) ---------------- */
+    /* ---------------- the Simple timeline (the kit's own drawing) ---------------- */
     function tlHeight(R, open, sel) {
       const secs = SECS.filter(s => R.lanes[s] && R.lanes[s].length);
       let rows;
@@ -720,15 +720,15 @@
     return '<section class="v8-why" aria-labelledby="v8-why-h">' +
       '<h3 class="v8-h" id="v8-why-h">Why save so little?</h3>' +
       '<ul class="v8-reasons">' +
-        '<li><b>No links to fix</b><p>A saved link between two layers has to be repaired every time something is copied, pasted, duplicated or saved as a template. Quick\'s marks never name another layer.</p></li>' +
-        '<li><b>Full can\'t make it wrong</b><p>Full doesn\'t know about Quick. If the clip order were saved, one drag in Full would make it wrong. Worked out from the start times, it is always right.</p></li>' +
-        '<li><b>Opening changes nothing</b><p>Quick works everything out when it opens a project, and saves its few marks only at your first clip edit. An old project stays exactly as it was until then.</p></li>' +
+        '<li><b>No links to fix</b><p>A saved link between two layers has to be repaired every time something is copied, pasted, duplicated or saved as a template. Simple\'s marks never name another layer.</p></li>' +
+        '<li><b>Full can\'t make it wrong</b><p>Full doesn\'t know about Simple. If the clip order were saved, one drag in Full would make it wrong. Worked out from the start times, it is always right.</p></li>' +
+        '<li><b>Opening changes nothing</b><p>Simple works everything out when it opens a project, and saves its few marks only at your first clip edit. An old project stays exactly as it was until then.</p></li>' +
         '<li><b>Your editor stays yours</b><p>Which editor you are using is kept on each phone or computer, never in the file. A friend in the same project keeps their own.</p></li>' +
       '</ul>' +
       '<details class="v8-extra"><summary>Other small fields the design adds</summary>' +
-        '<p class="h-note">Plain fields, not in Quick\'s box, because Full and the renderer can use them too. None of them points at another layer.</p>' +
+        '<p class="h-note">Plain fields, not in Simple\'s box, because Full and the renderer can use them too. None of them points at another layer.</p>' +
         '<dl>' +
-          '<dt><code>srcW</code>, <code>srcH</code></dt><dd>The clip\'s own size, so Quick can tell a full-screen clip before the file itself arrives.</dd>' +
+          '<dt><code>srcW</code>, <code>srcH</code></dt><dd>The clip\'s own size, so Simple can tell a full-screen clip before the file itself arrives.</dd>' +
           '<dt><code>audioOnly</code></dt><dd>Sound only. Now written the moment a song, voice-over or sound effect is added.</dd>' +
           '<dt><code>taken</code></dt><dd>The date a clip was filmed, for Sort by date taken.</dd>' +
           '<dt><code>pick</code></dt><dd>Which batch of picked files a clip came from.</dd>' +

@@ -9,15 +9,14 @@
  *     button (at least 44x32) after the Delete key on a clip, after ✂ (or A / S / D), or after a tap on a gap chip.
  *     The line clears after 10 s (never while the pointer or focus is in it) or on a tap elsewhere; its buttons stay
  *     inert for 400 ms; the rightmost 56 px of the row hold no button (§3.12 rules 2, 5)
- *   - ✂ dimmed, aria-disabled and still tappable; the editor button (kit glyphs 'quick' / 'backQuick', as V1 and V12)
- *     flips Quick and Full with Phase 1's 150 ms crossfade; E does too
+ *   - ✂ dimmed, aria-disabled and still tappable; no switch on either play bar (Full's is today's ⋯ ⧉ ◐ |◀). The switch is the
+ *     ⚙ cog's third block (VIS.cog, DESIGN §6.1): one tap flips Simple and Full with Phase 1's 150 ms crossfade; there is no E key
  *   - selecting opens today's panels, docked (phone: under the timeline; PC: the band). Full on a phone shows only the
  *     picked layer's row, as the app does today (V1's solo view)
  *   - + opens Full's Add sheet unchanged; media picked there land end to end from the end of the clip row, nothing that
- *     was there moves and no Quick marks are written (a plain add, so the song stays where it was)
- *   - the Settings row "Quick editor" / "See any project as clips — still being tested.", in its own group above
- *     Work with friends; off sends the project back to Full and hides the editor button and E
- * Both projects are the kit's samples with their Quick marks removed: in step 1 every project was made in Full.
+ *     was there moves and no Simple marks are written (a plain add, so the song stays where it was)
+ *   - no Settings row (D22 A, recommended): the cog's block is the only door, and nothing else in Full changes (§0.4)
+ * Both projects are the kit's samples with their Simple marks removed: in step 1 every project was made in Full.
  * Later steps use the adopted Beach day and the kit's real commands where something moves (delete, reorder).
  */
 (function () {
@@ -175,7 +174,7 @@
     let docs, undo;
     function reset() { docs = { beach: fullMade('beach'), messy: fullMade('messy') }; undo = { beach: [], messy: [] }; }
     reset();
-    let f = null, api = null, live = null, lineTimer = 0, pointerIn = false, focusIn = false;
+    let f = null, api = null, live = null, lineTimer = 0, pointerIn = false, focusIn = false, cog = null;
     const doc = () => docs[S.proj];
     const layerOf = id => doc().layers.find(l => l.id === id) || null;
     const quick = () => S.editor === 'quick';
@@ -193,9 +192,9 @@
       f.tray.setAttribute('role', 'status'); f.tray.setAttribute('aria-live', 'polite');
       live = el('div', 'v11-vh'); live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite'); f.root.appendChild(live);
       f.root.tabIndex = 0;
-      f.root.setAttribute('aria-label', 'Phase 1 screen, ' + name + '. Delete, S and E work here.');
+      f.root.setAttribute('aria-label', 'Phase 1 screen, ' + name + '. Delete and S work here; ⚙ opens the cog with the switch.');
       f.on('split', () => splitTap());
-      f.on('switch', () => flip());
+      cog = VIS.cog(f, { editor: () => S.editor, onSwitch: () => flip(), onOpen: () => { S.sheet = null; renderSheet(); say('The ⚙ cog, with its new third block on top. Tap its switch to flip editors; “What should you use?” opens the explanation.'); } });
       f.on('undo', () => undoOne());
       f.root.addEventListener('keydown', onKey);
       f.root.addEventListener('pointerdown', e => {
@@ -216,16 +215,11 @@
     function draw(opt) {
       opt = opt || {};
       const d = doc(), q = quick(), solo = soloFull();
-      // the editor button (§6.1): the glyph shows the editor you are in (a row of clips in Quick, ‹ and the clips as
-      // the way back from Full), the same drawing as V1 and V12; hidden while the Settings switch is off
-      const to = q ? 'Full' : 'Quick';
-      f.switchBtn.style.visibility = S.on ? '' : 'hidden';
-      f.switchBtn.innerHTML = VIS.icon(q ? 'quick' : 'backQuick') + (S.view === 'pc' ? '<span>' + to + '</span>' : '');
-      f.switchBtn.setAttribute('aria-label', q ? 'Switch to Full' : 'Back to Quick'); f.switchBtn.title = (q ? 'Switch to Full' : 'Back to Quick') + ' (E)';
+      // no switch on either play bar (§0.4): Full's is today's, Simple's is ⋯ ✂ · |◀; the switch is the ⚙ cog's third block
+      f.setEditor(S.editor);
       if (ui.onEditor) ui.onEditor(S.editor);
       const sb = f.root.querySelector('[data-act="split"]');
-      sb.classList.toggle('dim', q);
-      if (q) { sb.setAttribute('aria-disabled', 'true'); sb.title = 'Split (in the next update)'; } else { sb.removeAttribute('aria-disabled'); sb.title = 'Split'; }
+      if (sb && q) { sb.classList.add('dim'); sb.setAttribute('aria-disabled', 'true'); sb.title = 'Split (in the next update)'; }
       if (S.view === 'phone') { const tray = q || solo; f.tray.style.display = tray ? '' : 'none'; f.timeline.style.height = (tray ? TL : TL + TRAY_H) + 'px'; }
       else f.tray.style.visibility = q ? '' : 'hidden';
       VIS.stage(f.stage, d, S.t, { selected: S.sel });
@@ -289,14 +283,14 @@
     }
     function pins() {
       unring(f.root);
-      if (S.on) ring(f.switchBtn, 2, { out: true });
-      if (!quick()) return;
-      ring(f.timeline.querySelector('.fm-cliprow'), 3, { left: true });
+      ring(f.root.querySelector(S.view === 'pc' ? '.fm-transport [data-act="gear"]' : '.fm-topbar [data-act="settings"]'), 1, { out: true });
+      if (!quick()) return;                                     // Full: nothing new but the cog's block, which lives inside ⚙
+      ring(f.timeline.querySelector('.fm-cliprow'), 2, { left: true });
       const docked = S.view === 'phone' && S.sel && !S.line && !S.sheet && layerOf(S.sel);
-      if (S.sel && !S.line && layerOf(S.sel)) ring(S.view === 'pc' ? f.panel : f.tray.querySelector('.v11-dock'), 4, { foot: S.view === 'phone' });
-      ring(f.root.querySelector('[data-act="split"]'), 5, { outl: true });
-      if (!docked) ring(f.tray, 6, { foot: S.view === 'phone' });
-      ring(f.timeline.querySelector('.fm-addclip'), 7, { out: true });
+      if (S.sel && !S.line && layerOf(S.sel)) ring(S.view === 'pc' ? f.panel : f.tray.querySelector('.v11-dock'), 3, { foot: S.view === 'phone' });
+      ring(f.root.querySelector('[data-act="split"]'), 4, { outl: true });
+      if (!docked) ring(f.tray, 5, { foot: S.view === 'phone' });
+      ring(f.timeline.querySelector('.fm-addclip'), 6, { out: true });
     }
 
     /* the #sm-say line: one line, one button, clears after 10 s unless the pointer or focus is in it */
@@ -340,7 +334,7 @@
       const R = E.classify(doc());
       if (R.isMain(S.sel)) {
         setLine('Deleting clips comes next');
-        say('There is no delete button in Quick yet. On a clip, the Delete key explains instead of leaving a hole in the row.');
+        say('There is no delete button in Simple yet. On a clip, the Delete key explains instead of leaving a hole in the row.');
         return;
       }
       const l = layerOf(S.sel); if (!l) return;
@@ -356,14 +350,13 @@
       S.editor = quick() ? 'full' : 'quick';
       S.line = null; S.seam = null; S.sheet = null; clearTimeout(lineTimer);
       draw({ fade: true });
-      if (live) live.textContent = 'Now in ' + (quick() ? 'Quick' : 'Full');
-      if (!(opts && opts.silent)) say('Now in ' + (quick() ? 'Quick' : 'Full') + '. Same project, same spot, same pick' + (soloFull() ? ': Full on a phone shows only the picked layer, as it does today' : '') + '. Nothing was converted or saved. Phase 1 switches with a quick fade; the three animations come in Phase 3.');
+      if (live) live.textContent = 'Now in ' + (quick() ? 'Simple' : 'Full');
+      if (!(opts && opts.silent)) say('Now in ' + (quick() ? 'Simple' : 'Full') + '. Same project, same spot, same pick' + (soloFull() ? ': Full on a phone shows only the picked layer, as it does today' : '') + '. Nothing was converted or saved' + (quick() ? '' : ', and Full is exactly today’s Full') + '. Phase 1 switches with a quick fade; the animation comes in Phase 3.');
     }
     function openInFull() {
       S.editor = 'full'; S.line = null; S.seam = null; clearTimeout(lineTimer);
       draw({ fade: true });
-      if (S.on) try { f.switchBtn.focus({ preventScroll: true }); } catch (e) { /* not focusable here */ }
-      say('Open in Full takes you to the same spot in Full, with the same thing picked. The editor button, now ‹ and a row of clips, brings you back.');
+      say('Open in Full takes you to the same spot in Full, with the same thing picked. Full is plain Full, with no back button: the switch in the ⚙ cog brings you back.');
     }
     function undoOne() {
       if (!quick()) { say('In Full, ↶ undoes as it does today.'); }
@@ -379,7 +372,6 @@
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); deleteKey(); }
       else if (k === 'a' || k === 'A' || k === 's' || k === 'S' || k === 'd' || k === 'D') { if (quick()) { e.preventDefault(); splitTap(); } }
-      else if (k === 'e' || k === 'E') { e.preventDefault(); flip(); }
       else if (k === 'Escape') { if (S.sheet) { S.sheet = null; draw(); } else clearLine(); }
     }
 
@@ -451,7 +443,7 @@
       get view() { return S.view; }, get proj() { return S.proj; }, get on() { return S.on; }, get editor() { return S.editor; },
       setView(v) { if (v === S.view) return; S.view = v; S.sheet = null; S.line = null; S.seam = null; build(); ui.onView(v); },
       setProj(p) { if (p === S.proj) return; S.proj = p; S.t = T0[p]; S.sel = null; S.seam = null; S.open = null; S.line = null; S.sheet = null; if (S.on) S.editor = 'quick'; build(); ui.onProj(p); },
-      reset() { reset(); S.sel = null; S.seam = null; S.line = null; S.sheet = null; S.open = null; S.t = T0[S.proj]; S.editor = S.on ? 'quick' : 'full'; build(); say('Back to the start: ' + doc().project.name + ', made in Full, seen in Quick.'); },
+      reset() { reset(); S.sel = null; S.seam = null; S.line = null; S.sheet = null; S.open = null; S.t = T0[S.proj]; S.editor = S.on ? 'quick' : 'full'; build(); say('Back to the start: ' + doc().project.name + ', made in Full, seen in Simple.'); },
       pickClip() {
         if (!quick() && S.on) flip({ silent: true });
         S.sheet = null; renderSheet();
@@ -467,7 +459,7 @@
       },
       tapSplit() { if (!quick() && S.on) flip({ silent: true }); S.sheet = null; renderSheet(); splitTap(); },
       tapAdd() { if (!quick() && S.on) flip({ silent: true }); openAdd(); },
-      tapSwitch() { if (!S.on) { say('Turn Quick editor on in Settings first. While it is off, the editor button and the E key are hidden.'); return; } flip(); },
+      tapSwitch() { if (cog) cog.open('last'); },
       tapGap() {
         if (S.proj !== 'messy') this.setProj('messy');
         if (!quick() && S.on) flip({ silent: true });
@@ -475,12 +467,7 @@
         const e = E.classify(doc()).main.find(x => x.seam.kind === 'gap');
         if (e) seamTap(e.id);
       },
-      setOn(v) {
-        S.on = v; S.line = null; S.seam = null; S.sheet = null; clearTimeout(lineTimer);
-        S.editor = v ? 'quick' : 'full';
-        draw({ fade: true });
-        say(v ? 'On: the project shows in Quick again, and the editor button is back.' : 'Off: the project goes straight back to Full, and the editor button, the E key and the menu items for Quick disappear. Nothing in the project changes.');
-      }
+      setOn() {}
     };
   }
 
@@ -495,13 +482,13 @@
 
   /* ================================================================== the other steps' screens */
   function buildDecide(host) {
-    const DECS = [['D1', 'Names', 'A'], ['D2', 'The switch in Full', 'B'], ['D3', 'New project', 'A'], ['D4', 'Titles follow clips', 'A'],
+    const DECS = [['D1', 'Names', 'A'], ['D3', 'New project (asked again)', 'A'], ['D4', 'Titles follow clips', 'A'],
       ['D5', 'Delete takes its titles', 'A'], ['D6', 'A title’s start trimmed off', 'A'], ['D7', 'A locked clip', 'A'], ['D8', 'Gaps', 'A'], ['D9', 'Old projects', 'A']];
     shell(host, 'Your decisions',
       '<div class="v11-dec"><p class="v11-dec-lede">A letter for each, or just “do recommended”.</p>' +
       DECS.map(d => '<div class="v11-dec-row"><span class="k">' + d[0] + '</span><span class="q">' + esc(d[1]) + '</span><span class="v11-dec-pick">' +
         ['A', 'B', 'C'].map(x => '<i' + (x === d[2] ? ' class="on"' : '') + '>' + x + '</i>').join('') + '</span></div>').join('') +
-      '<p class="v11-dec-more">and 12 more</p></div>' +
+      '<p class="v11-dec-more">and 14 more · D2 is settled: the switch is in the ⚙ cog</p></div>' +
       '<div class="v11-dec-foot"><span class="v11-dec-btn">Do recommended</span><span class="v11-dec-btn primary">Copy my answers</span></div>');
     return {};
   }
@@ -560,26 +547,9 @@
     ['captions', 'look', 'effects', 'ask'].forEach(id => { const b = f.toolbar && f.toolbar.buttons[id]; if (b) b.classList.add('v11-dot'); });
     ring(api.sectionRows && api.sectionRows.captions, 2);
     ring(cv, 3);
-    // the way in: New project with two cards (§7.1); on his devices Full stays picked (D3 A)
-    const np = el('div', 'fm v11-np');
-    let pick = 'full';
-    function drawNp() {
-      np.innerHTML = '<div class="v11-np-h">New project</div><div class="v11-np-cards">' +
-        '<button type="button" class="v11-np-card" data-e="quick" aria-pressed="' + (pick === 'quick') + '">' + VIS.icon('quick') + '<b>Quick</b><small>Clips one after another</small></button>' +
-        '<button type="button" class="v11-np-card" data-e="full" aria-pressed="' + (pick === 'full') + '">' + VIS.icon('editor') + '<b>Full</b><small>Layers anywhere, every option</small></button></div>' +
-        '<div class="v11-np-row"><span>Name</span><span class="v11-np-in">Beach day</span></div>' +
-        '<div class="v11-np-row"><span>Shape</span><span class="v11-np-ar"><span class="on">9:16</span><span>16:9</span><span>1:1</span><span>4:5</span></span></div>' +
-        (pick === 'quick'
-          ? '<div class="v11-np-more">More · 1080p · 30 fps · Black ›</div>'
-          : '<div class="v11-np-row"><span>Resolution</span><span class="v11-np-val">1080p</span></div><div class="v11-np-row"><span>Frame rate</span><span class="v11-np-val">30 fps</span></div>' +
-            '<div class="v11-np-row"><span>Background</span><span class="v11-np-val">Black</span></div>') +
-        '<div class="v11-np-foot"><span>Cancel</span><span class="primary">Create</span></div>';
-      np.querySelectorAll('.v11-np-card').forEach(b => b.addEventListener('click', () => { pick = b.dataset.e; drawNp(); }));
-    }
-    drawNp();
-    detail.extra.appendChild(el('p', 'v11-h4', 'The way in: New project'));
-    detail.extra.appendChild(np);
-    detail.extra.appendChild(el('p', 'v11-note', 'Tap the cards. Quick folds the rarely used settings into one line. On your devices Full stays picked (D3); a brand-new phone starts on Quick.'));
+    // the way in (§7.1, 1 Oct): New project stays today's dialog; D3 A opens a new project in this device's last editor
+    detail.extra.appendChild(el('p', 'v11-h4', 'The way in'));
+    detail.extra.appendChild(el('p', 'v11-note', 'New project stays exactly as it is today. A new project opens in the editor this device last switched to in the ⚙ cog (D3, asked again). When that is Simple, Create also opens the picker straight away, so the clips land end to end.'));
   }
 
   function buildTogether(host, detail) {
@@ -589,7 +559,7 @@
     function draw() {
       unring(f.root);
       VIS.stage(f.stage, ed.doc, 1.2, {});
-      people(f.stage, [{ n: 'Sam', ed: 'Quick', c: SAM }]);
+      people(f.stage, [{ n: 'Sam', ed: 'Simple', c: SAM }]);
       api = VIS.drawQuick(f.timeline, ed.doc, { pxPerSec: 'fit', time: 1.2, open: 'text' });
       tint.forEach(id => { const n = api.items.get(id); if (n) n.classList.add('v11-tint'); });
       if (line) sayLine(f.tray, line, []); else quiet(f.tray, '<b>4 clips</b> · 0:14');
@@ -627,7 +597,7 @@
     ed.run('reorder', { id: 'c4', to: 0 });
     const f = phone(host, { tools: VIS.QUICK_TOOLS });
     VIS.stage(f.stage, ed.doc, 5.2, {});
-    people(f.stage, [{ n: 'Sam', ed: 'Quick', c: SAM }, { n: 'Mia', ed: 'Full', c: MIA }]);
+    people(f.stage, [{ n: 'Sam', ed: 'Simple', c: SAM }, { n: 'Mia', ed: 'Full', c: MIA }]);
     VIS.drawQuick(f.timeline, ed.doc, { pxPerSec: 'fit', time: 5.2, open: 'text' });
     quiet(f.tray, '<b>4 clips</b> · 0:14');
     f.setTime(5.2, 30);
@@ -675,35 +645,35 @@
   const STEPS = [
     { n: 0, name: 'Decide', when: 'You are here', hold: ['see', 'You see it here'],
       line: 'You look through these pages and pick your answers. Nothing in the app changes yet.',
-      starts: 'Now. Pick on the decision sheet (V10), or send “do recommended”.',
-      news: [], notes: ['Every question has a recommended answer, so “do recommended” answers all of them at once.'], build: buildDecide },
+      starts: 'Now. You answered most of them on 1 Oct; six are still open on the decision sheet (V10), or send “do recommended”.',
+      news: [], notes: ['Every open question has a recommended answer, so “do recommended” answers all six at once.'], build: buildDecide },
     { n: 1, name: 'See any project as clips', when: 'The first thing you hold', hold: ['preview', 'You can hold it, as a preview'], first: true,
       line: 'Any project shows as a row of clips. You can look, pick, and add clips on the end. Editing clips still happens in Full.',
-      starts: 'When you say go (D15), with your picks on D1, D2, D9, D16 and D18.' },
+      starts: 'You said go (D15 A). Your picks on D1, D9 and D16 are in; D18, D22, D23 and D24 are still open. D2 is settled: the switch is in the ⚙ cog.' },
     { n: 2, name: 'Edit clip after clip', hold: ['preview', 'You can hold it, as a preview'],
       line: 'Trim, split, delete, move and speed up clips. The rest close up, and titles go with their clip.',
-      starts: 'After Phase 1 is checked, with your picks on D4 to D8, D10, D14, D17 and D19.',
+      starts: 'After Phase 1 is checked, with your picks on D4 to D8, D10, D14, D17 (a long song runs on in black) and D19, and D14b still open.',
       news: ['Tools for the clip you picked, in the row under the timeline', 'A tools row: Clips, Text, Sound and Overlay', 'Handles on the picked clip, to trim it', '✂ splits'],
-      notes: ['With a friend in the project, clips stay put until Phase 4. Looks, text and sound still work live.'], build: buildEdit },
+      notes: ['With a friend who can edit in the project, clips stay put (D14b, still open; A is recommended). Looks, text and sound still work live.'], build: buildEdit },
     { n: 3, name: 'Looks, captions and the way in', hold: ['yes', 'You can hold it'],
-      line: 'Looks, captions, effects and Ask arrive. New project lets you pick Quick or Full, and the Settings switch goes.',
-      starts: 'After Phase 2, with your picks on D3, D11, D12, D20 and D21.',
+      line: 'Looks, captions, effects and Ask arrive. A new project opens in the editor you last switched to; New project itself is unchanged.',
+      starts: 'After Phase 2, with your picks on D11 (the morph), D12, D20 (panels in the left band) and D21, and D3 still open.',
       news: ['Captions, Look, Effects and Ask join the tools row (the green dots)', 'Captions go with their clips, line by line', 'A look on the picture'],
-      notes: ['The editor button now plays one of three animations, picked at random each time.'], build: buildLooks },
-    { n: 4, name: 'Together', hold: ['yes', 'You can hold it'],
-      line: 'You and a friend can both move clips at the same time. Their moves glide into place on your screen.',
-      starts: 'After your first real test with the Mac and the iPhone together.',
+      notes: ['The switch in the cog now plays the morph as the cog closes (D11, your pick).'], build: buildLooks },
+    { n: 4, name: 'Together (held)', hold: ['none', 'Held'],
+      line: 'Held. You and a friend could both move clips at the same time, but it would change how Full behaves when a friend is in, so it is built only if you say yes (D14b). Drawn here in Simple.',
+      starts: 'Only if you say yes on D14b (option B), after your first real test with the Mac and the iPhone together.',
       news: ['A friend’s moves glide into place and glow in their colour for a second', 'One line says what happened'],
-      notes: ['Before this phase, moving clips waits while a friend who can edit is in the project.'], build: buildTogether },
-    { n: 5, name: 'All or nothing', hold: ['none', 'Nothing new to see'],
+      notes: ['If this is never built, moving clips waits while a friend who can edit is in the project, for good, and Full is untouched.'], build: buildTogether },
+    { n: 5, name: 'All or nothing (held)', hold: ['none', 'Held with Phase 4'],
       line: 'If two people move clips at the very same moment, each move lands whole or not at all. You should notice nothing.',
-      starts: 'Before Phase 6 if Phase 4’s tests show stray gaps, after it if not.',
+      starts: 'Only with Phase 4.',
       news: ['Clips still join up, even when two people move them at the same moment'], notes: [], build: buildSeams },
     { n: 6, name: 'Transitions', hold: ['yes', 'You can hold it'],
       line: 'A ◇ at every cut to add a transition, and clips that can animate in and out.',
       starts: 'After Phase 5, with your pick on D13. You see drawn options first.',
       news: ['A ◇ at every cut', 'Pick a transition, set its length, or use it on every cut', 'The picture half way through a transition'],
-      notes: ['Transitions never shorten your video (D13, recommended).'], build: buildTransitions },
+      notes: ['Transitions never shorten your video (D13, recommended).', 'One video: a transition added in Simple also plays in Full’s preview and export. Full gets no new button for it (D13 decides this when Phase 6 comes up).'], build: buildTransitions },
     { n: 7, name: 'The later list', hold: ['none', 'One at a time'],
       line: 'Small extras, one at a time, each only when you say yes.',
       starts: 'Your go-ahead on each one.', news: [], notes: [], build: buildLater },
@@ -711,11 +681,10 @@
       line: 'A bigger rebuild of how clips are laid out, only if working together still leaves gaps too often.',
       starts: 'Only if Phases 4 and 5 still show gaps often, once measured.', news: [], notes: [], build: buildIfNeeded }
   ];
-  const SHORT = ['Decide', 'See clips', 'Edit clips', 'Looks', 'Together', 'All or nothing', 'Transitions', 'Later', 'If needed'];
+  const SHORT = ['Decide', 'See clips', 'Edit clips', 'Looks', 'Together (held)', 'All or nothing (held)', 'Transitions', 'Later', 'If needed'];
 
   const P1_NEWS = [
-    'A switch in Settings turns Quick on. It starts off.',
-    'The editor button {sw} flips between Quick and Full. Same project, same spot, same pick, nothing converted or saved. In Full it turns into {back}, the way back. The E key does it too.',
+    'The ⚙ cog gets a third block on top, Editor: a small Simple ⇄ Full switch and “What should you use?”. One tap switches and the cog closes. Same project, same spot, same pick, nothing converted or saved. It is the only change you would see in Full.',
     'Clips in one row, with titles, captions and sound in rows of their own. Gaps and overlaps show as small chips.',
     'Tap a clip and the panels you know from Full open, docked under the timeline (on a PC, on the left beside it).',
     '✂ is in its final place but greyed out. A tap says so and offers Open in Full.',
@@ -723,9 +692,7 @@
     '+ opens Full’s Add menu. The clips you pick land one after another at the end. Nothing already there moves.'
   ];
 
-  /* {sw} and {back} in a line draw the editor button's own glyph inline, so the words point at what is on the screen */
-  const GLYPH_IN = { sw: ['quick', 'a row of clips'], back: ['backQuick', '‹ and a row of clips'] };
-  const withGlyphs = t => esc(t).replace(/\{(sw|back)\}/g, (m, k) => '<span class="v11-glyph" role="img" aria-label="' + GLYPH_IN[k][1] + '">' + VIS.icon(GLYPH_IN[k][0]) + '</span>');
+  const withGlyphs = t => esc(t);
   function legend(items) {
     const ol = el('ol', 'v11-legend');
     items.forEach((t, i) => ol.appendChild(el('li', '', '<span class="v11-num" aria-hidden="true">' + (i + 1) + '</span><span><span class="v11-vh">' + (i + 1) + '. </span>' + withGlyphs(t) + '</span>')));
@@ -814,9 +781,8 @@
       const d = c.detail;
       const narr = el('p', 'v11-narr', 'Tap anything on the screen above, or try one of these.');
       narr.setAttribute('aria-live', 'polite');
-      let segView, segProj, swTry = null;
-      // the try button wears the same glyph and words as the editor button on the screen above
-      const syncSwTry = ed => { if (swTry) swTry.innerHTML = VIS.icon(ed === 'quick' ? 'quick' : 'backQuick') + '<span>' + (ed === 'quick' ? 'Switch to Full' : 'Back to Quick') + '</span>'; };
+      let segView, segProj;
+      const syncSwTry = () => {};
       const wideStart = (window.innerWidth || 1024) >= 1000;
       const p1 = buildP1(mockHost, {
         view: wideStart ? 'pc' : 'phone',
@@ -838,8 +804,7 @@
       T('delete', 'Press Delete', () => p1.pressDelete());
       T('split', 'Tap ✂', () => p1.tapSplit());
       T('add', 'Tap +', () => p1.tapAdd());
-      swTry = T('quick', 'Switch to Full', () => p1.tapSwitch());
-      syncSwTry(p1.editor);
+      T('gear', 'Open the ⚙ cog', () => p1.tapSwitch());
       T('fit', 'Show a gap', () => p1.tapGap());
       T('undo', 'Start again', () => p1.reset()).classList.add('v11-reset');
       d.appendChild(tries);
@@ -848,18 +813,13 @@
       const a = el('div', 'v11-p1col'), b = el('div', 'v11-p1col');
       a.appendChild(el('p', 'v11-h4', 'New on this screen'));
       a.appendChild(legend(P1_NEWS));
-      a.appendChild(el('p', 'v11-note', 'Looking at a project in Quick saves nothing. Clips you add are saved the same way as adding them in Full.'));
-      a.appendChild(el('p', 'v11-note', 'It works with a friend in the project too, because nothing in Quick moves other clips yet.'));
-      // the Settings row (§15.1): its own untitled group, directly above Work with friends
-      b.appendChild(el('p', 'v11-h4', 'The switch in Settings'));
-      const set = el('div', 'fm v11-set v11-new');
-      set.innerHTML = '<span class="v11-pin" aria-hidden="true">1</span><div class="v11-set-h">' + VIS.icon('gear') + '<span>Settings</span></div>' +
-        '<div class="v11-set-grp"><button type="button" class="v11-set-row" role="switch" aria-checked="true"><span class="v11-set-t"><b>Quick editor</b><small>See any project as clips — still being tested.</small></span><i class="v11-sw" aria-hidden="true"></i></button></div>' +
-        '<div class="v11-set-grp dim" aria-hidden="true"><div class="v11-set-row"><span class="v11-set-t"><b>Work with friends</b></span><i class="v11-sw on"></i></div></div>';
-      const sw = set.querySelector('[role="switch"]');
-      sw.addEventListener('click', () => { const on = sw.getAttribute('aria-checked') !== 'true'; sw.setAttribute('aria-checked', String(on)); p1.setOn(on); });
-      b.appendChild(set);
-      b.appendChild(el('p', 'v11-note', 'In the app it starts off. It is on here so you can see Quick. Turn it off and watch the screen go back to Full.'));
+      a.appendChild(el('p', 'v11-note', 'Looking at a project in Simple saves nothing. Clips you add are saved the same way as adding them in Full.'));
+      a.appendChild(el('p', 'v11-note', 'It works with a friend in the project too, because nothing in Simple moves other clips yet.'));
+      // the switch (§6.1, §15.1): the cog's third block, small; under D22 A there is no Settings row
+      b.appendChild(el('p', 'v11-h4', 'The switch, in the ⚙ cog'));
+      const still = el('div', 'v11-cogstill'); b.appendChild(still);
+      VIS.cogStill(still, { layout: 'phone', big: 'canvas', editor: 'full' });
+      b.appendChild(el('p', 'v11-note', 'Canvas settings and Friends stay where they are today; the Editor block sits small above them. “What should you use?” opens it big. There is no Settings row for it (D22, recommended), so nothing else in Full changes.'));
       // the message row, both states (§15.1: blank, and with the Delete line)
       b.appendChild(el('p', 'v11-h4', 'The message row'));
       const strips = el('div', 'v11-strips');

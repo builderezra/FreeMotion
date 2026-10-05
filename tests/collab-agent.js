@@ -80,7 +80,10 @@
     /* Wait until the app has finished booting: FM.scene populated and storage settled. */
     ready: async function () {
       for (let i = 0; i < 200; i++) {
-        if (FM.scene && FM.scene.project && FM.storage && FM.projects && FM.projects.currentId()) break;
+        /* …and the collab UI (5 Oct): a relaunched frame under load can have its project before js/collab-ui.js has run, and
+           every act that reads C.ui then threw "Cannot read properties of undefined (reading '_relay')" — v17.23's phone
+           pass went red on 967 5 for exactly that, and the test passed alone twice. Ready means the whole app is there. */
+        if (FM.scene && FM.scene.project && FM.storage && FM.projects && FM.projects.currentId() && (!FM.collab || FM.collab.ui)) break;
         /* queue 936: a real fresh start (`fmseed=0`) has NO project and never will until one is made — the boot is
            done when Home is up. A seeded instance still has its project first: migrate() sets it before Home opens. */
         if (/(^|[?&])fmseed=0(&|$)/.test(location.search) && FM.home && FM.home.isOpen && FM.home.isOpen()) break;
@@ -274,7 +277,7 @@
       let rec = false; try { rec = !!localStorage.getItem('fm.collab.host.' + pid); } catch (e) {}
       return {
         pid: pid, homeOpen: !!(FM.home && FM.home.isOpen && FM.home.isOpen()), session: !!S, owner: !!(S && S.isOwner),
-        relay: !!(C.ui._relay && C.ui._relay()), rec: rec, locks: C.ui._locks ? C.ui._locks() : null,
+        relay: !!(C.ui && C.ui._relay && C.ui._relay()), rec: rec, locks: C.ui && C.ui._locks ? C.ui._locks() : null,   // no UI yet = nothing armed (5 Oct)
         first: window.FM_FIRST_LOAD, agentBeforeApp: !!window.__fmAgentBeforeApp, armed: (window.__fm967 || []).slice(), toasts: (window.__fm967t || []).slice()
       };
     },

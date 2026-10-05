@@ -1,4 +1,15 @@
-/* V10 — Your decisions (DESIGN §17 D1–D21, the "decided with the recommended option" pictures, the §8.9 words).
+/* V10 — Your decisions (DESIGN §17 D1–D24, the "decided with the recommended option" pictures, the §8.9 words).
+ *
+ * 1 Oct, his answers (verbatim in ANS below): every pick he made that still stands is shown DECIDED, greyed, with his own
+ * words, and cannot be re-picked here. Only the six still open are live picks: D3 and D14b (asked again, because his A on
+ * each would change Full, his 1 Oct rule), D18 (rewritten after he answered), D22, D23 and D24 (new). "Do recommended" and
+ * "Copy my answers" cover those six only. D24's pictures are the real-app sheets (cog/d24-*.jpg, cropped into img/).
+ *
+ * 1 Oct, his rule (DESIGN §0.4: Full keeps its design and function; the switch is the ⚙ cog's third block): D2 is SETTLED by his
+ * words and shown as such (no pick, not counted); D3 and D14 are asked again in a form that leaves Full alone; D15 and D18 are
+ * reworded for a play bar with no switch; D11 says the animation plays as the cog closes; D16 row 6 (the back button) is
+ * withdrawn; D22 (a Settings row?) and D23 (does the cog close?) are new. Picks stored before this revision for D2, D3, D14,
+ * D15 and D18 are dropped once (state version 2), because their options changed meaning.
  *
  * One card per decision: the question, why it matters, a drawn picture of every option (one marked Recommended),
  * tap to pick. The edit-behaviour pictures (D4–D8, D19, and the friend's-title case) are drawn from VIS.engine
@@ -6,7 +17,7 @@
  * made by setting Stay put first (what "nothing follows" means) or by removing the title (D6 B).
  *
  * Picks live in localStorage (key vis.v10.v1, every access in try/catch). "Do recommended" fills every unpicked
- * one (pressed again, it makes all 21 recommended), with Undo. "Copy my answers" writes a plain message
+ * one (pressed again, it makes every one recommended), with Undo. "Copy my answers" writes a plain message
  * ("D1 A, D2 B, …") with navigator.clipboard inside the click, falling back to selecting the textarea.
  * The name picked in D1 is used everywhere else on this page (spans .v10-nS / .v10-nF), so he sees his words.
  * CSS is injected once (id v10-css), so index.html needs no extra <link>.
@@ -25,13 +36,35 @@
     try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { s = null; }
     s = s && typeof s === 'object' ? s : {};
     ['d', 'x', 'w', 'i'].forEach(k => { if (!s[k] || typeof s[k] !== 'object') s[k] = {}; });
+    if (s.v !== 2 && s.v !== 3) { ['D2', 'D3', 'D14', 'D15', 'D18'].forEach(k => { delete s.d[k]; }); s.v = 2; }   // 1 Oct: these changed meaning
+    if (s.v === 2) { Object.keys(s.d).forEach(k => { if (!['D3', 'D18', 'D22', 'D23'].includes(k)) delete s.d[k]; }); s.i = {}; s.v = 3; }   // his answers decide the rest
     return s;
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { /* private mode: picks last this visit */ } }
   let st = load();
 
   const NAMES = { A: ['Simple', 'Full'], B: ['Quick', 'Full'], C: ['Clips', 'Layers'], D: ['Cut', 'Motion'] };
-  const names = () => NAMES[st.d.D1] || NAMES.B;             // unpicked: the working names these pages use
+  const names = () => NAMES.A;                               // his D1 pick, 1 Oct: "Names: Simple / Full."
+
+  /* His answers, 1 Oct, pasted from the decisions page: "My picks for the simple editor: D1 A, D2 ?, D3 A, D4 A, D5 A, D6 A,
+     D7 A, D8 A, D9 A, D10 A, D11 B, D12 A, D13 A, D14 A, D15 A, D16 A, D17 B, D18 ?, D19 A, D20 A, D21 A / Not the recommended
+     one: D11 B, D17 B, D20 A. / Not picked yet: D2, D18. / Names: Simple / Full." and, on D11, "Just do the one clip on the far
+     left, morph i think it was". D3 A and D14 A's second half are NOT here: each would change Full (DESIGN §0.4), so they are
+     asked again (D3, D14b). D2 is settled by his cog words; D18 was rewritten after he answered. */
+  const ANS = {
+    D1: { k: 'A', said: ['D1 A', 'Names: Simple / Full.'], note: 'Every page now says Simple and Full.' },
+    D4: { k: 'A' }, D5: { k: 'A' }, D6: { k: 'A' }, D7: { k: 'A' }, D8: { k: 'A' }, D9: { k: 'A' }, D10: { k: 'A' },
+    D11: { k: 'B', said: ['D11 B', 'Just do the one clip on the far left, morph i think it was'], note: 'Only the morph is built. Fold and Slide are dropped everywhere; V1 plays it.' },
+    D12: { k: 'A' }, D13: { k: 'A' },
+    D14: { k: 'A', note: 'This is the first half. Moving clips while a friend can edit is asked again below, as D14b.' },
+    D15: { k: 'A', note: 'Applied to the revised plan: Phase 1 with the switch in the ⚙ cog and {F} untouched.' },
+    D16: { k: 'A', note: 'You answered before row 1 became the cog block’s icon and pictures, and before row 6 was withdrawn, so A means the recommended one in each row as it stands now. You will see row 1 in place before it ships.' },
+    D17: { k: 'B', note: 'A long song makes the video run on in black, as {F} does today. Nothing trims or fades music, and there is no Ends with the video switch. V2, V3 and V9 show it.' },
+    D19: { k: 'A' },
+    D20: { k: 'A', note: 'The panel opens inside the left band and scrolls. At 1280×800 it has about 100 px before it scrolls; the picture and the timeline are never covered. A phone held sideways still gets the sheet over the timeline. V4 shows it.' },
+    D21: { k: 'A' }
+  };
+  const isDecided = d => !!ANS[d.id];
   const tag = (i, svg) => { const c = i ? 'v10-nF' : 'v10-nS', t = esc(names()[i]); return svg ? '<tspan class="' + c + '">' + t + '</tspan>' : '<span class="' + c + '">' + t + '</span>'; };
   const nm = (s, svg) => String(s).replace(/\{S\}/g, () => tag(0, svg)).replace(/\{F\}/g, () => tag(1, svg));
   const plain = s => String(s).replace(/\{S\}/g, names()[0]).replace(/\{F\}/g, names()[1]);
@@ -245,21 +278,18 @@
 
   /* ------------------------------------------------------------ the decisions (§17, final) --------------------------- */
   const DEC = [
-    { id: 'D1', q: 'What are the two editors called?', why: 'It is the word on the switch, the New project cards and every Home card.', rec: 'A',
-      foot: '"Pro" is avoided: you use it for a paid version. The rest of this page uses the names you pick here.',
+    { id: 'D1', q: 'What are the two editors called?', why: 'It is the word on the cog’s switch and its explanation, and on everything {S} shows. New project and Home no longer carry it.', rec: 'A',
+      foot: '"Pro" is avoided: you use it for a paid version.',
       opts: [['A', 'Simple / Full', '<b>Simple / Full</b>: your own word, and "Full" promises nothing is taken away.'],
         ['B', 'Quick / Full', '<b>Quick / Full</b>.'], ['C', 'Clips / Layers', '<b>Clips / Layers</b>.'], ['D', 'Cut / Motion', '<b>Cut / Motion</b>.']],
       pic: k => { const [a, b] = NAMES[k]; return mock(nameCards(a, b)); } },
-    { id: 'D2', q: 'Where is the switch when you are in {F}, on the phone?', why: '{F}\'s play bar is already full, so the switch either takes a button you use or sits one tap away.', rec: 'B',
-      foot: 'On a computer the switch is always in the left group of the play bar. <b>B has a snag on small phones, measured:</b> {F}\'s ⋯ opens a tall strip of icon buttons, and on a 380×667 phone it is already too short today (the last one, clear export marks, is half cut off). With B\'s switch on top, two buttons are out of sight there, and even on a taller phone the last one slides away until you scroll the strip. So B comes with a small fix: a shorter item, or a strip that is meant to scroll. A adds a row to the same strip.',
-      opts: [['A', 'Slot 3 of the play bar', 'Slot 3 of {F}\'s play bar too; your ◐ Add-row switch moves into ⋯ as a Top/Bottom row and loses its knob.'],
-        ['B', 'First in ⋯, plus a back button', 'The first item inside {F}\'s ⋯ (one extra tap, your row untouched); after a switch or Open in {F}, a back-to-{S} button (the {S} icon with ‹) stands in slot 3 until you go back, and a short note says so. On a small phone ⋯\'s strip is already too short, so B comes with a small fix: a shorter item, or a strip meant to scroll.'],
-        ['C', 'Smaller buttons, five fit', 'On wider phones, like yours, every play-bar button gets a little smaller so five fit; narrower phones use B (so your row would change, and differ between phones).'],
-        ['D', 'Not on the play bar', 'Not on the play bar at all: only the ⚙ canvas settings and Home\'s ⋯ (the back-to-{S} button still appears after Open in {F}).']],
-      pic: k => mock(d2(k)) },
-    { id: 'D3', q: 'How does a new project choose its editor?', why: 'It decides what + New project does on your devices and on a friend\'s fresh install.', rec: 'A',
-      opts: [['A', 'Two cards, remembers your pick', 'Two cards in New project that remember your last pick; {F} stays picked on any device that already has projects, {S} only on a brand-new install; picking {S} folds the rarely used settings into one line.'],
-        ['B', 'Always {S}', 'Always start in {S}.'], ['C', 'Always {F}', 'Always start in {F}.']],
+    { id: 'D2', settled: true, q: 'Where is the switch?', why: 'Settled by your words, 1 Oct: <q>the option to switch between the two editors should be in the settings cog, making a third section in there. it can be a small button that just switches between editors and should have a button that you press that says ‘What should you use?’</q>',
+      said: '<b>Settled: the ⚙ cog’s third block.</b> Nothing is added to {F}’s play bar, its ⋯ menu or the video. The old choices (a button on {F}’s play bar, a first item in ⋯ with a back button, smaller buttons, menus only) are withdrawn.',
+      opts: [['S', 'The ⚙ cog', 'The ⚙ cog’s third block.']], pic: () => mock(d2()) },
+    { id: 'D3', q: 'How does a new project choose its editor?', why: 'It decides which editor you land in after Create.', rec: 'A',
+      reask: 'You said <q>D3 A</q> on the old page, but that A put two editor cards in New project, a dialog you use in {F}, so your 1 Oct rule rules it out and it is not applied.',
+      opts: [['A', 'Your last switch in ⚙', 'A new project opens in the editor this device last switched to in the ⚙ cog. New project itself is unchanged.'],
+        ['B', 'Always {F}', 'Always start in {F}; switch in the cog after.']],
       pic: k => mock(d3(k)) },
     { id: 'D4', q: 'Do text, stickers and overlays follow their clip?', why: 'It decides whether titles stay on their picture when you move or cut clips.', rec: 'A',
       before: () => before(beach(), { mark: { id: 'c1', kind: 'del' } }, '<b>Before.</b> The title sits on Waves, the shell sticker on Sandcastle. You delete <b>Arriving</b>.'),
@@ -314,8 +344,8 @@
     { id: 'D10', q: 'When a clip is selected', why: 'CapCut\'s worst trap is the main toolbar vanishing when a clip is tapped.', rec: 'A',
       opts: [['A', 'Its tools above the toolbar', 'Its tools appear in a row above the main toolbar, which never disappears.'], ['B', 'Its tools replace the toolbar', 'Its tools replace the toolbar, with a "‹ Done".']],
       pic: k => mock(d10(k)) },
-    { id: 'D11', q: 'The switch animation', why: 'You asked for all three (morph, fold, slide) to be built, with one played at random; this only decides when you choose the keeper.', rec: 'A', anim: true,
-      opts: [['A', 'All three, at random', 'Keep all three at random for now and name the keeper once you have lived with them.'], ['B', 'Pick one now', 'Pick one now from V1 and build only that.']],
+    { id: 'D11', q: 'The switch animation', why: 'It decides what plays as the cog closes after a switch, so you see the timeline move into the other editor.', rec: 'A', anim: true,
+      opts: [['A', 'All three, at random', 'Build all three (morph, fold, slide), played at random, and choose the keeper later.'], ['B', 'One now: the morph', 'Pick one now and build only that: the morph, the one on the far left.']],
       pic: k => mock(d11(k)) },
     { id: 'D12', q: 'The Assistant in {S}', why: 'It decides whether Ask is in {S} from the release that adds looks and captions.', rec: 'A',
       opts: [['A', 'Yes, an Ask button', 'An "Ask" button in the project tools when you have a key set, which edits through {S}\'s own commands (no gaps, one Undo).'],
@@ -324,15 +354,20 @@
     { id: 'D13', q: 'Transitions', why: 'It decides whether adding a transition changes your video\'s length.', rec: 'A',
       opts: [['A', 'Never shorter', 'They never make the video shorter.'], ['B', 'The video gets shorter', 'The two clips overlap, so the video gets shorter by the transition.']],
       pic: k => customStrip(d13(k), { note: k === 'A' ? 'Same length as before: 0:14.2.' : 'The clips overlap: 0.5 s shorter, 0:13.7.' }) },
-    { id: 'D14', q: 'Friends and {S}', why: 'It decides how soon you and a friend can edit one project in different editors.', rec: 'A',
-      opts: [['A', 'Looks first, clips next', 'Looks, text, captions and sound work together from the first release that edits; moving clips together comes in the "together" release (Phase 4).'],
-        ['B', 'Both at once, later', 'Wait and ship both at once.'], ['C', 'View only with friends', '{S} stays view-only while friends are in.']],
+    { id: 'D14', q: 'Friends and {S}: what works live with a friend in', why: 'It decides how soon you and a friend can edit one project in different editors.', rec: 'A',
+      opts: [['A', 'Looks, text, captions, sound', 'Looks, text, captions and sound work together from the first release that edits.'],
+        ['C', 'View only with friends', '{S} stays view-only while friends are in.']],
       pic: k => mock(d14(k)) },
+    { id: 'D14b', q: 'Moving clips while a friend who can edit is connected', why: 'It decides whether you and a friend can ever both move clips at once, and whether that may change {F}.', rec: 'A',
+      reask: 'Your <q>D14 A</q> on the old page included moving clips together later (Phase 4), and that release changes how {F} behaves with a friend in (its clip drag, refusals in {F}, undo waiting), so your 1 Oct rule rules it out and it is not applied to this half.',
+      opts: [['A', 'It waits, for good', 'Moving clips waits while a friend who can edit is connected, for good; {F} is untouched.'],
+        ['B', 'Build "together" later', 'Build "together" (Phase 4) later anyway, knowing it changes how {F} behaves in a session.']],
+      pic: k => mock(d14b(k)) },
     { id: 'D15', q: 'Build it?', why: 'The go-ahead; nothing is built until you say so.', rec: 'A',
-      opts: [['A', 'Build Phase 1', 'Build Phase 1 (see any project as clips, and the switch, behind a Settings switch you turn on) and show you.'], ['B', 'Keep planning', 'Keep planning.'], ['C', 'Not now', 'Not now.']],
+      opts: [['A', 'Build Phase 1', 'Build Phase 1 (see any project as clips, with the switch in the ⚙ cog and {F} untouched) and show you.'], ['B', 'Keep planning', 'Keep planning.'], ['C', 'Not now', 'Not now.']],
       pic: k => mock(d15(k)) },
     { id: 'D16', q: 'Icons and marks', why: 'You will look at these every day, and none may be copied. Drawn big and at their real size, none from CapCut or Alight Motion.', rec: 'A',
-      opts: [['A', 'The set drawn for you', 'The set marked recommended on the sheet (open "See the seven rows" below).'], ['B', 'Pick per row', 'Pick per row, in "See the seven rows" below.']],
+      opts: [['A', 'The set drawn for you', 'The set marked recommended on the sheet (open "See the rows" below).'], ['B', 'Pick per row', 'Pick per row, in "See the rows" below.']],
       pic: k => mock(d16(k)), extra: () => iconRows() },
     { id: 'D17', q: 'Music longer than your clips', why: 'It decides whether a long song makes the video run on in black.', rec: 'A',
       opts: [['A', 'Ends with the video', 'It ends with the video (fading out, up to 2 s), and a switch lets it run on.'], ['B', 'Runs on in black', 'The video runs on in black, as {F} does today.']],
@@ -341,8 +376,9 @@
         const d = beach(), s = d.layers.find(l => l.id === 'song'); s.duration = 95; s.sm = { stay: true }; d.project.duration = 95;
         return stripPic(d, { span: 20, black: [14.2, 20], runLabel: '→ 1:35' }, { note: 'The video runs on to 1:35, black after 0:14.' });
       } },
-    { id: 'D18', q: 'The order of {S}\'s play-bar buttons on the phone', why: 'It decides where ✂ and the switch sit under your thumb.', rec: 'A',
-      opts: [['A', '⋯ ✂ ⇄ |◀', '⋯ · ✂ · ⇄ · |◀: the switch in slot 3, the same spot as D2-B\'s back button in {F}.'], ['B', '⋯ ⇄ ✂ |◀', '⋯ · ⇄ · ✂ · |◀: the switch where {F} has ⧉.']],
+    { id: 'D18', q: 'The order of {S}\'s play-bar buttons on the phone', why: 'It decides where ✂ and |◀ sit under your thumb. {F}\'s bar stays ⋯ ⧉ ◐ |◀ either way.', rec: 'A',
+      reask: 'You left this as <q>D18 ?</q>, and it was rewritten after you answered: the switch left the play bar for the ⚙ cog, so the bar has one slot fewer.',
+      opts: [['A', '⋯ ✂ · |◀', '⋯ · ✂ · (gap) · |◀: |◀ stays where {F} has it, so it is under the same thumb in both editors.'], ['B', '⋯ ✂ |◀', '⋯ · ✂ · |◀ packed, |◀ one slot nearer the middle.']],
       pic: k => mock(d18(k)) },
     { id: 'D19', q: 'Benchmarks (the marks you tap on the beat)', why: 'It decides whether a mark stays on the song or moves with a clip when clips before it are removed.', rec: 'A',
       before: () => before(beach(), { mark: { id: 'c1', kind: 'del' }, beats: BEATS, guides: true }, '<b>Before.</b> Yellow marks you tapped on the beat, each on a cut or a moment in a clip. You delete <b>Arriving</b>.'),
@@ -361,8 +397,24 @@
     { id: 'D21', q: 'Can you add shapes, saved elements and templates inside {S}?', why: 'Without it you switch to {F} for every lower third or template.', rec: 'A',
       opts: [['A', 'Yes, in Clips › Extras', 'Yes, under Clips › Extras, and what you drop in stays editable piece by piece.'],
         ['B', 'Only in {F}', 'Only in {F}, with one line in the Clips tool: "Shapes, elements and templates are in {F} ›".']],
-      pic: k => mock(d21(k)) }
+      pic: k => mock(d21(k)) },
+    { id: 'D22', q: 'Does a Settings row turn the cog’s Editor block on while {S} is being tested?', why: 'A new Settings row is a change to {F} you would see, and a second home for the switch.', rec: 'A', fresh: true,
+      opts: [['A', 'No Settings row', 'No Settings row: the cog’s block is the only door, there from the release that brings {S}.'],
+        ['B', 'A Settings row', 'A "{S} editor" row in Settings turns the cog’s block on while it is tested.']],
+      pic: k => mock(d22(k)) },
+    { id: 'D23', q: 'After you tap the switch, does the cog close?', why: 'Closing shows you the other editor at once: two taps in all.', rec: 'A', fresh: true,
+      opts: [['A', 'It closes', 'It closes, so you see the other editor; it stays open only when Canvas settings has picks you have not applied, or Friends is open.'],
+        ['B', 'It stays open', 'It stays open until you close it.']],
+      pic: k => mock(d23(k)) },
+    { id: 'D24', q: 'Your phone held sideways: where does the cog’s Editor block go?', why: 'Measured on the real app: on your phone sideways (956×440), and at 932×430 and 844×390, the Editor tile lands off the screen with Canvas or Friends open, so the switch cannot be reached, and in {S} the cog is the only way back to {F}. Each picture is the real app, with Canvas open.', rec: 'B', fresh: true, photos: true,
+      before: () => '<span class="v10-pic photo wide"><img src="img/v10-d24-0-crop.jpg" width="1200" height="332" alt="The plan as written, on your phone sideways: with Canvas open the Editor tile is above the top edge; with Friends open the switch is off screen." loading="lazy" decoding="async"></span><figcaption><b>The problem.</b> The plan as written, on your phone sideways: the switch is above the top of the screen. <a href="img/v10-d24-0-the-problem.jpg" target="_blank" rel="noopener">The whole sheet</a></figcaption>',
+      opts: [['A', 'Its own column', 'The Editor tile gets its own column at the far left, the same tile as on a computer. Where even that has no room (844×390) it falls back to B. Two looks to build and test, and on your phone the tile is about 520 px from the cog.'],
+        ['B', 'On the cog’s row', 'The switch and "What should you use?" sit on the cog’s own row, just left of the cog. Canvas settings and Friends stay exactly as they are. One rule for every short sideways screen, beside the cog you just tapped, and it never moves during a swap.'],
+        ['C', 'A strip by the cog', 'An Editor strip along the cog’s side of the pair. Canvas and Friends get 54 px shorter, which changes {F}, so your 1 Oct rule rules it out.']],
+      pic: k => '<span class="v10-pic photo"><img src="img/v10-d24-' + k + '-crop.jpg" width="598" height="332" alt="Option ' + k + ' on your phone sideways, 956×440, with Canvas open" loading="lazy" decoding="async"></span>',
+      foot: 'Under each option, "What should you use?" opens as the big block with Friends and Canvas as two bars beside it. Upright phones and computers are not part of this pick. The whole sheets, with 844×390, Friends open and upright: <a href="img/v10-d24-A-own-column.jpg" target="_blank" rel="noopener">A</a> · <a href="img/v10-d24-B-on-the-cog-row.jpg" target="_blank" rel="noopener">B</a> · <a href="img/v10-d24-C-strip-by-the-cog.jpg" target="_blank" rel="noopener">C</a>.' }
   ];
+  const OPEN = DEC.filter(d => !d.settled && !isDecided(d)), NQ = OPEN.length;   // the six still to answer (D2 settled, the rest his)
   const DMAP = new Map(DEC.map(d => [d.id, d]));
 
   /* the "decided with the recommended option" pictures §17 asks V10 to draw: the chosen one first */
@@ -375,7 +427,7 @@
         if (k === 'A') return stripPic(after(ed => { ed.run('stayPut', { id: 'title', on: true }); ed.run('deleteClip', { id: 'c2' }); }), { by: { title: 1 } }, { app: 'Deleted clip · kept Sam\'s title', btn: ['Undo', 'Show'] });
         return stripPic(after(ed => ed.run('deleteClip', { id: 'c2' })), {}, { app: 'Deleted clip and 1 thing on it', btn: ['Undo'] });
       } },
-    { id: 'settings', label: 'Where the Settings row sits', q: 'Where the {S} preview switch sits in Settings', why: 'It is the switch you turn on to try Phase 1.',
+    { id: 'settings', label: 'Where the Settings row sits (only under D22 B)', q: 'Where the {S} preview switch sits in Settings, only if D22 is B', why: 'Under D22 A (recommended) there is no Settings row at all.',
       opts: [['A', 'Its own group, above Work with friends', 'In its own untitled group, directly above Work with friends.'], ['B', 'Under "Try it early"', 'Under a group called "Try it early".']], pic: k => mock(x3(k)) },
     { id: 'offline', label: 'A friend who can edit goes offline', q: 'A friend who can edit goes offline', why: 'While they are away their changes wait, so clips stay put for everyone.',
       opts: [['A', 'Until they leave', 'Clips stay put until they leave, you remove them, or you tap Arrange anyway or Make Sam a Viewer. It does not end by itself.'],
@@ -400,7 +452,6 @@
     ['clipRow', 'The main track', 'Clip row'],
     ['follow', 'The follow switch', 'Stay put'],
     ['capSwitch', 'The caption-track switch', 'Follows the clips / Stays with the sound'],
-    ['endSwitch', 'The end switch', 'Ends with the video'],
     ['gap', 'A gap', 'Close gap · Close all gaps'],
     ['mute', 'Mute', 'Mute the clip row'],
     ['soundOut', 'Sound out of a clip', 'Take sound out'],
@@ -413,16 +464,21 @@
     ['missing', 'Missing footage', 'No footage'],
     ['band', 'The black band at the end', 'End with the video · Keep as end card'],
     ['hint', 'The first hint (phone)', 'Tap a clip to change its speed or look · ✂ splits it at the line'],
-    ['preview', 'The Settings row', 'See any project as clips — still being tested.']
+    ['cogAsk', 'The cog block’s button', 'What should you use?'],
+    ['cogFoot', 'The line under the explanation', 'Same project in both. Nothing is converted, and you can switch back any time.'],
+    ['preview', 'The Settings row (only under D22 B)', 'See any project as clips — still being tested.']
   ];
   const FACES = { id: 'faces', rec: 'A', opts: [['A', '⤒ Lift off · ⤓ Into row'], ['B', '⤒ On top · ⤓ Into row'], ['C', 'Move to top layer · Put back in line']] };
 
-  /* D16's seven rows (§17): each drawn big and at real size; candidate 1 is the recommended one */
+  /* D16's rows (§17): each drawn big and at real size; candidate 1 is the recommended one. Row 6 (the back-to-Quick button
+     in Full) is withdrawn with D2 (§0.4 V2); the rows keep §17's numbers, so the next one is 7. */
+  const rowNo = row => row.id.slice(1);
   const ROWS = [
-    { id: 'r1', name: 'The switch glyph, {S} and {F} (also on New project and Home)', W: 56, H: 24, big: 2, cands: [
-      () => ic('qA', 0, 0, 24, C.accent) + ic('fA', 32, 0, 24, C.fullInk),
-      () => ic('qB', 0, 0, 24, C.accent) + ic('fB', 32, 0, 24, C.fullInk),
-      () => ic('qC', 0, 0, 24, C.accent) + ic('fC', 32, 0, 24, C.fullInk)] },
+    { id: 'r1', name: 'The cog block’s icon and its two option pictures ({S}, {F})', W: 120, H: 34, big: 1.6, cands: [
+      () => '<circle cx="15" cy="17" r="14" fill="rgba(90,199,237,.14)"/>' + ic('edblock', 6, 8, 18, C.accent) +
+        r(36, 4, 17, 6, 3, '#9fb6c0') + r(34, 13, 18, 12, 2.4, '#cfe2e8') + r(53.5, 13, 18, 12, 2.4, '#cfe2e8') + r(73, 13, 18, 12, 2.4, '#cfe2e8') + r(34, 28, 57, 4, 2, '#6f8a95') +
+        r(96, 3, 18, 5, 2.5, C.accent) + r(94, 10, 20, 5, 2.5, C.accent) + r(102, 17, 18, 5, 2.5, C.accent) + r(96, 24, 17, 5, 2.5, C.accent),
+      () => '<circle cx="15" cy="17" r="14" fill="rgba(90,199,237,.14)"/>' + ic('gear', 6, 8, 18, C.accent) + ic('qA', 40, 3, 28, C.accent) + ic('fA', 82, 3, 28, C.fullInk)] },
     { id: 'r2', name: 'The Captions, Text and Overlay section marks', W: 84, H: 24, big: 2, cands: [
       () => ic('captions', 0, 0, 24, C.cap) + ic('text', 30, 0, 24, C.txt) + ic('overlay', 60, 0, 24, C.ov),
       () => r(1, 1, 22, 22, 6, C.cap) + t(12, 16, 'CC', { size: 9.5, weight: 800, anchor: 'middle', fill: '#1a1406' }) + r(31, 1, 22, 22, 6, C.txt) +
@@ -441,48 +497,40 @@
         r(39, 2, 32, 20, 10, '#2a1418', ' stroke="' + C.bad + '" stroke-width="1.5"') + t(55, 15.5, '0.4s', { size: 9, weight: 700, anchor: 'middle', fill: C.bad }),
       () => r(1, 2, 32, 20, 3, '#2a1f14', ' stroke="' + C.warn + '" stroke-width="1.5"') + '<path d="M7 12h20M7 12l3.5-3.5M7 12l3.5 3.5M27 12l-3.5-3.5M27 12l-3.5 3.5" stroke="' + C.warn + '" stroke-width="1.6" fill="none" stroke-linecap="round"/>' +
         r(39, 2, 32, 20, 3, '#2a1418', ' stroke="' + C.bad + '" stroke-width="1.5"') + '<path d="M44 12h7M59 12h7M51 12l-3-3M51 12l-3 3M59 12l3-3M59 12l3 3" stroke="' + C.bad + '" stroke-width="1.6" fill="none" stroke-linecap="round"/>'] },
-    { id: 'r6', name: 'The back-to-{S} button, in {F}', W: 34, H: 34, big: 1.6, cands: [
-      () => pb(0, 0, 34, '', { ring: true, back: true }),
-      () => r(0.8, 0.8, 32.4, 32.4, 5, 'rgba(90,199,237,.08)', ' stroke="' + C.accent + '" stroke-width="1.4"') + ic('undo', 7, 7, 20, C.accent)] },
     { id: 'r7', name: 'The tool icons (they must read without their words)', W: 174, H: 24, big: 1.25, cands: [
       () => ['clips', 'text', 'captions', 'music', 'overlay', 'look'].map((n, i) => ic(n, i * 30, 0, 24, C.text)).join(''),
       () => ['clips', 'text', 'captions', 'music', 'overlay', 'look'].map((n, i) => r(i * 30, 0, 24, 24, 6, 'rgba(90,199,237,.18)') + ic(n, i * 30 + 4, 4, 16, C.accent, 2)).join('')] }
   ];
 
   /* ------------------------------------------------------------ the mock pictures ------------------------------------ */
-  function nameCards(a, b) {
-    const card = (x, g, col, name) => r(x, 8, 64, 50, 8, C.panel3, ' stroke="' + C.line + '"') + ic(g, x + 20, 13, 24, col) + t(x + 32, 49, esc(name), { size: 11.5, weight: 800, anchor: 'middle' });
-    return card(8, 'qA', C.accent, a) + card(78, 'fA', C.fullInk, b) +
-      r(22, 68, 106, 19, 7, 'rgba(18,40,51,.8)', ' stroke="rgba(188,230,239,.22)"') + ic('qA', 28, 71.5, 12, C.accent) + t(44, 81, 'Switch to ' + esc(b), { size: 8.5 });
+  /* the cog's small Editor bar, drawn at 150 wide: [icon] [a ⇄ b] [What should you use?]; knob on the editor you are in */
+  function edBar(x, y, w, a, b, onB, hl) {
+    const h = 24, sw = Math.min(72, w - 60);
+    return r(x, y, w, h, 6, C.panel3, ' stroke="' + (hl ? C.accent : C.line) + '"' + (hl ? ' stroke-width="1.4"' : '')) +
+      '<circle cx="' + f(x + 11) + '" cy="' + f(y + h / 2) + '" r="7.5" fill="rgba(90,199,237,.16)"/>' + ic('edblock', x + 5.5, y + h / 2 - 5.5, 11, C.accent) +
+      r(x + 22, y + 4, sw, h - 8, (h - 8) / 2, 'rgba(0,0,0,.3)', ' stroke="' + C.line + '"') + r(x + 23.5 + (onB ? sw / 2 : 0), y + 5.5, sw / 2 - 3, h - 11, (h - 11) / 2, C.accent) +
+      t(x + 22 + sw / 4, y + h / 2 + 2.6, a, { size: 6.8, anchor: 'middle', fill: onB ? C.dim : '#04161d' }) + t(x + 22 + sw * 3 / 4, y + h / 2 + 2.6, b, { size: 6.8, anchor: 'middle', fill: onB ? '#04161d' : C.dim }) +
+      r(x + w - 34, y + 4, 30, h - 8, 4, 'rgba(255,255,255,.05)', ' stroke="' + C.line + '"') + t(x + w - 19, y + h / 2 - 0.5, 'What', { size: 5.6, anchor: 'middle', fill: C.text }) + t(x + w - 19, y + h / 2 + 5.5, 'to use?', { size: 5.6, anchor: 'middle', fill: C.text });
   }
-  function d2(k) {
-    let s = barBg(64, 26);
-    const S = [3, 24, 45, 66];                                // four buttons, the time and ▷| end 10 px short of the edge, so nothing reads as cut
-    const row = list => list.map((it, i) => pb(S[i], 67, 20, it.g, it)).join('');
-    if (k === 'A') s += menu(4, 6, 98, [{ g: 'knob', text: 'Add row · Top' }, { text: 'Loop' }, { text: 'Preview speed' }]) + row([{ g: 'more', on: true }, { g: 'twin' }, { g: 'fA', color: C.accent }, { g: 'toStart' }]);
-    if (k === 'B') s += menu(4, 6, 98, [{ g: 'qA', text: '{S} editor'.replace('{S}', tag(0, true)), hl: true }, { text: 'Loop' }, { text: 'Preview speed' }]) + row([{ g: 'more', on: true }, { g: 'twin' }, { g: 'knob' }, { g: 'toStart' }]);
-    if (k === 'C') {
-      [4, 22, 40, 58, 76].forEach((x, i) => { s += pb(x, 68.5, 17, ['more', 'twin', 'fA', 'knob', 'toStart'][i], i === 2 ? { color: C.accent } : {}); });
-      s += '<path d="M4 60h89M4 57v6M93 57v6" stroke="' + C.dim + '" stroke-width=".8"/>' + t(48.5, 55, 'five, a bit smaller', { size: 8, anchor: 'middle', fill: C.dim }) +
-        t(75, 20, 'Wider phones, like yours', { size: 9, anchor: 'middle' }) + t(75, 33, 'narrower phones: like B', { size: 8, anchor: 'middle', fill: C.faint });
-      return s + timePill(95, 69, 36, 16) + ic('toEnd', 133, 70.5, 12, C.text);
-    }
-    if (k === 'D') {
-      s += row([{ g: 'more' }, { g: 'twin' }, { g: 'knob' }, { g: 'toStart' }]) + ic('gear', 6, 8, 14, C.accent) +
-        r(26, 4, 120, 52, 7, C.panel3, ' stroke="' + C.line + '"') + t(34, 18, 'Canvas settings', { size: 9, weight: 700 }) + t(34, 40, 'Editor', { size: 8.5, fill: C.dim }) +
-        r(66, 30, 74, 15, 7.5, 'rgba(255,255,255,.06)') + r(104, 31, 35, 13, 6.5, 'rgba(155,135,245,.3)') +
-        t(85, 40.5, tag(0, true), { size: 8, anchor: 'middle', fill: C.dim }) + t(121.5, 40.5, tag(1, true), { size: 8, anchor: 'middle' });
-    }
-    return s + timePill(89, 70, 38, 16) + ic('toEnd', 129, 71, 13, C.text);
+  function nameCards(a, b) {
+    return t(75, 26, esc(a) + '  ⇄  ' + esc(b), { size: 13, weight: 800, anchor: 'middle' }) + t(75, 42, 'the words on the cog’s switch', { size: 7.5, anchor: 'middle', fill: C.faint }) +
+      edBar(4, 56, 142, esc(a), esc(b), true, false);
+  }
+  /* D2, settled: the cog's three blocks, the new one small on top */
+  function d2() {
+    return edBar(4, 3, 142, tag(0, true), tag(1, true), true, true) +
+      r(4, 31, 142, 16, 5, C.panel3, ' stroke="' + C.line + '"') + ic('friends', 9, 34, 10, C.accent) + t(24, 42, 'Friends', { size: 7.5, weight: 700 }) +
+      r(4, 51, 142, 40, 6, C.panel3, ' stroke="' + C.line + '"') + t(11, 63, 'Canvas settings', { size: 8, weight: 700 }) +
+      [0, 1, 2, 3, 4, 5].map(i => r(11 + i * 21.5, 68, 18, 12, 2.5, i === 1 ? C.accent : C.panel, ' stroke="' + C.line + '"')).join('') + r(110, 83, 30, 6, 3, C.accent);
   }
   function d3(k) {
-    let s = r(6, 4, 138, 86, 9, C.panel3, ' stroke="' + C.line + '"') + t(14, 18, 'New project', { size: 9.5, weight: 700 });
-    const card = (x, g, col, i, pick) => r(x, 24, 60, 30, 6, pick ? 'rgba(90,199,237,.12)' : C.panel, ' stroke="' + (pick ? C.accent : C.line) + '"' + (pick ? ' stroke-width="1.5"' : '')) +
-      ic(g, x + 6, 31, 15, col) + t(x + 25, 42.5, tag(i, true), { size: 9, weight: 700 });
-    if (k === 'A') s += card(14, 'qA', C.accent, 0, false) + card(78, 'fA', C.fullInk, 1, true) + t(108, 62, 'your last pick', { size: 7.5, anchor: 'middle', fill: C.accent });
-    else s += r(14, 26, 122, 22, 6, C.panel, ' stroke="' + C.line + '"') + ic(k === 'B' ? 'qA' : 'fA', 20, 30.5, 13, k === 'B' ? C.accent : C.fullInk) +
-      t(38, 40.5, 'Opens in ' + tag(k === 'B' ? 0 : 1, true), { size: 9, weight: 700 }) + t(14, 62, 'no choice shown', { size: 7.5, fill: C.faint });
-    return s + t(14, 81, 'Name  Beach day', { size: 8, fill: C.dim }) + r(100, 70, 38, 16, 6, C.accent) + t(119, 81, 'Create', { size: 8, weight: 700, anchor: 'middle', fill: '#04161d' });
+    let s = r(6, 4, 138, 70, 9, C.panel3, ' stroke="' + C.line + '"') + t(14, 18, 'New project', { size: 9.5, weight: 700 }) + t(140, 18, 'as today', { size: 7, anchor: 'end', fill: C.faint });
+    s += t(14, 32, 'Name  Beach day', { size: 8, fill: C.dim }) + [0, 1, 2, 3].map(i => r(14 + i * 22, 38, 19, 14, 3, i === 0 ? C.accent : C.panel, ' stroke="' + C.line + '"')).join('') +
+      r(100, 56, 38, 14, 6, C.accent) + t(119, 66, 'Create', { size: 8, weight: 700, anchor: 'middle', fill: '#04161d' });
+    s += k === 'A'
+      ? ic('gear', 8, 77, 12, C.accent) + t(24, 86.5, 'your last switch in ⚙: ' + tag(0, true), { size: 7.5, fill: C.dim })
+      : ic('fA', 8, 77, 12, C.fullInk) + t(24, 86.5, 'always opens in ' + tag(1, true), { size: 7.5, fill: C.dim });
+    return s;
   }
   function clipRowMock(y, h, selIdx) {
     const looks = [['#5fd3e6', '#1f6fa3'], ['#f3d27a', '#c98b4b'], ['#ff9966', '#6a3d7a']], xs = [[8, 56], [57, 104], [105, 144]];
@@ -529,7 +577,7 @@
       if (keep) s += r(x - 2, 6, 46, 46, 8, 'none', ' stroke="' + C.accent + '" stroke-width="1.6"');
     });
     s += k === 'A' ? ic('shuffle', 36, 71, 14, C.accent) + t(55, 82, 'one at random', { size: 8.5, fill: C.dim })
-      : t(75, 82, 'you name one now', { size: 8.5, anchor: 'middle', fill: C.dim });
+      : t(75, 82, 'the morph only', { size: 8.5, anchor: 'middle', fill: C.dim });
     return s;
   }
   function d12(k) {
@@ -566,48 +614,83 @@
     let s = r(4, 4, 142, 86, 8, C.panel3, ' stroke="' + C.line + '"');
     rows.forEach((name, i) => {
       const y = 18 + i * 16;
-      s += t(12, y + 3, name, { size: 9.5, fill: C.text, weight: 600 });
+      s += t(12, y + 3, name, { size: 9.5, fill: i === 4 ? C.faint : C.text, weight: 600 });
       let g, col, word;
-      if (k === 'A') { if (i < 4) { g = 'okC'; col = C.good; word = 'first'; } else { g = 'clock'; col = C.warn; word = 'Phase 4'; } }
-      else if (k === 'B') { g = 'clock'; col = C.warn; word = 'Phase 4'; }
-      else { g = 'eye'; col = C.dim; word = 'watch'; }
-      s += t(118, y + 3, word, { size: 7.5, anchor: 'end', fill: C.faint }) + ic(g, 122, y - 6.5, 13, col, 2);
+      if (i === 4) { g = null; word = 'D14b'; }
+      else if (k === 'C') { g = 'eye'; col = C.dim; word = 'watch'; }
+      else { g = 'okC'; col = C.good; word = 'live'; }
+      s += t(118, y + 3, esc(word), { size: 7.5, anchor: 'end', fill: C.faint }) + (g ? ic(g, 122, y - 6.5, 13, col, 2) : t(128.5, y + 3, '?', { size: 9, weight: 800, anchor: 'middle', fill: C.faint }));
     });
     return s;
   }
+  /* D14b: a friend who can edit is connected. A: moving clips waits, Full as today. B: "together" later, and Full changes. */
+  function d14b(k) {
+    const col = (x, title, sub) => r(x, 4, 69, 86, 8, C.panel3, ' stroke="' + C.line + '"') + t(x + 6, 17, title, { size: 8.5, weight: 700 }) + t(x + 6, 27, sub, { size: 7, fill: C.faint });
+    let s = col(4, tag(0, true), 'you') + col(77, tag(1, true), 'Sam');
+    s += clipRowMockMini(10, 36) + clipRowMockMini(83, 36);
+    if (k === 'A') {
+      s += ic('clock', 41, 36.5, 13, C.warn, 2) + t(10, 64, 'clips stay put', { size: 7.5, fill: C.dim }) + t(10, 75, 'while Sam edits', { size: 7, fill: C.faint }) +
+        ic('okC', 114, 36.5, 13, C.good, 2) + t(83, 64, 'as today', { size: 7.5, fill: C.dim }) + t(83, 75, 'nothing new', { size: 7, fill: C.faint });
+    } else {
+      s += '<path d="M40 43h8M45 40l3 3-3 3" stroke="' + C.accent + '" stroke-width="1.4" fill="none" stroke-linecap="round"/>' + t(10, 64, 'both move clips', { size: 7.5, fill: C.dim }) + t(10, 75, 'later (Phase 4)', { size: 7, fill: C.faint }) +
+        '<circle cx="120.5" cy="43" r="6" fill="' + C.bad + '"/>' + t(120.5, 46, '!', { size: 8, weight: 800, anchor: 'middle', fill: '#1a0d06' }) +
+        t(83, 64, tag(1, true) + ' changes', { size: 7.5, fill: C.bad }) + t(83, 75, 'with a friend in', { size: 7, fill: C.faint });
+    }
+    return s;
+  }
   function d15(k) {
-    if (k === 'A') return r(6, 12, 138, 46, 8, C.panel3, ' stroke="' + C.line + '"') + t(13, 28, 'See any project as clips', { size: 9, weight: 700 }) +
-      t(13, 46, 'still being tested.', { size: 8.5, fill: C.dim }) + toggle(117, 37, true) +
-      r(6, 66, 42, 16, 8, 'rgba(90,199,237,.16)', ' stroke="rgba(90,199,237,.5)"') + t(27, 77.5, 'Phase 1', { size: 8, weight: 700, anchor: 'middle', fill: C.accent }) +
-      t(54, 77.5, 'you turn it on', { size: 8, fill: C.faint });
+    if (k === 'A') return edBar(4, 10, 142, tag(0, true), tag(1, true), true, true) + t(75, 50, 'the switch in the ⚙ cog', { size: 8.5, anchor: 'middle', fill: C.dim }) +
+      r(6, 64, 42, 16, 8, 'rgba(90,199,237,.16)', ' stroke="rgba(90,199,237,.5)"') + t(27, 75.5, 'Phase 1', { size: 8, weight: 700, anchor: 'middle', fill: C.accent }) +
+      t(54, 75.5, tag(1, true) + ' untouched', { size: 8, fill: C.faint });
     if (k === 'B') return ic('book', 57, 12, 36, C.dim) + t(75, 68, 'Keep planning', { size: 10, anchor: 'middle' });
     return '<circle cx="75" cy="32" r="18" fill="none" stroke="' + C.dim + '" stroke-width="1.8"/>' + r(68, 24, 4.5, 16, 1.2, C.dim) + r(77.5, 24, 4.5, 16, 1.2, C.dim) + t(75, 68, 'Not now', { size: 10, anchor: 'middle' });
   }
   function d16(k) {
     if (k === 'A') {
       const cells = [ROWS[0].cands[0](), ROWS[1].cands[0](), ROWS[4].cands[0]()];
-      return '<g transform="translate(10 8) scale(.9)">' + cells[0] + '</g>' + '<g transform="translate(70 8) scale(.85)">' + cells[1] + '</g>' +
+      return '<g transform="translate(8 6) scale(.55)">' + cells[0] + '</g>' + '<g transform="translate(78 8) scale(.8)">' + cells[1] + '</g>' +
         '<g transform="translate(10 40)">' + r(0, 0, 22, 14, 3.5, 'rgba(155,135,245,.9)') + ic('spark', 5.5, 1.5, 11, '#120c2a') + '</g>' +
-        '<g transform="translate(40 34)">' + pb(0, 0, 26, '', { ring: true, back: true }) + '</g>' + '<g transform="translate(74 36) scale(.9)">' + cells[2] + '</g>' +
+        '<g transform="translate(74 36) scale(.9)">' + cells[2] + '</g>' +
         t(75, 84, 'one set, drawn for you', { size: 8.5, anchor: 'middle', fill: C.dim });
     }
     let s = '';
-    ROWS[0].cands.forEach((c, i) => { s += '<g transform="translate(' + (8 + i * 47) + ' 18) scale(.72)">' + c() + '</g>' + t(8 + i * 47 + 20, 50, String(i + 1), { size: 9, anchor: 'middle', fill: i === 1 ? C.accent : C.dim }); });
-    return s + r(8 + 47 - 4, 12, 48, 44, 7, 'none', ' stroke="' + C.accent + '" stroke-width="1.4"') + t(75, 78, 'a pick for each of 7 rows', { size: 8.5, anchor: 'middle', fill: C.dim });
+    ROWS[0].cands.forEach((c, i) => { s += '<g transform="translate(' + (8 + i * 70) + ' 18) scale(.55)">' + c() + '</g>' + t(8 + i * 70 + 33, 50, String(i + 1), { size: 9, anchor: 'middle', fill: i === 1 ? C.accent : C.dim }); });
+    return s + r(8 + 70 - 4, 12, 74, 44, 7, 'none', ' stroke="' + C.accent + '" stroke-width="1.4"') + t(75, 78, 'a pick for each row', { size: 8.5, anchor: 'middle', fill: C.dim });
   }
   function d18(k) {
     const S = [6, 31, 56, 81], y1 = 16, y2 = 62;
     let s = barBg(y1 - 3, 28) + barBg(y2 - 3, 28);
-    s += t(6, 10, tag(0, true), { size: 8, fill: C.accent }) + t(6, 56, tag(1, true) + ', after a switch', { size: 8, fill: C.faint });
-    const top = k === 'A' ? [{ g: 'more' }, { g: 'split' }, { g: 'qA', color: C.accent }, { g: 'toStart' }] : [{ g: 'more' }, { g: 'qA', color: C.accent }, { g: 'split' }, { g: 'toStart' }];
-    top.forEach((it, i) => { s += pb(S[i], y1, 22, it.g, it); });
-    [{ g: 'more' }, { g: 'twin' }, { ring: true, back: true }, { g: 'toStart' }].forEach((it, i) => { s += pb(S[i], y2, 22, it.g, it); });
+    s += t(6, 10, tag(0, true), { size: 8, fill: C.accent }) + t(6, 56, tag(1, true) + ', as today', { size: 8, fill: C.faint });
+    const top = k === 'A' ? [{ g: 'more' }, { g: 'split' }, null, { g: 'toStart' }] : [{ g: 'more' }, { g: 'split' }, { g: 'toStart' }];
+    top.forEach((it, i) => { if (it) s += pb(S[i], y1, 22, it.g, it); });
+    [{ g: 'more' }, { g: 'layers' }, { g: 'knob' }, { g: 'toStart' }].forEach((it, i) => { s += pb(S[i], y2, 22, it.g, it); });
     s += timePill(108, y1 + 3, 38, 16) + timePill(108, y2 + 3, 38, 16);
     const hl = (x, ya, yb) => r(x - 2.5, ya, 27, yb - ya, 6, 'none', ' stroke="' + C.kf + '" stroke-width="1.2" stroke-dasharray="3 2"');
-    if (k === 'A') s += hl(S[2], y1 - 2.5, y2 + 24.5);
-    else s += hl(S[1], y1 - 2.5, y1 + 24.5) + hl(S[2], y2 - 2.5, y2 + 24.5);
+    if (k === 'A') s += hl(S[3], y1 - 2.5, y2 + 24.5);
+    else s += hl(S[2], y1 - 2.5, y1 + 24.5) + hl(S[3], y2 - 2.5, y2 + 24.5);
     return s;
   }
+  function d22(k) {
+    const head = (y, text) => t(10, y, text, { size: 7, weight: 700, fill: C.faint, extra: ' letter-spacing=".6"' });
+    const fr = y => r(6, y, 138, 24, 7, C.panel3, ' stroke="' + C.line + '"') + t(13, y + 15.5, 'Share live', { size: 8.5 }) + ic('chevR', 130, y + 6.5, 11, C.dim, 2);
+    if (k === 'A') return t(10, 12, 'Settings', { size: 9, weight: 700 }) + t(140, 12, 'as today', { size: 7, anchor: 'end', fill: C.faint }) + head(30, 'WORK WITH FRIENDS') + fr(36) +
+      t(75, 80, 'the switch is only in the ⚙ cog', { size: 8, anchor: 'middle', fill: C.dim });
+    return r(6, 6, 138, 30, 7, C.panel3, ' stroke="' + C.accent + '"') + t(13, 19, 'See any project as clips', { size: 8.5, weight: 700 }) + t(13, 30, 'still being tested.', { size: 7.5, fill: C.dim }) + toggle(119, 15, true) +
+      head(50, 'WORK WITH FRIENDS') + fr(56) + t(75, 90, 'a new row in ' + tag(1, true) + '’s Settings', { size: 7.5, anchor: 'middle', fill: C.warn });
+  }
+  function d23(k) {
+    let s = edBar(4, 6, 92, tag(0, true), tag(1, true), false, true);
+    if (k === 'A') {
+      s += ic('chevR', 98, 10, 16, C.accent, 2.4) + r(116, 4, 30, 30, 5, C.panel) + clipRowMockMini(118, 12) +
+        t(75, 56, 'tap the switch: the cog closes,', { size: 8, anchor: 'middle', fill: C.dim }) + t(75, 68, 'and you see the other editor', { size: 8, anchor: 'middle', fill: C.dim }) +
+        t(75, 86, 'stays open if Canvas has unapplied picks', { size: 7, anchor: 'middle', fill: C.faint });
+    } else {
+      s += r(4, 34, 142, 18, 5, C.panel3, ' stroke="' + C.line + '"') + t(10, 46, 'Friends', { size: 7.5 }) + r(4, 56, 142, 18, 5, C.panel3, ' stroke="' + C.line + '"') + t(10, 68, 'Canvas', { size: 7.5 }) +
+        t(75, 88, 'the cog stays until you close it', { size: 8, anchor: 'middle', fill: C.dim });
+    }
+    return s;
+  }
+  function clipRowMockMini(x, y) { return r(x, y, 8, 14, 1.5, '#5fd3e6') + r(x + 9, y, 8, 14, 1.5, '#f3d27a') + r(x + 18, y, 8, 14, 1.5, '#ff9966'); }
   function d20(k) {
     const id = uid('g');
     let s = '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5fd3e6"/><stop offset="1" stop-color="#1f6fa3"/></linearGradient></defs>' +
@@ -685,12 +768,33 @@
     const c = el('article', 'v10-card' + (kind === 'x' ? ' x' : ''));
     c.id = 'v10-' + d.id; c.dataset.d = d.id;
     const hid = 'v10-h-' + d.id;
-    c.innerHTML = '<header class="v10-q">' + (kind === 'x' ? '' : '<span class="v10-num">' + d.id + '</span>') + '<div class="v10-qt"><h3 id="' + hid + '" tabindex="-1">' + nm(d.q) + '</h3>' +
-      '<p class="v10-why">' + nm(d.why) + '</p></div></header>' +
-      (d.before ? '<figure class="v10-before">' + d.before() + '</figure>' : '') +
-      '<div class="v10-opts n' + d.opts.length + '" role="group" aria-labelledby="' + hid + '"></div><p class="v10-said"></p>' +
+    const flag = d.reask ? '<span class="v10-flag re">Asked again</span>' : d.fresh ? '<span class="v10-flag new">New since you answered</span>' : '';
+    c.innerHTML = '<header class="v10-q">' + (kind === 'x' ? '' : '<span class="v10-num">' + d.id + '</span>') + '<div class="v10-qt">' + flag + '<h3 id="' + hid + '" tabindex="-1">' + nm(d.q) + '</h3>' +
+      '<p class="v10-why">' + nm(d.why) + '</p>' + (d.reask ? '<p class="v10-reask">' + nm(d.reask) + '</p>' : '') + '</div></header>' +
+      (d.before ? '<figure class="v10-before' + (d.photos ? ' photo' : '') + '">' + d.before() + '</figure>' : '') +
+      '<div class="v10-opts n' + d.opts.length + (d.photos ? ' photos' : '') + '" role="group" aria-labelledby="' + hid + '"></div><p class="v10-said"></p>' +
       (d.foot ? '<p class="v10-foot">' + nm(d.foot) + '</p>' : '');
     const box = c.querySelector('.v10-opts');
+    if (kind !== 'x' && isDecided(d)) {                        // his 1 Oct answer: shown, greyed, not pickable here
+      const a = ANS[d.id];
+      c.classList.add('done', 'decided');
+      box.removeAttribute('role');
+      box.innerHTML = d.opts.map(([k, short]) => '<div class="v10-opt' + (k === a.k ? ' mine' : '') + '">' + (k === a.k ? '<span class="v10-tick">' + CHECK + '</span>' : '') + d.pic(k) +
+        '<span class="v10-ol"><span class="v10-let">' + k + '</span><span class="v10-lab">' + nm(short) + '</span>' +
+        (k === a.k ? '<span class="v10-rec mine">Your pick</span>' : k === d.rec ? '<span class="v10-rec was">Was recommended</span>' : '') + '</span></div>').join('');
+      const o = d.opts.find(x => x[0] === a.k), words = (a.said || [d.id + ' ' + a.k]).map(w => '<q>' + esc(w) + '</q>').join(', then ');
+      c.querySelector('.v10-said').innerHTML = '<span class="v10-tag dec">Decided</span> Your answer, 1 Oct: ' + words + '. <b>' + a.k + '.</b> ' + nm(o[2] || o[1]) +
+        (a.k !== d.rec ? ' <span class="v10-tag own">Not the one recommended then</span>' : '') + (a.note ? '<span class="v10-note">' + nm(a.note) + '</span>' : '');
+      if (d.extra) c.appendChild(d.extra());
+      return c;
+    }
+    if (d.settled) {
+      c.classList.add('done', 'settled');
+      box.removeAttribute('role'); box.classList.add('settled');
+      box.innerHTML = '<div class="v10-opt v10-settled">' + d.pic() + '<span class="v10-ol"><span class="v10-let">✓</span><span class="v10-lab">' + nm(d.opts[0][1]) + '</span><span class="v10-rec">Settled</span></span></div>';
+      c.querySelector('.v10-said').innerHTML = nm(d.said);
+      return c;
+    }
     d.opts.forEach(o => {
       const b = optionButton(d, o, kind);
       b.addEventListener('click', () => kind === 'x' ? pickX(d.id, o[0]) : pick(d.id, o[0]));
@@ -701,19 +805,18 @@
   }
   function iconRows() {
     const det = el('details', 'v10-more');
-    det.innerHTML = '<summary>See the seven rows, big and at real size</summary><p class="v10-foot">Tap a different one in any row and D16 becomes B, with your row picks in the message. Each is shown big, then at the size it ships at.</p>';
+    det.innerHTML = '<summary>See the rows, big and at real size</summary><p class="v10-foot">Your A means option 1 in every row. Each is shown big, then at the size it ships at. Row 6, the back button in Full, is withdrawn: Full gets no new button.</p>';
     const wrap = el('div', 'v10-rows');
     ROWS.forEach((row, ri) => {
       const d = el('div', 'v10-irow');
-      d.innerHTML = '<p class="v10-iname"><b>' + (ri + 1) + '.</b> ' + nm(row.name) + '</p>';
+      d.innerHTML = '<p class="v10-iname"><b>' + rowNo(row) + '.</b> ' + nm(row.name) + '</p>';
       const cands = el('div', 'v10-icands');
       row.cands.forEach((c, j) => {
-        const b = el('button', 'v10-icand');
-        b.type = 'button'; b.dataset.row = row.id; b.dataset.j = String(j + 1);
+        const b = el('div', 'v10-icand');
+        b.dataset.row = row.id; b.dataset.j = String(j + 1); b.setAttribute('aria-pressed', String(j === 0));
         const pic = (sc, cls) => '<span class="' + cls + '"><svg viewBox="0 0 ' + row.W + ' ' + row.H + '" width="' + f(row.W * sc) + '" height="' + f(row.H * sc) + '" aria-hidden="true" focusable="false">' + c() + '</svg></span>';
-        b.innerHTML = pic(row.big, 'v10-ibig') + pic(1, 'v10-ireal') + '<span class="v10-icap">' + (j + 1) + (j === 0 ? ' · recommended' : '') + '</span>';
-        b.setAttribute('aria-label', 'Row ' + (ri + 1) + ', option ' + (j + 1) + (j === 0 ? ', recommended' : ''));
-        b.addEventListener('click', () => pickIcon(row.id, j + 1));
+        b.innerHTML = pic(row.big, 'v10-ibig') + pic(1, 'v10-ireal') + '<span class="v10-icap">' + (j + 1) + (j === 0 ? ' · your pick (A)' : '') + '</span>';
+        b.setAttribute('role', 'img'); b.setAttribute('aria-label', 'Row ' + rowNo(row) + ', option ' + (j + 1) + (j === 0 ? ', your pick' : ''));
         cands.appendChild(b);
       });
       d.appendChild(cands); wrap.appendChild(d);
@@ -729,30 +832,38 @@
     const root = el('div', 'v10');
     host.appendChild(root);
     const intro = el('div', 'v10-intro');
-    intro.innerHTML = '<p><b>21 choices.</b> Each one has a picture of every option, and the one I would build is marked <b>Recommended</b>. Tap a picture to pick it.</p>' +
-      '<p class="h-note"><b>Do recommended</b> picks the recommended one for everything you have not touched. When you are done, <b>Copy my answers</b> and paste the message to me. Your picks stay on this device.</p>';
+    intro.innerHTML = '<p><b>' + (['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven'][NQ] || NQ) + ' choices are still yours.</b> You answered the rest on 1 Oct; they are below, greyed, with your words. Two of your answers are asked again (D3, D14b), because each would have changed ' + esc(names()[1]) + ', and your rule says ' + esc(names()[1]) + ' stays exactly as it is. D18 was rewritten after you answered, and D22, D23 and D24 are new.</p>' +
+      '<p class="h-note">Each open choice has a picture of every option, and the one I would build is marked <b>Recommended</b>. Tap a picture to pick it. <b>Do recommended</b> picks the recommended one for every open choice you have not touched. Then <b>Copy my answers</b> and paste the message to me. Your picks stay on this device.</p>';
     root.appendChild(intro);
 
     const bw = el('section', 'v10-boardwrap');
     bw.setAttribute('aria-label', 'Your picks at a glance');
-    bw.innerHTML = '<p class="v10-lbl">Your picks at a glance</p>';
-    const board = el('div', 'v10-board');
+    bw.innerHTML = '<p class="v10-lbl">Still open</p>';
+    const board = el('div', 'v10-board'), board2 = el('div', 'v10-board done');
     const chips = {};
     DEC.forEach(d => {
       const b = el('button', 'v10-chip', '<span>' + d.id + '</span><b>–</b>');
       b.type = 'button';
       b.addEventListener('click', () => jump(d.id));
-      board.appendChild(b); chips[d.id] = b;
+      (OPEN.includes(d) ? board : board2).appendChild(b); chips[d.id] = b;
     });
     bw.appendChild(board);
     const legend = el('p', 'v10-legend', '<span><i class="rec"></i>recommended</span><span><i class="own"></i>your own pick</span><span><i class="none"></i>not picked yet</span>');
     bw.appendChild(legend);
+    bw.appendChild(el('p', 'v10-lbl', 'Decided by you on 1 Oct, and D2 settled'));
+    bw.appendChild(board2);
     root.appendChild(bw);
 
     const cards = {};
     const list = el('div', 'v10-list');
-    DEC.forEach(d => { const c = buildCard(d, 'd'); cards[d.id] = c; list.appendChild(c); });
+    OPEN.forEach(d => { const c = buildCard(d, 'd'); cards[d.id] = c; list.appendChild(c); });
     root.appendChild(list);
+    const decSec = el('section', 'v10-sec v10-decsec');
+    decSec.innerHTML = '<h3 class="v10-h">Decided by you, 1 Oct</h3><p class="h-note">Your answers from the page as it was before the 1 Oct revision, each with your words. They are greyed because they are done; nothing here can be changed by a tap. If one is wrong, just tell me.</p>';
+    const dlist = el('div', 'v10-list');
+    DEC.filter(d => !OPEN.includes(d)).forEach(d => { const c = buildCard(d, 'd'); cards[d.id] = c; dlist.appendChild(c); });
+    decSec.appendChild(dlist);
+    root.appendChild(decSec);
 
     // already decided
     const xs = el('section', 'v10-sec');
@@ -766,7 +877,7 @@
 
     // the words
     const ws = el('section', 'v10-sec');
-    ws.innerHTML = '<h3 class="v10-h">The words on screen</h3><p class="h-note">One name for each thing, in both editors. Change any word and the change goes in your message.</p>';
+    ws.innerHTML = '<h3 class="v10-h">The words on screen</h3><p class="h-note">One name for each thing. Only {S} and the cog’s third block show these words; {F}’s own words stay exactly as they are. Change any word and the change goes in your message.</p>';
     const faces = el('article', 'v10-card x');
     faces.id = 'v10-faces';
     faces.innerHTML = '<header class="v10-q"><div class="v10-qt"><h3 id="v10-h-faces" tabindex="-1">The two buttons that move a clip off the clip row and back</h3><p class="v10-why">Their full names stay "Make overlay" and "Put in the clip row". The bare word "Overlay" is kept for the tool that adds a picture on top.</p></div></header>' +
@@ -808,8 +919,8 @@
 
     // your message + the dock
     const ans = el('section', 'v10-sec v10-ans');
-    ans.innerHTML = '<h3 class="v10-h">Your message</h3><p class="h-note">This is what <b>Copy my answers</b> puts on your clipboard. Paste it into the chat.</p>' +
-      '<textarea class="v10-msg" readonly rows="6" aria-label="Your answers as a message"></textarea><p><button type="button" class="v10-clear">Start again (clear every pick)</button></p>';
+    ans.innerHTML = '<h3 class="v10-h">Your message</h3><p class="h-note">This is what <b>Copy my answers</b> puts on your clipboard: the six open ones, and anything you changed further up. Paste it into the chat.</p>' +
+      '<textarea class="v10-msg" readonly rows="6" aria-label="Your answers as a message"></textarea><p><button type="button" class="v10-clear">Start again (clear the open picks)</button></p>';
     root.appendChild(ans);
     const dock = el('div', 'v10-dock');
     dock.setAttribute('role', 'region'); dock.setAttribute('aria-label', 'Your answers');
@@ -824,8 +935,8 @@
     ui.copyBtn.addEventListener('click', copyAnswers);
     ans.querySelector('.v10-clear').addEventListener('click', () => {
       const snap = JSON.stringify(st);
-      st = { d: {}, x: {}, w: {}, i: {} }; save(); refreshAll();
-      say('Every pick is cleared.', snap);
+      st = { d: {}, x: {}, w: {}, i: {}, v: 3 }; save(); refreshAll();
+      say('Every open pick is cleared. Your 1 Oct answers stay.', snap);
     });
 
     // D11 plays its three animations only while its card is on screen
@@ -840,21 +951,13 @@
   function pick(id, k) {
     const prev = st.d[id];
     st.d[id] = k;
-    if (id === 'D16' && k === 'A') st.i = {};
     save();
     refreshCard(id); refreshBoard(prev !== k ? [id] : []); refreshDock();
-    if (id === 'D1') refreshNames();
-    if (id === 'D16') refreshIcons();
     refreshMsg();
   }
   function pickX(id, k) {
     if (k === 'A') delete st.x[id]; else st.x[id] = k;
     save(); refreshX(id); refreshMsg();
-  }
-  function pickIcon(row, j) {
-    if (j === 1) delete st.i[row]; else st.i[row] = j;
-    if (j !== 1 && st.d.D16 !== 'B') { st.d.D16 = 'B'; refreshBoard(['D16']); refreshDock(); }
-    save(); refreshCard('D16'); refreshIcons(); refreshMsg();
   }
   function jump(id) {
     const c = ui.cards[id]; if (!c) return;
@@ -873,6 +976,7 @@
   }
   function refreshCard(id) {
     const d = DMAP.get(id), c = ui.cards[id], k = st.d[id];
+    if (d.settled || isDecided(d)) return;
     c.classList.toggle('done', !!k);
     c.querySelectorAll('.v10-opts .v10-opt').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.k === k)));
     c.querySelector('.v10-said').innerHTML = saidHTML(d, k, 'd');
@@ -885,6 +989,8 @@
   function refreshBoard(popIds) {
     DEC.forEach(d => {
       const b = ui.chips[d.id], k = st.d[d.id];
+      if (d.settled) { b.className = 'v10-chip set'; b.querySelector('b').textContent = '✓'; b.setAttribute('aria-label', d.id + ': settled by your words. Go to it.'); return; }
+      if (isDecided(d)) { const a = ANS[d.id].k; b.className = 'v10-chip set'; b.querySelector('b').textContent = a; b.setAttribute('aria-label', d.id + ': decided, your answer ' + a + '. Go to it.'); return; }
       b.className = 'v10-chip' + (k ? (k === d.rec ? ' rec' : ' own') : '');
       b.querySelector('b').textContent = k || '–';
       b.setAttribute('aria-label', d.id + ': ' + (k ? k + (k === d.rec ? ', the recommended one' : ', your own pick') : 'not picked yet') + '. Go to it.');
@@ -895,9 +1001,9 @@
     });
   }
   function refreshDock() {
-    const n = DEC.filter(d => st.d[d.id]).length, own = DEC.filter(d => st.d[d.id] && st.d[d.id] !== d.rec).length;
-    ui.count.innerHTML = '<b>' + n + '</b> of 21 picked' + (own ? ' · <span class="v10-ownc">' + own + ' of your own</span>' : '');
-    ui.meter.style.width = (n / 21 * 100) + '%';
+    const n = OPEN.filter(d => st.d[d.id]).length, own = OPEN.filter(d => st.d[d.id] && st.d[d.id] !== d.rec).length;
+    ui.count.innerHTML = '<b>' + n + '</b> of ' + NQ + ' picked' + (own ? ' · <span class="v10-ownc">' + own + ' of your own</span>' : '');
+    ui.meter.style.width = (n / NQ * 100) + '%';
   }
   function refreshNames() {
     const [a, b] = names();
@@ -905,12 +1011,7 @@
     ui.root.querySelectorAll('.v10-nF').forEach(n => { n.textContent = b; });
     refreshWords();
   }
-  function refreshIcons() {
-    ui.cards.D16.querySelectorAll('.v10-icand').forEach(b => {
-      const cur = st.i[b.dataset.row] || 1;
-      b.setAttribute('aria-pressed', String(Number(b.dataset.j) === cur));
-    });
-  }
+  function refreshIcons() { /* D16 is decided (A): the rows are shown with option 1 marked, and nothing is picked here */ }
   function grow(ta) { ta.style.height = 'auto'; if (ta.scrollHeight) ta.style.height = (ta.scrollHeight + 3) + 'px'; }
   function markWord(key) {
     const inp = ui.inputs[key], row = inp.closest('.v10-word');
@@ -934,14 +1035,12 @@
 
   /* ------------------------------------------------------------ the message ----------------------------------------- */
   function message() {
-    const out = ['My picks for the simple editor: ' + DEC.map(d => d.id + ' ' + (st.d[d.id] || '?')).join(', ')];
-    const off = DEC.filter(d => st.d[d.id] && st.d[d.id] !== d.rec).map(d => d.id + ' ' + st.d[d.id]);
-    const none = DEC.filter(d => !st.d[d.id]).map(d => d.id);
+    const out = ['My picks on the open ones: ' + OPEN.map(d => d.id + ' ' + (st.d[d.id] || '?')).join(', ') + '. (The rest I answered on 1 Oct; D2 is settled: the cog.)'];
+    const off = OPEN.filter(d => st.d[d.id] && st.d[d.id] !== d.rec).map(d => d.id + ' ' + st.d[d.id]);
+    const none = OPEN.filter(d => !st.d[d.id]).map(d => d.id);
     if (!off.length && !none.length) out.push('All as recommended.');
     if (off.length) out.push('Not the recommended one: ' + off.join(', ') + '.');
     if (none.length) out.push('Not picked yet: ' + none.join(', ') + '.');
-    if (st.d.D1) out.push('Names: ' + names().join(' / ') + '.');
-    if (st.d.D16 === 'B') out.push('D16 rows: ' + ROWS.map((row, i) => (i + 1) + ' → ' + (st.i[row.id] || 1)).join(', ') + ' (1 is the recommended one).');
     const xs = XDEC.filter(d => st.x[d.id]).map(d => plain(d.label) + ': ' + st.x[d.id] + ' (' + plain(d.opts.find(o => o[0] === st.x[d.id])[1]) + ')');
     if (xs.length) out.push('Change these decided ones: ' + xs.join('; ') + '.');
     if (st.w.__faces) out.push('Clip buttons: ' + st.w.__faces + ' (' + FACES.opts.find(o => o[0] === st.w.__faces)[1] + ').');
@@ -965,18 +1064,17 @@
   }
   function doRecommended() {
     const snap = JSON.stringify(st);
-    const unpicked = DEC.filter(d => !st.d[d.id]);
-    const changed = unpicked.length ? unpicked : DEC.filter(d => st.d[d.id] !== d.rec);
+    const unpicked = OPEN.filter(d => !st.d[d.id]);
+    const changed = unpicked.length ? unpicked : OPEN.filter(d => st.d[d.id] !== d.rec);
     if (!changed.length) { say('Every answer is already the recommended one.'); return; }
     changed.forEach(d => { st.d[d.id] = d.rec; });
-    if (changed.some(d => d.id === 'D16')) st.i = {};
     save();
     DEC.forEach(d => refreshCard(d.id));
     refreshBoard(changed.map(d => d.id)); refreshDock(); refreshNames(); refreshIcons(); refreshMsg();
-    const own = DEC.filter(d => st.d[d.id] !== d.rec).length;
+    const own = OPEN.filter(d => st.d[d.id] !== d.rec).length;
     say(unpicked.length
       ? 'Picked the recommended one for ' + changed.length + (own ? '. ' + (own === 1 ? 'Your own pick is kept' : 'Your ' + own + ' own picks are kept') + '; press again to make ' + (own === 1 ? 'it' : 'them') + ' recommended too.' : '.')
-      : 'All 21 are now the recommended one.', snap);
+      : 'All ' + NQ + ' are now the recommended one.', snap);
   }
   function copyAnswers() {
     const text = message(), ta = ui.msg, btn = ui.copyBtn;
@@ -1017,6 +1115,11 @@
 .v10-chip.own{border-style:solid;border-color:color-mix(in srgb,var(--h-warn) 60%,var(--h-rule));background:color-mix(in srgb,var(--h-warn) 12%,var(--h-surface))}
 .v10-chip.own b{color:var(--h-warn)}
 .v10-chip.pop{animation:v10-pop .38s cubic-bezier(.2,.8,.2,1.35)}
+.v10-chip.set{border-style:solid;border-color:var(--h-good);background:color-mix(in srgb,var(--h-good) 12%,var(--h-surface))}
+.v10-chip.set b{color:var(--h-good)}
+.v10-opts.settled{grid-template-columns:minmax(0,320px)}
+.v10-opt.v10-settled{cursor:default;border-color:var(--h-good)}
+.v10-card.settled .v10-why q{font-style:italic;color:var(--h-ink)}
 @keyframes v10-pop{0%{transform:scale(.82)}100%{transform:none}}
 .v10-legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--h-muted)}
 .v10-legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1.5px solid var(--h-rule)}
@@ -1136,6 +1239,39 @@
 @keyframes v10-fb{0%,35%{transform:scaleY(0)}55%,78%{transform:scaleY(1)}92%,100%{transform:scaleY(0)}}
 @keyframes v10-sa{0%,18%{transform:none}45%,75%{transform:translateX(-44px)}100%{transform:none}}
 @keyframes v10-sb{0%,18%{transform:translateX(44px)}45%,75%{transform:none}100%{transform:translateX(44px)}}
+/* 1 Oct: his answers, greyed and not pickable; the open ones carry a flag saying why they are open */
+.v10-board.done{opacity:.8}
+.v10-board.done .v10-chip.set{border-style:solid;border-color:var(--h-rule);background:var(--h-surface-2);color:var(--h-faint)}
+.v10-board.done .v10-chip.set b{color:var(--h-muted)}
+.v10-boardwrap>.v10-lbl+.v10-board.done{margin-top:-2px}
+.v10-flag{justify-self:start;font:700 10.5px/1 var(--h-mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 7px;border-radius:6px;margin-bottom:2px}
+.v10-flag.re{color:var(--h-warn);background:color-mix(in srgb,var(--h-warn) 15%,transparent)}
+.v10-flag.new{color:var(--h-accent);background:var(--h-accent-soft)}
+.v10-reask{font-size:14px;line-height:1.4;color:var(--h-ink);padding:8px 10px;border-radius:10px;border:1px dashed color-mix(in srgb,var(--h-warn) 55%,var(--h-rule));background:color-mix(in srgb,var(--h-warn) 7%,transparent);margin-top:4px}
+.v10-reask q,.v10-said q{font-style:italic;color:var(--h-ink)}
+.v10-card.decided{box-shadow:none;background:color-mix(in srgb,var(--h-surface) 55%,var(--h-bg))}
+.v10-card.decided .v10-num{background:var(--h-surface-2);color:var(--h-muted)}
+.v10-card.decided .v10-q h3{color:var(--h-muted)}
+.v10-card.decided .v10-opt{cursor:default;opacity:.5}
+.v10-card.decided .v10-opt:hover{border-color:var(--h-rule)}
+.v10-card.decided .v10-opt:active{transform:none}
+.v10-card.decided .v10-opt .v10-pic{filter:grayscale(.85)}
+.v10-card.decided .v10-opt.mine{opacity:.9;border-color:color-mix(in srgb,var(--h-good) 60%,var(--h-rule));background:var(--h-surface)}
+.v10-card.decided .v10-opt.mine .v10-pic{filter:grayscale(.35)}
+.v10-card.decided .v10-opt.mine .v10-tick{transform:scale(1);background:color-mix(in srgb,var(--h-good) 80%,#000)}
+.v10-card.decided .v10-opt.mine .v10-let{background:color-mix(in srgb,var(--h-good) 75%,#000);color:#fff}
+.v10-card.decided .v10-said{border-left-color:var(--h-good);background:color-mix(in srgb,var(--h-good) 9%,transparent)}
+.v10-rec.mine{color:var(--h-good)}
+.v10-rec.was{color:var(--h-muted);background:var(--h-surface-2)}
+.v10-tag.dec{background:color-mix(in srgb,var(--h-good) 16%,transparent);color:var(--h-good)}
+.v10-note{display:block;margin-top:6px;font-size:13.5px}
+.v10-decsec .v10-list{gap:12px}
+.v10-pic.photo{background:#0d1117}
+.v10-pic.photo img{display:block;width:100%;height:auto}
+.v10-opts.photos{grid-template-columns:minmax(0,1fr)}
+@container v10 (min-width:640px){.v10-opts.photos{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.v10-before.photo{max-width:760px}
+.v10-before a,.v10-foot a{color:var(--h-accent);font-weight:700;text-underline-offset:3px}
 @media (prefers-reduced-motion: reduce){.v10 *{animation:none!important;transition:none!important}}
 `;
     document.head.appendChild(s);
@@ -1144,7 +1280,7 @@
   VIS.register('v10', {
     title: 'Your decisions',
     group: 'Your decisions',
-    blurb: 'Every choice that is yours, each with a picture of the options and the recommended one marked; tap to pick, then copy your answers as one message.',
+    blurb: 'Six choices still open, each with a picture of the options and the recommended one marked; the rest you decided on 1 Oct, shown with your words.',
     mount
   });
 })();

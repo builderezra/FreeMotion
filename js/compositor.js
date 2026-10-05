@@ -67,6 +67,20 @@ window.FM = window.FM || {};
     { type: 'vignette', label: 'Vignette', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'size', label: 'Size', min: 0, max: 95, step: 1, def: 35, unit: '%' },
+      /* #482 polish 6.1 (C50). The vignette was always a CIRCLE out to the frame's half-diagonal, so on a 9:16 phone frame it
+         darkened the top and bottom far harder than the sides. Roundness 0 fits an ellipse to the frame (the corners are still
+         where it is darkest, and mid-left and top-centre get the same darkening); 100 is the old circle. Feather widens or
+         narrows the fade about its middle (100 = the old fade from Size to the corner). Centre moves it; Mode lays white or a
+         colour instead of black; Protect highlights spares the brightest parts of the picture (a lamp in a dark corner stays
+         lit). Every one at its default runs the old gradient untouched, so every saved vignette and the filters built on one
+         draw the same pixels. */
+      { key: 'round', label: 'Roundness', min: 0, max: 100, step: 1, def: 100, unit: '%', note: '100 a circle · 0 fits the frame' },
+      { key: 'feather', label: 'Feather', min: 10, max: 300, step: 5, def: 100, unit: '%' },
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'mode', label: 'Mode', def: 0, options: [[0, 'Darken'], [1, 'Lighten'], [2, 'Colour']] },
+      { key: 'color', label: 'Colour', swatch: true, def: '#000000', overriddenBy: 'mode', liveWhen: 2 },
+      { key: 'hilite', label: 'Protect highlights', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'chromakey', label: 'Chroma Key', color: true, defColor: '#00ff00', params: [
       { key: 'tolerance', label: 'Tolerance', min: 0, max: 1, step: 0.02, def: 0.3 },
@@ -393,10 +407,21 @@ window.FM = window.FM || {};
       { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ] },
     // ---- batch 8 ----
-    { type: 'lightglow', label: 'Light Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', params: [   // queue 904: was hardcoded white
+    { type: 'lightglow', label: 'Light Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', colorGate: { by: 'from', when: 0 }, params: [   // queue 904: was hardcoded white
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 1, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 60, unit: '%' },
+      /* #482 polish 6.2 (C23, C49). Threshold was a hard on/off step, so a smooth gradient got a contour where it crossed it;
+         Threshold softness fades the glow in across it instead. Smoothness blurs the glow again (1 = the old single box, 3
+         is close to a true Gaussian). Glow past the edges lets the glow spill into the empty space round the layer (a
+         title's halo) where it used to stop at the layer's own pixels. Blend: Screen is the old look, Add burns brighter,
+         Soft light lifts without washing the picture out. Colour from: the Glow colour (the old look) or each bright
+         area's own colour. Every one at its default runs the old kernel untouched. */
+      { key: 'knee', label: 'Threshold softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1 },
+      { key: 'outside', label: 'Glow past the edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
+      { key: 'from', label: 'Colour from', def: 0, options: [[0, 'Chosen colour'], [1, 'Source colour']] },
     ] },
     { type: 'longshadow', label: 'Long Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
     { type: 'halftonelines', label: 'Halftone Lines', params: [
@@ -428,12 +453,22 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 1, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 40, unit: '%' },
+      /* #482 polish 6.2 (C23): Threshold softness, Smoothness and Glow past the edges as on Light Glow; the dark glow's own
+         Blend is the mirror of the light ones — Multiply (the old look), Subtract (sinks harder), Soft light (deepens
+         without crushing). Every one at its default runs the old kernel untouched. */
+      { key: 'knee', label: 'Threshold softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1 },
+      { key: 'outside', label: 'Glow past the edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Multiply'], [1, 'Subtract'], [2, 'Soft light']] },
     ] },
     { type: 'stroke', label: 'Stroke Colour', color: true, defColor: '#ffffff', colorLabel: 'Stroke', params: [
       { key: 'width', label: 'Width', min: 1, max: 60, step: 1, def: 4, unit: 'px' },
       { key: 'position', label: 'Position', def: 0, options: [[0, 'Outside'], [1, 'Centre'], [2, 'Inside']] },
       { key: 'shape', label: 'Corners', def: 0, options: [[0, 'Square'], [1, 'Round']] },
       { key: 'softness', label: 'Softness', min: 0, max: 12, step: 0.5, def: 0, unit: 'px' },
+      /* #482 6.4: a gap between the layer and its outline — the sticker double outline (a white Stroke, then a second one
+         with an Offset). Outside only: Centre and Inside sit on the edge by definition. 0 is the old outline byte for byte. */
+      { key: 'gap', label: 'Offset', min: 0, max: 60, step: 1, def: 0, unit: 'px', overriddenBy: 'position', liveWhen: 0, note: 'A gap between the layer and its outline' },
     ] },
     { type: 'smoothedges', label: 'Smooth Edges', params: [
       { key: 'radius', label: 'Softness', min: 0, max: 20, step: 1, def: 4, unit: 'px' },
@@ -597,7 +632,22 @@ window.FM = window.FM || {};
       { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 }] },
     { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
     // ---- batch 12 ----
-    { type: 'dropshadow', label: 'Drop Shadow', params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 18, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°' }, { key: 'softness', label: 'Softness', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 100, unit: '%' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: Opacity — every shadow was full strength
+    /* #482 6.3 (his #966: "as much choice as possible"). Distance stopped at 60 px and Softness at one 20 px box, so a long
+       poster shadow or a wide soft one could not be made at all. SPREAD is how much of the Softness is solid shadow (a
+       drop shadow's Spread everywhere else): 100% is a hard shadow grown by the Softness. SMOOTHNESS runs the soft edge's
+       box blur 1-3 times, so it falls off like a real penumbra instead of a straight ramp. SHADOW ONLY hides the layer and
+       keeps its shadow. Every default is the old shadow byte for byte (no library filter carries one), and the old
+       maxima still draw what they drew. C22 (no shadow under a soft edge) was #986's, v17.14. */
+    { type: 'dropshadow', label: 'Drop Shadow', params: [
+      { key: 'distance', label: 'Distance', min: 0, max: 300, step: 1, def: 18, unit: 'px' },
+      { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°' },
+      { key: 'softness', label: 'Softness', min: 0, max: 80, step: 1, def: 6, unit: 'px' },
+      { key: 'spread', label: 'Spread', min: 0, max: 100, step: 1, def: 0, unit: '%', overriddenBy: 'softness', liveAbove: 0, note: 'How much of the Softness is solid · 100% = a hard shadow' },
+      /* alsoGate (6.3 review): Spread 100% leaves no blur at all, so Smoothness does nothing there either — the panel takes one
+         overriddenBy, and this is the second condition. */
+      { key: 'smooth', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1, overriddenBy: 'softness', liveAbove: 0, alsoGate: { by: 'spread', deadAt: 100 } },
+      { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 100, unit: '%' },   // queue 904: Opacity — every shadow was full strength
+      { key: 'shadowonly', label: 'Shadow only', def: 0, options: [[0, 'Off'], [1, 'On']] }], color: true, defColor: '#000000', colorLabel: 'Shadow' },
     { type: 'chromaticaberration', label: 'Chromatic Aberration', params: [{ key: 'amount', label: 'Amount', min: 0, max: 30, step: 1, def: 8, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
       /* TOWARD EDGES (queue 798). The description has always said "fringing toward the edges, the way a real lens misfocuses
          each colour" and the kernel shifted every pixel by the same vector — RGB Split under another name (both read Δ9.9 on
@@ -607,7 +657,13 @@ window.FM = window.FM || {};
     { type: 'innerglow', label: 'Inner Glow', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
     { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has
     { type: 'hextiles', label: 'Hexagon Tiles', param: 'size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
-    { type: 'linstreaks', label: 'Linear Streaks', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 8, unit: ' taps' }] },
+    /* #482 polish 6.6 (#966 "as much choice as possible"). The streak only ever ran one way along Angle, every bright-ish
+       pixel joined it (a mid-tone streaks a little, so a busy picture smeared all over rather than just its lights), and it
+       was always the colour of what it smeared. Both ways smears to both sides, Only above is Zoom Streaks' gate (the same
+       name and maths), and Tint colours the streak. One way, 0 % and white draw the old streak exactly. */
+    { type: 'linstreaks', label: 'Linear Streaks', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 8, unit: ' taps' },
+      { key: 'both', label: 'Streaks', def: 0, options: [[0, 'One way'], [1, 'Both ways']] },
+      { key: 'threshold', label: 'Only above', min: 0, max: 100, step: 1, def: 0, unit: '%' }], color: true, defColor: '#ffffff', colorLabel: 'Tint' },
     // ---- batch 13: Opacity / Visibility (time-based alpha) ----
     { type: 'blink', label: 'Blink', params: [
       { key: 'rate', label: 'Rate', min: 0.5, max: 12, step: 0.1, def: 2, unit: 'Hz' },
@@ -730,7 +786,19 @@ window.FM = window.FM || {};
         { key: 'dither', label: 'Dither', def: 0, options: [[0, 'Off'], [1, 'On']] },
         { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }
       ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
-    { type: 'lensflare', label: 'Lens Flare', color: true, defColor: '#fff0d2', colorLabel: 'Flare', color2: true, defColor2: '#fff0d2', color2Label: 'Rays', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }] },
+    /* #482 polish 6.5 (#966 "as much choice as possible"; answers the backlog's C38). The core was welded at W x 0.18 and the
+       rays at six, flat, and the description promised "the streaks and ghosts a real one throws" while it drew neither. Core
+       size scales the core; Rays 0-16 (more rays are thinner, so sixteen still read as sixteen) and Rotation turn the star;
+       Ghosts are the discs a lens throws along the line from the light through the middle of the frame, tinted the Flare
+       colour; Ring is a faint rainbow halo round the light; Anamorphic streak is the long horizontal line in the Rays &
+       streak colour. 100 %, 6, 0 and nothing draw the old flare to the byte (queue 474 pins the six-ray path). */
+    { type: 'lensflare', label: 'Lens Flare', color: true, defColor: '#fff0d2', colorLabel: 'Flare', color2: true, defColor2: '#fff0d2', color2Label: 'Rays & streak', params: [{ key: 'x', label: 'Light X', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'y', label: 'Light Y', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 },
+      { key: 'size', label: 'Core size', min: 20, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'rays', label: 'Rays', min: 0, max: 16, step: 1, def: 6 },
+      { key: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'rays', liveAbove: 0 },
+      { key: 'ghosts', label: 'Ghosts', min: 0, max: 8, step: 1, def: 0 },
+      { key: 'halo', label: 'Ring', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'streak', label: 'Anamorphic streak', min: 0, max: 1, step: 0.02, def: 0 }] },
     { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }] },
     { type: 'hexarray', label: 'Honeycomb', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 8, max: 80, step: 1, def: 24, unit: 'px' },
@@ -752,13 +820,27 @@ window.FM = window.FM || {};
      the picture is gone under the band. Speed and Width move the band; nothing could turn it DOWN.
      Default 1 is exactly today's behaviour, so every saved project renders unchanged — the control
      only adds the half of the range that never existed. */
-    { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }, { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 }, { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left']] }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },   // direction: queue 904, it only ever swept down
+    /* #482 polish 6.7 (#966; answers the backlog's C35 — the band was measured across the FRAME and locked to project time).
+       Angle sends it any way, not just the four; Sweeps across Layer runs it over the layer's own box, so a title gets the
+       whole band instead of a sliver as it crosses the frame; Wait between sweeps rests between passes (and before the
+       first); Once sweeps a single time. A sweep that rests, runs on a layer, or happens once starts off the edge and leaves
+       off the far one, on the clip's own clock, so the shine lands when the title does. Frame, no wait and Loop are the old
+       wrapping scan on project time, to the byte. */
+    { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }, { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 }, { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left'], [4, 'Angle']] },   // direction: queue 904, it only ever swept down
+      { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 30, unit: '°', overriddenBy: 'direction', liveWhen: 4 },
+      { key: 'span', label: 'Sweeps across', def: 0, options: [[0, 'Frame'], [1, 'Layer']] },
+      { key: 'pause', label: 'Wait between sweeps', min: 0, max: 5, step: 0.1, def: 0, unit: 's', note: 'The first sweep waits too' },
+      { key: 'loop', label: 'Repeat', def: 0, options: [[0, 'Loop'], [1, 'Once']] }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },
+    /* #482 polish 6.6: Only above is Zoom Streaks' gate — a darker part stays put instead of smearing — and Direction turns
+       the arcs the other way round the centre. 0 % and Clockwise are the old streaks to the byte. */
     { type: 'spinstreaks', label: 'Spin Streaks', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'decay', label: 'Trail falloff', min: 0, max: 2, step: 0.05, def: 0.6 },
       { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 10, unit: ' taps' },   // queue 904: the tap count was a hardcoded 10 while the Blur twins expose it
+      { key: 'threshold', label: 'Only above', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'dir', label: 'Direction', def: 0, options: [[0, 'Clockwise'], [1, 'Anticlockwise']] },
     ] },
     /* FRACTAL RIDGES — reworked. It shipped with two sliders over a picture that never moved and had
      * no colour at all. Measured before the rework (real app, real renderScene, 240x240, ps 1): the
@@ -1147,10 +1229,16 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Shutter phase', min: -100, max: 100, step: 1, def: 0, unit: '%', note: '−100 trails behind only · +100 runs ahead' },
     ] },
     // ---- batch 26 (AM parity fill-ins: glow / selective colour / generative) ----
-    { type: 'softglow', label: 'Soft Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', params: [   // queue 904: was hardcoded white
+    { type: 'softglow', label: 'Soft Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', colorGate: { by: 'from', when: 0 }, params: [   // queue 904: was hardcoded white
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 10, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+      /* #482 polish 6.2 (C23, C49) — the same five controls as Light Glow; see there. */
+      { key: 'knee', label: 'Threshold softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1 },
+      { key: 'outside', label: 'Glow past the edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
+      { key: 'from', label: 'Colour from', def: 0, options: [[0, 'Chosen colour'], [1, 'Source colour']] },
     ] },
     { type: 'replacecolor', label: 'Replace Colour', color: true, defColor: '#e03131', colorLabel: 'From', color2: true, defColor2: '#3aa0ff', color2Label: 'To', params: [
       { key: 'tolerance', label: 'Tolerance', min: 0.02, max: 1, step: 0.02, def: 0.25 },
@@ -4531,6 +4619,61 @@ window.FM = window.FM || {};
     return out;
   }
 
+  /* ═══ GROW EVERY PIXEL AT ITS OWN STRENGTH (#482 6.3 review) ══════════════════════════════════════════════════════════
+   * Drop Shadow's Spread grows the layer's alpha by `r` px. Its first build grew a BINARY mask (the pixels at least half as
+   * opaque as the layer's most opaque one) and filled it at that maximum, so a see-through part's shadow jumped to full
+   * strength or did not grow at all depending on what ELSE was on the layer — a 50% card with one opaque spot cast a solid
+   * black spread (127 -> 0), and an opaque spot sliding in from off-frame flipped the whole card's shadow mid-animation.
+   * This is a grey-level dilation instead, over a round disc with an anti-aliased rim:
+   *     out(x) = max over y of A(y) x k(|x - y|),   k = 1 up to r, falling to 0 at r + 1 (pixel centres)
+   * so each part spreads at its own alpha and nothing farther than r + 1 px can change it. Computed in two exact parts:
+   *   · THE FLAT DISC (k = 1) as horizontal runs: disc row dy is a run of half-width floor(sqrt(r² - dy²)); the runs are
+   *     widened a pixel at a time (run k = max(run k-1, A[x-k], A[x+k])) and each output row takes the max of the runs its
+   *     disc rows need — about 3r reads a pixel.
+   *   · THE RIM (r < distance < r + 1), only where it can add anything. A rim source brighter than the flat value at x
+   *     lies within r of some pixel at most 2 px from x (step 2 px toward it), so the flat result is brighter somewhere in
+   *     x's 5x5 square; everywhere else the rim cannot win. Those pixels — a band two or three pixels wide round each grown
+   *     edge — read the ~2 pi r rim offsets, heaviest first, and stop once no remaining one can beat what they have.
+   *     A smooth ramp (a feathered edge) gains under RIM_T levels from its rim and is skipped, so it never costs r per pixel.
+   * `A` is alpha 0-255 on a w x h buffer; the result is a fresh Float32Array. */
+  const RIM_T = 3;
+  function greyDilateDisc(A, w, h, r) {
+    const N = w * h, run = new Float32Array(N), G = new Float32Array(N);
+    for (let i = 0; i < N; i++) run[i] = A[i];
+    const rows = [];   // the disc's rows by half-width
+    for (let dy = -r; dy <= r; dy++) { const hw = Math.floor(Math.sqrt(r * r - dy * dy)); (rows[hw] || (rows[hw] = [])).push(dy); }
+    for (let k = 0; k <= r; k++) {
+      if (k > 0) for (let y = 0; y < h; y++) { const ro = y * w; for (let x = 0; x < w; x++) { let m = run[ro + x], a; if (x >= k && (a = A[ro + x - k]) > m) m = a; if (x + k < w && (a = A[ro + x + k]) > m) m = a; run[ro + x] = m; } }
+      const dys = rows[k]; if (!dys) continue;
+      for (let j = 0; j < dys.length; j++) {
+        const dy = dys[j], y0 = dy < 0 ? -dy : 0, y1 = dy > 0 ? h - 1 - dy : h - 1;
+        for (let y = y0; y <= y1; y++) { const ro = y * w, rs = (y + dy) * w; for (let x = 0; x < w; x++) { const v = run[rs + x]; if (v > G[ro + x]) G[ro + x] = v; } }
+      }
+    }
+    /* the brightest flat value within 2 px (two passes of a 5-wide max; `run` is free now) */
+    const M5 = new Float32Array(N);
+    for (let y = 0; y < h; y++) { const ro = y * w; for (let x = 0; x < w; x++) { let m = 0; for (let q = x - 2; q <= x + 2; q++) { if (q >= 0 && q < w && G[ro + q] > m) m = G[ro + q]; } run[ro + x] = m; } }
+    for (let y = 0; y < h; y++) { const ro = y * w; for (let x = 0; x < w; x++) { let m = 0; for (let q = y - 2; q <= y + 2; q++) { if (q >= 0 && q < h && run[q * w + x] > m) m = run[q * w + x]; } M5[ro + x] = m; } }
+    /* the rim offsets, heaviest first */
+    const ro1 = [], R1 = r + 1;
+    for (let dy = -R1; dy <= R1; dy++) for (let dx = -R1; dx <= R1; dx++) { const dd = Math.sqrt(dx * dx + dy * dy); if (dd > r && dd < R1) ro1.push([dx, dy, R1 - dd]); }
+    ro1.sort((p, q) => q[2] - p[2] || p[1] - q[1] || p[0] - q[0]);
+    const nO = ro1.length, ODX = new Int32Array(nO), ODY = new Int32Array(nO), OK = new Float32Array(nO);
+    for (let o = 0; o < nO; o++) { ODX[o] = ro1[o][0]; ODY[o] = ro1[o][1]; OK[o] = ro1[o][2]; }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x, top = M5[i]; let best = G[i];
+      if (!(top - best > RIM_T)) continue;
+      for (let o = 0; o < nO; o++) {
+        const kk = OK[o]; if (top * kk <= best) break;   // no source here is brighter than `top`, and the weights only fall
+        const X = x + ODX[o], Y = y + ODY[o]; if (X < 0 || Y < 0 || X >= w || Y >= h) continue;
+        const v = A[Y * w + X] * kk; if (v > best) best = v;
+      }
+      G[i] = best;
+    }
+    return G;
+  }
+  FM._greyDilateDisc = greyDilateDisc;   // seam: the suite checks it against a brute-force max
+
   /* ONE REUSED SCRATCH FOR THE "copy the frame, then read it while you overwrite it" PATTERN
      (queue 474, v11.76). Sixteen kernels open with `d.slice()` — a fresh 5.6 MB Uint8ClampedArray at
      1080x1350, allocated and thrown away on EVERY invocation.
@@ -6639,7 +6782,7 @@ window.FM = window.FM || {};
       } } },
     // ---- batch 8 (pixel) ----
     lightglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904): it was hardcoded white. A missing colour is WHITE, not hexToRGB(undefined) — that
-       returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
+       returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); /* #482 polish 6.2: any new control off its default draws through glow6; at the defaults the old loop below runs untouched */ var lg6=glow6Opts(p,t,true); if(lg6) return glow6(d,W,H,0,lgAmt,(lgThr===60?153:lgThr/100*255),(p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t)))),lgWh?null:lgC,lg6); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
     longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); /* ANGLE (queue 904): the throw was welded to 45° down-right. 45 runs the diagonal walk below untouched, so every saved
        shadow is byte-identical; any other angle marches back from each empty pixel along the throw, up to Length steps, and is
        shadowed if it meets the layer — the same rule the walk applies, in any direction. */
@@ -6748,7 +6891,7 @@ window.FM = window.FM || {};
         var stp_v=stp_dir===1?(stp_x-stp_y):(stp_dir===2?stp_y:(stp_dir===3?stp_x:(stp_x+stp_y)));
         var stp_m=stp_v%stp_period; if(stp_m<0)stp_m+=stp_period; if(stp_m<stp_half){ d[stp_i]=d[stp_i]*stp_ik+stp_r*stp_k; d[stp_i+1]=d[stp_i+1]*stp_ik+stp_g*stp_k; d[stp_i+2]=d[stp_i+2]*stp_ik+stp_b*stp_k; } } } },
     // ---- batch 9 (pixel) ----
-    darkglow: function(d,W,H,p,t){ var dgAmt = fparam(p, 'amount', 0.6, t); dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); var dgN=W*H; var dgDark=new Float32Array(dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=new Float32Array(dgN); var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
+    darkglow: function(d,W,H,p,t){ var dgAmt = fparam(p, 'amount', 0.6, t); dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); /* #482 polish 6.2 — see lightglow */ var dg6=glow6Opts(p,t,false); if(dg6) return glow6(d,W,H,2,dgAmt,(dgThr===40?102:dgThr/100*255),(p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t)))),null,dg6); var dgN=W*H; var dgDark=new Float32Array(dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=new Float32Array(dgN); var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
     stroke: function(d,W,H,p,t,ps){ var st_w=Math.round(FM.evalProp(p.width,t)); if(!(st_w>=1))st_w=4; if(st_w>60)st_w=60; st_w=Math.max(1,Math.round(st_w*(ps||1)));   /* PLATE px: the width the user set is in PROJECT px, and the plate shrinks with the playback quality tier — without this a 16px outline drew 16 plate px on a 0.36 plate, i.e. 44 project px, and the preview disagreed with the export by +154% */ var st_col=hexToRGB(p.color)||[255,255,255]; var st_N=W*H, st_w4=W*4; var st_x,st_y,st_i; var st_src=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)st_src[st_i]=(d[st_i*4+3]>0)?1:0;
       // POSITION / SHAPE / SOFTNESS. Outside + Square + hard runs the ORIGINAL box dilation below,
       // untouched, so every existing stroke in every project is byte-for-byte what it was. Anything
@@ -6758,7 +6901,11 @@ window.FM = window.FM || {};
       var st_shp=p.shape==null?0:(Math.round(FM.evalProp(p.shape,t))|0);
       var st_sft=p.softness==null?0:FM.evalProp(p.softness,t); if(st_sft<0)st_sft=0; if(st_sft>12)st_sft=12;
       st_sft*=(ps||1);   // softness is in PROJECT px like the width, so it scales with the plate too
-      if(!(st_pos===0&&st_shp===0&&st_sft===0)){
+      /* OFFSET (#482 6.4): the band starts `st_gap` px out instead of at the edge, so a transparent ring separates the layer from
+         its outline — the sticker double outline. Outside only (Centre and Inside sit on the edge by definition), PROJECT px
+         rounded to whole plate px like the width. 0 leaves Outside + Square + hard on the original box dilation below. */
+      var st_gap=p.gap==null?0:FM.evalProp(p.gap,t); if(!(st_gap>0))st_gap=0; if(st_gap>60)st_gap=60; st_gap=st_pos===0?Math.round(st_gap*(ps||1)):0;
+      if(!(st_pos===0&&st_shp===0&&st_sft===0&&st_gap===0)){
         var stRound=st_shp===1;
         // Centre splits the width across the edge, which is what "centred" means in every other editor.
         var stOutW=st_pos===2?0:(st_pos===1?st_w/2:st_w);
@@ -6777,7 +6924,9 @@ window.FM = window.FM || {};
           var sf=st_sft>band-1?band-1:st_sft; if(sf<=0)return 1; var e=band-dist; if(e>=sf)return 1; return e/sf; };
         for(st_i=0;st_i<st_N;st_i++){
           var stA=0;
-          if(st_src[st_i]===0){ if(stOutW>0&&stFo[st_i]>0) stA=stCov(stFo[st_i],stOutW); }
+          if(st_src[st_i]===0){ if(stOutW>0&&stFo[st_i]>0){
+            if(st_gap>0){ var stDg=stFo[st_i]-st_gap; if(stDg>0){ stA=stCov(stDg,stOutW); if(stDg<1)stA*=stDg; } }   // the gap's own edge is anti-aliased: a round field puts it between pixels
+            else stA=stCov(stFo[st_i],stOutW); } }
           else { if(stInW>0) stA=stCov(stFi[st_i],stInW); }
           if(stA<=0)continue; if(stA>1)stA=1;
           var stO=st_i*4;
@@ -7292,7 +7441,29 @@ window.FM = window.FM || {};
        `softness` are both `unit: 'px'`, so naming the parameters would push this kernel past the arity
        pxToPlate checks and silently opt it out of the plate scaling (#691). A shadow that stopped
        matching the export is worse than a slow one. */
-    dropshadow: function(d,W,H,p,t){ var dsBB=arguments[6]; var dsDist = fparam(p, 'distance', 18, t); dsDist=Math.max(0,Math.min(60,dsDist)); var dsAng = fparam(p, 'angle', 135, t); var dsSoft = fparam(p, 'softness', 6, t); dsSoft=Math.max(0,Math.min(20,Math.round(dsSoft))); var dsCol=hexToRGB(p.color); var dsCr=dsCol?dsCol[0]:0, dsCg=dsCol?dsCol[1]:0, dsCb=dsCol?dsCol[2]:0; var dsN=W*H; var dsRad=dsAng*Math.PI/180; var dsOx=Math.round(Math.cos(dsRad)*dsDist); var dsOy=Math.round(Math.sin(dsRad)*dsDist); var s=fxSrc(d); var dsShift=new Float32Array(dsN); /* OPACITY (queue 904): 100% is the old full-strength shadow, byte-identical. */ var dsOp=(p.opacity==null?100:FM.evalProp(p.opacity,t))/100; if(dsOp<0)dsOp=0; if(dsOp>1)dsOp=1; if(dsOp<=0)return; var dsx,dsy,dssx,dssy;
+    dropshadow: function(d,W,H,p,t){ var dsBB=arguments[6];
+      /* #482 6.3: Distance reaches 300 and Softness 80 — they stopped at 60 and 20. THE OLD CEILING STAYS for a value whose
+         keyframes all lie inside the old range (6.3 review): an Overshoot or Elastic ease carries a saved 10 -> 60 past 60
+         (64 at t 1.37), and v17.21 clamped that to 60, so the build's 300 moved the shadow 4 px on frames he had already made.
+         A keyframe above 60 / 20 can only be new, and gets the new ceiling. A reduced preview plate hands this kernel the value
+         already evaluated and scaled (pxToPlate), so there it cannot see the keyframes; v17.21's ceiling was 60 PLATE px, which
+         a saved range only reaches eased past 60/scale — at a half-size preview, 120 px. */
+      var dsCap=function(v,o,n){ if(!FM.isAnimated(v))return n; for(var k=0;k<v.kf.length;k++){ if(!(+v.kf[k].v<=o))return n; } return o; };
+      var dsDist = fparam(p, 'distance', 18, t); dsDist=Math.max(0,Math.min(dsCap(p.distance,60,300),dsDist)); var dsAng = fparam(p, 'angle', 135, t); var dsSoft = fparam(p, 'softness', 6, t); dsSoft=Math.max(0,Math.min(dsCap(p.softness,20,80),Math.round(dsSoft))); var dsCol=hexToRGB(p.color); var dsCr=dsCol?dsCol[0]:0, dsCg=dsCol?dsCol[1]:0, dsCb=dsCol?dsCol[2]:0; var dsN=W*H; var dsRad=dsAng*Math.PI/180; var dsOx=Math.round(Math.cos(dsRad)*dsDist); var dsOy=Math.round(Math.sin(dsRad)*dsDist); var s=fxSrc(d); var dsShift=new Float32Array(dsN); /* OPACITY (queue 904): 100% is the old full-strength shadow, byte-identical. */ var dsOp=(p.opacity==null?100:FM.evalProp(p.opacity,t))/100; if(dsOp<0)dsOp=0; if(dsOp>1)dsOp=1;
+      /* #482 6.3. SPREAD: how much of the Softness is solid — the alpha is grown by that much (a round, exact distance field) and
+         blurred by the rest, so 100% is a hard shadow grown by the Softness. SMOOTHNESS: the blur runs 1-3 times, a triangle and
+         then a near-gaussian penumbra instead of one straight ramp. SHADOW ONLY: the layer is cleared and its shadow drawn alone.
+         All three are absent or at their defaults on every saved shadow, and then every line below runs exactly as before. */
+      var dsOnly=(p.shadowonly==null?0:(Math.round(FM.evalProp(p.shadowonly,t))|0))===1;
+      var dsSpr=p.spread==null?0:FM.evalProp(p.spread,t); if(!(dsSpr>0))dsSpr=0; if(dsSpr>100)dsSpr=100;
+      var dsPass=p.smooth==null?1:Math.round(FM.evalProp(p.smooth,t)); if(!(dsPass>=1))dsPass=1; if(dsPass>3)dsPass=3;
+      /* Below 100% at least one pixel of the Softness stays a blur (6.3 review): a rounded 96% of 12 was all 12, no blur ran,
+         and Smoothness 1, 2 and 3 drew the same bytes while the panel offered them. Now only 100% is the hard shadow, and the
+         panel greys Smoothness there (its alsoGate). */
+      var dsDil=(dsSoft>0&&dsSpr>0)?(dsSpr>=100?dsSoft:Math.min(dsSoft-1,Math.round(dsSoft*dsSpr/100))):0;
+      var dsClear=function(){ var cx0=dsBB?Math.max(0,dsBB.x):0, cx1=dsBB?Math.min(W-1,dsBB.x+dsBB.w-1):W-1, cy0=dsBB?Math.max(0,dsBB.y):0, cy1=dsBB?Math.min(H-1,dsBB.y+dsBB.h-1):H-1, cx, cy, ci;
+        for(cy=cy0;cy<=cy1;cy++){ for(cx=cx0;cx<=cx1;cx++){ ci=(cy*W+cx)*4; d[ci]=0; d[ci+1]=0; d[ci+2]=0; d[ci+3]=0; } } };   // the layer's own pixels: its box holds every one (fxBounds scans at alpha > 0)
+      if(dsOp<=0){ if(dsOnly)dsClear(); return; } var dsx,dsy,dssx,dssy;
       /* ═══ SKIP WHAT CANNOT HOLD A SHADOW (#692) ══════════════════════════════════════════════════
        * The shadow is the layer's alpha SHIFTED by (dsOx, dsOy) and then blurred by dsSoft, so it can
        * only ever occupy the layer's box moved by that offset and grown by that radius. Everywhere
@@ -7302,15 +7473,49 @@ window.FM = window.FM || {};
        * axis a running sum walks, so no accumulator's priming changes. */
       var dsSX0=dsBB?Math.max(0,dsBB.x+dsOx):0,             dsSX1=dsBB?Math.min(W-1,dsBB.x+dsBB.w-1+dsOx):W-1;
       var dsSY0=dsBB?Math.max(0,dsBB.y+dsOy):0,             dsSY1=dsBB?Math.min(H-1,dsBB.y+dsBB.h-1+dsOy):H-1;
-      var dsGX0=dsBB?Math.max(0,dsSX0-dsSoft-1):0,          dsGX1=dsBB?Math.min(W-1,dsSX1+dsSoft+1):W-1;
-      var dsGY0=dsBB?Math.max(0,dsSY0-dsSoft-1):0,          dsGY1=dsBB?Math.min(H-1,dsSY1+dsSoft+1):H-1;
-      for(dsy=dsSY0;dsy<=dsSY1;dsy++){ for(dsx=dsSX0;dsx<=dsSX1;dsx++){ dssx=dsx-dsOx; dssy=dsy-dsOy; if(dssx<0||dssx>=W||dssy<0||dssy>=H){ dsShift[dsy*W+dsx]=0; } else { dsShift[dsy*W+dsx]=s[(dssy*W+dssx)*4+3]; } } } if(dsSoft>0){ var dsR=dsSoft; var dsWin=dsR*2+1; var dsTmp=new Float32Array(dsN); var dsAcc,dskx,dski,dsrow; for(dsy=dsSY0;dsy<=dsSY1;dsy++){ dsrow=dsy*W; dsAcc=0; for(dski=-dsR;dski<=dsR;dski++){ dskx=dski<0?0:(dski>=W?W-1:dski); dsAcc+=dsShift[dsrow+dskx]; } for(dsx=0;dsx<W;dsx++){ dsTmp[dsrow+dsx]=dsAcc/dsWin; var dsAdd=dsx+dsR+1; dsAdd=dsAdd>=W?W-1:dsAdd; var dsSub=dsx-dsR; dsSub=dsSub<0?0:dsSub; dsAcc+=dsShift[dsrow+dsAdd]-dsShift[dsrow+dsSub]; } } var dscol2; for(dsx=dsGX0;dsx<=dsGX1;dsx++){ dsAcc=0; for(dski=-dsR;dski<=dsR;dski++){ dscol2=dski<0?0:(dski>=H?H-1:dski); dsAcc+=dsTmp[dscol2*W+dsx]; } for(dsy=0;dsy<H;dsy++){ dsShift[dsy*W+dsx]=dsAcc/dsWin; var dsAddY=dsy+dsR+1; dsAddY=dsAddY>=H?H-1:dsAddY; var dsSubY=dsy-dsR; dsSubY=dsSubY<0?0:dsSubY; dsAcc+=dsTmp[dsAddY*W+dsx]-dsTmp[dsSubY*W+dsx]; } } } var dsi,dsidx,dsa,dssh,dsoa, dsCy, dsCx;
+      /* SHADOW ONLY PAST THE FRAME EDGE (#482 6.3 review). A layer the frame cuts carries on past it, but its off-frame part was
+         never drawn, so its shadow stopped Distance px short of the edge — with Shadow only on, the background showed through
+         where the layer used to cover the hole (a title sliding in from off-screen). On a side the layer TOUCHES (alpha on the
+         plate's edge row or column — the same whether or not a box is passed, and a crop never cuts a layer), a source off the
+         plate reads the edge pixel: the layer continues as it leaves. Shadow only alone, so every other shadow is as before. */
+      var dsTL=false, dsTR=false, dsTT=false, dsTB=false;
+      if(dsOnly){ for(dsy=0;dsy<H;dsy++){ if(s[dsy*W*4+3]>0)dsTL=true; if(s[(dsy*W+W-1)*4+3]>0)dsTR=true; } for(dsx=0;dsx<W;dsx++){ if(s[dsx*4+3]>0)dsTT=true; if(s[((H-1)*W+dsx)*4+3]>0)dsTB=true; }
+        if(dsTL)dsSX0=0; if(dsTR)dsSX1=W-1; if(dsTT)dsSY0=0; if(dsTB)dsSY1=H-1; }
+      var dsEdge=dsTL||dsTR||dsTT||dsTB;
+      /* SPREAD (#482 6.3): the layer's alpha grown by dsDil before it is shifted, every pixel at its OWN strength (greyDilateDisc —
+         a grey-level dilation over a round disc with an anti-aliased rim), on a buffer that runs dsDil + 1 px past the layer's box
+         and past the plate. The grown buffer replaces the alpha the shift reads. */
+      var dsG=null, dsDX0=0, dsDY0=0, dsDW=0, dsDH=0, dsU, dsV;
+      if(dsDil>0){
+        var dsBX0=dsBB?dsBB.x:0, dsBX1=dsBB?dsBB.x+dsBB.w-1:W-1, dsBY0=dsBB?dsBB.y:0, dsBY1=dsBB?dsBB.y+dsBB.h-1:H-1, dsE=dsDil+1, dsQx, dsQy;
+        dsDX0=dsBX0-dsE; dsDY0=dsBY0-dsE; dsDW=dsBX1-dsBX0+1+2*dsE; dsDH=dsBY1-dsBY0+1+2*dsE;
+        var dsA=new Uint8Array(dsDW*dsDH);
+        for(dsV=0;dsV<dsDH;dsV++){ dsQy=dsDY0+dsV; if(dsQy<0||dsQy>=H)continue; for(dsU=0;dsU<dsDW;dsU++){ dsQx=dsDX0+dsU; if(dsQx<0||dsQx>=W)continue; dsA[dsV*dsDW+dsU]=s[(dsQy*W+dsQx)*4+3]; } }
+        dsG=greyDilateDisc(dsA,dsDW,dsDH,dsDil);
+        /* the grown buffer, shifted, is where the shadow can now be — and on a side the layer touches (Shadow only), to the edge */
+        dsSX0=Math.max(0,dsDX0+dsOx); dsSX1=Math.min(W-1,dsDX0+dsDW-1+dsOx); dsSY0=Math.max(0,dsDY0+dsOy); dsSY1=Math.min(H-1,dsDY0+dsDH-1+dsOy);
+        if(dsTL)dsSX0=0; if(dsTR)dsSX1=W-1; if(dsTT)dsSY0=0; if(dsTB)dsSY1=H-1;
+      }
+      for(dsy=dsSY0;dsy<=dsSY1;dsy++){ for(dsx=dsSX0;dsx<=dsSX1;dsx++){ dssx=dsx-dsOx; dssy=dsy-dsOy;
+        if(dsEdge){ if(dssx<0){ if(dsTL)dssx=0; } else if(dssx>=W){ if(dsTR)dssx=W-1; } if(dssy<0){ if(dsTT)dssy=0; } else if(dssy>=H){ if(dsTB)dssy=H-1; } }   // a touched side only: past any other the grown buffer (or nothing) answers as before
+        if(dsG){ dsU=dssx-dsDX0; dsV=dssy-dsDY0; dsShift[dsy*W+dsx]=(dsU<0||dsU>=dsDW||dsV<0||dsV>=dsDH)?0:dsG[dsV*dsDW+dsU]; }
+        else if(dssx<0||dssx>=W||dssy<0||dssy>=H){ dsShift[dsy*W+dsx]=0; } else { dsShift[dsy*W+dsx]=s[(dssy*W+dssx)*4+3]; } } }
+      /* The bounds grow with the passes (#482 6.3): each blur pass carries the shadow (dsR + 1) further out, so pass k may only
+         skip the rows outside the box grown by k-1 passes, and its columns by k. With one pass and no spread these are exactly
+         the old bounds — box shifted, then grown by the softness and a pixel — and the loops below are the old loops. */
+      var dsR=dsSoft-dsDil, dsReach=dsPass*(dsR+1);
+      var dsGX0=dsBB?Math.max(0,dsSX0-dsReach):0,          dsGX1=dsBB?Math.min(W-1,dsSX1+dsReach):W-1;
+      var dsGY0=dsBB?Math.max(0,dsSY0-dsReach):0,          dsGY1=dsBB?Math.min(H-1,dsSY1+dsReach):H-1;
+      if(dsR>0){ var dsWin=dsR*2+1; var dsTmp=new Float32Array(dsN); var dsAcc,dskx,dski,dsrow,dscol2,dsPk,dsRY0,dsRY1,dsCX0,dsCX1; for(dsPk=0;dsPk<dsPass;dsPk++){
+        dsRY0=dsBB?Math.max(0,dsSY0-dsPk*(dsR+1)):0; dsRY1=dsBB?Math.min(H-1,dsSY1+dsPk*(dsR+1)):H-1; dsCX0=dsBB?Math.max(0,dsSX0-(dsPk+1)*(dsR+1)):0; dsCX1=dsBB?Math.min(W-1,dsSX1+(dsPk+1)*(dsR+1)):W-1;
+        for(dsy=dsRY0;dsy<=dsRY1;dsy++){ dsrow=dsy*W; dsAcc=0; for(dski=-dsR;dski<=dsR;dski++){ dskx=dski<0?0:(dski>=W?W-1:dski); dsAcc+=dsShift[dsrow+dskx]; } for(dsx=0;dsx<W;dsx++){ dsTmp[dsrow+dsx]=dsAcc/dsWin; var dsAdd=dsx+dsR+1; dsAdd=dsAdd>=W?W-1:dsAdd; var dsSub=dsx-dsR; dsSub=dsSub<0?0:dsSub; dsAcc+=dsShift[dsrow+dsAdd]-dsShift[dsrow+dsSub]; } } for(dsx=dsCX0;dsx<=dsCX1;dsx++){ dsAcc=0; for(dski=-dsR;dski<=dsR;dski++){ dscol2=dski<0?0:(dski>=H?H-1:dski); dsAcc+=dsTmp[dscol2*W+dsx]; } for(dsy=0;dsy<H;dsy++){ dsShift[dsy*W+dsx]=dsAcc/dsWin; var dsAddY=dsy+dsR+1; dsAddY=dsAddY>=H?H-1:dsAddY; var dsSubY=dsy-dsR; dsSubY=dsSubY<0?0:dsSubY; dsAcc+=dsTmp[dsAddY*W+dsx]-dsTmp[dsSubY*W+dsx]; } } } } var dsi,dsidx,dsa,dssh,dsoa, dsCy, dsCx;
       /* UNDER A SOFT EDGE TOO (#986 C22, hunt). This skipped every pixel with ANY alpha (`dsa>0`), so the shadow stopped
          dead at an anti-aliased edge — the half-covered pixels round every glyph sat over the background with no shadow
          behind them, a light seam between the letter and its shadow — and a semi-transparent layer cast no shadow behind
          itself at all. A partly covered pixel now has the shadow composited BEHIND it (the layer over the shadow, which
          is what 'drop shadow' means and what CSS drop-shadow draws). Empty pixels and solid ones are exactly as before. */
       var dsFa, dsSa, dsOa2;
+      if(dsOnly){ dsClear(); for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dssh=dsShift[dsi]; if(dssh<=0) continue; dsidx=dsi*4; dsoa=dssh; if(dsoa>255)dsoa=255; if(dsOp!==1)dsoa*=dsOp; d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } } return; }   // SHADOW ONLY (#482 6.3): the whole shadow, the layer gone
       for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dsidx=dsi*4; dsa=s[dsidx+3]; if(dsa>=255) continue; dssh=dsShift[dsi]; if(dssh<=0) continue; dsoa=dssh; if(dsoa>255)dsoa=255; if(dsOp!==1)dsoa*=dsOp; if(dsa===0){ d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } else { dsFa=dsa/255; dsSa=dsoa/255*(1-dsFa); dsOa2=dsFa+dsSa; d[dsidx]=(s[dsidx]*dsFa+dsCr*dsSa)/dsOa2; d[dsidx+1]=(s[dsidx+1]*dsFa+dsCg*dsSa)/dsOa2; d[dsidx+2]=(s[dsidx+2]*dsFa+dsCb*dsSa)/dsOa2; d[dsidx+3]=dsOa2*255; } } } },
     chromaticaberration: function(d,W,H,p,t){ var caAmt = fparam(p, 'amount', 8, t); caAmt=Math.max(0,Math.min(30,caAmt)); var caAng = fparam(p, 'angle', 0, t); var caRad=caAng*Math.PI/180; var caCos=Math.cos(caRad), caSin=Math.sin(caRad); var caDx=caCos*caAmt, caDy=caSin*caAmt; if(caAmt===0)return; var caQ=Math.max(0,Math.min(1,fparam(p, 'radial', 0, t)/100)); /* 0 = the uniform shift every saved instance had (legacy); 1 = radial, nothing at the centre */ var caCx=W/2, caCy=H/2, caNorm=1/Math.max(1,Math.hypot(caCx,caCy)); var caS=fxSrc(d); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; if(caQ>0){ var caPx=caX-caCx, caPy=caY-caCy, caR=Math.hypot(caPx,caPy), caRn=caR*caNorm; var caUx=caR>0?caPx/caR:0, caUy=caR>0?caPy/caR:0; /* radial unit vector rotated by the angle, blended with the uniform direction; magnitude blended the same way */ var caVx=(1-caQ)*caCos+caQ*(caUx*caCos-caUy*caSin), caVy=(1-caQ)*caSin+caQ*(caUx*caSin+caUy*caCos); var caMag=caAmt*((1-caQ)+caQ*caRn); caDx=caVx*caMag; caDy=caVy*caMag; } var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4; d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; d[caI+3]=caS[caI+3]; } } },
     innerglow: function(d,W,H,p,t){ var igRad = fparam(p, 'radius', 10, t); igRad=Math.max(1,Math.min(30,Math.round(igRad))); var igInt = fparam(p, 'intensity', 1, t); igInt=Math.max(0,Math.min(2,igInt)); var igCol=hexToRGB(p.color||'#ffe08a'); var igN=W*H; var igMask=new Float32Array(igN); var igI; for(igI=0;igI<igN;igI++){ igMask[igI]=d[igI*4+3]>0?1:0; } var igTmp=new Float32Array(igN); var igDiam=igRad*2+1; var igInv=1/igDiam; var igX,igY,igK,igAcc,igRow,igIdx; for(igY=0;igY<H;igY++){ igRow=igY*W; igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCx=igK<0?0:(igK>=W?W-1:igK); igAcc+=igMask[igRow+igCx]; } for(igX=0;igX<W;igX++){ igTmp[igRow+igX]=igAcc*igInv; var igAdd=igX+igRad+1; igAdd=igAdd>=W?W-1:igAdd; var igSub=igX-igRad; igSub=igSub<0?0:igSub; igAcc+=igMask[igRow+igAdd]-igMask[igRow+igSub]; } } var igSoft=igMask; for(igX=0;igX<W;igX++){ igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCy=igK<0?0:(igK>=H?H-1:igK); igAcc+=igTmp[igCy*W+igX]; } for(igY=0;igY<H;igY++){ igSoft[igY*W+igX]=igAcc*igInv; var igAddY=igY+igRad+1; igAddY=igAddY>=H?H-1:igAddY; var igSubY=igY-igRad; igSubY=igSubY<0?0:igSubY; igAcc+=igTmp[igAddY*W+igX]-igTmp[igSubY*W+igX]; } } var igCr=igCol[0],igCg=igCol[1],igCb=igCol[2]; for(igI=0;igI<igN;igI++){ igIdx=igI*4; if(d[igIdx+3]<=0)continue; var igProx=(1-igSoft[igI])*1.6; if(igProx<0)igProx=0; else if(igProx>1)igProx=1; var igF=igProx*igInt; if(igF<=0)continue; if(igF>1)igF=1; var igGr=igCr*igF, igGg=igCg*igF, igGb=igCb*igF; var igR0=d[igIdx],igG0=d[igIdx+1],igB0=d[igIdx+2]; d[igIdx]=255-(255-igR0)*(255-igGr)/255; d[igIdx+1]=255-(255-igG0)*(255-igGg)/255; d[igIdx+2]=255-(255-igB0)*(255-igGb)/255; } },
@@ -7328,7 +7533,18 @@ window.FM = window.FM || {};
       var hxY0=hxBB?Math.max(0,hxBB.y-hxM):0, hxY1=hxBB?Math.min(H-1,hxBB.y+hxBB.h-1+hxM):H-1;
       var hxX0=hxBB?Math.max(0,hxBB.x-hxM):0, hxX1=hxBB?Math.min(W-1,hxBB.x+hxBB.w-1+hxM):W-1;
       for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
-    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d); for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
+    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d);
+      /* #482 polish 6.6. BOTH WAYS reads the same taps on the far side too, each side as strong as the one-way streak, so a bright dot
+         streaks out both ways along Angle. ONLY ABOVE is Zoom Streaks' gate: a tap's brightness below the cut weighs nothing and the
+         rest is stretched back over 0..1 before it is squared, so 0 % is the old (lum)^2 weight exactly. TINT multiplies the streak
+         (never the picture under it) by a colour; white skips the multiply. One way, 0 % and white are the old streak to the byte. */
+      var lsSides=(p.both==null?0:(Math.round(FM.evalProp(p.both,t))|0))===1?2:1;
+      var lsThrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(!(lsThrP>0))lsThrP=0; if(lsThrP>100)lsThrP=100; var lsGate=lsThrP>0, lsThr=lsThrP/100, lsSpan=1-lsThr;
+      var lsTc=hexToRGB(p.color||'#ffffff'), lsTint=!(lsTc[0]===255&&lsTc[1]===255&&lsTc[2]===255);
+      /* One way, 0 % and white take v17.21's loop VERBATIM, branched once here and never per tap: the side loop below costs about
+         a quarter more time per pixel even at one side (159 against 126 ms on a 1080x1920 plate), and every saved streak is this case. */
+      if(lsSides===1&&!lsGate&&!lsTint){ for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; var lsSx=lsX-lsDx*lsOff, lsSy=lsY-lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } return; }
+      for(var lsY=0;lsY<H;lsY++){ var lsRow=lsY*lsW4; for(var lsX=0;lsX<W;lsX++){ var lsI=lsRow+lsX*4; if(lsS[lsI+3]<=0)continue; var lsAr=0,lsAg=0,lsAb=0; for(var lsK=1;lsK<=lsSamp;lsK++){ var lsOff=lsK*lsStep; for(var lsSide=0;lsSide<lsSides;lsSide++){ var lsSx=lsSide===0?lsX-lsDx*lsOff:lsX+lsDx*lsOff, lsSy=lsSide===0?lsY-lsDy*lsOff:lsY+lsDy*lsOff; var lsXi=lsSx<0?0:(lsSx>W-1?W-1:Math.round(lsSx)); var lsYi=lsSy<0?0:(lsSy>H-1?H-1:Math.round(lsSy)); var lsSi=lsYi*lsW4+lsXi*4; if(lsS[lsSi+3]<=0)continue; var lsSr=lsS[lsSi], lsSg=lsS[lsSi+1], lsSb=lsS[lsSi+2]; var lsBright=(lsSr*0.299+lsSg*0.587+lsSb*0.114)/255; if(lsGate){ lsBright = lsBright<=lsThr ? 0 : (lsSpan<=0?1:(lsBright-lsThr)/lsSpan); } lsBright=lsBright*lsBright; var lsDecay=1-(lsK/(lsSamp+1)); var lsWt=lsBright*lsDecay; lsAr+=lsSr*lsWt; lsAg+=lsSg*lsWt; lsAb+=lsSb*lsWt; } } var lsNorm=lsSamp*0.5; var lsTr=lsAr/lsNorm, lsTg=lsAg/lsNorm, lsTb=lsAb/lsNorm; if(lsTr>255)lsTr=255; if(lsTg>255)lsTg=255; if(lsTb>255)lsTb=255; if(lsTint){ lsTr=lsTr*lsTc[0]/255; lsTg=lsTg*lsTc[1]/255; lsTb=lsTb*lsTc[2]/255; } var lsR=d[lsI], lsG=d[lsI+1], lsB=d[lsI+2]; d[lsI]=255-(255-lsR)*(255-lsTr)/255; d[lsI+1]=255-(255-lsG)*(255-lsTg)/255; d[lsI+2]=255-(255-lsB)*(255-lsTb)/255; } } },
     // ---- batch 13 (opacity / visibility) ----
     blink: function(d, W, H, p, t) { var blkRate = FM.evalProp(p.rate, t); if (blkRate == null || !isFinite(blkRate)) blkRate = 2; if (blkRate < 0.5) blkRate = 0.5; if (blkRate > 12) blkRate = 12; var blkTime = (typeof t === 'number' && isFinite(t)) ? t : 0; if (blkTime < 0) blkTime = 0; 
       // Every blink in every project was the same hard 50/50 square wave locked to t=0. DUTY makes a
@@ -7667,7 +7883,43 @@ window.FM = window.FM || {};
         }
       }
     },
-    lensflare: function(d,W,H,p,t){ var lfx = fparam(p, 'x', 0.3, t); if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy = fparam(p, 'y', 0.3, t); if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI = fparam(p, 'intensity', 1, t); if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSig=W*0.18; if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4; for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=1.0471975512; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; var lfShape=lfB16*lfB16; var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; if(lfAmt<=0) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
+    lensflare: function(d,W,H,p,t){ var lfx = fparam(p, 'x', 0.3, t); if(lfx<0)lfx=0; if(lfx>1)lfx=1; var lfy = fparam(p, 'y', 0.3, t); if(lfy<0)lfy=0; if(lfy>1)lfy=1; var lfI = fparam(p, 'intensity', 1, t); if(lfI<0)lfI=0; if(lfI>2)lfI=2; var lfLX=lfx*W, lfLY=lfy*H; var lfSz=fparam(p, 'size', 100, t); if(!(lfSz>=20))lfSz=20; if(lfSz>400)lfSz=400; var lfSig=W*0.18; if(lfSz!==100)lfSig=W*0.18*lfSz/100; /* CORE SIZE (#482 6.5): 100 % keeps the old W*0.18 untouched */ if(lfSig<1)lfSig=1; var lfDen=2*lfSig*lfSig; /* QUEUE 558 — "Lens flair should have colour options". The flare was hardcoded warm white (255,240,210 = #fff0d2), and it draws TWO things: the round core and the six streaks. Both get their own colour, so the anamorphic look (warm core, cold streaks) is reachable; both DEFAULT to the old hardcoded value, so an existing flare and a newly added one render exactly as before. */ var lfC1=hexToRGB(p.color||'#fff0d2'), lfFR=lfC1[0], lfFG=lfC1[1], lfFB=lfC1[2]; var lfC2=hexToRGB(p.color2||'#fff0d2'), lfRR=lfC2[0], lfRG=lfC2[1], lfRB=lfC2[2]; var lfSame=(lfRR===lfFR&&lfRG===lfFG&&lfRB===lfFB); var lfRays=[0.0,1.0471975512,2.0943951024,3.1415926536,4.1887902048,5.2359877560]; var lfNR=lfRays.length; var lfMaxR=Math.sqrt(W*W+H*H); var lfw4=W*4;
+      /* #482 polish 6.5. RAYS 0-16 and ROTATION: the nearest-ray rounding below works for any even spacing, so N rays are one
+         rounding at 2pi/N. Six keeps the old literal step and the five squarings, and rotation 0 subtracts nothing, so the default is
+         queue 474's path to the byte. Past six the rays narrow with N squared (cos^e at the half-gap stays where six put it), or
+         sixteen would merge into a ring. Fewer than six keep the old width. */
+      var lfN=Math.round(fparam(p, 'rays', 6, t)); if(!(lfN>=0))lfN=0; if(lfN>16)lfN=16;
+      var lfRot=fparam(p, 'rotation', 0, t); if(!isFinite(lfRot))lfRot=0; lfRot=lfRot*Math.PI/180;
+      var lfStepN=lfN===6?1.0471975512:(lfN>0?6.283185307179586/lfN:0), lfExp=lfN<=6?32:32*(lfN/6)*(lfN/6), lfP32=lfExp===32;
+      /* GHOSTS, RING and ANAMORPHIC STREAK — extra light added to the same screen, drawn only where the layer is (as the core is).
+         Ghosts sit on the line from the light through the middle of the plate (1 = the middle, 2 = the light mirrored through it),
+         sized off the plate's short side, each a soft disc with a brighter rim in a tint of the Flare colour. The ring is a thin
+         halo round the light with red outside and blue inside. The streak is a thin bright line through the light with a soft
+         glow, fading along the width, in the Rays & streak colour. All are fractions of the plate, so a preview plate draws them
+         where the export does. None is drawn at 0, and the old expression is untouched when all three are 0. */
+      var lfGh=Math.round(fparam(p, 'ghosts', 0, t)); if(!(lfGh>=0))lfGh=0; if(lfGh>8)lfGh=8;
+      var lfHalo=fparam(p, 'halo', 0, t); if(!(lfHalo>=0))lfHalo=0; if(lfHalo>1)lfHalo=1;
+      var lfStk=fparam(p, 'streak', 0, t); if(!(lfStk>=0))lfStk=0; if(lfStk>1)lfStk=1;
+      var lfX=lfGh>0||lfHalo>0||lfStk>0, lfU=Math.min(W,H), lfCX=W/2, lfCY=H/2;
+      var lfGT=[[1.35,0.050,0.45,1.00,0.85,0.55],[1.75,0.090,0.34,0.55,1.00,0.70],[0.62,0.032,0.52,0.70,0.80,1.00],[2.10,0.130,0.26,1.00,0.70,0.95],
+                [1.12,0.024,0.58,0.95,1.00,0.60],[0.40,0.056,0.34,0.60,0.90,1.00],[2.45,0.170,0.20,1.00,0.80,0.65],[1.95,0.040,0.44,0.75,0.65,1.00]];
+      var lfGx=[], lfGy=[], lfGr=[], lfGa=[], lfGcr=[], lfGcg=[], lfGcb=[];
+      for(var lfq=0;lfq<lfGh;lfq++){ var lfg=lfGT[lfq]; lfGx.push(lfLX+(lfCX-lfLX)*lfg[0]); lfGy.push(lfLY+(lfCY-lfLY)*lfg[0]); lfGr.push(Math.max(1,lfU*lfg[1])); lfGa.push(lfI*255*lfg[2]); lfGcr.push(lfFR*lfg[3]/255); lfGcg.push(lfFG*lfg[4]/255); lfGcb.push(lfFB*lfg[5]/255); }
+      var lfRR0=lfU*0.3, lfRW=Math.max(0.75,lfU*0.016), lfRDen=2*lfRW*lfRW, lfRA=lfHalo*lfI*120*(lfU*0.016<0.75?lfU*0.016/0.75:1);   // dimmed below 0.75 px, as the streak line is
+      /* The streak's bright line is thinner than a pixel on a small plate. Sampled at whole rows, a Gaussian that thin still puts
+         its full peak on one row, so a reduced preview plate drew it heavier than the export does (measured on a 240x180 project:
+         the half-size preview of a full flare sat 2.32 levels from the export, 2.06 after this). Below 0.7 px it is drawn 0.7 wide
+         and dimmed by the same ratio, which keeps the light it carries per row (sigma x sqrt(2 pi)) the export's. */
+      var lfS1t=lfU*0.0035, lfS1=Math.max(0.7,lfS1t), lfS1A=lfS1t<0.7?lfS1t/0.7:1, lfS2=Math.max(1.5,lfU*0.02), lfS2A=lfU*0.02<1.5?lfU*0.02/1.5:1, lfSD1=2*lfS1*lfS1, lfSD2=2*lfS2*lfS2, lfSL=Math.max(1,W*0.45), lfSA=lfStk*lfI;
+      for(var lfYY=0;lfYY<H;lfYY++){ var lfrow=lfYY*lfw4; for(var lfXX=0;lfXX<W;lfXX++){ var lfi=lfrow+lfXX*4; if(d[lfi+3]<=0) continue; var lfDX=lfXX-lfLX, lfDY=lfYY-lfLY; var lfd2=lfDX*lfDX+lfDY*lfDY; var lfDist=Math.sqrt(lfd2); var lfCore=lfI*255*Math.exp(-lfd2/lfDen); var lfRay=0; if(lfN>0&&lfDist>0.5){ var lfAng=Math.atan2(lfDY,lfDX); if(lfRot!==0)lfAng-=lfRot; /* SIX COSINES FOR THE NEAREST OF SIX EVENLY-SPACED RAYS (queue 474). The rays sit every 60 deg around the circle, so the best-aligned one is simply the NEAREST — cos is largest where |dA| is smallest — and the nearest is one rounding away. Six cos calls and twelve wrap-tests per pixel become one cos. Equal in exact arithmetic; the float order differs, so the test bounds the difference rather than demanding bit-equality. |dA| <= 30 deg always, so lfBest >= 0.866 and the branch below is always taken, exactly as before. */ var lfStep=lfStepN; var lfdA=lfAng-Math.round(lfAng/lfStep)*lfStep; var lfBest=Math.cos(lfdA); if(lfBest>0){ /* pow(b,32) is five squarings — checked byte-identical against Math.pow here, and the exponent is a literal so it can never drift out of step with the code. */ var lfShape; if(lfP32){ var lfB2=lfBest*lfBest, lfB4=lfB2*lfB2, lfB8=lfB4*lfB4, lfB16=lfB8*lfB8; lfShape=lfB16*lfB16; } else lfShape=Math.pow(lfBest,lfExp); var lfFall=Math.exp(-lfDist/(lfMaxR*0.35)); lfRay=lfI*150*lfShape*lfFall; } } var lfAmt=lfCore+lfRay; var lfEr=0, lfEg=0, lfEb=0;
+        if(lfX){
+          for(var lfk=0;lfk<lfGh;lfk++){ var lfgx=lfXX-lfGx[lfk], lfgr=lfGr[lfk]; if(lfgx>=lfgr||lfgx<=-lfgr)continue; var lfgy=lfYY-lfGy[lfk]; if(lfgy>=lfgr||lfgy<=-lfgr)continue; var lfgd2=lfgx*lfgx+lfgy*lfgy; if(lfgd2>=lfgr*lfgr)continue;
+            var lfrho=Math.sqrt(lfgd2)/lfgr, lfr4=lfrho*lfrho*lfrho*lfrho, lfedge=(1-lfrho)/0.18; if(lfedge>1)lfedge=1; var lfgv=lfGa[lfk]*(0.55+0.45*lfr4)*lfedge; lfEr+=lfGcr[lfk]*lfgv; lfEg+=lfGcg[lfk]*lfgv; lfEb+=lfGcb[lfk]*lfgv; }
+          if(lfRA>0){ var lfe0=lfDist-lfRR0*1.04, lfe1=lfDist-lfRR0, lfe2=lfDist-lfRR0*0.96; var lfRc=lfRW*4.5;
+            if(lfe0<lfRc&&lfe0>-lfRc) lfEr+=lfFR*lfRA*Math.exp(-lfe0*lfe0/lfRDen)/255; if(lfe1<lfRc&&lfe1>-lfRc) lfEg+=lfFG*lfRA*Math.exp(-lfe1*lfe1/lfRDen)/255; if(lfe2<lfRc&&lfe2>-lfRc) lfEb+=lfFB*lfRA*Math.exp(-lfe2*lfe2/lfRDen)/255; }
+          if(lfSA>0){ var lfsy2=lfDY*lfDY; if(lfsy2<lfSD2*9){ var lfsv=lfSA*(190*lfS1A*Math.exp(-lfsy2/lfSD1)+55*lfS2A*Math.exp(-lfsy2/lfSD2))*Math.exp(-(lfDX<0?-lfDX:lfDX)/lfSL); lfEr+=lfRR*lfsv/255; lfEg+=lfRG*lfsv/255; lfEb+=lfRB*lfsv/255; } }
+        }
+        if(lfAmt<=0&&!(lfEr>0||lfEg>0||lfEb>0)) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } if(lfX){ lfAddR+=lfEr; lfAddG+=lfEg; lfAddB+=lfEb; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
     roughenedges: function(d,W,H,p,t){ var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt)); var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl)); if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
     /* ⚠️ THE CLAMP IS IN PLATE PIXELS (queue 913). pxToPlate has already multiplied `size` by the plate scale, so the
        catalogue's 8..80 has to be too — `arguments[5]`, because naming `ps` would lift the arity past pxToPlate's check
@@ -7697,6 +7949,44 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          Down is the loop below, untouched — a saved scan is byte-identical. Up runs the same line backwards; Right and Left are
          the same maths along COLUMNS, with the same wrap-around distance. */
       var gsDir=p.direction==null?0:(Math.round(FM.evalProp(p.direction,t))|0);
+      /* #482 polish 6.7. ANGLE (Sweeps = 4), SWEEPS ACROSS LAYER, WAIT BETWEEN SWEEPS and ONCE all take this path; Frame, no wait,
+         Loop and the four directions never reach it, so a saved scan is the loop below to the byte.
+         The band is the same Gaussian at the same strength, screened the same way, measured along a unit vector: Down (0,1), Up
+         (0,-1), Right, Left, or (cos, sin) of Angle — so 0 deg travels right and 90 deg travels down, like Linear Streaks.
+         WHERE it runs is the frame, or the layer's own box on this plate (the exact alpha scan the bounded kernels use), taken
+         across that vector from its first corner to its last.
+         TWO KINDS OF SWEEP. Frame, no wait and Loop with an Angle is still the old wrapping scan on project time (the band leaves
+         one end as it enters the other) — the same model the four directions have always used. Anything else TRAVELS: the band
+         starts 3.6 sigma before the first edge (where it is under the 0.002 the loop below already skips) and ends 3.6 sigma past
+         the last, on the clip's own clock (FM.fxLocalTime, so a split or trimmed clip keeps its timing), with the wait first:
+         wait, sweep, wait, sweep — or wait, sweep, nothing, for Once. So a sweep that rests never leaves half a band parked on an
+         edge, and the shine lands when the title does. Stateless: a hash of nothing, only t, so preview = export = scrub. */
+      var gsSpan=p.span==null?0:(Math.round(FM.evalProp(p.span,t))|0), gsOnce=p.loop==null?0:(Math.round(FM.evalProp(p.loop,t))|0);
+      var gsWait=fparam(p,'pause',0,t); if(!(gsWait>0))gsWait=0; if(gsWait>5)gsWait=5;
+      if(gsDir===4||gsSpan===1||gsWait>0||gsOnce===1){
+        var gsTravel=!(gsSpan!==1&&gsWait===0&&gsOnce!==1), gsU=gsPhase;
+        if(gsTravel){
+          var gsLay=arguments[7], gsTl=gsLay?FM.fxLocalTime(gsLay,t):t;
+          if(!(gsSpeed>0)) return;
+          if(gsOnce===1){ var gsK=(gsTl-gsWait)*gsSpeed; if(!(gsK>=0&&gsK<=1)) return; gsU=gsK; }
+          else { var gsCyc=1/gsSpeed+gsWait, gsM=gsTl%gsCyc; if(gsM<0)gsM+=gsCyc; if(gsM<gsWait) return; gsU=(gsM-gsWait)*gsSpeed; if(gsU>1)gsU=1; }
+        }
+        var gsX0=0, gsY0=0, gsX1=W, gsY1=H;
+        if(gsSpan===1){ var gsBox=fxBoundsScan(d,W,H); if(!gsBox) return; if(!gsBox.dirty){ gsX0=gsBox.x; gsY0=gsBox.y; gsX1=gsBox.x+gsBox.w; gsY1=gsBox.y+gsBox.h; } }
+        var gsUx=0, gsUy=1;
+        if(gsDir===1){ gsUy=-1; } else if(gsDir===2){ gsUx=1; gsUy=0; } else if(gsDir===3){ gsUx=-1; gsUy=0; }
+        else if(gsDir===4){ var gsA=(p.angle==null?30:FM.evalProp(p.angle,t)); if(!isFinite(gsA))gsA=30; gsA=gsA*Math.PI/180; gsUx=Math.cos(gsA); gsUy=Math.sin(gsA); }
+        var gsC=[gsX0*gsUx+gsY0*gsUy, gsX1*gsUx+gsY0*gsUy, gsX0*gsUx+gsY1*gsUy, gsX1*gsUx+gsY1*gsUy];
+        var gsS0=Math.min(gsC[0],gsC[1],gsC[2],gsC[3]), gsS1=Math.max(gsC[0],gsC[1],gsC[2],gsC[3]), gsL=gsS1-gsS0; if(!(gsL>0)) return;
+        var gsMid, gsWrap=!gsTravel;
+        if(gsWrap) gsMid=gsS0+gsU*gsL; else { var gsMg=3.6*gsSigma; gsMid=gsS0-gsMg+gsU*(gsL+2*gsMg); }
+        var gsCut=gsDen*6.2146;   // exp(-6.2146) = 0.002, the floor the loop below skips at
+        for(var gsYa=gsY0;gsYa<gsY1;gsYa++){ var gsRowa=gsYa*gsW4, gsSy=gsYa*gsUy-gsMid; for(var gsXa2=gsX0;gsXa2<gsX1;gsXa2++){
+          var gsDd=gsXa2*gsUx+gsSy; if(gsWrap) gsDd-=gsL*Math.round(gsDd/gsL); var gsD2=gsDd*gsDd; if(gsD2>=gsCut) continue;
+          var gsIa=gsRowa+gsXa2*4; if(d[gsIa+3]<=0) continue; var gsBa=Math.exp(-gsD2/gsDen); if(gsBa<0.002) continue;
+          var gsRa=gsCr*gsBa, gsGa=gsCg*gsBa, gsBb2=gsCb*gsBa; d[gsIa]=255-(255-d[gsIa])*(255-gsRa)/255; d[gsIa+1]=255-(255-d[gsIa+1])*(255-gsGa)/255; d[gsIa+2]=255-(255-d[gsIa+2])*(255-gsBb2)/255; } }
+        return;
+      }
       if(gsDir===1) gsScanY=(1-gsPhase)*H;
       if(gsDir===2||gsDir===3){ var gsScanX=(gsDir===2?gsPhase:1-gsPhase)*W, gsBx=new Float32Array(W);
         for(var gsXa=0;gsXa<W;gsXa++){ var gsDx=Math.abs(gsXa-gsScanX), gsAx=W-gsDx; if(gsAx<gsDx)gsDx=gsAx; gsBx[gsXa]=Math.exp(-(gsDx*gsDx)/gsDen); }
@@ -7734,8 +8024,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          Same identity, not an approximation — only the ORDER of floating-point operations differs, which
          is why the suite pins this with a BOUNDED-difference assertion rather than the byte-identity one
          used for tilt shift. See the test for why exact equality is not reachable here. */
+      /* #482 polish 6.6. DIRECTION: Anticlockwise mirrors every tap angle, which is the sine's sign — the bound below inverts the
+         same arrays, so it stays exact either way. ONLY ABOVE: a tap that lands on something darker than the cut is read as this
+         pixel itself instead (fading over the 10 % below the cut, so nothing pops), so dark parts stay where they are and only the
+         bright parts sweep round into arcs. At 0 nothing is gated and the old loop runs. */
+      var ssDir=p.dir==null?0:(Math.round(FM.evalProp(p.dir,t))|0);
+      var ssThrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(!(ssThrP>0))ssThrP=0; if(ssThrP>100)ssThrP=100; var ssThr=ssThrP/100;
       var ssCos=new Float64Array(ssN), ssSin=new Float64Array(ssN), ssWts=new Float64Array(ssN), ssWtot=0;
-      for(var ssP=0; ssP<ssN; ssP++){ var ssAng=ssP*ssDa; ssCos[ssP]=Math.cos(ssAng); ssSin[ssP]=Math.sin(ssAng); ssWts[ssP]=1/(1+ssP*(9/(ssN-1))*ssDec);   /* falloff per ANGLE, not per tap, so more taps smooth the trail without shortening it; 9/9 is exactly 1 at the old 10 */ ssWtot+=ssWts[ssP]; }
+      for(var ssP=0; ssP<ssN; ssP++){ var ssAng=ssP*ssDa; ssCos[ssP]=Math.cos(ssAng); ssSin[ssP]=ssDir===1?-Math.sin(ssAng):Math.sin(ssAng); ssWts[ssP]=1/(1+ssP*(9/(ssN-1))*ssDec);   /* falloff per ANGLE, not per tap, so more taps smooth the trail without shortening it; 9/9 is exactly 1 at the old 10 */ ssWtot+=ssWts[ssP]; }
       var ssY0=0, ssY1=H-1, ssX0=0, ssX1=W-1;
        /* ⚠️ NOT WHEN THE LAYER TOUCHES A FRAME EDGE. A tap whose sample falls outside the frame is
           CLAMPED to the border rather than dropped, so if the layer is ON that border a pixel arbitrarily
@@ -7761,6 +8057,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        // a rotation preserves distance, so the tap's truncation costs about a pixel; 3 is slack
        ssX0=Math.max(0,Math.floor(ssMnx)-3); ssX1=Math.min(W-1,Math.ceil(ssMxx)+3);
        ssY0=Math.max(0,Math.floor(ssMny)-3); ssY1=Math.min(H-1,Math.ceil(ssMxy)+3);
+     }
+     if(ssThrP>0){
+       for(var sgY=ssY0; sgY<=ssY1; sgY++){ for(var sgX=ssX0; sgX<=ssX1; sgX++){
+         var sgDx=sgX-ssCx, sgDy=sgY-ssCy, sgO=(sgY*W+sgX)*4, sgR0=ssSrc[sgO], sgG0=ssSrc[sgO+1], sgB0=ssSrc[sgO+2], sgA0=ssSrc[sgO+3];
+         var sgR=0, sgG=0, sgB=0, sgA=0;
+         for(var sgK=0; sgK<ssN; sgK++){ var sgWt=ssWts[sgK]; var sgSx=ssCx + sgDx*ssCos[sgK] + sgDy*ssSin[sgK]; var sgSy=ssCy + sgDy*ssCos[sgK] - sgDx*ssSin[sgK];
+           var sgXi=sgSx<0?0:(sgSx>W-1?W-1:(sgSx|0)); var sgYi=sgSy<0?0:(sgSy>H-1?H-1:(sgSy|0)); var sgI=sgYi*ssW4 + sgXi*4;
+           var sr=ssSrc[sgI], sg=ssSrc[sgI+1], sb=ssSrc[sgI+2], sa=ssSrc[sgI+3];
+           var sgL=(sr*0.299+sg*0.587+sb*0.114)*(sa/255)/255, sgG1=sgL>=ssThr?1:1-(ssThr-sgL)/0.1; if(sgG1<0)sgG1=0;
+           if(sgG1<1){ sr=sgR0+(sr-sgR0)*sgG1; sg=sgG0+(sg-sgG0)*sgG1; sb=sgB0+(sb-sgB0)*sgG1; sa=sgA0+(sa-sgA0)*sgG1; }
+           sgR+=sr*sgWt; sgG+=sg*sgWt; sgB+=sb*sgWt; sgA+=sa*sgWt; }
+         d[sgO]=sgR/ssWtot; d[sgO+1]=sgG/ssWtot; d[sgO+2]=sgB/ssWtot; d[sgO+3]=sgA/ssWtot; } }
+       return;
      }
      for(var ssY=ssY0; ssY<=ssY1; ssY++){ for(var ssX=ssX0; ssX<=ssX1; ssX++){ var ssDx=ssX-ssCx, ssDy=ssY-ssCy; var ssAccR=0, ssAccG=0, ssAccB=0, ssAccA=0; for(var ssK=0; ssK<ssN; ssK++){ var ssWt=ssWts[ssK]; var ssCk=ssCos[ssK], ssSk=ssSin[ssK]; var ssSx=ssCx + ssDx*ssCk + ssDy*ssSk; var ssSy=ssCy + ssDy*ssCk - ssDx*ssSk; var ssXi=ssSx<0?0:(ssSx>W-1?W-1:(ssSx|0)); var ssYi=ssSy<0?0:(ssSy>H-1?H-1:(ssSy|0)); var ssIdx=ssYi*ssW4 + ssXi*4; ssAccR+=ssSrc[ssIdx]*ssWt; ssAccG+=ssSrc[ssIdx+1]*ssWt; ssAccB+=ssSrc[ssIdx+2]*ssWt; ssAccA+=ssSrc[ssIdx+3]*ssWt; } var ssOut=(ssY*W+ssX)*4; d[ssOut]=ssAccR/ssWtot; d[ssOut+1]=ssAccG/ssWtot; d[ssOut+2]=ssAccB/ssWtot; d[ssOut+3]=ssAccA/ssWtot; } } },
     /* FRACTAL RIDGES. Three octaves of value noise, each folded to a ridge (1 - |2n-1|) and summed
@@ -8374,7 +8683,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with
     // frame size, so mid-tones haze softly instead of only hot highlights blooming.
-    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; var sgN=W*H, sgB=new Float32Array(sgN), sgT=new Float32Array(sgN), sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
+    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; /* #482 polish 6.2 — see lightglow */ var sg6=glow6Opts(p,t,true); if(sg6){ var sgRad6=p.radius==null?100:FM.evalProp(p.radius,t); return glow6(d,W,H,1,sgA,sgThrV,(sgRad6===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad6/100)))),sgWh?null:sgC,sg6); } var sgN=W*H, sgB=new Float32Array(sgN), sgT=new Float32Array(sgN), sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
     // Replace Color: pixels whose hue sits within the tolerance window of the From colour get their hue
     // shifted to the To colour (sat/val kept), with a soft falloff to the window edge. Near-greys are
     // skipped — they carry no meaningful hue to replace.
@@ -8796,6 +9105,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      fast box blur produces the SAME bytes as the 17-tap one it replaced, not merely a similar picture.
      Read-only by convention; nothing outside may mutate a kernel. */
   FM._pixelFx = PIXEL_FX;
+  /* WHEN A GLOW SCAN IS ACTUALLY SWEEPING (#482 polish 6.7). The open effect's "changes nothing" check (fx-thumbs noopTimes) looks
+     at the playhead and seven moments spread through the clip. A Glow Scan that waits between sweeps, or sweeps Once, can be at
+     rest at all eight — one 0.67 s sweep at the start of a 10 s clip misses every one of them — and the panel would tell him a
+     working effect does nothing (#460, #477). So the middle of its first sweeps, on the clip clock the kernel runs them on, are
+     offered as moments to look at too. Only for the sweeps that rest; the wrapping scan is always somewhere on the frame. */
+  FM.fxNoopMoments = function (layer) {
+    const out = [];
+    if (!layer || !Array.isArray(layer.effects)) return out;
+    layer.effects.forEach(fx => {
+      if (!fx || fx.type !== 'glowscan' || fx.enabled === false) return;
+      const p = fx.params || {}, t0 = +layer.start || 0;
+      const ev = (k, d) => { const v = p[k] == null ? d : FM.evalProp(p[k], t0); return (typeof v === 'number' && isFinite(v)) ? v : d; };
+      const sp = Math.min(8, ev('speed', 1.5)), wait = Math.max(0, Math.min(5, ev('pause', 0)));
+      const once = Math.round(ev('loop', 0)) === 1, span = Math.round(ev('span', 0));
+      if (!(sp > 0) || (wait === 0 && !once && span !== 1)) return;
+      const shift = -FM.fxLocalTime(layer, 0), cyc = 1 / sp + wait;   // project time = clip-clock time + shift
+      for (let k = 0; k < (once ? 1 : 3); k++) out.push(shift + wait + 0.5 / sp + k * cyc);
+    });
+    return out;
+  };
   Object.setPrototypeOf(PIXEL_FX, null);   // own keys only — see POSTFX
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
@@ -12090,6 +12419,118 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let e = null; try { e = alphaBBoxWithin(_fx2d(A), bb); } catch (err) { e = null; }
     return e && e.w > 0 && e.h > 0 ? e : bb;
   }
+  /* #482 polish 6.1 — the vignette's new controls, read once at frame t. NULL when every one is at its default: that is the
+     signal to draw the old gradient exactly as it always was. Keyframed values are read at t like every other control. */
+  function vignette6(p, t) {
+    const num = (k, d, lo, hi) => { let v = p[k] == null ? d : Number(FM.evalProp(p[k], t)); if (!isFinite(v)) v = d; return v < lo ? lo : (v > hi ? hi : v); };
+    const o = { round: num('round', 100, 0, 100), feather: num('feather', 100, 10, 300), x: num('x', 50, 0, 100), y: num('y', 50, 0, 100),
+      mode: Math.round(num('mode', 0, 0, 2)), hilite: num('hilite', 0, 0, 100), color: typeof p.color === 'string' ? p.color : '#000000' };
+    if (o.round === 100 && o.feather === 100 && o.x === 50 && o.y === 50 && o.mode === 0 && o.hilite === 0) return null;
+    return o;
+  }
+  FM._vignette6 = vignette6;   // suite seam
+
+  /* ═══ #482 POLISH 6.2 — LIGHT, SOFT AND DARK GLOW: Threshold softness, Smoothness, Glow past the edges, Blend, Colour from ═══
+   * The three kernels (PIXEL_FX lightglow / softglow / darkglow) were one hard threshold step, ONE box blur, and a write only
+   * where the layer already had alpha — so a glow stopped dead at a title's edge (C23) and a gradient got a contour where it
+   * crossed the threshold (C49). glow6Opts reads the new controls and is NULL when all of them are at their defaults; the
+   * kernels then run their old loops untouched, byte for byte. Otherwise glow6 below draws the glow:
+   *   · THE MASK is each kernel's own (Light: the pixel's brightness above the threshold; Soft: 1.55 × how far above it;
+   *     Dark: 255 − brightness below it). Threshold softness swaps the step for a smooth one, ±64 levels wide at 100 (Soft
+   *     Glow takes the quadratic knee, which joins its ramp without a kink).
+   *   · SMOOTHNESS runs the same box blur 1–3 times (three boxes are within a few percent of a Gaussian).
+   *   · COLOUR FROM Source colour blurs the bright areas' own colours (three masks, each the colour × the mask's share).
+   *   · BLEND Screen / Add / Soft light for the two light glows; Multiply / Subtract / Soft light for Dark Glow.
+   *   · GLOW PAST THE EDGES weighs the mask by alpha (a half-covered edge pixel gives half its light) and writes the glow
+   *     into the empty pixels round the layer as the glow colour at the glow's own strength — under the layer's pixels, so a
+   *     soft edge blends into its halo. Light and Dark Glow run on the cropped readback (CROP_FX): its margin is 3 × Radius
+   *     + 8 plate px, and three passes of a box of radius R reach exactly 3R, so the halo is never cut (tested). */
+  function glow6Opts(p, t, light) {
+    const num = (k, d, lo, hi) => { let v = p[k] == null ? d : Number(FM.evalProp(p[k], t)); if (!isFinite(v)) v = d; return v < lo ? lo : (v > hi ? hi : v); };
+    const o = { knee: num('knee', 0, 0, 100), passes: Math.round(num('passes', 1, 1, 3)), outside: Math.round(num('outside', 0, 0, 1)),
+      blend: Math.round(num('blend', 0, 0, 2)), from: light ? Math.round(num('from', 0, 0, 1)) : 0 };
+    if (o.knee === 0 && o.passes === 1 && o.outside === 0 && o.blend === 0 && o.from === 0) return null;
+    return o;
+  }
+  FM._glow6Opts = glow6Opts;   // suite seam
+  FM._glow6 = function (d, W, H, kind, amt, thrV, R, col, o) { return glow6(d, W, H, kind, amt, thrV, R, col, o); };   // suite seam: the general path at neutral settings must be the old kernel
+  /* The old kernels' box blur, verbatim arithmetic (replicate at the plate edge), in place: src → tmp across, tmp → src down. */
+  function glowBox6(src, tmp, W, H, R) {
+    const div = 2 * R + 1;
+    for (let y = 0; y < H; y++) {
+      const row = y * W; let sum = 0;
+      for (let x = -R; x <= R; x++) sum += src[row + (x < 0 ? 0 : (x >= W ? W - 1 : x))];
+      for (let x = 0; x < W; x++) { tmp[row + x] = sum / div; const ax = x + R + 1, sx = x - R; sum += src[row + (ax >= W ? W - 1 : ax)] - src[row + (sx < 0 ? 0 : sx)]; }
+    }
+    for (let x = 0; x < W; x++) {
+      let sum = 0;
+      for (let y = -R; y <= R; y++) sum += tmp[(y < 0 ? 0 : (y >= H ? H - 1 : y)) * W + x];
+      for (let y = 0; y < H; y++) { src[y * W + x] = sum / div; const ay = y + R + 1, sy = y - R; sum += tmp[(ay >= H ? H - 1 : ay) * W + x] - tmp[(sy < 0 ? 0 : sy) * W + x]; }
+    }
+  }
+  /* kind 0 Light, 1 Soft, 2 Dark. thrV: the threshold in levels, as the old kernel computes it. R: the box radius in plate px.
+     col: the Glow colour [r,g,b], or null for white. */
+  function glow6(d, W, H, kind, amt, thrV, R, col, o) {
+    const N = W * H, out = o.outside === 1, src = o.from === 1 && kind !== 2, nCh = src ? 3 : 1;
+    const kw = o.knee / 100 * 64;
+    const M = []; for (let c = 0; c < nCh; c++) M.push(new Float32Array(N));
+    const tmp = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const i4 = i * 4, a = d[i4 + 3]; if (a === 0) continue;
+      const L = 0.299 * d[i4] + 0.587 * d[i4 + 1] + 0.114 * d[i4 + 2];
+      let m;
+      if (kind === 1) {   // Soft: how far above the threshold, ×1.55; the knee is the quadratic one, so the ramp has no corner
+        let e;
+        if (kw > 0) { if (L <= thrV - kw) e = 0; else if (L >= thrV + kw) e = L - thrV; else { const u = L - thrV + kw; e = u * u / (4 * kw); } }
+        else e = L > thrV ? L - thrV : 0;
+        m = e * 1.55;
+      } else {
+        let w;
+        if (kw > 0) { let q = (L - (thrV - kw)) / (2 * kw); q = q < 0 ? 0 : (q > 1 ? 1 : q); w = q * q * (3 - 2 * q); }
+        else w = L > thrV ? 1 : 0;
+        if (kind === 2) { if (kw <= 0) w = L < thrV ? 0 : 1; m = (255 - L) * (1 - w); }   // Dark: the darks below the threshold
+        else m = L * w;
+      }
+      if (out) m *= a / 255;   // a half-covered edge pixel gives half its light to the halo
+      if (src) { const f = L > 0 ? m / L : 0; M[0][i] = d[i4] * f; M[1][i] = d[i4 + 1] * f; M[2][i] = d[i4 + 2] * f; }
+      else M[0][i] = m;
+    }
+    for (let c = 0; c < nCh; c++) for (let n = 0; n < o.passes; n++) glowBox6(M[c], tmp, W, H, R);
+    const cr = col ? col[0] : 255, cg = col ? col[1] : 255, cb = col ? col[2] : 255;
+    let l0, l1, l2, D = 0;
+    for (let i = 0; i < N; i++) {
+      const i4 = i * 4, a = d[i4 + 3];
+      if (a === 0 && !out) continue;
+      let g;   // the halo's strength, 0..1
+      if (kind === 2) { D = M[0][i] / 255 * amt; if (D > 1) D = 1; if (D <= 0) continue; g = D; }
+      else {
+        if (src) { l0 = M[0][i] * amt; l1 = M[1][i] * amt; l2 = M[2][i] * amt; if (l0 > 255) l0 = 255; if (l1 > 255) l1 = 255; if (l2 > 255) l2 = 255; }
+        else { let G = M[0][i] * amt; if (G > 255) G = 255; l0 = cr * G / 255; l1 = cg * G / 255; l2 = cb * G / 255; }
+        g = Math.max(l0, l1, l2) / 255; if (g <= 0) continue;
+      }
+      let r = 0, gg = 0, b = 0;
+      if (a > 0) {
+        const c0 = d[i4], c1 = d[i4 + 1], c2 = d[i4 + 2];
+        if (kind === 2) {
+          if (o.blend === 1) { r = c0 - 255 * D; gg = c1 - 255 * D; b = c2 - 255 * D; }
+          else if (o.blend === 2) { const s = 127.5 * (1 - D); r = fxBlendPx(4, s, c0); gg = fxBlendPx(4, s, c1); b = fxBlendPx(4, s, c2); }
+          else { r = c0 * (1 - D); gg = c1 * (1 - D); b = c2 * (1 - D); }
+        } else if (o.blend === 1) { r = c0 + l0; gg = c1 + l1; b = c2 + l2; }
+        else if (o.blend === 2) { r = fxBlendPx(4, 127.5 + l0 / 2, c0); gg = fxBlendPx(4, 127.5 + l1 / 2, c1); b = fxBlendPx(4, 127.5 + l2 / 2, c2); }
+        else { r = 255 - (255 - c0) * (255 - l0) / 255; gg = 255 - (255 - c1) * (255 - l1) / 255; b = 255 - (255 - c2) * (255 - l2) / 255; }
+      }
+      if (out && a < 255) {
+        // the halo UNDER the layer's own pixels: premultiplied, the layer's share a, the halo's (1 − a)·g
+        const af = a / 255, oa = af + (1 - af) * g;
+        if (oa <= 0) continue;
+        const hr = kind === 2 ? 0 : l0, hg = kind === 2 ? 0 : l1, hb = kind === 2 ? 0 : l2;
+        r = (af * r + (1 - af) * hr) / oa; gg = (af * gg + (1 - af) * hg) / oa; b = (af * b + (1 - af) * hb) / oa;
+        d[i4 + 3] = oa * 255;
+      }
+      d[i4] = r; d[i4 + 1] = gg; d[i4 + 2] = b;
+    }
+  }
+
   const CANVAS_FX = {
     /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
      * There were two. A video or photo drew an inline black radial gradient over its clip rect inside the media draw:
@@ -12125,6 +12566,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.setTransform(s, 0, 0, s, -oX * s, -oY * s);            // project units → this plate's pixels
       let cx = proj.width / 2, cy = proj.height / 2, R = Math.hypot(proj.width, proj.height) / 2;
       let cover = [oX, oY, W / s, H / s];                      // the whole plate, in the space the gradient is drawn in
+      let frame = [0, 0, proj.width, proj.height];             // what the shape is fitted to (#482 6.1): the project frame…
       if (M && sz && sz.w > 0 && sz.h > 0) {
         let I = null; try { I = M.inverse(); } catch (e) { I = null; }
         if (I && [I.a, I.b, I.c, I.d, I.e, I.f].every(Number.isFinite)) {
@@ -12136,16 +12578,65 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
              darkened it, by the full Amount past the half-diagonal (#986 review, measured: the halo round a clip at
              60% went from a mean of 50.5 to 16.5). source-atop still keeps a PNG's clear corners clear. */
           cover = [-sz.w * anchorX(tr), -sz.h * anchorY(tr), sz.w, sz.h];
+          frame = cover;                                         // …or the clip's own frame on a video or photo
         }
       }
-      if (R > 0) {
+      /* #482 polish 6.1 — Roundness, Feather, Centre, Mode (+ Colour) and Protect highlights. All six at their defaults take
+         the old three lines below untouched (byte-identical: every saved vignette and the filters that carry one). */
+      const v6 = vignette6(p, t);
+      if (R > 0 && !v6) {
         const grad = B.createRadialGradient(cx, cy, R * vgIn, cx, cy, R);
         grad.addColorStop(0, 'rgba(0,0,0,0)');
         grad.addColorStop(1, 'rgba(0,0,0,' + vgA + ')');
         B.fillStyle = grad;
         B.fillRect(cover[0], cover[1], cover[2], cover[3]);
+      } else if (R > 0) {
+        /* THE FRAME the vignette is fitted to, in the space the gradient is drawn in: the clip's own (cropped) frame on a video
+           or photo, the project frame on anything else — the same frame the old circle was centred on and reached the
+           corners of. Roundness 100 is that circle (radius = the half-diagonal); 0 is the ellipse through the four corners
+           with the frame's own proportions (semi-axes W/√2 and H/√2), so the sides and the top darken alike on a 9:16 phone
+           frame. In between, each semi-axis is a straight blend of the two. Centre X/Y moves the shape by a share of the
+           frame; the size stays. */
+        const fr = frame, fw = fr[2], fh = fr[3], Rf = Math.hypot(fw, fh) / 2, k = v6.round / 100;
+        const ex = fw / Math.SQRT2 + (Rf - fw / Math.SQRT2) * k, ey = fh / Math.SQRT2 + (Rf - fh / Math.SQRT2) * k;
+        const ox = fr[0] + fw * v6.x / 100, oy = fr[1] + fh * v6.y / 100;
+        /* FEATHER widens or narrows the fade about its middle: the old fade runs from Size (vgIn) out to the corner (1), so
+           its middle is (vgIn + 1) / 2 and its half-width (1 − vgIn) / 2; Feather scales the half-width. Past 100 the fade
+           starts nearer the middle and is still short of full Amount at the corner; below it is a sharper ring. A fade that
+           would begin before the centre starts AT the centre, at the share of Amount it has reached there. */
+        const mid = (vgIn + 1) / 2, half = Math.max(1e-4, (1 - vgIn) / 2 * v6.feather / 100);
+        let r0 = mid - half; const r1 = mid + half;
+        const a0 = r0 < 0 ? vgA * (-r0) / (r1 - r0) : 0; if (r0 < 0) r0 = 0;
+        const rgb = v6.mode === 1 ? [255, 255, 255] : (v6.mode === 2 ? (hexToRGB(v6.color) || [0, 0, 0]) : [0, 0, 0]);
+        const rgba = a => 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + a + ')';
+        const sx = Math.max(ex, 1e-6), sy = Math.max(ey, 1e-6);   // the unit circle, stretched to the shape
+        B.translate(ox, oy); B.scale(sx, sy);
+        const grad = B.createRadialGradient(0, 0, r0, 0, 0, r1);
+        grad.addColorStop(0, rgba(a0));
+        grad.addColorStop(1, rgba(vgA));
+        B.fillStyle = grad;
+        B.fillRect((cover[0] - ox) / sx, (cover[1] - oy) / sy, cover[2] / sx, cover[3] / sy);   // the same cover rect, in that space
       }
       B.restore();
+      /* PROTECT HIGHLIGHTS puts the picture's brightest pixels back toward what they were before the vignette: a lamp or a
+         window in a dark corner stays lit. A smooth ramp on the pixel's own brightness, from 60% (no help below it, so skin and
+         mid-tones still take the vignette) to pure white (fully spared at 100). Per pixel, so it costs a read of the plate —
+         only while the slider is up. */
+      if (v6 && v6.hilite > 0 && R > 0) {
+        let src, dst;
+        try { src = _fx2d(A).getImageData(0, 0, W, H); dst = B.getImageData(0, 0, W, H); } catch (e) { src = null; }
+        if (src) {
+          const s0 = src.data, d0 = dst.data, hk = v6.hilite / 100;
+          for (let i = 0; i < d0.length; i += 4) {
+            if (s0[i + 3] === 0) continue;
+            let q = ((0.299 * s0[i] + 0.587 * s0[i + 1] + 0.114 * s0[i + 2]) / 255 - 0.6) / 0.4;
+            if (q <= 0) continue; if (q > 1) q = 1;
+            const w = hk * q * q * (3 - 2 * q);
+            d0[i] += (s0[i] - d0[i]) * w; d0[i + 1] += (s0[i + 1] - d0[i + 1]) * w; d0[i + 2] += (s0[i + 2] - d0[i + 2]) * w;
+          }
+          B.putImageData(dst, 0, 0);
+        }
+      }
     },
     /* ---- Halation ----------------------------------------------------------------------------
      * Film's highlights bleed warm-red because light punches through the emulsion, scatters off the

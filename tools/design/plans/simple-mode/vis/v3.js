@@ -1,6 +1,6 @@
-/* V3 · Quick on a phone.
+/* V3 · Simple on a phone.
  *
- * A playable Beach day in Quick at phone size, run on VIS.engine (DESIGN §3 ripple, §4 attachments, §8.2 phone):
+ * A playable Beach day in Simple at phone size, run on VIS.engine (DESIGN §3 ripple, §4 attachments, §8.2 phone):
  * trim either edge (the rest closes up while the finger moves), delete, split, hold-drag to reorder, speed;
  * titles and stickers ride with the clip they start on (the link line), Stay put, captions shifting line by line,
  * a gap block with Close gap, Undo / Redo, and the "Deleted clip and 2 things on it · Undo" line in the tray row (§3.12).
@@ -92,7 +92,7 @@
   ];
   const SOUND_TOOLS = [
     { id: 'volume', label: 'Volume', icon: 'sound' }, { id: 'fade', label: 'Fade', icon: 'fade' },
-    { id: 'endswith', label: 'Ends with the video', icon: 'endswith' }, { id: 'sndspeed', label: 'Speed', icon: 'speed' },
+    { id: 'sndspeed', label: 'Speed', icon: 'speed' },                  // no Ends with the video switch (D17 B, his pick)
     { id: 'voice', label: 'Voice', icon: 'voice' }, { id: 'stay', label: 'Stay put', icon: 'pin' }
   ];
   const SEGMENT_TOOLS = [
@@ -310,8 +310,7 @@
         return;
       }
       let note = parts.join(' · ');
-      if (k === 'audio' && Math.abs(ds) < 0.004 && Math.abs(dd) > 0.004 && E.hasFlag(x, 'tail')) note = 'stays put · still ends with the video, now at ' + fmt(x.start + x.duration);
-      else if (ka !== 'clip' && k !== 'clip' && Math.abs(ds) > 0.004) {
+      if (ka !== 'clip' && k !== 'clip' && Math.abs(ds) > 0.004) {
         const h = Ra.units[x.id] && Ra.units[x.id].host, hl = h && Am.get(h);
         if (hl) note += ' · with ' + nm(hl);
       }
@@ -812,7 +811,7 @@
           seg.appendChild(b);
         });
       } else if (u.section === 'audio') {
-        list = SOUND_TOOLS.map(t => t.id === 'endswith' ? Object.assign({}, t, { pressed: E.hasFlag(l, 'tail') }) : pin(t));
+        list = SOUND_TOOLS.map(pin);
       } else {
         const hl = u.host && R.layer(u.host);
         lead = hl ? 'Goes with <b>' + esc(nm(hl)) + '</b>' : stay ? '<b>Stays put</b> at ' + fmt(u.start) : 'Not on a clip';
@@ -1080,7 +1079,7 @@
       const R = read(), ids = R.main.filter(e => !e.slot).map(e => e.id);
       if (ids.length < 2) { say('Add another clip first', null, true); return false; }
       // Full trims one clip's end and nothing closes up. Pick a clip and an amount that leave a real gap
-      // (if something starts in the cut-off end, Quick shows a card there instead, §3.1).
+      // (if something starts in the cut-off end, Simple shows a card there instead, §3.1).
       const cands = ids.slice(0, -1).sort((a, b) => (b === 'c3') - (a === 'c3'));
       let id = null, cut = 0;
       for (const c of cands) {
@@ -1802,7 +1801,7 @@
         '<li>Take a clip out, or make it shorter, and the ones after it close up. No gaps are left behind.</li>' +
         '<li>A title or sticker goes with the clip it starts on. Tap one to see the line down to its clip.</li>' +
         '<li>Captions move line by line with the clips under them.</li>' +
-        '<li>The song stays put and always ends with the video.</li>' +
+        '<li>The song stays put and keeps its length. When the clips get shorter than it, the video runs on in black after them, as in Full (your pick, D17).</li>' +
         '<li>Every edit is one step. ' + rich('{undo}') + ' undoes the whole thing.</li></ul>';
     }
     function show(k) {
@@ -1851,7 +1850,7 @@
   }
 
   VIS.register('v3', {
-    title: 'Quick on a phone',
+    title: 'Simple on a phone',
     group: 'Try it',
     blurb: 'Trim, split, move, speed up and delete real clips, and watch the titles, stickers and captions on them go along.',
     mount(host) { mountV3(host); }

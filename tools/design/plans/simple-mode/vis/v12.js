@@ -1,19 +1,18 @@
-/* V12 — Buttons on the video (DESIGN §6.1, §18 V12; decisions D2 and D18). The hub's name for it; "chrome" read as
- * the Google browser (QA 29 Sep).
+/* V12 — The switch in the cog (DESIGN §0.4, §6, §18 V12; cog/COG-DESIGN.md; decisions D18, D22, D23).
  *
- * Real screenshots of the app (v17.12), taken with tools/shot.py at 380x800, 380x667 and 440x956 (touch phone) and
- * 1280x800 (mouse). The proposed Quick/Full editor button was INJECTED into the running page for each photo
- * (a DOM insert, nothing on disk changed), and the amber boxes were drawn on the pictures afterwards.
- * "With a friend in" is the app's own sharing engine with a pretend friend joined through an in-page loopback
- * link — no socket and no peer connection was opened in any run (both counted, both 0).
- * The numbers behind FINDINGS were measured in those same runs (button rects, the options strip's scroll height,
- * the note's size); the words on the page leave the pixel maths out. The pictures live in img/ next to this file
- * (the 380x667 one is WebP, img/v12-phone-667.webp; it was embedded in this file until the V12 handoff moved it out).
- * Measured at 380x667: the options strip has 254 px of room for 278 px of buttons today (the last one is already
- * half cut off), and 324 px with D2-B's switch on top, so the last two are out of sight.
+ * 1 Oct, his rule: "i dont want the original editor changing in design and function" and "the option to switch between the
+ * two editors should be in the settings cog, making a third section in there". This page used to be "Buttons on the video":
+ * photos of a switch put INTO Full's play bar (choices A-D of the old D2). Those are withdrawn with D2 (settled: the cog), and
+ * the page now shows the cog's third block instead.
  *
- * The own-devices case (his phone and Mac in one session: "Your phone can edit · clips stay put" + Options ›) is
- * DRAWN with the kit, not photographed: the line lives in Quick's tray, and Quick is not in the app yet.
+ * The pictures are cog/*.jpg, copied to img/v12-cog-*.jpg: real screenshots of the app (v17.21) taken with tools/shot.py at
+ * 380x800, 380x667, 440x956 and 1280x800, with a throwaway prototype of the Editor block injected into the running page for
+ * each (a DOM insert; no app file was edited). DESIGN §21 (1 Oct) adds 375×553, 320×568 and sideways sizes. Their numbers (same pixels for Canvas and Friends, the 33 px and 15 px costs on
+ * short phones) are COG-DESIGN §6.4's, measured in those runs. The pictures say "Simple", D1's recommended name; the rest of
+ * these pages still call the new editor Simple, its working name.
+ *
+ * The own-devices case (his phone and Mac in one session: "Your phone can edit · clips stay put" + Options ›) is DRAWN with the
+ * kit, not photographed: the line lives in Simple's tray, and Simple is not in the app yet.
  */
 (function () {
   'use strict';
@@ -124,59 +123,49 @@
 
   /* The pictures, all in img/, made from the real app (see the note at the top of this file). */
   const SHOTS = [
-    { file: 'v12-phone-full-alone.jpg', w: 760, h: 1817, kind: 'phone', size: 'Phone · 380×800 · alone',
-      title: 'Full on a phone, on your own',
-      text: 'Top: choice A puts the switch third on the play bar, where your add-row switch is now (that moves into the options menu). Bottom: choice B leaves your play bar alone and puts the switch first in the options menu. The person+ door stays in the top-left corner of the video both times.' },
-    { file: 'v12-phone-full-live.jpg', w: 760, h: 1780, kind: 'phone', size: 'Phone · 380×800 · with a friend',
-      title: 'Full on a phone, with a friend in',
-      text: 'Sam’s face, the red LIVE pill and the comments bubble sit in the top-left corner of the video. Neither choice goes near them: the switch lives on the play bar, a long way below. With the options menu open (bottom) the menu covers Sam’s face, but it already does that today.' },
-    { file: 'v12-phone-667.webp', w: 760, h: 1632, kind: 'phone', size: 'Small phone · 380×667',
-      title: 'On a small phone',
-      text: 'The same two choices on a smaller screen, like an iPhone SE. The video shrinks, the play bar stays the same, so A looks just as it does above. B’s snag gets worse here: the options menu is too short even today, and with the switch on top, its last two buttons are out of sight until you scroll it.' },
-    { file: 'v12-phone-quick.jpg', w: 760, h: 2228, kind: 'phone', size: 'Phone · 380×800 · Quick',
-      title: 'Quick’s play bar',
-      text: 'Row A (recommended): options, split, switch, to start. Split takes the spot where Full has copy, and the switch takes the add-row switch’s spot, so the switch is third in both editors. Row B swaps the two. Full’s row is at the bottom so you can see exactly what changes.' },
-    { file: 'v12-phone-back.jpg', w: 760, h: 1633, kind: 'phone', size: 'Phone · 380×800 · the way back',
-      title: 'Landing in Full from Quick',
-      text: 'After a mis-tap, or “Open in Full” on something, choice B puts a back button third on the play bar until you go back, plus a short note that lets taps through. On a narrow phone the note wraps to three lines. Under choice A the switch is already there, so it just gets the arrow and the ring.' },
-    { file: 'v12-phone-440.jpg', w: 880, h: 2512, kind: 'phone', size: 'Phone · 440×956 · your phone',
-      title: 'At your phone’s width',
-      text: 'Choice C only works on wide phones like yours: every play-bar button gets a little smaller so five fit on the left, and it only just fits before the time. Under choice B your row stays exactly as it is today. Then the back button and Quick’s row on your phone.' },
-    { file: 'v12-pc-full.jpg', w: 1200, h: 1976, kind: 'pc', size: 'PC · 1280×800',
-      title: 'Full on a PC',
-      text: 'Lots of room: the switch sits right after the back arrow at the left end of the play bar. Sam’s face is at the top left of the picture and Share is beside Export on the right, both far from it. A PC has no LIVE pill or comments bubble on the picture; those two are phone things.' },
-    { file: 'v12-pc-quick.jpg', w: 1200, h: 1572, kind: 'pc', size: 'PC · 1280×800 · Quick and the way back',
-      title: 'Quick on a PC, and the way back',
-      text: 'Quick’s left end reads back, split, switch, to start: split comes before the switch on the phone and the PC alike. After landing in Full from Quick, a PC has room for a worded “‹ Quick” button, and the note fits on one line.' }
+    { file: 'v12-cog-1-phone-380-small.jpg', w: 1200, h: 1431, kind: 'phone', size: 'Phone · 380×800',
+      title: 'The cog with a third block, small',
+      text: 'Left is today. Right adds the Editor block on top: the Simple ⇄ Full switch and “What should you use?”. Friends and Canvas settings sit on exactly the same pixels in both.' },
+    { file: 'v12-cog-2-phone-380-open-and-switch.jpg', w: 1200, h: 1431, kind: 'phone', size: 'Phone · 380×800 · open, then a switch',
+      title: '“What should you use?” and the switch',
+      text: 'Left: the Editor block open, with the other two shrunk to bars, the way they shrink today. Right: just after tapping the switch, the knob slides to the other editor, then the cog closes so you see it. Nothing is written to the project and no Undo step is made.' },
+    { file: 'v12-cog-3-phone-440.jpg', w: 1200, h: 1353, kind: 'phone', size: 'Phone · 440×956 · your phone',
+      title: 'At your phone’s size',
+      text: 'Editor small, with Canvas and Friends on today’s pixels; then the Editor block open. The explanation fits with no scrolling.' },
+    { file: 'v12-cog-7-short-phones.jpg', w: 1200, h: 820, kind: 'phone', size: 'Small phones · 380×667 and 380×800',
+      title: 'Where the extra bar does cost room',
+      text: 'The honest cost, only on shorter screens. At 380×667 Canvas keeps its size and sits 15 px lower. At 380×800 with Friends open, the Friends block is 33 px shorter and scrolls. Shorter still (375×553, a phone in Safari; 320×568) Canvas sits 72 px lower and is 68 px shorter, so Background and Size scroll (Apply stays). On your phone held upright nothing moves. Turned sideways (956×440) Canvas and Friends stay put, but the Editor tile lands off the top of the screen: not solved yet (D24).' },
+    { file: 'v12-cog-4-pc-1280-small.jpg', w: 1200, h: 690, kind: 'pc', size: 'PC · 1280×800',
+      title: 'On a PC: the Editor tile',
+      text: 'Hung off the cog as today. The Editor tile sits above the Friends tile, in the same narrow column, so no extra width is needed and Canvas settings stays where it is.' },
+    { file: 'v12-cog-5-pc-1280-three-states.jpg', w: 1200, h: 722, kind: 'pc', size: 'PC · 1280×800 · one big, two small',
+      title: 'On a PC: whichever you open is big',
+      text: 'Left: the Editor block open, with Friends and Canvas as tiles. Right: Friends open, with the Editor and Canvas tiles beside it, Friends and Canvas exactly as today.' },
+    { file: 'v12-cog-6-pc-1280-warning.jpg', w: 1200, h: 690, kind: 'pc', size: 'PC · 1280×800 · the warning',
+      title: 'A warning only when something would be lost',
+      text: 'Left: a crop drawn but not applied, then the switch. Closing the crop tool would throw the box away and Undo couldn’t bring it back, so it asks: Stay, or Apply crop and switch. Right: nothing to lose, so the switch just happens.' }
   ];
   const srcOf = s => 'img/' + s.file;
 
-  /* What the pictures showed, measured in the same runs (the numbers are in the note at the top of this file). */
+  /* What the pictures show, measured in the same runs (cog/COG-DESIGN.md §6.4, §7). */
   const FINDINGS = [
-    { warn: false, html: '<b>Nothing on the video has to move.</b> The top-left corner holds the person+ door when you are on your own, and Sam’s face, LIVE and the comments bubble when a friend is in. Every choice keeps the switch on the play bar, well below them.' },
-    { warn: false, html: '<b>A and Quick’s rows swap a button rather than add one</b>, so the play bar holds exactly as many buttons as today. On a narrow phone that row already runs right to the screen’s edges. That is true today, and nothing here changes it.' },
-    { warn: true, html: '<b>B has a snag on the phone.</b> The options menu there is a tall strip of icons, not a list of words, and it is already full. Put the switch at the top and the last button (clear export marks) slides out of sight until you scroll the strip. On a small phone it is worse: the strip is too short even today, and with B two buttons are hidden. B needs a small fix: a shorter item, or a strip that is meant to scroll.' },
-    { warn: false, html: '<b>C fits on your phone, just</b>, because every play-bar button gets a little smaller. On a phone only a bit narrower than yours it cannot fit, and falls back to B.' },
-    { warn: true, html: '<b>The way-back note is long for a phone:</b> three lines on a narrow phone, two on yours, one on a PC. It sits over the clips but lets taps through. Something like “Full editor · ‹ takes you back” would fit on one line (a suggestion, not in the design yet).' },
-    { warn: false, html: '<b>The open options menu covers the corner with Sam’s face.</b> That already happens today, and the switch does not make it worse under A, C or D.' },
-    { warn: false, html: '<b>Your own phone and Mac are fine too.</b> The line “Your phone can edit · clips stay put” and its Options menu live in the tools, under the clips, so they never cover the video or the buttons on it (drawn below).' }
+    { warn: false, html: '<b>Full does not change.</b> Its play bar, its ⋯ menu and the video keep exactly today’s buttons. The cog is the one place to switch, in both editors; Simple’s play bar has no switch either.' },
+    { warn: false, html: '<b>Canvas settings and Friends do not move.</b> With the Editor block small they sit on the same pixels as today on your phone, at 380×800 with Canvas open, and on a PC.' },
+    { warn: false, html: '<b>Two taps to switch:</b> ⚙, then the switch. The cog closes so you see the other editor. It stays open only when Canvas settings has picks you have not applied, so nothing is thrown away (D23).' },
+    { warn: false, html: '<b>“What should you use?” opens the block big</b>, the same way Friends and Canvas settings open today. It stays small unless you want the explanation.' },
+    { warn: true, html: '<b>The cost is on short screens only.</b> At 380×667 Canvas sits 15 px lower. At 380×800 with Friends open, the Friends block is 33 px shorter and scrolls. At 375×553 and 320×568 Canvas is 72 px lower and 68 px shorter (Background and Size scroll; Apply stays). Upright, nothing moves on your phone. Sideways (956×440) the Editor tile is off the top of the screen: D24 asks how to fix it.' },
+    { warn: false, html: '<b>A warning only when Undo couldn’t bring something back:</b> a crop, touch-up, pen drawing or voice take not yet applied, or steps waiting on Redo. Anything else just switches.' }
   ];
 
-  /* The slot-by-slot table (DESIGN §6.1). `n` marks a button that is new or moved. */
+  /* The play bars, slot by slot (DESIGN §6.1, §15.1, D18). `n` marks a button that differs from Full's; `g` an empty slot. */
   const PHONE_ROWS = [
-    { name: 'Full today', note: 'what you have now', slots: [['Options'], ['Copy'], ['Add-row switch'], ['To start']] },
-    { name: 'Full · A', note: 'the add-row switch moves into Options', slots: [['Options'], ['Copy'], ['Switch', 'n'], ['To start']] },
-    { name: 'Full · B', rec: true, note: 'the switch is the first item inside Options', slots: [['Options'], ['Copy'], ['Add-row switch'], ['To start']] },
-    { name: 'Full · B, after a visit from Quick', note: 'until you go back', slots: [['Options'], ['Copy'], ['Back to Quick', 'n'], ['To start']] },
-    { name: 'Full · C', note: 'wide phones like yours only; every button a little smaller', slots: [['Options'], ['Copy'], ['Switch', 'n'], ['Add-row switch'], ['To start']] },
-    { name: 'Full · D', note: 'no switch here; only in ⚙ and Home’s menu', slots: [['Options'], ['Copy'], ['Add-row switch'], ['To start']] },
-    { name: 'Quick · row A', rec: true, note: 'decision D18', slots: [['Options'], ['Split', 'n'], ['Switch', 'n'], ['To start']] },
-    { name: 'Quick · row B', note: 'decision D18', slots: [['Options'], ['Switch', 'n'], ['Split', 'n'], ['To start']] }
+    { name: 'Full', note: 'exactly as today, in every release', slots: [['Options'], ['Copy'], ['Add-row switch'], ['To start']] },
+    { name: 'Simple · row A', rec: true, note: 'decision D18: To start stays where Full has it', slots: [['Options'], ['Split', 'n'], ['', 'g'], ['To start']] },
+    { name: 'Simple · row B', note: 'decision D18: packed', slots: [['Options'], ['Split', 'n'], ['To start']] }
   ];
   const PC_ROWS = [
-    { name: 'Full', slots: [['Back'], ['Switch', 'n'], ['…', 'g'], ['Copy'], ['Add-row switch'], ['To start']] },
-    { name: 'Quick', slots: [['Back'], ['Split', 'n'], ['Switch', 'n'], ['…', 'g'], ['To start']] },
-    { name: 'Full, after a visit from Quick', slots: [['Back'], ['‹ Quick', 'n'], ['…', 'g'], ['Copy'], ['Add-row switch'], ['To start']] }
+    { name: 'Full', note: 'exactly as today', slots: [['Back'], ['…', 'g'], ['Copy'], ['Add-row switch'], ['To start']] },
+    { name: 'Simple', slots: [['Back'], ['Split', 'n'], ['…', 'g'], ['To start']] }
   ];
 
   function rowsList(rows, label, counted) {
@@ -186,8 +175,8 @@
       let n = 0;
       r.slots.forEach(sl => {
         const cls = sl[1] === 'n' ? ' new' : sl[1] === 'g' ? ' gap' : '';
-        const num = sl[1] === 'g' ? '' : '<i>' + (++n) + '</i>';
-        h += '<li class="v12-slot' + cls + '">' + (counted ? num : '') + esc(sl[0]) + (sl[1] === 'n' ? '<span class="v12-sr"> (new)</span>' : '') + '</li>';
+        const num = sl[1] === 'g' && sl[0] === '…' ? '' : '<i>' + (++n) + '</i>';
+        h += '<li class="v12-slot' + cls + '">' + (counted ? num : '') + (sl[0] ? esc(sl[0]) : '<span class="v12-sr">empty</span>') + (sl[1] === 'n' ? '<span class="v12-sr"> (only in Simple)</span>' : '') + '</li>';
       });
       h += '</ol></li>';
     });
@@ -298,7 +287,7 @@
       : { time: t, selected: sel, addButton: false, showLink: false });
     f.setTime(t, 30);
     const oc = el('div', 'v12-oc');
-    // the other device's face: your Mac (blue) on the phone, your phone (green) on the Mac, both in Quick; LIVE and the
+    // the other device's face: your Mac (blue) on the phone, your phone (green) on the Mac, both in Simple; LIVE and the
     // comments bubble are phone things (the PC pictures above have neither)
     oc.innerHTML = '<span class="v12-face" style="--who:' + (pc ? '#6fd6a0' : '#93a9ff') + '">E<span class="g">' + GQ + '</span></span>';
     if (!pc) { oc.appendChild(VIS.chip('LIVE', 'live')); oc.appendChild(el('span', 'v12-bub', BUBBLE)); }
@@ -318,8 +307,8 @@
   }
 
   VIS.register('v12', {
-    title: 'Buttons on the video',
-    blurb: 'The buttons that sit over the video, checked at phone and PC sizes, alone and with a friend.',
+    title: 'The switch in the cog',
+    blurb: 'Real pictures of the app with the cog’s third block, small and open, on a phone and a PC, and the warning.',
     mount(host) {
       if (!document.getElementById('v12-css')) { const st = el('style'); st.id = 'v12-css'; st.textContent = CSS; document.head.appendChild(st); }
       const root = el('div', 'v12');
@@ -327,10 +316,10 @@
 
       const intro = el('section', 'h-card v12-intro');
       intro.innerHTML =
-        '<h3>Where the switch would sit</h3>' +
-        '<p>These are real screenshots of FreeMotion as it is today (v17.12). For each picture the new switch was slipped into the running app, just for the photo. Nothing in the app was changed. <span class="v12-key" aria-hidden="true"></span> An amber box marks the new button.</p>' +
-        '<p>“With a friend in” means a pretend friend, Sam, joined inside the page. No internet was used.</p>' +
-        '<p class="h-note">The switch icons are stand-ins: three clips in a row when you are in Quick, stacked bars when you are in Full. The real icons are your pick (D16).</p>';
+        '<h3>The switch lives in the ⚙ cog</h3>' +
+        '<p>Your words: <q>the option to switch between the two editors should be in the settings cog, making a third section in there.</q> So the cog gets a third block, Editor, beside Canvas settings and Friends. It stays small: a switch and a <b>What should you use?</b> button that opens it big, the way the other two open. Nothing is added to Full anywhere else.</p>' +
+        '<p>These are real screenshots of FreeMotion as it is today (v17.21). For each one a stand-in of the Editor block was slipped into the running app just for the photo. Nothing in the app was changed.</p>' +
+        '<p class="h-note">The pictures say <b>Simple</b> and <b>Full</b>, the names you picked (D1). The block’s icon is a stand-in; the real one is drawn from your D16 pick and shown to you before it ships.</p>';
       root.appendChild(intro);
 
       const find = el('section', 'h-card');
@@ -400,7 +389,7 @@
       const own = el('section', 'h-card v12-own');
       own.innerHTML =
         '<h3>Your own phone and Mac</h3>' +
-        '<p>When your phone and your Mac share one project, each counts as someone who can edit. So until Phase 4, moving clips stops on both, and the tools say why. You tapped Delete on Sandcastle here.</p>' +
+        '<p>When your phone and your Mac share one project, each counts as someone who can edit. So while both can edit, moving clips stops on both (D14b), and the tools say why. You tapped Delete on Sandcastle here. This is all in Simple: Full shows nothing new.</p>' +
         '<p class="h-note">Drawn, not photographed: this line is not in the app yet.</p>';
       const grid = el('div', 'v12-own-grid');
       const mk = (kind, size, title, text) => {
@@ -432,11 +421,11 @@
       /* slot by slot */
       const slots = el('section', 'h-card');
       slots.innerHTML =
-        '<h3>Slot by slot, on a phone</h3>' +
-        '<p class="h-note" style="margin-bottom:10px">The buttons left of the time, counted from the left edge. Amber means new or moved.</p>' +
+        '<h3>The play bars, slot by slot</h3>' +
+        '<p class="h-note" style="margin-bottom:10px">The buttons left of the time, counted from the left edge. Full’s row is today’s and never changes. Amber marks what only Simple has. Neither row has a switch.</p>' +
         rowsList(PHONE_ROWS, 'Phone play bar, slot by slot', true) +
         '<h3 style="margin-top:18px">On a PC</h3>' +
-        '<p class="h-note" style="margin-bottom:10px">The left end of the play bar, from the left. The … is the gap before the time.</p>' +
+        '<p class="h-note" style="margin-bottom:10px">The left end of the play bar, from the left. The … is the gap before the time. The cog stays where it is today, near the right end.</p>' +
         rowsList(PC_ROWS, 'PC play bar, left end', false);
       root.appendChild(slots);
 
@@ -445,10 +434,10 @@
       how.innerHTML =
         '<summary>How these pictures were made</summary>' +
         '<ul>' +
-        '<li>Taken automatically on this Mac, each in a fresh browser that starts empty: phones at 380×800, 380×667 and 440×956 (acting as a touch phone), and a 1280×800 window with a mouse. Each picture shows just the video and the play bar.</li>' +
-        '<li>The project is a small “Beach day” made of shapes and a title, made fresh for the pictures. Your own projects were never opened.</li>' +
-        '<li>“With a friend in” uses the app’s real sharing, with Sam joined inside the page. The internet was blocked: nothing was sent anywhere in any of them.</li>' +
-        '<li>The screen stays in Full underneath. Quick’s timeline does not exist yet, so the Quick pictures show only the video and the play bar, which are the same in both editors.</li>' +
+        '<li>Taken automatically on this Mac, each in a fresh browser that starts empty: phones at 380×800, 380×667 and 440×956 (acting as a touch phone), and a 1280×800 window with a mouse.</li>' +
+        '<li>A throwaway stand-in builds the Editor block and its styles inside the running app, then the cog is opened the real way, by tapping ⚙. No file in the app was edited.</li>' +
+        '<li>“Same pixels” was measured: the same crops of the two screenshots, with and without the block, compared colour by colour (largest difference 3 of 255, from the blurred video behind).</li>' +
+        '<li>The warning used a real crop box, drawn but not applied, on a picture made in memory. Your own projects were never opened.</li>' +
         '<li>Your own phone and Mac are drawn, not photographed, because that line is not in the app yet. V6 plays the same moment through, step by step.</li>' +
         '</ul>';
       root.appendChild(how);

@@ -64,6 +64,17 @@ def launch(port, width, height, profile):
         *(["--use-angle=default", "--enable-gpu"] if os.environ.get("FM_GL") == "angle"
           else ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"]),
         "--autoplay-policy=no-user-gesture-required",
+        # WEBRTC PAIRS MUST NOT DEPEND ON macOS's mDNS SERVICE (5 Oct, v17.23). By default Chrome hides each host candidate
+        # behind a random "<uuid>.local" name (measured), and the OTHER side of an in-page pair has to resolve it through
+        # mDNSResponder. Two phone passes in a row went red on 967 7c / 967 B4 4 / 971 with "the two data channels never
+        # opened (ice new/new)" — ICE never started on either side for 20 s — while every one passed alone. WHY the pairs
+        # stalled is NOT proven: it was first blamed on ChatGPT's browsers, and that was wrong — the PM checked every 10 min
+        # and ChatGPT ran none during those passes. What is certain is the dependency: these two flags make the candidates
+        # plain addresses (127.0.0.1 included), so a pair needs nothing outside this browser. If ice new/new comes back with
+        # them in, the cause is elsewhere. Nothing in the suite asserts mDNS hiding; the swap-code codec carries IPv4, IPv6
+        # and mDNS alike (js/collab-signal.js); the flags merge into headless's own --disable-features list (PM, measured).
+        "--disable-features=WebRtcHideLocalIpsWithMdns",
+        "--allow-loopback-in-peer-connection",
         "about:blank",
     ]
     return subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
