@@ -58721,6 +58721,40 @@
    * `finally` frees the export frame caches and drops the crash-resume data. A card that resolved early
    * would pull the ground out from under a save that had not happened yet, and nothing on screen would
    * show it. */
+  test('project and export dialogs announce their names, progress and completion (batch2 1b.9)', { item: 'TBD' }, async function () {
+    [
+      ['hm-dialog', 'New project'], ['export-dialog', 'Export'],
+      ['canvas-dialog', 'Canvas settings'], ['export-overlay', 'Exporting'],
+      ['export-ready', 'Export ready']
+    ].forEach(function (entry) {
+      var dialog = document.getElementById(entry[0]);
+      if (!dialog || dialog.getAttribute('role') !== 'dialog' || dialog.getAttribute('aria-modal') !== 'true') throw new Error(entry[0] + ' is not announced as a modal dialog');
+      var title = document.getElementById(dialog.getAttribute('aria-labelledby'));
+      if (!title || !dialog.contains(title) || title.textContent.trim() !== entry[1]) throw new Error(entry[0] + ' has no matching accessible title');
+    });
+    var status = document.getElementById('export-status'), bar = document.getElementById('export-bar');
+    if (status.getAttribute('role') !== 'status' || bar.getAttribute('role') !== 'progressbar' || bar.getAttribute('aria-valuemin') !== '0' || bar.getAttribute('aria-valuemax') !== '100') throw new Error('export progress has no live status or measured bar');
+    if (typeof FM._showExportReady !== 'function') throw new Error('export-ready card seam missing');
+    var ready = document.getElementById('export-ready');
+    var wasHidden = ready.classList.contains('hidden');
+    var pending;
+    try {
+      pending = FM._showExportReady({ blob: { size: 1024 }, name: 'speech.mp4', poster: null, width: 64, height: 64, fps: 30, seconds: 1, save: function () { return Promise.resolve('saved'); } });
+      if (ready.classList.contains('hidden')) throw new Error('ready card did not open');
+      var live = document.getElementById('xr-status');
+      if (!live || live.getAttribute('role') !== 'status' || !/^Done\b/.test(live.textContent)) throw new Error('completion is not announced in the ready card');
+      if (!ready.contains(document.activeElement)) throw new Error('focus is outside the ready card');
+      document.getElementById('xr-discard').click();
+      await pending;
+    } finally {
+      if (!ready.classList.contains('hidden')) {
+        document.getElementById('xr-discard').click();
+        if (pending) await pending;
+      }
+      if (wasHidden) ready.classList.add('hidden');
+    }
+  });
+
   test('export ready: the file is handed over on Save, not flung at you when the render ends', { item: 'export-ready-card' }, async function () {
     if (typeof FM._showExportReady !== 'function') throw new Error('FM._showExportReady is missing — the export-ready card has no testable seam');
     var overlay = document.getElementById('export-ready');

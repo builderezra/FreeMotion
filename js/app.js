@@ -6295,6 +6295,9 @@ window.FM = window.FM || {};
     const bar = document.getElementById('export-bar');
     const status = document.getElementById('export-status');
     overlay.classList.remove('hidden');
+    bar.style.width = '0%';
+    bar.setAttribute('aria-valuenow', '0');
+    status.textContent = 'Preparing…';
     // Taken here, still inside the tap on Export, and let go in the finally below (queue 690) — see expWakeTake.
     expWakeHold();
     if (FM.playing) FM.pause();
@@ -6319,9 +6322,21 @@ window.FM = window.FM || {};
          The second is the only message that says crash-resume fired, and it was both garbled and
          overwritten one frame later. Four releases built that feature and this is one of two reasons
          nobody could ever see it work. */
+      let lastMilestone = -1, lastPhase = '';
       const onProgress = (p, what, verbatim) => {
-        bar.style.width = Math.round(p * 100) + '%';
-        status.textContent = verbatim ? what : 'Encoding ' + what + '… ' + Math.round(p * 100) + '%';
+        const pct = Math.max(0, Math.min(100, Math.round(p * 100)));
+        bar.style.width = pct + '%';
+        bar.setAttribute('aria-valuenow', String(pct));
+        const words = String(what || '');
+        const embeddedPct = verbatim && words.match(/(\d+)%\s*$/);
+        const phase = words.replace(/\s*\d+%\s*$/, '').trim();
+        const milestone = Math.floor((embeddedPct ? Math.min(100, Number(embeddedPct[1])) : pct) / 10);
+        // The live status speaks a phase change and each tenth, not every encoded frame.
+        if (phase !== lastPhase || milestone !== lastMilestone) {
+          status.textContent = verbatim ? what : 'Encoding ' + what + '… ' + pct + '%';
+          lastPhase = phase;
+          lastMilestone = milestone;
+        }
       };
       /* THE OTHER REASON: the message was a toast, and #toast is z-index 60 under #export-overlay's
          100 plus its 65% black backdrop — so it was painted behind the screen it is about. This note
@@ -6374,6 +6389,7 @@ window.FM = window.FM || {};
       expWakeDrop();   // on a finished file, a Cancel and a failure alike — a lock that outlived the export would keep his screen on for nothing
       if (soloRestore) { soloRestore.forEach(([l, v]) => { l.solo = v; }); FM.requestRender(); }
       bar.style.width = '0%';
+      bar.setAttribute('aria-valuenow', '0');
       FM.seekVideosToTime();
     }
   }
@@ -6483,6 +6499,7 @@ window.FM = window.FM || {};
       saveBtn.addEventListener('click', onSave);
       discardBtn.addEventListener('click', onDiscard);
       overlay.classList.remove('hidden');
+      document.getElementById('xr-status').textContent = 'Done — export ready to save.';
       saveBtn.focus();
     });
   }
