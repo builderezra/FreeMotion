@@ -7,9 +7,10 @@
 #   tools/full-unchanged.sh --hash           # the source hash a PASS is cached under
 #   tools/full-unchanged.sh --selftest-port  # two runs started at the same instant get two ports, each serving its own folder
 #
-# ⚠️ IT TAKES ~20 MINUTES — over the Bash tool's 600 s cap. Run it in the background (run_in_background) and read its
-# output when it says it is done; never in the foreground, or the cap kills it half-way (its trap cleans up, but the run
-# is wasted).
+# ⚠️ IT TAKES OVER AN HOUR (measured 6 Oct: 19 minutes for HEAD and the tree at both widths, then one probe run per plant,
+# one Chrome at a time) — far over the Bash tool's 600 s cap, and a backgrounded Bash call is killed at its own timeout.
+# Detach it: `nohup tools/full-unchanged.sh > /dev/null 2>&1 &`, and read tools/.full-unchanged-report when it ends in
+# PASS or NOT PASS. Killed half-way, its trap (or, for a SIGKILL, its watchdog) still takes every server, Chrome and folder.
 #
 # His rule, 1 Oct: "i dont want the original editor changing in design and function … dont do that." The Simple editor
 # is built beside Full, and every Simple release has to prove Full did not move — not by a session saying so, by THIS:

@@ -523,8 +523,9 @@ def check(root):
         got = []
     if not got or got[0] != want:
         return 1, ('REFUSE: this is a Simple release (%s), and tools/full-unchanged.sh has not printed PASS on this exact tree '
-                   '(sources %s; the last PASS was for %s). Run tools/full-unchanged.sh IN THE BACKGROUND (about 20 minutes, '
-                   'over the Bash tool’s 600 s cap) and ship again once it says PASS.' % ('; '.join(why), want, got[0] if got else 'nothing'))
+                   '(sources %s; the last PASS was for %s). Run it DETACHED — `nohup tools/full-unchanged.sh > /dev/null '
+                   '2>&1 &` (over an hour, far over the Bash tool’s cap) — and ship again once tools/.full-unchanged-report '
+                   'ends in PASS.' % ('; '.join(why), want, got[0] if got else 'nothing'))
     return 0, 'OK: full-unchanged PASS on this tree (%s) — %s' % (want, '; '.join(why))
 
 
