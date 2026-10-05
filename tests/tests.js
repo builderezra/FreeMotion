@@ -120975,7 +120975,9 @@
       if (live()) throw new Error('the switch went through but the lost drag is still live under Simple');
       if (Math.abs(L.start - 1) > 1e-6) throw new Error('the lost drag was not put back where it started (start ' + L.start + ')');
     } finally {
-      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: PID, pointerType: 'mouse', buttons: 0 })); } catch (e) {}
+      /* on DOCUMENT, which reaches window too: a pointerup sent only to window never reaches the document-level listeners (Simple's
+         finger tracker from Phase 2), and they would think a finger is still down for every test after this one */
+      try { document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: PID, pointerType: 'mouse', buttons: 0 })); } catch (e) {}
       if (FM._recoverStuckGesture) FM._recoverStuckGesture();
       held().clear();
       try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
