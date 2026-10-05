@@ -3131,6 +3131,7 @@ body.white-chrome #time-readout:active {
    gone transparent. Two-layer background = the tint we wanted + an opaque base that occludes. */
 .track-head.sel { background: linear-gradient(rgba(41,217,187,.10), rgba(41,217,187,.10)), var(--panel); box-shadow: inset 2px 0 0 var(--accent); }
 .track-head.sel.primary { background: linear-gradient(rgba(41,217,187,.18), rgba(41,217,187,.18)), var(--panel); }
+.track-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .track-head.dragging { opacity: .5; }
 .track-head.drop-target { box-shadow: inset 0 2px 0 var(--accent); }
 /* THE EYE'S HIT AREA, grown without moving the glyph (BUG-HUNT). The icon is 15x15 CSS px — about

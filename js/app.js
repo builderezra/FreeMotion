@@ -9111,7 +9111,19 @@ window.FM = window.FM || {};
       else if (e.code === 'BracketRight') { e.preventDefault(); markRegionOut(); }
       else if (e.code === 'Backslash') { e.preventDefault(); clearRegion(); }
       else if (e.code === 'KeyM') { e.preventDefault(); if (e.repeat) return; if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead(); }   // toggle (dedups within 0.12s) + ignore OS autorepeat → no stacked duplicates / undo spam
-      else if (e.code === 'Tab') { e.preventDefault(); const ls = FM.scene.layers; if (ls.length) { const i = ls.findIndex(l => l.id === FM.scene.selectedId); const n = ((i < 0 ? 0 : i + (e.shiftKey ? -1 : 1)) + ls.length) % ls.length; FM.selectLayer(ls[n].id); } }
+      else if (e.code === 'Tab') {
+        // Tab on an editor control belongs to the browser's focus order. Only a bare editor/timeline
+        // focus uses the old layer-cycle shortcut; a focused layer head has its own arrow-key path.
+        const focus = document.activeElement;
+        const bare = !focus || focus === document.body || focus === document.documentElement || focus === document.getElementById('timeline');
+        if (!bare) return;
+        const ls = FM.scene.layers;
+        if (!ls.length) return;
+        e.preventDefault();
+        const i = ls.findIndex(l => l.id === FM.scene.selectedId);
+        const n = ((i < 0 ? 0 : i + (e.shiftKey ? -1 : 1)) + ls.length) % ls.length;
+        FM.selectLayer(ls[n].id);
+      }
       else if ((e.code === 'Equal' || e.code === 'NumpadAdd') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1.5); }
       else if ((e.code === 'Minus' || e.code === 'NumpadSubtract') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1 / 1.5); }
       // Number keys. With a layer SELECTED: 1..N open its category cards (Color & Fill, Border,

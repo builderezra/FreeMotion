@@ -57120,6 +57120,58 @@
     }
   });
 
+  test('Tab leaves editor controls reachable while layer heads have a keyboard path (batch2 1b.5)', { item: 'TBD' }, async function () {
+    const old = { layers: FM.scene.layers.slice(), selected: FM.scene.selectedId,
+      selectedIds: (FM.scene.selectedIds || []).slice(), home: FM.home && FM.home.isOpen && FM.home.isOpen() };
+    const key = (target, code, name) => {
+      const ev = new KeyboardEvent('keydown', { key: name, code, bubbles: true, cancelable: true });
+      target.dispatchEvent(ev);
+      return ev;
+    };
+    try {
+      if (old.home) { FM.home.close(); await new Promise(r => setTimeout(r, 350)); }
+      if (FM.overlayOwnsScreen() || (FM.fxSheetOpen && FM.fxSheetOpen()))
+        throw new Error('setup: another editor surface still owns the keyboard');
+      const a = FM.makeLayer('shape', { name: 'First keyboard layer', shape: 'rect', x: 20, y: 20 });
+      const b = FM.makeLayer('shape', { name: 'Second keyboard layer', shape: 'rect', x: 40, y: 40 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(a, b);
+      FM.selectLayer(a.id);
+
+      const exportButton = document.getElementById('btn-export');
+      if (!exportButton) throw new Error('setup: Export control is missing');
+      exportButton.focus();
+      if (document.activeElement !== exportButton) throw new Error('setup: Export control did not take focus');
+      const fromButton = key(exportButton, 'Tab', 'Tab');
+      if (fromButton.defaultPrevented || FM.scene.selectedId !== a.id)
+        throw new Error('Tab on Export was stolen to cycle layers instead of moving through editor controls');
+
+      const heads = [...document.querySelectorAll('#tl-tracks .track-head')];
+      if (document.getElementById('tl-tracks').getAttribute('role') !== 'listbox' || heads.length !== 2 ||
+          heads[0].tabIndex !== 0 || heads[1].tabIndex !== -1 || heads[0].getAttribute('role') !== 'option' ||
+          heads[0].getAttribute('aria-selected') !== 'true' || !heads[0].getAttribute('aria-label'))
+        throw new Error('the visible layer rows lack a named, roving keyboard selection');
+      heads[0].focus();
+      if (document.activeElement !== heads[0]) throw new Error('setup: the layer head did not take focus');
+      key(heads[0], 'ArrowDown', 'ArrowDown');
+      const chosen = [...document.querySelectorAll('#tl-tracks .track-head')].find(h => h.dataset.lid === b.id);
+      if (FM.scene.selectedId !== b.id || !chosen || document.activeElement !== chosen ||
+          chosen.tabIndex !== 0 || chosen.getAttribute('aria-selected') !== 'true')
+        throw new Error('ArrowDown did not select and focus the next visible layer');
+
+      chosen.blur();
+      if (document.activeElement !== document.body) throw new Error('setup: focus did not return to the bare editor');
+      const fromBody = key(document.body, 'Tab', 'Tab');
+      if (!fromBody.defaultPrevented || FM.scene.selectedId !== a.id)
+        throw new Error('the bare-editor Tab shortcut no longer cycles layers');
+    } finally {
+      FM.scene.layers.length = 0; old.layers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(old.selected || null);
+      FM.scene.selectedIds = old.selectedIds;
+      FM.refreshAll();
+      if (old.home && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   /* ---------------- queue 184: speed to the playhead ----------------
    * "Go on the timeline to exactly where you want it to last to, then press a button and it will
    * change the speed to go exactly to that point." The whole value is that the number is EXACT, so

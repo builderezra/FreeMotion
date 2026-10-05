@@ -1345,6 +1345,24 @@ window.FM = window.FM || {};
     const head = document.createElement('div');
     head.className = 'track-head' + (isSelected(layer.id) ? ' sel' : '') + (layer.id === FM.scene.selectedId ? ' primary' : '');
     head.dataset.idx = index;   // reorder moved to the right-edge ≡ handle (pointer-based)
+    head.dataset.lid = layer.id;
+    head.setAttribute('role', 'option');
+    head.setAttribute('aria-label', layer.name + ' layer');
+    head.setAttribute('aria-selected', isSelected(layer.id) ? 'true' : 'false');
+    head.tabIndex = layer.id === FM.scene.selectedId ? 0 : -1;
+    head.addEventListener('keydown', e => {
+      if (!['ArrowUp', 'ArrowDown', 'Enter', ' '].includes(e.key)) return;
+      e.preventDefault(); e.stopPropagation();
+      const heads = Array.from(tracksEl.querySelectorAll('.track-head'));
+      const at = heads.indexOf(head);
+      const next = e.key === 'ArrowUp' ? heads[(at - 1 + heads.length) % heads.length]
+        : e.key === 'ArrowDown' ? heads[(at + 1) % heads.length] : head;
+      if (!next) return;
+      const id = next.dataset.lid;
+      FM.selectLayer(id); // rebuilds the rows and their aria-selected/roving-tabindex state
+      const live = Array.from(tracksEl.querySelectorAll('.track-head')).find(h => h.dataset.lid === id);
+      if (live) live.focus();
+    });
 
     const eye = document.createElement('span');
     eye.className = 'th-eye' + (layer.visible ? '' : ' off');
@@ -3960,6 +3978,11 @@ window.FM = window.FM || {};
       if (!soloId) row.appendChild(buildDragHandle(row, layer, index));   // ≡ right-edge reorder (AM)
       tracksEl.appendChild(row);
     });
+    // A selected child of a collapsed group may not have a visible row. Keep one reachable head.
+    if (!tracksEl.querySelector('.track-head[tabindex="0"]')) {
+      const first = tracksEl.querySelector('.track-head');
+      if (first) first.tabIndex = 0;
+    }
     /* AT ITS OWN INDEX (queue 294, clause 5). The row is drawn before the layer that currently sits at
        FM.addAt, and FM.insertLayer splices new layers at that same number — so what you add appears
        directly BELOW the row, exactly as he described, and the row stays where you left it. */
