@@ -122414,7 +122414,7 @@
         XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
         await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
           onProgress: function () {}, onReady: async function () {} });
-        if (!renderer || !renderer.includes(';c31-image-boundary-4'))
+        if (!renderer || !renderer.includes(';c31-image-boundary-5'))
           throw new Error('an interrupted image Frame Stutter MP4 can resume an old history-based prefix');
       } finally {
         XR.signature = previousSignature; FM.scene = previousScene; FM.exportWorker = previousWorker;
@@ -123101,6 +123101,38 @@
     }
   });
 
+  test('690 Frame Stutter holds keyed Colour Balance on a moving shape at the exact boundary', { item: 'TBD', budgetMs: 30000 }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 40, shapeW: 28, shapeH: 28,
+      fill: '#8a7064', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 1, v: 80, e: 'linear' }] };
+    const colour = FM.fxRegistry.makeInstance('colorbalance');
+    colour.params.red = { kf: [{ t: 0, v: 90, e: 'linear' }, { t: 1, v: -90, e: 'linear' }] };
+    colour.params.blue = { kf: [{ t: 0, v: -90, e: 'linear' }, { t: 1, v: 90, e: 'linear' }] };
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    for (const width of [120, 60]) {
+      layer.effects = [colour];
+      const boundary = frame(0.5, width), live = frame(0.7, width);
+      if (same(boundary, live)) throw new Error('Control: keyed Colour Balance and movement did not change the source');
+      layer.effects = [colour, stutter]; FM.resetMotionFlowCache();
+      let played;
+      for (let i = 0; i <= 21; i++) played = frame(i / 30, width);
+      FM.resetMotionFlowCache();
+      const cold = frame(0.7, width);
+      if (!same(cold, boundary) || !same(cold, played))
+        throw new Error('Frame Stutter held current Colour Balance instead of boundary Colour Balance at width=' + width);
+    }
+  });
+
   test('690 Frame Stutter cold-seeks decoded video beneath a rotating null parent', { item: 'TBD', budgetMs: 90000 }, async function () {
     if (!FM.createFrameStutterSampler || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
       throw new Error('setup: parented-video fixture is unavailable');
@@ -123157,7 +123189,7 @@
         FM.scene = sc;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return oldSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-10')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-11')))
           throw new Error('parented held-video MP4 did not use the current renderer');
       } finally { FM.scene = oldScene; if (XR) XR.signature = oldSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -123222,7 +123254,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-10')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-11')))
           throw new Error('masked held-video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -123305,7 +123337,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-10')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-11')))
           throw new Error('pen-masked held-video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -123376,7 +123408,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-10')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-11')))
           throw new Error('combined-mask video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -123450,7 +123482,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-10')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-11')))
           throw new Error('unmarked/vector-mask video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -123516,7 +123548,7 @@
         FM.scene = scene;
         if (XR) XR.signature = options => { renderer = options.renderer || ''; return previousSignature(options); };
         const exported = await hunt2dExport({ fps:30, to:1 / 30 });
-        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-10')))
+        if (!exported || !exported.size || (XR && !renderer.includes(';c31-video-boundary-11')))
           throw new Error('unmarked-mask video MP4 did not use the current resume renderer');
       } finally { FM.scene = previousScene; if (XR) XR.signature = previousSignature; }
     } finally { sampler.dispose(); made.forEach(id => { try { FM.media.remove(id); } catch (e) {} }); }
@@ -124743,7 +124775,7 @@
       XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
       await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
         onProgress: function () {}, onReady: async function () {} });
-      if (!renderer || !renderer.includes(';c31-shape-upstream-8'))
+      if (!renderer || !renderer.includes(';c31-shape-upstream-9'))
         throw new Error('an interrupted shape Frame Stutter MP4 can resume an old history-based prefix');
     } finally { XR.signature = previousSignature; FM.scene = previousScene; }
   });
