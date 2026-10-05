@@ -128299,4 +128299,49 @@
     } finally { FM._exporting = wasExporting; FM.playing = wasPlaying; }
   });
 
+  test('TBD an EXIF-rotated JPEG stays upright on canvas and export', { item: 'TBD', budgetMs: 20000 }, async function () {
+    const response = await fetch('tests/_fixtures/exif-orientation-6.jpg', { cache: 'no-store' });
+    if (!response.ok) throw new Error('setup: EXIF orientation fixture is missing');
+    const file = new File([await response.blob()], 'exif-orientation-6.jpg', { type: 'image/jpeg' });
+    const rec = await FM.loadImageFile(file, { still: true });
+    const wasExporting = FM._exporting;
+    let layer, worker;
+    try {
+      if (rec.width !== 40 || rec.height !== 80)
+        throw new Error('import read ' + rec.width + '×' + rec.height + ' instead of the upright 40×80 JPEG');
+      layer = FM.makeLayer('image', { name: 'EXIF orientation probe', x: 20, y: 40, start: 0, duration: 2 });
+      FM.media.set(layer.id, rec);
+      const scene = FM.newScene();
+      Object.assign(scene.project, { width: 40, height: 80, fps: 30, duration: 2, background: '#000000' });
+      scene.layers = [layer];
+      const sample = g => [[10, 20], [30, 20], [10, 60], [30, 60]].map(([x, y]) =>
+        Array.from(g.getImageData(x, y, 1, 1).data).slice(0, 3));
+      const render = exporting => {
+        FM._exporting = exporting;
+        const cv = offscreen(40, 80), g = cv.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(g, scene, 0.5);
+        return sample(g);
+      };
+      const expected = [
+        rgb => rgb[2] > 140 && rgb[0] < 110 && rgb[1] < 120, // raw bottom-left blue rotates to upright top-left
+        rgb => rgb[0] > 140 && rgb[1] < 110 && rgb[2] < 110, // raw top-left red
+        rgb => rgb[0] > 140 && rgb[1] > 140 && rgb[2] < 110, // raw bottom-right yellow
+        rgb => rgb[1] > 120 && rgb[0] < 110 && rgb[2] < 120  // raw top-right green
+      ];
+      for (const [name, pixels] of [['canvas', render(false)], ['export', render(true)]])
+        pixels.forEach((rgb, i) => { if (!expected[i](rgb)) throw new Error(name + ' EXIF quadrant ' + i + ' is ' + rgb.join(',')); });
+      if (!FM.exportWorker || !FM.exportWorker.eligible(scene)) throw new Error('setup: EXIF image scene cannot reach the export worker');
+      worker = await FM.exportWorker.create(scene, { time: 0.5 });
+      if (!worker) throw new Error('setup: EXIF image export worker could not start');
+      const output = offscreen(40, 80), g = output.getContext('2d', { willReadFrequently: true });
+      await worker.render(g, 0.5);
+      sample(g).forEach((rgb, i) => { if (!expected[i](rgb)) throw new Error('worker export EXIF quadrant ' + i + ' is ' + rgb.join(',')); });
+    } finally {
+      if (worker) worker.dispose();
+      FM._exporting = wasExporting;
+      if (layer) FM.media.remove(layer.id);
+      else if (rec.url) URL.revokeObjectURL(rec.url);
+    }
+  });
+
 })();
