@@ -9132,6 +9132,17 @@ window.FM = window.FM || {};
         return;
       }
       if (inEdit) return;
+      // Option/Alt + ,/. seeks adjacent keyframes; adding Shift retimes the focused key at
+      // the playhead by one frame. Keep plain ,/. as the existing frame-step controls.
+      if (e.altKey && (e.code === 'Comma' || e.code === 'Period')) {
+        e.preventDefault();
+        if (FM.timeline) {
+          const direction = e.code === 'Period' ? 1 : -1;
+          if (e.shiftKey) FM.timeline.nudgeKeyframe(direction);
+          else FM.timeline.seekKeyframe(direction);
+        }
+        return;
+      }
       if (e.code === 'Space') { e.preventDefault(); FM.togglePlay(); }
       else if (e.key === '?') { e.preventDefault(); if (FM.shortcuts) FM.shortcuts.toggle(); }
       else if (e.code.indexOf('Arrow') === 0) {

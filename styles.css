@@ -3537,6 +3537,7 @@ body.white-chrome #time-readout:active {
 .kf-dot.ease-custom { background: #b18cff; }       /* hand-shaped bezier */
 .kf-dot.ease-hold { background: #7d8ca5; transform: translateX(-5.5px) rotate(0deg); border-radius: 1px; }  /* stepped / hold — flat square */
 .kf-dot.kf-live:hover { background: #d7fff5 !important; }
+.kf-dot.kf-live:focus-visible { outline: 2px solid var(--accent); outline-offset: 7px; }
 /* Armed and live. Needs !important to beat the hover rule above, and must NOT touch `transform` —
    .ease-hold re-shapes the diamond into a square, and overriding transform here would spin it
    back into a diamond mid-drag. */

@@ -718,6 +718,57 @@ window.FM = window.FM || {};
   }
   FM._keyframeSlots = keyframeSlots;   // suite hook: the two lists must not drift again
 
+  function keyboardKeyframeProps(layer, focusedOnly) {
+    const focus = FM.kfFocusProps ? FM.kfFocusProps(layer) : null;
+    if (focusedOnly && (!focus || !focus.length)) return [];
+    const animated = FM.animatedProps(layer);
+    return focus && focus.length ? animated.filter(prop => focus.includes(prop)) : animated;
+  }
+  function focusKeyboardKeyframe(t) {
+    const halfFrame = 0.5 / fps();
+    const dot = [...document.querySelectorAll('.kf-dot.kf-live[tabindex="0"]')]
+      .find(node => Math.abs(Number(node.dataset.t) - t) < halfFrame);
+    if (dot) dot.focus({ preventScroll: true });
+    return !!dot;
+  }
+  function seekKeyboardKeyframe(direction) {
+    const layer = FM.selectedLayer(FM.scene);
+    if (!layer) return false;
+    const times = keyboardKeyframeProps(layer, false).flatMap(prop => prop.kf.map(kf => kf.t));
+    const halfFrame = 0.5 / fps();
+    const candidates = times.filter(t => direction > 0 ? t > FM.time + halfFrame : t < FM.time - halfFrame);
+    if (!candidates.length) return false;
+    const target = direction > 0 ? Math.min(...candidates) : Math.max(...candidates);
+    FM.pause(); FM.setTime(target);
+    if (!focusKeyboardKeyframe(target) && FM.toast) FM.toast('Keyframe at ' + tc(target), 1700);
+    return true;
+  }
+  function retimeKeyboardKeyframes(layer, moving, direction) {
+    if (!layer || layer.locked || roNow() || !moving.length) return false;
+    const keys = [...new Set(moving)];
+    const target = Math.max(0, Math.min(FM.scene.project.duration,
+      Math.round((keys[0].t + direction / fps()) * fps()) / fps()));
+    if (Math.abs(target - keys[0].t) < 1e-6) return false;
+    keys.forEach(kf => { kf.t = target; });
+    // The pointer drag uses this same collision rule: moved keys win over an existing key on the frame.
+    FM.dedupDraggedKfs(layer, keys);
+    FM.pause(); FM.setTime(target);
+    FM.timeline.rebuild();
+    if (FM.inspector) FM.inspector.refresh();
+    FM.requestRender();
+    if (FM.history) FM.history.commit();
+    if (!focusKeyboardKeyframe(target) && FM.toast) FM.toast('Keyframe moved to ' + tc(target), 1700);
+    return true;
+  }
+  function nudgeKeyboardKeyframe(direction) {
+    const layer = FM.selectedLayer(FM.scene);
+    if (!layer) return false;
+    const halfFrame = 0.5 / fps();
+    const moving = keyboardKeyframeProps(layer, true).flatMap(prop =>
+      prop.kf.filter(kf => Math.abs(kf.t - FM.time) < halfFrame));
+    return retimeKeyboardKeyframes(layer, moving, direction);
+  }
+
   /* WHICH KEYFRAME CARRIES A DIAMOND'S EASE (queue 690). FM.evalProp eases a move by the keyframe it ENDS on (js/scene.js
      reads `b.ez` / `b.bez` / `b.e`, b being the later key), and the graph editor writes there too — so a diamond's ease is
      the move ARRIVING at it. The FIRST keyframe has nothing arriving: its own ease is read by nothing, ever (before it
@@ -2646,6 +2697,7 @@ window.FM = window.FM || {};
       // draggable, so simply selecting a clip armed a dozen diamonds you had no reason to touch.
       const focus = FM.kfFocusProps ? FM.kfFocusProps(layer) : null;
       const inFocus = (prop) => !!focus && focus.indexOf(prop) >= 0;
+      const addresses = new Map(keyframeSlots(layer).map(slot => [slot.c[slot.k], slot.addr]));
       const entries = [];
       FM.animatedProps(layer).forEach(prop => {
         const live = inFocus(prop);
@@ -2681,6 +2733,14 @@ window.FM = window.FM || {};
         dot.className = 'kf-dot ' + easeClass + (entry.live ? ' kf-live' : ' kf-idle');
         dot.style.left = (PAD + tt * pps) + 'px';
         dot.dataset.t = tt;   // updatePlayhead reads this to light the one under the playhead
+        if (entry.live) {
+          const address = addresses.get(entry.prop) || 'property';
+          const name = address === 'transform.x' ? 'Position X' : address === 'transform.y' ? 'Position Y'
+            : address.replace(/^transform\./, '').replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          dot.tabIndex = 0;
+          dot.setAttribute('role', 'button');
+          dot.setAttribute('aria-label', name + ' keyframe at ' + tc(tt) + '. Left or Right finds another key; Alt plus Left or Right moves one frame');
+        } else dot.setAttribute('aria-hidden', 'true');
         // An inert diamond must not advertise a gesture it will refuse. It keeps its title as a
         // sign-post to the thing that WOULD make it draggable.
         dot.title = entry.live
@@ -2730,6 +2790,16 @@ window.FM = window.FM || {};
         });
         // The keyframes a gesture on THIS diamond acts on: the live stack at its time (queue 690), or itself alone.
         const stackOf = () => (entry.live ? liveStackAt(tt) : [entry]);
+        if (entry.live) dot.addEventListener('keydown', e => {
+          if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+            e.preventDefault(); e.stopPropagation();
+            const direction = e.code === 'ArrowRight' ? 1 : -1;
+            if (e.altKey) retimeKeyboardKeyframes(layer, stackOf().map(en => en.kf), direction);
+            else seekKeyboardKeyframe(direction);
+          } else if (e.code === 'Enter' || e.code === 'Space') {
+            e.preventDefault(); e.stopPropagation(); FM.pause(); FM.setTime(tt);
+          }
+        });
         dot.addEventListener('dblclick', (e) => {
           e.stopPropagation();
           // this diamond's live stack only — the dimmed ones behind it survive (queue 690: X AND Y, not one of them)
@@ -4820,6 +4890,8 @@ window.FM = window.FM || {};
   };
 
   FM.timeline = {
+    seekKeyframe: seekKeyboardKeyframe,
+    nudgeKeyframe: nudgeKeyboardKeyframe,
     /* End the live ≡ drag WITHOUT its drop (queue 924 review) — for the switch's throw, which is a drop of its own. A
        no-op when nothing is being dragged. */
     abandonReorder() { const f = abandonActiveReorder; if (f) f(); return !!f; },

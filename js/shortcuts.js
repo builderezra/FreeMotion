@@ -33,6 +33,8 @@ window.FM = window.FM || {};
     ['← / →', 'Nudge selected layer  (Shift = 10px)'],
     ['↑ / ↓', 'Nudge selected layer vertically'],
     [', / .', 'Step one frame back / forward'],
+    ['Alt/⌥ + , / .', 'Previous / next keyframe on selected layer'],
+    ['Alt/⌥ + ⇧ + , / .', 'Move a focused keyframe at the playhead one frame'],
     ['Home / End', 'Jump to start / end'],
     ['⇧ + Home / End', 'Send the add marker to the top / bottom'],
     ['[ / ]', 'Set loop region in / out  (\\ clears)'],

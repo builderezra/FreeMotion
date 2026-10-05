@@ -127025,4 +127025,38 @@
     }
   });
 
+  test('TBD: keyboard seeks and retimes a live keyframe without changing its value', { item: 'TBD' }, function () {
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, time0 = FM.time;
+    const duration0 = FM.scene.project.duration, fps0 = FM.scene.project.fps;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const press = (code, key, shiftKey) => window.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true, cancelable: true, code, key, altKey: true, shiftKey: !!shiftKey
+    }));
+    try {
+      if (homeWasOpen) FM.home.close();
+      FM.scene.layers.length = 0; FM.scene.project.duration = 4; FM.scene.project.fps = 30;
+      const layer = FM.makeLayer('shape', { name: 'keyboard keyframe', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#569ac0' });
+      layer.start = 0; layer.duration = 4;
+      layer.transform.x = { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 0.5, v: 200, e: 'linear' }, { t: 1, v: 300, e: 'linear' }] };
+      layer.transform.y = { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 0.75, v: 140, e: 'linear' }] };
+      FM.scene.layers.push(layer); FM.selectLayer(layer.id); FM.setTime(0); FM.refreshAll();
+      FM._mtMode = 'move'; FM.inspector.openCategory('transform'); FM.timeline.rebuild();
+      press('Period', '.', false);
+      if (Math.abs(FM.time - 0.5) > 1e-4) throw new Error('next-key shortcut missed the 0.5 s keyframe: ' + FM.time);
+      const dot = [...document.querySelectorAll('.kf-dot.kf-live[tabindex="0"]')].find(node => Math.abs(Number(node.dataset.t) - 0.5) < 1e-4);
+      if (!dot || !/00:00:15/.test(dot.getAttribute('aria-label') || '')) throw new Error('live diamond does not speak its frame time');
+      press('Period', '.', true);
+      if (Math.abs(layer.transform.x.kf[1].t - 16 / 30) > 1e-4 || layer.transform.x.kf[1].v !== 200)
+        throw new Error('keyboard nudge did not move x exactly one frame with value unchanged');
+      if (layer.transform.y.kf[1].t !== 0.75 || layer.transform.y.kf[1].v !== 140)
+        throw new Error('keyboard nudge touched an unrelated y keyframe');
+      if (Math.abs(FM.time - 16 / 30) > 1e-4) throw new Error('playhead did not follow the moved keyframe');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(layer => FM.scene.layers.push(layer));
+      FM.scene.project.duration = duration0; FM.scene.project.fps = fps0;
+      FM.setTime(time0); FM.selectLayer(sel0 || null); FM.refreshAll();
+      if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
 })();
