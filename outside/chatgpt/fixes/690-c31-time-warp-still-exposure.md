@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Exposure before moving-still Time Warp Scan
+
+Starting commit: clean preferred Codex-only `54c023efe1c81e333dc7c81e1cfae2d36807b051`; isolated branch `codex/690-c31-scan-exposure-still`. The exact standing #690 is `REQUESTS.md:27375-27403`, and C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. `audits/912-audit.json` mentions Exposure in an unrelated filter recipe; `audits/940-hunt.json` uses the word generically. Neither names this scan finding.
+
+Exposure is a source-local, history-free grade, but the moving-still historical gate excluded it. A keyed Exposure before Time Warp Scan therefore showed different strips after a cold seek. The still-image gate now admits Exposure. A new `{ item: 'TBD' }` native Chromium regression failed before (`cold=0, played=42` at a strip pixel) and passed after in Freeze and Reveal at 120/60 px, also checking the scan against the current unscanned picture. The adjacent keyed Colour Balance still regression passed; its first browser bootstrap was incomplete and discarded. The still-image main-MP4 resume identity advances from 8 to 9.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 368→369, exporter 177→178), `tests/tests.js` (one new regression and one existing resume-identity expectation), and this report. Node syntax and `git diff --check` passed. Decoded-video Exposure remains a separate unproven gate. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
