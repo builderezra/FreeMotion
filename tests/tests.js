@@ -41562,6 +41562,35 @@
     });
   });
 
+  test('offline Undo and Redo count toward the outbox cap and drain cleanly (batch2 1b.7)', { item: 'TBD', budgetMs: 120000 }, async function () {
+    need921S8('offline outbox accounting');
+    const layers = Array.from({ length: 1200 }, (_, i) => layer921('Layer ' + i));
+    await withCollab921(layers, async function (ctx) {
+      const g = ctx.addGuest({ role: 'editor', name: 'Sam' }), full = [];
+      g.A.onOutboxFull = on => full.push(on);
+      g.G.setOnline(false);
+      g.doc.layers.forEach((layer, i) => { layer.name = 'Changed ' + i; });
+      g.G.tick('full');
+      g.G.afterCommit();
+      if (!g.G.undo() || !g.G.redo() || !g.G.undo() || !g.G.redo())
+        throw new Error('setup: the large offline edit could not alternate Undo and Redo');
+      if (!g.G.outboxFull || full[0] !== true)
+        throw new Error('offline Undo/Redo exceeded 5000 outstanding ops without filling the outbox');
+      const held = g.G._outstanding().length, name = g.doc.layers[0].name;
+      if (g.G.undo() || g.G._outstanding().length !== held || g.doc.layers[0].name !== name)
+        throw new Error('Undo kept adding work after the outbox became full');
+      g.G.setOnline(true);
+      for (let i = 0; i < 25 && g.G._outstanding().length; i++) { g.loop.settle(); await settle921(10); }
+      if (g.G._outstanding().length || g.G.outboxFull || full[full.length - 1] !== false)
+        throw new Error('acknowledgements did not drain and unlock the outbox');
+      g.G.setOnline(false);
+      if (!g.G.undo() || !g.G.redo() || !g.G.undo() || !g.G.redo() || !g.G.undo())
+        throw new Error('setup: the post-ack Undo/Redo sequence stopped before crossing the cap');
+      if (!g.G.outboxFull || full[full.length - 1] !== true)
+        throw new Error('acknowledgements left the counters low, allowing a later oversized outbox');
+    });
+  });
+
   test('921 S8r a toast raised from a collaboration card is painted above it, and a refused copy puts the text where it can be selected', { item: '921', budgetMs: 90000 }, async function () {
     const C = need921S8('toasts over the collab cards');
     await withLabs921(async function (ui) {

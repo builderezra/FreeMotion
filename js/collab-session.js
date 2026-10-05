@@ -122,6 +122,16 @@ window.FM = window.FM || {};
     const forceIds = Object.create(null);         // S7: layer ids whose next `lr` is a confirmed delete-anyway
     let refusedAt = 0;                            // S7: the §16.3 toast, said once rather than every tick
     let outboxOps = 0, outboxBytes = 0;
+    function enqueue(entry) {
+      outstanding.push(entry);
+      outboxOps += entry.ops.length;
+      outboxBytes += canon(entry.ops).length;
+      if (!S.outboxFull && (outboxOps > LIM.OUTBOX_OPS || outboxBytes > LIM.OUTBOX_BYTES)) {
+        S.outboxFull = true;
+        keepMyVersion();
+        if (A.onOutboxFull) { try { A.onOutboxFull(true); } catch (e) {} }
+      }
+    }
 
     /* ── the local interaction (§8.2) ────────────────────────────────────────────────────────── */
     let held = Object.create(null);               // pathKey -> {b: the value before the interaction}
@@ -327,16 +337,7 @@ window.FM = window.FM || {};
            content op underneath it, in base as well as live, with nothing to bring them back. */
         if (op.o === 's' || op.o === 'd') pending[P.key(op.p)] = S.cid;
       }
-      outstanding.push(entry);
-      outboxOps += ops.length;
-      outboxBytes += canon(ops).length;
-      /* §13.1 (S8 review): past the cap this device turns read-only and says so — the flag was set and nothing
-         read it, so the outbox went on growing past the size it exists to bound. */
-      if (!S.outboxFull && (outboxOps > LIM.OUTBOX_OPS || outboxBytes > LIM.OUTBOX_BYTES)) {
-        S.outboxFull = true;
-        keepMyVersion();
-        if (A.onOutboxFull) { try { A.onOutboxFull(true); } catch (e) {} }
-      }
+      enqueue(entry);
       if (S.online) flushOutstanding();
       S.stats.tx++;
       return res.ops.length;
@@ -947,8 +948,8 @@ window.FM = window.FM || {};
       const entry = i >= 0 ? outstanding[i] : null;
       if (entry) rememberCatchup(entry.ops, entry.cid);
       if (entry) {
-        outboxOps -= entry.ops.length;
-        outboxBytes -= canon(entry.ops).length;
+        outboxOps = Math.max(0, outboxOps - entry.ops.length);
+        outboxBytes = Math.max(0, outboxBytes - canon(entry.ops).length);
         outstanding.splice(i, 1);
         if (S.outboxFull && outboxOps <= LIM.OUTBOX_OPS && outboxBytes <= LIM.OUTBOX_BYTES) {
           S.outboxFull = false;
@@ -1184,6 +1185,11 @@ window.FM = window.FM || {};
     function runStep(st, intoRedo) {
       if (A.flushPendingCommit) { try { A.flushPendingCommit(); } catch (e) {} }
       pushLocal('hot');
+      if (!isOwner && S.active && S.outboxFull) {
+        if (st.pre) preIdx++;
+        else (intoRedo ? undoStack : redoStack).push(st);
+        return false;
+      }
       const keepOps = [], keepRecs = [];
       let soft = 0, hardFail = null;
       for (let i = 0; i < st.ops.length; i++) {
@@ -1260,7 +1266,7 @@ window.FM = window.FM || {};
           for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
           S.cid += 1;
           for (let i = 0; i < ops.length; i++) if (ops[i].o === 's' || ops[i].o === 'd') pending[P.key(ops[i].p)] = S.cid;
-          outstanding.push({ cid: S.cid, ops: ops, sent: false, queued: !S.online || catchingUp });
+          enqueue({ cid: S.cid, ops: ops, sent: false, queued: !S.online || catchingUp });
           rememberCatchup(ops, S.cid);
           if (S.online) flushOutstanding();
         }
@@ -1403,7 +1409,7 @@ window.FM = window.FM || {};
       for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
       S.cid += 1;
       for (let i = 0; i < ops.length; i++) if (ops[i].o === 's' || ops[i].o === 'd') pending[P.key(ops[i].p)] = S.cid;
-      outstanding.push({ cid: S.cid, ops: ops, sent: false, queued: true });
+      enqueue({ cid: S.cid, ops: ops, sent: false, queued: true });
       keepMyVersion();                          // §13.2 step 5: a reload's recovered work is offline work too
       return ops.length;
     };
