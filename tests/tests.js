@@ -126899,4 +126899,56 @@
     }
   });
 
+  test('TBD: keyframe diamonds name the parameter and playhead action across inspector builders', { item: 'TBD' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, time0 = FM.time;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const panel = document.getElementById('inspector-panel');
+    if (!panel) throw new Error('inspector panel missing');
+    const rowByLabel = (selector, label) => [...panel.querySelectorAll(selector)].find(row =>
+      (row.querySelector('.fx-scrub-label, label')?.textContent || '').trim() === label);
+    const assertAction = async (find, label) => {
+      const before = find();
+      if (!before) throw new Error(label + ' keyframe row missing');
+      if (!new RegExp('^Animate ' + label + ' \\u2014 add a keyframe').test(before.getAttribute('aria-label') || ''))
+        throw new Error(label + ' has no named initial keyframe action: ' + before.getAttribute('aria-label'));
+      before.click(); await sleep(80);
+      const after = find(); // inspector refresh replaces the button
+      if (!after || !new RegExp('^Remove ' + label + ' keyframe at playhead$').test(after.getAttribute('aria-label') || ''))
+        throw new Error(label + ' does not announce the keyframe now at the playhead: ' + (after && after.getAttribute('aria-label')));
+    };
+    try {
+      if (homeWasOpen) FM.home.close();
+      FM.scene.layers.length = 0; FM.time = 0;
+      const layer = FM.makeLayer('shape', { name: 'keyframe names', shape: 'rect', x: 80, y: 80, shapeW: 80, shapeH: 80, fill: '#4488ff' });
+      layer.start = 0; layer.duration = 4;
+      layer.stroke = { enabled: true, width: 8, color: '#ffffff', position: 'center' };
+      layer.trimPath = { enabled: true, start: 0, end: 1, offset: 0 };
+      layer.effects = [{ type: 'glow', params: {} }];
+      FM.scene.layers.push(layer); FM.selectLayer(layer.id); FM.refreshAll(); await sleep(120);
+      FM.inspector.openCategory('blend');
+      await assertAction(() => panel.querySelector('.kf-btn[aria-label*="Opacity"]'), 'Opacity');
+      FM.time = 1; FM.inspector.refresh();
+      const between = panel.querySelector('.kf-btn[aria-label*="Opacity"]');
+      if (!between || between.getAttribute('aria-label') !== 'Add Opacity keyframe at playhead')
+        throw new Error('animated Opacity without a key here must say Add, not Remove');
+      FM.time = 0; FM.inspector.refresh();
+      FM.inspector.openCategory('border');
+      await assertAction(() => rowByLabel('.fx-scrub-row', 'Size')?.querySelector('.fx-kf'), 'Size');
+      await assertAction(() => rowByLabel('.fx-scrub-row', 'Start')?.querySelector('.fx-kf'), 'Start');
+      await assertAction(() => rowByLabel('.kf-color-row', 'Color')?.querySelector('.fx-kf'), 'Color');
+      FM.inspector.openCategory('effects'); await sleep(120);
+      const disc = panel.querySelector('.fx-disc') || panel.querySelector('.fx-head');
+      if (disc) { disc.click(); await sleep(120); }
+      const effectRow = [...panel.querySelectorAll('.fx-scrub-row')].find(row => row.querySelector('.fx-kf'));
+      const effectLabel = effectRow?.querySelector('.fx-scrub-label')?.textContent?.trim();
+      if (!effectLabel) throw new Error('effect scrubber keyframe row missing');
+      await assertAction(() => rowByLabel('.fx-scrub-row', effectLabel)?.querySelector('.fx-kf'), effectLabel);
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(layer => FM.scene.layers.push(layer));
+      FM.time = time0; FM.selectLayer(sel0 || null); FM.refreshAll();
+      if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
 })();

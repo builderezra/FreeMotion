@@ -16,6 +16,13 @@ window.FM = window.FM || {};
   }
   function round(v, dp) { const m = Math.pow(10, dp); return Math.round(v * m) / m; }
   function commitH() { if (FM.history) FM.history.commit(); }
+  function nameKeyframeButton(button, label, prop) {
+    const action = FM.hasKeyframeAt(prop, FM.time) ? 'Remove ' + label + ' keyframe at playhead'
+      : FM.isAnimated(prop) ? 'Add ' + label + ' keyframe at playhead'
+      : 'Animate ' + label + ' — add a keyframe at playhead';
+    button.setAttribute('aria-label', action);
+    button.title = action;
+  }
 
   function section(title) { const s = el('div', 'insp-section'); s.appendChild(el('h4', null, title)); return s; }
 
@@ -43,7 +50,7 @@ window.FM = window.FM || {};
     const animated = FM.isAnimated(p);
     const onHere = FM.hasKeyframeAt(p, FM.time);
     const kf = el('button', 'kf-btn' + (animated ? ' active' : '') + (onHere ? ' here' : ''), '◆');
-    kf.title = animated ? 'Keyframe at playhead (click to remove)' : 'Animate this property — adds a keyframe at the playhead';
+    nameKeyframeButton(kf, label, p);
     kf.addEventListener('click', () => {
       FM.toggleKeyframe(layer, key, FM.time);
       FM.inspector.refresh();
@@ -1140,7 +1147,7 @@ window.FM = window.FM || {};
     if (p.keyframable) {
       const c = fx.params[p.key];
       const kfb = el('button', 'fx-kf' + (FM.isAnimated(c) ? ' active' : '') + (FM.hasKeyframeAt(c, FM.time) ? ' here' : ''), '◆');
-      kfb.title = FM.isAnimated(c) ? 'Keyframe at playhead (click to remove)' : 'Animate this parameter';
+      nameKeyframeButton(kfb, p.label, c);
       kfb.addEventListener('click', () => { FM.toggleProp(fx.params, p.key, FM.time, followed ? followed() : fallback); afterFx(); });
       row.appendChild(kfb);
     } else { row.appendChild(el('span', 'fx-kf-spacer')); }
@@ -1342,7 +1349,7 @@ window.FM = window.FM || {};
     const read = () => { const c = container[key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : dflt); };
     const c0 = container[key];
     const kfb = el('button', 'fx-kf' + (FM.isAnimated(c0) ? ' active' : '') + (FM.hasKeyframeAt(c0, FM.time) ? ' here' : ''), '◆');
-    kfb.title = FM.isAnimated(c0) ? 'Keyframe at playhead (click to remove)' : 'Animate this';
+    nameKeyframeButton(kfb, label, c0);
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt); afterKf(); });
     row.appendChild(kfb);
     row.appendChild(el('span', 'fx-scrub-label', label));
@@ -1374,7 +1381,7 @@ window.FM = window.FM || {};
     const read = () => { const c = container[key]; return (FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : dflt / disp)) * disp; };
     const c0 = container[key];
     const kfb = el('button', 'fx-kf' + (FM.isAnimated(c0) ? ' active' : '') + (FM.hasKeyframeAt(c0, FM.time) ? ' here' : ''), '◆');
-    kfb.title = FM.isAnimated(c0) ? 'Keyframe at playhead (click to remove)' : 'Animate this';
+    nameKeyframeButton(kfb, label, c0);
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt / disp); afterKf(); });
     row.appendChild(kfb);
     row.appendChild(el('span', 'fx-scrub-label', label));
@@ -1404,7 +1411,7 @@ window.FM = window.FM || {};
     const row = el('div', 'prop-row kf-color-row');
     const c0 = container[key];
     const kfb = el('button', 'fx-kf' + (FM.isAnimated(c0) ? ' active' : '') + (FM.hasKeyframeAt(c0, FM.time) ? ' here' : ''), '◆');
-    kfb.title = FM.isAnimated(c0) ? 'Keyframe at playhead (click to remove)' : 'Animate colour';
+    nameKeyframeButton(kfb, label, c0);
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dv()); afterKf(); });
     row.appendChild(kfb);
     row.appendChild(el('label', null, label));
