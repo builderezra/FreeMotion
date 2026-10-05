@@ -1,21 +1,19 @@
 # Make a photo or title move across the screen
 
-You'll be able to set a start and an end position, and have the picture glide between them.
+You'll be able to set a start and an end spot, and have the picture glide between them.
 
 1. Tap your photo or title on the timeline. Its options open. <!-- js/timeline.js:2191 tap selects; js/mobile.js:48 syncSheet -->
-2. Slide the timeline so the middle line (the playhead) sits at the start of the clip. <!-- js/timeline.js:11 -->
+2. Slide the timeline so the middle line (the playhead) sits at the start of the clip. Swipe the time ruler, or start moving straight away: holding a clip for a third of a second picks the clip up instead. <!-- js/timeline.js:11 fixed-centre playhead; js/timeline.js:2196-2203, 2322 hold grabs the clip -->
 3. Open the **Position / Scale** card. <!-- js/inspector.js:2677 -->
-4. Check that the first of the four icons on the right edge of the panel is lit. That is Move. <!-- js/inspector.js:4318-4319 MT_MODES, MT_TITLES; js/inspector.js:5368-5376 right rail; js/inspector.js:7151 'move' is the default mode -->
-5. On the left edge of the panel, tap the small diamond at the top. This is your first keyframe. <!-- js/inspector.js:4896-4925 left rail, kfBtn '◆' "Add a keyframe at the playhead"; the glyph is the button's text -->
+4. Check that the first of the four buttons on the right edge of the panel (Move) is lit. If it isn't, tap it. If you see "Anchor X" and "Centre the anchor" instead of X, Y and Z, tap Move again. <!-- js/inspector.js:4318-4319 MT_MODES; js/inspector.js:5368-5376 right rail, Move again toggles anchor; js/inspector.js:5335, 5353 'Anchor X', 'Centre the anchor'; js/inspector.js:7151 default 'move' -->
+5. On the left edge of the panel there is a column of buttons. Tap the top one, the diamond (not the tiny diamonds on the number boxes). It turns yellow: that is your first keyframe. <!-- js/inspector.js:4896-4925 left rail kfBtn '◆'; styles.css:407 .mt-kf.here color var(--kf) amber; js/inspector.js:5009-5010 the number boxes -->
 6. Slide the timeline later, to where the move should end. <!-- js/timeline.js:11 -->
 7. Tap the diamond again to add the second keyframe. <!-- js/inspector.js:4925-4960 -->
-8. Tap the **X** number and type a clearly different number. Because the move is now keyframed, this changes the second keyframe. <!-- js/inspector.js:5009 mtVBox('X'), tap opens type-in (4389); js/scene.js:332-343 an edit on an animated prop upserts a keyframe at the playhead -->
-9. Slide back to the start and tap the time counter to play. Tap it again to stop. <!-- index.html:557 #time-readout -->
+8. Tap the **X** number and type a clearly different number. Press Return or tap away to apply it. This edits the second keyframe. <!-- js/inspector.js:5009 mtVBox('X'), tap to type 4389-4391; js/scene.js:332-343 upsertKeyframe on an animated prop -->
+9. Slide back to the start and quick-tap the time counter to play. Tap again to stop. <!-- index.html:557 #time-readout; js/app.js:6745-6750 hold = loop -->
 
-A small white diamond now shows on the timeline at each keyframe. <!-- js/timeline.js:2663 kf-dot; styles.css:3516 white 11px diamond -->
+On a computer: the same steps, in the panel at the bottom left. To slide the timeline, drag the time ruler or an empty part of it (or scroll). Dragging the clip moves the clip. Press Enter after typing the X number. Space also plays and stops. <!-- js/timeline.js:5096-5098; index.html:556 "Play / Pause (space)" -->
 
-On a computer: it is the same. The clip panel is at the bottom left. <!-- js/inspector.js:4896 -->
+Tip: To soften the movement, tap the curve button just under the diamond. A graph opens with two rows of buttons under it. In the bottom row of small curve pictures, tap the S-shaped one (Ease In-Out), then play it again. Tap the back arrow by Position / Scale to return. <!-- js/inspector.js:4950-4955 mt-ease; js/graph-editor.js:33-39, 267-275 presets row; js/graph-editor.js:355-362; js/inspector.js:7147 'cat-back' -->
 
-Tip: To soften the movement, tap the curve icon under the diamond. A row of small curve pictures appears. Tap one and play it again. <!-- js/inspector.js:4950-4955 mt-ease, FM.openEasingCurve; js/graph-editor.js:33-39, 267-275 presets row; js/graph-editor.js:355-362 applies it -->
-
-If it doesn't work: If dragging the picture on the preview moves the whole animation instead of adding a keyframe, use the **X** and **Y** numbers instead. Moving it on the preview keeps your timing and never adds a keyframe. <!-- js/scene.js:348-351 shiftTransform "canvas drag ... never to drop a stray keyframe"; js/scene.js:332-343 -->
+If it doesn't work: Dragging the picture on the preview shifts the whole animation and never adds a keyframe. Use the **X** and **Y** numbers. <!-- js/scene.js:348-351 shiftTransform -->
