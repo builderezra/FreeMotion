@@ -120620,4 +120620,48 @@
     });
   });
 
+  test('980 cog T12 on every phone size, upright and sideways, the switch and the open block are on screen, nothing scrolls sideways, and Apply is reachable', { item: '980', budgetMs: 120000 }, async function () {
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test sizes its own frame and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const SIZES = [[320, 568], [375, 553], [380, 667], [380, 800], [440, 956], [956, 440]];
+    const bad = [];
+    try {
+      for (const sz of SIZES) {
+        frame.style.width = sz[0] + 'px'; frame.style.height = sz[1] + 'px';
+        window.dispatchEvent(new Event('resize'));
+        await new Promise(r => setTimeout(r, 260));
+        await smCog(async function (c) {
+          const W = window.innerWidth, H = window.innerHeight, tag = sz[0] + 'x' + sz[1];
+          const onScreen = (el, what) => {
+            if (!el) { bad.push(tag + ': no ' + what); return; }
+            const r = el.getBoundingClientRect();
+            if (!(r.width > 0 && r.left >= -0.5 && r.top >= -0.5 && r.right <= W + 0.5 && r.bottom <= H + 0.5)) { bad.push(tag + ': ' + what + ' is off screen ' + JSON.stringify([Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)])); return; }
+            const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            if (!h || !(h === el || el.contains(h))) bad.push(tag + ': ' + what + ' is covered (the point hits ' + (h ? h.tagName.toLowerCase() + (h.id ? '#' + h.id : '') : 'nothing') + ')');
+          };
+          const sw = () => Array.prototype.find.call(document.querySelectorAll('#cv-editor .ed-sw'), b => b.getClientRects().length);
+          /* S1: Canvas open — the switch and Apply */
+          onScreen(sw(), 'the switch (Canvas open)');
+          const card = c.dlg.querySelector('.export-card'), apply = c.dlg.querySelector('.export-card .dialog-actions .primary, .export-card .dialog-actions button:last-child');
+          if (card) card.scrollTop = card.scrollHeight;
+          await c.sleep(30);
+          onScreen(apply, 'Apply (Canvas open, scrolled to the end)');
+          if (document.documentElement.scrollWidth > W + 1) bad.push(tag + ': the page scrolls sideways (' + document.documentElement.scrollWidth + ' > ' + W + ')');
+          /* S3: the explanation open — the big switch and the two bars to get back */
+          document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
+          if (c.big() !== 'editor') { bad.push(tag + ': the explanation did not open'); return; }
+          onScreen(sw(), 'the switch (explanation open)');
+          onScreen(document.getElementById('cv-mini'), 'the Canvas bar (explanation open)');
+          onScreen(document.getElementById('cv-fr-bar'), 'the Friends bar (explanation open)');
+        });
+      }
+    } finally {
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await new Promise(r => setTimeout(r, 220));
+    }
+    if (bad.length) throw new Error(bad.length + ' problem(s): ' + bad.slice(0, 6).join(' · '));
+  });
+
 })();
