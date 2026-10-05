@@ -1437,7 +1437,7 @@ window.FM = window.FM || {};
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'shape' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'timewarp'))) {
         // Historical scan strips can differ from a prefix rendered before deterministic cold seeks.
-        resumeRenderer = (resumeRenderer || 'main') + ';c31-shape-timewarp-grade-6';
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-shape-timewarp-grade-7';
       }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'image' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'timewarp'))) {
