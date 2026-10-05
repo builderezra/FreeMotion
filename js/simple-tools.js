@@ -64,7 +64,13 @@ window.FM = window.FM || {};
     /* Simple's ⋯ (§8.2): Close all gaps when there is one, then everything else in Full's own ⋯ strip. Capture phase, and
        only while Simple is on screen, so Full's ⋯ is exactly today's. */
     const opts = document.getElementById('btn-opts');
-    if (opts) opts.addEventListener('click', e => { if (!isSimple() || FM._smOptsPass) return; e.stopImmediatePropagation(); e.preventDefault(); optsMenu(opts); }, true);
+    if (opts) opts.addEventListener('click', e => {
+      if (!isSimple() || FM._smOptsPass) return;
+      /* the lit ⋯ shuts the Loop / preview speed strip it opened, as in Full (review finding 28): the tap goes to Full's toggle */
+      const ob = document.getElementById('opt-bar');
+      if (ob && FM.sideBarOpen && FM.sideBarOpen(ob)) { closeMenu(); return; }
+      e.stopImmediatePropagation(); e.preventDefault(); optsMenu(opts);
+    }, true);
     document.addEventListener('pointerdown', e => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
     /* A PLAIN MOUSE WHEEL SCROLLS THE TRAY SIDEWAYS (review finding 22, his #976: "on pc without trackpad there seems to be no
        way to slide"). Only a vertical wheel over a tray that overflows, and only while it can still move; a trackpad's own

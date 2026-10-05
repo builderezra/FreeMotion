@@ -122558,4 +122558,25 @@
       if (focusedTool() !== 'earlier') throw new Error('when the line went, focus did not go back to Move earlier: ' + focusedTool());
     });
   });
+
+
+  test('simple P2.2 · review the lit ⋯ closes the Loop and preview speed strip it opened, as in Full', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const btn = document.getElementById('btn-opts'), bar = document.getElementById('opt-bar');
+      try {
+        btn.click(); await v.sleep(60);
+        const it = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).find(b => /Loop and preview speed/.test(b.textContent));
+        if (!it) throw new Error('CONTROL: Simple’s ⋯ has no Loop and preview speed');
+        it.click(); await v.sleep(250);
+        if (!FM.sideBarOpen(bar) || !btn.classList.contains('active')) throw new Error('CONTROL: the strip did not open from Simple’s ⋯');
+        btn.click(); await v.sleep(250);
+        if (document.querySelector('.sm-menu')) throw new Error('the lit ⋯ opened Simple’s list instead of closing the strip');
+        if (FM.sideBarOpen(bar) || btn.classList.contains('active')) throw new Error('the lit ⋯ did not close the strip');
+        /* CONTROL: with the strip shut, ⋯ opens Simple’s list again */
+        btn.click(); await v.sleep(60);
+        if (!document.querySelector('.sm-menu')) throw new Error('CONTROL: ⋯ no longer opens Simple’s list once the strip is shut');
+      } finally { FM.simpleTools._reset(); if (FM.sideBarOpen(bar) && FM.setSideBar) FM.setSideBar(bar, btn, false); }
+    });
+  });
 })();
