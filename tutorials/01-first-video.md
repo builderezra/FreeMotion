@@ -2,20 +2,21 @@
 
 You'll be able to start a project, add a clip or photo, watch it, and save the finished video to your phone.
 
-1. On the home screen, tap the round **+** button (New project). <!-- index.html:716 aria-label="New project" -->
-2. Type a name, or leave the suggested one. Pick a shape, like **9:16** for a phone video. <!-- index.html:719-725 "New project", "Name", "9:16" -->
-3. Tap **Create**. Your project opens. <!-- index.html:770 "Create"; js/home.js:3193 opens the project -->
-4. Tap the bar that says **Tap here to start creating**. The Add sheet slides up. <!-- js/timeline.js:2795 addRowLabel(); index.html:653 "Add" -->
+1. On the home screen, tap the round **+** button. <!-- index.html:716 #hm-new aria-label="New project" -->
+2. Pick a shape, like **9:16** for a phone video. <!-- index.html:719-725 "New project", "Name", "9:16" -->
+3. Tap **Create**. Your project opens. <!-- index.html:770 "Create"; js/home.js:3193 -->
+4. Tap the big round **+** in the middle of the empty timeline. "Tap here to start creating" is written under it. The Add menu comes up. <!-- js/timeline.js:3447-3452 plus icon and label; js/timeline.js:2795 addRowLabel() "Tap here to start creating" -->
 5. Tap the **Media** tab. <!-- js/addmenu.js:377 key 'media' label 'Media' -->
-6. Tap **Import media**, then choose a video or photo from your phone. <!-- js/addmenu.js:423 "Import media" -->
-7. To watch it, tap the time counter (it reads 00:00:00 at the start). Tap it again to pause. <!-- index.html:557 #time-readout title "Tap: play / pause" -->
-8. Tap the **Export** button (the up-arrow button in the top bar). <!-- index.html:395 aria-label="Export" -->
-9. Leave the settings as they are and tap **Export MP4**. Wait for the bar to finish. <!-- index.html:958 "Export MP4" -->
-10. When **Export ready** appears, tap **Save**. <!-- index.html:832, 840 "Export ready", "Save" -->
-11. In the sheet your phone shows, choose the option that saves the video. <!-- js/exporter.js:55 hands the MP4 to the OS share sheet; the wording there is your phone's, not ours -->
+6. Tap **Import media**, then pick a video or photo from your phone. <!-- js/addmenu.js:423 "Import media" -->
+7. Your clip lands on the timeline already selected, with its options open underneath. <!-- js/app.js:3099 scene.selectedId = layer.id -->
+8. To watch it, tap the time counter (it reads 00:00:00 at the start). Tap again to pause. <!-- index.html:557 #time-readout title "Tap: play / pause" -->
+9. Tap the back arrow at the top left **once**. That closes the clip's options. A second tap would take you to Home. <!-- index.html:338 #m-back (a back chevron); styles.css:4214 body.m-editing hides #m-export while a clip is selected -->
+10. Tap the up-arrow button at the top right. This is Export. <!-- index.html:395 #m-export aria-label="Export" -->
+11. Tap **Export MP4** and wait. <!-- index.html:958 "Export MP4" -->
+12. When **Export ready** shows, tap **Save**, then choose the option in your phone's sheet that saves the video. If no sheet appears, the video went to your Downloads. If you close the sheet by mistake, tap **Save** again. <!-- index.html:832, 840 "Export ready", "Save"; js/exporter.js:55-60 share sheet, falls back to a download -->
 
-On a computer: drag a video or photo onto the picture, or click **Import media** at the top. Click the time counter or press Space to play, and click **Export** at the top. <!-- index.html:423 "Drag a video or image here or click Import media"; index.html:332 "Export"; index.html:556 "Play / Pause (space)" -->
+On a computer: there is no Import media button on the top bar. Click the **+** on the empty timeline, then the **Media** tab, then **Import media**. Export sits at the right end of the row under the picture. <!-- index.html:280 #topbar-extra display:none; js/addmenu.js:423; index.html:423 "Drag a video or image here"; index.html:556 "Play / Pause (space)"; js/app.js:7737 pcTransportLayout moves btn-export into that row -->
 
-Tip: Once you've imported something, it shows up as a small tile in the **Media** tab. Tap that tile to add it again without opening your photos. <!-- js/addmenu.js:458-461 libEntries, "One tap re-adds it" -->
+Tip: Past imports show as tiles in the **Media** tab. Tap one to add it again. <!-- js/addmenu.js:458-461 libEntries -->
 
-If it doesn't work: If you tap **Import media** and nothing seems to happen, you may have backed out of your phone's picker. Tap it again and pick a file. <!-- js/addmenu.js:69 fileImport opens the picker -->
+If it doesn't work: Tapping **Import media** closes the Add menu. If you back out of the picker, tap "Tap here to start creating" again, then **Media**, then **Import media**. <!-- js/addmenu.js:69 fileImport opens the picker; js/timeline.js:2795 -->
