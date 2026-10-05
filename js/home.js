@@ -2564,7 +2564,11 @@ window.FM = window.FM || {};
     // is already on screen (a thumbnail grab, a migrate, a sort change) the clear is SOFT — arrowSoon() below holds the arrow
     // and its redraw carries the draw on from where it was, instead of starting it again from the middle of it
     if (FM.homeArrow) FM.homeArrow.clear({ soft: !root.classList.contains('hidden') });
-    root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    root.querySelectorAll('.hm-tab').forEach(b => {
+      const selected = b.dataset.tab === tab;
+      b.classList.toggle('active', selected);
+      b.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    });
     // Keep the legacy programmatic Select control in sync; cards' menus are the visible entry.
     const selBtn = document.getElementById('hm-select-btn');
     if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.classList.toggle('on', selectMode); }

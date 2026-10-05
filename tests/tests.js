@@ -126999,4 +126999,30 @@
     }
   });
 
+  test('TBD: Home tab buttons announce the selected destination', { item: 'TBD' }, async function () {
+    const wasOpen = FM.home.isOpen();
+    const tabs = [...document.querySelectorAll('#home-screen .hm-tab')];
+    const initial = tabs.find(button => button.classList.contains('active'));
+    if (tabs.length !== 4 || !initial) throw new Error('Home tab fixture is incomplete');
+    const check = selected => tabs.forEach(button => {
+      const expected = button.dataset.tab === selected ? 'true' : 'false';
+      if (button.getAttribute('aria-pressed') !== expected)
+        throw new Error(button.dataset.tab + ' should announce aria-pressed=' + expected);
+    });
+    try {
+      if (!wasOpen) FM.home.open();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      check(initial.dataset.tab);
+      const templates = tabs.find(button => button.dataset.tab === 'templates');
+      templates.click();
+      check('templates');
+      const projects = tabs.find(button => button.dataset.tab === 'projects');
+      projects.click();
+      check('projects');
+    } finally {
+      if (initial.dataset.tab !== 'projects') initial.click();
+      if (!wasOpen) FM.home.close();
+    }
+  });
+
 })();
