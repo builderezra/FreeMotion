@@ -127582,4 +127582,49 @@
     }
   });
 
+  test('690 Mask and Blur chosen together undo together in either pick order', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      const pid = await FM.projects.create({ name: 'Mask multi-pick Undo', width: 320, height: 240 });
+      if (!pid) throw new Error('setup: could not make the effect project');
+      made.push(pid);
+      const L = FM.makeLayer('shape', { name: 'effect target', shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 70 });
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.reset();
+      for (const order of [['_mask', 'blur'], ['blur', '_mask']]) {
+        const before = FM.history._steps().index;
+        FM.fxBrowser.open(FM.layerById(FM.scene, L.id));
+        await sleep(180);
+        const root = document.getElementById('fx-browser');
+        if (!root.classList.contains('fxb-sheet')) throw new Error('setup: the effect picker did not open in sheet mode');
+        root.querySelector('.fxb-search-btn').click();
+        const search = root.querySelector('.fxb-search-input');
+        for (const id of order) {
+          search.value = id === '_mask' ? 'mask' : 'blur';
+          search.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(130);
+          const tile = root.querySelector('[data-fxid="' + id + '"]');
+          if (!tile) throw new Error('setup: could not pick ' + id);
+          tile.click(); await sleep(70);
+        }
+        root.querySelector('.fxb-commit-go').click();
+        await sleep(140);
+        const after = FM.layerById(FM.scene, L.id);
+        if ((after.masks || []).length !== 1 || !(after.effects || []).some(e => e.type === 'blur'))
+          throw new Error('Mask and Blur did not both land');
+        if (FM.history._steps().index !== before + 1)
+          throw new Error(order.join(' then ') + ' needed more than one Undo step');
+        FM.history.undo();
+        const undone = FM.layerById(FM.scene, L.id);
+        if ((undone.masks || []).length || (undone.effects || []).some(e => e.type === 'blur'))
+          throw new Error('one Undo left part of the picked effects behind');
+        FM.history.reset(); // start the reverse-order control from the clean shape
+      }
+    } finally {
+      if (FM.maskTool && FM.maskTool.close) FM.maskTool.close();
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();

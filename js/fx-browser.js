@@ -572,7 +572,9 @@ window.FM = window.FM || {};
     if (!quiet) FM.fxBrowser.close();
     if (FM.inspector) FM.inspector.refresh();
     if (FM.timeline) FM.timeline.rebuild();
-    if (FM.history) FM.history.commit();
+    // The sheet's commitPicks() commits the whole numbered selection once. A quiet Mask must not
+    // leave an earlier step that makes one Add require two Undo presses.
+    if (!quiet && FM.history) FM.history.commit();
     /* The mask EDITOR only opens on the single-tap path. In a batch it would land on top of whatever
        else was picked, and you would be drawing a mask before seeing the rest of what you added. */
     if (!quiet && FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, m.id);
