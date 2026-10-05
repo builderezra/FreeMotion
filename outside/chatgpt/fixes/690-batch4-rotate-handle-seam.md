@@ -6,4 +6,4 @@ The rotate handle used the raw difference between two `atan2` readings, so cross
 
 Changed files: `js/canvas-edit.js`, `index.html` (canvas-edit cache 122), `tests/tests.js` (one `TBD` seam/control regression).
 
-Checks: focused production-branch Node check passed 170°→190°, 10°→30°, and a full turn with 2° maximum adjacent steps; changed-JS syntax and `git diff --check` passed. Browser regression remains pending under the Claude ship lock; this branch is not promoted to the preferred checkpoint until it passes.
+Checks: focused production-branch Node check passed 170°→190°, 10°→30°, and a full turn with 2° maximum adjacent steps; changed-JS syntax and `git diff --check` passed. The focused muted Chromium regression remains pending: one attempt lacked the selection box and a retry failed app-frame readiness. Neither is a product failure or pass.

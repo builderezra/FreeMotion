@@ -6,4 +6,4 @@ The speed-ramp integral averaged the values on either side of a hold key across 
 
 Changed files: `js/scene.js`, `index.html` (scene cache 120), `tests/tests.js` (one `TBD` hold-step/split regression).
 
-Checks: focused production-function check measured 0.000002 s error at a 100×→1× drop and 0.000002 s split shift; changed-JS syntax and `git diff --check` passed. Browser regression remains pending under the Claude ship lock; this branch is not promoted to the preferred checkpoint until it passes.
+Checks: focused production-function check measured 0.000002 s error at a 100×→1× drop and 0.000002 s split shift; changed-JS syntax and `git diff --check` passed. The focused muted Chromium regression subsequently passed (1/1) when the app frame loaded.
