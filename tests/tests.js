@@ -122116,4 +122116,30 @@
       }, { fps: 30 });
     }
   });
+
+
+  test('simple P2.2 · review the + refuses (until 2.4) to move an end card out from under a keyed camera, and goes through when the camera is set to Stay put (§3.10 rule 3e)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const file = await smPng('#ff0000');
+    for (const pinned of [false, true]) {
+      await smP2((W, H) => {
+        const cam = FM.makeLayer('camera', { name: 'Cam', start: 0, duration: 8 });
+        cam.transform.scale = smKf([[6, 1], [8, 1.5]]);   // a zoom onto the end card
+        if (pinned) cam.sm = { stay: true };
+        return [cam, smT('End', 6, 2, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)];
+      }, async function (v) {
+        if (FM.spine.classify(FM.scene).tail.indexOf(v.L('End').id) < 0) throw new Error('CONTROL: the end card is not in the tail');
+        const n0 = v.steps(), d0 = v.doc();
+        await FM.simpleTimeline.pickFiles([file]); await v.idle();
+        const img = FM.scene.layers.find(l => l.type === 'image');
+        if (!pinned) {
+          if (v.L('End').start !== 6 || v.steps() !== n0 || v.doc() !== d0)
+            throw new Error('the + moved the end card to ' + v.L('End').start + ' while the zoom on it stayed at ' + v.L('Cam').transform.scale.kf.map(k => k.t) + ' (it now plays over the new clip)');
+          if (!/camera/i.test(v.say())) throw new Error('refused with no camera line: “' + v.say() + '”');
+        } else if (!img || Math.abs(v.L('End').start - (6 + img.duration)) > 1e-9 || v.steps() !== n0 + 1) {
+          throw new Error('CONTROL: with the camera set to Stay put the + did not go through: End at ' + v.L('End').start + ' (it said “' + v.say() + '”)');
+        }
+      });
+    }
+  });
 })();

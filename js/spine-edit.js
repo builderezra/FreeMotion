@@ -323,6 +323,11 @@ window.FM = window.FM || {};
       const end = (+l.start || 0) + (+l.duration || 0);
       if (end > from + R.eps) return { kind: 'riders', name: S.itemWord(l, R) };
     }
+    return cameraBlock(R, from, map);
+  }
+  /* The camera half alone: Append moves only the tail, so riders wholly after T stay a listed 2.4 gap, but a keyed camera
+     over the end card is not — it refuses rather than let the zoom play over the new clips (§3.10 rule 3e; review finding 5) */
+  function cameraBlock(R, from, map) {
     for (let k = 0; k < R.fullOnly.length; k++) {
       const l = map.get(R.fullOnly[k]); if (!l || l.type !== 'camera' || (l.sm && l.sm.stay)) continue;
       const keyed = (FM.timedLists ? FM.timedLists(l) : FM.animatedProps(l)).some(pp => pp.kf.some(kk => kk.t >= from - R.eps));
@@ -1008,6 +1013,7 @@ window.FM = window.FM || {};
     const T = R.main.some(e => !e.slot) ? R.trackEnd : 0;
     const sum = clips.reduce((a, c) => a + c.len, 0);
     for (const id of R.riders) { const l = map.get(id); if (l && (+l.start || 0) < T - R.eps && (+l.start || 0) + (+l.duration || 0) > T + R.eps) return refusePlan('riders'); }
+    if (R.tail.length && clips.length) { const cm = cameraBlock(R, T, map); if (cm) return refusePlan(cm.kind, cm); }   // rule 3e: only when it moves the tail
     const plan = newPlan(clips.length > 1 ? 'Add ' + clips.length + ' clips' : 'Add clip');
     /* §3.6 Append row: arranging (so gated, pinned and tail-fitted in this same step) when it moves an end card, when an
        sm.tail item will be refitted to the new end, or when a whole-video picture added in Full after adoption carries no
