@@ -120692,7 +120692,7 @@
     });
   });
 
-  test('980 cog T12 on every phone size, upright and sideways, the switch and the open block are on screen, nothing scrolls sideways, and Apply is reachable', { item: '980', budgetMs: 120000 }, async function () {
+  test('980 cog T12 on every phone size, upright and sideways, the switch and the open block are on screen, nothing scrolls sideways, and Apply is reachable — the cog is never covered by the Editor block, nothing spills out of it, and the knob sits behind the current word', { item: '980', budgetMs: 120000 }, async function () {
     const frame = window.frameElement;
     if (!frame) throw new Error('this test sizes its own frame and has no frameElement');
     const w0 = frame.style.width, h0 = frame.style.height;
@@ -120713,8 +120713,37 @@
             if (!h || !(h === el || el.contains(h))) bad.push(tag + ': ' + what + ' is covered (the point hits ' + (h ? h.tagName.toLowerCase() + (h.id ? '#' + h.id : '') : 'nothing') + ')');
           };
           const sw = () => Array.prototype.find.call(document.querySelectorAll('#cv-editor .ed-sw'), b => b.getClientRects().length);
+          const box = el => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)]; };
+          const meets = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+          /* The cog he tapped (D24 B, measured 6 Oct: at 956x440 the two buttons spilled 110 px out of a 176 px box, over the cog) */
+          /* Only where the blocks HANG OFF the cog (cv-anchored: PC and a sideways phone). Upright on a phone they are a sheet over a
+             scrim that covers the play bar's cog by design — that cog is not the one he is looking at. */
+          const cog = document.body.classList.contains('cv-anchored') ? ['btn-settings', 'm-settings'].map(id => document.getElementById(id)).find(b => b && b.getBoundingClientRect().width > 0) : null;
+          const ownBlock = (what) => {
+            const ed = document.getElementById('cv-editor'), er = ed.getBoundingClientRect();
+            ed.querySelectorAll('button').forEach(b => {
+              if (!b.getClientRects().length) return;
+              const r = b.getBoundingClientRect(); if (!(r.width > 0)) return;
+              const name = (b.className || b.tagName).split(' ')[0] + ' “' + (b.textContent || '').trim().slice(0, 24) + '”';
+              if (r.left < er.left - 0.5 || r.right > er.right + 0.5 || r.top < er.top - 0.5 || r.bottom > er.bottom + 0.5) bad.push(tag + ': ' + name + ' spills out of the Editor block (' + what + ') ' + JSON.stringify(box(b)) + ' outside ' + JSON.stringify(box(ed)));
+              /* the WORDS, by a Range over the contents: scrollWidth would count the buttons' own invisible tap areas (::before) */
+              const rg = document.createRange(); rg.selectNodeContents(b); const tr = rg.getBoundingClientRect();
+              if (tr.width > 0 && (tr.left < r.left - 0.5 || tr.right > r.right + 0.5)) bad.push(tag + ': ' + name + '’s words run past its own edge (' + what + ') ' + JSON.stringify([Math.round(tr.left), Math.round(tr.right)]) + ' in ' + JSON.stringify([Math.round(r.left), Math.round(r.right)]));
+              if (cog && meets(r, cog.getBoundingClientRect())) bad.push(tag + ': ' + name + ' covers the cog (' + what + ') ' + JSON.stringify(box(b)) + ' on ' + JSON.stringify(box(cog)));
+            });
+          };
+          const knob = (what) => {
+            const b = sw(); if (!b) return;
+            const k = b.querySelector('.ed-k'), lit = b.querySelector(FM.editor.mode() === 'simple' ? '.ed-l-s' : '.ed-l-f');
+            const kr = k && k.getBoundingClientRect(), lr = lit.getBoundingClientRect();
+            if (!kr || !(kr.width > 0)) { bad.push(tag + ': the switch has no knob (' + what + ')'); return; }
+            const cx = kr.left + kr.width / 2;
+            if (!(cx > lr.left && cx < lr.right)) bad.push(tag + ': the knob is not behind the current word (' + what + ') knob ' + JSON.stringify(box(k)) + ', word ' + JSON.stringify(box(lit)));
+          };
           /* S1: Canvas open — the switch and Apply */
           onScreen(sw(), 'the switch (Canvas open)');
+          onScreen(document.getElementById('cv-ed-what'), 'What should you use? (Canvas open)');
+          ownBlock('Canvas open'); knob('Canvas open');
           const card = c.dlg.querySelector('.export-card'), apply = c.dlg.querySelector('.export-card .dialog-actions .primary, .export-card .dialog-actions button:last-child');
           if (card) card.scrollTop = card.scrollHeight;
           await c.sleep(30);
@@ -120724,6 +120753,7 @@
           document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
           if (c.big() !== 'editor') { bad.push(tag + ': the explanation did not open'); return; }
           onScreen(sw(), 'the switch (explanation open)');
+          ownBlock('explanation open'); knob('explanation open');
           onScreen(document.getElementById('cv-mini'), 'the Canvas bar (explanation open)');
           onScreen(document.getElementById('cv-fr-bar'), 'the Friends bar (explanation open)');
         });

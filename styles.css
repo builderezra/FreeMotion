@@ -8653,13 +8653,31 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   background: var(--panel-2); color: var(--text); font-size: 12.5px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 #cv-editor .ed-what::before { content: ''; position: absolute; inset: -8px -4px; }
 /* THE SWITCH: one button, both words, the current one lit (COG-DESIGN §3.2) */
-#cv-editor .ed-sw { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 17px;
+#cv-editor .ed-sw { position: relative; display: inline-flex; align-items: center; gap: 2px; height: 34px; padding: 0 3px; border-radius: 17px;
   border: 1px solid var(--line); background: var(--panel-2); color: var(--text-dim); font-weight: 700; font-size: 13px; cursor: pointer; flex: none; }
 #cv-editor .ed-sw::before { content: ''; position: absolute; inset: -6px; }
-#cv-editor .ed-sw .ed-k { display: none; }
-#cv-editor .ed-sw .ed-x { opacity: .55; font-weight: 400; }
-#cv-editor .ed-sw[data-mode="full"] .ed-l-f, #cv-editor .ed-sw[data-mode="simple"] .ed-l-s { color: var(--accent); }
-#cv-editor .ed-sw.big { height: 42px; padding: 0 16px; font-size: 15px; border-radius: 21px; }
+/* The KNOB (COG-DESIGN §3.2, the cog/*.jpg pictures): a filled pill behind the current word that slides to the other one. The
+   two words have one fixed width so CSS alone knows where the knob goes: past one word, the ⇄ and the two 2 px gaps. */
+#cv-editor .ed-sw .ed-l { position: relative; z-index: 1; width: 58px; text-align: center; transition: color .2s; }
+#cv-editor .ed-sw .ed-x { position: relative; z-index: 1; width: 16px; text-align: center; opacity: .55; font-weight: 400; }
+#cv-editor .ed-sw .ed-k { position: absolute; top: 3px; bottom: 3px; left: 3px; width: 58px; border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2)); transition: transform .2s cubic-bezier(.2, .8, .3, 1); }
+#cv-editor .ed-sw[data-mode="full"] .ed-k { transform: translateX(78px); }   /* 58 + 2 + 16 + 2 */
+#cv-editor .ed-sw[data-mode="full"] .ed-l-f, #cv-editor .ed-sw[data-mode="simple"] .ed-l-s { color: #06231d; }   /* the Apply button's ink on its fill */
+#cv-editor .ed-sw.big { height: 42px; padding: 0 4px; font-size: 15px; border-radius: 21px; }
+#cv-editor .ed-sw.big .ed-l, #cv-editor .ed-sw.big .ed-k { width: 88px; }
+#cv-editor .ed-sw.big .ed-k { top: 4px; bottom: 4px; left: 4px; }
+#cv-editor .ed-sw.big[data-mode="full"] .ed-k { transform: translateX(108px); }   /* 88 + 2 + 16 + 2 */
+/* On the phone's bar the explanation's door is two short lines, as drawn — on one line it ran past the block's edge */
+#canvas-dialog:not(.cv-side) #cv-ed-bar .ed-what { white-space: normal; height: auto; min-height: 30px; max-width: 112px; padding: 5px 12px;
+  border-radius: 12px; line-height: 1.2; text-align: center; }
+/* The smallest phones (320 wide): the icon gives its room to the door, and the two words narrow, so all of it stays in the block */
+@media (max-width: 359px) {
+  #canvas-dialog:not(.cv-side) #cv-ed-bar .cv-mini-ico { display: none; }
+  #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-sw:not(.big) .ed-l, #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-sw:not(.big) .ed-k { width: 52px; }
+  #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-sw:not(.big)[data-mode="full"] .ed-k { transform: translateX(72px); }   /* 52 + 2 + 16 + 2 */
+  #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-what { max-width: 100px; padding: 5px 9px; }
+}
 #cv-editor .ed-now { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 #cv-editor .ed-now-t { font-size: 13px; color: var(--text-dim); }
 #cv-editor .ed-opt { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); }
@@ -8667,7 +8685,8 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 #cv-editor .ed-opt > svg { width: 64px; height: 34px; flex: none; color: var(--accent); margin-top: 2px; }
 #cv-editor .ed-opt b { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
 #cv-editor .ed-opt p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--text-dim); }
-#cv-editor .ed-here { font-size: 11px; font-weight: 700; color: var(--accent); }
+#cv-editor .ed-here { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; color: #06231d;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2)); }
 #cv-editor .ed-note { margin: 0; font-size: 12px; color: var(--text-dim); line-height: 1.4; }
 #cv-editor .ed-why { font-size: 12.5px; color: #ffb4a8; min-height: 0; }
 #cv-editor .ed-why:empty { display: none; }
@@ -8727,7 +8746,7 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
      pair moves and the swap leaves it where it is. */
   body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-short:not(.cv-ed-big) { grid-template-rows: auto; grid-template-columns: 176px 360px; grid-template-areas: "fr cv"; }
   body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-fr-big:not(.cv-ed-big) { grid-template-columns: 360px 176px; grid-template-areas: "fr cv"; }
-  #canvas-dialog.cv-ed-short:not(.cv-ed-big) > #cv-editor { position: fixed; top: calc(var(--cv-cog-mid, 0px) - 18px); right: calc(var(--cv-cog-left, 0px) + 10px);
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-ed-short:not(.cv-ed-big) > #cv-editor { position: fixed; top: calc(var(--cv-cog-mid, 0px) - 18px); right: calc(var(--cv-cog-left, 0px) + 10px);
     width: auto; background: none; border: 0; box-shadow: none; animation: none; overflow: visible; }
   #canvas-dialog.cv-ed-short:not(.cv-ed-big) > #cv-editor > #cv-ed-bar { flex-direction: row; align-items: center; height: 36px; gap: 8px; padding: 0; }
   #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-head, #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-gap { display: none; }
@@ -11674,7 +11693,7 @@ body.ed-simple #btn-sm-split { display: inline-flex; }
 #cv-editor .ed-sw.ed-shake { animation: ed-shake .36s ease; }
 @keyframes ed-shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
 /* AFTER the rule it stops: same specificity, so an earlier "none" loses the cascade and the shake ran under reduced motion (T15) */
-@media (prefers-reduced-motion: reduce) { #cv-editor .ed-sw.ed-shake { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #cv-editor .ed-sw.ed-shake { animation: none; } #cv-editor .ed-sw .ed-k, #cv-editor .ed-sw .ed-l { transition: none; } }
 /* ✎ hides while something is selected in Simple — by VISIBILITY, so ? never slides a slot (his #171) */
 body.ed-simple.sm-has-sel #m-notes { visibility: hidden; }
 /* the timeline: Full's stays laid out underneath (one pxPerSec), Simple's covers it exactly */
