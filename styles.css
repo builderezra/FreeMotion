@@ -412,6 +412,7 @@ body {
    (js/inspector.js, mtVBox fitVal), and with `normal` a smaller font meant a shorter box — X a few px
    shorter than Y beside it. 21px is what `normal` measured at 18px, so an unshrunk box is unchanged. */
 .mt-vbox-val { width: 100%; box-sizing: border-box; text-align: center; font-size: 18px; line-height: 21px; white-space: nowrap; font-weight: 600; color: var(--accent); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 4px; cursor: ew-resize; user-select: none; font-variant-numeric: tabular-nums; touch-action: none; }
+.mt-vbox-val:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mt-vbox-val.editing { outline: 2px solid var(--accent); outline-offset: -1px; cursor: text; color: #fff; }
 .mt-vbox-lab { font-size: 11px; color: #7d8ca5; }
 /* X / Y / Z as the move pad's mode switch (v5.43). The LABEL is the target, not the number — tapping

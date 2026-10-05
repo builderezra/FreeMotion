@@ -57072,6 +57072,54 @@
     }
   });
 
+  test('keyboard can edit numeric Volume and Position values and effect inputs have names (batch2 1b.4)', { item: 'TBD', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), selected0 = FM.scene.selectedId;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      await sleep(350);
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('video', { name: 'Keyboard values' });
+      L.start = 0; L.duration = 4; L.volume = 1;
+      L.effects = [FM.fxRegistry.makeInstance('blur')];
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.inspector.openCategory('volume'); await sleep(150);
+      const volume = document.querySelector('.vol-panel .mt-vbox-val');
+      if (!volume) throw new Error('setup: Volume value did not render');
+      if (volume.tabIndex !== 0 || volume.getAttribute('role') !== 'spinbutton' || volume.getAttribute('aria-label') !== 'Volume')
+        throw new Error('Volume cannot be reached and identified from the keyboard');
+      volume.focus(); volume.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      if (!volume.isContentEditable || document.activeElement !== volume) throw new Error('Enter did not open Volume editing');
+      volume.textContent = '50'; volume.focus(); volume.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      if (Math.abs(FM.evalProp(L.volume, FM.time) - 0.5) > 1e-6) throw new Error('typing 50 into Volume did not set 50%');
+      const fadeInputs = [...document.querySelectorAll('.vol-panel .fx-scrub-val')];
+      if (!fadeInputs.length || fadeInputs.some(v => !v.getAttribute('aria-label'))) throw new Error('the Volume fade inputs lack accessible names');
+
+      FM.inspector.openCategory('transform'); await sleep(150);
+      const xBox = [...document.querySelectorAll('.mt-vbox')].find(b => (b.querySelector('.mt-vbox-lab') || {}).textContent === 'X');
+      const x = xBox && xBox.querySelector('.mt-vbox-val');
+      if (!x || x.tabIndex !== 0 || x.getAttribute('aria-label') !== 'X') throw new Error('Position X is not keyboard reachable');
+      x.focus(); x.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      if (!x.isContentEditable) throw new Error('Enter did not open Position X editing');
+      x.textContent = '42'; x.focus(); x.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      if (Math.abs(FM.evalProp(L.transform.x, FM.time) - 42) > 1e-6) throw new Error('typing Position X did not set it');
+      const xAfter = [...document.querySelectorAll('.mt-vbox')].find(b => (b.querySelector('.mt-vbox-lab') || {}).textContent === 'X').querySelector('.mt-vbox-val');
+      xAfter.focus(); xAfter.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      if (Math.abs(FM.evalProp(L.transform.x, FM.time) - 42.1) > 1e-6 || xAfter.getAttribute('aria-valuenow') !== '42.1')
+        throw new Error('ArrowUp did not step Position X or update its announced value');
+
+      FM.inspector.openCategory('effects'); await sleep(150);
+      const row = document.querySelector('.fx-row:not(.mask-item)');
+      if (row && !row.classList.contains('fx-open')) { const head = row.querySelector('.fx-head'); if (head) head.click(); await sleep(100); }
+      const effectInputs = [...document.querySelectorAll('.fx-row .fx-scrub-val')];
+      if (!effectInputs.length) throw new Error('setup: the blur effect has no numeric input');
+      if (effectInputs.some(v => !v.getAttribute('aria-label'))) throw new Error('an effect value input has no accessible name');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(selected0 || null); FM.refreshAll();
+    }
+  });
+
   /* ---------------- queue 184: speed to the playhead ----------------
    * "Go on the timeline to exactly where you want it to last to, then press a button and it will
    * change the speed to go exactly to that point." The whole value is that the number is EXACT, so
