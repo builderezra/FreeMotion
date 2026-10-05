@@ -1441,7 +1441,7 @@ window.FM = window.FM || {};
       }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'image' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'timewarp'))) {
-        resumeRenderer = (resumeRenderer || 'main') + ';c31-image-timewarp-5';
+        resumeRenderer = (resumeRenderer || 'main') + ';c31-image-timewarp-6';
       }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'video' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'timewarp'))) {

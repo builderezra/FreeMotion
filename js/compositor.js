@@ -13723,7 +13723,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             || e.type === 'levels' || e.type === 'gamma'
             || (warpPenSafe && e.type === 'penmask' && e.maskId === warpMask.id)))
           || (still && still.kind === 'image' && still.el && !layer._cropEditing
-            && warpUpstream.every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast'
+            && warpUpstream.every(e => !e || e.enabled === false || e.type === 'brightness' || e.type === 'contrast' || e.type === 'saturate'
               || e.type === 'levels' || e.type === 'gamma'
               || (warpPenSafe && e.type === 'penmask' && e.maskId === warpMask.id))))
         && !layer.effects.slice(warpIndex + 1).some(e => e && e.enabled !== false)
