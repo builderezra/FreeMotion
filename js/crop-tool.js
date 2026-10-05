@@ -11,6 +11,7 @@ window.FM = window.FM || {};
   let active = null;              // { layerId }
   let overlay = null, bar = null, raf = 0;
   let rect = null;                // crop rect in SOURCE px { x, y, w, h }
+  let rect0 = null;               // the rect the tool opened with — changed() reads it (Simple mode P1, DESIGN §6.4; read-only)
   let MW = 0, MH = 0;
   let drag = null;                // { mode, startSp, startRect }
 
@@ -182,6 +183,9 @@ window.FM = window.FM || {};
 
   FM.cropTool = {
     isActive() { return !!active; },
+    /* Simple mode P1 (DESIGN §6.4): has the box moved since the tool opened? Read-only — the editor switch asks before it
+       closes a crop he has changed, and an untouched one never warns. */
+    changed() { return !!(active && rect && rect0) && ['x', 'y', 'w', 'h'].some(k => Math.abs(rect[k] - rect0[k]) > 1e-6); },
     layerId() { return active ? active.layerId : null; },
     start(layerId) {
       if (active) this.stop();   // re-entry guard (like text-edit/point-edit/touch-up) — reopening crop used to orphan the old overlay + leave the old layer's _cropEditing stuck true
@@ -198,6 +202,7 @@ window.FM = window.FM || {};
       // seed from the existing crop (before _cropEditing flips the frame to full)
       const cur = FM.cropOf ? FM.cropOf(l, FM.time) : null;
       rect = (cur && !cur.full) ? { x: cur.x, y: cur.y, w: cur.w, h: cur.h } : { x: 0, y: 0, w: MW, h: MH };
+      rect0 = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
       active = { layerId };
       l._cropEditing = true; FM.requestRender();
       const wrap = document.getElementById('canvas-wrap');

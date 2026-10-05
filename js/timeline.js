@@ -4811,6 +4811,10 @@ window.FM = window.FM || {};
        second hand-written copy is how an overlay ends up a head-width out at one zoom and right at
        another, which is the whole reason it is a function. */
     timeToX: function (t) { return HEAD_W + PAD + (t || 0) * pxPerSec(); },
+    /* Simple mode P1: the ONE time scale both timelines draw with (Full's #timeline stays laid out under Simple's), and
+       whether a Full gesture is live (the editor switch refuses — shakes — rather than tear a drag out from under a finger). */
+    pxPerSec: function () { return pxPerSec(); },
+    gestureLive: function () { return !!(clipMove || trimDrag || kfDrag || slipDrag || cueDrag || reorderActive || headPan); },
     /* Call `fn` at the end of every REAL rebuild (never a deferred one). Returns the unsubscribe. */
     onRebuilt: function (fn) {
       if (typeof fn !== 'function') return function () {};
@@ -5664,6 +5668,18 @@ window.FM = window.FM || {};
 
     rebuild() {
       if (!tracksEl) return;
+      /* SIMPLE MODE P1 (DESIGN.md §8.1, §14.3): ONE DISPATCH, so the ~90 callers of rebuild() need no change. The project
+         that just opened gets its own editor first; in Simple the derived writers still run exactly as below, and
+         Simple draws instead of buildTracks. Full's rows are rebuilt when the switch comes back to Full. */
+      if (FM.editor && FM.editor.syncProject) FM.editor.syncProject();
+      if (FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.simpleTimeline) {
+        if (FM.syncAddSwitch) FM.syncAddSwitch();
+        FM.timeline.inheritLoopModes();
+        if (FM.autoFitDuration) FM.autoFitDuration();
+        FM.simpleTimeline.rebuild();
+        fireRebuilt();
+        return;
+      }
       // A rebuild mid-gesture rips the DOM out from under an active drag (frozen kf-dot, wiped
       // marker-rename input) — an async filmstrip/waveform arrival or resize can fire one at any
       // moment. Defer it; the gesture's own release path (or the marker's commit) flushes it.
@@ -5771,7 +5787,7 @@ window.FM = window.FM || {};
       /* Shown on the clip's main grid (and the multi-select panel, which is that grid's other face); hidden inside every
          sub-panel — the Effects view he named, and the slider lists and the easing editor, whose graph the row would
          otherwise take 51px from (the suite measured it collapsing to 22px). */
-      const shown = !!n && view === 'home' && !inBrowser;
+      const shown = !!n && view === 'home' && !inBrowser && !(FM.editor && FM.editor.isSimple && FM.editor.isSimple());   // Simple mode P1: Simple has no A/S/D keycaps (✂ is inert until Phase 2)
       rail.classList.toggle('hidden', !shown);
       /* ON THE TITLE LINE, one mode for every band height. A row under the name (46x41 with letters) costs the band
          51px, and the band can be dragged down to 232px where the grid's cards are already at their 40px floor — test 285
@@ -5810,6 +5826,7 @@ window.FM = window.FM || {};
     updatePlayhead() {
       if (!tracksEl) return;
       FM.timeline.syncKeyRail();   // queue 765 + 772: the rail on the seam replaced the two floating groups
+      if (FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.simpleTimeline) { FM.simpleTimeline.updatePlayhead(); return; }   // Simple mode P1
       const pps = pxPerSec();
       // UNIVERSAL fixed-centre (phone + desktop): #tl-centerline is a CSS-pinned static line at 50vw
       // that NEVER moves and JS never touches it — we only scroll the CONTENT so the current time sits

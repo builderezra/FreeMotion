@@ -1002,9 +1002,13 @@ window.FM = window.FM || {};
     // m-editing is phone-only: it drives --head-w and the docked sheet, and the rules that read it are
     // all inside (max-width: 700px). Off at desktop width, which is what mobile.js's resize did by hand.
     const phone = !window.matchMedia || window.matchMedia('(max-width: 700px)').matches;
-    document.body.classList.toggle('sel-multi', n >= 2);
-    document.body.classList.toggle('sel-mode', selOwns);
-    document.body.classList.toggle('m-editing', phone && n === 1 && !selOwns);
+    /* SIMPLE MODE P1 (DESIGN.md §8.2): Simple sets none of Full's three — its timeline never goes solo and the phone's top
+       bar keeps the project name — and `sm-has-sel` instead, which hides ✎ by VISIBILITY (#171) so nothing slides. */
+    const simple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    document.body.classList.toggle('sel-multi', !simple && n >= 2);
+    document.body.classList.toggle('sel-mode', !simple && selOwns);
+    document.body.classList.toggle('m-editing', !simple && phone && n === 1 && !selOwns);
+    document.body.classList.toggle('sm-has-sel', simple && n >= 1);
     /* ⚠️ AND THE BACK BUTTON MUST SAY WHAT IT ACTUALLY DOES (queue 654, v14.40). `#m-back` carries a
        fixed `aria-label="Projects / file"` in index.html — but js/mobile.js branches on these very
        classes and, in BOTH `sel-mode` and `m-editing`, that button does not go to Projects at all: it
@@ -5482,6 +5486,7 @@ window.FM = window.FM || {};
   // Seams for the suite (queue 448): the import decision and the extraction itself. Without them the
   // only way to test this is a real file picker, which no test can drive.
   FM._handleFiles = function (files, opts) { return handleFiles(files, opts); };
+  FM.importFiles = function (files, opts) { return handleFiles(files, opts); };   // Simple mode P1: the + on Simple's clip row (opts.at)
   FM._audioFromVideo = function (file) { return audioFromVideo(file); };
 
   /* ═══ A SLOW ADD LANDS IN THE PROJECT IT WAS STARTED IN, OR NOWHERE (queue 690, hunt 5) ════════════════
@@ -8366,13 +8371,90 @@ window.FM = window.FM || {};
       const cvFrBody = document.getElementById('cv-fr-body');
       const cvMini = document.getElementById('cv-mini');
       const cvFrBar = document.getElementById('cv-fr-bar');
+      /* THE THIRD BLOCK (Simple mode, his rule of 1 Oct: "the option to switch between the two editors should be in the settings
+         cog, making a third section in there … stays small unless you want the explanation"). Small: one switch and a "What should
+         you use?" button. Big: the explanation. Same pair rule: one block big, the others small (DESIGN.md §6.1). */
+      let cvEd = null, cvEdBar = null, cvEdBody = null, cvEdSwitched = false;
+      const cvEdOn = () => !!(FM.editor && FM.editor.enabled && FM.editor.enabled());
+      const ED_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M8 14h5M8 10v9"/></svg>';
+      const ED_PIC = { simple: '<svg viewBox="0 0 64 34" aria-hidden="true"><rect x="1" y="13" width="19" height="11" rx="2" fill="currentColor" opacity=".9"/><rect x="22" y="13" width="14" height="11" rx="2" fill="currentColor" opacity=".9"/><rect x="38" y="13" width="25" height="11" rx="2" fill="currentColor" opacity=".9"/><rect x="5" y="4" width="22" height="6" rx="3" fill="currentColor" opacity=".45"/><rect x="1" y="27" width="62" height="5" rx="2.5" fill="currentColor" opacity=".3"/></svg>',
+                       full: '<svg viewBox="0 0 64 34" aria-hidden="true"><rect x="16" y="1" width="30" height="6" rx="2" fill="currentColor" opacity=".55"/><rect x="4" y="9" width="24" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="26" y="17" width="34" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="25" width="40" height="6" rx="2" fill="currentColor" opacity=".7"/></svg>' };
+      const edEl = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+      const edW = () => (FM.spineWords && FM.spineWords.editor) || {};
+      const edSwitch = big => {
+        const w = edW(), b = edEl('button', 'ed-sw' + (big ? ' big' : ''));
+        b.type = 'button';
+        b.append(edEl('span', 'ed-k'), edEl('span', 'ed-l ed-l-s', w.simple || 'Simple'), edEl('span', 'ed-x', '⇄'), edEl('span', 'ed-l ed-l-f', w.full || 'Full'));
+        b.querySelector('.ed-k').setAttribute('aria-hidden', 'true'); b.querySelector('.ed-x').setAttribute('aria-hidden', 'true');
+        /* A tap on the switch never opens or swaps the block (as #cv-mini-app at :7138); it asks FM.editor (§6.4). */
+        b.addEventListener('click', async e => {
+          e.stopPropagation();
+          const to = FM.editor.mode() === 'simple' ? 'full' : 'simple';
+          if (!(await FM.editor.request(to, { from: 'cog' }))) return;
+          cvEdPaint(); cvEdSwitched = true;
+          /* D23 A: close, so he sees the new editor — unless Canvas holds picks he has not applied, or Friends is the big block
+             (he is in the middle of something there; closing would unmount it). DESIGN §21 F3: compare EVERY pending value with
+             the snapshot taken at open — cvSummary() leaves the background out, so a background pick was thrown away. */
+          const pending = cvPendingFp() !== cvOpenFp;
+          if (!pending && cvPairBig() !== 'friends') setTimeout(() => { if (!cvDialog.classList.contains('hidden')) cvClose(); }, 260);
+        });
+        return b;
+      };
+      const cvEdBuild = () => {
+        if (cvEd) return;
+        const w = edW();
+        cvEd = edEl('div'); cvEd.id = 'cv-editor'; cvEd.setAttribute('role', 'group'); cvEd.setAttribute('aria-label', w.title || 'Editor');
+        cvEdBar = edEl('div', 'cv-mini'); cvEdBar.id = 'cv-ed-bar';
+        const ico = edEl('span', 'cv-mini-ico'); ico.setAttribute('aria-hidden', 'true'); ico.innerHTML = ED_ICON;   // fixed string
+        /* ONE markup for both widths (DESIGN §21 F11): the block is built once and kept, and a window can cross 700 px while the cog
+           is up (cvOnWidth) — a phone-built bar on a PC lost its title, a PC-built one on a phone overflowed 356 px and grew the
+           bar, moving Canvas and Friends. The phone query hides `.cv-mini-t` inside #cv-ed-bar instead. */
+        { const h = edEl('span', 'ed-head'); h.append(ico, edEl('span', 'cv-mini-t', w.title || 'Editor')); cvEdBar.append(h); }
+        const what = edEl('button', 'ed-what', w.what || 'What should you use?'); what.type = 'button'; what.id = 'cv-ed-what'; what.setAttribute('aria-expanded', 'false');
+        const why = edEl('div', 'ed-why'); why.id = 'cv-ed-why'; why.setAttribute('role', 'status'); why.setAttribute('aria-live', 'polite');
+        cvEdBar.append(edSwitch(false), edEl('span', 'ed-gap'), what);
+        cvEdBody = edEl('div'); cvEdBody.id = 'cv-ed-body';
+        const now = edEl('div', 'ed-now'); now.append(edSwitch(true), Object.assign(edEl('span', 'ed-now-t'), { id: 'cv-ed-now' }));
+        cvEdBody.append(edEl('div', 'export-title', w.what || 'What should you use?'), now);
+        ['simple', 'full'].forEach(k => {
+          const o = edEl('div', 'ed-opt'); o.dataset.k = k;
+          const pic = edEl('span'); pic.innerHTML = ED_PIC[k];   // fixed string
+          const t = edEl('div'); t.append(edEl('b', '', k === 'simple' ? (w.simple || 'Simple') : (w.full || 'Full')), edEl('p', '', k === 'simple' ? w.simpleText : w.fullText));
+          o.append(pic.firstChild, t); cvEdBody.append(o);
+        });
+        cvEdBody.append(edEl('p', 'ed-note', w.note || ''), why);
+        cvEd.append(cvEdBar, cvEdBody);
+        cvDialog.appendChild(cvEd);
+        cvEdBar.addEventListener('click', () => cvPairSwap('editor'));   // the bar away from the switch, and "What should you use?"
+        cvEdPaint();
+      };
+      const cvEdDrop = () => { if (cvEd) { cvEd.remove(); cvEd = cvEdBar = cvEdBody = null; } cvDialog.classList.remove('cv-ed-on', 'cv-ed-big'); };
+      const cvEdSync = () => { if (cvEdOn()) { cvEdBuild(); cvDialog.classList.add('cv-ed-on'); } else cvEdDrop(); };
+      const cvEdPaint = () => {
+        if (!cvEd) return;
+        const w = edW(), m = FM.editor.mode(), to = m === 'full' ? (w.toSimple || 'Switch to Simple editor') : (w.toFull || 'Switch to Full editor');
+        cvEd.querySelectorAll('.ed-sw').forEach(b => { b.dataset.mode = m; b.setAttribute('aria-label', to); b.title = to; });
+        const now = document.getElementById('cv-ed-now'); if (now) now.textContent = (w.youreIn || 'You’re in ') + (m === 'full' ? (w.full || 'Full') : (w.simple || 'Simple'));
+        cvEd.querySelectorAll('.ed-opt').forEach(o => {
+          const here = o.dataset.k === m; o.classList.toggle('here', here);
+          const b = o.querySelector('b'), t = b.querySelector('.ed-here'); if (t) t.remove();
+          if (here) b.append(edEl('span', 'ed-here', w.here || 'You’re here'));
+        });
+      };
+      if (FM.editor && FM.editor.onChange) FM.editor.onChange(cvEdPaint);
+      /* A refusal is shown INSIDE the block, never as a toast under the dialog (the #921 S7 lesson, cvRoleNote below) */
+      window.addEventListener('fm-editor-refuse', e => {
+        if (!cvEd || cvDialog.classList.contains('hidden')) return;
+        const why = document.getElementById('cv-ed-why'); if (why) why.textContent = (e.detail && e.detail.text) || '';
+        cvEd.querySelectorAll('.ed-sw').forEach(b => { b.classList.remove('ed-shake'); void b.offsetWidth; b.classList.add('ed-shake'); });
+      });
       const CV_PAIR_KEY = 'fm.cvPair';   // its own key: FM.settings' load() whitelist would drop it, and it is not a project fact
       const cvPhoneMq = window.matchMedia ? window.matchMedia('(max-width: 700px)') : null;
       let cvFlight = [];
       const CV_SIDE_NEED = 546 + 16;   // side by side needs Friends 360 + gap 10 + tile 176 left of the button's right edge, and 16 of margin
       let cvSrc = null;                // the control the pair hangs from on a PC (the cog — the Share button beside Export went with #983)
       /* The block next to the button: side by side it is always Canvas; stacked it is the big one (the small one sits away). */
-      const cvAnchorBlock = () => (cvDialog.classList.contains('cv-side') || !cvDialog.classList.contains('cv-fr-big')) ? cvCard : cvFr;
+      const cvAnchorBlock = () => cvDialog.classList.contains('cv-side') ? cvCard : ({ canvas: cvCard, friends: cvFr, editor: cvEd }[cvPairBig()] || cvCard);   // Simple mode P1: three blocks; side by side Canvas stays by the cog
       /* THE COMIC TAIL FOLLOWS THAT BLOCK (queue 548: decorate, never move). Unpop and pop in one task, so the opener's
          `.pop-src` lift never drops for a frame. No-op when not anchored (a phone). */
       const cvAim = () => {
@@ -8383,7 +8465,7 @@ window.FM = window.FM || {};
       };
       const cvUi = () => (FM.collab && FM.collab.ui) || null;
       const cvPairLast = () => { try { return localStorage.getItem(CV_PAIR_KEY) === 'friends' ? 'friends' : 'canvas'; } catch (e) { return 'canvas'; } };
-      const cvPairBig = () => (cvDialog.classList.contains('cv-fr-big') ? 'friends' : 'canvas');
+      const cvPairBig = () => (cvDialog.classList.contains('cv-ed-big') ? 'editor' : cvDialog.classList.contains('cv-fr-big') ? 'friends' : 'canvas');
       /* What the Canvas bar says: the PENDING choice, read the way Apply reads it — which is the project's own until he
          changes something, and his unapplied choice if he swapped to Friends mid-edit. */
       const cvSummary = () => {
@@ -8392,11 +8474,23 @@ window.FM = window.FM || {};
         const fps = Math.max(1, Math.min(120, parseInt(raw, 10) || 30));
         return (cvAspect === 'custom' ? 'Custom' : cvAspect) + ' · ' + sz.w + ' × ' + sz.h + ' · ' + fps + ' fps';
       };
+      /* Every value Apply would write, in one string (DESIGN §21 F3): the third block's switch closes the cog after a swap
+         only when nothing here is pending — cvSummary() leaves the background out, so it cannot be the judge. */
+      let cvOpenFp = '';
+      const cvPendingFp = () => {
+        const sz = cvCompute();
+        const raw = (fpsSel && fpsSel.value === 'custom') ? (fpsNum ? fpsNum.value : '') : (fpsSel ? fpsSel.value : '');
+        const cw = document.getElementById('cv-cw'), ch = document.getElementById('cv-ch');
+        return [sz.w, sz.h, raw, cvBg, cvAspect, cw ? cw.value : '', ch ? ch.value : ''].join('|');
+      };
       const friendsUnmount = () => { const U = cvUi(); if (U && U.friendsClosed) U.friendsClosed(); else if (cvFrBody) cvFrBody.textContent = ''; };
       /* Put the pair in state `big` ('canvas' | 'friends'). Mounts the Friends content when Friends is big; never unmounts
          (a shrinking Friends stays drawn for the flight's cross-fade — the settle unmounts it). */
       const cvPairApply = (big, remember) => {
         cvDialog.classList.toggle('cv-fr-big', big === 'friends');
+        cvDialog.classList.toggle('cv-ed-big', big === 'editor');
+        { const w = document.getElementById('cv-ed-what'); if (w) w.setAttribute('aria-expanded', big === 'editor' ? 'true' : 'false'); }
+        cvEdPaint();
         const sub = document.getElementById('cv-mini-sub'); if (sub) sub.textContent = cvSummary();
         const fe = document.getElementById('cv-fr-exp'), me = document.getElementById('cv-mini-exp');
         if (fe) fe.setAttribute('aria-expanded', big === 'friends' ? 'true' : 'false');
@@ -8407,15 +8501,16 @@ window.FM = window.FM || {};
           if (U && U.renderFriends) U.renderFriends(cvFrBody);
           else if (cvFrBody) cvFrBody.textContent = 'Live sharing is not available here';
         }
-        if (remember !== false) { try { localStorage.setItem(CV_PAIR_KEY, big); } catch (e) {} }
+        if (remember !== false && big !== 'editor') { try { localStorage.setItem(CV_PAIR_KEY, big); } catch (e) {} }   // the Editor block is never remembered (DESIGN §21 F7)
       };
       /* Land any flight and take off everything it put inline. Called before every swap, at every open (a test or anything
          else may have hidden the dialog with a bare class) and at every close. */
       const cvPairSettle = () => {
         const f = cvFlight; cvFlight = [];
         f.forEach(a => { try { a.cancel(); } catch (e) {} });
-        [cvCard, cvFr].forEach(b => { if (b) ['position', 'left', 'top', 'width', 'height', 'margin', 'zIndex'].forEach(k => { b.style[k] = ''; }); });
+        [cvCard, cvFr, cvEd].filter(Boolean).forEach(b => { ['position', 'left', 'top', 'width', 'height', 'margin', 'zIndex'].forEach(k => { b.style[k] = ''; }); });
         if (cvMini) cvMini.style.top = '';
+        if (cvEdBar) cvEdBar.style.top = '';
         cvDialog.classList.remove('cv-flying');
         if (!cvDialog.classList.contains('cv-fr-big')) friendsUnmount();
       };
@@ -8425,6 +8520,7 @@ window.FM = window.FM || {};
          one's height would shove the other about mid-air. */
       const cvPairSwap = (to) => {
         if (cvDialog.classList.contains('hidden') || !cvDialog.classList.contains('cv-pair') || cvPairBig() === to) return;
+        if (to === 'editor' && !cvEd) return;
         cvPairSettle();
         /* Land the entrance first: a card still swinging on its hinge (rotateX) measures foreshortened. */
         try {
@@ -8433,18 +8529,22 @@ window.FM = window.FM || {};
             if (t && isFinite(t.endTime)) a.finish();
           });
         } catch (e) {}
+        const from = cvPairBig();
         const ae = document.activeElement;
-        const hadExp = !!(ae && cvDialog.contains(ae) && ae.classList && ae.classList.contains('cv-mini-exp'));
+        const hadExp = !!(ae && cvDialog.contains(ae) && ((ae.classList && ae.classList.contains('cv-mini-exp')) || ae.id === 'cv-ed-what'));
         if (ae && cvDialog.contains(ae) && ae.blur) ae.blur();   // an input left focused keeps iOS's keyboard up under the flight
+        /* focus goes to the expand control of the block that just became small (Simple mode P1: three blocks, so by name) */
+        const EXP = { canvas: 'cv-mini-exp', friends: 'cv-fr-exp', editor: 'cv-ed-what' };
         const refocus = () => {
           if (!hadExp) return;
-          const b = document.getElementById(to === 'friends' ? 'cv-mini-exp' : 'cv-fr-exp');
+          const b = document.getElementById(EXP[from]);
           if (b && b.focus) { try { b.focus({ preventScroll: true }); } catch (e) {} }
         };
         const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
         if (reduce || !cvCard || !cvFr || !cvCard.animate) { cvPairApply(to); cvPairSettle(); cvAim(); refocus(); return; }
-        const blocks = [cvCard, cvFr];
-        const cardShrinks = to === 'friends';
+        const KEY = new Map([[cvCard, 'canvas'], [cvFr, 'friends']]); if (cvEd) KEY.set(cvEd, 'editor');
+        const blocks = [cvCard, cvFr, cvEd].filter(Boolean);
+        const cardShrinks = from === 'canvas';
         const st = cardShrinks ? cvCard.scrollTop : 0;
         const first = blocks.map(b => b.getBoundingClientRect());
         cvPairApply(to);
@@ -8453,7 +8553,7 @@ window.FM = window.FM || {};
           b.style.position = 'fixed'; b.style.margin = '0';
           b.style.left = last[i].left + 'px'; b.style.width = last[i].width + 'px';
           b.style.top = last[i].top + 'px'; b.style.height = last[i].height + 'px';
-          b.style.zIndex = ((b === cvFr) === (to === 'friends')) ? '2' : '1';   // the one arriving flies above the one leaving
+          b.style.zIndex = KEY.get(b) === to ? '3' : KEY.get(b) === from ? '2' : '1';   // the one arriving flies above the one leaving
         });
         cvDialog.classList.add('cv-flying');
         /* A card he had scrolled (a short phone, the oversize note) keeps its place while it fades, and its bar is drawn
@@ -8461,17 +8561,19 @@ window.FM = window.FM || {};
         if (cardShrinks && st) { cvCard.scrollTop = st; if (cvMini) cvMini.style.top = st + 'px'; }
         const DUR = 460, EASE = 'cubic-bezier(.2,.85,.25,1.06)';
         const anim = (node, frames, o) => { if (node && node.animate) cvFlight.push(node.animate(frames, Object.assign({ duration: DUR, fill: 'both' }, o || {}))); };
+        const BAR = new Map([[cvCard, cvMini], [cvFr, cvFrBar]]); if (cvEd) BAR.set(cvEd, cvEdBar);
+        const CONTENT = b => b === cvCard ? Array.prototype.filter.call(cvCard.children, k => k !== cvMini) : b === cvFr ? [cvFrBody] : [cvEdBody];
         blocks.forEach((b, i) => {
-          const growing = (b === cvFr) === (to === 'friends');
           /* `left` and `width` fly too (#978): side by side on a PC the line between the blocks slides, so each block's width
              changes. Where they do not change — the phone, and a PC's stacked fallback — those two keyframes are inert. */
           anim(b, [{ left: first[i].left + 'px', width: first[i].width + 'px', top: first[i].top + 'px', height: first[i].height + 'px' },
                    { left: last[i].left + 'px', width: last[i].width + 'px', top: last[i].top + 'px', height: last[i].height + 'px' }], { easing: EASE });
-          const bar = b === cvCard ? cvMini : cvFrBar;
-          const content = b === cvCard ? Array.prototype.filter.call(cvCard.children, k => k !== cvMini) : [cvFrBody];
+          const k = KEY.get(b);
+          if (k !== to && k !== from) return;   // a small block that stays small only flies: its bar stays, nothing cross-fades
+          const growing = k === to;
           /* the bar leaves early and the content arrives late, so the two are never read on top of each other */
-          anim(bar, growing ? [{ opacity: 1 }, { opacity: 0, offset: .18 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 0, offset: .4 }, { opacity: 1, offset: .75 }, { opacity: 1 }]);
-          content.forEach(c => anim(c, growing ? [{ opacity: 0 }, { opacity: 0, offset: .15 }, { opacity: 1, offset: .6 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0, offset: .25 }, { opacity: 0 }]));
+          anim(BAR.get(b), growing ? [{ opacity: 1 }, { opacity: 0, offset: .18 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 0, offset: .4 }, { opacity: 1, offset: .75 }, { opacity: 1 }]);
+          CONTENT(b).forEach(c => anim(c, growing ? [{ opacity: 0 }, { opacity: 0, offset: .15 }, { opacity: 1, offset: .6 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0, offset: .25 }, { opacity: 0 }]));
         });
         const mine = cvFlight.slice();
         Promise.all(mine.map(a => a.finished)).then(() => { if (cvFlight.length && cvFlight[0] === mine[0]) { cvPairSettle(); cvAim(); } }, () => {});
@@ -8586,18 +8688,21 @@ window.FM = window.FM || {};
         /* queue 945 / queue 978: THE PAIR AT EVERY WIDTH, decided before the placement, because the tail is aimed at the block
            next to the button. Anchored to the cog on a PC (cvPlace, above); centred on a phone. */
         cvDialog.classList.add('cv-pair');
+        cvEdSync();   // Simple mode P1: the third block (always there under D22 A)
         cvPairApply(o.block === 'friends' ? 'friends' : o.block === 'last' ? cvPairLast() : 'canvas');
         if (!cvDialog.classList.contains('cv-fr-big')) friendsUnmount();
         cvPlace(o.from || (FM.settings && FM.settings.lastCanvasOpener) || document.getElementById('btn-settings'));
         cvWatchWidth(true);
         cvRoleNote();
         cvDialog.classList.remove('hidden');
+        cvOpenFp = cvPendingFp();   // LAST: every control is seeded from the project, so "pending" means his unapplied picks only
       };
       /* ONE CLOSE for every way out (queue 945) — backdrop, Cancel, Apply, App settings…, and through Cancel the cog's second
          tap, #btn-canvas's and Escape. Each used to do its own three steps; now each also lands a flight, empties the
          Friends block (which starts the room code's half hour, as closing the Share card does) and stops the width watch. */
       const cvClose = () => {
         cvPairSettle();
+        if (cvEdSwitched) { cvEdSwitched = false; if (FM.editor && FM.editor.afterCogClose) { try { FM.editor.afterCogClose(); } catch (e) {} } }   // §6.3: the held switch animation plays as the cog closes
         friendsUnmount();
         cvWatchWidth(false);
         cvSrc = null; cvDialog.classList.remove('cv-side');
@@ -8867,6 +8972,9 @@ window.FM = window.FM || {};
         if (mod ? /^[dDaA]$/.test(e.key) : /^(Space|Tab|Backspace|Delete|Home|End|Arrow)/.test(e.code || '')) e.preventDefault();
         return;
       }
+      /* SIMPLE MODE P1: in Simple, the arranging keys with no Simple command yet say so rather than do Full's thing to a
+         main clip (DESIGN.md §15.1). In Full it answers NOTHING: there is no E key (DESIGN.md §0.4 B14). */
+      if (!inEdit && FM.editor && FM.editor.onKey && FM.editor.onKey(e)) return;
       if (mod && (e.key === 'z' || e.key === 'Z')) {
         if (inEdit) return; // let field text-undo
         e.preventDefault();
