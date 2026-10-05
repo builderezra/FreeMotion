@@ -8620,6 +8620,115 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   body.cv-anchored #canvas-dialog.cv-pair > #cv-friends { animation: none; }
 }
 
+/* ═══ THE ⚙ COG'S THIRD BLOCK — the Simple ⇄ Full switch (Simple mode P1, BUILD-PLAN 1.3.18; COG-DESIGN.md §2–§6). His words,
+   1 Oct: "the option to switch between the two editors should be in the settings cog, making a third section in there … it
+   stays small unless you want the explanation". Every rule here is keyed on .cv-ed-on (the block exists) or #cv-editor, so with
+   the block absent Canvas and Friends are exactly as they were. Same pair rule as #945: one block big, the others bars.
+   ⚠️ Written from COG-DESIGN §6 while the machine was testing another release — the prototype that drew it was never committed;
+   checked against cog/*.jpg at 380 and 1280 before step 1.3 ships. */
+#cv-editor { display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.6); }
+#canvas-dialog.cv-pair.cv-ed-on > #cv-editor { display: flex; flex-direction: column; overflow: hidden; position: relative; flex: none; }
+#cv-ed-bar { display: none; }
+#cv-ed-body { display: none; flex-direction: column; gap: 12px; padding: 18px 18px 16px; overflow-y: auto; min-height: 0; }
+/* small: the bar — the head, the switch, "What should you use?" */
+#canvas-dialog.cv-pair.cv-ed-on:not(.cv-ed-big) > #cv-editor > #cv-ed-bar { display: flex; }
+#canvas-dialog.cv-pair.cv-ed-on:not(.cv-ed-big):not(.cv-flying) > #cv-editor > #cv-ed-body { display: none; }
+#canvas-dialog.cv-pair:not(.cv-ed-big) > #cv-editor { order: -2; }   /* the small blocks sit on top: Editor above Friends */
+/* big: the explanation; Canvas and Friends are both bars */
+#canvas-dialog.cv-pair.cv-ed-big > #cv-editor { order: 1; }
+#canvas-dialog.cv-pair.cv-ed-big > #cv-editor > #cv-ed-body { display: flex; }
+#canvas-dialog.cv-pair.cv-ed-big:not(.cv-flying) > #cv-editor > #cv-ed-bar { display: none; }
+#canvas-dialog.cv-pair.cv-ed-big:not(.cv-flying) > .export-card { padding: 0; }
+#canvas-dialog.cv-pair.cv-ed-big:not(.cv-flying) > .export-card > :not(.cv-mini) { display: none; }
+#canvas-dialog.cv-pair.cv-ed-big > .export-card > .cv-mini { display: flex; }
+/* the flight: like the pair's, both halves drawn for the 460 ms */
+#canvas-dialog.cv-pair.cv-flying > #cv-editor { overflow: hidden; }
+#canvas-dialog.cv-pair.cv-flying > #cv-editor > #cv-ed-bar { display: flex; position: absolute; left: 0; right: 0; top: 0; z-index: 2; }
+#canvas-dialog.cv-pair.cv-flying.cv-ed-big > #cv-editor > #cv-ed-body,
+#canvas-dialog.cv-pair.cv-flying > #cv-editor > #cv-ed-body { display: flex; }
+/* the bar's insides */
+#cv-ed-bar .ed-head { display: flex; align-items: center; gap: 10px; min-width: 0; flex: none; }
+#cv-ed-bar .ed-gap { flex: 1; }
+#cv-editor .ed-what { position: relative; flex: none; height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); font-size: 12.5px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+#cv-editor .ed-what::before { content: ''; position: absolute; inset: -8px -4px; }
+/* THE SWITCH: one button, both words, the current one lit (COG-DESIGN §3.2) */
+#cv-editor .ed-sw { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 17px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text-dim); font-weight: 700; font-size: 13px; cursor: pointer; flex: none; }
+#cv-editor .ed-sw::before { content: ''; position: absolute; inset: -6px; }
+#cv-editor .ed-sw .ed-k { display: none; }
+#cv-editor .ed-sw .ed-x { opacity: .55; font-weight: 400; }
+#cv-editor .ed-sw[data-mode="full"] .ed-l-f, #cv-editor .ed-sw[data-mode="simple"] .ed-l-s { color: var(--accent); }
+#cv-editor .ed-sw.big { height: 42px; padding: 0 16px; font-size: 15px; border-radius: 21px; }
+#cv-editor .ed-now { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+#cv-editor .ed-now-t { font-size: 13px; color: var(--text-dim); }
+#cv-editor .ed-opt { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); }
+#cv-editor .ed-opt.here { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+#cv-editor .ed-opt > svg { width: 64px; height: 34px; flex: none; color: var(--accent); margin-top: 2px; }
+#cv-editor .ed-opt b { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
+#cv-editor .ed-opt p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--text-dim); }
+#cv-editor .ed-here { font-size: 11px; font-weight: 700; color: var(--accent); }
+#cv-editor .ed-note { margin: 0; font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+#cv-editor .ed-why { font-size: 12.5px; color: #ffb4a8; min-height: 0; }
+#cv-editor .ed-why:empty { display: none; }
+@keyframes ed-shake-x { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@media (max-width: 700px) {
+  #canvas-dialog.cv-pair > #cv-editor { width: min(420px, calc(100vw - 24px)); }
+  #cv-ed-bar .cv-mini-t { display: none; }   /* ONE markup for both widths (DESIGN §21 F11): the phone hides the title */
+  /* SAFE CENTRE (COG-DESIGN §6.1): Canvas and Friends keep their exact place — the column is centred in a box one bar (76 px)
+     shorter at the bottom, and where it does not fit it starts at the top reserve. Two growing spacers, not
+     `justify-content: safe center` (Safari). Each cancels the column gap it would add. */
+  #canvas-dialog.cv-pair.cv-ed-on { justify-content: flex-start; padding-bottom: calc(12px + 76px + env(safe-area-inset-bottom)); }
+  #canvas-dialog.cv-pair.cv-ed-on::before, #canvas-dialog.cv-pair.cv-ed-on::after { content: ''; flex: 1 1 0; min-height: 0; margin: -10px 0 0; }
+  #canvas-dialog.cv-pair.cv-ed-on::before { order: -10; }
+  #canvas-dialog.cv-pair.cv-ed-on::after { order: 10; }
+  /* the big block's cap: the top reserve 96, two bars 2 × (66 + 10), the bottom 12 */
+  #canvas-dialog.cv-pair.cv-ed-on > .export-card,
+  #canvas-dialog.cv-pair.cv-ed-on.cv-fr-big > #cv-friends,
+  #canvas-dialog.cv-pair.cv-ed-on.cv-ed-big > #cv-editor {
+    max-height: calc(100vh - 260px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100svh - 260px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+@media (min-width: 701px) {
+  #canvas-dialog.cv-pair > #cv-editor { width: 360px; }
+  body.cv-anchored #canvas-dialog.cv-pair > #cv-editor { animation: cv-grow 160ms cubic-bezier(.2, .8, .3, 1); transform-origin: top right; }
+  /* STACKED fall-back (§6.3): small blocks away from the cog, the big one next to it; each cap loses another bar */
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on:not(.cv-side):not(.cv-ed-big) > #cv-editor { order: 2; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { order: -3; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-big:not(.cv-side) > .export-card,
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-big:not(.cv-side) > #cv-friends { order: 1; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-pair.cv-ed-on:not(.cv-side) > .export-card,
+  body.cv-anchored.cv-up #canvas-dialog.cv-pair.cv-ed-on.cv-fr-big:not(.cv-side) > #cv-friends,
+  body.cv-anchored.cv-up #canvas-dialog.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px - 152px); }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on:not(.cv-side) > .export-card,
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on.cv-fr-big:not(.cv-side) > #cv-friends,
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px - 152px); }
+  /* SIDE BY SIDE with three blocks (§6.2): two columns, two rows — the small column holds both tiles, the one by the cog's
+     row where today's tile is, the Editor tile beside it. No extra width: side by side starts where it does today. */
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-on { grid-auto-flow: row; grid-template-rows: 1fr auto; row-gap: 10px;
+    grid-template-columns: 176px 360px; grid-template-areas: "ed cv" "fr cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-on { grid-template-rows: auto 1fr; grid-template-areas: "fr cv" "ed cv"; }
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-fr-big { grid-template-columns: 360px 176px; grid-template-areas: "fr ed" "fr cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-fr-big { grid-template-areas: "fr cv" "fr ed"; }
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-ed-big { grid-template-columns: 360px 176px; grid-template-areas: "ed fr" "ed cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-ed-big { grid-template-areas: "ed cv" "ed fr"; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on > .export-card { grid-area: cv; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on > #cv-friends { grid-area: fr; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on > #cv-editor { grid-area: ed; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on:not(.cv-ed-big) > #cv-editor,
+  #canvas-dialog.cv-pair.cv-side.cv-ed-big > .export-card,
+  #canvas-dialog.cv-pair.cv-side.cv-ed-big > #cv-friends { width: 176px; }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar { flex-direction: column; align-items: flex-start; height: auto; padding: 16px 14px 14px; gap: 10px; }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar .ed-gap { display: none; }
+  #canvas-dialog.cv-pair.cv-side.cv-flying > #cv-editor > #cv-ed-bar { bottom: 0; height: auto; right: auto; width: 176px; }
+  #canvas-dialog.cv-pair.cv-side.cv-flying > #cv-editor > #cv-ed-body { width: 358px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.cv-anchored #canvas-dialog.cv-pair > #cv-editor { animation: none; }
+  #cv-editor .ed-sw.ed-shake { animation: none; }
+}
+
 /* ---- Canvas presets (queue 183) --------------------------------------------------------------
    "This settings menu shall have an option that says save project as preset." Two surfaces: the row
    in Canvas settings that saves and lists them, and the chips on the New project dialog that spend
