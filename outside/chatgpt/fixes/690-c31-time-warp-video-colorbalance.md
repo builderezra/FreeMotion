@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Colour Balance before decoded-video Time Warp Scan
+
+Starting commit: clean preferred Codex-only `ab907edc2b0800a3a01024b0707bd52a046f3d8e`; isolated branch `codex/690-c31-scan-colorbalance-video`. Exact standing #690 is `REQUESTS.md:27375-27403`, and C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. No `audits/*.json` record names C31 or Time Warp Scan; Colour Balance mentions in `audits/912-audit.json` concern filter recipes.
+
+The decoded-video historical sampler omitted Colour Balance from its source-local upstream gate, so a keyed grade ahead of Time Warp Scan could not form a cold-seek video plan. The video gate now admits it. An indexed MP4 regression first failed because the plan was excluded; afterward sequential and cold preview agreed at 128/64 px, the upper scanned strip preserved a visible historical grade, and the main MP4 retained it. Shape and still gates were already fixed separately. The video MP4 resume identity advances from 10 to 11 to invalidate interrupted prefixes.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 366→367, exporter 175→176), `tests/tests.js` (one new `{ item: 'TBD' }` regression and four existing resume-identity expectations), and this report. The adjacent keyed-Vibrance video regression passed; the new regression passed after using an early scan strip where the keyed red shift is visible. JavaScriptCore syntax and `git diff --check` passed. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
