@@ -122221,4 +122221,26 @@
       if (still) throw new Error('one undo left ' + still + ' line(s) pinned');
     });
   });
+
+
+  test('simple P2.2 · review a clip, an overlay or a song added in Simple has its file on disk at once: a hide flush straight after cannot bring it back blank (queue 681)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const pngs = await Promise.all(['#ff0000', '#00ff00', '#0000ff'].map((c, k) => smPng(c, 'add' + k + '.png')));
+    await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await FM.storage.settled();
+      const ids0 = new Set(FM.scene.layers.map(l => l.id));
+      const fresh = () => FM.scene.layers.filter(l => !ids0.has(l.id) && ids0.add(l.id));
+      const onDisk = async (what) => {
+        const made = fresh();
+        if (!made.length) throw new Error(what + ' added nothing (it said “' + v.say() + '”)');
+        FM.storage.flushSync();                          // visibilitychange → hidden: the document only, the pending save cancelled
+        await FM.storage.settled();
+        for (const l of made) if (!(await FM.storage.readMedia(l.id))) throw new Error(what + ': the new layer’s file was never written — after a hide flush the project reopens with it blank');
+      };
+      await FM.simpleTimeline.pickFiles([pngs[0]]); await v.idle(); await onDisk('the + (Append)');
+      await FM.spine.cmd.insert([pngs[1]], 1); await v.idle(); await onDisk('Clips › After Clip 1 (Insert)');
+      FM.time = 1; await FM.spine.cmd.addOverlay([pngs[2]]); await v.idle(); await onDisk('Overlay');
+      FM.time = 0; await FM.spine.cmd.addMusic([q921wav(1, 440, 'song.wav')]); await v.idle(); await onDisk('Sound › Music');
+    });
+  });
 })();

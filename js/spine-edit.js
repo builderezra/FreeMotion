@@ -866,7 +866,7 @@ window.FM = window.FM || {};
       FM.refreshAll();
       if (plan.time != null && !FM.playing) { const P = FM.scene.project; FM.time = Math.max(0, Math.min(P.duration || 0, plan.time)); if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead(); }
       FM.history.commit({ label: label, ed: 's', arr: gated });
-      /* a new media record (a duplicate's copy) is written NOW, not on the 600 ms autosave: a hide flush cancels that and writes
+      /* a new media record (a duplicate's copy, an added clip, overlay or song) is written NOW, not on the 600 ms autosave: a hide flush cancels that and writes
          the document only, so the copy came back blank (queue 681). Saved after the commit, so the finished document is what
          lands — the reason for {noSave} (nothing un-rippled on disk mid-run) still holds. */
       if (plan.mints && FM.storage && FM.storage.save) FM.storage.save();
@@ -1040,6 +1040,7 @@ window.FM = window.FM || {};
       if (made.length && lastMain && FM.layerById(FM.scene, lastMain)) FM.moveLayers(made.map(l => l.id), lastMain);   // just above the clip before (§3.6.1)
       const snd = addRecs(picked.sounds, Math.max(0, Math.min(FM.time || 0, T)), newPickB(), map);
       snd.forEach(l => { S.setFlag(l, 'stay', true); FM.moveLayers([l.id], null); });   // music: Stay put, left whole (D17 B); sound sits at the end of the stack
+      if (made.length || snd.length) plan.mints = true;   // {noSave} records: the runner writes their files at once (queue 681, review finding 9)
       plan.selectId = made.length ? made[0].id : (snd[0] && snd[0].id);
       plan.made = made.length;
     });
@@ -1072,6 +1073,7 @@ window.FM = window.FM || {};
       plan.selectId = made.length ? made[0].id : null;
       const snd = addRecs(picked.sounds, Math.max(0, FM.time || 0), newPickB(), map);
       snd.forEach(l => { S.setFlag(l, 'stay', true); FM.moveLayers([l.id], null); });
+      if (made.length || snd.length) plan.mints = true;
     });
     plan.time = at;
     plan.live = clips.length > 1 ? line('addedN', clips.length) : line('added1');
@@ -1319,6 +1321,7 @@ window.FM = window.FM || {};
         const anchor = S.bandAnchor('overlay', l.start, l.start + l.duration, new Set([l.id]));
         if (anchor) FM.moveLayers([l.id], anchor);
       });
+      if (made.length) plan.mints = true;
       plan.selectId = made.length ? made[0].id : null;
     });
     plan.live = line('overlayAdded');
@@ -1331,6 +1334,7 @@ window.FM = window.FM || {};
     plan.pre.push(async () => {
       const made = addRecs(items, Math.max(0, FM.time || 0), newPickB(), null);
       made.forEach(l => { S.setFlag(l, 'stay', true); if (!(l.sm && l.sm.snd)) l.muted = false; FM.moveLayers([l.id], null); });   // music: Stay put, whole (D17 B)
+      if (made.length) plan.mints = true;
       plan.selectId = made.length ? made[0].id : null;
     });
     plan.live = line('musicAdded');
