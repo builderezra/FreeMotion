@@ -828,6 +828,23 @@ window.FM = window.FM || {};
        home screen's cog none of them existed, and the natural moment to look (after leaving a project that cut out or
        exported silently) found an empty panel. Only Measure needs a project to sample; the readouts need nothing. */
     {
+      const storageWrap = el('div', 'set-row set-perf hidden');
+      const storageHead = el('div', 'set-rowtext');
+      storageHead.appendChild(el('div', 'set-label', 'Project storage protection'));
+      const storageOut = el('div', 'set-hint');
+      storageHead.appendChild(storageOut);
+      storageWrap.appendChild(storageHead);
+      rep.appendChild(storageWrap);
+      const showStorageProtection = () => {
+        if (typeof FM.storagePersisted !== 'boolean') return;
+        storageOut.textContent = FM.storagePersisted
+          ? 'On — this browser granted protection from automatic storage eviction.'
+          : 'Off — this browser may remove saved projects when device storage is low. Keep a project backup.';
+        storageWrap.classList.remove('hidden');
+      };
+      showStorageProtection();
+      if (FM.storagePersistenceReady) FM.storagePersistenceReady.then(showStorageProtection);
+
       /* ---- "Your last export" (queue 604 / 215 / 662) ------------------------------------------
        * He has reported a silent export four times, and every round died the same way: everything
        * measurable on a desktop is healthy, and the device it happens on cannot be inspected. On

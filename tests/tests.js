@@ -57120,6 +57120,34 @@
     }
   });
 
+  test('storage protection refusal appears in quota diagnosis and device report (batch2 1b.6)', { item: 'TBD' }, async function () {
+    if (!FM._checkStoragePersistence || !FM.storage || !FM.storage._warnStore)
+      throw new Error('storage persistence diagnosis is unavailable');
+    await FM.storagePersistenceReady;
+    const previous = FM.storagePersisted, toast = FM.toast;
+    const wasSettingsOpen = FM.settings.isOpen();
+    const messages = [];
+    try {
+      FM.toast = message => messages.push(message);
+      const result = await FM._checkStoragePersistence({ persisted: async () => false, persist: async () => false });
+      if (result !== false || FM.storagePersisted !== false)
+        throw new Error('a denied persistence request was discarded rather than stored as false');
+      FM.storage._warnStore({ name: 'QuotaExceededError' }, 'test-protection-' + Date.now());
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (!messages.some(message => /storage protection is off/i.test(message)))
+        throw new Error('the quota warning did not say that storage protection is off');
+      FM.settings.open();
+      const report = [...document.querySelectorAll('#set-reports .set-row')]
+        .find(row => /Project storage protection/.test(row.textContent));
+      if (!report || !/Off.*may remove saved projects/.test(report.textContent))
+        throw new Error('the device report did not show the denied storage-protection result');
+    } finally {
+      if (!wasSettingsOpen) FM.settings.close();
+      FM.storagePersisted = previous;
+      FM.toast = toast;
+    }
+  });
+
   test('Tab leaves editor controls reachable while layer heads have a keyboard path (batch2 1b.5)', { item: 'TBD' }, async function () {
     const old = { layers: FM.scene.layers.slice(), selected: FM.scene.selectedId,
       selectedIds: (FM.scene.selectedIds || []).slice(), home: FM.home && FM.home.isOpen && FM.home.isOpen() };

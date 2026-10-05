@@ -159,9 +159,13 @@ window.FM = window.FM || {};
   // JSON can outgrow the ~5MB quota on a heavy project; silently swallowing it stops persistence
   // with no sign, and a reload then reverts to the last write that fit. (#15)
   let _quotaWarned = false;
+  function protectionNote() {
+    return FM.storagePersisted === true ? ' Storage protection is on.' :
+           FM.storagePersisted === false ? ' Storage protection is off.' : '';
+  }
   function warnQuota(e) {
     const quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
-    if (quota && !_quotaWarned) { _quotaWarned = true; if (FM.toast) FM.toast('Storage full — autosave paused. Use ⚙ → Save project file to keep your work.', 5000); }
+    if (quota && !_quotaWarned) { _quotaWarned = true; if (FM.toast) FM.toast('Storage full — autosave paused. Use ⚙ → Save project file to keep your work.' + protectionNote(), 5000); }
   }
 
   function openDB() {
@@ -317,20 +321,24 @@ window.FM = window.FM || {};
     if (_storeWarned.has(what) || !FM.toast) return;
     _storeWarned.add(what);
     const mb = n => (n / 1048576).toFixed(0) + ' MB';
-    const say = extra => FM.toast((quota ? 'Not enough storage to save that media.' : 'Could not save that media.') + (extra || ''), 6000);
+    const say = extra => FM.toast((quota ? 'Not enough storage to save that media.' : 'Could not save that media.') + (extra || '') + (quota ? protectionNote() : ''), 6000);
     if (quota && navigator.storage && navigator.storage.estimate) {
       navigator.storage.estimate().then(q => say(q && q.quota ? ' Used ' + mb(q.usage || 0) + ' of ' + mb(q.quota) + '.' : '')).catch(() => say(''));
     } else say('');
   }
 
-  // Ask once for persistent storage. Without it the browser may evict this origin's media under
-  // pressure — i.e. projects can lose their clips with no user action at all. Cheap, and silent when
-  // it is refused or unsupported.
-  try {
-    if (navigator.storage && navigator.storage.persist && navigator.storage.persisted) {
-      navigator.storage.persisted().then(p => { if (!p) return navigator.storage.persist(); }).catch(() => {});
-    }
-  } catch (e) {}
+  // Keep the result for diagnosis. A refusal is silent until a quota error or the device report is opened.
+  FM.storagePersisted = null; // null means unsupported or not yet known
+  FM._checkStoragePersistence = async function (api) {
+    try {
+      api = api || (navigator && navigator.storage);
+      if (!api || !api.persisted || !api.persist) return null;
+      const already = await api.persisted();
+      FM.storagePersisted = already ? true : !!(await api.persist());
+      return FM.storagePersisted;
+    } catch (e) { return FM.storagePersisted; }
+  };
+  FM.storagePersistenceReady = FM._checkStoragePersistence();
   function idbDel(db, key) {
     if (isLibKey(key)) return Promise.resolve();   // queue 915: no deleter may take a shared copy — clips in any project point at it (phase B still never collects one)
     if (heldByAnother(key)) return Promise.resolve();   // queue 915 phase B: another copy in memory still plays from this record's file — it goes at a later sweep, when nothing holds it
@@ -677,6 +685,7 @@ window.FM = window.FM || {};
   const _prevFiles = new Map();
   function prevKey(id, rev) { return 'prev:' + id + ':' + (rev || 0); }
   FM.storage = {
+    _warnStore: warnStore, // focused quota-diagnostic check
     _writeJobs: planBlobWrites,   // queue 830 suite seam
     _hydrateSceneMedia: hydrateSceneMedia,   // queue 834 (u8) suite seam: the shared-run guard itself
     /* ⚠️ queue 829: THE FILE HE IS REPLACING MUST SURVIVE THE REPLACE. A layer's blob is keyed by the
