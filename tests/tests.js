@@ -103966,6 +103966,38 @@
       });
     });
   });
+  test('690 Droplet widens smoothly from neck into bulb at canvas size', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const cv = offscreen(300, 300), ctx = cv.getContext('2d', { willReadFrequently: true });
+    FM.traceShapePath(ctx, { shape: 'droplet' }, 0, 0, 300, 300, 0);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    const pixels = ctx.getImageData(0, 0, 300, 300).data;
+    const widthAt = y => {
+      let width = 0;
+      for (let x = 0; x < 300; x++) if (pixels[(y * 300 + x) * 4 + 3] > 127) width++;
+      return width;
+    };
+    const widths = [120, 140, 160].map(widthAt);
+    if (widths.some(w => !w)) throw new Error('Droplet did not draw through its upper body');
+    const before = widths[1] - widths[0], after = widths[2] - widths[1];
+    if (Math.abs(before - after) > 13)
+      throw new Error('Droplet has an abrupt shoulder: row widths ' + widths.join(', '));
+    const XR = FM.exportResume, previousScene = FM.scene, previousSignature = XR && XR.signature;
+    const previousWorker = FM.exportWorker;
+    if (!XR || !FM.exporter || typeof VideoEncoder === 'undefined' || !window.Mp4Muxer)
+      throw new Error('setup: Droplet MP4 resume identity is unavailable');
+    let renderer = null;
+    try {
+      FM.scene = { project: { width: 120, height: 80, fps: 30, duration: 1, background: '#000000' },
+        layers: [FM.makeLayer('shape', { shape: 'droplet', x: 60, y: 40, shapeW: 60, shapeH: 60,
+          fill: '#ffffff', start: 0, duration: 1 })], selectedId: null, selectedIds: [] };
+      FM.exportWorker = null;
+      XR.signature = function (options) { renderer = options.renderer; return previousSignature(options); };
+      await FM.exporter.run({ scale: 1, fps: 30, to: 1 / 30,
+        onProgress: function () {}, onReady: async function () {} });
+      if (!renderer || !renderer.includes(';droplet-contour-2'))
+        throw new Error('an interrupted MP4 could resume an older Droplet silhouette');
+    } finally { XR.signature = previousSignature; FM.scene = previousScene; FM.exportWorker = previousWorker; }
+  });
   test('TBD Heart and Ring thumbnails match the shapes they add, with no stray polygon centre dot', { item: 'TBD' }, async function () {
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';

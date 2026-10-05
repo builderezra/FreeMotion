@@ -17915,9 +17915,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // shield: hand-authored — the old two-arc build kept the arc's bottom-center endpoint in the
     // path, so the right side dropped a vertical cliff onto the tip while the left ran diagonally.
     S.shield = [[[0.5,0.03],[0.93,0.15],[0.885,0.475,1,-0.045,0.15],[0.5,0.97],[0.115,0.475,1,-0.045,-0.15],[0.07,0.15]]];
-    S.droplet = [[[0.5,0.035],[0.68,0.34,1,0.07,0.105],
-      [0.825,0.62,1,0,0.165],[0.5,0.965,1,-0.18,0],
-      [0.175,0.62,1,0,-0.165],[0.32,0.34,1,0.07,-0.105]]];
+    // One optically reviewed contour for both the Shape picker and rendered canvas.
+    S.droplet = [[[0.5,0.035],[0.60,0.24,1,0.055,0.095],
+      [0.82,0.63,1,0,0.175],[0.5,0.965,1,-0.18,0],
+      [0.18,0.63,1,0,-0.175],[0.40,0.24,1,0.055,-0.095]]];
     // cloud: three distinct puffs (small L, big top, mid R) with crease corners at the valleys and
     // a FLAT bottom with rounded ends — the old three-arc chain was lopsided with a wavy bottom.
     S.cloud = [[[0.04,0.63,1,0,-0.095],[0.20,0.435,1,0.09,0],[0.315,0.455],[0.47,0.205,1,0.125,0],[0.65,0.43],[0.78,0.385,1,0.095,0],[0.945,0.62,1,0,0.095],[0.87,0.77,1,-0.07,0],[0.13,0.77,1,-0.07,0]]];

@@ -1417,6 +1417,10 @@ window.FM = window.FM || {};
       if (!frameRenderer && captured && FM.exportWorker.mediaID(captured)) {
         resumeRenderer = (resumeRenderer || 'main') + ';' + FM.exportWorker.mediaID(captured);
       }
+      if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'shape' && layer.shape === 'droplet')) {
+        // A saved Droplet scene now has a smoother silhouette; never join its old MP4 prefix.
+        resumeRenderer = (resumeRenderer || 'main') + ';droplet-contour-2';
+      }
       if (!frameRenderer && scene.layers.some(layer => layer && layer.type === 'video' &&
           (layer.effects || []).some(fx => fx && fx.enabled !== false && fx.type === 'framestutter'))) {
         // C31 changes opaque main-renderer pixels too; never splice an old history-based prefix
