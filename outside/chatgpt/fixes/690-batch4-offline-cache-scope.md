@@ -6,4 +6,4 @@ The FreeMotion service worker and version chip previously removed every cache or
 
 Changed files: `sw.js`, `index.html` (worker registration query 2), `tests/tests.js` (one `TBD` regression for both cleanup paths).
 
-Checks: focused production-handler Node check retained another app's worker/cache and removed FreeMotion's obsolete cache; inline-script and changed-JS syntax plus `git diff --check` passed. Browser regression remains pending under the Claude ship lock; this branch is not promoted to the preferred checkpoint until it passes. Other apps' own cache-cleanup code lies outside this repo.
+Checks: focused production-handler Node check retained another app's worker/cache and removed FreeMotion's obsolete cache; inline-script and changed-JS syntax plus `git diff --check` passed. The focused muted Chromium regression subsequently passed (1/1). Other apps' own cache-cleanup code lies outside this repo.

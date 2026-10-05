@@ -6,4 +6,4 @@ Detect speech previously stopped with a generic failure when the first video had
 
 Changed files: `js/captions.js`, `index.html` (captions cache 62), `tests/tests.js` (one `TBD` regression covering default, project and chosen-clip scopes).
 
-Checks: focused production-handler Node check passed silent-first fallback, a later failed decode after a valid no-speech result, and an explicitly chosen silent source. Changed-JS syntax and `git diff --check` passed. Browser regression remains pending under the Claude ship lock; this branch is not promoted to the preferred checkpoint until it passes.
+Checks: focused production-handler Node check passed silent-first fallback, a later failed decode after a valid no-speech result, and an explicitly chosen silent source. Changed-JS syntax and `git diff --check` passed. The focused muted Chromium regression subsequently passed (1/1) after its fixture called the editor control on `FM.captionsEditor`.

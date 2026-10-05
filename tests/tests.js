@@ -127886,7 +127886,7 @@
         layer.captions = [{ a: 0, b: 1, text: '' }, { a: 2, b: 3, text: '' }];
         return { count: 2, stats: {} };
       };
-      let row = C.detectRow(T, () => {});
+      let row = FM.captionsEditor.detectRow(T, () => {});
       row.querySelector('.cap-detect-btn').click(); await sleep(80);
       if (called.join(',') !== B.id || T.captions.length !== 2 || !messages.some(m => /2 cues.*Talking clip/.test(m)))
         throw new Error('default scope did not use the talking clip after silent B-roll');
@@ -127898,13 +127898,13 @@
         if (candidate.id === B.id) throw new Error('no decodable audio in that clip');
         return { count: 0, stats: { clipDbStd: 4 } };
       };
-      FM._capScope = 'project'; row = C.detectRow(T, () => {});
+      FM._capScope = 'project'; row = FM.captionsEditor.detectRow(T, () => {});
       row.querySelector('.cap-detect-btn').click(); await sleep(80);
       if (called.join(',') !== A.id + ',' + B.id || !messages.some(m => /No speech found in.*Silent B-roll/.test(m)) || messages.some(m => /Speech detection failed/.test(m)))
         throw new Error('a later silent clip turned a valid no-speech result into a generic failure');
 
       called.length = 0; messages.length = 0; FM.hasAudioTrack = l => l.id === A.id ? false : true;
-      FM._capScope = 'source'; FM._capSrcId = A.id; row = C.detectRow(T, () => {});
+      FM._capScope = 'source'; FM._capSrcId = A.id; row = FM.captionsEditor.detectRow(T, () => {});
       row.querySelector('.cap-detect-btn').click(); await sleep(40);
       if (called.length || !messages.some(m => /No sound in.*Silent B-roll/.test(m)))
         throw new Error('a chosen silent source did not explain that the clip has no sound');
@@ -128187,9 +128187,11 @@
   });
 
   test('TBD: shortcut sheet distinguishes Add keys from selected-layer cards', { item: 'TBD' }, function () {
-    const wasOpen = FM.shortcuts.isOpen(), oldSelected = FM.scene.selectedId;
-    const oldCard = FM.inspector.openCategoryByIndex, oldTab = FM.addMenu.openTab;
+    const wasOpen = FM.shortcuts.isOpen(), oldSelected = FM.scene.selectedId, oldLayers = FM.scene.layers.slice();
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const oldCard = FM.inspector && FM.inspector.openCategoryByIndex, oldTab = FM.addMenu && FM.addMenu.openTab;
     try {
+      if (hadHome) FM.home.close();
       FM.shortcuts.show();
       const rows = Array.from(document.querySelectorAll('#shortcuts-overlay .shortcut-row')).map(row => row.textContent);
       if (!rows.some(row => row.includes('1 – 5 (nothing selected)')) ||
@@ -128198,21 +128200,24 @@
           !rows.some(row => row.includes('Ctrl + Y')))
         throw new Error('the visible help sheet still omits the key conditions or alternatives');
       FM.shortcuts.hide({ now: true });
+      if (!FM.inspector || !FM.addMenu) throw new Error('setup: app inspector or Add menu did not load');
       let card = 0, tab = 0;
       FM.inspector.openCategoryByIndex = n => { card = n; return true; };
       FM.addMenu.openTab = () => { tab++; };
-      FM.scene.selectedId = 'shortcut-sheet-probe';
+      const layer = FM.makeLayer('shape', { name: 'Shortcut sheet probe' });
+      FM.scene.layers.push(layer); FM.scene.selectedId = layer.id;
       window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));
-      if (card !== 1 || tab) throw new Error('Digit1 with a selection opened the Add menu instead of a panel card');
+      if (card !== 1 || tab) throw new Error('Digit1 with a selection used card=' + card + ', Add=' + tab);
       card = 0; FM.scene.selectedId = null;
       window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));
       if (card || tab !== 1) throw new Error('Digit1 without a selection did not open an Add tab');
     } finally {
-      FM.scene.selectedId = oldSelected;
-      FM.inspector.openCategoryByIndex = oldCard;
-      FM.addMenu.openTab = oldTab;
+      FM.scene.layers = oldLayers; FM.scene.selectedId = oldSelected;
+      if (FM.inspector && oldCard) FM.inspector.openCategoryByIndex = oldCard;
+      if (FM.addMenu && oldTab) FM.addMenu.openTab = oldTab;
       FM.shortcuts.hide({ now: true });
       if (wasOpen) FM.shortcuts.show();
+      if (hadHome) FM.home.open();
     }
   });
 
@@ -128244,7 +128249,7 @@
       if (changed(hard, soft) < W * H / 100) throw new Error('Edges did not alter an adjustment-layer picture');
       if (changed(render(25, 0, 'clip'), render(400, 0, 'clip')) < W * H / 20)
         throw new Error('clip control is insensitive to Block aspect, so the fixture cannot judge parity');
-    } finally { FM.media.delete(clip.id); }
+    } finally { FM.media.remove(clip.id); }
   });
 
 })();

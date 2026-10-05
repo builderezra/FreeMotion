@@ -4,5 +4,5 @@
 - Source: shared `REQUESTS.md` #1054 and batch3 `VERIFIED.md` §1 item 15 (F2/F3). Shared audit JSON and prior fix reports had no exact duplicate.
 - Changed: `js/shortcuts.js`, `index.html`, `tests/tests.js`.
 - The ? sheet now distinguishes unselected Add-menu digits from selected-layer panel-card digits, and lists Backspace and Ctrl+Y. Add-tab names remain read from the Add menu itself.
-- Checks: focused rendered-sheet behavior check passed with live Add-menu labels; changed JavaScript syntax and diff checks passed. One focused `{ item: 'TBD' }` regression covers the sheet plus Digit1 with and without a selection. Its browser gate is pending because the preceding two muted Chromium attempts on #1053 failed app-frame readiness despite successful script requests; no product result was inferred.
+- Checks: focused rendered-sheet behavior check passed with live Add-menu labels; changed JavaScript syntax and diff checks passed. The focused muted Chromium regression passed (1/1) after its fixture used a real selected layer and restored Home state.
 - Local only; not promoted, pushed or released.
