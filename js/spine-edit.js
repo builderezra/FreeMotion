@@ -782,7 +782,7 @@ window.FM = window.FM || {};
       case 'cutShort': text = line('cutShort', o.name); buttons = [full]; break;
       case 'insertFade': text = line('insertFade', o.a, o.b); break;   // 2.2: the two clip numbers (DESIGN §3.11)
       default: text = line(kind) || line('failed');
-        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock') buttons = [full];
+        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow') buttons = [full];
     }
     S.say(text, { buttons: buttons, refusal: kind, ids: o.ids });
     S.lastRefusal = kind;
@@ -1182,6 +1182,10 @@ window.FM = window.FM || {};
   S.planIntoRow = function (R, id) {
     const map = byIdMap(), o = map.get(id), u = R.units[id];
     if (!o || !u || R.isMain(id)) return refusePlan('gone');
+    /* a member of a card between clips (a slot): DESIGN §3.6's slot form puts the card in the row with no ripple and no move.
+       Make main clip's map rippled the card's other members and every later clip by +len and opened a gap (finding 12).
+       Refused with Open in Full until the slot form is built. */
+    if (u.host && String(u.host).indexOf('slot:') === 0) return refusePlan('slotIntoRow');
     if (!(o.type === 'video' || o.type === 'image' || o.type === 'shape' || (o.type === 'text' && !isCap(o)))) return refusePlan('cannotMain');
     if (o.audioOnly === true || (o.sm && o.sm.snd === true)) return refusePlan('cannotMain');
     const j = S.insertIndexAt(R, +o.start || 0);

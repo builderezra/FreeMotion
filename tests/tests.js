@@ -122285,4 +122285,26 @@
       if (got.some((s, k) => Math.abs(s - want[k]) > 1e-9)) throw new Error('want B, its title, C and End at ' + want + ', got ' + got + ' (B landed on the new clip’s end while its title and C moved by the plain length)');
     });
   });
+
+
+  test('simple P2.2 · review Into row is not offered on a card between clips, and the command refuses with Open in Full and moves nothing (DESIGN §3.6 slot form)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [
+      smT('Title', 5, 3, W, H),
+      FM.makeLayer('shape', { name: 'Card', shape: 'rect', x: W / 2, y: H / 2, shapeW: W * 0.5, shapeH: H * 0.3, fill: '#224', start: 5, duration: 3 }),
+      FM.makeLayer('shape', { name: 'Badge', shape: 'rect', x: W / 2, y: H / 2, shapeW: 20, shapeH: 20, fill: '#fff', start: 1, duration: 1 }),
+      smV('B', 8, 5, W, H), smV('A', 0, 5, W, H)], async function (v) {
+      const K = v.L('Card'), R = FM.spine.read(FM.scene);
+      if (!(R.main[1] && R.main[1].slot && String(R.units[K.id].host).indexOf('slot:') === 0)) throw new Error('CONTROL: the card is not a slot member: ' + JSON.stringify(R.main.map(e => e.id)));
+      FM.selectLayer(v.L('Badge').id); await v.sleep(60);
+      if (!smTool('into')) throw new Error('CONTROL: an overlay on a clip lost Into row');
+      const doc0 = v.doc(), n0 = v.steps();
+      FM.selectLayer(K.id); await v.sleep(60);
+      const offered = !!smTool('into');
+      await FM.spine.cmd.intoRow(K.id); await v.idle();
+      if (v.doc() !== doc0 || v.steps() !== n0) throw new Error('Into row on a card member changed the project: B at ' + v.L('B').start + ', Title at ' + v.L('Title').start + ', the card ' + JSON.stringify(K.sm || null) + ' (the video grew and the card’s words left it)');
+      if (offered) throw new Error('the tray offers Into row on a card member between clips');
+      if (!Array.from(document.querySelectorAll('#sm-say .sm-say-b')).some(b => /Open in Full/.test(b.textContent))) throw new Error('the refusal has no Open in Full: “' + v.say() + '”');
+    });
+  });
 })();
