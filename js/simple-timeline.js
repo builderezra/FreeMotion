@@ -69,7 +69,7 @@ window.FM = window.FM || {};
   function wireSay() {
     if (!sayEl || sayEl._wired) return;
     sayEl._wired = true;
-    document.addEventListener('pointerdown', e => { ptrDown = true; const ln = lineOf(); if (ln && ln.textContent && !sayEl.contains(e.target)) clearSay(); }, true);
+    document.addEventListener('pointerdown', e => { ptrDown = true; lastPtr = performance.now(); const ln = lineOf(); if (ln && ln.textContent && !sayEl.contains(e.target)) clearSay(); }, true);
     document.addEventListener('pointerup', () => { ptrDown = false; }, true);
     document.addEventListener('pointercancel', () => { ptrDown = false; }, true);
     /* A REFUSED SWITCH IS SAID HERE WHEN THE COG IS CLOSED (Phase 1 review R1). The cog block shows its own refusal line, but an
@@ -83,7 +83,22 @@ window.FM = window.FM || {};
   }
   /* Phase 2.2: #sm-say is the TRAY ROW (§8.2): its .sm-line takes the row while Simple speaks, #sm-tray shows otherwise */
   const lineOf = () => (sayEl && sayEl.querySelector('.sm-line')) || sayEl;
-  function clearSay() { clearTimeout(sayT); const ln = lineOf(); if (ln) ln.textContent = ''; if (sayEl) sayEl.classList.remove('sm-saying', 'sm-say-has-b'); }
+  /* §3.12 1b (review finding 27): a line with buttons raised from a tray tool pressed by KEYBOARD (or a screen reader) takes
+     that focus on its first button, and gives it back to the tool when it goes (or to the tray's first tool if that tool is
+     gone). Not after a pointer press (a pointerdown in the last half second), so a mouse click or a tap never parks focus in
+     a line, which would then never time out (rule 1b: never while focus is inside it). */
+  let raisedBy = null, lastPtr = -1e9;
+  function clearSay() {
+    clearTimeout(sayT); const ln = lineOf(); if (ln) ln.textContent = ''; if (sayEl) sayEl.classList.remove('sm-saying', 'sm-say-has-b');
+    if (raisedBy != null) {
+      const tr = document.getElementById('sm-tray'), ae = document.activeElement;
+      if (tr && (!ae || ae === document.body || (sayEl && sayEl.contains(ae)))) {
+        const t = (raisedBy && tr.querySelector('[data-tool="' + raisedBy + '"]')) || tr.querySelector('button');
+        if (t) { try { t.focus({ preventScroll: true }); } catch (e) {} }
+      }
+      raisedBy = null;
+    }
+  }
   function armClear(ms) {
     clearTimeout(sayT);
     sayT = setTimeout(function again() {
@@ -109,6 +124,8 @@ window.FM = window.FM || {};
     if (opts.live) { if (liveEl) liveEl.textContent = text; pulse(opts.pulse); return; }
     if (!sayEl) return;
     const ln = lineOf();
+    const tr = document.getElementById('sm-tray'), ae = document.activeElement;
+    if (tr && ae && tr.contains(ae) && !ptrDown && performance.now() - lastPtr > 500) raisedBy = (ae.dataset && ae.dataset.tool) || '';
     ln.textContent = ''; sayEl.classList.add('sm-saying');
     const tx = el('span', 'sm-say-t', text); tx.title = text; ln.appendChild(tx);
     const btns = (opts.buttons || []).slice(0, 2);
@@ -123,6 +140,7 @@ window.FM = window.FM || {};
       ln.appendChild(b);
     });
     sayEl.classList.toggle('sm-say-has-b', btns.length > 0);
+    if (raisedBy != null && btns.length) { const fb = ln.querySelector('.sm-say-b'); if (fb) { try { fb.focus({ preventScroll: true }); } catch (e) {} } }
     if (btns.length) setTimeout(function arm() { if (!sayEl.isConnected || !sayEl.querySelector('.sm-say-b')) return; if (!armed()) { setTimeout(arm, 60); return; } sayEl.querySelectorAll('.sm-say-b').forEach(b => b.setAttribute('aria-disabled', 'false')); }, 400);
     /* #sm-say is itself the polite status region (rule 1b) and reads the text with its buttons; #sm-live is for live-only lines.
        Writing the row's text there too made a screen reader read every refusal and every Undo line twice (review finding 29). */

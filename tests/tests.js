@@ -122525,4 +122525,37 @@
       if (document.activeElement !== document.getElementById('btn-opts')) throw new Error('Esc did not give focus back to ⋯');
     });
   });
+
+
+  test('simple P2.2 · review a tray tool keeps keyboard focus after a press that changes the clip, so Move later and +1 frame can be pressed again by Enter; a line with buttons takes focus and gives it back (§3.12 1a, 1b, §8.10 item 6)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const A = v.L('A'), frame = () => new Promise(r => requestAnimationFrame(() => r()));
+      const order = () => FM.spine.classify(FM.scene).main.filter(e => !e.slot).map(e => FM.layerById(FM.scene, e.id).name).join('');
+      const focusedTool = () => { const a = document.activeElement; return a && document.getElementById('sm-tray').contains(a) ? (a.dataset.tool || a.className) : (a ? a.tagName + (a.id ? '#' + a.id : '') : 'nothing'); };
+      FM.selectLayer(A.id); await v.sleep(60);
+      smTool('later').focus();
+      if (focusedTool() !== 'later') throw new Error('CONTROL: Move later did not take focus');
+      document.activeElement.click(); await v.idle(); await frame();
+      if (order() !== 'BAC') throw new Error('CONTROL: Move later did not move A: ' + order() + ' (it said “' + v.say() + '”)');
+      if (focusedTool() !== 'later') throw new Error('after Move later, focus fell to ' + focusedTool() + ' — a second Enter does nothing');
+      document.activeElement.click(); await v.idle(); await frame();
+      if (order() !== 'BCA') throw new Error('the second press on the focused Move later did not land: ' + order());
+      /* the Length row: +1 frame twice by Enter */
+      FM.simpleTools.openLength(A.id); await v.sleep(30);
+      smTool('lenPlus').focus(); const d0 = A.duration;
+      document.activeElement.click(); await v.idle(); await frame();
+      if (focusedTool() !== 'lenPlus') throw new Error('after +1 frame, focus fell to ' + focusedTool());
+      document.activeElement.click(); await v.idle(); await frame();
+      if (Math.abs(A.duration - (d0 + 2 / 30)) > 1e-9) throw new Error('two presses of the focused +1 frame gave ' + (A.duration - d0) + ' s');
+      smTool('lenBack').focus(); document.activeElement.click(); await v.sleep(30);
+      if (focusedTool() !== 'length') throw new Error('Done on the Length row left focus on ' + focusedTool() + ', not on Length');
+      /* a line with buttons raised from a focused tool takes focus, and gives it back when it goes */
+      smTool('earlier').focus();
+      FM.simpleTimeline._say('That clip is locked', { buttons: [{ label: 'Do it anyway', fn() {} }] }); await v.sleep(30);
+      if (!(document.activeElement && document.activeElement.classList.contains('sm-say-b'))) throw new Error('a line with a button did not take focus from the tool that raised it: ' + focusedTool());
+      FM.simpleTimeline.clearSay(); await v.sleep(30);
+      if (focusedTool() !== 'earlier') throw new Error('when the line went, focus did not go back to Move earlier: ' + focusedTool());
+    });
+  });
 })();

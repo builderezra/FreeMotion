@@ -258,6 +258,19 @@ window.FM = window.FM || {};
       const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
       if (sig === lastSig) return;
       lastSig = sig;
+      /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the
+         row, and focus fell to <body> with the button it was on, so a second Enter on Move later or +1 frame did nothing.
+         Restored only when focus was already in the tray, so a tap on the timeline never pulls focus here. */
+      const ae = document.activeElement, hadFocus = !!(ae && ae !== tray && tray.contains(ae));
+      const focusKey = hadFocus ? ((ae.dataset && ae.dataset.tool) || (ae.classList.contains('sm-len-v') ? '#len' : '')) : '';
+      FM.simpleTools._fill(R, ids, one, S);
+      if (hadFocus) {
+        const want = focusKey === 'lenBack' ? 'length' : focusKey;   // Done goes back to the Length that opened the row
+        const n = (want === '#len' ? tray.querySelector('.sm-len-v') : want && tray.querySelector('[data-tool="' + want + '"]')) || tray.querySelector('button, input');
+        if (n) n.focus({ preventScroll: true });
+      }
+    },
+    _fill(R, ids, one, S) {
       tray.textContent = '';
       tray.classList.toggle('sm-tray-len', !!lengthFor);
       if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return; }
