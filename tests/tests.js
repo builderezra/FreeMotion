@@ -122511,6 +122511,51 @@
     } finally { FM.media.remove(layer.id); image.close(); }
   });
 
+  test('690 C31 Time Warp Scan holds keyed Gamma on a moving still image', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const tex = offscreen(40, 56), g = tex.getContext('2d');
+    g.fillStyle = '#c64326'; g.fillRect(0, 0, 40, 56);
+    g.fillStyle = '#2fadd7'; g.fillRect(0, 0, 20, 28);
+    g.fillStyle = '#e3cf59'; g.fillRect(20, 28, 20, 28);
+    const layer = FM.makeLayer('image', { x: 20, y: 40, start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 2, v: 100, e: 'linear' }] };
+    const gamma = FM.fxRegistry.makeInstance('gamma');
+    gamma.params.gamma = { kf: [{ t: 0, v: 0.55, e: 'linear' }, { t: 2, v: 3.4, e: 'linear' }] };
+    gamma.params.red = 1.5;
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, loop: 0 });
+    layer.effects = [gamma, warp];
+    const image = await createImageBitmap(tex);
+    FM.media.set(layer.id, { kind: 'image', el: image, width: 40, height: 56 });
+    const scene = { project: { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' },
+      layers: [layer], selectedId: null, selectedIds: [] };
+    const frame = (t, width) => {
+      const cv = offscreen(width, width * 2 / 3), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 0, cv.width, cv.height).data;
+    };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    try {
+      for (const width of [120, 60]) for (const mode of [0, 1]) {
+        warp.params.mode = mode;
+        FM.resetMotionFlowCache();
+        let played;
+        for (let i = 0; i <= 24; i++) played = frame(i / 30, width);
+        FM.resetMotionFlowCache();
+        const cold = frame(24 / 30, width);
+        if (!same(cold, played)) {
+          const i = cold.findIndex((v, j) => v !== played[j]);
+          throw new Error((mode ? 'Reveal' : 'Freeze') + ' still-image Gamma cold seek differs at ' +
+            (i >> 2) + ': cold=' + cold[i] + ', played=' + played[i] + ', width=' + width);
+        }
+        layer.effects = [gamma];
+        const live = frame(24 / 30, width);
+        layer.effects = [gamma, warp];
+        if (same(cold, live)) throw new Error('Control: scan did not retain historical still-image Gamma');
+      }
+    } finally { FM.media.remove(layer.id); image.close(); }
+  });
+
   test('690 Time Warp Scan cold-seeks a moving still through a vector mask', { item: 'TBD', budgetMs: 30000 }, async function () {
     const tex = offscreen(40, 56), g = tex.getContext('2d');
     g.fillStyle = '#c64326'; g.fillRect(0, 0, 40, 56);
