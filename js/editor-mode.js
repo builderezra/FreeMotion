@@ -88,16 +88,25 @@ window.FM = window.FM || {};
   /* §21 F5: the ↷ the person SEES. In a live session undo and redo go through FM.collab (js/history.js:208, :325-326), and the
      local stack's canRedo() says nothing about it — the redo warning would be wrong in exactly the case with a friend in. */
   const canRedoNow = () => safe(() => (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) ? FM.collab.canRedo() : FM.history.canRedo());
+  const redoCountNow = () => { try { return ((FM.collab && FM.collab.undoActive && FM.collab.undoActive()) ? FM.collab.redoDepth() : FM.history.redoDepth()) || 1; } catch (e) { return 1; } };   // the steps ↷ holds, for the redo line
   function plan(to) {
     const p = { to: to, refuse: busyReason(), lose: [], steps: 0, writes: ['card.editor', 'fm.editor.last'] };
     HOLDS.forEach(h => { if (safe(h.live)) p.lose.push(h.id); });
-    p.steps = COMMITS.filter(c => safe(c.live)).length + p.lose.length;   // applying a held thing is a step too
+    /* ONLY A STEP THE SWITCH REALLY MAKES cuts the redo tail (review 6 Oct). A pen under 3 points is thrown away (keep()
+       commits nothing), and closing an untouched text editor, mask or Edit Points commits an identical snapshot, which
+       history.commit() ignores — so neither may say "Redo can't bring back…". Unsure (no wouldStep, or a live session's
+       own undo) means warn. */
+    const penDiscard = id => id === 'pen' && FM.drawTool && FM.drawTool.points.length < 3;
+    const collabUndo = safe(() => FM.collab && FM.collab.undoActive && FM.collab.undoActive());
+    const wouldStep = () => { try { return !FM.history.wouldStep || FM.history.wouldStep(); } catch (e) { return true; } };
+    const commitStep = COMMITS.some(c => safe(c.live)) && (collabUndo || wouldStep());
+    p.steps = p.lose.filter(id => !penDiscard(id)).length + (commitStep ? 1 : 0);   // applying a held thing is a step too
     if (p.steps && canRedoNow()) p.lose.push('redo');
     return p;
   }
   function warning(p) {
     const w = W().warn || {}, to = p.to === 'simple' ? (W().simple || 'Simple') : (W().full || 'Full');
-    const lines = p.lose.map(id => id === 'pen' && FM.drawTool && FM.drawTool.points.length < 3 ? w.penShort : (id === 'redo' ? w.redo(FM.history.redoDepth ? FM.history.redoDepth() : 1) : w[id]));
+    const lines = p.lose.map(id => id === 'pen' && FM.drawTool && FM.drawTool.points.length < 3 ? w.penShort(FM.drawTool.points.length) : (id === 'redo' ? w.redo(redoCountNow()) : w[id]));
     const one = p.lose.length === 1 ? p.lose[0] : null;
     return { title: (w.title || 'Switch to ') + to + '?', message: lines.join('\n'),
              ok: one ? ((one === 'pen' && FM.drawTool.points.length < 3) ? w.okAnyway : (w.ok[one] || w.okAnyway)) : w.okSeveral,
@@ -119,7 +128,6 @@ window.FM = window.FM || {};
     if (HOLDS.some(h => safe(h.live))) return false;
     COMMITS.forEach(c => { if (safe(c.live)) { try { c.close(); } catch (e) {} } });
     QUIET.forEach(q => { if (safe(q.live)) { try { q.close(); } catch (e) {} } });
-    if (FM.exitEditGroup) { try { FM.exitEditGroup(); } catch (e) {} }
     const had = document.activeElement;
     mode = next;
     /* This project's editor is decided NOW. Without this the rebuild below ran syncProject while lastPid still named no project
@@ -127,6 +135,10 @@ window.FM = window.FM || {};
        first switch after opening the app turned Simple on and straight back off, with no refusal and no question (cog T10b). */
     lastPid = openPid();
     body().classList.toggle('ed-simple', mode === 'simple');
+    /* §6.2: a switch leaves Edit Group (review 6 Oct). There was a call to FM.exitEditGroup, which does not exist, so the group
+       context rode into Simple and the + filed new clips INSIDE the group. FM.exitGroup(true) is the app's own exit; it runs
+       after lastPid is set, so the rebuild inside it cannot re-enter apply through syncProject. */
+    if (FM.groupContext && FM.exitGroup) { try { FM.exitGroup(true); } catch (e) {} }
     if (opts.from === 'cog') pendingFx = true; else if (!opts.quiet) crossfade();
     if (FM.syncSelectionChrome) FM.syncSelectionChrome();
     if (!opts.noRebuild && FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();   // syncProject runs INSIDE a rebuild: no second one
@@ -188,6 +200,10 @@ window.FM = window.FM || {};
     }
     /* §21 F1: apply() refuses while any HOLDS tool is still live (a Done that settles later, a keep that did nothing). Say so in
        the block instead of returning a silent false that leaves the knob, the cog and him all waiting. */
+    /* A HOP (Open in Full from a Simple line or chip, DESIGN §6.2 / §9.2): the same guard and the same questions, but it writes
+       NO editor memory — one look at an item in Full must not change how the project opens next time (review 6 Oct: it went
+       through set(), which saved the card as Full, and skipped every question above). */
+    if (o.hop) { if (!apply(to, {})) return refuse('unsettled'); announce(); return true; }
     return set(to, { from: o.from }) || refuse('unsettled');
   }
 

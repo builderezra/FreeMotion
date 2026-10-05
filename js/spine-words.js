@@ -24,7 +24,7 @@ window.FM = window.FM || {};
         crop: 'Your crop isn’t applied yet. Switching closes the crop tool, and Undo can’t bring the box back.',
         touchup: 'Your touch-up isn’t applied yet. Switching closes it, and Undo can’t bring the box back.',
         pen: 'Your drawing isn’t finished. Switching closes the pen, and Undo can’t bring the points back.',
-        penShort: 'Your drawing has only 2 points, so it can’t be kept. Switching throws it away.',
+        penShort: function (n) { return 'Your drawing has only ' + (n === 1 ? '1 point' : n + ' points') + ', so it can’t be kept. Switching throws it away.'; },
         redo: function (n) { return 'Switching saves what you just did as a step, so Redo can’t bring back the ' + (n === 1 ? 'step' : n + ' steps') + ' you undid.'; },
         ok: { crop: 'Apply crop and switch', touchup: 'Apply touch-up and switch', pen: 'Finish drawing and switch', redo: 'Switch anyway' },
         okAnyway: 'Switch anyway', okSeveral: 'Apply them and switch', stay: 'Stay'

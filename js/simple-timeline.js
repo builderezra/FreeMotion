@@ -86,7 +86,14 @@ window.FM = window.FM || {};
     if (opts && opts.full) {
       const b = el('button', 'sm-say-b', (W().lines || {}).openFull || 'Open in Full');
       b.type = 'button';
-      b.addEventListener('click', () => { clearSay(); if (FM.editor) FM.editor.set('full'); });
+      b.addEventListener('click', async () => {
+        clearSay();
+        if (!FM.editor) return;
+        /* the cog is closed, so its refusal listener shows nothing: a refusal is said here instead (review 6 Oct) */
+        const said = ev => { const t = ev.detail && ev.detail.text; if (t) sayLine(t); };
+        window.addEventListener('fm-editor-refuse', said);
+        try { await FM.editor.request('full', { hop: true }); } finally { window.removeEventListener('fm-editor-refuse', said); }
+      });
       sayEl.appendChild(b);
     }
     if (liveEl) liveEl.textContent = text;

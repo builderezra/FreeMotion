@@ -4814,7 +4814,15 @@ window.FM = window.FM || {};
     /* Simple mode P1: the ONE time scale both timelines draw with (Full's #timeline stays laid out under Simple's), and
        whether a Full gesture is live (the editor switch refuses — shakes — rather than tear a drag out from under a finger). */
     pxPerSec: function () { return pxPerSec(); },
-    gestureLive: function () { return !!(clipMove || trimDrag || kfDrag || slipDrag || cueDrag || reorderActive || headPan); },
+    gestureLive: function () {
+      if (!(clipMove || trimDrag || kfDrag || slipDrag || cueDrag || reorderActive || headPan)) return false;
+      if (!gestureIsStale()) return true;          // a live hold: a fresh stamp, or a finger still down (queue 781)
+      /* queue 541's wreckage (a lost pointer): it refused the switch with a shake and no line, on every tap, until something
+         else rebuilt (review 6 Oct). Put it back exactly as rebuild() does — Simple's rebuild returns before that check. */
+      recoverStuckGesture();
+      if (FM.requestRender) FM.requestRender();
+      return false;
+    },
     /* Call `fn` at the end of every REAL rebuild (never a deferred one). Returns the unsubscribe. */
     onRebuilt: function (fn) {
       if (typeof fn !== 'function') return function () {};

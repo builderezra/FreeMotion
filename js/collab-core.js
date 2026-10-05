@@ -365,6 +365,7 @@ window.FM = window.FM || {};
   C.redo = function () { const s = US(); return s ? s.redo() : false; };
   C.canUndo = function () { const s = US(); return s ? s.canUndo() : false; };
   C.canRedo = function () { const s = US(); return s ? s.canRedo() : false; };
+  C.redoDepth = function () { const s = US(); return s && s._undoDepth ? s._undoDepth().redo : 0; };   // #980: the switch's redo line counts steps
 
   /* history.reset() runs on every project open, import and boot: the session stands down (§12.1
      `paused`) and the borrowed undo goes back. NOT gated on `active` — the hand-back is exactly the

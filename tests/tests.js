@@ -120789,6 +120789,8 @@
       /* typing open: the switch would commit it, and a commit with redo waiting cuts redo off — so it must ask */
       FM.textEdit.start(L.id); await sleep(80);
       if (!FM.textEdit.isActive()) throw new Error('setup: the text editor did not open on the text layer');
+      /* TYPE: an untouched text box commits an identical snapshot, which makes no step and cuts nothing (review R3) */
+      const ta = document.getElementById('te-input'); ta.value = 'one more'; ta.dispatchEvent(new Event('input', { bubbles: true })); await sleep(20);
       answer = false;
       const ok = await FM.editor.request('simple', { from: 'cog' }); await sleep(40);
       if (!asked.length) throw new Error('with typing open and redo waiting, the switch went ahead without a word — the redo tail would be lost silently');
@@ -120804,6 +120806,180 @@
       const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
       FM.selectLayer(null); FM.refreshAll();
       await sleep(60);
+    }
+  });
+
+  /* ═══ #980 PHASE 1 REVIEW (6 Oct): three readers, each finding checked by a refuter — five real defects in the switch. ═══ */
+  test('980 review R1 Open in Full from a Simple line is a hop: it never changes how the project opens next time, asks before throwing away a moved crop box, and says a refusal in the line', { item: '980', budgetMs: 60000 }, async function () {
+    const pid = FM.storage.openProjectId ? FM.storage.openProjectId() : null;
+    const cardOf = () => (FM.projects.list() || []).find(c => c.id === pid);
+    const card0 = cardOf(), ed0 = card0 ? card0.editor : undefined;
+    const say = () => document.getElementById('sm-say');
+    const openFull = async () => { const b = say().querySelector('button'); if (!b) throw new Error('the line has no Open in Full button: ' + say().textContent); b.click(); await new Promise(r => setTimeout(r, 60)); };
+    try {
+      await smCropRig(async function (r) {
+        if (!pid || !card0) throw new Error('setup: the suite project has no card, so the memory cannot be read');
+        /* he chose Simple for this project with the cog */
+        if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('setup: the switch to Simple was refused');
+        const last1 = localStorage.getItem('fm.editor.last');
+        if (cardOf().editor !== 'simple') throw new Error('setup: the cog switch did not remember Simple on the card');
+        /* (a) a plain hop: Full on screen, the memory untouched */
+        FM.spine.say('splitNext', { full: true }); await r.sleep(20);
+        await openFull();
+        if (FM.editor.mode() !== 'full') throw new Error('Open in Full did not open Full');
+        if (cardOf().editor !== 'simple') throw new Error('Open in Full saved the project as Full on this device (card editor ' + cardOf().editor + ') — one look in Full changed how it opens next time');
+        if (localStorage.getItem('fm.editor.last') !== last1) throw new Error('Open in Full rewrote fm.editor.last (' + localStorage.getItem('fm.editor.last') + ')');
+        /* (b) a moved crop box: the hop asks first, and Stay keeps everything */
+        if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('setup: back to Simple was refused');
+        FM.cropTool.start(r.L.id); await r.sleep(60);
+        document.querySelector('#crop-bar .cb-reset').click(); await r.sleep(30);
+        if (!FM.cropTool.changed()) throw new Error('setup: the crop box did not change');
+        r.answer(false); r.asked.length = 0;
+        FM.spine.say('splitNext', { full: true }); await r.sleep(20);
+        await openFull();
+        if (!r.asked.length) throw new Error('Open in Full with a moved crop box went ahead (or did nothing) without asking');
+        if (!/crop/i.test(JSON.stringify(r.asked[0]))) throw new Error('the question does not mention the crop: ' + JSON.stringify(r.asked[0]));
+        if (FM.editor.mode() !== 'simple' || !FM.cropTool.isActive() || !FM.cropTool.changed()) throw new Error('Stay did not leave Simple and the moved crop box as they were');
+        FM.cropTool.stop(); await r.sleep(30);
+        /* (c) a refusal while exporting is said in the line, not lost with the cog closed */
+        const was = FM._exporting;
+        try {
+          FM._exporting = true;
+          FM.spine.say('splitNext', { full: true }); await r.sleep(20);
+          await openFull();
+          if (FM.editor.mode() !== 'simple') throw new Error('Open in Full switched while an export was running');
+          const want = ((FM.spineWords && FM.spineWords.editor && FM.spineWords.editor.refuse) || {}).export || 'export';
+          if (!say().textContent || say().textContent.indexOf(want.slice(0, 12)) < 0) throw new Error('the refusal was not said in the line (#sm-say reads "' + say().textContent + '")');
+        } finally { FM._exporting = was; }
+      });
+    } finally {
+      try { const idx = FM.projects.list(), c = idx.find(x => x.id === pid); if (c && c.editor !== ed0) { if (ed0 === undefined) delete c.editor; else c.editor = ed0; FM.projects.saveIndex(idx); } } catch (e) {}
+    }
+  });
+
+  test('980 review R2 switching to Simple leaves Edit Group, so a clip added in Simple is never filed inside the group', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, mode0 = FM.editor.mode(), last0 = localStorage.getItem('fm.editor.last');
+    try {
+      if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
+      FM.scene.layers.length = 0; FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.groupContext = null;
+      const mk = name => { const l = FM.makeLayer('shape', { name: name, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#3a7bd5' }); l.start = 0; l.duration = 3; FM.insertLayer(l); return l; };
+      const A = mk('A'), B = mk('B');
+      FM.scene.selectedIds = [A.id, B.id]; FM.scene.selectedId = A.id; FM.groupSelection();
+      const G = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!G) throw new Error('setup: grouping made no group');
+      FM.enterGroup(G.id); await sleep(40);
+      if (FM.groupContext !== G.id) throw new Error('setup: Edit Group did not open');
+      if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('the switch to Simple was refused');
+      if (FM.groupContext) throw new Error('Edit Group is still open in Simple (groupContext ' + FM.groupContext + ')');
+      const C = mk('C');
+      if (C.parent) throw new Error('a layer added in Simple went INSIDE the group (parent ' + C.parent + ')');
+    } finally {
+      FM.groupContext = null;
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = sel0;
+      FM.refreshAll(); await sleep(40);
+    }
+  });
+
+  test('980 review R3 the redo warning comes only when the switch really makes a step — not for an untouched text box or a pen under three points — and it counts the steps and the points', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const ask0 = FM.ask, mode0 = FM.editor.mode(), last0 = localStorage.getItem('fm.editor.last');
+    const P = FM.scene.project;
+    const L = FM.makeLayer('text', { name: 'SM_R3', text: 'one', x: Math.round(P.width / 2), y: Math.round(P.height / 2) });
+    L.start = 0; L.duration = 3;
+    const asked = []; let answer = false;
+    FM.ask = async function (o) { asked.push(o || {}); return answer; };
+    const back = async () => { if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true }); await sleep(30); };
+    try {
+      await back();
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      for (let i = 1; i <= 3; i++) { FM.setProp(L.transform, 'x', (FM.evalProp(L.transform.x, 0) || 0) + 10, 0); FM.history.commit(); }
+      FM.history.undo(); FM.history.undo(); FM.history.undo(); await sleep(40);
+      if (!FM.history.canRedo()) throw new Error('setup: three undos left nothing to redo');
+      /* an untouched text box: closing it makes no step, so the switch goes through without a word and ↷ survives */
+      FM.textEdit.start(L.id); await sleep(80);
+      if (!FM.textEdit.isActive()) throw new Error('setup: the text editor did not open');
+      asked.length = 0;
+      if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('an untouched text box refused the switch');
+      if (asked.length) throw new Error('an untouched text box asked about redo: ' + JSON.stringify(asked[0]));
+      if (!FM.history.canRedo()) throw new Error('the switch ate the redo steps although it made no step');
+      await back();
+      /* typing: a real step — the warning must count all three undone steps */
+      FM.textEdit.start(L.id); await sleep(80);
+      const ta = document.getElementById('te-input'); ta.value = 'one two'; ta.dispatchEvent(new Event('input', { bubbles: true })); await sleep(20);
+      asked.length = 0; answer = false;
+      await FM.editor.request('simple', { from: 'cog' });
+      if (!asked.length) throw new Error('typing with redo waiting switched without a warning');
+      if (!/3 steps/.test(JSON.stringify(asked[0]))) throw new Error('the redo line does not count the 3 undone steps: ' + JSON.stringify(asked[0].message));
+      FM.textEdit.stop(); await sleep(40); FM.history.undo(); await sleep(30);
+      /* a pen with two points: thrown away, no step — only the pen line, it counts the points, and ↷ survives */
+      if (!FM.history.canRedo()) throw new Error('setup: nothing to redo before the pen case');
+      FM.selectLayer(null); FM.startDraw('vector'); await sleep(80);
+      FM.drawTool.points = [[0.3, 0.3], [0.7, 0.3]];
+      asked.length = 0; answer = true;
+      if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('Switch anyway on a two-point pen did not switch');
+      if (asked.length !== 1) throw new Error('a two-point pen should ask once, asked ' + asked.length);
+      const msg = String(asked[0].message || '');
+      if (!/2 points/.test(msg)) throw new Error('the pen line does not say 2 points: ' + msg);
+      if (/redo/i.test(msg)) throw new Error('a pen that is thrown away makes no step, but the warning says redo goes: ' + msg);
+      if (!FM.history.canRedo()) throw new Error('switching away a two-point pen ate the redo steps');
+      await back();
+      /* one point says one point */
+      FM.startDraw('vector'); await sleep(80); FM.drawTool.points = [[0.4, 0.4]];
+      asked.length = 0; answer = false;
+      await FM.editor.request('simple', { from: 'cog' });
+      if (!asked.length || !/only 1 point,/.test(String(asked[0].message))) throw new Error('a one-point pen does not say 1 point: ' + JSON.stringify(asked[0] && asked[0].message));
+    } finally {
+      FM.ask = ask0;
+      try { if (FM.drawTool && FM.drawTool.active) { FM.drawTool.points = []; FM.drawTools.stop(); } } catch (e) {}
+      document.body.classList.remove('drawing', 'draw-vector');
+      try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      FM.selectLayer(null); FM.refreshAll(); await sleep(60);
+    }
+  });
+
+  test('980 review R4 a lost drag (its pointer gone) does not hold the switch: it goes through, and the clip is put back where it started', { item: '980', budgetMs: 30000 }, async function () {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.timeline._dragState || !FM._gestureIsStale) throw new Error('seams missing: timeline._dragState / _gestureIsStale');
+    const held = () => FM._heldPointers || new Set();
+    const saved = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, mode0 = FM.editor.mode(), last0 = localStorage.getItem('fm.editor.last');
+    const live = () => ((FM.timeline._dragState() || {}).live || []).indexOf('clipMove') >= 0;
+    const PID = 980;
+    try {
+      if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
+      held().clear();
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0', start: 1, duration: 2 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.timeline.rebuild(); await sleep(80);
+      const clip = document.querySelector('.track-row .clip');
+      if (!clip) throw new Error('setup: no .clip in the timeline');
+      const r = clip.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const send = (type, dx, buttons) => clip.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: PID, pointerType: 'mouse', isPrimary: true, clientX: x + dx, clientY: y, buttons: buttons }));
+      send('pointerdown', 0, 1); send('pointermove', 30, 1); await sleep(30);
+      if (!live()) throw new Error('setup: the press did not start a clip drag');
+      /* the pointer is lost: the mouse moves with no button, and the stale window passes */
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: PID, pointerType: 'mouse', clientX: x + 31, clientY: y + 1, buttons: 0 }));
+      await sleep(1350);
+      if (!FM._gestureIsStale()) throw new Error('setup: the lost drag does not read as stale');
+      if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('a lost drag held the switch (refused as a drag in progress, with no line)');
+      if (live()) throw new Error('the switch went through but the lost drag is still live under Simple');
+      if (Math.abs(L.start - 1) > 1e-6) throw new Error('the lost drag was not put back where it started (start ' + L.start + ')');
+    } finally {
+      try { window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: PID, pointerType: 'mouse', buttons: 0 })); } catch (e) {}
+      if (FM._recoverStuckGesture) FM._recoverStuckGesture();
+      held().clear();
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = sel0;
+      FM.timeline.rebuild(); await sleep(40);
     }
   });
 
