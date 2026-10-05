@@ -1015,6 +1015,42 @@ window.FM = window.FM || {};
     return made;
   }
   const newPickB = () => 'pk' + Date.now().toString(36).slice(-6) + Math.floor(Math.random() * 1296).toString(36);
+  /* FULL'S ADD ROW KEEPS ITS PLACE (§3.6.1 "one insert helper", as S.insertAt): addMediaLayer inserts at FM.addAt and the
+     plan then moves the new layers into their band, which left the row one layer off (review finding 17). Call before the
+     adds; the returned function puts the row back above the layer it sat above. */
+  function addRowMark() {
+    const L = FM.scene.layers, k = FM.clampAddAt(), id = L[k] ? L[k].id : null;
+    return () => { const i = id ? FM.scene.layers.findIndex(l => l.id === id) : -1; FM.addAt = i >= 0 ? i : FM.scene.layers.length; FM.clampAddAt(); };
+  }
+  /* §3.6.1 BACKDROP: in a project with no main clips, a visual that fills the frame, at opacity 1, normal blend, no mask, below
+     every other visual it overlaps (a text-and-shapes template's full-canvas rect). `vis` is in array order. */
+  function isBackdrop(l, vis) {
+    if (!l || l.type === 'text' || l.type === 'group') return false;
+    if (l.blendMode && l.blendMode !== 'normal') return false;
+    if ((l.mask && l.mask.enabled) || (l.masks || []).some(m => m && m.enabled !== false)) return false;
+    const s = +l.start || 0, d = +l.duration || 0;
+    if (FM.layerOpacity && [s, s + d / 2].some(t => FM.layerOpacity(l, t) < 0.999)) return false;
+    const P = FM.scene.project, W = P.width || 1080, H = P.height || 1920;
+    let b = null; try { b = FM.worldBox ? FM.worldBox(l, s, FM.scene) : null; } catch (e) { b = null; }
+    if (!b) return false;
+    const iw = Math.max(0, Math.min(W, b.x1) - Math.max(0, b.x0)), ih = Math.max(0, Math.min(H, b.y1) - Math.max(0, b.y0));
+    if (iw * ih < 0.9 * W * H) return false;
+    const i = FM.scene.layers.indexOf(l);
+    return vis.every(o => o === l || FM.scene.layers.indexOf(o) < i);
+  }
+  /* §3.6.1: THE FIRST MAIN CLIPS of a project with none go directly above the top-most backdrop they overlap, else directly
+     below the lowest visual they overlap — never at FM.addAt's default, the top, over every title and shape (finding 17). */
+  function placeFirstMain(made, s, e, R) {
+    const ids = new Set(made.map(l => l.id));
+    const vis = FM.scene.layers.filter(l => !ids.has(l.id) && overlaps(l, s, e) && l.type !== 'camera' && l.type !== 'group' &&
+      l.audioOnly !== true && !(l.sm && l.sm.snd === true) && !(R.units[l.id] && (R.units[l.id].kind === 'audio' || R.units[l.id].kind === 'fullOnly')));
+    if (!vis.length) return;
+    const back = vis.filter(l => isBackdrop(l, vis));
+    if (back.length) { FM.moveLayers(made.map(l => l.id), back[0].id); return; }   // just above the top-most backdrop
+    const L = FM.scene.layers, k = L.indexOf(vis[vis.length - 1]);
+    const nx = L.slice(k + 1).find(l => !ids.has(l.id));
+    FM.moveLayers(made.map(l => l.id), nx ? nx.id : null);                         // just below the lowest visual
+  }
 
   /* APPEND (the clip row's +, Clips › At the end): the clips go end to end from the track end, BEFORE an end card, which
      moves along. Arranging only when it moves something (a tail item) or the project is not adopted yet (§3.6 Append row):
@@ -1038,11 +1074,14 @@ window.FM = window.FM || {};
     R.tail.forEach(id => addMove(plan, id, sum));
     const lastMain = (() => { const m = R.main.filter(e => !e.slot); return m.length ? m[m.length - 1].id : null; })();
     plan.pre.push(async () => {
+      const keepRow = addRowMark();
       const made = addRecs(clips, T, newPickB(), map);
       made.forEach(l => S.setFlag(l, 'main', true));
       if (made.length && lastMain && FM.layerById(FM.scene, lastMain)) FM.moveLayers(made.map(l => l.id), lastMain);   // just above the clip before (§3.6.1)
+      else if (made.length) placeFirstMain(made, T, T + sum, R);
       const snd = addRecs(picked.sounds, Math.max(0, Math.min(FM.time || 0, T)), newPickB(), map);
       snd.forEach(l => { S.setFlag(l, 'stay', true); FM.moveLayers([l.id], null); });   // music: Stay put, left whole (D17 B); sound sits at the end of the stack
+      keepRow();
       if (made.length || snd.length) plan.mints = true;   // {noSave} records: the runner writes their files at once (queue 681, review finding 9)
       plan.selectId = made.length ? made[0].id : (snd[0] && snd[0].id);
       plan.made = made.length;
@@ -1073,12 +1112,14 @@ window.FM = window.FM || {};
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
     const anchor = S.rowAnchor(R, j);
     plan.pre.push(async () => {
+      const keepRow = addRowMark();
       const made = addRecs(clips, at, newPickB(), map);
       made.forEach(l => S.setFlag(l, 'main', true));
       if (made.length && anchor) FM.moveLayers(made.map(l => l.id), anchor);
       plan.selectId = made.length ? made[0].id : null;
       const snd = addRecs(picked.sounds, Math.max(0, FM.time || 0), newPickB(), map);
       snd.forEach(l => { S.setFlag(l, 'stay', true); FM.moveLayers([l.id], null); });
+      keepRow();
       if (made.length || snd.length) plan.mints = true;
     });
     plan.time = at;
@@ -1330,14 +1371,21 @@ window.FM = window.FM || {};
     if (!items.length) return refusePlan('nothingAdded');
     const plan = newPlan('Add overlay'); plan.arranges = false; plan.adopts = false;
     plan.pre.push(async () => {
+      const keepRow = addRowMark();
       const t0 = Math.max(0, FM.time || 0), made = addRecs(items, t0, newPickB(), null);
       made.forEach(l => {
         const c = S.clampToTrack(R, +l.start || 0, +l.duration || 0);
         l.start = c.start;
         if (c.duration < l.duration) { if (l.type === 'video') { const r = FM.trimClipEdge(l, 'tail', c.duration - l.duration, srcDurOf(l)); l.duration = r.duration; l.trimStart = r.trimStart; } else l.duration = c.duration; }
-        const anchor = S.bandAnchor('overlay', l.start, l.start + l.duration, new Set([l.id]));
+        const s0 = +l.start || 0, e0 = s0 + (+l.duration || 0);
+        const anchor = S.bandAnchor('overlay', s0, e0, new Set([l.id]));
         if (anchor) FM.moveLayers([l.id], anchor);
+        else {   // nothing but words under it: below every text and caption track it overlaps (§3.6.1), not left on top of them
+          const L = FM.scene.layers, words = L.filter(x => x !== l && x.type === 'text' && overlaps(x, s0, e0));
+          if (words.length) { const k = L.indexOf(words[words.length - 1]), nx = L.slice(k + 1).find(x => x !== l); FM.moveLayers([l.id], nx ? nx.id : null); }
+        }
       });
+      keepRow();
       if (made.length) plan.mints = true;
       plan.selectId = made.length ? made[0].id : null;
     });
@@ -1349,6 +1397,7 @@ window.FM = window.FM || {};
     if (!items.length) return refusePlan('nothingAdded');
     const plan = newPlan('Add music'); plan.arranges = false; plan.adopts = false;
     plan.pre.push(async () => {
+      const keepRow = addRowMark();
       const made = addRecs(items, Math.max(0, FM.time || 0), newPickB(), null);
       made.forEach(l => {
         /* a PICTURE video picked as music: its sound only, as Full's Extract Audio makes it (audioOnly, opacity 0 — the only
@@ -1357,6 +1406,7 @@ window.FM = window.FM || {};
         if (!(l.sm && l.sm.snd)) { l.audioOnly = true; l.transform.opacity = 0; S.setFlag(l, 'snd', true); l.muted = false; }
         S.setFlag(l, 'stay', true); FM.moveLayers([l.id], null);   // music: Stay put, whole (D17 B); sound sits at the end of the stack
       });
+      keepRow();
       if (made.length) plan.mints = true;
       plan.selectId = made.length ? made[0].id : null;
     });

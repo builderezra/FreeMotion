@@ -122354,4 +122354,39 @@
       });
     } finally { FM.loadVideoFile = lv0; }
   });
+
+
+  test('simple P2.2 · review the + on a project with no clips puts them under the words and above a full-canvas backdrop, an overlay goes under the words too, and Full’s Add row keeps its place (§3.6.1)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const files = await Promise.all(['#ff0000', '#00ff00', '#0000ff'].map(c => smPng(c)));
+    const z = id => FM.scene.layers.findIndex(l => l.id === id);
+    /* (a) a text-and-shapes template: words over a full-canvas rect, no media */
+    await smP2((W, H) => [smT('Words', 0, 5, W, H), FM.makeLayer('shape', { name: 'Back', shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#123', start: 0, duration: 5 })], async function (v) {
+      if (FM.spine.read(FM.scene).main.length) throw new Error('CONTROL (a): the template already has a clip row');
+      await FM.simpleTimeline.pickFiles([files[0], files[1]]); await v.idle();
+      const clips = FM.scene.layers.filter(l => l.sm && l.sm.main);
+      if (clips.length !== 2) throw new Error('CONTROL (a): the + added ' + clips.length + ' clips (it said “' + v.say() + '”)');
+      if (clips.some(l => !(z(l.id) > z(v.L('Words').id)))) throw new Error('(a) the clips landed above the template’s words: ' + FM.scene.layers.map(l => l.name).join(' / '));
+      if (clips.some(l => !(z(l.id) < z(v.L('Back').id)))) throw new Error('(a) the clips landed under the backdrop, where nothing of them shows: ' + FM.scene.layers.map(l => l.name).join(' / '));
+    });
+    /* (b) a title added first, then the + and an overlay: both go under the title */
+    await smP2((W, H) => [smT('Title', 0, 3, W, H)], async function (v) {
+      await FM.simpleTimeline.pickFiles([files[0]]); await v.idle();
+      const clip = FM.scene.layers.find(l => l.sm && l.sm.main);
+      if (!clip || !(z(v.L('Title').id) < z(clip.id))) throw new Error('(b) the first clip covered the title: ' + FM.scene.layers.map(l => l.name).join(' / '));
+    });
+    await smP2((W, H) => [smT('Title', 0, 3, W, H)], async function (v) {
+      FM.time = 0.5; await FM.spine.cmd.addOverlay([files[2]]); await v.idle();
+      const o = FM.scene.layers.find(l => l.type === 'image');
+      if (!o || !(z(v.L('Title').id) < z(o.id))) throw new Error('(b) the overlay landed above the title it overlaps (§3.6.1: below every text it overlaps): ' + FM.scene.layers.map(l => l.name).join(' / '));
+    });
+    /* (c) Full's Add row sat at the bottom, below the last clip: an Append moves its clips above that clip, and the row must
+       stay at the bottom, not end up one layer up */
+    await smP2((W, H) => [smT('On B', 3.5, 1, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      FM.addAt = FM.scene.layers.length;
+      await FM.simpleTimeline.pickFiles([files[1]]); await v.idle();
+      if (!FM.scene.layers.some(l => l.type === 'image')) throw new Error('CONTROL (c): the + added nothing');
+      if (FM.clampAddAt() !== FM.scene.layers.length) throw new Error('(c) Full’s Add row moved from the bottom to index ' + FM.addAt + ' of ' + FM.scene.layers.length);
+    });
+  });
 })();
