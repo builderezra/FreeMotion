@@ -155,7 +155,7 @@ window.FM = window.FM || {};
     { id: 'poster', name: 'Poster Print', section: 'stylised',
       desc: 'Few colours, printed as dots — a screen-printed poster.',
       effects: [e('contrast', { amount: 1.2 }), e('posterize', { levels: 4 }),
-                e('halftone', { size: 6 })] },
+                e('halftone', { size: 6, angle: 45, gain: 0.9, aa: 1, sample: 1, output: 1 })] },
     { id: 'thermal', name: 'Thermal Camera', section: 'stylised',
       desc: 'Brightness read as heat — cold darks, white-hot highlights, glowing.',
       // "white-hot highlights, glowing" — after the thermal ramp, so the hot areas are what bloom (queue 858)

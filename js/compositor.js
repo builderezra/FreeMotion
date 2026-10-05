@@ -211,6 +211,7 @@ globalThis.FM = globalThis.FM || {};
       { key: 'shape', label: 'Dot shape', def: 0, options: [[0, 'Round'], [1, 'Square'], [2, 'Diamond']] },
       { key: 'aa', label: 'Smooth dots', min: 0, max: 2, step: 0.1, def: 0, unit: 'px' },
       { key: 'sample', label: 'Samples', def: 0, options: [[0, 'Centre'], [1, 'Cell average']] },
+      { key: 'output', label: 'Paper', def: 0, options: [[0, 'Black / white'], [1, 'Ink over colour']] },
     ] },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
     { type: 'wave', label: 'Wave', params: [
@@ -7398,6 +7399,7 @@ globalThis.FM = globalThis.FM || {};
       const aa = p.aa == null ? 0 : Math.max(0, Math.min(2, FM.evalProp(p.aa, t) || 0));
       const feather = aa > 0 ? 1 + aa * (ps || 1) : 0;
       const average = p.sample != null && Math.round(FM.evalProp(p.sample, t)) === 1;
+      const colourPaper = p.output != null && Math.round(FM.evalProp(p.output, t)) === 1;
       let sums, counts, firstX = 0, firstY = 0, cellsWide = 0;
       if (average) {
         // One source-pixel pass makes the true mean of each turned screen cell. Sampling only its
@@ -7452,7 +7454,16 @@ globalThis.FM = globalThis.FM || {};
           const edge = (1 - l) * r2 * gain - dist;
           const v = feather ? Math.round(255 * (1 - clamp01(0.5 + edge / feather)))
                             : (edge > 0 ? 0 : 255);
-          d[i] = v; d[i + 1] = v; d[i + 2] = v;
+          if (colourPaper) {
+            // The dot is black ink; the open screen shows the posterised source colour.
+            // Keep the legacy monochrome path bit-for-bit for saved Halftone layers.
+            const paper = v / 255;
+            d[i] = Math.round(s[i] * paper);
+            d[i + 1] = Math.round(s[i + 1] * paper);
+            d[i + 2] = Math.round(s[i + 2] * paper);
+          } else {
+            d[i] = v; d[i + 1] = v; d[i + 2] = v;
+          }
         }
       }
     },

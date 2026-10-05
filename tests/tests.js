@@ -59530,6 +59530,41 @@
     if (dead.length) throw new Error(dead.join(' · ') + ' (queue 778)');
   });
 
+  test('690 Poster Print keeps posterised colour beneath its ink dots', { item: 'TBD', budgetMs: 30000 }, function () {
+    const S = 96, src = document.createElement('canvas'); src.width = S; src.height = S;
+    const sg = src.getContext('2d');
+    sg.fillStyle = '#e8803d'; sg.fillRect(0, 0, 48, 48);
+    sg.fillStyle = '#247f83'; sg.fillRect(48, 0, 48, 48);
+    sg.fillStyle = '#6d59ad'; sg.fillRect(0, 48, 48, 48);
+    sg.fillStyle = '#ecd277'; sg.fillRect(48, 48, 48, 48);
+    const id = '_t690poster'; FM.media.set(id, { kind: 'image', el: src, width: S, height: S, duration: 0 });
+    if (FM.media.pin) FM.media.pin(id);
+    const render = effects => {
+      const l = FM.makeLayer('image', { x: 48, y: 48, start: 0, duration: 2 }); l.id = id; l.effects = effects;
+      const cv = offscreen(S, S), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, { project: { width: S, height: S, fps: 30, duration: 2, background: '#ffffff' }, layers: [l] }, 0.001);
+      return ctx.getImageData(0, 0, S, S).data;
+    };
+    const stats = data => {
+      let colour = 0, ink = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        if (Math.max(r, g, b) - Math.min(r, g, b) > 20) colour++;
+        if (r + g + b < 120) ink++;
+      }
+      return { colour, ink };
+    };
+    try {
+      const filter = FM.filters.makeInstance('poster');
+      if (!filter) throw new Error('Poster Print filter failed to build');
+      const print = stats(render([filter]));
+      if (print.colour < S * S * 0.12 || print.ink < S * S * 0.05)
+        throw new Error('Poster Print lost its colour or ink dots: ' + JSON.stringify(print));
+      const legacy = stats(render([FM.fxRegistry.makeInstance('halftone')]));
+      if (legacy.colour !== 0) throw new Error('Existing monochrome Halftone changed: ' + JSON.stringify(legacy));
+    } finally { try { FM.media.unpin && FM.media.unpin(id); } catch (e) {} }
+  });
+
   test('filter library: CSS-filter effects are authored first, so the list matches the render order', { item: 'fx-library' }, function () {
     var bad = [];
     FM.filters.all().forEach(function (f) {

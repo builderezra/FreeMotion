@@ -1,0 +1,9 @@
+# #690/C32 — Poster Print keeps its colours beneath the ink screen
+
+Starting commit: `29babcd9ef8663577e1a2fe41b58717bc29eadde` on the clean Codex-only preferred checkpoint. The exact #690 brief and C32 plan were checked. `audits/912-audit.json` records the concrete mismatch: Poster Print promised a few colours but Halftone Dots replaced every channel with black or white. `REQUESTS.md` #858 had already identified Poster Print as an extreme working look, so saved monochrome Halftone and existing filter instances retain their behavior.
+
+Halftone Dots now has an opt-in **Ink over colour** output. A black dot covers the pixel; open paper retains the posterised source colour, including through smoothed dot edges. New Poster Print instances use that output, a 45° screen, cell-average sampling, 1 px edge smoothing and 0.9 ink gain. The filtered image remains intentionally graphic and high contrast. The native-renderer preview `690-poster-print-colour-preview.png` shows original photo, old monochrome Poster Print, then the chosen colour print from left to right. No existing Halftone layer or saved Poster Print instance is rewritten.
+
+Changed files: `js/compositor.js`, `js/filters.js`, `index.html` (compositor cache 357, filters cache 21), `tests/tests.js` (one focused `{ item: 'TBD' }` regression), `outside/chatgpt/fixes/690-poster-print-colour-preview.png`, and this report.
+
+The focused native Chromium test failed before the renderer change with zero coloured pixels and passed after, while also checking that standalone default Halftone remains monochrome. The chosen lighter-ink recipe passed again after visual inspection. JavaScript syntax, PNG decode and diff checks passed. The preview uses one real filter-subject photograph at 300 px; it does not claim every photo or reduced phone tile looks identical.
