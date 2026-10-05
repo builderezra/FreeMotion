@@ -81217,6 +81217,27 @@
     }
   });
 
+  test('large project import warns before reading and avoids a layer clone (queue 1007)', { item: 'TBD' }, async function () {
+    const toast0 = FM.toast, events = [];
+    try {
+      FM.toast = function (message) { events.push('toast:' + message); };
+      await FM.storage.readProjectFile({ size: 400 * 1024 * 1024,
+        text: async function () { events.push('read'); return '{'; } });
+      if (!events.length || !/over 300 MB/.test(events[0]) || events[1] !== 'read')
+        throw new Error('the large-file warning did not precede the project read: ' + events.join(' | '));
+      events.length = 0;
+      await FM.storage.readProjectFile({ size: 1024 * 1024,
+        text: async function () { events.push('read'); return '{'; } });
+      if (events[0] !== 'read' || events.some(e => /over 300 MB/.test(e)))
+        throw new Error('a small file received the large-file warning: ' + events.join(' | '));
+      const layers = [FM.makeLayer('shape', { shape: 'rect', x: 20, y: 20, shapeW: 20, shapeH: 20 })];
+      const before = layers[0].id;
+      const re = FM.storage._reIdLayers(layers, true);
+      if (re.layers !== layers || layers[0].id === before || re.map[before] !== layers[0].id)
+        throw new Error('the parsed file still needs a deep layer copy during import');
+    } finally { FM.toast = toast0; }
+  });
+
   test('672 — the layer-panel labels never collapse to nothing, at any band height', { item: '672' }, async function () {
     /* From the external QA pass, and reproduced before anything was changed:
          1920x1080 -> label 14px ✓ · 1440x900 -> 0px · 1280x800 -> 0px

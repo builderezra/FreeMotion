@@ -1764,7 +1764,7 @@ window.FM = window.FM || {};
       return ks.filter(function (k) { return typeof k === 'string' && k.indexOf(p) === 0; }).sort();
     } catch (e) { return []; }
   };
-  FM.storage.applyScene = async function (obj, importWarnings) {
+  FM.storage.applyScene = async function (obj, importWarnings, inPlace) {
     if (!obj || !obj.project || typeof obj.project !== 'object' || Array.isArray(obj.project) || !Array.isArray(obj.layers) || hasInvalidLayerEntries(obj.layers)) return false;
     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
     if (hasUnsafeSceneNesting(obj.project, obj.layers)) return false;
@@ -1774,7 +1774,7 @@ window.FM = window.FM || {};
     // reusing them would collide with that project in the SHARED IDB media store (the old
     // "drop stale media" loop here actively deleted the other project's blobs). Fresh ids need
     // no clearing at all; embedded media is rehydrated under the new ids below.
-    const re = reIdLayers(obj.layers);
+    const re = reIdLayers(obj.layers, inPlace);
     /* A file exported from INSIDE an element or template workspace carries that session's pointers; imported
        later, Home would write the imported project back over the element/template (review, 2 Sep). Strip them. */
     ['ofTemplate', 'ofElement', 'returnTo'].forEach(k => { try { delete obj.project[k]; } catch (e) {} });
@@ -1809,7 +1809,7 @@ window.FM = window.FM || {};
           const file = await dataURLToFile(md.dataURL, md.name);
           if (!file) continue;   // non-data: URL was rejected → layer loads media-less (relink via Replace media…)
           const rec = md.kind === 'video' ? await FM.loadVideoFile(file) : await FM.loadImageFile(file);
-          if (rec) { FM.media.set(nid, rec); hydratedMediaIds.add(id); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec); }
+          if (rec) { FM.media.set(nid, rec); hydratedMediaIds.add(nid); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec); }
         } catch (e) { /* a missing/corrupt embed → that layer loads media-less (relink via Replace media…) */ }
       }
     }
@@ -1822,7 +1822,7 @@ window.FM = window.FM || {};
      * worked out from the layers otherwise, so files saved BEFORE this fix still get the warning. */
     let missingMediaWarning = '';
     try {
-      const want = (obj.layers || []).filter(l => l && (l.type === 'video' || l.type === 'image'));
+      const want = re.layers.filter(l => l && (l.type === 'video' || l.type === 'image'));
       const blank = want.filter(l => !hydratedMediaIds.has(l.id)).map(l => l.name || l.type);
       if (blank.length) {
         const om = obj.omitted || [];
@@ -2133,7 +2133,7 @@ window.FM = window.FM || {};
       if (!pid) return false;
     }
     const importWarnings = opts && opts.quiet ? null : [];
-    const ok = await FM.storage.applyScene(obj, importWarnings);
+    const ok = await FM.storage.applyScene(obj, importWarnings, !!(opts && opts.inPlace));
     if (!ok) {
       /* Belt and braces: sceneFileProblem should have caught everything applyScene refuses, but if the
          two ever disagree the user must still be told rather than left in an empty project. */
@@ -2148,19 +2148,28 @@ window.FM = window.FM || {};
     return true;
   };
 
+  FM.storage.readProjectFile = async function (file, onDone) {
+    if (!file) return false;
+    // Warn before reading: a very large JSON string, parsed object and re-ID clone can
+    // coexist in memory and may exhaust a phone. The warning is advisory, not a cap.
+    if (file.size > 300 * 1024 * 1024 && FM.toast)
+      FM.toast('This project file is over 300 MB. Opening it may take a while or fail on a phone.', 12000);
+    try {
+      let obj;
+      try { obj = JSON.parse(await file.text()); }
+      catch (e) { if (FM.toast) FM.toast('That file is not readable as a project — it may be truncated.', 5000); return false; }
+      // The parsed file is new and not shared with another caller, so re-ID its layers in
+      // place rather than holding a second deep copy of a potentially huge project.
+      return await FM.storage.importObject(obj, onDone, { inPlace: true });
+    } catch (e) { if (FM.toast) FM.toast('Could not read that project file'); return false; }
+  };
+
   FM.storage.importFile = function (onDone) {   // onDone runs ONLY on a successful import (not on picker-cancel)
     const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,application/json'; input.style.display = 'none';
     input.addEventListener('change', async () => {
       const file = input.files && input.files[0]; input.remove();
-      if (!file) return;
-      try {
-        let obj = null;
-        try { obj = JSON.parse(await file.text()); }
-        catch (e) { if (FM.toast) FM.toast('That file is not readable as a project — it may be truncated.', 5000); return; }
-        // Import into a NEW project — never overwrite whatever happens to be open. (#r1) …but only
-        // once the file has been checked, which is queue 673's whole point.
-        await FM.storage.importObject(obj, onDone);
-      } catch (e) { if (FM.toast) FM.toast('Could not read that project file'); }
+      // Import into a NEW project only after validating the file (queue 673).
+      await FM.storage.readProjectFile(file, onDone);
     });
     document.body.appendChild(input); input.click();
   };
@@ -2182,9 +2191,9 @@ window.FM = window.FM || {};
    * duplicated call is a far cheaper mistake than a missed one.
    * It matters more than it did: #113's filters make layer.effects a NESTED structure, so "which
    * paths validate" stops being academic the moment a container can arrive through one that does not. */
-  function reIdLayers(layers) {
+  function reIdLayers(layers, inPlace) {
     const map = Object.create(null);   // null-proto: an imported layer.parent of 'constructor' would otherwise "remap" to a prototype function
-    const out = JSON.parse(JSON.stringify(layers, FM.jsonReplacer));
+    const out = inPlace ? layers : JSON.parse(JSON.stringify(layers, FM.jsonReplacer));
     sanitizeImportedLayers(out);
     out.forEach(l => { map[l.id] = newId('l'); l.id = map[l.id]; });
     out.forEach(l => { if (l.parent) l.parent = map[l.parent] || null; });
