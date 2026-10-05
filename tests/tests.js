@@ -122267,4 +122267,22 @@
       });
     } finally { FM.loadImageFile = li0; }
   });
+
+
+  test('simple P2.2 · review Clips › After Clip 1 at a gap keeps the gap after the new clip: B, its title, C and the end card all move by exactly the clip length (§3.6 Insert row)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const png = await smPng('#0000ff', 'x.png');
+    await smP2((W, H) => [smT('End', 17, 2, W, H), smT('Title', 7, 2, W, H), smV('C', 12, 5, W, H), smV('B', 7, 5, W, H), smV('A', 0, 5, W, H)], async function (v) {
+      const R0 = FM.spine.read(FM.scene);
+      if (!R0.main[1] || R0.main[1].seam.kind !== 'gap' || (R0.followers[v.L('B').id] || []).indexOf(v.L('Title').id) < 0 || R0.tail.indexOf(v.L('End').id) < 0)
+        throw new Error('CONTROL: the fixture is not A | 2 s gap | B (with its title) | C | end card');
+      const j = FM.spine.insertIndexAt(R0, 6.5);
+      if (j !== 1) throw new Error('CONTROL: 6.5 s should name the A|B cut, got ' + j);
+      await FM.spine.cmd.insert([png], j); await v.idle();
+      const X = FM.scene.layers.find(l => l.type === 'image'), d = X && X.duration;
+      if (!X || X.start !== 5) throw new Error('CONTROL: the new clip is not at A’s end: ' + (X && X.start) + ' (it said “' + v.say() + '”)');
+      const got = ['B', 'Title', 'C', 'End'].map(n => v.L(n).start), want = [7 + d, 7 + d, 12 + d, 17 + d];
+      if (got.some((s, k) => Math.abs(s - want[k]) > 1e-9)) throw new Error('want B, its title, C and End at ' + want + ', got ' + got + ' (B landed on the new clip’s end while its title and C moved by the plain length)');
+    });
+  });
 })();

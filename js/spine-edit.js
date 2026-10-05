@@ -1062,17 +1062,20 @@ window.FM = window.FM || {};
     const at = j === 0 ? R.main[0].start : R.main[j - 1].end;
     const rb = riderBlock(R, at, map); if (rb) return refusePlan(rb.kind, rb);
     const sum = clips.reduce((a, c) => a + c.len, 0);
+    /* the new clips' end exactly as addRecs writes it (each start = the last end, duration = its len), so the ripple lands
+       entry j there only when its seam was a join or a hairline — with the same correction carried to its followers, every
+       later clip and the tail. A gap stays a gap (§3.2 rule 1): a late land after the ripple moved j by sum − gap while
+       everything tied to it moved by sum (review finding 11). */
+    let newEnd = at; clips.forEach(c => { newEnd = newEnd + c.len; });
     const plan = newPlan(clips.length > 1 ? 'Add ' + clips.length + ' clips' : 'Add clip');
-    const rp = ripple(plan, R, j, sum, new Set(), null, false);
-    tailMove(plan, R, R.trackEnd + (rp.last == null ? sum : rp.last), map);
+    const rp = ripple(plan, R, j, sum, new Set(), newEnd, true);
+    tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
     const anchor = S.rowAnchor(R, j);
     plan.pre.push(async () => {
       const made = addRecs(clips, at, newPickB(), map);
       made.forEach(l => S.setFlag(l, 'main', true));
       if (made.length && anchor) FM.moveLayers(made.map(l => l.id), anchor);
-      /* the first clip after the new ones lands on their end exactly (a seam the command creates, §3.1) */
-      if (made.length && !e.slot) { const last = made[made.length - 1]; plan.lands.set(e.id, (+last.start || 0) + (+last.duration || 0)); }
       plan.selectId = made.length ? made[0].id : null;
       const snd = addRecs(picked.sounds, Math.max(0, FM.time || 0), newPickB(), map);
       snd.forEach(l => { S.setFlag(l, 'stay', true); FM.moveLayers([l.id], null); });
