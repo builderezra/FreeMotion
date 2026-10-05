@@ -149,6 +149,20 @@ window.FM = window.FM || {};
 
     /* ── frozen / busy (§8.9) ────────────────────────────────────────────────────────────────── */
     const msgQueue = [];                          // guests: whole messages. owner: live applications.
+    let msgQueueBytes = 0, msgQueueOverflow = false;
+    function holdMessage(entry) {
+      if (msgQueueOverflow) return;
+      const bytes = canon(entry).length;
+      if (msgQueue.length >= LIM.HELD_QUEUE_MESSAGES || msgQueueBytes + bytes > LIM.HELD_QUEUE_BYTES) {
+        msgQueue.length = 0;
+        msgQueueBytes = 0;
+        msgQueueOverflow = true;                 // the authoritative document replaces the dropped tail on unfreeze
+        return;
+      }
+      msgQueue.push(entry);
+      msgQueueBytes += bytes;
+      S.stats.queued++;
+    }
 
     /* ── links ───────────────────────────────────────────────────────────────────────────────── */
     const peers = Object.create(null);            // owner: mid -> endpoint
@@ -658,7 +672,7 @@ window.FM = window.FM || {};
             broadcast(r.b, mid);
             lastBatchAt = now();
             const all = r.b.ops.concat(r.b.fix || []);
-            if (frozen() || busy()) { msgQueue.push({ kind: 'live', ops: all, by: mid, ord: r.b.ord }); S.stats.queued++; }
+            if (frozen() || busy()) holdMessage({ kind: 'live', ops: all, by: mid, ord: r.b.ord });
             else { applyIncoming(all, { by: mid }); adoptOrder(r.b.ord, true); }
           }
           return;
@@ -850,7 +864,7 @@ window.FM = window.FM || {};
       if (msg.t === 'pong') return;                 // S6: consumed by the silence clock above, never queued
       /* §8.9: a guest queues WHOLE incoming messages while frozen or busy, so an export or a half-built
          paste never sees a document somebody else is changing underneath it. */
-      if ((frozen() || busy()) && msg.t !== 'welcome') { msgQueue.push({ kind: 'msg', msg: msg }); S.stats.queued++; return; }
+      if ((frozen() || busy()) && msg.t !== 'welcome') { holdMessage({ kind: 'msg', msg: msg }); return; }
       switch (msg.t) {
         case 'welcome':
           S.mid = msg.mid || S.mid;
@@ -1331,9 +1345,28 @@ window.FM = window.FM || {};
     };
 
     function drainQueue() {
-      if (!msgQueue.length) return;
+      if (!msgQueue.length && !msgQueueOverflow) return;
       if (frozen() || busy()) return;
+      if (msgQueueOverflow) {
+        msgQueueOverflow = false;
+        msgQueue.length = 0;
+        msgQueueBytes = 0;
+        if (isOwner) {
+          const delta = D.diffDoc(view(), S.base);
+          const sum = { wasSelected: A.selected ? A.selected() : null, paths: [], layerIds: Object.create(null), removed: [], inserted: [], structural: true, projectKeys: Object.create(null) };
+          for (let i = 0; i < delta.ops.length; i++) applyLive(delta.ops[i], sum);
+          for (let i = 0; i < delta.orders.length; i++) D.applyOrder(doc(), delta.orders[i]);
+          keepIds = null;
+          if (A.afterApply) A.afterApply(sum);
+          if (A.autosave) { try { A.autosave(); } catch (e) {} }
+        } else {
+          S.stats.resyncs++;
+          sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });
+        }
+        return;
+      }
       const q = msgQueue.splice(0, msgQueue.length);
+      msgQueueBytes = 0;
       for (let i = 0; i < q.length; i++) {
         if (q[i].kind === 'live') { applyIncoming(q[i].ops, { by: q[i].by }); adoptOrder(q[i].ord, true); }
         else guestMessage(q[i].msg);

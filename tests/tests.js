@@ -41591,6 +41591,29 @@
     });
   });
 
+  test('frozen owner bounds held messages and catches live view up to host base (batch2 1b.8)', { item: 'TBD', budgetMs: 90000 }, async function () {
+    const C = need921S8('held-message queue cap');
+    await withCollab921([layer921('A')], async function (ctx) {
+      const g = ctx.addGuest({ role: 'editor', name: 'Sam' });
+      FM._exporting = true;
+      for (let i = 0; i < C.LIMITS.HELD_QUEUE_MESSAGES + 8; i++) {
+        g.doc.layers[0].name = 'queued ' + i;
+        g.G.tick('full');
+        g.loop.settle();
+        if (ctx.S._queued() > C.LIMITS.HELD_QUEUE_MESSAGES)
+          throw new Error('the frozen owner retained more than the held-message cap');
+      }
+      if (ctx.S.base.layers[0].name !== 'queued ' + (C.LIMITS.HELD_QUEUE_MESSAGES + 7))
+        throw new Error('setup: the host did not accept the final editor transaction');
+      if (ctx.S.hash() === ctx.S.baseHash())
+        throw new Error('setup: the frozen live view had already caught up, so the overflow was not exercised');
+      FM._exporting = false;
+      ctx.S.tick('full');
+      if (ctx.S._queued() || ctx.S.hash() !== ctx.S.baseHash())
+        throw new Error('after unfreeze the owner did not rebuild the live document from the authoritative host base');
+    });
+  });
+
   test('921 S8r a toast raised from a collaboration card is painted above it, and a refused copy puts the text where it can be selected', { item: '921', budgetMs: 90000 }, async function () {
     const C = need921S8('toasts over the collab cards');
     await withLabs921(async function (ui) {
