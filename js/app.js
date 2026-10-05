@@ -8446,7 +8446,13 @@ window.FM = window.FM || {};
       window.addEventListener('fm-editor-refuse', e => {
         if (!cvEd || cvDialog.classList.contains('hidden')) return;
         const why = document.getElementById('cv-ed-why'); if (why) why.textContent = (e.detail && e.detail.text) || '';
-        cvEd.querySelectorAll('.ed-sw').forEach(b => { b.classList.remove('ed-shake'); void b.offsetWidth; b.classList.add('ed-shake'); });
+        /* The class comes off when the shake ends (or at 600 ms if no animationend comes — reduced motion runs none): left on,
+           the switch shook AGAIN every time the cog reopened, because a display:none parent restarts a CSS animation. */
+        cvEd.querySelectorAll('.ed-sw').forEach(b => {
+          b.classList.remove('ed-shake'); void b.offsetWidth; b.classList.add('ed-shake');
+          clearTimeout(b._edShakeT); const off = () => { clearTimeout(b._edShakeT); b.classList.remove('ed-shake'); b.removeEventListener('animationend', off); };
+          b.addEventListener('animationend', off); b._edShakeT = setTimeout(off, 600);
+        });
       });
       const CV_PAIR_KEY = 'fm.cvPair';   // its own key: FM.settings' load() whitelist would drop it, and it is not a project fact
       const cvPhoneMq = window.matchMedia ? window.matchMedia('(max-width: 700px)') : null;

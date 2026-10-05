@@ -122,6 +122,10 @@ window.FM = window.FM || {};
     if (FM.exitEditGroup) { try { FM.exitEditGroup(); } catch (e) {} }
     const had = document.activeElement;
     mode = next;
+    /* This project's editor is decided NOW. Without this the rebuild below ran syncProject while lastPid still named no project
+       (the last rebuild came before the open id was set, as on every app start), and it re-applied the card's editor: the
+       first switch after opening the app turned Simple on and straight back off, with no refusal and no question (cog T10b). */
+    lastPid = openPid();
     body().classList.toggle('ed-simple', mode === 'simple');
     if (opts.from === 'cog') pendingFx = true; else if (!opts.quiet) crossfade();
     if (FM.syncSelectionChrome) FM.syncSelectionChrome();

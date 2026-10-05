@@ -8744,7 +8744,6 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 }
 @media (prefers-reduced-motion: reduce) {
   body.cv-anchored #canvas-dialog.cv-pair > #cv-editor { animation: none; }
-  #cv-editor .ed-sw.ed-shake { animation: none; }
 }
 
 /* ---- Canvas presets (queue 183) --------------------------------------------------------------
@@ -11674,6 +11673,8 @@ body.ed-simple #btn-sm-split { display: inline-flex; }
 #btn-sm-split[aria-disabled="true"] { opacity: .38; }
 #cv-editor .ed-sw.ed-shake { animation: ed-shake .36s ease; }
 @keyframes ed-shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+/* AFTER the rule it stops: same specificity, so an earlier "none" loses the cascade and the shake ran under reduced motion (T15) */
+@media (prefers-reduced-motion: reduce) { #cv-editor .ed-sw.ed-shake { animation: none; } }
 /* ✎ hides while something is selected in Simple — by VISIBILITY, so ? never slides a slot (his #171) */
 body.ed-simple.sm-has-sel #m-notes { visibility: hidden; }
 /* the timeline: Full's stays laid out underneath (one pxPerSec), Simple's covers it exactly */

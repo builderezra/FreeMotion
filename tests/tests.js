@@ -120418,9 +120418,13 @@
       const sw = document.querySelector('#cv-ed-bar .ed-sw');
       if (!sw) throw new Error('the small block has no switch (#cv-ed-bar .ed-sw)');
       if (!/Switch to Simple/.test(sw.getAttribute('aria-label') || '')) throw new Error('in Full the switch is labelled "' + sw.getAttribute('aria-label') + '" — it should name what it does (Switch to Simple editor)');
-      sw.click(); await c.sleep(120);
+      const seen = []; const onRefuse = e => seen.push('refused: ' + (e.detail && e.detail.kind)); window.addEventListener('fm-editor-refuse', onRefuse);
+      const ask0 = FM.ask; FM.ask = function (o) { seen.push('asked: ' + (o && o.title) + ' / ' + (o && o.message)); return Promise.resolve(false); };
+      seen.push('before: lastPid ' + String(FM.editor._state().lastPid) + ', open ' + String(FM.storage.openProjectId && FM.storage.openProjectId()));
+      const modes = []; FM.editor.onChange(m => modes.push(m));
+      try { sw.click(); await c.sleep(120); seen.push('modes ' + modes.join('>')); } finally { FM.ask = ask0; window.removeEventListener('fm-editor-refuse', onRefuse); }
       if (c.dlg.classList.contains('cv-ed-big')) throw new Error('tapping the switch opened the explanation — a tap on the switch only switches');
-      if (FM.editor.mode() !== 'simple') throw new Error('tapping the switch did not switch (mode ' + FM.editor.mode() + ')');
+      if (FM.editor.mode() !== 'simple') throw new Error('tapping the switch did not switch (mode ' + FM.editor.mode() + (seen.length ? '; ' + seen.join('; ') : '; no refusal, no question') + ')');
       await c.sleep(400);
       if (c.dlg.classList.contains('hidden')) await c.open();
       const sw2 = document.querySelector('#cv-ed-bar .ed-sw');
@@ -120430,6 +120434,27 @@
       document.getElementById('cv-mini').click(); await c.sleep(520); await c.land();
       document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
       if (c.big() !== 'editor') throw new Error('What should you use? did not open the explanation');
+    });
+  });
+
+  test('980 cog T10b the first switch after a project opens holds — a rebuild that has not yet seen the open project does not put the old editor back', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      /* The condition every app start produces: the project is open, but no rebuild has run since its id was set, so the editor
+         has not recorded it. A fresh id with no card stands in for it (the card would say Full, as a new project's does). */
+      const st = FM.storage, open0 = st.openProjectId;
+      st.openProjectId = function () { return 'p_cogT10b_fresh'; };
+      const modes = []; FM.editor.onChange(m => modes.push(m));
+      try {
+        if (FM.editor._state().lastPid === 'p_cogT10b_fresh') throw new Error('the set-up failed: the editor already knows this project');
+        const ok = await FM.editor.request('simple', { from: 'cog' });
+        await c.sleep(60);
+        if (!ok || FM.editor.mode() !== 'simple') throw new Error('the first switch after a project opened did not hold (request ' + ok + ', now ' + FM.editor.mode() + ', modes ' + modes.join('>') + ') — the rebuild put the card’s editor back');
+        FM.timeline.rebuild(); await c.sleep(30);
+        if (FM.editor.mode() !== 'simple') throw new Error('a later rebuild put Full back after the switch');
+      } finally {
+        st.openProjectId = open0;
+        try { const idx = FM.projects.list(); if (idx.some(p => p.id === 'p_cogT10b_fresh')) FM.projects.saveIndex(idx.filter(p => p.id !== 'p_cogT10b_fresh')); } catch (e) {}
+      }
     });
   });
 
@@ -120488,18 +120513,65 @@
     });
   });
 
-  test('980 cog T15 with reduced motion the swap is instant — no flight, no animation left running in the cog', { item: '980', budgetMs: 60000 }, async function () {
-    const mm0 = window.matchMedia;
+  /* Reduced motion, asked of the DRIVER (tests/_cdp.py polls `__fmWantMedia` and answers `__fmMediaReduce`). A matchMedia stub
+     only changes what script sees; the stylesheet's own @media rules need the real thing, and the first version of T15 stubbed
+     it and so could not see the shake's reduced-motion rule losing the cascade. Returns true once the emulation is on. */
+  async function smReduceMotion(on, ms) {
+    window.__fmWantMedia = on ? { reduce: true, until: Date.now() + (ms || 30000) } : null;
+    for (let i = 0; i < 160; i++) {
+      if (window.__fmMediaReduce === !!on) return true;
+      await new Promise(function (r) { setTimeout(r, 50); });
+    }
+    return false;
+  }
+  function smCogRunning(dlg) {
+    return dlg.getAnimations({ subtree: true }).filter(a => a.playState === 'running' && a.effect && a.effect.getComputedTiming().duration > 0 && isFinite(a.effect.getComputedTiming().endTime) && (a.effect.target && a.effect.target.closest && a.effect.target.closest('#cv-editor, #cv-friends, .export-card')));
+  }
+  function smAnimNames(list) {
+    return list.slice(0, 4).map(a => { const t = a.effect.target; return (a.constructor && a.constructor.name) + ' ' + (a.animationName || a.transitionProperty || a.id || '?') + ' on ' + (t.id ? '#' + t.id : t.tagName.toLowerCase() + (typeof t.className === 'string' && t.className.trim() ? '.' + t.className.trim().split(/\s+/).join('.') : '')); }).join(', ');
+  }
+
+  test('980 cog T15 with reduced motion the swap is instant — no flight, no animation left running in the cog, and a refused switch does not shake', { item: '980', budgetMs: 60000 }, async function () {
+    if (!(await smReduceMotion(true))) throw new Error('the driver did not turn reduced motion on (__fmMediaReduce never came back true) — run this test through tests/_cdp.py');
     try {
-      window.matchMedia = function (q) { return /prefers-reduced-motion:\s*reduce/.test(String(q)) ? { matches: true, media: q, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {} } : mm0.call(window, q); };
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error('the driver says reduced motion is on but this frame does not see it');
       await smCog(async function (c) {
         document.getElementById('cv-ed-what').click(); await c.sleep(30);
         if (c.big() !== 'editor') throw new Error('the swap to the Editor block did not happen at once under reduced motion');
         if (c.dlg.classList.contains('cv-flying')) throw new Error('the swap flew under reduced motion');
-        const running = c.dlg.getAnimations({ subtree: true }).filter(a => a.playState === 'running' && a.effect && a.effect.getComputedTiming().duration > 0 && isFinite(a.effect.getComputedTiming().endTime) && (a.effect.target && a.effect.target.closest && a.effect.target.closest('#cv-editor, #cv-friends, .export-card')));
-        if (running.length) throw new Error(running.length + ' animation(s) still running in the cog under reduced motion');
+        let running = smCogRunning(c.dlg);
+        if (running.length) throw new Error(running.length + ' animation(s) still running in the cog under reduced motion after the swap: ' + smAnimNames(running));
+        /* a refused switch: the line says why, and nothing moves */
+        const was = FM._exporting;
+        try {
+          FM._exporting = true;
+          document.querySelector('#cv-editor .ed-sw').click(); await c.sleep(40);
+          if (FM.editor.mode() !== 'full') throw new Error('the switch went through while an export was running');
+          running = smCogRunning(c.dlg);
+          if (running.length) throw new Error('a refused switch still moved under reduced motion: ' + smAnimNames(running));
+        } finally { FM._exporting = was; }
       });
-    } finally { window.matchMedia = mm0; }
+    } finally { await smReduceMotion(false); }
+  });
+
+  test('980 cog T13b a refused switch shakes once — closing and reopening the cog does not shake it again', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      const was = FM._exporting;
+      try {
+        FM._exporting = true;
+        document.querySelector('#cv-ed-bar .ed-sw').click(); await c.sleep(60);
+        if (FM.editor.mode() !== 'full') throw new Error('the switch went through while an export was running');
+        const sw = document.querySelector('#cv-ed-bar .ed-sw');
+        const shaking = sw.getAnimations().filter(a => a.animationName === 'ed-shake');
+        if (!shaking.length) throw new Error('a refused switch should shake once (no ed-shake animation on the switch)');
+      } finally { FM._exporting = was; }
+      await c.sleep(700);   // past the 360 ms shake
+      FM.closeCanvasDialog(); await c.sleep(150);
+      FM.openCanvasDialog({}); await c.sleep(60);   // not c.open(): it finishes every animation, which would hide a replayed shake
+      const sw2 = document.querySelector('#cv-ed-bar .ed-sw');
+      const again = sw2.getAnimations().filter(a => a.animationName === 'ed-shake' && a.playState === 'running');
+      if (again.length || sw2.classList.contains('ed-shake')) throw new Error('the switch shook again when the cog reopened (class ' + sw2.className + ') — the refusal shake must play once');
+    });
   });
 
   test('980 cog T1 ten switches both ways write nothing — the document, the undo history, every storage key and the remembered block stay as they were, apart from this device’s own editor memory', { item: '980', budgetMs: 60000 }, async function () {
