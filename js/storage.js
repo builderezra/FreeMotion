@@ -2611,14 +2611,22 @@ window.FM = window.FM || {};
       if (!(legacy && legacy.project) && !seeded) { if (id) { try { localStorage.removeItem(CUR_KEY); } catch (e) {} } return; }
       id = newId('p');
       try { localStorage.setItem(CUR_KEY, id); } catch (e) {}
+      if (curId() !== id) return;   // no pointer landed; leave the legacy scene for the next boot
       if (legacy && legacy.project) {
-        writeJSON('fm.proj.' + id, legacy);
+        const key = 'fm.proj.' + id;
+        // A full store can refuse this write (or silently ignore it). The old single scene
+        // is the only copy, so never delete it until the new document can be read back.
+        if (!writeJSON(key, legacy) || !(readJSON(key, null) || {}).project) {
+          try { localStorage.removeItem(CUR_KEY); } catch (e) {}
+          return;
+        }
         idx.unshift({ id: id, name: legacy.project.name || 'My project', created: Date.now(), modified: Date.now(), width: legacy.project.width, height: legacy.project.height, duration: legacy.project.duration, layers: (legacy.layers || []).length, thumb: null });
+        if (!this.saveIndex(idx)) return;   // doc + pointer survive; re-index on the next boot
         try { localStorage.removeItem(SCENE_KEY); } catch (e) {}
       } else {
         idx.unshift({ id: id, name: 'My project', created: Date.now(), modified: Date.now(), width: 1080, height: 1920, duration: 0, thumb: null });
       }
-      this.saveIndex(idx);
+      if (!(legacy && legacy.project) && !this.saveIndex(idx)) { try { localStorage.removeItem(CUR_KEY); } catch (e) {} }
     },
     // Keep the index card for the current project fresh (called from every autosave — cheap; the
     // thumbnail re-render is throttled and skipped mid-playback).

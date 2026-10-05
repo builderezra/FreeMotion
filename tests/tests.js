@@ -128064,4 +128064,28 @@
     }
   });
 
+  test('TBD: full storage leaves a pre-project legacy scene in place for migration retry', { item: 'TBD' }, function () {
+    const curKey = 'fm.currentProject', oldCur = localStorage.getItem(curKey);
+    const oldScene = localStorage.getItem('fm.scene'), oldIndex = localStorage.getItem('fm.projects');
+    const oldSet = Storage.prototype.setItem;
+    const legacy = JSON.stringify({ project: { name: 'Legacy retry', width: 320, height: 240 }, layers: [] });
+    const count = FM.projects.list().length;
+    try {
+      localStorage.removeItem(curKey);
+      localStorage.setItem('fm.scene', legacy);
+      Storage.prototype.setItem = function (key, value) {
+        if (String(key).indexOf('fm.proj.') === 0) throw new DOMException('full migration probe', 'QuotaExceededError');
+        return oldSet.apply(this, arguments);
+      };
+      FM.projects.migrate();
+      if (localStorage.getItem('fm.scene') !== legacy || localStorage.getItem(curKey) || FM.projects.list().length !== count)
+        throw new Error('failed legacy migration removed the only scene or indexed a missing project');
+    } finally {
+      Storage.prototype.setItem = oldSet;
+      if (oldCur === null) localStorage.removeItem(curKey); else localStorage.setItem(curKey, oldCur);
+      if (oldScene === null) localStorage.removeItem('fm.scene'); else localStorage.setItem('fm.scene', oldScene);
+      if (oldIndex === null) localStorage.removeItem('fm.projects'); else localStorage.setItem('fm.projects', oldIndex);
+    }
+  });
+
 })();
