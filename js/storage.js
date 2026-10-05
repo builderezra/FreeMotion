@@ -1149,8 +1149,17 @@ window.FM = window.FM || {};
     if ('notes' in p) {
       if (!Array.isArray(p.notes)) p.notes = [];
       else {
-        const keep = p.notes.filter(n => n && typeof n === 'object' && !Array.isArray(n) && (n.text == null || typeof n.text === 'string')).slice(0, 500);
-        if (keep.length !== p.notes.length) p.notes = keep;
+        const keep = [];
+        for (const n of p.notes) {
+          if (keep.length >= 500) break;
+          if (!n || typeof n !== 'object' || Array.isArray(n) || (n.text != null && typeof n.text !== 'string')) continue;
+          const id = typeof n.id === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(n.id) ? n.id : newId('n');
+          const text = typeof n.text === 'string' ? n.text.slice(0, 200000) : '';
+          const remind = n.remind === true;
+          keep.push(Object.keys(n).length === 3 && n.id === id && n.text === text && n.remind === remind
+            ? n : { id: id, text: text, remind: remind });
+        }
+        if (keep.length !== p.notes.length || keep.some((n, i) => n !== p.notes[i])) p.notes = keep;
       }
     }
   }
@@ -1424,12 +1433,12 @@ window.FM = window.FM || {};
     if (l.fov != null) { const f = +l.fov; if (isFinite(f) && f > 0.5 && f < 179) l.fov = f; else delete l.fov; }
     if (l.focus) {
       const f = l.focus;
-      l.focus = { enabled: !!f.enabled, distance: num(f.distance, -100000, 100000, 0), dof: num(f.dof, 1, 100000, 200), blur: num(f.blur, 0, 2, 0.5) };
+      l.focus = { enabled: f.enabled === true, distance: num(f.distance, -100000, 100000, 0), dof: num(f.dof, 1, 100000, 200), blur: num(f.blur, 0, 2, 0.5) };
     }
     if (l.fog) {
       const g = l.fog;
       const near = num(g.near, -100000, 100000, 0), far = num(g.far, -100000, 200000, 2000);
-      l.fog = { enabled: !!g.enabled, color: safeColor(g.color) ? g.color : '#ffffff', near: near, far: (far === near ? near + 1 : far) };
+      l.fog = { enabled: g.enabled === true, color: safeColor(g.color) ? g.color : '#ffffff', near: near, far: (far === near ? near + 1 : far) };
     }
   }
   /* layer.effects — the last major layer sub-structure with no validation on the way in, and the one

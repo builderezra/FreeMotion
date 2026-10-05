@@ -128148,4 +128148,25 @@
     }
   });
 
+  test('TBD: imported camera switches and note reminders require real booleans', { item: 'TBD' }, function () {
+    const camera = FM.makeLayer('camera', { name: 'Boolean import probe' });
+    camera.focus = { enabled: 'false', distance: 10, dof: 200, blur: 0.5 };
+    camera.fog = { enabled: 'false', near: 0, far: 1000, color: '#ffffff' };
+    FM.storage._sanitizeLayers([camera]);
+    if (camera.focus.enabled !== false || camera.fog.enabled !== false)
+      throw new Error('a quoted false switched on imported camera focus or fog');
+    camera.focus.enabled = true; camera.fog.enabled = true;
+    FM.storage._sanitizeLayers([camera]);
+    if (camera.focus.enabled !== true || camera.fog.enabled !== true)
+      throw new Error('a real true stopped enabling camera focus or fog');
+
+    const valid = { id: 'n1052valid', text: 'Keep this reminder', remind: true };
+    const project = { notes: [{ id: 'n1052false', text: 'Do not interrupt export', remind: 'false', extra: 'drop me' }, valid] };
+    FM.storage._sanitizeProjectFields(project);
+    if (project.notes[0].remind !== false || 'extra' in project.notes[0] || project.notes[0].id !== 'n1052false')
+      throw new Error('a quoted false or extra note data survived import sanitising');
+    if (project.notes[1] !== valid || project.notes[1].remind !== true)
+      throw new Error('a valid reminder changed during sanitising');
+  });
+
 })();
