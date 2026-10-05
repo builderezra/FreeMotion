@@ -121669,4 +121669,27 @@
     if (m.length) fails.push('the end card missed the new end of the clips by float noise in: ' + m.join(', '));
     if (fails.length) throw new Error(fails.join(' · '));
   });
+
+  test('simple P2.1 · review deleting a clip that fades in over the one before cuts what runs on through the time that really went, so a voice-over stays in step (§3.6 Delete row)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [
+      smSong('Voice', 2, 12, W, H), smT('Run', 2, 11, W, H),
+      smV('C', 10, 5, W, H), (() => { const b = smV('B', 4, 6, W, H); b.transform.opacity = smKf([[4, 0], [5, 1]]); return b; })(), smV('A', 0, 5, W, H)
+    ], async function (v) {
+      const R = FM.spine.read(FM.scene), eB = R.main.find(e => e.id === v.L('B').id);
+      if (!eB || !eB.seam || eB.seam.kind !== 'blend') throw new Error('CONTROL: A|B is not a crossfade B owns: ' + JSON.stringify(eB && eB.seam));
+      FM.selectLayer(v.L('B').id);
+      v.key('Backspace'); await v.idle();
+      if (v.L('B')) throw new Error('B was not deleted (it said “' + v.say() + '”)');
+      const C = v.L('C');
+      if (C.start !== 5) throw new Error('CONTROL: C did not land on A’s end (the fade went with B): ' + C.start);
+      /* what played at 10 (C's first frame) now plays at 5: the voice's source second 8 must be there too */
+      const vs = FM.scene.layers.filter(l => l.name === 'Voice').sort((a, b) => a.start - b.start).map(l => [l.start, l.duration, l.trimStart || 0]);
+      const want = [[2, 3, 0], [5, 4, 8]];
+      if (vs.length !== 2 || vs.some((x, k) => x.some((n, j) => Math.abs(n - want[k][j]) > 1e-9)))
+        throw new Error('the voice-over was cut through the wrong span — it now runs ' + (vs[1] ? (C.start - vs[1][0]) : '?') + ' s ahead of the picture: ' + JSON.stringify(vs) + ', want ' + JSON.stringify(want));
+      const run = v.L('Run');
+      if (Math.abs(run.start - 2) > 1e-9 || Math.abs(run.start + run.duration - 8) > 1e-9) throw new Error('the title that ran to 13 should now end at 8 (13 − the 5 s that went): ' + run.start + '..' + (run.start + run.duration));
+    });
+  });
 })();

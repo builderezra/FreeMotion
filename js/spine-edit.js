@@ -396,40 +396,43 @@ window.FM = window.FM || {};
     const removes = [c.id].concat(R.followers[c.id] || []);
     removes.forEach(x => { unitLayers(x, map).forEach(l => plan.removes.add(l.id)); plan.touched.add(x); });
     plan.counts.followers = (R.followers[c.id] || []).filter(x => !S.isTwinOf(map.get(x), L, R.eps)).length;
-    /* (i)–(iii) long items cut through the delete map, keys refused until 2.4 */
-    const ml = MINLEN(), len = b - a;
+    /* (i)–(iii) long items cut through the delete map, keys refused until 2.4. The time that goes is [ca, b): when c's own
+       fade-in went with it, p still shows over [a, p.end) and n lands at p.end, so what played at b now plays at p.end — the
+       cut starts there and len = −dt, never b − a (a voice-over ran ahead of the picture by the fade; review finding 18) */
+    const ca = (plan.counts.fade && n) ? p.end : a;
+    const ml = MINLEN(), len = b - ca;
     const cut = Object.keys(R.units).filter(uid => {
       const u = R.units[uid], l = map.get(uid);
       if (!l || !u.long || u.kind === 'captions' || u.kind === 'fullOnly' || u.kind === 'block' || u.kind === 'main') return false;
       if (R.tail.indexOf(uid) >= 0 || (l.sm && l.sm.stay) || l.type === 'group') return false;
       const s = +l.start || 0, e = s + (+l.duration || 0);
-      return e > a + 1e-9 && s < b - 1e-9;
+      return e > ca + 1e-9 && s < b - 1e-9;
     });
     for (let k = 0; k < cut.length; k++) {
       const l = map.get(cut[k]), s = +l.start || 0, e = s + (+l.duration || 0);
       if (S.keyCount(l) > 0) return refusePlan('cutKeys', { name: S.itemWord(l, R) });
       const media = l.type === 'video';
-      if (s >= a - 1e-9) {                                   // (i) starts inside the deleted span
+      if (s >= ca - 1e-9) {                                  // (i) starts inside the deleted span
         if (e - b < ml - SLACK) return refusePlan('cutShort', { name: S.itemWord(l, R) });
-        plan.keyless.add(l.id); addLand(plan, l.id, a);
+        plan.keyless.add(l.id); addLand(plan, l.id, ca);
         plan.writes.push(() => {
           if (media) { const r = FM.trimClipEdge(l, 'head', b - s, srcDurOf(l)); l.duration = r.duration; l.trimStart = r.trimStart; FM.shiftLayerFxClock(l, r.fxShift); }
           else { l.duration = Math.max(ml, e - b); FM.shiftLayerFxClock(l, b - s); }
         });
       } else if (e <= b + 1e-9) {                             // (ii) ends inside it
-        if (a - s < ml - SLACK) return refusePlan('cutShort', { name: S.itemWord(l, R) });
+        if (ca - s < ml - SLACK) return refusePlan('cutShort', { name: S.itemWord(l, R) });
         plan.touched.add(l.id);
-        plan.writes.push(() => { l.duration = Math.max(ml, a - s); });
+        plan.writes.push(() => { l.duration = Math.max(ml, ca - s); });
       } else if (!media) {                                    // (iii) a middle cut of something with no source clock
         plan.touched.add(l.id);
         plan.writes.push(() => { l.duration = Math.max(ml, l.duration - len); });
       } else {                                                // (iii) a middle cut of a video or sound: split, then trim B
-        if (a - s < ml - SLACK || e - b < ml - SLACK) return refusePlan('cutShort', { name: S.itemWord(l, R) });
+        if (ca - s < ml - SLACK || e - b < ml - SLACK) return refusePlan('cutShort', { name: S.itemWord(l, R) });
         plan.touched.add(l.id);
         plan.pre.push(async () => {
-          const t0 = FM.time; FM.time = a;
+          const t0 = FM.time; FM.time = ca;
           try { await FM.splitLayer(l.id); } finally { FM.time = t0; }
-          const B = FM.scene.layers.find(x => x !== l && x.splitOf && x.splitOf === l.splitOf && Math.abs((+x.start || 0) - a) < 1e-6);
+          const B = FM.scene.layers.find(x => x !== l && x.splitOf && x.splitOf === l.splitOf && Math.abs((+x.start || 0) - ca) < 1e-6);
           if (!B) throw new Error('the cut item did not split');
           const r = FM.trimClipEdge(B, 'head', len, srcDurOf(B));
           B.duration = r.duration; B.trimStart = r.trimStart; FM.shiftLayerFxClock(B, r.fxShift);
