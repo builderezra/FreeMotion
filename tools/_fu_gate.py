@@ -22,7 +22,11 @@ tools/.full-unchanged-pass names the hash below); refused if the newest POLISH-L
 than 980 (a Simple release ships alone, so any difference from HEAD is Simple's and a rollback takes it back alone); and
 refused if it changes the INSTRUMENT (INSTRUMENT_FILES: the probe, the comparer, the plants, the driver, this gate, the
 server, ship.sh). A release cannot loosen the lock that judges it — the review moved a clip 0.5 s and added one mask line
-and the run said "same as HEAD". An instrument change ships in a release of its own first, one that does not fire this.
+and the run said "same as HEAD". An instrument change ships in a release of its own first, one that changes no app file.
+And whatever ANY release is labelled, gate or no gate: if its instrument sees less than HEAD's (a key added to
+FU_INVISIBLE, a tolerance or threshold raised, a plant taken out, a region taken out of the pictures), it is refused unless
+its POLISH-LOG line says `LOOSENS THE LOCK: <why>` — so the two-release route (loosen first, then ship what it hides) is
+a line he reads, never a quiet edit.
 
 THE HOOKS (review of v1): v1's pattern was UI hooks only — `isSimple|ed-simple|FM.editor|FM.spine|simpleTimeline|cv-ed|
 cv-editor|sm-` — and 17 of step 1.2's 22 shared-file hunks contain no line it matches (the whole sanitizeSmLayer, the
@@ -225,7 +229,9 @@ HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 
 
 def hunks_in_regions(diff_text, regions):
-    """Hunks of a `git diff -U0` whose HEAD-side lines fall inside a region (or, for a pure insertion, land inside one)."""
+    """Hunks of a `git diff -U0` whose HEAD-side lines fall inside a region (or, for a pure insertion, land inside one).
+    A region's CLOSING line is its own (6 Oct: step 1.2's SCHEMA_PROJECT_FIXTURE ends in a lone `};` that git's diff
+    attributes to the release before, so neither the hooks nor the provenance saw a later fix to it — 1 of 127 lines)."""
     hits = []
     for line in diff_text.splitlines():
         m = HUNK.match(line)
@@ -234,7 +240,7 @@ def hunks_in_regions(diff_text, regions):
         a, b = int(m.group(1)), int(m.group(2)) if m.group(2) is not None else 1
         lines = range(a, a + b) if b > 0 else []
         for (s, e) in regions:
-            if (b > 0 and any(s < x < e for x in lines)) or (b == 0 and s <= a < e):
+            if (b > 0 and any(s < x <= e for x in lines)) or (b == 0 and s <= a < e):
                 hits.append((s, e, line))
                 break
     return hits
@@ -387,6 +393,65 @@ def instrument_changed(files):
     return [f for f in files if f in INSTRUMENT_FILES]
 
 
+# ─── LOOSENING THE INSTRUMENT IS A DECLARATION, NEVER A QUIET EDIT (review finding 10, its second route) ────────────────
+# A Simple release cannot change the instrument (check() below). But the lock's own releases can, and they carry no app
+# change, so their PASS is HEAD against HEAD — a loosened mask passes that by construction. Two releases in a row would
+# then do what one may not: first add `layer.start` to FU_INVISIBLE (the review's selfloosen.py: a clip moved 0.5 s and
+# the run said "same as HEAD"), then ship the Simple change it hides. So ANY release whose instrument sees less than
+# HEAD's did — a key added to FU_INVISIBLE, a picture tolerance or threshold raised, a plant taken out, a region taken out
+# of the pictures — is refused unless its POLISH-LOG line says so in words he reads: `LOOSENS THE LOCK: <why>`. Whatever
+# the line's queue number, and whether or not the gate fires: the label is exactly what such a release would get wrong.
+LOOSEN_MARK = 'LOOSENS THE LOCK:'
+TOL_VARS = ('FU_TOL_PX', 'FU_CHAN', 'FU_FAINT_TOL_PX', 'FU_FAINT_CHAN', 'FU_GRID_TOL')   # a larger number sees less
+
+
+def instrument_terms(sh_text, cmp_text, plants_text):
+    """(the FU_INVISIBLE keys, {tolerance: value}, the plant names, the PNG_UNSTABLE entries) of one copy of the instrument."""
+    import json
+    inv, tol, names, unstable = set(), {}, set(), set()
+    m = re.search(r"^FU_INVISIBLE='\n(.*?)\n'", sh_text or '', re.M | re.S)
+    if m:
+        for line in m.group(1).split('\n'):
+            line = line.split('#', 1)[0].strip()
+            if line:
+                inv.add(line.split()[0])
+    for k in TOL_VARS:
+        t = re.search(r'^%s=(\d+)' % k, sh_text or '', re.M)
+        if t:
+            tol[k] = int(t.group(1))
+    try:
+        names = set(p.get('name') for p in json.loads(plants_text).get('plants') or [])
+    except Exception:
+        names = set()
+    u = re.search(r'^PNG_UNSTABLE\s*=\s*\[([^\]]*)\]', cmp_text or '', re.M)
+    if u:
+        unstable = set(x.strip().strip('\'"') for x in u.group(1).split(',') if x.strip())
+    return inv, tol, names, unstable
+
+
+def loosenings(root):
+    """What the tree's instrument stops seeing that HEAD's saw. Empty when HEAD has no instrument (nothing to loosen)."""
+    files = ('tools/full-unchanged.sh', 'tools/_fu_compare.py', 'tools/full-unchanged-plants.json')
+    head = [sh(['git', 'show', 'HEAD:' + f], root) for f in files]
+    if not head[0]:
+        return []
+    now = []
+    for f in files:
+        try:
+            now.append(io.open(os.path.join(root, f), encoding='utf-8').read())
+        except OSError:
+            now.append('')
+    hi, ht, hp, hu = instrument_terms(*head)
+    ni, nt, np_, nu = instrument_terms(*now)
+    out = ['FU_INVISIBLE gains %s' % k for k in sorted(ni - hi)]
+    for k in TOL_VARS:
+        if k in ht and (k not in nt or nt[k] > ht[k]):
+            out.append('%s %s → %s' % (k, ht[k], nt.get(k, 'gone')))
+    out += ['the %s plant is gone' % n for n in sorted(hp - np_)]
+    out += ['the pictures stop comparing %s' % u for u in sorted(nu - hu)]
+    return out
+
+
 def source_hash(root):
     h = hashlib.sha256()
     h.update(('HEAD ' + sh(['git', 'rev-parse', 'HEAD'], root).strip() + '\n').encode())
@@ -427,6 +492,12 @@ def check(root):
     """For tools/ship.sh. Returns (code, message): 0 OK / not triggered, 1 refuse."""
     logline = newest_log_line(root)
     files = changed_files(root)
+    if instrument_changed(files) and LOOSEN_MARK not in logline:
+        loose = loosenings(root)
+        if loose:
+            return 1, ('REFUSE: this release makes the Full-unchanged lock see less than HEAD’s did (%s), and its POLISH-LOG '
+                       'line does not say so. Write "%s <why>" in that line, so the loosening is a line he reads, not a '
+                       'quiet edit — or put the instrument back.' % ('; '.join(loose[:4]) + (' …' if len(loose) > 4 else ''), LOOSEN_MARK))
     why = trigger(logline, files, hook_lines(root, files))
     if not why:
         return 0, 'NOT-TRIGGERED'
@@ -584,6 +655,8 @@ def selftest():
         fails.append('a change to line 11 (inside sanitizeSmLayer, no Simple name on it) does not fire')
     if not hunks_in_regions('@@ -7,0 +8 @@', regs):
         fails.append('an insertion after line 7 (inside sanitizeSmLayer) does not fire')
+    if not hunks_in_regions('@@ -12 +12 @@', regs):
+        fails.append('a change to line 12 (sanitizeSmLayer’s own closing brace) does not fire')
     if hunks_in_regions('@@ -2 +2 @@', regs) or hunks_in_regions('@@ -14 +14 @@', regs) or hunks_in_regions('@@ -12,0 +13 @@', regs):
         fails.append('a change OUTSIDE sanitizeSmLayer fires')
     # the instrument lock
@@ -673,6 +746,10 @@ def selftest_repo():
         write('styles.css', '.a { color: red; }\n')
         write('index.html', '<!doctype html>\n')
         write('tools/_fu_compare.py', '# the comparer\n')
+        SH0 = "#!/bin/bash\nFU_INVISIBLE='\nlayer.srcW       # I2\nmeta.SCHEMA_REV  # N1\n'\nFU_TOL_PX=3   # measured\nFU_CHAN=24\nFU_GRID_TOL=4\n"
+        PL0 = '{"plants": [{"name": "margin"}, {"name": "toast"}]}\n'
+        write('tools/full-unchanged.sh', SH0)
+        write('tools/full-unchanged-plants.json', PL0)
         git('add', '-A')
         git('commit', '-q', '-m', 'v1')
         # the Simple release: one line of Full's function rewritten with nothing Simple on it, and a two-line block
@@ -747,6 +824,26 @@ def selftest_repo():
                 write(rel, old)
         if gate('- v3 — queue 980 (partial): the lock itself')[0] != 0:
             fails.append('the PASS cache: putting the tree back did not restore the PASS (the hash is not a function of the tree)')
+        # (6) the instrument may not see less than HEAD's without saying so — whatever the line's label, gate or no gate
+        #     (the review's selfloosen.py: one added mask line, and a clip moved 0.5 s read "same as HEAD")
+        for what, rel, text in (('a key added to FU_INVISIBLE', 'tools/full-unchanged.sh', SH0.replace("meta.SCHEMA_REV  # N1\n", "meta.SCHEMA_REV  # N1\nlayer.start      # I99\n")),
+                                ('a picture tolerance raised', 'tools/full-unchanged.sh', SH0.replace('FU_TOL_PX=3', 'FU_TOL_PX=12')),
+                                ('a threshold raised', 'tools/full-unchanged.sh', SH0.replace('FU_CHAN=24', 'FU_CHAN=40')),
+                                ('a plant taken out', 'tools/full-unchanged-plants.json', '{"plants": [{"name": "margin"}]}\n')):
+            old = io.open(os.path.join(d, rel), encoding='utf-8').read()
+            write(rel, text)
+            for log in ('- v3 — queue 980 (partial): the lock itself', '- v3 — queue 975: a tidy-up', '- v3 — (hunt LOW #2) the probe'):
+                code, msg = gate(log)
+                if code != 1 or LOOSEN_MARK not in msg:
+                    fails.append('the loosening rule: %s, logged as %r, was not refused for it (%s)' % (what, log, msg[:160]))
+            code, msg = gate('- v3 — queue 980 (partial): %s the probe needed it (measured)' % LOOSEN_MARK)
+            if 'see less' in msg:
+                fails.append('the loosening rule: %s was refused even though the line declares it' % what)
+            write(rel, old)
+        write('tools/full-unchanged.sh', SH0.replace('FU_TOL_PX=3', 'FU_TOL_PX=2'))   # TIGHTER: never a loosening
+        if 'see less' in gate('- v3 — queue 980 (partial): the lock itself')[1]:
+            fails.append('the loosening rule: a LOWER tolerance was read as a loosening')
+        write('tools/full-unchanged.sh', SH0)
     except Exception as e:
         fails.append('the repository self-test could not run: %s' % e)
     finally:
@@ -766,7 +863,7 @@ def main():
             return 1
         print('✅ the full-unchanged gate self-test passed (%d trigger cases, %d step-1.2 lines over %d hunks, %d quiet lines, '
               'the regions, the instrument lock, the other-queue rule; on a scratch repo: provenance, the instrument rule, the PASS '
-              'cache; and where ship.sh asks — before the proof and again just before the commit)' % (n, len(STEP_1_2), len(set(h for h, _, _ in STEP_1_2)), len(QUIET)))
+              'cache, the loosening rule; and where ship.sh asks — before the proof and again just before the commit)' % (n, len(STEP_1_2), len(set(h for h, _, _ in STEP_1_2)), len(QUIET)))
         return 0
     if cmd == 'hash':
         print(source_hash(root))

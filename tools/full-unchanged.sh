@@ -42,7 +42,9 @@ set -uo pipefail
 #   meta.*      FU5's two schema names only (N1).
 #   presence.*  FU4's presence frames only (I7).   manifest.*  FU4's media manifest entries only (I7).
 # Adding a line here is a claim that Full never reads that key. It needs its §0.4.3 row and a guard test, or it does not
-# go in — and in a Simple release it CANNOT go in: tools/_fu_gate.py refuses a Simple release that changes this file.
+# go in — and in a Simple release it CANNOT go in: tools/_fu_gate.py refuses a Simple release that changes this file, and
+# refuses ANY release that adds a line here (or raises a tolerance below, or drops a plant) unless its POLISH-LOG line
+# says `LOOSENS THE LOCK: <why>`.
 FU_INVISIBLE='
 layer.srcW       # I2  the source width written at add / Replace / duplicate / paste — a plain field no Full code reads
 layer.srcH       # I2  the source height, same
