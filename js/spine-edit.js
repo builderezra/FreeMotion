@@ -1209,7 +1209,7 @@ window.FM = window.FM || {};
     const dt = n ? -(n.start - c.start) : 0;
     const prevEnd = p ? p.end : null;
     const rp = ripple(plan, R, i + 1, dt, new Set([c.id].concat(fol)), prevEnd, !!(p && isFloatJoin(R, i)));
-    if (n) tailMove(plan, R, R.trackEnd + (rp.last == null ? dt : rp.last), map);
+    if (n) tailMove(plan, R, rp.end != null ? rp.end : R.trackEnd + (rp.last == null ? dt : rp.last), map);   // the last clip's end as apply() writes it, never trackEnd + d (§3.1, finding 16)
     else { const lastClip = R.main.filter(e => !e.slot && e.id !== c.id).pop(); tailMove(plan, R, lastClip ? lastClip.end : c.start, map); }
     plan.touched.add(c.id);
     plan.post.push(() => {

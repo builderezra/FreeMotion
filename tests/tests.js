@@ -122597,4 +122597,44 @@
       if (bad.length) throw new Error('names that do not contain their visible label: ' + bad.join(' · '));
     });
   });
+
+
+  test('simple P2.2 · review an end card lands bit-exact on the new end of the clips after Lift off, Move earlier / later and Close all gaps too (§3.1, review finding 16 for the 2.2 commands)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const P0 = FM.scene, t0 = FM.time, miss = {}, ran = {};
+    FM.history.mute();   // Lift off's post step re-stacks through FM.moveLayers, which commits: never into the open project's history
+    try {
+      for (let seed = 1; seed <= 240; seed++) {
+        const r = smRand(seed * 131 + 7), n = 3 + Math.floor(r() * 3), layers = [];
+        let t = 0;
+        for (let i = 0; i < n; i++) {
+          const l = FM.makeLayer('video', { name: 'c' + i, x: 160, y: 120, start: 0, duration: 1 });
+          l.start = t; l.duration = 0.7 + Math.floor(r() * 1e6) / 1e6 * 3.1; l.srcW = 320; l.srcH = 240; l.srcRev = 0; l.muted = true;
+          l.sm = { main: true };                                                  // adopted, as the runner leaves it, so a lifted clip reads as lifted
+          layers.push(l);
+          t = l.start + l.duration + (i === 1 && r() < 0.6 ? 0.3 + r() : 0);
+        }
+        const last = layers[layers.length - 1];
+        const card = FM.makeLayer('text', { name: 'Card', text: 'End', x: 160, y: 60, start: last.start + last.duration, duration: 2 });
+        const cmd = ['lift', 'later', 'earlier', 'closeAll'][seed % 4];
+        FM.scene = scene([card].concat(layers.slice().reverse()), { project: { width: 320, height: 240, fps: 30, duration: 60, background: '#000', sm: { adopted: true, v: 1 } } });
+        const R = FM.spine.classify(FM.scene), clips = R.main.filter(e => !e.slot);
+        const pick = clips[Math.floor(r() * clips.length)];
+        let plan = null;
+        if (cmd === 'lift') plan = FM.spine.planLift(R, pick.id);
+        else if (cmd === 'closeAll') plan = FM.spine.planCloseAll(R);
+        else { const j = FM.spine.moveIndexFor(R, pick.id, cmd === 'later' ? 1 : -1); if (j < 0) continue; plan = FM.spine.planReorder(R, pick.id, j); }
+        if (!plan || plan.refuse) continue;
+        await FM.spine._applyPlan(plan);
+        ran[cmd] = (ran[cmd] || 0) + 1;
+        const R2 = FM.spine.classify(FM.scene);
+        if (card.start !== R2.trackEnd) miss[cmd] = (miss[cmd] || 0) + 1;
+      }
+    } finally { FM.scene = P0; FM.time = t0; FM.history.unmute(); FM.refreshAll(); }
+    const fails = [];
+    ['lift', 'later', 'earlier', 'closeAll'].forEach(c => { if (!ran[c]) fails.push('CONTROL: the sweep never ran ' + c); });
+    const m = Object.keys(miss).map(c => c + ' ' + miss[c] + '/' + ran[c]);
+    if (m.length) fails.push('the end card missed the new end of the clips in: ' + m.join(', '));
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();
