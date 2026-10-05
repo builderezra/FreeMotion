@@ -65,11 +65,13 @@ window.FM = window.FM || {};
   }
 
   /* ─────────────── #sm-say: where Simple speaks (§3.12). A line with one real button; never FM.toast. ─────────────── */
-  let sayT = 0;
+  let sayT = 0, ptrDown = false;
   function wireSay() {
     if (!sayEl || sayEl._wired) return;
     sayEl._wired = true;
-    document.addEventListener('pointerdown', e => { if (sayEl.textContent && !sayEl.contains(e.target)) clearSay(); }, true);
+    document.addEventListener('pointerdown', e => { ptrDown = true; if (sayEl.textContent && !sayEl.contains(e.target)) clearSay(); }, true);
+    document.addEventListener('pointerup', () => { ptrDown = false; }, true);
+    document.addEventListener('pointercancel', () => { ptrDown = false; }, true);
     /* A REFUSED SWITCH IS SAID HERE WHEN THE COG IS CLOSED (Phase 1 review R1). The cog block shows its own refusal line, but an
        Open in Full hop is pressed with the cog shut, and its "wait for the export" was lost — one listener for every door. */
     window.addEventListener('fm-editor-refuse', ev => {
@@ -80,25 +82,47 @@ window.FM = window.FM || {};
     });
   }
   function clearSay() { clearTimeout(sayT); if (sayEl) sayEl.textContent = ''; }
-  function armClear() {
+  function armClear(ms) {
     clearTimeout(sayT);
     sayT = setTimeout(function again() {
       if (sayEl && (sayEl.matches(':hover') || sayEl.contains(document.activeElement))) { sayT = setTimeout(again, 1000); return; }
       clearSay();
-    }, 10000);
+    }, ms || 10000);
   }
+  /* A pulse on the clip a button-less line is about (§3.12 rule 1a): the line itself goes to #sm-live only, so the tool
+     that was pressed keeps its place and its focus. */
+  function pulse(ids) {
+    (ids || []).forEach(id => {
+      const n = root && root.querySelector('.sm-item[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+      if (!n) return;
+      n.classList.remove('sm-pulse'); void n.offsetWidth; n.classList.add('sm-pulse');
+      setTimeout(() => n.classList.remove('sm-pulse'), 700);
+    });
+  }
+  /* THE LINE (§3.12). opts.live: screen readers and a pulse only, the row is not taken. Otherwise the row shows the text
+     and at most two real buttons, which ignore every press until 400 ms have passed AND the press that raised the line
+     has been let go (rule 5), reading aria-disabled meanwhile; a line with buttons stays 10 s, one without 4 s. */
   function sayLine(text, opts) {
+    opts = opts || {};
+    if (opts.live) { if (liveEl) liveEl.textContent = text; pulse(opts.pulse); return; }
     if (!sayEl) return;
     sayEl.textContent = '';
-    sayEl.appendChild(el('span', 'sm-say-t', text));
-    if (opts && opts.full) {
-      const b = el('button', 'sm-say-b', (W().lines || {}).openFull || 'Open in Full');
-      b.type = 'button';
-      b.addEventListener('click', () => { clearSay(); if (FM.editor) FM.editor.request('full', { hop: true }); });   // a hop: the guard, no memory (R1)
+    const tx = el('span', 'sm-say-t', text); tx.title = text; sayEl.appendChild(tx);
+    const btns = (opts.buttons || []).slice(0, 2);
+    if (opts.full && !btns.length) btns.push({ label: (W().lines || {}).openFull || 'Open in Full', fn: () => { if (FM.editor) FM.editor.request('full', { hop: true }); } });   // a hop: the guard, no memory (R1)
+    const t0 = performance.now(); let up = !ptrDown;
+    if (!up) document.addEventListener('pointerup', () => { up = true; }, { once: true, capture: true });
+    const armed = () => up && performance.now() - t0 >= 400;
+    btns.forEach(bd => {
+      const b = el('button', 'sm-say-b', bd.label); b.type = 'button'; b.setAttribute('aria-disabled', 'true');
+      b.addEventListener('pointerdown', ev => { if (!armed()) { ev.preventDefault(); ev.stopPropagation(); } });
+      b.addEventListener('click', ev => { ev.stopPropagation(); if (!armed()) { ev.preventDefault(); return; } clearSay(); try { bd.fn(); } catch (e) {} });
       sayEl.appendChild(b);
-    }
+    });
+    sayEl.classList.toggle('sm-say-has-b', btns.length > 0);
+    if (btns.length) setTimeout(function arm() { if (!sayEl.isConnected || !sayEl.querySelector('.sm-say-b')) return; if (!armed()) { setTimeout(arm, 60); return; } sayEl.querySelectorAll('.sm-say-b').forEach(b => b.setAttribute('aria-disabled', 'false')); }, 400);
     if (liveEl) liveEl.textContent = text;
-    armClear();
+    armClear(btns.length ? 10000 : 4000);
   }
 
   let laterRAF = 0;
@@ -236,7 +260,7 @@ window.FM = window.FM || {};
         const words = W().a11y || {};
         const name = s.kind === 'gap' ? (words.gap ? words.gap(s.amt) : 'Gap') : (words.overlap ? words.overlap(s.amt) : 'Overlap');
         chip.setAttribute('aria-label', name); chip.title = name;
-        chip.addEventListener('click', ev => { ev.stopPropagation(); FM.spine.say('gapNext', { full: true }); });
+        chip.addEventListener('click', ev => { ev.stopPropagation(); if (FM.spine.cmd) FM.spine.cmd.closeSeam(e.id); });   // Phase 2: Close gap / Fix
         mainEl.appendChild(chip);
       });
       // + at the end of the clip row: pick files, laid END TO END from the end of the main track (§15.1)

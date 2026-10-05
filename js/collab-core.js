@@ -355,7 +355,7 @@ window.FM = window.FM || {};
      the session. history.commit calls these while `undoActive()` for the same reason; the session records locally and
      sends nothing once it has stopped (collab-session.js pushLocal). */
   C.beforeSnap = function () { const s = US(); if (s) s.beforeSnap(); };
-  C.afterCommit = function () { const s = US(); if (s) s.afterCommit(); };
+  C.afterCommit = function (meta) { const s = US(); if (s) s.afterCommit(meta); };   // Simple mode P2: the step's {label, ed, arr}
   C.beforeFlush = function () { const s = S(); if (s) s.beforeFlush(); };
 
   /* §10.5: undo stays delegated after a session ends, until the project is switched or the page
@@ -440,6 +440,25 @@ window.FM = window.FM || {};
     const s = C.session;
     if (!s || !C.active || s.ended || s.active === false) return false;
     return s.isOwner ? !!(s.peerIds && s.peerIds().length) : true;
+  };
+  /* ═══ SIMPLE MODE P2: THE ONE LIVE-GATE PREDICATE (DESIGN.md §3.7, §10.2; his D14: moving clips waits while someone else
+     who can edit is in). Read by Simple's runner and by undo's gate, never by Full. True on a guest (the owner can always
+     write); on the owner, while a member with the Editor role is connected OR is still in the room's member table (a dropped
+     editor's offline changes would replay at their old times); with no session, on a linked copy that has not been left.
+     Viewers and Commenters never count. (Arrange anyway and Make Sam a Viewer are release 2.6.) */
+  C.isLinkedCopy = function (pid) {
+    pid = pid || (FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null);
+    let card = null;
+    try { card = pid && FM.projects && FM.projects.list ? (FM.projects.list() || []).find(p => p.id === pid) : null; } catch (e) { card = null; }
+    return !!(card && card.collab && !card.collab.ended);
+  };
+  C.othersCanEdit = function () {
+    const s = C.session;
+    if (!s || !C.active || s.ended || s.active === false) return C.isLinkedCopy();
+    if (!s.isOwner) return true;
+    const H = s.host, m = H && H.members;
+    if (m && Object.keys(m).some(mid => mid !== H.ownerMid && m[mid] && m[mid].role === 'editor')) return true;
+    return !!(C.ui && C.ui.roomEditors && C.ui.roomEditors().length);
   };
   /* S8 review: …and the banner says so the moment it happens ("Update ready — it applies when you leave the
      session"), not at whatever next repaints it. */

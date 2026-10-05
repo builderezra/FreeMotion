@@ -29,9 +29,13 @@ window.FM = window.FM || {};
   /* ═══ THE ONE `sm` WRITER (§2.3). Merges into layer.sm, deletes the sub-key when off, deletes `sm` once empty. No code
      assigns `sm` whole (that would wipe a newer build's sub-keys). Refuses what the sanitiser would strip, so a write can
      never be undone by the next load. Returns whether the layer now carries the flag as asked. */
-  const FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit'];
+  /* Phase 2 adds `cut` (the de-click mark, §12.1) and `snd` (Simple's own sound-only fact, §0.4 B8). The sanitiser keeps both
+     as plain unknown keys (`true` is plain), so its output does not change and no SCHEMA_REV bump is needed for them. */
+  const FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'cut', 'snd'];
   S.setFlag = function (layer, key, on) {
     if (!layer || FLAGS.indexOf(key) < 0) return false;
+    /* D17 B (his pick): a sound never ends with the video — music, a voice-over, a recording run on in black as in Full */
+    if (on && key === 'tail' && (layer.audioOnly === true || (layer.sm && layer.sm.snd === true))) return false;
     if (on && key === 'main' && (layer.audioOnly === true || layer.type === 'group' || (layer.type === 'text' && Array.isArray(layer.captions)))) return false;
     if (on && key === 'unit' && layer.type !== 'group') return false;
     if (on) {
