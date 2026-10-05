@@ -667,6 +667,18 @@
   }
   /* A finger or a mouse must land ON what it is meant to move: the element the browser hit-tests at that point has to be
      the target or inside it, or the step throws (and an error on HEAD is a broken instrument, so the run cannot PASS). */
+  /* An element's box once it has held still for three frames in a row (2 s at most): a sheet that docks or a stage that
+     resizes moves it by script, which settle() — it finishes CSS animations — cannot see. */
+  async function stableRect(e) {
+    var last = '', same = 0, t0 = Date.now(), r = e.getBoundingClientRect();
+    while (Date.now() - t0 < 2000) {
+      await raf1();
+      r = e.getBoundingClientRect();
+      var k = [r.left, r.top, r.width, r.height].join(',');
+      if (k === last) { if (++same >= 3) break; } else { same = 0; last = k; }
+    }
+    return r;
+  }
   function mustHit(target, x, y, what) {
     var at = D.elementFromPoint(x, y);
     if (!at || !(at === target || target.contains(at))) {
@@ -883,7 +895,7 @@
     var x0 = JSON.stringify(A.transform.x);
     await screen('fu1-overlays', async function () {
       FM.selectLayer(A.id); FM.setTime(1);
-      FM.setTransform(A, 'x', A.transform.x, 0.4); FM.setTransform(A, 'x', A.transform.x + 120, 1.6);
+      keyTwo(A, 'x', 0.4, A.transform.x, 1.6, A.transform.x + 120);
       FM.onionSkin = true; FM.showGuides = true; FM.requestRender();
     });
     FM.onionSkin = false; FM.showGuides = false; A.transform.x = JSON.parse(x0); FM.selectLayer(null); FM.refreshAll(); await settle(150);
@@ -1057,6 +1069,21 @@
     var tab = firstVisibleSel(['.addmenu-tab[data-key="' + tabKey + '"]']);
     if (tab && !tab.classList.contains('active')) { tab.click(); await settle(200); }
     return byText('.addmenu-card', re);
+  }
+  /* Two keys on a transform channel. FM.setTransform only WRITES a keyframe on a prop that is already keyed (js/scene.js:
+     "otherwise it sets the static value"), so the first one goes in through FM.toggleKeyframe, as the ◆ does. */
+  function keyTwo(L, k, t0, v0, t1, v1) {
+    if (!FM.isAnimated(L.transform[k])) FM.toggleKeyframe(L, k, t0);
+    FM.setTransform(L, k, v0, t0); FM.setTransform(L, k, v1, t1);
+    var p = L.transform[k];
+    if (!FM.isAnimated(p) || p.kf.length < 2) throw new Error('could not put two ' + k + ' keys on ' + L.name);
+  }
+  /* A jump on the channel a layer's newest Bounce rings on: +35% on a scale, 160 units on a position or a turn. */
+  function jumpOn(L, t0, t1) {
+    var b = (L.behaviors || []).filter(function (x) { return x.type === 'bounce'; }).slice(-1)[0];
+    if (!b) throw new Error(L.name + ' has no Bounce');
+    var k = b.prop || 'y', p = L.transform[k], v = typeof p === 'number' ? p : FM.evalProp(p, t0);
+    keyTwo(L, k, t0, v, t1, /scale/i.test(k) ? v * 1.35 : v + 160);
   }
   /* An effect added the way he adds one: the selected layer's Effects card, + Add Effect, the browser's search, the tile,
      the browser's Add. `fallback` runs only when the tile is not on screen (and the step is marked as having fallen back). */
@@ -1246,9 +1273,12 @@
         await via('Edit path', edit, async function () { var m = Cc.masks[Cc.masks.length - 1]; FM.maskTool.open(Cc.id, m.id); });
         await settle(300);
         if (FM.maskTool && FM.maskTool.isActive && FM.maskTool.isActive()) {
-          var ov = el('#mask-overlay', 'the mask overlay'), pv = el('#preview', 'the preview'), pr = pv.getBoundingClientRect();
+          var ov = el('#mask-overlay', 'the mask overlay'), pv = el('#preview', 'the preview');
           var pts = [[0.35, 0.35], [0.65, 0.4], [0.5, 0.7]];
           for (var i = 0; i < pts.length; i++) {
+            /* where the preview is NOW, once it has stopped moving (measured 6 Oct: on the phone the stage was still
+               settling after the first taps, so a rect read once put the third point 2 px apart on two runs of HEAD) */
+            var pr = await stableRect(pv);
             var x = pr.left + pr.width * pts[i][0], y = pr.top + pr.height * pts[i][1];
             pe(ov, 'pointerdown', x, y, 1); peBoth('pointerup', x, y, 0);
             await settle(80);
@@ -1350,11 +1380,16 @@
       /* B4/B5's GUARDS (DESIGN FU2: "a Follow on a split target and a luma matte on a split source rendered past the
          cut; Bounce on a camera with split keys"). Each renders frames on both sides of its cut. The Follow and the Bounce
          go through the Position / Scale card's + Add behavior; the matte's source is set the way its picker writes it. */
-      ['a Follow on a split target (+ Add behavior → Follow, Clip B’s first half), frames past the cut', async function () {
+      /* The follower is Clip A, which is on screen across the cut (v2 put it on a text inside the masking group, so
+         nothing it did reached a frame: its three frames were one picture). The target, Clip B's first half, really
+         carries two x keys — v2's FM.setTransform on an unkeyed prop only sets the value, so it moved nothing. */
+      ['a Follow on a split target (Clip A follows Clip B’s first half: + Add behavior → Follow, its layer list), frames past the cut', async function () {
         var halves = FM.scene.layers.filter(function (l) { return l.name === 'Clip B'; });
         var B1 = halves.slice().sort(function (a, b) { return a.start - b.start; })[0];
-        var T = byName('Text');
-        FM.selectLayer(T.id); await settle();
+        var T = byName('Clip A');
+        keyTwo(B1, 'x', B1.start, B1.transform.x, B1.start + B1.duration, (typeof B1.transform.x === 'number' ? B1.transform.x : 0) + 90);
+        FM.history.commit();
+        FM.selectLayer(T.id); FM.setTime(B1.start + B1.duration - 0.2); await settle();
         if (!(await openCard(/Position/))) fellOnly('the Position / Scale card was not on screen');
         var add = byText('#inspector-panel .fx-add-btn', /Add behavior/);
         await via('+ Add behavior', add, async function () {});
@@ -1365,11 +1400,11 @@
         var sel = [].slice.call(D.querySelectorAll('#inspector-panel .be-list select')).filter(function (s) { return [].slice.call(s.options).some(function (o) { return o.value === B1.id; }); })[0];
         if (sel) setInput(sel, B1.id);
         else { fellOnly('the Follow layer picker was not on screen'); var b = (T.behaviors || []).filter(function (x) { return x.type === 'follow'; })[0]; if (b) { b.params = b.params || {}; b.params.targetId = B1.id; } FM.history.commit(); }
-        // the target moves, so the follower's frames past the cut say what Full reads there
-        FM.setTransform(B1, 'x', B1.transform.x, B1.start); FM.setTransform(B1, 'x', B1.transform.x + 90, B1.start + B1.duration); FM.history.commit();
+        var fb = (T.behaviors || []).filter(function (x) { return x.type === 'follow'; }).slice(-1)[0];
+        if (!fb || !fb.params || fb.params.targetId !== B1.id) throw new Error('Clip A does not follow Clip B’s first half');
         await settle(200);
         ctx.times = [B1.start + B1.duration - 0.05, B1.start + B1.duration + 0.05, B1.start + B1.duration + 0.4];
-      }, { times: function () { return ctx.times; } }],
+      }, { times: function () { return ctx.times; }, mustMove: true }],
       /* The matte goes on Pick D (an image live from 1 s to 6 s, so it spans the cut) and its source is Clip B's FIRST
          half: past the cut that half is gone, and what Full draws there is what B4 pins (a matte resolved through the
          split lineage would use the second half). v2 wrote the source into fields the matte never reads (it reads
@@ -1399,21 +1434,21 @@
         if (fx.params.source !== B1.id) throw new Error('the matte’s source is ' + fx.params.source + ', not Clip B’s first half');
         await settle(200);
         ctx.times = [cut - 0.04, cut + 0.04, cut + 0.3];
-      }, { times: function () { return ctx.times; } }],
-      /* Bounce rings after a key's jump (js/behaviors.js bounceDelta). Its default channel is y, so the keys are on y: the
-         camera (Add → Camera; a camera cannot be split in Full — "Only video/image/text/shape clips can be split" — so its
-         frames ring after its own jump), and a split clip whose tail renders the ring across the cut from its head's keys
-         (the split's boundary key is dropped there: B5's guard). */
-      ['Bounce on a camera (Add → Camera, two y keys, + Add behavior → Bounce), frames on the ring', async function () {
+      }, { times: function () { return ctx.times; }, mustMove: true }],
+      /* Bounce rings after a key's jump (js/behaviors.js bounceDelta), on the channel it is added on — from the Position /
+         Scale card that is not y (measured 6 Oct: 'scale'), and v2 keyed y, with a setter that does not even key an
+         unkeyed prop: no jump, no ring, three identical frames, and a planted 1.5x decay passed. Now the Bounce goes on
+         first, its own channel gets the two keys, and the step refuses to measure if its frames do not move. The camera
+         (Add → Camera; a camera cannot be split in Full) rings after its own jump; a clip with keys, split after them,
+         rings across the cut on its tail (the split's boundary key is dropped there: B5's guard). */
+      ['Bounce on a camera (Add → Camera, + Add behavior → Bounce, two keys on its channel), frames on the ring', async function () {
         FM.setTime(0.5);
         var c = await addCard('object', /^Camera\b/);
         await via('the Add menu’s Camera card', c, async function () { FM.addCameraLayer(); });
         await settle(250);
         var Cam = FM.scene.layers.filter(function (l) { return l.type === 'camera'; })[0];
         if (!Cam) throw new Error('no camera after Add → Camera');
-        FM.selectLayer(Cam.id);
-        FM.setTransform(Cam, 'y', Cam.transform.y, 0.6); FM.setTransform(Cam, 'y', Cam.transform.y + 160, 1.0); FM.history.commit();
-        await settle();
+        FM.selectLayer(Cam.id); await settle();
         if (!(await openCard(/Position/))) fellOnly('the camera’s Position / Scale card was not on screen');
         var add = byText('#inspector-panel .fx-add-btn', /Add behavior/);
         await via('+ Add behavior', add, async function () {});
@@ -1421,29 +1456,32 @@
         var pick = byText('#inspector-panel .be-pick-btn', /^Bounce$/);
         await via('the Bounce tile', pick, async function () { Cam.behaviors = (Cam.behaviors || []).concat([FM.behaviorRegistry.makeInstance('bounce', 'y')]); FM.history.commit(); });
         await settle(200);
+        jumpOn(Cam, 0.6, 1.0);
+        FM.history.commit(); await settle(200);
         ctx.times = [1.05, 1.2, 1.5];
-      }, { times: function () { return ctx.times; } }],
-      ['Bounce across a split (Clip C’s second half: two y keys, S after them, + Add behavior → Bounce on the tail), frames past the cut', async function () {
+      }, { times: function () { return ctx.times; }, mustMove: true }],
+      ['Bounce across a split (Clip C’s second half: + Add behavior → Bounce, two keys on its channel, S after them), frames past the cut', async function () {
         var halves = FM.scene.layers.filter(function (l) { return l.name === 'Clip C'; }).sort(function (a, b) { return a.start - b.start; });
         var C = halves[halves.length - 1];
         var k0 = C.start + 0.1, k1 = C.start + Math.min(0.3, C.duration * 0.3), cut = C.start + Math.min(0.45, C.duration * 0.5);
-        FM.selectLayer(C.id);
-        FM.setTransform(C, 'y', C.transform.y, k0); FM.setTransform(C, 'y', C.transform.y + 140, k1); FM.history.commit();
-        FM.setTime(cut); await settle();
-        key('KeyS', 's'); await settle(200);
-        var after = FM.scene.layers.filter(function (l) { return l.name === 'Clip C'; }).sort(function (a, b) { return a.start - b.start; });
-        var tail = after[after.length - 1];
-        if (after.length !== halves.length + 1) throw new Error('S at ' + cut + ' did not split Clip C’s second half');
-        FM.selectLayer(tail.id); await settle();
-        if (!(await openCard(/Position/))) fellOnly('the tail’s Position / Scale card was not on screen');
+        FM.selectLayer(C.id); FM.setTime(k0); await settle();
+        if (!(await openCard(/Position/))) fellOnly('Clip C’s Position / Scale card was not on screen');
         var add = byText('#inspector-panel .fx-add-btn', /Add behavior/);
         await via('+ Add behavior', add, async function () {});
         await settle(150);
         var pick = byText('#inspector-panel .be-pick-btn', /^Bounce$/);
-        await via('the Bounce tile', pick, async function () { tail.behaviors = (tail.behaviors || []).concat([FM.behaviorRegistry.makeInstance('bounce', 'y')]); FM.history.commit(); });
+        await via('the Bounce tile', pick, async function () { C.behaviors = (C.behaviors || []).concat([FM.behaviorRegistry.makeInstance('bounce', 'y')]); FM.history.commit(); });
         await settle(200);
+        jumpOn(C, k0, k1);
+        FM.history.commit();
+        FM.setTime(cut); await settle();
+        key('KeyS', 's'); await settle(200);
+        var after = FM.scene.layers.filter(function (l) { return l.name === 'Clip C'; }).sort(function (a, b) { return a.start - b.start; });
+        if (after.length !== halves.length + 1) throw new Error('S at ' + cut + ' did not split Clip C’s second half');
+        var tail = after[after.length - 1];
+        if (!(tail.behaviors || []).some(function (b) { return b.type === 'bounce'; })) throw new Error('the tail of the split carries no Bounce');
         ctx.times = [cut + 0.02, cut + 0.1, cut + 0.25];
-      }, { times: function () { return ctx.times; } }],
+      }, { times: function () { return ctx.times; }, mustMove: true }],
       ['delete Pick D with the Delete key', async function () {
         var D2 = FM.scene.layers.filter(function (l) { return /Pick D/.test(l.name); })[0];
         FM.selectLayer(D2.id); await settle();
@@ -1462,6 +1500,12 @@
       var fell = CUR_FELL, surf = CUR_SURF; CUR_FELL = null; CUR_SURF = null;
       await settle(200);
       var st = await stateRecord({ noFrames: !!rec.noFrames, times: opt.times ? (opt.times() || null) : null });
+      /* A GUARD THAT DRAWS NOTHING MOVING MEASURES NOTHING (6 Oct: the Follow's and both Bounces' three frames were one
+         picture on HEAD, so their planted changes passed). Its frames must differ from each other, or the step fails —
+         and an error on HEAD is a broken instrument, never a PASS. */
+      if (opt.mustMove && st.frames && st.frames.length > 1 && st.frames.every(function (f) { return f === st.frames[0]; })) {
+        err = err || ('its frames at ' + (opt.times() || []).map(function (t) { return Math.round(t * 1000) / 1000; }).join(', ') + ' s are one picture: nothing it guards reached a frame');
+      }
       if (opt.times && !rec.noFrames) st.framesAt = await frameHashes(FRAME_TIMES);
       var entry = { name: nm, err: err, fell: fell, surf: surf, state: st };
       if (fell.length) DUMP.fell = DUMP.fell.concat(fell.map(function (f) { return nm + ' — ' + f; }));

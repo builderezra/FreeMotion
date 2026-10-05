@@ -21,11 +21,11 @@
 # (within the tolerances measured below).
 #
 # It cannot pass on a run that did not measure: if the probe could not drive HEAD somewhere — or drove the function under
-# a control instead of the control — that is a broken instrument and the answer is no. And it cannot pass with a blind
-# eye: every run plants ten changes Full must never get (tools/full-unchanged-plants.json: DESIGN's three, and one of each
-# kind the 1 Oct review slipped past v1) and each must turn it red BY NAME, or it refuses to print PASS. A PASS is cached
-# by a hash of the sources (tools/_fu_gate.py, the same rule ship.sh reads), so ship.sh can refuse a Simple release whose
-# exact tree never passed.
+# a control instead of the control, or a finger missed what it was moving — that is a broken instrument and the answer is
+# no. And it cannot pass with a blind eye: every run plants 25 changes Full must never get (tools/full-unchanged-
+# plants.json: DESIGN's three; ALL NINETEEN the 1 Oct review slipped past v1 in one "Simple release"; and DESIGN's B4 / B5
+# guards) and each must turn it red BY NAME, or it refuses to print PASS. A PASS is cached by a hash of the sources
+# (tools/_fu_gate.py, the same rule ship.sh reads), so ship.sh can refuse a Simple release whose exact tree never passed.
 #
 # No worktree and no stash (both are shared state — memory): HEAD comes out of `git archive`. ONE server, on a free port in
 # 8790–8799 (then 8800–8849; never 8777, never a port another run holds), serves every copy as a sub-folder; it proves it

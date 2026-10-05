@@ -119833,6 +119833,11 @@
       // …and the step it is caught BY is still in the probe (FU2's names, FU3's keys)
       const sig0 = (p.sig || [])[0] || '';
       if (gs.indexOf('FU2') >= 0 && !/^FU\d/.test(sig0) && sig0.charAt(0) !== '#' && probe.indexOf(sig0) < 0) throw new Error('the step “' + sig0 + '” the ' + p.name + ' plant is caught by is gone from the probe');
+      // …and a step's or a key's NAME is only WHERE: the signature must also say WHAT differs (6 Oct: a plant was "caught"
+      // because its step's name held the word its signature asked for, on a line that differed for another reason)
+      if (/^(FU3 ")/.test(sig0) || (gs.indexOf('FU2') >= 0 && !/^(FU\d|#|fu1-)/.test(sig0) && sig0.indexOf('the preview') < 0)) {
+        if ((p.sig || []).length < 2) throw new Error('the ' + p.name + ' plant’s signature names only where it is caught (' + sig0 + '), not what differs there');
+      }
     }
     if (probe.indexOf("var ALL = ['" + order.join("', '") + "'];") < 0) throw new Error('the probe’s group order is not ' + order.join(', ') + ' — the plants’ prefixes no longer line up with it');
     /* CONTROL: the counter really counts — an anchor written twice reads as 2. */
@@ -119872,10 +119877,13 @@
       ['the luma matte through the effects browser and its Matte layer list (B4)', "addEffectThroughBrowser(P, 'luma matte'"],
       ['a finger that misses its target fails the step', 'function mustHit(target, x, y, what)'],
       ['the text editor a new text opens', "surface('the text editor'"],
-      ['every infinite animation on screen, with its keyframes', 'function infiniteNow()']
+      ['every infinite animation on screen, with its keyframes', 'function infiniteNow()'],
+      ['a render guard whose frames do not move fails its step', 'mustMove: true'],
+      ['keys that really are keys (setTransform only writes one on a keyed prop)', 'function keyTwo(L, k, t0, v0, t1, v1)']
     ];
     need.forEach(function (n) { if (probe.indexOf(n[1]) < 0) missing.push(n[0]); });
     if (cmp.indexOf("rec.get('fell')") < 0 || cmp.indexOf('FELL BACK') < 0) missing.push('the comparer refusing a step that fell back');
+    if (cmp.indexOf('def sig_hit(') < 0 || cmp.indexOf('sig_hit(x, sig)') < 0) missing.push('the judge reading a plant’s signature in what differs, not in a step’s name');
     return missing;
   }
 

@@ -21,7 +21,7 @@ measure what it says, because a step that fails the same way on both sides compa
 
 Nothing here decides what Full is: it only says where two records disagree. Ids were canonicalised by the probe.
 """
-import argparse, difflib, json, os, sys
+import argparse, difflib, json, os, re, sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 PLANTS_FILE = os.path.join(ROOT, 'tools', 'full-unchanged-plants.json')
@@ -586,6 +586,23 @@ def linkcopy(src, dst):
     return 0
 
 
+def sig_hit(line, sig):
+    """A difference line carries a plant's signature: every string is in it, and when the line names a step or a key
+    (`… "<name>": <what differs>`), every string after the first is in WHAT differs — never only in the name. Measured
+    6 Oct: 'Bounce on a camera … frames on the ring' carried ['Bounce on a camera', 'frames'] in its NAME, on a line that
+    differed for another reason, while the planted 1.5x decay drew nothing at all — a catch by luck."""
+    if not all(s in line for s in sig):
+        return False
+    m = STEP_LINE.match(line)
+    if not m:
+        return True
+    rest = sig[1:]
+    return bool(rest) and all(s in line[m.end():] for s in rest)
+
+
+STEP_LINE = re.compile(r'^\d+ FU\d "[^"]*": ')   # "380 FU2 "<step>": <what differs>" (a value's own JSON never starts a line)
+
+
 def judge(work):
     ok = True
     for p in plants():
@@ -596,7 +613,7 @@ def judge(work):
             ok = False
             continue
         for w in widths:
-            hits = [x for x in diffs if x.startswith(w + ' ') and all(s in x for s in sig)]
+            hits = [x for x in diffs if x.startswith(w + ' ') and sig_hit(x, sig)]
             if hits:
                 print('   ✅ %s plant (%s) caught at %s: %s' % (kind, p.get('kind', ''), w, hits[0][:200]))
             elif diffs:
