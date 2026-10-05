@@ -66,6 +66,16 @@ window.FM = window.FM || {};
     const opts = document.getElementById('btn-opts');
     if (opts) opts.addEventListener('click', e => { if (!isSimple() || FM._smOptsPass) return; e.stopImmediatePropagation(); e.preventDefault(); optsMenu(opts); }, true);
     document.addEventListener('pointerdown', e => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
+    /* A PLAIN MOUSE WHEEL SCROLLS THE TRAY SIDEWAYS (review finding 22, his #976: "on pc without trackpad there seems to be no
+       way to slide"). Only a vertical wheel over a tray that overflows, and only while it can still move; a trackpad's own
+       sideways swipe and a finger are left to the browser. */
+    tray.addEventListener('wheel', e => {
+      if (!e.deltaY || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      const max = tray.scrollWidth - tray.clientWidth; if (max <= 0) return;
+      const to = Math.max(0, Math.min(max, tray.scrollLeft + e.deltaY));
+      if (to === tray.scrollLeft) return;
+      e.preventDefault(); tray.scrollLeft = to;
+    }, { passive: false });
     return true;
   }
   function tool(t) {
@@ -244,7 +254,11 @@ window.FM = window.FM || {};
         tray.appendChild(tool({ id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (all) { if (FM.deleteSelected) FM.deleteSelected(); } else S.say((FM.spineWords.lines || {}).deleteOne || 'Delete one clip at a time'); } }));
         return;
       }
-      trayFor(R, one).forEach(t => tray.appendChild(tool(t)));
+      /* More and 🗑 share ONE sticky end (review finding 22): More is the only way to every other setting, and with 8 tools at
+         ~54 px it sat past the 307 px band at 1280, or under 🗑 at 380, where a mouse could never reach it */
+      const pins = el('div', 'sm-pins');
+      trayFor(R, one).forEach(t => (t.id === 'more' || t.pin ? pins : tray).appendChild(tool(t)));
+      if (pins.firstChild) tray.appendChild(pins);
     },
     /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
     openPanel(id) { panelFor = id; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },   // a closed sheet comes back (finding 20)

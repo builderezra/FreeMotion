@@ -122432,4 +122432,29 @@
       if (v.steps() !== s2 || /Nothing more/.test(v.say())) throw new Error('leaving the field unchanged made a step or said “' + v.say() + '”');
     });
   });
+
+
+  test('simple P2.2 · review More is always in reach beside 🗑 at 1280 and 380 (the only way to every other setting), and a plain mouse wheel scrolls the tray to the rest (#976)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const hits = (id) => { const b = smTool(id); if (!b) return 'missing'; const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, e = document.elementFromPoint(x, y); return e && b.contains(e) ? '' : 'its centre (' + Math.round(x) + ',' + Math.round(y) + ') hits ' + (e ? (e.dataset && e.dataset.tool) || e.id || e.className || e.tagName : 'nothing'); };
+    for (const width of [1280, 380]) {
+      await (width <= 700 ? atPhoneWidth : atWideWidth)(async function () {
+        /* B has a 1 s gap after it, so Close gap joins the tray: the longest main-clip tray there is */
+        await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+          FM.selectLayer(v.L('B').id); await v.sleep(120);
+          const tray = document.getElementById('sm-tray');
+          if (!smTool('seam') || !smTool('crop')) throw new Error('CONTROL (' + width + '): the tray is ' + Array.from(tray.querySelectorAll('.sm-tool')).map(b => b.dataset.tool));
+          tray.scrollLeft = 0; await v.sleep(30);
+          if (hits('length')) throw new Error('CONTROL (' + width + '): Length is not reachable: ' + hits('length'));
+          if (hits('more')) throw new Error(width + ' px: More cannot be clicked — ' + hits('more'));
+          if (hits('delete')) throw new Error(width + ' px: 🗑 cannot be clicked — ' + hits('delete'));
+          if (width > 700) {
+            tray.dispatchEvent(new WheelEvent('wheel', { deltaY: 600, bubbles: true, cancelable: true })); await v.sleep(30);
+            if (tray.scrollWidth - tray.clientWidth > 1 && Math.abs(tray.scrollLeft - (tray.scrollWidth - tray.clientWidth)) > 1) throw new Error('1280 px: a mouse wheel does not scroll the tray (scrollLeft ' + tray.scrollLeft + ' of ' + (tray.scrollWidth - tray.clientWidth) + ')');
+            ['crop', 'duplicateClip', 'seam'].forEach(id => { if (hits(id)) throw new Error('1280 px: after the wheel, ' + id + ' still cannot be clicked — ' + hits(id)); });
+          }
+        });
+      }, width);
+    }
+  });
 })();
