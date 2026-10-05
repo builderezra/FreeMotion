@@ -15311,8 +15311,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* A layer's axis-aligned box in PROJECT px at time t: its transform box under its full CTM (parents included) —
      the same four corners drawSquish walks for its plate estimate. Layer-vs-layer collision reads it (queue 539).
      Its size is the crop at t (layerSizeAt), so an exported frame gets the same box the preview does at that frame. */
-  function layerAABB(l, t, scene) {
-    const sz = layerSizeAt(l, t); if (!sz) return null;
+  function layerAABB(l, t, scene, size) {
+    const sz = size || layerSizeAt(l, t); if (!sz) return null;
     const tr = l.transform || {}, kx = anchorX(tr), ky = anchorY(tr), bw = sz.w || 0, bh = sz.h || 0;
     const M = layerCTM(l, t, scene);
     if (!M) {
@@ -15329,6 +15329,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { x0: x0, y0: y0, x1: x1, y1: y1 };
   }
   FM._layerAABB = layerAABB;   // suite seam (queue 539)
+  /* THE WORLD BOX (Simple mode P1, DESIGN.md §5.2 fillsFrame): a layer's axis-aligned box in project px at `t`, through
+     its whole parent chain (the compositor's own CTM), for an explicit native `size` — so the classifier and the renderer
+     cannot drift apart. `size` omitted = layerSizeAt(l, t) (the crop at t), exactly what layerAABB returns today. */
+  FM.worldBox = function (layer, t, scene, size) { return layerAABB(layer, t, scene, size); };
 
   /* ONE placement map for every on-canvas editing overlay (BUG-HUNT: "Both files should share one
    * helper so they cannot drift from the compositor again").
@@ -18351,6 +18355,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (op < 0.999 || (FM.isAnimated && FM.isAnimated(g.transform && g.transform.opacity))) return true;
     return false;
   }
+  FM.groupNeedsUnit = groupNeedsUnit;   // Simple mode P1: a group that composites as ONE piece is a block (§2.5) — one rule, shared
   function collectGroupUnits(scene, t) {
     let map = null;
     const units = [];

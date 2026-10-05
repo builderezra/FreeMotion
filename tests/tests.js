@@ -119734,5 +119734,362 @@
     if (src.indexOf(old) > src.indexOf('lsSide<lsSides')) throw new Error('the side loop comes before the v17.21 loop, so it is still in the path One way takes');
   });
 
+  /* ═══ SIMPLE MODE, PHASE 1 — THE ONE KEYFRAME COLLECTOR (queue 980 (partial); BUILD-PLAN.md §3.1). A new function only:
+     Full's own shifters do not read it (DESIGN.md §0.4 B2). */
 
+  /* The generic walk the collector is checked against: EVERY {kf:[…]} container anywhere under the layer. It is
+     deliberately not a copy of the collector — it knows nothing about which fields exist — so a list the collector
+     forgets shows up as a difference. */
+  function smAllKfLists(root) {
+    var out = [], seen = new Set();
+    (function walk(v, depth) {
+      if (!v || typeof v !== 'object' || depth > 12 || seen.has(v)) return;
+      seen.add(v);
+      if (!Array.isArray(v) && Array.isArray(v.kf) && v.kf.length && v.kf.every(function (k) { return k && typeof k.t === 'number'; })) { out.push(v); return; }
+      Object.keys(v).forEach(function (k) { walk(v[k], depth + 1); });
+    })(root, 0);
+    return out;
+  }
+  function smKitchenSink() {
+    var kf = function (a, b) { return { kf: [{ t: a, v: 0, e: 'linear' }, { t: b, v: 1, e: 'linear' }] }; };
+    var L = FM.makeLayer('text', { name: 'SM_SINK', text: '', x: 50, y: 50 });
+    L.start = 1; L.duration = 6;
+    L.transform.x = kf(1, 2);
+    L.volume = kf(1, 3);
+    L.effects = [{ type: 'blur', enabled: true, params: { radius: kf(2, 3) } },
+                 { type: 'filter', enabled: true, params: { strength: kf(2, 4) }, effects: [{ type: 'blur', enabled: true, params: { radius: kf(3, 4) } }] }];
+    L.audioFx = [{ type: 'reverb', enabled: true, params: { mix: kf(1, 5) } }];
+    L.masks = [{ id: 'smm1', mode: 'add', path: { kf: [{ t: 1, v: [[0, 0], [8, 0], [8, 8]], e: 'linear' }, { t: 2, v: [[0, 0], [9, 0], [9, 9]], e: 'linear' }] } }];
+    L.captions = [
+      { start: 0, end: 2, text: 'one', effects: [{ type: 'blur', enabled: true, params: { radius: kf(1.5, 2.5) } }] },
+      { start: 2, end: 4, text: 'two', effects: [{ type: 'filter', enabled: true, params: {}, effects: [{ type: 'blur', enabled: true, params: { radius: kf(3.5, 4.5) } }] }] }
+    ];
+    return L;
+  }
+
+  test('simple P1 · T15 FM.timedLists lists exactly the keyframe containers a generic walk finds (cue effects included)', { item: '980' }, function () {
+    var L = smKitchenSink();
+    /* `(FM.timedLists || FM.animatedProps)`: with the collector missing, the SHIPPED collector is what gets
+       checked, so this fails on HEAD by what it leaves out rather than by a missing seam. */
+    var collect = FM.timedLists || FM.animatedProps;
+    var got = collect(L), want = smAllKfLists(L);
+    var missing = want.filter(function (p) { return got.indexOf(p) < 0; });
+    var extra = got.filter(function (p) { return want.indexOf(p) < 0; });
+    if (missing.length || extra.length) throw new Error('the collector and the generic walk disagree: ' + missing.length + ' list(s) missed (first: ' + JSON.stringify(missing[0] && missing[0].kf[0]) + '), ' + extra.length + ' extra — on HEAD the two cue-effect lists are the missed ones');
+    if (want.length !== 9) throw new Error('the fixture should hold 9 keyed lists, the walk found ' + want.length + ' — the fixture changed, so this proves less than it says');
+    /* POSITIVE CONTROL: the same layer with its cues' effects removed — the walk and animatedProps must then agree,
+       or the walk is simply counting something different and the check above means nothing. */
+    var C = smKitchenSink(); C.captions.forEach(function (c) { delete c.effects; });
+    var a = FM.animatedProps(C), w = smAllKfLists(C);
+    if (a.length !== w.length || w.some(function (p) { return a.indexOf(p) < 0; })) throw new Error('CONTROL: without cue effects the generic walk (' + w.length + ') and animatedProps (' + a.length + ') still disagree — the walk is not a fair judge');
+    if (FM.timedLists && FM.timedLists(L, { cues: false }).length !== FM.animatedProps(L).length) throw new Error('timedLists(layer, {cues:false}) is not animatedProps');
+    /* FULL IS UNTOUCHED (DESIGN.md §0.4 B2): Full's own shift still moves exactly animatedProps' lists, so a caption
+       track moved in Full leaves its cue effects where they were, as on HEAD. */
+    var F = smKitchenSink(), cueKey = F.captions[0].effects[0].params.radius.kf[0];
+    FM.shiftLayerKeyframes(F, 3);
+    if (Math.abs(F.transform.x.kf[0].t - 4) > 1e-9) throw new Error('CONTROL: Full’s shift did not move the transform key — the shift itself is broken');
+    if (Math.abs(cueKey.t - 1.5) > 1e-9) throw new Error('Full’s shiftLayerKeyframes now moves cue effects (' + cueKey.t + ', want 1.5 as on HEAD) — a Full behaviour change, DESIGN §0.4 B2');
+  });
+
+  /* ═══ SIMPLE MODE, PHASE 1 STEP 1.2 — THE ENGINE (invisible): sanitiser, copy routes, schema, FM.spine.classify ═══ */
+
+  /* A tiny project builder for the classifier. Every clip gets a real media record (native size), removed afterwards. */
+  function smRig(W, H) {
+    var made = [];
+    var rig = {
+      clip: function (id, start, dur, o) {
+        o = o || {};
+        var L = FM.makeLayer(o.type || 'video', { name: o.name || id, x: o.x != null ? o.x : W / 2, y: o.y != null ? o.y : H / 2, start: start, duration: dur, scale: o.scale != null ? o.scale : 1 });
+        L.id = id;
+        if (o.visible === false) L.visible = false;
+        if (o.opacity != null) L.transform.opacity = o.opacity;
+        if (o.muted) L.muted = true;
+        if (o.pick) L.pick = o.pick;
+        if (o.blend) L.blendMode = o.blend;
+        if (o.audioOnly) L.audioOnly = true;
+        if (o.nw !== 0) { FM.media.set(id, { kind: o.type === 'image' ? 'image' : 'video', width: o.nw || W, height: o.nh || H, duration: dur, hasAudio: o.silent ? false : undefined }); made.push(id); }
+        return L;
+      },
+      text: function (id, start, dur, words) { var T = FM.makeLayer('text', { text: words || 'Hello', x: W / 2, y: H / 2, start: start, duration: dur }); T.id = id; return T; },
+      scene: function (layers) { return scene(layers, { project: { width: W, height: H, fps: 30, duration: 0, background: '#000000' } }); },
+      done: function () { made.forEach(function (id) { FM.media.remove(id); }); }
+    };
+    return rig;
+  }
+  function smMain(R) { return R.main.map(function (e) { return e.id; }).join(','); }
+  function smNeedSpine() { if (!FM.spine || !FM.spine.classify) throw new Error('FM.spine.classify is missing — js/spine.js did not load'); return FM.spine; }
+
+  test('simple P1 · T7 sanitiser: layer.sm and project.sm come out canonical, keep plain unknown keys, and a second pass changes nothing', { item: '980' }, function () {
+    var mk = function (sm, extra) { return Object.assign({ id: 'smz', type: 'video', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], sm: sm }, extra || {}); };
+    var run = function (l) { FM.storage._sanitizeLayers([l]); return l; };
+    var a = run(mk({ main: 'yes', stay: true, row: 2, future: { a: 1 }, _secret: 1, junk: function () {} }));
+    if (!a.sm || a.sm.main !== undefined) throw new Error('sm.main:"yes" survived the sanitiser: ' + JSON.stringify(a.sm));
+    if (a.sm.stay !== true || a.sm.row !== 2 || !a.sm.future || a.sm.future.a !== 1) throw new Error('a valid flag or a plain unknown sub-key was dropped (whitelist drift): ' + JSON.stringify(a.sm));
+    if ('_secret' in a.sm || 'junk' in a.sm) throw new Error('an underscore key or a function survived: ' + JSON.stringify(Object.keys(a.sm)));
+    var once = JSON.stringify(a); run(a);
+    if (JSON.stringify(a) !== once) throw new Error('a second pass changed a canonical layer: ' + once + ' → ' + JSON.stringify(a));
+    var b = run(mk({ main: true, stay: true, tail: true }));
+    if (JSON.stringify(b.sm) !== '{"main":true}') throw new Error('main must win over stay and tail: ' + JSON.stringify(b.sm));
+    var c = run(mk({ tail: true }));
+    if (!(c.sm && c.sm.tail === true && c.sm.stay === true)) throw new Error('tail must imply stay: ' + JSON.stringify(c.sm));
+    var d = run(mk({ main: true }, { audioOnly: true }));
+    if (d.sm) throw new Error('sm.main survived on an audio-only layer: ' + JSON.stringify(d.sm));
+    var e = run(mk({ main: true }, { type: 'text', captions: [] }));
+    if (e.sm) throw new Error('sm.main survived on a caption track');
+    var f = run(mk({ main: true }, { srcW: 1920, srcH: -4, srcRev: 1.5, pick: { b: 'pk1', i: 2, x: 9 } }));
+    if (f.srcW !== 1920 || 'srcH' in f || 'srcRev' in f) throw new Error('srcW/srcH/srcRev not sanitised: ' + JSON.stringify([f.srcW, f.srcH, f.srcRev]));
+    if (JSON.stringify(f.pick) !== '{"b":"pk1","i":2}') throw new Error('pick not canonical: ' + JSON.stringify(f.pick));
+    var g = run(mk('not an object'));
+    if ('sm' in g) throw new Error('a non-object sm survived');
+    /* THE ORDINARY LOAD PATH runs sanitizeEffects + sanitizeUnsafeValues (js/storage.js load), not _sanitizeLayers. */
+    var h = mk({ main: 'x', row: 3 });
+    FM.storage_sanitizeUnsafeValues(h);
+    if (JSON.stringify(h.sm) !== '{"row":3}') throw new Error('the load path did not sanitise sm: ' + JSON.stringify(h.sm));
+    /* An effect instance keeps its Simple-made marker only as exactly 1. */
+    var fxl = mk(undefined, { effects: [{ type: 'blur', enabled: true, sm: 1, params: { radius: 2 } }, { type: 'blur', enabled: true, sm: 'x', params: { radius: 2 } }] });
+    delete fxl.sm; run(fxl);
+    if (fxl.effects[0].sm !== 1) throw new Error('an effect instance lost its sm:1 marker (the Simple-made flag would turn Full-made on the next undo)');
+    if ('sm' in fxl.effects[1]) throw new Error('an effect instance kept sm:"x"');
+    /* project.sm: home keeps any string ≤ 32, a non-string home goes, v is clamped (never to SM_V), junk is dropped. */
+    var P = { width: 320, height: 240, fps: 30, duration: 4, sm: { v: 99999, home: 'x', adopted: 'yes', mrev: 3, later: { a: [1] } } };
+    FM.storage._clampProjectDims(P);
+    if (JSON.stringify(P.sm) !== '{"v":1000,"home":"x","mrev":3,"later":{"a":[1]}}') throw new Error('project.sm not canonical: ' + JSON.stringify(P.sm));
+    var P2 = { width: 320, height: 240, fps: 30, duration: 4, sm: { home: 5 } };
+    FM.storage._clampProjectDims(P2);
+    if ('sm' in P2) throw new Error('project.sm with only a numeric home should be dropped whole: ' + JSON.stringify(P2.sm));
+    /* CONTROL: a layer with no sm and no helper fields comes out byte-identical — the sanitiser adds nothing. */
+    var n = mk(undefined); delete n.sm; var n0 = JSON.stringify(n); run(n);
+    if (JSON.stringify(n) !== n0) throw new Error('CONTROL: a layer with no Simple keys was changed by the sanitiser');
+  });
+
+  test('simple P1 · T6 copy routes: duplicate, paste and the Assistant clone never make a second main clip or a second end watermark', { item: '980' }, async function () {
+    var fx = importFixture();
+    try {
+      var A = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 20, shapeH: 20, fill: '#fff' });
+      A.id = 'sm6_main'; A.start = 0; A.duration = 2; A.sm = { main: true, row: 2 }; A.pick = { b: 'pk9', i: 0 };
+      var S = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 20, shapeH: 20, fill: '#0f0' });
+      S.id = 'sm6_mark'; S.start = 0; S.duration = 9; S.sm = { stay: true, tail: true, tailEnd: 9 };
+      FM.scene.layers.push(A, S); FM.scene.project.duration = 9;
+      var before = new Set(FM.scene.layers.map(function (l) { return l.id; }));
+      var fresh = function () { return FM.scene.layers.filter(function (l) { return !before.has(l.id); }); };
+      var check = function (route, copy, want) {
+        var got = copy.sm ? JSON.stringify(copy.sm) : 'none';
+        if (got !== want) throw new Error(route + ': the copy carries sm ' + got + ', want ' + want + ' — a copy of a main clip must not be a second main clip');
+        if ('pick' in copy) throw new Error(route + ': the copy kept the pick stamp — it was not in that pick');
+      };
+      await FM.duplicateLayer(A.id);            check('duplicate', fresh()[0], '{"row":2}'); fresh().forEach(function (l) { before.add(l.id); });
+      await FM.duplicateLayer(A.id, true);      check('duplicate in place', fresh()[0], '{"row":2}'); fresh().forEach(function (l) { before.add(l.id); });
+      await FM.duplicateLayer(S.id);            check('duplicate of the end watermark', fresh()[0], '{"stay":true}'); fresh().forEach(function (l) { before.add(l.id); });
+      FM.scene.selectedIds = [A.id]; FM.scene.selectedId = A.id;
+      FM.copySelection(); await FM.pasteClipboard();
+      check('paste', fresh()[0], '{"row":2}'); fresh().forEach(function (l) { before.add(l.id); });
+      var r = FM.aiOps.applyOps([{ op: 'duplicateLayer', ref: A.id }]);
+      var ai = fresh()[0];
+      if (!ai) throw new Error('the Assistant duplicate made no copy: ' + JSON.stringify(r && r.dropped));
+      check('Assistant clone', ai, '{"row":2}');
+      /* CONTROL: the ORIGINALS keep every byte — the strip is on the copy only. */
+      if (JSON.stringify(A.sm) !== '{"main":true,"row":2}' || !A.pick) throw new Error('CONTROL: the original main clip lost its flags: ' + JSON.stringify(A.sm));
+      if (JSON.stringify(S.sm) !== '{"stay":true,"tail":true,"tailEnd":9}') throw new Error('CONTROL: the original watermark lost its flags');
+    } finally { fx.restore(); }
+  });
+
+  test('simple P1 · T1 classifier: a plain track, a picture-in-picture, native-size fitting, gaps, overlaps and a crossfade', { item: '980' }, function () {
+    var SP = smNeedSpine(), g = smRig(1920, 1080);
+    try {
+      /* plain track + PiP + a 4K clip at 0.5 + a landscape clip letterboxed in 9:16 (in its own project) */
+      var c1 = g.clip('c1', 0, 4), c2 = g.clip('c2', 4, 3, { nw: 3840, nh: 2160, scale: 0.5 }), c3 = g.clip('c3', 7, 5);
+      var pip = g.clip('pip', 5, 1.5, { scale: 0.4, x: 1500, y: 300 });
+      var R = SP.classify(g.scene([pip, c3, c2, c1]));
+      if (smMain(R) !== 'c1,c2,c3') throw new Error('main should be c1,c2,c3 (a 4K clip at scale 0.5 fills a 1080p frame), got ' + smMain(R));
+      if (R.units.pip.kind !== 'overlay' || R.units.pip.host !== 'c2') throw new Error('the picture-in-picture should be an overlay following c2: ' + JSON.stringify(R.units.pip));
+      if (R.main.some(function (e) { return e.seam.kind !== 'join'; })) throw new Error('end-to-end clips should all be joins: ' + JSON.stringify(R.main.map(function (e) { return e.seam; })));
+      if (Math.abs(R.trackEnd - 12) > 1e-9) throw new Error('trackEnd ' + R.trackEnd + ', want 12');
+      var g9 = smRig(1080, 1920);
+      try {
+        var land = g9.clip('land', 0, 4, { nw: 1920, nh: 1080, scale: 0.5625 });
+        var R9 = SP.classify(g9.scene([land]));
+        if (smMain(R9) !== 'land') throw new Error('a landscape clip fitted to a 9:16 frame (scale 0.5625) should be main, got ' + smMain(R9));
+      } finally { g9.done(); }
+      /* a gap, an overlap and a hand-made crossfade (opacity keys on the upper clip inside the overlap) */
+      var a = g.clip('ga', 0, 4), b = g.clip('gb', 5.5, 4), c = g.clip('gc', 9, 4), d = g.clip('gd', 12, 4);
+      d.transform.opacity = { kf: [{ t: 12, v: 0, e: 'linear' }, { t: 13, v: 1, e: 'linear' }] };
+      var R2 = SP.classify(g.scene([d, c, b, a]));
+      var seams = R2.main.map(function (e) { return e.id + ':' + e.seam.kind; }).join(' ');
+      if (seams !== 'ga:join gb:gap gc:overlap gd:blend') throw new Error('seams wrong: ' + seams + ' (want ga:join gb:gap gc:overlap gd:blend)');
+      if (Math.abs(R2.main[1].seam.amt - 1.5) > 1e-9) throw new Error('the gap should measure 1.5 s: ' + R2.main[1].seam.amt);
+      if (!R2.anomalies.some(function (x) { return x.kind === 'gap'; }) || !R2.anomalies.some(function (x) { return x.kind === 'overlap'; })) throw new Error('the gap and the overlap are not listed as anomalies');
+      if (R2.anomalies.some(function (x) { return x.kind === 'overlap' && x.ids.indexOf('gd') >= 0; })) throw new Error('a crossfade was listed as an overlap — it must show no chip');
+    } finally { g.done(); }
+  });
+
+  test('simple P1 · T1 classifier: stacked takes, a background still, an A-roll with cutaways and an import stack', { item: '980' }, function () {
+    var SP = smNeedSpine(), g = smRig(1920, 1080);
+    try {
+      /* a take stacked over an older take: top wins — unless the top is see-through, then the bottom stays main */
+      var lo = g.clip('lo', 0, 5), up = g.clip('up', 0, 5);
+      var R = SP.classify(g.scene([up, lo]));
+      if (smMain(R) !== 'up') throw new Error('a stacked take: the top should win, got ' + smMain(R));
+      up.transform.opacity = 0.5;
+      R = SP.classify(g.scene([up, lo]));
+      if (smMain(R) !== 'lo' || R.units.up.kind !== 'overlay') throw new Error('a half-transparent take on top: the lower clip should stay main and the top be an overlay, got ' + smMain(R) + ' / ' + R.units.up.kind);
+      /* a silent background still under five joined clips → a background; the five are main */
+      var bg = g.clip('bg', 0, 10, { type: 'image' });
+      var five = [0, 1, 2, 3, 4].map(function (i) { return g.clip('j' + i, i * 2, 2); });
+      R = SP.classify(g.scene(five.slice().reverse().concat([bg])));
+      if (smMain(R) !== 'j0,j1,j2,j3,j4' || R.units.bg.kind !== 'background') throw new Error('a background still: main ' + smMain(R) + ', bg ' + R.units.bg.kind);
+      /* an A-roll WITH SOUND under separated cutaways → one main clip, the cutaways are overlays that follow it */
+      var aroll = g.clip('aroll', 0, 60);
+      var cuts = [5, 15, 25, 35, 45].map(function (t, i) { return g.clip('cut' + i, t, 3); });
+      R = SP.classify(g.scene(cuts.concat([aroll])));
+      if (smMain(R) !== 'aroll') throw new Error('an A-roll with cutaways: main should be the A-roll, got ' + smMain(R));
+      if (cuts.some(function (k) { return R.units[k.id].kind !== 'overlay' || R.units[k.id].host !== 'aroll'; })) throw new Error('the cutaways should be overlays following the A-roll: ' + JSON.stringify(cuts.map(function (k) { return R.units[k.id]; })));
+      /* an import stack: four clips of one pick at one start all go on the main track in pick order */
+      var pk = [0, 1, 2, 3].map(function (i) { return g.clip('p' + i, 0, 3, { pick: { b: 'pkA', i: i } }); });
+      R = SP.classify(g.scene(pk.slice().reverse()));
+      if (smMain(R) !== 'p0,p1,p2,p3') throw new Error('an import stack of one pick should be four main clips in pick order, got ' + smMain(R));
+      /* CONTROL: two UNSTAMPED clips at one start are still a stacked take — the top one wins */
+      var u1 = g.clip('u1', 0, 3), u2 = g.clip('u2', 0, 3);
+      R = SP.classify(g.scene([u2, u1]));
+      if (smMain(R) !== 'u2') throw new Error('CONTROL: two unstamped clips at one start should be a stacked take (top wins), got ' + smMain(R));
+    } finally { g.done(); }
+  });
+
+  test('simple P1 · T1 classifier: what follows which clip — on a cut, long things, the sound rule, captions, hidden clips, camera', { item: '980' }, function () {
+    var SP = smNeedSpine(), g = smRig(1920, 1080);
+    try {
+      var c1 = g.clip('k1', 0, 5), c2 = g.clip('k2', 5, 5), c3 = g.clip('k3', 10, 5), c4 = g.clip('k4', 15, 5);
+      var t1 = g.text('t_in', 1, 2), t2 = g.text('t_cut', 5, 2), tLong = g.text('t_long', 2, 12);
+      var song = g.clip('song', 0, 8, { nw: 0, audioOnly: true });
+      var whoosh = g.clip('whoosh', 4.6, 0.8, { nw: 0, audioOnly: true });
+      var caps = g.text('caps', 0, 20); caps.captions = [{ start: 0, end: 2, text: 'a' }]; caps.text = '';
+      var cam = FM.makeLayer('camera', { start: 0, duration: 20 }); cam.id = 'cam';
+      var hid = g.clip('hid', 20, 3, { visible: false });
+      var R = SP.classify(g.scene([t1, t2, tLong, caps, cam, whoosh, song, c4, c3, c2, c1, hid]));
+      if (smMain(R) !== 'k1,k2,k3,k4,hid') throw new Error('main should be k1..k4 plus the hidden clip in the seam after them, got ' + smMain(R));
+      if (!R.units.hid.hidden) throw new Error('the hidden main clip should be marked hidden (drawn dimmed)');
+      if (R.units.t_in.host !== 'k1') throw new Error('a title inside clip 1 should follow clip 1: ' + R.units.t_in.host);
+      if (R.units.t_cut.host !== 'k2') throw new Error('a title starting exactly on the cut should follow the clip AFTER it: ' + R.units.t_cut.host);
+      if (R.units.t_long.host !== null) throw new Error('a title over three clips is long and stays put: ' + R.units.t_long.host);
+      if (R.units.song.kind !== 'audio' || R.units.song.host !== null) throw new Error('a song running on past its clip stays put: ' + JSON.stringify(R.units.song));
+      if (R.units.whoosh.host !== 'k1') throw new Error('a 0.8 s whoosh starting 0.4 s before a cut follows the clip it starts on: ' + R.units.whoosh.host);
+      if (R.riders.indexOf('caps') < 0 || R.units.caps.kind !== 'captions') throw new Error('a caption track over the whole video rides the time map: ' + JSON.stringify(R.units.caps));
+      if (R.units.cam.kind !== 'fullOnly' || R.fullOnly.indexOf('cam') < 0) throw new Error('the camera is Full-only: ' + JSON.stringify(R.units.cam));
+      if (R.followers.k1.indexOf('t_in') < 0 || R.followers.k1.indexOf('whoosh') < 0) throw new Error('followers of clip 1 wrong: ' + JSON.stringify(R.followers.k1));
+      /* lanes: the two short titles share a lane, the long one needs its own */
+      if (R.lanes.text.length !== 2) throw new Error('three titles (two back to back, one long) should pack into 2 lanes: ' + JSON.stringify(R.lanes.text));
+      /* nothing but text and shapes → no main track at all; an empty project → nothing */
+      var only = SP.classify(g.scene([g.text('lone', 0, 3)]));
+      if (only.main.length || only.trackEnd !== 0) throw new Error('text only should have no main track');
+      if (SP.classify(g.scene([])).main.length !== 0) throw new Error('an empty project has a main track');
+    } finally { g.done(); }
+  });
+
+  test('simple P1 · T1 classifier: media still arriving is undecided, a missing clip with a known size is still a picture, and classify never reads FM.scene', { item: '980' }, function () {
+    var SP = smNeedSpine(), g = smRig(1920, 1080);
+    var hyd0 = FM.storage.hydrating;
+    try {
+      var known = g.clip('mk', 0, 4, { nw: 0 }); known.srcW = 1920; known.srcH = 1080; known.srcRev = 0;
+      var blind = g.clip('mb', 4, 4, { nw: 0 });
+      FM.storage.hydrating = function () { return true; };
+      var R = SP.classify(g.scene([blind, known]));
+      if (R.units.mb.kind !== 'undecided' || R.units.mb.media !== 'arriving') throw new Error('a clip with no record and no size while media is loading should be undecided/arriving: ' + JSON.stringify(R.units.mb));
+      if (smMain(R) !== 'mk') throw new Error('a clip whose record has not landed but whose srcW/srcH are stored is a picture and main, got ' + smMain(R));
+      /* a stale srcW (it describes an older mediaRev) is never trusted */
+      known.mediaRev = 2;
+      FM.storage.hydrating = function () { return false; };
+      R = SP.classify(g.scene([known]));
+      if (R.units.mk.media !== 'missing') throw new Error('with hydration over and no record the clip is missing: ' + R.units.mk.media);
+      /* PURITY: classify reads its argument, never FM.scene (a pack is classified on its own list, §12.2) */
+      var pure = g.scene([g.clip('pz1', 0, 3), g.clip('pz2', 3, 3), g.text('pzt', 1, 1)]);   // built BEFORE the probe: makeLayer reads FM.scene
+      var real = FM.scene, touched = 0;
+      Object.defineProperty(FM, 'scene', { configurable: true, get: function () { touched++; return real; }, set: function (v) { real = v; } });
+      try { SP.classify(pure); }
+      finally { delete FM.scene; FM.scene = real; }
+      if (touched) throw new Error('classify read FM.scene ' + touched + ' time(s) — it must read only the scene it is given');
+    } finally { FM.storage.hydrating = hyd0; g.done(); }
+  });
+
+  test('simple P1 · T1 classifier timing: 500 layers within budget, and 2,000 is not quadratic', { item: '980', budgetMs: 60000 }, function () {
+    var SP = smNeedSpine(), g = smRig(1920, 1080);
+    try {
+      var build = function (n) {
+        var ls = [];
+        for (var i = 0; i < n; i++) {
+          if (i % 10 === 0) ls.push(g.clip('tc' + n + '_' + i, i * 0.4, 4));   // a main-track candidate every tenth layer
+          else { var t = g.text('tt' + n + '_' + i, i * 0.4, 1.2); ls.push(t); }
+        }
+        return g.scene(ls.reverse());
+      };
+      var s5 = build(500), s20 = build(2000);
+      SP.classify(s5);                                   // warm
+      var t0 = performance.now(); for (var k = 0; k < 3; k++) SP.classify(s5); var m5 = (performance.now() - t0) / 3;
+      t0 = performance.now(); SP.classify(s20); var m20 = performance.now() - t0;
+      if (m5 > 60) throw new Error('classify took ' + m5.toFixed(1) + ' ms for 500 layers (budget 60 ms in the suite frame; the phone target is §14.5)');
+      if (m20 > Math.max(12 * m5, 40)) throw new Error('2,000 layers took ' + m20.toFixed(1) + ' ms against ' + m5.toFixed(1) + ' ms for 500 — growth is quadratic, not O(n log n)');
+    } finally { g.done(); }
+  });
+
+
+  test('simple P1 · Simple’s + lays four picked photos end to end from the end of the clip row, one pick', { item: '980' }, async function () {
+    const png = color => new Promise(res => { const c = offscreen(32, 32), x = c.getContext('2d'); x.fillStyle = color; x.fillRect(0, 0, 32, 32); c.toBlob(b => res(new File([b], color.slice(1) + '.png', { type: 'image/png' })), 'image/png'); });
+    const files = await Promise.all(['#ff0000', '#00ff00', '#0000ff', '#ffff00'].map(png));
+    const fx = importFixture({ project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' } });
+    const lib0 = FM.mediaLib && FM.mediaLib.add;
+    try {
+      const A = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#888' });
+      A.start = 0; A.duration = 5; FM.scene.layers.push(A);
+      FM.time = 1;   // the playhead is NOT at the end: Full would put all four at 1 s
+      const add = FM.importFiles || FM._handleFiles;
+      await add(files, { at: 5 });
+      const got = FM.scene.layers.filter(l => l.type === 'image').sort((a, b) => a.start - b.start);
+      if (got.length !== 4) throw new Error('expected four photos, got ' + got.length);
+      const d = got[0].duration;
+      const starts = got.map(l => +l.start.toFixed(6));
+      const want = [5, 5 + d, 5 + 2 * d, 5 + 3 * d].map(x => +x.toFixed(6));
+      if (starts.join() !== want.join()) throw new Error('the photos were not laid end to end from 5 s: ' + starts.join(', ') + ' (want ' + want.join(', ') + ')');
+      const b = got[0].pick && got[0].pick.b;
+      if (!b || got.some((l, i) => !l.pick || l.pick.b !== b || l.pick.i !== i)) throw new Error('the four are not stamped as one pick in order: ' + JSON.stringify(got.map(l => l.pick)));
+      if (got.some(l => !(l.srcW === 32 && l.srcH === 32 && l.srcRev === 0))) throw new Error('native size not written at add: ' + JSON.stringify(got.map(l => [l.srcW, l.srcH, l.srcRev])));
+      /* CONTROL: without `at` nothing about placement changes — a single photo lands at the playhead, unstamped */
+      FM.time = 2;
+      await add([files[0]]);
+      const one = FM.scene.layers.filter(l => l.type === 'image' && got.indexOf(l) < 0)[0];
+      if (!one || Math.abs(one.start - 2) > 1e-6 || one.pick) throw new Error('CONTROL: a plain import moved (' + (one && one.start) + ') or was stamped');
+    } finally { if (FM.mediaLib) FM.mediaLib.add = lib0; fx.restore(); }
+  });
+
+  test('simple P1 · T20 no company name in any word the Simple editor shows, and the scan catches one', { item: '980' }, function () {
+    const BRANDS = /\b(Apple|Alight ?Motion|After ?Effects|Adobe|Premiere|Final ?Cut|CapCut|Instagram|TikTok|DaVinci|Resolve|iMovie|LumaFusion)\b/i;
+    const scan = function (o, path, out) {
+      if (typeof o === 'string') { if (BRANDS.test(o)) out.push(path + ': "' + o + '"'); return out; }
+      if (typeof o === 'function') { try { scan(String(o.length >= 4 ? o(2, 5, 3.2, 2) : o.length === 1 ? o(1.5) : o(4, 15)), path + '()', out); } catch (e) {} return out; }
+      if (o && typeof o === 'object') Object.keys(o).forEach(k => scan(o[k], path + '.' + k, out));
+      return out;
+    };
+    if (!FM.spineWords) throw new Error('FM.spineWords is missing — js/spine-words.js did not load');
+    const hits = scan(FM.spineWords, 'spineWords', []);
+    if (hits.length) throw new Error('another company’s name is in Simple’s words: ' + hits.join(' · '));
+    const n = scan({ a: 'Lay them out like CapCut' }, 'control', []);
+    if (n.length !== 1) throw new Error('CONTROL: the scan did not catch a planted brand name');
+    const ids = ['btn-sm-split', 'sm-timeline', 'sm-say', 'cv-editor'];   // 1 Oct: the switch is the cog's (#cv-editor, built when the cog opens)
+    const dom = ids.map(id => document.getElementById(id)).filter(Boolean).map(e => e.textContent + ' ' + (e.getAttribute('aria-label') || '') + ' ' + (e.title || '')).join(' ');
+    if (BRANDS.test(dom)) throw new Error('a company name is in the Simple editor’s controls: ' + dom.match(BRANDS)[0]);
+  });
+
+
+  test('simple P1 · the collab fingerprint carries the sm rules — its fixture holds sm keys that come out canonical, and SM_V moves it', { item: '980' }, function () {
+    const C = FM.collab;
+    if (!C || typeof C.schemaFingerprint !== 'function' || typeof C.SCHEMA_FIXTURE !== 'function') throw new Error('setup: FM.collab.schemaFingerprint is not loaded');
+    const L = C.SCHEMA_FIXTURE();
+    FM.storage._sanitizeLayers(L);
+    const sm = L[0] && L[0].sm;
+    if (JSON.stringify(sm) !== '{"stay":true,"row":2,"future":{"a":1}}') throw new Error('the fingerprint fixture carries sm ' + (sm === undefined ? 'nothing at all' : JSON.stringify(sm)) + ' after sanitising (want {"stay":true,"row":2,"future":{"a":1}}) — two builds that read sm differently would hash the same');
+    const got = C.schemaFingerprint();
+    if (got === null) throw new Error('setup: the fingerprint could not be computed');
+    const v0 = FM.SM_V;
+    let moved;
+    try { FM.SM_V = (v0 || 0) + 1; moved = C.schemaFingerprint(); } finally { if (v0 === undefined) delete FM.SM_V; else FM.SM_V = v0; }
+    if (C.schemaFingerprint() !== got) throw new Error('CONTROL: the fingerprint did not come back after SM_V was restored');
+    if (moved === got) throw new Error('a build with a different SM_V has the same fingerprint — SM_V must only change with SCHEMA_REV, and the gate cannot tell');
+  });
 })();
