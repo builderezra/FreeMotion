@@ -127233,4 +127233,32 @@
     }
   });
 
+  test('TBD: a muted or ended microphone stops the take and keeps captured audio', { item: 'TBD', budgetMs: 30000 }, async function () {
+    await withFakeMic(async function () {
+      FM.voiceRec.open();
+      for (const kind of ['mute', 'ended']) {
+        await vrWait(() => FM.voiceRec._state() === 'idle' && vrLive().length === 1, 9000, 'the live microphone');
+        const track = FM.voiceRec._tracks()[0];
+        vrEl('.vr-rec').click();
+        await vrWait(() => FM.voiceRec._state() === 'recording', 3000, 'the take to start');
+        await sleep(700);
+        track.dispatchEvent(new Event(kind));
+        await vrWait(() => FM.voiceRec._state() !== 'recording', 5000, 'the interrupted take to settle');
+        if (FM.voiceRec._state() !== 'review' || !/microphone stopped providing audio/i.test(vrEl('.vr-msg').textContent))
+          throw new Error(kind + ' left the take without its audio or without an explanation');
+        if (track.readyState !== 'ended' || FM.voiceRec.micLive())
+          throw new Error(kind + ' left the microphone active after ending the take');
+        if (kind === 'mute') vrEl('.vr-actions .vr-btn:nth-child(2)').click();
+      }
+      vrEl('.vr-actions .vr-btn:nth-child(2)').click();
+      await vrWait(() => FM.voiceRec._state() === 'idle' && vrLive().length === 1, 9000, 'the retry microphone');
+      const shortTrack = FM.voiceRec._tracks()[0];
+      vrEl('.vr-rec').click();
+      shortTrack.dispatchEvent(new Event('ended'));
+      await vrWait(() => FM.voiceRec._state() !== 'recording', 5000, 'the empty interrupted take to settle');
+      if (FM.voiceRec._state() !== 'error' || !/No audio was saved/.test(vrEl('.vr-msg').textContent) || FM.voiceRec.micLive())
+        throw new Error('an empty interrupted take silently re-opened the dead microphone instead of offering Try again');
+    });
+  });
+
 })();

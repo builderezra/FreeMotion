@@ -75,6 +75,7 @@ window.FM = window.FM || {};
   var state = 'closed';      // closed | idle | recording | review | error
   var root = null, ui = {};
   var stream = null, micTracks = [];
+  var micWatch = [], micLost = false, stopRequested = false;
   var recorder = null, chunks = [], mime = '';
   var ac = null, analyser = null, srcNode = null, levelBuf = null, rafId = 0;
   var startedAt = 0, seconds = 0, tickId = 0, watchId = 0, silentFor = 0, lastLevelAt = 0;
@@ -179,6 +180,7 @@ window.FM = window.FM || {};
      closing a closed context and cancelling a dead rAF are all no-ops, so calling it twice is safe
      and calling it from a path that never acquired anything is safe. */
   function releaseMic() {
+    unwatchMicTracks();
     if (rafId) { try { cancelAnimationFrame(rafId); } catch (e) {} rafId = 0; }
     if (srcNode) { try { srcNode.disconnect(); } catch (e) {} srcNode = null; }
     analyser = null; levelBuf = null;
@@ -198,6 +200,36 @@ window.FM = window.FM || {};
     for (var j = 0; j < tr.length; j++) { try { tr[j].stop(); } catch (e) {} }
     // The mic is gone, so Web Audio goes back to the playback session (queue 690 — see arm).
     if (FM.playbackSession) FM.playbackSession();
+  }
+
+  function unwatchMicTracks() {
+    micWatch.forEach(function (w) {
+      try { w.track.removeEventListener(w.kind, w.handler); } catch (e) {}
+    });
+    micWatch = [];
+  }
+
+  /* A device unplug, permission revocation or OS mute can stop delivering samples without a
+     MediaRecorder error. Keep an existing take through the normal stop/review path; when there is
+     nothing to keep, leave an explicit Try again instead of silently opening the dead mic again. */
+  function watchMicTracks() {
+    unwatchMicTracks();
+    micTracks.forEach(function (track) {
+      if (!track || !track.addEventListener) return;
+      ['ended', 'mute'].forEach(function (kind) {
+        var handler = function () {
+          if (micTracks.indexOf(track) < 0) return;
+          if (state === 'recording') {
+            micLost = true;
+            stop('The microphone stopped providing audio, so the take ended there.');
+          } else if (state === 'idle') {
+            fail('The microphone stopped providing audio. Check its connection or permission, then tap Try again.');
+          }
+        };
+        track.addEventListener(kind, handler);
+        micWatch.push({ track: track, kind: kind, handler: handler });
+      });
+    });
   }
 
   /* ---- level meter ---------------------------------------------------------------------------- */
@@ -455,7 +487,7 @@ window.FM = window.FM || {};
   function open() {
     if (state !== 'closed') return;          // a second tap on Record voice… must not stack panels
     if (!root) build();
-    chunks = []; blob = null; seconds = 0; silentFor = 0;
+    chunks = []; blob = null; seconds = 0; silentFor = 0; micLost = false; stopRequested = false;
     say('');
     root.classList.remove('hidden');
     state = 'idle';
@@ -544,6 +576,7 @@ window.FM = window.FM || {};
       stream = s;
       micTracks = s.getTracks ? s.getTracks() : [];
       state = 'idle';
+      watchMicTracks();
       startMeter();
       paint();
       return s;
@@ -612,6 +645,7 @@ window.FM = window.FM || {};
 
   function start() {
     if (state !== 'idle' || !stream) return;
+    micLost = false; stopRequested = false;
     if (FM.playing && FM.pause) { try { FM.pause(); } catch (e) {} }   // belt and braces
     mime = pickMime(window.MediaRecorder && MediaRecorder.isTypeSupported
       ? MediaRecorder.isTypeSupported.bind(MediaRecorder) : null);
@@ -624,7 +658,15 @@ window.FM = window.FM || {};
     }
     recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
     recorder.onerror = function () { fail('The recording stopped with an error.'); };
-    recorder.onstop = finish;
+    recorder.onstop = function () {
+      // Some recorders finish on track loss before delivering the track's ended event.
+      if (state === 'recording' && !stopRequested) seconds = (Date.now() - startedAt) / 1000;
+      if (state === 'recording' && !stopRequested && !ui._note && micTracks.some(function (t) { return t.readyState === 'ended' || t.muted; })) {
+        micLost = true;
+        ui._note = 'The microphone stopped providing audio, so the take ended there.';
+      }
+      finish();
+    };
     try { recorder.start(250); } catch (e) { fail('This browser refused to start a recording.'); return; }
     startedAt = Date.now(); seconds = 0; silentFor = 0;
     state = 'recording';
@@ -649,6 +691,8 @@ window.FM = window.FM || {};
   // `note` is shown after the take lands in review — used by the cap and by the backgrounding path.
   function stop(note) {
     if (state !== 'recording') return;
+    stopRequested = true;
+    unwatchMicTracks();
     seconds = (Date.now() - startedAt) / 1000;
     stopTick();
     ui._note = note || '';
@@ -661,7 +705,7 @@ window.FM = window.FM || {};
            that does nothing, forever. That is the worst failure this screen can have, so it gets a
            watchdog: finish() runs either way, and whichever arrives second is a no-op because
            finish() only acts while the state is still 'recording'. */
-        watchId = setTimeout(function () { watchId = 0; finish(); }, 900);
+        if (state === 'recording') watchId = setTimeout(function () { watchId = 0; finish(); }, 900);
         return;
       } catch (e) {}
     }
@@ -678,11 +722,20 @@ window.FM = window.FM || {};
     releaseMic();
     blob = chunks.length ? new Blob(chunks, { type: mime || (chunks[0] && chunks[0].type) || '' }) : null;
     chunks = [];
+    var lost = micLost, note = ui._note || '';
+    micLost = false; stopRequested = false; ui._note = '';
 
     // Zero-length: tapped stop the instant you tapped record, or a recorder that produced nothing.
     // This must NOT become a layer — an empty audio clip on the timeline is worse than no clip.
     if (!blob || !blob.size || seconds < MIN_SECONDS) {
       blob = null;
+      if (lost) {
+        state = 'error';
+        say(note + ' No audio was saved. Check the mic, then tap Try again.', 'bad');
+        ui.retake.textContent = 'Try again';
+        paint();
+        return;
+      }
       state = 'idle';
       say('Too short — nothing was recorded. Hold the take for at least a moment.', 'bad');
       ui.time.textContent = '0:00';
@@ -704,8 +757,7 @@ window.FM = window.FM || {};
       ? 'Will start the composition at 0:00.'
       : 'Lands at ' + clockFine(landsAt) + ' — where the playhead is, same as an import.';
     state = 'review';
-    say(ui._note || '');
-    ui._note = '';
+    say(note);
     paint();
   }
 
