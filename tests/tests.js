@@ -120502,4 +120502,50 @@
     } finally { window.matchMedia = mm0; }
   });
 
+  test('980 cog T1 ten switches both ways write nothing — the document, the undo history, every storage key and the remembered block stay as they were, apart from this device’s own editor memory', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      FM.closeCanvasDialog(); await c.sleep(100);
+      const docOf = () => JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers });
+      const ALLOWED = { 'fm.editor.last': 1, 'fm.editor.hint': 1, 'fm.projects': 1 };   // the card's own `editor` is checked below
+      const snap = () => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!ALLOWED[k]) o[k] = localStorage.getItem(k); } return o; };
+      const cards = () => { try { return JSON.parse(localStorage.getItem('fm.projects') || '[]').map(p => { const q = Object.assign({}, p); delete q.editor; return q; }); } catch (e) { return null; } };
+      const doc0 = docOf(), hist0 = JSON.stringify(FM.history._steps()), ls0 = snap(), cards0 = JSON.stringify(cards()), pair0 = localStorage.getItem('fm.cvPair');
+      const setItem0 = Storage.prototype.setItem; const wrote = [];
+      Storage.prototype.setItem = function (k, v) { if (!ALLOWED[k]) wrote.push(k); return setItem0.call(this, k, v); };
+      try {
+        for (let i = 0; i < 10; i++) {
+          const to = FM.editor.mode() === 'simple' ? 'full' : 'simple';
+          if (!(await FM.editor.request(to, { from: 'cog' }))) throw new Error('switch ' + (i + 1) + ' to ' + to + ' was refused with nothing open');
+          await c.sleep(30);
+        }
+        await c.sleep(700);   // past the 600 ms autosave debounce, so a save the switch scheduled would have landed
+      } finally { Storage.prototype.setItem = setItem0; }
+      if (FM.editor.mode() !== 'full') throw new Error('ten switches from Full should end in Full, not ' + FM.editor.mode());
+      if (docOf() !== doc0) throw new Error('the switches changed the document (an sm key, a layer, the project)');
+      if (JSON.stringify(FM.history._steps()) !== hist0) throw new Error('the switches added undo steps: ' + hist0 + ' → ' + JSON.stringify(FM.history._steps()));
+      if (wrote.length) throw new Error('the switches wrote storage keys: ' + Array.from(new Set(wrote)).join(', '));
+      const ls1 = snap(); const changed = Object.keys(Object.assign({}, ls0, ls1)).filter(k => ls0[k] !== ls1[k]);
+      if (changed.length) throw new Error('storage keys changed across the switches: ' + changed.join(', '));
+      if (JSON.stringify(cards()) !== cards0) throw new Error('the project cards changed beyond their own editor field');
+      if (localStorage.getItem('fm.cvPair') !== pair0) throw new Error('the remembered cog block changed (fm.cvPair)');
+    });
+  });
+
+  test('980 cog T2 every canvas tool a live session leases is known to the switch (it holds, commits, closes quietly or stays), and the voice recorder is refused', { item: '980' }, async function () {
+    smNeedEditor();
+    const G = FM.editorGuardLists;
+    if (!G) throw new Error('FM.editorGuardLists is missing (js/editor-mode.js)');
+    /* the table is read from collab-presence's own source, so a tool added there later fails here until the switch knows it */
+    const src = await (await fetch('js/collab-presence.js', { cache: 'no-store' })).text();
+    const m = src.match(/const LEASED = \[([\s\S]*?)\n  \];/);
+    if (!m) throw new Error('setup: could not read the LEASED table out of js/collab-presence.js');
+    const leased = Array.from(m[1].matchAll(/\['(\w+)'/g)).map(x => x[1]);
+    if (leased.length < 9) throw new Error('setup: the LEASED table read as ' + JSON.stringify(leased) + ' — fewer tools than it holds');
+    const known = new Set([].concat(G.HOLDS, G.COMMITS, G.QUIET, G.STAYS));
+    const NAME = { motion: ['path'], track: ['tracker'], draw: ['pen', 'draw-freehand'] };   // presence's names → the guard's
+    const missing = leased.filter(id => !(NAME[id] || [id]).every(n => known.has(n)));
+    if (missing.length) throw new Error('the switch does not know these leased tools: ' + missing.join(', ') + ' (known: ' + Array.from(known).join(', ') + ')');
+    if ((G.REFUSED || []).indexOf('voice') < 0) throw new Error('the voice recorder is not in REFUSED — a switch could slide under an open take');
+  });
+
 })();
