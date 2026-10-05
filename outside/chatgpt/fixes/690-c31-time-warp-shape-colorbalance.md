@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Colour Balance before Time Warp Scan on a moving shape
+
+Starting commit: clean preferred Codex-only `7baf7646a09df33b3ceb27350701e0847f4afd0d`; isolated branch `codex/690-c31-scan-colorbalance-shape`. Exact standing #690 is `REQUESTS.md:27375-27403`, and C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. No `audits/*.json` record names C31 or Time Warp Scan; Colour Balance mentions in `audits/912-audit.json` concern filter recipes.
+
+Colour Balance grades each source pixel independently at the requested time. The moving-shape historical-source gate omitted it, so a cold seek to 0.8 seconds differed from sequential playback (`cold=0, played=182` at pixel 605). The shape gate now reconstructs the keyed grade at each crossing. Still-image and decoded-video gates remain separate. The shape MP4 resume identity advances from 8 to 9 so interrupted exports cannot reuse old scan pixels.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 364→365, exporter 173→174), `tests/tests.js` (one new `{ item: 'TBD' }` regression and existing resume-identity expectation), and this report. The focused native Chromium regression failed before and passed after at full and half preview size in Freeze and Reveal; adjacent keyed-Vibrance regression passed. JavaScriptCore syntax and `git diff --check` passed. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
