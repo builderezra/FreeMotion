@@ -121758,6 +121758,23 @@
     });
   });
 
+  test('TBD Speech bubble keeps a broad attached tail at picker and canvas size', { item: 'TBD' }, function () {
+    [34, 300].forEach(size => {
+      const cv = offscreen(size, size), g = cv.getContext('2d', { willReadFrequently: true });
+      FM.traceShapePath(g, { shape: 'speech' }, 0, 0, size, size);
+      g.fillStyle = '#fff'; g.fill();
+      const pixels = g.getImageData(0, 0, size, size).data;
+      const filled = (x, y) => pixels[(y * size + x) * 4 + 3] > 127;
+      if (!filled(Math.floor(size * 0.5), Math.floor(size * 0.4)) || filled(0, 0))
+        throw new Error('Speech bubble body became hollow or escaped its layer at ' + size + 'px');
+      const y = Math.floor(size * 0.80), xs = [];
+      for (let x = 0; x < size; x++) if (filled(x, y)) xs.push(x);
+      if (!xs.length) throw new Error('Speech bubble tail disappeared below its body at ' + size + 'px');
+      if (size === 300 && (xs[0] > 0.15 * size || xs.length < 0.13 * size))
+        throw new Error('Speech bubble tail is still a thin detached-looking slash at canvas size: left ' + xs[0] + ', width ' + xs.length);
+    });
+  });
+
   test('TBD Reviewed shapes keep their bomb, hand and crown silhouette at picker and canvas size', { item: 'TBD' }, function () {
     const draw = (shape, size, aspect) => {
       const cv = offscreen(size, size), g = cv.getContext('2d', { willReadFrequently: true });

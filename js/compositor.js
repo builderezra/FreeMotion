@@ -17881,12 +17881,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     S.trapezoid = [[[0.22,0],[0.78,0],[1,1],[0,1]]];
     S.parallelogram = [[[0.28,0],[1,0],[0.72,1],[0,1]]];
     // — page 2 —
-    // Short, swept tail: accepted independently at picker and canvas size.
+    // The tail and lower-left corner form one contour; the previous detached-looking slash
+    // passed the picker but failed the 300px canvas review.
     S.speech = [[[0.19,0.09,1,0.082,0],[0.81,0.09,1,0.082,0],
       [0.94,0.22,1,0,0.082],[0.94,0.62,1,0,0.082],
-      [0.81,0.75,1,-0.082,0],[0.49,0.75],
-      [0.315,0.855,1,-0.076,0.043],[0.18,0.910,1,-0.027,0.007],
-      [0.18,0.865,1,0.015,-0.031],[0.25,0.75],[0.19,0.75,1,-0.082,0],
+      [0.81,0.75,1,-0.082,0],[0.42,0.75,1,-0.075,0],
+      [0.16,0.88],[0.12,0.75,1,-0.02,-0.05],
       [0.06,0.62,1,0,-0.082],[0.06,0.22,1,0,-0.082]]];
     // crescent moon: hand-authored outline (horn → outer bulge → horn → concave inner edge) —
     // the old two-overlapping-arcs version self-intersected and filled as a thin sliver
