@@ -91,7 +91,10 @@ window.FM = window.FM || {};
     const inside = clips.length && t > clips[0].start + R.eps && t < R.trackEnd - R.eps;
     if (!inside) { pick('video/*,image/*,audio/*', true, f => S.cmd.append(f)); return; }
     const j = S.insertIndexAt(R, t);
-    const after = j === 0 ? w.beforeFirst : (w.afterClip || 'After ') + S.itemWord(FM.layerById(FM.scene, R.main[j - 1].id), R);
+    /* after a card (a slot entry, id 'slot:…', no layer) the label names the card by its first member: "After " alone read
+       as a broken button (review finding 6) */
+    const pe = j > 0 ? R.main[j - 1] : null, nm = pe ? S.itemWord(FM.layerById(FM.scene, pe.slot ? pe.members[0] : pe.id), R) : '';
+    const after = j === 0 ? w.beforeFirst : (nm ? (w.afterClip || 'After ') + nm : (w.afterCard || 'After the card'));
     S.say(w.addWhere || 'Add clips', { buttons: [
       { label: w.atEnd || 'At the end', fn: () => pick('video/*,image/*,audio/*', true, f => S.cmd.append(f)) },
       { label: after, fn: () => pick('video/*,image/*,audio/*', true, f => S.cmd.insert(f, j)) }

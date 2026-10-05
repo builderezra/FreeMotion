@@ -122142,4 +122142,37 @@
       });
     }
   });
+
+
+  test('simple P2.2 · review Clips › After a card and Into row after a card keep the new clip above the backdrop, just above the next clip, and the label names the card (§3.6.1)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const bgRec = (W, H) => { const c = offscreen(W, H), x = c.getContext('2d'); x.fillStyle = '#334'; x.fillRect(0, 0, W, H); return { kind: 'image', el: c, width: W, height: H }; };
+    const build = extra => (W, H) => [smT('Intro', 0, 2, W, H)].concat(extra ? [extra(W, H)] : []).concat([smV('B', 5, 3, W, H), smV('A', 2, 3, W, H),
+      FM.makeLayer('image', { name: 'Bg', x: W / 2, y: H / 2, start: 0, duration: 8 })]);
+    const z = id => FM.scene.layers.findIndex(l => l.id === id);
+    /* Insert after a leading card */
+    await smP2(build(null), async function (v) {
+      const R = FM.spine.classify(FM.scene);
+      if (!R.main[0].slot || R.units[v.L('Bg').id].kind !== 'background') throw new Error('CONTROL: Intro is not a leading card over a background still: ' + JSON.stringify(R.main.map(e => e.id)) + ' ' + R.units[v.L('Bg').id].kind);
+      const j = FM.spine.insertIndexAt(R, 2.5);
+      if (j !== 1) throw new Error('CONTROL: the cut at 2.5 s is ' + j);
+      FM.time = 2.5; smTool('clips').click(); await v.sleep(30);
+      const labels = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).map(b => b.textContent);
+      if (labels.length !== 2 || labels.some(t => /After\s*$/.test(t))) throw new Error('the cut after a card is labelled ' + JSON.stringify(labels));
+      FM.simpleTimeline.clearSay();
+      await FM.spine.cmd.insert([await smPng('#0000ff')], j); await v.idle();
+      const ins = FM.scene.layers.find(l => l.type === 'image' && l.name !== 'Bg');
+      if (!ins || ins.start !== 2) throw new Error('CONTROL: the insert did not land at 2 (it said “' + v.say() + '”)');
+      if (!(z(ins.id) < z(v.L('Bg').id))) throw new Error('the inserted clip went under the backdrop: z ' + z(ins.id) + ' vs Bg ' + z(v.L('Bg').id) + ' — nothing of it shows');
+      if (!(z(ins.id) < z(v.L('A').id))) throw new Error('the inserted clip is not just above the clip after it: z ' + z(ins.id) + ' vs A ' + z(v.L('A').id));
+    }, { media: [{ name: 'Bg', rec: bgRec(320, 240) }] });
+    /* Into row on an overlay whose nearest cut is just after the card */
+    await smP2(build((W, H) => FM.makeLayer('shape', { name: 'Ov', shape: 'rect', x: W / 2, y: H / 2, shapeW: 60, shapeH: 40, fill: '#f0f', start: 2.4, duration: 1 })), async function (v) {
+      const Ov = v.L('Ov');
+      FM.selectLayer(Ov.id); await v.sleep(60);
+      smTool('into').click(); await v.idle();
+      if (!(Ov.sm && Ov.sm.main) || Ov.start !== 2) throw new Error('CONTROL: Into row did not put the overlay in the row at 2 (it said “' + v.say() + '”)');
+      if (!(z(Ov.id) < z(v.L('Bg').id)) || !(z(Ov.id) < z(v.L('A').id))) throw new Error('Into row after a card dropped the clip to z ' + z(Ov.id) + ' (Bg ' + z(v.L('Bg').id) + ', A ' + z(v.L('A').id) + ')');
+    }, { media: [{ name: 'Bg', rec: bgRec(320, 240) }] });
+  });
 })();

@@ -955,6 +955,14 @@ window.FM = window.FM || {};
     return { start: s, duration: Math.max(ml, Math.min(len, R.trackEnd - s)) };
   };
 
+  /* THE Z ANCHOR FOR CUT j (§3.6.1 "directly above the main clip before it"): the nearest real CLIP before j, or failing that
+     the first clip from j on. A card (slot) entry's id is 'slot:…', no layer's id, and moveLayers sent an unknown anchor to
+     the very bottom — under a background or a backdrop, where nothing of the new clip showed (review finding 6). */
+  S.rowAnchor = function (R, j, skip) {
+    for (let k = j - 1; k >= 0; k--) if (!R.main[k].slot && R.main[k].id !== skip) return R.main[k].id;
+    for (let k = j; k < R.main.length; k++) if (!R.main[k].slot && R.main[k].id !== skip) return R.main[k].id;
+    return null;
+  };
   /* The cut nearest t (§3.6 Insert, §8.5 "After Clip N"): an exact tie at a clip's midpoint goes AFTER it. Returns the
      index j of the entry the new clips go before (R.main.length = the end). */
   S.insertIndexAt = function (R, t) {
@@ -1053,11 +1061,11 @@ window.FM = window.FM || {};
     const rp = ripple(plan, R, j, sum, new Set(), null, false);
     tailMove(plan, R, R.trackEnd + (rp.last == null ? sum : rp.last), map);
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
-    const before = j > 0 ? R.main[j - 1] : null;
+    const anchor = S.rowAnchor(R, j);
     plan.pre.push(async () => {
       const made = addRecs(clips, at, newPickB(), map);
       made.forEach(l => S.setFlag(l, 'main', true));
-      if (made.length) FM.moveLayers(made.map(l => l.id), before ? before.id : e.id);
+      if (made.length && anchor) FM.moveLayers(made.map(l => l.id), anchor);
       /* the first clip after the new ones lands on their end exactly (a seam the command creates, §3.1) */
       if (made.length && !e.slot) { const last = made[made.length - 1]; plan.lands.set(e.id, (+last.start || 0) + (+last.duration || 0)); }
       plan.selectId = made.length ? made[0].id : null;
@@ -1181,8 +1189,8 @@ window.FM = window.FM || {};
     plan.post.push(() => {
       S.setFlag(o, 'main', true); S.setFlag(o, 'stay', false);
       twins.forEach(t => S.setFlag(t, 'stay', false));
-      const before = j > 0 ? R.main[j - 1] : null;
-      if (before) FM.moveLayers([o.id], before.id);   // main band: just above the clip before it
+      const anchor = S.rowAnchor(R, j, o.id);
+      if (anchor) FM.moveLayers([o.id], anchor);   // main band: just above the clip before it (never a card's slot id)
     });
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
     plan.time = seam;
