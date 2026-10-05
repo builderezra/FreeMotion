@@ -1476,10 +1476,19 @@ window.FM = window.FM || {};
        * The cost is holding the encoded audio in memory for the render — AAC at 160kbps is about
        * 1.2MB a minute, which is nothing beside the video, and it is freed as soon as it is muxed. */
       let audioChunks = null;
+      let audioFramesWritten = 0, audioBytesWritten = 0, audioDurationUs = 0;
       if (mix) {
         audioChunks = [];
         try {
           await encodeAudio((chunk, meta) => audioChunks.push({ chunk: chunk, meta: meta }), mix);
+          // A resolved flush is not proof that the encoder emitted anything. Declaring a track
+          // here would put an empty soun/mp4a track in the file while the ready card says Sound ✓.
+          if (!audioChunks.length) {
+            FM._audioTrackDropped = 'no-chunks';
+            exportSay('The audio encoder produced no sound frames — exporting WITHOUT SOUND');
+            if (FM.toast) FM.toast('The audio encoder produced no sound frames — exporting WITHOUT SOUND', 6000);
+            mix = null; audioChunks = null;
+          }
         } catch (e) {
           console.warn('[export] the soundtrack failed to encode — exporting video only', e);
           FM._audioTrackDropped = 'encode-failed';
@@ -1658,9 +1667,17 @@ window.FM = window.FM || {};
        * Kept as a swallow on purpose — a failed soundtrack must not throw away a render that may have
        * taken minutes — but it says so now, and it distinguishes itself from the other two paths so the
        * toast alone tells you which half of the pipeline broke. */
-      /* Nothing can fail here any more: these chunks were produced before the muxer was built, and the
-         muxer only declared an audio track BECAUSE they exist. Adding a chunk is a byte copy. */
-      if (audioChunks) { for (const a of audioChunks) muxer.addAudioChunk(a.chunk, a.meta); audioChunks = null; }
+      /* The muxer declared an audio track only after at least one chunk existed. Count bytes and
+         duration as they are fed so the report describes the track actually written. */
+      if (audioChunks) {
+        for (const a of audioChunks) {
+          muxer.addAudioChunk(a.chunk, a.meta);
+          audioFramesWritten++;
+          audioBytesWritten += a.chunk.byteLength || 0;
+          audioDurationUs += a.chunk.duration || AAC_FRAME / mix.sampleRate * 1e6;
+        }
+        audioChunks = null;
+      }
       muxer.finalize();
       /* HAND THE FILE OVER, or hand it to whoever asked to present it (queue 141 part 4).
        * `onReady` lets the caller put its own card in front of the OS save sheet — which is the whole
@@ -1704,7 +1721,9 @@ window.FM = window.FM || {};
             'when       ' + new Date().toISOString(),
             'file       ' + outName + '  ' + Math.round(outBlob.size / 1024) + ' KB',
             'video      ' + outW + 'x' + outH + ' @' + fps + 'fps, ' + Math.max(0, end - start).toFixed(2) + 's',
-            'audio      ' + (mix ? 'TRACK WRITTEN' : 'NO TRACK'),
+            'audio      ' + (audioFramesWritten > 0
+              ? 'TRACK WRITTEN · ' + audioFramesWritten + ' AAC frames · ' + (audioBytesWritten / 1024).toFixed(1) + ' KB · ' + (audioDurationUs / 1e6).toFixed(2) + 's'
+              : 'NO TRACK'),
             'dropped    ' + (FM._audioTrackDropped || 'no'),
             'mix peak   ' + (FM._lastMixRawPeak == null ? '-' : FM._lastMixRawPeak.toFixed(3)) +
               (FM._lastMixGain != null && FM._lastMixGain < 1 ? '  (limited: x' + FM._lastMixGain.toFixed(3) + ' at the loudest overlap only)' : ''),
@@ -1744,7 +1763,7 @@ window.FM = window.FM || {};
         await opts.onReady({
           blob: outBlob, name: outName, poster: poster,
           width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
-          hasAudio: !!mix, audioDropped: FM._audioTrackDropped || null,
+          hasAudio: audioFramesWritten > 0, audioDropped: FM._audioTrackDropped || null,
           resumedPct: resumedPct, resumedParts: resumedParts,
           protected: !recorder ? null : (recorder.recording ? true : recorder.capped ? 'capped' : false),
           save: () => deliver(outBlob, outName),

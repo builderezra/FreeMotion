@@ -66078,6 +66078,75 @@
     return { bytes: blob.size, soun: find('soun') >= 0, mp4a: find('mp4a') >= 0, vide: find('vide') >= 0 };
   }
 
+  test('export: a zero-chunk AAC encode cannot masquerade as a soundtrack (batch2 1a)', { item: 'TBD' }, async function () {
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height,
+      toast: FM.toast, encoder: window.AudioEncoder, report: localStorage.getItem('fm.lastExportReport') };
+    let song = null;
+    const runProbe = async () => {
+      let ready = null, card = '';
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'aac-count-probe', onReady: async out => {
+        ready = out;
+        const cardDone = FM._showExportReady(out);
+        card = document.getElementById('xr-meta').textContent;
+        document.getElementById('xr-discard').click();
+        await cardDone;
+      } });
+      return { ready, card, report: localStorage.getItem('fm.lastExportReport') || '' };
+    };
+    try {
+      P.duration = 0.3; P.width = 64; P.height = 64;
+      FM.scene.layers.length = 0;
+      const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+      box.start = 0; box.duration = 0.3; FM.scene.layers.push(box);
+      song = FM.makeLayer('video', { name: 'audible tone' });
+      song.start = 0; song.duration = 0.3; song.trimStart = 0; song.trimEnd = 0.3; FM.scene.layers.push(song);
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const tone = ac.createBuffer(2, 14400, 48000);
+      for (let c = 0; c < 2; c++) {
+        const data = tone.getChannelData(c);
+        for (let i = 0; i < data.length; i++) data[i] = Math.sin(i * 2 * Math.PI * 440 / 48000) * 0.4;
+      }
+      FM.media.set(song.id, { file: new Blob(['a']), duration: 0.3, audioBuffer: tone });
+
+      // Positive control: this exact audible scene must produce actual AAC data and a truthful card.
+      const good = await runProbe();
+      const healthy = await q215TrackScan(good.ready.blob);
+      if (!healthy.vide || !healthy.soun || !healthy.mp4a || !good.ready.hasAudio ||
+          !/Sound ✓/.test(good.card) || !/^audio\s+TRACK WRITTEN/m.test(good.report))
+        throw new Error('the real encoder control did not prove a counted audio track: ' + JSON.stringify({ healthy, card: good.card, report: good.report }));
+
+      // A browser can claim AAC support, resolve flush(), and still emit nothing. The MP4 must not
+      // advertise a track and the ready card/report must not tell Ezra the file has sound.
+      function EmptyEncoder() {}
+      EmptyEncoder.isConfigSupported = async () => ({ supported: true });
+      EmptyEncoder.prototype.configure = function () {};
+      EmptyEncoder.prototype.encode = function () {};
+      EmptyEncoder.prototype.flush = async function () {};
+      EmptyEncoder.prototype.close = function () {};
+      window.AudioEncoder = EmptyEncoder;
+      const empty = await runProbe();
+      const dry = await q215TrackScan(empty.ready.blob);
+      if (!dry.vide || dry.soun || dry.mp4a) throw new Error('zero AAC chunks still left a declared audio track in the MP4: ' + JSON.stringify(dry));
+      if (FM._audioTrackDropped !== 'no-chunks' || empty.ready.hasAudio || empty.ready.audioDropped !== 'no-chunks')
+        throw new Error('zero AAC chunks were reported as sound: ' + JSON.stringify({ dropped: FM._audioTrackDropped, ready: empty.ready.audioDropped, hasAudio: empty.ready.hasAudio }));
+      if (!/NO SOUND/.test(empty.card) || /Sound ✓/.test(empty.card)) throw new Error('the actual ready card claims the empty track has sound: ' + empty.card);
+      if (/^audio\s+TRACK WRITTEN/m.test(empty.report) || !/^audio\s+NO TRACK/m.test(empty.report))
+        throw new Error('the export report claims the empty track was written: ' + empty.report);
+      if (!/^audio\s+TRACK WRITTEN · [1-9]\d* AAC frames ·/m.test(good.report))
+        throw new Error('the healthy export report omits the encoded frame count: ' + good.report);
+    } finally {
+      window.AudioEncoder = saved.encoder; FM.toast = saved.toast;
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
+      if (song) FM.media.remove(song.id);
+      P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      if (saved.report == null) localStorage.removeItem('fm.lastExportReport');
+      else localStorage.setItem('fm.lastExportReport', saved.report);
+      FM._audioTrackDropped = null;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('export: a browser with no AAC encoder ships an honest silent file, not one promising a track (queue 215)', { item: '215' }, async function () {
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     const P = FM.scene.project;
