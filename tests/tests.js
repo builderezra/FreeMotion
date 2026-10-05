@@ -127188,4 +127188,49 @@
     }
   });
 
+  test('TBD: GIF frames over budget shrink, draw at original size, and close on removal', { item: 'TBD', budgetMs: 45000 }, async function () {
+    if (!FM._decodeGifAnimation || !FM._releaseMediaRecord || !window.createImageBitmap)
+      throw new Error('setup: animated GIF decode and bitmap release are unavailable');
+    const W = 1800, H = 1800, budget = 32 * 1024 * 1024;
+    const palette = [[0, 0, 0], [255, 0, 0], [0, 255, 0], [0, 0, 255]];
+    const bytes = h3aGifBytes(W, H, palette, [1, 2, 3].map((colour, i) => ({
+      x: i, y: i, w: 1, h: 1, disposal: 1, transparent: -1, delay: 10, px: () => colour
+    })));
+    const limits = FM.frameCacheLimits;
+    let anim, record, layer, originalDraw, captured;
+    try {
+      FM.frameCacheLimits = () => ({ maxBytes: 64 * 1024 * 1024 });
+      anim = await FM._decodeGifAnimation(new File([bytes], 'over-budget.gif', { type: 'image/gif' }));
+      FM.frameCacheLimits = limits;
+      if (!anim || anim.frames.length !== 3 || anim.width >= W || anim.height >= H)
+        throw new Error('the GIF exceeded its frame budget but was not decoded smaller');
+      if (anim.frames.length * anim.width * anim.height * 4 > budget)
+        throw new Error('the scaled GIF frames still exceed the 32 MiB budget');
+      if (!anim.frames.every(frame => frame.width === anim.width && frame.height === anim.height && typeof frame.close === 'function'))
+        throw new Error('the decoder did not keep closeable, scaled frames');
+      layer = FM.makeLayer('image', { name: 'budget GIF', x: 50, y: 50, start: 0, duration: 1 });
+      layer.transform.scale = 100 / W;
+      record = { kind: 'image', el: document.createElement('canvas'), width: W, height: H, anim };
+      FM.media.set(layer.id, record);
+      const canvas = document.createElement('canvas'); canvas.width = 100; canvas.height = 100;
+      originalDraw = CanvasRenderingContext2D.prototype.drawImage;
+      CanvasRenderingContext2D.prototype.drawImage = function (...args) {
+        if (args[0] === anim.frames[0]) captured = args;
+        return originalDraw.apply(this, args);
+      };
+      FM.renderScene(canvas.getContext('2d'), scene([layer], { project: { width: 100, height: 100, fps: 30, duration: 1, background: '#000000' } }), 0.05);
+      CanvasRenderingContext2D.prototype.drawImage = originalDraw; originalDraw = null;
+      if (!captured || captured.length !== 5 || captured[3] !== W || captured[4] !== H)
+        throw new Error('the smaller cached frame was not drawn across its original 1800×1800 image box');
+      FM.media.remove(layer.id);
+      if (!record._released || record.anim !== null || anim.frames.some(frame => frame.width !== 0 || frame.height !== 0))
+        throw new Error('removing the GIF did not close every decoded bitmap');
+    } finally {
+      FM.frameCacheLimits = limits;
+      if (originalDraw) CanvasRenderingContext2D.prototype.drawImage = originalDraw;
+      if (layer && FM.media.get(layer.id)) FM.media.remove(layer.id);
+      else if (anim && !record) anim.frames.forEach(frame => { try { frame.close(); } catch (e) {} });
+    }
+  });
+
 })();
