@@ -1350,7 +1350,13 @@ window.FM = window.FM || {};
     const plan = newPlan('Add music'); plan.arranges = false; plan.adopts = false;
     plan.pre.push(async () => {
       const made = addRecs(items, Math.max(0, FM.time || 0), newPickB(), null);
-      made.forEach(l => { S.setFlag(l, 'stay', true); if (!(l.sm && l.sm.snd)) l.muted = false; FM.moveLayers([l.id], null); });   // music: Stay put, whole (D17 B)
+      made.forEach(l => {
+        /* a PICTURE video picked as music: its sound only, as Full's Extract Audio makes it (audioOnly, opacity 0 — the only
+           thing that stops the compositor drawing it) plus Simple's sound fact. Added as it was, it drew a full-frame picture
+           in every gap and, at the bottom of an un-adopted project, became the whole clip row (review finding 15). */
+        if (!(l.sm && l.sm.snd)) { l.audioOnly = true; l.transform.opacity = 0; S.setFlag(l, 'snd', true); l.muted = false; }
+        S.setFlag(l, 'stay', true); FM.moveLayers([l.id], null);   // music: Stay put, whole (D17 B); sound sits at the end of the stack
+      });
       if (made.length) plan.mints = true;
       plan.selectId = made.length ? made[0].id : null;
     });

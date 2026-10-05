@@ -122331,4 +122331,27 @@
       if (v.L('End').start !== B.start + B.duration) throw new Error('(b) the end card stayed at ' + v.L('End').start + ' under the clips, which now end at ' + (B.start + B.duration));
     });
   });
+
+
+  test('simple P2.2 · review Sound › Music with a picture video adds its sound only: it draws nothing and the clips stay the clip row (DESIGN §3.6.1, §8.5)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const lv0 = FM.loadVideoFile;
+    try {
+      await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        FM.loadVideoFile = async f => ({ kind: 'video', el: document.createElement('video'), width: v.W, height: v.H, duration: 12, hasAudio: true, file: f });
+        FM.time = 0;
+        await FM.spine.cmd.addMusic([new File([new Uint8Array(8)], 'concert.mp4', { type: 'video/mp4' })]); await v.idle();
+        const s = v.L('concert');
+        if (!s) throw new Error('CONTROL: Add music added nothing (it said “' + v.say() + '”)');
+        const R = FM.spine.classify(FM.scene);
+        const main = R.main.filter(e => !e.slot).map(e => FM.layerById(FM.scene, e.id).name).join(',');
+        if (main !== 'A,B') throw new Error('the music video took over the clip row: ' + main);
+        if (R.units[s.id].kind !== 'audio') throw new Error('the music video is a ' + R.units[s.id].kind + ', not a sound');
+        if (FM.layerOpacity(s, 1) > 0.02) throw new Error('the music video draws its picture under the clips (opacity ' + FM.layerOpacity(s, 1) + ')');
+        if (s.duration !== 12 || s.muted) throw new Error('the music was trimmed or muted (D17 B): ' + s.duration + ' s, muted ' + s.muted);
+        const o = FM.spine.overrun(R);
+        if (o.pictures.indexOf(s) >= 0 || o.sounds.indexOf(s) < 0) throw new Error('End with the video would trim the music: it is filed as a picture');
+      });
+    } finally { FM.loadVideoFile = lv0; }
+  });
 })();
