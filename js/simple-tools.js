@@ -89,7 +89,11 @@ window.FM = window.FM || {};
     b.type = 'button'; b.dataset.tool = t.id;
     b.innerHTML = svg(t.icon);                                        // a fixed string, never user data
     b.appendChild(el('span', 'sm-tool-l', t.label));
-    b.title = t.title || t.label; b.setAttribute('aria-label', t.title || t.label);
+    /* the accessible name STARTS with the words on the face (WCAG 2.5.3 Label in Name, review finding 30): "Into row, Put in the
+       clip row", so Voice Control's "tap Into row" finds it; a full name that already contains the face word is kept as is */
+    const face = String(t.label || ''), full = String(t.title || '');
+    b.title = full || face;
+    b.setAttribute('aria-label', !full ? face : full.toLowerCase().indexOf(face.toLowerCase()) >= 0 ? full : face + ', ' + full);
     if (t.pressed != null) b.setAttribute('aria-pressed', t.pressed ? 'true' : 'false');
     if (t.disabled) b.setAttribute('aria-disabled', 'true');
     b.addEventListener('click', e => { e.stopPropagation(); if (b.getAttribute('aria-disabled') === 'true') { if (t.why && FM.spine) FM.spine.say(t.why); return; } closeMenu(); t.run(b); });

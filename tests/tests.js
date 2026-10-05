@@ -122579,4 +122579,22 @@
       } finally { FM.simpleTools._reset(); if (FM.sideBarOpen(bar) && FM.setSideBar) FM.setSideBar(bar, btn, false); }
     });
   });
+
+
+  test('simple P2.2 · review every tray and project tool’s accessible name contains the words on its face, so Voice Control can press Into row and +1 frame (WCAG 2.5.3)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [FM.makeLayer('shape', { name: 'Badge', shape: 'rect', x: W / 2, y: H / 2, shapeW: 20, shapeH: 20, fill: '#fff', start: 1, duration: 1 }), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const bad = [], seen = new Set();
+      const check = () => document.querySelectorAll('#sm-tray .sm-tool, #sm-tools .sm-tool').forEach(b => {
+        const face = ((b.querySelector('.sm-tool-l') || {}).textContent || '').trim().toLowerCase(), name = (b.getAttribute('aria-label') || '').toLowerCase();
+        seen.add(b.dataset.tool);
+        if (face && name.indexOf(face) < 0) bad.push(b.dataset.tool + ': “' + b.getAttribute('aria-label') + '” for “' + face + '”');
+      });
+      FM.selectLayer(v.L('A').id); await v.sleep(60); check();
+      FM.selectLayer(v.L('Badge').id); await v.sleep(60); check();
+      FM.selectLayer(v.L('A').id); await v.sleep(60); FM.simpleTools.openLength(v.L('A').id); await v.sleep(30); check();
+      ['lift', 'more', 'into', 'lenMinus', 'lenPlus', 'clips'].forEach(t => { if (!seen.has(t)) bad.push('CONTROL: never saw ' + t); });
+      if (bad.length) throw new Error('names that do not contain their visible label: ' + bad.join(' · '));
+    });
+  });
 })();
