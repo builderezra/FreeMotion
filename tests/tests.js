@@ -128216,4 +128216,35 @@
     }
   });
 
+  test('TBD: adjustment Pixelate uses Block aspect and Edges like a clip', { item: 'TBD' }, function () {
+    const W = 160, H = 120, source = offscreen(W, H), g = source.getContext('2d');
+    for (let y = 0; y < H; y += 6) for (let x = 0; x < W; x += 6) {
+      g.fillStyle = ((x + y) / 6) % 2 ? '#f4bf35' : '#123aa2'; g.fillRect(x, y, 6, 6);
+    }
+    const clip = FM.makeLayer('image', { name: 'Pixelate input', x: W / 2, y: H / 2 });
+    clip.start = 0; clip.duration = 2;
+    FM.media.set(clip.id, { kind: 'image', el: source, width: W, height: H });
+    const adj = FM.makeLayer('adjustment', { name: 'Pixelate controls' });
+    adj.start = 0; adj.duration = 2;
+    const fx = FM.fxRegistry.makeInstance('pixelate'); fx.params.size = 14; adj.effects = [fx];
+    const scene = { project: { width: W, height: H, fps: 30, duration: 2, background: '#000000' }, layers: [adj, clip], selectedId: null, selectedIds: [] };
+    const render = (aspect, smooth, selectedLayer) => {
+      fx.params.aspect = aspect; fx.params.smooth = smooth;
+      scene.layers = selectedLayer === 'clip' ? [clip] : [adj, clip];
+      clip.effects = selectedLayer === 'clip' ? [fx] : [];
+      const cv = offscreen(W, H), c = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(c, scene, 0.5);
+      return c.getImageData(0, 0, W, H).data;
+    };
+    const changed = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4)
+      if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 30) n++; return n; };
+    try {
+      const wide = render(25, 0), tall = render(400, 0), hard = render(100, 0), soft = render(100, 1);
+      if (changed(wide, tall) < W * H / 20) throw new Error('Block aspect did not alter an adjustment-layer picture');
+      if (changed(hard, soft) < W * H / 100) throw new Error('Edges did not alter an adjustment-layer picture');
+      if (changed(render(25, 0, 'clip'), render(400, 0, 'clip')) < W * H / 20)
+        throw new Error('clip control is insensitive to Block aspect, so the fixture cannot judge parity');
+    } finally { FM.media.delete(clip.id); }
+  });
+
 })();

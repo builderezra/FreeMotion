@@ -20333,8 +20333,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      rectangle never leaves its source — a rectangle past the edge is clipped by drawImage, and the blocks there came out
      half-transparent. The blocks are then laid back with smoothing off, at their project positions. */
   let _adjEdge = null;
-  function pixelateOnFrameGrid(a, cw, ch, rs, OX, OY, W, H, size) {
-    const nX = Math.max(1, Math.round(W / size)), nY = Math.max(1, Math.round(H / size));
+  function pixelateOnFrameGrid(a, cw, ch, rs, OX, OY, W, H, size, aspect, soft) {
+    const sizeY = aspect === 1 ? size : Math.max(1, size * aspect);
+    const nX = Math.max(1, Math.round(W / size)), nY = Math.max(1, Math.round(H / sizeY));
     const bw = W / nX, bh = H / nY;                                   // one block, project units — the export's own
     const x0 = Math.floor(OX / bw), y0 = Math.floor(OY / bh);
     const nx = Math.max(1, Math.ceil((OX + cw / rs) / bw) - x0), ny = Math.max(1, Math.ceil((OY + ch / rs) / bh) - y0);
@@ -20356,7 +20357,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const tctx = _adjTmp.getContext('2d');
     tctx.clearRect(0, 0, nx, ny); tctx.imageSmoothingEnabled = true;
     tctx.drawImage(_adjEdge, (x0 * bw - OX) * rs + px, (y0 * bh - OY) * rs + py, nx * bw * rs, ny * bh * rs, 0, 0, nx, ny);   // downscale: the export's samples
-    a.imageSmoothingEnabled = false; a.clearRect(0, 0, cw, ch);
+    a.imageSmoothingEnabled = soft; a.clearRect(0, 0, cw, ch);
     a.drawImage(_adjTmp, 0, 0, nx, ny, (x0 * bw - OX) * rs, (y0 * bh - OY) * rs, nx * bw * rs, ny * bh * rs);   // upscale → blocky, at their project positions
     a.imageSmoothingEnabled = true;
   }
@@ -20567,22 +20568,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ppfx.forEach(fx => applyPixelFx(d, fx, t, cw, ch, rs, frameGeo));   // rs: the adjustment plate's own scale (#691); frameGeo: where the frame is (queue 690)
       a.putImageData(img, 0, 0);
     }
+    // Match drawPixelate's Block aspect and Edges controls on both the frame and a cropped preview.
+    // Pixelate has its own geometry pass here, so adding it to PIXEL_ADJ would apply it twice.
+    const pxp = pixFx && pixFx.params || {};
+    const pxSize = pixFx ? Math.max(1, Math.round(FM.evalProp(pxp.size, t) || 1)) : 1;
+    const pxAspect = Math.max(25, Math.min(400, pxp.aspect == null ? 100 : FM.evalProp(pxp.aspect, t))) / 100;
+    const pxSoft = Math.round(pxp.smooth == null ? 0 : FM.evalProp(pxp.smooth, t)) === 1;
     if (pixFx && !onFrame) {                       // …the same blocks, on the export's grid (queue 690)
-      const size = Math.max(1, Math.round(FM.evalProp((pixFx.params || {}).size, t) || 1));
-      if (size > 1) pixelateOnFrameGrid(a, cw, ch, rs, aOX, aOY, W, H, size);
+      if (pxSize > 1) pixelateOnFrameGrid(a, cw, ch, rs, aOX, aOY, W, H, pxSize, pxAspect, pxSoft);
     } else if (pixFx) {                            // pixelate the whole scene below (down- then up-scale the snapshot)
-      const size = Math.max(1, Math.round(FM.evalProp((pixFx.params || {}).size, t) || 1));
-      if (size > 1) {
+      if (pxSize > 1) {
         // Block COUNT comes from the visible area in PROJECT units (cw / rs), not from the plate's
         // device pixels — otherwise the blocks would change size with the quality tier, and on a
         // zoomed preview (where the plate is a crop) they would be wrong in the other direction.
-        const sw = Math.max(1, Math.round((cw / rs) / size)), sh = Math.max(1, Math.round((ch / rs) / size));
+        const sizeY = pxAspect === 1 ? pxSize : Math.max(1, pxSize * pxAspect);
+        const sw = Math.max(1, Math.round((cw / rs) / pxSize)), sh = Math.max(1, Math.round((ch / rs) / sizeY));
         if (!_adjTmp) _adjTmp = createCanvas();
         _adjTmp.width = sw; _adjTmp.height = sh;
         const tctx = _adjTmp.getContext('2d');
         tctx.clearRect(0, 0, sw, sh); tctx.imageSmoothingEnabled = true;
         tctx.drawImage(_adjCv, 0, 0, sw, sh);              // downscale (block-average)
-        a.imageSmoothingEnabled = false; a.clearRect(0, 0, cw, ch);
+        a.imageSmoothingEnabled = pxSoft; a.clearRect(0, 0, cw, ch);
         a.drawImage(_adjTmp, 0, 0, sw, sh, 0, 0, cw, ch);  // upscale → blocky
         a.imageSmoothingEnabled = true;
       }
