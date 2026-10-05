@@ -122503,4 +122503,26 @@
       if (FM.scene.selectedId) throw new Error('CONTROL: a tap on empty background no longer deselects');
     });
   });
+
+
+  test('simple P2.2 · review keys in Simple’s ⋯ stay in the list: ↓ moves to the next choice, Backspace deletes nothing, Esc closes it, keeps the selection and gives focus back to ⋯', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('B', 4, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const A = v.L('A'); FM.selectLayer(A.id); await v.idle();
+      const y0 = JSON.stringify(A.transform.y), n0 = v.steps();
+      const press = k => { const t = document.activeElement; ['keydown', 'keyup'].forEach(ty => t.dispatchEvent(new KeyboardEvent(ty, { key: k, code: k, bubbles: true, cancelable: true }))); };
+      document.getElementById('btn-opts').click(); await v.sleep(60);
+      const items = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i'));
+      if (items.length < 2 || document.activeElement !== items[0]) throw new Error('CONTROL: the list did not open with focus on its first choice');
+      press('ArrowDown'); await v.sleep(30);
+      if (JSON.stringify(v.L('A').transform.y) !== y0 || v.steps() !== n0) throw new Error('↓ in the list nudged the selected clip’s picture (a hidden canvas edit in Simple)');
+      if (document.activeElement !== items[1]) throw new Error('↓ did not move to the next choice');
+      press('Backspace'); await v.idle();
+      if (!v.L('A') || v.steps() !== n0) throw new Error('Backspace in the list deleted the selected clip');
+      press('Escape'); await v.sleep(30);
+      if (document.querySelector('.sm-menu')) throw new Error('Esc left the list open');
+      if (FM.scene.selectedId !== A.id) throw new Error('Esc reached through the list and deselected the clip');
+      if (document.activeElement !== document.getElementById('btn-opts')) throw new Error('Esc did not give focus back to ⋯');
+    });
+  });
 })();

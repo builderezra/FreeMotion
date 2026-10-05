@@ -209,6 +209,22 @@ window.FM = window.FM || {};
     closeMenu();
     menu = el('div', 'sm-menu'); menu.setAttribute('role', 'menu');
     items.forEach(it => { const b = el('button', 'sm-menu-i', it.label); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.addEventListener('click', e => { e.stopPropagation(); closeMenu(); it.run(); }); menu.appendChild(b); });
+    /* THE LIST OWNS ITS KEYS (review finding 26; the pattern of js/contextmenu.js's role=menu): ↑/↓/Home/End move between
+       choices, Esc closes it and gives focus back to the button that opened it, and Space / Enter / Backspace / Delete stay
+       with the focused choice. Without this they reached Full's window handler: ↓ nudged the selected clip's picture a
+       pixel (a hidden canvas edit), Backspace deleted the clip, Esc deselected it and left the list open. Letter
+       shortcuts (A / S / D, ⌘Z) still reach the app. */
+    menu.addEventListener('keydown', e => {
+      const its = Array.from(menu.querySelectorAll('.sm-menu-i')), i = its.indexOf(document.activeElement);
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); if (anchor && anchor.isConnected) anchor.focus({ preventScroll: true }); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+        e.preventDefault(); e.stopPropagation();
+        const n = e.key === 'Home' ? 0 : e.key === 'End' ? its.length - 1 : e.key === 'ArrowDown' ? (i + 1) % its.length : (i - 1 + its.length) % its.length;
+        if (its[n]) its[n].focus({ preventScroll: true });
+        return;
+      }
+      if (e.key === ' ' || e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.stopPropagation();
+    });
     document.body.appendChild(menu);
     const r = anchor.getBoundingClientRect(), mr = menu.getBoundingClientRect();
     const left = Math.max(8, Math.min(window.innerWidth - mr.width - 8, r.left));
