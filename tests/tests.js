@@ -120092,4 +120092,264 @@
     if (C.schemaFingerprint() !== got) throw new Error('CONTROL: the fingerprint did not come back after SM_V was restored');
     if (moved === got) throw new Error('a build with a different SM_V has the same fingerprint — SM_V must only change with SCHEMA_REV, and the gate cannot tell');
   });
+
+  /* ═══ SIMPLE MODE, PHASE 1 STEP 1.3 — THE VIEW HE HOLDS: the switch (through the cog's one door), the read-only Simple timeline ═══
+     1 Oct: re-anchored to the cog and the guard; NOT RE-RUN. The cog block's own tests are §5.6b. */
+
+  /* A project on screen with three clips (real media records), a title and a song; everything put back.
+     `fn(ctx)` gets the layers and a commit counter. History commits are COUNTED, not stubbed away, so "no undo step" is real. */
+  async function smView(fn, opts) {
+    opts = opts || {};
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (wasHome) FM.home.close();
+    const saved = { scene: FM.scene, time: FM.time, commit: FM.history.commit, save: FM.storage.save, zoom: FM.timeline.getZoom() };   // 1 Oct: no Settings preview (D22 A); under D22 B also save and set 'simpleEditor' here
+    /* The switch remembers the editor on THIS device's card for the open project (FM.editor.set → the index entry's
+       `editor`). The suite's own project is that project, so the card is put back exactly as found, or the next test
+       would open in Simple. */
+    const pid0 = FM.storage.openProjectId ? FM.storage.openProjectId() : null;
+    const card0 = (FM.projects.list() || []).find(p => p.id === pid0);
+    const ed0 = card0 ? card0.editor : undefined;
+    /* the switch also writes this device's fm.editor.last and, on a first arrival in Simple, fm.editor.hint: put both back */
+    const ls0 = {}; ['fm.editor.last', 'fm.editor.hint'].forEach(k => { try { ls0[k] = localStorage.getItem(k); } catch (e) {} });
+    let commits = 0;
+    FM.history.commit = function () { commits++; };
+    FM.storage.save = function () {};
+    const g = smRig(1080, 1920);
+    const c1 = g.clip('smv1', 0, 4, { nw: 1080, nh: 1920 }), c2 = g.clip('smv2', 4, 3, { nw: 1080, nh: 1920 }), c3 = g.clip('smv3', 8, 4, { nw: 1080, nh: 1920 });
+    const title = g.text('smvT', 1, 2, 'Beach day');
+    const song = g.clip('smvS', 0, 12, { nw: 0, audioOnly: true });
+    FM.scene = g.scene([title, c3, c2, c1, song]);
+    FM.scene.project.duration = 12;
+    FM.time = 2;
+    try {
+      FM.refreshAll(); await sleep(60);
+      return await fn({ c1: c1, c2: c2, c3: c3, title: title, song: song, commits: () => commits, sleep: sleep });
+    } finally {
+      try { if (FM.editor) FM.editor.apply('full', { force: true }); } catch (e) {}
+      try {
+        const idx = FM.projects.list() || [], c = idx.find(p => p.id === pid0);
+        if (c && c.editor !== ed0) { if (ed0 === undefined) delete c.editor; else c.editor = ed0; FM.projects.saveIndex(idx); }
+      } catch (e) {}
+      Object.keys(ls0).forEach(k => { try { if (ls0[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, ls0[k]); } catch (e) {} });
+      FM.history.commit = saved.commit; FM.storage.save = saved.save;
+      FM.scene = saved.scene; FM.time = saved.time;
+      g.done();
+      try { FM.timeline.setZoom(saved.zoom); FM.refreshAll(); } catch (e) {}
+      if (wasHome && !FM.home.isOpen()) FM.home.open();
+      await sleep(30);
+    }
+  }
+  function smVis(el) { return !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'; }
+  function smNeedEditor() { if (!FM.editor || !FM.simpleTimeline) throw new Error('FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load'); }
+
+  /* D22 B ONLY: build this test only if he picks a Settings gate. Under D22 A (recommended) there is no row, and cog T7–T9
+     (§5.6b) test the block instead. */
+  /* (the Settings-row test is D22 B only — under his D22 A there is no Settings row; BUILD-PLAN §5.2 1.3.7–1.3.9) */
+
+  test('simple P1 · T8 the switch writes nothing, keeps time, selection and zoom, and every clip keeps its x', { item: '980' }, async function () {
+    smNeedEditor();
+    /* 1 Oct, RE-ANCHORED, NOT RE-RUN: through FM.editor.request (the cog's one door); no ⇄, no E, no preview flip. */
+    await atWideWidth(async function () {
+      await smView(async function (v) {
+        FM.selectLayer(v.c2.id);
+        /* the DOCUMENT only: this test itself moves the selection between the two reads (selectLayer(null) to measure x),
+           and FM.scene carries selectedId / selectedIds, so a whole-scene compare failed on the test's own tap */
+        const docOf = () => JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers });
+        const doc0 = docOf(), hist0 = JSON.stringify(FM.history._steps()), z0 = FM.timeline.getZoom(), t0 = FM.time, commits0 = v.commits();
+        FM.selectLayer(null);
+        const fullX = {};
+        [v.c1, v.c2, v.c3].forEach(c => { const e = document.querySelector('#tl-tracks .clip[data-id="' + c.id + '"]'); fullX[c.id] = e ? e.getBoundingClientRect().left : NaN; });
+        FM.selectLayer(v.c2.id);
+        if (!(await FM.editor.request('simple'))) throw new Error('the switch refused with nothing live');
+        await v.sleep(40);
+        if (!document.body.classList.contains('ed-simple') || !smVis(document.getElementById('sm-timeline'))) throw new Error('Simple is not on screen after the switch');
+        if (docOf() !== doc0) throw new Error('the switch wrote to the document');
+        if (v.commits() !== commits0 || JSON.stringify(FM.history._steps()) !== hist0) throw new Error('the switch took an undo step');
+        if (FM.time !== t0 || FM.timeline.getZoom() !== z0 || FM.scene.selectedId !== v.c2.id) throw new Error('the switch lost the time, zoom or selection');
+        if (document.body.classList.contains('m-editing') || document.body.classList.contains('sel-mode')) throw new Error('Full’s selection classes are on in Simple');
+        FM.selectLayer(null); await v.sleep(20);
+        const off = [];
+        [v.c1, v.c2, v.c3].forEach(c => {
+          const e = document.querySelector('#sm-main .sm-item[data-id="' + c.id + '"]');
+          const x = e ? e.getBoundingClientRect().left : NaN;
+          if (!(Math.abs(x - fullX[c.id]) <= 1)) off.push(c.id + ': Full ' + Math.round(fullX[c.id]) + ' vs Simple ' + Math.round(x));
+        });
+        if (off.length) throw new Error('clips moved across the switch: ' + off.join(' · '));
+        if (document.activeElement === document.body) throw new Error('focus fell to <body> after the switch');
+        /* back to Full through the same door: still nothing written; the switch's own words are cog T7/T10's (§5.6b) */
+        if ((await FM.editor.request('full')) !== true || document.body.classList.contains('ed-simple')) throw new Error('the switch did not go back to Full');
+        if (docOf() !== doc0 || v.commits() !== commits0) throw new Error('switching back wrote to the document or took a step');
+        /* during an export the one door refuses (its line shows inside the cog block, cog T13) */
+        FM._exporting = true;
+        try { if ((await FM.editor.request('simple')) !== false || document.body.classList.contains('ed-simple')) throw new Error('the switch went through during an export'); }
+        finally { FM._exporting = false; }
+        /* NO E (DESIGN §0.4 B14): the key does nothing new in Full */
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true }));
+        await v.sleep(20);
+        if (document.body.classList.contains('ed-simple')) throw new Error('E switched editor — Full must gain no key'); 
+      });
+    }, 1280);
+  });
+
+  test('simple P1 · T19 on a phone at 380 the Simple row reads ⋯ ✂ (gap) |◀ with |◀ where Full has it, the clip row is hit-testable, and ✎ hides by visibility', { item: '980' }, async function () {
+    smNeedEditor();
+    /* 1 Oct, RE-ANCHORED, NOT RE-RUN: no ⇄ on the play bar (D18 rewritten); ◐ keeps slot 3 invisible. */
+    await atPhoneWidth(async function () {
+      await smView(async function (v) {
+        /* Full's own left group first: its four buttons sit flush, and at the narrowest widths they already overlap by a
+           sub-pixel or so. Simple's row may overlap no more than Full's does at the same width (the control). */
+        const fids = ['btn-opts', 'btn-layermenu', 'btn-addside', 'btn-tostart'];
+        const fr = fids.map(id => document.getElementById(id).getBoundingClientRect());
+        let fullOver = 0; for (let i = 1; i < fr.length; i++) fullOver = Math.max(fullOver, fr[i - 1].right - fr[i].left);
+        FM.editor.set('simple'); await v.sleep(60);
+        /* A shake (a refused switch in an earlier test) or the crossfade is a TRANSFORM, which getBoundingClientRect includes — finish
+           every running animation so this measures the layout, not a frame of one. */
+        document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
+        const ids = ['btn-opts', 'btn-sm-split', 'btn-addside', 'btn-tostart'];   // ◐ (#btn-addside) holds slot 3, invisible (D18 A)
+        const xs = ids.map(id => { const e = document.getElementById(id); return e && e.getClientRects().length ? e.getBoundingClientRect().left : NaN; });
+        if (xs.some(isNaN) || !(xs[0] < xs[1] && xs[1] < xs[2] && xs[2] < xs[3])) throw new Error('the left group is not ⋯ ✂ (gap) |◀ in order: ' + ids.map((id, i) => id + '@' + Math.round(xs[i])).join(' '));
+        ['btn-layermenu', 'btn-addside'].forEach(id => { if (smVis(document.getElementById(id))) throw new Error('#' + id + ' (Full’s) is visible in Simple'); });
+        if (Math.abs(document.getElementById('btn-tostart').getBoundingClientRect().left - fr[3].left) > 1) throw new Error('|◀ moved between Full and Simple — D18 A keeps it in its slot');
+        const r = ids.map(id => document.getElementById(id).getBoundingClientRect());
+        for (let i = 1; i < r.length; i++) if (r[i - 1].right - r[i].left > fullOver + 0.5) throw new Error(ids[i] + ' overlaps ' + ids[i - 1] + ' by ' + (r[i - 1].right - r[i].left).toFixed(2) + ' px, more than Full’s own row does (' + fullOver.toFixed(2) + ' px)');
+        const sp = document.getElementById('btn-sm-split');
+        if (sp.getAttribute('aria-disabled') !== 'true' || !(parseFloat(getComputedStyle(sp).opacity) < 0.6)) throw new Error('✂ is not dimmed and aria-disabled in Phase 1');
+        const clip = document.querySelector('#sm-main .sm-item[data-id="' + v.c2.id + '"]');
+        if (!clip) throw new Error('clip 2 is not drawn in the Simple clip row');
+        const cr = clip.getBoundingClientRect(), hit = document.elementFromPoint(Math.min(cr.left + 20, window.innerWidth - 10), cr.top + cr.height / 2);
+        if (!hit || !hit.closest || !hit.closest('#sm-timeline')) throw new Error('a tap on the clip row lands on ' + (hit && (hit.id || hit.className)) + ', not the Simple timeline');
+        const say = document.getElementById('sm-say'), sr = say.getBoundingClientRect();
+        if (Math.round(sr.height) !== 52 || sr.bottom > window.innerHeight + 0.5) throw new Error('#sm-say is not a 52 px row on screen: ' + Math.round(sr.height) + ' px, bottom ' + Math.round(sr.bottom) + ' of ' + window.innerHeight);
+        const song = document.querySelector('#sm-sound .sm-item[data-id="' + v.song.id + '"]');
+        if (!song || !smVis(song)) throw new Error('the song is not in the Sound row');
+        const title = document.querySelector('#sm-sections .sm-item[data-id="' + v.title.id + '"]');
+        if (!title) throw new Error('the title is not in a section above the clips');
+        if (!(title.getBoundingClientRect().bottom <= cr.top + 0.5)) throw new Error('the title is not ABOVE the clip row (higher on screen = in front)');
+        /* NOTHING MOVES ON SELECT, AND THE PANEL DOCKS UNDER THE SIMPLE TIMELINE (DESIGN T19, Phase 1 clauses): the clip row, the
+           sound row and #sm-say keep their y to the pixel, and today's panel starts below #sm-say with room to use. */
+        const tops0 = ['sm-main', 'sm-sound', 'sm-say'].map(id => document.getElementById(id).getBoundingClientRect().top);
+        FM.selectLayer(v.c2.id); await v.sleep(120);
+        document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });   // the panel RISES into place (a transition): measure where it lands
+        const tops1 = ['sm-main', 'sm-sound', 'sm-say'].map(id => document.getElementById(id).getBoundingClientRect().top);
+        if (tops0.some((t, i) => Math.abs(t - tops1[i]) > 0.5)) throw new Error('selecting a clip moved the Simple rows (clip row, sound, #sm-say tops ' + tops0.map(Math.round) + ' → ' + tops1.map(Math.round) + ')');
+        const insp = document.getElementById('inspector-panel'), ir = insp && insp.getBoundingClientRect(), sayB = document.getElementById('sm-say').getBoundingClientRect().bottom;
+        if (!ir || ir.height < 1) throw new Error('selecting a clip opened no panel');
+        if (ir.top < sayB - 0.5) throw new Error('the docked panel (top ' + Math.round(ir.top) + ') covers the Simple timeline or #sm-say (bottom ' + Math.round(sayB) + ')');
+        if (window.innerHeight - ir.top < 150) throw new Error('the docked panel has only ' + Math.round(window.innerHeight - ir.top) + ' px (under 150) — the stage clamp did not leave it room (panel top ' + Math.round(ir.top) + ', #sm-say bottom ' + Math.round(sayB) + ')');
+        if (document.body.classList.contains('m-editing')) throw new Error('m-editing is on in Simple');
+        const notes = document.getElementById('m-notes');
+        if (notes && getComputedStyle(notes).visibility !== 'hidden') throw new Error('✎ still shows with something selected in Simple (#171)');
+        if (notes && getComputedStyle(notes).display === 'none') throw new Error('✎ was hidden with display:none — the bar would slide');
+        const c2b = document.querySelector('#sm-main .sm-item[data-id="' + v.c2.id + '"]');
+        if (!c2b || !c2b.classList.contains('sel')) throw new Error('the selected clip is not marked in the Simple row');
+      });
+    }, 380);
+  });
+
+  test('simple P1 · the Phase 1 lines: Delete on a main clip, ✂, S and a seam chip each say their line with Open in Full and change nothing', { item: '980' }, async function () {
+    smNeedEditor();
+    await smView(async function (v) {
+      FM.editor.set('simple'); await v.sleep(40);
+      const say = document.getElementById('sm-say');
+      const n0 = FM.scene.layers.length;
+      FM.selectLayer(v.c1.id);
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Backspace', key: 'Backspace', bubbles: true }));
+      await v.sleep(10);
+      if (FM.scene.layers.length !== n0) throw new Error('Delete on a main clip deleted it in Phase 1 (' + n0 + ' → ' + FM.scene.layers.length + ')');
+      if (!/Deleting clips comes next/.test(say.textContent)) throw new Error('Delete on a main clip said nothing in #sm-say: "' + say.textContent + '"');
+      const b = say.querySelector('button');
+      if (!b || b.textContent !== 'Open in Full') throw new Error('the line has no Open in Full button');
+      const br = b.getBoundingClientRect();
+      if (br.width < 44 || br.height < 32) throw new Error('Open in Full is ' + Math.round(br.width) + '×' + Math.round(br.height) + ', under 44×32');
+      /* CONTROL: Delete on something that is NOT a main clip is today's delete */
+      FM.selectLayer(v.title.id);
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Backspace', key: 'Backspace', bubbles: true }));
+      await v.sleep(10);
+      if (FM.scene.layers.some(l => l.id === v.title.id)) throw new Error('CONTROL: Delete on a title did not delete it — the key is being swallowed for everything');
+      FM.selectLayer(v.c1.id); FM.time = 1;
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS', key: 's', bubbles: true }));
+      await v.sleep(10);
+      if (FM.scene.layers.filter(l => l.type === 'video').length !== 4) throw new Error('S split a clip in Phase 1');
+      if (!/Splitting comes in the next update/.test(say.textContent)) throw new Error('S said nothing: "' + say.textContent + '"');
+      say.textContent = '';
+      document.getElementById('btn-sm-split').click();
+      if (!/Splitting comes in the next update/.test(say.textContent)) throw new Error('✂ said nothing: "' + say.textContent + '"');
+      const chip = document.querySelector('#sm-main .sm-chip-gap');
+      if (!chip) throw new Error('the 1 s gap between clips 2 and 3 has no seam chip');
+      const cr = chip.getBoundingClientRect();
+      if (cr.width < 32 || cr.height < 32) throw new Error('the seam chip is ' + Math.round(cr.width) + '×' + Math.round(cr.height) + ', under 32×32');
+      if (!/second gap/.test(chip.getAttribute('aria-label') || '')) throw new Error('the seam chip has no accessible name: ' + chip.getAttribute('aria-label'));
+      chip.click();
+      if (!/Closing gaps comes in the next update/.test(say.textContent)) throw new Error('the seam chip said nothing: "' + say.textContent + '"');
+      say.querySelector('button').click(); await v.sleep(20);
+      if (document.body.classList.contains('ed-simple')) throw new Error('Open in Full did not switch to Full');
+      if (v.commits() !== 1) throw new Error('only the title delete should have committed, got ' + v.commits() + ' commits');
+    });
+  });
+
+
+  /* T21 (DESIGN §8.8): the Full doors that edit the layer stack Simple does not show. One helper, two tests (one per width), so a
+     width change inside one test cannot leave the transport half-rebuilt for the other. */
+  async function smT21(w, ids, phone) {
+    smNeedEditor();
+    /* `rendered`: it has a box on screen (so a button inside a hidden group counts as hidden). The two view-menu items live in a
+       menu that is closed in both editors, so for them (marked *) the item's OWN display is what Simple must turn off. */
+    const shown = key => {
+      const own = key.charAt(key.length - 1) === '*', e = document.getElementById(own ? key.slice(0, -1) : key);
+      if (!e) return false;
+      return own ? getComputedStyle(e).display !== 'none' : (e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden');
+    };
+    await (phone ? atPhoneWidth : atWideWidth)(async function () {
+      await smView(async function (v) {
+        FM.selectLayer(v.c2.id); FM.refreshAll(); await v.sleep(60);
+        // CONTROL: in Full these doors exist and are displayed (on the phone, with a clip selected)
+        const inFull = ids.filter(id => !shown(id));
+        if (inFull.length) throw new Error('CONTROL at ' + w + ': in Full these are not displayed, so their absence in Simple would prove nothing: ' + inFull.join(', '));
+        FM.editor.set('simple'); await v.sleep(60);
+        FM.selectLayer(v.c2.id); await v.sleep(40);
+        const leak = ids.filter(shown);
+        if (leak.length) throw new Error('at ' + w + ' px these Full doors show in Simple: ' + leak.join(', ') + ' — each one edits the layer stack Simple does not show');
+      });
+    }, w);
+  }
+  test('simple P1 · T21 at 380 in Simple none of Full’s layer doors show — ⧉, ◐, Layers, Add camera, the phone’s copy and delete — with one clip selected', { item: '980' }, async function () {
+    await smT21(380, ['btn-layermenu', 'btn-addside', 'vb-layers*', 'vb-camera*', 'm-dup', 'm-del'], true);
+  });
+  test('simple P1 · T21 at 1280 in Simple the PC layer-action group (delete, parent, more) does not show with one clip selected', { item: '980' }, async function () {
+    await smT21(1280, ['btn-del-layer', 'btn-parent', 'btn-more-layer'], false);
+  });
+
+  /* 1 Oct: the D2-B test (Full's ⋯ strip carries a Simple editor item) is WITHDRAWN with the item (DESIGN.md §0.4 V1).
+     Its opposite now holds: FU1 checks that Full's ⋯ strip is HEAD's, element for element and pixel for pixel. */
+
+  test('simple P1 · off means off: a project this device never switched opens in Full and runs nothing of the switch — no text-editor flush', { item: '980' }, function () {
+    smNeedEditor();
+    /* 1 Oct, RE-ANCHORED, NOT RE-RUN. "Off" is now "this device never chose Simple for the project" (DESIGN.md §7.2), and the
+       control seeds the project's index card with editor 'simple' instead of project.sm.home, which homeFor no longer reads
+       (DESIGN.md §0.4 B27). syncProject() runs inside EVERY timeline rebuild and a new project id reaches it on every open; the
+       switch's apply() commits the text editor before it swaps. Spied, not stubbed away: the spy counts, and the control proves
+       the same path does run when this device chose Simple. */
+    const te = FM.textEdit, pid0 = FM.storage.openProjectId, list0 = FM.projects.list, P = FM.scene.project, had = 'sm' in P, sm0 = P.sm;
+    const act0 = te && te.isActive, stop0 = te && te.stop;
+    if (!te) throw new Error('setup: FM.textEdit is missing');
+    let stops = 0, n = 0;
+    try {
+      te.isActive = function () { return true; }; te.stop = function () { stops++; };
+      FM.storage.openProjectId = function () { return 'sm_offmeansoff_' + n; };
+      FM.projects.list = function () { return [{ id: 'sm_offmeansoff_1' }, { id: 'sm_offmeansoff_2', editor: 'simple' }]; };
+      P.sm = { home: 'simple' };   // a Simple-made file: it must NOT put a device that never chose Simple into Simple
+      n = 1; FM.timeline.rebuild();
+      if (stops) throw new Error('a project this device never switched flushed the text editor ' + stops + ' time(s) on open — the switch ran in Full');
+      if (FM.editor.mode() !== 'full' || document.body.classList.contains('ed-simple')) throw new Error('project.sm.home "simple" put a device that never chose Simple into Simple (DESIGN §0.4 B27)');
+      /* CONTROL: this device chose Simple for project 2 — the same open DOES switch, committing the text editor first */
+      n = 2; FM.timeline.rebuild();
+      if (FM.editor.mode() !== 'simple' || !stops) throw new Error('CONTROL: a project whose card says Simple opened in ' + FM.editor.mode() + ' with ' + stops + ' flush(es) — the spy is not on the path');
+    } finally {
+      te.isActive = act0; te.stop = stop0; FM.storage.openProjectId = pid0; FM.projects.list = list0;
+      if (had) P.sm = sm0; else delete P.sm;
+      try { FM.editor.apply('full', { force: true, quiet: true }); } catch (e) {}
+      try { FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
 })();
