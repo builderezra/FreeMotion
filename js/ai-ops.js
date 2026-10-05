@@ -170,6 +170,12 @@ window.FM = window.FM || {};
       return layer;
     }
 
+    // Some validated ops call editor actions that commit for themselves (notably deleteLayer).
+    // Mute at this shared boundary so Director, re-roll and Refine all land one snapshot when
+    // their caller commits the finished batch; the Assistant's outer mute nests safely.
+    var hist = FM.history;
+    if (hist && hist.mute) hist.mute();
+    try {
     for (var i = 0; i < (ops || []).length; i++) {
       var o = ops[i];
       if (!o || typeof o !== 'object' || FM.AI_OP_NAMES.indexOf(o.op) < 0) { drop(o && o.op, o && o.ref, 'unknown op'); continue; }
@@ -490,6 +496,7 @@ window.FM = window.FM || {};
         drop(o.op, ref, 'exception: ' + (e && e.message));
       }
     }
+    } finally { if (hist && hist.unmute) hist.unmute(); }
 
     return { appliedCount: applied, dropped: dropped, results: results };
   }

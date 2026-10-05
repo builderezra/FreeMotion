@@ -127542,4 +127542,44 @@
     }
   });
 
+  test('690 Director ops with a deletion undo as one complete change', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    try {
+      if (wasOpen) FM.home.close();
+      const pid = await FM.projects.create({ name: 'AI undo check', width: 320, height: 240 });
+      if (!pid) throw new Error('setup: could not make the AI undo project');
+      made.push(pid);
+      const A = FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 40, y: 40 });
+      const B = FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 80, y: 80 });
+      const C = FM.makeLayer('shape', { name: 'C', shape: 'rect', x: 120, y: 120 });
+      FM.scene.layers.push(A, B, C); FM.refreshAll(); FM.history.reset();
+      const digest = () => JSON.stringify(FM.scene.layers.map(l => ({ id: l.id, scale: l.transform.scale, opacity: l.transform.opacity })));
+      const original = digest();
+      const ops = [
+        { op: 'setProp', ref: A.id, path: 'transform.scale', value: 1.4 },
+        { op: 'deleteLayer', ref: B.id },
+        { op: 'setProp', ref: C.id, path: 'transform.opacity', value: 0.4 },
+      ];
+      const before = FM.history._steps().index;
+      const result = FM.aiOps.applyOps(ops, {});
+      if (result.appliedCount !== 3) throw new Error('setup: the three Director ops did not apply');
+      FM.refreshAll(); FM.history.commit(); // Director/Refine's completion step
+      if (FM.history._steps().index !== before + 1) throw new Error('a Director op batch used more than one Undo step');
+      FM.history.undo();
+      if (digest() !== original) throw new Error('one Undo left part of the AI edit behind');
+      FM.history.redo();
+      if (FM.scene.layers.some(l => l.id === B.id) || FM.layerById(FM.scene, C.id).transform.opacity !== 0.4)
+        throw new Error('one Redo did not restore the complete AI edit');
+
+      FM.history.undo(); FM.history.reset();
+      const chatBefore = FM.history._steps().index;
+      FM.aiChat._apply(ops);
+      if (FM.history._steps().index !== chatBefore + 1) throw new Error('Assistant control did not stay one step');
+      FM.history.undo();
+      if (digest() !== original) throw new Error('Assistant control did not undo completely');
+    } finally {
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
 })();

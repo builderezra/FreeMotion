@@ -288,7 +288,9 @@ window.FM = window.FM || {};
         return { error: err, left: true };
       }
       // commit whatever applied so the user keeps it (cancel = keep)
-      if (FM.scene.layers.length !== beforeLen) { FM.refreshAll(); if (FM.history) FM.history.commit(); }
+      // A cancelled run can replace/delete layers and finish at the same count. commit() already
+      // ignores an unchanged snapshot, so count is not a safe test for whether work should be kept.
+      FM.refreshAll(); if (FM.history) FM.history.commit();
       if (err && err.cancelled) { P.done({ cancelled: true, layersAdded: FM.scene.layers.length - beforeLen }); }
       else { P.error((err && err.message) || 'Something went wrong'); }
       return { error: err };
