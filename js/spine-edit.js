@@ -429,6 +429,7 @@ window.FM = window.FM || {};
           const r = FM.trimClipEdge(B, 'head', len, srcDurOf(B));
           B.duration = r.duration; B.trimStart = r.trimStart; FM.shiftLayerFxClock(B, r.fxShift);
           S.setFlag(B, 'stay', true); S.setFlag(l, 'stay', true);
+          plan.resized.add(B.id);   // the cut made this length, not he: a whole-video piece keeps sm.tail and the fit re-seats it (§4.3)
         });
       }
       plan.resized.add(l.id);

@@ -121493,4 +121493,28 @@
       if (!okA || G.start !== 3 || B.start !== 3 || C.start !== 7) throw new Error('CONTROL: D on clip A did not ripple the block as one piece: G ' + G.start + ', B ' + B.start + ', C ' + C.start + ' (it said “' + v.say() + '”)');
     }, { project: { sm: { adopted: true, v: 1 } } });
   });
+
+  test('simple P2.1 · review Delete that cuts a muted whole-video overlay keeps the end-with-the-video flag on its later piece, so the next trim still takes it to the end (§4.3)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [
+      smV('Leak', 0, 12, W, H),                         // a muted light-leak video over the whole film, added in Full after adoption: no flag yet
+      smV('C', 8, 4, W, H, { sm: { main: true } }), smV('B', 4, 4, W, H, { sm: { main: true } }), smV('A', 0, 4, W, H, { sm: { main: true } })
+    ], async function (v) {
+      FM.selectLayer(v.L('B').id);
+      v.key('Backspace'); await v.idle();
+      if (v.L('B')) throw new Error('B was not deleted (it said “' + v.say() + '”)');
+      const leaks = FM.scene.layers.filter(l => l.name === 'Leak').sort((a, b) => a.start - b.start);
+      if (leaks.length !== 2 || Math.abs(leaks[1].start - 4) > 1e-9 || Math.abs(leaks[1].start + leaks[1].duration - 8) > 1e-9)
+        throw new Error('CONTROL: the muted overlay was not cut at the deleted clip: ' + JSON.stringify(leaks.map(l => [l.start, l.duration])));
+      const L2 = leaks[1];
+      if (!(L2.sm && L2.sm.tail === true && Math.abs(L2.sm.tailEnd - 8) < 1e-9)) throw new Error('the later piece lost its end-with-the-video flag: ' + JSON.stringify(L2.sm));
+      if (/keeps the length you gave it/.test(v.say())) throw new Error('the line says a length he never set was kept: “' + v.say() + '”');
+      /* the next trim shortens the video: the piece must follow the new end, not run on in black */
+      FM.selectLayer(v.L('C').id); FM.time = 6;
+      v.key('KeyD', 'd'); await v.idle();
+      const C = v.L('C');
+      if (Math.abs(C.start + C.duration - 6) > 1e-9) throw new Error('CONTROL: D did not trim C to end at 6 (it said “' + v.say() + '”)');
+      if (Math.abs(L2.start + L2.duration - 6) > 1e-9) throw new Error('the muted overlay runs on past the new end: ' + L2.start + '..' + (L2.start + L2.duration) + ' with the video ending at 6');
+    }, { project: { sm: { adopted: true, v: 1 } } });
+  });
 })();
