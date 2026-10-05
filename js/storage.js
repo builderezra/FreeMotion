@@ -1789,10 +1789,13 @@ window.FM = window.FM || {};
     if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
     if (FM.fonts && obj.fonts) {
       let missingFonts = 0;
-      try { missingFonts = await FM.fonts.applyEmbedded(obj.fonts); }
+      let fontStorageFailed = false;
+      try { missingFonts = await FM.fonts.applyEmbedded(obj.fonts, () => { fontStorageFailed = true; }); }
       catch (e) { missingFonts = 1; }
       if (missingFonts) {
-        const warning = missingFonts + (missingFonts === 1 ? ' embedded font could' : ' embedded fonts could') + ' not be restored — text may use a fallback font.';
+        const warning = fontStorageFailed
+          ? 'Storage is full — the fonts in this file could not be saved; text may use a fallback font.'
+          : missingFonts + (missingFonts === 1 ? ' embedded font could' : ' embedded fonts could') + ' not be restored — text may use a fallback font.';
         if (Array.isArray(importWarnings)) importWarnings.push(warning);
         else if (FM.toast) FM.toast(warning, 7000);
       }
@@ -3114,8 +3117,16 @@ window.FM = window.FM || {};
         if (candidates.length) {
           if (FM._mediaBusy) { db.close(); return; }   // something started writing mid-scan
           const keep2 = collectKeep();                  // fresh snapshot at delete time
+          // A font/template/element can arrive while the asynchronous IDB scan above runs. Refresh
+          // their indexes as well, or this sweep can delete a blob just committed by an import.
+          const tplIds2 = new Set((FM.templates.list() || []).map(t => t.id));
+          const elemIds2 = new Set((FM.elements.list() || []).map(e => e.id));
+          const fontIds2 = new Set((FM.fonts && FM.fonts.list ? FM.fonts.list() : []).map(f => f.id));
           for (const k of candidates) {
             if (keep2.has(k) || ckptKeep.has(k) || FM.media.get(k)) continue;   // referenced since the scan / by a collab save point (queue 921 S0) / live in memory
+            if (typeof k === 'string' && ((k.indexOf('tpl:') === 0 && tplIds2.has(k.slice(4))) ||
+                (k.indexOf('elem:') === 0 && elemIds2.has(k.slice(5))) ||
+                (k.indexOf('font:') === 0 && fontIds2.has(k.slice(5))))) continue;
             await idbDel(db, k);
           }
         }
@@ -3866,12 +3877,21 @@ window.FM = window.FM || {};
     },
     // Register fonts embedded in an imported .fmotion.json so its text renders on this device too.
     // Adds only fonts the library doesn't already have, keyed by their (stable) family token.
-    async applyEmbedded(fontsObj) {
+    async applyEmbedded(fontsObj, onStorageFailure) {
       if (!fontsObj) return 0;
       if (typeof fontsObj !== 'object' || Array.isArray(fontsObj)) return 1;
-      const idx = this.list();
-      const haveFam = new Set(idx.map(f => f.family));
-      let failed = 0, added = 0;
+      const haveFam = new Set(this.list().map(f => f.family));
+      const pending = [];
+      let failed = 0;
+      async function drop(records) {
+        if (!records.length) return;
+        records.forEach(f => _fontReg.delete(f.id));
+        try {
+          const db = await openDB();
+          for (const f of records) await idbDel(db, 'font:' + f.id);
+          db.close();
+        } catch (e) {}
+      }
       for (const key of Object.keys(fontsObj)) {
         const fd = fontsObj[key];
         if (!fd || typeof fd.family !== 'string' || !fd.family) { failed++; continue; }
@@ -3882,12 +3902,25 @@ window.FM = window.FM || {};
         const nid = newId('f'); _fontReg.add(nid);
         let put = false;   // queue 915 clause 2: registered for this session either way, but only a stored font is listed
         try { const db = await openDB(); put = await idbPut(db, 'font:' + nid, { file: file }); db.close(); } catch (e) {}
-        if (!put) { _fontReg.delete(nid); failed++; continue; }
-        idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
+        if (!put) { _fontReg.delete(nid); failed++; if (onStorageFailure) onStorageFailure(); continue; }
+        pending.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
         haveFam.add(fd.family);
-        added++;
       }
-      if (added && !writeJSON(FONT_INDEX, idx)) failed += added;
+      if (pending.length) {
+        // Re-read AFTER all awaits: a picker import or another file may have updated the index.
+        // The write below is synchronous, so nobody can interleave between this read and write.
+        const idx = this.list(), liveFam = new Set(idx.map(f => f.family));
+        const duplicate = [], added = [];
+        for (const f of pending) (liveFam.has(f.family) ? duplicate : added).push(f);
+        // Do not await the duplicate cleanup between the fresh read and the index write.
+        let rollback = duplicate;
+        if (added.length && !writeJSON(FONT_INDEX, idx.concat(added))) {
+          failed += added.length;
+          if (onStorageFailure) onStorageFailure();
+          rollback = duplicate.concat(added);
+        }
+        await drop(rollback); // otherwise the next boot sweep finds and deletes a silent orphan
+      }
       return failed;
     },
   };

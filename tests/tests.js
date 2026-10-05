@@ -127374,4 +127374,71 @@
     }
   });
 
+  test('690 embedded fonts keep concurrent imports and report an index write failure', { item: 'TBD', budgetMs: 30000 }, async function () {
+    const tag = 'FMFembedded1042' + Date.now();
+    const firstFamily = tag + 'A', refusedFamily = tag + 'B';
+    const dataURL = 'data:font/ttf;base64,AAAAAAAAAAA=';
+    const embedded = family => ({ family: family, name: family + '.ttf', dataURL: dataURL });
+    const before = new Set(FM.fonts.list().map(f => f.id));
+    const realFace = window.FontFace, realAdd = Object.getOwnPropertyDescriptor(document.fonts, 'add');
+    const realSet = Storage.prototype.setItem;
+    const scene = { project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId, selectedIds: FM.scene.selectedIds };
+    let releaseFace, reachedFace;
+    const faceGate = new Promise(resolve => { releaseFace = resolve; });
+    const faceEntered = new Promise(resolve => { reachedFace = resolve; });
+    let waiting = null;
+    try {
+      window.FontFace = function (family) {
+        this.load = function () {
+          if (family === firstFamily) { reachedFace(); return faceGate; }
+          return Promise.resolve(this);
+        };
+      };
+      document.fonts.add = function () {};
+      waiting = FM.fonts.applyEmbedded({ first: embedded(firstFamily) });
+      await faceEntered;
+      const picked = await FM.fonts.import(new File([new Uint8Array(32)], tag + '.ttf', { type: 'font/ttf' }));
+      if (!picked) throw new Error('setup: a picker font did not import during the embedded-font wait');
+      releaseFace();
+      if (await waiting) throw new Error('embedded font failed during the concurrent import control');
+      const families = FM.fonts.list().map(f => f.family);
+      if (!families.includes(firstFamily) || !families.includes(picked.family))
+        throw new Error('embedded import overwrote the picker font index while awaiting a face');
+      await FM.projects.pruneOrphans();
+      const raw = await q915aRaw();
+      if (!raw['font:' + picked.id] || !raw['font:' + FM.fonts.list().find(f => f.family === firstFamily).id])
+        throw new Error('the boot sweep removed a font whose index entry survived');
+
+      let refused = false;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === 'fm.fonts') { refused = true; throw new DOMException('full in test', 'QuotaExceededError'); }
+        return realSet.call(this, key, value);
+      };
+      const rawBefore = await q915aRaw();
+      const warnings = [];
+      const project = JSON.parse(JSON.stringify(scene.project));
+      if (!await FM.storage.applyScene({ project: project, layers: [], fonts: { refused: embedded(refusedFamily) } }, warnings))
+        throw new Error('setup: imported scene was rejected before the font index write');
+      if (!refused) throw new Error('setup: the simulated full font index was not reached');
+      if (!warnings.some(w => /Storage is full.*fonts in this file could not be saved/.test(w)))
+        throw new Error('the project import did not explain the missing embedded font');
+      if (FM.fonts.list().some(f => f.family === refusedFamily))
+        throw new Error('a font with a refused index write was listed as saved');
+      const rawAfter = await q915aRaw();
+      if (Object.keys(rawAfter).some(k => k.indexOf('font:') === 0 && !rawBefore[k]))
+        throw new Error('a refused font index write left an orphan font blob');
+    } finally {
+      if (releaseFace) releaseFace();
+      if (waiting) await waiting.catch(() => {});
+      Storage.prototype.setItem = realSet;
+      window.FontFace = realFace;
+      if (realAdd) Object.defineProperty(document.fonts, 'add', realAdd);
+      else delete document.fonts.add;
+      FM.scene.project = scene.project; FM.scene.layers = scene.layers;
+      FM.scene.selectedId = scene.selectedId; FM.scene.selectedIds = scene.selectedIds;
+      for (const f of FM.fonts.list().filter(f => !before.has(f.id))) await FM.fonts.remove(f.id);
+      FM.refreshAll();
+    }
+  });
+
 })();
