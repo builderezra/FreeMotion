@@ -127059,4 +127059,10 @@
     }
   });
 
+  test('TBD: main video preview is announced as a named image', { item: 'TBD' }, function () {
+    const preview = document.getElementById('preview');
+    if (!preview || preview.getAttribute('role') !== 'img' || preview.getAttribute('aria-label') !== 'Video preview')
+      throw new Error('the main preview surface has no accessible image name');
+  });
+
 })();
