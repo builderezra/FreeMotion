@@ -282,9 +282,11 @@ window.FM = window.FM || {};
 
   /* THE ONE RIPPLE (§3.4), by main-track ORDER, with exact landings (§3.1): entries from `from` move by dt; a seam that was a
      float-noise join or a hairline, and the first seam when `landFirst`, lands bit-exact on the new end before it, and
-     every later entry, follower and the tail take that correction too. Returns the total displacement of the last entry. */
+     every later entry, follower and the tail take that correction too. Returns the total displacement of the last entry, and
+     `end`: the last CLIP's new end exactly as apply() writes it (null when no clip moved) — the tail lands on that, never on
+     trackEnd + d, which differs by an ulp often enough to open a black frame before an end card (§3.1). */
   function ripple(p, R, from, dt, skip, prevEnd, landFirst) {
-    let acc = 0, last = null;
+    let acc = 0, last = null, end = null;
     const map = byIdMap();
     for (let i = from; i < R.main.length; i++) {
       const e = R.main[i];
@@ -300,10 +302,11 @@ window.FM = window.FM || {};
            plus the stored duration — never e.end + d, which rounds differently (§3.1) */
         const l = map.get(e.id), ns = landAt != null ? landAt : (+l.start || 0) + d;
         prevEnd = ns + (+l.duration || 0);
+        end = prevEnd;
       }
       last = d;
     }
-    return { last: last, acc: acc };
+    return { last: last, acc: acc, end: end };
   }
   /* The tail (§4.3) moves by the change of trackEnd; one that sat bit-exact on the old end lands on the new one. */
   function tailMove(p, R, newEnd, map) {
@@ -442,7 +445,7 @@ window.FM = window.FM || {};
     const rp = ripple(plan, R, i + 1, dt, new Set([c.id]), prevEnd, landFirst);
     /* the new main-track end: the last clip moved by the ripple, or (c last) the clip before it, or c's start when c was alone */
     const lastClipIdx = (() => { for (let k = R.main.length - 1; k >= 0; k--) if (!R.main[k].slot && k !== i) return k; return -1; })();
-    const newEnd = lastClipIdx > i ? R.main[lastClipIdx].end + (rp.last == null ? dt : rp.last) : (lastClipIdx >= 0 ? R.main[lastClipIdx].end : a);
+    const newEnd = lastClipIdx > i ? (rp.end != null ? rp.end : R.main[lastClipIdx].end + (rp.last == null ? dt : rp.last)) : (lastClipIdx >= 0 ? R.main[lastClipIdx].end : a);
     tailMove(plan, R, newEnd, map);
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
     plan.time = n ? a : Math.max(0, newEnd);
@@ -498,7 +501,7 @@ window.FM = window.FM || {};
       }
     });
     const rp = ripple(plan, R, i + 1, dt, new Set([c.id].concat(twins.map(t => t.id))), newEnd, false);
-    tailMove(plan, R, R.trackEnd + (rp.last == null ? dt : rp.last), map);
+    tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);   // c last: its start + the new duration, bit for bit
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
     plan.live = line('trimmed', S.itemWord(L, R));
     plan.pulse = [c.id];
@@ -548,7 +551,7 @@ window.FM = window.FM || {};
       if (u && u.kind === 'effect' && fs + fd <= c.end + 1e-9 && s2 + fd > newEnd + 1e-9) plan.writes.push(() => { f.duration = Math.max(ml, newEnd - s2); });
     });
     const rp = ripple(plan, R, i + 1, -Lnd, new Set([c.id].concat(twins.map(t => t.id))), newEnd, false);
-    tailMove(plan, R, R.trackEnd + (rp.last == null ? -Lnd : rp.last), map);
+    tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);   // c last: its start never moves, so its end is start + the new duration
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
     plan.time = c.start;
     plan.live = line('trimmed', S.itemWord(L, R));
@@ -612,7 +615,7 @@ window.FM = window.FM || {};
     const rb = riderBlock(R, Math.min(e.start, prevEnd), map); if (rb) return refusePlan(rb.kind, rb);
     const plan = newPlan(sm.kind === 'gap' ? 'Close gap' : 'Fix overlap');
     const rp = ripple(plan, R, j, dt, new Set(), prevEnd, true);
-    tailMove(plan, R, R.trackEnd + (rp.last == null ? dt : rp.last), map);
+    tailMove(plan, R, rp.end != null ? rp.end : R.trackEnd + (rp.last == null ? dt : rp.last), map);
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
     const t = FM.time || 0, lo = Math.min(prevEnd, e.start), hi = Math.max(prevEnd, e.start);
     if (t > lo && t < hi) plan.time = prevEnd;
@@ -651,7 +654,7 @@ window.FM = window.FM || {};
       plan.selectId = dupId;
     });
     const rp = ripple(plan, R, i + 1, len, new Set(), target + len, false);
-    tailMove(plan, R, R.trackEnd + (rp.last == null ? len : rp.last), map);
+    tailMove(plan, R, rp.end != null ? rp.end : target + len, map);   // c last: the copy's end, start target + its duration
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
     plan.time = target;
     plan.live = line('duplicated');

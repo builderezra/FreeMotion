@@ -121611,4 +121611,62 @@
     }));
     if (fails.length) throw new Error(fails.join(' · '));
   });
+
+  test('simple P2.1 · review an end card lands bit-exact on the new end of the clips after every command, so no 1-ulp black frame opens before it (§3.1)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    /* (1) D on the last clip with the playhead on a frame: (0.8 + 3.3333333) + (nd − 3.3333333) is one ulp past 0.8 + nd */
+    await smP2((W, H) => [smT('Card', 0.8 + 3.3333333, 2, W, H), smV('B', 0.8, 3.3333333, W, H), smV('A', 0, 0.8, W, H)], async function (v) {
+      const B = v.L('B'), card = v.L('Card');
+      if (card.start !== B.start + B.duration) throw new Error('CONTROL: the card does not sit bit-exact on the clip end');
+      const t = 31 / 30;
+      if (!(await FM.spine.cmd.trimTail(B.id, t))) throw new Error('(D) refused: “' + v.say() + '”');
+      await v.idle();
+      if (card.start !== B.start + B.duration) fails.push('(D) the end card landed at ' + card.start + ' but the clip ends at ' + (B.start + B.duration));
+      if (!FM.isLayerVisibleAt(B, t) && !FM.isLayerVisibleAt(card, t)) fails.push('(D) frame ' + t + ' shows neither the clip nor the end card');
+    });
+    /* (2) A on the last clip: its start never moves, so its end is start + the new duration, not trackEnd − the trim */
+    await smP2((W, H) => [smT('Card', 0.8 + 3.3333333, 2, W, H), smV('B', 0.8, 3.3333333, W, H), smV('A', 0, 0.8, W, H)], async function (v) {
+      const B = v.L('B'), card = v.L('Card');
+      if (!(await FM.spine.cmd.trimHead(B.id, 26 / 30))) throw new Error('(A) refused: “' + v.say() + '”');
+      await v.idle();
+      if (card.start !== B.start + B.duration) fails.push('(A) the end card landed at ' + card.start + ' but the clip ends at ' + (B.start + B.duration));
+    });
+    /* (3) a seeded sweep of delete, both trims and close gap over off-grid tracks with an end card: the card must
+       start exactly where the last clip now ends */
+    const P0 = FM.scene, t0 = FM.time, miss = {}, ran = {};
+    try {
+      for (let seed = 1; seed <= 240; seed++) {
+        const r = smRand(seed * 97 + 13), n = 3 + Math.floor(r() * 3), layers = [];
+        let t = 0;
+        for (let i = 0; i < n; i++) {
+          const l = FM.makeLayer('video', { name: 'c' + i, x: 160, y: 120, start: 0, duration: 1 });
+          l.start = t; l.duration = 0.7 + Math.floor(r() * 1e6) / 1e6 * 3.1; l.srcW = 320; l.srcH = 240; l.srcRev = 0; l.muted = true;
+          layers.push(l);
+          t = l.start + l.duration + (i === 1 && r() < 0.5 ? 0.3 + r() : 0);     // sometimes a gap before the third clip
+        }
+        const last = layers[layers.length - 1];
+        const card = FM.makeLayer('text', { name: 'Card', text: 'End', x: 160, y: 60, start: last.start + last.duration, duration: 2 });
+        const cmd = ['del', 'tail', 'head', 'seam'][seed % 4];
+        FM.scene = scene([card].concat(layers.slice().reverse()), { project: { width: 320, height: 240, fps: 30, duration: 60, background: '#000' } });
+        const R = FM.spine.classify(FM.scene), clips = R.main.filter(e => !e.slot);
+        const pick = clips[Math.floor(r() * clips.length)], L = FM.layerById(FM.scene, pick.id);
+        const at = Math.round((L.start + L.duration * (0.3 + r() * 0.4)) * 30) / 30;      // a playhead on a frame, inside the clip
+        let plan = null;
+        if (cmd === 'del') plan = FM.spine.planDelete(R, pick.id);
+        else if (cmd === 'tail') plan = FM.spine.planTrimTail(R, pick.id, at - L.start, { key: true });
+        else if (cmd === 'head') plan = FM.spine.planTrimHead(R, pick.id, at - L.start, { key: true });
+        else if (cmd === 'seam') { const e = R.main.find(x => x.seam && x.seam.kind === 'gap'); if (!e) continue; plan = FM.spine.planSeam(R, e.id); }
+        if (!plan || plan.refuse) continue;
+        await FM.spine._applyPlan(plan);
+        ran[cmd] = (ran[cmd] || 0) + 1;
+        const R2 = FM.spine.classify(FM.scene);
+        if (card.start !== R2.trackEnd) miss[cmd] = (miss[cmd] || 0) + 1;
+      }
+    } finally { FM.scene = P0; FM.time = t0; }
+    ['del', 'tail', 'head', 'seam'].forEach(c => { if (!ran[c]) fails.push('CONTROL: the sweep never ran ' + c); });
+    const m = Object.keys(miss).map(c => c + ' ' + miss[c] + '/' + ran[c]);
+    if (m.length) fails.push('the end card missed the new end of the clips by float noise in: ' + m.join(', '));
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();
