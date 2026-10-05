@@ -121,7 +121,8 @@ window.FM = window.FM || {};
     });
     sayEl.classList.toggle('sm-say-has-b', btns.length > 0);
     if (btns.length) setTimeout(function arm() { if (!sayEl.isConnected || !sayEl.querySelector('.sm-say-b')) return; if (!armed()) { setTimeout(arm, 60); return; } sayEl.querySelectorAll('.sm-say-b').forEach(b => b.setAttribute('aria-disabled', 'false')); }, 400);
-    if (liveEl) liveEl.textContent = text;
+    /* #sm-say is itself the polite status region (rule 1b) and reads the text with its buttons; #sm-live is for live-only lines.
+       Writing the row's text there too made a screen reader read every refusal and every Undo line twice (review finding 29). */
     armClear(btns.length ? 10000 : 4000);
   }
 

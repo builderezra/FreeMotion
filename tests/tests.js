@@ -121754,4 +121754,27 @@
       if (fails.length) throw new Error(fails.join(' · '));
     });
   });
+
+  test('simple P2.1 · review a line Simple says in its row is announced by ONE live region, not read twice (§3.12 rule 1)', { item: '980', budgetMs: 30000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      /* the outermost live regions on the page whose text holds the line */
+      const live = '[aria-live="polite"],[aria-live="assertive"],[role="status"],[role="alert"]';
+      const regions = txt => Array.from(document.querySelectorAll(live))
+        .filter(r => r.getAttribute('aria-live') !== 'off' && !(r.parentElement && r.parentElement.closest(live)))
+        .filter(r => r.textContent.indexOf(txt) >= 0);
+      const row = 'Deleted clip and 1 thing on it zq1';
+      FM.spine.say(row, { buttons: [{ label: 'Undo', fn() {} }] });
+      if (!/zq1/.test(v.say())) throw new Error('CONTROL: the line did not take the row');
+      if (regions(row).length !== 1) throw new Error('a line with Undo sits in ' + regions(row).length + ' live regions (' + regions(row).map(r => r.id || r.className).join(', ') + '): a screen reader reads it twice');
+      const ref = 'Nothing more to trim zq2';
+      FM.spine.say(ref);
+      if (regions(ref).length !== 1) throw new Error('a refusal sits in ' + regions(ref).length + ' live regions (' + regions(ref).map(r => r.id || r.className).join(', ') + ')');
+      /* CONTROL: a live-only line still reaches #sm-live, exactly once, and leaves the row alone */
+      const mv = 'Trimmed Clip 2 zq3';
+      FM.spine.say(mv, { live: true });
+      if (document.getElementById('sm-live').textContent !== mv || regions(mv).length !== 1) throw new Error('CONTROL: the live-only line was not announced exactly once through #sm-live');
+      if (v.say().indexOf('zq3') >= 0) throw new Error('CONTROL: the live-only line took the row');
+    });
+  });
 })();
