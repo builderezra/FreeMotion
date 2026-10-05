@@ -956,9 +956,29 @@ globalThis.FM = globalThis.FM || {};
       const SR = 120, n = Math.max(2, Math.ceil((layer.duration || 0) * SR) + 2);
       const tab = new Float32Array(n);
       let acc = 0, prev = Math.max(0.05, evalProp(sp, layer.start));
+      const speedKeys = sp.kf.filter(k => k && Number.isFinite(k.t)).slice().sort((a, b) => a.t - b.t);
+      let nextKey = 0;
+      while (nextKey < speedKeys.length && speedKeys[nextKey].t <= layer.start) nextKey++;
       for (let i = 1; i < n; i++) {
-        const v = Math.max(0.05, evalProp(sp, layer.start + i / SR));
-        acc += (prev + v) / (2 * SR);
+        const end = layer.start + i / SR;
+        let from = layer.start + (i - 1) / SR, fromV = prev;
+        // A hold key is a step: sampling just its right value and averaging it with the left
+        // books half the rate change into the preceding sample. Split at every key boundary;
+        // the left limit of a hold is the previous key's value, while its right is the new one.
+        while (nextKey < speedKeys.length && speedKeys[nextKey].t <= end) {
+          const key = speedKeys[nextKey], at = key.t;
+          if (at > from) {
+            const left = key.e === 'hold' && nextKey > 0
+              ? Math.max(0.05, speedKeys[nextKey - 1].v)
+              : Math.max(0.05, evalProp(sp, at));
+            acc += (fromV + left) * (at - from) / 2;
+            from = at;
+            fromV = Math.max(0.05, evalProp(sp, at));
+          }
+          nextKey++;
+        }
+        const v = Math.max(0.05, evalProp(sp, end));
+        acc += (fromV + v) * (end - from) / 2;
         tab[i] = acc; prev = v;
       }
       c = _spInt[layer.id] = { sig: sig, tab: tab, SR: SR };

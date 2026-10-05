@@ -127786,4 +127786,23 @@
       throw new Error('version chip touched other apps or failed to clear its own copy: ' + unregistered + ' / ' + chipDeleted);
   });
 
+  test('690 a hold speed drop keeps footage aligned through a split', { item: 'TBD', budgetMs: 10000 }, function () {
+    const step = 0.5 + 0.4 / 120;
+    const speed = { kf: [{ t: 0, v: 100, e: 'linear' }, { t: step, v: 1, e: 'hold' }] };
+    const whole = { id: 'speed-whole', start: 0, duration: 2, speed };
+    const actual = FM.layerSourceAdvance(whole, 1.5);
+    const exact = 100 * step + (1.5 - step);
+    if (Math.abs(actual - exact) > 0.001)
+      throw new Error('hold step left ' + (actual - exact).toFixed(4) + ' seconds of source offset');
+
+    // A head split/trim moves the table origin to 0.25 s. The later footage must not shift.
+    const tail = { id: 'speed-tail', start: 0.25, duration: 1.75, speed };
+    const fromWhole = FM.layerSourceAdvance(whole, 1.2) - FM.layerSourceAdvance(whole, 0.25);
+    const fromTail = FM.layerSourceAdvance(tail, 0.95);
+    if (Math.abs(fromTail - fromWhole) > 0.001)
+      throw new Error('the speed step moved footage by ' + (fromTail - fromWhole).toFixed(4) + ' seconds after a split');
+    const staticLayer = { id: 'speed-static', start: 0, duration: 2, speed: 2 };
+    if (FM.layerSourceAdvance(staticLayer, 1.5) !== 3) throw new Error('static-speed control changed');
+  });
+
 })();
