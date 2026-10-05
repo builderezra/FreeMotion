@@ -120815,7 +120815,7 @@
     const cardOf = () => (FM.projects.list() || []).find(c => c.id === pid);
     const card0 = cardOf(), ed0 = card0 ? card0.editor : undefined;
     const say = () => document.getElementById('sm-say');
-    const openFull = async () => { const b = say().querySelector('button'); if (!b) throw new Error('the line has no Open in Full button: ' + say().textContent); b.click(); await new Promise(r => setTimeout(r, 60)); };
+    const openFull = async () => { await new Promise(r => setTimeout(r, 450)); const b = say().querySelector('button'); if (!b) throw new Error('the line has no Open in Full button: ' + say().textContent); b.click(); await new Promise(r => setTimeout(r, 60)); };   // 450 ms: a line's buttons arm after 400 ms from Phase 2 on
     try {
       await smCropRig(async function (r) {
         if (!pid || !card0) throw new Error('setup: the suite project has no card, so the memory cannot be read');

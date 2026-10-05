@@ -70,6 +70,14 @@ window.FM = window.FM || {};
     if (!sayEl || sayEl._wired) return;
     sayEl._wired = true;
     document.addEventListener('pointerdown', e => { if (sayEl.textContent && !sayEl.contains(e.target)) clearSay(); }, true);
+    /* A REFUSED SWITCH IS SAID HERE WHEN THE COG IS CLOSED (Phase 1 review R1). The cog block shows its own refusal line, but an
+       Open in Full hop is pressed with the cog shut, and its "wait for the export" was lost — one listener for every door. */
+    window.addEventListener('fm-editor-refuse', ev => {
+      const dlg = document.getElementById('canvas-dialog');
+      if (dlg && !dlg.classList.contains('hidden')) return;
+      if (!(FM.editor && FM.editor.isSimple())) return;
+      const t = ev.detail && ev.detail.text; if (t) sayLine(t);
+    });
   }
   function clearSay() { clearTimeout(sayT); if (sayEl) sayEl.textContent = ''; }
   function armClear() {
@@ -86,14 +94,7 @@ window.FM = window.FM || {};
     if (opts && opts.full) {
       const b = el('button', 'sm-say-b', (W().lines || {}).openFull || 'Open in Full');
       b.type = 'button';
-      b.addEventListener('click', async () => {
-        clearSay();
-        if (!FM.editor) return;
-        /* the cog is closed, so its refusal listener shows nothing: a refusal is said here instead (review 6 Oct) */
-        const said = ev => { const t = ev.detail && ev.detail.text; if (t) sayLine(t); };
-        window.addEventListener('fm-editor-refuse', said);
-        try { await FM.editor.request('full', { hop: true }); } finally { window.removeEventListener('fm-editor-refuse', said); }
-      });
+      b.addEventListener('click', () => { clearSay(); if (FM.editor) FM.editor.request('full', { hop: true }); });   // a hop: the guard, no memory (R1)
       sayEl.appendChild(b);
     }
     if (liveEl) liveEl.textContent = text;
