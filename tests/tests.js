@@ -122077,4 +122077,43 @@
       });
     }
   });
+
+
+  test('simple P2.2 · review Close all gaps lands every hairline a frame falls into and every hairline it moves, so it never leaves or makes a black frame (§3.1, inv. 13)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const black = () => smBlackFrames(FM.spine.classify(FM.scene));
+    /* (a) a hairline after a gap it closes: the hairline moves 0.52 s and must land shut, not open a black frame at 4.0 s */
+    await smP2((W, H) => [smV('C', 4.522, 2, W, H), smV('B', 2.52, 1.99, W, H), smV('A', 0, 2, W, H)], async function (v) {
+      const R0 = FM.spine.classify(FM.scene);
+      if (!R0.main[2].seam || R0.main[2].seam.kind !== 'hairline' || black().length) throw new Error('CONTROL (a): B|C is not a frame-free hairline: ' + JSON.stringify(R0.main[2].seam) + ' ' + black());
+      const ok = await FM.spine.cmd.closeAll(); await v.idle();
+      const B = v.L('B'), C = v.L('C');
+      if (!ok || B.start !== 2) throw new Error('(a) the gap was not closed (it said “' + v.say() + '”)');
+      if (C.start !== B.start + B.duration || black().length) throw new Error('(a) the moved hairline was left open: B ends ' + (B.start + B.duration) + ', C starts ' + C.start + ', black frames at ' + black());
+    }, { fps: 30 });
+    /* (b) a hairline whose LATER edge is off-grid and whose earlier edge sits on frame 60: frame 60 (2.0 s) is black */
+    await smP2((W, H) => [smV('D', 4.512, 2, W, H), smV('C', 2.012, 2, W, H), smV('A', 0, 2, W, H)], async function (v) {
+      if (!black().some(t => Math.abs(t - 2) < 1e-6)) throw new Error('CONTROL (b): frame 2.0 s is not black before: ' + black());
+      const ok = await FM.spine.cmd.closeAll(); await v.idle();
+      if (!ok || v.L('C').start !== 2 || black().length) throw new Error('(b) the hairline with a frame inside stayed open: C at ' + v.L('C').start + ', black at ' + black());
+    }, { fps: 30 });
+    /* (c) seeded tracks: joins, hairlines and gaps mixed; after Close all gaps, no frame of the clip row is black */
+    let seed = 980;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+    for (let s = 0; s < 8; s++) {
+      const spec = []; let t = 0;
+      for (let k = 0; k < 7; k++) {
+        const r = rnd(), d = 1 + Math.round(rnd() * 2000) / 1000;
+        if (k) t += r < 0.3 ? 0 : r < 0.65 ? 0.001 + rnd() * 0.0155 : 0.3 + rnd() * 0.7;
+        spec.push([t, d]); t += d;
+      }
+      await smP2((W, H) => spec.map((p, k) => smV('S' + k, p[0], p[1], W, H)).reverse(), async function (v) {
+        const R0 = FM.spine.classify(FM.scene);
+        if (!R0.main.some(e => e.seam && e.seam.kind === 'gap')) return;
+        await FM.spine.cmd.closeAll(); await v.idle();
+        const R1 = FM.spine.classify(FM.scene), bad = black();
+        if (bad.length) throw new Error('(c) seed ' + s + ': black frames at ' + bad.slice(0, 4) + ' after Close all gaps, seams ' + JSON.stringify(R1.main.map(e => e.seam && e.seam.kind)));
+      }, { fps: 30 });
+    }
+  });
 })();

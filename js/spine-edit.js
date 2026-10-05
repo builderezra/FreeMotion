@@ -1216,10 +1216,15 @@ window.FM = window.FM || {};
     let prevEnd = null, acc = 0, closed = 0;
     R.main.forEach((e, k) => {
       let d = acc, ns = e.start + acc;
-      const sm = e.seam;
-      const frameIn = sm && sm.kind === 'hairline' && Math.floor((k ? R.main[k - 1].end : 0) * fps0 + 1e-9) !== Math.floor(e.start * fps0 + 1e-9);
-      const fix = sm && !sm.covered && (sm.kind === 'gap' || sm.kind === 'overlap' || frameIn || (sm.kind === 'join' && Math.abs((k ? R.main[k - 1].end : e.start) - e.start) < 1e-9 && prevEnd != null));
-      if (fix) { const target = prevEnd != null ? prevEnd : 0; if (sm.kind !== 'join') closed++; acc += target - ns; d = acc; ns = target; }
+      const sm = e.seam, hair = !!(sm && sm.kind === 'hairline');
+      /* frame f is black when prevEnd ≤ f/fps < start: a CEIL test on the original edges (a floor test missed an edge that sits
+         on a frame and counted one that does not), and a hairline this command moves is landed shut whatever it held, since
+         its new place is off the grid (§3.1: landed whenever it moves; inv. 13; review finding 4) */
+      const pEnd0 = k ? R.main[k - 1].end : 0;
+      const frameIn = hair && Math.ceil(pEnd0 * fps0 - 1e-9) !== Math.ceil(e.start * fps0 - 1e-9);
+      const movedHair = hair && acc !== 0 && prevEnd != null;
+      const fix = sm && !sm.covered && (sm.kind === 'gap' || sm.kind === 'overlap' || frameIn || movedHair || (sm.kind === 'join' && Math.abs((k ? R.main[k - 1].end : e.start) - e.start) < 1e-9 && prevEnd != null));
+      if (fix) { const target = prevEnd != null ? prevEnd : 0; if (sm.kind === 'gap' || sm.kind === 'overlap' || frameIn) closed++; acc += target - ns; d = acc; ns = target; }
       if (e.slot) { e.members.forEach(m => { if (d) addMove(plan, m, d); }); prevEnd = e.end + d; return; }
       if (fix) addLand(plan, e.id, ns); else if (d) addMove(plan, e.id, d);
       (R.followers[e.id] || []).forEach(f => { if (d) addMove(plan, f, d); });
