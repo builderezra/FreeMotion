@@ -120548,4 +120548,76 @@
     if ((G.REFUSED || []).indexOf('voice') < 0) throw new Error('the voice recorder is not in REFUSED — a switch could slide under an open take');
   });
 
+  /* A picture layer with a crop (200x150 of a 400x300 frame), its media in memory only, and FM.ask replaced by a recorder that
+     answers with `answer` — the guard's warning is the app's own pop-up, which a test cannot tap. Everything put back after. */
+  async function smCropRig(fn) {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const P = FM.scene.project, ask0 = FM.ask, mode0 = FM.editor.mode(), last0 = localStorage.getItem('fm.editor.last');
+    const cv = document.createElement('canvas'); cv.width = 400; cv.height = 300;
+    const g = cv.getContext('2d'); g.fillStyle = '#3a8a6a'; g.fillRect(0, 0, 400, 300);
+    const L = FM.makeLayer('image', { name: 'SM_CROP', x: Math.round(P.width / 2), y: Math.round(P.height / 2), start: 0, duration: 4 });
+    FM.media.set(L.id, { kind: 'image', el: cv, width: 400, height: 300, duration: 0 });
+    L.crop = { x: 50, y: 40, w: 200, h: 150 };
+    FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit && FM.history.commit();
+    const asked = [];
+    let answer = false;
+    FM.ask = async function (o) { asked.push(o || {}); return answer; };
+    try {
+      if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
+      await fn({ L: L, sleep: sleep, asked: asked, answer: v => { answer = v; } });
+    } finally {
+      FM.ask = ask0;
+      try { if (FM.cropTool.isActive()) FM.cropTool.stop(); } catch (e) {}
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      try { FM.media.remove(L.id); } catch (e) {}
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(80);
+    }
+  }
+
+  test('980 cog T3 a crop box he has moved is never thrown away by a switch: the warning asks, Stay keeps the crop open as it was, and Apply crop and switch makes one undo step that undo takes back', { item: '980', budgetMs: 60000 }, async function () {
+    await smCropRig(async function (r) {
+      FM.cropTool.start(r.L.id); await r.sleep(60);
+      document.querySelector('#crop-bar .cb-reset').click(); await r.sleep(30);   // the box is now the whole frame: changed
+      if (!FM.cropTool.changed()) throw new Error('setup: Reset did not change the crop box (changed() is false)');
+      const hist0 = FM.history._steps();
+      r.answer(false);
+      const ok1 = await FM.editor.request('simple', { from: 'cog' });
+      if (!r.asked.length) throw new Error('a moved crop box was switched away with no warning — the silent discard (M14)');
+      if (!/crop/i.test(JSON.stringify(r.asked[0]))) throw new Error('the warning does not mention the crop: ' + JSON.stringify(r.asked[0]));
+      if (ok1 || FM.editor.mode() !== 'full') throw new Error('Stay switched the editor anyway');
+      if (!FM.cropTool.isActive() || !FM.cropTool.changed()) throw new Error('Stay did not leave the crop open with his moved box');
+      r.answer(true);
+      const ok2 = await FM.editor.request('simple', { from: 'cog' }); await r.sleep(60);
+      if (!ok2 || FM.editor.mode() !== 'simple') throw new Error('Apply crop and switch did not switch (mode ' + FM.editor.mode() + ')');
+      if (FM.cropTool.isActive()) throw new Error('the crop tool is still open after Apply crop and switch');
+      const c = FM.cropOf(r.L, 0);
+      if (!c.full) throw new Error('the moved box was not applied (crop ' + JSON.stringify(c) + ')');
+      const hist1 = FM.history._steps();
+      if (hist1.index !== hist0.index + 1) throw new Error('Apply crop and switch made ' + (hist1.index - hist0.index) + ' undo steps, not one');
+      FM.history.undo(); await r.sleep(60);
+      const back = FM.cropOf(FM.layerById(FM.scene, r.L.id) || r.L, 0);
+      if (back.full || Math.abs(back.w - 200) > 0.5) throw new Error('undo did not bring the old crop back (' + JSON.stringify(back) + ')');
+    });
+  });
+
+  test('980 cog T4 an untouched crop box never warns: the switch closes it, makes no undo step, and goes through', { item: '980', budgetMs: 60000 }, async function () {
+    await smCropRig(async function (r) {
+      FM.cropTool.start(r.L.id); await r.sleep(60);
+      if (FM.cropTool.changed()) throw new Error('setup: a crop box just opened reads as changed');
+      const hist0 = JSON.stringify(FM.history._steps());
+      r.answer(false);
+      const ok = await FM.editor.request('simple', { from: 'cog' }); await r.sleep(60);
+      if (r.asked.length) throw new Error('an untouched crop box warned: ' + JSON.stringify(r.asked[0]));
+      if (!ok || FM.editor.mode() !== 'simple') throw new Error('the switch did not go through over an untouched crop');
+      if (FM.cropTool.isActive()) throw new Error('the untouched crop tool was left open behind the switch');
+      if (JSON.stringify(FM.history._steps()) !== hist0) throw new Error('closing an untouched crop made an undo step');
+      const c = FM.cropOf(r.L, 0);
+      if (c.full || Math.abs(c.w - 200) > 0.5) throw new Error('the crop changed although he never moved it (' + JSON.stringify(c) + ')');
+    });
+  });
+
 })();
