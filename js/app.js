@@ -9230,7 +9230,11 @@ window.FM = window.FM || {};
         // This listener is on document in the CAPTURE phase, so the overlay's own stopPropagation()
         // cannot reach it; being named here is the only thing that spares a surface.
         ' #ed-overlay, #ed-bar, #crop-overlay, #crop-bar, #touchup-overlay, #touchup-bar, #fd-overlay,' +
-        ' #pe-overlay, #pe-bar';   // the shape point editor — the fifth tool to be missing from this list
+        ' #pe-overlay, #pe-bar,' +   // the shape point editor — the fifth tool to be missing from this list
+        // Simple's timeline and the line it speaks in (980 Phase 2 review): a tap on the line's text "does nothing" (DESIGN
+        // §3.12 rule 2), and pressing the selected clip must not deselect it before its own click. Simple clears the selection
+        // itself on a tap of its empty timeline (#sm-inner's click). display:none outside Simple, so Full never matches it.
+        ' #sm-timeline';
       let dx = 0, dy = 0, keepAtDown = false, armed = false;
       document.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) { armed = false; return; }

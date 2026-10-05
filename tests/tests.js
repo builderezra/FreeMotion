@@ -121721,4 +121721,37 @@
     await run('ramp (iii)', (W, H) => smSong('Song', 2, 8, W, H, { trimStart: 0, speed: ramp(2, 10) }), [8.5, 9.5], [4.5, 5.5]);
     if (fails.length) throw new Error(fails.join(' · '));
   });
+
+  test('simple P2.1 · review a tap on the line Simple is saying, on its row, or on the selected clip keeps the selection (§3.12 rule 2: a tap on the line does nothing)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      /* a real finger's tap as the document sees it: the app's deselect-on-empty-tap listener is a capture listener on document */
+      const tap = el => { const r = el.getBoundingClientRect(), x = r.left + Math.min(r.width - 4, Math.max(4, r.width / 2)), y = r.top + r.height / 2;
+        ['pointerdown', 'pointerup'].forEach(t => el.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0, pointerId: 9802, pointerType: 'touch', isPrimary: true }))); };
+      const A = v.L('A'), fails = [];
+      /* CONTROL: the same tap on the page's empty background does clear the selection, so these taps reach the listener */
+      FM.selectLayer(A.id); await v.sleep(40);
+      tap(document.body); await v.sleep(40);
+      if (FM.scene.selectedId) throw new Error('CONTROL: a tap on the empty background did not clear the selection — the synthetic tap is not seen');
+      /* the line's own text */
+      FM.selectLayer(A.id); await v.sleep(40);
+      FM.spine.say('That clip is locked', { buttons: [{ label: 'Do it anyway', fn() {} }] });
+      const txt = document.querySelector('#sm-say .sm-say-t');
+      if (!txt) throw new Error('CONTROL: no line text drawn');
+      tap(txt); await v.sleep(40);
+      if (FM.scene.selectedId !== A.id) fails.push('a tap on the line’s text deselected the clip');
+      if (!/That clip is locked/.test(v.say())) fails.push('a tap on the line’s text dismissed it');
+      /* the row itself, beside the line (its padding) */
+      FM.selectLayer(A.id); await v.sleep(40);
+      tap(document.getElementById('sm-say')); await v.sleep(40);
+      if (FM.scene.selectedId !== A.id) fails.push('a tap on the line’s row deselected the clip');
+      /* the selected clip itself: the app's pointerup must not deselect it before the clip's own click re-selects it */
+      FM.selectLayer(A.id); FM.refreshAll(); await v.sleep(40);
+      const item = document.querySelector('#sm-main .sm-item[data-id="' + A.id + '"]');
+      if (!item) throw new Error('CONTROL: clip A is not drawn in the clip row');
+      tap(item); await v.sleep(40);
+      if (FM.scene.selectedId !== A.id) fails.push('pressing the selected clip deselected it first (its panel closes and reopens; the click can land on a rebuilt row)');
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
 })();
