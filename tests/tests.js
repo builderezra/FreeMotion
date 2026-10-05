@@ -66208,8 +66208,10 @@
   test('export: a zero-chunk AAC encode cannot masquerade as a soundtrack (batch2 1a)', { item: 'TBD' }, async function () {
     const P = FM.scene.project;
     const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height,
-      toast: FM.toast, encoder: window.AudioEncoder, report: localStorage.getItem('fm.lastExportReport') };
+      toast: FM.toast, encoder: window.AudioEncoder, warn: console.warn, report: localStorage.getItem('fm.lastExportReport') };
     let song = null;
+    let lateOutput = null;
+    const warnings = [];
     const runProbe = async () => {
       let ready = null, card = '';
       await FM.exporter.run({ fps: 10, scale: 1, name: 'aac-count-probe', onReady: async out => {
@@ -66222,14 +66224,15 @@
       return { ready, card, report: localStorage.getItem('fm.lastExportReport') || '' };
     };
     try {
+      FM.toast = () => {};
+      console.warn = (...args) => { warnings.push(args.map(String).join(' ')); };
       P.duration = 0.3; P.width = 64; P.height = 64;
       FM.scene.layers.length = 0;
       const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
       box.start = 0; box.duration = 0.3; FM.scene.layers.push(box);
       song = FM.makeLayer('video', { name: 'audible tone' });
       song.start = 0; song.duration = 0.3; song.trimStart = 0; song.trimEnd = 0.3; FM.scene.layers.push(song);
-      const ac = new (window.AudioContext || window.webkitAudioContext)();
-      const tone = ac.createBuffer(2, 14400, 48000);
+      const tone = new AudioBuffer({ numberOfChannels: 2, length: 14400, sampleRate: 48000 });
       for (let c = 0; c < 2; c++) {
         const data = tone.getChannelData(c);
         for (let i = 0; i < data.length; i++) data[i] = Math.sin(i * 2 * Math.PI * 440 / 48000) * 0.4;
@@ -66242,10 +66245,15 @@
       if (!healthy.vide || !healthy.soun || !healthy.mp4a || !good.ready.hasAudio ||
           !/Sound ✓/.test(good.card) || !/^audio\s+TRACK WRITTEN/m.test(good.report))
         throw new Error('the real encoder control did not prove a counted audio track: ' + JSON.stringify({ healthy, card: good.card, report: good.report }));
+      const count = /audio\s+TRACK WRITTEN · (\d+) AAC frames/m.exec(good.report);
+      if (!count || +count[1] < 13 || +count[1] > 17)
+        throw new Error('the 0.3s positive control should contain about 15 AAC frames: ' + good.report);
+      const peak = /decoded peak\s+(\d+\.\d+)/m.exec(good.report);
+      if (!peak || +peak[1] < 0.1) throw new Error('the encoded audible tone did not decode back to an audible peak: ' + good.report);
 
       // A browser can claim AAC support, resolve flush(), and still emit nothing. The MP4 must not
       // advertise a track and the ready card/report must not tell Ezra the file has sound.
-      function EmptyEncoder() {}
+      function EmptyEncoder(opts) { lateOutput = opts.output; }
       EmptyEncoder.isConfigSupported = async () => ({ supported: true });
       EmptyEncoder.prototype.configure = function () {};
       EmptyEncoder.prototype.encode = function () {};
@@ -66262,8 +66270,14 @@
         throw new Error('the export report claims the empty track was written: ' + empty.report);
       if (!/^audio\s+TRACK WRITTEN · [1-9]\d* AAC frames ·/m.test(good.report))
         throw new Error('the healthy export report omits the encoded frame count: ' + good.report);
+      if (!lateOutput) throw new Error('the empty encoder callback was not captured');
+      lateOutput(new EncodedAudioChunk({ type: 'key', timestamp: 0, data: new Uint8Array([1]) }));
+      const lateReport = localStorage.getItem('fm.lastExportReport') || '';
+      if (!/late AAC\s+1 chunk arrived after the track was dropped/.test(lateReport) ||
+          !warnings.some(w => /AAC chunk arrived after the sound track was dropped/.test(w)))
+        throw new Error('a late AAC callback was neither warned nor added to this export report: ' + lateReport);
     } finally {
-      window.AudioEncoder = saved.encoder; FM.toast = saved.toast;
+      window.AudioEncoder = saved.encoder; FM.toast = saved.toast; console.warn = saved.warn;
       FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
       if (song) FM.media.remove(song.id);
       P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
