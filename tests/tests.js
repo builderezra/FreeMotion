@@ -128186,4 +128186,34 @@
       throw new Error('blank or boolean values were accepted as imported numbers');
   });
 
+  test('TBD: shortcut sheet distinguishes Add keys from selected-layer cards', { item: 'TBD' }, function () {
+    const wasOpen = FM.shortcuts.isOpen(), oldSelected = FM.scene.selectedId;
+    const oldCard = FM.inspector.openCategoryByIndex, oldTab = FM.addMenu.openTab;
+    try {
+      FM.shortcuts.show();
+      const rows = Array.from(document.querySelectorAll('#shortcuts-overlay .shortcut-row')).map(row => row.textContent);
+      if (!rows.some(row => row.includes('1 – 5 (nothing selected)')) ||
+          !rows.some(row => row.includes('1 – 9 (layer selected)')) ||
+          !rows.some(row => row.includes('Delete / Backspace')) ||
+          !rows.some(row => row.includes('Ctrl + Y')))
+        throw new Error('the visible help sheet still omits the key conditions or alternatives');
+      FM.shortcuts.hide({ now: true });
+      let card = 0, tab = 0;
+      FM.inspector.openCategoryByIndex = n => { card = n; return true; };
+      FM.addMenu.openTab = () => { tab++; };
+      FM.scene.selectedId = 'shortcut-sheet-probe';
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));
+      if (card !== 1 || tab) throw new Error('Digit1 with a selection opened the Add menu instead of a panel card');
+      card = 0; FM.scene.selectedId = null;
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true }));
+      if (card || tab !== 1) throw new Error('Digit1 without a selection did not open an Add tab');
+    } finally {
+      FM.scene.selectedId = oldSelected;
+      FM.inspector.openCategoryByIndex = oldCard;
+      FM.addMenu.openTab = oldTab;
+      FM.shortcuts.hide({ now: true });
+      if (wasOpen) FM.shortcuts.show();
+    }
+  });
+
 })();

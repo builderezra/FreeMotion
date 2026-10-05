@@ -13,12 +13,12 @@ window.FM = window.FM || {};
    * or rename of a tab or a tool cannot leave it behind. Capped at what that branch takes: 1–5 for the tabs
    * (with nothing selected) and ⇧1–4 for the tools. The typed text is only a fallback for a build where
    * addmenu.js is missing, and says what the keys do today. */
-  const ADD_TABS_ROW = ['1 – 5', 'Add menu → Elements · Shape · Media · Audio · Template'];
+  const ADD_TABS_ROW = ['1 – 5 (nothing selected)', 'Add menu → Elements · Shape · Media · Audio · Template'];
   const ADD_INSTANT_ROW = ['⇧ 1 / 2 / 3 / 4', 'Add Text · Captions · Sketching · Custom shape'];
   function addMenuRow(row) {
     if (row === ADD_TABS_ROW) {
       const labels = (FM._tabLabels ? FM._tabLabels() : []).slice(0, 5);
-      return labels.length ? ['1 – ' + labels.length, 'Add menu → ' + labels.join(' · ')] : row;
+      return labels.length ? ['1 – ' + labels.length + ' (nothing selected)', 'Add menu → ' + labels.join(' · ')] : row;
     }
     if (row === ADD_INSTANT_ROW) {
       const labels = (FM._instantLabels ? FM._instantLabels() : []).slice(0, 4);
@@ -28,7 +28,8 @@ window.FM = window.FM || {};
   }
   const SHORTCUTS = [
     ['Space', 'Play / pause'],
-    ADD_TABS_ROW,      // 1 – 5 and ⇧ 1 – 4: written from the Add menu's own lists when the sheet is built — see addMenuRow()
+    ADD_TABS_ROW,      // Add-menu tabs only when no layer is selected; labels come from the menu itself.
+    ['1 – 9 (layer selected)', 'Open that panel card'],
     ADD_INSTANT_ROW,
     ['← / →', 'Nudge selected layer  (Shift = 10px)'],
     ['↑ / ↓', 'Nudge selected layer vertically'],
@@ -43,12 +44,12 @@ window.FM = window.FM || {};
     ['A', 'Cut away the left of the clip at the playhead · off the clip: bring it left to the playhead'],
     ['S', 'Split clip at playhead · off the clip: extend it to the playhead'],
     ['D', 'Cut away the right of the clip at the playhead · off the clip: bring it right to the playhead'],
-    ['Delete', 'Delete selected layer'],
+    ['Delete / Backspace', 'Delete selected layer'],
     ['⌘/Ctrl + D', 'Duplicate selected layer'],
     ['⌘/Ctrl + C / V', 'Copy / paste layer(s)'],
     ['⌘/Ctrl + A', 'Select all layers'],
     ['⌘/Ctrl + Z', 'Undo'],
-    ['⌘/Ctrl + ⇧ + Z', 'Redo'],
+    ['⌘/Ctrl + ⇧ + Z or ⌘/Ctrl + Y', 'Redo'],
     ['Tab / ⇧Tab', 'Select next / previous layer'],
     ['Esc', 'Go back a page (sub-menu → grid → deselect)'],
     ['?', 'Show / hide this help'],
