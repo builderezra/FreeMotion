@@ -11,7 +11,8 @@
   saw: a layout record and a PNG per screen, and a state record after every edit. tools/full-unchanged.sh runs it once on
   HEAD and once on the tree and compares the two, so the verdict is "the same as the release before", never "looks fine".
 
-  Run it only through tools/full-unchanged.sh (it needs tests/_cdp.py's --dump/--shots and its phone emulation). By hand:
+  Run it only through tools/full-unchanged.sh (it needs tests/_cdp.py's --dump/--shots, its phone emulation and its
+  real-input channel). By hand:
     python3 tests/_cdp.py --port <p> --width 380 --height 800 --dump out.json --shots shots/ \
       --url 'http://localhost:<p>/tests/full-unchanged.html?w=380&h=800&phone=1&shots=1'
 
@@ -23,6 +24,20 @@
   ⚠️ A STEP THAT THROWS ON HEAD IS A BROKEN INSTRUMENT, NOT A PASS. Every step records its error; the tool refuses to say
   PASS when HEAD itself errored anywhere, because a step that fails the same way on both sides compares equal and proves
   nothing (memory: "a negative test needs a positive control").
+
+  ⚠️ A STEP THAT CANNOT FIND FULL'S OWN CONTROL IS A BROKEN INSTRUMENT TOO (review of v1, 1 Oct). Every edit goes through
+  the control Full shows him — the Speed card's box, the Group button, the ◆, the menu item, a real finger on the phone —
+  because a change to that control's HANDLER is exactly what a call into the function underneath cannot see. When the
+  control is not there the step still runs its fallback (so the rest of the script lines up), but it writes `fell` into
+  its record, and tools/_fu_compare.py refuses PASS for any run with a `fell` in it.
+
+  v2 (1 Oct, the review's fixes): every computed style that paints (borders, shadows, radii, gradients, filters, outline,
+  weight, SVG fill/stroke, cursor, pointer-events, touch-action, transition, animation) and the geometry attributes of every
+  SVG shape; a second picture of each screen with the preview hidden, so its overlays are compared pixel for pixel; the
+  preview's own backing store and a hash of what it drew, at full quality; the transitions and animations each screen runs;
+  a hover per toolbar on the PC pass; real touch on the phone pass (the 350 ms hold, the 300 ms grip arm, the diamond
+  hold); FU2's missing edits; a real export through the export sheet; every key the handler answers, with what each one
+  opened; the live session's whole wire, presence included; FU5 unmasked except N1.
 -->
 <style>
   html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
@@ -38,15 +53,21 @@
 <script>
 (function () {
   'use strict';
-  var PROBE_VERSION = 1;
+  var PROBE_VERSION = 2;
   var Q = new URLSearchParams(location.search);
   var W = parseInt(Q.get('w'), 10) || 1280, H = parseInt(Q.get('h'), 10) || 800;
   var PHONE = Q.get('phone') === '1', SHOTS = Q.get('shots') === '1';
-  /* FU1 and FU2 first, in this order: the self-test's plants are measured with a PREFIX of it (FU1 for the margin, FU1+FU2
-     for the toast and the split floor), so whatever one group leaves behind, a plant's run starts FU2 where the full run did. */
-  var ALL = ['FU1', 'FU2', 'FU6', 'FU3', 'FU4', 'FU5', 'FU7'];
+  /* FU_INVISIBLE's layer keys, handed over by tools/full-unchanged.sh (the list lives THERE, once). Used for ONE thing: the
+     FU fixture document that FU5 feeds the sanitiser is built by each side's own app, so it is stripped of these keys
+     BEFORE it goes in — the sanitiser then gets the same input on both sides, and its output is compared byte for byte. */
+  var INV = (Q.get('inv') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  var UPTO = Q.get('upto') || '';   // development only: stop FU2 after the step whose name contains this (the tool never passes it)
+  /* FU1 and FU2 first, in this order: the self-test's plants are measured with a PREFIX of it (FU1 for the pictures, FU1+FU2
+     for the edits, FU1..FU3 for the keys, FU1..FU5 for the sanitiser), so whatever one group leaves behind, a plant's run
+     reaches its group exactly where the full run did. */
+  var ALL = ['FU1', 'FU2', 'FU3', 'FU6', 'FU4', 'FU5', 'FU7'];
   var GROUPS = (Q.get('groups') || ALL.join(',')).split(',').filter(function (g) { return ALL.indexOf(g) >= 0; });
-  var DUMP = window.__fmDump = { probe: PROBE_VERSION, w: W, h: H, phone: PHONE, groups: GROUPS, step: 'boot', screens: {}, fu2: [], fu3: [], fu4: null, fu5: [], fu6: {}, fu7: null, errors: [], notes: [] };
+  var DUMP = window.__fmDump = { probe: PROBE_VERSION, w: W, h: H, phone: PHONE, groups: GROUPS, step: 'boot', screens: {}, fu2: [], fu3: [], fu4: null, fu5: [], fu6: {}, fu7: null, errors: [], notes: [], fell: [] };
   var frame = document.getElementById('app');
   frame.style.width = W + 'px'; frame.style.height = H + 'px';
   var w, D, FM;   // the app frame's window, document and FM, once loaded
@@ -69,24 +90,70 @@
       await sleep(50);
     }
   }
+  function raf1() { return new Promise(function (r) { w.requestAnimationFrame(function () { r(); }); }); }
   function raf2() { return new Promise(function (r) { w.requestAnimationFrame(function () { w.requestAnimationFrame(r); }); }); }
 
   /* ═══ DETERMINISM ═══════════════════════════════════════════════════════════════════════════════════════════════════
-     Two runs of the SAME build must produce the same records, or the comparison measures the clock. Three sources, each
-     handled once here and nowhere else:
-       · Math.random: replaced in the app frame by a seeded generator the moment the app has loaded (before the fixture).
-         Boot-time draws already happened and are not ours to fix (the only one that shows is randomFill's start hue, and
-         the fixture holds no shape that asks for one).
-       · CSS animations: finite ones are finished, infinite ones (Home's glints and grain, a spinner) are paused at 0 for
-         the instant of a measurement and resumed after — the same frame on both sides, and nothing about them is lost.
-       · The text caret: made transparent by a probe-only style (caret-color is not in the record; the PNG would see it). */
+     Two runs of the SAME build must produce the same records, or the comparison measures the clock. Each source handled
+     once, here:
+       · Math.random: replaced in the app frame by a seeded generator before any of its scripts run (the driver's init
+         script), and re-seeded per group. The generator's state can be saved and put back (rngState below).
+       · A new layer's bar colour: the next of eight from a counter in js/scene.js that EVERY FM.makeLayer advances — and
+         the compositor makes one per group on every render (`_flat`), the effect thumbnails more while a sheet is open,
+         so which colour a clip got was how many frames this machine drew first. v1 masked every palette colour as
+         "@clip-colour", which hid a change to how bar colours are chosen (the review planted "every new layer gets the
+         same colour" and it passed). Now the colour is MADE deterministic instead, and compared exactly: those two
+         render-time callers are made colour-neutral (each such call is followed by seven more and the random generator
+         is put back, so the counter lands where it started, mod 8), and the counter is aligned to the palette's first
+         colour at the start of every group. Every other FM.makeLayer runs untouched.
+       · CSS animations: their timing is RECORDED first (the transitions and animations each screen started, with their
+         durations, delays, easing and keyframes), then finite ones are finished and infinite ones paused at 0 for the
+         instant of a measurement — the same frame on both sides.
+       · The text caret: made transparent by a probe-only style (caret-color is not in the record; the PNG would see it).
+       · A file's lastModified: fixed, so the live session's media manifest carries the same `lm` on both sides. */
+  var RNG = { a: 0x980 };
   function seedRandom(seed) {
-    var a = seed >>> 0;
+    RNG.a = seed >>> 0;
     w.Math.random = function () {   // mulberry32
-      a = (a + 0x6D2B79F5) >>> 0; var t = a;
+      RNG.a = (RNG.a + 0x6D2B79F5) >>> 0; var t = RNG.a;
       t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+  }
+  var PALETTE = null, MAKE_LAYER = null, COLOUR_STEPS = 0;
+  async function loadPalette() {
+    var src = await (await w.fetch('js/scene.js', { cache: 'no-store' })).text();
+    var m = /CLIP_COLORS\s*=\s*\[([^\]]*)\]/.exec(src);
+    if (!m) throw new Error('could not read CLIP_COLORS from js/scene.js — the clip-colour rule in the probe needs updating');
+    PALETTE = m[1].split(',').map(function (x) { return x.trim().replace(/^['"]|['"]$/g, ''); }).filter(Boolean);
+    DUMP.palette = PALETTE;
+  }
+  function colourNeutralCaller() {
+    var st = ''; try { st = String(new Error().stack || ''); } catch (e) {}
+    return /\/js\/(compositor|fx-thumbs|fx-browser|audio-fx-browser|elements-browser)\.js/.test(st);
+  }
+  function installColourGuard() {
+    MAKE_LAYER = FM.makeLayer;
+    FM.makeLayer = function (type, props) {
+      if (type === '_flat' || colourNeutralCaller()) {
+        var saved = RNG.a;
+        var out = MAKE_LAYER.apply(this, arguments);
+        for (var i = 1; i < PALETTE.length; i++) MAKE_LAYER('_flat', {});
+        RNG.a = saved;
+        return out;
+      }
+      return MAKE_LAYER.apply(this, arguments);
+    };
+  }
+  /* The next layer made gets PALETTE[0]: one throwaway call reads where the counter is, then it is walked round to 0. */
+  function alignColours() {
+    var saved = RNG.a;
+    var c = MAKE_LAYER('_flat', {}).clipColor, i = PALETTE.indexOf(c);
+    if (i < 0) { DUMP.notes.push('the clip colour ' + c + ' is not in the palette — colours are not aligned'); RNG.a = saved; return; }
+    var n = (PALETTE.length - ((i + 1) % PALETTE.length)) % PALETTE.length;
+    for (var k = 0; k < n; k++) MAKE_LAYER('_flat', {});
+    RNG.a = saved;
+    COLOUR_STEPS++;
   }
   function finishFinite() {
     D.getAnimations().forEach(function (a) {
@@ -135,10 +202,47 @@
   }
   function unfreeze(fr) { fr.forEach(function (f) { try { if (f.was === 'running') f.a.play(); } catch (e) {} }); }
 
+  /* ═══ MOTION: what each screen ANIMATED (review of v1: "durations and easing are invisible") ═══════════════════════
+     Every transition and animation the app starts while a screen is being reached is written down when it starts — the
+     element, the property or @keyframes name, the computed duration, delay, easing (and iterations), and an animation's
+     keyframes — sorted, so the order two rAFs happened to fire in is not a difference. Then they are finished as before. */
+  var motionLog = null;
+  function motionStart() { motionLog = Object.create(null); }
+  function motionTake() { var m = motionLog ? Object.keys(motionLog).sort() : []; motionLog = null; return m; }
+  function noteMotion(e) {
+    if (!motionLog) return;
+    try {
+      var t = e.target; if (!t || t.nodeType !== 1) return;
+      var cs = w.getComputedStyle(t, e.pseudoElement || null), row;
+      if (e.type === 'transitionrun') {
+        row = ['T', pathOf(t) + (e.pseudoElement || ''), e.propertyName, cs.transitionProperty, cs.transitionDuration, cs.transitionDelay, cs.transitionTimingFunction];
+      } else {
+        var kf = '';
+        try {
+          var an = t.getAnimations().filter(function (a) { return a.animationName === e.animationName; })[0];
+          if (an) kf = JSON.stringify(an.effect.getKeyframes().map(function (k) { var o = {}; Object.keys(k).sort().forEach(function (x) { if (x !== 'computedOffset') o[x] = k[x]; }); return o; }));
+        } catch (er) {}
+        row = ['A', pathOf(t) + (e.pseudoElement || ''), e.animationName, cs.animationDuration, cs.animationDelay, cs.animationTimingFunction, cs.animationIterationCount, kf.slice(0, 1500)];
+      }
+      motionLog[JSON.stringify(row)] = 1;
+    } catch (er) {}
+  }
+
   /* ═══ THE LAYOUT RECORD (DESIGN §0.4.5 "two comparisons per screen", 1) ═════════════════════════════════════════════
      Every rendered element (a box, not visibility:hidden): its path, rect rounded to 0.5 px, own text (and a form
-     control's value), aria-label, title, and seven computed styles. In document order, so a reorder is a difference. */
-  var STYLES = ['display', 'visibility', 'opacity', 'color', 'background-color', 'font-size', 'transform'];
+     control's value), aria-label, title, every computed style that paints or decides what a finger does, and its
+     attributes (an SVG shape's geometry — the review redrew the phone bin's lid by one unit and the old record could not
+     see it; a button's disabled; aria state). In document order, so a reorder is a difference. The field names travel in
+     the record (DUMP.fields), so the comparer can never disagree with the probe about which column is which. */
+  var STYLES = ['display', 'visibility', 'opacity', 'color', 'background-color', 'font-size', 'transform',
+    'border-color', 'border-style', 'border-width', 'border-radius', 'box-shadow', 'background-image', 'filter', 'backdrop-filter',
+    'outline', 'font-weight', 'font-family', 'letter-spacing', 'fill', 'stroke', 'stroke-width', 'cursor', 'pointer-events',
+    'touch-action', 'z-index', 'mix-blend-mode', 'transition', 'animation'];
+  var ATTRS = ['disabled', 'aria-pressed', 'aria-expanded', 'aria-checked', 'aria-selected', 'aria-hidden', 'role', 'tabindex',
+    'placeholder', 'inputmode', 'type', 'href', 'draggable', 'contenteditable', 'src', 'style'];
+  var SVG_ATTRS = ['d', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'viewBox',
+    'transform', 'fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin', 'offset', 'stop-color', 'href', 'opacity'];
+  DUMP.fields = ['path', 'x', 'y', 'w', 'h', 'text', 'aria-label', 'title'].concat(STYLES).concat(['attrs']);
   function half(v) { return Math.round(v * 2) / 2; }
   function nameOf(el) {
     var cls = el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className;
@@ -153,6 +257,7 @@
     }
     return parts.join('>');
   }
+  function short(s, n) { s = String(s); return s.length <= (n || 160) ? s : ('#' + cyrb53(new TextEncoder().encode(s)) + ':' + s.length); }
   function ownText(el) {
     var s = '';
     for (var c = el.firstChild; c; c = c.nextSibling) if (c.nodeType === 3) s += c.nodeValue;
@@ -163,10 +268,26 @@
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
       s += '«' + (el.type === 'checkbox' || el.type === 'radio' ? (el.checked ? 'on' : 'off') : String(el.value)) + '»';
     }
-    /* A canvas's backing store: the same box can hold a coarser picture. Not the preview's — that one is ADAPTIVE by design
-       (a quality tier learned from this machine's render speed, FM._perfState), so it is the machine's number. */
+    /* A canvas's backing store: the same box can hold a coarser picture. The preview's is in its own record (pv), taken
+       after its quality ladder has been put back to the top. */
     if (tag === 'CANVAS' && el.id !== 'preview') s += '⧉' + el.width + 'x' + el.height;
     return s.slice(0, 200);
+  }
+  function attrsOf(el) {
+    var out = [], svg = el.namespaceURI === 'http://www.w3.org/2000/svg';
+    var list = svg ? SVG_ATTRS : ATTRS;
+    for (var i = 0; i < list.length; i++) {
+      var k = list[i];
+      if (!el.hasAttribute(k)) continue;
+      var v = el.getAttribute(k);
+      if (k === 'style' && !svg) continue;   // inline styles already reach the computed styles
+      out.push(k + '=' + short(v, 200));
+    }
+    return out.join(' ');
+  }
+  function styleOf(cs, k) {
+    var v = cs.getPropertyValue(k);
+    return (k === 'background-image' || k === 'font-family' || k === 'filter' || k === 'backdrop-filter') ? short(v, 200) : v;
   }
   function layoutRecord(root, skip) {
     root = root || D.body;
@@ -181,7 +302,8 @@
       if (cs.visibility === 'hidden') continue;
       var rec = [pathOf(el), half(r.left), half(r.top), half(r.width), half(r.height), ownText(el),
         el.getAttribute('aria-label') || '', el.getAttribute('title') || ''];
-      for (var k = 0; k < STYLES.length; k++) rec.push(cs.getPropertyValue(STYLES[k]));
+      for (var k = 0; k < STYLES.length; k++) rec.push(styleOf(cs, STYLES[k]));
+      rec.push(attrsOf(el));
       out.push(rec);
     }
     return out;
@@ -198,30 +320,99 @@
     if (window.__fmShotErr) throw new Error('picture ' + name + ': ' + window.__fmShotErr);
     return name;
   }
+  /* THE PREVIEW, AT FULL QUALITY, AND WHAT IT DREW (review of v1). v1 left the preview canvas's pixels out of every
+     picture because its resolution is adaptive (the play-quality ladder, FM._perfState) — and with them every overlay drawn
+     over it (#select-box, its handles, the guides). So now: (1) the ladder is put back to the top and the probe waits for
+     the motion window to close (a burst of renders sheds pixels for 700 ms), then asks for a frame; (2) the preview's
+     backing store, scale and crop are recorded and compared; (3) a hash of what it drew is compared exactly; (4) a second
+     picture is taken with ONLY the preview hidden, so everything drawn over it is compared pixel for pixel. */
+  /* The motion window (js/app.js): three renders each within 500 ms of the last is "moving", and the preview sheds pixels
+     until 700 ms pass with none. So the probe waits for 900 ms with no render asked for (FM.requestRender is watched, see
+     BOOT) and no motion, puts the ladder back to the top, and asks for ONE render — alone, so it cannot start a burst. */
+  var LAST_RENDER_ASK = 0;
+  async function previewState() {
+    var pv = D.getElementById('preview');
+    if (!pv) return { pv: null };
+    try {
+      await until('the preview to stop shedding pixels', function () {
+        var s = FM._perfState ? FM._perfState() : null;
+        return performance.now() - LAST_RENDER_ASK > 900 && (!s || !s.inMotion);
+      }, 8000);
+    } catch (e) { DUMP.notes.push(DUMP.step + ': ' + e.message); }
+    if (FM._resetPlayQuality) FM._resetPlayQuality();
+    if (FM.requestRender) FM.requestRender();
+    await raf2(); await raf2();
+    var st = FM._perfState ? FM._perfState() : {};
+    var info = { w: pv.width, h: pv.height, rs: Math.round((pv.__fmRS || 0) * 1e4) / 1e4, ox: Math.round((pv.__fmOX || 0) * 100) / 100,
+      oy: Math.round((pv.__fmOY || 0) * 100) / 100, crop: !!pv.__fmCrop, tier: st.tier, factor: st.factor, motion: !!st.inMotion };
+    var hash = '';
+    try { var g = pv.getContext('2d'); hash = cyrb53(new Uint8Array(g.getImageData(0, 0, pv.width, pv.height).data.buffer)); }
+    catch (e) { hash = 'unreadable: ' + (e && e.message); }
+    return { pv: info, pvHash: hash };
+  }
+  async function shotNoPreview(name) {
+    var pv = D.getElementById('preview');
+    if (!SHOTS || !pv) return;
+    var was = pv.style.visibility;
+    pv.style.visibility = 'hidden';
+    try { await raf2(); await shot(name + '~nopv'); }
+    finally { pv.style.visibility = was; }
+  }
   async function capture(name, opts) {
     opts = opts || {};
     step('capture ' + name);
     if (!opts.keepToast && FM.hideToast) FM.hideToast();
     await settle(opts.wait);
-    /* The preview is drawn on request; one drawn while the stage was still settling (a sheet rising on the phone) keeps
-       that frame's fit until something asks again, so ask once more now that the layout has landed. */
-    /* …at full detail: the preview sheds pixels while things move and learns a quality tier from how fast THIS machine
-       renders (js/app.js FM._perfState). That is the machine's number, not Full's, so it is put back to its start —
-       the same thing opening a project does (FM.projects.open calls it) — before the frame that is measured. */
-    if (FM._resetPlayQuality) FM._resetPlayQuality();
-    if (FM.requestRender) FM.requestRender();
+    var motion = motionTake();
     var quiet = await canvasesQuiet();
+    var pvs = opts.noPreview ? {} : await previewState();
     var fr = freezeInfinite();
     try {
       await raf2();
       fr = fr.concat(freezeInfinite());
       await raf2();
       var rec = layoutRecord(opts.root ? D.querySelector(opts.root) : D.body, opts.skip);
-      var pv = D.getElementById('preview');
       DUMP.screens[name] = { layout: rec, focus: D.activeElement ? pathOf(D.activeElement) : '', canvasesQuiet: quiet,
-        pv: pv ? { rs: pv.__fmRS, ox: pv.__fmOX, oy: pv.__fmOY, crop: !!pv.__fmCrop, w: pv.width, h: pv.height, perf: FM._perfState ? FM._perfState().tier : null } : null };   // diagnosis only: not compared
-      if (!opts.noShot) await shot(name);
+        pv: pvs.pv || null, pvHash: pvs.pvHash || '', motion: motion };
+      if (!opts.noShot) { await shot(name); if (!opts.noPreview) await shotNoPreview(name); }
     } finally { unfreeze(fr); }
+  }
+
+  /* ═══ REAL INPUT (tests/_cdp.py's channel, queue 924): a finger, a mouse that hovers ═════════════════════════════
+     A synthetic PointerEvent is untrusted: setPointerCapture refuses it and the browser does no hit-testing, and every
+     one v1 sent said pointerType 'mouse' — so the phone pass never ran Full's touch paths (the 350 ms clip hold, the 300 ms
+     grip arm, the diamond hold). These go through the browser's own input pipeline, at app-frame coordinates. */
+  var inputSeq = 0;
+  async function realInput(steps) {
+    var seq = ++inputSeq;
+    w.__fmInputErr = '';
+    w.__fmWantInput = { seq: seq, steps: steps };
+    await until('the driver to send real input (run this through tools/full-unchanged.sh)', function () { return w.__fmInputDone === seq; }, 30000);
+    if (w.__fmInputErr) throw new Error('real input: ' + w.__fmInputErr);
+  }
+  /* What a real gesture actually met (diagnosis only — DUMP.diag is never compared): the element under the finger and the
+     pointer events the app's window saw. */
+  /* THE HOLD IS TIMED IN THE PAGE, not in the driver: the finger goes down in one request, the probe waits `holdMs` on the
+     page's own clock (its timer is queued after the app's hold timer, so the app's fires first however busy the Mac is),
+     and the moves and the lift go in a second request. A hold timed by the driver's sleep raced the page under load. */
+  async function touchDrag(x, y, dx, dy, holdMs) {
+    var steps = [];
+    for (var k = 1; k <= 6; k++) steps.push({ t: 'touchMove', x: x + dx * k / 6, y: y + dy * k / 6, ms: 24 });
+    steps.push({ t: 'touchEnd', x: x + dx, y: y + dy, ms: 0 });
+    var seen = [], at = D.elementFromPoint(x, y);
+    var note = function (e) { if (seen.length < 40) seen.push(e.type + ' ' + (e.pointerType || '') + ' ' + (e.target && e.target.nodeType === 1 ? nameOf(e.target) : '')); };
+    ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'touchcancel', 'contextmenu'].forEach(function (t) { w.addEventListener(t, note, true); });
+    try {
+      await realInput([{ t: 'touchStart', x: x, y: y, ms: 0 }]);
+      if (holdMs) await sleep(holdMs);
+      await raf2();
+      await realInput(steps);
+    }
+    finally {
+      ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'touchcancel', 'contextmenu'].forEach(function (t) { w.removeEventListener(t, note, true); });
+      (DUMP.diag = DUMP.diag || []).push({ step: DUMP.step, at: at ? pathOf(at) : null, x: Math.round(x), y: Math.round(y), seen: seen });
+    }
+    await settle(150);
   }
 
   /* ═══ THE STATE RECORD (FU2–FU5, FU7): what an edit did, read from the app ════════════════════════════════════════ */
@@ -229,8 +420,10 @@
     return JSON.parse(JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers }, FM.jsonReplacer));
   }
   /* Ids carry performance.now() and Math.random() — no two runs share one. Each is replaced by its POSITION: layer ids by
-     their index in the stack (so a moved layer still reads as moved), every other id / uid by first appearance. Strings
-     that CONTAIN an id (an op path) are rewritten too. Nothing else is touched. */
+     their index in the stack (so a moved layer still reads as moved), every other id by first appearance. Strings that
+     CONTAIN an id (an op path) are rewritten too. Nothing else is touched — v1's clip-colour rewrite is gone (see
+     DETERMINISM: the colour is made deterministic and compared exactly). */
+  var ID_KEYS = { id: 1, uid: 1, mid: 1, fid: 1, maskId: 1 };
   function canon(obj, layers) {
     var map = Object.create(null), n = 0;
     (layers || []).forEach(function (l, i) { if (l && typeof l.id === 'string' && !map[l.id]) map[l.id] = '@L' + i; });
@@ -238,21 +431,20 @@
       if (!v || typeof v !== 'object' || depth > 40) return;
       if (Array.isArray(v)) { v.forEach(function (x) { walk(x, depth + 1); }); return; }
       Object.keys(v).forEach(function (k) {
-        if ((k === 'id' || k === 'uid' || k === 'mid') && typeof v[k] === 'string' && v[k].length >= 4 && !map[v[k]]) map[v[k]] = '@' + k + (n++);
+        if (ID_KEYS[k] && typeof v[k] === 'string' && v[k].length >= 4 && !map[v[k]]) map[v[k]] = '@' + k + (n++);
         walk(v[k], depth + 1);
       });
     })(obj, 0);
     var ids = Object.keys(map).sort(function (a, b) { return b.length - a.length; });
     var re = ids.length ? new RegExp(ids.map(function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|'), 'g') : null;
     function sub(s) { return re ? s.replace(re, function (m) { return map[m]; }) : s; }
-    return (function copy(v, depth, key, owner) {
-      if (key === 'clipColor' && typeof v === 'string' && PALETTE_SET && PALETTE_SET[v.toLowerCase()] && !(owner && owner.clipColorSet)) return '@clip-colour';
+    return (function copy(v, depth) {
       if (typeof v === 'string') return sub(v);
       if (typeof v === 'number') return Math.round(v * 1e6) / 1e6;   // float noise below a micro-unit is the engine's, not Full's
       if (!v || typeof v !== 'object' || depth > 40) return v;
       if (Array.isArray(v)) return v.map(function (x) { return copy(x, depth + 1); });
       var o = {};
-      Object.keys(v).forEach(function (k) { o[sub(k)] = copy(v[k], depth + 1, k, v); });
+      Object.keys(v).forEach(function (k) { o[sub(k)] = copy(v[k], depth + 1); });
       return o;
     })(obj, 0);
   }
@@ -282,7 +474,7 @@
     return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
   }
   async function mediaSettled() {
-    var vids = [].slice.call(D.querySelectorAll('video')).concat(FM.media && FM.media.all ? [] : []);
+    var vids = [].slice.call(D.querySelectorAll('video'));
     try {
       if (FM.media && typeof FM.media.get === 'function') {
         FM.scene.layers.forEach(function (l) { var m = FM.media.get(l.id); if (m && m.el && m.el.tagName === 'VIDEO' && vids.indexOf(m.el) < 0) vids.push(m.el); });
@@ -336,30 +528,72 @@
     opts = opts || {};
     var rec = { doc: canonDoc(), hist: histInfo(), toasts: takeToasts(), sel: selInfo(), time: Math.round(FM.time * 1e6) / 1e6,
       playing: !!FM.playing, panels: panelsOpen() };
-    if (!opts.noFrames) rec.frames = await frameHashes();
+    if (!opts.noFrames) rec.frames = await frameHashes(opts.times);
     return rec;
   }
-  /* Which of Full's surfaces are up — the part of "what did that key do" that is not in the document. */
+  /* Which of Full's surfaces are up, and how its views stand — the part of "what did that key do" that is not in the
+     document. v1 read an inspector class that matches nothing (every FU3 record said ''), and recorded neither the Add
+     menu's tab nor the timeline's zoom, so a remapped number key or a changed +/− step left every record identical. */
   function panelsOpen() {
     var up = function (id) { var e = D.getElementById(id); return !!(e && !e.classList.contains('hidden') && e.getClientRects().length); };
+    var tab = D.querySelector('.addmenu-tab.active');
+    var tl = D.getElementById('timeline');
+    var view = ''; try { view = FM.inspector && FM.inspector.currentView ? String(FM.inspector.currentView()) : ''; } catch (e) { view = 'threw'; }
     return {
       exportDialog: up('export-dialog'), canvasDialog: up('canvas-dialog'), addSheet: !!(D.getElementById('add-sheet') && D.getElementById('add-sheet').classList.contains('open')),
       shortcuts: !!(FM.shortcuts && FM.shortcuts.isOpen && FM.shortcuts.isOpen()), ctxMenu: !!(FM.contextMenu && FM.contextMenu.isOpen && FM.contextMenu.isOpen()),
       textEdit: !!(FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()), crop: !!(FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()),
+      maskTool: !!(FM.maskTool && FM.maskTool.isActive && FM.maskTool.isActive()), drawing: !!(FM.drawTool && FM.drawTool.active),
       optBar: up('opt-bar'), home: !!(FM.home && FM.home.isOpen && FM.home.isOpen()), settings: !!(FM.settings && FM.settings.isOpen && FM.settings.isOpen()),
-      inspectorCat: (D.querySelector('#inspector-panel .insp-cat.open, #inspector-panel [data-cat].open') || {}).textContent ? String(D.querySelector('#inspector-panel .insp-cat.open, #inspector-panel [data-cat].open').textContent).trim().slice(0, 40) : ''
+      inspectorView: view, addTab: tab ? (tab.getAttribute('data-key') || tab.textContent.trim()) : '',
+      tlZoom: FM.timeline && FM.timeline.getZoom ? Math.round(FM.timeline.getZoom() * 1e4) / 1e4 : null,
+      tlPps: FM._tlPxPerSec ? Math.round(FM._tlPxPerSec() * 100) / 100 : null,
+      tlScroll: tl ? [Math.round(tl.scrollLeft), Math.round(tl.scrollTop)] : null,
+      addAt: FM.addAt == null ? null : FM.addAt, onion: !!FM.onionSkin, guides: !!FM.showGuides,
+      region: FM.scene && FM.scene.project && FM.scene.project.loop ? JSON.stringify(FM.scene.project.loop) : ''
     };
   }
 
-  /* ═══ DRIVING FULL: synthetic events on ATTACHED elements only (the suite's rule — re-acquire after a rebuild) ═══ */
+  /* ═══ DRIVING FULL: Full's own controls, on ATTACHED elements only (the suite's rule — re-acquire after a rebuild) ═══ */
   function el(sel, what) {
     var e = typeof sel === 'string' ? D.querySelector(sel) : sel;
     if (!e || !e.isConnected) throw new Error('no ' + (what || sel) + ' on screen');
     return e;
   }
+  function vis(e) { return !!(e && e.isConnected && e.getClientRects().length && e.getBoundingClientRect().width > 0 && w.getComputedStyle(e).visibility !== 'hidden'); }
   function firstVisible(ids) {
-    for (var i = 0; i < ids.length; i++) { var e = D.getElementById(ids[i]); if (e && e.getClientRects().length && e.getBoundingClientRect().width > 0) return e; }
+    for (var i = 0; i < ids.length; i++) { var e = D.getElementById(ids[i]); if (vis(e)) return e; }
     return null;
+  }
+  function firstVisibleSel(sels) {
+    for (var i = 0; i < sels.length; i++) {
+      var list = [].slice.call(D.querySelectorAll(sels[i]));
+      for (var j = 0; j < list.length; j++) if (vis(list[j])) return list[j];
+    }
+    return null;
+  }
+  function byText(sel, re) {
+    var list = [].slice.call(D.querySelectorAll(sel));
+    for (var i = 0; i < list.length; i++) {
+      var t = (list[i].textContent || '') + ' ' + (list[i].getAttribute('title') || '') + ' ' + (list[i].getAttribute('aria-label') || '');
+      if (re.test(t.replace(/\s+/g, ' ').trim()) && vis(list[i])) return list[i];
+    }
+    return null;
+  }
+  /* THE FALLBACK IS WRITTEN DOWN. `ctrl` is Full's control (an element, or null when it is not on screen); `fallback` is
+     what the step does instead so the rest of the script still lines up. A step that fell back measured the function
+     underneath, not Full's control — tools/_fu_compare.py refuses PASS for any run that has one. */
+  var CUR_FELL = null;
+  async function via(what, ctrl, fallback) {
+    if (ctrl) { ctrl.click(); return true; }
+    var why = what + ': Full’s control was not on screen, the step called the function underneath instead';
+    if (CUR_FELL) CUR_FELL.push(why); else DUMP.fell.push(DUMP.step + ' — ' + why);
+    if (fallback) await fallback();
+    return false;
+  }
+  function fellOnly(what) {
+    var why = what;
+    if (CUR_FELL) CUR_FELL.push(why); else DUMP.fell.push(DUMP.step + ' — ' + why);
   }
   function press(sel, what) {
     var e = typeof sel === 'string' ? (sel.charAt(0) === '#' || sel.charAt(0) === '.' || sel.indexOf(' ') >= 0 ? D.querySelector(sel) : D.getElementById(sel)) : sel;
@@ -377,13 +611,24 @@
   function pe(target, type, x, y, buttons, id) {
     target.dispatchEvent(new w.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id || 41, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: buttons }));
   }
+  function peBoth(type, x, y, buttons) {
+    pe(D, type, x, y, buttons);
+    w.dispatchEvent(new w.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: y, buttons: buttons }));
+  }
+  function setInput(inp, v) {
+    inp.focus && inp.focus();
+    inp.value = String(v);
+    inp.dispatchEvent(new w.Event('input', { bubbles: true }));
+    inp.dispatchEvent(new w.Event('change', { bubbles: true }));
+    try { inp.blur(); } catch (e) {}
+  }
   function clipEl(L) {
     if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     return el('#tl-tracks .clip[data-id="' + L.id + '"]', 'the timeline clip of ' + L.name);
   }
   /* Bring an element to the middle of the timeline before a drag, so no drag starts or ends in the edge zone that
-     auto-scrolls — an auto-scroll's distance is however many frames the machine fitted in, not Full's behaviour. On a
-     phone the timeline scrolls under a centred playhead, so this moves FM.time too; the same on both sides. */
+     auto-scrolls — except the one step that drives the edge zone on purpose, frame by frame. On a phone the timeline
+     scrolls under a centred playhead, so this moves FM.time too; the same on both sides. */
   async function centerOn(target) {
     var tl = D.getElementById('timeline');
     if (!tl) return;
@@ -395,10 +640,15 @@
   async function dragFrom(target, x, y, dx, dy, holdMs) {
     pe(target, 'pointerdown', x, y, 1);
     if (holdMs) await sleep(holdMs);
-    for (var k = 1; k <= 6; k++) { var px = x + dx * k / 6, py = y + dy * k / 6; pe(D, 'pointermove', px, py, 1); w.dispatchEvent(new w.PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', isPrimary: true, clientX: px, clientY: py, buttons: 1 })); await sleep(16); }
-    pe(D, 'pointerup', x + dx, y + dy, 0);
-    w.dispatchEvent(new w.PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'mouse', isPrimary: true, clientX: x + dx, clientY: y + dy, buttons: 0 }));
+    for (var k = 1; k <= 6; k++) { peBoth('pointermove', x + dx * k / 6, y + dy * k / 6, 1); await sleep(16); }
+    peBoth('pointerup', x + dx, y + dy, 0);
     await settle(120);
+  }
+  /* On the phone pass a drag is a FINGER (real touch, held past Full's own timer); on the PC pass, the mouse. */
+  async function gesture(target, dx, dy, holdMs) {
+    var r = target.getBoundingClientRect(), x = r.left + Math.min(30, r.width / 2), y = r.top + r.height / 2;
+    if (PHONE) await touchDrag(x, y, dx, dy, holdMs);
+    else await dragFrom(target, x, y, dx, dy, 0);
   }
   function byName(name) { var L = FM.scene.layers.filter(function (l) { return l.name === name; })[0]; if (!L) throw new Error('no layer named ' + name); return L; }
   function closeTransient() {
@@ -407,23 +657,38 @@
     try { if (FM.shortcuts && FM.shortcuts.isOpen && FM.shortcuts.isOpen()) FM.shortcuts.hide(); } catch (e) {}
     try { if (FM.closeCanvasDialog) { var cd = D.getElementById('canvas-dialog'); if (cd && !cd.classList.contains('hidden')) FM.closeCanvasDialog(); } } catch (e) {}
     try { var xd = D.getElementById('export-dialog'); if (xd && !xd.classList.contains('hidden')) press('#exp-cancel'); } catch (e) {}
+    try { var xr = D.getElementById('export-ready'); if (xr && !xr.classList.contains('hidden')) press('#xr-discard'); } catch (e) {}
     try { if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
     try { if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop(); } catch (e) {}
+    try { if (FM.maskTool && FM.maskTool.isActive && FM.maskTool.isActive()) FM.maskTool.stop(); } catch (e) {}
+    try { if (FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+    // Shift+3 / Shift+4 open the drawing tools (a full-screen mode that keeps the keyboard): out, so the next key is Full's
+    try { if (FM.drawTool && FM.drawTool.active && FM.drawTools && FM.drawTools.stop) FM.drawTools.stop(); } catch (e) {}
     try { if (FM.pause) FM.pause(); } catch (e) {}
     // the ⋯ strip stays open until its own button shuts it (and is remembered): a group that opened it must not hand it on
     try { var ob = D.getElementById('opt-bar'); if (ob && !ob.classList.contains('hidden') && ob.getClientRects().length) { var bo = D.getElementById('btn-opts'); if (bo) bo.click(); } } catch (e) {}
   }
+  /* Every group starts from the same VIEW as well as the same document: the timeline at its fitted zoom and scrolled to
+     the start (a zoom one group left behind used to carry into the next one's drags — the review's Q1 was red only by
+     that accident), and the bar colours aligned. */
+  async function resetView() {
+    try { if (FM.timeline && FM.timeline.setZoom) FM.timeline.setZoom(1); } catch (e) {}
+    var tl = D.getElementById('timeline'); if (tl) { tl.scrollLeft = 0; tl.scrollTop = 0; }
+    alignColours();
+  }
 
   /* ═══ THE FU FIXTURE (DESIGN §0.4.5 FU1): 3 clips from in-memory canvases, a text, a song, a caption track with an
      animated cue effect, a group — imported and edited THROUGH THE APP, then saved as its own project so every group
-     below starts from an identical copy (FM.projects.duplicateFrom: fresh ids, its media copied). ═════════════════ */
+     below starts from an identical copy (FM.projects.duplicateFrom: fresh ids, its media copied). Plus, made first and
+     saved away, one template and one element, for FU2's two inserts. ════════════════════════════════════════════════ */
+  var FIXED_LM = 1759300000000;   // 1 Oct 2026: a file's lastModified, the same on both sides
   function pngFile(name, rgb, wd, ht, mark) {
     var c = D.createElement('canvas'); c.width = wd; c.height = ht;
     var g = c.getContext('2d');
     g.fillStyle = rgb; g.fillRect(0, 0, wd, ht);
     g.fillStyle = '#ffffff'; g.fillRect(wd * 0.2, ht * 0.2, wd * 0.25, ht * 0.12);
     g.fillStyle = '#111111'; g.fillRect(wd * (0.5 + 0.1 * mark), ht * 0.6, wd * 0.2, ht * 0.2);
-    return new Promise(function (r) { c.toBlob(function (b) { r(new w.File([b], name, { type: 'image/png' })); }, 'image/png'); });
+    return new Promise(function (r) { c.toBlob(function (b) { r(new w.File([b], name, { type: 'image/png', lastModified: FIXED_LM })); }, 'image/png'); });
   }
   function wavFile(name, secs, hz) {
     var rate = 22050, n = Math.round(secs * rate), buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
@@ -431,7 +696,7 @@
     s(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); s(8, 'WAVE'); s(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
     v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); s(36, 'data'); v.setUint32(40, n * 2, true);
     for (var i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.round(Math.sin(i / rate * 2 * Math.PI * hz) * 7000 * (i % rate < rate / 2 ? 1 : 0.5)), true);
-    return new w.File([buf], name, { type: 'audio/wav' });
+    return new w.File([buf], name, { type: 'audio/wav', lastModified: FIXED_LM });
   }
   /* THE FIXTURE VIDEO IS A STILL PICTURE WITH A TONE, made here (WebCodecs + the app's own vendor/mp4-muxer.js): 2 s of
      one frame, H.264 with a single keyframe, and a 440 Hz AAC track for "extract the audio". STILL ON PURPOSE (measured
@@ -465,16 +730,37 @@
       if (errs.length) throw new Error('the fixture video could not be encoded: ' + errs[0]);
       VIDEO_BYTES = muxer.target.buffer;
     }
-    return new w.File([VIDEO_BYTES.slice(0)], 'Clip V.mp4', { type: 'video/mp4' });
+    return new w.File([VIDEO_BYTES.slice(0)], 'Clip V.mp4', { type: 'video/mp4', lastModified: FIXED_LM });
   }
   var FIXTURE_ID = null;
+  async function buildPacks() {
+    /* The template and the element FU2 inserts, made through Full's own save routes from a small project of their own. */
+    step('fixture: a template and an element');
+    var pid = await FM.projects.create({ name: 'FU pack' });
+    if (!pid) throw new Error('FM.projects.create made no project for the packs');
+    await settle(200); alignColours();   // the pack layers keep their bar colours into the inserts FU2 makes
+    FM.setTime(0);
+    FM.addTextLayer(); await settle(150);
+    if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop();
+    var T = FM.scene.layers.filter(function (l) { return l.type === 'text'; })[0];
+    T.text = 'Pack title'; T.duration = 2;
+    if (FM.addShapeLayer) FM.addShapeLayer('rect');
+    var S = FM.scene.layers.filter(function (l) { return l.type === 'shape'; })[0];
+    if (S) { S.fill = '#3a7bd5'; S.duration = 2; S.shapeW = 300; S.shapeH = 120; }
+    FM.refreshAll(); FM.history.commit();
+    await FM.storage.save(); if (FM.storage.settled) await FM.storage.settled();
+    if (!(await FM.templates.save('FU tpl', pid))) throw new Error('FM.templates.save refused the FU template');
+    if (!(await FM.elements.save('FU element', [T]))) throw new Error('FM.elements.save refused the FU element');
+  }
   async function buildFixture() {
+    await buildPacks();
     step('fixture: new project');
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     await settle(300);
     FIXTURE_ID = await FM.projects.create({ name: 'FU fixture' });
     if (!FIXTURE_ID) throw new Error('FM.projects.create made no project');
     await settle(200);
+    alignColours();
     step('fixture: three clips');
     FM.setTime(0);
     await FM._handleFiles([await pngFile('Clip A.png', '#b8433a', 360, 640, 0), await pngFile('Clip B.png', '#2f78b0', 360, 640, 1), await pngFile('Clip C.png', '#2f9a5a', 360, 640, 2)]);
@@ -507,28 +793,10 @@
     FM.selectLayer(T.id); FM.toggleSelect(Cap.id);
     FM.groupSelection(); await settle(200);
     FM.selectLayer(null); FM.setTime(0);
-    // the bar colours by position (see PALETTE above): the counter that chose them is the machine's, not Full's
-    FM.scene.layers.forEach(function (l, i) { l.clipColor = PALETTE[i % PALETTE.length]; });
     FM.refreshAll();
     FM.history.commit();
     await FM.storage.save(); if (FM.storage.settled) await FM.storage.settled();
     await settle(200);
-  }
-  /* A NEW LAYER'S BAR COLOUR IS NOT DETERMINISTIC IN FULL ITSELF (measured 1 Oct, HEAD against HEAD). It is the next of
-     eight from a counter (js/scene.js CLIP_COLORS / _colorIdx) that EVERY layer object made in the page advances — and the
-     compositor makes one per group on every render (`_flat`), the effect thumbnails make more while a sheet is open — so
-     which of the eight a clip gets is how many frames this machine drew first. So a colour FROM THE PALETTE reads as
-     "@clip-colour" in the records (a colour he chose, clipColorSet, or one outside the palette stays exact), and the
-     palette itself is recorded, so a changed palette is still a difference. The fixture's own colours are set by index,
-     so the FU1 pictures are the same on both sides. Each side reads its OWN palette, from its own source. */
-  var PALETTE = null, PALETTE_SET = null;
-  async function loadPalette() {
-    var src = await (await w.fetch('js/scene.js', { cache: 'no-store' })).text();
-    var m = /CLIP_COLORS\s*=\s*\[([^\]]*)\]/.exec(src);
-    if (!m) throw new Error('could not read CLIP_COLORS from js/scene.js — the clip-colour rule in the probe needs updating');
-    PALETTE = m[1].split(',').map(function (x) { return x.trim().replace(/^['"]|['"]$/g, ''); }).filter(Boolean);
-    PALETTE_SET = Object.create(null); PALETTE.forEach(function (c) { PALETTE_SET[c.toLowerCase()] = 1; });
-    DUMP.palette = PALETTE;
   }
   /* A fresh, identical copy of the fixture, open, with an empty history — every group starts here. */
   async function freshCopy(tag) {
@@ -543,14 +811,16 @@
     seedRandom(0x980 + tag.length * 7919 + tag.charCodeAt(tag.length - 1));
     FM.selectLayer(null); FM.setTime(0);
     await settle(300); await mediaSettled();
+    await resetView();
     takeToasts();
     return id;
   }
 
   /* ═══ FU1: Full's chrome, screen by screen (DESIGN §0.4.5 FU1) ═══════════════════════════════════════════════════ */
   async function screen(name, fn, opts) {
+    motionStart();
     try { if (fn) await fn(); await capture(name, opts); }
-    catch (e) { DUMP.screens[name] = { err: String(e && e.message || e) }; }
+    catch (e) { DUMP.screens[name] = { err: String(e && e.message || e) }; motionTake(); }
     finally { closeTransient(); await settle(120); }
   }
   async function FU1() {
@@ -571,22 +841,70 @@
     await screen('fu1-export-sheet', async function () { FM.selectLayer(null); var b = firstVisible(['btn-export', 'm-export']); if (!b) throw new Error('no export button on screen'); b.click(); });
     await screen('fu1-help-sheet', async function () { var b = firstVisible(['btn-help', 'm-help']); if (!b) throw new Error('no ? button on screen'); b.click(); });
     await screen('fu1-cog', async function () { FM.selectLayer(null); var b = firstVisible(['btn-settings', 'm-settings']); if (!b) throw new Error('no cog on screen'); b.click(); });
+    /* Overlays drawn over the preview, which v1's pictures could not see: onion skin and the guides, on a selected clip
+       with keys (the selection box, its handles, the ghosts, the thirds). */
+    var x0 = JSON.stringify(A.transform.x);
+    await screen('fu1-overlays', async function () {
+      FM.selectLayer(A.id); FM.setTime(1);
+      FM.setTransform(A, 'x', A.transform.x, 0.4); FM.setTransform(A, 'x', A.transform.x + 120, 1.6);
+      FM.onionSkin = true; FM.showGuides = true; FM.requestRender();
+    });
+    FM.onionSkin = false; FM.showGuides = false; A.transform.x = JSON.parse(x0); FM.selectLayer(null); FM.refreshAll(); await settle(150);
     /* A PLAYING frame, held still: the transport is really playing (its button, its classes), and FM.clockNow — the one
        clock the play loop reads — is pinned to 1.25 s for the instant of the measurement, so the readout and the playhead
        are the same on both sides instead of wherever the wall clock happened to be. */
     step('FU1 playing');
     var real = FM.clockNow;
+    motionStart();
     try {
       FM.selectLayer(null); FM.setTime(1);
       FM.play(); await sleep(200);
       FM.clockNow = function () { return 1.25; };
       await sleep(250);
-      await capture('fu1-playing', { wait: 60 });
+      await capture('fu1-playing', { wait: 60, noPreview: true });
       DUMP.screens['fu1-playing'].playing = !!FM.playing;
     } catch (e) { DUMP.screens['fu1-playing'] = { err: String(e && e.message || e) }; }
     finally { FM.clockNow = real; closeTransient(); await settle(120); }
+    if (!PHONE) await hoverScreen();
     await screen('fu1-session', sessionScreen, { wait: 400 });
     await endSession();
+  }
+  /* HOVER, ON THE PC PASS (review of v1: "nothing is ever hovered at 1280, so :hover styles are never applied"). A real
+     mouse — CDP's, through the browser's own hit-testing — rests on one control per toolbar, and the control and its
+     insides are recorded with their hover styles applied. Then it rests on the stage, and stays there for the rest of the
+     run: the same spot on both sides. */
+  var HOVER = [   // [toolbar, candidate selectors, select Clip A first?]
+    ['add card', ['.addmenu-card'], false],
+    ['top bar', ['#btn-export', '#btn-settings'], false],
+    ['transport', ['#btn-undo', '#btn-redo', '#transport .tbtn'], false],
+    ['timeline view bar', ['#btn-amfit', '#tl-zoom-in', '.tl-viewbar button'], false],
+    ['timeline clip', ['#tl-tracks .clip'], false],
+    ['layer row', ['#btn-layermenu', '#btn-more-layer'], true],
+    ['key rail', ['#key-s', '#key-a', '#key-d'], true],
+    ['inspector card', ['.cat-card'], true]
+  ];
+  async function hoverScreen() {
+    step('FU1 hover');
+    var rec = DUMP.screens['fu1-hover'] = { hovers: {}, err: '' };
+    try {
+      var A = byName('Clip A');
+      FM.selectLayer(null); FM.setTime(1); await settle(200);
+      for (var i = 0; i < HOVER.length; i++) {
+        var nm = HOVER[i][0];
+        if (HOVER[i][2] && FM.scene.selectedId !== A.id) { FM.selectLayer(A.id); await settle(250); }
+        var t = firstVisibleSel(HOVER[i][1]);
+        if (!t) { rec.hovers[nm] = { none: HOVER[i][1].join(' | ') }; continue; }
+        var r = t.getBoundingClientRect();
+        motionStart();
+        await realInput([{ t: 'mouseMove', x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), ms: 60 }]);
+        await settle(220);
+        rec.hovers[nm] = { target: pathOf(t), layout: layoutRecord(t), motion: motionTake() };
+      }
+    } catch (e) { rec.err = String(e && e.message || e); }
+    finally {
+      try { var pv = D.getElementById('preview'), pr = pv ? pv.getBoundingClientRect() : { left: 4, top: 4, width: 2, height: 2 }; await realInput([{ t: 'mouseMove', x: Math.round(pr.left + 2), y: Math.round(pr.top + 2), ms: 60 }]); } catch (e) {}
+      FM.selectLayer(null); closeTransient(); await settle(150);
+    }
   }
   /* The live session screen: the people chip, the LIVE pill and a friend's selection ring — on the in-page loopback link,
      no network (DESIGN §0.4.5 FU1's fake-net screen). The friend is a plain engine guest; its presence names Clip B. */
@@ -627,6 +945,7 @@
   async function endSession() {
     if (!SESS) return;
     var C = SESS.C; SESS = null;
+    try { if (C.presence && C.presence._clock) C.presence._clock(null); } catch (e) {}
     try { C.end(); } catch (e) {}
     try { C.detach(); } catch (e) {}
     try { if (C._undoHandover) C._undoHandover(false); } catch (e) {}
@@ -646,33 +965,98 @@
   }
 
   /* ═══ FU2: Full's common edits, one scripted run (DESIGN §0.4.5 FU2). After every step: the document, history depth,
-     the toasts, the selection, FM.time, which surfaces are up, and three rendered frames. ═══════════════════════════ */
+     the toasts, the selection, FM.time, which surfaces are up and how the views stand, three rendered frames (more where a
+     step asks for them, past a cut), and the layout of any surface the step opened. Every edit through Full's own control.
+     ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+  var CUR_SURF = null;
+  function surface(label, sel) {
+    var e = typeof sel === 'string' ? D.querySelector(sel) : sel;
+    if (!CUR_SURF) return;
+    CUR_SURF[label] = vis(e) ? layoutRecord(e) : 'not on screen';
+  }
+  /* An item of a menu Full opens from one of its buttons, clicked by its words (FM.contextMenu draws them as .ctx-item). */
+  async function menuItem(btnIds, re, what) {
+    var b = firstVisible(btnIds);
+    if (!b) return false;
+    b.click(); await settle(150);
+    var it = byText('#ctx-menu .ctx-item, .ctx-menu .ctx-item, .ctx-item', re);
+    if (!it) { if (FM.contextMenu && FM.contextMenu.isOpen && FM.contextMenu.isOpen()) FM.contextMenu.hide(); return false; }
+    surface(what + ' (the menu)', it.parentElement);
+    it.click(); await settle(150);
+    return true;
+  }
+  /* The inspector's card for `label` on the selected layer (the .cat-card he taps), or false. */
+  async function openCard(re) {
+    // from inside another card, his way back to the grid is the ‹ at the top of the panel
+    var back = firstVisibleSel(['#inspector-panel .cat-back']);
+    if (back && FM.inspector && FM.inspector.currentView && FM.inspector.currentView() !== 'home') { back.click(); await settle(150); }
+    var c = byText('#inspector-panel .cat-card, .cat-card', re);
+    if (!c) return false;
+    c.click(); await settle(150);
+    return true;
+  }
+  /* The Add menu's card `re` on tab `tab` — on the PC it is the inspector column with nothing selected, on the phone the
+     sheet behind the + (opened by its own button). */
+  async function addCard(tabKey, re) {
+    FM.selectLayer(null); await settle(150);
+    if (PHONE) { var fab = firstVisible(['add-fab']); if (fab && !(D.getElementById('add-sheet') && D.getElementById('add-sheet').classList.contains('open'))) { fab.click(); await settle(250); } }
+    var tab = firstVisibleSel(['.addmenu-tab[data-key="' + tabKey + '"]']);
+    if (tab && !tab.classList.contains('active')) { tab.click(); await settle(200); }
+    return byText('.addmenu-card', re);
+  }
+  async function splitButton() {
+    var b = firstVisibleSel(['#btn-split', '#key-s', '.qr-btn[title="Split at playhead"]']);
+    return via('the split button', b, async function () { await FM.splitLayer(FM.scene.selectedId); });
+  }
   function fu2Steps() {
     var ctx = {};
     return [
-      ['add text (the Add sheet’s Text)', async function () { FM.setTime(2); FM.addTextLayer(); await settle(200); if (FM.textEdit && FM.textEdit.isActive()) FM.textEdit.stop(); }],
-      ['one multi-file pick: an image, a video and a song', async function () {
+      ['add text (Add → Elements → Text)', async function () {
+        FM.setTime(2);
+        var c = await addCard('object', /^Text\b/);
+        await via('the Add menu’s Text card', c, async function () { FM.addMenu.instant(0); });
+        await settle(200); if (FM.textEdit && FM.textEdit.isActive()) FM.textEdit.stop();
+      }],
+      ['one multi-file pick: an image, a video and a song (the picker’s landing route)', async function () {
         FM.setTime(1);
         await FM._handleFiles([await pngFile('Pick D.png', '#8a5bc0', 360, 640, 3), await videoFile(), wavFile('Pick song.wav', 3, 330)]);
         await settle(400); await mediaSettled();
       }],
-      ['drag Clip B along the timeline', async function () {
+      /* THE CLIP HOLD (timeline.js, 350 ms): on the phone a real finger rests 0.6 s, then moves. */
+      ['drag Clip B along the timeline (phone: a finger held 0.6 s)', async function () {
         var B = byName('Clip B'); FM.selectLayer(null); await settle();
         await centerOn(clipEl(B));
-        var c = clipEl(B), r = c.getBoundingClientRect();
-        await dragFrom(c, r.left + Math.min(30, r.width / 2), r.top + r.height / 2, 48, 0);
+        await gesture(clipEl(B), 48, 0, 600);
       }],
-      ['trim Clip C’s right grip in', async function () {
+      /* THE GRIP ARM (timeline.js ARM_MS, 300 ms): on the phone a real finger rests 0.5 s on the grip, then moves. */
+      ['trim Clip C’s right grip in (phone: a finger held 0.5 s)', async function () {
         var Cc = byName('Clip C'); FM.selectLayer(Cc.id); await settle();
         await centerOn(el(clipEl(Cc).querySelector('.clip-grip.right'), 'Clip C’s right grip'));
         var g = el(clipEl(Cc).querySelector('.clip-grip.right'), 'Clip C’s right grip'), r = g.getBoundingClientRect();
-        await dragFrom(g, r.left + r.width / 2, r.top + r.height / 2, -30, 0, PHONE ? 450 : 0);
+        if (PHONE) await touchDrag(r.left + r.width / 2, r.top + r.height / 2, -30, 0, 500);
+        else await dragFrom(g, r.left + r.width / 2, r.top + r.height / 2, -30, 0, 0);
       }],
-      ['trim Clip C’s left grip in', async function () {
+      ['trim Clip C’s left grip in (phone: a finger held 0.5 s)', async function () {
         var Cc = byName('Clip C'); FM.selectLayer(Cc.id); await settle();
         await centerOn(el(clipEl(Cc).querySelector('.clip-grip.left'), 'Clip C’s left grip'));
         var g = el(clipEl(Cc).querySelector('.clip-grip.left'), 'Clip C’s left grip'), r = g.getBoundingClientRect();
-        await dragFrom(g, r.left + r.width / 2, r.top + r.height / 2, 24, 0, PHONE ? 450 : 0);
+        if (PHONE) await touchDrag(r.left + r.width / 2, r.top + r.height / 2, 24, 0, 500);
+        else await dragFrom(g, r.left + r.width / 2, r.top + r.height / 2, 24, 0, 0);
+      }],
+      /* THE EDGE SCROLL (DESIGN I9: "an edge-scroll drag lands where HEAD's does"). The trim's auto-scroll moves a fixed
+         distance PER FRAME (timeline.js trimEdgeScroll), so the grip is carried into the right edge zone and held there
+         for exactly twelve animation frames — the probe counts them itself — then let go. */
+      ['carry Clip A’s right grip into the edge zone for 12 frames (the edge scroll)', async function () {
+        var A = byName('Clip A'); FM.selectLayer(A.id); await settle();
+        var tl = el('#timeline', 'the timeline'), tr = tl.getBoundingClientRect();
+        await centerOn(el(clipEl(A).querySelector('.clip-grip.right'), 'Clip A’s right grip'));
+        var g = el(clipEl(A).querySelector('.clip-grip.right'), 'Clip A’s right grip'), r = g.getBoundingClientRect();
+        var x = r.left + r.width / 2, y = r.top + r.height / 2, zone = FM._trimZonePx ? FM._trimZonePx(tr) : 23, ex = tr.right - Math.max(2, Math.round(zone / 3));
+        pe(g, 'pointerdown', x, y, 1);
+        for (var k = 1; k <= 4; k++) { peBoth('pointermove', x + (ex - x) * k / 4, y, 1); await raf1(); }
+        for (var f = 0; f < 12; f++) await raf1();
+        peBoth('pointerup', ex, y, 0);
+        await settle(150);
       }],
       ['A on Clip A at 0.6 s', async function () { var A = byName('Clip A'); FM.selectLayer(A.id); FM.setTime(0.6); key('KeyA', 'a'); await settle(); }],
       ['D on Clip A at 1.7 s', async function () { var A = byName('Clip A'); FM.selectLayer(A.id); FM.setTime(1.7); key('KeyD', 'd'); await settle(); }],
@@ -681,80 +1065,168 @@
          (the withdrawn step 1.1.5) would refuse it, which is one of the self-test's planted changes. */
       ['split Clip C 0.05 s from its start (the split button)', async function () {
         var Cc = byName('Clip C'); FM.selectLayer(Cc.id); FM.setTime(Cc.start + 0.05); await settle();
-        var b = firstVisible(['btn-split']); if (b) b.click(); else await FM.splitLayer(Cc.id);
+        await splitButton();
         await settle();
       }],
-      ['split at a clip’s very edge (refused, with its toast)', async function () {
-        var A = byName('Clip A'); FM.selectLayer(A.id); FM.setTime(A.start + 0.005); await FM.splitLayer(A.id); await settle();
+      /* At a clip's very edge the split button is not offered on the phone (its quick row changes with the side of the
+         playhead), so this is the S key, which both layouts answer — and whatever Full does there is recorded. */
+      ['S at a clip’s very edge (0.005 s in)', async function () {
+        var A = byName('Clip A'); FM.selectLayer(A.id); FM.setTime(A.start + 0.005); await settle();
+        key('KeyS', 's');
+        await settle();
       }],
-      ['speed 2× on Clip A (inspector route: FM.setClipSpeed or the speed prop)', async function () {
-        var A = byName('Clip A'); FM.selectLayer(A.id); await settle();
-        if (FM.setClipSpeed) FM.setClipSpeed(A, 2); else { FM.setProp(A, 'speed', 2, FM.time); }
-        FM.refreshAll(); FM.history.commit(); await settle();
+      /* THE ◆ (review of v1: keyframes went through FM.toggleProp/setProp, so a change to the inspector's own handler was
+         never run). The Mixing card's Opacity row: its ◆ at one time, its number box at another. */
+      ['◆ two opacity keys on Clip A (the Mixing card’s ◆ and its box)', async function () {
+        var A = byName('Clip A'); FM.selectLayer(A.id); FM.setTime(A.start + 0.1); await settle();
+        if (!(await openCard(/Mixing/))) fellOnly('the Mixing card was not on screen');
+        surface('the Mixing card', '#inspector-panel');
+        var kf = firstVisibleSel(['#inspector-panel .prop-row .kf-btn:not(.kf-ease-btn)']);
+        await via('the Opacity ◆', kf, async function () { FM.toggleKeyframe(A, 'opacity', FM.time); FM.history.commit(); });
+        await settle();
+        FM.setTime(A.start + A.duration - 0.1); await settle();
+        var box = firstVisibleSel(['#inspector-panel .prop-row input[type="number"]']);
+        if (box) setInput(box, '0.3'); else { fellOnly('the Opacity box was not on screen'); FM.setTransform(A, 'opacity', 0.3, FM.time); FM.history.commit(); }
+        await settle();
       }],
-      ['add an opacity keyframe pair on Clip B and drag the second diamond', async function () {
-        var B = byName('Clip B'); FM.selectLayer(B.id);
-        // the inspector's ◇ (FM.toggleProp) makes the channel animated at the playhead; a change elsewhere adds a key
-        FM.setTime(B.start + 0.2); FM.toggleProp(B.transform, 'opacity', FM.time, 1);
-        FM.setTime(B.start + 0.8); FM.setProp(B.transform, 'opacity', 0.4, FM.time);
-        FM.refreshAll(); FM.history.commit(); await settle();
-        /* A diamond is live (draggable) only while the editor that owns its property is open (timeline.js, v5.42) — so
-           open the inspector's categories in order until opacity's owner is up, the way he would find it. */
-        var dots = [];
-        for (var n = 1; n <= 9 && dots.length < 2; n++) {
-          // the diamonds live in the clip's LANE (timeline.js appends them beside the clip, not inside it)
-          if (FM.inspector && FM.inspector.openCategoryByIndex && FM.inspector.openCategoryByIndex(n)) { await settle(80); dots = [].slice.call(clipEl(B).parentElement.querySelectorAll('.kf-dot.kf-live')); }
-        }
-        if (dots.length < 2) throw new Error('Clip B shows ' + dots.length + ' live diamonds after two keys, with every inspector category tried');
+      /* THE SPEED CARD (review of v1: "speed 2× … inspector route" called FM.setProp, so the slider's own re-time and
+         keyframe scaling never ran — the review switched the scaling off and it passed). His control: the Speed card's
+         box, typed 200 and committed, which runs the slider's own setter. Clip A carries the two keys above, so the
+         keyframe scaling is visible in the document. */
+      ['speed 2× on Clip A (the Speed card’s box)', async function () {
+        var A = byName('Clip A'); FM.selectLayer(A.id); FM.setTime(A.start + 0.2); await settle();
+        if (!(await openCard(/^\d*\s*Speed\b/))) fellOnly('the Speed card was not on screen');
+        surface('the Speed card', '#inspector-panel');
+        var rows = [].slice.call(D.querySelectorAll('#inspector-panel .prop-row--scrub'));
+        var row = rows.filter(function (r) { return /Speed %/.test(r.textContent || ''); })[0];
+        var box = row ? row.querySelector('.fx-scrub-val') : null;
+        if (box && vis(box)) setInput(box, '200');
+        else { fellOnly('the Speed % box was not on screen'); FM.setProp(A, 'speed', 2, FM.time); FM.refreshAll(); FM.history.commit(); }
+        await settle();
+      }],
+      ['◆ opacity keys on Clip B (the ◆ and its box), then drag the second diamond (phone: a finger held 0.5 s)', async function () {
+        var B = byName('Clip B'); FM.selectLayer(B.id); FM.setTime(B.start + 0.2); await settle();
+        if (!(await openCard(/Mixing/))) fellOnly('the Mixing card was not on screen');
+        var kf = firstVisibleSel(['#inspector-panel .prop-row .kf-btn:not(.kf-ease-btn)']);
+        await via('the Opacity ◆', kf, async function () { FM.toggleKeyframe(B, 'opacity', FM.time); FM.history.commit(); });
+        await settle();
+        FM.setTime(B.start + 0.8); await settle();
+        var box = firstVisibleSel(['#inspector-panel .prop-row input[type="number"]']);
+        if (box) setInput(box, '0.4'); else { fellOnly('the Opacity box was not on screen'); FM.setTransform(B, 'opacity', 0.4, FM.time); FM.history.commit(); }
+        await settle();
+        // a diamond is live (draggable) only while the editor that owns its property is open (timeline.js, v5.42): it is
+        var dots = [].slice.call(clipEl(B).parentElement.querySelectorAll('.kf-dot.kf-live'));
+        if (dots.length < 2) throw new Error('Clip B shows ' + dots.length + ' live diamonds after two keys with the Mixing card open');
         await centerOn(dots[dots.length - 1]);
         dots = [].slice.call(clipEl(B).parentElement.querySelectorAll('.kf-dot.kf-live'));
         var d = el(dots[dots.length - 1], 'the second diamond'), r = d.getBoundingClientRect();
-        await dragFrom(d, r.left + r.width / 2, r.top + r.height / 2, 14, 0);
+        if (PHONE) await touchDrag(r.left + r.width / 2, r.top + r.height / 2, 14, 0, 500);
+        else await dragFrom(d, r.left + r.width / 2, r.top + r.height / 2, 14, 0);
       }],
       ['⌘Z three times', async function () { key('KeyZ', 'z', { meta: true }); await settle(80); key('KeyZ', 'z', { meta: true }); await settle(80); key('KeyZ', 'z', { meta: true }); await settle(); }],
       ['⇧⌘Z once', async function () { key('KeyZ', 'Z', { meta: true, shift: true }); await settle(); }],
       ['⌘D duplicate Clip A', async function () { var A = byName('Clip A'); FM.selectLayer(A.id); key('KeyD', 'd', { meta: true }); await settle(250); }],
       ['⌘C then ⌘V on the text', async function () { var T = byName('Text'); FM.selectLayer(T.id); key('KeyC', 'c', { meta: true }); await settle(80); key('KeyV', 'v', { meta: true }); await settle(250); }],
       ['Backspace deletes the selection', async function () { await settle(); key('Backspace', 'Backspace'); await settle(250); }],
-      ['crop Clip B and Done', async function () {
+      ['crop Clip B and Done (the Customise card’s Free crop, the crop bar’s Done)', async function () {
         var B = byName('Clip B'); FM.selectLayer(B.id); await settle();
-        if (!FM.cropTool || !FM.cropTool.start) throw new Error('FM.cropTool.start is missing');
-        FM.cropTool.start(B.id); await settle(250);
-        var done = D.querySelector('#crop-bar .cb-done, #crop-bar [data-act="done"], #crop-bar button:last-child');
-        if (done) done.click(); else FM.cropTool.stop();
+        if (!(await openCard(/Customise|Edit Shape|Element/))) fellOnly('the Customise card was not on screen');
+        var fb = firstVisibleSel(['#inspector-panel .es-freecrop', '.es-freecrop']);
+        await via('the Free crop button', fb, async function () { FM.cropTool.start(B.id); });
+        await settle(250);
+        surface('the crop bar', '#crop-bar');
+        var done = firstVisibleSel(['#crop-bar .cb-done']);
+        await via('the crop bar’s Done', done, async function () { FM.cropTool.stop(); });
         await settle(200);
       }],
-      ['group Clip A and the song (the Group button route)', async function () {
-        var A = byName('Clip A'), S = byName('Song'); FM.selectLayer(A.id); FM.toggleSelect(S.id); await settle();
-        FM.groupSelection(); await settle(200);
+      /* A MASK (DESIGN FU2 lists it; v1 had none), the way he adds one: the Effects card's + Add Effect, the browser's
+         search, the Mask tile, Add; then the mask's own controls, Edit path, three taps on the mask overlay, Close path, Done. */
+      ['a mask on Clip C (Effects → + Add Effect → Mask, Edit path, three points, Done)', async function () {
+        var Cc = byName('Clip C'); FM.selectLayer(Cc.id); FM.setTime(Cc.start + 0.3); await settle();
+        if (!(await openCard(/^\d*\s*Effects\b/))) fellOnly('the Effects card was not on screen');
+        var add = byText('#inspector-panel .fx-add-btn', /Add Effect/);
+        await via('the Effects card’s + Add Effect', add, async function () { FM.fxBrowser.open(Cc); });
+        await settle(500);
+        var sb = firstVisibleSel(['#fx-browser .fxb-search-btn']);
+        await via('the effects browser’s search', sb, async function () {});
+        await settle(250);
+        var srch = firstVisibleSel(['#fx-browser .fxb-search-input', '#fx-browser input']);
+        if (srch) { setInput(srch, 'mask'); await settle(400); } else fellOnly('the effects browser’s search box was not on screen');
+        var tile = byText('#fx-browser .fxb-tile', /^\s*Mask\b/);
+        var mk0 = (Cc.masks || []).length;
+        await via('the effects browser’s Mask tile', tile, async function () {
+          var m = FM.masks.make('add'); Cc.masks = (Cc.masks || []).concat([m]); Cc.effects = (Cc.effects || []).concat([{ type: 'penmask', maskId: m.id }]); FM.history.commit();
+        });
+        await settle(250);
+        surface('the effects browser', '#fx-browser');
+        var go = firstVisibleSel(['#fx-browser .fxb-commit-go']);
+        if (FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()) await via('the browser’s Add', go, async function () { FM.fxBrowser.close(); });
+        await settle(400);
+        if ((Cc.masks || []).length !== mk0 + 1) fellOnly('the Mask tile added ' + ((Cc.masks || []).length - mk0) + ' masks');
+        var discs = [].slice.call(D.querySelectorAll('#inspector-panel .fx-disc')).filter(vis);
+        await via('the mask’s controls', discs[discs.length - 1] || null, async function () {});
+        await settle(250);
+        var edit = firstVisibleSel(['#inspector-panel .mask-edit-btn']);
+        await via('Edit path', edit, async function () { var m = Cc.masks[Cc.masks.length - 1]; FM.maskTool.open(Cc.id, m.id); });
+        await settle(300);
+        if (FM.maskTool && FM.maskTool.isActive && FM.maskTool.isActive()) {
+          var ov = el('#mask-overlay', 'the mask overlay'), pv = el('#preview', 'the preview'), pr = pv.getBoundingClientRect();
+          var pts = [[0.35, 0.35], [0.65, 0.4], [0.5, 0.7]];
+          for (var i = 0; i < pts.length; i++) {
+            var x = pr.left + pr.width * pts[i][0], y = pr.top + pr.height * pts[i][1];
+            pe(ov, 'pointerdown', x, y, 1); peBoth('pointerup', x, y, 0);
+            await settle(80);
+          }
+          surface('the mask tool', '#mask-bar');
+          var cl = byText('#mask-bar button', /Close path/);
+          if (cl) { cl.click(); await settle(120); }
+          var md = firstVisibleSel(['#mask-bar .mk-done']);
+          await via('the mask tool’s Done', md, async function () { FM.maskTool.stop(); });
+          await settle(200);
+        } else fellOnly('the mask tool did not open from Edit path');
       }],
-      ['masking group of the text and Clip B', async function () {
-        var T = byName('Text'), B = byName('Clip B'); FM.selectLayer(T.id); FM.toggleSelect(B.id); await settle();
-        FM.groupSelection({ mask: true }); await settle(200);
+      /* THE GROUP BUTTONS (review of v1: "(the Group button route)" called FM.groupSelection, and a planted handler that
+         made the phone's Group a masking group passed). */
+      ['group Clip A and the song (the Group button)', async function () {
+        var A = byName('Clip A'), S = byName('Song'); FM.selectLayer(A.id); FM.toggleSelect(S.id); await settle(200);
+        await via('the Group button', firstVisible(['btn-group', 'm-group']), async function () { FM.groupSelection(); });
+        await settle(200);
       }],
-      ['◐ parked mid-stack, then an add lands there', async function () {
+      ['masking group of the text and Clip B (the Masking group button)', async function () {
+        var T = byName('Text'), B = byName('Clip B'); FM.selectLayer(T.id); FM.toggleSelect(B.id); await settle(200);
+        await via('the Masking group button', firstVisible(['btn-maskgroup', 'm-maskgroup']), async function () { FM.groupSelection({ mask: true }); });
+        await settle(200);
+      }],
+      ['◐ parked mid-stack, then an add lands there (Add → Elements → Text)', async function () {
         FM.selectLayer(null);
+        // the marker's position is set as its drag sets it (FM.clampAddAt); the add goes through the Add menu's card
         if (FM.clampAddAt) FM.addAt = FM.clampAddAt(2); else FM.addAt = 2;
         FM.refreshAll(); await settle();
-        FM.setTime(0.5); FM.addTextLayer(); await settle(200); if (FM.textEdit && FM.textEdit.isActive()) FM.textEdit.stop();
+        FM.setTime(0.5);
+        var c = await addCard('object', /^Text\b/);
+        await via('the Add menu’s Text card', c, async function () { FM.addMenu.instant(0); });
+        await settle(200); if (FM.textEdit && FM.textEdit.isActive()) FM.textEdit.stop();
       }],
       ['Replace Clip C’s picture (FM.replaceMediaWith, the route the picker lands on)', async function () {
         var Cc = byName('Clip C'); FM.selectLayer(Cc.id);
         var rec = await FM.loadImageFile(await pngFile('Replacement.png', '#c0a030', 360, 640, 4));
         await FM.replaceMediaWith(Cc.id, rec); await settle(250);
       }],
-      ['extract the audio of the video', async function () {
+      ['extract the audio of the video (the clip menu’s Extract Audio)', async function () {
         var V = FM.scene.layers.filter(function (l) { return l.type === 'video' && /Clip V/.test(l.name); })[0];
         if (!V) throw new Error('no video layer to extract from');
-        FM.selectLayer(V.id); await FM.extractAudio(V); await settle(300);
+        FM.selectLayer(V.id); await settle();
+        if (!(await menuItem(['btn-more-layer', 'm-more'], /^Extract Audio$/, 'Extract Audio'))) { fellOnly('Extract Audio was not in the clip menu'); await FM.extractAudio(V); }
+        await settle(300);
       }],
-      ['Reverse the video (layer menu item)', async function () {
+      ['Reverse the video (the clip menu’s Reverse)', async function () {
         var V = FM.scene.layers.filter(function (l) { return l.type === 'video' && /Clip V/.test(l.name) && !l.audioOnly; })[0];
         FM.selectLayer(V.id); await settle();
-        var items = FM.layerMenuItems ? FM.layerMenuItems(V) : [];
-        var it = (items || []).filter(function (i) { return i && /reverse/i.test(i.label || ''); })[0];
-        if (!it) throw new Error('no Reverse in the layer menu');
-        await it.action();
+        if (!(await menuItem(['btn-more-layer', 'm-more'], /^Reverse$/, 'Reverse'))) {
+          fellOnly('Reverse was not in the clip menu');
+          var it = (FM.layerMenuItems ? FM.layerMenuItems(V) : []).filter(function (i) { return i && /reverse/i.test(i.label || ''); })[0];
+          if (it) await it.action();
+        }
         /* Reverse plays from a frame cache built in the background ("Preparing frames… n%"); a frame hashed before it is
            complete is however far the machine got. Wait for it, as he waits for the toast to go. */
         await until('the reversed video’s frame cache', function () { var m = FM.media.get(V.id); return !!(m && m.frameCache); }, 90000);
@@ -769,10 +1241,114 @@
         ctx.aiLog = log;
         await settle(250);
       }],
+      /* A TEMPLATE AND AN ELEMENT INSERT (DESIGN FU2; v1 had neither): the Add menu's own cards, made by buildPacks. */
+      ['insert the FU template (Add → Template)', async function () {
+        FM.setTime(1);
+        var c = await addCard('template', /FU tpl/);
+        await via('the Template tab’s card', c, async function () {
+          var t = (FM.templates.list() || []).filter(function (x) { return x.name === 'FU tpl'; })[0];
+          if (t) await FM.templates.insertInto(t.id);
+        });
+        await settle(400);
+      }],
+      ['insert the FU element (Add → Elements → FU element)', async function () {
+        FM.setTime(2.5);
+        var c = await addCard('object', /FU element/);
+        if (!c) {
+          var ce = await addCard('object', /Custom elements/);
+          if (ce) { ce.click(); await settle(300); }
+          c = byText('.elb-card, .el-card, [class*="elem"] button, button', /FU element/);
+          surface('the elements browser', firstVisibleSel(['#elements-browser', '.elements-browser', '.elb']) || D.body);
+        }
+        await via('the FU element’s card', c, async function () {
+          var e = (FM.elements.list() || []).filter(function (x) { return x.name === 'FU element'; })[0];
+          if (e) await FM.elements.insert(e.id);
+        });
+        await settle(400);
+        closeTransient();
+      }],
       ['move the caption track (its animated cue effect rides along)', async function () {
         var Cap = FM.scene.layers.filter(function (l) { return Array.isArray(l.captions) && l.captions.length; })[0];
         FM.moveClipTo(Cap, (Cap.start || 0) + 0.5); FM.refreshAll(); FM.history.commit(); await settle();
       }],
+      /* B4/B5's GUARDS (DESIGN FU2: "a Follow on a split target and a luma matte on a split source rendered past the
+         cut; Bounce on a camera with split keys"). Each renders frames on both sides of its cut. The Follow and the Bounce
+         go through the Position / Scale card's + Add behavior; the matte's source is set the way its picker writes it. */
+      ['a Follow on a split target (+ Add behavior → Follow, Clip B’s first half), frames past the cut', async function () {
+        var halves = FM.scene.layers.filter(function (l) { return l.name === 'Clip B'; });
+        var B1 = halves.slice().sort(function (a, b) { return a.start - b.start; })[0];
+        var T = byName('Text');
+        FM.selectLayer(T.id); await settle();
+        if (!(await openCard(/Position/))) fellOnly('the Position / Scale card was not on screen');
+        var add = byText('#inspector-panel .fx-add-btn', /Add behavior/);
+        await via('+ Add behavior', add, async function () {});
+        await settle(150);
+        var pick = byText('#inspector-panel .be-pick-btn', /^Follow$/);
+        await via('the Follow tile', pick, async function () { T.behaviors = (T.behaviors || []).concat([FM.behaviorRegistry.makeInstance('follow', 'x')]); FM.history.commit(); });
+        await settle(200);
+        var sel = [].slice.call(D.querySelectorAll('#inspector-panel .be-list select')).filter(function (s) { return [].slice.call(s.options).some(function (o) { return o.value === B1.id; }); })[0];
+        if (sel) setInput(sel, B1.id);
+        else { fellOnly('the Follow layer picker was not on screen'); var b = (T.behaviors || []).filter(function (x) { return x.type === 'follow'; })[0]; if (b) { b.params = b.params || {}; b.params.targetId = B1.id; } FM.history.commit(); }
+        // the target moves, so the follower's frames past the cut say what Full reads there
+        FM.setTransform(B1, 'x', B1.transform.x, B1.start); FM.setTransform(B1, 'x', B1.transform.x + 90, B1.start + B1.duration); FM.history.commit();
+        await settle(200);
+        ctx.times = [B1.start + B1.duration - 0.05, B1.start + B1.duration + 0.05, B1.start + B1.duration + 0.4];
+      }, { times: function () { return ctx.times; } }],
+      ['a luma matte on a split source (Clip C’s first half), frames past the cut', async function () {
+        var halves = FM.scene.layers.filter(function (l) { return l.name === 'Clip C'; }).sort(function (a, b) { return a.start - b.start; });
+        var C1 = halves[0], T = byName('Text');
+        var fx = FM.fxRegistry.makeInstance('lumamatte');
+        if (!fx) throw new Error('no Luma Matte in the registry');
+        fx.params = fx.params || {}; fx.params.layerId = C1.id; fx.layer = C1.id; fx.sourceId = C1.id;
+        T.effects = (T.effects || []).concat([fx]);
+        FM.refreshAll(); FM.history.commit(); await settle(200);
+        var cut = C1.start + C1.duration;
+        ctx.times = [cut - 0.02, cut + 0.02, cut + 0.3];
+      }, { times: function () { return ctx.times; } }],
+      /* Bounce rings after a key's jump (js/behaviors.js bounceDelta). Its default channel is y, so the keys are on y: the
+         camera (Add → Camera; a camera cannot be split in Full — "Only video/image/text/shape clips can be split" — so its
+         frames ring after its own jump), and a split clip whose tail renders the ring across the cut from its head's keys
+         (the split's boundary key is dropped there: B5's guard). */
+      ['Bounce on a camera (Add → Camera, two y keys, + Add behavior → Bounce), frames on the ring', async function () {
+        FM.setTime(0.5);
+        var c = await addCard('object', /^Camera\b/);
+        await via('the Add menu’s Camera card', c, async function () { FM.addCameraLayer(); });
+        await settle(250);
+        var Cam = FM.scene.layers.filter(function (l) { return l.type === 'camera'; })[0];
+        if (!Cam) throw new Error('no camera after Add → Camera');
+        FM.selectLayer(Cam.id);
+        FM.setTransform(Cam, 'y', Cam.transform.y, 0.6); FM.setTransform(Cam, 'y', Cam.transform.y + 160, 1.0); FM.history.commit();
+        await settle();
+        if (!(await openCard(/Position/))) fellOnly('the camera’s Position / Scale card was not on screen');
+        var add = byText('#inspector-panel .fx-add-btn', /Add behavior/);
+        await via('+ Add behavior', add, async function () {});
+        await settle(150);
+        var pick = byText('#inspector-panel .be-pick-btn', /^Bounce$/);
+        await via('the Bounce tile', pick, async function () { Cam.behaviors = (Cam.behaviors || []).concat([FM.behaviorRegistry.makeInstance('bounce', 'y')]); FM.history.commit(); });
+        await settle(200);
+        ctx.times = [1.05, 1.2, 1.5];
+      }, { times: function () { return ctx.times; } }],
+      ['Bounce across a split (Clip C’s second half: two y keys, S after them, + Add behavior → Bounce on the tail), frames past the cut', async function () {
+        var halves = FM.scene.layers.filter(function (l) { return l.name === 'Clip C'; }).sort(function (a, b) { return a.start - b.start; });
+        var C = halves[halves.length - 1];
+        var k0 = C.start + 0.1, k1 = C.start + Math.min(0.3, C.duration * 0.3), cut = C.start + Math.min(0.45, C.duration * 0.5);
+        FM.selectLayer(C.id);
+        FM.setTransform(C, 'y', C.transform.y, k0); FM.setTransform(C, 'y', C.transform.y + 140, k1); FM.history.commit();
+        FM.setTime(cut); await settle();
+        key('KeyS', 's'); await settle(200);
+        var after = FM.scene.layers.filter(function (l) { return l.name === 'Clip C'; }).sort(function (a, b) { return a.start - b.start; });
+        var tail = after[after.length - 1];
+        if (after.length !== halves.length + 1) throw new Error('S at ' + cut + ' did not split Clip C’s second half');
+        FM.selectLayer(tail.id); await settle();
+        if (!(await openCard(/Position/))) fellOnly('the tail’s Position / Scale card was not on screen');
+        var add = byText('#inspector-panel .fx-add-btn', /Add behavior/);
+        await via('+ Add behavior', add, async function () {});
+        await settle(150);
+        var pick = byText('#inspector-panel .be-pick-btn', /^Bounce$/);
+        await via('the Bounce tile', pick, async function () { tail.behaviors = (tail.behaviors || []).concat([FM.behaviorRegistry.makeInstance('bounce', 'y')]); FM.history.commit(); });
+        await settle(200);
+        ctx.times = [cut + 0.02, cut + 0.1, cut + 0.25];
+      }, { times: function () { return ctx.times; } }],
       ['delete Pick D with the Delete key', async function () {
         var D2 = FM.scene.layers.filter(function (l) { return /Pick D/.test(l.name); })[0];
         FM.selectLayer(D2.id); await settle();
@@ -782,23 +1358,160 @@
   }
   async function runFU2(steps, rec, after, before) {
     for (var i = 0; i < steps.length; i++) {
-      var nm = steps[i][0], err = '';
+      var nm = steps[i][0], err = '', opt = steps[i][2] || {};
       step('FU2 ' + nm);
       if (before) await before();
       takeToasts();
+      CUR_FELL = []; CUR_SURF = {};
       try { await steps[i][1](); } catch (e) { err = String(e && e.message || e); }
+      var fell = CUR_FELL, surf = CUR_SURF; CUR_FELL = null; CUR_SURF = null;
       await settle(200);
-      var st = await stateRecord({ noFrames: !!rec.noFrames });
-      var entry = { name: nm, err: err, state: st };
+      var st = await stateRecord({ noFrames: !!rec.noFrames, times: opt.times ? (opt.times() || null) : null });
+      if (opt.times && !rec.noFrames) st.framesAt = await frameHashes(FRAME_TIMES);
+      var entry = { name: nm, err: err, fell: fell, surf: surf, state: st };
+      if (fell.length) DUMP.fell = DUMP.fell.concat(fell.map(function (f) { return nm + ' — ' + f; }));
       if (after) entry.extra = await after(nm);
       rec.push(entry);
+      closeTransient(); await settle(80);
+      if (UPTO && nm.indexOf(UPTO) >= 0) { DUMP.notes.push('FU2 stopped after "' + nm + '" (upto= — a development run, never a measurement)'); break; }
     }
+  }
+  /* A download is never written: an <a download> the app clicks hands its blob URL here instead (the single frame). */
+  async function catchDownload(fn) {
+    var A = w.HTMLAnchorElement.prototype, orig = A.click, got = null;
+    A.click = function () { if (this.hasAttribute('download')) { got = { name: this.getAttribute('download'), href: this.href }; return; } return orig.apply(this, arguments); };
+    try { await fn(); await until('the download', function () { return got; }, 15000); }
+    finally { A.click = orig; }
+    var buf = new Uint8Array(await (await w.fetch(got.href)).arrayBuffer());
+    return { name: got.name.replace(/\d+(\.\d+)?s\.png$/, function (m) { return m; }), bytes: buf.length, hash: cyrb53(buf) };
+  }
+  /* The MP4's own structure, read from its boxes: what a different size, rate, frame count, keyframe spacing or codec
+     setting would change. */
+  function mp4Info(buf) {
+    var dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength), out = { tracks: [] }, cur = null;
+    var CONT = { moov: 1, trak: 1, mdia: 1, minf: 1, stbl: 1, edts: 1, dinf: 1, mvex: 1 };
+    function str(o) { return String.fromCharCode(buf[o], buf[o + 1], buf[o + 2], buf[o + 3]); }
+    (function walk(start, end, depth) {
+      var o = start;
+      while (o + 8 <= end && depth < 12) {
+        var size = dv.getUint32(o), type = str(o + 4), hdr = 8;
+        if (size === 1) { size = Number(dv.getBigUint64(o + 8)); hdr = 16; }
+        if (size < hdr || o + size > end) break;
+        var b = o + hdr;
+        if (type === 'trak') { cur = { }; out.tracks.push(cur); }
+        if (CONT[type]) walk(b, o + size, depth + 1);
+        else if (type === 'mvhd') { var v = buf[b]; out.timescale = dv.getUint32(b + (v ? 20 : 12)); }
+        else if (type === 'tkhd' && cur) { var v2 = buf[b]; var wo = b + (v2 ? 88 : 76); cur.w = dv.getUint32(wo) / 65536; cur.h = dv.getUint32(wo + 4) / 65536; }
+        else if (type === 'mdhd' && cur) { var v3 = buf[b]; cur.timescale = dv.getUint32(b + (v3 ? 20 : 12)); cur.duration = v3 ? Number(dv.getBigUint64(b + 24)) : dv.getUint32(b + 16); }
+        else if (type === 'hdlr' && cur) cur.handler = str(b + 8);
+        else if (type === 'stsd' && cur) { cur.codec = str(b + 12); var sz = dv.getUint32(b + 8); cur.stsd = cyrb53(buf.subarray(b + 8, b + 8 + sz)); }
+        else if (type === 'stsz' && cur) { cur.samples = dv.getUint32(b + 8); }
+        else if (type === 'stss' && cur) { var n = dv.getUint32(b + 4), ks = []; for (var i = 0; i < n && i < 200; i++) ks.push(dv.getUint32(b + 8 + i * 4)); cur.sync = ks; }
+        else if (type === 'stts' && cur) { var m = dv.getUint32(b + 4), ts = []; for (var j = 0; j < m && j < 50; j++) ts.push(dv.getUint32(b + 8 + j * 8) + 'x' + dv.getUint32(b + 12 + j * 8)); cur.stts = ts.join(' '); }
+        o += size;
+      }
+    })(0, buf.length, 0);
+    return out;
+  }
+  /* What the exported file SHOWS, decoded by the browser: a 12x12 grid of mean colours at three times. Encoders are not
+     promised to be bit-exact run to run, so these are numbers the comparer holds to a measured tolerance; the poster (the
+     first frame, before the encoder) and the structure above are exact. */
+  async function decodedGrid(blob, times) {
+    var url = URL.createObjectURL(blob), v = D.createElement('video'), out = [];
+    v.muted = true; v.playsInline = true; v.src = url;
+    try {
+      await new Promise(function (res, rej) { v.onloadeddata = res; v.onerror = function () { rej(new Error('the exported file would not decode')); }; setTimeout(function () { rej(new Error('the exported file took over 15 s to load')); }, 15000); });
+      var c = D.createElement('canvas'); c.width = 12; c.height = 12; var g = c.getContext('2d', { willReadFrequently: true });
+      for (var i = 0; i < times.length; i++) {
+        var t = Math.min(times[i], Math.max(0, v.duration - 0.02));
+        await new Promise(function (res) { v.onseeked = res; v.currentTime = t; setTimeout(res, 4000); });
+        g.drawImage(v, 0, 0, 12, 12);
+        out.push([].slice.call(g.getImageData(0, 0, 12, 12).data).filter(function (_, k) { return k % 4 !== 3; }));
+      }
+      out.unshift({ w: v.videoWidth, h: v.videoHeight, dur: Math.round(v.duration * 1000) / 1000 });
+    } finally { URL.revokeObjectURL(url); v.removeAttribute('src'); try { v.load(); } catch (e) {} }
+    return out;
   }
   async function FU2() {
     await freshCopy('FU2');
     var rec = DUMP.fu2;
-    rec.push({ name: 'start', err: '', state: await stateRecord() });
+    rec.push({ name: 'start', err: '', fell: [], surf: {}, state: await stateRecord() });
     await runFU2(fu2Steps(), rec);
+    if (UPTO) return;
+    /* THE SINGLE FRAME (DESIGN I8: FM.renderStill from snapshotPNG): the export sheet's format set to a single PNG and its
+       own button pressed. The file's bytes are hashed; the app's download is caught, never written. */
+    step('FU2 a single frame');
+    var still = { name: 'a single frame (Export → Single frame PNG)', err: '', fell: [], surf: {} };
+    CUR_FELL = still.fell; CUR_SURF = still.surf;
+    try {
+      FM.selectLayer(null); FM.setTime(1.2); await settle();
+      var b = firstVisible(['btn-export', 'm-export']);
+      await via('the export button', b, async function () {});
+      await settle(250);
+      var fmt = D.getElementById('exp-format');
+      var png = fmt ? [].slice.call(fmt.options).filter(function (o) { return /png|frame|still/i.test(o.value + ' ' + o.textContent) && !/sequence|frames/i.test(o.textContent); })[0] : null;
+      if (png) setInput(fmt, png.value); else fellOnly('the export sheet has no single-frame format');
+      await settle(150);
+      surface('the export sheet (single frame)', '#export-dialog');
+      still.file = await catchDownload(async function () {
+        await via('the export sheet’s Export', firstVisible(['exp-go']), async function () { FM.snapshotPNG({ scale: 1 }); });
+      });
+      still.toasts = takeToasts();
+    } catch (e) { still.err = String(e && e.message || e); }
+    CUR_FELL = null; CUR_SURF = null; closeTransient(); await settle(150);
+    rec.push({ name: still.name, err: still.err, fell: still.fell, surf: still.surf, state: { file: still.file || null, toasts: still.toasts || [] } });
+    if (still.fell.length) DUMP.fell = DUMP.fell.concat(still.fell.map(function (f) { return still.name + ' — ' + f; }));
+    /* A REAL EXPORT (review of v1: "it never runs the exporter"). The export sheet: MP4, the smallest size it offers, the
+       selected clip only, its own Export button. The run is the app's own, end to end — the progress overlay, the encoder,
+       the muxer, the ready card; the probe only listens at the card (FM.exporter.run's onReady is wrapped to keep the file)
+       and then presses Discard, so nothing is saved. */
+    step('FU2 a real export');
+    var xr = { name: 'export (Export → MP4, the loop region, the smallest size)', err: '', fell: [], surf: {} };
+    CUR_FELL = xr.fell; CUR_SURF = xr.surf;
+    var runOrig = FM.exporter && FM.exporter.run, got = null;
+    try {
+      /* The range is a LOOP REGION set with his keys ([ at 1.0 s, ] at 2.0 s): the phone's export button is not on screen
+         while a clip is selected, so "the selected clip" is not a range the phone can export, and a region is. */
+      FM.selectLayer(null); FM.setTime(1.0); await settle(); key('BracketLeft', '[');
+      FM.setTime(2.0); await settle(); key('BracketRight', ']'); await settle();
+      FM.exporter.run = function (opts) {
+        var o = Object.assign({}, opts), ready = opts.onReady;
+        o.onReady = function (out) { got = out; return ready ? ready(out) : undefined; };
+        xr.opts = { scale: opts.scale, fps: opts.fps, bitrate: opts.bitrate, from: opts.from, to: opts.to, outW: opts.outW, outH: opts.outH, name: opts.name };
+        return runOrig.call(this, o);
+      };
+      var b2 = firstVisible(['btn-export', 'm-export']);
+      await via('the export button', b2, async function () {});
+      await settle(250);
+      var f2 = D.getElementById('exp-format'); if (f2) setInput(f2, 'mp4');
+      var res = D.getElementById('exp-res');
+      if (res && res.options.length) {
+        var opts2 = [].slice.call(res.options).filter(function (o) { return o.value !== 'custom' && isFinite(parseFloat(o.value)); });
+        opts2.sort(function (a, b) { return parseFloat(a.value) - parseFloat(b.value); });
+        if (opts2[0]) setInput(res, opts2[0].value);
+      } else fellOnly('the export sheet has no size list');
+      var rg = D.getElementById('exp-range'); if (rg) setInput(rg, 'loop'); else fellOnly('the export sheet has no range list');
+      await settle(150);
+      surface('the export sheet (MP4)', '#export-dialog');
+      await via('the export sheet’s Export MP4', firstVisible(['exp-go']), async function () {});
+      await until('the export’s ready card', function () { var c = D.getElementById('export-ready'); return got && c && !c.classList.contains('hidden'); }, 180000);
+      await settle(200);
+      surface('the ready card', '#export-ready');
+      var bufX = new Uint8Array(await got.blob.arrayBuffer());
+      var pc = got.poster;
+      xr.out = { name: got.name, width: got.width, height: got.height, fps: got.fps, seconds: Math.round((got.seconds || 0) * 1e4) / 1e4,
+        hasAudio: got.hasAudio, audioDropped: got.audioDropped, bytes: bufX.length, hash: cyrb53(bufX),
+        poster: pc ? (pc.width + 'x' + pc.height + ' ' + cyrb53(new Uint8Array(pc.getContext('2d').getImageData(0, 0, pc.width, pc.height).data.buffer))) : null,
+        mp4: mp4Info(bufX) };
+      xr.grid = await decodedGrid(got.blob, [0.05, (got.seconds || 1) / 2, Math.max(0.05, (got.seconds || 1) - 0.1)]);
+      await via('the ready card’s Discard', firstVisible(['xr-discard']), async function () {});
+      await settle(200);
+      xr.toasts = takeToasts();
+    } catch (e) { xr.err = String(e && e.message || e); }
+    finally { if (runOrig) FM.exporter.run = runOrig; }
+    CUR_FELL = null; CUR_SURF = null; closeTransient(); await settle(150);
+    rec.push({ name: xr.name, err: xr.err, fell: xr.fell, surf: xr.surf, state: { opts: xr.opts || null, out: xr.out || null, toasts: xr.toasts || [] }, grid: xr.grid || null });
+    if (xr.fell.length) DUMP.fell = DUMP.fell.concat(xr.fell.map(function (f) { return xr.name + ' — ' + f; }));
     /* …and at the end, the export's frames (every quarter second, through the compositor) and its audio mix. */
     step('FU2 export frames and audio');
     var P = FM.scene.project, times = [];
@@ -817,7 +1530,7 @@
              measured 1 Oct, two runs of the same build mixed the same project to different 16-bit samples (the hash of
              the samples differed) while every window's RMS and peak agreed to 1/1000 — and a real change (a volume, a fade,
              a clip moved by a frame) moves the windows it touches by more than that. */
-          var ch = [], win = Math.round(buf.sampleRate / 10), maxd = 0;
+          var ch = [], win = Math.round(buf.sampleRate / 10);
           for (var c = 0; c < buf.numberOfChannels; c++) {
             var f = buf.getChannelData(c), shape = [];
             for (var s0 = 0; s0 < f.length; s0 += win) {
@@ -831,19 +1544,24 @@
         }
       }
     } catch (e) { ex.err = String(e && e.message || e); }
-    rec.push({ name: 'export', err: ex.err, state: { exportFrames: ex.frames, exportAudio: ex.audio } });
+    rec.push({ name: 'export frames and audio', err: ex.err, fell: [], surf: {}, state: { exportFrames: ex.frames, exportAudio: ex.audio } });
   }
 
   /* ═══ FU3: every key the window keydown handler answers (js/app.js), with nothing selected and with one clip
-     selected (E included — Full has no E; B14). The fixture is restored from the saved copy before every key. ════ */
+     selected (E included — Full has no E; B14). The fixture is restored from the saved copy before every key. Each record
+     says what the key opened (the inspector's view, the Add menu's tab), the timeline's zoom and scroll, and the frame at
+     the playhead. ═════════════════════════════════════════════════════════════════════════════════════════════════════ */
   var KEYS = [
     ['KeyZ', 'z', { meta: true }], ['KeyZ', 'Z', { meta: true, shift: true }], ['KeyY', 'y', { meta: true }], ['KeyD', 'd', { meta: true }],
     ['KeyC', 'c', { meta: true }], ['KeyV', 'v', { meta: true }], ['KeyA', 'a', { meta: true }], ['KeyS', 's', { meta: true }],
     ['Space', ' '], ['Slash', '?', { shift: true }], ['ArrowLeft', 'ArrowLeft'], ['ArrowRight', 'ArrowRight'], ['ArrowUp', 'ArrowUp'], ['ArrowDown', 'ArrowDown'],
-    ['ArrowRight', 'ArrowRight', { shift: true }], ['Comma', ','], ['Period', '.'], ['Home', 'Home'], ['End', 'End'], ['Home', 'Home', { shift: true }], ['End', 'End', { shift: true }],
+    ['ArrowLeft', 'ArrowLeft', { shift: true }], ['ArrowRight', 'ArrowRight', { shift: true }], ['ArrowUp', 'ArrowUp', { shift: true }], ['ArrowDown', 'ArrowDown', { shift: true }],
+    ['Comma', ','], ['Period', '.'], ['Home', 'Home'], ['End', 'End'], ['Home', 'Home', { shift: true }], ['End', 'End', { shift: true }],
     ['BracketLeft', '['], ['BracketRight', ']'], ['Backslash', '\\'], ['KeyM', 'm'], ['Tab', 'Tab'], ['Tab', 'Tab', { shift: true }],
-    ['Equal', '='], ['Minus', '-'], ['NumpadAdd', '+'], ['NumpadSubtract', '-'], ['Digit1', '1'], ['Digit3', '3'], ['Digit5', '5'], ['Digit1', '!', { shift: true }],
-    ['Escape', 'Escape'], ['KeyA', 'a'], ['KeyS', 's'], ['KeyD', 'd'], ['Delete', 'Delete'], ['Backspace', 'Backspace'], ['KeyE', 'e'], ['KeyE', 'E', { shift: true }]
+    ['Equal', '='], ['Minus', '-'], ['NumpadAdd', '+'], ['NumpadSubtract', '-'],
+    ['Digit1', '1'], ['Digit2', '2'], ['Digit3', '3'], ['Digit4', '4'], ['Digit5', '5'], ['Digit6', '6'], ['Digit7', '7'], ['Digit8', '8'], ['Digit9', '9'],
+    ['Digit1', '!', { shift: true }], ['Digit2', '@', { shift: true }], ['Digit3', '#', { shift: true }], ['Digit4', '$', { shift: true }], ['Digit5', '%', { shift: true }],
+    ['Escape', 'Escape'], ['KeyA', 'a'], ['KeyS', 's'], ['KeyD', 'd'], ['Delete', 'Delete'], ['Backspace', 'Backspace'], ['KeyE', 'e'], ['KeyE', 'E', { shift: true }], ['KeyQ', 'q']
   ];
   async function FU3() {
     var base = await freshCopy('FU3');
@@ -863,14 +1581,14 @@
           key(K[0], K[1], K[2]);
           await settle(160);
         } catch (e) { err = String(e && e.message || e); }
-        try { st = await stateRecord({ noFrames: true }); }
+        try { st = await stateRecord({ times: [FM.time] }); }
         finally { FM.clockNow = realClock; }
         closeTransient();
         DUMP.fu3.push({ name: nm, err: err, state: st });
       }
     }
   }
-  /* Back to the fixture copy exactly as saved: reopen it from disk (no re-id, its media hydrated). */
+  /* Back to the fixture copy exactly as saved: reopen it from disk (no re-id, its media hydrated), and the view reset. */
   var BASE_DOC = {};
   async function restoreFrom(pid) {
     closeTransient();
@@ -881,42 +1599,71 @@
     FM.history.reset();
     FM.selectLayer(null);
     if (FM.shortcuts && FM.shortcuts.isOpen && FM.shortcuts.isOpen()) FM.shortcuts.hide();
+    try { if (FM.inspector && FM.inspector.openCategory) { /* the grid, not a card a previous key opened */ } } catch (e) {}
+    await resetView();
   }
 
   /* ═══ FU4: Full in a live session (DESIGN §0.4.5 FU4; §21 F9). The app is the host, a plain engine guest is the friend,
-     on the in-page loopback link. FU2's script runs; what goes on the wire is recorded per step — every batch's ops,
-     canonicalised, UNMASKED (the tool masks them with FU_INVISIBLE and nothing else) — and the guest's document at the
-     end. Presence the host sends is recorded too. ═══════════════════════════════════════════════════════════════════ */
+     on the in-page loopback link. FU2's script runs; EVERYTHING that goes on the wire is recorded per step — every
+     message's whole payload, canonicalised, UNMASKED (the tool masks FU_INVISIBLE's keys and nothing else) — including
+     the host's presence, which is driven once per step on a fixed clock (v1 sent none, so "presence equal except ed" was
+     an empty check), and the media manifest (v1 kept only its type). Then the People menu changes Sam's role, and the
+     guest's document is recorded at the end. ═════════════════════════════════════════════════════════════════════════ */
   async function FU4() {
     await freshCopy('FU4');
-    var s = startSession(false);
-    var out = DUMP.fu4 = { steps: [], guestDoc: null, err: '' };
+    var s = startSession(true);   // with the Labs switch and his profile on, as FU1 leaves them: the Friends block lists Sam with his role button
+    var out = DUMP.fu4 = { steps: [], guestDoc: null, err: '', presence: false };
+    var clk = 1.9e12;
     try {
+      var PZ = s.C.presence;
+      out.presence = !!(PZ && PZ.attached && PZ.attached());
+      if (out.presence && PZ._clock) PZ._clock(function () { return clk; });
       var pump = function () { try { s.S.tick('full'); } catch (e) {} try { s.loop.settle(); } catch (e) {} };
-      pump(); s.sent.length = 0;
-      var rec = []; rec.noFrames = true;
-      await runFU2(fu2Steps(), rec, async function () {
-        pump();
+      var pres = function () { if (!out.presence) return; clk += 5000; try { PZ.tick(); } catch (e) {} };
+      pres(); pump(); s.sent.length = 0;
+      var wire = function () {
+        pres(); pump();
         var msgs = s.sent.splice(0);
         return msgs.map(function (m) {
-          var msg = m.msg || {};
-          if (m.ch === 'pres' || msg.t === 'pr' || msg.t === 'PR') {
-            var p = clone(msg); ['at', 'n', 'ts', 'now', 'seq'].forEach(function (k) { delete p[k]; });
-            return { ch: m.ch, t: msg.t, pres: canon(p, FM.scene.layers) };
-          }
-          if (msg.t === 'b') return { ch: m.ch, t: 'b', ops: canon(msg.ops || [], FM.scene.layers) };
-          return { ch: m.ch, t: msg.t };
+          var msg = clone(m.msg || {});
+          ['at', 'ts', 'now'].forEach(function (k) { delete msg[k]; });
+          return { ch: m.ch, t: msg.t, msg: canon(msg, FM.scene.layers) };
         });
-      });
-      out.steps = rec.map(function (r) { return { name: r.name, err: r.err, wire: r.extra, toasts: r.state.toasts }; });
+      };
+      var rec = []; rec.noFrames = true;
+      await runFU2(fu2Steps(), rec, async function () { return wire(); });
+      /* The People menu's role (DESIGN I8, U.setMemberRole): the cog's Friends block, Sam's role button, Viewer. */
+      step('FU4 the People menu: Sam becomes a Viewer');
+      var role = { name: 'the People menu: Sam becomes a Viewer', err: '', fell: [], surf: {} };
+      CUR_FELL = role.fell; CUR_SURF = role.surf;
+      try {
+        if (s.C.ui && s.C.ui.openPeople) await s.C.ui.openPeople();
+        await settle(400);
+        var rb = firstVisibleSel(['.cs-role']);
+        if (rb) {
+          rb.click(); await settle(200);
+          var it = byText('.ctx-item', /Viewer/);
+          await via('the role menu’s Viewer', it, async function () { s.S.setPeerRole(s.mid, 'viewer'); });
+        } else { fellOnly('Sam’s role button was not in the Friends block'); s.S.setPeerRole(s.mid, 'viewer'); }
+        await settle(300);
+        surface('the Friends block', '#canvas-dialog');
+      } catch (e) { role.err = String(e && e.message || e); }
+      CUR_FELL = null; CUR_SURF = null;
+      role.wire = wire();
+      closeTransient(); await settle(200);
+      rec.push({ name: role.name, err: role.err, fell: role.fell, surf: role.surf, state: { toasts: takeToasts() }, extra: role.wire });
+      if (role.fell.length) DUMP.fell = DUMP.fell.concat(role.fell.map(function (f) { return role.name + ' — ' + f; }));
+      out.steps = rec.map(function (r) { return { name: r.name, err: r.err, fell: r.fell, wire: r.extra, toasts: r.state.toasts }; });
       out.guestDoc = canon(clone({ project: s.gdoc.project, layers: s.gdoc.layers }), s.gdoc.layers);
     } catch (e) { out.err = String(e && e.message || e); }
     finally { await endSession(); }
   }
 
   /* ═══ FU5: documents. Each fixture document through the sanitiser, then the import door (applyScene), a save and an
-     open (load) — the bytes at each stage. SCHEMA_REV / SCHEMA_FP are recorded under their own names (N1: the tool masks
-     them by name, nothing else). ═══════════════════════════════════════════════════════════════════════════════════ */
+     open (load) — the bytes at each stage. Compared with NOTHING masked but N1 (SCHEMA_REV / SCHEMA_FP, recorded under
+     their own names): v1 masked FU_INVISIBLE's layer keys here too, and the review planted a sanitiser that writes `pick`
+     into every layer — it passed. The one document each side builds itself, the FU fixture, is stripped of those keys
+     on the way IN (see INV), so the sanitiser is fed the same bytes on both sides. ════════════════════════════════════ */
   function kitchenDoc() {
     var kf = function (a, b) { return { kf: [{ t: a, v: 0, e: 'linear' }, { t: b, v: 1, e: 'easeIn' }] }; };
     var L = FM.makeLayer('text', { name: 'Kitchen', text: 'Ab', x: 50, y: 50 });
@@ -930,6 +1677,17 @@
     S.id = 'kitchen_2'; S.parent = 'kitchen_1';
     return { project: { name: 'Kitchen', width: 320, height: 240, fps: 30, duration: 8, background: '#000000', markers: [{ t: 1 }] }, layers: [L, S] };
   }
+  function stripInv(doc) {
+    (doc.layers || []).forEach(function (l) {
+      INV.forEach(function (k) {
+        var parts = k.split('.'); if (parts[0] !== 'layer') return;
+        var node = l; for (var i = 1; i < parts.length - 1 && node; i++) node = node[parts[i]];
+        if (node && typeof node === 'object') delete node[parts[parts.length - 1]];
+        if (parts.length > 2 && l[parts[1]] && typeof l[parts[1]] === 'object' && !Object.keys(l[parts[1]]).length) delete l[parts[1]];
+      });
+    });
+    return doc;
+  }
   async function FU5() {
     /* tests.js is injected (never run) for the suite's own fixture documents (kitchen921), and only here, last but one,
        so FU1–FU4 drive an app the suite file has not touched. The same file is used on both sides. */
@@ -939,13 +1697,13 @@
     } catch (e) { DUMP.notes.push('tests.js not injected: ' + e.message); }
     var C = FM.collab || {};
     DUMP.fu5meta = { SCHEMA_REV: C.SCHEMA_REV, SCHEMA_FP: C.SCHEMA_FP };
-    var pid = await freshCopy('FU5');   // first: it aligns the clip colours the documents below are built with
+    var pid = await freshCopy('FU5');
     var docs = [];
     try { if (C.SCHEMA_FIXTURE) docs.push(['SCHEMA_FIXTURE', { project: { name: 'fp', width: 320, height: 240, fps: 30, duration: 4, background: '#000000' }, layers: C.SCHEMA_FIXTURE() }]); } catch (e) { DUMP.errors.push('FU5 SCHEMA_FIXTURE: ' + e.message); }
     try { if (C.DERIVED_FIXTURE) docs.push(['DERIVED_FIXTURE', C.DERIVED_FIXTURE()]); } catch (e) { DUMP.errors.push('FU5 DERIVED_FIXTURE: ' + e.message); }
     try { docs.push(['kitchen', kitchenDoc()]); } catch (e) { DUMP.errors.push('FU5 kitchen: ' + e.message); }
     try { if (w.FMTests && w.FMTests.kit && w.FMTests.kit.kitchen921) for (var sd = 1; sd <= 6; sd++) docs.push(['kitchen921 seed ' + sd, w.FMTests.kit.kitchen921(sd)]); } catch (e) { DUMP.errors.push('FU5 kitchen921: ' + e.message); }
-    try { docs.push(['the FU fixture', JSON.parse(w.localStorage.getItem('fm.proj.' + FIXTURE_ID))]); } catch (e) { DUMP.errors.push('FU5 fixture: ' + e.message); }
+    try { docs.push(['the FU fixture', stripInv(JSON.parse(w.localStorage.getItem('fm.proj.' + FIXTURE_ID)))]); } catch (e) { DUMP.errors.push('FU5 fixture: ' + e.message); }
     for (var i = 0; i < docs.length; i++) {
       var nm = docs[i][0], d = docs[i][1], r = { name: nm, err: '' };
       step('FU5 ' + nm);
@@ -1079,6 +1837,18 @@
     await until('the splash to go', function () { return !D.getElementById('splash'); }, 15000);
     seedRandom(0x980);
     await loadPalette();
+    installColourGuard();
+    var rr = FM.requestRender;
+    FM.requestRender = function () { LAST_RENDER_ASK = performance.now(); return rr.apply(this, arguments); };
+    /* A NATIVE DIALOG WOULD FREEZE THE RUN: alert / confirm / prompt block the page, and the driver's every question then
+       waits for ever (measured 1 Oct: a run went silent for 25 minutes). Each one Full raises is answered here the way a
+       person dismissing it would (OK on an alert, Cancel on a confirm or a prompt) and written into the toasts of the step
+       that raised it, so a new or changed dialog is a difference by name. */
+    ['alert', 'confirm', 'prompt'].forEach(function (k) {
+      w[k] = function (m) { noteToast('[' + k + '] ' + String(m == null ? '' : m).replace(/\s+/g, ' ').slice(0, 300)); return k === 'confirm' ? false : (k === 'prompt' ? null : undefined); };
+    });
+    D.addEventListener('transitionrun', noteMotion, true);
+    D.addEventListener('animationstart', noteMotion, true);
     var st = D.createElement('style'); st.id = 'fu-probe-caret'; st.textContent = '*, *::before, *::after { caret-color: transparent !important; }';
     D.head.appendChild(st);
     var toast = D.getElementById('toast');
@@ -1086,7 +1856,7 @@
       if (!toast.classList.contains('hidden') && toast.textContent) noteToast(toast.textContent.trim());
     }).observe(toast, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     APP_VERSION = String((D.querySelector('.ver') || {}).textContent || '').trim();
-    DUMP.app = { version: APP_VERSION, inner: [w.innerWidth, w.innerHeight], hoverNone: w.matchMedia('(hover: none)').matches, phoneMq: w.matchMedia('(max-width: 700px)').matches };
+    DUMP.app = { version: APP_VERSION, inner: [w.innerWidth, w.innerHeight], hoverNone: w.matchMedia('(hover: none)').matches, phoneMq: w.matchMedia('(max-width: 700px)').matches, touch: w.navigator.maxTouchPoints };
     if (w.innerWidth !== W || w.innerHeight !== H) throw new Error('the app frame is ' + w.innerWidth + '×' + w.innerHeight + ', not ' + W + '×' + H);
     if (PHONE && !DUMP.app.hoverNone) throw new Error('the phone pass is not a phone: (hover: none) does not match inside the app frame');
     await settle(400);
@@ -1098,6 +1868,7 @@
       try { await plan[GROUPS[i]](); }
       catch (e) { DUMP.errors.push(GROUPS[i] + ' stopped at "' + DUMP.step + '": ' + (e && e.message || e)); closeTransient(); await endSession(); }
     }
+    DUMP.colourAligned = COLOUR_STEPS;
     step('done');
   }
   main().then(function () { done(true); }, function (e) {

@@ -1,0 +1,103 @@
+{
+  "_": "THE FULL-UNCHANGED SELF-TEST'S PLANTS (queue 980; DESIGN.md §0.4.5 'The gate, structurally'; the 1 Oct review). Changes Full must never get. tools/full-unchanged.sh plants each one in a COPY of the tree on every run, measures it with the groups and widths named here, and refuses PASS unless each turns the comparison red FOR ITS OWN REASON: a difference line that starts with the width and carries every string in `sig`. A red that names something else is luck, not a catch. One per kind of change the v1 lock missed: a picture margin, a toast word and the split floor (DESIGN's three), and the review's seven categories: a preview-overlay colour, an icon path, a key remap, a touch hold, a UI-route handler, the export path and a sanitiser key. `groups` is always a PREFIX of the probe's order (FU1, FU2, FU3, FU6, FU4, FU5, FU7), so a plant's run reaches its group exactly as the full run did. `old` must appear EXACTLY once in `file` (tests.js '980 FU lock: every self-test plant still lands exactly once' checks it, so a plant cannot rot silently); `append` adds to the end instead.",
+  "plants": [
+    {
+      "name": "margin",
+      "kind": "a 1 px layout move (DESIGN)",
+      "file": "styles.css",
+      "append": "\n/* full-unchanged self-test plant: never shipped */\n#transport { margin-top: 1px !important; }\n",
+      "widths": ["380", "1280"],
+      "groups": "FU1",
+      "sig": ["#transport"]
+    },
+    {
+      "name": "toast",
+      "kind": "one word of a toast (DESIGN)",
+      "file": "js/app.js",
+      "old": "Audio extracted to its own layer — original muted",
+      "new": "Audio extracted to its own layer — the original muted",
+      "widths": ["380"],
+      "groups": "FU1,FU2",
+      "sig": ["extract the audio", "toasts"]
+    },
+    {
+      "name": "floor",
+      "kind": "the split floor moved to 0.1 s (DESIGN; the withdrawn step 1.1.5)",
+      "file": "js/app.js",
+      "old": "if (t <= layer.start + 0.02 || t >= end - 0.02) {",
+      "new": "if (t <= layer.start + 0.1 || t >= end - 0.1) {",
+      "widths": ["380"],
+      "groups": "FU1,FU2",
+      "sig": ["split Clip C 0.05 s from its start"]
+    },
+    {
+      "name": "overlay",
+      "kind": "a preview-overlay colour (review P1: the selection box dashed red)",
+      "file": "styles.css",
+      "append": "\n/* full-unchanged self-test plant: never shipped */\n#select-box { border-style: dashed !important; border-color: #ff3b30 !important; }\n",
+      "widths": ["1280"],
+      "groups": "FU1",
+      "sig": ["#select-box"]
+    },
+    {
+      "name": "icon",
+      "kind": "an icon path (review P12: the phone bin's lid one unit shorter)",
+      "file": "index.html",
+      "old": "<button id=\"m-del\" class=\"m-tbtn\" aria-label=\"Delete layer\"><svg viewBox=\"0 0 24 24\" class=\"m-ico\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 7h16M9 7V5h6v2",
+      "new": "<button id=\"m-del\" class=\"m-tbtn\" aria-label=\"Delete layer\"><svg viewBox=\"0 0 24 24\" class=\"m-ico\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 7h16M9 7V5h5v2",
+      "widths": ["380"],
+      "groups": "FU1",
+      "sig": ["#m-del"]
+    },
+    {
+      "name": "key",
+      "kind": "a key remap (review Q2: 3 with a clip selected opens card 4)",
+      "file": "js/app.js",
+      "old": "if (FM.inspector.openCategoryByIndex(n)) e.preventDefault();",
+      "new": "if (FM.inspector.openCategoryByIndex(n === 3 ? 4 : n)) e.preventDefault();",
+      "widths": ["1280"],
+      "groups": "FU1,FU2,FU3",
+      "sig": ["FU3 \"clip selected · Digit3\""]
+    },
+    {
+      "name": "touch",
+      "kind": "a touch gesture (review P6: the phone clip hold 1.2 s instead of 0.35 s)",
+      "file": "js/timeline.js",
+      "old": "            }, 350);",
+      "new": "            }, 1200);",
+      "widths": ["380"],
+      "groups": "FU1,FU2",
+      "sig": ["drag Clip B along the timeline"]
+    },
+    {
+      "name": "uiroute",
+      "kind": "a UI-route handler (review P11: the Speed card stops scaling keyframes)",
+      "file": "js/inspector.js",
+      "old": "if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);",
+      "new": "if (false && durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);",
+      "widths": ["380"],
+      "groups": "FU1,FU2",
+      "sig": ["speed 2× on Clip A"]
+    },
+    {
+      "name": "export",
+      "kind": "the export path (review P8: exported frames half-desaturated)",
+      "file": "js/exporter.js",
+      "old": "      ctx.globalCompositeOperation = 'source-over';\n      const barFill = (fit && fit.letterboxed && barFillNow) ? barFillNow() : null;",
+      "new": "      ctx.globalCompositeOperation = 'source-over';\n      ctx.filter = 'saturate(0.5)';\n      const barFill = (fit && fit.letterboxed && barFillNow) ? barFillNow() : null;",
+      "widths": ["380"],
+      "groups": "FU1,FU2",
+      "sig": ["export (Export → MP4"]
+    },
+    {
+      "name": "sanitiser",
+      "kind": "a sanitiser key (review S1: every layer gets `pick`)",
+      "file": "js/storage.js",
+      "old": "      if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';\n    }\n  }\n  FM.storage_sanitizeUnsafeValues",
+      "new": "      if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';\n    }\n    l.pick = { b: 'pk0', i: 0 };   // full-unchanged self-test plant: never shipped\n  }\n  FM.storage_sanitizeUnsafeValues",
+      "widths": ["380"],
+      "groups": "FU1,FU2,FU3,FU6,FU4,FU5",
+      "sig": ["FU5", "pick"]
+    }
+  ]
+}

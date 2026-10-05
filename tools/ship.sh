@@ -776,6 +776,20 @@ else
   echo "· no shipped source changed — skipping the phone pass"
 fi
 
+# ─── THE FULL-UNCHANGED GATE AGAIN, ON WHAT IS ABOUT TO BE COMMITTED (queue 980 review, 1 Oct) ───────────────────────
+# The check above ran before prove.sh and both suite passes — about ninety minutes — and `git add -A` below commits
+# whatever the tree holds NOW. This repo runs two sessions and parallel agents on one tree, and an edit made during a ship's
+# suite has been swept into its commit before (the v13.64/65 note above). So the gate is asked again, here, on this exact
+# tree: a Simple change made during the suite either fires a gate that did not fire before, or moves the source hash off
+# the one full-unchanged.sh passed — and is refused either way. What gets committed is a tree the lock measured.
+_FU_MSG2="$(python3 tools/_fu_gate.py check)"; _FU_RC2=$?
+if [ "$_FU_RC2" != 0 ]; then
+  echo "❌ THE TREE CHANGED DURING THE SHIP, and the Full-unchanged gate refuses it now: ${_FU_MSG2#REFUSE: }" | fold -s -w 130 | sed '2,$s/^/   /'
+  echo "   Not committing, not pushing."
+  _WHY="the Full-unchanged gate refused the tree as it stood at commit time"
+  exit 1
+fi
+[ "$_FU_MSG2" = "$_FU_MSG" ] || echo "→ Full unchanged, re-checked at commit time: ${_FU_MSG2}"
 git add -A
 git commit -q -m "$MSG" || { echo "ship: nothing to commit"; exit 1; }
 git push -q ssh main 2>&1 | tail -2

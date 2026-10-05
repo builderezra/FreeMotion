@@ -85,6 +85,15 @@ def ws_url(port, timeout=25):
     raise RuntimeError("Chrome's DevTools endpoint never came up")
 
 
+def _dump_open(path):
+    """queue 980: where --dump writes. A path ending .gz is written gzipped — a full probe record is ~10 MB of JSON, and the
+    lock writes a dozen of them on a disk that ran out mid-run on 1 Oct."""
+    if path.endswith(".gz"):
+        import gzip
+        return gzip.open(path, "wt", encoding="utf-8")
+    return open(path, "w", encoding="utf-8")
+
+
 class CDP:
     def __init__(self, url):
         self.ws = websocket.create_connection(url, timeout=600)
@@ -217,7 +226,7 @@ def main():
         payload = None
         last_seen = ""
         cpu = [1]
-        inp = {"touch_emu": False, "touch_down": False, "mouse_down": False}   # the real-input channel's state across requests (queue 924)
+        inp = {"touch_emu": False, "touch_down": False, "mouse_down": False, "touch_base": False}   # the real-input channel's state across requests (queue 924)
         # WHERE THE TIME GOES, WHILE IT GOES (30 Sep, v17.18). A timeout used to read lastTest ONCE, at the end — and when the
         # page had stopped answering by then it printed `"lastTest": ""`, which says nothing about an hour of suite. So the
         # running test is sampled every ~5 s: the timeout names the last test the page reported and how long it sat on it,
@@ -350,7 +359,9 @@ def main():
                     finally:
                         # touch emulation stays on only while a finger is still down — a test may split one gesture across
                         # two requests (hold, act, then move and lift) — and goes off the moment none is
-                        if inp["touch_emu"] and not inp["touch_down"]:
+                        # …unless the page asked for a PHONE at setup (queue 980's probe): touch emulation is then the device
+                        # itself, on before the app loaded, and switching it off would turn the phone into a narrow PC
+                        if inp["touch_emu"] and not inp["touch_down"] and not inp["touch_base"]:
                             try:
                                 cdp.send("Emulation.setTouchEmulationEnabled", enabled=False)
                             except Exception:
@@ -408,6 +419,8 @@ def main():
                             cdp.send("Page.addScriptToEvaluateOnNewDocument", source=str(q["init"]))
                         if q.get("phone"):
                             cdp.send("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=5)
+                            inp["touch_emu"] = True
+                            inp["touch_base"] = True
                             cdp.send("Emulation.setEmulatedMedia", features=[{"name": "hover", "value": "none"},
                                                                             {"name": "any-hover", "value": "none"},
                                                                             {"name": "pointer", "value": "coarse"},
@@ -472,7 +485,7 @@ def main():
             if a.dump:
                 # queue 980: how far the probe got, for the timeout message (its own __fmDump.step says where it was)
                 try:
-                    with open(a.dump, "w", encoding="utf-8") as fh:
+                    with _dump_open(a.dump) as fh:
                         fh.write(cdp.eval("JSON.stringify({timedOut:true, partial: window.__fmDump || null})") or "null")
                 except Exception:
                     pass
@@ -488,10 +501,10 @@ def main():
             try:
                 dumped = cdp.eval("(function(){try{return JSON.stringify(window.__fmDump===undefined?null:window.__fmDump);}"
                                   "catch(e){return JSON.stringify({dumpError:String(e)});}})()")
-                with open(a.dump, "w", encoding="utf-8") as fh:
+                with _dump_open(a.dump) as fh:
                     fh.write(dumped or "null")
             except Exception as ex:
-                with open(a.dump, "w", encoding="utf-8") as fh:
+                with _dump_open(a.dump) as fh:
                     fh.write(json.dumps({"dumpError": str(ex)[:300]}))
         # queue 996: what each test left in the shared scene (tests.js records it; report only)
         try:
@@ -529,4 +542,14 @@ def main():
 
 
 if __name__ == "__main__":
+    # A SIGTERM IS AN EXIT, SO THE `finally` RUNS (queue 980 review, 1 Oct). Python's default for SIGTERM is to die on the
+    # spot, which skips main()'s finally — Chrome is left running and its fm-cdp- profile (~50 MB) is left in $TMPDIR. A run
+    # in the background cannot be stopped with SIGINT either (a backgrounded child inherits it as ignored), so TERM is how
+    # tools/full-unchanged.sh, ship.sh and a timed-out Bash call stop this — and now it cleans up after itself.
+    import signal
+
+    def _on_term(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _on_term)
     sys.exit(main())

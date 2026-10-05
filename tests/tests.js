@@ -118123,7 +118123,12 @@
     const m = /var KEYS = \[([\s\S]*?)\n  \];/.exec(src);
     if (!m) return null;
     const out = [];
-    m[1].replace(/\['([A-Za-z0-9]+)',\s*'(?:[^'\\]|\\.)*'(?:,\s*\{([^}]*)\})?\]/g, function (_, code, mods) { out.push(code + (mods && /meta/.test(mods) ? '+meta' : '')); return _; });
+    m[1].replace(/\['([A-Za-z0-9]+)',\s*'(?:[^'\\]|\\.)*'(?:,\s*\{([^}]*)\})?\]/g, function (_, code, mods) {
+      // ⌘ combos as `+meta`; a shifted DIGIT as `+shift` too (review of v1: Shift+2/3/4 add Captions / Sketching /
+      // Custom shape and FU3 pressed only Shift+1, so a swapped pair passed)
+      out.push(code + (mods && /meta/.test(mods) ? '+meta' : (mods && /shift/.test(mods) && /^Digit/.test(code) ? '+shift' : '')));
+      return _;
+    });
     return out;
   }
   function fu980Handler(app) {
@@ -118137,7 +118142,13 @@
     h.replace(/e\.code === '([A-Za-z0-9]+)'/g, function (_, c) { want.add(c); return _; });
     h.replace(/mod && \(e\.key === '([a-z])'/g, function (_, k) { want.add('Key' + k.toUpperCase() + '+meta'); return _; });
     if (/e\.code\.indexOf\('Arrow'\) === 0/.test(h)) ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].forEach(function (c) { want.add(c); });
-    if (/\^Digit\[1-9\]\$/.test(h)) want.add('Digit1');
+    /* EVERY digit the handler answers, plain and shifted (review of v1: only Digit1 was demanded, and FU3 pressed 1, 3 and 5,
+       so a 2, 4, 6–9 or Shift+2–4 remap went unseen): the plain range from its own `^Digit[a-b]$`, the shifted ones up to
+       its own `n <= N`. */
+    const dr = /\^Digit\[(\d)-(\d)\]\$/.exec(h);
+    if (dr) for (let d = +dr[1]; d <= +dr[2]; d++) want.add('Digit' + d);
+    const sr = /if \(e\.shiftKey\) \{ if \(n <= (\d)/.exec(h);
+    if (sr) for (let d = 1; d <= +sr[1]; d++) want.add('Digit' + d + '+shift');
     if (/e\.key === '\?'/.test(h)) want.add('Slash');
     if (/e\.code === 'KeyA' \|\| e\.code === 'KeyS' \|\| e\.code === 'KeyD'/.test(h)) ['KeyA', 'KeyS', 'KeyD'].forEach(function (c) { want.add(c); });
     return want;
@@ -118157,31 +118168,89 @@
     const missing = Array.from(want).filter(function (c) { return !have.has(c); });
     if (missing.length) throw new Error('Full’s keydown handler answers ' + missing.join(', ') + ' and the Full-unchanged probe (FU3) never presses it — add it to KEYS in tests/full-unchanged.html');
     if (!have.has('KeyE')) throw new Error('FU3 must press E (Full has no E; DESIGN §0.4.2 B14)');
-    /* POSITIVE CONTROL: a key planted in the handler is seen as missing, so "nothing missing" above is a finding. */
-    const planted = fu980Wanted(h.replace("e.code === 'KeyM'", "e.code === 'KeyQ') {} else if (e.code === 'KeyM'"));
-    if (!planted.has('KeyQ') || have.has('KeyQ')) throw new Error('CONTROL: a planted KeyQ in the handler was not read as a key the probe misses');
+    if (want.size < 40) throw new Error('only ' + want.size + ' keys were read out of the handler (the digits alone are 13) — the reader has gone blind');
+    /* POSITIVE CONTROLS: a key planted in the handler is seen as missing, and so is a shifted digit the probe stops pressing,
+       so "nothing missing" above is a finding. */
+    const planted = fu980Wanted(h.replace("e.code === 'KeyM'", "e.code === 'KeyJ') {} else if (e.code === 'KeyM'"));
+    if (!planted.has('KeyJ') || have.has('KeyJ')) throw new Error('CONTROL: a planted KeyJ in the handler (a key the probe never presses) was not read as a key the probe misses');
+    const fewer = new Set(fu980Keys(probe.replace("['Digit3', '#', { shift: true }], ", '')));
+    if (fewer.has('Digit3+shift') || !want.has('Digit3+shift')) throw new Error('CONTROL: a probe that stops pressing Shift+3 was not read as missing it');
   });
 
-  test('980 FU lock: the three self-test plants still land exactly once in Full’s source, so the lock can still prove it sees (the 1 px margin, the toast word, the split floor)', { item: '980' }, async function () {
-    const cmp = await fetch('tools/_fu_compare.py', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
-    if (!cmp) throw new Error('tools/_fu_compare.py is missing — the Full-unchanged lock (queue 980) has no comparer or self-test');
-    const plants = [];
-    cmp.replace(/'(margin|toast|floor)': \('([^']+)', (None|'((?:[^'\\]|\\.)*)')/g, function (_, kind, file, raw, old) { plants.push({ kind: kind, file: file, old: raw === 'None' ? null : old }); return _; });
-    if (plants.length !== 3) throw new Error('read ' + plants.length + ' self-test plants out of tools/_fu_compare.py, not 3');
+  test('980 FU lock: every self-test plant still lands exactly once in Full’s source, so the lock can still prove it sees (the margin, the toast, the floor, and one of each kind the 1 Oct review slipped past v1)', { item: '980' }, async function () {
+    const raw = await fetch('tools/full-unchanged-plants.json', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    if (!raw) throw new Error('tools/full-unchanged-plants.json is missing — the Full-unchanged lock (queue 980) has no self-test, so a green verdict would mean nothing');
+    const plants = JSON.parse(raw).plants || [];
+    const names = plants.map(function (p) { return p.name; });
+    ['margin', 'toast', 'floor', 'overlay', 'icon', 'key', 'touch', 'uiroute', 'export', 'sanitiser'].forEach(function (n) {
+      if (names.indexOf(n) < 0) throw new Error('the self-test lost its "' + n + '" plant — the lock can no longer prove it sees that kind of change');
+    });
+    const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    const order = ['FU1', 'FU2', 'FU3', 'FU6', 'FU4', 'FU5', 'FU7'];
     for (const p of plants) {
       const src = await fetch(p.file, { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
-      if (!src) throw new Error('the ' + p.kind + ' plant edits ' + p.file + ', which cannot be read');
-      if (p.old === null) { if (p.kind !== 'margin' || !/#transport\s*\{/.test(src)) throw new Error('the margin plant needs #transport styled in ' + p.file); continue; }
-      const n = src.split(p.old).length - 1;
-      if (n !== 1) throw new Error('the ' + p.kind + ' plant’s anchor appears ' + n + ' times in ' + p.file + ' (want 1): ' + p.old + ' — the lock’s self-test would refuse every run; if Full changed here with his yes, move the plant');
+      if (!src) throw new Error('the ' + p.name + ' plant edits ' + p.file + ', which cannot be read');
+      if (p.append != null) {
+        const sel = (/(#[\w-]+)\s*\{/.exec(p.append) || [])[1];
+        const idHome = sel ? (await fetch('index.html', { cache: 'no-store' }).then(function (r) { return r.text(); })) + src : '';
+        if (!sel || idHome.indexOf(sel.slice(1)) < 0) throw new Error('the ' + p.name + ' plant styles ' + sel + ', which Full no longer has');
+      } else {
+        const n = src.split(p.old).length - 1;
+        if (n !== 1) throw new Error('the ' + p.name + ' plant’s anchor appears ' + n + ' times in ' + p.file + ' (want 1): ' + p.old.slice(0, 120) + ' — the lock’s self-test would refuse every run; if Full changed here with his yes, move the plant');
+        if (p.new === p.old) throw new Error('the ' + p.name + ' plant changes nothing');
+      }
+      // a plant is measured with a PREFIX of the probe's group order, or its reference run is not the one it is compared with
+      const gs = String(p.groups || '').split(',');
+      if (gs.join(',') !== order.slice(0, gs.length).join(',')) throw new Error('the ' + p.name + ' plant runs groups ' + p.groups + ', which is not a prefix of ' + order.join(','));
+      // …and the step it is caught BY is still in the probe (FU2's names, FU3's keys)
+      const sig0 = (p.sig || [])[0] || '';
+      if (gs.indexOf('FU2') >= 0 && !/^FU\d/.test(sig0) && sig0.charAt(0) !== '#' && probe.indexOf(sig0) < 0) throw new Error('the step “' + sig0 + '” the ' + p.name + ' plant is caught by is gone from the probe');
     }
-    /* …and the two FU2 steps the plants are caught BY are still in the probe. */
-    const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
-    ['split Clip C 0.05 s from its start', 'split at a clip’s very edge'].forEach(function (s) {
-      if (probe.indexOf(s) < 0 || cmp.indexOf(s) < 0) throw new Error('the step “' + s + '” is gone from the probe or from the comparer’s signatures — a plant can no longer be caught by name');
-    });
+    if (probe.indexOf("var ALL = ['" + order.join("', '") + "'];") < 0) throw new Error('the probe’s group order is not ' + order.join(', ') + ' — the plants’ prefixes no longer line up with it');
     /* CONTROL: the counter really counts — an anchor written twice reads as 2. */
-    if (('a' + plants[1].old + 'b' + plants[1].old).split(plants[1].old).length - 1 !== 2) throw new Error('CONTROL: the anchor counter does not count');
+    const a = plants.filter(function (p) { return p.old; })[0].old;
+    if (('x' + a + 'y' + a).split(a).length - 1 !== 2) throw new Error('CONTROL: the anchor counter does not count');
+  });
+
+  /* The 1 Oct review of the lock: FU2 left out edits DESIGN §0.4.5 lists (a mask, both inserts, the B4/B5 guards, I8's single
+     frame and People-menu role, I9's edge scroll), drove the speed, the Group button and the ◆ through the functions under
+     them, never sent a touch on the phone pass, never ran the exporter, and nothing refused a step that fell back. This keeps
+     each of those in the probe — the failure being guarded is the probe quietly losing a step as Full grows. */
+  function fu980Coverage(probe, cmp) {
+    const missing = [];
+    const need = [
+      ['a mask through the effects browser', 'a mask on Clip C (Effects → + Add Effect → Mask'],
+      ['a template insert', 'insert the FU template (Add → Template)'],
+      ['an element insert', 'insert the FU element (Add → Elements → FU element)'],
+      ['a Follow on a split target (B4)', 'a Follow on a split target'],
+      ['a luma matte on a split source (B4)', 'a luma matte on a split source'],
+      ['Bounce on a camera', 'Bounce on a camera'],
+      ['Bounce across a split (B5)', 'Bounce across a split'],
+      ['the edge scroll (I9)', 'into the edge zone for 12 frames'],
+      ['the single frame (I8)', 'a single frame (Export → Single frame PNG)'],
+      ['a real export', 'export (Export → MP4'],
+      ['the People menu’s role (I8)', 'the People menu: Sam becomes a Viewer'],
+      ['the Speed card’s own box', "fellOnly('the Speed % box"],
+      ['the Group button', "via('the Group button'"],
+      ['the Masking group button', "via('the Masking group button'"],
+      ['the ◆', "via('the Opacity ◆'"],
+      ['a real finger on the phone pass', "t: 'touchStart'"],
+      ['a hover on the PC pass', "t: 'mouseMove'"],
+      ['the preview with its overlays', "shot(name + '~nopv')"]
+    ];
+    need.forEach(function (n) { if (probe.indexOf(n[1]) < 0) missing.push(n[0]); });
+    if (cmp.indexOf("rec.get('fell')") < 0 || cmp.indexOf('FELL BACK') < 0) missing.push('the comparer refusing a step that fell back');
+    return missing;
+  }
+
+  test('980 FU lock: the probe drives every Full edit DESIGN §0.4.5 FU2 lists through Full’s own controls (and a real finger on the phone), and a step that falls back is refused', { item: '980' }, async function () {
+    const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    const cmp = await fetch('tools/_fu_compare.py', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    if (!probe || !cmp) throw new Error('tests/full-unchanged.html or tools/_fu_compare.py is missing — the Full-unchanged lock (queue 980) cannot measure');
+    const missing = fu980Coverage(probe, cmp);
+    if (missing.length) throw new Error('the Full-unchanged probe no longer covers: ' + missing.join('; ') + ' — a change to Full there would pass the lock');
+    /* CONTROL: a probe that lost its mask step is read as missing it. */
+    if (fu980Coverage(probe.split('a mask on Clip C (Effects').join('a rename'), cmp).indexOf('a mask through the effects browser') < 0) throw new Error('CONTROL: a probe without its mask step was not read as missing it');
   });
 
 })();
