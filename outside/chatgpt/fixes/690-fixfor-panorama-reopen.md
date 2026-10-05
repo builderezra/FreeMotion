@@ -6,6 +6,6 @@ The focused `{ item: 'TBD' }` regression now imports both reported panorama size
 
 Changed: `tests/tests.js`, `js/app.js` (comment), `index.html` (app cache 477→478).
 
-Node syntax and diff checks passed. Browser verification is pending because the shared builder's `.ship-in-progress` marker is present; no competing browser job was started.
+Node syntax and diff checks passed. Browser verification remains pending: two focused muted Chromium attempts with the ship lock absent could not bootstrap the app frame (`FM.makeLayer`, `FM.renderScene`, `FM.scene` and other core APIs missing). The regression never reached its assertions, so this is not a product verdict. No further browser retry was started; temporary mute-driver edit was restored.
 
 Local only; no shared Claude checkout edit, push, PR or deployment.

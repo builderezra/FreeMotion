@@ -6,6 +6,6 @@ The export report now decodes the AAC chunks that will enter the MP4 and records
 
 Changed: `js/exporter.js`, `index.html` (exporter cache 186→187), and the focused `{ item: 'TBD' }` regression in `tests/tests.js`. The regression now uses a standalone `AudioBuffer`, stubs the toast, expects about 15 AAC frames and an audible decoded peak in the positive control, and checks a late callback after a zero-chunk export.
 
-Node syntax and diff checks passed. Browser verification is pending because the shared builder's `.ship-in-progress` marker is present; no competing browser job was started.
+Node syntax and diff checks passed. The focused muted Chromium regression later passed (1/1) with the ship lock absent. It checked audible decoded AAC peak and frame count, a zero-chunk MP4 without an audio track, ready-card/report honesty, and the late callback warning. Temporary mute-driver edit was restored.
 
 Local only; no shared Claude checkout edit, push, PR or deployment.
