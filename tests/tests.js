@@ -128252,4 +128252,51 @@
     } finally { FM.media.remove(clip.id); }
   });
 
+  test('690 Pixel Motion paused preview matches its 1080 export smear', { item: 'TBD', budgetMs: 60000 }, function () {
+    const W = 1080, H = 1080, fx = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.motionflow;
+    if (!fx) throw new Error('setup: Pixel Motion kernel is unavailable');
+    const frame = shift => {
+      const cv = offscreen(W, H), g = cv.getContext('2d');
+      g.fillStyle = '#20252d'; g.fillRect(0, 0, W, H);
+      for (let y = 0; y < 18; y++) for (let x = 0; x < 18; x++) {
+        g.fillStyle = ((x * 7 + y * 11) % 4 < 2) ? '#f3cf58' : '#52bad9';
+        g.fillRect(330 + shift + x * 23, 330 + y * 23, 20, 20);
+      }
+      return cv;
+    };
+    const first = frame(0), next = frame(30), params = { style: 0, amount: 0.5, samples: 10, threshold: 0.05, softness: 0.5 };
+    const wasExporting = FM._exporting, wasPlaying = FM.playing;
+    try {
+      FM.playing = false;
+      const render = (exporting, style, id, playing) => {
+        const out = offscreen(W, H), g = out.getContext('2d');
+        FM._exporting = exporting; FM.playing = !!playing;
+        const p = Object.assign({}, params, { style });
+        fx(first, g, W, H, { x: 0, y: 0, w: W, h: H }, p, 0, 0, { id });
+        g.clearRect(0, 0, W, H);
+        const start = performance.now();
+        fx(next, g, W, H, { x: 0, y: 0, w: W, h: H }, p, 1 / 30, 1 / 30, { id });
+        const ms = performance.now() - start;
+        return { data: g.getImageData(0, 0, W, H).data, ms };
+      };
+      const preview = render(false, 0, 'parity-preview'), exported = render(true, 0, 'parity-export');
+      let over = 0, max = 0;
+      for (let i = 0; i < preview.data.length; i++) {
+        const d = Math.abs(preview.data[i] - exported.data[i]);
+        if (d > 2) over++;
+        if (d > max) max = d;
+      }
+      if (over) throw new Error('preview/export differ at ' + over + ' channels (max ' + max + '); 1080 kernel ms/frame ' + preview.ms.toFixed(1) + '/' + exported.ms.toFixed(1));
+      const playing = render(false, 0, 'parity-playing', true);
+      let playbackDelta = 0;
+      for (let i = 0; i < playing.data.length; i++) if (Math.abs(playing.data[i] - exported.data[i]) > 2) playbackDelta++;
+      if (playbackDelta < 500) throw new Error('playing preview no longer uses the measured 480px performance tier');
+      const directionalPreview = render(false, 1, 'parity-directional-preview');
+      const directionalExport = render(true, 1, 'parity-directional-export');
+      for (let i = 0; i < directionalPreview.data.length; i++)
+        if (Math.abs(directionalPreview.data[i] - directionalExport.data[i]) > 2)
+          throw new Error('directional style changed across preview and export');
+    } finally { FM._exporting = wasExporting; FM.playing = wasPlaying; }
+  });
+
 })();

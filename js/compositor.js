@@ -15577,7 +15577,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
 
       // STYLE 0: PIXEL MOTION — per-pixel blur along the local flow vector, at a capped working res
-      const WW = Math.min(FM._exporting ? 720 : 480, W), WH = Math.max(2, Math.round(H * WW / W));
+      // Match export quality while parked. During playback retain the cheaper 480px loop: on a
+      // 1080px moving plate the 720px pass measured ~42ms versus ~23ms at 480px (#1062).
+      const WW = Math.min((FM._exporting || !FM.playing) ? 720 : 480, W), WH = Math.max(2, Math.round(H * WW / W));
       if (!_mfW1) _mfW1 = createCanvas();
       if (_mfW1.width !== WW || _mfW1.height !== WH) { _mfW1.width = WW; _mfW1.height = WH; }
       const wc = _mfW1.getContext('2d', { willReadFrequently: true });
