@@ -8,6 +8,49 @@ window.FM = window.FM || {};
   FM.playing = false;
   FM.loop = false;
 
+  // Shared keyboard boundary for the three settings/create dialogs. The opener remains
+  // clickable (Export and Canvas buttons also close their open dialogs), while the rest
+  // of the page is inert and Tab wraps among controls inside the dialog.
+  FM.modalFocus = function (dialog, opener, initialFocus) {
+    if (!dialog) return function () {};
+    const blocked = [];
+    const leaveOpener = (branch) => {
+      if (!opener || !branch.contains(opener)) { if (!branch.inert) { branch.inert = true; blocked.push(branch); } return; }
+      if (branch === opener) return;
+      Array.from(branch.children).forEach(leaveOpener);
+    };
+    for (let node = dialog; node && node !== document.body; node = node.parentElement) {
+      const parent = node.parentElement;
+      if (!parent) break;
+      Array.from(parent.children).forEach(child => { if (child !== node) leaveOpener(child); });
+    }
+    const priorTabindex = dialog.getAttribute('tabindex');
+    dialog.setAttribute('tabindex', '-1');
+    const controls = () => Array.from(dialog.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'))
+      .filter(el => el.getClientRects().length && !el.closest('[inert]'));
+    const onKey = e => {
+      if (e.key !== 'Tab' || dialog.classList.contains('hidden')) return;
+      const list = controls();
+      if (!list.length) { e.preventDefault(); dialog.focus(); return; }
+      const at = list.indexOf(document.activeElement);
+      if (e.shiftKey && at <= 0) { e.preventDefault(); list[list.length - 1].focus(); }
+      else if (!e.shiftKey && (at < 0 || at === list.length - 1)) { e.preventDefault(); list[0].focus(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    const first = initialFocus && dialog.contains(initialFocus) ? initialFocus : controls()[0] || dialog;
+    first.focus();
+    let released = false;
+    return function () {
+      if (released) return;
+      released = true;
+      document.removeEventListener('keydown', onKey, true);
+      blocked.forEach(el => { el.inert = false; });
+      if (priorTabindex === null) dialog.removeAttribute('tabindex');
+      else dialog.setAttribute('tabindex', priorTabindex);
+      if (opener && opener.isConnected && opener.getClientRects().length) opener.focus();
+    };
+  };
+
   let canvas, ctx, readoutEl, dropHint;
   let renderQueued = false;
   let layerDragIdx = null;
@@ -5779,6 +5822,7 @@ window.FM = window.FM || {};
     }
     return showExportDialogNow();
   }
+  let expModalRelease = null;
   function showExportDialogNow() {
     // Build resolution presets from THIS project's size. "p" = the shorter side (1080p portrait =
     // 1080 wide); value stays a SCALE factor so the exporter math is unchanged. Full first, then
@@ -5880,6 +5924,9 @@ window.FM = window.FM || {};
       FM._expPop = FM.popFrom(card, document.getElementById('btn-export'));
     }
     checkExportAudioSupport();
+    if (expModalRelease) expModalRelease();
+    const expOpener = document.activeElement !== document.body ? document.activeElement : document.getElementById('btn-export');
+    expModalRelease = FM.modalFocus(document.getElementById('export-dialog'), expOpener);
   }
 
   /* ═══ SAY THE EXPORT WILL BE SILENT BEFORE HE RENDERS IT, NOT AFTER (queue 215).
@@ -6015,6 +6062,7 @@ window.FM = window.FM || {};
   function hideExportDialog() {
     if (FM._expPop) { FM._expPop(); FM._expPop = null; }   // or the card keeps `position: fixed` and the button stays lifted
     document.getElementById('export-dialog').classList.add('hidden');
+    if (expModalRelease) { expModalRelease(); expModalRelease = null; }
   }
 
   // Format picker → button label + transparent toggle + GIF note. MP4 can't carry alpha, so the
@@ -8418,6 +8466,7 @@ window.FM = window.FM || {};
     // canvas-size / aspect-ratio dialog (AM-style)
     let cvAspect = '9:16';
     const cvDialog = document.getElementById('canvas-dialog');
+    let cvModalRelease = null;
     const cvClampDim = v => Math.max(16, Math.min(7680, Math.round((parseInt(v, 10) || 16) / 2) * 2));   // even, sane bounds (matches import clamp)
     function cvCompute() {
       if (cvAspect === 'custom') return { w: cvClampDim(document.getElementById('cv-cw').value), h: cvClampDim(document.getElementById('cv-ch').value) };
@@ -8750,6 +8799,9 @@ window.FM = window.FM || {};
         cvWatchWidth(true);
         cvRoleNote();
         cvDialog.classList.remove('hidden');
+        if (cvModalRelease) cvModalRelease();
+        const cvOpener = o.from || (document.activeElement !== document.body ? document.activeElement : null) || document.getElementById('btn-settings');
+        cvModalRelease = FM.modalFocus(cvDialog, cvOpener);
       };
       /* ONE CLOSE for every way out (queue 945) — backdrop, Cancel, Apply, App settings…, and through Cancel the cog's second
          tap, #btn-canvas's and Escape. Each used to do its own three steps; now each also lands a flight, empties the
@@ -8761,6 +8813,7 @@ window.FM = window.FM || {};
         cvSrc = null; cvDialog.classList.remove('cv-side');
         (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         cvDialog.classList.add('hidden');
+        if (cvModalRelease) { cvModalRelease(); cvModalRelease = null; }
       };
       FM.closeCanvasDialog = cvClose;
       /* #978 review: THE SWITCH IN THE PAIR MOVES THE BUTTON IT HANGS FROM. On a PC the Friends block holds the only Work

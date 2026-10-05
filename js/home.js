@@ -3039,6 +3039,7 @@ window.FM = window.FM || {};
      these nodes — nothing he typed. */
   const NP_FX_MS = 640;
   let npFx = null;   // the entrance of the card on screen: { anims, orbAnims, nodes, timer, O, orb, orbPaint }
+  let npModalRelease = null;
   function npFxReduced() {
     try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
   }
@@ -3138,6 +3139,7 @@ window.FM = window.FM || {};
   function npDismiss() {
     const dlg = document.getElementById('hm-dialog');
     if (dlg && !dlg.classList.contains('hidden')) dlg.classList.add('hidden');
+    if (npModalRelease) { npModalRelease(); npModalRelease = null; }
   }
 
   /* queue 991 — THE SUGGESTED NAME GETS OUT OF HIS WAY. Ezra, 29 Sep: *"On mobile when naming a project you have to delete
@@ -3187,6 +3189,8 @@ window.FM = window.FM || {};
     npUpdate();
     dlg.classList.remove('hidden');
     npEntrance(dlg, orb, orbRect);   // queue 947: the +'s own entrance, the ripple he picked
+    if (npModalRelease) npModalRelease();
+    npModalRelease = FM.modalFocus(dlg, orb, dlg);
     // Focus the name field on a real keyboard only. On a phone, auto-focus throws the software
     // keyboard up the instant the dialog opens and pushes Create/Cancel off the visual viewport
     // (measured: a 667pt screen leaves ~380pt, the card is ~550pt) — the name already has a sane
@@ -3200,6 +3204,7 @@ window.FM = window.FM || {};
     const s = npCompute(), fps = npFps();
     try { localStorage.setItem(NEWP_KEY, JSON.stringify({ aspect: npAspect, res: npEl('hm-new-res').value, fps: fps, bg: npBg, w: s.w, h: s.h })); } catch (e) {}
     dlg.classList.add('hidden');
+    if (npModalRelease) { npModalRelease(); npModalRelease = null; }
     if (!(await leaveOk())) return;   // #967 B3: New project is another project too — Stay leaves him on Home
     /* ⚠️ queue 690 (HUNT-a): A TILE IS A PROMISE. Only Custom says Auto adjusts (his words, #659); the other five
        name a shape and a size, and he picked one. The first clip or photo used to replace that size with the
@@ -3319,6 +3324,7 @@ window.FM = window.FM || {};
       if (window.MutationObserver) new MutationObserver(() => {
         const d = document.getElementById('hm-dialog');
         if (npFx && d && d.classList.contains('hidden')) npFxClear();
+        if (npModalRelease && d && d.classList.contains('hidden')) { npModalRelease(); npModalRelease = null; }
       }).observe(document.getElementById('hm-dialog'), { attributes: true, attributeFilter: ['class'] });
       // new-project dialog wiring
       const dlg = document.getElementById('hm-dialog');
@@ -3437,6 +3443,7 @@ window.FM = window.FM || {};
       if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
       const push = !!(opts && opts.push) && !root.classList.contains('hidden');
       document.getElementById('hm-dialog').classList.add('hidden');
+      if (npModalRelease) { npModalRelease(); npModalRelease = null; }
       document.body.classList.remove('home-open');
       if (push) {
         // `closing` makes isOpen() report false for the length of the push, so nothing downstream can

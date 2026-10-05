@@ -58755,6 +58755,32 @@
     }
   });
 
+  test('Export traps keyboard focus and returns it to its opener (batch2 1b.10)', { item: 'TBD' }, async function () {
+    var dialog = document.getElementById('export-dialog'), opener = document.getElementById('btn-export');
+    var other = document.getElementById('btn-canvas');
+    if (!dialog || !opener || !other || !FM.showExportDialog) throw new Error('Export focus test setup is missing');
+    if (!dialog.classList.contains('hidden')) document.getElementById('exp-cancel').click();
+    opener.focus();
+    try {
+      await FM.showExportDialog();
+      if (dialog.classList.contains('hidden')) throw new Error('Export dialog did not open');
+      if (!dialog.contains(document.activeElement)) throw new Error('focus stayed behind the Export dialog');
+      if (!other.closest('[inert]')) throw new Error('other editor controls remain interactive behind Export');
+      var focusable = Array.from(dialog.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'))
+        .filter(function (el) { return el.getClientRects().length; });
+      if (focusable.length < 2) throw new Error('Export has too few controls to prove a Tab trap');
+      focusable[0].focus();
+      var backwards = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+      focusable[0].dispatchEvent(backwards);
+      if (!backwards.defaultPrevented || document.activeElement !== focusable[focusable.length - 1]) throw new Error('Shift+Tab escaped instead of wrapping to the last control');
+      document.getElementById('exp-cancel').click();
+      if (document.activeElement !== opener) throw new Error('closing Export did not return focus to its opener');
+      if (other.closest('[inert]')) throw new Error('editor controls stayed inert after Export closed');
+    } finally {
+      if (!dialog.classList.contains('hidden')) document.getElementById('exp-cancel').click();
+    }
+  });
+
   test('export ready: the file is handed over on Save, not flung at you when the render ends', { item: 'export-ready-card' }, async function () {
     if (typeof FM._showExportReady !== 'function') throw new Error('FM._showExportReady is missing — the export-ready card has no testable seam');
     var overlay = document.getElementById('export-ready');
