@@ -253,7 +253,7 @@ if [ "$MODE" = selftest-port ]; then
   done
   exit "$bad"
 fi
-if [ "$MODE" = run ] && ! "$ROOT/tools/full-unchanged.sh" --selftest-port >/dev/null 2>&1; then
+if [ "$MODE" = run ] && ! FU_KEEP= FU_SELF_COPY= "$ROOT/tools/full-unchanged.sh" --selftest-port >/dev/null 2>&1; then
   say "❌ the port self-test failed (tools/full-unchanged.sh --selftest-port): two runs at once would not each get their own server — no PASS"; exit 2
 fi
 start_server || exit 2

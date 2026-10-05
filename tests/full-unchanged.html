@@ -989,7 +989,13 @@
     return A;
   }
   function clone(v) { return JSON.parse(JSON.stringify(v)); }
-  function startSession(withUi) {
+  /* THE SESSION'S CLOCK IS THE PROBE'S (6 Oct). The host sends its document checksum (`hash`) when 2 s have passed since
+     the last batch and 10 s since the last checksum — by Date.now(), so whether a step's wire held one was how long that
+     step took on this machine. In FU4 both engines (and the presence layer) run on this clock instead: it moves only when the probe moves it (FU4 moves
+     it 5 s per step, with the presence clock), and a tick at the same instant sends nothing a tick before it did not. */
+  var SESS_CLK = { t: 1.9e12 };
+  function sessNow() { return SESS_CLK.t; }
+  function startSession(withUi, clocked) {
     var C = FM.collab;
     if (!C || !C.share || !C.link || !C.Session || !C.bridge) throw new Error('FM.collab is missing pieces (share/link/Session/bridge)');
     if (withUi) {
@@ -998,7 +1004,8 @@
       if (C.ui && C.ui.setProfile) C.ui.setProfile('Ezra', C.ui.PALETTE ? C.ui.PALETTE[0] : '#a3e635');
     }
     C.bridge._quiet();
-    var S = C.share({ autoTick: false, ownerInfo: { name: 'Ezra', color: '#ff8800' } });
+    SESS_CLK.t = 1.9e12;
+    var S = C.share({ autoTick: false, ownerInfo: { name: 'Ezra', color: '#ff8800' }, now: clocked ? sessNow : undefined });
     var sent = [];
     var gdoc = clone({ project: S.base.project, layers: S.base.layers });
     var A = plainAdapter(gdoc, C.bridge.invariants());
@@ -1006,7 +1013,7 @@
     var orig = loop.a.send;
     loop.a.send = function (ch, msg) { sent.push({ ch: ch, msg: clone(msg) }); return orig.call(loop.a, ch, msg); };
     var mid = S.addPeer(loop.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
-    var G = C.Session({ adapter: A, role: 'editor', mid: mid, base: clone(gdoc), epoch: S.epoch });
+    var G = C.Session({ adapter: A, role: 'editor', mid: mid, base: clone(gdoc), epoch: S.epoch, now: clocked ? sessNow : undefined });
     G.setLink(loop.b);
     G.bs = S.host.seq;
     SESS = { C: C, S: S, G: G, loop: loop, mid: mid, sent: sent, gdoc: gdoc };
@@ -1779,20 +1786,34 @@
      guest's document is recorded at the end. ═════════════════════════════════════════════════════════════════════════ */
   async function FU4() {
     await freshCopy('FU4');
-    var s = startSession(true);   // with the Labs switch and his profile on, as FU1 leaves them: the Friends block lists Sam with his role button
+    var s = startSession(true, true);   // on the probe's clock; with the Labs switch and his profile on, as FU1 leaves them: the Friends block lists Sam with his role button
     var out = DUMP.fu4 = { steps: [], guestDoc: null, err: '', presence: false };
-    var clk = 1.9e12;
     try {
       var PZ = s.C.presence;
       out.presence = !!(PZ && PZ.attached && PZ.attached());
-      if (out.presence && PZ._clock) PZ._clock(function () { return clk; });
+      if (out.presence && PZ._clock) PZ._clock(sessNow);
       var pump = function () { try { s.S.tick('full'); } catch (e) {} try { s.loop.settle(); } catch (e) {} };
-      var pres = function () { if (!out.presence) return; clk += 5000; try { PZ.tick(); } catch (e) {} };
+      var pres = function () { SESS_CLK.t += 5000; if (!out.presence) return; try { PZ.tick(); } catch (e) {} };
       pres(); pump(); s.sent.length = 0;
-      var wire = function () {
+      /* EVERYTHING A STEP SENDS, AND ONLY WHAT IT SENDS (measured 6 Oct, HEAD against the same app at 380): the media
+         manifest (`mf`) goes out from the media layer's reconcile, which awaits IndexedDB and runs on a wall-clock sweep
+         — so after "Replace" it fell inside that step's window on one run and in the next step's on the other. So each
+         step ends with one whole reconcile, awaited, and the wire is read only once nothing new has gone out for three
+         readings in a row. And within a step, each KIND of message keeps its own order while the kinds are not
+         interleaved by arrival (a stable sort by channel and type): the tx stream is compared in order, as DESIGN says;
+         whether a manifest left before or after a batch in the same step is the machine's speed. */
+      var media = s.C.media;
+      var wire = async function () {
         pres(); pump();
-        var msgs = s.sent.splice(0);
-        return msgs.map(function (m) {
+        try { if (media && media._reconcile) await media._reconcile(s.S); } catch (e) {}
+        var n = -1, same = 0, t0 = Date.now();
+        while (same < 3 && Date.now() - t0 < 4000) {
+          await sleep(100); pump();
+          if (s.sent.length === n) same++; else { same = 0; n = s.sent.length; }
+        }
+        var msgs = s.sent.splice(0).map(function (m, i) { return { m: m, i: i, k: String(m.ch) + ' ' + String((m.msg || {}).t) }; });
+        msgs.sort(function (a, b) { return a.k < b.k ? -1 : a.k > b.k ? 1 : a.i - b.i; });
+        return msgs.map(function (x) { return x.m; }).map(function (m) {
           var msg = clone(m.msg || {});
           ['at', 'ts', 'now'].forEach(function (k) { delete msg[k]; });
           /* The host's document checksum (`hash`'s `h`) is a hash OVER the ids, which are random and timed on every run, so
@@ -1821,7 +1842,7 @@
         surface('the Friends block', '#canvas-dialog');
       } catch (e) { role.err = String(e && e.message || e); }
       CUR_FELL = null; CUR_SURF = null;
-      role.wire = wire();
+      role.wire = await wire();
       closeTransient(); await settle(200);
       rec.push({ name: role.name, err: role.err, fell: role.fell, surf: role.surf, state: { toasts: takeToasts() }, extra: role.wire });
       if (role.fell.length) DUMP.fell = DUMP.fell.concat(role.fell.map(function (f) { return role.name + ' — ' + f; }));
