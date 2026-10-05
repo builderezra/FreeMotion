@@ -122019,4 +122019,30 @@
       if (Math.abs(end(M) - R3.trackEnd) > 1e-9 || !(M.sm && M.sm.tail)) throw new Error('the watermark added in Full after adoption was not tagged and fitted: it ends at ' + end(M) + ', the clips at ' + R3.trackEnd + ', sm ' + JSON.stringify(M.sm || null));
     });
   });
+
+
+  /* ═══ SIMPLE MODE, PHASE 2 RELEASE 2.2 — REVIEW FIXES (p2-confirmed findings left for 2.2). Each test fails on bda3802e by
+     what happens, not by a missing name. ═══════════════════════════════════════════════════════════════════════════════ */
+  test('simple P2.2 · review Lift off on a main block (a clip grouped in Full with a group look) refuses with Open in Full and moves nothing (DESIGN §8.5 Block row, §9.1)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => {
+      const A = smV('A', 0, 4, W, H, { sm: { main: true } }), B = smV('B', 4, 4, W, H, { sm: { main: true } }), C = smV('C', 8, 4, W, H, { sm: { main: true } });
+      const G = FM.makeLayer('group', { name: 'G', x: 0, y: 0, start: 4, duration: 4 });
+      G.transform.opacity = 0.8;                       // a group fade in Full: the group composites as one piece, a block
+      B.parent = G.id;
+      return [C, G, B, A];
+    }, async function (v) {
+      const G = v.L('G'), C = v.L('C');
+      if (!FM.spine.read(FM.scene).isMain(G.id)) throw new Error('CONTROL: the grouped clip is not a main block');
+      const doc0 = v.doc(), n0 = v.steps();
+      const ok = await FM.spine.cmd.lift(G.id); await v.idle();
+      if (ok !== false || C.start !== 8 || v.doc() !== doc0 || v.steps() !== n0)
+        throw new Error('Lift off on a main block wrote something: C at ' + C.start + ', the block still main: ' + FM.spine.read(FM.scene).isMain(G.id) + ', ' + (v.steps() - n0) + ' step(s)');
+      if (!/Open in Full/.test(v.say()) || !Array.from(document.querySelectorAll('#sm-say .sm-say-b')).some(b => /Open in Full/.test(b.textContent)))
+        throw new Error('the refusal has no Open in Full: “' + v.say() + '”');
+      /* CONTROL: a plain main clip still lifts off, and the block closes up under it as one piece */
+      const okA = await FM.spine.cmd.lift(v.L('A').id); await v.idle();
+      if (!okA || G.start !== 0 || v.L('B').start !== 0 || C.start !== 4) throw new Error('CONTROL: Lift off on clip A did not close the block up as one piece: G ' + G.start + ', B ' + v.L('B').start + ', C ' + C.start + ' (it said “' + v.say() + '”)');
+    }, { project: { sm: { adopted: true, v: 1 } } });
+  });
 })();

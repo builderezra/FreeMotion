@@ -777,7 +777,7 @@ window.FM = window.FM || {};
       case 'cutShort': text = line('cutShort', o.name); buttons = [full]; break;
       case 'insertFade': text = line('insertFade', o.a, o.b); break;   // 2.2: the two clip numbers (DESIGN §3.11)
       default: text = line(kind) || line('failed');
-        if (kind === 'splitBlock' || kind === 'trimBlock') buttons = [full];
+        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock') buttons = [full];
     }
     S.say(text, { buttons: buttons, refusal: kind, ids: o.ids });
     S.lastRefusal = kind;
@@ -1125,6 +1125,9 @@ window.FM = window.FM || {};
     const map = byIdMap(), i = mainIdx(R, id);
     if (i < 0) return refusePlan('gone');
     const c = R.main[i], p = R.main[i - 1] || null, n = R.main[i + 1] || null, L = map.get(c.id);
+    /* a main block (§8.5 Block row: Open in Full · Duplicate · 🗑): sm.main lives on its members, never on the group row, so
+       clearing the group's flag left the block main while the clips after it slid under it (review finding 0) */
+    if (L.type === 'group') return refusePlan('liftBlock');
     if ((n && n.seam && n.seam.kind === 'blend') || (p && c.seam && c.seam.kind === 'blend')) return refusePlan('sortFade');
     const rb = riderBlock(R, c.start, map); if (rb) return refusePlan(rb.kind, rb);
     const plan = newPlan('Lift off');
