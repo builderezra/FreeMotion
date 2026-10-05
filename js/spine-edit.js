@@ -272,7 +272,8 @@ window.FM = window.FM || {};
      post run after the moves. `touched` is every unit the lock rule (D7) and the lease rule look at. */
   function newPlan(label) {
     return { label: label, moves: new Map(), lands: new Map(), keyless: new Set(), removes: new Set(), touched: new Set(),
-             resized: new Set(), writes: [], pre: [], post: [], arranges: true, adopts: true, time: null, live: null, say: null, sayButtons: null, counts: {} };
+             resized: new Set(), writes: [], pre: [], post: [], arranges: true, adopts: true, time: null, live: null, say: null, sayButtons: null, counts: {},
+             mints: false };   // mints: the plan made a new media record ({noSave}), so the runner saves its file at once
   }
   function addMove(p, id, d) { p.moves.set(id, (p.moves.get(id) || 0) + d); p.touched.add(id); }
   function addLand(p, id, t) { p.lands.set(id, t); p.touched.add(id); }
@@ -635,6 +636,7 @@ window.FM = window.FM || {};
       const dupId = await FM.duplicateLayer(L.id, false, { noSave: true });
       const dup = dupId && FM.layerById(FM.scene, dupId);
       if (!dup) throw new Error('duplicate refused');
+      plan.mints = true;
       S.setFlag(dup, 'main', true);                         // put back after onCopy stripped it: the one route that does (§12.2)
       const d = target - (+dup.start || 0); dup.start = target; S.shiftKeys(dup, d);
       for (const t of twins) {
@@ -844,6 +846,10 @@ window.FM = window.FM || {};
       FM.refreshAll();
       if (plan.time != null && !FM.playing) { const P = FM.scene.project; FM.time = Math.max(0, Math.min(P.duration || 0, plan.time)); if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead(); }
       FM.history.commit({ label: label, ed: 's', arr: gated });
+      /* a new media record (a duplicate's copy) is written NOW, not on the 600 ms autosave: a hide flush cancels that and writes
+         the document only, so the copy came back blank (queue 681). Saved after the commit, so the finished document is what
+         lands — the reason for {noSave} (nothing un-rippled on disk mid-run) still holds. */
+      if (plan.mints && FM.storage && FM.storage.save) FM.storage.save();
       if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync();
       speakDone(plan, notes);
       return true;

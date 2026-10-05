@@ -121545,4 +121545,25 @@
       if (seamOf('N', v) !== 'blend 1') throw new Error('CONTROL: the crossfade did not survive a head trim to twice its length: ' + seamOf('N', v));
     });
   });
+
+  test('simple P2.1 · review a clip duplicated in Simple has its footage on disk at once: locking the phone straight after cannot bring the copy back blank (queue 681)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const png = await new Promise(res => { const c = offscreen(320, 240), x = c.getContext('2d'); x.fillStyle = '#f0f'; x.fillRect(0, 0, 320, 240); c.toBlob(b => res(new File([b], 'dup.png', { type: 'image/png' })), 'image/png'); });
+    const img = await FM.loadImageFile(png);
+    await smP2((W, H) => [(() => { const l = FM.makeLayer('image', { name: 'P', x: W / 2, y: H / 2, start: 0, duration: 4 }); l.srcW = W; l.srcH = H; l.srcRev = 0; return l; })()], async function (v) {
+      await FM.storage.settled();
+      const P = v.L('P');
+      if (!(await FM.spine.cmd.duplicate(P.id))) throw new Error('the duplicate was refused: “' + v.say() + '”');
+      const dupId = FM.scene.selectedId;
+      if (!dupId || dupId === P.id || !FM.media.get(dupId)) throw new Error('CONTROL: no copy with footage was made');
+      FM.storage.flushSync();                          // what visibilitychange → hidden does: the document only, the pending save cancelled
+      await FM.storage.settled();
+      if (!(await FM.storage.readMedia(dupId))) throw new Error('the copy’s footage was never written: after a hide flush the project reopens with the copy blank');
+      /* CONTROL: Full's own duplicate, through the same flush, is on disk — so this check can see a saved file */
+      FM.editor.apply('full', { force: true, quiet: true });
+      const fullId = await FM.duplicateLayer(P.id);
+      FM.storage.flushSync(); await FM.storage.settled();
+      if (!fullId || !(await FM.storage.readMedia(fullId))) throw new Error('CONTROL: Full’s duplicate is not on disk either — the check cannot tell');
+    }, { media: [{ name: 'P', rec: img }] });
+  });
 })();
