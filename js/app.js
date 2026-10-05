@@ -6409,23 +6409,18 @@ window.FM = window.FM || {};
       /* outW/outH go to ALL THREE (queue 690). They used to reach the MP4 only, so a Custom size typed
          for a GIF or PNG frames — boxes on screen, no warning — came out at the project size. */
       if (fmt === 'gif') {
-        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, outW, outH, onProgress });
+        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, outW, outH, onProgress,
+                                   onReady: showExportReady });
       } else if (fmt === 'frames') {
-        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress });
+        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress,
+                                      onReady: showExportReady });
       } else {
         await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress, onNote,
                                 onReady: showExportReady });
       }
-      /* The MP4 path now ends on its own card, which has already said what happened and hidden the
-       * progress overlay — repeating "saved to your Downloads" behind it would be a second, and often
-       * wrong, answer (it may have gone to Photos, or been discarded). Every other format still
-       * downloads straight away and still gets told so. (queue 141 part 4) */
-      if (fmt !== 'mp4') {
-        status.textContent = 'Done — saved to your Downloads.';
-        setTimeout(() => overlay.classList.add('hidden'), 900);
-      } else {
-        overlay.classList.add('hidden');
-      }
+      // Every picture format now uses the ready card; it alone knows whether Save shared,
+      // downloaded, was cancelled, or was discarded.
+      overlay.classList.add('hidden');
     } catch (e) {
       overlay.classList.add('hidden');
       if (e.message === 'NO_WEBCODECS') alert('Export needs the WebCodecs video encoder. Please open FreeMotion in Google Chrome.');
@@ -6505,7 +6500,9 @@ window.FM = window.FM || {};
         // decode fell through to 'no soundtrack' — the same words a project with no audio gets.
         'all-unreadable': 'none of the audio clips could be read',
       };
-      const sound = out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
+      const sound = out.kind === 'gif' ? 'GIF has no soundtrack'
+                  : out.kind === 'frames' ? 'PNG frames have no soundtrack'
+                  : out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
                   : out.hasAudio ? 'Sound ✓'
                   : 'no soundtrack';
       document.getElementById('xr-meta').textContent =

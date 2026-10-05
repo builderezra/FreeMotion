@@ -52,7 +52,7 @@ window.FM = window.FM || {};
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
-  // Hand the finished MP4 to the OS share sheet where we can (Save to Photos / AirDrop / send straight
+  // Hand a finished export to the OS share sheet where we can (Save to Photos / AirDrop / send straight
   // to an app) — on a phone an <a download> lands the file somewhere awkward, and this IS a mobile-first
   // PWA. Falls back to the plain download whenever sharing isn't available or isn't permitted:
   //   • no Web Share for files (desktop Firefox/Chrome, older Safari) → canShare() is false
@@ -60,13 +60,14 @@ window.FM = window.FM || {};
   //     it → share() rejects with NotAllowedError, so we quietly download instead
   // AbortError is the one case we do NOT fall back on: the user saw the sheet and dismissed it, so
   // silently downloading anyway would be the opposite of what they asked for.
-  // Takes the finished file as a BLOB (see createMp4Sink). It used to take the muxer's ArrayBuffer and
-  // do `new Blob([buffer])` here, which meant that at the moment of delivery the whole movie existed
-  // TWICE — once on the JS heap, once in blob storage. A blob in, a blob out: no copy. (#47)
+  // Takes the finished file as a BLOB. The MP4 path used to pass the muxer's ArrayBuffer and
+  // copy the whole movie into another Blob; a blob in, a blob out avoids that second copy. (#47)
   async function deliver(blob, name) {
     let file = null;
-    try { file = new File([blob], name, { type: 'video/mp4' }); } catch (e) {}
-    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { file = new File([blob], name, { type: blob.type || 'video/mp4' }); } catch (e) {}
+    let canShare = false;
+    try { canShare = !!(file && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) {}
+    if (canShare) {
       try { await navigator.share({ files: [file], title: name }); return 'shared'; }
       catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
     }
@@ -1737,8 +1738,8 @@ window.FM = window.FM || {};
        * nothing on the web can write to a camera roll without the sheet. `save` is the same deliver()
        * this line always called, handed over as a closure so the caller does not need the blob's
        * plumbing and cannot deliver something else by mistake.
-       * Absent, the behaviour is exactly what it was, which is what keeps the GIF and PNG paths and
-       * every existing test on the old road. */
+       * Absent, the MP4 behaviour is exactly what it was; the GIF and PNG paths now have the
+       * same optional ready-card route while direct exporter calls still download. */
       const outBlob = sink.finish();
       const outName = (opts.name || 'freemotion-export') + '.mp4';
       if (typeof opts.onReady === 'function') {
@@ -1918,6 +1919,7 @@ window.FM = window.FM || {};
 
       const transparent = !!opts.transparent;
       FM._exporting = true;   // skip the compositor's preview-only hold-frame capture (#13,#22)
+      let readyFile = null;
       let releaseVideos = null, stutterSampler = exportStutterSampler(FM.media, scene),
         warpSampler = exportTimeWarpSampler(FM.media, scene);
       try {
@@ -1948,7 +1950,9 @@ window.FM = window.FM || {};
           await nextTick();   // yield so the Cancel tap can land between frames (throttle-proof — see nextTick)
         }
         const blob = gif.finish();
-        download(blob, (opts.name || 'freemotion-export') + '.gif');
+        const name = (opts.name || 'freemotion-export') + '.gif';
+        readyFile = { blob, name, poster: outCanvas, width: outW, height: outH, fps,
+          seconds: Math.max(0, end - start), kind: 'gif', save: () => deliver(blob, name) };
       } finally {
         if (stutterSampler) stutterSampler.dispose();
         if (warpSampler) warpSampler.dispose();
@@ -1957,6 +1961,9 @@ window.FM = window.FM || {};
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;
       }
+      // Release render caches before a ready card waits for the next user gesture.
+      if (typeof opts.onReady === 'function') await opts.onReady(readyFile);
+      else download(readyFile.blob, readyFile.name);
     },
 
     // PNG image sequence zipped via FM.zipWrite (store-only). Same frame loop; each frame is a PNG (with
@@ -2004,6 +2011,7 @@ window.FM = window.FM || {};
 
       const transparent = !!opts.transparent;
       FM._exporting = true;
+      let readyFile = null;
       let releaseVideos = null, stutterSampler = exportStutterSampler(FM.media, scene),
         warpSampler = exportTimeWarpSampler(FM.media, scene);
       try {
@@ -2029,7 +2037,9 @@ window.FM = window.FM || {};
           if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, 'frames');
         }
         const zipBlob = zip.finish();
-        download(zipBlob, base + '_frames.zip');
+        const name = base + '_frames.zip';
+        readyFile = { blob: zipBlob, name, poster: outCanvas, width: outW, height: outH, fps,
+          seconds: Math.max(0, end - start), kind: 'frames', save: () => deliver(zipBlob, name) };
       } finally {
         if (stutterSampler) stutterSampler.dispose();
         if (warpSampler) warpSampler.dispose();
@@ -2038,6 +2048,8 @@ window.FM = window.FM || {};
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;
       }
+      if (typeof opts.onReady === 'function') await opts.onReady(readyFile);
+      else download(readyFile.blob, readyFile.name);
     },
   };
 })(window.FM);

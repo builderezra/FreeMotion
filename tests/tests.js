@@ -91898,6 +91898,8 @@
       if (!row || row.classList.contains('hidden') || !row.getBoundingClientRect().height) throw new Error('CONTROL: the Custom size row is not on screen for ' + fmt + ', so the dialog never offered it');
       $('exp-go').click();
       const t0 = Date.now();
+      while ($('export-ready').classList.contains('hidden') && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 40));
+      if (!$('export-ready').classList.contains('hidden')) $('xr-save').click();
       while (!dl.files.length && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 40));
       const f = dl.files[0];
       if (!f || !f.blob) throw new Error('setup: the ' + fmt + ' export handed nothing to the download link');
@@ -127087,6 +127089,46 @@
       if (C.comments._relativeTime(hostNow - 10 * 60000) !== '10 min ago') throw new Error('an older host-stamped comment has the wrong age');
     } finally {
       C.session = priorSession; C.active = priorActive;
+    }
+  });
+
+  test('TBD: GIF and PNG-frame exports reach the ready card and share with their real file types', { item: 'TBD', budgetMs: 30000 }, async function () {
+    if (!FM.exporter || !FM.gifEncoder || !FM.zipWrite || !FM._runExport)
+      throw new Error('setup: image export paths are unavailable');
+    const saved = FM.scene, nav = navigator;
+    const fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
+    const resEl = document.getElementById('exp-res'), ready = document.getElementById('export-ready');
+    const save = document.getElementById('xr-save'), discard = document.getElementById('xr-discard');
+    const old = { fmt: fmtEl.value, range: rangeEl.value, res: resEl.value,
+      canShare: Object.getOwnPropertyDescriptor(nav, 'canShare'), share: Object.getOwnPropertyDescriptor(nav, 'share') };
+    const shared = [];
+    let prefs = null; try { prefs = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const box = FM.makeLayer('shape', { name: 'share image', shape: 'rect', x: 16, y: 16, shapeW: 12, shapeH: 12, fill: '#36b7ca', start: 0, duration: 0.1 });
+      FM.scene = scene([box], { project: { width: 32, height: 32, fps: 10, duration: 0.1, background: '#101820' } });
+      FM.selectLayer(null); FM.refreshAll();
+      Object.defineProperty(nav, 'canShare', { configurable: true, value: () => true });
+      Object.defineProperty(nav, 'share', { configurable: true, value: data => { shared.push(data); return Promise.resolve(); } });
+      rangeEl.value = 'whole'; resEl.value = '1'; FM._setExportSoloId(null);
+      for (const [fmt, ext, mime] of [['gif', '.gif', 'image/gif'], ['frames', '.zip', 'application/zip']]) {
+        fmtEl.value = fmt; fmtEl.dispatchEvent(new Event('change'));
+        const run = FM._runExport(), deadline = Date.now() + 15000;
+        while (ready.classList.contains('hidden') && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 30));
+        if (ready.classList.contains('hidden')) throw new Error(fmt + ' bypassed the Export ready card');
+        if (!document.getElementById('xr-name').textContent.endsWith(ext)) throw new Error(fmt + ' ready card names the wrong file');
+        save.click(); await run;
+        const file = shared[shared.length - 1] && shared[shared.length - 1].files[0];
+        if (!file || !file.name.endsWith(ext) || file.type !== mime || file.size === 0)
+          throw new Error(fmt + ' did not offer a nonempty ' + mime + ' file to the share sheet');
+      }
+      if (shared.length !== 2) throw new Error('expected one share for each image format, got ' + shared.length);
+    } finally {
+      if (!ready.classList.contains('hidden')) discard.click();
+      for (const key of ['canShare', 'share']) { if (old[key]) Object.defineProperty(nav, key, old[key]); else delete nav[key]; }
+      fmtEl.value = old.fmt; rangeEl.value = old.range; resEl.value = old.res;
+      try { if (prefs == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', prefs); } catch (e) {}
+      FM.scene = saved; FM.selectLayer(null); FM.refreshAll();
     }
   });
 
