@@ -11799,7 +11799,7 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
 .sm-quiet { display: flex; align-items: center; padding: 0 12px; font: 600 12.5px/1 system-ui, sans-serif; color: var(--text-dim); white-space: nowrap; }
 #sm-tray.sm-tray-len { align-items: center; }
 .sm-len-v { flex: none; width: 72px; height: 36px; margin: 0 4px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
-  font: 700 14px/1 system-ui, sans-serif; text-align: center; }
+  font: 700 16px/1 system-ui, sans-serif; text-align: center; }   /* 16 px: iOS zooms the page into any field under 16 px (as #hm-search-input) */
 #sm-tools { display: flex; align-items: stretch; flex: 0 0 56px; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: content-box; }
 #sm-tools .sm-tool { flex: 1 1 0; min-width: 0; }
 .sm-menu { position: fixed; z-index: 120; min-width: 210px; padding: 6px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line);

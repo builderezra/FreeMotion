@@ -122406,4 +122406,30 @@
       });
     }, 380);
   });
+
+
+  test('simple P2.2 · review a typed Length commits when the field is left (the iPhone pad has no Return), Enter then leaving commits once, and the field is 16 px so iOS does not zoom', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const A = v.L('A'), B = v.L('B');
+      FM.selectLayer(A.id); await v.sleep(60);
+      smTool('length').click(); await v.sleep(40);
+      const inp = document.querySelector('#sm-tray .sm-len-v');
+      if (!inp) throw new Error('CONTROL: Length did not open its row');
+      if (parseFloat(getComputedStyle(inp).fontSize) < 16) throw new Error('the Length field is ' + getComputedStyle(inp).fontSize + ': iOS zooms the page into any field under 16 px');
+      const s0 = v.steps();
+      inp.value = '2.5'; inp.dispatchEvent(new Event('change', { bubbles: true })); await v.idle();
+      if (Math.abs(A.duration - 2.5) > 1e-9 || Math.abs(B.start - 2.5) > 1e-9) throw new Error('a typed length committed by leaving the field did not land: A ' + A.duration + ' s, B at ' + B.start);
+      if (v.steps() !== s0 + 1) throw new Error('CONTROL: the change made ' + (v.steps() - s0) + ' steps');
+      const inp2 = document.querySelector('#sm-tray .sm-len-v'), s1 = v.steps();
+      inp2.value = '2.2';
+      inp2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      inp2.dispatchEvent(new Event('change', { bubbles: true })); await v.idle();
+      if (Math.abs(A.duration - 2.2) > 1e-9) throw new Error('CONTROL: Enter did not commit 2.2: ' + A.duration);
+      if (v.steps() - s1 !== 1 || /Nothing more/.test(v.say())) throw new Error('Enter then leaving the field committed ' + (v.steps() - s1) + ' steps (expected 1) and said “' + v.say() + '”');
+      const inp3 = document.querySelector('#sm-tray .sm-len-v'), s2 = v.steps();
+      inp3.value = A.duration.toFixed(2); inp3.dispatchEvent(new Event('change', { bubbles: true })); await v.idle();
+      if (v.steps() !== s2 || /Nothing more/.test(v.say())) throw new Error('leaving the field unchanged made a step or said “' + v.say() + '”');
+    });
+  });
 })();

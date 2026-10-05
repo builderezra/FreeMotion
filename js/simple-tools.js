@@ -168,9 +168,21 @@ window.FM = window.FM || {};
     const which = tool({ id: 'lenEdge', label: lengthEdge === 'end' ? (w.lenEnd || 'End') : (w.lenStart || 'Start'), icon: 'length', pressed: lengthEdge === 'start', run: () => { lengthEdge = lengthEdge === 'end' ? 'start' : 'end'; lastSig = ''; FM.simpleTools.sync(); } });
     const step = sign => tool({ id: sign < 0 ? 'lenMinus' : 'lenPlus', label: sign < 0 ? (w.minusFrame || '−1 frame') : (w.plusFrame || '+1 frame'), icon: sign < 0 ? 'minus' : 'plus', title: sign < 0 ? (w.shorter || 'One frame shorter') : (w.longer || 'One frame longer'),
       run: () => { const L = FM.layerById(FM.scene, id); if (!L) return; if (lengthEdge === 'end') S.cmd.length(id, L.duration + sign / fps); else S.cmd.trimStartBy(id, -sign / fps); } });
-    const val = el('input', 'sm-len-v'); val.type = 'text'; val.inputMode = 'decimal'; val.value = l ? l.duration.toFixed(2) : '';
+    const val = el('input', 'sm-len-v'); val.type = 'text'; val.inputMode = 'decimal'; val.enterKeyHint = 'done'; val.value = l ? l.duration.toFixed(2) : '';
     val.setAttribute('aria-label', w.lengthLabel || 'Length in seconds');
-    val.addEventListener('keydown', e => { if (e.key !== 'Enter') return; e.preventDefault(); const v = parseFloat(val.value); const L = FM.layerById(FM.scene, id); if (!isFinite(v) || !L) return; if (lengthEdge === 'end') S.cmd.length(id, v); else S.cmd.trimStartBy(id, L.duration - v); val.blur(); });
+    /* ONE commit for Enter and for leaving the field (review finding 21): the iPhone's decimal pad has no Return, so its Done
+       or a tap elsewhere — a blur, which fires change — is the only way he can send a typed length. Each value is sent once
+       (Enter blurs, and the blur's change must not send it again should the edit still be in flight), and a value equal to
+       the clip's length sends nothing (no false "Nothing more to trim"). */
+    let sent = null;
+    const commit = () => {
+      const v = parseFloat(String(val.value).replace(',', '.')), L = FM.layerById(FM.scene, id);
+      if (!isFinite(v) || !L || v === sent || Math.abs(v - L.duration) < 0.5 / fps) return;
+      sent = v;
+      if (lengthEdge === 'end') S.cmd.length(id, v); else S.cmd.trimStartBy(id, L.duration - v);
+    };
+    val.addEventListener('keydown', e => { if (e.key !== 'Enter') return; e.preventDefault(); commit(); val.blur(); });
+    val.addEventListener('change', commit);
     row.push(back, which, step(-1), val, step(1));
     return row;
   }
