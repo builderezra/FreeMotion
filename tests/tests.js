@@ -127673,4 +127673,27 @@
       throw new Error('unbroken run measured ' + measured + ' characters for ' + n + ' input characters');
   });
 
+  test('690 a recent colour from another window survives this window’s next pick', { item: 'TBD', budgetMs: 10000 }, function () {
+    const key = 'fm.recentColors', saved = localStorage.getItem(key), inMemory = FM.recentColors;
+    try {
+      FM.recentColors = ['#aaaaaa']; // stale local tab
+      localStorage.setItem(key, JSON.stringify(['#112233'])); // other tab's newer choice
+      let color = '#000000';
+      const field = FM._colorField(() => color, v => { color = v; });
+      const chip = field.querySelector('.swatch-chip');
+      if (!chip || chip.title !== '#112233') throw new Error('freshly opened colour row missed the other window’s swatch');
+      localStorage.setItem(key, JSON.stringify(['#123456', '#112233'])); // other tab picks again while this row is open
+      const swatch = field.querySelector('input[type="color"]');
+      swatch.value = '#445566';
+      swatch.dispatchEvent(new Event('input', { bubbles: true }));
+      swatch.dispatchEvent(new Event('change', { bubbles: true }));
+      const stored = JSON.parse(localStorage.getItem(key));
+      if (JSON.stringify(stored.slice(0, 3)) !== JSON.stringify(['#445566', '#123456', '#112233']))
+        throw new Error('this window overwrote the other window’s recent colours: ' + JSON.stringify(stored));
+    } finally {
+      FM.recentColors = inMemory;
+      if (saved === null) localStorage.removeItem(key); else localStorage.setItem(key, saved);
+    }
+  });
+
 })();

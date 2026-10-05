@@ -251,9 +251,21 @@ window.FM = window.FM || {};
 
   // Swatch + synced hex text input (type/paste/read exact colours). Renders on input, commits on change.
   function normHex(c) { c = String(c == null ? '#000000' : c).trim().toLowerCase(); let h = c.replace('#', ''); if (/^[0-9a-f]{3}$/.test(h)) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; return /^[0-9a-f]{6}$/.test(h) ? '#' + h : '#000000'; }
+  function latestRecentColors() {
+    try {
+      const saved = localStorage.getItem('fm.recentColors');
+      if (saved !== null) {
+        const list = JSON.parse(saved);
+        if (Array.isArray(list)) FM.recentColors = list;
+      }
+    } catch (e) {} // Keep this window's colours if storage is unavailable or damaged.
+    return FM.recentColors || [];
+  }
   function addRecentColor(c) {
     c = normHex(c);
-    FM.recentColors = [c].concat((FM.recentColors || []).filter(x => x !== c)).slice(0, 12);
+    // Another tab may have picked colours since this inspector opened. Merge with storage at the
+    // moment of the write so this pick does not replace that tab's more recent swatches.
+    FM.recentColors = [c].concat(latestRecentColors().filter(x => x !== c)).slice(0, 12);
     try { localStorage.setItem('fm.recentColors', JSON.stringify(FM.recentColors)); } catch (e) {}   // survive reload
   }
   function colorField(getVal, setVal) {
@@ -290,6 +302,7 @@ window.FM = window.FM || {};
     }
     cont.appendChild(wrap);
     // recently-used colour swatches
+    latestRecentColors();
     if (FM.recentColors && FM.recentColors.length) {
       const rec = el('div', 'color-recents');
       FM.recentColors.slice(0, 10).forEach(c => {
