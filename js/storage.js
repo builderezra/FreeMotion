@@ -16,7 +16,19 @@ window.FM = window.FM || {};
   let _dirty = false;   // a REAL edit happened since the last modified-stamp — merely viewing a project must not bump it to the top of the home list (Ezra)
   function newId(prefix) { return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function readJSON(key, def) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : def; } catch (e) { return def; } }
-  function writeJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { warnQuota(e); return false; } }
+  // An absent index is empty; an unreadable index may still own every pack.
+  function readIndexStrict(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === null) return [];
+      const value = JSON.parse(raw);
+      return Array.isArray(value) && value.every(entry => entry && typeof entry.id === 'string') ? value : null;
+    } catch (e) { return null; }
+  }
+  function writeJSON(key, val) {
+    if ((key === PROJ_INDEX || key === TPL_INDEX || key === ELEM_INDEX || key === 'fm.fonts') && readIndexStrict(key) === null) return false;
+    try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { warnQuota(e); return false; }
+  }
   function curId() {
     let id = null;
     try { id = localStorage.getItem(CUR_KEY); } catch (e) {}
@@ -346,7 +358,7 @@ window.FM = window.FM || {};
     if (heldByAnother(key)) return Promise.resolve();   // queue 915 phase B: another copy in memory still plays from this record's file — it goes at a later sweep, when nothing holds it
     _stored.delete(key);   // queue 690 (hunt 5): no longer known to be on disk — a clip brought back by undo is noted again on its next save
     return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
-  function idbKeys(db) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]); } catch (e) { res([]); } }); }
+  function idbKeys(db, strict) { return new Promise((res, rej) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => strict ? rej(rq.error || new Error('Media key read failed')) : res([]); } catch (e) { if (strict) rej(e); else res([]); } }); }
 
   /* ═══ THE LAYER IDS A COLLAB CHECKPOINT CAN STILL BRING BACK (queue 921 S0, spec §12.4) ════════════
    * A checkpoint — `collab:ckpt:<pid>:<ts>` — is the project's document as it stood before a share
@@ -3044,7 +3056,16 @@ window.FM = window.FM || {};
       return { ok: ok, why: ok ? '' : 'refused' };
     },
     async remove(id) {
+      if ([PROJ_INDEX, TPL_INDEX, ELEM_INDEX, 'fm.fonts'].some(k => readIndexStrict(k) === null)) return false;
       const doc = readJSON('fm.proj.' + id, null);
+      if (!doc || !Array.isArray(doc.layers)) return false;
+      // A damaged peer document might share layer IDs with this project.
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith('fm.proj.') || key.endsWith('.unreadable') || key === 'fm.proj.' + id) continue;
+        const other = readJSON(key, null);
+        if (!other || !Array.isArray(other.layers)) return false;
+      }
       try {
         const db = await openDB();
         // Deleting a project deletes ITS media — except any blob the Media library is holding on
@@ -3063,16 +3084,20 @@ window.FM = window.FM || {};
         const elsewhere = new Set();
         for (let i = 0; i < localStorage.length; i++) {
           const lk = localStorage.key(i);
-          if (!lk || lk.indexOf('fm.proj.') !== 0 || lk.slice(8) === id) continue;
+          if (!lk || lk.indexOf('fm.proj.') !== 0 || lk.endsWith('.unreadable') || lk.slice(8) === id) continue;
           const d = readJSON(lk, null);
           if (d && Array.isArray(d.layers)) d.layers.forEach(l => { if (l && l.id) elsewhere.add(l.id); });
         }
         if (id !== curId()) ((FM.scene && FM.scene.layers) || []).forEach(l => { if (l && l.id) elsewhere.add(l.id); });
         const ckptPrefix = 'collab:ckpt:' + id + ':';
-        const allKeys = await idbKeys(db);
+        let allKeys;
+        try { allKeys = await idbKeys(db, true); } catch (e) { db.close(); return false; }
         for (const k of allKeys) {
           if (typeof k !== 'string' || k.indexOf('collab:ckpt:') !== 0 || k.indexOf(ckptPrefix) === 0) continue;
-          ckptLayerIds(await idbGet(db, k)).forEach(lid => elsewhere.add(lid));
+          let checkpoint;
+          try { checkpoint = await idbGet(db, k, true); } catch (e) { db.close(); return false; }
+          if (!checkpoint) { db.close(); return false; }
+          ckptLayerIds(checkpoint).forEach(lid => elsewhere.add(lid));
         }
         if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) { if (!libKeys.has(l.id) && !elsewhere.has(l.id)) await idbDel(db, l.id); }
         // this project's own collab records go with it (spec §12.4): the checkpoints…
@@ -3141,6 +3166,8 @@ window.FM = window.FM || {};
         };
         const first = collectKeep();
         if (first.unreadable) return;
+        const indexes = [PROJ_INDEX, TPL_INDEX, ELEM_INDEX, 'fm.fonts'].map(readIndexStrict);
+        if (indexes.some(v => v === null)) return;
         if (FM.exportResume && FM.exportResume.sweep) { try { await FM.exportResume.sweep(); } catch (e) {} }
         const keep = first.keep;
         /* ⚠️ queue 921 S0: A SAVE POINT IS A REFERENCE (spec §12.4, §24). `collab:ckpt:*` holds the
@@ -3151,12 +3178,14 @@ window.FM = window.FM || {};
            pass re-collects and would otherwise have forgotten them again. */
         const ckptKeep = new Set();
         // the three index-backed prefixes, so an unreferenced pack can finally be collected
-        const tplIds = new Set((FM.templates.list() || []).map(t => t.id));
-        const elemIds = new Set((FM.elements.list() || []).map(e => e.id));
-        const fontIds = new Set((FM.fonts && FM.fonts.list ? FM.fonts.list() : []).map(f => f.id));
+        const tplIds = new Set(indexes[1].map(t => t.id));
+        const elemIds = new Set(indexes[2].map(e => e.id));
+        const fontIds = new Set(indexes[3].map(f => f.id));
         const db = await openDB();
         const candidates = [];
-        for (const k of await idbKeys(db)) {
+        let mediaKeys;
+        try { mediaKeys = await idbKeys(db, true); } catch (e) { db.close(); return; }
+        for (const k of mediaKeys) {
           /* These prefixes used to be skipped OUTRIGHT, which is why a pack whose index write failed
              could never be reclaimed. Cross-check them against their index instead: a 'tpl:'/'elem:'/
              'font:' pack that nothing references is exactly the orphan this sweep is for. The other
@@ -3175,7 +3204,12 @@ window.FM = window.FM || {};
              and delete it at the next boot: the save point, the offline recovery point and a half-arrived
              file. They are collected by their own rules (FM.collab.gc), with the knowledge to do it. */
           if (typeof k === 'string' && k.indexOf('collab:') === 0) {
-            if (k.indexOf('collab:ckpt:') === 0) ckptLayerIds(await idbGet(db, k)).forEach(id => ckptKeep.add(id));
+            if (k.indexOf('collab:ckpt:') === 0) {
+              let checkpoint;
+              try { checkpoint = await idbGet(db, k, true); } catch (e) { db.close(); return; }
+              if (!checkpoint) { db.close(); return; }
+              ckptLayerIds(checkpoint).forEach(id => ckptKeep.add(id));
+            }
             continue;
           }
           if (typeof k === 'string' && k.indexOf('tpl:') === 0) { if (tplIds.has(k.slice(4))) continue; candidates.push(k); continue; }
@@ -3193,9 +3227,11 @@ window.FM = window.FM || {};
           const keep2 = fresh.keep;
           // A font/template/element can arrive while the asynchronous IDB scan above runs. Refresh
           // their indexes as well, or this sweep can delete a blob just committed by an import.
-          const tplIds2 = new Set((FM.templates.list() || []).map(t => t.id));
-          const elemIds2 = new Set((FM.elements.list() || []).map(e => e.id));
-          const fontIds2 = new Set((FM.fonts && FM.fonts.list ? FM.fonts.list() : []).map(f => f.id));
+          const freshIndexes = [PROJ_INDEX, TPL_INDEX, ELEM_INDEX, 'fm.fonts'].map(readIndexStrict);
+          if (freshIndexes.some(v => v === null)) { db.close(); return; }
+          const tplIds2 = new Set(freshIndexes[1].map(t => t.id));
+          const elemIds2 = new Set(freshIndexes[2].map(e => e.id));
+          const fontIds2 = new Set(freshIndexes[3].map(f => f.id));
           for (const k of candidates) {
             if (keep2.has(k) || ckptKeep.has(k) || FM.media.get(k)) continue;   // referenced since the scan / by a collab save point (queue 921 S0) / live in memory
             if (typeof k === 'string' && ((k.indexOf('tpl:') === 0 && tplIds2.has(k.slice(4))) ||
@@ -3333,7 +3369,7 @@ window.FM = window.FM || {};
       return { omitted: obj.omitted, omittedFonts: obj.omittedFonts };
     },
     async remove(tid) {
-      writeJSON(TPL_INDEX, this.list().filter(t => t.id !== tid));
+      if (!writeJSON(TPL_INDEX, this.list().filter(t => t.id !== tid))) return false;
       try { const db = await openDB(); await idbDel(db, 'tpl:' + tid); db.close(); } catch (e) {}
     },
     /* DUPLICATE A TEMPLATE (queue 374). Ezra: "There's no way to duplicate templates or elements".
@@ -3793,7 +3829,7 @@ window.FM = window.FM || {};
       return true;
     },
     async remove(eid) {
-      writeJSON(ELEM_INDEX, this.list().filter(t => t.id !== eid));
+      if (!writeJSON(ELEM_INDEX, this.list().filter(t => t.id !== eid))) return false;
       try { const db = await openDB(); await idbDel(db, 'elem:' + eid); db.close(); } catch (e) {}
     },
     // Duplicate an element (queue 374) — same construction as templates.duplicate, and the note above
@@ -3934,7 +3970,7 @@ window.FM = window.FM || {};
       return { id: id, name: name, family: family, css: css };
     },
     async remove(id) {
-      writeJSON(FONT_INDEX, this.list().filter(f => f.id !== id));
+      if (!writeJSON(FONT_INDEX, this.list().filter(f => f.id !== id))) return false;
       try { const db = await openDB(); await idbDel(db, 'font:' + id); db.close(); } catch (e) {}
     },
     // Open a file picker and import the chosen font; calls back with the new record on success.

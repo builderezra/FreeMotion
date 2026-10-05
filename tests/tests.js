@@ -128088,4 +128088,61 @@
     }
   });
 
+  test('TBD: unreadable indexes and checkpoints cannot make storage cleanup delete media', { item: 'TBD', budgetMs: 60000 }, async function () {
+    const token = Date.now(), originalGet = IDBObjectStore.prototype.get;
+    const prior = FM.projects.currentId(), made = [], keys = [];
+    const indexes = [['fm.templates', 'tpl:', FM.templates], ['fm.elements', 'elem:', FM.elements], ['fm.fonts', 'font:', FM.fonts]];
+    try {
+      for (const [index, prefix, owner] of indexes) {
+        const id = 'index-guard-' + token + prefix, key = prefix + id;
+        const old = localStorage.getItem(index); keys.push({ index, old, key });
+        if (!(await FM.storage.writeMedia(key, { file: new Blob(['pack']), kind: 'image' }))) throw new Error('pack fixture did not save');
+        localStorage.setItem(index, '[{"id":');
+        await FM.projects.pruneOrphans();
+        if (!(await FM.storage.readMedia(key))) throw new Error(index + ' parse error deleted its pack');
+        if (await owner.remove(id) !== false || localStorage.getItem(index) !== '[{"id":' || !(await FM.storage.readMedia(key)))
+          throw new Error(index + ' remove overwrote corrupt index bytes or deleted its pack');
+        if (old === null) localStorage.removeItem(index); else localStorage.setItem(index, old);
+        await FM.projects.pruneOrphans();
+        if (await FM.storage.readMedia(key)) throw new Error(index + ' clean control did not collect orphan pack');
+      }
+
+      const checkpoint = 'collab:ckpt:index-guard-' + token + ':1', orphan = 'ckpt-guard-' + token;
+      keys.push({ checkpoint, key: orphan });
+      if (!(await FM.storage.collabPut(checkpoint, JSON.stringify({ layers: [] })))) throw new Error('checkpoint fixture did not save');
+      if (!(await FM.storage.writeMedia(orphan, { file: new Blob(['orphan']), kind: 'image' }))) throw new Error('media fixture did not save');
+      IDBObjectStore.prototype.get = function (key) {
+        if (key !== checkpoint) return originalGet.apply(this, arguments);
+        const request = { error: new DOMException('checkpoint read failed', 'UnknownError') };
+        queueMicrotask(() => { if (request.onerror) request.onerror({ target: request }); });
+        return request;
+      };
+      await FM.projects.pruneOrphans();
+      if (!(await FM.storage.readMedia(orphan))) throw new Error('failed checkpoint read allowed media deletion');
+      IDBObjectStore.prototype.get = originalGet;
+
+      const project = await FM.projects.create({ name: 'Remove guard probe' });
+      if (!project) throw new Error('project fixture not created');
+      made.push(project);
+      const layer = FM.makeLayer('image', { name: 'Shared blob' });
+      FM.scene.layers.push(layer); FM.storage.flushSync();
+      if (!(await FM.storage.writeMedia(layer.id, { file: new Blob(['shared']), kind: 'image' }))) throw new Error('shared clip fixture did not save');
+      const broken = 'fm.proj.remove-guard-' + token; keys.push({ broken });
+      localStorage.setItem(broken, '{"layers":');
+      if (await FM.projects.remove(project) !== false || !(await FM.storage.readMedia(layer.id)))
+        throw new Error('project delete lost a clip while another project was unreadable');
+      localStorage.removeItem(broken);
+    } finally {
+      IDBObjectStore.prototype.get = originalGet;
+      for (const entry of keys) {
+        if (entry.index) { if (entry.old === null) localStorage.removeItem(entry.index); else localStorage.setItem(entry.index, entry.old); }
+        if (entry.broken) localStorage.removeItem(entry.broken);
+        if (entry.checkpoint) await FM.storage.collabDel(entry.checkpoint);
+        if (entry.key) await FM.storage.removeMedia(entry.key);
+      }
+      try { await FM.projects.open(prior || null, { confirmed: true }); } catch (e) {}
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+    }
+  });
+
 })();
