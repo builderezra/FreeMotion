@@ -536,7 +536,9 @@ window.FM = window.FM || {};
         }
         drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startScale: s0, startDist: Math.hypot(p.x - cx, p.y - cy) || 1 };
       } else {
-        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(p.y - cy, p.x - cx) };
+        const startRot = FM.evalProp(layer.transform.rotation, FM.time);
+        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startRot: startRot,
+          rotation: startRot, lastAngle: Math.atan2(p.y - cy, p.x - cx) };
       }
     };
   }
@@ -679,7 +681,13 @@ window.FM = window.FM || {};
       }
       FM.shiftTransform(L, 'scale', s, FM.time);
     } else if (drag.mode === 'rotate') {
-      const deg = drag.startRot + (Math.atan2(p.y - drag.cy, p.x - drag.cx) - drag.startAngle) * 180 / Math.PI;
+      const angle = Math.atan2(p.y - drag.cy, p.x - drag.cx);
+      // Accumulate each shortest step so crossing atan2's left-hand seam cannot jump the
+      // inspector value by 360°, while a deliberate full turn still reaches 360°.
+      const step = ((((angle - drag.lastAngle) * 180 / Math.PI + 180) % 360 + 360) % 360) - 180;
+      drag.rotation += step;
+      drag.lastAngle = angle;
+      const deg = drag.rotation;
       if (drag.pivot && !drag.pivot.sandwich) {
         // rotate about the bounds centre C: G' = C + R(Δ)·(G0 − C), so the visible box turns in place
         // (queue 831: only when the RENDERER is not pivoting — see the note where `pivot` is built)

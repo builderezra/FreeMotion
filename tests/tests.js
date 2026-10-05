@@ -53731,6 +53731,61 @@
     }
   });
 
+  test('rotate handle crosses the left-hand angle seam without a 360 degree jump (queue 1063)', { item: 'TBD' }, async function () {
+    const box = document.getElementById('select-box');
+    if (!box || !FM.canvasEdit) throw new Error('selection handles are unavailable');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    let pointerId = 10630;
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: FM.scene.width / 2, y: FM.scene.height / 2,
+        shapeW: 120, shapeH: 120, fill: '#fff', start: 0, duration: 5 });
+      FM.scene.layers.push(L);
+      FM.seek ? FM.seek(0) : (FM.time = 0);
+      FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll();
+      async function turn(from, to) {
+        L.transform.rotation = 0;
+        FM.canvasEdit.update();
+        await sleep(100);
+        const knob = box.querySelector('.sb-rot'), kr = knob && knob.getBoundingClientRect();
+        if (!kr || !kr.width) throw new Error('rotate handle is unavailable');
+        const br = box.getBoundingClientRect(), cx = br.left + br.width / 2, cy = br.top + br.height / 2;
+        const id = ++pointerId;
+        knob.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true,
+          pointerId: id, pointerType: 'mouse', button: 0, buttons: 1,
+          clientX: kr.left + kr.width / 2, clientY: kr.top + kr.height / 2 }));
+        const readings = [];
+        try {
+          for (let deg = from; deg <= to; deg += 2) {
+            const a = deg * Math.PI / 180;
+            window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true,
+              pointerId: id, pointerType: 'mouse', button: 0, buttons: 1,
+              clientX: cx + 80 * Math.cos(a), clientY: cy + 80 * Math.sin(a) }));
+            readings.push(FM.evalProp(L.transform.rotation, FM.time));
+          }
+        } finally {
+          window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true,
+            pointerId: id, pointerType: 'mouse', button: 0, buttons: 0 }));
+        }
+        if (Math.abs(readings.at(-1) - readings[0] - (to - from)) > 1)
+          throw new Error(from + '→' + to + ' moved rotation ' + (readings.at(-1) - readings[0]) + '° instead of ' + (to - from) + '°');
+        for (let i = 1; i < readings.length; i++) {
+          if (Math.abs(readings[i] - readings[i - 1]) > 5)
+            throw new Error('rotation jumped ' + (readings[i] - readings[i - 1]) + '° at pointer step ' + i);
+        }
+      }
+      await turn(170, 190); // atan2 changes from +179° to -179° here
+      await turn(10, 30);   // ordinary drag control
+    } finally {
+      try { FM.canvasEdit._finishDrag && FM.canvasEdit._finishDrag(); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.seek ? FM.seek(t0) : (FM.time = t0);
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('a corner drag on a layer scaled to nothing is refused, instead of lifting every scale keyframe off zero (queue 834 u18)', { item: '834' }, async function () {
     /* The scale drag MULTIPLIES the scale it started from, so from 0 there is nothing to multiply: the
        old base of 0.0001 made every product round to zero, the 0.02 floor caught it, and the box never
