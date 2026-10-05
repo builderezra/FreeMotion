@@ -121777,4 +121777,13 @@
       if (v.say().indexOf('zq3') >= 0) throw new Error('CONTROL: the live-only line took the row');
     });
   });
+
+  test('simple P2.1 · review the clips-and-length summary never shows :60 — the total is rounded before it is split into minutes', { item: '980' }, function () {
+    const f = FM.spineWords && FM.spineWords.summary;
+    if (typeof f !== 'function') throw new Error('FM.spineWords.summary is missing');
+    /* the first three carry into the next minute; the last three are CONTROLS that pass either way (format, not the carry) */
+    const cases = [[2, 59.6, '2 clips · 1:00'], [1, 119.5, '1 clip · 2:00'], [1, 59.99999999, '1 clip · 1:00'], [3, 59.4, '3 clips · 0:59'], [1, 0, '1 clip · 0:00'], [2, 65.2, '2 clips · 1:05']];
+    const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
