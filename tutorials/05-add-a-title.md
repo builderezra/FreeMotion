@@ -12,10 +12,12 @@ You'll be able to type a title, style it, place it, and choose when it appears.
 8. Tap the small colour square at the far left of the bar. Tap the colour box to choose a colour, or type a code like #ff0000. <!-- js/text-edit.js:876, 871-884, 505-518 buildColorPop -->
 9. Tap the tick at the bar's far right. <!-- js/text-edit.js:878 -->
 10. To place it, drag the title on the preview. <!-- js/canvas-edit.js:2 -->
-11. To end it sooner, slide to where it should disappear. With the title selected and the playhead inside it, tap the right-hand one of the three small icon buttons (a bar on the right). <!-- js/inspector.js:3555-3570, 3613; js/app.js:2792-2795 default 5 seconds -->
+11. To end it sooner, slide the timeline to where it should disappear. With the title selected and the playhead inside it, look at the top of the edit panel under the timeline: there is a row of three wide buttons. Tap the right-hand one (two upright lines, bracket on the right). Don't use the small icons in the top bar. <!-- js/inspector.js:3555-3570, 3611-3613 trim end; js/app.js:2792-2795 -->
 
-On a computer: click the "New layers go here" line (or an empty spot) so nothing is selected. The Add panel shows at the bottom left. The text controls sit on a card at the bottom of the picture. To end the title, put the playhead inside it and press **D**, or click the D key at the top of the panel. <!-- js/timeline.js:3452; js/text-edit.js:23-25; js/timeline.js:5758-5762 key rail, js/app.js:9013 -->
+On a computer: click an empty spot in the timeline, or the thin blue line between layers, so nothing is selected. The Add panel shows at the bottom left; if its tabs show only icons, Elements is the first one. The text controls sit on a card at the bottom of the picture. To move the playhead, drag the time ruler (dragging a clip moves the clip; a single click on the ruler deselects). To end the title, click its bar so it is selected, drag the ruler until the playhead is inside it where it should end, and press **D** or click the D key at the top of the panel. <!-- js/timeline.js:3452 'New layers go here'; js/timeline.js:5096-5098; js/addmenu.js:219, 1072-1074; js/text-edit.js:23-25; js/timeline.js:5758-5762; js/app.js:9013; js/app.js:6909-6913 -->
 
 Tip: Tap **Aa** in the bar for spacing and animation. <!-- js/text-edit.js:877, 520-526 -->
 
-If it doesn't work: The three small buttons only show while the playhead is inside the title. Slide until the line is over the title's bar, or you see two other buttons. <!-- js/inspector.js:3568-3603 -->
+Note: A new title lasts 5 seconds. If it runs past the end of your video it makes the whole video (and the export) longer, so trim it. <!-- js/app.js:2792-2795 default 5 s; js/app.js:3055 -->
+
+If it doesn't work: The row of three buttons only shows while the playhead is inside the title. If that row has two buttons instead, the playhead is before or after the title (right after you add it, it is exactly on the start). Slide until the line is over the title's bar. <!-- js/inspector.js:3568-3603 -->
