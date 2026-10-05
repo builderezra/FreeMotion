@@ -58781,6 +58781,25 @@
     }
   });
 
+  test('ordinary and actionable toasts speak through a stable live region (batch2 1b.11)', { item: 'TBD' }, async function () {
+    var toast = document.getElementById('toast'), spoken = document.getElementById('toast-sr');
+    if (!toast || !spoken || spoken.getAttribute('role') !== 'status') throw new Error('the permanent toast live region is missing');
+    var frame = function () { return new Promise(function (resolve) { requestAnimationFrame(resolve); }); };
+    try {
+      FM.toast('hello', 0);
+      if (spoken.textContent) throw new Error('toast speech was written before the next frame');
+      await frame();
+      if (spoken.textContent !== 'hello') throw new Error('ordinary toast was not announced');
+      FM.toast('Open report', 0, function () {});
+      await frame();
+      if (toast.getAttribute('role') !== 'button') throw new Error('actionable toast lost its button role');
+      if (spoken.getAttribute('role') !== 'status' || spoken.textContent !== 'Open report') throw new Error('actionable toast did not keep its separate live announcement');
+    } finally {
+      FM.hideToast();
+      spoken.textContent = '';
+    }
+  });
+
   test('export ready: the file is handed over on Save, not flung at you when the render ends', { item: 'export-ready-card' }, async function () {
     if (typeof FM._showExportReady !== 'function') throw new Error('FM._showExportReady is missing — the export-ready card has no testable seam');
     var overlay = document.getElementById('export-ready');

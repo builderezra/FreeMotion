@@ -22,7 +22,7 @@ window.FM = window.FM || {};
     for (let node = dialog; node && node !== document.body; node = node.parentElement) {
       const parent = node.parentElement;
       if (!parent) break;
-      Array.from(parent.children).forEach(child => { if (child !== node) leaveOpener(child); });
+      Array.from(parent.children).forEach(child => { if (child !== node && child.id !== 'toast-sr') leaveOpener(child); });
     }
     const priorTabindex = dialog.getAttribute('tabindex');
     dialog.setAttribute('tabindex', '-1');
@@ -1438,6 +1438,7 @@ window.FM = window.FM || {};
   // duration-less caller, e.g. "Grouped 3 layers", on screen forever). Pass ms=0 for a sticky
   // progress toast paired with FM.hideToast(). The seq guard stops an old timer from hiding a newer toast.
   let toastSeq = 0;
+  let toastSpeechSeq = 0;
   /* ---------- "you are looking at an old build, and here is why" (queue 306) --------------------
    * His report, for weeks: *"an older version of our project shows up when you refresh"*, *"The glitch
    * that shows the old version of FreeMotion that has a more alight motion look STILL shows up when I
@@ -1525,6 +1526,12 @@ window.FM = window.FM || {};
   FM.toast = function (msg, ms, onTap) {
     const t = document.getElementById('toast'); if (!t) return;
     t.textContent = msg;
+    const spoken = document.getElementById('toast-sr');
+    if (spoken) {
+      spoken.textContent = '';
+      const words = t.textContent, turn = ++toastSpeechSeq;
+      requestAnimationFrame(() => { if (turn === toastSpeechSeq) spoken.textContent = words; });
+    }
     t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap'); t.removeAttribute('role'); t.removeAttribute('tabindex');
     if (typeof onTap === 'function') {
       t.classList.add('toast-tap');
