@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Grayscale before moving-still Time Warp Scan
+
+Starting commit: clean preferred Codex-only `b7da66cd891ee944bcffe1bc8cdc8055507b8db4`; isolated branch `codex/690-c31-scan-grayscale-still`. The standing #690 is `REQUESTS.md:27375-27403`; C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. `audits/*.json` has no matching Grayscale scan finding; its Grayscale references concern filter recipes and registration rules.
+
+The moving-still historical scan gate omitted source-local Grayscale, so a keyed grade ahead of Time Warp Scan used the current picture after a cold jump. The still-image gate now admits Grayscale and redraws the prefix at each crossing. One new `{ item: 'TBD' }` Chromium regression failed before (`Freeze` cold 0 versus sequential 103 at a scanned pixel) and passed afterward in Freeze/Reveal at 120/60 px, including a current-picture control. The adjacent keyed Hue Shift still regression passed. Main MP4 still-scan resume identity advances 10→11.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 374→375, exporter 183→184), `tests/tests.js` (one new regression and one existing resume-identity expectation), and this report. Node syntax and diff checks passed. Decoded-video Grayscale scan remains a separate unproved gate. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
