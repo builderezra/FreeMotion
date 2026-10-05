@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Hue Shift before moving-shape Time Warp Scan
+
+Starting commit: clean preferred Codex-only `09d451aee32d55e2b56a4cb1f75efad5ab75ac47`; isolated branch `codex/690-c31-scan-hue-shape`. The exact standing #690 is `REQUESTS.md:27375-27403`; C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. No `audits/*.json` record names C31, Time Warp Scan or Hue Shift.
+
+Hue Shift is a source-local, history-free CSS grade, but the moving-shape historical gate excluded it. A keyed shift before Time Warp Scan therefore filled a cold-seek strip from the current picture instead of the colour at its crossing. The shape gate now admits Hue Shift only for this bounded source path; still-image and decoded-video paths retain their separate gates. A new `{ item: 'TBD' }` native Chromium regression failed before (`cold=0, played=161` at the strip pixel) and passed after in Freeze and Reveal at 120/60 px, with a current-picture control. The adjacent keyed Exposure shape regression passed. Main-MP4 shape-scan resume identity advances 10→11 to avoid reusing an older interrupted prefix.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 370→371; exporter 179→180), `tests/tests.js` (one focused regression and updated resume-identity expectation), and this report. Node syntax and `git diff --check` passed. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
