@@ -1,0 +1,7 @@
+# #690 / C31 — keyed Colour Balance before Time Warp Scan on a moving still image
+
+Starting commit: clean preferred Codex-only `8e4780a35fe401165b8ce1cb7b98a79762959ab7`; isolated branch `codex/690-c31-scan-colorbalance-still`. Exact standing #690 is `REQUESTS.md:27375-27403`, and C31 is `tools/design/plans/2026-09-29-idle-backlog/backlog.md:1375`. No `audits/*.json` record names C31 or Time Warp Scan; `audits/912-audit.json` uses Colour Balance in unrelated filter recipes.
+
+Colour Balance is source-local and history-free on a decoded still. The still-image historical-source gate omitted it, so a cold seek to 0.8 seconds differed from sequential playback (`cold=0, played=160` at pixel 1447). The still gate now evaluates the keyed grade at each crossing. Shape and decoded-video gates remain separate. The still-image MP4 resume identity advances from 7 to 8 so interrupted exports cannot reuse old pixels.
+
+Changed files: `js/compositor.js`, `js/exporter.js`, `index.html` (compositor cache 365→366, exporter 174→175), `tests/tests.js` (one new `{ item: 'TBD' }` regression and the existing resume-identity expectation), and this report. The focused native Chromium regression failed before and passed after at full and half preview size in Freeze and Reveal; adjacent keyed-Vibrance still regression passed. JavaScriptCore syntax and `git diff --check` passed. No shared Claude checkout, protected-file edit, push, PR, deployment or release.
