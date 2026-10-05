@@ -81179,6 +81179,44 @@
       throw new Error('the video encoder error is no longer held and rethrown after flush, the way the audio encoder does it');
   });
 
+  test('a failed video encode closes its frame and encoder (queue 1011)', { item: 'TBD' }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined' || !window.Mp4Muxer) return;
+    const P = FM.scene.project, keep = FM.scene.layers.slice();
+    const w0 = P.width, h0 = P.height, d0 = P.duration, f0 = P.fps;
+    const encode0 = VideoEncoder.prototype.encode, close0 = VideoFrame.prototype.close;
+    const frames = [], closed = new WeakSet();
+    let failedEncoder = null;
+    try {
+      P.width = 120; P.height = 120; P.duration = 0.3; P.fps = 10;
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#4fd1ff' });
+      L.start = 0; L.duration = 0.3; FM.scene.layers.push(L);
+      FM.refreshAll();
+      VideoFrame.prototype.close = function () { closed.add(this); return close0.call(this); };
+      VideoEncoder.prototype.encode = function (frame) {
+        frames.push(frame); failedEncoder = this;
+        if (frames.length === 3) throw new Error('deliberate frame-three encode failure');
+        // No real chunks are needed: the third call must fail before muxer finalization.
+      };
+      let error = null;
+      try {
+        await FM.exporter.run({ name: 'q1011-frame-close', scale: 1, fps: 10, bitrate: 200000,
+          from: 0, to: 0.3, outW: 120, outH: 120, onProgress: function () {}, onReady: async function () {} });
+      } catch (e) { error = e; }
+      if (!error || !/deliberate frame-three encode failure/.test(String(error)))
+        throw new Error('the deliberate third encode did not stop the export: ' + error);
+      if (frames.length !== 3 || frames.some(frame => !closed.has(frame)))
+        throw new Error('the failed encode left a VideoFrame open (' + frames.length + ' encoded, ' + frames.filter(f => closed.has(f)).length + ' closed)');
+      if (!failedEncoder || failedEncoder.state !== 'closed')
+        throw new Error('the failed export left its video encoder open');
+    } finally {
+      VideoEncoder.prototype.encode = encode0; VideoFrame.prototype.close = close0;
+      P.width = w0; P.height = h0; P.duration = d0; P.fps = f0;
+      FM.scene.layers.length = 0; keep.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
   test('672 — the layer-panel labels never collapse to nothing, at any band height', { item: '672' }, async function () {
     /* From the external QA pass, and reproduced before anything was changed:
          1920x1080 -> label 14px ✓ · 1440x900 -> 0px · 1280x800 -> 0px

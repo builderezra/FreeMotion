@@ -1683,8 +1683,11 @@ window.FM = window.FM || {};
         const frame = new VideoFrame(outCanvas, { timestamp: Math.round(f * frameDurUs), duration: Math.round(frameDurUs) });
         // `f === resumeFrom` forces the seam to be an IDR. A fresh encoder would almost certainly open
         // with one anyway, but "almost certainly" is not a thing to hang a file's decodability on.
-        encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 || f === resumeFrom });
-        frame.close();
+        try {
+          encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 || f === resumeFrom });
+        } finally {
+          frame.close();
+        }
         while (encoder.encodeQueueSize > 8) await nextTick();
         // ONE unconditional yield per frame. Without it this loop only ever returned to the event
         // loop when the encoder fell behind — so on a machine whose encoder keeps up, the whole
