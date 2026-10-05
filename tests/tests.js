@@ -127696,4 +127696,59 @@
     }
   });
 
+  test('690 Detect speech skips silent B-roll and continues after a failed source', { item: 'TBD', budgetMs: 15000 }, async function () {
+    const C = FM.captions, A = { id: 'silent-a', name: 'Silent B-roll', type: 'video' }, B = { id: 'voice-b', name: 'Talking clip', type: 'video' };
+    const T = { id: 'caption-track', captions: [] }, saved = {
+      sources: C.audioSources, detect: C.detect, audio: FM.hasAudioTrack, toast: FM.toast,
+      scope: FM._capScope, src: FM._capSrcId, report: FM.reportError,
+      refresh: FM.inspector && FM.inspector.refresh, rebuild: FM.timeline && FM.timeline.rebuild,
+      changed: FM.textEdit && FM.textEdit.cuesChanged
+    };
+    const messages = [], called = [];
+    try {
+      C.audioSources = () => [A, B];
+      FM.toast = msg => messages.push(msg);
+      FM.reportError = () => {};
+      if (FM.inspector) FM.inspector.refresh = () => {};
+      if (FM.timeline) FM.timeline.rebuild = () => {};
+      if (FM.textEdit) FM.textEdit.cuesChanged = () => {};
+      FM._capScope = 'clip'; FM._capSrcId = null;
+      FM.hasAudioTrack = l => l.id === A.id ? false : true;
+      C.detect = async (layer, candidate) => {
+        called.push(candidate.id);
+        if (candidate.id === A.id) throw new Error('known-silent clip was decoded');
+        layer.captions = [{ a: 0, b: 1, text: '' }, { a: 2, b: 3, text: '' }];
+        return { count: 2, stats: {} };
+      };
+      let row = C.detectRow(T, () => {});
+      row.querySelector('.cap-detect-btn').click(); await sleep(80);
+      if (called.join(',') !== B.id || T.captions.length !== 2 || !messages.some(m => /2 cues.*Talking clip/.test(m)))
+        throw new Error('default scope did not use the talking clip after silent B-roll');
+
+      // A valid source with no speech followed by a failed decode should retain A's no-speech result.
+      called.length = 0; messages.length = 0; FM.hasAudioTrack = () => null;
+      C.detect = async (layer, candidate) => {
+        called.push(candidate.id);
+        if (candidate.id === B.id) throw new Error('no decodable audio in that clip');
+        return { count: 0, stats: { clipDbStd: 4 } };
+      };
+      FM._capScope = 'project'; row = C.detectRow(T, () => {});
+      row.querySelector('.cap-detect-btn').click(); await sleep(80);
+      if (called.join(',') !== A.id + ',' + B.id || !messages.some(m => /No speech found in.*Silent B-roll/.test(m)) || messages.some(m => /Speech detection failed/.test(m)))
+        throw new Error('a later silent clip turned a valid no-speech result into a generic failure');
+
+      called.length = 0; messages.length = 0; FM.hasAudioTrack = l => l.id === A.id ? false : true;
+      FM._capScope = 'source'; FM._capSrcId = A.id; row = C.detectRow(T, () => {});
+      row.querySelector('.cap-detect-btn').click(); await sleep(40);
+      if (called.length || !messages.some(m => /No sound in.*Silent B-roll/.test(m)))
+        throw new Error('a chosen silent source did not explain that the clip has no sound');
+    } finally {
+      C.audioSources = saved.sources; C.detect = saved.detect; FM.hasAudioTrack = saved.audio;
+      FM.toast = saved.toast; FM.reportError = saved.report; FM._capScope = saved.scope; FM._capSrcId = saved.src;
+      if (FM.inspector) FM.inspector.refresh = saved.refresh;
+      if (FM.timeline) FM.timeline.rebuild = saved.rebuild;
+      if (FM.textEdit) FM.textEdit.cuesChanged = saved.changed;
+    }
+  });
+
 })();

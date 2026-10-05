@@ -530,20 +530,40 @@ window.FM = window.FM || {};
          * extra exactly when the user would otherwise be stuck with "no speech found" and no idea that
          * another clip was an option. On 'source' he has named the clip, so his choice is respected
          * and nothing else is touched. */
-        const queue = (mode === 'source') ? [src] : [src].concat(sources.filter(l => l.id !== src.id));
+        const ordered = (mode === 'source') ? [src] : [src].concat(sources.filter(l => l.id !== src.id));
+        // A known-silent video can be first in the layer list even when a talking clip follows it.
+        // Unknown tracks still get a real decode; a failed decode must not stop the fallback queue.
+        const queue = ordered.filter(l => !FM.hasAudioTrack || FM.hasAudioTrack(l) !== false);
+        if (!queue.length) {
+          if (FM.toast) FM.toast('No sound in “' + (src.name || 'that clip') + '” — choose a clip with sound', 5000);
+          return;
+        }
         btn.disabled = true;
         const label = btn.textContent;
         btn.textContent = 'Decoding…';
         try {
-          let r = null, used = src, tried = 0;
+          let r = null, used = null, tried = 0, firstError = null;
           for (const cand of queue) {
             tried++;
             const tag = queue.length > 1 ? ' (' + tried + '/' + queue.length + ')' : '';
-            r = await C.detect(layer, cand, p => { btn.textContent = 'Listening…' + tag + ' ' + Math.round(p * 100) + '%'; }, mode);
-            used = cand;
-            if (r.count) break;
+            try {
+              const found = await C.detect(layer, cand, p => { btn.textContent = 'Listening…' + tag + ' ' + Math.round(p * 100) + '%'; }, mode);
+              r = found; used = cand;
+              if (r.count) break;
+            } catch (err) {
+              if (!firstError) firstError = { err: err, clip: cand };
+            }
           }
           btn.textContent = label; btn.disabled = false;
+          if (!r) {
+            if (firstError && FM.reportError) FM.reportError('detecting speech for captions', firstError.err);
+            const failed = firstError && firstError.clip;
+            const noAudio = firstError && /no decodable audio|no media file/i.test(String(firstError.err && firstError.err.message));
+            if (FM.toast) FM.toast((noAudio ? 'No sound in “' : 'Could not detect speech in “') +
+              ((failed && failed.name) || 'that clip') + '” — ' +
+              (noAudio ? 'choose a clip with sound' : 'see Settings → Last error for details'), 6000);
+            return;
+          }
           const src2 = used;
           if (!r.count) {
             /* WHY it found nothing, not just that it did (queue 152). Ezra: "im pretty sure the auto
