@@ -751,9 +751,20 @@ window.FM = window.FM || {};
          moment after leaves a note for every file that had not landed yet (see notePending). */
       let jobs = []; try { jobs = planBlobWrites(); } catch (e) {}
       try {
-      try { notePending(jobs); } catch (e) {}
+      // A stale tab must not claim the newer tab's clips are waiting on its own save.
+      // Check before noting, still in the same synchronous tick as writeScene below.
+      let canNote = !_stale;
+      if (canNote) {
+        const raw = diskRaw();
+        if (revOf(raw) > lastRev) {
+          const mine = workOf(lastDoc);
+          canNote = mine !== null && mine === workOf(raw);
+        }
+      }
+      if (canNote) { try { notePending(jobs); } catch (e) {} }
       writingBegin(jobs);
       let sceneOk = writeScene();   // rev-guarded; a quota failure shouldn't block the IDB media save below
+      if (!sceneOk && _writeFail === 'stale') return;   // never overwrite newer blobs from an older tab
       const warnedBefore = _quotaWarned;
       /* queue 748 (hunt MEDIUM #31): `warnedBefore` can only see a flag raised THIS tick, and the index write's result was
          thrown away — so with the index failing every tick, the flag was raised on tick 1, reset on tick 2 (raised before, not

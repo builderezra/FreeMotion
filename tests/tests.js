@@ -49427,6 +49427,42 @@
     }
   });
 
+  test('a stale tab cannot replace a newer tab\'s media blob (queue 1000)', { item: 'TBD' }, async function () {
+    const key = 'fm.proj.' + localStorage.getItem('fm.currentProject');
+    const original = localStorage.getItem(key);
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const id = 'q1000-media-' + Date.now();
+    try {
+      const A = new File([new Uint8Array([1, 2, 3])], 'old.png', { type: 'image/png' });
+      const B = new File([new Uint8Array([4, 5, 6, 7])], 'new.png', { type: 'image/png' });
+      const L = FM.makeLayer('image', { x: 60, y: 60, start: 0, duration: 2 });
+      L.id = id; L.mediaRev = 0;
+      FM.scene.layers.push(L); FM.media.set(id, { file: A, kind: 'image', rev: 0 });
+      if (!FM.storage.flushSync() || !(await FM.storage.writeMedia(id, { file: A, kind: 'image', rev: 0 })))
+        throw new Error('setup: the old scene and media did not reach storage');
+      const disk = JSON.parse(localStorage.getItem(key));
+      const newer = JSON.parse(JSON.stringify(disk));
+      newer.rev = disk.rev + 1;
+      newer.layers.find(l => l.id === id).mediaRev = 1;
+      localStorage.setItem(key, JSON.stringify(newer));
+      if (!(await FM.storage.writeMedia(id, { file: B, kind: 'image', rev: 1 })))
+        throw new Error('setup: the other tab\'s replacement did not reach storage');
+      L.transform.x = 61;
+      await FM.storage.save();
+      const stored = await FM.storage.readMedia(id);
+      const bytes = stored && stored.file && new Uint8Array(await stored.file.arrayBuffer());
+      if (!FM._sceneRevState().stale || !stored || stored.rev !== 1 || !bytes || bytes.join(',') !== '4,5,6,7')
+        throw new Error('the stale tab replaced the newer media: ' + JSON.stringify({ stale: FM._sceneRevState().stale, rev: stored && stored.rev, bytes: bytes && bytes.join(',') }));
+    } finally {
+      if (original == null) localStorage.removeItem(key); else localStorage.setItem(key, original);
+      await FM.storage.load();
+      FM.media.remove(id);
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.refreshAll();
+      await FM.storage.removeMedia(id);
+    }
+  });
+
   /* ---------------- EFFECTS-PLAN round 19: the atmosphere effects ---------------- */
 
   test('effects: the atmosphere effects still render an un-upgraded instance exactly as they did', { item: 'fx-atmos' }, function () {
