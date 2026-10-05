@@ -1671,6 +1671,13 @@
       await via('the export sheet’s Export MP4', firstVisible(['exp-go']), async function () {});
       await until('the export’s ready card', function () { var c = D.getElementById('export-ready'); return got && c && !c.classList.contains('hidden'); }, 180000);
       await settle(200);
+      /* The card opens with the file's size ("11 KB · 0:01 · …"), and the H.264 encoder is not bit-exact run to run
+         (measured 6 Oct: 11693 and 11698 bytes from one build) — a size near a half KB would round two ways. The number
+         is written as # before the card is recorded (its unit, and everything after it, stays compared; what the
+         encoder was asked for is in the run's opts, and what it made is in the poster, the decoded grid and the MP4's
+         structure). */
+      var xm = D.getElementById('xr-meta');
+      if (xm) { xm.textContent = String(xm.textContent).replace(/^\s*\d+(\.\d+)?\s*(KB|MB|GB)/, '# $2'); await raf2(); }
       surface('the ready card', '#export-ready');
       var bufX = new Uint8Array(await got.blob.arrayBuffer());
       var pc = got.poster;
