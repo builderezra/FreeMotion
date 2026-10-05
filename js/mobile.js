@@ -458,7 +458,10 @@ window.FM = window.FM || {};
     // Returning to desktop width must never strand the drawer off-screen.
     window.addEventListener('resize', function () { if (!isPhone()) { close(); closeAdd(); document.body.classList.remove('m-editing'); insp.style.top = ''; insp.style.maxHeight = ''; } else { syncAddSheetTop(); } });
 
-    FM.mobile = { open: open, close: close, toggle: toggle, isPhone: isPhone, openAdd: openAdd, closeAdd: closeAdd, syncAddSheetTop: syncAddSheetTop };
+    FM.mobile = { open: open, close: close, toggle: toggle, isPhone: isPhone, openAdd: openAdd, closeAdd: closeAdd, syncAddSheetTop: syncAddSheetTop,
+      /* Simple's More only (js/simple-tools.js openPanel): a deliberate ask for the panel undoes an earlier swipe-away of it, which
+         otherwise held for that selection and left More dead (980 review finding 20). Full never calls it. */
+      unlatch: function () { userClosed = false; } };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

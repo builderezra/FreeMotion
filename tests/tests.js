@@ -122389,4 +122389,21 @@
       if (FM.clampAddAt() !== FM.scene.layers.length) throw new Error('(c) Full’s Add row moved from the bottom to index ' + FM.addAt + ' of ' + FM.scene.layers.length);
     });
   });
+
+
+  test('simple P2.2 · review at 380 More raises the panel again after he closed it with the grab bar (the only way to every other setting)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('C', 5, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const insp = document.getElementById('inspector-panel'), fin = () => document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
+        FM.selectLayer(v.L('B').id); await v.sleep(120); fin();
+        smTool('more').click(); await v.sleep(200); fin();
+        if (!insp.classList.contains('open')) throw new Error('CONTROL: More did not raise the panel the first time');
+        document.getElementById('insp-grab').click(); await v.sleep(200); fin();
+        if (insp.classList.contains('open')) throw new Error('CONTROL: the grab bar did not close the panel');
+        smTool('more').click(); await v.sleep(200); fin();
+        if (!insp.classList.contains('open')) throw new Error('More did nothing after the panel was closed with the grab bar — it stays dead until another clip is picked');
+      });
+    }, 380);
+  });
 })();

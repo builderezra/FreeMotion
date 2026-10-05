@@ -235,7 +235,7 @@ window.FM = window.FM || {};
       trayFor(R, one).forEach(t => tray.appendChild(tool(t)));
     },
     /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
-    openPanel(id) { panelFor = id; lastSig = ''; FM.refreshAll(); },
+    openPanel(id) { panelFor = id; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },   // a closed sheet comes back (finding 20)
     closePanel() { if (!panelFor) return; panelFor = null; lastSig = ''; FM.refreshAll(); },
     openLength(id) { lengthFor = id; lengthEdge = 'end'; lastSig = ''; this.sync(); },
     panelFor: () => panelFor,
