@@ -119806,10 +119806,12 @@
     /* DESIGN's three, and the review's blocker — a Simple release carrying these nineteen changes to Full passed v1 — one
        plant each: P1 overlay, P12 icon, P3 hover, P4 sheetmotion, P13 cropbar, V1 halfres, P5 shift34, Q2 key, Q3 addtab,
        P6 touch, P10 group, P11 uiroute, T1 speedtoast, P7 colour, P8 export, P9 bounce, R1 manifest, S1 sanitiser, E1
-       endnudge; and DESIGN's B4 / B5 guards, which v1 had no step for: matte, follow, seam. Each must turn the lock red BY
-       NAME on every run (tools/_fu_compare.py judge). */
+       endnudge; and DESIGN's B4 / B5 guards, which v1 had no step for: matte, follow, seam; and the review's Q1 (finding 4:
+       a changed zoom step left every FU3 record the same), zoomstep. Each must turn the lock red BY NAME on every run
+       (tools/_fu_compare.py judge). */
     ['margin', 'toast', 'floor', 'overlay', 'icon', 'hover', 'sheetmotion', 'cropbar', 'halfres', 'shift34', 'key', 'addtab', 'touch',
-     'group', 'uiroute', 'speedtoast', 'colour', 'export', 'bounce', 'manifest', 'sanitiser', 'endnudge', 'matte', 'follow', 'seam'].forEach(function (n) {
+     'group', 'uiroute', 'speedtoast', 'colour', 'export', 'bounce', 'manifest', 'sanitiser', 'endnudge', 'matte', 'follow', 'seam',
+     'zoomstep'].forEach(function (n) {
       if (names.indexOf(n) < 0) throw new Error('the self-test lost its "' + n + '" plant — the lock can no longer prove it sees that kind of change');
     });
     const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
@@ -119895,6 +119897,38 @@
     if (missing.length) throw new Error('the Full-unchanged probe no longer covers: ' + missing.join('; ') + ' — a change to Full there would pass the lock');
     /* CONTROL: a probe that lost its mask step is read as missing it. */
     if (fu980Coverage(probe.split('a mask on Clip C (Effects').join('a rename'), cmp).indexOf('a mask through the effects browser') < 0) throw new Error('CONTROL: a probe without its mask step was not read as missing it');
+  });
+
+  /* The 6 Oct proof runs of the lock: four of its probe's guards measured NOTHING on HEAD, or measured the machine, and
+     each was found only by running HEAD against itself — the B4 Follow sat on a clip that had left the screen long before
+     the cut, the B5 split Bounce held one key on its tail (so the ring stops there on HEAD), a mask tap mapped through a
+     preview that was shedding pixels on one run and not the other, and the live wire of a step held whatever the media
+     layer's wall-clock sweep and the host's checksum timer had happened to send. Each is fixed in the probe; this keeps
+     each fix there, because the failure it guards is silent: a probe step that draws one picture three times passes every
+     plant aimed at it, and a wire that races fails every honest run. */
+  function fu980Measures(probe) {
+    const missing = [];
+    [
+      ['the Follow guard on Pick D, the one picture on screen on both sides of the cut', 'a Follow on a split target (Pick D follows Clip B'],
+      ['the Follow guard refusing a follower that does not span the cut', 'does not span the cut at '],
+      ['the split Bounce with a key past the cut, so the tail holds two', 'jumpOn(C, k0, k1, kHold)'],
+      ['a mask tap waiting for the preview to be back at the top of its quality ladder', 'await previewSettled();\n            var pr = await stableRect(pv);'],
+      ['FU4 on the probe’s own clock (the host, the guest and presence)', 'startSession(true, true)'],
+      ['FU4 ending each step with one whole media reconcile, awaited', 'media._reconcile(s.S)'],
+      ['FU4 reading the wire only once nothing new has gone out', 'while (same < 3 && Date.now() - t0 < 4000)'],
+      ['FU4 keeping each kind of message in its own order, not interleaved by arrival', 'msgs.sort(function (a, b) { return a.k < b.k ? -1 : a.k > b.k ? 1 : a.i - b.i; });'],
+      ['a guard whose frames do not move failing its step', 'mustMove: true']
+    ].forEach(function (n) { if (probe.indexOf(n[1]) < 0) missing.push(n[0]); });
+    return missing;
+  }
+
+  test('980 FU lock: the probe guards measure Full on HEAD and not the machine (the Follow across the cut, a key past the split, mask taps at the top of the preview ladder, the live wire on the probe clock)', { item: '980' }, async function () {
+    const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    if (!probe) throw new Error('tests/full-unchanged.html is missing — the Full-unchanged lock (queue 980) cannot measure');
+    const missing = fu980Measures(probe);
+    if (missing.length) throw new Error('the Full-unchanged probe no longer has: ' + missing.join('; ') + ' — its guard there measures nothing on HEAD, or measures the machine');
+    /* CONTROL: a probe whose FU4 stopped awaiting the reconcile is read as missing it. */
+    if (fu980Measures(probe.split('media._reconcile(s.S)').join('media.tick(s.S)')).indexOf('FU4 ending each step with one whole media reconcile, awaited') < 0) throw new Error('CONTROL: a probe without the awaited reconcile was not read as missing it');
   });
 
 })();
