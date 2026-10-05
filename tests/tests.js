@@ -53771,8 +53771,7 @@
   });
 
   test('rotate handle crosses the left-hand angle seam without a 360 degree jump (queue 1063)', { item: 'TBD' }, async function () {
-    const box = document.getElementById('select-box');
-    if (!box || !FM.canvasEdit) throw new Error('selection handles are unavailable');
+    if (!FM.canvasEdit) throw new Error('selection handles are unavailable');
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
@@ -53787,6 +53786,8 @@
         L.transform.rotation = 0;
         FM.canvasEdit.update();
         await sleep(100);
+        const box = document.getElementById('select-box');
+        if (!box) throw new Error('selected layer did not create the selection box');
         const knob = box.querySelector('.sb-rot'), kr = knob && knob.getBoundingClientRect();
         if (!kr || !kr.width) throw new Error('rotate handle is unavailable');
         const br = box.getBoundingClientRect(), cx = br.left + br.width / 2, cy = br.top + br.height / 2;
