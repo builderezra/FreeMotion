@@ -8671,7 +8671,6 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 #cv-editor .ed-note { margin: 0; font-size: 12px; color: var(--text-dim); line-height: 1.4; }
 #cv-editor .ed-why { font-size: 12.5px; color: #ffb4a8; min-height: 0; }
 #cv-editor .ed-why:empty { display: none; }
-@keyframes ed-shake-x { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 @media (max-width: 700px) {
   #canvas-dialog.cv-pair > #cv-editor { width: min(420px, calc(100vw - 24px)); }
   #cv-ed-bar .cv-mini-t { display: none; }   /* ONE markup for both widths (DESIGN §21 F11): the phone hides the title */
@@ -8723,6 +8722,25 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   #canvas-dialog.cv-pair.cv-side #cv-ed-bar .ed-gap { display: none; }
   #canvas-dialog.cv-pair.cv-side.cv-flying > #cv-editor > #cv-ed-bar { bottom: 0; height: auto; right: auto; width: 176px; }
   #canvas-dialog.cv-pair.cv-side.cv-flying > #cv-editor > #cv-ed-body { width: 358px; }
+  /* ── D24 B (DESIGN §6.5): SHORT SCREENS. Not S3: the pair is exactly today's two-area grid, and the Editor's small form is a
+     pill of two controls on the cog's own row, 10 px left of the cog and centred on it — not a grid item, so nothing in the
+     pair moves and the swap leaves it where it is. */
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-short:not(.cv-ed-big) { grid-template-rows: auto; grid-template-columns: 176px 360px; grid-template-areas: "fr cv"; }
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-fr-big:not(.cv-ed-big) { grid-template-columns: 360px 176px; grid-template-areas: "fr cv"; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) > #cv-editor { position: fixed; top: calc(var(--cv-cog-mid, 0px) - 18px); right: calc(var(--cv-cog-left, 0px) + 10px);
+    width: auto; background: none; border: 0; box-shadow: none; animation: none; overflow: visible; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) > #cv-editor > #cv-ed-bar { flex-direction: row; align-items: center; height: 36px; gap: 8px; padding: 0; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-head, #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-gap { display: none; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-sw, #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-what { height: 36px; background: var(--panel); box-shadow: none; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-sw::before { inset: -6px -4px; }
+  /* S3 on a short screen: the explanation takes the big column; Friends and Canvas wait as two 64 px bars by the cog */
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto; grid-template-areas: "ed ." "ed fr" "ed cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big { grid-template-rows: auto auto 1fr; grid-template-areas: "ed cv" "ed fr" "ed ."; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-mini { flex-direction: row; align-items: center; height: 64px; padding: 11px 12px 11px 14px; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-mini-s, #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-mini-app,
+  #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-fr-faces { display: none; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px); }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px); }
 }
 @media (prefers-reduced-motion: reduce) {
   body.cv-anchored #canvas-dialog.cv-pair > #cv-editor { animation: none; }

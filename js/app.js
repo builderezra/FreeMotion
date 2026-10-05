@@ -8451,6 +8451,7 @@ window.FM = window.FM || {};
       const CV_PAIR_KEY = 'fm.cvPair';   // its own key: FM.settings' load() whitelist would drop it, and it is not a project fact
       const cvPhoneMq = window.matchMedia ? window.matchMedia('(max-width: 700px)') : null;
       let cvFlight = [];
+      const CV_ED_COL = 159 + 10 + 216;   // Simple mode P1, D24 B: the small column's tallest state — the Editor tile, the gap, the S2 Canvas tile (DESIGN §6.5)
       const CV_SIDE_NEED = 546 + 16;   // side by side needs Friends 360 + gap 10 + tile 176 left of the button's right edge, and 16 of margin
       let cvSrc = null;                // the control the pair hangs from on a PC (the cog — the Share button beside Export went with #983)
       /* The block next to the button: side by side it is always Canvas; stacked it is the big one (the small one sits away). */
@@ -8597,6 +8598,19 @@ window.FM = window.FM || {};
        * #983: A DOOR WITH NO BOX ON A PC HANGS IT FROM THE COG. The phone's person+ passes itself, and above 700 px it has no
        * box — so a pair it opened on a phone, and a window then widened to a PC's, was left un-anchored in the middle (before
        * #983 the width listener moved the button beside Export and the pair followed it there). The cog is the PC's door. */
+      /* D24 B (DESIGN §6.5, his pick 5 Oct): ON A SHORT SCREEN THE SWITCH STAYS ON SCREEN. Side by side, the small column must
+         hold the Editor tile + the gap + the tallest small tile (CV_ED_COL); where the room on the cog's open side is less, the
+         Editor's small form becomes two controls on the cog's own row (cv-ed-short), placed from these two variables, and
+         Canvas and Friends keep their rects exactly. Measured on: 956x440 (his phone sideways), 932x430, 844x390, 1024x600. */
+      const cvEdFit = (sr, up) => {
+        const on = !!(sr && cvDialog.classList.contains('cv-ed-on') && cvDialog.classList.contains('cv-side')
+          && ((up ? sr.top - 24 : window.innerHeight - sr.bottom - 24) < CV_ED_COL));
+        cvDialog.classList.toggle('cv-ed-short', on);
+        if (on) {
+          cvDialog.style.setProperty('--cv-cog-mid', Math.round((sr.top + sr.bottom) / 2) + 'px');
+          cvDialog.style.setProperty('--cv-cog-left', Math.round(window.innerWidth - sr.left) + 'px');
+        } else { cvDialog.style.removeProperty('--cv-cog-mid'); cvDialog.style.removeProperty('--cv-cog-left'); }
+      };
       const cvPlace = (src) => {
         if (src && !(src.getBoundingClientRect().width > 0) && window.matchMedia('(min-width: 701px)').matches) src = document.getElementById('btn-settings') || src;
         cvSrc = src || null;
@@ -8618,6 +8632,7 @@ window.FM = window.FM || {};
           cvDialog.style.setProperty('--cv-anchor-bottom', Math.max(8, Math.round(window.innerHeight - sr.top + 8)) + 'px');
           document.body.classList.add('cv-anchored');
           cvDialog.classList.toggle('cv-side', sr.right >= CV_SIDE_NEED);                    // room for side by side, else stacked
+          cvEdFit(sr, up);
           /* (#983: `cv-share-src`, which put the cog back under the blur while the pair hung off the Share button beside
              Export, went with that button.) */
         } else {
@@ -8626,6 +8641,7 @@ window.FM = window.FM || {};
           cvDialog.style.removeProperty('--cv-anchor-bottom');
           document.body.classList.remove('cv-anchored', 'cv-up');
           cvDialog.classList.remove('cv-side');
+          cvEdFit(null);
         }
         /* THE TAIL, and ONLY the tail (queue 548). The cog already pops from its button with its own cv-grow, and suite
            tests pin that placement — so it takes the comic tail the other three have and keeps everything else. cvAim
@@ -8706,6 +8722,7 @@ window.FM = window.FM || {};
         friendsUnmount();
         cvWatchWidth(false);
         cvSrc = null; cvDialog.classList.remove('cv-side');
+        cvEdFit(null);
         (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         cvDialog.classList.add('hidden');
       };
