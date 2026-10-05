@@ -5,6 +5,7 @@
 #   tools/full-unchanged.sh --measure        # re-measure the tolerances (HEAD against itself, every group, and a 1 px move)
 #   tools/full-unchanged.sh --selftest-gate  # the ship.sh gate's rules (tools/_fu_gate.py), in a second
 #   tools/full-unchanged.sh --hash           # the source hash a PASS is cached under
+#   tools/full-unchanged.sh --selftest-port  # two runs started at the same instant get two ports, each serving its own folder
 #
 # ⚠️ IT TAKES ~20 MINUTES — over the Bash tool's 600 s cap. Run it in the background (run_in_background) and read its
 # output when it says it is done; never in the foreground, or the cap kills it half-way (its trap cleans up, but the run
@@ -79,7 +80,7 @@ FU_GRID_JITTER=0            # a decoded export cell, HEAD against itself
 FU_GRID_TOL=6               # … and the most a cell may move
 export FU_INVISIBLE FU_TOL_PX FU_CHAN FU_FAINT_TOL_PX FU_FAINT_CHAN FU_GRID_TOL
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="${FU_ROOT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$ROOT" || exit 2
 MODE=run
 case "${1:-}" in
@@ -87,9 +88,19 @@ case "${1:-}" in
   --measure) MODE=measure ;;
   --selftest-gate) exec python3 tools/_fu_gate.py selftest ;;
   --hash) exec python3 tools/_fu_gate.py hash ;;
+  --selftest-port) MODE=selftest-port ;;
   -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
   *) echo "full-unchanged: unknown option $1 (see --help)"; exit 2 ;;
 esac
+# BASH READS A SCRIPT AS IT RUNS: an edit to this file during a run — another session on the same tree, a pull — would have
+# the rest of the run execute whatever bytes now sit at its read offset (6 Oct: edited mid-run while developing it). So a
+# run executes a private copy, taken here; the real file is read again only by the hash at the end, which then differs,
+# so a run whose instrument changed under it earns no PASS. (The copy goes on the cleanup trap.)
+if [ -z "${FU_SELF_COPY:-}" ]; then
+  _copy="$(mktemp "${TMPDIR:-/tmp}/fm-full-unchanged-self.XXXXXX")" || exit 2
+  cp "$0" "$_copy" || exit 2
+  FU_SELF_COPY="$_copy" FU_ROOT_DIR="$ROOT" exec bash "$_copy" "$@"
+fi
 # Each tolerance is a claim about two measurements; a hand-loosened number that no longer sits between them is refused.
 # (And none of these lines can change in a Simple release at all: tools/_fu_gate.py refuses one that edits this file.)
 if ! [ "$FU_TOL_PX" -gt "$FU_JITTER_PX" ] 2>/dev/null || ! [ "$FU_TOL_PX" -lt 8 ] 2>/dev/null || ! [ "$FU_TOL_PX" -lt "$FU_SMALLEST_REAL_PX" ] 2>/dev/null \
@@ -145,6 +156,7 @@ cleanup() {
   [ -n "$SERVER" ] && kill "$SERVER" 2>/dev/null
   for p in "${WATCH[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null; done
   [ -n "$LOCK" ] && rm -rf "$LOCK"
+  rm -f "${FU_SELF_COPY:-/nonexistent}"
   [ -n "${FU_KEEP:-}" ] && say "(kept $WORK)" || rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -161,12 +173,23 @@ watch_child() {   # watch_child <pid>
   WATCH+=($!)
 }
 
+if [ "$MODE" = run ]; then
+  # ship.sh bumps a stale ?v= in index.html BEFORE its gate asks for this PASS — so a PASS measured on a stale tree is for
+  # a tree that never ships, and is refused after the whole measurement. Bump first (as ship.sh would), then measure.
+  if ! _stale="$(python3 tools/_fu_gate.py stale-busters)"; then
+    say "❌ not measuring: index.html's cache-busters are stale for $_stale — ship.sh would bump them and so change the"
+    say "   tree after this PASS. Bump each ?v= in index.html (+1), then run this again."
+    exit 2
+  fi
+fi
 HASH0="$(python3 tools/_fu_gate.py hash)"
 HEADSHA="$(git rev-parse --short HEAD)"
 
 # ─── 3. HEAD AND THE TREE, EACH FROZEN IN ITS OWN FOLDER ─────────────────────────────────────────────────────────────
-python3 tools/_fu_gate.py snapshot-head "$WORK/head" >/dev/null || { say "❌ could not extract HEAD"; exit 2; }
-python3 tools/_fu_gate.py snapshot-tree "$WORK/tree" >/dev/null || { say "❌ could not copy the tree"; exit 2; }
+if [ "$MODE" != selftest-port ]; then
+  python3 tools/_fu_gate.py snapshot-head "$WORK/head" >/dev/null || { say "❌ could not extract HEAD"; exit 2; }
+  python3 tools/_fu_gate.py snapshot-tree "$WORK/tree" >/dev/null || { say "❌ could not copy the tree"; exit 2; }
+fi
 
 # ─── 4. ONE SERVER FOR EVERY COPY, ON A PORT THAT IS PROVABLY OURS ───────────────────────────────────────────────────
 # v1 picked "a free port" with lsof and then bound it — two runs started together picked the SAME port, one server died
@@ -177,7 +200,7 @@ TOKEN="fu-$$-$RANDOM$RANDOM-$(date +%s)"
 printf '%s' "$TOKEN" > "$WORK/fu-serve-token.txt"
 start_server() {
   local p lk
-  for p in $(seq 8790 8799) $(seq 8800 8849); do
+  for p in $(seq "${PORT_LO:-8790}" "${PORT_HI:-8849}"); do
     lk="${TMPDIR:-/tmp}/fm-full-unchanged-port-$p.lock"
     if ! mkdir "$lk" 2>/dev/null; then
       local owner; owner="$(cat "$lk/pid" 2>/dev/null)"
@@ -196,8 +219,38 @@ start_server() {
     if [ "$ok" = 1 ]; then PORT="$p"; LOCK="$lk"; return 0; fi
     kill "$SERVER" 2>/dev/null; SERVER=""; rm -rf "$lk"
   done
-  say "❌ no port in 8790–8849 would serve this run's folder"; return 1
+  say "❌ no port in ${PORT_LO:-8790}–${PORT_HI:-8849} would serve this run's folder"; return 1
 }
+# THE RACE, AS A TEST (review of v1: two runs started together took the same port 3 rounds of 3, and the loser measured
+# the winner's folder). Two start_servers at the same instant, three rounds, on 8850–8859 (out of real runs' way): each
+# must get its own port, and each port must hand back its own run's token. No Chrome, a few seconds.
+if [ "$MODE" = selftest-port ]; then
+  PORT_LO=8850; PORT_HI=8859; bad=0
+  for round in 1 2 3; do
+    for k in a b; do
+      ( WORK="$WORK/r$round$k"; mkdir -p "$WORK"; TOKEN="fu-st-$round$k-$RANDOM$RANDOM"; printf '%s' "$TOKEN" > "$WORK/fu-serve-token.txt"
+        SERVER=""; LOCK=""; PORT=""; WATCH=()
+        start_server >/dev/null 2>&1 && echo "$PORT $TOKEN $SERVER $LOCK" > "$WORK/result" ) &
+    done
+    wait
+    ra="$(cat "$WORK/r${round}a/result" 2>/dev/null)"; rb="$(cat "$WORK/r${round}b/result" 2>/dev/null)"
+    set -- $ra; pa="${1:-}"; ta="${2:-}"; sa="${3:-}"; la="${4:-}"
+    set -- $rb; pb="${1:-}"; tb="${2:-}"; sb="${3:-}"; lb="${4:-}"
+    ga="$(curl -sf "http://localhost:$pa/fu-serve-token.txt" 2>/dev/null)"; gb="$(curl -sf "http://localhost:$pb/fu-serve-token.txt" 2>/dev/null)"
+    if [ -z "$pa" ] || [ -z "$pb" ] || [ "$pa" = "$pb" ] || [ "$ga" != "$ta" ] || [ "$gb" != "$tb" ]; then
+      say "❌ round $round: run a got :${pa:-none} (serves ${ga:-nothing}), run b got :${pb:-none} (serves ${gb:-nothing})"; bad=1
+    else
+      say "✅ round $round: run a on :$pa and run b on :$pb, each serving its own folder"
+    fi
+    for x in "$sa" "$sb"; do [ -n "$x" ] && kill "$x" 2>/dev/null; done
+    for x in "$la" "$lb"; do [ -n "$x" ] && rm -rf "$x"; done
+    sleep 0.5
+  done
+  exit "$bad"
+fi
+if [ "$MODE" = run ] && ! "$ROOT/tools/full-unchanged.sh" --selftest-port >/dev/null 2>&1; then
+  say "❌ the port self-test failed (tools/full-unchanged.sh --selftest-port): two runs at once would not each get their own server — no PASS"; exit 2
+fi
 start_server || exit 2
 URL="http://localhost:$PORT"
 
@@ -212,18 +265,25 @@ start_probe() {   # start_probe <copy> <width> <groups>; background; the PID is 
   CDPS+=($!); watch_child "$!"
 }
 wait_probes() { local p; for p in "${CDPS[@]:-}"; do [ -n "$p" ] && wait "$p" 2>/dev/null; done; CDPS=(); }
+# ONE CHROME AT A TIME by default (6 Oct): this Mac has 8 GB and crashed from memory pressure on 5 Oct with several
+# Chromes up; v1 ran HEAD and the tree side by side and three plants at once. FU_JOBS=2 (or more) on a bigger machine.
+JOBS="${FU_JOBS:-1}"
+probe() {         # probe <copy> <width> <groups>: start one, and wait (and check the load) once JOBS are running
+  start_probe "$@"
+  if [ "${#CDPS[@]}" -ge "$JOBS" ]; then wait_probes; waitload || exit 2; fi
+}
 ALL='FU1,FU2,FU3,FU6,FU4,FU5,FU7'   # the probe's own order: every plant is measured with a PREFIX of it
 
 # ─── --measure: the numbers this file carries ────────────────────────────────────────────────────────────────────────
 if [ "$MODE" = measure ]; then
   say "→ measuring: HEAD ($HEADSHA) twice, at 380 and 1280, every group…"
   python3 tools/_fu_compare.py linkcopy "$WORK/head" "$WORK/head2" || exit 2
-  start_probe head 380 "$ALL"; start_probe head2 380 "$ALL"; wait_probes
-  start_probe head 1280 "$ALL"; start_probe head2 1280 "$ALL"; wait_probes
+  probe head 380 "$ALL"; probe head2 380 "$ALL"; wait_probes
+  probe head 1280 "$ALL"; probe head2 1280 "$ALL"; wait_probes
   say "→ and the smallest real change: the #transport 1 px margin (the self-test's first plant)…"
   python3 tools/_fu_compare.py linkcopy "$WORK/tree" "$WORK/margin" || exit 2
   python3 tools/_fu_compare.py plant margin "$WORK/margin" || exit 2
-  start_probe margin 380 FU1; start_probe margin 1280 FU1; wait_probes
+  probe margin 380 FU1; probe margin 1280 FU1; wait_probes
   python3 tools/_fu_compare.py measure "$WORK/head" "$WORK/head2" "$WORK/margin"
   exit $?
 fi
@@ -232,9 +292,9 @@ fi
 log "→ Full unchanged: the tree against HEAD ($HEADSHA), sources $HASH0"
 log "   one server on :$PORT (its token checked) — 380×800 (a touch phone) first, then 1280×800"
 T0=$SECONDS
-start_probe head 380 "$ALL"; start_probe tree 380 "$ALL"; wait_probes
+probe head 380 "$ALL"; probe tree 380 "$ALL"; wait_probes
 waitload || exit 2
-start_probe head 1280 "$ALL"; start_probe tree 1280 "$ALL"; wait_probes
+probe head 1280 "$ALL"; probe tree 1280 "$ALL"; wait_probes
 log "   both sides measured in $(( SECONDS - T0 ))s"
 python3 tools/_fu_compare.py "$WORK/head" "$WORK/tree" --widths 380,1280 --groups "$ALL" --json "$WORK/main.json" | tee -a "$REPORT"
 RC=${PIPESTATUS[0]}
@@ -254,13 +314,11 @@ while read -r name groups widths; do
   python3 tools/_fu_compare.py plant "$name" "$WORK/plant-$name" || { log "❌ could not plant $name — the self-test cannot run, so no PASS"; exit 1; }
   for w in ${widths//,/ }; do PLANTS+=("plant-$name $w $groups"); done
 done < <(python3 tools/_fu_compare.py plants)
-# three probes at a time, the Mac's load checked between batches
-i=0
+# FU_JOBS at a time (one by default), the Mac's load checked between them
 for job in "${PLANTS[@]}"; do
   set -- $job
-  start_probe "$1" "$2" "$3"
-  i=$((i + 1))
-  if [ $((i % 3)) = 0 ]; then wait_probes; waitload || exit 2; fi
+  log "   · plant $1 at $2 ($3)"
+  probe "$1" "$2" "$3"
 done
 wait_probes
 SELF_OK=1

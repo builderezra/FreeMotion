@@ -402,6 +402,27 @@ def source_hash(root):
     return h.hexdigest()[:24]
 
 
+def stale_busters(root):
+    """Changed js / css files whose ?v= in index.html still equals HEAD's. tools/ship.sh BUMPS these before this gate
+    runs, which changes index.html — so a PASS measured before the bump is for a tree that never ships, and the gate
+    refuses it after a ninety-minute measurement. tools/full-unchanged.sh asks this first and will not measure until
+    they are bumped (the same rule ship.sh's buster gate reads: js/*.js, styles.css, theme-glass.css)."""
+    try:
+        now = io.open(os.path.join(root, 'index.html'), encoding='utf-8').read()
+    except OSError:
+        return []
+    was = sh(['git', 'show', 'HEAD:index.html'], root)
+    out = []
+    for f in changed_files(root):
+        if not re.match(r'^(js/.*\.js|styles\.css|theme-glass\.css)$', f):
+            continue
+        a = re.search(re.escape(f) + r'\?v=([0-9.]+)', now)
+        b = re.search(re.escape(f) + r'\?v=([0-9.]+)', was)
+        if a and b and a.group(1) == b.group(1):
+            out.append('%s (still ?v=%s)' % (f, a.group(1)))
+    return out
+
+
 def check(root):
     """For tools/ship.sh. Returns (code, message): 0 OK / not triggered, 1 refuse."""
     logline = newest_log_line(root)
@@ -726,6 +747,12 @@ def main():
     if cmd == 'why':
         files = changed_files(root)
         print('\n'.join(trigger(newest_log_line(root), files, hook_lines(root, files))) or 'not triggered')
+        return 0
+    if cmd == 'stale-busters':
+        s = stale_busters(root)
+        if s:
+            print(', '.join(s))
+            return 1
         return 0
     code, msg = check(root)
     print(msg)
