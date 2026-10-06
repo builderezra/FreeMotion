@@ -76,8 +76,13 @@ fi
 # LIVE MUST NOT BE AHEAD OF THIS TREE (queue 1066, 5 Oct). Another tool pushed to ssh/main (ChatGPT's v17.22, f7716576) while
 # this tree still sat on v17.21 with its own unshipped work also labelled v17.22. Nothing here looked at the remote until the
 # push, so a ship would have spent ~90 minutes on two suite passes and then been rejected as non-fast-forward. So: fetch
-# first and refuse in one second if live is not in this tree's history. If the remote cannot be reached, say so and carry
-# on — the push at the end still verifies, so an offline ship loses nothing it had before this gate.
+# first and refuse in one second if live is not in this tree's history.
+# ⚠️ AND IF GITHUB CANNOT BE REACHED, REFUSE TOO (6 Oct). It used to warn and carry on, on the grounds that the push verifies
+# at the end. But on 6 Oct github.com dropped out from this Mac twice in one night (03:14 and 03:50, ssh and https both), and a
+# ship launched into that spends ~90 minutes on two suite passes for a push that cannot land. Worse, a fetch with no time limit
+# HANGS rather than fails when the network half-answers, and the ship would sit there. So the fetch gets 15 seconds to connect,
+# and an unreachable remote stops the ship before anything runs. FM_SHIP_OFFLINE=1 says "commit locally anyway, I know".
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3}"
 if git fetch -q ssh 2>/dev/null; then
   if ! git merge-base --is-ancestor ssh/main HEAD; then
     echo "❌ LIVE HAS MOVED ON: ssh/main ($(git rev-parse --short ssh/main)) is not in this tree's history (HEAD $(git rev-parse --short HEAD))."
@@ -85,8 +90,13 @@ if git fetch -q ssh 2>/dev/null; then
     echo "   (git cherry-pick --no-commit <branch>), renumber if the versions collide. Shipping now would run the whole suite and then fail at the push."
     exit 1
   fi
+elif [ "${FM_SHIP_OFFLINE:-}" = "1" ]; then
+  echo "⚠️  could not reach GitHub (ssh) — FM_SHIP_OFFLINE=1, so carrying on; the push at the end will fail and the commit stays local"
 else
-  echo "⚠️  could not reach ssh to check whether live has moved on — carrying on; the push at the end still verifies"
+  echo "❌ GITHUB CANNOT BE REACHED (git fetch ssh failed or took over 15 s to connect). The push at the end would fail after ~90"
+  echo "   minutes of suite passes. Wait until this answers 200, then ship:  curl -s -m 8 -o /dev/null -w '%{http_code}' https://github.com"
+  echo "   (FM_SHIP_OFFLINE=1 tools/ship.sh ... commits locally anyway.)"
+  exit 1
 fi
 # A SPOT-CHECK AND A SHIP DO NOT SHARE THE MACHINE (5 Sep). Two headless suites at once starve the timing-sensitive tests: a
 # two-commit spot-check running under the v15.71 ship's phone pass flaked test 699 ("the CONTROL swipe moved nothing") and cost
