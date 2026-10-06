@@ -357,6 +357,78 @@ out="$(tools/record-baselines.sh --fake-os linux --file ../x.json 2>&1)"; rc=$?
 [ "$rc" = 2 ] && ok "--file must be a plain name under tests/" || bad "--file path: rc=$rc $out"
 python3 -c 'import json,sys; d=json.load(open("tests/baselines.json")); sys.exit(0 if isinstance(d, dict) and "_about" in d and "macos" not in d else 1)' && ok "tests/baselines.json is tracked, valid, and holds no 'macos' section (the Mac's are the literals)" || bad "tests/baselines.json is missing, not JSON, or holds a macos section"
 
+echo "── a baseline is recorded from a RELEASED commit as committed, never the working tree — and ships alone (6 Oct, the port audit, MAJOR) ──"
+# A recording blesses whatever the served tree draws: pinSame() stores it and says yes, pinTol() says Infinity. It served the
+# WORKING TREE, stamped it with HEAD's hash, and nothing checked HEAD was released — so a render regression in the tree could
+# be written as this OS's baseline and then "proven" against itself. A fixture repo with a local 'ssh' remote; the stub
+# driver reads js/probe.js from the server it was pointed at and records THAT as the pinned value, so the recording says
+# which tree was served. (A stub Chrome: nothing here launches a browser.)
+BR="$TMP/brec"; mkdir -p "$BR/tools" "$BR/tests" "$BR/js"
+cp tools/record-baselines.sh tools/_platform.sh tools/serve.sh "$BR/tools/"
+cat > "$BR/tests/_cdp.py" <<'STUB'
+#!/usr/bin/env python3
+# STUB driver: records what the served js/probe.js says; a proof run passes only if the served tree carries the recording
+import json, sys, urllib.request, urllib.parse
+a = sys.argv[1:]
+url = a[a.index('--url') + 1]; u = urllib.parse.urlparse(url); q = urllib.parse.parse_qs(u.query)
+base = '%s://%s' % (u.scheme, u.netloc)
+get = lambda p: urllib.request.urlopen(base + p).read().decode()
+ok = {"ok": True, "summary": "Regression 1/1 ✓ FILTERED", "failures": [], "notRun": [], "browser": "stub"}
+if '--record-baselines' in a:
+    open(a[a.index('--record-baselines') + 1], 'w').write(json.dumps({"os": "linux", "tables": {"t / probe": {"v": get('/js/probe.js').strip()}}, "tols": {}, "incomplete": [], "tests": ["t"]}))
+    print(json.dumps(ok)); sys.exit(0)
+f = (q.get('fmbaselines') or ['baselines.json'])[0]
+try: rec = json.loads(get('/tests/' + f)).get('linux', {}).get('tables', {}).get('t / probe', {}).get('v')
+except Exception as e: rec = None
+want = get('/js/probe.js').strip()
+if rec != want: print(json.dumps({"ok": False, "summary": "Regression 0/1", "failures": ["FAIL stub: served probe %r, served recording %r" % (want, rec)], "notRun": []})); sys.exit(1)
+print(json.dumps(ok))
+STUB
+( cd "$BR" && git init -q . && git config user.email t@t && git config user.name t && git checkout -q -b main 2>/dev/null
+  echo 'RELEASED' > js/probe.js; printf '{"_about": "fixture"}\n' > tests/baselines.json; printf '<html></html>\n' > index.html
+  mkdir -p tests && printf '<html></html>\n' > tests/run.html
+  git add -A && git commit -q -m released && git init -q --bare "$TMP/brec-remote.git" && git remote add ssh "$TMP/brec-remote.git" && git push -q ssh main 2>/dev/null && git fetch -q ssh )
+printf '#!/bin/sh\nexit 0\n' > "$TMP/brec-chrome"; chmod +x "$TMP/brec-chrome"
+brec() { ( cd "$BR" && PATH="$(shim_os Linux):$PATH" FM_CHROME="$TMP/brec-chrome" tools/record-baselines.sh "$@" 2>&1 ); }
+echo 'WORKING-TREE EDIT' > "$BR/js/probe.js"   # uncommitted: a recording must not see it
+out="$(brec)"; rc=$?
+got="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("linux", {}).get("tables", {}).get("t / probe", {}).get("v"))' "$BR/tests/baselines.json" 2>/dev/null)"
+[ "$rc" = 0 ] && [ "$got" = RELEASED ] && ok "a dirty working tree: the recording is HEAD's committed js/probe.js ('RELEASED'), not the edit" || bad "the recording read the working tree (or did not run): rc=$rc recorded=[$got] — $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
+stamp="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("linux", {}).get("commit"))' "$BR/tests/baselines.json" 2>/dev/null)"
+[ -n "$stamp" ] && [ "$stamp" = "$(cd "$BR" && git rev-parse --short HEAD)" ] && ok "…stamped with HEAD's hash, which now describes exactly what was recorded" || bad "the recording's commit stamp is [$stamp]"
+( cd "$BR" && git checkout -q -- tests/baselines.json && echo 'UNRELEASED' > js/probe.js && git commit -q -am 'not pushed' )
+out="$(brec)"; rc=$?
+[ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'not a released commit' && ( cd "$BR" && git diff --quiet HEAD -- tests/baselines.json ) && ok "HEAD not in ssh/main: refused (exit 2), tests/baselines.json untouched" || bad "an unreleased HEAD was recorded into the tracked file: rc=$rc — $(printf '%s' "$out" | tail -2 | tr '\n' ' ')"
+out="$(brec --fake-os linux --file proof.json)"; rc=$?
+[ "$rc" = 0 ] && ok "control: a PROOF file (never the tracked one) may be recorded from an unreleased HEAD — and still from HEAD as committed" || bad "a proof recording on an unreleased HEAD failed: rc=$rc — $(printf '%s' "$out" | tail -2 | tr '\n' ' ')"
+
+echo "── ship.sh refuses tests/baselines.json beside shipped source, or recorded on an unreleased commit (6 Oct, the port audit, MAJOR) ──"
+bg() { ( cd "$BR" && python3 "$REPO/tools/_shipgates.py" baseline-gate 2>&1 ); }
+( cd "$BR" && git reset -q --hard ssh/main )
+REL="$(cd "$BR" && git rev-parse --short HEAD)"
+setsec() { python3 - "$BR/tests/baselines.json" "$1" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); d["linux"] = {"commit": sys.argv[2], "tables": {"t / probe": {"v": "x"}}, "tols": {}, "tests": ["t"]}
+json.dump(d, open(sys.argv[1], "w"))
+PY
+}
+setsec "$REL"; v="$(bg)"; rc=$?
+[ "$rc" = 0 ] && ok "control: baselines.json alone, recorded on a released commit → passes" || bad "a lone, released recording was refused: rc=$rc $v"
+echo 'var x = 1;' > "$BR/js/app.js"; v="$(bg)"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$v" | grep -q 'js/app.js' && ok "baselines.json + js/app.js in one release → refused, naming the source file" || bad "baselines.json beside shipped source passed: rc=$rc $v"
+rm -f "$BR/js/app.js"; echo 'body{}' > "$BR/styles.css"; ( cd "$BR" && git add styles.css ); v="$(bg)"; rc=$?
+[ "$rc" = 1 ] && ok "…and beside styles.css (staged) too" || bad "baselines.json beside styles.css passed: rc=$rc $v"
+( cd "$BR" && git rm -q --cached styles.css && rm -f styles.css )
+UNREL="$(cd "$BR" && git commit -q --allow-empty -m 'local only' && git rev-parse --short HEAD)"; ( cd "$BR" && git reset -q --soft HEAD~1 )
+setsec "$UNREL"; v="$(bg)"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$v" | grep -q 'not a released commit' && ok "a changed section recorded on a commit that is not in ssh/main → refused" || bad "an unreleased recording passed: rc=$rc $v"
+setsec ""; v="$(bg)"; rc=$?
+[ "$rc" = 1 ] && ok "…and one that names no commit at all" || bad "a section with no commit passed: rc=$rc $v"
+( cd "$BR" && git checkout -q -- tests/baselines.json ); echo 'var x = 2;' > "$BR/js/app.js"; v="$(bg)"; rc=$?
+[ "$rc" = 0 ] && ok "control: shipped source with baselines.json unchanged → this gate has nothing to say" || bad "a source-only release was refused by the baseline gate: rc=$rc $v"
+rm -f "$BR/js/app.js"
+awk '/_shipgates.py baseline-gate/{f=NR} /^ship_phase prove/{p=NR} END{exit !(f && p && f < p)}' tools/ship.sh && ok "ship.sh asks it in the one-second gates, before the proof and the suites" || bad "ship.sh does not run the baseline gate before the proof step"
+
 echo "── ship.sh runs THIS test whenever a file it proves changes (6 Oct, the port audit, minor) ──"
 # A release that edited only tools/_shipgates.py (the feature gate, and the sh() that makes a failed git a refusal) shipped
 # with no self-test at all: ship.sh runs this file only when a file in its trigger list changes, and the list was written by

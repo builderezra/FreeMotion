@@ -99,6 +99,73 @@ def feature_gate(files, diff_text, notrun_lines):
     return out
 
 
+# ---- THE BASELINE GATE (6 Oct, the port audit, MAJOR) -----------------------------------------------------------------
+# tests/baselines.json is what the pinned 482 / 986 tests compare against on every OS but the Mac — so a release that
+# re-records it can make a pinned test pass against the very regression it carries. Two rules, both about the release:
+#   • it ships ALONE: tests/baselines.json beside any shipped source refuses (a recording blesses code, so the code it
+#     blesses must already be out, proven by the Mac);
+#   • every OS section it changes names the commit it was recorded on, and that commit is RELEASED (in ssh/main).
+# tools/record-baselines.sh records only HEAD as committed, and into this file only from a released HEAD; this is the lock
+# on the other door — a hand edit, an old copy of the recorder, a merge.
+def baseline_gate(files, old, new, released):
+    """refusal lines. files: the release's changed paths; old / new: tests/baselines.json at HEAD and in the tree (dicts;
+    new None = unreadable); released(commit) -> True / False."""
+    import fnmatch
+    if 'tests/baselines.json' not in files:
+        return []
+    out = []
+    src = [p for p in files if any(fnmatch.fnmatch(p, g) for g in SHIPPED)]
+    if src:
+        out.append("❌ THIS RELEASE CHANGES tests/baselines.json AND SHIPPED SOURCE (%s) — a recording blesses whatever the code "
+                   "draws, so it ships on its own, after the code it was recorded on has shipped from the Mac."
+                   % (', '.join(src[:6]) + (' … and %d more' % (len(src) - 6) if len(src) > 6 else '')))
+    if new is None:
+        out.append("❌ tests/baselines.json is not readable JSON — every pinned test would say NOT RUN on it.")
+        return out
+    for osn in sorted(k for k in new if not k.startswith('_')):
+        sec = new[osn]
+        if isinstance(old, dict) and old.get(osn) == sec:
+            continue
+        c = sec.get('commit') if isinstance(sec, dict) else None
+        if not c:
+            out.append("❌ the '%s' baselines changed and name no commit they were recorded on — record them with "
+                       "tools/record-baselines.sh on a released commit." % osn)
+        elif not released(str(c)):
+            out.append("❌ the '%s' baselines were recorded on %s, which is not a released commit (not in ssh/main) — "
+                       "only code a ship has passed on the Mac may be recorded." % (osn, c))
+    return out
+
+
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "baseline-gate":
+    # tools/ship.sh, in the one-second gates (after the fetch): the release's files and both copies of the file from git
+    import json
+    files = set(sh(['git', 'diff', '--name-only', 'HEAD']).split() + sh(['git', 'ls-files', '--others', '--exclude-standard']).split())
+    if 'tests/baselines.json' in files:
+        at_head = subprocess.run(['git', 'cat-file', '-e', 'HEAD:tests/baselines.json'], capture_output=True).returncode == 0
+        try:
+            old = json.loads(sh(['git', 'show', 'HEAD:tests/baselines.json'])) if at_head else {}
+        except ValueError:
+            old = {}
+        try:
+            new = json.load(open('tests/baselines.json', encoding='utf-8'))
+            new = new if isinstance(new, dict) else None
+        except FileNotFoundError:
+            new = {}
+        except ValueError:
+            new = None
+        sh(['git', 'rev-parse', '--verify', '-q', 'ssh/main'])   # no ssh/main: git cannot say what is released — exit 3
+
+        def released(c):
+            r = subprocess.run(['git', 'merge-base', '--is-ancestor', c, 'ssh/main'], capture_output=True, text=True)
+            return r.returncode == 0   # 1 = not an ancestor; 128 = no such commit here — neither is released
+        lines = baseline_gate(sorted(files), old, new, released)
+    else:
+        lines = []
+    for l in lines:
+        print(l)
+    sys.exit(1 if lines else 0)
+
+
 if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "feature-gate":
     # tools/ship.sh: NOT RUN lines on stdin; the release's files and diff from git (--files / --diff-file for the self-test)
     args = sys.argv[2:]

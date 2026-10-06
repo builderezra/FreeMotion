@@ -11,12 +11,21 @@
 # looks every other OS up in tests/baselines.json; an OS with nothing recorded says NOT RUN HERE: no baseline recorded for
 # <os> (run tools/record-baselines.sh). This writes that OS's section.
 #
-# ⚠️ RECORD ON A TREE THE MAC HAS PASSED, AND ONLY THEN. A recording blesses whatever this machine draws today, so it is
-# only as good as the code it was taken from: the Mac's full suite must have been green on this commit (a shipped
-# release is). It refuses on the Mac (nothing to record — the literals ARE the Mac's), refuses when a pinned test fails
-# for any other reason while recording, refuses when a table was not fully seen, and then PROVES the recording: the
-# pinned tests must pass at 1280 and at 380 against what was just written, with none NOT RUN for want of a baseline.
-# Commit tests/baselines.json afterwards; it is tracked, one section per OS.
+# ⚠️ RECORD ON A TREE THE MAC HAS PASSED, AND ONLY THEN — and that is a gate, not this sentence (6 Oct, the port audit,
+# MAJOR). A recording blesses whatever the served tree draws (pinSame() stores it and says yes, pinTol() says Infinity), so
+# it is only as good as the code it was taken from. It used to serve the WORKING TREE, uncommitted edits and all, stamp it
+# with HEAD's hash and never ask whether HEAD had shipped — so a render regression in the tree could be written down as
+# this OS's baseline and then "proven" green against itself. Now:
+#   • into the tracked tests/baselines.json only when HEAD is a RELEASED commit (in ssh/main — a ship ran the Mac's two
+#     suite passes on it). A proof file (--file) may be any commit; it is never what the suite reads.
+#   • from HEAD AS COMMITTED: `git archive HEAD` into a temporary directory, which is what is served — never the working
+#     tree, whatever it holds. The stamp is then the truth.
+#   • and ship.sh refuses a release that carries tests/baselines.json beside shipped source, or a changed section whose
+#     commit is not in ssh/main (tools/_shipgates.py baseline-gate) — so a recording ships on its own.
+# It also refuses on the Mac (nothing to record — the literals ARE the Mac's), refuses when a pinned test fails for any
+# other reason while recording, refuses when a table was not fully seen, and then PROVES the recording: the pinned tests
+# must pass at 1280 and at 380 against what was just written, with none NOT RUN for want of a baseline.
+# Commit tests/baselines.json afterwards, ON ITS OWN; it is tracked, one section per OS.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 . tools/_platform.sh || { echo "record-baselines: tools/_platform.sh is missing"; exit 2; }
@@ -37,17 +46,41 @@ fi
 if [ -z "$FAKE" ] && [ "$(fm_os)" = Darwin ]; then
   echo "❌ this is the Mac: its baselines are the literals in tests/tests.js — there is nothing to record here."; exit 2
 fi
+# WHAT IS RECORDED: HEAD, as committed — and for the tracked file, only a HEAD that has shipped (see the header).
+HEAD_FULL="$(git rev-parse --verify -q HEAD)" || { echo "record-baselines: git cannot say what HEAD is — nothing recorded"; exit 2; }
+HEAD_SHORT="$(git rev-parse --short "$HEAD_FULL")"
+if [ "$FILE" = baselines.json ]; then
+  export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o ConnectTimeout=15 -o BatchMode=yes}"
+  git fetch -q ssh 2>/dev/null || echo "   (could not reach GitHub — judging by the last-fetched ssh/main)"
+  if ! git rev-parse -q --verify ssh/main >/dev/null; then
+    echo "❌ there is no ssh/main here to say whether HEAD ($HEAD_SHORT) has shipped — nothing recorded."; exit 2
+  fi
+  if ! git merge-base --is-ancestor "$HEAD_FULL" ssh/main; then
+    echo "❌ HEAD ($HEAD_SHORT) is not a released commit (it is not in ssh/main): a recording blesses whatever it draws, so it is"
+    echo "   taken only from code a ship has passed on the Mac. Check out a released commit (or ship this one first) — nothing recorded."
+    exit 2
+  fi
+fi
+if [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null | grep -v ' tests/baselines\.json$')" ]; then
+  echo "   ⚠️  the working tree has uncommitted changes — they are NOT recorded: this records HEAD ($HEAD_SHORT) exactly as committed"
+fi
 fm_chrome >/dev/null || { echo "record-baselines: no Chrome (the reason is above) — nothing recorded"; exit 2; }
-fm_require curl python3 || exit 2
+fm_require curl python3 tar || exit 2
 for lock in .ship-in-progress .mutation-in-progress .spotcheck-in-progress; do
   [ -f "$lock" ] && { echo "❌ $lock exists — another suite is using this tree; not starting a second one beside it."; exit 2; }
 done
 
-PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
-( exec tools/serve.sh "$PORT" ) >/dev/null 2>&1 & SRV=$!
-disown "$SRV" 2>/dev/null   # its kill on the way out is ours: no "Terminated" line from the shell
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/fm-baselines-XXXXXX")"
-trap 'kill "$SRV" 2>/dev/null; rm -rf "$TMP"' EXIT
+SRV=""
+trap '[ -n "$SRV" ] && kill "$SRV" 2>/dev/null; rm -rf "$TMP"' EXIT
+# HEAD's own tree, exported — the server serves THIS, so nothing uncommitted can reach the page (tools/ and audits/ are left
+# out: the pinned tests load none of it, and tools/ is most of the repo's weight)
+SNAP="$TMP/tree"; mkdir -p "$SNAP"
+git archive --format=tar "$HEAD_FULL" -- . ':(exclude)tools' ':(exclude)audits' | tar -x -C "$SNAP" \
+  || { echo "record-baselines: could not export HEAD ($HEAD_SHORT) to serve it — nothing recorded"; exit 2; }
+PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
+( exec tools/serve.sh "$PORT" "$SNAP" ) >/dev/null 2>&1 & SRV=$!
+disown "$SRV" 2>/dev/null   # its kill on the way out is ours: no "Terminated" line from the shell
 UP=0; for _ in $(seq 1 20); do curl -s -o /dev/null "http://127.0.0.1:$PORT/tests/run.html" && { UP=1; break; }; sleep 0.5; done
 [ "$UP" = 1 ] || { echo "record-baselines: tools/serve.sh never answered on port $PORT — nothing recorded"; exit 2; }
 
@@ -59,7 +92,7 @@ echo "→ recording: the pinned tests, once, at 1280 px ($( [ -n "$FAKE" ] && ec
 python3 tests/_cdp.py --url "http://127.0.0.1:$PORT/tests/run.html?$Q&fmrecord=1" --width 1280 --timeout 3000 \
   --record-baselines "$TMP/rec.json" > "$TMP/run.json" 2>"$TMP/run.err"
 RC=$?
-MERGE="$(python3 - "$TMP/rec.json" "$TMP/run.json" "tests/$FILE" "$RC" "$( [ -n "$ONLY" ] && echo merge || echo replace)" "$(git rev-parse --short HEAD 2>/dev/null)" <<'PY'
+MERGE="$(python3 - "$TMP/rec.json" "$TMP/run.json" "tests/$FILE" "$RC" "$( [ -n "$ONLY" ] && echo merge || echo replace)" "$HEAD_SHORT" <<'PY'
 import json, sys, time
 rec_f, run_f, out_f, rc, mode, head = sys.argv[1:7]
 def bad(msg):
@@ -103,6 +136,8 @@ esac
 
 # PROVE IT: the pinned tests must now PASS here, against what was just written, at both widths — and none may be NOT RUN
 # for want of a baseline. (Any other NOT RUN — a missing encoder — is listed, and is not this script's to fix.)
+# The same exported HEAD is served, with the file just written put into it — the page reads its baselines from there.
+cp "tests/$FILE" "$SNAP/tests/$FILE" || { echo "❌ could not put tests/$FILE into the served copy of HEAD to prove it"; exit 1; }
 VQ="pinned=1"
 [ -n "$ONLY" ] && VQ="$VQ&only=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1], safe=""))' "$ONLY")"
 [ -n "$FAKE" ] && VQ="$VQ&fmos=$FAKE"
@@ -131,5 +166,5 @@ if [ "$FAILV" = 1 ]; then
   exit 1
 fi
 echo "✅ baselines for '$OS_SEEN' recorded and proven at 1280 and 380 px."
-[ "$FILE" = baselines.json ] && echo "   Commit tests/baselines.json (it is tracked) — then this machine's full suite runs those tests instead of NOT RUN HERE."
+[ "$FILE" = baselines.json ] && echo "   Commit tests/baselines.json ON ITS OWN (ship.sh refuses it beside shipped source) — then this machine's full suite runs those tests instead of NOT RUN HERE."
 exit 0
