@@ -119775,6 +119775,39 @@
     return want;
   }
 
+  /* THE SWEEP (the second review, 6 Oct): a shortcut written with e.key — `else if (e.key === 'f' || e.key === 'F')` — was
+     read by nothing above and pressed by nothing in FU3, so it passed both. The probe now sweeps every key a keyboard has on
+     the PC pass (SWEEP_CODES); this reads every e.key / e.code literal in Full's handler AND in every other script that
+     listens for keydown on the window or the document, and demands each be a key the probe presses. */
+  function fu980Sweep(src) {
+    const m = /var SWEEP_CODES = \[([\s\S]*?)\];/.exec(src);
+    if (!m) return null;
+    const out = [];
+    m[1].replace(/'([A-Za-z0-9]+)'/g, function (_, c) { out.push(c); return _; });
+    return out;
+  }
+  const FU980_CHAR_CODE = { '-': 'Minus', '_': 'Minus', '=': 'Equal', '+': 'Equal', '[': 'BracketLeft', '{': 'BracketLeft', ']': 'BracketRight',
+    '}': 'BracketRight', '\\': 'Backslash', '|': 'Backslash', ';': 'Semicolon', ':': 'Semicolon', "'": 'Quote', '"': 'Quote', ',': 'Comma',
+    '<': 'Comma', '.': 'Period', '>': 'Period', '/': 'Slash', '?': 'Slash', '`': 'Backquote', '~': 'Backquote', ' ': 'Space',
+    '!': 'Digit1', '@': 'Digit2', '#': 'Digit3', '$': 'Digit4', '%': 'Digit5', '^': 'Digit6', '&': 'Digit7', '*': 'Digit8', '(': 'Digit9', ')': 'Digit0' };
+  const FU980_NAMED = { Esc: 'Escape', Spacebar: 'Space', Del: 'Delete', Left: 'ArrowLeft', Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown' };
+  const FU980_NOT_KEYS = { Shift: 1, Meta: 1, Control: 1, Alt: 1, AltGraph: 1, CapsLock: 1, Dead: 1, Process: 1, Unidentified: 1, OS: 1 };
+  /* The code a key literal is pressed by: 'f' → KeyF, '?' → Slash, 'Esc' → Escape, 'F2' → F2. A literal that is not a key
+     value (a storage event's `e.key === 'fm.profile'`) is not read. */
+  function fu980KeyCode(k) {
+    if (/^[a-z]$/i.test(k)) return 'Key' + k.toUpperCase();
+    if (/^[0-9]$/.test(k)) return 'Digit' + k;
+    if (k.length === 1) return FU980_CHAR_CODE[k] || null;
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(k) || FU980_NOT_KEYS[k]) return null;
+    return FU980_NAMED[k] || k;
+  }
+  function fu980Literals(src) {
+    const out = new Set();
+    src.replace(/\b(?:e|ev|evt|event)\.key\s*===?\s*'((?:[^'\\]|\\.)*)'/g, function (_, k) { const c = fu980KeyCode(k.replace(/\\(.)/g, '$1')); if (c) out.add(c); return _; });
+    src.replace(/\b(?:e|ev|evt|event)\.code\s*===?\s*'([A-Za-z0-9]+)'/g, function (_, c) { out.add(c); return _; });
+    return out;
+  }
+
   test('980 FU lock: the Full-unchanged probe presses every key Full’s keydown handler answers (FU3), so a new shortcut cannot slip past the lock', { item: '980' }, async function () {
     const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
     if (!probe) throw new Error('tests/full-unchanged.html is missing — the Full-unchanged lock (queue 980) has no probe, so nothing measures Full against HEAD');
@@ -119796,6 +119829,29 @@
     if (!planted.has('KeyJ') || have.has('KeyJ')) throw new Error('CONTROL: a planted KeyJ in the handler (a key the probe never presses) was not read as a key the probe misses');
     const fewer = new Set(fu980Keys(probe.replace("['Digit3', '#', { shift: true }], ", '')));
     if (fewer.has('Digit3+shift') || !want.has('Digit3+shift')) throw new Error('CONTROL: a probe that stops pressing Shift+3 was not read as missing it');
+    /* …and EVERY key literal, e.key as well as e.code, in the handler and in every other script listening for keydown on the
+       window or the document, is a key the probe presses (KEYS, or the PC pass's sweep). */
+    const sweep = fu980Sweep(probe);
+    if (!sweep || sweep.length < 80) throw new Error('could not read the probe’s SWEEP_CODES (' + (sweep ? sweep.length : 'none') + ') — the FU3 key sweep is gone, so a shortcut written with e.key would pass');
+    const pressed = new Set(keys.map(function (k) { return k.split('+')[0]; }).concat(sweep));
+    const index = await fetch('index.html', { cache: 'no-store' }).then(function (r) { return r.text(); });
+    const srcs = Array.from(new Set((index.match(/src="(js\/[^"?]+\.js)/g) || []).map(function (x) { return x.slice(5); })));
+    if (srcs.length < 40) throw new Error('only ' + srcs.length + ' scripts were read out of index.html — the reader has gone blind');
+    const listening = [], unpressed = [];
+    for (const f of srcs) {
+      const src = f === 'js/app.js' ? app : await fetch(f, { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+      if (!/(?:window|document)\.addEventListener\('keydown'/.test(src)) continue;
+      listening.push(f);
+      fu980Literals(src).forEach(function (c) { if (!pressed.has(c)) unpressed.push(f + ': ' + c); });
+    }
+    if (listening.indexOf('js/app.js') < 0 || listening.length < 5) throw new Error('only ' + listening.length + ' scripts listen for keydown on the window or the document (' + listening.join(', ') + ') — the reader has gone blind');
+    if (unpressed.length) throw new Error('these keys are named by a keydown listener and the Full-unchanged probe never presses them: ' + unpressed.join(', ') + ' — add each to KEYS or SWEEP_CODES in tests/full-unchanged.html');
+    /* CONTROLS: an e.key shortcut planted in the handler is read as its key, and a sweep without that key is read as missing it. */
+    const lit = fu980Literals(h.replace("e.code === 'KeyM'", "e.key === 'f' || e.key === 'F') {} else if (e.code === 'KeyM'"));
+    if (!lit.has('KeyF')) throw new Error('CONTROL: a shortcut written `e.key === \'f\'` was not read as KeyF');
+    if (fu980Literals('if (e.key === \'fm.profile\') {}').size) throw new Error('CONTROL: a storage event’s e.key was read as a key');
+    const sweepLess = new Set(fu980Sweep(probe.replace("'KeyF', ", '')));
+    if (sweepLess.has('KeyF') || keys.some(function (k) { return k.split('+')[0] === 'KeyF'; })) throw new Error('CONTROL: a sweep without KeyF was not read as missing it');
   });
 
   test('980 FU lock: every self-test plant still lands exactly once in Full’s source, so the lock can still prove it sees (the margin, the toast, the floor, and all nineteen changes the 1 Oct review slipped past v1)', { item: '980' }, async function () {

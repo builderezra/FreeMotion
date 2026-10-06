@@ -381,6 +381,12 @@ def instrument_errors(rec, w, groups):
             for r in rec.get(key) or []:
                 if r.get('err'):
                     out.append('%s %s "%s": %s' % (w, g, r.get('name'), r['err']))
+    if 'FU3' in groups:
+        if not rec.get('phone') and not rec.get('fu3sweep'):
+            out.append('%s FU3: the key sweep recorded nothing on a PC pass' % w)
+        for r in rec.get('fu3sweep') or []:
+            if r.get('err'):
+                out.append('%s FU3 "%s": %s' % (w, r.get('name'), r['err']))
     if 'FU4' in groups:
         f4 = rec.get('fu4') or {}
         if not f4.get('steps'):
@@ -400,7 +406,71 @@ def instrument_errors(rec, w, groups):
     return out
 
 
+def sound_diff(a, b, where, out, tol):
+    """The exported file's decoded sound: its rate, length and channels exact, each 0.1 s window's RMS and peak within tol."""
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        if a != b:
+            out.append('%s: %s → %s' % (where, short(a, 60), short(b, 60)))
+        return
+    if a.get('head') != b.get('head'):
+        out.append('%s: the decoded sound %s → %s' % (where, short(a.get('head')), short(b.get('head'))))
+        return
+    for c, (ca, cb) in enumerate(zip(a.get('ch') or [], b.get('ch') or [])):
+        worst, at = 0, None
+        for i, (x, y) in enumerate(zip(ca, cb)):
+            d = max(abs(x[0] - y[0]), abs(x[1] - y[1]))
+            if d > worst:
+                worst, at = d, i
+        if worst > tol:
+            out.append('%s: channel %d of the decoded sound moved %d/1000 at %.1f s (tolerance %d): %s → %s' % (where, c, worst, at / 10.0, tol, ca[at], cb[at]))
+
+
+def bytes_diff(sa, sb, where, out, pct):
+    """The exported file's sound track, in bytes: within pct % (the AAC encoder is not byte-exact run to run — 7216 and 7212
+    from one build, 6 Oct — while a lower bitrate moves it by tens of percent). Taken out of both states once compared."""
+    ta = (((sa or {}).get('out') or {}).get('mp4') or {}).get('tracks') or []
+    tb = (((sb or {}).get('out') or {}).get('mp4') or {}).get('tracks') or []
+    for i, (x, y) in enumerate(zip(ta, tb)):
+        if not isinstance(x, dict) or not isinstance(y, dict) or ('bytes' not in x and 'bytes' not in y):
+            continue
+        bx, by = x.pop('bytes', None), y.pop('bytes', None)
+        if bx is None or by is None or abs(bx - by) * 100.0 > max(bx, by) * pct:
+            out.append('%s: state.out.mp4.tracks[%d].bytes: %s → %s (tolerance %d%%)' % (where, i, bx, by, pct))
+
+
+def sweep_diff(A, B, w, out, per_step):
+    """FU3's key sweep: per key, whether it changed anything and, where it did, the state it left — against the state its
+    pass started from when the other side changed nothing, so a new shortcut reads as what it did."""
+    sa, sb = A.get('fu3sweep') or [], B.get('fu3sweep') or []
+    ba, bb = A.get('fu3sweepBase') or [], B.get('fu3sweepBase') or []
+    if ba != bb:
+        local = []
+        json_diff(ba, bb, 'the state each sweep pass starts from', local, per_step)
+        out += ['%s FU3 "sweep": %s' % (w, x) for x in local]
+    for i, ra in enumerate(sa):
+        rb = sb[i] if i < len(sb) else None
+        if rb is None:
+            out.append('%s FU3 "%s": missing on the tree' % (w, ra.get('name')))
+            break
+        local = []
+        if ra.get('name') != rb.get('name'):
+            local.append('key %s → %s' % (ra.get('name'), rb.get('name')))
+        if ra.get('err') != rb.get('err'):
+            local.append('error %s → %s' % (short(ra.get('err')), short(rb.get('err'))))
+        if ra.get('changed') != rb.get('changed') or ra.get('state') != rb.get('state'):
+            p = ra.get('pass') or 0
+            xa = ra.get('state') if ra.get('state') is not None else (ba[p] if p < len(ba) else None)
+            xb = rb.get('state') if rb.get('state') is not None else (bb[p] if p < len(bb) else None)
+            if ra.get('changed') != rb.get('changed'):
+                local.append('it changes anything: %s → %s' % (bool(ra.get('changed')), bool(rb.get('changed'))))
+            json_diff(xa, xb, 'key.state', local, max(4, per_step))
+        out += ['%s FU3 "%s": %s' % (w, ra.get('name'), x) for x in local]
+    if len(sb) > len(sa):
+        out.append('%s FU3 sweep: %d keys → %d' % (w, len(sa), len(sb)))
+
+
 def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
+    """`widths` are run labels; `groups` is one list for all of them, or {label: [groups]}."""
     keys = invisible_list()
     tol, chan = envint('FU_TOL_PX'), envint('FU_CHAN')
     ftol, fchan = envint('FU_FAINT_TOL_PX', 10 ** 9), envint('FU_FAINT_CHAN', 255)
@@ -501,6 +571,7 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                     out.append('%s FU3 "%s": %s' % (w, ra['name'], x))
                 if len(out) >= limit:
                     break
+            sweep_diff(A, B, w, out, per_step)
         if 'FU4' in groups:
             local = []
             json_diff(A.get('fu4'), B.get('fu4'), 'FU4', local, limit)

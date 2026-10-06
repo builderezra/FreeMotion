@@ -1870,7 +1870,101 @@
         closeTransient();
         DUMP.fu3.push({ name: nm, err: err, state: st });
       }
+      /* A TOGGLE PRESSED TWICE (the second review, 6 Oct: M on an existing benchmark says 'Benchmark removed', and that toast
+         was reworded unseen — every key above is pressed once, on a fresh document). Each key in KEYS_TWICE: on, then off. */
+      for (var j = 0; j < KEYS_TWICE.length; j++) {
+        var K2 = KEYS_TWICE[j], nm2 = (pass ? 'clip selected · ' : 'nothing selected · ') + 'twice · ' + (K2[2] ? Object.keys(K2[2]).join('+') + '+' : '') + K2[0], err2 = '', st2;
+        step('FU3 ' + nm2);
+        var realClock2 = FM.clockNow;
+        try {
+          await restoreFrom(base);
+          if (pass) { FM.selectLayer(byName('Clip B').id); }
+          FM.setTime(2.5);
+          await settle(60); takeToasts(); takeToastFirst();
+          FM.clockNow = function () { return FM.time; };
+          key(K2[0], K2[1], K2[2]); await settle(160);
+          key(K2[0], K2[1], K2[2]); await settle(160);
+        } catch (e) { err2 = String(e && e.message || e); }
+        try { st2 = await stateRecord({ times: [FM.time] }); }
+        finally { FM.clockNow = realClock2; }
+        closeTransient();
+        DUMP.fu3.push({ name: nm2, err: err2, state: st2 });
+      }
     }
+    if (!PHONE) await sweepKeys(base);
+  }
+  var KEYS_TWICE = [['KeyM', 'm'], ['Space', ' '], ['Slash', '?', { shift: true }]];   // the benchmark, playback, the ? sheet: on, then off
+  /* ═══ EVERY OTHER KEY (the second review, 6 Oct: an F shortcut written with e.key — `else if (e.key === 'f' || …)` — passed
+     the probe AND its suite guard: FU3 pressed a fixed list, and the guard read only e.code). On the PC pass, every key a
+     keyboard has that KEYS does not already press in that combination: letters, digits, punctuation, the named keys, F1–F12
+     and the number pad, each plain and with ⇧, ⌥ and ⌘, with nothing selected and with Clip B selected. Kept cheap so it
+     can be whole: a key's record says only whether ANYTHING changed (the document, the history, the toasts, the selection,
+     the playhead, the surfaces and the views — FU3's own record, less the frame) a frame and 60 ms after it; a key that
+     changed something records that whole state, a beat later when it has settled, and the fixture is put back after it.
+     The state each pass starts from is recorded once, so a key that changes something on one side only reads as what it
+     changed. The phone pass presses KEYS (above), not this: a phone has no keyboard. */
+  var SWEEP_CODES = ['KeyA', 'KeyB', 'KeyC', 'KeyD', 'KeyE', 'KeyF', 'KeyG', 'KeyH', 'KeyI', 'KeyJ', 'KeyK', 'KeyL', 'KeyM', 'KeyN', 'KeyO',
+    'KeyP', 'KeyQ', 'KeyR', 'KeyS', 'KeyT', 'KeyU', 'KeyV', 'KeyW', 'KeyX', 'KeyY', 'KeyZ', 'Digit0', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
+    'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Minus', 'Equal', 'BracketLeft', 'BracketRight', 'Backslash', 'Semicolon', 'Quote',
+    'Comma', 'Period', 'Slash', 'Backquote', 'IntlBackslash', 'Enter', 'Space', 'Tab', 'Escape', 'Backspace', 'Delete', 'Insert', 'Home',
+    'End', 'PageUp', 'PageDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9',
+    'F10', 'F11', 'F12', 'Numpad0', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5', 'Numpad6', 'Numpad7', 'Numpad8', 'Numpad9',
+    'NumpadDecimal', 'NumpadAdd', 'NumpadSubtract', 'NumpadMultiply', 'NumpadDivide', 'NumpadEnter'];
+  var SWEEP_MODS = ['', 'shift', 'alt', 'meta'];
+  var KEY_CHARS = { Minus: '-_', Equal: '=+', BracketLeft: '[{', BracketRight: ']}', Backslash: '\\|', Semicolon: ';:', Quote: '\'"',
+    Comma: ',<', Period: '.>', Slash: '/?', Backquote: '`~', IntlBackslash: '§±', Digit1: '1!', Digit2: '2@', Digit3: '3#', Digit4: '4$',
+    Digit5: '5%', Digit6: '6^', Digit7: '7&', Digit8: '8*', Digit9: '9(', Digit0: '0)' };
+  var PAD_KEYS = { NumpadDecimal: '.', NumpadAdd: '+', NumpadSubtract: '-', NumpadMultiply: '*', NumpadDivide: '/', NumpadEnter: 'Enter', Space: ' ' };
+  function keyOf(code, shift) {   // the `key` a US keyboard sends for `code` (⌥ and ⌘ send the plain one here)
+    if (/^Key[A-Z]$/.test(code)) return shift ? code.slice(3) : code.slice(3).toLowerCase();
+    if (KEY_CHARS[code]) return KEY_CHARS[code].charAt(shift ? 1 : 0);
+    if (/^Numpad\d$/.test(code)) return code.slice(6);
+    if (PAD_KEYS[code]) return PAD_KEYS[code];
+    return code;
+  }
+  async function sweepKeys(base) {
+    var have = {};
+    KEYS.forEach(function (K) { have[K[0] + '|' + (K[2] ? Object.keys(K[2]).sort().join('+') : '')] = 1; });
+    var realClock = FM.clockNow, out = DUMP.fu3sweep = [], bases = DUMP.fu3sweepBase = [];
+    try {
+      for (var pass = 0; pass < 2; pass++) {
+        var prep = async function () {
+          await restoreFrom(base);
+          if (pass) FM.selectLayer(byName('Clip B').id);
+          FM.setTime(2.5); await settle(60); takeToasts(); takeToastFirst();
+          FM.clockNow = function () { return FM.time; };
+          return await stateRecord({ noFrames: true });
+        };
+        var b0 = await prep(), sig = JSON.stringify(b0);
+        bases.push(b0);
+        for (var i = 0; i < SWEEP_CODES.length; i++) {
+          for (var m = 0; m < SWEEP_MODS.length; m++) {
+            var code = SWEEP_CODES[i], mod = SWEEP_MODS[m];
+            if (have[code + '|' + mod]) continue;
+            var nm = 'sweep · ' + (pass ? 'clip selected · ' : 'nothing selected · ') + (mod ? mod + '+' : '') + code;
+            step('FU3 ' + nm);
+            var e1 = { name: nm, pass: pass, err: '', changed: false, state: null };
+            try {
+              var mods = {}; if (mod) mods[mod] = true;
+              key(code, keyOf(code, mod === 'shift'), mods);
+              await sleep(60); await raf2();
+              var st = await stateRecord({ noFrames: true });
+              if (JSON.stringify(st) !== sig) {
+                e1.changed = true;
+                await settle(160);
+                var st2 = await stateRecord({ noFrames: true });
+                st2.toasts = st.toasts.concat(st2.toasts); st2.toastBox = st.toastBox || st2.toastBox;
+                e1.state = st2;
+                FM.clockNow = realClock; closeTransient();
+                b0 = await prep(); sig = JSON.stringify(b0);
+              }
+            } catch (e) { e1.err = String(e && e.message || e); try { FM.clockNow = realClock; closeTransient(); b0 = await prep(); sig = JSON.stringify(b0); } catch (x) {} }
+            out.push(e1);
+          }
+        }
+        FM.clockNow = realClock; closeTransient();
+      }
+    } finally { FM.clockNow = realClock; }
   }
   /* Back to the fixture copy exactly as saved: reopen it from disk (no re-id, its media hydrated), and the view reset. */
   var BASE_DOC = {};
