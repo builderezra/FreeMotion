@@ -315,6 +315,10 @@ def main():
                                     inp["touch_emu"] = True
                                 typ = {"touchStart": "touchStart", "touchMove": "touchMove", "touchEnd": "touchEnd", "touchCancel": "touchCancel"}[t]
                                 pts = [] if typ in ("touchEnd", "touchCancel") else [{"x": x, "y": y, "id": 1}]
+                                # queue 980 (the second review): `pts` is several fingers at once — the probe's pinch
+                                if isinstance(st.get("pts"), list) and typ not in ("touchEnd", "touchCancel"):
+                                    pts = [{"x": float(p.get("x", 0)) + q["ox"], "y": float(p.get("y", 0)) + q["oy"], "id": i + 1}
+                                           for i, p in enumerate(st["pts"])]
                                 cdp.send("Input.dispatchTouchEvent", type=typ, touchPoints=pts)
                                 inp["touch_down"] = typ in ("touchStart", "touchMove")
                             elif t == "wheel":
@@ -411,7 +415,7 @@ def main():
                 pass
             # THE "FULL UNCHANGED" PROBE'S TWO ASKS (queue 980, tests/full-unchanged.html). Asked by the TOP page, never by
             # the suite, so a suite run never reaches either branch.
-            #  · `window.__fmWantSetup = {phone, init}` — answered ONCE with `__fmSetupDone` (1, or the error text), and the
+            #  · `window.__fmWantSetup = {phone, reduce, init}` — answered ONCE with `__fmSetupDone` (1, or the error text), and the
             #    probe waits for it before it loads the app frame, so the app boots already set up:
             #      phone: a phone is a FINGER, not a narrow mouse — the app asks about the pointer (queue 797;
             #             tools/shot.py does the same), so touch and (hover: none) go on;
@@ -428,16 +432,23 @@ def main():
                     try:
                         if q.get("init"):
                             cdp.send("Page.addScriptToEvaluateOnNewDocument", source=str(q["init"]))
+                        feats = []
                         if q.get("phone"):
                             cdp.send("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=5)
                             inp["touch_emu"] = True
                             inp["touch_base"] = True
-                            cdp.send("Emulation.setEmulatedMedia", features=[{"name": "hover", "value": "none"},
-                                                                            {"name": "any-hover", "value": "none"},
-                                                                            {"name": "pointer", "value": "coarse"},
-                                                                            {"name": "any-pointer", "value": "coarse"}])
-                            if not cdp.eval("matchMedia('(hover: none)').matches"):
-                                perr = 'the phone emulation did not take: (hover: none) does not match'
+                            feats += [{"name": "hover", "value": "none"}, {"name": "any-hover", "value": "none"},
+                                      {"name": "pointer", "value": "coarse"}, {"name": "any-pointer", "value": "coarse"}]
+                        #  reduce: the OS asking for less motion (queue 980, the second review: Full's reduced-motion path was
+                        #          never measured) — one emulation call, with the phone's features when it is a phone too
+                        if q.get("reduce"):
+                            feats.append({"name": "prefers-reduced-motion", "value": "reduce"})
+                        if feats:
+                            cdp.send("Emulation.setEmulatedMedia", features=feats)
+                        if q.get("phone") and not cdp.eval("matchMedia('(hover: none)').matches"):
+                            perr = 'the phone emulation did not take: (hover: none) does not match'
+                        if q.get("reduce") and not cdp.eval("matchMedia('(prefers-reduced-motion: reduce)').matches"):
+                            perr = 'the reduced-motion emulation did not take: (prefers-reduced-motion: reduce) does not match'
                     except Exception as ex:
                         perr = str(ex)[:300]
                     cdp.eval("window.__fmSetupDone = %s" % json.dumps(perr or 1))

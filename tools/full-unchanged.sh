@@ -7,25 +7,32 @@
 #   tools/full-unchanged.sh --hash           # the source hash a PASS is cached under
 #   tools/full-unchanged.sh --selftest-port  # two runs started at the same instant get two ports, each serving its own folder
 #
-# ⚠️ IT TAKES OVER AN HOUR (measured 6 Oct: 19 minutes for HEAD and the tree at both widths, then one probe run per plant,
-# one Chrome at a time) — far over the Bash tool's 600 s cap, and a backgrounded Bash call is killed at its own timeout.
+# ⚠️ IT TAKES ABOUT THREE HOURS (6 Oct, from its parts timed on this Mac: ~50 minutes for HEAD and the tree in the ten runs
+# of FU_RUNS, ~2 h 10 min for the 49 plants, one Chrome at a time; FU_JOBS=2 halves it on a machine with the memory; the
+# PASS line prints the minutes a run really took) — far over the Bash tool's 600 s cap, and a backgrounded Bash call is
+# killed at its own timeout.
 # Detach it: `nohup tools/full-unchanged.sh > /dev/null 2>&1 &`, and read tools/.full-unchanged-report when it ends in
 # PASS or NOT PASS. Killed half-way, its trap (or, for a SIGKILL, its watchdog) still takes every server, Chrome and folder.
 #
 # His rule, 1 Oct: "i dont want the original editor changing in design and function … dont do that." The Simple editor
 # is built beside Full, and every Simple release has to prove Full did not move — not by a session saying so, by THIS:
-# HEAD (the release before) and the tree are each served and driven through tests/full-unchanged.html at 380×800 (a
-# touch phone, real fingers) and 1280×800 (a mouse that hovers), and the two records are compared — every visible
-# element's box, words, painted styles and attributes (exact), the preview's resolution and what it drew (exact), what
-# each screen animated, every edit's document, undo depth, toasts, selection, views and frames (exact), a real export's
-# file, the live session's whole wire, the documents' bytes, the cog at fourteen sizes, and two pictures of every screen
-# (within the tolerances measured below).
+# HEAD (the release before) and the tree are each served and driven through tests/full-unchanged.html in every run of
+# FU_RUNS below — 380×800 (a touch phone, real fingers) and 1280×800 (a mouse that hovers) with every group, his own phone
+# (440×956) with the screens and the edits, the screens again on a small and a big phone, a short laptop, a small and a
+# big PC and the phone turned sideways, and on each kind with every Setting off its default and reduced motion — and the
+# two records are compared: every visible element's box, words, painted styles, pseudo-elements and attributes (exact),
+# the preview's resolution and what it drew (exact), what each screen animated (CSS and script), every edit's document,
+# undo depth, toasts and the toast itself, selection, views, frames, the saved record and the Home card (exact), every
+# effect's, sound's and behaviour's defaults (exact), every key a keyboard has, a real export's file and its sound, the
+# live session's whole wire and a friend's edits arriving, the documents' bytes, the cog at fourteen sizes, and two
+# pictures of every screen and one of every hovered control (within the tolerances measured below).
 #
 # It cannot pass on a run that did not measure: if the probe could not drive HEAD somewhere — or drove the function under
 # a control instead of the control, or a finger missed what it was moving — that is a broken instrument and the answer is
-# no. And it cannot pass with a blind eye: every run plants 26 changes Full must never get (tools/full-unchanged-
+# no. And it cannot pass with a blind eye: every run plants the changes Full must never get (tools/full-unchanged-
 # plants.json: DESIGN's three; ALL NINETEEN the 1 Oct review slipped past v1 in one "Simple release"; DESIGN's B4 / B5
-# guards; and the review's zoom step, Q1) and each must turn it red BY NAME, or it refuses to print PASS. A PASS is cached by a hash of the sources
+# guards; the review's zoom step, Q1; ALL SIXTEEN the 6 Oct review slipped past v2, and the clip hold it found; and one in
+# every run FU_RUNS adds) and each must turn it red BY NAME, or it refuses to print PASS. A PASS is cached by a hash of the sources
 # (tools/_fu_gate.py, the same rule ship.sh reads), so ship.sh can refuse a Simple release whose exact tree never passed.
 #
 # No worktree and no stash (both are shared state — memory): HEAD comes out of `git archive`. ONE server, on a free port in
@@ -60,6 +67,36 @@ manifest.h       # I7  its height, same
 manifest.dur     # I7  its duration, same
 '
 
+# ═══ FU_RUNS — WHERE FULL IS MEASURED (the second review, 6 Oct) ═══════════════════════════════════════════════════════
+# v2 measured two screens, 380×800 and 1280×800, and Full has rules of its own elsewhere: his phone is 440 wide (the
+# min-width:400 block exists for it), and a 1280×720 laptop is a short screen (max-height:720). A change in each passed.
+# So: every run below is one probe run on each side, compared under its LABEL (the label leads every difference line, and
+# names it in a plant's `widths`). `touch` is a phone (real fingers, no hover); `mouse` a PC (a real mouse that hovers).
+# `settings` is every Setting off its default AT ONCE and the OS asking for reduced motion (tests/full-unchanged.html
+# ENV_SETTINGS). Groups are a prefix of the probe's order; FU1 alone is a minute a side.
+# Taking a run out, or a group from one, is a loosening (tools/_fu_gate.py reads this block), and every run must have a
+# self-test plant caught in it, or a PASS could not show that run still sees anything.
+#   label      size       input  env       groups
+FU_RUNS='
+380        380x800    touch  -         FU1,FU2,FU3,FU6,FU4,FU5,FU7
+1280       1280x800   mouse  -         FU1,FU2,FU3,FU6,FU4,FU5,FU7
+440x956    440x956    touch  -         FU1,FU2
+320x568    320x568    touch  -         FU1
+956x440    956x440    touch  -         FU1
+1280x720   1280x720   mouse  -         FU1
+1024x600   1024x600   mouse  -         FU1
+1680x1050  1680x1050  mouse  -         FU1
+env-380    380x800    touch  settings  FU1
+env-1280   1280x800   mouse  settings  FU1
+'
+#   440x956   HIS phone (DESIGN's size for it): the min-width:400 rules, his screens and his edits
+#   320x568   the smallest phone, and short: the max-width 360 / 340 / 335 rules, and max-height:720
+#   956x440   his phone turned sideways: a touch screen in the PC layout, short (hover:none past 700)
+#   1280x720  a short laptop: max-height:720 at a full PC width
+#   1024x600  a small PC, short: the max-width:1226 band and under 1100, and max-height:720
+#   1680x1050 a big PC: the wide layout as scripts fit it (the min-width:1600 block's two variables are overridden there)
+#   env-*     every Setting off its default and reduced motion, phone and PC: the dark Home, Demo mode, Show touches …
+
 # ═══ THE TOLERANCES — MEASURED, NOT CHOSEN (memory: "set float tolerances from measurement") ═══════════════════════════
 # MEASURED 6 Oct 2026 on v17.23 (b46b47d3), headless Chrome + SwiftShader on this Mac, on the FINISHED probe: every FU1
 # picture (the screen, and the screen with the preview hidden — 62 pictures over both widths) at 380 (touch) and 1280,
@@ -88,7 +125,12 @@ FU_FAINT_TOL_PX=12          # … and a picture may have at most this many: abov
                             #   change at this threshold (the margin, 105) and a 40 px panel's border recoloured 20 levels (156)
 FU_GRID_JITTER=0            # a decoded export cell, HEAD against itself: 0 levels measured 6 Oct, both widths
 FU_GRID_TOL=4               # … and the most a cell may move (the saturate plant moves cells by tens of levels)
-export FU_INVISIBLE FU_TOL_PX FU_CHAN FU_FAINT_TOL_PX FU_FAINT_CHAN FU_GRID_TOL
+FU_AUDIO_JITTER=0           # the exported file's decoded sound, HEAD against itself: the most a 0.1 s window's RMS or peak
+                            #   moved, in 1/1000 (measured 6 Oct at 380: 0 — while the encoded bytes differed)
+FU_AUDIO_TOL=2              # … and the most it may move (its encoder configuration is compared exactly besides)
+FU_BYTES_JITTER_PCT=1       # the exported sound track's size, HEAD against itself: 7216 and 7212 bytes (0.06%, measured 6 Oct)
+FU_BYTES_PCT=3              # … and the most it may differ (a 160 → 96 kb/s soundtrack is ~40% smaller)
+export FU_INVISIBLE FU_TOL_PX FU_CHAN FU_FAINT_TOL_PX FU_FAINT_CHAN FU_GRID_TOL FU_AUDIO_TOL FU_BYTES_PCT
 
 ROOT="${FU_ROOT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$ROOT" || exit 2
@@ -115,13 +157,18 @@ fi
 # (And none of these lines can change in a Simple release at all: tools/_fu_gate.py refuses one that edits this file.)
 if ! [ "$FU_TOL_PX" -gt "$FU_JITTER_PX" ] 2>/dev/null || ! [ "$FU_TOL_PX" -lt 8 ] 2>/dev/null || ! [ "$FU_TOL_PX" -lt "$FU_SMALLEST_REAL_PX" ] 2>/dev/null \
    || ! [ "$FU_FAINT_TOL_PX" -gt "$FU_FAINT_JITTER_PX" ] 2>/dev/null || ! [ "$FU_FAINT_TOL_PX" -lt 156 ] 2>/dev/null \
-   || ! [ "$FU_GRID_TOL" -gt "$FU_GRID_JITTER" ] 2>/dev/null || ! [ "$FU_GRID_TOL" -le 16 ] 2>/dev/null; then
+   || ! [ "$FU_GRID_TOL" -gt "$FU_GRID_JITTER" ] 2>/dev/null || ! [ "$FU_GRID_TOL" -le 16 ] 2>/dev/null \
+   || ! [ "$FU_AUDIO_TOL" -gt "$FU_AUDIO_JITTER" ] 2>/dev/null || ! [ "$FU_AUDIO_TOL" -le 20 ] 2>/dev/null \
+   || ! [ "$FU_BYTES_PCT" -gt "$FU_BYTES_JITTER_PCT" ] 2>/dev/null || ! [ "$FU_BYTES_PCT" -le 10 ] 2>/dev/null; then
   echo "❌ a tolerance no longer sits between its measured jitter and the smallest change it must catch:"
-  echo "   FU_TOL_PX $FU_TOL_PX (jitter $FU_JITTER_PX, a 4 px line moved 1 px = 8), FU_FAINT_TOL_PX $FU_FAINT_TOL_PX (jitter $FU_FAINT_JITTER_PX, a border recolour = 156), FU_GRID_TOL $FU_GRID_TOL (jitter $FU_GRID_JITTER)"
+  echo "   FU_TOL_PX $FU_TOL_PX (jitter $FU_JITTER_PX, a 4 px line moved 1 px = 8), FU_FAINT_TOL_PX $FU_FAINT_TOL_PX (jitter $FU_FAINT_JITTER_PX, a border recolour = 156), FU_GRID_TOL $FU_GRID_TOL (jitter $FU_GRID_JITTER), FU_AUDIO_TOL $FU_AUDIO_TOL (jitter $FU_AUDIO_JITTER), FU_BYTES_PCT $FU_BYTES_PCT (jitter $FU_BYTES_JITTER_PCT)"
   echo "   Re-measure with tools/full-unchanged.sh --measure and write BOTH numbers, not just a looser tolerance."
   exit 2
 fi
 FU_INV_Q="$(printf '%s\n' "$FU_INVISIBLE" | sed 's/#.*//' | awk '$1 ~ /^layer\./ {print $1}' | paste -sd, -)"
+# FU_RUNS, read once: run_labels lists the labels in order; run_spec LABEL prints "WxH input env groups"
+run_labels() { printf '%s\n' "$FU_RUNS" | sed 's/#.*//' | awk 'NF >= 5 {print $1}'; }
+run_spec() { printf '%s\n' "$FU_RUNS" | sed 's/#.*//' | awk -v l="$1" '$1 == l && NF >= 5 {print $2, $3, $4, $5; exit}'; }
 
 say() { printf '%s\n' "$*"; }
 REPORT="$ROOT/tools/.full-unchanged-report"
@@ -192,6 +239,7 @@ if [ "$MODE" = run ]; then
     exit 2
   fi
 fi
+T_START=$SECONDS
 HASH0="$(python3 tools/_fu_gate.py hash)"
 HEADSHA="$(git rev-parse --short HEAD)"
 
@@ -265,13 +313,19 @@ start_server || exit 2
 URL="http://localhost:$PORT"
 
 # ─── 5. ONE PROBE RUN ────────────────────────────────────────────────────────────────────────────────────────────────
-start_probe() {   # start_probe <copy> <width> <groups>; background; the PID is appended to CDPS
-  local copy="$1" w="$2" groups="$3" q
-  mkdir -p "$WORK/$copy/shots-$w"
-  q="w=$w&h=800&shots=1&groups=$groups&inv=$FU_INV_Q"; [ "$w" -lt 701 ] && q="$q&phone=1"
-  python3 "$ROOT/tests/_cdp.py" --port "$PORT" --width "$w" --height 800 --timeout 2400 \
-    --dump "$WORK/$copy/rec-$w.json.gz" --shots "$WORK/$copy/shots-$w" \
-    --url "$URL/$copy/tests/full-unchanged.html?$q" > "$WORK/$copy/cdp-$w.log" 2>&1 &
+start_probe() {   # start_probe <copy> <run label> <groups>; background; the PID is appended to CDPS
+  local copy="$1" lab="$2" groups="$3" q spec size input env w h
+  spec="$(run_spec "$lab")"
+  [ -n "$spec" ] || { say "❌ no run named $lab in FU_RUNS"; exit 2; }
+  set -- $spec; size="$1"; input="$2"; env="$3"
+  w="${size%x*}"; h="${size#*x}"
+  mkdir -p "$WORK/$copy/shots-$lab"
+  q="w=$w&h=$h&shots=1&groups=$groups&inv=$FU_INV_Q"
+  [ "$input" = touch ] && q="$q&phone=1"
+  [ "$env" != - ] && q="$q&env=$env"
+  python3 "$ROOT/tests/_cdp.py" --port "$PORT" --width "$w" --height "$h" --timeout 2400 \
+    --dump "$WORK/$copy/rec-$lab.json.gz" --shots "$WORK/$copy/shots-$lab" \
+    --url "$URL/$copy/tests/full-unchanged.html?$q" > "$WORK/$copy/cdp-$lab.log" 2>&1 &
   CDPS+=($!); watch_child "$!"
 }
 wait_probes() { local p; for p in "${CDPS[@]:-}"; do [ -n "$p" ] && wait "$p" 2>/dev/null; done; CDPS=(); }
@@ -298,18 +352,22 @@ if [ "$MODE" = measure ]; then
   exit $?
 fi
 
-# ─── 6. THE MEASUREMENT: HEAD against the tree, both widths, every group ─────────────────────────────────────────────
+# ─── 6. THE MEASUREMENT: HEAD against the tree, in every run of FU_RUNS ─────────────────────────────────────────────
 log "→ Full unchanged: the tree against HEAD ($HEADSHA), sources $HASH0"
-log "   one server on :$PORT (its token checked) — 380×800 (a touch phone) first, then 1280×800"
+log "   one server on :$PORT (its token checked) — $(run_labels | wc -l | tr -d ' ') runs: $(run_labels | paste -sd' ' -)"
 T0=$SECONDS
-probe head 380 "$ALL"; probe tree 380 "$ALL"; wait_probes
-waitload || exit 2
-probe head 1280 "$ALL"; probe tree 1280 "$ALL"; wait_probes
+RUNS_ARG=""
+for lab in $(run_labels); do
+  set -- $(run_spec "$lab"); g="$4"
+  probe head "$lab" "$g"; probe tree "$lab" "$g"; wait_probes
+  waitload || exit 2
+  RUNS_ARG="$RUNS_ARG $lab=$g"
+done
 log "   both sides measured in $(( SECONDS - T0 ))s"
-python3 tools/_fu_compare.py "$WORK/head" "$WORK/tree" --widths 380,1280 --groups "$ALL" --json "$WORK/main.json" | tee -a "$REPORT"
+python3 tools/_fu_compare.py "$WORK/head" "$WORK/tree" --runs "$RUNS_ARG" --json "$WORK/main.json" | tee -a "$REPORT"
 RC=${PIPESTATUS[0]}
 if [ "$RC" != 0 ]; then
-  for w in 380 1280; do [ -s "$WORK/tree/cdp-$w.log" ] && grep -q '"ok": false' "$WORK/tree/cdp-$w.log" && { log "   the tree's probe at $w:"; head -c 600 "$WORK/tree/cdp-$w.log" | sed 's/^/     /' | tee -a "$REPORT"; }; done
+  for w in $(run_labels); do [ -s "$WORK/tree/cdp-$w.log" ] && grep -q '"ok": false' "$WORK/tree/cdp-$w.log" && { log "   the tree's probe at $w:"; head -c 600 "$WORK/tree/cdp-$w.log" | sed 's/^/     /' | tee -a "$REPORT"; }; done
   log "NOT PASS — Full differs from HEAD (or could not be measured). Nothing is cached."
   exit 1
 fi
@@ -346,5 +404,5 @@ if [ "$HASH1" != "$HASH0" ]; then
   exit 1
 fi
 printf '%s %s HEAD=%s\n' "$HASH0" "$(date '+%Y-%m-%dT%H:%M:%S')" "$HEADSHA" > tools/.full-unchanged-pass
-log "PASS — Full is unchanged against HEAD ($HEADSHA) at 380×800 and 1280×800, and the self-test caught every plant. Cached for sources $HASH0."
+log "PASS — Full is unchanged against HEAD ($HEADSHA) in all $(run_labels | wc -l | tr -d ' ') runs ($(run_labels | paste -sd' ' -)), and the self-test caught every plant. Run time $(( (SECONDS - T_START + 59) / 60 )) minutes. Cached for sources $HASH0."
 exit 0

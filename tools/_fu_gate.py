@@ -19,10 +19,13 @@ a later queue number must not skip the lock"):
      the file) — a later fix to a line of sanitizeSmLayer that names nothing Simple (`if (typeof v === 'number') …`);
   5. the diff changes a line a Simple release wrote (provenance, by git blame) — but never a line it only RE-NUMBERED: the
      version label and a ?v= buster ship in every release's one commit, so they are nobody's (the second review, 6 Oct);
-  6. the diff changes the INSTRUMENT at all, whatever the release is labelled (the second review: a group's comparison
-     switched off by code and 'box-shadow' dropped from the probe, logged as an ordinary item, was NOT-TRIGGERED). Such a
-     release needs `INSTRUMENT CHANGE: <what>` in its POLISH-LOG line, a PASS of its own, and a plant caught in every
-     group the probe runs.
+  6. the diff changes the lock's OWN files at all (LOCK_FILES: the probe, the comparer, the plants, the driver script, this
+     gate), or the lock's part of the shared tooling it runs on (tests/_cdp.py's probe channels, ship.sh's gate calls,
+     serve.sh), whatever the release is labelled (the second review: a group's comparison switched off by code and
+     'box-shadow' dropped from the probe, logged as an ordinary item, was NOT-TRIGGERED). Such a release needs
+     `INSTRUMENT CHANGE: <what>` in its POLISH-LOG line, a PASS of its own, and a plant caught in every group the probe
+     runs and in every run of FU_RUNS. An ordinary release that changes ship.sh or tests/_cdp.py for the SUITE does not
+     fire (replayed 6 Oct: 12 of the last 60 ordinary releases did, and every one would have been refused for ever).
 When it fires, a release is REFUSED unless tools/full-unchanged.sh printed PASS on this exact tree (the cache in
 tools/.full-unchanged-pass names the hash below); refused if the newest POLISH-LOG line names any `queue NNN` other
 than 980 (a Simple release ships alone, so any difference from HEAD is Simple's and a rollback takes it back alone); and
@@ -478,6 +481,46 @@ def instrument_changed(files):
     return [f for f in files if f in INSTRUMENT_FILES]
 
 
+# ─── WHICH INSTRUMENT CHANGES FIRE THE GATE BY THEMSELVES (fix of the second review's finding 4, 6 Oct) ───────────────────
+# The lock's own files fire on any change. tests/_cdp.py and tools/ship.sh are shared with the suite and the ship, and ordinary
+# releases change them for those (replayed on the last 60 releases: 12 did — Chrome flags, the CPU throttle, the fetch-first
+# check — and under "any change fires" each needed a two-hour PASS it had no reason to need, with no override). So for these
+# a change fires when it is in the lock's part: a changed line, or one within six lines of it, that names the probe's own
+# channels (`__fmWantSetup`, `__fmWantShot`, --dump, --shots, the phone base, reduced motion) or queue 980 in _cdp.py, or the
+# gate or the lock in ship.sh. serve.sh is small and the lock's own server: any change fires. A Simple release may still
+# change NONE of INSTRUMENT_FILES (check(), below). And a driver change that blinds the lock where these markers do not
+# reach is what the self-test is for: the next PASS runs every plant through the changed driver (`pixels` proves the
+# pictures, `touch` / `hold500` / `scrubrate` the fingers, `hover` / `ctxhover` the mouse).
+LOCK_FILES = ['tools/full-unchanged.sh', 'tools/_fu_compare.py', 'tools/_fu_gate.py', 'tools/full-unchanged-plants.json',
+              'tests/full-unchanged.html']
+LOCK_PART = {
+    'tests/_cdp.py': re.compile(r'980|__fmWant(?:Setup|Shot)\b|__fm(?:Setup|Shot)(?:Done|Err)\b|\ba\.(?:dump|shots)\b|'
+                                r'--(?:dump|shots)\b|_dump_open|touch_base|prefers-reduced-motion|captureScreenshot'),
+    'tools/ship.sh': re.compile(r'_fu_gate|full-unchanged|\b980\b'),
+    'tools/serve.sh': None,
+}
+
+
+def instrument_firing(root, files):
+    """The changed instrument files whose change fires the gate on its own (see LOCK_PART)."""
+    out = []
+    untracked = set(sh(['git', 'ls-files', '--others', '--exclude-standard'], root).splitlines())
+    for f in instrument_changed(files):
+        rx = LOCK_PART.get(f, None) if f not in LOCK_FILES else None
+        if f in LOCK_FILES or rx is None or f in untracked:
+            out.append(f)
+            continue
+        diff = sh(['git', 'diff', '-U6', 'HEAD', '--', f], root)
+        if not diff.strip() and os.path.exists(os.path.join(root, f)) is False:
+            out.append(f)          # deleted
+            continue
+        for hunk in re.split(r'\n(?=@@ )', diff):
+            if hunk.startswith('@@') and rx.search(hunk):
+                out.append(f)
+                break
+    return out
+
+
 # ─── LOOSENING THE INSTRUMENT IS A DECLARATION, NEVER A QUIET EDIT (review finding 10, its second route) ────────────────
 # A Simple release cannot change the instrument (check() below). But the lock's own releases can, and they carry no app
 # change, so their PASS is HEAD against HEAD — a loosened mask passes that by construction. Two releases in a row would
@@ -487,7 +530,7 @@ def instrument_changed(files):
 # of the pictures — is refused unless its POLISH-LOG line says so in words he reads: `LOOSENS THE LOCK: <why>`. Whatever
 # the line's queue number, and whether or not the gate fires: the label is exactly what such a release would get wrong.
 LOOSEN_MARK = 'LOOSENS THE LOCK:'
-TOL_VARS = ('FU_TOL_PX', 'FU_CHAN', 'FU_FAINT_TOL_PX', 'FU_FAINT_CHAN', 'FU_GRID_TOL', 'FU_AUDIO_TOL')   # a larger number sees less
+TOL_VARS = ('FU_TOL_PX', 'FU_CHAN', 'FU_FAINT_TOL_PX', 'FU_FAINT_CHAN', 'FU_GRID_TOL', 'FU_AUDIO_TOL', 'FU_BYTES_PCT')   # a larger number sees less
 # ⚠️ AND ANY CHANGE TO THE INSTRUMENT IS A RELEASE OF ITS OWN THAT SAYS SO (the second review, 6 Oct). The rule above read
 # four knobs (FU_INVISIBLE, the tolerances, plant names, PNG_UNSTABLE) — and `if 'FU6' in groups and False:` in the comparer
 # with 'box-shadow' dropped from the probe's STYLES, logged as an ordinary "queue 975", was NOT-TRIGGERED; the next Simple
@@ -500,8 +543,8 @@ TOL_VARS = ('FU_TOL_PX', 'FU_CHAN', 'FU_FAINT_TOL_PX', 'FU_FAINT_CHAN', 'FU_GRID
 #   · and the probe's own lists (the styles, attributes, keys, sizes, environments, widths it measures) shrinking is a
 #     loosening, read like the four knobs.
 INSTRUMENT_MARK = 'INSTRUMENT CHANGE:'
-PROBE_LISTS = ('STYLES', 'ATTRS', 'SVG_ATTRS', 'PSEUDO_STYLES', 'KEYS', 'SWEEP_CODES', 'SWEEP_MODS', 'FU6_SIZES', 'ENVS',
-               'HOVER', 'HOVER_MORE', 'ALL')
+PROBE_LISTS = ('STYLES', 'ATTRS', 'SVG_ATTRS', 'PSEUDO', 'KEYS', 'KEYS_TWICE', 'SWEEP_CODES', 'SWEEP_MODS', 'FU6_SIZES',
+               'HOVER', 'HOVER_MORE', 'HOLDS', 'FRIEND', 'ALL')
 NO_PLANT_GROUPS = ('FU7',)   # a record of "no switch yet" (it refuses PASS by itself once one exists): nothing to plant in it
 
 
@@ -527,24 +570,43 @@ def probe_groups(text):
     return [x.strip().strip('\'"') for x in m.group(1).split(',') if x.strip()] if m else []
 
 
-def plant_gaps(probe_text, plants_text):
-    """The probe groups no plant is caught in (a plant is caught in the LAST group of its prefix)."""
+def plant_gaps(probe_text, plants_text, sh_text=None):
+    """The probe groups no plant is caught in (a plant is caught in the LAST group of its prefix) — and, when the driver's
+    text is given, the runs of its FU_RUNS no plant is measured in (the second review: a run nobody plants in could have
+    its comparison switched off and still PASS)."""
     import json
     try:
         ps = json.loads(plants_text).get('plants') or []
     except Exception:
         return ['(the plants file does not read)']
-    caught = set()
+    caught, labels = set(), set()
     for p in ps:
         gs = [g for g in str(p.get('groups') or '').split(',') if g]
         if gs:
             caught.add(gs[-1])
-    return [g for g in probe_groups(probe_text) if g not in caught and g not in NO_PLANT_GROUPS]
+        labels.update(p.get('widths') or [])
+    gaps = [g for g in probe_groups(probe_text) if g not in caught and g not in NO_PLANT_GROUPS]
+    if sh_text is not None:
+        gaps += ['the run %s' % r for r in sorted(shell_runs(sh_text)) if r not in labels]
+    return gaps
+
+
+def shell_runs(sh_text):
+    """{label: (size, input, env, set of groups)} of the driver's FU_RUNS block (the second review: where Full is measured)."""
+    m = re.search(r"^FU_RUNS='\n(.*?)\n'", sh_text or '', re.M | re.S)
+    out = {}
+    if not m:
+        return out
+    for line in m.group(1).split('\n'):
+        f = line.split('#', 1)[0].split()
+        if len(f) >= 5:
+            out[f[0]] = (f[1], f[2], f[3], set(g for g in f[4].split(',') if g))
+    return out
 
 
 def shell_widths(sh_text):
-    m = re.search(r'^FU_WIDTHS="([^"]*)"', sh_text or '', re.M)
-    return set(m.group(1).split()) if m else set()
+    """The runs' labels (v2 called them widths)."""
+    return set(shell_runs(sh_text))
 
 
 def instrument_terms(sh_text, cmp_text, plants_text):
@@ -598,9 +660,17 @@ def loosenings(root):
             gone = sorted(hl[name] - nl.get(name, set()))
             if gone:
                 out.append('the probe’s %s loses %s' % (name, ', '.join(gone[:4]) + (' …' if len(gone) > 4 else '')))
-    gw = sorted(shell_widths(head[0]) - shell_widths(now[0]))
+    hr, nr = shell_runs(head[0]), shell_runs(now[0])
+    gw = sorted(set(hr) - set(nr))
     if gw:
-        out.append('the widths measured lose %s' % ', '.join(gw))
+        out.append('the runs measured lose %s' % ', '.join(gw))
+    for lab in sorted(set(hr) & set(nr)):
+        a, b = hr[lab], nr[lab]
+        if a[:3] != b[:3]:
+            out.append('the run %s is no longer %s %s %s' % (lab, a[0], a[1], a[2]))
+        lost = sorted(a[3] - b[3])
+        if lost:
+            out.append('the run %s loses %s' % (lab, ', '.join(lost)))
     return out
 
 
@@ -644,7 +714,8 @@ def check(root):
     """For tools/ship.sh. Returns (code, message): 0 OK / not triggered, 1 refuse."""
     logline = newest_log_line(root)
     files = changed_files(root)
-    inst = instrument_changed(files)
+    inst = instrument_changed(files)           # any instrument file: a Simple release may change none of them
+    fire = instrument_firing(root, inst)       # …and the ones whose change fires the gate on its own
     if inst and LOOSEN_MARK not in logline:
         loose = loosenings(root)
         if loose:
@@ -652,26 +723,27 @@ def check(root):
                        'line does not say so. Write "%s <why>" in that line, so the loosening is a line he reads, not a '
                        'quiet edit — or put the instrument back.' % ('; '.join(loose[:4]) + (' …' if len(loose) > 4 else ''), LOOSEN_MARK))
     simple = trigger(logline, files, hook_lines(root, files))
-    if not simple and not inst:
+    if not simple and not fire:
         return 0, 'NOT-TRIGGERED'
     why = list(simple)
-    if inst:
-        why.append('the diff changes the Full-unchanged instrument (%s)' % ', '.join(inst))
+    if fire:
+        why.append('the diff changes the Full-unchanged instrument (%s)' % ', '.join(fire))
         if INSTRUMENT_MARK not in logline and LOOSEN_MARK not in logline:
             return 1, ('REFUSE: this release changes the instrument that judges every Simple release (%s), and its POLISH-LOG '
                        'line does not say so. Write "%s <what>" in that line — whatever the item it ships under — and give it '
                        'a PASS of its own (tools/full-unchanged.sh), so the changed instrument is proved to still catch every '
-                       'plant before anything is judged by it.' % (', '.join(inst), INSTRUMENT_MARK))
+                       'plant before anything is judged by it.' % (', '.join(fire), INSTRUMENT_MARK))
         try:
             gaps = plant_gaps(io.open(os.path.join(root, 'tests/full-unchanged.html'), encoding='utf-8').read(),
-                              io.open(os.path.join(root, 'tools/full-unchanged-plants.json'), encoding='utf-8').read())
+                              io.open(os.path.join(root, 'tools/full-unchanged-plants.json'), encoding='utf-8').read(),
+                              io.open(os.path.join(root, 'tools/full-unchanged.sh'), encoding='utf-8').read())
         except OSError:
-            gaps = ['(the probe or the plants file is missing)']
+            gaps = ['(the probe, the plants file or the driver is missing)']
         if gaps and LOOSEN_MARK not in logline:
             return 1, ('REFUSE: this release changes the instrument (%s), and no self-test plant is caught in %s — so a PASS '
                        'could not show that part still sees anything (switching its comparison off would pass). Add a plant '
-                       'caught there (tools/full-unchanged-plants.json, its groups ending in that group).'
-                       % (', '.join(inst), ', '.join(gaps)))
+                       'caught there (tools/full-unchanged-plants.json: its groups ending in that group, or that run in its widths).'
+                       % (', '.join(fire), ', '.join(gaps)))
     others = other_queues(logline)
     if simple and others:
         return 1, ('REFUSE: this is a Simple release (%s), and the newest POLISH-LOG line also names queue %s. A Simple release '
@@ -946,12 +1018,19 @@ def selftest_repo():
               '<script src="js/storage.js?v=30"></script>', '</body>']
         write('index.html', '\n'.join(IX) + '\n')
         write('tools/_fu_compare.py', "# the comparer\nif 'FU2' in groups:\n    pass\n")
-        SH0 = "#!/bin/bash\nFU_INVISIBLE='\nlayer.srcW       # I2\nmeta.SCHEMA_REV  # N1\n'\nFU_TOL_PX=3   # measured\nFU_CHAN=24\nFU_GRID_TOL=4\nFU_WIDTHS=\"380 1280\"\n"
-        PL0 = '{"plants": [{"name": "margin", "groups": "FU1"}, {"name": "toast", "groups": "FU1,FU2"}]}\n'
-        PR0 = "<script>\n  var ALL = ['FU1', 'FU2', 'FU7'];\n  var STYLES = ['display', 'box-shadow',\n    'outline'];\n</script>\n"
+        SH0 = ("#!/bin/bash\nFU_INVISIBLE='\nlayer.srcW       # I2\nmeta.SCHEMA_REV  # N1\n'\nFU_TOL_PX=3   # measured\nFU_CHAN=24\nFU_GRID_TOL=4\n"
+               "FU_RUNS='\n380   380x800   touch  -   FU1,FU2,FU7\n1280  1280x800  mouse  -   FU1,FU2,FU7\n440x956  440x956  touch  -  FU1,FU2   # his phone\n'\n")
+        PL0 = '{"plants": [{"name": "margin", "groups": "FU1", "widths": ["380", "1280"]}, {"name": "toast", "groups": "FU1,FU2", "widths": ["440x956"]}]}\n'
+        PR0 = "<script>\n  var ALL = ['FU1', 'FU2', 'FU7'];\n  var STYLES = ['display', 'box-shadow',\n    'outline'];\n  var PSEUDO = ['::before', '::after'];\n</script>\n"
         write('tools/full-unchanged.sh', SH0)
         write('tools/full-unchanged-plants.json', PL0)
         write('tests/full-unchanged.html', PR0)
+        CDP0 = ['def launch():', '    args = ["--headless=new", "--no-first-run"]', '    return args', '', '', '', '', '', '', '', '',
+                'def loop():', '    want_shot = cdp.eval("window.__fmWantShot")', '    shot = cdp.send("Page.captureScreenshot", clip=c, scale=1)', '    return shot']
+        SHIP0 = ['#!/bin/bash', 'run_suite() { python3 tests/_cdp.py --port 8777; }', '', '', '', '', '', '', '', '', '',
+                 'python3 tools/_fu_gate.py check || exit 1', 'git add -A']
+        write('tests/_cdp.py', '\n'.join(CDP0) + '\n')
+        write('tools/ship.sh', '\n'.join(SHIP0) + '\n')
         git('add', '-A')
         git('commit', '-q', '-m', 'v1')
         # the Simple release: one line of Full's function rewritten with nothing Simple on it, and a two-line block — and,
@@ -1043,11 +1122,40 @@ def selftest_repo():
         code, msg = gate('- v3 — queue 975: a tidy-up. %s the comparer’s words' % INSTRUMENT_MARK)
         if code != 1 or 'has not printed PASS' not in msg:
             fails.append('the instrument rule: a declared instrument change under an ordinary label did not need its PASS (%s)' % msg[:200])
+        # (4b') THE REPLAY (6 Oct): an ordinary release that changes the SUITE's part of tests/_cdp.py or ship.sh is not an
+        #       instrument change — 12 of the last 60 releases did, and each would have been refused with no way through —
+        #       while one that changes the lock's part of either is
+        write('tools/_fu_compare.py', "# the comparer\nif 'FU2' in groups:\n    pass\n")
+        for rel, lines, at, new, fires in (
+                ('tests/_cdp.py', CDP0, 1, '    args = ["--headless=new", "--no-first-run", "--disable-mdns"]', False),
+                ('tests/_cdp.py', CDP0, 13, '    shot = cdp.send("Page.captureScreenshot", clip=c, scale=0.5)', True),
+                ('tools/ship.sh', SHIP0, 1, 'run_suite() { python3 tests/_cdp.py --port 8777 --timeout 3600; }', False),
+                ('tools/ship.sh', SHIP0, 11, 'python3 tools/_fu_gate.py check || true', True)):
+            ed = list(lines); ed[at] = new
+            write(rel, '\n'.join(ed) + '\n')
+            code, msg = gate('- v3 — queue 975: an ordinary release')
+            if fires and (code != 1 or INSTRUMENT_MARK not in msg):
+                fails.append('the instrument rule: a change to the lock’s part of %s (%r) did not fire (%s)' % (rel, new, msg[:160]))
+            if not fires and (code, msg) != (0, 'NOT-TRIGGERED'):
+                fails.append('the instrument rule: an ordinary release changing the suite’s part of %s (%r) fired (%s)' % (rel, new, msg[:200]))
+            if not fires:   # …and a Simple release still may not change it at all
+                write('js/spine.js', '// Simple\n')
+                code, msg = gate('- v3 — queue 980 (partial): more')
+                if code != 1 or 'as well as the app' not in msg:
+                    fails.append('the instrument lock: a Simple release that also changes %s was not refused for it (%s)' % (rel, msg[:160]))
+                os.remove(os.path.join(d, 'js/spine.js'))
+            write(rel, '\n'.join(lines) + '\n')
+        write('tools/_fu_compare.py', "# the comparer, tightened\nif 'FU2' in groups:\n    pass\n")
         # (4c) a group with no plant caught in it: the PASS could not show it still sees anything
-        write('tools/full-unchanged-plants.json', '{"plants": [{"name": "margin", "groups": "FU1"}, {"name": "toast", "groups": "FU1"}]}\n')
+        write('tools/full-unchanged-plants.json', '{"plants": [{"name": "margin", "groups": "FU1", "widths": ["380", "1280"]}, {"name": "toast", "groups": "FU1", "widths": ["440x956"]}]}\n')
         code, msg = gate('- v3 — queue 975: a tidy-up. %s the plants' % INSTRUMENT_MARK)
         if code != 1 or 'no self-test plant is caught in FU2' not in msg:
             fails.append('the instrument rule: a probe group with no plant caught in it was not refused (%s)' % msg[:200])
+        # (4c') …and a RUN of FU_RUNS that no plant is measured in (the second review: a run nobody plants in can go blind)
+        write('tools/full-unchanged-plants.json', '{"plants": [{"name": "margin", "groups": "FU1", "widths": ["380", "1280"]}, {"name": "toast", "groups": "FU1,FU2", "widths": ["380"]}]}\n')
+        code, msg = gate('- v3 — queue 975: a tidy-up. %s the plants' % INSTRUMENT_MARK)
+        if code != 1 or 'the run 440x956' not in msg:
+            fails.append('the instrument rule: a run with no plant measured in it was not refused (%s)' % msg[:200])
         write('tools/full-unchanged-plants.json', PL0)
         # (4d) the review's loosen.py: a group's comparison switched off by code and 'box-shadow' dropped from the probe's
         #      STYLES, declared only as a tidy-up — the list's shrink is a loosening
@@ -1089,7 +1197,10 @@ def selftest_repo():
                                 ('a picture tolerance raised', 'tools/full-unchanged.sh', SH0.replace('FU_TOL_PX=3', 'FU_TOL_PX=12')),
                                 ('a threshold raised', 'tools/full-unchanged.sh', SH0.replace('FU_CHAN=24', 'FU_CHAN=40')),
                                 ('a plant taken out', 'tools/full-unchanged-plants.json', '{"plants": [{"name": "margin", "groups": "FU1,FU2"}]}\n'),
-                                ('a width taken out', 'tools/full-unchanged.sh', SH0.replace('FU_WIDTHS="380 1280"', 'FU_WIDTHS="380"'))):
+                                ('a run taken out', 'tools/full-unchanged.sh', SH0.replace('440x956  440x956  touch  -  FU1,FU2   # his phone\n', '')),
+                                ('a group taken from a run', 'tools/full-unchanged.sh', SH0.replace('440x956  440x956  touch  -  FU1,FU2', '440x956  440x956  touch  -  FU1')),
+                                ('a run moved to another size', 'tools/full-unchanged.sh', SH0.replace('440x956  440x956  touch', '440x956  380x800  touch')),
+                                ('the pseudo-elements no longer read', 'tests/full-unchanged.html', PR0.replace("var PSEUDO = ['::before', '::after'];", "var PSEUDO = ['::before'];"))):
             old = io.open(os.path.join(d, rel), encoding='utf-8').read()
             write(rel, text)
             for log in ('- v3 — queue 980 (partial): the lock itself', '- v3 — queue 975: a tidy-up', '- v3 — (hunt LOW #2) the probe'):
@@ -1137,8 +1248,8 @@ def main():
     if cmd == 'why':
         files = changed_files(root)
         why = trigger(newest_log_line(root), files, hook_lines(root, files))
-        if instrument_changed(files):
-            why.append('the diff changes the Full-unchanged instrument (%s)' % ', '.join(instrument_changed(files)))
+        if instrument_firing(root, instrument_changed(files)):
+            why.append('the diff changes the Full-unchanged instrument (%s)' % ', '.join(instrument_firing(root, instrument_changed(files))))
         print('\n'.join(why) or 'not triggered')
         return 0
     if cmd == 'stale-busters':
