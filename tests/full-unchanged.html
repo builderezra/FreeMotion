@@ -38,6 +38,15 @@
   a hover per toolbar on the PC pass; real touch on the phone pass (the 350 ms hold, the 300 ms grip arm, the diamond
   hold); FU2's missing edits; a real export through the export sheet; every key the handler answers, with what each one
   opened; the live session's whole wire, presence included; FU5 unmasked except N1.
+
+  v3 (6 Oct, the second review — a Simple release carrying SIXTEEN changes to Full got a literal PASS): his phone (440×956)
+  is a width of its own, and FU8 boots the app again in the environments v2 never measured — short screens both ways, a
+  phone of 320, a PC of 1024 and of 1680, reduced motion, the dark Home, the other Settings switched on; a friend's EDITS
+  arriving in Full (FU4), not only presence; the saved record and the Home card whole, after every FU2 step; the toast's box
+  and rise; animations started from script (element.animate) and pseudo-elements; a picture of every hovered control, and
+  five more kinds hovered; the un-held swipe, the tap, the pinch, and each hold threshold bracketed; the exported file's
+  sound; every effect / sound / behaviour default; every printable key with every modifier; and the suite's file is never
+  run inside the frame being measured (kitchen921 lives here now).
 -->
 <style>
   html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
@@ -53,7 +62,7 @@
 <script>
 (function () {
   'use strict';
-  var PROBE_VERSION = 2;
+  var PROBE_VERSION = 3;
   var Q = new URLSearchParams(location.search);
   var W = parseInt(Q.get('w'), 10) || 1280, H = parseInt(Q.get('h'), 10) || 800;
   var PHONE = Q.get('phone') === '1', SHOTS = Q.get('shots') === '1';
@@ -65,9 +74,11 @@
   /* FU1 and FU2 first, in this order: the self-test's plants are measured with a PREFIX of it (FU1 for the pictures, FU1+FU2
      for the edits, FU1..FU3 for the keys, FU1..FU5 for the sanitiser), so whatever one group leaves behind, a plant's run
      reaches its group exactly where the full run did. */
-  var ALL = ['FU1', 'FU2', 'FU3', 'FU6', 'FU4', 'FU5', 'FU7'];
+  /* FU8 last (6 Oct): it boots the app again in each environment, so nothing may run after it — and a plant caught there
+     pays for every group before it, so only the plants that need an environment are measured that far. */
+  var ALL = ['FU1', 'FU2', 'FU3', 'FU6', 'FU4', 'FU5', 'FU7', 'FU8'];
   var GROUPS = (Q.get('groups') || ALL.join(',')).split(',').filter(function (g) { return ALL.indexOf(g) >= 0; });
-  var DUMP = window.__fmDump = { probe: PROBE_VERSION, w: W, h: H, phone: PHONE, groups: GROUPS, step: 'boot', screens: {}, fu2: [], fu3: [], fu4: null, fu5: [], fu6: {}, fu7: null, errors: [], notes: [], fell: [] };
+  var DUMP = window.__fmDump = { probe: PROBE_VERSION, w: W, h: H, phone: PHONE, groups: GROUPS, step: 'boot', screens: {}, fu2: [], fu3: [], fu4: null, fu5: [], fu6: {}, fu7: null, fu8: { screens: {}, envs: {} }, errors: [], notes: [], fell: [] };
   var frame = document.getElementById('app');
   frame.style.width = W + 'px'; frame.style.height = H + 'px';
   var w, D, FM;   // the app frame's window, document and FM, once loaded
