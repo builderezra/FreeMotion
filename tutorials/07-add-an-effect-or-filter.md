@@ -7,10 +7,10 @@ You'll be able to find an effect, set how strong it is, change the order, remove
 3. Tap **+ Add Effect**.
 4. Tap the magnifier at the top right and type **blur**. Tap the picture for **Gaussian Blur**. A number appears on it, and your video behind shows a preview.
 5. Tap **Add 1 effect**.
-6. Tap the **Gaussian Blur** row to open it. Drag its ruler left to raise the blur, or tap the number and type one.
+6. The **Gaussian Blur** row is already open, with its ruler showing. Drag the ruler left to raise the blur, or tap the number and type one. (Tapping the row's name closes it. Tap again to reopen.)
 7. Add a second effect the same way. Now each row has a small grip of dots at its left. Press it for a moment, then drag the row up or down to change the order.
 8. To switch an effect off without losing it, tap the eye at the right of its row. To remove it, open the row and tap the bin at the right, or swipe the row left.
-9. For a ready-made look, tap **Filters** at the top. Tap one or more pictures, then **Add 1 filter**. Open the filter. **Strength** starts at 1. Drag its ruler right to fade the look toward 0.
+9. For a ready-made look, tap **Filters** at the top. Tap one or more pictures, then **Add 1 filter**. You are taken back to **Visual** with the filter already open. **Strength** starts at 1. Drag its ruler right to fade the look toward 0.
 
 On a computer: the same. Click the clip first. The panel is at the bottom left. Drag the grip to reorder, and click the bin to delete.
 
@@ -43,3 +43,5 @@ If it doesn't work: If a row says "does nothing here", that effect has nothing t
 | 9 Strength 0..1, default 1 | js/compositor.js:1646 | yes |
 | Tip: + Add effect to this filter | js/inspector.js:1900 | yes |
 | If: 'does nothing here' tag | js/inspector.js:1776 | yes |
+| 6 row already open on add | js/fx-browser.js:256-257, js/inspector.js:1748, 1754 | yes |
+| 9 filter already open, back on Visual | js/inspector.js:2124-2125, 2230 | yes |
