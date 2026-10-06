@@ -61821,8 +61821,9 @@
     });
   });
 
-  /* `kit` (queue 980): the suite's own fixture documents, for tests/full-unchanged.html's FU5 ("every fixture project in
-     the suite … loaded, sanitised, saved and loaded again"). Read-only builders; nothing here runs a test. */
+  /* `kit` (queue 980): the suite's own fixture documents. tests/full-unchanged.html no longer loads this file to reach them
+     (the second review, 6 Oct: the suite must not run inside the frame the lock measures) — it carries its own copy of
+     kitchen921. Read-only builders; nothing here runs a test. */
   window.FMTests = { tests: T, run: run, kit: { kitchen921: kitchen921 } };
 
   /* ================= queue 306: the service worker's silent downgrade =============================
