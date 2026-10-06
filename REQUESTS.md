@@ -35471,6 +35471,8 @@ re-opened #480, which I had marked done and had not fixed.
          - Add a structural ship.sh rule: a release that touches export-audio or QR code refuses unless those tests ran green on a machine that has the feature (the Mac) for that HEAD.
       ✅ HE ANSWERED the OS-specific-tests ❓ASK: "whatever you think is best" → the recommended answer (per-OS baselines for the 16; a visible NOT RUN HERE for the 6; the ship.sh rule that export-audio / QR changes need those tests green on the Mac). The memory hunt is #1085.
       📍 Builder's order (6 Oct): the lock first, then ONE release with port/wsl + the rules-audit B1–B5 tools (#1073, after the PM's port review fixes), then Simple 1.2 onward. The Mac stays the only shipper until that release is live and the WSL suite is green or NOT-RUN-only.
+      📍 **7 Oct ~01:40 — v17.24 (the port + audit release) is built and saved as branch release/v17.24 (ca51a60f) but NOT live:** three ship tries — one refused by a too-strict baseline gate (fixed, with test-port cases failing first), two frozen by this Mac running out of memory (#1085). ~~ASK: quit the ChatGPT and Codex apps~~ — done by the PM on his behalf (01:3x); the 4th try still crawled (~8 tests/min against ~52, 80 MB free pages, swap 8 GB) and was stopped cleanly at 02:10 — nothing committed.
+      ❓ASK (7 Oct ~02:15): this Mac cannot run the full suite now. A (recommended): push release/v17.24 and let the laptop ship it — that is the switch-over; B: restart the Mac and ship right after boot; C: fix the suite's growth (#1085) first, hours. The builder keeps the Mac quiet meanwhile.
 - [ ] **1072 — His second (free) Claude account gets a tutorials job, on a lower model, monitored** (6 Oct, ~00:10 AWST, via INBOX — his words)
       **STATUS: 📌 NOTE — nothing to build**
       Moved from INBOX.md whole:
@@ -35524,6 +35526,7 @@ re-opened #480, which I had marked done and had not fixed.
       Clauses (his): 1. [ ] none of the rules (mine or ChatGPT's) slow us down or cause issues · 2. [ ] an old rule that does not fit now gets changed. (And his steer: time well spent, tests kept where they are genuinely helpful.)
       📍 Builder's order: B4, B1 and B3 before the next ship that needs them (B4 only matters to a release that runs mutate.sh — the land releases); B2, B5–B11 soon; B12 before the Windows move; B13 only after his yes.
       🔨 **6 Oct ~14:30 — B1, B3 (its wording), B4, B2 (text) and B5 built** on branch rules-audit-b1b5 (4ffff138), each self-tested (tools/test-ship-bg.sh, tools/test-mutate.sh, all green): ship-bg.sh launches a ship and exits 3 — never 0 — and refuses beside a live one; ship.sh records its pid and phase, and a killed ship reads as KILLED; mutate.sh's cap follows the measured suite length, a timeout reads TIMED OUT (exit 8), never SURVIVED, and an --only mode proves a mutation on a slice. An adversarial check found 6 defects (2 major: a cached green baseline that missed the mutated file or the width, so a mutation could read CAUGHT on a tree already red); all six fixed (branch rules-audit-b1b5-fix, 1f7610a1), each with a self-test case that failed first; tools/test-mutate.sh 31 checks and tools/test-ship-bg.sh 40 checks green. Ships in a tools release between Simple releases.
+      ✅ **7 Oct ~02:30 — B11 (memory) and B1's memory half done** (outside the repo, no release needed): one merged 'nothing beside a ship' rule replaces three copies; the cron note says CronList first; the loop-and-quota note scopes 'just do everything' to #872/#882 and adds one browser agent at a time; the build-while-shipping note drops the unproven Spotlight claim and merges back only after a pushed-and-verified ship; the suite note now carries the ship-bg.sh launch rule and points at tools/.suite-seconds.
 - [ ] **1074 — Phone: after the first import, Export is hidden (hunt LOW #1074)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
       **STATUS: 🟢 READY — nothing is stopping this**
       1. **Phone: after the first import, Export is hidden.** The new clip is auto-selected (app.js:3099-3100), which sets body.m-editing (app.js:1007), and `body.m-editing #m-export { display:none }` (styles.css:4214) removes the Export button until the user finds the back arrow. Tapping back a second time goes to Home. A beginner who just added their first clip cannot see how to export. Options to draw: keep Export visible in the clip header, or do not auto-select after the first import.
@@ -35646,3 +35649,56 @@ re-opened #480, which I had marked done and had not fixed.
 - [ ] **1085 — The test page reserves about 8.7 GB over one suite run: find the leak and fail a run past a memory budget (hunt MEDIUM #1085)** (6 Oct, ~18:10 — the PC Claude's report via the PM; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       The first Linux pass died on Chrome's 8 GB renderer cap; it may be what keeps pushing this 8 GB Mac into swap (the 23:46 reboot, the 17:36 load 41). Find the tests that leave media, bitmaps, AudioContexts or workers alive, and add a guard that fails a run whose renderer grows past a set budget. Full plan: #1071's 18:10 block.
+      📍 **7 Oct ~01:40 — it now stops this Mac shipping at all:** v17.24's full suite froze twice at the desktop pass — page silent for minutes at test 765 (00:4x, ran to the 72-min cap) and at test 201 (01:24; stopped by hand at 350 s silent) — with the test Chrome squeezed to under 1 MB resident and swap at ~7 of 8 GB. Not a crash (the driver's new crash detection stayed quiet) and not this release's flags (only --mute-audio and --use-mock-keychain on the Mac). A hunt workflow is measuring growth per test on slices, then fixing the worst leaks in the tests and adding a budget guard that fails a run by name.
+
+- [ ] **1086 — Export: one clip's sound fails to read, the export goes out without it, and the ready card still says Sound ✓ (hunt MEDIUM #1086)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      1. CONFIRMED: a project where ONE clip's sound fails to read exports with that sound missing, yet the ready card says "Sound ✓".
+         - Cause: `FM._audioTrackDropped` is set only when ALL clips fail (exporter.js:748), and the amber warning lives in the overlay that app.js:6247 hides before the card opens.
+         - Fix: add `audioMissing` (the length of FM._lastAudioDrops) to the run result (exporter.js:1620) and show "Sound — N clip(s) missing" on the card (app.js:6281). Test with one good clip plus one undecodable clip.
+      3. WRONG, don't do it: the audit's "missing AAC description means encode-failed" check. The bundled muxer supplies its own AAC config (vendor/mp4-muxer.js:1639-1653), so that check would CREATE silent exports.
+
+- [ ] **1087 — Export decodes each source file whole, with no size ceiling — a long 4K clip can kill the tab at export start (phones) (hunt MEDIUM #1087)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      2. PARTLY: the export decodes each source file whole (exporter.js:562 → media.js:836), with no 300 MB ceiling like the other three decode paths, so a long 4K clip can kill the tab at export start.
+         - Fix: on phones, refuse sources over WAVE_MAX_BYTES with a named "too big to read its sound on this device" drop, and release m.audioBuffer after the export.
+         - Do NOT decode at 8 kHz (the audit's idea would ruin the sound).
+
+- [ ] **1088 — Audio-only export (WAV / M4A) downloads with no fresh tap and revokes the file after 1 s — on an iPhone it may never appear, yet it says Audio exported (hunt MEDIUM #1088)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      4. PARTLY: audio-only export (WAV/M4A) downloads with no fresh tap, revokes the URL after 1 s, and always says "Audio exported" (app.js:6001-6004). On an iPhone the file may never appear.
+         - Fix: route it through the ready card's Save button (give deliver() a type parameter), and use a 4 s revoke as a stopgap.
+
+- [ ] **1089 — Phone memory: the autosave thumbnail canvas, the compositor's scratch pools, decoded export audio and the reverse / frame-blend caches never shrink (hunt MEDIUM #1089)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      **Phone memory (hunt MEDIUM; all partly confirmed):**
+      - The autosave thumbnail renders a full project-size canvas (~11 MB at 1080x1920) and never zeroes it. Render at 2x the card size and set width/height to 0 after toDataURL.
+      - Compositor scratch canvases and pools never shrink (100+ MB with several effects). Add FM.releaseCompositorScratch() and call it after export and on project switch.
+      - Decoded audio stays on m.audioBuffer after an export. Delete the buffers the export itself decoded, except reversed or audio-reactive clips.
+      - Reverse and frame-blend caches have per-clip budgets but no global cap (over 1 GB possible). Use a device-aware budget shared across clips in prepareCaches.
+
+- [ ] **1090 — Work with friends: the owner's private Notes-pad text and reminders sync to EVERY guest, viewers included, and nothing says so (hunt HIGH #1090)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      - CONFIRMED F1: the owner's private Notes-pad text and reminders (scene.project.notes) sync to EVERY guest, viewers included, and nothing on the Share screens says so.
+        - ❓ASK (his decision): keep notes on the owner's device only (add 'notes' to DENY in collab-session.js:31, so editors no longer share notes), or keep sharing them and say so on the Share screen? Recommended: owner-only.
+
+- [ ] **1091 — Work with friends: 'Viewer: can only watch' is untrue — viewers get all the media, export is on by default, and Leave keeps a full copy even with export off (hunt HIGH #1091)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      - CONFIRMED F2: "Viewer: can only watch" is untrue. Viewers get all the raw media, export is on by default (roExport true), and a viewer can Leave keeping a full copy even with export switched off.
+        - ❓ASK (his decision): change the words to "can watch, and keep a copy", or make "only watch" true (no copy on Leave when export is off)? Recommended: make it true.
+
+- [ ] **1092 — Work with friends: anyone holding the link or code learns the owner's internet address by trying to join, even if refused — the wording says otherwise (hunt HIGH #1092)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      - CONFIRMED F4: anyone holding the link or code learns the owner's internet address by trying to join, even if refused. Recommended: correct the wording at collab-ui.js:1988; changing the behaviour would break one-tap links.
+
+- [ ] **1093 — Work with friends: images a peer sends have no pixel limit (GIFs are capped at 64 MP), so a hostile admitted editor could freeze phones (hunt HIGH #1093)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      - PARTLY F5: peer-sent images have no pixel limit (GIFs are capped at 64 MP), so a hostile admitted editor could freeze phones. Refuse over ~50 MP in writeRecord (collab-media.js:1191).
+
+- [ ] **1094 — macOS's keychain daemon secd burns 60–170% CPU whenever test Chromes run; --use-mock-keychain on every Mac Chrome launch (hunt MEDIUM #1094)** (6 Oct, ~23:50 — the PM's finding, NOT his words)
+      Moved from INBOX.md whole:
+      ### 06 Oct 2026, ~23:50 AWST — (hunt MEDIUM) macOS keychain daemon `secd` burns 60-170% CPU whenever test Chromes run: likely fix `--use-mock-keychain` — PM finding, NOT his words
+
+      **Evidence (PM, read-only; nothing changed):**
+      - `secd` (with `ctkd`) ran at 167% at 17:36 (load 41, the near-crash), at 49% at 23:07 with two test Chromes, and at 166% for 53+ minutes during the v17.24 ship's desktop pass (load 22).
+      - It tracks test-Chrome activity, not the AIs.
+      - On macOS every Chrome profile reads its "Chrome Safe Storage" key from the login keychain, and each fresh `--user-data-dir` (the suite makes one per run; the collab tier-3 frames and relaunches add more) goes through secd.
+
+      **Likely fix:** add `--use-mock-keychain` to every Mac Chrome launch: tests/_cdp.py's launch flags, tests/_kbdevice.py, tests/_shot.sh and tools/shot.py, via `tests/_platform.py` if it centralises them. It is Chrome's own switch for exactly this test situation and touches nothing the suite measures.
+
+      **Before shipping it:** measure secd CPU over one slice run with and without the flag, the same way the mDNS flags were proven. Never during a ship.
+
+      **Also seen:** two headless Chromes from about 10 h ago (pids 27887/27888, `--disable-gpu --hide-scrollbars`, profiles `tmp.5Y5UB…`/`tmp.2clbC…`, parents 27132/27133 still alive, ~54 MB, idle). These look like a hung screenshot helper. Clean them up after the ship.
+      🔨 7 Oct ~00:55: built into tests/_cdp.py in release/v17.24 (unshipped). MEASURED, INCONCLUSIVE: secd ran 31–84% with the flag and 34–84% without, against 63–98% with no test Chrome at all — other apps drive most of it; kept as harmless (921 S0 12/12 both ways). Still to do: tests/_kbdevice.py, tests/_shot.sh, tools/shot.py. The two 10-hour-old headless Chromes (pids 27887/27888) are NOT the builder's: their parents are `./shot.sh terremoto …` and `./shot.sh pandc …` screenshots of outside sites, so they were left for whoever ran them.

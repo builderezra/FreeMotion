@@ -35,17 +35,12 @@ Append one line to the log below only when something changed.
 8. **Tutorials helper (from 6 Oct):** Ezra's second Claude account (Chrome profile "Builder", Claude Code on the web, Sonnet 5.5) writes tutorials on GitHub branch `tutorials-drafts`, in `tutorials/` only. Each tick: `git fetch ssh tutorials-drafts`. Review every new file against the code by checking each step's `<!-- file:line -->` comment, and against the live app at 380px. Record a verdict per tutorial in tools/design/tutorials/REVIEW.md. If it ever touches main or app code, tell Ezra at once. My access to Chrome is read-only (screenshot) and the Chrome extension is not connected, so corrections go to Ezra as one paste block.
 
 
-9. **WINDOWS SWITCH-OVER (from 6 Oct 18:20).** Ezra: "okay lmk when its ready and you need me to do something".
-   - **Ready when ALL hold:**
-     (a) the port+audit release (port/wsl merged with the review fixes and the OS-aware tests) is LIVE on main;
-     (b) the PC's suite is green, with only the visible NOT-RUN-HERE count for the 6 AAC/Barcode tests;
-     (c) no ship is running on the Mac.
-   - **Then:**
-     1. Message the Mac builder (GOP) to finish its current turn, CronDelete its loop, and not ship again.
-     2. Give Ezra ONE paste for the PC Claude session in ~/FreeMotion:
-        > SWITCH-OVER: you are now the FreeMotion builder; the Mac has stopped. Run `git fetch ssh && git switch main && git pull --ff-only ssh main`, then do CLAUDE.md's first-message routine (tick.sh, CronList BEFORE CronCreate, unshipped-release check). Continue the queue oldest-first: Simple mode's 980-* branches are on GitHub. You are the only shipper now.
-     3. Keep the PM ticks: the Mac PM chat watches GitHub. The PC sessions aren't reachable by message, so anything for the PC goes to Ezra as a paste or via the Drive transfer folder.
-
+9. **WINDOWS SWITCH-OVER (updated 7 Oct 02:20): option A.** The Mac could not finish v17.24's suite (4 attempts: time cap, swap freeze ×2, gate). The PM picked A under Ezra's "whatever you think is best": the LAPTOP ships v17.24 and becomes the builder.
+   - `release/v17.24` (ca51a60f) is pushed. The builder is writing `SWITCHOVER.md` on that branch with the PC's exact steps.
+   - **In the morning, give Ezra ONE paste for the PC Claude (the session in ~/FreeMotion):**
+     > SWITCH-OVER: you are now the FreeMotion builder. Run `git fetch ssh`, read SWITCHOVER.md on branch release/v17.24, and follow it exactly: ship v17.24 from this laptop, then take over the loop. The Mac has stopped shipping.
+   - **Before giving it, check:** SWITCHOVER.md exists on origin release/v17.24, no ship is running on the Mac, and the Mac builder has stopped its loop or agreed to.
+   - **After the PC ships:** confirm the live label says v17.24 (curl), then tell the Mac builder to CronDelete its loop and stay idle as the backup.
 
 10. **KEEP THE CLOUD HELPER BUSY FOREVER (Ezra, 6 Oct 23:10: "when it runs out make sure it still has more to do forever").**
     The helper is Ezra's second account: claude.ai/code session_01TnKnDxL9jETj2CCp8XMAQx (Chrome tab 128474790, Claude in Chrome, Sonnet 5.5). Its standing list is `tools/design/helper/BACKLOG.md` on branch `helper/backlog`; its done list is `helper/done`.
@@ -140,3 +135,5 @@ Append one line to the log below only when something changed.
 - 23:50 — Ship v17.24 desktop pass running (the profile dir prefix is now cdp-, not fm-cdp-; update the tick grep). secd 166% for 53 min during it; hypothesis logged to INBOX: test Chrome profiles hit the keychain, fix --use-mock-keychain (measure after the ship). 2 idle 10-h-old screenshot Chromes noted. Remote checks now use anonymous HTTPS, not ssh.
 - 00:47 — v17.24 REFUSED on TIME (the suite hit the 4315 s cap at test "921 S8r … two knocks …"; nothing failed). Load 9-22 throughout: secd 60-166%, GoogleUpdater 70-90%. Builder told: measure --use-mock-keychain in a 2-min slice before re-shipping; clean up 2 orphan Chromes. Switch-over ETA slips about 2 h (~05:00+).
 - 01:06 — v17.24 RE-SHIP running (pid 79382, desktop, started ~00:59). corespotlightd 189% now (Spotlight indexing). Live ~03:00-03:30 if green.
+- 01:37 — v17.24 attempt 3 was stopped by the builder (rc 143): the test browser froze in swap (Mac out of memory). The builder asked Ezra to quit ChatGPT/Codex; the PM did it for him (a menu Quit was refused, so the main pid 11891 got a TERM; tiny helpers remain) and closed its own browser pane. Memory free 47%. Builder told to re-ship. NOTE: ChatGPT's heartbeat is OFF until the app is reopened (it is out of usage until 11 Oct 14:24 anyway); reopen on/after the 11th, ideally on the PC.
+- 02:17 — v17.24 attempt 4 also stopped (rc 143). The builder asked Ezra A/B/C (A: the laptop ships it; B: restart the Mac; C: memory fix first). The PM chose A under his "whatever you think is best": pushed release/v17.24 (ca51a60f) and asked the builder for SWITCHOVER.md on that branch; the Mac continues #1085 with short runs only. The morning paste is in checklist item 9.

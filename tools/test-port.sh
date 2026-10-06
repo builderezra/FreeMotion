@@ -332,6 +332,16 @@ for r in "$NOBASE" "$PART" "$NOCASE"; do v="$(fg js/effects.js "$TMP/empty.diff"
 [ -z "$_fgmiss" ] && ok "every baseline reason (none recorded, incomplete, a missing case) refuses a js/ change" || bad "a baseline NOT RUN let js/effects.js through:$_fgmiss"
 v="$(fg js/app.js "$TMP/empty.diff" '999 a test\tneeds a gamepad — this browser has none\n')"; rc=$?
 [ "$rc" = 1 ] && ok "a reason the gate has no map for refuses any shipped change (fail-safe: a renamed reason cannot slip past)" || bad "an unmapped NOT RUN reason passed the gate: rc=$rc $v"
+# A RELEASE'S OWN VERSION LABEL IS NOT CODE (7 Oct): every release bumps index.html's label and ?v= busters, so read literally
+# the touch and baseline NOT RUN lines — permanent on Linux — would refuse EVERY release from the laptop, v17.24 included.
+printf 'diff --git a/index.html b/index.html\n--- a/index.html\n+++ b/index.html\n@@ -1,2 +1,2 @@\n-<span class="ver" title="t">v17.23</span>\n+<span class="ver" title="t">v17.24</span>\n-<script src="js/app.js?v=468"></script>\n+<script src="js/app.js?v=469"></script>\n' > "$TMP/label.diff"
+printf 'diff --git a/index.html b/index.html\n--- a/index.html\n+++ b/index.html\n@@ -1,2 +1,2 @@\n-<span class="ver" title="t">v17.23</span>\n+<span class="ver" title="t">v17.24</span>\n-<p>Projects</p>\n+<p>Your projects</p>\n' > "$TMP/realhtml.diff"
+v="$(fg index.html,tools/ship.sh "$TMP/label.diff" "$TOUCH$NOBASE")"; rc=$?
+[ "$rc" = 0 ] && ok "index.html changed only in its version label and a ?v= buster, with touch and baseline NOT RUN → passes (a label is not code)" || bad "a label-only index.html was refused as app code: rc=$rc $v"
+v="$(fg index.html,tools/ship.sh "$TMP/realhtml.diff" "$TOUCH$NOBASE")"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$v" | grep -q 'index.html' && ok "control: the label PLUS a real index.html change, with touch NOT RUN → refused, naming index.html" || bad "a real index.html change passed with touch NOT RUN: rc=$rc $v"
+v="$(fg index.html,js/app.js "$TMP/label.diff" "$TOUCH")"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$v" | grep -q 'js/app.js' && ok "control: a label-only index.html does not excuse a js/app.js change beside it" || bad "js/app.js passed beside a label-only index.html: rc=$rc $v"
 v="$(fg tests/tests.js,tools/ship.sh,REQUESTS.md,tests/baselines.json "$TMP/empty.diff" "$TOUCH$NOBASE")"; rc=$?
 [ "$rc" = 0 ] && ok "control: touch and baseline NOT RUN with only tests, tools and notes changed → passes (listed, not refused)" || bad "a tests/tools-only release was refused for a touch NOT RUN: rc=$rc $v"
 python3 - "$REPO" <<'PY' && ok "the gate's named reasons are the ones tests/tests.js and tests/_cdp.py actually write" || bad "a NOT RUN reason in tests.js or _cdp.py no longer starts the way tools/_shipgates.py expects (it would fall to the catch-all)"

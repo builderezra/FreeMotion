@@ -75,6 +75,33 @@ def changed_lines(diff_text, path):
     return out
 
 
+def label_only(diff_text, path):
+    """True when `path` is index.html and its every changed line differs only in the version label or a ?v= buster. Every
+    release bumps both, so read literally the touch and baseline NOT RUN lines — permanent off the Mac — would refuse every
+    release from the laptop (7 Oct, v17.24). Masked, the removed and added lines must be the same lines."""
+    import re
+    if path != 'index.html':
+        return False
+    lines = changed_lines_signed(diff_text, path)
+    if not lines:
+        return False
+    mask = lambda t: re.sub(r'\?v=\d+', '?v=#', re.sub(r'(class="ver"[^>]*>)v[0-9.]+(<)', r'\1v#\2', t))
+    minus = sorted(mask(l[1:]) for l in lines if l[0] == '-')
+    plus = sorted(mask(l[1:]) for l in lines if l[0] == '+')
+    return minus == plus
+
+
+def changed_lines_signed(diff_text, path):
+    """the + and - lines of `path` in a unified diff, WITH their sign (headers excluded)"""
+    out, cur = [], None
+    for l in diff_text.split('\n'):
+        if l.startswith('diff --git '):
+            cur = l.split(' b/', 1)[-1] if ' b/' in l else None
+        elif cur == path and l[:1] in ('+', '-') and not l.startswith('+++') and not l.startswith('---'):
+            out.append(l)
+    return out
+
+
 def feature_gate(files, diff_text, notrun_lines):
     """The refusals, one per feature: [(feature, [files that touch it], [its tests that did not run])]. notrun_lines are
     tools/_testfloor.sh notrun_list's "name<TAB>reason"; a "?" line (a driver that could not say) counts against every
@@ -87,6 +114,8 @@ def feature_gate(files, diff_text, notrun_lines):
         for p in files:
             if not any(fnmatch.fnmatch(p, g) for g in f["globs"]):
                 continue
+            if label_only(diff_text, p):
+                continue   # a release's own version label and ?v= busters are not code (7 Oct, see label_only)
             pat = f["lines"].get(p)
             if pat and not any(re.search(pat, l) for l in changed_lines(diff_text, p)):
                 continue
