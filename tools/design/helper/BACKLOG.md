@@ -47,3 +47,20 @@ ADDED 7 Oct 04:00 by the PM. Your QF fixes were right, thank you. QUALITY RULE s
 - R2  How CapCut and Alight Motion handle the same 7 beginner traps D1 covers (web research plus screenshots described in words). Which of D1's options matches what users already know? → tools/design/research/trap-conventions.md, branch research/trap-conventions.
 - P6  Plans for the 5 after P5. → plans/helper-6.
 
+ADDED 7 Oct 07:30 by the PM. Same rules and QUALITY RULE. Highest value first:
+- H16  Independent check of ChatGPT's 7 finished fixes on branch chatgpt/1059-detect-speech-fallback, a linear chain on v17.23: #1013 empty AAC (2ea47a00), #1014 panorama (9cec73a1), #1015 guest reconnect clash (d8fa4fbb), #1016 keyboard numeric (8c813c78), #1040 missing transform (ba154a37), #1041 nested styled groups (a22dbc46), #1059 detect speech (13e5b1ea).
+  - For each: review the diff for correctness and side effects.
+  - Run its focused test in your container (tests/run.html?only=<name>): show it FAILS with the fix reverted and PASSES with it.
+  - #1015 and #1016 never passed their gate on ChatGPT's machine ("could not bootstrap the app frame"). Find out whether that is the test or the fix.
+  - Verdict per commit: land / land-after-fix (exact fix) / drop.
+  → tools/design/hunts/chatgpt-chain-review.md, branch hunt/chatgpt-chain-review.
+- H13  Independent pre-check of v17.24 before the laptop ships it: in your container, run the full suite at 1280 and at --width 380 on branch release/v17.24. Report the totals, every red with its first error line, and the NOT RUN HERE list. Say which reds are your container's limits (e.g. test 1926's real MP4 export) and which are real. → tools/design/hunts/v1724-precheck.md, branch hunt/v1724-precheck.
+- D4  Ezra's request #1084: on a phone, the Add menu should grow out of where you tapped. In the empty project it pulses out in a circle from the finger; mid-edit, the "Tap to add a layer" row stretches up and down into the menu; plus a Settings toggle to switch back to the old slide-up. Build STANDALONE prototypes in plain HTML/CSS/JS (no app code), each at 380 px, using the app's colours, so the PM can screen-record them for him:
+  - (a) circle reveal from the tap point, at 260 ms and at 340 ms;
+  - (b) the row expanding into the sheet;
+  - (c) today's slide-up, for comparison;
+  - each with its closing (reverse) animation and a prefers-reduced-motion fallback.
+  → tools/design/1084-add-anim/, branch design/1084-add-anim.
+- H15  Ready-to-build plans for the Work-with-friends privacy fixes from H4: F1 (notes sync), F2 ("viewer can only watch"), F4 (address wording) and F5 (pixel cap). For F1 and F2, write BOTH options (Ezra hasn't chosen yet) with the code changes and tests for each. → tools/design/plans/collab-privacy.md, branch plans/collab-privacy.
+- P7  Plans for the 5 oldest open items after P6. → plans/helper-7.
+
