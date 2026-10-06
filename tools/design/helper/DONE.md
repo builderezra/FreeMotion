@@ -2,3 +2,4 @@
 
 T3 | 2026-10-06 | tutorials-drafts | Tutorials 07 (effects and filters), 08 (speed), 09 (export options), 10 (your projects) written, each with a file:line verification table; pushed fce481b.
 H2 | 2026-10-06 | hunt/export-no-sound | tools/design/hunts/export-no-sound.md: 10 ranked causes of a silent export with where each is reported; 2 verified gaps (partial clip loss still reads "Sound ✓"; no check that the AAC track has a decoder description), smallest fix and test for each.
+H3 | 2026-10-06 | hunt/app-memory | tools/design/hunts/app-memory.md: biggest finding is the 12 s autosave thumbnail rendering the whole scene on a project-size canvas (storage.js:2140-2162, never released); compositor scratch canvases never shrink (~125-170 MB at 1080x1920 for 5 effect families); decoded audio kept per clip (23 MB/min of source, uncapped); frame caches capped per clip not globally. Bounded items listed so nobody re-checks them.
