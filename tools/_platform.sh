@@ -155,6 +155,19 @@ fm_chrome() {
   return 1
 }
 
+# fm_chrome_extra_flags — the flags that make THIS OS's headless Chrome answer like the Mac's, one a line; nothing on the
+# Mac. The twin of tests/_platform.py chrome_extra_flags() — same flags, same order, and that file says what each fixes
+# (a mouse, 0-width scrollbars, no 8 GB renderer cap). For the shell tools that launch Chrome themselves (tests/_shot.sh):
+# without them a Linux PC-width picture is the FINGER layout, (hover: none) and (pointer: none) — the PM's review.
+fm_chrome_extra_flags() {
+  if [ "$(uname -s)" = Linux ]; then
+    printf '%s\n' --hide-scrollbars \
+      --blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2 \
+      --no-sandbox
+  fi
+  return 0
+}
+
 # fm_chrome_reap_pattern — the `pgrep -f` pattern for a test Chrome on an fm-cdp- profile, anchored to the CHROME BINARY
 # (ship.sh says why a bare 'fm-cdp-' is dangerous). Linux: every process of one headless Chrome shows argv[0]
 # /opt/google/chrome/chrome, even launched through the google-chrome wrapper (measured 14/14, and 0 decoy shells).

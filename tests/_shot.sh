@@ -17,8 +17,21 @@ OUT="$1"; URLPATH="$2"; W="${3:-380}"; H="${4:-300}"
 CHROME="$(fm_chrome)" || exit 2
 mkdir -p "$(dirname "$OUT")"
 rm -f "$OUT"   # so a Chrome that wrote nothing cannot leave an older PNG to be reported as this one
+# ⚠️ THE SAME CHROME THE SUITE GETS (6 Oct, the PM's port review). On Linux this launched without the flags tests/_platform.py
+# says Linux needs to answer like the Mac — so every picture, PC widths included, was drawn as (hover: none) / (pointer:
+# none): the FINGER layout, and these are pictures he picks designs from. fm_chrome_extra_flags is the shell twin (nothing
+# on the Mac). Its own profile, deleted after, with Chrome's temp files inside it (Linux /tmp is RAM under WSL).
+EXTRA=()
+while IFS= read -r _f; do [ -n "$_f" ] && EXTRA+=("$_f"); done <<EOF
+$(fm_chrome_extra_flags)
+EOF
+PROF="$(mktemp -d "${TMPDIR:-/tmp}/fm-shot-XXXXXX")" || { echo "_shot.sh: could not make a profile folder"; exit 2; }
+trap 'rm -rf "$PROF"' EXIT
+if [ "$(fm_os)" = Linux ]; then export TMPDIR="$PROF"; fi
 "$CHROME" \
   --headless --disable-gpu --hide-scrollbars --mute-audio \
+  --user-data-dir="$PROF" \
+  ${EXTRA[@]+"${EXTRA[@]}"} \
   --force-device-scale-factor=2 \
   --window-size="$W","$H" \
   --virtual-time-budget=5000 \

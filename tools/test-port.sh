@@ -188,6 +188,29 @@ for f in pyc shc; do
 done
 grep -q '"browser": _browser()' tests/_cdp.py && [ "$(grep -c '_browser()' tests/_cdp.py)" -ge 4 ] && ok "tests/_cdp.py puts the browser in the result, the timeout and every did-not-run" || bad "tests/_cdp.py does not name the browser in every result"
 
+echo "── tests/_shot.sh launches Chrome with the flags that give Linux the Mac's mouse (review minor) ──"
+for os_ in Darwin Linux; do
+  pos="$( [ "$os_" = Linux ] && echo linux || echo darwin )"
+  a="$(python3 -c 'import sys; sys.path.insert(0, "tests"); import _platform as P
+if sys.argv[1] == "linux": P.IS_LINUX = True
+else: P.IS_LINUX = False
+print("\n".join(P.chrome_extra_flags()))' "$pos")"
+  b="$(PATH="$(shim_os "$os_"):$PATH" bash -c '. tools/_platform.sh; fm_chrome_extra_flags' 2>/dev/null)"
+  [ "$a" = "$b" ] && ok "$os_: fm_chrome_extra_flags is the twin of chrome_extra_flags() ($(printf '%s' "$a" | wc -l | tr -d ' ') line breaks)" || bad "$os_: the extra flags differ — python [$a] vs shell [$b]"
+done
+cat > "$TMP/argvchrome" <<'FAKE'
+#!/bin/sh
+# a fake Chrome: records its arguments one a line, then writes the screenshot it was asked for
+for a in "$@"; do echo "$a"; done > "$ARGV_OUT"
+for a in "$@"; do case "$a" in --screenshot=*) printf 'png' > "${a#--screenshot=}" ;; esac; done
+FAKE
+chmod +x "$TMP/argvchrome"
+out="$(PATH="$(shim_os Linux):$PATH" ARGV_OUT="$TMP/argv.txt" FM_CHROME="$TMP/argvchrome" bash tests/_shot.sh "$TMP/shot.png" /index.html 1280 800 2>&1)"; rc=$?
+if [ "$rc" = 0 ] && [ -f "$TMP/argv.txt" ]; then
+  grep -q '^--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2$' "$TMP/argv.txt" && ok "Linux: _shot.sh passes the mouse (blink settings), so a PC-width picture is the PC layout" || bad "Linux: _shot.sh launches Chrome WITHOUT the mouse flags — PC pictures are the finger layout: $(tr '\n' ' ' < "$TMP/argv.txt")"
+  grep -q '^--user-data-dir=' "$TMP/argv.txt" && ok "…on its own profile (removed after)" || bad "_shot.sh has no profile of its own"
+else bad "_shot.sh did not run under the fake Chrome: rc=$rc $out"; fi
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"
