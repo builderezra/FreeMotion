@@ -9,6 +9,14 @@ WHY IT EXISTS (6 Oct, the WSL port). Every tool here was written on the Mac, and
 questions the suite depends on: it reports a MOUSE ((hover: hover) and (pointer: fine) — test 991's PC case throws without
 it, the 976 rail tests return early and so pass untested), its scrollbars are 0-width overlays, and --use-gl=swiftshader
 works. Linux headless Chrome (154, measured in WSL) answers all three differently. Each answer below says what it fixes.
+
+A LINUX TEST MACHINE NEEDS (Ubuntu 26.04, 6 Oct): google-chrome-stable (dl.google.com .deb), nodejs (the parse gate),
+python3-websocket, python3-pil, expect (tools/test-rollback.sh) and fonts-noto-color-emoji — without a colour emoji
+font the flag draws as two letters and "690 emoji stay whole" cannot see its bug (green once it was installed).
+WHAT NO FLAG FIXES ON LINUX CHROME (measured): no AAC encoder (AudioEncoder mp4a.40.2 unsupported; decode works), so
+the four AAC export tests (215 x2, 690 x2) are red; no BarcodeDetector backend (see below); and the byte-exact picture /
+sample hashes recorded on the Mac (the 482 "draws the old look byte for byte" tests) do not match another machine's
+rasteriser and audio engine. Same 23 reds at 1280 and 380 on the first full WSL passes, all of them these.
 """
 import os
 import shutil
@@ -89,7 +97,12 @@ def chrome_extra_flags():
         data segment reached 8.76 GB: the kernel logged "VmData 8760119296 exceed data ulimit", the renderer died, and the
         run hung. --no-sandbox removes the cap (measured: "unlimited", as on the Mac). These Chromes only ever load the app
         from 127.0.0.1 — the suite has no network by design — so the sandbox guards nothing they visit. Linux only.
-        (How big the page gets is itself worth knowing — it was 8.7 GB of RESERVED data, not resident memory.)"""
+        (How big the page gets is itself worth knowing — it was 8.7 GB of RESERVED data, not resident memory.)
+    NOT here, on purpose: BarcodeDetector. The Mac's Chrome has a working one; Linux's has none, so the two QR tests
+    (921 S6 Share panel, 921 S8 Scan QR) cannot measure here and stay red. --enable-features=BarcodeDetector was tried
+    (6 Oct): it EXPOSES the API with qr_code listed, but detect() rejects "Barcode Detection not implemented" — no Linux
+    backend — and the app, seeing the API, then skips its jsQR fallback: a third behaviour, neither the Mac's nor a real
+    Linux user's. Absent is the honest state."""
     if IS_LINUX:
         return ["--hide-scrollbars",
                 "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
