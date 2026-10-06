@@ -62,7 +62,7 @@ sleep 120
 STUB
 chmod +x "$S/tools/ship.sh" "$S/tools/ship-bg.sh"
 cd "$S" || exit 1
-git init -q . && git config user.email t@t && git config user.name t
+git init -q . && git config user.email t@t && git config user.name t && git symbolic-ref HEAD refs/heads/main   # main, as in the real repo
 echo '<span class="ver">v1.2</span>' > index.html
 git add -A && git commit -q -m "v1.2 — the release that is live"
 . tools/_shiplock.sh
@@ -173,6 +173,22 @@ echo '<span class="ver">v1.1</span>' > index.html
 l="$(unshipped_release_line)"; case "$l" in *"live is AHEAD"*) ok "label behind live → NO, and says live is ahead";; *) bad "behind live: $l";; esac
 echo '<span class="ver">v1.10</span>' > index.html
 l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: YES"*) ok "v1.10 is newer than v1.2 (numbers, not text)";; *) bad "v1.10 vs v1.2: $l";; esac
+# COMMITTED BUT NEVER PUSHED (the B5 check). ship.sh commits, then pushes; GitHub dropped out twice on 6 Oct. A release
+# with no version bump ("proof debt: …", "REQUESTS: …", a tools-only ship) left that way has labels equal to live's,
+# and read "NO — v1.2 is live". It is not live. Re-shipping it stops at "nothing to commit", so the line says to push.
+echo '<span class="ver">v1.2</span>' > index.html; echo '// a catching test' > proof-test.js
+git add proof-test.js && git commit -qm "proof debt: a test-only release (no version bump)"; echo "REFUSED rc=1" > .last-ship
+l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: YES"*"1 commit"*"git push ssh main"*) ok "committed, push failed, no version bump → YES, and it says to push (re-shipping stops at \"nothing to commit\")";; *) bad "unpushed commit, same label: $l";; esac
+echo '<span class="ver">v1.3</span>' > index.html; git commit -qam "v1.3 — committed, push failed"
+l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: YES"*"2 commit"*"git push ssh main"*) ok "…and with a version bump committed too: YES, push (not \"ship it\")";; *) bad "unpushed v1.3: $l";; esac
+git checkout -q -b some-feature
+l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: YES"*"git push"*) bad "a feature branch's own commits read as an unpushed release: $l";; *) ok "control: on a branch that is not main, commits ahead of live are not an unpushed release";; esac
+git checkout -q main
+tools/ship-bg.sh >/dev/null 2>&1; STUBPID="$(ship_lock_pid .ship-in-progress)"
+l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: IN FLIGHT"*"$STUBPID"*) ok "…while a ship is running over them → IN FLIGHT (its push will carry them)";; *) bad "unpushed commits, live ship: $l";; esac
+kill_stub "$STUBPID"; STUBPID=""; sleep 0.3; rm -f .ship-in-progress
+git update-ref refs/remotes/ssh/main HEAD
+l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: NO"*) ok "control: once ssh/main has them → NO";; *) bad "pushed: $l";; esac
 
 echo "── 7. every instruction that says what SHIPPED means quotes the success line whole, from the start of the line ──"
 # The words alone are also in this self-test's history and in comments; only ship.sh's own line, with ✅ and

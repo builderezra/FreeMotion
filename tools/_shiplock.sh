@@ -139,8 +139,9 @@ ship_status_lines() {
 _ver_newer() { awk -v a="$1" -v b="$2" 'BEGIN { na = split(a, x, "."); nb = split(b, y, "."); n = na > nb ? na : nb
   for (i = 1; i <= n; i++) { if (x[i] + 0 > y[i] + 0) exit 0; if (x[i] + 0 < y[i] + 0) exit 1 } exit 1 }'; }
 
-# UNSHIPPED RELEASE (RULES-AUDIT B5). YES when index.html's version label is newer than live's (ssh/main), or when a
-# ship's lock names a dead pid. Otherwise NO, whatever .last-ship says — .last-ship only explains why. A dirty tree on
+# UNSHIPPED RELEASE (RULES-AUDIT B5). YES when index.html's version label is newer than live's (ssh/main), when a
+# ship's lock names a dead pid, or when main has commits ssh/main does not (committed, never pushed: push them).
+# Otherwise NO, whatever .last-ship says — .last-ship only explains why. A dirty tree on
 # its own is NOT an unshipped release: INBOX.md, tools/design/pm/ and tools/design/plans/ belong to the logging chat,
 # and code with no version bump is the batch in progress.
 unshipped_release_line() {
@@ -152,6 +153,27 @@ unshipped_release_line() {
     dead*) set -- $st; echo "UNSHIPPED RELEASE: YES — a ship was KILLED mid-flight (pid $2, phase $3; index.html v${here:-?}, live v${live:-?}). Re-ship it before anything new."; return 0 ;;
   esac
   if [ -z "$here" ] || [ -z "$live" ]; then echo "UNSHIPPED RELEASE: UNKNOWN — could not read the version label (here v${here:-?}, ssh/main v${live:-?}; did \`git fetch ssh\` fail?)"; return 0; fi
+  # COMMITTED BUT NEVER PUSHED (6 Oct, the B5 check). ship.sh commits, then pushes, and GitHub dropped out twice that
+  # night. A release with no version bump ("proof debt: …", "REQUESTS: …", a tools-only ship) left that way has labels
+  # equal to live's and read "NO — vX is live" — a release that never reached his phone, reported as live. On main, any
+  # commit ssh/main does not have is exactly that. Re-shipping it stops at "nothing to commit", so the line says push.
+  local ahead behind newest why=""
+  if [ "$(git symbolic-ref --short -q HEAD 2>/dev/null)" = main ]; then
+    ahead="$(git rev-list --count ssh/main..HEAD 2>/dev/null)"; behind="$(git rev-list --count HEAD..ssh/main 2>/dev/null)"
+    if [ "${ahead:-0}" -gt 0 ] 2>/dev/null; then
+      case "$st" in
+        live*) set -- $st; echo "UNSHIPPED RELEASE: IN FLIGHT — a ship is running (pid $2, phase $3) with $ahead commit(s) live does not have yet. Do not re-ship; watch .claude/ship/ship.log."; return 0 ;;
+      esac
+      newest="$(git log -1 --format=%s 2>/dev/null | cut -c1-80)"
+      [ -f .last-ship ] && why=" (.last-ship: $(head -c 120 .last-ship | tr -d '\n'))"
+      if [ "${behind:-0}" -gt 0 ] 2>/dev/null; then
+        echo "UNSHIPPED RELEASE: YES — HEAD has $ahead commit(s) live (ssh/main) does not, newest \"$newest\", and live has $behind this tree does not$why. Bring live in first (ship.sh refuses until you do), then push: git push ssh main."
+      else
+        echo "UNSHIPPED RELEASE: YES — HEAD has $ahead commit(s) live (ssh/main) does not, newest \"$newest\" — committed, never pushed$why. If ship.sh made them (its gates passed, the push did not land), push: git push ssh main, then check HEAD == ssh/main. Re-shipping stops at \"nothing to commit\"."
+      fi
+      return 0
+    fi
+  fi
   if _ver_newer "$here" "$live"; then
     case "$st" in
       live*) set -- $st; echo "UNSHIPPED RELEASE: IN FLIGHT — v$here is being shipped now (pid $2, phase $3). Do not re-ship; watch .claude/ship/ship.log." ;;

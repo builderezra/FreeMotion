@@ -18,7 +18,9 @@ and it is the same three steps each time.** Unless his first message is plainly 
    chatgpt, u dont do that. so its fine."* Do not re-litigate it and do not quietly run slower.
 3. **Check for an unshipped release.** Read tick.sh's `UNSHIPPED RELEASE:` line. If it says yes, ship that first. A dirty tree on its own is normal: INBOX.md, tools/design/pm/ and tools/design/plans/ belong to the logging chat, and uncommitted code with no version bump is the previous batch in progress, so continue it.
    (`IN FLIGHT` means a ship is running it right now: watch `.claude/ship/ship.log`, do not re-ship. The line is YES
-   when index.html's version label is newer than live's, or when `.ship-in-progress` names a dead pid.)
+   when index.html's version label is newer than live's, when `.ship-in-progress` names a dead pid, or when main has
+   commits live does not — committed, never pushed (GitHub dropped out twice on 6 Oct): it says to push them, because
+   re-shipping stops at "nothing to commit".)
 
 **EXCEPTION — the LOGGING chat.** If his first message says this chat is for logging his requests
 (his arrangement: #843 on 10 Sep, restated 26 Sep: under each request goes a READY-TO-BUILD plan, options
