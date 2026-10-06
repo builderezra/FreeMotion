@@ -517,6 +517,9 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                         if va.get('target') != vb.get('target') or va.get('none') != vb.get('none'):
                             out.append('%s: hovered %s → %s' % (where, va.get('target') or va.get('none'), vb.get('target') or vb.get('none')))
                         layout_diff(va.get('layout') or [], vb.get('layout') or [], where + ' (hovered)', out, limit, fields)
+                        for hk2 in ('around', 'err'):
+                            if va.get(hk2) != vb.get(hk2):
+                                out.append('%s (hovered): %s %s → %s' % (where, {'around': 'the box pictured'}.get(hk2, hk2), short(va.get(hk2)), short(vb.get(hk2))))
                         if va.get('motion') != vb.get('motion'):
                             local = []
                             json_diff(va.get('motion'), vb.get('motion'), 'motion', local, max(3, per_step))

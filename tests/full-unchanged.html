@@ -380,17 +380,34 @@
       for (var k = 0; k < STYLES.length; k++) rec.push(styleOf(cs, STYLES[k]));
       rec.push(attrsOf(el));
       out.push(rec);
+      for (var p = 0; p < PSEUDO.length; p++) {
+        var ps = w.getComputedStyle(el, PSEUDO[p]), ct = ps.getPropertyValue('content');
+        if (!ct || ct === 'none' || ct === 'normal' || ps.getPropertyValue('display') === 'none') continue;
+        var pr = [rec[0] + PSEUDO[p], ps.getPropertyValue('left'), ps.getPropertyValue('top'), ps.getPropertyValue('width'),
+          ps.getPropertyValue('height'), short(ct, 120), '', ''];
+        for (var k2 = 0; k2 < STYLES.length; k2++) pr.push(styleOf(ps, STYLES[k2]));
+        pr.push('');
+        out.push(pr);
+      }
     }
     return out;
   }
 
   /* ═══ PICTURES (DESIGN §0.4.5, 2) — the driver clips the frame; the tolerance is the tool's, measured there ═══════ */
   var shotSeq = 0;
-  async function shot(name) {
+  async function shot(name, clip) {
     if (!SHOTS) return null;
     var seq = ++shotSeq;
     window.__fmShotErr = '';
-    window.__fmWantShot = { seq: seq, name: name, x: 0, y: 0, w: W, h: H };
+    /* `clip` (a box in the frame, the second review: a picture of a hovered control and its neighbours) is rounded out to
+       whole pixels and kept inside the frame; without it, the whole frame. */
+    var c = { x: 0, y: 0, w: W, h: H };
+    if (clip) {
+      var x0 = Math.max(0, Math.floor(clip.left)), y0 = Math.max(0, Math.floor(clip.top));
+      var x1 = Math.min(W, Math.ceil(clip.right)), y1 = Math.min(H, Math.ceil(clip.bottom));
+      if (x1 - x0 >= 1 && y1 - y0 >= 1) c = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    }
+    window.__fmWantShot = { seq: seq, name: name, x: c.x, y: c.y, w: c.w, h: c.h };
     await until('the driver to take the picture ' + name, function () { return window.__fmShotDone === seq; }, 20000);
     if (window.__fmShotErr) throw new Error('picture ' + name + ': ' + window.__fmShotErr);
     return name;
@@ -1131,32 +1148,94 @@
     ['key rail', ['#key-s', '#key-a', '#key-d'], true],
     ['inspector card', ['.cat-card'], true]
   ];
+  /* …AND MORE KINDS, EACH WITH ITS OWN WAY IN (the second review, 6 Oct: a menu item's hover colour changed and passed —
+     no menu item was ever hovered). The layer menu's SECOND live item (the first has the focus, and :focus-visible styles
+     it instead), an Add tab that is not the open one, Clip A's right grip, the effects browser's first category, and the
+     cog's Friends bar. The effects browser plays its layer on a loop while it is open (its playhead and its live effect
+     thumbnails move on the wall clock — measured 6 Oct: the banner's picture differed by 8611 px between two runs of HEAD),
+     so its category is recorded but not pictured; its FEATURED tiles are not hovered at all — that rail scrolls by itself
+     (the first tile at x -98 on one run of HEAD and -100 on the next), so where the mouse lands is the clock's. */
+  var HOVER_MORE = [   // [what, candidate selectors, how it is reached, canvases hidden for its picture, its picture's margin (null: its own size; -1: no picture)]
+    ['menu item', ['#ctx-menu .ctx-item:not(.disabled) ~ .ctx-item:not(.disabled)'], 'the layer menu', '', null],
+    ['add tab', ['.addmenu-tab:not(.active)'], 'nothing selected', '', null],
+    ['clip grip', ['#tl-tracks .clip.selected .clip-grip.right', '#tl-tracks .clip .clip-grip.right'], 'Clip A selected', '', null],
+    ['effect category', ['#fx-browser .fxb-banner'], 'the effects browser', '', -1],
+    ['cog bar', ['#cv-fr-bar', '#cv-fr-exp'], 'the cog', '', null]
+  ];
+  async function hoverWay(how, A) {
+    if (how === 'the layer menu') { FM.selectLayer(A.id); await settle(250); press('btn-layermenu', 'the layer menu button'); await settle(200); }
+    else if (how === 'nothing selected') { FM.selectLayer(null); await settle(250); }
+    else if (how === 'Clip A selected') { FM.selectLayer(A.id); await settle(250); }
+    else if (how === 'the effects browser') {
+      FM.selectLayer(A.id); await settle(250);
+      if (!(await openCard(/^\d*\s*Effects\b/))) throw new Error('the Effects card was not on screen');
+      var add = byText('#inspector-panel .fx-add-btn', /Add Effect/);
+      if (!add) throw new Error('no + Add Effect on the Effects card');
+      add.click(); await settle(500);
+    } else if (how === 'the cog') {
+      FM.selectLayer(null); await settle(150);
+      var b = cogButton(); if (!b) throw new Error('no cog on screen');
+      b.click(); await settle(350);
+    }
+  }
+  /* The picture: the control and its neighbours — its box grown by its own size each way (at least 16 px, at most 60). */
+  function aroundOf(t, margin) {
+    var r = t.getBoundingClientRect();
+    var gx = margin != null ? margin : Math.max(16, Math.min(60, r.width)), gy = margin != null ? margin : Math.max(16, Math.min(60, r.height));
+    return { left: r.left - gx, top: r.top - gy, right: r.right + gx, bottom: r.bottom + gy };
+  }
+  async function hoverOne(rec, nm, t, hideSel, margin) {
+    var r = t.getBoundingClientRect();
+    motionStart();
+    await realInput([{ t: 'mouseMove', x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), ms: 60 }]);
+    await settle(220);
+    var mo = motionTake();
+    await canvasesQuiet(2000);
+    // frozen, as every screen is (measured 6 Oct: a hover's box-shadow read 5.84862px on one run, 5.84866px on the next)
+    var fr = freezeInfinite();
+    try {
+      await raf2(); fr = fr.concat(freezeInfinite());
+      var ar = aroundOf(t, margin === -1 ? 0 : margin);
+      rec.hovers[nm] = { target: pathOf(t), layout: layoutRecord(t), motion: mo, around: [half(ar.left), half(ar.top), half(ar.right), half(ar.bottom)] };
+      // the preview is hidden too: its resolution is adaptive (PNG_UNSTABLE in tools/_fu_compare.py), and it is compared
+      // on its own, exactly, on every screen
+      var hid = [].slice.call(D.querySelectorAll(hideSel ? hideSel + ', canvas#preview' : 'canvas#preview'));
+      hid.forEach(function (c) { c.__fuVis = c.style.visibility; c.style.visibility = 'hidden'; });
+      try { if (hid.length) await raf2(); if (margin !== -1) await shot('fu1-hover-' + nm.replace(/[^a-z0-9]+/gi, '-'), ar); }
+      finally { hid.forEach(function (c) { c.style.visibility = c.__fuVis || ''; }); }
+    } finally { unfreeze(fr); }
+  }
   async function hoverScreen() {
     step('FU1 hover');
     var rec = DUMP.screens['fu1-hover'] = { hovers: {}, err: '' };
+    var A = byName('Clip A');
     try {
-      var A = byName('Clip A');
       FM.selectLayer(null); FM.setTime(1); await settle(200);
       for (var i = 0; i < HOVER.length; i++) {
         var nm = HOVER[i][0];
         if (HOVER[i][2] && FM.scene.selectedId !== A.id) { FM.selectLayer(A.id); await settle(250); }
         var t = firstVisibleSel(HOVER[i][1]);
         if (!t) { rec.hovers[nm] = { none: HOVER[i][1].join(' | ') }; continue; }
-        var r = t.getBoundingClientRect();
-        motionStart();
-        await realInput([{ t: 'mouseMove', x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), ms: 60 }]);
-        await settle(220);
-        var mo = motionTake();
-        // frozen, as every screen is (measured 6 Oct: a hover's box-shadow read 5.84862px on one run, 5.84866px on the next)
-        var fr = freezeInfinite();
-        try { rec.hovers[nm] = { target: pathOf(t), layout: layoutRecord(t), motion: mo }; }
-        finally { unfreeze(fr); }
+        await hoverOne(rec, nm, t);
       }
     } catch (e) { rec.err = String(e && e.message || e); }
-    finally {
-      try { var pv = D.getElementById('preview'), pr = pv ? pv.getBoundingClientRect() : { left: 4, top: 4, width: 2, height: 2 }; await realInput([{ t: 'mouseMove', x: Math.round(pr.left + 2), y: Math.round(pr.top + 2), ms: 60 }]); } catch (e) {}
-      FM.selectLayer(null); closeTransient(); await settle(150);
+    for (var j = 0; j < HOVER_MORE.length; j++) {
+      var hn = HOVER_MORE[j][0];
+      step('FU1 hover ' + hn);
+      try {
+        await parkMouse();
+        await hoverWay(HOVER_MORE[j][2], A);
+        var ht = firstVisibleSel(HOVER_MORE[j][1]);
+        if (!ht) { rec.hovers[hn] = { none: HOVER_MORE[j][1].join(' | ') }; }
+        else await hoverOne(rec, hn, ht, HOVER_MORE[j][3], HOVER_MORE[j][4]);
+      } catch (e) { rec.hovers[hn] = { err: String(e && e.message || e) }; rec.err = rec.err || (hn + ': ' + (e && e.message || e)); }
+      finally { await parkMouse(); FM.selectLayer(null); closeTransient(); await settle(150); }
     }
+    step('FU1 hover done');
+  }
+  /* The mouse back on the stage's corner: off every control, the same spot on both sides (and where it stays). */
+  async function parkMouse() {
+    try { var pv = D.getElementById('preview'), pr = pv ? pv.getBoundingClientRect() : { left: 4, top: 4, width: 2, height: 2 }; await realInput([{ t: 'mouseMove', x: Math.round(pr.left + 2), y: Math.round(pr.top + 2), ms: 60 }]); } catch (e) {}
   }
   /* The live session screen: the people chip, the LIVE pill and a friend's selection ring — on the in-page loopback link,
      no network (DESIGN §0.4.5 FU1's fake-net screen). The friend is a plain engine guest; its presence names Clip B. */
