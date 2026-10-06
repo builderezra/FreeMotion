@@ -82,10 +82,18 @@ def chrome_extra_flags():
         the baseline hover + fine, like the Mac, in every frame and across navigations. (A touch-emulation OFF wipes
         them for the rest of the page — which is why tests/_cdp.py sends Linux's real touch WITHOUT emulation.)
       * 0-width scrollbars. The Mac's are overlays (offsetWidth - clientWidth = 0); Linux's classic bars take 15px from
-        every scroller. --enable-features=OverlayScrollbar does nothing here; --hide-scrollbars gives 0."""
+        every scroller. --enable-features=OverlayScrollbar does nothing here; --hide-scrollbars gives 0.
+      * NO 8 GB CAP ON THE PAGE'S MEMORY. Linux's renderer sandbox sets RLIMIT_DATA to 8 GiB (measured in
+        /proc/<renderer>/limits: 8589934592; macOS has no such limit). The suite runs in ONE page for its whole length,
+        and 16 minutes into the first full pass on WSL (6 Oct, around queue 202's quality-ladder test) the renderer's
+        data segment reached 8.76 GB: the kernel logged "VmData 8760119296 exceed data ulimit", the renderer died, and the
+        run hung. --no-sandbox removes the cap (measured: "unlimited", as on the Mac). These Chromes only ever load the app
+        from 127.0.0.1 — the suite has no network by design — so the sandbox guards nothing they visit. Linux only.
+        (How big the page gets is itself worth knowing — it was 8.7 GB of RESERVED data, not resident memory.)"""
     if IS_LINUX:
         return ["--hide-scrollbars",
-                "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2"]
+                "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
+                "--no-sandbox"]
     return []
 
 

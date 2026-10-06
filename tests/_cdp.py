@@ -140,8 +140,14 @@ class CDP:
     def __init__(self, url):
         self.ws = websocket.create_connection(url, timeout=600)
         self.n = 0
+        # A CRASHED RENDERER NEVER ANSWERS (6 Oct, measured in WSL): Chrome sends no reply to a command already waiting on
+        # the page, only Inspector.targetCrashed (after Inspector.enable). Seen here, so a send() stops waiting, and main()
+        # ends the run as DID NOT RUN instead of sitting on a dead page until --timeout — 13 silent minutes and counting.
+        self.crashed = False
 
     def send(self, method, **params):
+        if self.crashed:
+            raise RuntimeError(f"{method}: the page's renderer has crashed")
         self.n += 1
         self.ws.send(json.dumps({"id": self.n, "method": method, "params": params}))
         while True:
@@ -150,6 +156,9 @@ class CDP:
                 if "error" in msg:
                     raise RuntimeError(f"{method}: {msg['error']}")
                 return msg.get("result", {})
+            if msg.get("method") == "Inspector.targetCrashed":
+                self.crashed = True
+                raise RuntimeError(f"{method}: the page's renderer crashed while this was waiting")
             # everything else is an event we did not subscribe to caring about
 
     def eval(self, expr, await_promise=False):
@@ -170,7 +179,7 @@ class CDP:
 def _did_not_run(error, last=""):
     """Print the runner's 'the suite did NOT run' answer (exit code 2) — never a FAIL, which ship.sh would read as red."""
     print(json.dumps({"ok": False, "error": error.replace("FAIL", "fail") + " The suite did NOT run to a verdict.",
-                      "lastTest": last}))
+                      "lastTest": last.replace("FAIL", "fail")}))   # a title can carry FAIL ('967 7c … FAILED …')
     return 2
 
 
@@ -303,6 +312,10 @@ def main():
             return _did_not_run("Chrome did not start (%s). Its stderr: %s" % (e, chrome_stderr_tail(profile)))
         cdp.send("Page.enable")
         cdp.send("Runtime.enable")
+        try:
+            cdp.send("Inspector.enable")   # for Inspector.targetCrashed — see CDP.crashed
+        except Exception:
+            pass
         cdp.send("Page.navigate", url=url)
         # THE SUITE IS WRITTEN FOR A BROWSER WITH A MOUSE, AND THAT IS NOW CHECKED, NOT ASSUMED (6 Oct, the WSL port). The
         # Mac's headless Chrome reports (hover: hover) and (pointer: fine): test 991's PC case throws without it, the 976
@@ -328,6 +341,10 @@ def main():
         # watched instead of waited out.
         track = {"name": "", "since": time.time(), "last_ok": time.time(), "n": 0, "polls": 0}
         while time.time() < deadline:
+            if cdp.crashed:
+                return _did_not_run("THE PAGE'S RENDERER CRASHED (last test seen: '%s'), so nothing after it ran. On Linux, "
+                                    "look for 'exceed data ulimit' in dmesg: a sandboxed Chrome renderer may hold 8 GB of data "
+                                    "there and none on the Mac (tests/_platform.py)." % track["name"], track["name"])
             if mouse["check"]:
                 m = _mouse_state(cdp)
                 if m is True:
