@@ -12,3 +12,4 @@ H1 | 2026-10-06 | hunt/1085-suite-memory | measured full run to test ~1924: rend
 H6 | 2026-10-06 | hunt/phone-perf | top 10 per-frame hot paths reasoned from code; biggest: updatePlayhead/syncKeyRail/readout DOM work every rAF and forced layout in canvas-edit (not timed on a device)
 T5 | 2026-10-06 | tutorials-drafts | tutorials 17-20 (friends, templates, elements, easing) with file:line tables; Home has an empty Tutorials tab they could fill
 P2 | 2026-10-06 | plans/helper-2 | plans for #482, #508, #619, #663, #676; found #482's slider table is stale (all 9 ceilings already raised) and audio-fx applyAt writes every param every frame with no unchanged check (suspect for #663)
+H7 | 2026-10-06 | hunt/dead-code | 11 dead functions (~107 lines), 52 unused CSS classes, 140 unreferenced probe pages; top duplicate risk: the 700px phone breakpoint written in ~36 places and wnoise copied between preview and export code
