@@ -62,8 +62,14 @@ echo "app version: $(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><'
 # the time for reasons that are not an unshipped release (the logging chat's files, the batch in progress).
 unshipped_release_line
 hr "QUEUE — oldest first; his words before audit findings; BUILT OUT items are not work"
-./tools/next.sh 2>&1 | sed -n '/^ACTIONABLE/,$p' | head -60
-./tools/next.sh 2>&1 | grep -A3 'STALE ASKS' | head -8
+# next.sh exits 2 with a STOP banner while INBOX.md has a line (6 Oct, the PM's port review): the sed below starts at
+# ACTIONABLE, which that banner never reaches, so the queue used to read EMPTY right under an inbox that looked empty too.
+_NX="$(./tools/next.sh 2>&1)"; _NXRC=$?
+if [ "$_NXRC" = 2 ]; then printf '%s\n' "$_NX" | head -30
+else
+  printf '%s\n' "$_NX" | sed -n '/^ACTIONABLE/,$p' | head -60
+  printf '%s\n' "$_NX" | grep -A3 'STALE ASKS' | head -8
+fi
 
 hr "PROOF DEBT — releases that changed source and have never been spot-checked (tools/spotcheck.sh <hash>); oldest first"
 python3 - <<'PY'

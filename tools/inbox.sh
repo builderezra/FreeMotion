@@ -41,12 +41,34 @@ else
 fi
 # the inbox text: the file itself on main (pulled just above), ssh/main's copy anywhere else
 inbox_text() { if [ "$ON_MAIN" = 1 ]; then cat INBOX.md; else printf '%s\n' "$MAIN_INBOX"; fi; }
-BODY="$(inbox_text | sed -n '/^---$/,$p' | sed '1d' | sed '/^[[:space:]]*$/d')"
+body_of() { sed -n '/^---$/,$p' | sed '1d' | tr -d '\r' | sed '/^[[:space:]]*$/d'; }
+BODY="$(inbox_text | body_of)"
 # A MISSING DIVIDER HIDES EVERYTHING. From 20 Sep to 26 Sep INBOX.md had no line of three dashes — the
 # --done below split on the FIRST "---" in the file, which was the one inside the header's own sentence,
 # and cut the divider off. Every sed above then printed nothing, so anything appended read as "inbox
 # empty". Say so instead of reporting a clean inbox.
 inbox_text | grep -q '^---$' || { echo "⛔ $INBOX_NAME HAS NO --- DIVIDER LINE — anything in it is invisible to this script and to next.sh. Put a line of exactly --- under the header."; exit 2; }
+# ⚠️ OFF main, THE WORKING TREE'S INBOX.md IS READ TOO (6 Oct, the PM's port review — MAJOR). ssh/main's copy alone missed
+# the one place a line is most likely to be: the logging chat on THIS machine appends to the working-tree file, uncommitted.
+# On the WSL laptop's port branch (or a Mac work branch) that read "inbox empty — INBOX.md on ssh/main" with his note sitting
+# in the tree. So: ssh/main's lines, then every line of the tree's copy that ssh/main does not have (a multiset difference —
+# a line in both is shown once), each part labelled, and a ⛔ banner LAST while any tree-only line is not already logged.
+TREE_ONLY=""
+if [ "$ON_MAIN" = 0 ] && [ -f INBOX.md ]; then
+  grep -q '^---$' INBOX.md || { echo "⛔ THIS TREE's INBOX.md HAS NO --- DIVIDER LINE — anything in it is invisible to this script and to next.sh. Put a line of exactly --- under the header."; exit 2; }
+  _MB="$(mktemp "${TMPDIR:-/tmp}/fm-inbox-XXXXXX")" || { echo "⛔ could not make a temp file — the tree's INBOX.md is UNCHECKED"; exit 2; }
+  printf '%s\n' "$BODY" > "$_MB"
+  TREE_ONLY="$(body_of < INBOX.md | awk 'NR == FNR { c[$0]++; next } { if (c[$0] > 0) c[$0]--; else print }' "$_MB" -)"
+  rm -f "$_MB"
+  if [ -n "$TREE_ONLY" ]; then
+    if [ -n "$BODY" ]; then BODY="--- on ssh/main (INBOX.md as committed there) ---
+$BODY"; fi
+    BODY="${BODY:+$BODY
+}--- ONLY IN THIS TREE's INBOX.md (not on ssh/main — the logging chat here, or this branch) ---
+$TREE_ONLY"
+  fi
+  INBOX_NAME="INBOX.md on ssh/main and in this tree"
+fi
 # WHAT WAS SHOWN is what --done may remove — nothing else. Since 26 Sep a second chat (the logging one)
 # appends here while this session works, so anything written between reading the inbox and running
 # --done would have been wiped unlogged by the old "clear everything". The display writes a snapshot;
@@ -106,6 +128,25 @@ fi
 
 ALL_SEEN=1
 if [ "$ICLOUD_SEEN" = 0 ] || [ "$SC_SEEN" = 0 ]; then ALL_SEEN=0; fi
+inbox_key() { printf '%s' "$1" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
+# ${1:0:40}, not `cut -c1-40`: GNU/uutils cut counts BYTES, so on Linux a curly quote or emoji was split and the
+# prefix came out shorter (a looser match) than the Mac's character-counting BSD cut. bash counts characters on both.
+# Off main, REQUESTS.md here is that branch's copy and misses whatever main logged since, so ssh/main's is asked too.
+already_logged() {
+  [ ${#1} -gt 24 ] && { grep -Fq "${1:0:40}" REQUESTS.md 2>/dev/null ||
+    { [ "$ON_MAIN" = 0 ] && git grep -Fq -e "${1:0:40}" ssh/main -- REQUESTS.md 2>/dev/null; }; }
+}
+# the tree-only lines that are NOT already logged — what the ⛔ banner at the end counts (a stale line a work branch still
+# carries from before main drained it is listed as ALREADY LOGGED above, and is not his unread words)
+TREE_UNLOGGED=0
+if [ -n "$TREE_ONLY" ]; then
+  while IFS= read -r _l; do
+    _k="$(inbox_key "$_l")"; [ -n "$_k" ] || continue
+    already_logged "$_k" || TREE_UNLOGGED=$((TREE_UNLOGGED + 1))
+  done <<EOF
+$TREE_ONLY
+EOF
+fi
 if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
   if [ "$ALL_SEEN" = 0 ]; then echo "$INBOX_NAME is empty — but part of iCloud was NOT checked (see the end)"
   elif [ "$ON_MAIN" = 1 ]; then echo "inbox empty"
@@ -119,12 +160,8 @@ else
   # kind of catching that fails on the day someone is tired. A line is flagged if a distinctive run of
   # its words is already in REQUESTS.md — the file quotes him verbatim, so that is a reliable signal.
   printf '%s\n' "$BODY" | while IFS= read -r line; do
-    key="$(printf '%s' "$line" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-    # ${key:0:40}, not `cut -c1-40`: GNU/uutils cut counts BYTES, so on Linux a curly quote or emoji was split and the
-    # prefix came out shorter (a looser match) than the Mac's character-counting BSD cut. bash counts characters on both.
-    # Off main, REQUESTS.md here is that branch's copy and misses whatever main logged since, so ssh/main's is asked too.
-    if [ ${#key} -gt 24 ] && { grep -Fq "${key:0:40}" REQUESTS.md 2>/dev/null ||
-         { [ "$ON_MAIN" = 0 ] && git grep -Fq -e "${key:0:40}" ssh/main -- REQUESTS.md 2>/dev/null; }; }; then
+    key="$(inbox_key "$line")"
+    if already_logged "$key"; then
       printf '  ⚠️ ALREADY LOGGED — do not add again: %s\n' "$key"
     else
       printf '%s\n' "$line"
@@ -174,6 +211,11 @@ if [ "$ON_MAIN" = 0 ]; then
   echo "⚠️ SHOWN, NOT DRAINED — this checkout is on ${_BRANCH:-a detached HEAD}, not main, so nothing was pulled, written or marked."
   echo "   His notes are logged and drained on main only: there, log them VERBATIM into REQUESTS.md, then tools/inbox.sh --done."
   echo "   Until then they are listed again on every run (until the PM's switch-over, the Mac is the machine on main)."
+fi
+if [ "$TREE_UNLOGGED" -gt 0 ]; then
+  echo "⛔ $TREE_UNLOGGED LINE(S) ARE ONLY IN THIS TREE's INBOX.md — not on ssh/main, so the drain on main has never seen them."
+  echo "   They are his words (the logging chat on this machine writes there). They reach REQUESTS.md only through main:"
+  echo "   copy them VERBATIM into INBOX.md on main (the Mac's checkout until the PM's switch-over), then delete them here."
 fi
 if [ "$ALL_SEEN" = 0 ]; then
   if [ "$ICLOUD_SEEN" = 0 ]; then

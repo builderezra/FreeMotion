@@ -641,6 +641,15 @@ if [ -n "$(git status --porcelain -- tools/mutate.sh tools/_spotjudge.py tools/t
     exit 1
   fi
 fi
+# …and so does the inbox (6 Oct, the PM's port review): "inbox empty" while his note sits in a file is the failure the
+# whole inbox exists to prevent, and every way into it is silent. Seconds, in a throwaway repo with a local "ssh" remote.
+if [ -n "$(git status --porcelain -- tools/inbox.sh tools/next.sh tools/tick.sh tools/test-inbox.sh tools/_platform.sh 2>/dev/null)" ]; then
+  echo "→ the inbox readers changed — proving them before shipping"
+  if ! ./tools/test-inbox.sh; then
+    echo "❌ THE INBOX READERS ARE BROKEN — not committing, not pushing."
+    exit 1
+  fi
+fi
 
 # Refresh REQUESTS.md's STATUS labels first, so they can never be stale in a commit (queue 352).
 # A label written by hand is true the day it is written and misleading a week later.
