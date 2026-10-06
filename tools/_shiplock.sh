@@ -48,26 +48,64 @@ ship_lock_state() {
   if ship_pid_alive "$pid"; then echo "live $pid ${phase:-unknown} ${since:-0}"; else echo "dead $pid ${phase:-unknown} ${since:-0}"; fi
 }
 
+# ---- A LOCK IS TAKEN IN ONE STEP, NOT CHECKED AND THEN WRITTEN (6 Oct, the B1 check) --------------------------------
+# ship_guard used to READ the lock and ship_phase to WRITE it, a moment later. Two ships started together both read
+# "none" in that moment and both went on: 10 of 10 simultaneous pairs of the real ship.sh passed the guard, and two
+# ship-bg.sh launches both exited 3 naming the SAME pid, while two full ships shared one tree, one port and one log
+# (and one .ship-in-progress.tmp: "mv: rename .ship-in-progress.tmp to .ship-in-progress: No such file or directory").
+# Now the lock file is CREATED with noclobber (O_EXCL): of any number of takers, exactly one creates it. A lock whose
+# holder is dead (a KILL runs no trap) has to be removed first, and that is the delicate part: several takers can judge
+# it dead at once, and a remover that is a moment late deletes the lock the first one has just taken. (Moving it aside
+# and putting it back with ln was tried first; with four takers over one dead lock, two ended up holding it.) So a dead
+# lock is removed only inside a short mkdir mutex, and only if it is still exactly what was judged dead: nothing else
+# can replace an existing lock (noclobber needs it gone, and only a LIVE owner rewrites its own), so a check made inside
+# the mutex still holds at the rm. The mutex is held for milliseconds; one left by a kill inside them is cleared after 5 s.
+# _take_lockfile <file> <content> <is-alive function, called with the file>. 0 = it holds <content> (_TOOK_OVER=1 when
+# it cleared a dead holder's lock first, whose content is in _OLD); 1 = _HELD=1 a live process holds it (content in
+# _OLD), or _HELD=0 it could not be taken at all.
+_take_lockfile() {
+  local f="$1" line="$2" alive="$3" cur try i
+  _TOOK_OVER=0; _HELD=0; _OLD=""
+  for try in 1 2 3 4 5 6 7 8; do
+    if ( set -o noclobber; printf '%s\n' "$line" > "$f" ) 2>/dev/null; then return 0; fi
+    [ -f "$f" ] || continue                        # gone between the two looks: try again
+    cur="$(cat "$f" 2>/dev/null)"
+    if "$alive" "$f"; then _HELD=1; _OLD="$cur"; return 1; fi
+    for i in $(seq 1 50); do mkdir "$f.takeover" 2>/dev/null && break; [ "$i" = 50 ] && { rmdir "$f.takeover" 2>/dev/null; mkdir "$f.takeover" 2>/dev/null; }; sleep 0.1; done
+    if [ -f "$f" ] && [ "$(cat "$f" 2>/dev/null)" = "$cur" ]; then rm -f "$f"; _TOOK_OVER=1; _OLD="$cur"; fi
+    rmdir "$f.takeover" 2>/dev/null
+  done
+  return 1
+}
+# A lock naming THIS process's own pid was left by an earlier process that had the same pid (a KILL, then pid reuse):
+# it is not a live ship, or this ship would refuse itself for ever.
+_ship_lock_alive() { [ "$(ship_lock_pid "$1")" != "$$" ] || return 1; case "$(ship_lock_state "$1")" in live*) return 0 ;; esac; return 1; }
+
 # ship.sh calls this BEFORE its trap, so a refusal here cannot delete the running ship's lock or overwrite its
-# .last-ship (the trap's cleanup would do both). Refuses with exit 1 while a ship's pid is alive; a dead one is
-# reported as KILLED and the caller carries on (it will overwrite the lock with its own).
+# .last-ship (the trap's cleanup would do both). It TAKES the lock (phase=gates) or refuses with exit 1 while a live
+# ship holds it; a dead holder is reported as KILLED and its lock taken over.
 ship_guard() {
-  local st; st="$(ship_lock_state .ship-in-progress)"
-  case "$st" in
-    live*) set -- $st
-           echo "❌ a ship is already running (pid $2, phase $3) — not starting a second one beside it."
-           echo "   Watch it instead: .claude/ship/ship.log ends with \"SHIP EXIT\"; .last-ship says PUSHED or REFUSED."
-           return 1 ;;
-    dead*) set -- $st
-           echo "⚠️  previous ship was KILLED (pid $2 is gone; it died in phase $3) — its lock was left behind. Carrying on."
-           return 0 ;;
-  esac
-  return 0
+  local opid ophase ok=0
+  _take_lockfile .ship-in-progress "pid=$$ phase=gates since=$(date +%s)" _ship_lock_alive && ok=1
+  opid="$(printf '%s' "$_OLD" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -1)"
+  ophase="$(printf '%s' "$_OLD" | sed -n 's/.*phase=\([^ ]*\).*/\1/p' | head -1)"
+  if [ "$ok" = 1 ]; then
+    [ "$_TOOK_OVER" = 1 ] && echo "⚠️  previous ship was KILLED (pid ${opid:-?} is gone; it died in phase ${ophase:-unknown}) — its lock was left behind. Carrying on."
+    return 0
+  fi
+  if [ "$_HELD" = 1 ]; then
+    echo "❌ a ship is already running (pid ${opid:-?}, phase ${ophase:-unknown}) — not starting a second one beside it."
+    echo "   Watch it instead: .last-ship says PUSHED <hash> or REFUSED when it ends; tools/tick.sh says what it is doing."
+  else
+    echo "❌ could not take .ship-in-progress (it kept changing under five attempts) — not starting; run tools/tick.sh."
+  fi
+  return 1
 }
 
-# ship.sh writes this at every phase change. Written to a temp file and moved, so a reader never sees it empty.
+# ship.sh writes this at every phase change. Written to a temp file and moved, so a reader never sees it empty — and
+# the temp file is this process's own, so two writers can never move each other's (or find it gone).
 ship_phase() {
-  printf 'pid=%s phase=%s since=%s\n' "$$" "$1" "$(date +%s)" > .ship-in-progress.tmp && mv -f .ship-in-progress.tmp .ship-in-progress
+  printf 'pid=%s phase=%s since=%s\n' "$$" "$1" "$(date +%s)" > ".ship-in-progress.$$.tmp" && mv -f ".ship-in-progress.$$.tmp" .ship-in-progress
 }
 
 _ship_ago() { local s="${1:-0}"; [ "$s" -gt 0 ] 2>/dev/null || { echo "?"; return; }; echo "$(( ( $(date +%s) - s ) / 60 ))m"; }

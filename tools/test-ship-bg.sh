@@ -15,7 +15,10 @@ cd "$(dirname "$0")/.."
 REPO="$PWD"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/fm-shipbg-test-XXXXXX")"
 STUBPID=""
-cleanup() { [ -n "$STUBPID" ] && { pkill -P "$STUBPID" 2>/dev/null; kill -9 "$STUBPID" 2>/dev/null; }; rm -rf "$TMP"; }
+kill_stub() { pkill -P "$1" 2>/dev/null; kill -9 "$1" 2>/dev/null; }
+kill_took() {   # every stub that took the lock — only while that pid is still a ship.sh (a pid can be handed on)
+  local p; for p in $(cat "$S/stub-took" 2>/dev/null); do ps -p "$p" -o command= 2>/dev/null | grep -q 'ship\.sh' && kill_stub "$p"; done; rm -f "$S/stub-took"; }
+cleanup() { [ -n "$STUBPID" ] && kill_stub "$STUBPID"; kill_took; rm -rf "$TMP"; }
 trap cleanup EXIT
 FAILED=0
 ok()  { printf '  ✅ %s\n' "$1"; }
@@ -28,9 +31,11 @@ cat > "$S/tools/ship.sh" <<'STUB'
 #!/bin/bash
 # STUB ship.sh — the lock exactly as the real one takes it, then a sleep where the suites would be.
 . "$(dirname "$0")/_shiplock.sh"
+[ -n "${STUB_HOLD:-}" ] && while [ -f "$STUB_HOLD" ]; do :; done   # a starting line, for the same-moment cases
 ship_guard || exit 1
 trap '[ "$(ship_lock_pid .ship-in-progress)" = "$$" ] && rm -f .ship-in-progress; printf "REFUSED rc=%s\n" "$?" > .last-ship' EXIT
 ship_phase gates
+echo "$$" >> stub-took
 printf 'RUNNING %s %s %s\n' "$$" v1.3 "$(date +%s)" > .last-ship
 [ -f stub-refuse ] && { echo "stub: refusing on purpose"; exit 1; }
 echo "stub: message is: $(head -1 "$2")"
@@ -91,7 +96,40 @@ echo "── 4b. a dead ship's pid handed to an unrelated process still reads as
 sleep 30 & OTHER=$!
 printf 'pid=%s phase=desktop since=%s\n' "$OTHER" "$(date +%s)" > .ship-in-progress
 case "$(ship_lock_state .ship-in-progress)" in dead*) ok "a lock naming a live NON-ship process (pid $OTHER, sleep) reads as dead";; *) bad "a reused pid reads as: $(ship_lock_state .ship-in-progress)";; esac
-kill "$OTHER" 2>/dev/null; rm -f .ship-in-progress
+kill "$OTHER" 2>/dev/null; wait "$OTHER" 2>/dev/null; rm -f .ship-in-progress
+
+echo "── 4c. launches at the SAME moment: one ship, one lock, one log (the lock is TAKEN, not checked and then written) ──"
+kill_took
+for trial in 1 2 3; do
+  rm -f .ship-in-progress .ship-in-progress.* stub-took; : > .claude/ship/ship.log; touch go-hold
+  ( while [ -f go-hold ]; do :; done; tools/ship-bg.sh > "$TMP/bg1" 2>&1; echo $? > "$TMP/bg1.rc" ) &
+  ( while [ -f go-hold ]; do :; done; tools/ship-bg.sh > "$TMP/bg2" 2>&1; echo $? > "$TMP/bg2.rc" ) &
+  sleep 0.5; rm -f go-hold; wait
+  rcs="$(cat "$TMP/bg1.rc") $(cat "$TMP/bg2.rc")"; took="$(sort -u stub-took 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$rcs" = "3 1" ] || [ "$rcs" = "1 3" ]; then
+    [ "$took" = 1 ] && ! grep -q 'mv: rename\|^SHIP EXIT' .claude/ship/ship.log \
+      && ok "trial $trial: two ship-bg.sh at once → one LAUNCHED (3), one refused (1); one ship.sh holds the lock; the log is that ship's alone" \
+      || bad "trial $trial: exits $rcs but $took ship.sh took the lock; log: $(head -c 300 .claude/ship/ship.log)"
+  else bad "trial $trial: two ship-bg.sh at once exited $rcs (want one 3 and one 1); $took ship.sh took the lock — $(head -c 200 "$TMP/bg1") / $(head -c 200 "$TMP/bg2")"; fi
+  kill_took
+done
+rm -f .ship-in-progress .last-ship
+same_moment() {   # $1 = how many ship.sh start at once; sets n = how many of them took the lock
+  local i; rm -f stub-took "$TMP"/sm.*; touch stub-hold
+  for i in $(seq 1 "$1"); do STUB_HOLD=stub-hold tools/ship.sh -F .claude/ship/msg.txt > "$TMP/sm.$i" 2>&1 & done
+  sleep 0.5; rm -f stub-hold; sleep 1
+  n="$(sort -u stub-took 2>/dev/null | wc -l | tr -d ' ')"
+}
+same_moment 4
+[ "$n" = 1 ] && ! cat "$TMP"/sm.* | grep -q 'mv: rename' && ok "four ship.sh at once, no lock → exactly one takes it" || bad "four ship.sh at once: $n took the lock — $(cat "$TMP"/sm.* | head -c 300)"
+kill_took; rm -f .ship-in-progress
+# a pid that is gone. NOT `sleep 30 & kill $!`: a signal that lands before the fork has exec'd sleep runs THIS script's
+# EXIT trap in the child (bash 3.2) — which is cleanup, which deleted the temp repo halfway through the run.
+GONE="$(bash -c 'echo $$')"
+printf 'pid=%s phase=desktop since=1\n' "$GONE" > .ship-in-progress      # a KILLED ship's lock
+same_moment 4
+[ "$n" = 1 ] && [ "$(cat "$TMP"/sm.* | grep -c 'previous ship was KILLED')" -ge 1 ] && ok "four ship.sh at once over a KILLED ship's lock → exactly one takes it over" || bad "four over a dead lock: $n took it — $(cat "$TMP"/sm.* | head -c 300)"
+kill_took; rm -f .ship-in-progress .last-ship
 
 echo "── 5. a ship that refuses at once is reported as refused (exit 1), not as launched ──"
 touch stub-refuse

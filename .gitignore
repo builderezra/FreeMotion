@@ -10,5 +10,7 @@ tools/.mutate-green
 .last-ship
 .inbox-seen
 .ship-in-progress.tmp
+# per-process temp and stale-lock names (tools/_shiplock.sh): a kill between write and move must not be committed
+.ship-in-progress.*
 .mutation-in-progress
 .mutation-in-progress.tmp

@@ -19,6 +19,22 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 . tools/_shiplock.sh
+mkdir -p .claude/ship
+
+# ONE LAUNCHER AT A TIME, TAKEN NOT CHECKED (6 Oct, the B1 check). The check below and the launch are separate steps, so
+# two ship-bg.sh started together both found no ship running, both emptied the log, both launched — and both exited 3
+# naming the SAME pid, because each waited for "a live pid in the lock" and the winner's was the only one there. The
+# loser's ship.sh, refused or not, wrote into the winner's log. ship.sh's own guard is atomic now too, but that alone
+# cannot keep a second launcher off the shared log, so the launcher holds a lock of its own (taken the same way, one
+# step) until it has seen its ship take .ship-in-progress, or seen it end.
+_launcher_alive() { local p; p="$(ship_lock_pid "$1")"; [ -n "$p" ] && [ "$p" != "$$" ] && kill -0 "$p" 2>/dev/null && ps -p "$p" -o command= 2>/dev/null | grep -q 'ship-bg\.sh'; }
+LAUNCH_LOCK=.claude/ship/launching
+if ! _take_lockfile "$LAUNCH_LOCK" "pid=$$ since=$(date +%s)" _launcher_alive; then
+  echo "❌ another tools/ship-bg.sh is launching a ship right now ($(printf '%s' "$_OLD" | head -1)) — not launching a second one."
+  echo "   In a few seconds .ship-in-progress names the ship it started; tools/tick.sh says what it is doing."
+  exit 1
+fi
+trap '[ "$(ship_lock_pid "$LAUNCH_LOCK")" = "$$" ] && rm -f "$LAUNCH_LOCK"' EXIT
 
 # One ship at a time — the same reader ship.sh uses, so the two cannot disagree about what "running" means.
 st="$(ship_lock_state .ship-in-progress)"

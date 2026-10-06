@@ -258,12 +258,14 @@ or a gate — not a paragraph.
 `tools/.suite-seconds`), far past any foreground limit — and on 5 Oct a ship launched the way the old text said was
 KILLED by the harness at its 10-minute background limit, after a session followed four sets of written instructions
 that all said the same stale thing. The method that worked lived only in a memory note. Now it is a script:
-- `tools/ship-bg.sh` refuses while a ship's pid is alive, refuses a missing message or one HEAD already shipped with,
+- `tools/ship-bg.sh` refuses while a ship's pid is alive or another ship-bg.sh is mid-launch (its own lock,
+  `.claude/ship/launching`), refuses a missing message or one HEAD already shipped with,
   launches `tools/ship.sh -F .claude/ship/msg.txt` under `nohup` (no `setsid` on this Mac), waits until ship.sh has
   put its pid in the lock, prints the watch line with that pid, and **exits 3 — never 0**, because on 20 Sep a refusal
   read as "exit code 0" and the next session built on a release that never landed.
-- `tools/ship.sh` refuses to start beside a live ship (checked BEFORE its trap, so the refusal cannot delete the
-  running ship's lock), says **previous ship was KILLED** when the lock's pid is gone, keeps
+- `tools/ship.sh` refuses to start beside a live ship (the lock is TAKEN in one step — created with noclobber, so of
+  ships started at the same moment exactly one gets it — BEFORE its trap, so the refusal cannot delete the running
+  ship's lock), says **previous ship was KILLED** when the lock's pid is gone, keeps
   `pid=<n> phase=<gates|prove|desktop|phone|push> since=<epoch>` in `.ship-in-progress`, and writes
   `RUNNING <pid> <version> <epoch>` to `.last-ship` until its verdict replaces it. A kill runs no trap, so a ship that
   was killed is exactly the one still saying RUNNING with its pid gone — `tools/tick.sh` prints that as KILLED.
