@@ -122891,6 +122891,16 @@
         fix.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: 1, clientX: q.left + 4, clientY: q.top + 4 }));
         await v.idle(); await v.sleep(60);
         if (v.steps() !== s1 + 1) throw new Error('a single click of its own on Fix did nothing (steps ' + (v.steps() - s1) + ')');
+        /* POSITIVE CONTROL: the same tool pressed twice still counts twice — a double click on B's Move later moves it two places */
+        FM.selectLayer(v.L('B').id); await v.sleep(150);
+        const later = smTool('later'), lr = later.getBoundingClientRect(), lx = lr.left + lr.width / 2, ly = lr.top + lr.height / 2, s2 = v.steps();
+        later.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: 1, clientX: lx, clientY: ly }));
+        await v.idle(); await v.sleep(120);
+        const again = document.elementFromPoint(lx, ly), l2 = again && again.closest && again.closest('.sm-tool');
+        if (!l2 || l2.dataset.tool !== 'later') throw new Error('CONTROL: Move later is not under the pointer after its own press (' + (l2 && l2.dataset.tool) + ')');
+        l2.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: 2, clientX: lx, clientY: ly }));
+        await v.idle(); await v.sleep(60);
+        if (v.steps() !== s2 + 2) throw new Error('a double click on Move later moved B ' + (v.steps() - s2) + ' time(s), want two');
       });
     }, 1280);
   });
