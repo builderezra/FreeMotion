@@ -13,3 +13,4 @@ H6 | 2026-10-06 | hunt/phone-perf | top 10 per-frame hot paths reasoned from cod
 T5 | 2026-10-06 | tutorials-drafts | tutorials 17-20 (friends, templates, elements, easing) with file:line tables; Home has an empty Tutorials tab they could fill
 P2 | 2026-10-06 | plans/helper-2 | plans for #482, #508, #619, #663, #676; found #482's slider table is stale (all 9 ceilings already raised) and audio-fx applyAt writes every param every frame with no unchanged check (suspect for #663)
 H7 | 2026-10-06 | hunt/dead-code | 11 dead functions (~107 lines), 52 unused CSS classes, 140 unreferenced probe pages; top duplicate risk: the 700px phone breakpoint written in ~36 places and wnoise copied between preview and export code
+P3 | 2026-10-06 | plans/helper-3 | plans for #692, #768, #775, #856, #860; #775 has no test at all, #856 has no speech input, and the selection-only forced layout in canvas-edit is the likeliest cause of #768
