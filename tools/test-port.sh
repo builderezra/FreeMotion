@@ -161,6 +161,14 @@ fi
 kill "$PYPID" "$SHPID" 2>/dev/null; wait "$PYPID" "$SHPID" 2>/dev/null
 grep -q 'fm_driver_pattern' tools/ship.sh && grep -q 'driver_pattern()' tests/_cdp.py && ok "ship.sh and tests/_cdp.py both ask the shared liveness pattern" || bad "ship.sh or tests/_cdp.py still has its own liveness pattern"
 
+echo "── the driver: no websocket-client is DID NOT RUN (exit 2) with the cure, never a traceback that reads as red (review minor) ──"
+mkdir -p "$TMP/nows/websocket"
+printf 'raise ImportError("No module named websocket (simulated: a fresh Ubuntu)")\n' > "$TMP/nows/websocket/__init__.py"
+out="$(PYTHONPATH="$TMP/nows" python3 tests/_cdp.py --port 1 2>&1)"; rc=$?
+[ "$rc" = 2 ] && printf '%s' "$out" | python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); sys.exit(0 if (d["ok"] is False and "websocket-client" in d["error"] and "apt install" in d["error"]) else 1)' 2>/dev/null \
+  && ok "websocket-client missing → exit 2 and a JSON error naming it and the install line" || bad "websocket-client missing: rc=$rc — $(printf '%s' "$out" | tail -2)"
+grep -q "python3 -c 'import websocket'" tools/ship.sh && ok "ship.sh asks for it up front, beside Chrome" || bad "ship.sh does not check for websocket-client before the suite"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"

@@ -284,6 +284,14 @@ if ! fm_chrome >/dev/null; then
   _WHY="no Chrome on this machine — not a code fault"
   exit 1
 fi
+# …and the driver's one third-party module (6 Oct, the PM's review): a fresh Ubuntu has none, and the first suite run would
+# end "DID NOT RUN" half an hour into a ship instead of here, in a second.
+if ! python3 -c 'import websocket' >/dev/null 2>&1; then
+  echo "❌ the Python module websocket-client is not installed — tests/_cdp.py cannot talk to Chrome. Nothing is committed or pushed."
+  echo "   Linux: sudo apt install python3-websocket    Mac: pip3 install websocket-client"
+  _WHY="websocket-client missing on this machine — not a code fault"
+  exit 1
+fi
 if ! curl -sf -o /dev/null "http://localhost:8777/tests/run.html"; then
   echo "→ nothing is serving port 8777 — starting one (the suite does not start its own)…"
   nohup "$(dirname "$0")/serve.sh" 8777 >/dev/null 2>&1 </dev/null &

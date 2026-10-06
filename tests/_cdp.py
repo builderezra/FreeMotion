@@ -20,13 +20,23 @@ Usage:
     python3 tests/_cdp.py --width 380         # phone width; some tests want <=700px
     FM_CHROME=/path/to/chrome python3 tests/_cdp.py   # a Chrome other than the Mac app / google-chrome on PATH
 
-Exit code is 0 only when regression is all-green, so it can gate a commit (1 = red, 2 = the suite did NOT run).
+Exit code is 0 only when regression is all-green, so it can gate a commit (1 = red, 2 = the suite did NOT run — a missing
+module, a Chrome that never started, a crash in this driver: anything that is not a verdict, 6 Oct).
 """
 
 import argparse, glob, json, os, shutil, socket, subprocess, sys, tempfile, time
 import urllib.request
 
-import websocket  # websocket-client
+try:
+    import websocket  # websocket-client
+except ImportError as _e:
+    # ⚠️ A MISSING MODULE IS "DID NOT RUN", NOT A TRACEBACK (6 Oct, the PM's port review). On a fresh Ubuntu the first run died
+    # here with ModuleNotFoundError and exit 1 — the code for "ran and was RED" — and ship.sh, which reads the JSON "error",
+    # then said "THE SUITE DID NOT RUN" with no reason at all. The answer every reader understands, with the cure in it.
+    print(json.dumps({"ok": False, "error": "the Python module websocket-client is not installed (%s) — Linux: sudo apt install "
+                      "python3-websocket; Mac: pip3 install websocket-client. The suite did NOT run to a verdict." % _e,
+                      "lastTest": ""}))
+    sys.exit(2)
 
 # WHAT DIFFERS BETWEEN THE MAC'S CHROME AND THIS MACHINE'S lives in tests/_platform.py (6 Oct, the WSL port): which Chrome,
 # its GL flags, the flags that give Linux headless the Mac's mouse and overlay scrollbars, the reap pattern, and how real
@@ -663,4 +673,15 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # EXIT 1 MEANS "RAN AND WAS RED", AND NOTHING ELSE MAY SAY IT (6 Oct, the PM's port review). An uncaught exception —
+    # Page.enable refused, a result that is not JSON — used to leave a traceback and exit 1, the red code, with nothing a
+    # reader could act on. Whatever escapes main() is a run that did not reach a verdict: exit 2, with the error in the JSON.
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except BaseException as _e:   # KeyboardInterrupt included: an interrupted run did not run
+        import traceback
+        _tb = traceback.format_exc().strip().splitlines()
+        sys.exit(_did_not_run("the driver itself failed: %s: %s (at %s)" % (type(_e).__name__, str(_e)[:300],
+                                                                            (_tb[-3] if len(_tb) >= 3 else '').strip()[:200])))
