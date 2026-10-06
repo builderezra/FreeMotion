@@ -82,6 +82,26 @@ out="$(cd "$B" && FM_SHIP_ALLOW_NON_MAC=1 bash "$REPO/tools/ship.sh" -F "$TMP/ms
 out="$(cd "$B" && FM_SHIP_ALLOW_NON_MAC=1 bash "$REPO/tools/ship.sh" -F "$TMP/msg.txt" 2>&1)"; rc=$?
 ! printf '%s' "$out" | grep -q 'NOT main' && printf '%s' "$out" | grep -q 'GITHUB CANNOT BE REACHED' && ok "control: on main it passes this gate and stops at the next (no 'ssh' remote here — GitHub unreachable)" || bad "on main: rc=$rc — $(printf '%s' "$out" | tail -3)"
 
+echo "── a git that cannot answer is a refusal in ship.sh's gates, never 'nothing changed' (review minor) ──"
+mkdir -p "$TMP/badgit"
+printf '#!/bin/sh\necho "fatal: detected dubious ownership in repository" >&2\nexit 128\n' > "$TMP/badgit/git"; chmod +x "$TMP/badgit/git"
+G="$TMP/gitfix"; mkdir -p "$G/js" "$G/tools"
+( cd "$G" && git init -q . && git config user.email t@t && git config user.name t && echo 'var a=1;' > js/a.js && echo '<script src="js/a.js?v=1"></script>' > index.html && git add -A && git commit -q -m base && echo 'var a=2;' > js/a.js )
+cp tools/_shipgates.py "$G/tools/" 2>/dev/null
+# 1. the parse gate's file list: ship.sh's own _JSFILES line, under a git that fails
+JSLINE="$(grep -m1 '^_JSFILES=' tools/ship.sh)"
+out="$(cd "$G" && PATH="$TMP/badgit:$PATH" bash -c '. "$1/tools/_shipgates.sh" 2>/dev/null; _WHY=""; eval "$2"; echo "LISTED[$_JSFILES]"' _ "$REPO" "$JSLINE" 2>&1)"; rc=$?
+[ "$rc" != 0 ] && ! printf '%s' "$out" | grep -q 'LISTED\[' && ok "the parse gate's file list: a failing git REFUSES (exit $rc), never an empty list" || bad "the parse gate read a failing git as 'no script changed': rc=$rc $out"
+out="$(cd "$G" && bash -c '. "$1/tools/_shipgates.sh" 2>/dev/null; eval "$2"; echo "LISTED[$_JSFILES]"' _ "$REPO" "$JSLINE" 2>&1)"
+[ "$out" = "LISTED[js/a.js]" ] && ok "control: with a working git it lists the changed js/a.js" || bad "parse-gate list, control: $out"
+# 2. the cache-buster gate: ship.sh's own BUSTER_MISS heredoc, under a git that fails
+awk '/^BUSTER_MISS="\$\(python3 - <<.PYEOF.$/{f=1; next} f && /^PYEOF$/{exit} f{print}' tools/ship.sh > "$TMP/buster.py"
+[ -s "$TMP/buster.py" ] || bad "could not find the BUSTER_MISS python in ship.sh — this check cannot see the gate"
+out="$(cd "$G" && PATH="$TMP/badgit:$PATH" python3 "$TMP/buster.py" 2>&1)"; rc=$?
+[ "$rc" != 0 ] && ok "the cache-buster gate: a failing git ends it non-zero (ship.sh refuses), never 'no stale buster'" || bad "the cache-buster gate read a failing git as 'nothing changed' (exit 0): $out"
+out="$(cd "$G" && python3 "$TMP/buster.py" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && printf '%s' "$out" | grep -q 'js/a.js (still ?v=1)' && ok "control: with a working git it names js/a.js's stale buster" || bad "buster control: rc=$rc $out"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"

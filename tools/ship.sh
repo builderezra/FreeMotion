@@ -234,7 +234,8 @@ fi
 # (`new Function(source)`) of jsc on the Mac and node elsewhere — not `node --check`, which passes `export` and top-level
 # `await`, both syntax errors in a classic <script>. No parser at all is a refusal.
 _BADJS=""
-_JSFILES="$( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | grep -E '^(js|tests)/.*\.js$' | sort -u )"
+# (a git that cannot answer is a refusal, not "no script changed" — changed_js_files in tools/_shipgates.sh, 6 Oct review)
+_JSFILES="$(changed_js_files)" || { echo "❌ git could not list the changed scripts (above) — cannot prove they parse, so not shipping them."; _WHY="git could not list the changed files"; exit 1; }
 if [ -n "$_JSFILES" ] && ! fm_js_parser >/dev/null; then
   echo "❌ NO JAVASCRIPT PARSER on this machine (jsc or node) — cannot prove the changed scripts parse, so not shipping them."
   _WHY="no JavaScript parser on this machine — not a code fault"
@@ -465,11 +466,9 @@ import _classify as C
 md = io.open('REQUESTS.md', encoding='utf-8').read()
 partials = set(os.environ.get('PARTIALS', '').split())
 closes = set(int(n) for n in os.environ.get('CLOSES', '').split() if n not in partials)
-try:
-    diff = subprocess.check_output(['git', 'diff', 'HEAD', '--', 'REQUESTS.md'],
-                                   stderr=subprocess.DEVNULL).decode('utf-8', 'replace')
-except Exception:
-    diff = ''
+# a git that cannot answer ends this gate (exit 3, the reason on stderr) — never "nothing closed" (6 Oct, the port review)
+from _shipgates import sh as _git_sh
+diff = _git_sh(['git', 'diff', 'HEAD', '--', 'REQUESTS.md'])
 for num, suf in C.closed_in_diff(diff):
     if num is None:
         closes.add(-1)            # an unnumbered entry — older than every number
@@ -486,7 +485,7 @@ if nxt and closes:
                if num is None else '#%d%s' % (num, suf)
         print('%s|%s|%s' % (','.join('#%d' % n for n in late), name, head.strip()[:130]))
 PYORDER
-)"
+)" || { echo "❌ the oldest-first gate could not run (git or its own error, above) — not shipping on a guess."; _WHY="the queue-order gate could not run"; exit 1; }
 if [ -n "$ORDER_MSG" ]; then
   LATE="${ORDER_MSG%%|*}"; REST="${ORDER_MSG#*|}"; NEXTUP="${REST%%|*}"; NEXTHEAD="${REST#*|}"
   echo "❌ QUEUE ORDER — this release closes $LATE, but $NEXTUP is open and workable and comes first."
@@ -513,7 +512,7 @@ fi
 # NEW files are exempt: they have no previous ?v= to differ from, and being referenced at all is enough.
 BUSTER_MISS="$(python3 - <<'PYEOF'
 import subprocess, re, sys
-def sh(c): return subprocess.run(c, shell=True, capture_output=True, text=True).stdout
+sys.path.insert(0, 'tools'); from _shipgates import sh   # a failed git exits 3 here, never "nothing changed" (6 Oct)
 changed = set()
 for line in sh("git status --porcelain").splitlines():
     parts = line[3:].split(" -> ")
@@ -533,7 +532,7 @@ for f in sorted(watched):
     if b_now == b_was:
         print("%s (still ?v=%s)" % (f, b_now))
 PYEOF
-)"
+)" || { echo "❌ the cache-buster gate could not run (git or its own error, above) — not shipping on a guess."; _WHY="git could not answer the cache-buster gate"; exit 1; }
 if [ -n "$BUSTER_MISS" ]; then
   # ⚠️ IT BUMPS THEM RATHER THAN REFUSING (6 Sep). This gate refused twice in one day, on two different
   # releases, for the same reason both times — and a gate that only says "you forgot" leaves the forgetting
@@ -548,12 +547,13 @@ if [ -n "$BUSTER_MISS" ]; then
 import re
 names = []
 import subprocess
-out = subprocess.run("git status --porcelain", shell=True, capture_output=True, text=True).stdout
+import sys; sys.path.insert(0, 'tools'); from _shipgates import sh
+out = sh("git status --porcelain")
 for line in out.splitlines():
     f = line[3:].split(" -> ")[-1].strip()
     if re.match(r'^(js/.*\.js|styles\.css|theme-glass\.css)$', f): names.append(f)
 src = open('index.html', encoding='utf-8').read()
-was = subprocess.run("git show HEAD:index.html", shell=True, capture_output=True, text=True).stdout
+was = sh("git show HEAD:index.html")
 for f in sorted(set(names)):
     m_now = re.search(re.escape(f) + r'\?v=([0-9]+)', src)
     m_was = re.search(re.escape(f) + r'\?v=([0-9]+)', was)
@@ -563,9 +563,10 @@ for f in sorted(set(names)):
     print("   ✅ %s ?v=%s → ?v=%d" % (f, m_now.group(1), int(m_now.group(1)) + 1))
 open('index.html', 'w', encoding='utf-8').write(src)
 PYEOF
+  [ $? = 0 ] || { echo "❌ the cache-buster bump could not run (git or its own error, above) — not shipping on a guess."; _WHY="git could not answer the cache-buster gate"; exit 1; }
   STILL="$(python3 - <<'PYEOF'
 import subprocess, re, sys
-def sh(c): return subprocess.run(c, shell=True, capture_output=True, text=True).stdout
+sys.path.insert(0, 'tools'); from _shipgates import sh   # a failed git exits 3 here, never "nothing changed" (6 Oct)
 changed = set()
 for line in sh("git status --porcelain").splitlines():
     changed.add(line[3:].split(" -> ")[-1].strip())
@@ -578,7 +579,7 @@ for f in sorted(watched):
     if n is None or o is None: continue
     if n == o: print("%s (still ?v=%s)" % (f, n))
 PYEOF
-)"
+)" || { echo "❌ the cache-buster re-check could not run (git or its own error, above) — not shipping on a guess."; _WHY="git could not answer the cache-buster gate"; exit 1; }
   if [ -n "$STILL" ]; then
     echo "❌ A FILE CHANGED AND ITS CACHE-BUSTER COULD NOT BE BUMPED — not committing, not pushing."
     echo "$STILL" | sed 's/^/   /'

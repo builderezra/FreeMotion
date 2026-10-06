@@ -17,3 +17,16 @@ dq_titles() { grep -nE "^[[:space:]]*test\('[^']*\"[^']*'" "$1" | head -3; }
 # on_main — true when the checkout is on main. ship.sh commits on the checked-out branch and pushes `main`, so anywhere
 # else it would commit on that branch after ~90 minutes of suites and push whatever local main holds (review minor).
 on_main() { [ "$(git symbolic-ref --short -q HEAD 2>/dev/null)" = main ]; }
+
+# changed_js_files — the js/ and tests/ .js files changed against HEAD, or new and untracked, one a line. RETURNS 1 when git
+# cannot answer (git's own words reach stderr) — 6 Oct, review minor: the parse gate read a failed `git diff` ("dubious
+# ownership", a \\wsl.localhost path, a broken index) as "no script changed" and skipped itself without a word, the same
+# failure the port had already fixed in _srcfiles.py and _spottests.py.
+changed_js_files() {
+  local a b
+  a="$(git diff --name-only HEAD)" || { echo "changed_js_files: git diff failed (above)" >&2; return 1; }
+  b="$(git ls-files --others --exclude-standard)" || { echo "changed_js_files: git ls-files failed (above)" >&2; return 1; }
+  printf '%s\n%s\n' "$a" "$b" | grep -E '^(js|tests)/.*\.js$' | sort -u
+  return 0
+}
+
