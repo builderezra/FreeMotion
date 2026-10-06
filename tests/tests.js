@@ -63993,6 +63993,16 @@
               L.effects.length = before;
             } else if (FM._fxPicks().length === picks0) {
               bad.push(id + ' did not select at all');
+            } else {
+              /* …AND THE PICK IS PUT BACK before the next tile (#1085, 7 Oct). The verdict above is the whole check; it
+                 never needed the picks to pile up. They used to: ~195 picked at once, so the live preview drew ALL of
+                 them as one stack, nested ~104 pixel effects deep, and the compositor kept a pair of full-size plates
+                 per depth — 335 canvases, about 2.1 GB held by the page for the rest of the run (heap snapshot: the
+                 compositor's _pfPool / _cfPool / _wpPool). That one test was most of the 8.7 GB the Windows laptop
+                 measured and why this Mac's suite froze. A second tap is the same toggle a person uses.
+                 It was also the test's TIME: every tap re-previewed the whole pile, so the sweep was quadratic. Alone, the
+                 same 206 tiles now take ~4 s at 380 px (measured 261-279 s before), and the renderer ends +131 MB, not +2.2 GB. */
+              tiles[ti].click();
             }
           }
           var _tb = Math.round(performance.now());
