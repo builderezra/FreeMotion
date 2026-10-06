@@ -301,6 +301,14 @@
       o.domMedia = document.querySelectorAll('video,audio').length; o.domCanvas = document.querySelectorAll('canvas').length;
       o.domIframes = document.querySelectorAll('iframe').length; o.domNodes = document.getElementsByTagName('*').length;
       o.layers = (FM.scene && FM.scene.layers || []).length;
+      // a census of what is IN the document, by tag and first class (the report diffs it to name what a test left behind)
+      var cen = {}, all = document.getElementsByTagName('*');
+      for (var ci = 0; ci < all.length; ci++) {
+        var el = all[ci], cl = (typeof el.className === 'string' ? el.className : (el.className && el.className.baseVal) || '').trim().split(/\s+/)[0];
+        var key = el.tagName.toLowerCase() + (cl ? '.' + cl : (el.id && !/\d/.test(el.id) ? '#' + el.id : ''));
+        cen[key] = (cen[key] || 0) + 1;
+      }
+      o.dom = cen;
     } catch (e) {}
     // what the run has STORED: localStorage is mirrored in the renderer's memory, and every project and stored clip a test
     // leaves behind is carried by every later test that lists, opens or sweeps them
