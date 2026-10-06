@@ -345,7 +345,7 @@ def measure(cdp, root_pid, want, state, deep=True, deep_only=None, infra=False):
         pass
     post = snapshot_procs(root_pid)
     rec = {
-        "seq": want.get("seq"), "i": want.get("i"), "name": want.get("name"), "tms": want.get("ms"), "ok": want.get("ok"),
+        "seq": want.get("seq"), "i": want.get("i"), "gi": want.get("gi"), "name": want.get("name"), "tms": want.get("ms"), "ok": want.get("ok"),
         "t": round(t0, 2),
         "heapUsed": metrics.get("JSHeapUsedSize"), "heapTotal": metrics.get("JSHeapTotalSize"),
         "backing": hu.get("backingStorageSize"), "embedder": hu.get("embedderHeapUsedSize"),
