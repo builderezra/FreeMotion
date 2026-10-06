@@ -556,12 +556,15 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                     local.append('step %s → %s' % (short(ra.get('name')), short(rb.get('name'))))
                 if rb.get('err') != ra.get('err'):
                     local.append('error %s → %s' % (short(ra.get('err')), short(rb.get('err'))))
+                bytes_diff(ra.get('state'), rb.get('state'), 'the exported file', local, btol)
                 json_diff(ra.get('state'), rb.get('state'), 'state', local, per_step)
                 sfa, sfb = ra.get('surf') or {}, rb.get('surf') or {}
                 for sk in list(sfa.keys()) + [k for k in sfb if k not in sfa]:
                     layout_diff(sfa.get(sk), sfb.get(sk), 'the surface "%s"' % sk, local, per_step + len(local), fields)
                 if 'grid' in ra or 'grid' in rb:
                     grid_diff(ra.get('grid'), rb.get('grid'), 'the exported file', local, gtol)
+                if 'sound' in ra or 'sound' in rb:
+                    sound_diff(ra.get('sound'), rb.get('sound'), 'the exported file', local, atol)
                 for x in local:
                     out.append('%s FU2 "%s": %s' % (w, ra['name'], x))
                 if len(out) >= limit:
@@ -761,6 +764,14 @@ def measure(head, head2, margin):
             for i in range(1, min(len(x), len(y))):
                 worst = max([worst] + [abs(p - q) for p, q in zip(x[i], y[i])])
         print('decoded export at %s, HEAD against itself: the most a cell moved = %d levels' % (w, worst))
+        sa = [e.get('sound') for e in A.get('fu2') or [] if e.get('sound')]
+        sb = [e.get('sound') for e in B.get('fu2') or [] if e.get('sound')]
+        worst_s = 0
+        for x, y in zip(sa, sb):
+            for ca, cb in zip(x.get('ch') or [], y.get('ch') or []):
+                for p_, q_ in zip(ca, cb):
+                    worst_s = max(worst_s, abs(p_[0] - q_[0]), abs(p_[1] - q_[1]))
+        print('decoded export SOUND at %s, HEAD against itself: the most a 0.1 s window moved = %d/1000 (FU_AUDIO_JITTER)' % (w, worst_s))
     mdiffs, _, _ = compare(head, margin, ['380', '1280'], ['FU1'], 400)
     moved = set((x.split(' ')[0], x.split(' ')[1].rstrip(':')) for x in mdiffs if '#transport' in x)
     print('the margin plant moved #transport in %d screen(s)' % len(moved))

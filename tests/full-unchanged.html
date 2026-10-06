@@ -2022,7 +2022,20 @@
         else if (type === 'mdhd' && cur) { var v3 = buf[b]; cur.timescale = dv.getUint32(b + (v3 ? 20 : 12)); cur.duration = v3 ? Number(dv.getBigUint64(b + 24)) : dv.getUint32(b + 16); }
         else if (type === 'hdlr' && cur) cur.handler = str(b + 8);
         else if (type === 'stsd' && cur) { cur.codec = str(b + 12); var sz = dv.getUint32(b + 8); cur.stsd = cyrb53(buf.subarray(b + 8, b + 8 + sz)); }
-        else if (type === 'stsz' && cur) { cur.samples = dv.getUint32(b + 8); }
+        else if (type === 'stsz' && cur) {
+          cur.samples = dv.getUint32(b + 8);
+          /* THE SOUND'S BYTES (the second review, 6 Oct: the soundtrack's bitrate 160 → 96 kb/s passed — the sample COUNT
+             is the same at any bitrate). For the sound track: every sample's size, totalled and hashed. Not the picture's:
+             the H.264 encoder is not bit-exact run to run (above), and what the picture shows is compared decoded. */
+          if (cur.handler === 'soun') {
+            var fixed = dv.getUint32(b + 4), tot = 0;
+            if (fixed) tot = fixed * cur.samples;
+            else for (var q = 0; q < cur.samples && b + 12 + q * 4 + 4 <= buf.length; q++) tot += dv.getUint32(b + 12 + q * 4);
+            /* (not a hash of the table: measured 6 Oct, the AAC encoder is not byte-exact either — 7216 and 7212 bytes from two
+               runs of one build — so the total is compared within FU_BYTES_PCT, and what it SOUNDS like decoded, below) */
+            cur.bytes = tot;
+          }
+        }
         else if (type === 'stss' && cur) { var n = dv.getUint32(b + 4), ks = []; for (var i = 0; i < n && i < 200; i++) ks.push(dv.getUint32(b + 8 + i * 4)); cur.sync = ks; }
         else if (type === 'stts' && cur) { var m = dv.getUint32(b + 4), ts = []; for (var j = 0; j < m && j < 50; j++) ts.push(dv.getUint32(b + 8 + j * 8) + 'x' + dv.getUint32(b + 12 + j * 8)); cur.stts = ts.join(' '); }
         o += size;
@@ -2052,11 +2065,34 @@
     } finally { URL.revokeObjectURL(url); v.removeAttribute('src'); try { v.load(); } catch (e) {} }
     return out;
   }
+  /* WHAT THE EXPORTED FILE SOUNDS LIKE (the second review, 6 Oct): its sound track decoded by the browser (an offline audio
+     context: no device), into the shape the mix is compared in — RMS and peak per 0.1 s, to 1/1000, per channel — held to
+     FU_AUDIO_TOL (measured; the AAC decoder's output is not promised bit-exact) by tools/_fu_compare.py, with its rate,
+     length and channels exact. */
+  async function decodedSound(buf) {
+    var Ctx = w.OfflineAudioContext || w.webkitOfflineAudioContext;
+    if (!Ctx) throw new Error('no OfflineAudioContext to decode the exported sound with');
+    var ab = await new Ctx(1, 1, 48000).decodeAudioData(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+    var ch = [], win = Math.round(ab.sampleRate / 10);
+    for (var c = 0; c < ab.numberOfChannels; c++) {
+      var f = ab.getChannelData(c), shape = [];
+      for (var s0 = 0; s0 < f.length; s0 += win) {
+        var e = Math.min(f.length, s0 + win), sq = 0, pk = 0;
+        for (var k = s0; k < e; k++) { var v = f[k]; sq += v * v; if (Math.abs(v) > pk) pk = Math.abs(v); }
+        shape.push([Math.round(Math.sqrt(sq / Math.max(1, e - s0)) * 1000), Math.round(pk * 1000)]);
+      }
+      ch.push(shape);
+    }
+    return { head: { rate: ab.sampleRate, len: ab.length, channels: ab.numberOfChannels }, ch: ch };
+  }
   async function FU2() {
-    await freshCopy('FU2');
+    var pid = await freshCopy('FU2');
     var rec = DUMP.fu2;
-    rec.push({ name: 'start', err: '', fell: [], surf: {}, state: await stateRecord() });
-    await runFU2(fu2Steps(), rec);
+    rec.storedPid = pid;   // (an array's own property: never serialised)
+    var st0 = await stateRecord();
+    st0.stored = await storedRecord(pid, st0.doc);
+    rec.push({ name: 'start', err: '', fell: [], surf: {}, state: st0 });
+    await runFU2(fu2Steps({ gestures: PHONE }), rec);
     if (UPTO) return;
     /* THE SINGLE FRAME (DESIGN I8: FM.renderStill from snapshotPNG): the export sheet's format set to a single PNG and its
        own button pressed. The file's bytes are hashed; the app's download is caught, never written. */
@@ -2089,6 +2125,12 @@
     var xr = { name: 'export (Export → MP4, the loop region, the smallest size)', err: '', fell: [], surf: {} };
     CUR_FELL = xr.fell; CUR_SURF = xr.surf;
     var runOrig = FM.exporter && FM.exporter.run, got = null;
+    /* WHAT THE ENCODERS WERE ASKED FOR (the second review, 6 Oct: the soundtrack's 160 → 96 kb/s passed). Every configure()
+       the export makes, sound and picture, in order, exactly — the first sound one is the exporter's priming probe. */
+    var encs = [], AEp = w.AudioEncoder && w.AudioEncoder.prototype, VEp = w.VideoEncoder && w.VideoEncoder.prototype;
+    var aeConf = AEp && AEp.configure, veConf = VEp && VEp.configure;
+    if (aeConf) AEp.configure = function (c) { encs.push(['sound', plainOf(c)]); return aeConf.apply(this, arguments); };
+    if (veConf) VEp.configure = function (c) { encs.push(['picture', plainOf(c)]); return veConf.apply(this, arguments); };
     try {
       /* The range is a LOOP REGION set with his keys ([ at 1.0 s, ] at 2.0 s): the phone's export button is not on screen
          while a clip is selected, so "the selected clip" is not a range the phone can export, and a region is. */
@@ -2131,13 +2173,14 @@
         poster: pc ? (pc.width + 'x' + pc.height + ' ' + cyrb53(new Uint8Array(pc.getContext('2d').getImageData(0, 0, pc.width, pc.height).data.buffer))) : null,
         mp4: mp4Info(bufX) };
       xr.grid = await decodedGrid(got.blob, [0.05, (got.seconds || 1) / 2, Math.max(0.05, (got.seconds || 1) - 0.1)]);
+      xr.sound = await decodedSound(bufX);
       await via('the ready card’s Discard', firstVisible(['xr-discard']), async function () {});
       await settle(200);
       xr.toasts = takeToasts();
     } catch (e) { xr.err = String(e && e.message || e); }
-    finally { if (runOrig) FM.exporter.run = runOrig; }
+    finally { if (runOrig) FM.exporter.run = runOrig; if (aeConf) AEp.configure = aeConf; if (veConf) VEp.configure = veConf; }
     CUR_FELL = null; CUR_SURF = null; closeTransient(); await settle(150);
-    rec.push({ name: xr.name, err: xr.err, fell: xr.fell, surf: xr.surf, state: { opts: xr.opts || null, out: xr.out || null, toasts: xr.toasts || [] }, grid: xr.grid || null });
+    rec.push({ name: xr.name, err: xr.err, fell: xr.fell, surf: xr.surf, state: { opts: xr.opts || null, encoders: encs, out: xr.out || null, toasts: xr.toasts || [] }, grid: xr.grid || null, sound: xr.sound || null });
     if (xr.fell.length) DUMP.fell = DUMP.fell.concat(xr.fell.map(function (f) { return xr.name + ' — ' + f; }));
     /* …and at the end, the export's frames (every quarter second, through the compositor) and its audio mix. */
     step('FU2 export frames and audio');

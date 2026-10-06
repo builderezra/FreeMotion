@@ -487,7 +487,7 @@ def instrument_changed(files):
 # of the pictures — is refused unless its POLISH-LOG line says so in words he reads: `LOOSENS THE LOCK: <why>`. Whatever
 # the line's queue number, and whether or not the gate fires: the label is exactly what such a release would get wrong.
 LOOSEN_MARK = 'LOOSENS THE LOCK:'
-TOL_VARS = ('FU_TOL_PX', 'FU_CHAN', 'FU_FAINT_TOL_PX', 'FU_FAINT_CHAN', 'FU_GRID_TOL', 'FU_AUDIO_TOL')   # a larger number sees less
+TOL_VARS = ('FU_TOL_PX', 'FU_CHAN', 'FU_FAINT_TOL_PX', 'FU_FAINT_CHAN', 'FU_GRID_TOL', 'FU_AUDIO_TOL', 'FU_BYTES_PCT')   # a larger number sees less
 # ⚠️ AND ANY CHANGE TO THE INSTRUMENT IS A RELEASE OF ITS OWN THAT SAYS SO (the second review, 6 Oct). The rule above read
 # four knobs (FU_INVISIBLE, the tolerances, plant names, PNG_UNSTABLE) — and `if 'FU6' in groups and False:` in the comparer
 # with 'box-shadow' dropped from the probe's STYLES, logged as an ordinary "queue 975", was NOT-TRIGGERED; the next Simple

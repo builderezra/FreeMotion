@@ -125,7 +125,12 @@ FU_FAINT_TOL_PX=12          # … and a picture may have at most this many: abov
                             #   change at this threshold (the margin, 105) and a 40 px panel's border recoloured 20 levels (156)
 FU_GRID_JITTER=0            # a decoded export cell, HEAD against itself: 0 levels measured 6 Oct, both widths
 FU_GRID_TOL=4               # … and the most a cell may move (the saturate plant moves cells by tens of levels)
-export FU_INVISIBLE FU_TOL_PX FU_CHAN FU_FAINT_TOL_PX FU_FAINT_CHAN FU_GRID_TOL
+FU_AUDIO_JITTER=0           # the exported file's decoded sound, HEAD against itself: the most a 0.1 s window's RMS or peak
+                            #   moved, in 1/1000 (measured 6 Oct at 380: 0 — while the encoded bytes differed)
+FU_AUDIO_TOL=2              # … and the most it may move (its encoder configuration is compared exactly besides)
+FU_BYTES_JITTER_PCT=1       # the exported sound track's size, HEAD against itself: 7216 and 7212 bytes (0.06%, measured 6 Oct)
+FU_BYTES_PCT=3              # … and the most it may differ (a 160 → 96 kb/s soundtrack is ~40% smaller)
+export FU_INVISIBLE FU_TOL_PX FU_CHAN FU_FAINT_TOL_PX FU_FAINT_CHAN FU_GRID_TOL FU_AUDIO_TOL FU_BYTES_PCT
 
 ROOT="${FU_ROOT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$ROOT" || exit 2
@@ -152,9 +157,11 @@ fi
 # (And none of these lines can change in a Simple release at all: tools/_fu_gate.py refuses one that edits this file.)
 if ! [ "$FU_TOL_PX" -gt "$FU_JITTER_PX" ] 2>/dev/null || ! [ "$FU_TOL_PX" -lt 8 ] 2>/dev/null || ! [ "$FU_TOL_PX" -lt "$FU_SMALLEST_REAL_PX" ] 2>/dev/null \
    || ! [ "$FU_FAINT_TOL_PX" -gt "$FU_FAINT_JITTER_PX" ] 2>/dev/null || ! [ "$FU_FAINT_TOL_PX" -lt 156 ] 2>/dev/null \
-   || ! [ "$FU_GRID_TOL" -gt "$FU_GRID_JITTER" ] 2>/dev/null || ! [ "$FU_GRID_TOL" -le 16 ] 2>/dev/null; then
+   || ! [ "$FU_GRID_TOL" -gt "$FU_GRID_JITTER" ] 2>/dev/null || ! [ "$FU_GRID_TOL" -le 16 ] 2>/dev/null \
+   || ! [ "$FU_AUDIO_TOL" -gt "$FU_AUDIO_JITTER" ] 2>/dev/null || ! [ "$FU_AUDIO_TOL" -le 20 ] 2>/dev/null \
+   || ! [ "$FU_BYTES_PCT" -gt "$FU_BYTES_JITTER_PCT" ] 2>/dev/null || ! [ "$FU_BYTES_PCT" -le 10 ] 2>/dev/null; then
   echo "❌ a tolerance no longer sits between its measured jitter and the smallest change it must catch:"
-  echo "   FU_TOL_PX $FU_TOL_PX (jitter $FU_JITTER_PX, a 4 px line moved 1 px = 8), FU_FAINT_TOL_PX $FU_FAINT_TOL_PX (jitter $FU_FAINT_JITTER_PX, a border recolour = 156), FU_GRID_TOL $FU_GRID_TOL (jitter $FU_GRID_JITTER)"
+  echo "   FU_TOL_PX $FU_TOL_PX (jitter $FU_JITTER_PX, a 4 px line moved 1 px = 8), FU_FAINT_TOL_PX $FU_FAINT_TOL_PX (jitter $FU_FAINT_JITTER_PX, a border recolour = 156), FU_GRID_TOL $FU_GRID_TOL (jitter $FU_GRID_JITTER), FU_AUDIO_TOL $FU_AUDIO_TOL (jitter $FU_AUDIO_JITTER), FU_BYTES_PCT $FU_BYTES_PCT (jitter $FU_BYTES_JITTER_PCT)"
   echo "   Re-measure with tools/full-unchanged.sh --measure and write BOTH numbers, not just a looser tolerance."
   exit 2
 fi
