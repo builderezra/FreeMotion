@@ -27,7 +27,7 @@ Under each phone is a small panel (outside the 380 box, so a crop of the phone i
 | **(c)** | `fm-hinge-up`: 360 ms, `cubic-bezier(.18,.85,.28,1.02)`, `perspective(1400px) translateY(100%) rotateX(-58deg)` to flat, opacity in by 55%. | the plain 0.22 s `ease` slide down. |
 | **reduced motion** | (a) and (b): a plain 160 ms fade. (c): the plain 0.22 s slide, as the app does. | a 120 ms fade ((c): the slide). |
 
-(c) copies the values from `styles.css:9954-9959` (the hinge) and `:4807` plus `:4810` (the base `transform .22s ease` slide), and its reduced-motion fallback from `:9976`. I did not run the real app to compare them side by side.
+(c) copies the values from `styles.css:9954-9959` (the hinge) and `:4807` (the base `transform .22s ease` slide) and `:4810` (the open state), and its reduced-motion fallback from `:9976`. I did not run the real app to compare them side by side.
 
 **The arriving sheet takes no taps.** While any sheet is arriving its contents ignore touches and the dimmed area ignores taps, as the app's `.is-arriving` guard does (`styles.css:8876`). I tested that an early tap does nothing and a tap after arrival closes.
 
