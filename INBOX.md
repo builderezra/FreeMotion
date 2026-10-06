@@ -22,125 +22,126 @@ Follow it; if the tree has moved and a step no longer fits, say so in the entry 
 
 ---
 
+### 06 Oct 2026, ~00:10 AWST — Give his second (free) Claude account a tutorials job, on a lower model, monitored
 
-### 05 Oct 2026, ~17:16 AWST — ChatGPT pile reviewed: land list ready (261 commits on codex/690-reviewed-local)
+**His words (verbatim):** "On my google that i have open (take control of my pc to see) i have another claude account open and i want you to delagate it a task. This task cannot interfere with other stuff. an idea for it could be creating tutorails. it isnt a pro sub so it has less usage, make sure its running a lower model. Monitor its output and make sure the tutorials are actually good and good for the app"
 
-**His words (verbatim):** "Okay im leaving my laptop now, make sure this gets done properly without needing my input."
+**Logger's plan (not his words).** The PM (logging chat) drives the second account in his Chrome on claude.ai, on the lowest model offered. It writes step-by-step FreeMotion tutorials from PM-written fact sheets taken from the code, so it never guesses at buttons. It has no access to the Mac or the repo, so it cannot interfere with the builder or ChatGPT. The PM checks every tutorial against the code and the live app before keeping it. Kept tutorials go in `tools/design/tutorials/`, and only Simple-mode-independent features are covered while #980 is being built. BUILDER: log it, nothing to build. If these become a public tutorial series, BEFORE-PUBLISHING.md (Alight Motion look) applies first.
 
-**PM's plan (not his words).** Per #1067, the builder lands ChatGPT's verified commits between Simple-mode releases; Simple mode stays first.
-Full plan: `tools/design/chatgpt-tasks/pile/LAND-LIST.md` (batches B1–B8, his questions, the drop list, ChatGPT's rules).
-Verdicts on the 261 commits: 72 land as-is, 89 land after a fix, 41 wait on his answer, 59 dropped.
-The pile does NOT contain the empty-audio export fix (#604/#215). When ChatGPT's fix for it arrives, it lands before B1.
+### 06 Oct 2026, ~02:00 AWST — Rules audit done: changes for the BUILDER (his request, verbatim below)
 
-**Already done by the PM (5 Oct):** the pile is copied into our repo, so /private/tmp being wiped loses nothing. `refs/pile/codex-690-reviewed` = `6ed01d4d` (the reviewed tip, which these batches name) and `refs/pile/codex-690` = ChatGPT's live tip (it keeps adding, linearly on top). Never write in ChatGPT's clone. Refresh with `git fetch /private/tmp/freemotion-reviewed-local-20261005 codex/690-reviewed-local:refs/pile/codex-690`.
+**His words (verbatim):** "Make sure none of the rules chatgpt or you have set up are slowing us down or causing issues, i may of set a rule ages ago that doesnt fit well for right now." Later the same night: "look, time to achieve stuff doesnt bother me, as long as it is well spent time and not wasted. if tests are proved to be genuinely helpful then keep testing and take your time getting it right"
 
-**First batch to land, after the current Simple-mode release: B1, "saving, importing, offline and small app fixes" (14 commits).**
-This batch does not touch compositor.js or collab-core and needs no schema bump. Land it before Simple Phase 2, which rewrites history.commit() and FM.replaceMedia.
-Apply in this order:
-`52843cc2 9cd5923c a4de4183 e808c3c2 b48cb48f f1ac5fa8 e987e4f3 2e5e0cf0 70797f4c 1fdd128b 5e8337da b69c5795 5cf39d11 d662aa35`
-Apply each one uncommitted with:
-`git show --binary --format= <sha> -- . ':(exclude)outside' ':(exclude)index.html' ':(exclude)tests/tests.js' | git apply -3 --index`
-Paste each test into tests.js as a block (never union-merge). Bump each touched file's ?v= once from live.
-Fixes required before shipping B1:
-- 2e5e0cf0: exportFile must fall back to IndexedDB, or "no longer stored" is sometimes false.
-- 70797f4c: buildBackup must cap fonts at _backupEmbedLimit, not Infinity (iPhone memory). Keep #1038 open.
-- f1ac5fa8: add a rejecting-fetch test case. Keep #1042 open.
-- b69c5795: fix before landing. Do not resync across a split (the song goes silent after the cut). Remap keyframes only on a speed change or a move. Add split, trim and move tests. Bump audio-tools ?v= from live 7.
-- d662aa35: leave out the sw.js?v=1 register change (the exclude above already does).
-- Every test is tagged item 'TBD'. Log B1 as one hunt-tagged REQUESTS entry and use its number. 9cd5923c+a4de4183 close #1051. They do NOT close #1040.
-Tests: the batch's own tests, plus 888, 915, 1051, SW 306/430 and the karaoke tests, at 900 and --width 380. Then ship.sh.
-What he sees: honest warnings when a file is missing footage or fonts; broken project files refused cleanly; Remove Vocals stays in sync.
+**PM's plan (not his words).** A read-only, adversarially verified audit of every standing rule (CLAUDE.md, LOOP.md, tools/ gates, memory, ChatGPT's prompt, the PM's rules) is in **`tools/design/pm/RULES-AUDIT.md`**. Its "Changes for the builder" section B1–B13 has the exact files, lines and wording, and none of it weakens a proof gate. In short:
+- **Before your next ship:**
+  - **B4** mutate.sh: its cap is 1800 s but a pass is 2697 s, so it cannot finish. FIRST-TWO.md tells the land-1013 release to run three mutations.
+  - **B1** a `tools/ship-bg.sh` launcher that exits 3 ("launched, NOT shipped"), live-pid checks in ship.sh, and the same two-line ship rule in CLAUDE.md, LOOP.md rule 6, tick.sh:104, REQUESTS.md:53-62 and the suite-timeout memory.
+  - **B3** the oldest-first refusal text must say: never JUMP an item in his own words (e.g. #980) just to get a land release through.
+- **Soon:**
+  - **B2** build during ships: create the next worktree BEFORE a ship and reuse it mid-ship.
+  - **B5** first-message step 3 reads tick.sh's `UNSHIPPED RELEASE:` line, not "is the tree dirty".
+  - **B6** ship.sh guards: a source-hash re-check before `git add -A`, wait up to 20 min for load before the phone pass but never refuse after a green desktop pass, STALLED detection, PASSES-ALONE / FAILS-ALONE diagnosis on a red pass, and its own server port.
+  - **B7** a docs-only fast path: 163 lines of his words are on this Mac only.
+  - **B8** a cheaper one-minute tick: move the LOOP.md narrative to LOOP-HISTORY.md; the tick.sh trims.
+  - **B9** inbox wording. **B10** the unblock-list line at the top of REQUESTS.md. **B11** memory merges.
+- **Before the Windows laptop:** **B12** port checks must refuse, never silently skip.
+- **Only after his yes:** **B13** his global ~/.claude/CLAUDE.md.
 
-**After B1:**
-- B2: keyframed Speed stops jumping. 26 commits; needs v17.23 shipped. Fix Glow Scan's travel branch first.
-- B3: preview matches export, plus effect memory. 12 commits; Unsharp Protect colour must default to 0.
-- B4 and B5: opt-in controls on existing effects. Before/after sheets.
-- B6: 13 new effects, picture sheet.
-- B7: 4 sound packs, listening page.
-- B8: C31 stills half, squashed, low priority.
-Fonts, worker export, shapes and the other new features wait on his answers in LAND-LIST.md §3.
-Drop all of T08, T14, T27, T30, T33 and T39, plus the merges. v17.23 or live already has them, or they are only notes.
+**Three practical notes:**
+1. **#1065** is JUMPED: ChatGPT already built it as 57a745ea. Land it after its browser check and the 380px check; do not rebuild it.
+2. **#1068**'s fetch line points at /private/tmp, which the reboot emptied. The branches are already in this repo under refs/heads/codex/*; LAND-LIST.md is updated to match.
+3. Before each land ship, run ChatGPT's still-pending focused tests as one `?only=` slice.
 
-❓ASK (his questions, recommended answers in LAND-LIST.md §3; none blocks B1–B5):
-- Fonts: yes, but keep old titles unchanged.
-- ChatGPT's 12 drawn fonts: none until he has seen a sheet.
-- Shapes: keep today's.
-- Worker export: after #604.
-- Colour pack, audio tools, audio effects, Filter layer tile, Overdrive sun, Stripes smoothing, Poster Print.
+**Already done by the PM:**
+- PM-STATE lanes and tick rules.
+- LAND-LIST fetch line, and ChatGPT's rule A is now "focused tests only, never a full suite; your landing ship is the full-suite gate".
+- ChatGPT's heartbeat prompt REPLACED with the audited rules: one worktree, never stash, start new fixes from v17.23, real REQUESTS numbers on tests, never take his-words items. A backup is at ~/FreeMotion-backups/automation.toml.before-audit-2026-10-06.
+- Its two /tmp bundles moved to ~/FreeMotion-backups/.
+- Two memory fixes: chatgpt-prompts-one-block and chatgpt-codex-interlude.
 
-**Two newer ChatGPT commits beyond the reviewed tip are being verified by the PM now:** `f25e15d3` "Guard empty AAC output before MP4 muxing" (the empty-audio-track export defect; may be his no-sound bug #215/#604/#677) and `3170a94c` "Keep panorama canvas within persisted size limits" (batch-2 §1b.2). If they verify, they land FIRST, before B1. A follow-up block will say.
+❓ASK (his, when he is back; the PM asks him):
+- (a) ChatGPT's checked fixes land BETWEEN Simple releases, or only AFTER Simple mode is finished?
+- (b) Republish the unblock list at a new private link: yes or no?
+- (c) Yes to correcting his global CLAUDE.md (the "nothing leaves the device" exception for collab relays; moved folders; the old Slot game/FreeMotion copy)?
+- Also his hands: Spotlight Search Privacy for ~/Claude/FreeMotion, ~/.codex and ~/Library/Application Support/Claude.
 
-### 05 Oct 2026, ~17:22 AWST — VERIFIED: ChatGPT's f25e15d3 (#1013, empty-audio export guard) and 3170a94c (#1014, panorama) — land together, between Simple-mode releases, before B1
+### 06 Oct 2026, ~02:25 AWST — (hunt LOW) Five beginner traps the tutorial review found in the app — PM findings, NOT his words
 
-**PM's note (not his words).** Two independent reviewers per commit (correctness, and his-outcome). Full instructions: `tools/design/chatgpt-tasks/pile/FIRST-TWO.md`. Nothing was run in a browser (your ship was in progress), so it was reasoned from the code plus `git merge-tree`.
-- **Both: land-after-fix, in ONE release.** They close your existing #1013 (hunt MEDIUM) and #1014 (hunt HIGH), so retag both tests from `'TBD'` to those numbers and claim `queue 1013` and `queue 1014`.
-- **Applying:** only `index.html` conflicts (the pile's own ?v= numbering). Bump from main's values instead: `exporter.js?v=126→127`, and `app.js?v=468→469` once. Use the `git show … | git apply -3 --index` route from the land-list block.
-- **f25e15d3 fixes** (do them yourself unless ChatGPT's `fix-for f25e15d3` commit is already on `refs/pile/codex-690`):
-  - add the "decoded peak" decode-back line to the export report (AudioDecoder, as `aacPriming` already does), so a non-zero frame count of silence is distinguishable;
-  - console.warn and a "late AAC" line if a chunk arrives after the track was dropped;
-  - in the test, use `new AudioBuffer(...)` instead of an AudioContext that is never closed, stub the toast, and tighten the positive control to about 15 frames;
-  - don't claim the `hasAudio` change as independently proven (the "revert to !!mix" mutation survives).
-- **3170a94c fixes:**
-  - make its round trip a real reopen (autosave, then `FM.storage.load()`, then assert width, height and transform are unchanged);
-  - drop or reword the long-side clause/assertion that claims legacy panoramas are detected.
-- **What he will see:** a normal export looks the same, but the report line reads "TRACK WRITTEN · N AAC frames · X KB · Ys · decoded peak P". If his phone's encoder ever produces nothing, the card says "NO SOUND — the audio encoder produced no sound frames" instead of the old false "Sound ✓". **Update #215/#604/#677:** this is a guard plus a diagnostic, not a confirmed cure. His next export report decides it (0 frames = his phone's encoder; more than 0 with a peak above 0 = the loss is after the file, in Photos/sharing). New panorama imports keep their shape on reopen.
-- **Order:** his words put Simple mode first. Land this pair in the first gap between Simple-mode releases, before B1.
+**Context (not his words).** Ezra asked that the tutorials be "actually good and good for the app". Writing beginner tutorials and checking them step by step against v17.23 (b46b47d3) showed five places where a new user gets stuck. These are audit findings: log each as `(hunt LOW #n)` so they sort behind his own requests. Evidence is in `tools/design/tutorials/REVIEW.md` and `check-2026-10-06.json`.
+1. **Phone: after the first import, Export is hidden.** The new clip is auto-selected (app.js:3099-3100), which sets body.m-editing (app.js:1007), and `body.m-editing #m-export { display:none }` (styles.css:4214) removes the Export button until the user finds the back arrow. Tapping back a second time goes to Home. A beginner who just added their first clip cannot see how to export. Options to draw: keep Export visible in the clip header, or do not auto-select after the first import.
+2. **Phone: grabbing a clip to move it gives no visual signal on iPhone.** It only calls navigator.vibrate(10), which Safari does not support. The edge grips turn teal, but the clip body shows nothing. A lift or shadow on grab would fix it.
+3. **PC: the S key splits only when the playhead is over the selected clip.** Otherwise it STRETCHES the clip's near edge out to the playhead (app.js KeyA/KeyS/KeyD), a surprising, different edit from a "split" key.
+4. **Effects browser: the "does nothing here" badge swallows the tap.** On a full-frame clip, tapping the badge on the Drop Shadow tile shows a toast and does NOT pick the tile (fx-browser.js ~929). The user has to know to tap the picture instead.
+5. **Drop Shadow → Shadow only on a full-frame clip turns the whole picture black**, which reads as broken. A hint in the control, such as "make the clip smaller first", would help.
 
-### 05 Oct 2026, ~19:50 AWST — UPDATE to the 17:22 block: ChatGPT's two fix-for commits arrived and are VERIFIED. Land them, do not redo the fixes
+### 06 Oct 2026, ~03:55 AWST — (hunt MEDIUM) PC export "Save" may give Windows users no way to save the MP4; and a home for the tutorials — PM findings, NOT his words
 
-**PM's note (not his words).** `refs/pile/codex-690` is refreshed to ChatGPT's tip `ed27177e`. Both follow-ups the 17:22 block asked for are on it, and they cover every fix listed there. I reviewed them by reading only, since your ship was running: no browser. Every helper the new tests call exists on main (`q915aPng`, `FM.storage.settled`, `sleep`, `FM.storage.removeMedia`, `FM.projects.remove`).
-- **The release is now four commits, in this order: `f25e15d3 f3109105 3170a94c 3c712a1d`.** Each one goes through the usual `git show --binary --format= <sha> -- . ':(exclude)outside' ':(exclude)index.html' ':(exclude)tests/tests.js' | git apply -3 --index`. Paste the two tests by hand as blocks, taking each test's FINAL version, the one from the fix-for commit. Retag them `1013` and `1014`. Bump `exporter.js` and `app.js` `?v=` once each from main's values.
-- **f3109105** (follows f25e15d3): adds `decodedAACPeak()`, which decodes the kept AAC chunks back and records a `decoded peak` line in the export report. It also adds a console.warn and a `late AAC` line for a chunk that arrives after the track was dropped, and updates only this export's saved report. The test uses `new AudioBuffer`, stubs the toast and console.warn, expects 13–17 frames and a decoded peak of at least 0.1, and fires a late callback.
-  - **One optional hardening, not a blocker:** `await dec.flush()` has no timeout. A phone decoder that never settles would hang the export on a diagnostic. `aacPriming()` already runs the same unguarded decode on every export, so the risk is not new, but a `Promise.race` with a ~5 s cap returning null ("unavailable") is cheap.
-  - **Correction to the 17:22 block:** the peak is its own report line (`decoded peak 0.4xx`), not appended to the `audio` line.
-- **3c712a1d** (follows 3170a94c): the test is now a real reopen. It creates a temporary project, imports, autosaves, waits for `settled()`, runs `FM.storage.load()`, and asserts the width, height and transform JSON are unchanged and the photo is still centred. The false "legacy 8000x1000 is detected" claim and its assertion are gone, and the `app.js` comment is reworded to match. It cleans up by reopening the prior project and removing the temp one.
-- **Prove:** the 1013 test must fail with exporter.js reverted to main and the 1014 test with app.js and storage at main. If the 1014 one does not fail (main may already reopen panoramas correctly), it is a regression guard. Write `UNPROVABLE: <why>` for it rather than forcing it.
-- **Still unverified, so do not land yet:** ChatGPT's newer `ba6fb835` (reconnect clash), `837fca68` (inspector keyboard), `007e0eeb` (Tab focus) and `ed27177e` (storage diagnosis), plus its staged #1019–#1026 branches. Their browser checks are pending until your ship ends. The PM will verify them and send a block.
+**Context (not his words).** These come from round 3 of the tutorial review against v17.23 (`tools/design/tutorials/REVIEW.md`, `check3-2026-10-06.json`).
+1. **(hunt MEDIUM) PC Save → share sheet. PLAUSIBLE, not yet run.** `deliver()` (exporter.js:66-75) calls `navigator.share` whenever `canShare({files})` is true, and nothing checks whether the device is a phone. The ready card has only Save and Discard (app.js:6305-6320). Desktop Chrome/Edge on Windows and Safari on Mac support sharing files, so a PC user likely gets the OS Share window instead of a download, and on Windows that window has no "save to disk". It matters more now that he is moving to a Windows laptop.
+   - **Test:** on Windows Chrome, export, then Save. Is there any way to get the file onto disk?
+   - **Likely fix:** on a non-touch, wide screen, download the file, or offer Download beside Share.
+2. **(note) The app already has a home for tutorials.** Home's **Tutorials** tab is a placeholder reading "Short walkthroughs of the editor will live here." (home.js:2601-2605). The second Claude account is writing checked how-to tutorials on branch `tutorials-drafts`: 01 first video, 02 trim/split, 03 glow and shadow. 02 and 03 pass a three-round step-by-step code check, and 01 is on its last two fixes. 04 keyframes, 05 titles and 06 music are being written.
+   - Showing them in that tab is a design decision for him. Draw options first (#545).
+   - Also check BEFORE-PUBLISHING.md if they go public.
 
-### 05 Oct 2026, ~22:28 AWST — Test browsers play sound through his speakers: add --mute-audio
+### 06 Oct 2026, ~04:10 AWST — ChatGPT is out of usage until 11 Oct; its finished chain of 7 fixes on v17.23 is ready to land — PM note, NOT his words
 
-**His words (verbatim):** "Also i think when u do testing you play audio noises but for some reason i hear them out of my speakers which means i have to constantly have my pc muted. I dont mind if theres a genuine need for this and no fix but if theres a way for this to stop playing for me then lmk"
+**PM's note (not his words).**
+- **ChatGPT is stopped.** It hit its usage limit at 03:05 AWST: "You've hit your usage limit … try again at Oct 11th, 2026 2:24 PM". Its heartbeat still fires every minute and fails at once, which costs nothing. It stays ACTIVE so the work resumes by itself if Ezra adds credits. That is his call and is not asked of him.
+- **What it left is clean.** One linear chain on v17.23 (b46b47d3), branch **`chatgpt/1059-detect-speech-fallback`** (tip 13e5b1ea; worktree clean; the refs are already in this repo). Its land-ready table is at the end of its STATE.md (~/.codex/visualizations/…/freemotion-takeover/STATE.md).
+- **Proven** (focused test, red with the fix reverted, green with it; muted Chromium on its own port):
+  - `2ea47a00` #1013 empty AAC track: supersedes the pile's f25e15d3 plus fix-for in FIRST-TWO.md.
+  - `9cec73a1` #1014 panorama reopen: supersedes 3170a94c plus fix-for.
+  - `ba154a37` #1040 missing transform on import.
+  - `a22dbc46` #1041 nested styled groups.
+  - `13e5b1ea` #1059 Detect speech fallback.
+- **NOT proven:** `d8fa4fbb` #1015 guest reconnect clash and `8c813c78` #1016 keyboard numeric values. GATE BLOCKER: their focused tests on port 8894 "could not bootstrap the app frame", and one reverted #1015 run failed setup with undefined innerHTML. Run them yourself, once on the tree and once on HEAD, before landing them.
+- **Landing order waits on his answer** to the RULES-AUDIT question: between Simple releases, or after Simple mode. Until then, do not land. When it is time, apply per commit, uncommitted, with the usual `git show … | git apply -3 --index` route (excluding index.html/tests.js/outside), then bump `?v=` from live once.
 
-**Logger's plan (not his words).** Headless Chrome still plays sound through the Mac's real output device. `tests/_cdp.py`'s `launch()` has no `--mute-audio`, so every suite and ship pass plays test tones aloud.
-- **Change:** add `"--mute-audio",` to the flag list in `tests/_cdp.py` `launch()`, beside the two WebRTC flags, with a one-line comment quoting him. Make it AFTER v17.23 lands, never mid-ship: the 380 pass re-launches `_cdp.py`.
-- **Measured by the PM, ~22:25, in a standalone headless Chrome:** with `--mute-audio`, a real-time AudioContext reports `running` and its clock advances 1.13–1.15 s over a 1.2 s wait. An AnalyserNode reads RMS 0.704–0.710 off a unit sine, the correct value of 1/√2. OfflineAudioContext renders a peak of 1.0. That was 4 of 4 muted runs, identical to unmuted. One earlier cold-start run had the clock not yet started, in a fresh profile, unrelated to the flag. So the flag mutes the output and leaves what the tests measure alone.
-- **Proof before shipping:** run every audio, sound, export-audio and voice test with `?only=` at 900 and 380, and confirm the same results as without the flag. If any `voice:` test depends on the real output device, that would show here. Bring it in with the next release; it is test-harness only, so log it `UNPROVABLE: harness flag, verified by the audio-test pairing`.
-- **ChatGPT has been told** to add the same flag to its own Chrome launches.
+### 06 Oct 2026, ~05:05 AWST — (hunt LOW) Two more beginner traps from the tutorial review — PM findings, NOT his words
 
-### 05 Oct 2026, ~22:40 AWST — Move the work to his more powerful laptop (another time, not tonight)
+Adds to the 02:25 block, with the same source (`tools/design/tutorials/check4-2026-10-06.json`):
+6. **Phone: while a clip is selected, the "Tap to add a layer" row and the + are not drawn at all** (timeline.js:3966 `addRowWanted() && !soloId`; styles.css:4205). Import auto-selects the new clip, so straight after importing a video a beginner cannot find how to add a title or a song. This is the same family as trap 1 (Export hidden), and one fix could cover both. Draw options: keep "add" reachable in the solo view, or do not auto-select after import.
+7. **A song or file is added AT THE PLAYHEAD** (app.js:3055), clamped to the project end. Someone who has just watched their video to the end gets the song starting after the video. Options: start audio at 0 when the playhead is at the project end, or show where it landed.
 
-**His words (verbatim):** "also i have a way more powerful laptop with lots of storage, i just havent been using it coz its impractical to bring around, could have a virus ( my computer nerd friend whos really smart found one on my pc recently and got rid of it, might be worth you having a gander). but if we switch to it we can just remote control from this laptop anyways so it wont lose and practicality. What do you say, worth switching? not tonight ofc but another time"
+### 06 Oct 2026, ~10:40 AWST — PC: a second, hidden back button in the top left that shows on hover
 
-**Logger's plan (not his words). PM's recommendation: yes, worth it. The machine is today's bottleneck.**
-- **Measured on this Mac, 5 Oct:**
-  - 6 cores and 8 GB RAM, with swap at 5.4 of 6 GB.
-  - 8–9 GB of disk free.
-  - A suite pass takes 45 min and a ship ~90.
-  - Timing-sensitive collab tests flake under load, and seven v17.23 attempts were refused in one evening.
-- **Expected on a stronger machine:**
-  - Faster passes.
-  - The desktop and 380 passes can run side by side instead of one after the other.
-  - ChatGPT's browser checks can run during a ship.
-  - No disk squeeze.
-- **❓ASK (him, when he next has it out):** the model, or a photo of its About / System Information page. Is it Windows or a Mac?
-  - The tooling is bash + python with macOS-isms (`stat -f`, `/Applications/Google Chrome.app`, `DEVELOPER_DIR`, the iCloud inbox path). On a Mac it moves as-is. On Windows it runs under WSL2, after a small porting pass the PM will scope first.
-- **Virus first, before anything sensitive goes on it** (his GitHub SSH key, which can push to the live site; his logged-in Claude and ChatGPT accounts):
-  - Recommended: reset or reinstall the OS fresh. After a known infection that is the only reliable "clean".
-  - If he would rather not: the PM does a check when it is set up (startup items, scheduled tasks, unusual processes and network connections, a full plus offline Defender scan), and says plainly that a check is weaker than a fresh install.
-- **Remote control:** keep this Mac as the screen.
-  - The work runs on the new machine: the Claude desktop app's Remote Control, or Screen Sharing / Chrome Remote Desktop.
-  - The new machine must stay awake and on power. A Mac uses `caffeinate` or the app's keep-awake; Windows uses its power settings.
-- **Move order (one evening):** fresh OS → Chrome, git, python, Claude app, Codex app → clone from GitHub (not a copy of this disk) → new SSH key added to GitHub → run one full suite to measure it → switch the loop over → retire this Mac's loop.
+**His words (verbatim):** "on pc i often find myself looking for the back button to get out of projects in the top left but it isnt there, its in a functionally better spot but i think it might be a good idea to make a second hidden back button to exit a project hidden in the top left and when you hover over that area its shows. make sure it looks good"
 
-### 05 Oct 2026, ~22:50 AWST — UPDATE to the powerful-laptop block: it is Windows; he wants to keep his files
+**Logger's plan (not his words):** in progress. The logging chat is mapping the PC top-left and drawing options over a real screenshot of the editor. A follow-up block will carry the options, his pick, the exact CSS/JS and the test. Design request, so pictures first (#545). It must not move or change the existing back button ("its in a functionally better spot").
 
-**His words (verbatim):** "its a windows laptop, the only reason i dont want to reset is i have some files and stuff on it i dont want to lose, but surely i can put that on an external storage without worries of virus coming through? well the external storage could be infected to as ive used it lots. may be worth reseting the storage drive first as well, but by plugging it in i could be letting a virus get into it."
+### 06 Oct 2026, ~10:55 AWST — PLAN for the 10:40 block (PC hidden back button in the top-left) — options drawn, waiting on his pick
 
-**Logger's plan (not his words).** ✅ The OS question in the earlier block is answered: **Windows**, so the tooling runs under WSL2 after a porting pass that the PM scopes before the move. His files survive the reset this way:
-1. **Scan before copying.** Run a Microsoft Defender full scan, then a Defender Offline scan. Both are built in.
-2. **Copy only personal files** (photos, videos, music, PDFs and documents) onto the external drive. Leave out programs and installers (`.exe .msi .bat .cmd .ps1 .vbs .js .scr .lnk .jar .iso`), macro Office files (`.docm .xlsm`), and zips containing those. Programs get reinstalled from the official sites.
-3. **Reset** with "Remove everything" plus "Clean the drive", or use a fresh install from Microsoft's USB tool.
-4. **Bring the files back.** After the reset, scan the external drive with Defender before opening anything on it, then copy back. Never run a program from the old drive.
+**Logger's plan (not his words).**
+- **Options were rendered INTO the live editor** at PC 1280x800, crisp at 2x, and sent to him: `tools/design/pc-back-hover/options.jpg` (crops: `{idle,a,b,c}-corner.png`).
+  - **A:** the existing back chevron on a 34px glass tile.
+  - **B (recommended):** a glass pill reading "‹ Projects".
+  - **C:** a quarter-circle glass corner that grows out of the top-left.
+  - ❓ASK: his pick, A, B or C. The plan below is written for B; A and C differ only in the CSS block.
+- **Where it goes.** On PC (≥701px) `#topbar` is hidden and `#main` (the stage) spans the whole top row (styles.css:6476-6480, measured `#main` = 0,0,1280x560), so the top-left of the screen is the stage's top-left. It is empty in the editor's resting state.
+  - The real back button `#btn-back` stays where it is (`#t-home`, left of the transport row, app.js:7666-7667; styles.css:8212). This is a SECOND door, not a move. He said "its in a functionally better spot".
+- **The change:**
+  - **HTML:** `<button id="btn-back-corner" class="corner-back" aria-label="Back to projects" tabindex="-1">` holding the same chevron SVG as `#btn-back`, plus `<span>Projects</span>`. Put it inside `#main` so it scrolls and layers with the stage; `position:absolute; left:14px; top:14px; z-index` above the canvas overlays but below dialogs and sheets.
+  - **Click:** delegate to `document.getElementById('btn-back').click()`, so behaviour stays identical: leave a group first, then Home (app.js:6909-6913).
+  - **CSS, idle:** `opacity:0; transform:translateX(-6px); pointer-events:none`.
+  - **CSS, revealed:** opacity 1, transform none, pointer-events auto, over 160ms ease-out.
+  - **The hot zone** is a transparent `::before` or a sibling 180x120px at the top-left that reveals on `:hover`. The pill keeps itself shown while hovered (`#main .corner-zone:hover .corner-back, .corner-back:hover, .corner-back:focus-visible`).
+  - **B's look:** height 34, radius 17, padding 0 14px 0 10px, gap 6, 13px/600, `background: rgba(233,244,247,.09)`, `border:1px solid rgba(233,244,247,.18)`, `backdrop-filter: blur(12px)`, `box-shadow: 0 6px 18px rgba(0,0,0,.35)`, text `rgb(233,244,247)`. These are the exact values the picture was drawn with, in the app's own tokens.
+  - **Light-chrome Home theme (body.white-chrome):** check the editor is dark there too. If not, use a light glass variant.
+- **Gates:**
+  - Only `@media (min-width:701px) and (hover:hover) and (pointer:fine)`. A touch screen never gets an invisible button, and phones are untouched.
+  - Hidden while any dialog or sheet is open, during text editing (body.text-editing) and drawing (body.drawing), and in fullscreen/preview mode. Check what else lives at the stage's top-left: canvas zoom/fit chips, selection toolbars, the Simple-mode cog (#980). Measure each state at 1280x800 and 1024x700 and move the zone if anything collides.
+  - `prefers-reduced-motion`: opacity only, no slide.
+- **Tests (tests/tests.js):**
+  1. At 1280 wide the corner button exists, has opacity 0 and pointer-events none at rest; hovering the zone gives opacity 1 (wait for the transition), and its rect does not overlap any visible control (elementFromPoint over its box).
+  2. Clicking it calls the same path as #btn-back: inside a group it exits the group; at top level it opens Home.
+  3. At 380 wide (`--width 380` pass) it is `display:none`, and on `(hover:none)` it never shows.
+  4. Prove: each test fails with the CSS/JS removed.
+- **#980 overlap check:** Simple mode on PC adds its own chrome. The builder must confirm the corner is still free in Simple mode, or hide the corner button there if Simple has its own exit.
 
-On his drive worry: a file on a USB drive does nothing until it is OPENED or RUN. Windows has not auto-run USB drives since Windows 7, and photos and documents are not programs. The Mac is also a safe place to plug the drive in, because Windows viruses cannot run on macOS.
+### 06 Oct 2026, ~10:50 AWST — HIS PICK for the PC hidden back button: B
+
+**His words (verbatim):** "B"
+
+**Logger's note (not his words).** ✅ He answered the ❓ASK in the ~10:55 PLAN block (written just before; the timestamps there are approximate): **B**, the glass pill reading "‹ Projects". It appears when the mouse is over the stage's top-left corner. Build it exactly as that plan says (its CSS values are the ones the picture was drawn with: `tools/design/pc-back-hover/b-corner.png`). It joins the queue in order, behind #980 Simple mode.
 

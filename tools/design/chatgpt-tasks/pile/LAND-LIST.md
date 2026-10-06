@@ -32,11 +32,7 @@ Built on 5 Oct 2026 from the per-commit verdicts (39 themes, T01–T39; the them
 
 ### How to bring commits in (applies to every batch)
 
-**First, once:** copy the pile into the builder's own repo. `/private/tmp` can be wiped, and the builder must never write in ChatGPT's clone.
-```bash
-git fetch /private/tmp/freemotion-reviewed-local-20261005 codex/690-reviewed-local:refs/pile/codex-690
-test "$(git rev-parse refs/pile/codex-690)" = 6ed01d4df0235d8b9f921a783dbe7deb74ff45ae && echo pinned
-```
+**First, once:** the branches are already in this repo (ChatGPT works in a git worktree of it since the 5 Oct reboot emptied `/private/tmp`): `git log main..codex/<branch>`. The reviewed pile is pinned at `refs/pile/codex-690-reviewed` = 6ed01d4d.
 **Per commit, in the batch's order, applied uncommitted so prove.sh runs.** Leave out ChatGPT's reports, index.html and tests.js, which are handled by hand:
 ```bash
 git show --binary --format= <sha> -- . ':(exclude)outside' ':(exclude)index.html' ':(exclude)tests/tests.js' | git apply -3 --index
@@ -250,7 +246,7 @@ STOP:
 7. Do not claim checks you did not run ("browser passed" without count/port; "saved projects keep their rendering").
 
 ALWAYS:
-A. Run the FULL suite (tests/_cdp.py, ~35 min) at 900 and --width 380 before calling a batch done. Single tests are not enough.
+A. Focused tests only, each shown failing with the fix reverted; never a full suite. The builder's landing ship is the full-suite gate. (Changed 6 Oct by the rules audit.)
 B. Any effect or audio param added → bump C.SCHEMA_REV and re-pin C.SCHEMA_FP in js/collab-core.js
    (the '921 S1 the schema fingerprint gate' test prints the value).
 C. Prove each test fails with the fix reverted. Its fixture must contain what separates right from wrong: a transparent

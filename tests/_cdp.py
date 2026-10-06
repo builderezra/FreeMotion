@@ -64,6 +64,12 @@ def launch(port, width, height, profile):
         *(["--use-angle=default", "--enable-gpu"] if os.environ.get("FM_GL") == "angle"
           else ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"]),
         "--autoplay-policy=no-user-gesture-required",
+        # NO SOUND OUT OF HIS SPEAKERS (5 Oct, #1070). His words: "when u do testing you play audio noises but for some reason i
+        # hear them out of my speakers which means i have to constantly have my pc muted". A headless Chrome still plays to the
+        # Mac's real output. This mutes only the OUTPUT: the audio graph, analysers, decoding, media clocks, recording a
+        # MediaStream and the export mix all run exactly as before (nothing in the app uses speechSynthesis, which would
+        # bypass it). If a test ever needs to HEAR the output, that test is wrong — it would depend on his volume knob.
+        "--mute-audio",
         # WEBRTC PAIRS MUST NOT DEPEND ON macOS's mDNS SERVICE (5 Oct, v17.23). By default Chrome hides each host candidate
         # behind a random "<uuid>.local" name (measured), and the OTHER side of an in-page pair has to resolve it through
         # mDNSResponder. Two phone passes in a row went red on 967 7c / 967 B4 4 / 971 with "the two data channels never

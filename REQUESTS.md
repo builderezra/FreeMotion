@@ -34513,6 +34513,14 @@ re-opened #480, which I had marked done and had not fixed.
       2. [ ] Step 1.2, the invisible engine (FM.timedLists, js/spine-words.js, js/spine.js) — nothing on screen, Full identical, proven by the lock. Ships on its own. (🔨 building after the lock.)
       3. [ ] Step 1.3, the view he holds (the cog's third block, Simple's timeline) — D18 A, D22 A, D23 A, D24 B answered 5 Oct (recommended, via the logging chat): build and ship after the engine; show him the cog block and D16 icons first.
       4. [ ] Phase 2 (BUILD-PLAN-PHASE2.md): editing clip after clip, after Phase 1, one release per step.
+      📍 **6 Oct ~00:30 — first browser runs (the Mac crashed at 23:46 and was picked up after):** steps 1.2 + 1.3 + the cog, 54/54 at 900 and 380; Phase 2 releases 2.1 + 2.2 on top, 81/81 at both. The first run found three real bugs, each fixed and mutation-proven: the first switch after the app reopened a project flipped straight back to Full (cog T10b); a refused switch shook again on every reopen (T13b); its reduced-motion rule lost the cascade (T15, now on real reduced motion from the driver). Checked against the approved pictures: the switch had no knob, What should you use? ran off the phone's block, and sideways (D24 B) the bar sat over the cog — all fixed, T12 now checks each. **Pictures sent** (tools/design/plans/simple-mode/cog/built/): the cog on phone, PC and sideways beside the approved designs, and the Simple timeline with the D16 chips. The lock (item 1) is being finished by a workflow (14 review findings); nothing ships before it.
+      📍 **6 Oct ~02:30 — Phase 1 reviewed** (three readers, each finding checked by a refuter; nothing found in the save format): five real defects in the switch, all fixed and mutation-proven — Open in Full saved the project as Full and skipped the questions (R1: it is now a hop through the guard, writing no memory, and a refusal is said in Simple's line); a switch never left Edit Group, so the + filed new clips inside a group (R2); the redo warning came when no step was made, and its counts were wrong (R3); a lost drag held the switch forever (R4). Phase 1 58/58 and Phase 1 + Phase 2 85/85 at 900 and 380. Phase 2 is being reviewed the same way now.
+      📍 **6 Oct ~03:40 — Phase 2 review:** 20 findings, 11 confirmed so far — the worst: a clip added or duplicated in Simple can come back BLANK after reopening (its media save was skipped); the rest are wrong results in corners (an end card left behind by a reorder, a sound twin left behind by Into row, a block trimmed only on its group row, Stay put on several items making several undo steps). A network outage at 03:14 killed the checks on the other nine and the UI lens; those are re-running. Phase 2 does not ship until every confirmed one is fixed with a test. Step 1.2 is ready on its own (36/36 at both widths) and ships right after the lock.
+      📍 **6 Oct ~05:10 — Phase 2 review complete:** 32 confirmed (none refuted), incl. the UI lens: on the phone More stops working after its sheet closes and the Length field cannot be committed on an iPhone; at 1280 the tray runs off its band; on PC the line's button lands where 🗑 was (a second click deletes a locked clip); keys in the tray run Full's shortcuts. Fixing release 2.1's share first on its own branch (each with a test that fails first), then 2.2's — so the two still ship one at a time.
+      📍 **6 Oct ~06:20 — Phase 2 fixed:** 2.1's eleven and 2.2's twenty-two review findings, each with a test seen failing first; Phase 1 + Phase 2 120/120 at 900 and 380. New words he has not seen: 'Open in Full to trim this', 'Open in Full to lift this off', 'Open in Full to put this card in the clip row', 'After the card'.
+      ✅ HE ANSWERED (6 Oct, ~06:25, in chat): *"do reconmended"* → **B, two rows, every tool on show**. ~~ASK (6 Oct, sheet sent: tools/design/plans/simple-mode/p22-review-shots/sheet-tray-pc.jpg): on PC at 1280 the clip tools do not fit one row — A one row, More + Delete pinned, four tools off the edge (built now); B two rows, every tool on show (recommended); C one row with a › cue. If he is silent when 2.2 is next to ship, build B (rule 16).~~
+      🔨 **6 Oct ~08:00 — B built** (branch 980-p22-trayb2, a7000c6f): on PC a clip's tools sit on two rows (ceil(n/2) columns, More and Delete last), the band grows only while it holds two rows, a line with a button takes the top row so it never lands where Delete was, the hint reads 'Its tools are below' only while the tools really are on two rows; the phone unchanged. An adversarial check at 7 widths x 4 heights found 3 small defects, all fixed with tests; 126/126 at 900 and 380.
+      ❓ASK (6 Oct, sheet sent: tools/design/plans/simple-mode/p22-review-shots/sheet-tray-more-pc.jpg): while More's panel is open on a laptop screen the panel and two rows do not both fit — 1 one row while the panel is open (built now, four tools off the edge); 2 two rows stay (the panel's first row of buttons cut); 3 one row with More turned into Done and a › cue (recommended). If he is silent when 2.2 is next to ship, build 3 (rule 16).
       ⚠️ **Note for the build plan (30 Sep, v17.15; updated 1 Oct, v17.19):** the collab SCHEMA_REV is now **5** (the #482 polish batches 1–3 added effect and audio params) — BUILD-PLAN step 1.2's `SCHEMA_REV 3` must become **6** when it is built (one more than whatever `C.SCHEMA_REV` in js/collab-core.js says then). (It waited for his word to build; he gave it on 1 Oct — D15 A, Phase 1 from the revised plan, PLAN LANDED above.)
 
 
@@ -34915,12 +34923,66 @@ re-opened #480, which I had marked done and had not fixed.
       Attach to #215 / #604 / #677: fix first (count the encoded audio chunks; 0 means no track and an honest message), then his next export report says whether the loss is the encoder or the Photos import. His GO (5 Oct) puts this first in the bug backlog.
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
+      📥 **5 Oct, ~17:22 and ~19:50 — the PM verified ChatGPT's fix for this; land it (moved from INBOX whole):**
+      ### 05 Oct 2026, ~17:22 AWST — VERIFIED: ChatGPT's f25e15d3 (#1013, empty-audio export guard) and 3170a94c (#1014, panorama) — land together, between Simple-mode releases, before B1
+
+      **PM's note (not his words).** Two independent reviewers per commit (correctness, and his-outcome). Full instructions: `tools/design/chatgpt-tasks/pile/FIRST-TWO.md`. Nothing was run in a browser (your ship was in progress), so it was reasoned from the code plus `git merge-tree`.
+      - **Both: land-after-fix, in ONE release.** They close your existing #1013 (hunt MEDIUM) and #1014 (hunt HIGH), so retag both tests from `'TBD'` to those numbers and claim `queue 1013` and `queue 1014`.
+      - **Applying:** only `index.html` conflicts (the pile's own ?v= numbering). Bump from main's values instead: `exporter.js?v=126→127`, and `app.js?v=468→469` once. Use the `git show … | git apply -3 --index` route from the land-list block.
+      - **f25e15d3 fixes** (do them yourself unless ChatGPT's `fix-for f25e15d3` commit is already on `refs/pile/codex-690`):
+        - add the "decoded peak" decode-back line to the export report (AudioDecoder, as `aacPriming` already does), so a non-zero frame count of silence is distinguishable;
+        - console.warn and a "late AAC" line if a chunk arrives after the track was dropped;
+        - in the test, use `new AudioBuffer(...)` instead of an AudioContext that is never closed, stub the toast, and tighten the positive control to about 15 frames;
+        - don't claim the `hasAudio` change as independently proven (the "revert to !!mix" mutation survives).
+      - **3170a94c fixes:**
+        - make its round trip a real reopen (autosave, then `FM.storage.load()`, then assert width, height and transform are unchanged);
+        - drop or reword the long-side clause/assertion that claims legacy panoramas are detected.
+      - **What he will see:** a normal export looks the same, but the report line reads "TRACK WRITTEN · N AAC frames · X KB · Ys · decoded peak P". If his phone's encoder ever produces nothing, the card says "NO SOUND — the audio encoder produced no sound frames" instead of the old false "Sound ✓". **Update #215/#604/#677:** this is a guard plus a diagnostic, not a confirmed cure. His next export report decides it (0 frames = his phone's encoder; more than 0 with a peak above 0 = the loss is after the file, in Photos/sharing). New panorama imports keep their shape on reopen.
+      - **Order:** his words put Simple mode first. Land this pair in the first gap between Simple-mode releases, before B1.
+      ### 05 Oct 2026, ~19:50 AWST — UPDATE to the 17:22 block: ChatGPT's two fix-for commits arrived and are VERIFIED. Land them, do not redo the fixes
+
+      **PM's note (not his words).** `refs/pile/codex-690` is refreshed to ChatGPT's tip `ed27177e`. Both follow-ups the 17:22 block asked for are on it, and they cover every fix listed there. I reviewed them by reading only, since your ship was running: no browser. Every helper the new tests call exists on main (`q915aPng`, `FM.storage.settled`, `sleep`, `FM.storage.removeMedia`, `FM.projects.remove`).
+      - **The release is now four commits, in this order: `f25e15d3 f3109105 3170a94c 3c712a1d`.** Each one goes through the usual `git show --binary --format= <sha> -- . ':(exclude)outside' ':(exclude)index.html' ':(exclude)tests/tests.js' | git apply -3 --index`. Paste the two tests by hand as blocks, taking each test's FINAL version, the one from the fix-for commit. Retag them `1013` and `1014`. Bump `exporter.js` and `app.js` `?v=` once each from main's values.
+      - **f3109105** (follows f25e15d3): adds `decodedAACPeak()`, which decodes the kept AAC chunks back and records a `decoded peak` line in the export report. It also adds a console.warn and a `late AAC` line for a chunk that arrives after the track was dropped, and updates only this export's saved report. The test uses `new AudioBuffer`, stubs the toast and console.warn, expects 13–17 frames and a decoded peak of at least 0.1, and fires a late callback.
+        - **One optional hardening, not a blocker:** `await dec.flush()` has no timeout. A phone decoder that never settles would hang the export on a diagnostic. `aacPriming()` already runs the same unguarded decode on every export, so the risk is not new, but a `Promise.race` with a ~5 s cap returning null ("unavailable") is cheap.
+        - **Correction to the 17:22 block:** the peak is its own report line (`decoded peak 0.4xx`), not appended to the `audio` line.
+      - **3c712a1d** (follows 3170a94c): the test is now a real reopen. It creates a temporary project, imports, autosaves, waits for `settled()`, runs `FM.storage.load()`, and asserts the width, height and transform JSON are unchanged and the photo is still centred. The false "legacy 8000x1000 is detected" claim and its assertion are gone, and the `app.js` comment is reworded to match. It cleans up by reopening the prior project and removing the temp one.
+      - **Prove:** the 1013 test must fail with exporter.js reverted to main and the 1014 test with app.js and storage at main. If the 1014 one does not fail (main may already reopen panoramas correctly), it is a regression guard. Write `UNPROVABLE: <why>` for it rather than forcing it.
+      - **Still unverified, so do not land yet:** ChatGPT's newer `ba6fb835` (reconnect clash), `837fca68` (inspector keyboard), `007e0eeb` (Tab focus) and `ed27177e` (storage diagnosis), plus its staged #1019–#1026 branches. Their browser checks are pending until your ship ends. The PM will verify them and send a block.
+      ⏩ Land as ONE release with its pair (f25e15d3 f3109105 3170a94c 3c712a1d), retag the tests 1013, claim queue 1013 — in the first gap between Simple-mode releases, before B1 (#1069). The JUMPED line above stays: ChatGPT built it, the builder lands it.
 - [ ] **1014 — A panorama import makes a canvas that changes shape when the project is reopened (hunt HIGH #1014)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 2
       Where: js/app.js:3020-3026 (fitProjectSize caps only the short side, at 2160) vs js/storage.js:1004-1010 (clampProjectDims caps each side at 7680, called at :890, :1777). The oversize warning at js/app.js:2982 checks only the short side · He sees: 16000×4000 → 8640×2160 project → reopens as 7680×2160. 9000×2000 is not capped at import and reopens as 7680×2000. The photo is then off-centre with its right edge cut, and nothing tells him. Arithmetic reproduced; the on-screen effect is inferred, not seen · Fix: Cap the long side at 7680 in fitProjectSize too, keeping the aspect ratio. Make the warning check both sides · Test: Unit: fitProjectSize(16000,4000) has both sides ≤ 7680. Round trip: import a 16000×4000 still, save, reopen, and assert the dims are unchanged and the layer is still centred. Mutation: drop the long-side cap
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
+      📥 **5 Oct, ~17:22 and ~19:50 — the PM verified ChatGPT's fix for this; land it (moved from INBOX whole):**
+      ### 05 Oct 2026, ~17:22 AWST — VERIFIED: ChatGPT's f25e15d3 (#1013, empty-audio export guard) and 3170a94c (#1014, panorama) — land together, between Simple-mode releases, before B1
+
+      **PM's note (not his words).** Two independent reviewers per commit (correctness, and his-outcome). Full instructions: `tools/design/chatgpt-tasks/pile/FIRST-TWO.md`. Nothing was run in a browser (your ship was in progress), so it was reasoned from the code plus `git merge-tree`.
+      - **Both: land-after-fix, in ONE release.** They close your existing #1013 (hunt MEDIUM) and #1014 (hunt HIGH), so retag both tests from `'TBD'` to those numbers and claim `queue 1013` and `queue 1014`.
+      - **Applying:** only `index.html` conflicts (the pile's own ?v= numbering). Bump from main's values instead: `exporter.js?v=126→127`, and `app.js?v=468→469` once. Use the `git show … | git apply -3 --index` route from the land-list block.
+      - **f25e15d3 fixes** (do them yourself unless ChatGPT's `fix-for f25e15d3` commit is already on `refs/pile/codex-690`):
+        - add the "decoded peak" decode-back line to the export report (AudioDecoder, as `aacPriming` already does), so a non-zero frame count of silence is distinguishable;
+        - console.warn and a "late AAC" line if a chunk arrives after the track was dropped;
+        - in the test, use `new AudioBuffer(...)` instead of an AudioContext that is never closed, stub the toast, and tighten the positive control to about 15 frames;
+        - don't claim the `hasAudio` change as independently proven (the "revert to !!mix" mutation survives).
+      - **3170a94c fixes:**
+        - make its round trip a real reopen (autosave, then `FM.storage.load()`, then assert width, height and transform are unchanged);
+        - drop or reword the long-side clause/assertion that claims legacy panoramas are detected.
+      - **What he will see:** a normal export looks the same, but the report line reads "TRACK WRITTEN · N AAC frames · X KB · Ys · decoded peak P". If his phone's encoder ever produces nothing, the card says "NO SOUND — the audio encoder produced no sound frames" instead of the old false "Sound ✓". **Update #215/#604/#677:** this is a guard plus a diagnostic, not a confirmed cure. His next export report decides it (0 frames = his phone's encoder; more than 0 with a peak above 0 = the loss is after the file, in Photos/sharing). New panorama imports keep their shape on reopen.
+      - **Order:** his words put Simple mode first. Land this pair in the first gap between Simple-mode releases, before B1.
+      ### 05 Oct 2026, ~19:50 AWST — UPDATE to the 17:22 block: ChatGPT's two fix-for commits arrived and are VERIFIED. Land them, do not redo the fixes
+
+      **PM's note (not his words).** `refs/pile/codex-690` is refreshed to ChatGPT's tip `ed27177e`. Both follow-ups the 17:22 block asked for are on it, and they cover every fix listed there. I reviewed them by reading only, since your ship was running: no browser. Every helper the new tests call exists on main (`q915aPng`, `FM.storage.settled`, `sleep`, `FM.storage.removeMedia`, `FM.projects.remove`).
+      - **The release is now four commits, in this order: `f25e15d3 f3109105 3170a94c 3c712a1d`.** Each one goes through the usual `git show --binary --format= <sha> -- . ':(exclude)outside' ':(exclude)index.html' ':(exclude)tests/tests.js' | git apply -3 --index`. Paste the two tests by hand as blocks, taking each test's FINAL version, the one from the fix-for commit. Retag them `1013` and `1014`. Bump `exporter.js` and `app.js` `?v=` once each from main's values.
+      - **f3109105** (follows f25e15d3): adds `decodedAACPeak()`, which decodes the kept AAC chunks back and records a `decoded peak` line in the export report. It also adds a console.warn and a `late AAC` line for a chunk that arrives after the track was dropped, and updates only this export's saved report. The test uses `new AudioBuffer`, stubs the toast and console.warn, expects 13–17 frames and a decoded peak of at least 0.1, and fires a late callback.
+        - **One optional hardening, not a blocker:** `await dec.flush()` has no timeout. A phone decoder that never settles would hang the export on a diagnostic. `aacPriming()` already runs the same unguarded decode on every export, so the risk is not new, but a `Promise.race` with a ~5 s cap returning null ("unavailable") is cheap.
+        - **Correction to the 17:22 block:** the peak is its own report line (`decoded peak 0.4xx`), not appended to the `audio` line.
+      - **3c712a1d** (follows 3170a94c): the test is now a real reopen. It creates a temporary project, imports, autosaves, waits for `settled()`, runs `FM.storage.load()`, and asserts the width, height and transform JSON are unchanged and the photo is still centred. The false "legacy 8000x1000 is detected" claim and its assertion are gone, and the `app.js` comment is reworded to match. It cleans up by reopening the prior project and removing the temp one.
+      - **Prove:** the 1013 test must fail with exporter.js reverted to main and the 1014 test with app.js and storage at main. If the 1014 one does not fail (main may already reopen panoramas correctly), it is a regression guard. Write `UNPROVABLE: <why>` for it rather than forcing it.
+      - **Still unverified, so do not land yet:** ChatGPT's newer `ba6fb835` (reconnect clash), `837fca68` (inspector keyboard), `007e0eeb` (Tab focus) and `ed27177e` (storage diagnosis), plus its staged #1019–#1026 branches. Their browser checks are pending until your ship ends. The PM will verify them and send a block.
+      ⏩ Land as ONE release with its pair (f25e15d3 f3109105 3170a94c 3c712a1d), retag the tests 1014, claim queue 1014 — in the first gap between Simple-mode releases, before B1 (#1069). The JUMPED line above stays: ChatGPT built it, the builder lands it.
 - [ ] **1015 — Edits a guest makes while offline go out without the clash check if they edit again before the host's catch-up reply, and silently overwrite the owner's newer change (hunt MEDIUM #1015)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 3
@@ -35239,7 +35301,7 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): the 5 Oct HANDOFF block (in #980)
       Structural, his rule: git fetch ssh first, refuse if ssh/main is not an ancestor of HEAD ("live has moved on: pull first"). Measured 5 Oct: live was f7716576 (ChatGPT's v17.22), the tree 28104a3e.
       🔨 5 Oct (shipped with v17.23's tooling): the gate is in tools/ship.sh, right after the mutation check — fetch, refuse if ssh/main is not an ancestor of HEAD, warn and carry on when offline. Checked both ways by hand (this tree passes; 28104a3e would be refused). Left open for one thing: a self-test that keeps it honest, like _classify.py's.
-
+      🔨 **6 Oct ~03:55 — the gate now also refuses when GitHub cannot be reached** (it used to warn and carry on). github.com dropped out from this Mac twice in one night (03:14, 03:50 — ssh and https both), and a ship launched into that spends ~90 minutes for a push that cannot land; a fetch with no limit also HANGS rather than fails. The fetch now gets 15 s to connect (measured against the real outage: exit 128 after 15 s) and an unreachable remote stops the ship before anything runs; FM_SHIP_OFFLINE=1 commits locally anyway. Ships with the next release.
 - [x] **1067 — PM lane split: the verified ChatGPT bug lists are ChatGPT's to fix; the builder lands its verified commits** (5 Oct, ~16:15 AWST, via INBOX — the logging chat as project manager; NOT his words) ✅ **LOGGED**
       Moved from INBOX.md whole:
       ### 05 Oct 2026, ~16:15 AWST — PM lane split: the VERIFIED ChatGPT bug lists are now ChatGPT's to fix; you land them, you don't build them
@@ -35250,3 +35312,111 @@ re-opened #480, which I had marked done and had not fixed.
       - ChatGPT's fixes accumulate as one linear series on `codex/690-reviewed-local` (on top of live v17.22) in `/private/tmp/freemotion-*`. The PM verifies them in batches and hands you **ordered land lists** here. Land them between Simple-mode releases; Simple mode stays first.
       - Nothing about your Simple-mode work changes.
       Applied: every item it names carries the JUMPED line above; the needs-his-OK, device-run, taste-call and test-gap items, and #1066, stay the builder's.
+
+- [ ] **1068 — Land ChatGPT's verified pile in batches B1–B8, between Simple-mode releases (his "make sure this gets done properly without needing my input")** (5 Oct, ~17:16 AWST, via INBOX — his words + the PM's land list)
+      **STATUS: 🟢 READY after the next Simple-mode release (#980 first, his words)**
+      Moved from INBOX.md whole:
+      ### 05 Oct 2026, ~17:16 AWST — ChatGPT pile reviewed: land list ready (261 commits on codex/690-reviewed-local)
+
+      **His words (verbatim):** "Okay im leaving my laptop now, make sure this gets done properly without needing my input."
+
+      **PM's plan (not his words).** Per #1067, the builder lands ChatGPT's verified commits between Simple-mode releases; Simple mode stays first.
+      Full plan: `tools/design/chatgpt-tasks/pile/LAND-LIST.md` (batches B1–B8, his questions, the drop list, ChatGPT's rules).
+      Verdicts on the 261 commits: 72 land as-is, 89 land after a fix, 41 wait on his answer, 59 dropped.
+      The pile does NOT contain the empty-audio export fix (#604/#215). When ChatGPT's fix for it arrives, it lands before B1.
+
+      **Already done by the PM (5 Oct):** the pile is copied into our repo, so /private/tmp being wiped loses nothing. `refs/pile/codex-690-reviewed` = `6ed01d4d` (the reviewed tip, which these batches name) and `refs/pile/codex-690` = ChatGPT's live tip (it keeps adding, linearly on top). Never write in ChatGPT's clone. Refresh with `git fetch /private/tmp/freemotion-reviewed-local-20261005 codex/690-reviewed-local:refs/pile/codex-690`.
+
+      **First batch to land, after the current Simple-mode release: B1, "saving, importing, offline and small app fixes" (14 commits).**
+      This batch does not touch compositor.js or collab-core and needs no schema bump. Land it before Simple Phase 2, which rewrites history.commit() and FM.replaceMedia.
+      Apply in this order:
+      `52843cc2 9cd5923c a4de4183 e808c3c2 b48cb48f f1ac5fa8 e987e4f3 2e5e0cf0 70797f4c 1fdd128b 5e8337da b69c5795 5cf39d11 d662aa35`
+      Apply each one uncommitted with:
+      `git show --binary --format= <sha> -- . ':(exclude)outside' ':(exclude)index.html' ':(exclude)tests/tests.js' | git apply -3 --index`
+      Paste each test into tests.js as a block (never union-merge). Bump each touched file's ?v= once from live.
+      Fixes required before shipping B1:
+      - 2e5e0cf0: exportFile must fall back to IndexedDB, or "no longer stored" is sometimes false.
+      - 70797f4c: buildBackup must cap fonts at _backupEmbedLimit, not Infinity (iPhone memory). Keep #1038 open.
+      - f1ac5fa8: add a rejecting-fetch test case. Keep #1042 open.
+      - b69c5795: fix before landing. Do not resync across a split (the song goes silent after the cut). Remap keyframes only on a speed change or a move. Add split, trim and move tests. Bump audio-tools ?v= from live 7.
+      - d662aa35: leave out the sw.js?v=1 register change (the exclude above already does).
+      - Every test is tagged item 'TBD'. Log B1 as one hunt-tagged REQUESTS entry and use its number. 9cd5923c+a4de4183 close #1051. They do NOT close #1040.
+      Tests: the batch's own tests, plus 888, 915, 1051, SW 306/430 and the karaoke tests, at 900 and --width 380. Then ship.sh.
+      What he sees: honest warnings when a file is missing footage or fonts; broken project files refused cleanly; Remove Vocals stays in sync.
+
+      **After B1:**
+      - B2: keyframed Speed stops jumping. 26 commits; needs v17.23 shipped. Fix Glow Scan's travel branch first.
+      - B3: preview matches export, plus effect memory. 12 commits; Unsharp Protect colour must default to 0.
+      - B4 and B5: opt-in controls on existing effects. Before/after sheets.
+      - B6: 13 new effects, picture sheet.
+      - B7: 4 sound packs, listening page.
+      - B8: C31 stills half, squashed, low priority.
+      Fonts, worker export, shapes and the other new features wait on his answers in LAND-LIST.md §3.
+      Drop all of T08, T14, T27, T30, T33 and T39, plus the merges. v17.23 or live already has them, or they are only notes.
+
+      ❓ASK (his questions, recommended answers in LAND-LIST.md §3; none blocks B1–B5):
+      - Fonts: yes, but keep old titles unchanged.
+      - ChatGPT's 12 drawn fonts: none until he has seen a sheet.
+      - Shapes: keep today's.
+      - Worker export: after #604.
+      - Colour pack, audio tools, audio effects, Filter layer tile, Overdrive sun, Stripes smoothing, Poster Print.
+
+      **Two newer ChatGPT commits beyond the reviewed tip are being verified by the PM now:** `f25e15d3` "Guard empty AAC output before MP4 muxing" (the empty-audio-track export defect; may be his no-sound bug #215/#604/#677) and `3170a94c` "Keep panorama canvas within persisted size limits" (batch-2 §1b.2). If they verify, they land FIRST, before B1. A follow-up block will say.
+      ❓ASK (his, none blocks B1–B5; recommended answers in tools/design/chatgpt-tasks/pile/LAND-LIST.md §3): fonts, ChatGPT's 12 drawn fonts, shapes, worker export, colour pack, audio tools, audio effects, Filter layer tile, Overdrive sun, Stripes smoothing, Poster Print.
+
+- [ ] **1069 — Land ChatGPT batch B1: saving, importing, offline and small app fixes (14 commits, with the five fixes the land list names) (hunt MEDIUM #1069)** (5 Oct — the PM's land list, #1068; NOT his words)
+      **STATUS: 🟢 READY after the #1013/#1014 pair lands**
+      Order and fixes: #1068's block (52843cc2 … d662aa35; fix 2e5e0cf0, 70797f4c, f1ac5fa8, b69c5795; leave out d662aa35's sw.js change). Its tests are tagged 'TBD' in the pile — retag them 1069. 9cd5923c + a4de4183 close #1051, not #1040.
+
+- [ ] **1070 — The test browsers play sound through his speakers: add --mute-audio** (5 Oct, ~22:28 AWST, via INBOX — his words)
+      Moved from INBOX.md whole:
+      ### 05 Oct 2026, ~22:28 AWST — Test browsers play sound through his speakers: add --mute-audio
+
+      **His words (verbatim):** "Also i think when u do testing you play audio noises but for some reason i hear them out of my speakers which means i have to constantly have my pc muted. I dont mind if theres a genuine need for this and no fix but if theres a way for this to stop playing for me then lmk"
+
+      **Logger's plan (not his words).** Headless Chrome still plays sound through the Mac's real output device. `tests/_cdp.py`'s `launch()` has no `--mute-audio`, so every suite and ship pass plays test tones aloud.
+      - **Change:** add `"--mute-audio",` to the flag list in `tests/_cdp.py` `launch()`, beside the two WebRTC flags, with a one-line comment quoting him. Make it AFTER v17.23 lands, never mid-ship: the 380 pass re-launches `_cdp.py`.
+      - **Measured by the PM, ~22:25, in a standalone headless Chrome:** with `--mute-audio`, a real-time AudioContext reports `running` and its clock advances 1.13–1.15 s over a 1.2 s wait. An AnalyserNode reads RMS 0.704–0.710 off a unit sine, the correct value of 1/√2. OfflineAudioContext renders a peak of 1.0. That was 4 of 4 muted runs, identical to unmuted. One earlier cold-start run had the clock not yet started, in a fresh profile, unrelated to the flag. So the flag mutes the output and leaves what the tests measure alone.
+      - **Proof before shipping:** run every audio, sound, export-audio and voice test with `?only=` at 900 and 380, and confirm the same results as without the flag. If any `voice:` test depends on the real output device, that would show here. Bring it in with the next release; it is test-harness only, so log it `UNPROVABLE: harness flag, verified by the audio-test pairing`.
+      - **ChatGPT has been told** to add the same flag to its own Chrome launches.
+      Clauses (his):
+      1. [ ] Test runs make no sound on his Mac (if there is a genuine need and no fix, tell him).
+      🔨 **6 Oct ~01:40 — built and checked, ships with the next release:** `--mute-audio` is in tests/_cdp.py's Chrome flags (a comment quotes him). It mutes only the OUTPUT; nothing in the app uses speechSynthesis, which would bypass it. Checked on the 290 audio / voice / export tests at 900 and 380: 288/290 with the flag, and the SAME two fail the same way without it in the same partial run (‘opening the export dialog stops the transport’ cannot start the transport outside the full suite; 914.9 adds no undo step after it) — both pass in the full suite, so the flag changes nothing measurable. One more thing it may help: the run WITHOUT the flag froze for 36 minutes on a sound test (986 C12), the coreaudio stall that has hung runs before; the muted run did not. The log line will say UNPROVABLE: a harness flag — sound out of the Mac's speakers is not something the suite can hear.
+- [ ] **1071 — Move the work to his more powerful Windows laptop (another time, not tonight), after a clean reset; keep his files** (5 Oct, ~22:40 and ~22:50 AWST, via INBOX — his words)
+      Moved from INBOX.md whole:
+      ### 05 Oct 2026, ~22:40 AWST — Move the work to his more powerful laptop (another time, not tonight)
+
+      **His words (verbatim):** "also i have a way more powerful laptop with lots of storage, i just havent been using it coz its impractical to bring around, could have a virus ( my computer nerd friend whos really smart found one on my pc recently and got rid of it, might be worth you having a gander). but if we switch to it we can just remote control from this laptop anyways so it wont lose and practicality. What do you say, worth switching? not tonight ofc but another time"
+
+      **Logger's plan (not his words). PM's recommendation: yes, worth it. The machine is today's bottleneck.**
+      - **Measured on this Mac, 5 Oct:**
+        - 6 cores and 8 GB RAM, with swap at 5.4 of 6 GB.
+        - 8–9 GB of disk free.
+        - A suite pass takes 45 min and a ship ~90.
+        - Timing-sensitive collab tests flake under load, and seven v17.23 attempts were refused in one evening.
+      - **Expected on a stronger machine:**
+        - Faster passes.
+        - The desktop and 380 passes can run side by side instead of one after the other.
+        - ChatGPT's browser checks can run during a ship.
+        - No disk squeeze.
+      - **❓ASK (him, when he next has it out):** the model, or a photo of its About / System Information page. Is it Windows or a Mac?
+        - The tooling is bash + python with macOS-isms (`stat -f`, `/Applications/Google Chrome.app`, `DEVELOPER_DIR`, the iCloud inbox path). On a Mac it moves as-is. On Windows it runs under WSL2, after a small porting pass the PM will scope first.
+      - **Virus first, before anything sensitive goes on it** (his GitHub SSH key, which can push to the live site; his logged-in Claude and ChatGPT accounts):
+        - Recommended: reset or reinstall the OS fresh. After a known infection that is the only reliable "clean".
+        - If he would rather not: the PM does a check when it is set up (startup items, scheduled tasks, unusual processes and network connections, a full plus offline Defender scan), and says plainly that a check is weaker than a fresh install.
+      - **Remote control:** keep this Mac as the screen.
+        - The work runs on the new machine: the Claude desktop app's Remote Control, or Screen Sharing / Chrome Remote Desktop.
+        - The new machine must stay awake and on power. A Mac uses `caffeinate` or the app's keep-awake; Windows uses its power settings.
+      - **Move order (one evening):** fresh OS → Chrome, git, python, Claude app, Codex app → clone from GitHub (not a copy of this disk) → new SSH key added to GitHub → run one full suite to measure it → switch the loop over → retire this Mac's loop.
+      ### 05 Oct 2026, ~22:50 AWST — UPDATE to the powerful-laptop block: it is Windows; he wants to keep his files
+
+      **His words (verbatim):** "its a windows laptop, the only reason i dont want to reset is i have some files and stuff on it i dont want to lose, but surely i can put that on an external storage without worries of virus coming through? well the external storage could be infected to as ive used it lots. may be worth reseting the storage drive first as well, but by plugging it in i could be letting a virus get into it."
+
+      **Logger's plan (not his words).** ✅ The OS question in the earlier block is answered: **Windows**, so the tooling runs under WSL2 after a porting pass that the PM scopes before the move. His files survive the reset this way:
+      1. **Scan before copying.** Run a Microsoft Defender full scan, then a Defender Offline scan. Both are built in.
+      2. **Copy only personal files** (photos, videos, music, PDFs and documents) onto the external drive. Leave out programs and installers (`.exe .msi .bat .cmd .ps1 .vbs .js .scr .lnk .jar .iso`), macro Office files (`.docm .xlsm`), and zips containing those. Programs get reinstalled from the official sites.
+      3. **Reset** with "Remove everything" plus "Clean the drive", or use a fresh install from Microsoft's USB tool.
+      4. **Bring the files back.** After the reset, scan the external drive with Defender before opening anything on it, then copy back. Never run a program from the old drive.
+
+      On his drive worry: a file on a USB drive does nothing until it is OPENED or RUN. Windows has not auto-run USB drives since Windows 7, and photos and documents are not programs. The Mac is also a safe place to plug the drive in, because Windows viruses cannot run on macOS.
+      BUILT OUT UNTIL HE brings the laptop out (the PM scopes the WSL2 porting pass first; his files go via a scanned external drive, then a reset).

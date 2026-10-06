@@ -1,0 +1,285 @@
+[
+ {
+  "file": "01-first-video",
+  "verdict": "fix",
+  "steps": [
+   {
+    "n": "1",
+    "ok": true,
+    "problem": "Correct. #hm-new has aria-label \"New project\" and is a 58px round button (48px on the phone), centred at the bottom of Home. Home opens on the Projects tab, so the + opens the New project dialog. On the Templates or Elements tab it would open a different menu. The step could also say where the button is.",
+    "correct_text": "On the home screen, tap the round + button at the bottom (New project).",
+    "evidence": "index.html:716; styles.css:5602, 6990, 7600; js/home.js:83 (tab='projects' by default), 2345-2370 (newFromTab), 3231"
+   },
+   {
+    "n": "2",
+    "ok": true,
+    "problem": "Mostly right. The suggestion \"Project N\" is pre-filled. On a phone, tapping the field clears it and shows it as a placeholder, and leaving the field empty still uses \"Project N\". The section is labelled \"Aspect ratio\", not shape. The tile reads 9:16 with \"Phone\" under it, and it is already selected by default (unless a different ratio was used last time).",
+    "correct_text": "Type a name, or leave the suggested one. Under Aspect ratio, 9:16 (Phone) is already picked for a phone video.",
+    "evidence": "index.html:719-724; js/home.js:3144 (default 9:16), 3165-3169 (Project N suggestion), 3181 (empty = suggestion), 3319-3325"
+   },
+   {
+    "n": "3",
+    "ok": true,
+    "problem": "Correct. #hm-create reads \"Create\". createFromDialog creates the project and calls FM.home.close, which opens the editor. The cited line is about 2 lines off (3191).",
+    "correct_text": "",
+    "evidence": "index.html:770; js/home.js:3179-3192"
+   },
+   {
+    "n": "4",
+    "ok": false,
+    "problem": "The text is exact, but the control is not a bar. In an empty project on a phone (<=700px), the add row fills the whole timeline: a big round coloured + (64px) sits in the middle with the label under it, at min(52vh,300px) tall. Calling it a \"bar\" sends people looking for a thin strip. The label only says this in an empty project; after the first import it changes to \"Tap to add a layer\". The sheet's title is \"Add\", and with motion on it swings up rather than slides.",
+    "correct_text": "Tap the big round + in the middle of the empty timeline (it says Tap here to start creating under it). The Add menu comes up.",
+    "evidence": "js/timeline.js:2794-2796 (addRowLabel), 52 (isPhone = max-width 700px), 3420 (tl-addrow--empty), 3452, 3483-3485 (openFromArea); styles.css:8825-8829 (min-height), 8921-8934 (64px plus, label 15px); index.html:653"
+   },
+   {
+    "n": "5",
+    "ok": true,
+    "problem": "Correct and needed. The first time, the menu opens on the Elements tab (TABS[0]). After that it reopens on whichever tab was used last. Tabs in order: Elements, Shape, Media, Audio, Template, with text labels shown on a phone. One small catch: taps on the menu are ignored for about 300-360ms while it is still arriving, so a very fast tap does nothing.",
+    "correct_text": "",
+    "evidence": "js/addmenu.js:238, 377 (key 'media' label 'Media'), ~1012 (active = remembered || TABS[0]), 1454-1455; styles.css:8857 (#add-sheet.is-arriving * pointer-events:none)"
+   },
+   {
+    "n": "6",
+    "ok": true,
+    "problem": "The label \"Import media\" is exact (the first pinned tile), and tapping it opens the file picker (accept video/image/audio). The tutorial leaves out what the user then sees: the Add menu closes, and the new clip is selected automatically. Its editing panel opens docked under the timeline, and the top bar changes to the clip's name with duplicate, delete and more buttons. That matters for step 8.",
+    "correct_text": "Tap Import media, then choose a video or photo from your phone. It lands on the timeline already selected, with its editing options open underneath.",
+    "evidence": "js/addmenu.js:423, 58-69 (pickFiles/fileImport), 1143 (o.add(); after()); js/mobile.js:386 (onAfterAdd: closeAdd), 90-92 (selection opens and docks the sheet); js/app.js:3099-3100 (selectedId = new layer)"
+   },
+   {
+    "n": "7",
+    "ok": true,
+    "problem": "Correct. #time-readout is the play button: a tap starts playback after a 240ms wait, and a tap while playing pauses at once. It reads mm:ss:ff, starting at 00:00:00. It stays visible while the clip is selected, and #transport is on the tap-away KEEP list, so tapping it does not deselect. Holding it for 550ms toggles looped playback instead, which could surprise someone who presses slowly. It is the pill in the middle of the button row between the picture and the timeline.",
+    "correct_text": "To watch it, tap the time counter in the middle of the row under the picture (it reads 00:00:00 at the start). Tap it again to pause.",
+    "evidence": "index.html:557; js/app.js:725 (format), 6733-6790 (tap/hold handlers), 9059 (KEEP includes #transport)"
+   },
+   {
+    "n": "8",
+    "ok": false,
+    "problem": "FAILS on a phone at this point in the flow. After step 6, the imported clip is still selected, which sets body.m-editing, and that hides the Export button. The top bar shows the clip header (back arrow, clip name, parent, delete, more) and no up-arrow button. The user has to deselect first: tapping the back arrow (top left) once deselects. Tapping it a second time goes to Home. Once deselected, Export is the up-arrow-over-a-line button at the right end of the top bar.",
+    "correct_text": "Your clip is still selected, so the top bar shows its name instead of the project buttons. Tap the back arrow at the top left once to close the clip's options. Then tap Export, the up-arrow button at the top right.",
+    "evidence": "js/app.js:3099-3100 (new layer selected), 1007 (m-editing when exactly one layer selected on phone); styles.css:4214 (body.m-editing #m-export { display:none }), 4211-4216; index.html:338 (#m-back), 395 (#m-export); js/mobile.js:347 (back = deselect when m-editing), 350 (otherwise back = Home), 365 (m-export clicks #btn-export)"
+   },
+   {
+    "n": "9",
+    "ok": true,
+    "problem": "Correct for a first export. The dialog is titled \"Export\", and the button reads \"Export MP4\" only while the format is MP4, which is the first and default option. If the format was changed in an earlier export, the label changes (Export GIF, Save frame, etc.). Progress shows in an \"Exporting\" card with a bar and a Cancel button.",
+    "correct_text": "",
+    "evidence": "index.html:845, 853-855 (format list, mp4 first), 958; js/app.js:5894-5896 (label per format), 6952-6956; index.html:798-813 (Exporting overlay)"
+   },
+   {
+    "n": "10",
+    "ok": true,
+    "problem": "Exact. For MP4, the run ends on the #export-ready card titled \"Export ready\", with a first-frame preview, size/length/sound details, and Discard and Save buttons.",
+    "correct_text": "",
+    "evidence": "index.html:830-842; js/app.js:6193 (onReady: showExportReady), 6242-6330"
+   },
+   {
+    "n": "11",
+    "ok": true,
+    "problem": "Fine on iOS and Android Chrome: Save calls navigator.share with the file. If the browser cannot share files, deliver() quietly downloads the file and no sheet appears. If the user dismisses the sheet, the Export ready card stays up with Save live again, so they can retry.",
+    "correct_text": "In the sheet your phone shows, choose the option that saves the video. If no sheet appears, the video has gone to your Downloads. If you close the sheet by mistake, tap Save again.",
+    "evidence": "js/exporter.js:66-75 (deliver: share or download, 'cancelled' on AbortError); js/app.js:6304-6315 (cancelled keeps card, re-enables Save)"
+   },
+   {
+    "n": "On a computer",
+    "ok": false,
+    "problem": "Two of the four claims are wrong. (a) The top-bar \"Import media\" button #btn-import is inside #topbar-extra with style display:none, so there is no Import media at the top. On a computer, Import media is the tile in the Add panel's Media tab (the panel shows whenever nothing is selected, and it opens on Elements the first time). (b) Export is not at the top: above 700px, pcTransportLayout moves #btn-export out of the top bar to the far right of the transport row (the row with the time counter, under the picture). Drag-and-drop works (window drop handler), and so do clicking the counter and pressing Space.",
+    "correct_text": "On a computer: drag a video or photo onto the picture, or click the Media tab in the Add panel and then Import media. Click the time counter or press Space to play. Export is the button at the right end of that same row, under the picture.",
+    "evidence": "index.html:279-281 (#topbar-extra style=display:none holds #btn-import); index.html:423 (drop hint); js/app.js:7634-7638 (pcTransportLayout, min-width 701px), 7737 (moves btn-export into #t-far), 8730-8741 (window drop), 8900 (Space)"
+   },
+   {
+    "n": "Tip",
+    "ok": true,
+    "problem": "Correct. Every import is added to the media library, and library tiles appear in the Media tab after the pinned buttons, below a divider. One tap calls FM.mediaLib.use and adds the clip again with no picker.",
+    "correct_text": "",
+    "evidence": "js/app.js:3108-3109 (mediaLib.add on import); js/addmenu.js:157-166 (libEntries, mediaLib.use), 458-461, 1103-1107 (pinned/library split)"
+   },
+   {
+    "n": "If it doesn't work",
+    "ok": false,
+    "problem": "\"Tap it again\" is not possible as written. Tapping Import media closes the Add menu straight away (onAfterAdd = closeAdd), so after backing out of the picker the menu is gone and the user has to reopen it. Also, a very quick tap while the menu is still arriving is deliberately ignored, which is another way \"nothing happens\".",
+    "correct_text": "If you tap Import media and nothing seems to happen, you may have backed out of your phone's picker, or tapped before the menu finished opening. Tap Tap here to start creating again, then Media, then Import media, and pick a file.",
+    "evidence": "js/mobile.js:386 (onAfterAdd: closeAdd); js/addmenu.js:1143; styles.css:8857 (#add-sheet.is-arriving); js/timeline.js:3340-3346 (guardArrival)"
+   }
+  ],
+  "missing": "Most important: after importing on a phone, the new clip is auto-selected. Its editing panel opens, and the top bar swaps the project buttons, Export included, for the clip's name, parent, delete and more buttons. Without a step telling the user to tap the back arrow once to deselect, a beginner cannot find Export at step 8. They should also be warned that tapping the back arrow a second time goes to Home. Second: if the browser cannot share files, Save downloads the video and no share sheet appears. The tutorial should say so.",
+  "summary": "Steps 1-3, 5-7 and 9-11 hold against b46b47d3. The labels \"New project\", \"Create\", \"Media\", \"Import media\", \"Export MP4\", \"Export ready\" and \"Save\" are exact, and tapping the time counter plays and pauses. The phone flow breaks at step 8. The imported clip stays selected (app.js:3099-3100), which sets body.m-editing (app.js:1007), and styles.css:4214 hides #m-export in that state, so the up-arrow Export button is not on screen until the user taps the back arrow once. Step 4 calls the empty-timeline start area a \"bar\", but it is a big centred + filling the timeline. The \"On a computer\" paragraph is wrong twice: the top-bar Import media button is inside a display:none container (index.html:279-281), so it actually lives in the Add panel's Media tab. Export is moved by JS into the right end of the transport row (app.js:7737), not the top. The troubleshooting line says to tap Import media again, but the Add menu has already closed. All of these are fixable by rewording and one inserted step, so the verdict is fix, not redo."
+ },
+ {
+  "file": "02-trim-and-split",
+  "verdict": "fix",
+  "steps": [
+   {
+    "n": "1",
+    "ok": true,
+    "problem": "True. A clean tap (no movement) selects on pointerup, and on a phone the sheet is derived from the selection, so it opens and docks under the clip. One thing the step leaves out: on a phone the timeline also shrinks to show only that clip's row while it is selected (the solo view). A new user may think the other clips have gone.",
+    "correct_text": "",
+    "evidence": "js/timeline.js:2192 comment 'A clean tap selects (pointerup)'; js/timeline.js:~5503 `if (!ct.moved) ... FM.selectLayer`; js/mobile.js:48 syncSheet -> open() + dockSheet(); js/mobile.js:271-293 dockSheet places the sheet under the last track row; js/app.js:1007 m-editing for exactly 1 selected on phone; js/timeline.js:2838 soloLayerId"
+   },
+   {
+    "n": "2",
+    "ok": true,
+    "problem": "True. The playhead (#tl-centerline) is fixed by CSS at the centre of the screen and the content scrolls under it. A horizontal drag on the clip or on the empty lane scrubs. Small risk: if the finger slows down and stays still on the clip for about 0.35s plus 150ms, the drag turns into a clip move. Worth a short warning.",
+    "correct_text": "",
+    "evidence": "js/timeline.js:11-16 'fixed-centre playhead \u2014 now UNIVERSAL'; styles.css:3386-3400 #tl-centerline left: calc(50vw - --tl-panel-left); js/timeline.js:5266-5315 a clipTap horizontal drag calls FM.scrubTime"
+   },
+   {
+    "n": "3",
+    "ok": false,
+    "problem": "There are two errors. (a) On a phone these buttons are icons only. 'Split at playhead' exists only as the button's title (a tooltip), so the user never sees those words. (b) The three buttons (trim start \u00b7 split \u00b7 trim end) only exist while the playhead is inside the selected clip. When the playhead is before or after the clip, the row holds two different buttons instead: 'Move clip \u2026 to the playhead' and 'Extend the \u2026 of the clip to the playhead'. So the 'middle of the three' is not there. Step 2 never tells the user to put the playhead over the clip. Also, after a split the right-hand piece becomes the selected one.",
+    "correct_text": "Slide the timeline until the playhead line is over the clip. A row of three icon buttons sits at the top of the panel. Tap the middle one (a line with arrows pointing out to both sides) to cut the clip in two at the playhead. The right-hand piece is selected afterwards.",
+    "evidence": "js/inspector.js:3568 `const side = FM.clipPlayheadSide(layer)`; 3570-3603 side != 0 builds only the qr-nudge Move/Extend pair; 3611-3613 the three qr-trim buttons only in the else branch; 3546 `b.title = title` with an svgIcon body and no text; styles.css:3221-3225 .qr-btn is icon-only (svg 18px); js/app.js:4799-4804 clipPlayheadSide; js/app.js:5090 `FM.scene.selectedId = B.id` after split"
+   },
+   {
+    "n": "4",
+    "ok": false,
+    "problem": "The position (left) and the action are correct. But the button only exists while the playhead is inside the clip, and its name is not shown on a phone. The step also follows step 3 directly. Straight after a split the playhead sits exactly on the cut, at the start of the newly selected right piece, so clipPlayheadSide returns -1 and the row shows the two Move/Extend buttons, not three. A user following in order will not find a 'left button of three'.",
+    "correct_text": "To cut away everything before the playhead, put the playhead inside the clip and tap the left button of the three (a bracket shape next to a line). If you've just split, slide the playhead into a piece first: right after a split it sits exactly on the cut, so the three buttons aren't shown.",
+    "evidence": "js/inspector.js:3611 'Trim start to playhead' (title only); js/timeline.js:84 clipCutTargets requires FM.time strictly inside the clip; js/timeline.js:86-104 clipTrimStart; js/app.js:4802 `t <= layer.start + 1e-4` returns -1; js/app.js:5090 the right piece is selected after a split"
+   },
+   {
+    "n": "5",
+    "ok": false,
+    "problem": "Same issue as step 4. The right position and action are correct, but the button only appears while the playhead is inside the clip, and the name 'Trim end to playhead' is never shown on a phone.",
+    "correct_text": "To cut away everything after the playhead, put the playhead inside the clip and tap the right button of the three (a line next to a closing-bracket shape).",
+    "evidence": "js/inspector.js:3613 'Trim end to playhead' (title only, icon path M18 4v16M18 4h-4M18 20h-4M10 4v16); js/timeline.js:105-119 clipTrimEnd; js/inspector.js:3570 when the playhead is outside the clip, the buttons are swapped for Move/Extend"
+   },
+   {
+    "n": "6",
+    "ok": true,
+    "problem": "Confirmed. On a selected clip the grips are 13px white caps with a chevron, sitting just outside each edge. A touch must hold still (moving more than 8px cancels) for 300ms. The cap then turns the accent teal and the trim follows the finger. Small improvements: say 'turns teal' rather than 'lights up', and tell the user to slide until the edge is on screen. On a long clip the far edge may be off screen or under the track-head column.",
+    "correct_text": "",
+    "evidence": "styles.css:3195-3200 `.clip.sel .clip-grip { background:#fff; width:13px }`; styles.css:3206 `.clip-grip.armed { background: var(--accent) }` (--accent #29d9bb, styles.css:19); js/timeline.js:2322 ARM_MS = 300; js/timeline.js:~2373 the move watcher disarms past 8px; js/timeline.js:~2392 classList.add('armed') then beginTrim"
+   },
+   {
+    "n": "7",
+    "ok": false,
+    "problem": "There is a real trap in this flow. A selected VIDEO clip that has unused footage gets a \u21c4 'Slip' pill centred on it, 44x26px, exactly where a thumb lands. Any clip trimmed in steps 4-6 has unused footage. A touch-hold on that pill arms after 300ms, before the clip's own 350ms move hold. Dragging then slides the footage inside the clip instead of moving the clip. Also, holding works on any unlocked clip, not just a selected one, and the hold needs the finger still for about 0.35-0.5s.",
+    "correct_text": "To move a clip, press and hold it (not on the \u21c4 button in its middle) and keep your finger still for about half a second, then drag it left or right. The \u21c4 button does something else: it slides the footage inside the clip while the clip stays put.",
+    "evidence": "js/timeline.js:2428 the slip pill only on the selected video clip with slack (m.duration - advTotal > 0.05); styles.css:2267-2272 .clip-slip left:50% top:50% min-width 44px; js/timeline.js:2467 slip arms at FM._trimArmMs || 300 and tears down clipTap; js/timeline.js:2207-2265 clip move needs the 350ms timer plus 150ms of stillness; js/timeline.js:2196-2203 any unlocked clip, selected or not"
+   },
+   {
+    "n": "On a computer",
+    "ok": false,
+    "problem": "(a) S splits only when the playhead is inside the selected clip. When the playhead is off the clip, S STRETCHES the clip's near edge out to the playhead, which is a different and surprising edit. (b) 'Drag the middle to move it': on a selected video clip with unused footage, the middle holds the \u21c4 slip pill, and a mouse press on it slips immediately (no hold for a mouse). (c) The cited index.html:576 'Split clip at playhead (S)' button is inside #transport-extra, which is display:none, so no such visible button exists. The key itself is real (app.js KeyA/KeyS/KeyD). Edge dragging is correct: a mouse on a grip trims at once, and the grips on unselected clips are invisible 9px strips that highlight on hover.",
+    "correct_text": "On a computer: select a clip, put the playhead over it and press S to split (A trims the start to the playhead, D trims the end). If the playhead isn't over the clip, S stretches the clip out to the playhead instead. Drag a clip's edge to trim it. Drag its body (not the \u21c4 button in the middle) to move it.",
+    "evidence": "js/timeline.js:229-241 clipKeyAction: side!==0 && k==='s' -> clipExtendToPlayhead; js/app.js:~9013 KeyA/KeyS/KeyD -> FM.timeline.clipKey; index.html:574 #transport-extra style=display:none, index.html:576 btn-split inside it; js/timeline.js:~2448 a mouse pointerdown on the slip pill calls armSlip(e, true) immediately; js/timeline.js:~2357 a mouse on a grip calls beginTrim immediately; styles.css:3190-3193 grip 9px, hover highlight"
+   },
+   {
+    "n": "Tip",
+    "ok": false,
+    "problem": "'Buttons 3 to 5' refers to the tutorial's step numbers, but the buttons on screen have no numbers, so a reader will be confused. The tip also misses the most useful related fact: when the playhead is not over the clip, those three buttons are not there at all. The playhead-parking advice itself is right: the bodies re-check the current playhead.",
+    "correct_text": "Tip: the split and trim buttons cut exactly where the playhead is, so park it on the exact frame first. If the playhead is off the clip, those three buttons are swapped for two others: one moves the clip to the playhead, the other stretches its edge out to it.",
+    "evidence": "js/inspector.js:3605-3610 'the body re-checks the CURRENT playhead (clipCutTargets)'; js/inspector.js:3570-3603 Move/Extend pair when side != 0; js/inspector.js:6999-7001 the row rebuilds as the playhead crosses an edge"
+   },
+   {
+    "n": "If it doesn't work",
+    "ok": false,
+    "problem": "'You let go too early' is wrong. The failure is starting to MOVE too soon; letting go does not cause a scrub. 'Until it lifts' is a false visual claim. A clip grabbed for a move gets no visual change at all, no lift, shadow or colour (only navigator.vibrate(10), and Safari on iPhone does not support vibrate), so the user waits for a signal that never comes. 'The same goes for the edge handles' is half right: the handles DO show a signal, they turn teal.",
+    "correct_text": "If it doesn't work: if dragging a clip just slides the timeline, you started moving too soon. Keep your finger still on the clip for about half a second, then drag. The clip won't change colour; it just starts following your finger. For the edge handles, wait until the handle turns teal, then drag.",
+    "evidence": "js/timeline.js:2211 the move needs lastMoveAt > 150ms of stillness; js/timeline.js:5269-5279 any travel past 8px sets moved=true and kills the hold (scrub instead); js/timeline.js:2261 the only grab feedback is navigator.vibrate(10); no 'lift'/'moving' class anywhere in timeline.js or styles.css (grep); styles.css:3206 the grip .armed colour"
+   }
+  ],
+  "missing": "The guide needs two warnings: (1) The playhead must be over the clip for the three cut buttons to appear. Otherwise the row shows Move-to-playhead and Extend-to-playhead, and right after a split the playhead sits exactly on the cut, so the user has to slide into a piece first. (2) On a selected video clip with unused footage (which any trimmed clip has), the \u21c4 Slip button sits in the middle, and holding or dragging it slides the footage instead of moving the clip. That affects step 7 on the phone and 'drag the middle' on a computer. It is also worth saying that after a split the right-hand piece is selected, that Undo reverses a cut, and that on a phone a selected clip shows alone in a one-row timeline.",
+  "summary": "The basic flow is right: tap to select opens the docked sheet, the centre playhead is fixed, the trim/split row reads left to right as trim start, split, trim end, the edge grips need a 300ms hold and turn teal, and a clip moves after a still hold. But several claims fail for a real phone user. The three cut buttons only exist while the playhead is inside the clip; outside it, and right after a split, they are swapped for Move/Extend buttons. Their names ('Split at playhead' etc.) are tooltip titles that never show on a phone. Step 7 and the computer's 'drag the middle' run into the \u21c4 Slip pill on any trimmed video clip, which slides the footage instead of moving the clip. On a computer, S extends the clip rather than splitting it when the playhead is off the clip. The troubleshooting line's 'let go too early' and 'until it lifts' are wrong: there is no lift visual, only a vibration that iPhones don't produce. All of this can be fixed by rewording."
+ },
+ {
+  "file": "03-glow-and-shadow",
+  "verdict": "fix",
+  "steps": [
+   {
+    "n": "1",
+    "ok": true,
+    "problem": "Correct. On a phone, tapping a clip selects it and the edit sheet slides up by itself, starting on the card grid for a new layer. Every visual layer type has an Effects card labelled \"Effects\". The cited line 2246 is a heading that gets removed in this view, so the card label at 2702 is the real source.",
+    "correct_text": "",
+    "evidence": "js/inspector.js:2702 {key:'effects',label:'Effects'}; js/inspector.js:3796-3824 catsForBase keeps 'effects' for every visual type; js/inspector.js:7091 a new layer resets view to 'home'; js/mobile.js:23-55 syncSheet opens the phone sheet from the selection; js/inspector.js:4028-4029 card click sets view='effects'"
+   },
+   {
+    "n": "2",
+    "ok": true,
+    "problem": "Exact wording, and the button sits directly under the (empty) effect list, so it is on screen.",
+    "correct_text": "",
+    "evidence": "js/inspector.js:2284-2285 el('button','fx-add-btn','+ Add Effect') opens FM.fxBrowser.open(layer); js/inspector.js:6440-6463 effects view renders effectsSection"
+   },
+   {
+    "n": "3",
+    "ok": true,
+    "problem": "The flow works. The search button is a magnifying-glass icon with no text (aria-label \"Search effects\"). Tapping it shows a \"Search effects\u2026\" box and focuses it. A tile tap on phone and PC picks it (sheet mode) and paints a \"1\" badge. Small nit: calling it the magnifying-glass button would help a phone user.",
+    "correct_text": "Tap the magnifying-glass button at the top, type Light Glow, and tap its tile. A 1 appears on it.",
+    "evidence": "index.html:781 fxb-search-btn aria-label 'Search effects'; js/fx-browser.js:1914 toggles and focuses the input; js/fx-browser.js:1686-1704 search matches the label; js/fx-browser.js:547 sheetMode \u2192 togglePick; js/fx-browser.js:353-363 paintPick badge = index+1"
+   },
+   {
+    "n": "4",
+    "ok": false,
+    "problem": "The search box still says \"Light Glow\", so typing just adds to it. The user has to clear it first. Tapping the magnifier again hides and empties the box, so it then needs a second tap. Also, if the clip fills the whole frame (the usual case for an imported phone video), the Drop Shadow tile has a \"does nothing here\" badge. Tapping that badge shows a toast and does NOT pick the tile, because the badge stops the click.",
+    "correct_text": "Clear the search box, type Drop Shadow, and tap that tile too (a 2 appears). If the tile says \"does nothing here\", your clip fills the screen. See the note at the end, and tap the picture, not the badge.",
+    "evidence": "js/fx-browser.js:1914 the search button toggles hidden and clears the value; js/fx-browser.js:928-929 COVERS_FRAME_FX.dropshadow; js/fx-browser.js:1016-1017 deadHereWhy returns it when the layer covers the frame; js/fx-browser.js:1057-1066 badge click stopPropagation + toast; js/fx-browser.js:1048 short label 'does nothing here'"
+   },
+   {
+    "n": "5",
+    "ok": true,
+    "problem": "Exact. The bar shows Clear / Add naked / \"Add 2 effects\" once two are picked. Effects are added in tap order and the panel lands on the Effects view.",
+    "correct_text": "",
+    "evidence": "js/fx-browser.js:374 'Add ' + n + ' effects'; js/fx-browser.js:1893-1911 commit bar; js/fx-browser.js:512-538 commitPicks adds in order and calls openCategory('effects')"
+   },
+   {
+    "n": "6",
+    "ok": true,
+    "problem": "Correct. After adding, the LAST effect (Drop Shadow) is the one already open, because each add sets it as the open row. Tapping the Light Glow row header opens it and closes Drop Shadow. It might help to say Drop Shadow is open at first.",
+    "correct_text": "Drop Shadow opens first. Tap Light Glow in the list to open its controls instead.",
+    "evidence": "js/fx-browser.js:256-257 dest.forEach(e=>e._expanded=false); inst._expanded=true; js/inspector.js:1740-1753 tapping the header toggles, one row open at a time"
+   },
+   {
+    "n": "7",
+    "ok": false,
+    "problem": "\"Drag up\" is wrong on a phone. The control is a horizontal ruler: you drag it LEFT to raise the value. A vertical drag is handed to the panel, which just scrolls. The label is exact (\"Threshold softness\", 0-100%, default 0). The described result is right but subtle: it swaps the hard cut-off at the Threshold for a smooth ramp (\u00b164 brightness levels at 100%), so the edges of the glowing areas blend in.",
+    "correct_text": "Drag the ruler next to Threshold softness to the LEFT to raise it (or tap its number and type, say, 60). The edges of the glow now blend in gently instead of cutting off hard.",
+    "evidence": "js/compositor.js:420 knee 'Threshold softness'; js/inspector.js:976-990 'drag LEFT to raise the value\u2026 cur - dx'; js/inspector.js:1009-1024 vertical movement past 6px \u2192 browser scrolls; js/compositor.js:12478-12490 glow6 smoothstep across thrV\u00b1kw"
+   },
+   {
+    "n": "8",
+    "ok": false,
+    "problem": "The control is exact (an Off / On button pair). But the promised result only shows where the layer has empty or see-through pixels round it, because the halo is written only into those. On a clip that fills the frame there is no empty space and nothing visibly changes. The title example fits, a typical full-screen clip does not.",
+    "correct_text": "Next to Glow past the edges, tap On. If your clip doesn't fill the screen (a title, or a clip you've made smaller), the glow now spills into the empty space round it like a halo. On a full-screen clip you won't see a change.",
+    "evidence": "js/compositor.js:422 outside options [[0,'Off'],[1,'On']]; js/fx-registry.js:245 options \u2192 type 'segment'; js/inspector.js:1315-1330 fxSegment buttons; js/compositor.js:12441-12443 and 12500-12507 the halo is only written where alpha < 255"
+   },
+   {
+    "n": "9",
+    "ok": false,
+    "problem": "\"Raise Softness a little first\" suggests Spread is locked until you do, but Softness already starts at 6 px. Spread is greyed out and untouchable (pill: \"Only used when Softness is above 0\") only when Softness is 0. What the dependency really means: Spread is the share of the Softness that turns into solid shadow. At 100% the shadow is hard-edged and grows by the Softness amount, so more Softness lets Spread make it thicker. \"Thicker and harder\" is right. Also, Smoothness greys out at Spread 100%.",
+    "correct_text": "Open Drop Shadow. Raise Spread to make the shadow thicker and harder-edged. At 100% it is a hard shadow grown by the Softness amount, so raise Softness too for a thicker one. (If Softness is 0, Spread is greyed out.)",
+    "evidence": "js/compositor.js:644 softness def 6; js/compositor.js:645 spread overriddenBy 'softness', liveAbove 0, note 'How much of the Softness is solid \u00b7 100% = a hard shadow'; js/inspector.js:1247-1249 'Only used when Softness is above 0'; js/inspector.js:1281-1287 greyed row; js/compositor.js:7460 dsDil = Softness\u00d7Spread%"
+   },
+   {
+    "n": "10",
+    "ok": false,
+    "problem": "The label and the On button are exact, and on a smaller clip it does hide the clip and keep the shadow. But on a clip that fills the frame, Shadow only pads the shadow out to every edge the layer touches, so the whole screen turns the shadow colour (black by default). That reads as broken, and the clip-fills-the-screen note only comes after this step.",
+    "correct_text": "Tap On next to Shadow only to hide the clip and keep just its shadow. (On a clip that fills the screen, the whole picture turns black. Make the clip smaller first.)",
+    "evidence": "js/compositor.js:650 shadowonly options Off/On; js/compositor.js:7455 dsOnly; js/compositor.js:7461-7462 dsClear clears the layer; js/compositor.js:7477-7480 a touched side pads the shadow to the plate edge"
+   },
+   {
+    "n": "On a computer",
+    "ok": true,
+    "problem": "Basically true. Since queue 303 the PC uses the same pick-then-Add flow and commit bar, with the browser docked in the inspector column, and the same \"+ Add Effect\" button. Two small differences: the sliders are click-and-drag LEFT to raise, and a short inspector can show the cards as icons only (hover shows the name).",
+    "correct_text": "On a computer: it's the same. Click the clip, open Effects in the right-hand panel (hover a card to see its name if only icons show), then click + Add Effect. Drag a ruler left to raise a value.",
+    "evidence": "js/fx-browser.js:24-31 and 1941 'PC too since 303'; js/fx-browser.js:61-75 docks into #inspector-panel at min-width 701px; styles.css:5961 data-rung=icon hides .cat-label on PC; js/inspector.js:976-979 drag direction"
+   },
+   {
+    "n": "Tip",
+    "ok": true,
+    "problem": "Correct. Only pixels brighter than Threshold (0-100%, default 60%) feed the glow, so lowering it glows more of the picture.",
+    "correct_text": "",
+    "evidence": "js/compositor.js:413 threshold def 60; js/compositor.js:6786 lgL > threshold; js/fx-registry.js:383 description"
+   },
+   {
+    "n": "If it doesn't work",
+    "ok": false,
+    "problem": "The cause is right and the Position / Scale card exists. But for a typical full-screen phone clip this matters from step 4 onward (the \"does nothing here\" badge, an invisible shadow, a black screen with Shadow only, no halo from Glow past the edges), so it is too late as a closing note. It also doesn't mention the black-screen symptom.",
+    "correct_text": "Move this before step 4: 'If your clip fills the whole screen, make it smaller first in the Position / Scale card, or the shadow falls off the edges (the Drop Shadow tile will say \"does nothing here\") and Shadow only turns the screen black.'",
+    "evidence": "js/fx-browser.js:928-929; js/inspector.js:2677 'Position / Scale'; js/compositor.js:7477-7480"
+   }
+  ],
+  "missing": "Most phone users edit a clip that fills the whole frame. For that clip the Drop Shadow tile is marked \"does nothing here\", the shadow can't be seen, Shadow only turns the screen black, and Glow past the edges changes nothing. The \"make the clip smaller in Position / Scale\" step needs to come before Drop Shadow is added, not in a closing note. The sliders are horizontal rulers you drag LEFT to raise (a vertical drag scrolls the panel), and the tutorial never says so.",
+  "summary": "The flow is right and the labels match the code exactly: Effects card \u2192 + Add Effect \u2192 search \u2192 pick two (numbered) \u2192 \"Add 2 effects\" \u2192 open rows \u2192 Off/On buttons. It needs wording fixes, not a redo. Step 7 says \"drag up\", but the control is a horizontal ruler you drag left, and a vertical drag scrolls. Step 4 doesn't say to clear the old search text. Step 9's \"raise Softness first\" suggests Spread is locked, but Softness starts at 6 px, and Spread is only greyed out at Softness 0. Steps 8 and 10 promise results that only show when the clip doesn't fill the screen; on a full-screen clip Shadow only turns the screen black. So the \"make it smaller\" note has to move before step 4. The \"On a computer\" line is accurate, since the PC has used the same pick-then-Add flow since queue 303."
+ }
+]
