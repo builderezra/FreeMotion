@@ -1,5 +1,5 @@
 {
-  "_": "THE FULL-UNCHANGED SELF-TEST'S PLANTS (queue 980; DESIGN.md §0.4.5 'The gate, structurally'; the 1 Oct review). Changes Full must never get. tools/full-unchanged.sh plants each one in a COPY of the tree on every run, measures it with the groups and widths named here, and refuses PASS unless each turns the comparison red FOR ITS OWN REASON: a difference line that starts with the width and carries every string in `sig` — sig[0] says WHERE (a screen, a step, a key) and every later string must be in WHAT the line says differs (after the step's name), so a step whose name happens to contain a word cannot catch anything by its name (6 Oct: 'Bounce on a camera … frames on the ring' matched sig ['Bounce on a camera', 'frames'] on a jitter line while the planted decay drew nothing). A red that names something else is luck, not a catch — and so is a signature broad enough to be met by another change's lines (6 Oct: with the review's nineteen replayed as ONE release, 'state.doc' and 'key.state' were met by the colour plant's clipColor lines), so each names the field its own change moves. DESIGN's three (a picture margin, a toast word, the split floor) and EVERY change the 1 Oct review slipped past v1 (its blocker's nineteen: P1 overlay, P12 icon, P3 hover, P4 sheetmotion, P13 cropbar, V1 halfres, P5 shift34, Q2 key, Q3 addtab, P6 touch, P10 group, P11 uiroute, T1 speedtoast, P7 colour, P8 export, P9 bounce, R1 manifest, S1 sanitiser, E1 endnudge), DESIGN's B4 and B5 guards (matte, follow, seam), which v1 had no step for; and the review's Q1 (zoomstep: finding 4 found the timeline zoom unrecorded, so a changed zoom step was red only by accident). `groups` is always a PREFIX of the probe's order (FU1, FU2, FU3, FU6, FU4, FU5, FU7), so a plant's run reaches its group exactly as the full run did. `old` must appear EXACTLY once in `file` (tests.js '980 FU lock: every self-test plant still lands exactly once' checks it, so a plant cannot rot silently); `append` adds to the end instead.",
+  "_": "THE FULL-UNCHANGED SELF-TEST'S PLANTS (queue 980; DESIGN.md §0.4.5 'The gate, structurally'; the 1 Oct review). Changes Full must never get. tools/full-unchanged.sh plants each one in a COPY of the tree on every run, measures it with the groups and widths named here, and refuses PASS unless each turns the comparison red FOR ITS OWN REASON: a difference line that starts with the width and carries every string in `sig` — sig[0] says WHERE (a screen, a step, a key) and every later string must be in WHAT the line says differs (after the step's name), so a step whose name happens to contain a word cannot catch anything by its name (6 Oct: 'Bounce on a camera … frames on the ring' matched sig ['Bounce on a camera', 'frames'] on a jitter line while the planted decay drew nothing). A red that names something else is luck, not a catch — and so is a signature broad enough to be met by another change's lines (6 Oct: with the review's nineteen replayed as ONE release, 'state.doc' and 'key.state' were met by the colour plant's clipColor lines), so each names the field its own change moves. DESIGN's three (a picture margin, a toast word, the split floor) and EVERY change the 1 Oct review slipped past v1 (its blocker's nineteen: P1 overlay, P12 icon, P3 hover, P4 sheetmotion, P13 cropbar, V1 halfres, P5 shift34, Q2 key, Q3 addtab, P6 touch, P10 group, P11 uiroute, T1 speedtoast, P7 colour, P8 export, P9 bounce, R1 manifest, S1 sanitiser, E1 endnudge), DESIGN's B4 and B5 guards (matte, follow, seam), which v1 had no step for; and the review's Q1 (zoomstep: finding 4 found the timeline zoom unrecorded, so a changed zoom step was red only by accident). And (6 Oct, the second review) ALL SIXTEEN changes it slipped past v2 in one 'Simple release' — w440 his phone's own rule, h720 a short screen's, friendtoast a friend's edit arriving, savefield and indexfield the stored record and the Home card, reduce the reduced-motion path, darkhome a non-default Setting's look, toastpos and marktoast the toast, cogflight an animation started from script, cathover a pseudo-element's hover, ctxhover a menu item's hover, scrubrate an un-held finger, audiobr the exported sound, brightdef an effect's default, keyf2 an e.key shortcut — and hold500, the clip hold it found the probe held past; one plant in every run tools/full-unchanged.sh FU_RUNS adds (tiny320, sideways, band1226, wide1600, detail), so each run's PASS shows that run still sees; and pixels, a change only the pictures can see. `widths` are FU_RUNS labels ('380', '440x956', 'env-1280' …). `groups` is always a PREFIX of the probe's order (FU1, FU2, FU3, FU6, FU4, FU5, FU7), so a plant's run reaches its group exactly as the full run did. `old` must appear EXACTLY once in `file` (tests.js '980 FU lock: every self-test plant still lands exactly once' checks it, so a plant cannot rot silently); `append` adds to the end instead.",
   "plants": [
     {
       "name": "margin",
@@ -385,6 +385,350 @@
       "sig": [
         "Bounce across a split",
         "state.frames"
+      ]
+    },
+    {
+      "name": "w440",
+      "kind": "his phone's own rule (6 Oct review A: the skip button's margin inside min-width:400, his phone is 440)",
+      "file": "styles.css",
+      "old": "  #transport #btn-tostart { margin-right: -4px; }",
+      "new": "  #transport #btn-tostart { margin-right: 0px; }",
+      "widths": [
+        "440x956"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "#btn-tostart"
+      ]
+    },
+    {
+      "name": "h720",
+      "kind": "a short screen's rule (6 Oct review A: the view bar's gaps at max-height:720, a 1280x720 laptop)",
+      "file": "styles.css",
+      "old": "  #view-bar, #opt-bar { --sb-gap: 2px; --sb-pad: 3px; }",
+      "new": "  #view-bar, #opt-bar { --sb-gap: 0px; --sb-pad: 1px; }",
+      "widths": [
+        "1280x720"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "1280x720 fu1-",
+        "#vb-"
+      ]
+    },
+    {
+      "name": "friendtoast",
+      "kind": "a friend's edit arriving in Full (6 Oct review B, DESIGN V12: 'A friend moved N clips')",
+      "file": "js/collab-session.js",
+      "old": "          if (lid && A.cancelGesturesOn) { try { A.cancelGesturesOn(lid); } catch (e) {} }\n        }\n      }\n      keepIds = null;\n      if (A.afterApply) A.afterApply(sum);",
+      "new": "          if (lid && A.cancelGesturesOn) { try { A.cancelGesturesOn(lid); } catch (e) {} }\n        }\n      }\n      keepIds = null;\n      { const n = Object.keys(sum.layerIds).length; if (!oo.own && oo.by && oo.by !== S.mid && n) toast('A friend moved ' + n + (n === 1 ? ' clip' : ' clips'), 1800); }   // full-unchanged self-test plant: never shipped\n      if (A.afterApply) A.afterApply(sum);",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2,FU3,FU6,FU4",
+      "sig": [
+        "FU4.friend",
+        "toasts"
+      ]
+    },
+    {
+      "name": "savefield",
+      "kind": "a key in every saved project record (6 Oct review C: sceneDoc writes `ed`)",
+      "file": "js/storage.js",
+      "old": "    return { project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId, selectedIds: FM.scene.selectedIds };",
+      "new": "    return { project: FM.scene.project, layers: FM.scene.layers, selectedId: FM.scene.selectedId, selectedIds: FM.scene.selectedIds, ed: 'full' };",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "FU2 \"",
+        "stored.record"
+      ]
+    },
+    {
+      "name": "indexfield",
+      "kind": "keys on every Home card (6 Oct review C, DESIGN I15: touchCurrent writes `ed` and `clips`)",
+      "file": "js/storage.js",
+      "old": "      e.layers = FM.scene.layers.length;\n",
+      "new": "      e.layers = FM.scene.layers.length; e.ed = 'full'; e.clips = FM.scene.layers.filter(l => l.type === 'video' || l.type === 'image').length;\n",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "FU2 \"",
+        "stored.card"
+      ]
+    },
+    {
+      "name": "reduce",
+      "kind": "the reduced-motion path (6 Oct review D: the opts strip's transition under prefers-reduced-motion)",
+      "file": "styles.css",
+      "old": "@media (prefers-reduced-motion: reduce) { #opt-bar { transition: none; } }",
+      "new": "@media (prefers-reduced-motion: reduce) { #opt-bar { transition: opacity .6s ease; } }",
+      "widths": [
+        "env-380"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "env-380 fu1-",
+        "#opt-bar",
+        "transition"
+      ]
+    },
+    {
+      "name": "darkhome",
+      "kind": "a non-default Setting's look (6 Oct review D: the dark Home's top bar coloured)",
+      "file": "styles.css",
+      "old": "  html[data-home=\"dark\"][data-theme=\"glass\"] #home-screen .hm-top { background: transparent;",
+      "new": "  html[data-home=\"dark\"][data-theme=\"glass\"] #home-screen .hm-top { background: rgba(60,0,90,.55);",
+      "widths": [
+        "env-380"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "fu1-home",
+        "hm-top",
+        "background-color"
+      ]
+    },
+    {
+      "name": "toastpos",
+      "kind": "the toast's place (6 Oct review E: 24 px higher on the phone)",
+      "file": "styles.css",
+      "old": "  position: fixed; bottom: 244px; left: 50%; transform: translateX(-50%);",
+      "new": "  position: fixed; bottom: 268px; left: 50%; transform: translateX(-50%);",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "fu1-toast",
+        "#toast"
+      ]
+    },
+    {
+      "name": "marktoast",
+      "kind": "a toggle's off-words (6 Oct review E: 'Benchmark removed' reworded — no step pressed M on a benchmark)",
+      "file": "js/app.js",
+      "old": "FM.toast('Benchmark removed', 1000)",
+      "new": "FM.toast('Marker taken off', 1000)",
+      "widths": [
+        "1280"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "fu1-toast",
+        "Marker taken off"
+      ]
+    },
+    {
+      "name": "cogflight",
+      "kind": "an animation started from script (6 Oct review F: the cog's Canvas-Friends flight 460 ms spring -> 700 ms ease-in-out)",
+      "file": "js/app.js",
+      "old": "const DUR = 460, EASE = 'cubic-bezier(.2,.85,.25,1.06)';",
+      "new": "const DUR = 700, EASE = 'ease-in-out';",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2,FU3,FU6",
+      "sig": [
+        "FU6",
+        "what it animated"
+      ]
+    },
+    {
+      "name": "cathover",
+      "kind": "a hover drawn on a pseudo-element (6 Oct review G: the inspector card's hover glow)",
+      "file": "styles.css",
+      "old": ".cat-card:hover::before { opacity: 1; }",
+      "new": ".cat-card:hover::before { opacity: .35; }",
+      "widths": [
+        "1280"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "fu1-hover inspector card",
+        "::before",
+        "opacity"
+      ]
+    },
+    {
+      "name": "ctxhover",
+      "kind": "a hover on a control no toolbar hover reached (6 Oct review G: a menu item's hover colour)",
+      "file": "styles.css",
+      "old": ".ctx-item:hover { background: var(--panel-3); }",
+      "new": ".ctx-item:hover { background: #6a2c8f; }",
+      "widths": [
+        "1280"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "fu1-hover menu item",
+        "background-color"
+      ]
+    },
+    {
+      "name": "scrubrate",
+      "kind": "an un-held finger (6 Oct review H: a swipe over a clip scrubs 1.5x as far)",
+      "file": "js/timeline.js",
+      "old": "FM.scrubTime(snapT(clipTap.baseTime - (e.clientX - clipTap.startX) / pxPerSec()));",
+      "new": "FM.scrubTime(snapT(clipTap.baseTime - 1.5 * (e.clientX - clipTap.startX) / pxPerSec()));",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "swipe over a clip without holding",
+        "state.time"
+      ]
+    },
+    {
+      "name": "audiobr",
+      "kind": "the exported sound (6 Oct review I: the soundtrack 160 -> 96 kb/s)",
+      "file": "js/exporter.js",
+      "old": "    enc.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 160000 });\n    const chData = [];",
+      "new": "    enc.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 96000 });\n    const chData = [];",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "export (Export → MP4",
+        "state.encoders"
+      ]
+    },
+    {
+      "name": "brightdef",
+      "kind": "an effect's default no document carries (6 Oct review J: Brightness 1.3 -> 1.2)",
+      "file": "js/compositor.js",
+      "old": "    { type: 'brightness', label: 'Brightness', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },",
+      "new": "    { type: 'brightness', label: 'Brightness', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.2 },",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "registry.fx.brightness",
+        "default"
+      ]
+    },
+    {
+      "name": "keyf2",
+      "kind": "a shortcut written with e.key (6 Oct review K: F zooms the timeline)",
+      "file": "js/app.js",
+      "old": "      else if (e.code === 'Backslash') { e.preventDefault(); clearRegion(); }\n",
+      "new": "      else if (e.code === 'Backslash') { e.preventDefault(); clearRegion(); }\n      else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); if (FM.timeline.zoomBy) FM.timeline.zoomBy(1.5); }   // full-unchanged self-test plant: never shipped\n",
+      "widths": [
+        "1280"
+      ],
+      "groups": "FU1,FU2,FU3",
+      "sig": [
+        "FU3 \"sweep · nothing selected · KeyF\"",
+        "tlZoom"
+      ]
+    },
+    {
+      "name": "hold500",
+      "kind": "a hold threshold (6 Oct review H: the clip hold 350 -> 500 ms compared 'same as HEAD' — the probe held 600)",
+      "file": "js/timeline.js",
+      "old": "            }, 350);",
+      "new": "            }, 500);",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1,FU2",
+      "sig": [
+        "hold a clip 470 ms, then drag it (past the 350 ms clip hold",
+        "state.doc.layers["
+      ]
+    },
+    {
+      "name": "tiny320",
+      "kind": "the smallest phone's rule (max-width:360: the transport buttons 31 -> 30 px)",
+      "file": "styles.css",
+      "old": "#transport .tbtn { min-width: 31px; width: 31px; }",
+      "new": "#transport .tbtn { min-width: 30px; width: 30px; }",
+      "widths": [
+        "320x568"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "320x568 fu1-",
+        "tbtn"
+      ]
+    },
+    {
+      "name": "sideways",
+      "kind": "a touch screen in the PC layout (his phone turned sideways: hover:none past 700 px)",
+      "file": "styles.css",
+      "old": "@media (hover: none) { .cat-num { display: none; } }",
+      "new": "@media (hover: none) { .cat-num { display: inline-block; } }",
+      "widths": [
+        "956x440"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "cat-num"
+      ]
+    },
+    {
+      "name": "band1226",
+      "kind": "the small PC's band (max-width:1226: the transport band 40 -> 44 px, which v2 caught only by accident)",
+      "file": "styles.css",
+      "old": "    #transport { align-self: start; height: 40px; }",
+      "new": "    #transport { align-self: start; height: 44px; }",
+      "widths": [
+        "1024x600"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "1024x600 fu1-",
+        "#transport"
+      ]
+    },
+    {
+      "name": "wide1600",
+      "kind": "a big PC's rule (min-width:1600: the inspector column 20vw -> 21vw)",
+      "file": "styles.css",
+      "old": "  :root { --insp-w: clamp(320px, 20vw, 380px); }",
+      "new": "  :root { --insp-w: clamp(320px, 21vw, 380px); }",
+      "widths": [
+        "1680x1050"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "1680x1050 fu1-",
+        "#inspector"
+      ]
+    },
+    {
+      "name": "detail",
+      "kind": "a non-default Setting's behaviour (Detail playback: the preview's floor 1 -> 0.9)",
+      "file": "js/app.js",
+      "old": "    const floor = detail ? 1 : MIN_PREVIEW_SCALE;",
+      "new": "    const floor = detail ? 0.9 : MIN_PREVIEW_SCALE;",
+      "widths": [
+        "env-1280"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "the preview’s backing store"
+      ]
+    },
+    {
+      "name": "pixels",
+      "kind": "a change ONLY the pictures can see (a text shadow: no layout record column holds it) — so a PASS proves the screenshots still show what is drawn",
+      "file": "styles.css",
+      "append": "\n/* full-unchanged self-test plant: never shipped */\n#time-readout { text-shadow: 0 0 3px #ff2020 !important; }\n",
+      "widths": [
+        "380"
+      ],
+      "groups": "FU1",
+      "sig": [
+        "picture fu1-",
+        "px differ"
       ]
     }
   ]

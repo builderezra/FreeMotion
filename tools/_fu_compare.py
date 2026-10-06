@@ -7,14 +7,20 @@ Called by tools/full-unchanged.sh, which owns the measured numbers and the one m
     FU_FAINT_TOL_PX, FU_FAINT_CHAN   … and in at most FU_FAINT_TOL_PX where one moved by more than FU_FAINT_CHAN (a faint
                                      recolour over a large area: a panel's border a few levels lighter)
     FU_GRID_TOL         a decoded export frame's 12x12 colour grid may move by at most this many levels per cell
+    FU_AUDIO_TOL        the exported file's decoded sound: a 0.1 s window's RMS or peak (in 1/1000) may move by at most this
+    FU_BYTES_PCT        the exported file's sound track may differ in size by at most this many percent
 
-    python3 tools/_fu_compare.py REF_DIR CAND_DIR [--widths 380,1280] [--groups FU1,FU2] [--max 12] [--json OUT]
+    python3 tools/_fu_compare.py REF_DIR CAND_DIR [--widths 380,1280] [--groups FU1,FU2] [--runs '380=FU1,FU2 1280=FU1'] [--max 12] [--json OUT]
+
+A RUN is named by its label (tools/full-unchanged.sh FU_RUNS: '380', '1280', '440x956', 'env-380' …): each DIR holds
+rec-<label>.json(.gz) and shots-<label>/*.png, and every difference line starts with its label. --runs gives each label its
+own groups (the extra screens and environments measure a prefix of the probe's order, not all of it).
     python3 tools/_fu_compare.py plant NAME DIR      # plant one change from tools/full-unchanged-plants.json into DIR
     python3 tools/_fu_compare.py judge WORK          # did every plant turn it red for its own reason?
     python3 tools/_fu_compare.py measure HEAD HEAD2 MARGIN   # the numbers full-unchanged.sh carries
     python3 tools/_fu_compare.py plants              # list the plants (name, groups, widths) for the shell
 
-Each DIR holds rec-<W>.json (the probe's dump) and shots-<W>/*.png. Exit 0: identical (pictures within the tolerance);
+Each DIR holds rec-<label>.json (the probe's dump) and shots-<label>/*.png. Exit 0: identical (pictures within the tolerance);
 1: differences, the first ones printed BY NAME; 3: the instrument is broken (the probe could not drive REF, a record is
 missing, or a step FELL BACK from Full's own control to the function underneath) — never PASS on a run that did not
 measure what it says, because a step that fails the same way on both sides compares equal.
@@ -362,6 +368,12 @@ def instrument_errors(rec, w, groups):
         for k, v in (rec.get('screens') or {}).items():
             if v.get('err'):
                 out.append('%s FU1 %s: %s' % (w, k, v['err']))
+            for hk, hv in (v.get('hovers') or {}).items():
+                if isinstance(hv, dict) and hv.get('err'):
+                    out.append('%s FU1 %s %s: %s' % (w, k, hk, hv['err']))
+        reg = rec.get('registry')
+        if not isinstance(reg, dict) or reg.get('err') or not reg.get('fx'):
+            out.append('%s FU1: no registry of defaults (%s)' % (w, (reg or {}).get('err') if isinstance(reg, dict) else reg))
     for g, key in (('FU2', 'fu2'), ('FU3', 'fu3'), ('FU5', 'fu5')):
         if g in groups:
             if not rec.get(key):
@@ -369,15 +381,23 @@ def instrument_errors(rec, w, groups):
             for r in rec.get(key) or []:
                 if r.get('err'):
                     out.append('%s %s "%s": %s' % (w, g, r.get('name'), r['err']))
+    if 'FU3' in groups:
+        if not rec.get('phone') and not rec.get('fu3sweep'):
+            out.append('%s FU3: the key sweep recorded nothing on a PC pass' % w)
+        for r in rec.get('fu3sweep') or []:
+            if r.get('err'):
+                out.append('%s FU3 "%s": %s' % (w, r.get('name'), r['err']))
     if 'FU4' in groups:
         f4 = rec.get('fu4') or {}
         if not f4.get('steps'):
             out.append('%s FU4: nothing recorded%s' % (w, (' — ' + f4['err']) if f4.get('err') else ''))
         if f4.get('err'):
             out.append('%s FU4: %s' % (w, f4['err']))
-        for r in f4.get('steps') or []:
+        for r in (f4.get('steps') or []) + (f4.get('friend') or []) + ([f4['leave']] if isinstance(f4.get('leave'), dict) else []):
             if r.get('err'):
                 out.append('%s FU4 "%s": %s' % (w, r.get('name'), r['err']))
+        if not f4.get('friend'):
+            out.append('%s FU4: no edit of the friend’s was recorded' % w)
     if 'FU6' in groups:
         f6 = rec.get('fu6') or {}
         if len([k for k in f6 if k != 'function']) < 14:
@@ -388,13 +408,81 @@ def instrument_errors(rec, w, groups):
     return out
 
 
+def sound_diff(a, b, where, out, tol):
+    """The exported file's decoded sound: its rate, length and channels exact, each 0.1 s window's RMS and peak within tol."""
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        if a != b:
+            out.append('%s: %s → %s' % (where, short(a, 60), short(b, 60)))
+        return
+    if a.get('head') != b.get('head'):
+        out.append('%s: the decoded sound %s → %s' % (where, short(a.get('head')), short(b.get('head'))))
+        return
+    for c, (ca, cb) in enumerate(zip(a.get('ch') or [], b.get('ch') or [])):
+        worst, at = 0, None
+        for i, (x, y) in enumerate(zip(ca, cb)):
+            d = max(abs(x[0] - y[0]), abs(x[1] - y[1]))
+            if d > worst:
+                worst, at = d, i
+        if worst > tol:
+            out.append('%s: channel %d of the decoded sound moved %d/1000 at %.1f s (tolerance %d): %s → %s' % (where, c, worst, at / 10.0, tol, ca[at], cb[at]))
+
+
+def bytes_diff(sa, sb, where, out, pct):
+    """The exported file's sound track, in bytes: within pct % (the AAC encoder is not byte-exact run to run — 7216 and 7212
+    from one build, 6 Oct — while a lower bitrate moves it by tens of percent). Taken out of both states once compared."""
+    ta = (((sa or {}).get('out') or {}).get('mp4') or {}).get('tracks') or []
+    tb = (((sb or {}).get('out') or {}).get('mp4') or {}).get('tracks') or []
+    for i, (x, y) in enumerate(zip(ta, tb)):
+        if not isinstance(x, dict) or not isinstance(y, dict) or ('bytes' not in x and 'bytes' not in y):
+            continue
+        bx, by = x.pop('bytes', None), y.pop('bytes', None)
+        if bx is None or by is None or abs(bx - by) * 100.0 > max(bx, by) * pct:
+            out.append('%s: state.out.mp4.tracks[%d].bytes: %s → %s (tolerance %d%%)' % (where, i, bx, by, pct))
+
+
+def sweep_diff(A, B, w, out, per_step):
+    """FU3's key sweep: per key, whether it changed anything and, where it did, the state it left — against the state its
+    pass started from when the other side changed nothing, so a new shortcut reads as what it did."""
+    sa, sb = A.get('fu3sweep') or [], B.get('fu3sweep') or []
+    ba, bb = A.get('fu3sweepBase') or [], B.get('fu3sweepBase') or []
+    if ba != bb:
+        local = []
+        json_diff(ba, bb, 'the state each sweep pass starts from', local, per_step)
+        out += ['%s FU3 "sweep": %s' % (w, x) for x in local]
+    for i, ra in enumerate(sa):
+        rb = sb[i] if i < len(sb) else None
+        if rb is None:
+            out.append('%s FU3 "%s": missing on the tree' % (w, ra.get('name')))
+            break
+        local = []
+        if ra.get('name') != rb.get('name'):
+            local.append('key %s → %s' % (ra.get('name'), rb.get('name')))
+        if ra.get('err') != rb.get('err'):
+            local.append('error %s → %s' % (short(ra.get('err')), short(rb.get('err'))))
+        if ra.get('changed') != rb.get('changed') or ra.get('state') != rb.get('state'):
+            p = ra.get('pass') or 0
+            xa = ra.get('state') if ra.get('state') is not None else (ba[p] if p < len(ba) else None)
+            xb = rb.get('state') if rb.get('state') is not None else (bb[p] if p < len(bb) else None)
+            if ra.get('changed') != rb.get('changed'):
+                local.append('it changes anything: %s → %s' % (bool(ra.get('changed')), bool(rb.get('changed'))))
+            json_diff(xa, xb, 'key.state', local, max(4, per_step))
+        out += ['%s FU3 "%s": %s' % (w, ra.get('name'), x) for x in local]
+    if len(sb) > len(sa):
+        out.append('%s FU3 sweep: %d keys → %d' % (w, len(sa), len(sb)))
+
+
 def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
+    """`widths` are run labels; `groups` is one list for all of them, or {label: [groups]}."""
     keys = invisible_list()
     tol, chan = envint('FU_TOL_PX'), envint('FU_CHAN')
     ftol, fchan = envint('FU_FAINT_TOL_PX', 10 ** 9), envint('FU_FAINT_CHAN', 255)
     gtol = envint('FU_GRID_TOL', 0)
+    atol = envint('FU_AUDIO_TOL', 0)
+    btol = envint('FU_BYTES_PCT', 0)
+    by_label = groups if isinstance(groups, dict) else None
     diffs, broken, pictures = [], [], []
     for w in widths:
+        groups = by_label.get(w, []) if by_label is not None else groups
         A, B = load(ref_dir, w), load(cand_dir, w)
         broken += instrument_errors(A, w, groups)
         if B is None:
@@ -431,6 +519,9 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                         if va.get('target') != vb.get('target') or va.get('none') != vb.get('none'):
                             out.append('%s: hovered %s → %s' % (where, va.get('target') or va.get('none'), vb.get('target') or vb.get('none')))
                         layout_diff(va.get('layout') or [], vb.get('layout') or [], where + ' (hovered)', out, limit, fields)
+                        for hk2 in ('around', 'err'):
+                            if va.get(hk2) != vb.get(hk2):
+                                out.append('%s (hovered): %s %s → %s' % (where, {'around': 'the box pictured'}.get(hk2, hk2), short(va.get(hk2)), short(vb.get(hk2))))
                         if va.get('motion') != vb.get('motion'):
                             local = []
                             json_diff(va.get('motion'), vb.get('motion'), 'motion', local, max(3, per_step))
@@ -440,10 +531,19 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                 for k in ('focus', 'pv', 'pvHash'):
                     if sa.get(k) != sb.get(k):
                         out.append('%s %s: %s %s → %s' % (w, name, {'pv': 'the preview’s backing store', 'pvHash': 'what the preview drew'}.get(k, k), short(sa.get(k)), short(sb.get(k))))
+                for k in ('toast', 'playing'):
+                    if sa.get(k) != sb.get(k):
+                        local = []
+                        json_diff(sa.get(k), sb.get(k), {'toast': 'the toast'}.get(k, k), local, max(4, per_step))
+                        out += ['%s %s: %s' % (w, name, x) for x in local]
                 if sa.get('motion') != sb.get('motion'):
                     local = []
                     json_diff(sa.get('motion'), sb.get('motion'), 'what it animated', local, max(4, per_step))
                     out += ['%s %s: %s' % (w, name, x) for x in local]
+        if 'FU1' in groups and A.get('registry') != B.get('registry'):
+            local = []
+            json_diff(A.get('registry'), B.get('registry'), 'registry', local, max(8, per_step))
+            out += ['%s %s' % (w, x) for x in local]
         if 'FU2' in groups:
             sa, sb = A.get('fu2') or [], B.get('fu2') or []
             for i, ra in enumerate(sa):
@@ -456,12 +556,15 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                     local.append('step %s → %s' % (short(ra.get('name')), short(rb.get('name'))))
                 if rb.get('err') != ra.get('err'):
                     local.append('error %s → %s' % (short(ra.get('err')), short(rb.get('err'))))
+                bytes_diff(ra.get('state'), rb.get('state'), 'the exported file', local, btol)
                 json_diff(ra.get('state'), rb.get('state'), 'state', local, per_step)
                 sfa, sfb = ra.get('surf') or {}, rb.get('surf') or {}
                 for sk in list(sfa.keys()) + [k for k in sfb if k not in sfa]:
                     layout_diff(sfa.get(sk), sfb.get(sk), 'the surface "%s"' % sk, local, per_step + len(local), fields)
                 if 'grid' in ra or 'grid' in rb:
                     grid_diff(ra.get('grid'), rb.get('grid'), 'the exported file', local, gtol)
+                if 'sound' in ra or 'sound' in rb:
+                    sound_diff(ra.get('sound'), rb.get('sound'), 'the exported file', local, atol)
                 for x in local:
                     out.append('%s FU2 "%s": %s' % (w, ra['name'], x))
                 if len(out) >= limit:
@@ -481,6 +584,7 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                     out.append('%s FU3 "%s": %s' % (w, ra['name'], x))
                 if len(out) >= limit:
                     break
+            sweep_diff(A, B, w, out, per_step)
         if 'FU4' in groups:
             local = []
             json_diff(A.get('fu4'), B.get('fu4'), 'FU4', local, limit)
@@ -508,6 +612,10 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                         for k in ('cls', 'focus', 'exp'):
                             if pa_.get(k) != pb_.get(k):
                                 out.append('%s FU6 %s %s: %s %s → %s' % (w, size, part, k, short(pa_.get(k)), short(pb_.get(k))))
+                        if pa_.get('motion') != pb_.get('motion'):
+                            local = []
+                            json_diff(pa_.get('motion'), pb_.get('motion'), 'what it animated', local, max(4, per_step))
+                            out += ['%s FU6 %s %s: %s' % (w, size, part, x) for x in local]
                 if size == 'function':
                     local = []
                     json_diff(va, vb, 'FU6 function', local, limit)
@@ -603,7 +711,7 @@ def sig_hit(line, sig):
     return bool(rest) and all(s in line[m.end():] for s in rest)
 
 
-STEP_LINE = re.compile(r'^\d+ FU\d "[^"]*": ')   # "380 FU2 "<step>": <what differs>" (a value's own JSON never starts a line)
+STEP_LINE = re.compile(r'^[\w.-]+ FU\d "[^"]*": ')   # "380 FU2 "<step>": <what differs>" ("440x956 FU2 …" too; a value's own JSON never starts a line)
 
 
 def judge(work):
@@ -656,6 +764,14 @@ def measure(head, head2, margin):
             for i in range(1, min(len(x), len(y))):
                 worst = max([worst] + [abs(p - q) for p, q in zip(x[i], y[i])])
         print('decoded export at %s, HEAD against itself: the most a cell moved = %d levels' % (w, worst))
+        sa = [e.get('sound') for e in A.get('fu2') or [] if e.get('sound')]
+        sb = [e.get('sound') for e in B.get('fu2') or [] if e.get('sound')]
+        worst_s = 0
+        for x, y in zip(sa, sb):
+            for ca, cb in zip(x.get('ch') or [], y.get('ch') or []):
+                for p_, q_ in zip(ca, cb):
+                    worst_s = max(worst_s, abs(p_[0] - q_[0]), abs(p_[1] - q_[1]))
+        print('decoded export SOUND at %s, HEAD against itself: the most a 0.1 s window moved = %d/1000 (FU_AUDIO_JITTER)' % (w, worst_s))
     mdiffs, _, _ = compare(head, margin, ['380', '1280'], ['FU1'], 400)
     moved = set((x.split(' ')[0], x.split(' ')[1].rstrip(':')) for x in mdiffs if '#transport' in x)
     print('the margin plant moved #transport in %d screen(s)' % len(moved))
@@ -707,6 +823,7 @@ def main():
     ap.add_argument('cand')
     ap.add_argument('--widths', default='380,1280')
     ap.add_argument('--groups', default='FU1,FU2,FU3,FU6,FU4,FU5,FU7')
+    ap.add_argument('--runs', default=None, help="each label's own groups: '380=FU1,FU2 440x956=FU1' (overrides --widths/--groups)")
     ap.add_argument('--max', type=int, default=12)
     ap.add_argument('--json', default=None)
     ap.add_argument('--png-selftest', action='store_true')
@@ -722,7 +839,12 @@ def main():
               'a panel border recoloured by 20 levels counts %d against %d, and the same picture counts %d. Re-measure '
               '(tools/full-unchanged.sh --measure) and lower the tolerances in tools/full-unchanged.sh.' % (moved, tol, faint, ftol, same))
         return 3
-    diffs, broken, pictures = compare(a.ref, a.cand, a.widths.split(','), a.groups.split(','), a.max * 50)
+    if a.runs:
+        runs = [x.split('=', 1) for x in a.runs.split()]
+        labels, groups = [r[0] for r in runs], dict((r[0], r[1].split(',')) for r in runs)
+    else:
+        labels, groups = a.widths.split(','), a.groups.split(',')
+    diffs, broken, pictures = compare(a.ref, a.cand, labels, groups, a.max * 50)
     if a.json:
         json.dump({'diffs': diffs, 'broken': broken, 'pictures': pictures}, open(a.json, 'w'), indent=1, ensure_ascii=False)
     if broken:
