@@ -18,13 +18,13 @@ Seven places where a first-time user gets stuck or surprised. Each page is a sta
 
 ## Notes per trap
 
-1. **Export.** Option A needs the bar's width worked out at 320 px (the entry on `styles.css:4200-4230` says the bar is already tight); fold Parent into the ⋯ menu to pay for it.
+1. **Export.** Option A needs the bar's width worked out at 320 px (the comment at `styles.css:4217-4232` describes how tight the bar already is); fold Parent into the ⋯ menu to pay for it.
 2. **Add row.** The solo view exists on purpose (a layer selected shows only its row). A is a strip, not the full row, so the solo view stays calm.
 3. **Grab.** If a haptic is wanted on Android, keep the existing `navigator.vibrate` call as well; A does not replace it.
 4. **S key.** Same fix applies to the A and D keys' captions. The keyboard path (`js/app.js:9013`) cannot show amber; its toast should say "Stretched" with Undo (option B) as a second layer.
 5. **Badge.** This trades a warning that blocks for one that informs. The reason text stays (`deadHereWhy`), just never in the way of the tap.
 6. **Shadow only.** Full-frame detection should use the layer's alpha box (the compositor already scans it, `fxBoundsScan` `js/compositor.js:4199`), not the layer type.
-7. **Songs.** Only audio changes; photos and videos keep going to the playhead. Check #655/#678-style tests that assert placement.
+7. **Songs.** Only audio changes; photos and videos keep going to the playhead. Any test that asserts where an imported audio clip lands will need updating.
 
 ## What I did not do
 
