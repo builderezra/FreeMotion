@@ -20,22 +20,13 @@ if [ -f .mutation-in-progress ]; then echo "⛔ MUTATION IN PROGRESS: $(cat .mut
 SUITES="$(pgrep -fl 'tests/_cdp.py' 2>/dev/null | grep -v pgrep | wc -l | tr -d ' ')"
 [ "$SUITES" != "0" ] && echo "⚠️ $SUITES suite run(s) alive (a ship or mutate is in flight — a mid-flight edit lands in a run meant to test the previous tree)" || echo "no suite running"
 [ -n "$(git status --porcelain)" ] && { echo "✏️ uncommitted changes:"; git status --porcelain | head -12; } || echo "tree clean"
-# THE LAST SHIP'S VERDICT, read from the file ship.sh writes on EVERY exit path (see the note at the
-# top of ship.sh). A dirty tree alone does not say whether the last release REFUSED or was simply
-# interrupted, and on 20 Sep a session spent twenty-five minutes rediscovering that by hand — after
-# reading "exit code 0" from a ship that had refused, because it had been piped through `tail`.
-if [ -f .last-ship ]; then
-  _V="$(cat .last-ship 2>/dev/null)"
-  case "$_V" in
-    # A refusal is not automatically a problem — the docs-only batch gate refuses ON PURPOSE and says so.
-    # Shouting at that one would teach the next session to scroll past the banner, which costs the real
-    # refusals this line exists to surface. So the alarm is reserved for a refusal with no stated reason.
-    *batched*) echo "last ship: held back on purpose ($_V) — carry on; the notes ride out with the next real change" ;;
-    *overloaded*) echo "⏸ last ship: the MAC was overloaded, not the code ($_V) — the tree is a finished release; ship it again once \`sysctl -n vm.loadavg\` is under ~10 (ship.sh refuses in a second otherwise, so trying costs nothing)" ;;
-    REFUSED*)  echo "🚨 THE LAST SHIP REFUSED ($_V) — the tree above is an UNSHIPPED release, not work in progress. Read the log, fix the gate it tripped, ship again." ;;
-    *)         echo "last ship: $_V" ;;
-  esac
-fi
+# THE SHIP: the lock and the last verdict, read by tools/_shiplock.sh (the same reader ship.sh and ship-bg.sh use).
+# ship.sh writes .last-ship on EVERY exit path that runs its trap, and "RUNNING <pid>" before its first gate — so a
+# ship that was KILLED (no trap runs) is the one that still says RUNNING with its pid gone (6 Oct, RULES-AUDIT B1).
+# A dirty tree alone does not say whether the last release REFUSED, was killed, or is still running, and on 20 Sep a
+# session spent twenty-five minutes rediscovering that by hand — after reading "exit code 0" from a refused ship.
+. tools/_shiplock.sh
+ship_status_lines
 
 hr "INBOX — Ezra writes here from his phone; if anything is listed, log it VERBATIM into REQUESTS.md first and do nothing else this tick"
 ./tools/inbox.sh 2>&1 | tail -20
@@ -45,7 +36,6 @@ git fetch ssh --prune -q 2>/dev/null
 L="$(git rev-parse HEAD)"; R="$(git rev-parse ssh/main 2>/dev/null)"
 if [ "$L" = "$R" ]; then echo "HEAD == ssh/main ($(git rev-parse --short HEAD)) — pushed"; else echo "⚠️ HEAD $(git rev-parse --short HEAD) != ssh/main $(git rev-parse --short ssh/main 2>/dev/null) — a release did not land, or the remote moved (pull first)"; fi
 echo "app version: $(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><')   newest log: $(grep -oE '^- v[0-9.]+' POLISH-LOG.md | tail -1 | sed 's/^- //')   test floor: $(cat tools/.test-floor 2>/dev/null)"
-
 hr "QUEUE — oldest first; his words before audit findings; BUILT OUT items are not work"
 ./tools/next.sh 2>&1 | sed -n '/^ACTIONABLE/,$p' | head -60
 ./tools/next.sh 2>&1 | grep -A3 'STALE ASKS' | head -8
@@ -101,4 +91,6 @@ echo "If the app is broken and needs undoing:  tools/rollback.sh  (no args = lis
 echo
 echo "Rules in one breath: log him verbatim before working · oldest first · read the code before building · never stop the cron ·"
 echo "prove before claiming (a fix ships with a test that FAILS without it — ship.sh checks) · mobile at 380px · batch 3-5 items per ship ·"
-echo "ship.sh in the background with timeout 600000, then HEAD == ssh/main · when he is silent, DECIDE and show him the picture (rule 16)."
+echo "when he is silent, DECIDE and show him the picture (rule 16)."
+echo "Ships: write the message to .claude/ship/msg.txt, run tools/ship-bg.sh (exit 3 means launched, NOT shipped), then Monitor .claude/ship/ship.log until SHIP EXIT appears or kill -0 on the pid in .ship-in-progress fails. Shipped = the log says \"pushed and verified\" AND .last-ship is PUSHED <hash> with hash == git rev-parse --short HEAD. HEAD == ssh/main alone proves nothing. RUNNING with no live pid means a KILLED ship: re-ship it."
+echo "Suites: a full suite may use run_in_background with timeout = 1.6 × tools/.suite-seconds × 1000 (at most 7200000). Only ?only= slices run in the foreground (timeout ≤ 600000). Never write minutes into prose."

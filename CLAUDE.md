@@ -43,8 +43,9 @@ plus the `?v=` cache-busters and add a POLISH-LOG.md entry per release. Commit l
 Ezra authorised this on 2026-08-13 (*"if you can do that then do it every time"*), replacing the old
 GitHub-Desktop-by-hand arrangement. Use `git push ssh main`: the branch's upstream `origin` is the
 HTTPS URL with no stored credentials and fails with "could not read Username", while the `ssh` remote
-points at the same repo and authenticates with his on-disk key. Verify by comparing `git rev-parse HEAD`
-against `git rev-parse ssh/main` — do not trust the push output alone.
+points at the same repo and authenticates with his on-disk key. ship.sh verifies its own push by comparing
+`git rev-parse HEAD` against `git rev-parse ssh/main` — but a SESSION judges a ship by the rule in "SHIPS AND
+SUITES" below (the log's "pushed and verified" plus `.last-ship`): HEAD == ssh/main alone proves nothing.
 
 **The app is live at <https://builderezra.github.io/FreeMotion/>** — GitHub Pages off `main`, which is
 why pushing matters: that URL is what his phone loads and what the installed PWA updates from. Nothing in
@@ -220,39 +221,32 @@ reads. Details in LOOP.md rule 18.
 **Add to this pattern rather than adding notes.** If a mistake could recur, the fix is a script, a test,
 or a gate — not a paragraph.
 
-## ⚠️ RUN THE SUITE IN THE FOREGROUND WITH A LONG TIMEOUT — never background-and-poll
+## ⚠️ SHIPS AND SUITES — launch the ship detached, judge it by its log (6 Oct; replaces "run the suite in the foreground")
 
-**`python3 tests/_cdp.py --port 8777` takes 3–4 minutes. The Bash tool's default timeout is 2 minutes.**
+> **Ships:** write the message to `.claude/ship/msg.txt`, run `tools/ship-bg.sh` (exit 3 means launched, NOT shipped), then Monitor `.claude/ship/ship.log` until `SHIP EXIT` appears or `kill -0` on the pid in `.ship-in-progress` fails. **Shipped** = the log says `pushed and verified` AND `.last-ship` is `PUSHED <hash>` with hash == `git rev-parse --short HEAD`. HEAD == ssh/main alone proves nothing. `RUNNING` with no live pid means a KILLED ship: re-ship it.
+> **Suites:** a full suite may use `run_in_background` with timeout = 1.6 × `tools/.suite-seconds` × 1000 (at most 7200000). Only `?only=` slices run in the foreground (timeout ≤ 600000). Never write minutes into prose.
 
-⚠️ **30 Sep: THE 3–4 MINUTES ABOVE IS YEARS STALE — a full pass is now ~35 minutes (2186 tests), and a ship (two passes +
-prove) ~90.** The real number is in `tools/.suite-seconds`, written by every green ship pass, and ship.sh sets its cap from
-it (1.6x, never below an hour). Believing "4 minutes" cost an afternoon: a slow pass read as a hang and was chased as one.
-So a full suite run always goes in the background (`run_in_background: true`) — it cannot fit the Bash tool's 600 s cap.
-So a plain foreground call ALWAYS times out, and the reflex after that — background it, then poll for
-the result — is slower than the run itself and has repeatedly ended in waiting on nothing.
+**Why it changed (RULES-AUDIT B1).** This section used to describe a ship as one foreground call with
+`timeout: 600000`. A ship is now two full passes plus the proof (the real length of a pass is in
+`tools/.suite-seconds`), far past any foreground limit — and on 5 Oct a ship launched the way the old text said was
+KILLED by the harness at its 10-minute background limit, after a session followed four sets of written instructions
+that all said the same stale thing. The method that worked lived only in a memory note. Now it is a script:
+- `tools/ship-bg.sh` refuses while a ship's pid is alive, refuses a missing message or one HEAD already shipped with,
+  launches `tools/ship.sh -F .claude/ship/msg.txt` under `nohup` (no `setsid` on this Mac), waits until ship.sh has
+  put its pid in the lock, prints the watch line with that pid, and **exits 3 — never 0**, because on 20 Sep a refusal
+  read as "exit code 0" and the next session built on a release that never landed.
+- `tools/ship.sh` refuses to start beside a live ship (checked BEFORE its trap, so the refusal cannot delete the
+  running ship's lock), says **previous ship was KILLED** when the lock's pid is gone, keeps
+  `pid=<n> phase=<gates|prove|desktop|phone|push> since=<epoch>` in `.ship-in-progress`, and writes
+  `RUNNING <pid> <version> <epoch>` to `.last-ship` until its verdict replaces it. A kill runs no trap, so a ship that
+  was killed is exactly the one still saying RUNNING with its pid gone — `tools/tick.sh` prints that as KILLED.
+- "The commit is on GitHub" is not proof: HEAD == ssh/main is also true when a ship refused and moved nothing.
+- `tools/test-ship-bg.sh` proves all of the above against a stub ship.sh in a temp directory, in seconds, and
+  ship.sh runs it whenever the launcher, the lock or ship.sh itself changes.
 
-⚠️ **`timeout: 900000` DOES NOT WORK — the Bash tool caps at 600000 and silently clamps.** Asking for 900s
-gets 600s, and at 911 tests a double suite run plus the push now exceeds that, so ship.sh gets backgrounded
-mid-flight (24 Aug, v12.28). It still finishes and still pushes — the notification arrives and the output
-file has the result — but that is exactly the background-and-poll this section exists to stop.
-**So: pass `timeout: 600000` (the real maximum) and expect ship.sh to sometimes land in the background.
-When it does, do NOT re-run it.** Read the output file, then verify with `git rev-parse HEAD` against
-`ssh/main` — re-running would re-run two four-minute suites for nothing.
-
-**Always pass an explicit timeout instead:** `timeout: 500000` for a bare suite run — but **`timeout:
-600000` (the cap) for `tools/ship.sh`, which runs the suite TWICE** (desktop, then again at 380px) whenever a
-`js/*.js`, `styles.css` or `index.html` change is being shipped. 500s is not enough for that and the
-ship gets backgrounded mid-push, which is exactly the background-and-poll this section exists to stop.
-Measured at v11.83: two green passes plus the push took just over eight minutes. One call, one result,
-no polling. Ezra has raised this more than once — *"i tried to get you to avoid this. it happens so
-often, you need to stop this issue"* — so treat it as a hard rule, not a preference.
-
-Two things that made it worse, both worth avoiding:
-- A run that times out mid-way **leaves the file mutated** if it was a mutation check. Restore from the
-  backup before doing anything else, and check with `grep -c mutated <file>`.
-- **Never run a browser/preview check while a mutation job is running.** The browser loads whatever is
-  on disk, so a measurement taken then describes the MUTATION, not the code. That has already produced
-  one confidently wrong reading.
+**Never take a browser reading, or edit THIS tree, while `.mutation-in-progress` or `.ship-in-progress` exists.** The
+browser loads whatever is on disk (a reading taken during a mutation describes the MUTATION — that has happened), and
+ship.sh's phone pass and its `git add -A` both read the tree as it is at that moment.
 
 ### Run ONE test, or a slice, instead of the whole suite (2 Sep)
 

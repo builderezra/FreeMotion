@@ -4,6 +4,10 @@
 #   tools/ship.sh "<commit message>"
 #   tools/ship.sh -F <file>          # …or read the message from a file / from - for stdin
 #
+# A ship outlasts every harness timeout, so it is LAUNCHED, not called: write the message to .claude/ship/msg.txt and run
+# tools/ship-bg.sh (exit 3 = launched, NOT shipped). The verdict is .claude/ship/ship.log ("pushed and verified", then
+# "SHIP EXIT <rc>") and .last-ship (PUSHED <hash> == git rev-parse --short HEAD). See CLAUDE.md, "SHIPS AND SUITES".
+#
 # Refuses to push unless: the tree is not mid-mutation, the suite is fully green, the version label
 # and the newest POLISH-LOG entry agree, and the push actually landed. That last one matters —
 # `origin` is an HTTPS URL with no stored credentials and fails with "could not read Username", so
@@ -32,12 +36,28 @@ SHIPPED=0
 _WHY=""            # a refusal may be the repo working as INTENDED (see the docs-only batch gate) — say which
 _verdict() {
   _rc=$?
-  rm -f .ship-in-progress
+  # only OUR lock: a refusal must never delete the lock of a ship that is still running (see the guard below)
+  [ "$(ship_lock_pid .ship-in-progress)" = "$$" ] && rm -f .ship-in-progress
   { if [ "${SHIPPED:-0}" = 1 ]; then printf 'PUSHED %s\n' "$(git rev-parse --short HEAD 2>/dev/null)"
     elif [ -n "${_WHY:-}" ]; then printf 'REFUSED rc=%s %s\n' "$_rc" "$_WHY"
     else printf 'REFUSED rc=%s\n' "$_rc"; fi; } > .last-ship 2>/dev/null
 }
-trap _verdict EXIT INT TERM
+# ⚠️ ONE SHIP AT A TIME, CHECKED BEFORE THE TRAP (6 Oct, RULES-AUDIT B1). A ship now runs for well over an hour,
+# detached (tools/ship-bg.sh), so "is one already running?" is a real question — and it must be answered BEFORE the
+# trap below exists, because _verdict's cleanup on a refusal would delete the running ship's lock and overwrite its
+# .last-ship. A lock whose pid is gone is a KILLED ship (a kill skips every trap): said, and carried on from.
+. "$(dirname "$0")/_shiplock.sh"
+ship_guard || exit 1
+trap _verdict EXIT
+# A signal ENDS the ship. With `trap _verdict EXIT INT TERM` the handler ran on a TERM and the script then CARRIED ON —
+# it had deleted its own lock and went on towards the commit and the push with nothing on disk saying a ship was
+# running. Exiting runs the one EXIT handler above (see the note: one handler), which records rc=130 / rc=143.
+trap 'exit 130' INT
+trap 'exit 143' TERM
+# The lock carries this ship's pid and phase, and .last-ship says RUNNING until a verdict replaces it — so a KILL,
+# which runs no trap at all, leaves "RUNNING <pid>" behind with that pid gone, and tick.sh reads exactly that as KILLED.
+ship_phase gates
+printf 'RUNNING %s %s %s\n' "$$" "$(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><')" "$(date +%s)" > .last-ship 2>/dev/null
 # ⚠️ THE MESSAGE CAN COME FROM A FILE, AND FOR ANYTHING WITH CODE IN IT, IT SHOULD (25 Aug).
 # Backticks inside a double-quoted shell argument are COMMAND SUBSTITUTION, not code quotes. The gate
 # below has guarded that since a message containing `void ic.offsetWidth` executed it and committed the
@@ -127,7 +147,7 @@ if ! pgrep -f '_cdp\.py' >/dev/null 2>&1; then
     echo "→ reaped $_ORPH orphaned headless Chrome process(es) left by an interrupted run (they make a green tree read RED)"
   fi
 fi
-touch .ship-in-progress   # removed by _verdict() — deliberately NOT its own trap, see the note up top
+# .ship-in-progress was written at the top (ship_phase gates) and is removed by _verdict() — deliberately NOT its own trap.
 
 # ⚠️ DO NOT START A HALF-HOUR RUN ON A MACHINE THAT CANNOT FINISH IT (21 Sep). The timeout diagnosis (_whyslow, below)
 # explains a stall AFTER it has cost 30 minutes. Twice on 21 Sep the machine was already visibly unable before a single
@@ -538,6 +558,17 @@ if ! git diff --cached --quiet -- tools/rollback.sh 2>/dev/null || ! git diff --
     exit 1
   fi
 fi
+# THE LAUNCHER AND THE LOCK PROVE THEMSELVES TOO (6 Oct, RULES-AUDIT B1). Every way they can be wrong is silent — a launcher
+# that exits 0 reads as "shipped", a refusal that deletes a live ship's lock makes it invisible, a killed ship that reads
+# as "running" waits for ever. A few seconds in a temp directory, against a stub ship.sh; nothing there reaches GitHub.
+# `git status`, not `git diff`: a NEW file is untracked, and `git diff --quiet` says nothing changed.
+if [ -n "$(git status --porcelain -- tools/ship-bg.sh tools/_shiplock.sh tools/test-ship-bg.sh tools/ship.sh 2>/dev/null)" ]; then
+  echo "→ the ship launcher or its lock changed — proving them before shipping"
+  if ! ./tools/test-ship-bg.sh; then
+    echo "❌ THE SHIP LAUNCHER OR ITS LOCK IS BROKEN — not committing, not pushing."
+    exit 1
+  fi
+fi
 
 # Refresh REQUESTS.md's STATUS labels first, so they can never be stale in a commit (queue 352).
 # A label written by hand is true the day it is written and misleading a week later.
@@ -649,6 +680,7 @@ if [ -n "$REQ_GONE" ] && ! printf '%s' "$MSG" | grep -q 'DROPS REQUEST:'; then
   exit 1
 fi
 
+ship_phase prove
 echo "→ proving the release (its changed tests must fail without the fix)…"
 tools/prove.sh || { echo "   Not committing, not pushing."; exit 1; }
 
@@ -702,6 +734,7 @@ _whyslow() {
 
 if [ "$_last_suite" -gt 0 ]; then echo "→ running the suite (the last green pass took $(( _last_suite / 60 )) minutes; cap ${SUITE_TIMEOUT}s)…"
 else echo "→ running the suite (cap ${SUITE_TIMEOUT}s)…"; fi
+ship_phase desktop
 _suite_t0=$SECONDS
 OUT="$(python3 tests/_cdp.py --port 8777 --timeout $SUITE_TIMEOUT 2>&1)"
 _suite_secs=$(( SECONDS - _suite_t0 ))
@@ -749,6 +782,7 @@ echo "$_suite_secs" > tools/.suite-seconds
 # module, which is the failure mode this file exists to remove.
 PHONE_RELEVANT="$(git diff --cached --name-only; git diff --name-only)"
 if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; then
+  ship_phase phone
   echo "→ running the suite again at PHONE width (380px)…"
   POUT="$(python3 tests/_cdp.py --port 8777 --width 380 --timeout $SUITE_TIMEOUT 2>&1)"
   PSUM="$(printf '%s' "$POUT" | grep -o '"summary": "[^"]*"' | head -1)"
@@ -776,6 +810,7 @@ else
   echo "· no shipped source changed — skipping the phone pass"
 fi
 
+ship_phase push
 git add -A
 git commit -q -m "$MSG" || { echo "ship: nothing to commit"; exit 1; }
 git push -q ssh main 2>&1 | tail -2

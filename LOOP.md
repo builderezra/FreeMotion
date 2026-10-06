@@ -19,15 +19,12 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 5. **Ship properly:** bump the version label in `index.html` AND the `?v=` cache-buster for EVERY file
    touched (a missed buster reads as "the fix does not work" — it has), add a plain-language
    `POLISH-LOG.md` entry, tick the `REQUESTS.md` entry with its version, then
-   `tools/ship.sh "message"`. Never commit around ship.sh.
-6. **Suite in the FOREGROUND with `timeout: 500000`** — and **`timeout: 600000` for `tools/ship.sh`**,
-   which runs the suite twice (desktop + 380px) on any shipped source change. Never background-and-poll.
-   ⚠️ **`900000` DOES NOT WORK and this rule used to say it did.** The Bash tool caps at 600000 and
-   silently clamps, so asking for 900s gets 600s — the rule was telling every session to use a number
-   that cannot happen. 600000 is the real maximum, and at 964 tests a double run plus the push still
-   sometimes exceeds it. **When ship.sh lands in the background, do NOT re-run it**: read its output
-   file and verify with `git rev-parse HEAD` against `ssh/main`. Re-running costs two more four-minute
-   suites for nothing. (CLAUDE.md has said this for days; this file contradicted it.)
+   ship it with `tools/ship-bg.sh` (rule 6). Never commit around ship.sh.
+6. **Ships and suites — the same two lines as CLAUDE.md ("SHIPS AND SUITES") and tools/tick.sh (6 Oct, RULES-AUDIT B1):**
+   **Ships:** write the message to `.claude/ship/msg.txt`, run `tools/ship-bg.sh` (exit 3 means launched, NOT shipped), then Monitor `.claude/ship/ship.log` until `SHIP EXIT` appears or `kill -0` on the pid in `.ship-in-progress` fails. **Shipped** = the log says `pushed and verified` AND `.last-ship` is `PUSHED <hash>` with hash == `git rev-parse --short HEAD`. HEAD == ssh/main alone proves nothing. `RUNNING` with no live pid means a KILLED ship: re-ship it.
+   **Suites:** a full suite may use `run_in_background` with timeout = 1.6 × `tools/.suite-seconds` × 1000 (at most 7200000). Only `?only=` slices run in the foreground (timeout ≤ 600000). Never write minutes into prose.
+   (This rule used to say "foreground, `timeout: 600000`" — written for a ship a fraction of today's length. On 5 Oct a
+   ship started that way was killed at the harness's 10-minute limit.)
 7. **Mobile-first:** verify at ~380px before calling any UI change done.
 8. **Surface every open question in the reply.** 28 questions once piled up unasked. Never block
    silently, and never re-ask something he has already answered.
