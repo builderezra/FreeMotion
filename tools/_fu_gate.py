@@ -16,7 +16,13 @@ a later queue number must not skip the lock"):
   3. the diff adds — or removes — a line matching one of HOOKS in a shared file (SHARED: js/*.js, every root .css,
      index.html, sw.js);
   4. the diff changes a line INSIDE one of Simple's own functions in a shared file (REGION_HEAD, found in HEAD's copy of
-     the file) — a later fix to a line of sanitizeSmLayer that names nothing Simple (`if (typeof v === 'number') …`).
+     the file) — a later fix to a line of sanitizeSmLayer that names nothing Simple (`if (typeof v === 'number') …`);
+  5. the diff changes a line a Simple release wrote (provenance, by git blame) — but never a line it only RE-NUMBERED: the
+     version label and a ?v= buster ship in every release's one commit, so they are nobody's (the second review, 6 Oct);
+  6. the diff changes the INSTRUMENT at all, whatever the release is labelled (the second review: a group's comparison
+     switched off by code and 'box-shadow' dropped from the probe, logged as an ordinary item, was NOT-TRIGGERED). Such a
+     release needs `INSTRUMENT CHANGE: <what>` in its POLISH-LOG line, a PASS of its own, and a plant caught in every
+     group the probe runs.
 When it fires, a release is REFUSED unless tools/full-unchanged.sh printed PASS on this exact tree (the cache in
 tools/.full-unchanged-pass names the hash below); refused if the newest POLISH-LOG line names any `queue NNN` other
 than 980 (a Simple release ships alone, so any difference from HEAD is Simple's and a rollback takes it back alone); and
@@ -42,7 +48,11 @@ step 1.2 fires anyway, by its "Simple mode" comment and by the sanitiser lines i
 import hashlib, io, os, re, subprocess, sys
 
 SIMPLE_FILES = ['js/spine.js', 'js/spine-words.js', 'js/simple-timeline.js', 'js/editor-mode.js', 'js/simple-tools.js']
-# (what it is, the pattern, the only files it applies to — None for every shared file)
+# (what it is, the pattern, the files it applies to: None for every shared file, 'js' for the shared scripts only, or a list)
+# THE SECOND REVIEW (6 Oct): four of these were a bare word, and an ordinary "queue 975" release was refused — with no
+# override — for `const PAD = { sm: 4 }`, `.chip.sm { … }`, `.hm-card.hydrating { … }`, `el.classList.add('pick')`,
+# `const fn = FM.eyedropper.pick;` and a comment saying "simple mode". Each now names Simple's OWN identifier in its
+# context (BUILD-PLAN §4.1's lines, verbatim in STEP_1_2 below, are what they must still see), and the six are in QUIET.
 HOOKS = [
     ('isSimple()', r'\bisSimple\(', None),
     ('the ed-simple body class', r'(?<![\w-])ed-simple\b', None),
@@ -51,26 +61,34 @@ HOOKS = [
     ('simpleTimeline', r'\bsimpleTimeline\b', None),
     ('the cog’s Editor block', r'\bcv-ed(?:itor\b|-)', None),
     ('a Simple id or class', r'(?<![\w-])sm-[a-z]|\bbtn-sm-split\b|(?<![\w-])ed-live\b', None),
-    ('a "Simple mode" marker', r'(?i)\bsimple[ -]mode\b', None),
-    ('the layer’s sm key', r'\.sm\b(?![-\w])|(?<![\w$-])sm\s*:', None),
+    # capital S, as every hunk of the plans writes it ("Simple mode P1", "Simple mode Phase 1", "Simple mode P2.2")
+    ('a "Simple mode" marker', r'\bSimple mode\b', None),
+    # the layer's / project's / an effect's `sm`: a layer-ish name before it, one of its own keys after it, or an object
+    # literal that opens with one of its keys — never a bare `sm:` (a size scale) and never a CSS class
+    ('the layer’s sm key', r'\b(?:l|L|layer|lay|f|fx|out|p|P|proj|project|c|copy)\.sm\b(?![-\w])|'
+                          r'\bsm\.(?:main|stay|tail|tailEnd|twin|unit|muteByMode|v|adopted|home|muteClips|mrev|row)\b|'
+                          r'(?<![\w$.-])sm\s*:\s*\{\s*(?:main|v|stay|tail|twin|adopted|home|unit)\b', 'js'),
     ('Simple’s sanitiser', r'\bsanitizeSm\w*|\bsmPlain\b|\bsmKeepUnknown\b|\bSM_FLAGS\b|\bSM_V\b', None),
     ('a shared helper step 1.2 adds', r'\bFM\.(?:timedLists|trimClipEdge|worldBox|groupNeedsUnit|seamKey|divideSegment|renderStill|pickReplacement|swapInMedia|setClipSpeed|docRev)\b', None),
     ('a plain helper field', r'\.src(?:W|H|Rev)\b|\bsrc(?:W|H|Rev)\s*:|[\'"]src(?:W|H|Rev)[\'"]', None),
-    ('a pick', r'\.pick\b(?!\s*\()|\bpick\s*:\s*\{|[\'"]pick[\'"]|\bpick[BI]\b', None),
+    # a layer's pick stamp: `l.pick`, `pick: { b`, `'pick' in`, pickB / pickI — never a class name or eyedropper.pick
+    ('a pick', r'\b(?:l|L|layer|lay|c|copy|out)\.pick\b|\bpick\s*:\s*\{\s*b\b|[\'"]pick[\'"]\s+in\b|\bpick[BI]\b', 'js'),
     ('a split-boundary mark', r'(?<![\w$-])sb\s*:\s*1\b|\.sb\b(?![-\w])', None),
     ('onSplit', r'\bonSplit\b', None),
     ('the schema project fixture', r'\bSCHEMA_PROJECT_FIXTURE\b', None),
     ('the size-aware layerAABB', r'\blayerAABB\([^)]*\bsize\b', None),
     ('handleFiles with opts', r'\bhandleFiles\(\s*files\s*,\s*opts\s*\)', None),
     ('addMediaLayer’s at', r'\bopts\.at\b', ['js/app.js']),
-    ('FM.storage.hydrating', r'\.hydrating\b', None),
+    ('FM.storage.hydrating', r'\bFM\.storage\.hydrating\b', None),
     ('a Simple-owned script', r'\b(?:spine|spine-words|simple-timeline|editor-mode|simple-tools)\.js\b', None),
 ]
 HOOKS_RE = [(n, re.compile(p), f) for (n, p, f) in HOOKS]
 # A line in HEAD's copy of a shared file that OPENS one of Simple's own functions: every line until its closing brace is
-# Simple's, whatever it names.
-REGION_HEAD = re.compile(r'\bfunction\s+(?:sanitizeSm\w*|smPlain|smKeepUnknown)\b|\bSCHEMA_PROJECT_FIXTURE\s*=|'
-                         r'\bFM\.(?:spine|editor|timedLists|trimClipEdge|worldBox)\w*(?:\.\w+)*\s*=\s*(?:async\s+)?function')
+# Simple's, whatever it names. EXACT names (the second review: `FM.editor\w*` took an ordinary FM.editorHints for Simple's,
+# so its first release shipped quietly and the next one-line fix inside it was refused).
+REGION_HEAD = re.compile(r'\bfunction\s+(?:sanitizeSm\w*|smPlain|smKeepUnknown)\s*\(|\bSCHEMA_PROJECT_FIXTURE\s*=|'
+                         r'\bFM\.(?:spine|editor|timedLists|trimClipEdge|worldBox)\b(?:\.\w+)*\s*=\s*(?:async\s+)?function|'
+                         r'\bFM\.(?:spine|editor)\s*=\s*\{')
 SHARED = re.compile(r'^(js/.*\.js|[^/]+\.css|index\.html|sw\.js)$')
 QUEUE = re.compile(r'queue (\d+)\b')
 PASS_FILE = os.path.join('tools', '.full-unchanged-pass')
@@ -81,7 +99,11 @@ INSTRUMENT_FILES = ['tools/full-unchanged.sh', 'tools/_fu_compare.py', 'tools/_f
 # What a PASS depends on. The app (every file it serves), plus the instrument itself: a changed probe, comparer or driver
 # is a different measurement, so it must not inherit the old verdict.
 HASH_DIRS = ['js', 'vendor', 'fx-art', 'launch']          # every folder index.html and the scripts load from (v17.21)
-PROBE_FILES = ['tests/full-unchanged.html', 'tests/tests.js']   # served beside the app, from the TREE on both sides
+# Served beside the app, from the TREE on both sides. NOT tests/tests.js any more (the second review, 6 Oct): FU5 used to run
+# it inside the measured app frame for its kitchen921 fixtures, so a Simple release could change Full and, in the same commit,
+# put a top-level line in tests.js that neutered the sanitiser on BOTH sides — tests.js is not instrument, and a Simple
+# release may change it. The fixture builder lives in the probe now; nothing of the suite runs in the frame being measured.
+PROBE_FILES = ['tests/full-unchanged.html']
 HASH_FILES = PROBE_FILES + ['tests/_cdp.py', 'tools/full-unchanged.sh', 'tools/_fu_compare.py', 'tools/_fu_gate.py',
                             'tools/full-unchanged-plants.json', 'tools/serve.sh']
 
@@ -174,7 +196,10 @@ def changed_files(root):
 def hook_of(path, text):
     """The name of the first hook `text` (one line of `path`) matches, or None."""
     for name, rx, files in HOOKS_RE:
-        if files is not None and path not in files:
+        if files == 'js':
+            if not path.endswith('.js'):
+                continue
+        elif files is not None and path not in files:
             continue
         if rx.search(text):
             return name
@@ -287,6 +312,56 @@ def hook_lines(root, files):
 # Simple-owned file, its POLISH-LOG line says queue 980, or a line it added to a shared file matches a hook) is Simple's,
 # whatever it says. A pure insertion counts when BOTH lines around it are Simple's (it lands inside a Simple block).
 _SIMPLE_SHA = {}
+# ⚠️ A RELEASE NUMBER IS NOT A LINE OF SIMPLE'S (the second review, 6 Oct). ship.sh commits a release as ONE commit, and that
+# commit carries index.html's version label and every ?v= buster it bumped — so git blame credited those lines to the Simple
+# release, and the NEXT ordinary release, which has to bump the label again, was refused as "a line a Simple release wrote"
+# (and could never get the PASS it was then told to get: it changes Full on purpose). With no override, every #482 batch and
+# hunt fix would have stopped the day Simple shipped. So a line whose only change is the version label or a buster's number
+# is nobody's: a hunk that only re-numbers is skipped, and a line a Simple commit only re-numbered is not Simple's.
+_BUMP = [(re.compile(r'>v\d+(?:\.\d+)*<'), '>v#<'), (re.compile(r'\?v=[0-9][0-9.]*'), '?v=#')]
+
+
+def bump_mask(s):
+    for rx, rep in _BUMP:
+        s = rx.sub(rep, s)
+    return s
+
+
+def diff_hunks(diff_text):
+    """[(header, a, b, c, d, removed lines, added lines)] of a `git diff -U0` / `git show -U0` for one file."""
+    out, cur = [], None
+    for line in diff_text.splitlines():
+        m = HUNK.match(line)
+        if m:
+            a, b = int(m.group(1)), int(m.group(2)) if m.group(2) is not None else 1
+            c, d = int(m.group(3)), int(m.group(4)) if m.group(4) is not None else 1
+            cur = (line, a, b, c, d, [], [])
+            out.append(cur)
+        elif cur is not None and line.startswith('-') and not line.startswith('---'):
+            cur[5].append(line[1:])
+        elif cur is not None and line.startswith('+') and not line.startswith('+++'):
+            cur[6].append(line[1:])
+    return out
+
+
+def bump_only(rem, add):
+    """A hunk that only re-numbers: the same lines, pair by pair, once the label and the busters are masked."""
+    return bool(rem) and len(rem) == len(add) and all(bump_mask(x) == bump_mask(y) for x, y in zip(rem, add))
+
+
+_RENUMBERED = {}
+
+
+def renumbered_by(root, sha, fname, orig_line):
+    """Did commit `sha` only re-number line `orig_line` (its own numbering) of `fname`? Then the line is not its own."""
+    key = (sha, fname)
+    if key not in _RENUMBERED:
+        _RENUMBERED[key] = diff_hunks(sh(['git', 'show', '--format=', '-U0', sha, '--', fname], root))
+    for (_, a, b, c, d, rem, add) in _RENUMBERED[key]:
+        if d > 0 and c <= orig_line < c + d:
+            i = orig_line - c
+            return b == d and i < len(rem) and i < len(add) and bump_mask(rem[i]) == bump_mask(add[i])
+    return False
 
 
 def is_simple_commit(root, sha):
@@ -317,7 +392,8 @@ def is_simple_commit(root, sha):
 
 
 def blame_lines(root, f, lines, nmax):
-    """{line: sha} for the given 1-based HEAD lines of f, in one `git blame` call."""
+    """{line: (sha, its line number in that commit, the file's name there)} for the given 1-based HEAD lines of f, in one
+    `git blame` call."""
     lines = sorted(set(x for x in lines if 1 <= x <= nmax))
     if not lines:
         return {}
@@ -330,38 +406,47 @@ def blame_lines(root, f, lines, nmax):
         ranges += ['-L', '%d,%d' % (a, prev)]
         if x is not None:
             a = prev = x
-    out = {}
+    out, names, last = {}, {}, None
     for t in sh(['git', 'blame', '--porcelain'] + ranges + ['HEAD', '--', f], root).splitlines():
-        m = re.match(r'^([0-9a-f]{40}) \d+ (\d+)', t)
+        m = re.match(r'^([0-9a-f]{40}) (\d+) (\d+)', t)
         if m:
-            out[int(m.group(2))] = m.group(1)
-    return out
+            last = (m.group(1), int(m.group(2)), int(m.group(3)))
+            out[last[2]] = last
+            continue
+        if t.startswith('filename ') and last:
+            names[last[0]] = t[9:]
+    return dict((k, (sha, ol, names.get(sha, f))) for k, (sha, ol, _) in out.items())
 
 
 def simple_owned_lines(root, f, diff, head_text):
-    """[(HEAD line, sha, hunk header)] for every hunk of `diff` that changes a line a Simple release wrote."""
+    """[(HEAD line, sha, hunk header)] for every hunk of `diff` that changes a line a Simple release wrote. A hunk that only
+    re-numbers (the version label, a buster) is nobody's, and so is a line a Simple commit only re-numbered."""
     if not head_text:
         return []
     nmax = head_text.count('\n') + (0 if head_text.endswith('\n') else 1)
     want, hunks = set(), []
-    for line in diff.splitlines():
-        m = HUNK.match(line)
-        if not m:
+    for (hdr, a, b, c, d, rem, add) in diff_hunks(diff):
+        if b > 0 and bump_only(rem, add):
             continue
-        a, b = int(m.group(1)), int(m.group(2)) if m.group(2) is not None else 1
         ls = list(range(a, a + b)) if b > 0 else [a, a + 1]
-        hunks.append((line, b, ls))
+        hunks.append((hdr, b, ls))
         want.update(ls)
     if not hunks:
         return []
     who = blame_lines(root, f, want, nmax)
+
+    def simple_line(x):
+        w = who.get(x)
+        if not w or not is_simple_commit(root, w[0]):
+            return None
+        return None if renumbered_by(root, w[0], w[2], w[1]) else w[0]
     out = []
     for (hdr, b, ls) in hunks:
-        shas = [(x, who.get(x)) for x in ls if 1 <= x <= nmax]
+        shas = [(x, simple_line(x)) for x in ls if 1 <= x <= nmax]
         if b > 0:
-            hit = [(x, s) for (x, s) in shas if s and is_simple_commit(root, s)]
+            hit = [(x, s) for (x, s) in shas if s]
         else:   # an insertion: inside a Simple block only if the lines on BOTH sides are Simple's
-            hit = shas if len(shas) == 2 and all(s and is_simple_commit(root, s) for (_, s) in shas) else []
+            hit = shas if len(shas) == 2 and all(s for (_, s) in shas) else []
         if hit:
             out.append((hit[0][0], hit[0][1], hdr))
     return out
@@ -402,7 +487,64 @@ def instrument_changed(files):
 # of the pictures — is refused unless its POLISH-LOG line says so in words he reads: `LOOSENS THE LOCK: <why>`. Whatever
 # the line's queue number, and whether or not the gate fires: the label is exactly what such a release would get wrong.
 LOOSEN_MARK = 'LOOSENS THE LOCK:'
-TOL_VARS = ('FU_TOL_PX', 'FU_CHAN', 'FU_FAINT_TOL_PX', 'FU_FAINT_CHAN', 'FU_GRID_TOL')   # a larger number sees less
+TOL_VARS = ('FU_TOL_PX', 'FU_CHAN', 'FU_FAINT_TOL_PX', 'FU_FAINT_CHAN', 'FU_GRID_TOL', 'FU_AUDIO_TOL')   # a larger number sees less
+# ⚠️ AND ANY CHANGE TO THE INSTRUMENT IS A RELEASE OF ITS OWN THAT SAYS SO (the second review, 6 Oct). The rule above read
+# four knobs (FU_INVISIBLE, the tolerances, plant names, PNG_UNSTABLE) — and `if 'FU6' in groups and False:` in the comparer
+# with 'box-shadow' dropped from the probe's STYLES, logged as an ordinary "queue 975", was NOT-TRIGGERED; the next Simple
+# release would then have been judged by the weaker instrument. No list of knobs can see every way code goes blind, so:
+#   · ANY release that changes an instrument file fires the gate, whatever its label: it needs a PASS on its exact tree
+#     (the self-test then proves every plant is still caught BY THE CHANGED INSTRUMENT) and a line he reads,
+#     `INSTRUMENT CHANGE: <what>` (or `LOOSENS THE LOCK: <why>`) in its POLISH-LOG line;
+#   · and every group the probe runs must have a plant caught IN it (plant_gaps), so switching a group's comparison off
+#     cannot pass that PASS — FU6 had none until now;
+#   · and the probe's own lists (the styles, attributes, keys, sizes, environments, widths it measures) shrinking is a
+#     loosening, read like the four knobs.
+INSTRUMENT_MARK = 'INSTRUMENT CHANGE:'
+PROBE_LISTS = ('STYLES', 'ATTRS', 'SVG_ATTRS', 'PSEUDO_STYLES', 'KEYS', 'SWEEP_CODES', 'SWEEP_MODS', 'FU6_SIZES', 'ENVS',
+               'HOVER', 'HOVER_MORE', 'ALL')
+NO_PLANT_GROUPS = ('FU7',)   # a record of "no switch yet" (it refuses PASS by itself once one exists): nothing to plant in it
+
+
+def probe_lists(text):
+    """{list name: set of its entries} for the probe's measured lists — an entry is a top-level [...] item when the list
+    holds arrays (KEYS, FU6_SIZES), else each quoted string."""
+    out = {}
+    for name in PROBE_LISTS:
+        m = re.search(r'\bvar %s\s*=\s*\[(.*?)\n?\s*\];' % name, text or '', re.S)
+        if not m:
+            continue
+        body = m.group(1)
+        if re.search(r'^\s*\[', body):
+            items = set(re.sub(r'\s+', ' ', x) for x in re.findall(r'\[[^\[\]]*\]', body))
+        else:
+            items = set(re.findall(r"'((?:[^'\\]|\\.)*)'", body))
+        out[name] = items
+    return out
+
+
+def probe_groups(text):
+    m = re.search(r"\bvar ALL = \[([^\]]*)\];", text or '')
+    return [x.strip().strip('\'"') for x in m.group(1).split(',') if x.strip()] if m else []
+
+
+def plant_gaps(probe_text, plants_text):
+    """The probe groups no plant is caught in (a plant is caught in the LAST group of its prefix)."""
+    import json
+    try:
+        ps = json.loads(plants_text).get('plants') or []
+    except Exception:
+        return ['(the plants file does not read)']
+    caught = set()
+    for p in ps:
+        gs = [g for g in str(p.get('groups') or '').split(',') if g]
+        if gs:
+            caught.add(gs[-1])
+    return [g for g in probe_groups(probe_text) if g not in caught and g not in NO_PLANT_GROUPS]
+
+
+def shell_widths(sh_text):
+    m = re.search(r'^FU_WIDTHS="([^"]*)"', sh_text or '', re.M)
+    return set(m.group(1).split()) if m else set()
 
 
 def instrument_terms(sh_text, cmp_text, plants_text):
@@ -431,7 +573,7 @@ def instrument_terms(sh_text, cmp_text, plants_text):
 
 def loosenings(root):
     """What the tree's instrument stops seeing that HEAD's saw. Empty when HEAD has no instrument (nothing to loosen)."""
-    files = ('tools/full-unchanged.sh', 'tools/_fu_compare.py', 'tools/full-unchanged-plants.json')
+    files = ('tools/full-unchanged.sh', 'tools/_fu_compare.py', 'tools/full-unchanged-plants.json', 'tests/full-unchanged.html')
     head = [sh(['git', 'show', 'HEAD:' + f], root) for f in files]
     if not head[0]:
         return []
@@ -441,14 +583,24 @@ def loosenings(root):
             now.append(io.open(os.path.join(root, f), encoding='utf-8').read())
         except OSError:
             now.append('')
-    hi, ht, hp, hu = instrument_terms(*head)
-    ni, nt, np_, nu = instrument_terms(*now)
+    hi, ht, hp, hu = instrument_terms(*head[:3])
+    ni, nt, np_, nu = instrument_terms(*now[:3])
     out = ['FU_INVISIBLE gains %s' % k for k in sorted(ni - hi)]
     for k in TOL_VARS:
         if k in ht and (k not in nt or nt[k] > ht[k]):
             out.append('%s %s → %s' % (k, ht[k], nt.get(k, 'gone')))
     out += ['the %s plant is gone' % n for n in sorted(hp - np_)]
     out += ['the pictures stop comparing %s' % u for u in sorted(nu - hu)]
+    # the probe's own lists, and the widths the driver runs
+    hl, nl = probe_lists(head[3]), probe_lists(now[3])
+    for name in PROBE_LISTS:
+        if name in hl:
+            gone = sorted(hl[name] - nl.get(name, set()))
+            if gone:
+                out.append('the probe’s %s loses %s' % (name, ', '.join(gone[:4]) + (' …' if len(gone) > 4 else '')))
+    gw = sorted(shell_widths(head[0]) - shell_widths(now[0]))
+    if gw:
+        out.append('the widths measured lose %s' % ', '.join(gw))
     return out
 
 
@@ -492,29 +644,47 @@ def check(root):
     """For tools/ship.sh. Returns (code, message): 0 OK / not triggered, 1 refuse."""
     logline = newest_log_line(root)
     files = changed_files(root)
-    if instrument_changed(files) and LOOSEN_MARK not in logline:
+    inst = instrument_changed(files)
+    if inst and LOOSEN_MARK not in logline:
         loose = loosenings(root)
         if loose:
             return 1, ('REFUSE: this release makes the Full-unchanged lock see less than HEAD’s did (%s), and its POLISH-LOG '
                        'line does not say so. Write "%s <why>" in that line, so the loosening is a line he reads, not a '
                        'quiet edit — or put the instrument back.' % ('; '.join(loose[:4]) + (' …' if len(loose) > 4 else ''), LOOSEN_MARK))
-    why = trigger(logline, files, hook_lines(root, files))
-    if not why:
+    simple = trigger(logline, files, hook_lines(root, files))
+    if not simple and not inst:
         return 0, 'NOT-TRIGGERED'
+    why = list(simple)
+    if inst:
+        why.append('the diff changes the Full-unchanged instrument (%s)' % ', '.join(inst))
+        if INSTRUMENT_MARK not in logline and LOOSEN_MARK not in logline:
+            return 1, ('REFUSE: this release changes the instrument that judges every Simple release (%s), and its POLISH-LOG '
+                       'line does not say so. Write "%s <what>" in that line — whatever the item it ships under — and give it '
+                       'a PASS of its own (tools/full-unchanged.sh), so the changed instrument is proved to still catch every '
+                       'plant before anything is judged by it.' % (', '.join(inst), INSTRUMENT_MARK))
+        try:
+            gaps = plant_gaps(io.open(os.path.join(root, 'tests/full-unchanged.html'), encoding='utf-8').read(),
+                              io.open(os.path.join(root, 'tools/full-unchanged-plants.json'), encoding='utf-8').read())
+        except OSError:
+            gaps = ['(the probe or the plants file is missing)']
+        if gaps and LOOSEN_MARK not in logline:
+            return 1, ('REFUSE: this release changes the instrument (%s), and no self-test plant is caught in %s — so a PASS '
+                       'could not show that part still sees anything (switching its comparison off would pass). Add a plant '
+                       'caught there (tools/full-unchanged-plants.json, its groups ending in that group).'
+                       % (', '.join(inst), ', '.join(gaps)))
     others = other_queues(logline)
-    if others:
+    if simple and others:
         return 1, ('REFUSE: this is a Simple release (%s), and the newest POLISH-LOG line also names queue %s. A Simple release '
                    'ships ALONE, so any difference from HEAD is Simple’s and a rollback takes it back alone — ship the other '
-                   'item(s) separately, or write them as #NNN if they are only mentioned.' % ('; '.join(why), ', '.join(others)))
-    inst = instrument_changed(files)
+                   'item(s) separately, or write them as #NNN if they are only mentioned.' % ('; '.join(simple), ', '.join(others)))
     app = [f for f in files if is_app_path(f)]
     if inst and app:
         # (An instrument change with NO app file in the same release — the lock's own releases, which say queue 980 — is
         # allowed: it cannot hide a change to Full, because it carries none, and it still needs its own PASS below, so
         # the self-test proves the changed instrument still sees every plant.)
-        return 1, ('REFUSE: this is a Simple release (%s), and it changes the instrument that judges it (%s) as well as the '
-                   'app (%s). A release cannot loosen its own lock: ship the instrument change in a release of its own first '
-                   '(one that changes no app file), then this one against it.'
+        return 1, ('REFUSE: this release fires the Full-unchanged gate (%s), and it changes the instrument (%s) as well as the '
+                   'app (%s). A release cannot loosen the lock that judges it: ship the instrument change in a release of its '
+                   'own first (one that changes no app file), then this one against it.'
                    % ('; '.join(why), ', '.join(inst), ', '.join(app[:4]) + (' …' if len(app) > 4 else '')))
     want = source_hash(root)
     try:
@@ -522,7 +692,7 @@ def check(root):
     except OSError:
         got = []
     if not got or got[0] != want:
-        return 1, ('REFUSE: this is a Simple release (%s), and tools/full-unchanged.sh has not printed PASS on this exact tree '
+        return 1, ('REFUSE: this release fires the Full-unchanged gate (%s), and tools/full-unchanged.sh has not printed PASS on this exact tree '
                    '(sources %s; the last PASS was for %s). Run it DETACHED — `nohup tools/full-unchanged.sh > /dev/null '
                    '2>&1 &` (over an hour, far over the Bash tool’s cap) — and ship again once tools/.full-unchanged-report '
                    'ends in PASS.' % ('; '.join(why), want, got[0] if got else 'nothing'))
@@ -581,7 +751,16 @@ QUIET = [
     ('js/compositor.js', '  function groupNeedsUnit(g, t) {'), ('js/storage.js', '    if (FM._mediaBusy) return 0;               // a pack is hydrating; its ids are in flight'),
     ('styles.css', 'prism-shine'), ('styles.css', 'chasm-edge'), ('styles.css', 'transform-origin'), ('styles.css', 'smooth-scroll'),
     ('js/app.js', "document.getElementById('cv-mini-exp')"), ('js/app.js', 'FM.editPoints()'),
+    # the second review's six (6 Oct): each refused an ordinary "queue 975" release, with no override — common idioms all
+    ('js/timeline.js', 'const PAD = { sm: 4, md: 8, lg: 16 };'), ('styles.css', '.hm-card.hydrating { opacity: .6; }'),
+    ('js/home.js', "  el.classList.add('pick');"), ('js/inspector.js', '  const fn = FM.eyedropper.pick;'),
+    ('styles.css', '.chip.sm { padding: 2px 6px; }'), ('js/app.js', "  if (mode === 'simple mode') return;   // the export sheet's simple mode"),
+    ('js/app.js', '  FM.editorHints = function () { return 1; };'), ('js/app.js', '  FM.spineless = true;'),
 ]
+# Lines that OPEN a block REGION_HEAD must not take for one of Simple's own functions (the second review: an ordinary helper
+# named FM.editorHints shipped quietly, and the next one-line fix inside it was refused as Simple's — a prefix, not a name).
+QUIET_REGIONS = ['  FM.editorHints = function () {', '  FM.spineless = function () {', '  FM.worldBoxes = function (a) {',
+                 '  FM.timedListsCache = async function () {', '  function smPlainish(v) {']
 REGION_FIXTURE = '\n'.join([
     "  function ordinary(a) {",                        # 1
     "    return a + 1;",                               # 2
@@ -641,6 +820,21 @@ def selftest():
         h = hook_of(f, s)
         if h:
             fails.append('the hooks fire (%s) on the ordinary %s line %r' % (h, f, s))
+    for s in QUIET_REGIONS:
+        if REGION_HEAD.search(s):
+            fails.append('REGION_HEAD takes the ordinary %r for one of Simple’s own functions (a prefix, not a name)' % s)
+    for s in ['  FM.spine = function () {', '  FM.editor = { request: function () {', '  FM.timedLists = function (layer) {',
+              '  FM.worldBox = function (layer, t, scene, size) {', '  function sanitizeSmLayer(l) {', '  FM.spine.classify = function (doc) {']:
+        if not REGION_HEAD.search(s):
+            fails.append('REGION_HEAD misses Simple’s own %r' % s)
+    # the version label and a ?v= buster, masked, are the same line (the second review: ship.sh writes both into the Simple
+    # release's one commit, and git blame then credited them to Simple for ever)
+    if bump_mask('<span class="ver" title="x">v17.24</span>') != bump_mask('<span class="ver" title="x">v17.25</span>'):
+        fails.append('bump_mask does not hide the version label')
+    if bump_mask('  <script src="js/app.js?v=469"></script>') != bump_mask('  <script src="js/app.js?v=470"></script>'):
+        fails.append('bump_mask does not hide a ?v= buster')
+    if bump_mask('  <script src="js/app.js?v=469"></script>') == bump_mask('  <script src="js/spine.js?v=469"></script>'):
+        fails.append('bump_mask hides more than the number (a renamed script reads as a bump)')
     # the shared files: the review found theme-glass.css loaded by index.html and outside SHARED
     for f in ['js/app.js', 'styles.css', 'theme-glass.css', 'index.html', 'sw.js']:
         if not SHARED.match(f):
@@ -671,6 +865,8 @@ def selftest():
     for f in ['tools/full-unchanged-plants.json']:
         if f not in HASH_FILES:
             fails.append('%s is not in the PASS hash' % f)
+    if 'tests/tests.js' in PROBE_FILES:
+        fails.append('tests/tests.js is served to the probe again — the suite would run inside the frame being measured')
     # the other-queue rule
     if other_queues('- v17.30 — queue 980 (partial) and queue 975') != ['975']:
         fails.append('another queue NNN in a Simple line is not seen')
@@ -745,21 +941,33 @@ def selftest_repo():
         write('POLISH-LOG.md', LOG0)
         write('js/app.js', '\n'.join(A) + '\n')
         write('styles.css', '.a { color: red; }\n')
-        write('index.html', '<!doctype html>\n')
-        write('tools/_fu_compare.py', '# the comparer\n')
-        SH0 = "#!/bin/bash\nFU_INVISIBLE='\nlayer.srcW       # I2\nmeta.SCHEMA_REV  # N1\n'\nFU_TOL_PX=3   # measured\nFU_CHAN=24\nFU_GRID_TOL=4\n"
-        PL0 = '{"plants": [{"name": "margin"}, {"name": "toast"}]}\n'
+        IX = ['<!doctype html>', '<div class="brand">FreeMotion <span class="ver" title="x">v1.0</span></div>',
+              '<script src="js/scene.js?v=10"></script>', '<script src="js/app.js?v=20"></script>',
+              '<script src="js/storage.js?v=30"></script>', '</body>']
+        write('index.html', '\n'.join(IX) + '\n')
+        write('tools/_fu_compare.py', "# the comparer\nif 'FU2' in groups:\n    pass\n")
+        SH0 = "#!/bin/bash\nFU_INVISIBLE='\nlayer.srcW       # I2\nmeta.SCHEMA_REV  # N1\n'\nFU_TOL_PX=3   # measured\nFU_CHAN=24\nFU_GRID_TOL=4\nFU_WIDTHS=\"380 1280\"\n"
+        PL0 = '{"plants": [{"name": "margin", "groups": "FU1"}, {"name": "toast", "groups": "FU1,FU2"}]}\n'
+        PR0 = "<script>\n  var ALL = ['FU1', 'FU2', 'FU7'];\n  var STYLES = ['display', 'box-shadow',\n    'outline'];\n</script>\n"
         write('tools/full-unchanged.sh', SH0)
         write('tools/full-unchanged-plants.json', PL0)
+        write('tests/full-unchanged.html', PR0)
         git('add', '-A')
         git('commit', '-q', '-m', 'v1')
-        # the Simple release: one line of Full's function rewritten with nothing Simple on it, and a two-line block
+        # the Simple release: one line of Full's function rewritten with nothing Simple on it, and a two-line block — and,
+        # as ship.sh writes it, the version label and two busters bumped in the same commit, plus one line of its own
         B = list(A)
         B[2] = '  const sz = size || layerSizeAt(l, t); if (!sz) return null;'
         B[3:3] = ['  // the box at its native size', '  if (sz.w > 0) { box.w = sz.w; }']
         LOG0 = LOG0 + '- v2 — queue 980 (partial): the engine\n'
         write('POLISH-LOG.md', LOG0)
         write('js/app.js', '\n'.join(B) + '\n')
+        IX2 = list(IX)
+        IX2[1] = IX[1].replace('v1.0', 'v1.1')
+        IX2[3] = IX[3].replace('?v=20', '?v=21')
+        IX2[4] = IX[4].replace('?v=30', '?v=31')
+        IX2[5] = '<i class="hint"></i></body>'
+        write('index.html', '\n'.join(IX2) + '\n')
         git('add', '-A')
         git('commit', '-q', '-m', 'v2')
         head = git('rev-parse', 'HEAD').stdout.strip()
@@ -789,23 +997,73 @@ def selftest_repo():
         if edit(C) != (0, 'NOT-TRIGGERED'):
             fails.append('provenance: a line inserted between two ordinary lines fired')
         write('js/app.js', '\n'.join(B) + '\n')
+        # (3b) THE NEXT ORDINARY RELEASE AFTER A SIMPLE ONE (the second review's blocker): it bumps the version label and the
+        #      same busters again — lines git blame credits to the Simple commit — and must not be read as Simple's
+        IX3 = list(IX2)
+        IX3[1] = IX2[1].replace('v1.1', 'v1.2')
+        IX3[3] = IX2[3].replace('?v=21', '?v=22')
+        IX3[4] = IX2[4].replace('?v=31', '?v=32')
+        write('index.html', '\n'.join(IX3) + '\n')
+        write('styles.css', '.a { color: red; }\n.b { color: blue; }\n')
+        code, msg = gate('- v3 — queue 975: an ordinary release')
+        if (code, msg) != (0, 'NOT-TRIGGERED'):
+            fails.append('provenance: an ordinary release that bumps the label and busters a Simple release last bumped was read as Simple’s (%s)' % msg[:200])
+        # (3c) …and a script line inserted between two busters the Simple release only re-numbered
+        IX4 = list(IX2)
+        IX4[4:4] = ['<script src="js/new.js?v=1"></script>']
+        write('index.html', '\n'.join(IX4) + '\n')
+        code, msg = gate('- v3 — queue 975: an ordinary release')
+        if (code, msg) != (0, 'NOT-TRIGGERED'):
+            fails.append('provenance: a line inserted between two busters a Simple release only re-numbered fired (%s)' % msg[:200])
+        # (3d) CONTROL: the line the Simple release REALLY wrote in index.html is still Simple's
+        IX5 = list(IX2)
+        IX5[5] = '<i class="hint2"></i></body>'
+        write('index.html', '\n'.join(IX5) + '\n')
+        code, msg = gate('- v3 — queue 975: an ordinary release')
+        if code != 1 or 'Simple release' not in msg:
+            fails.append('provenance CONTROL: a change to a line the Simple release really wrote in index.html did not fire (%s)' % msg[:200])
+        write('index.html', '\n'.join(IX2) + '\n')
+        write('styles.css', '.a { color: red; }\n')
         # (4) the instrument: a Simple release that also changes the comparer is refused for THAT; the lock's own
-        # release (queue 980, the instrument and nothing in the app) is not — it needs its own PASS instead
-        write('tools/_fu_compare.py', '# the comparer, loosened\n')
+        # release (queue 980, the instrument and nothing in the app) is not — it needs its declaration and its own PASS
+        write('tools/_fu_compare.py', "# the comparer, tightened\nif 'FU2' in groups:\n    pass\n")
         write('js/spine.js', '// Simple\n')
-        code, msg = gate('- v3 — queue 980 (partial): more')
-        if code != 1 or 'instrument' not in msg:
+        code, msg = gate('- v3 — queue 980 (partial): more. INSTRUMENT CHANGE: the comparer')
+        if code != 1 or 'as well as the app' not in msg:
             fails.append('the instrument lock: a Simple release that also changes the comparer was not refused for it (%s)' % msg[:160])
         os.remove(os.path.join(d, 'js/spine.js'))
-        code, msg = gate('- v3 — queue 980 (partial): the lock itself')
-        if code != 1 or 'instrument' in msg or 'has not printed PASS' not in msg:
+        code, msg = gate('- v3 — queue 980 (partial): the lock itself. INSTRUMENT CHANGE: the comparer')
+        if code != 1 or 'as well as the app' in msg or 'has not printed PASS' not in msg:
             fails.append('the instrument lock: an instrument-only release was refused for the wrong reason (%s)' % msg[:200])
+        # (4b) THE SECOND REVIEW'S ROUTE: any instrument change fires, whatever its label, and says so in a line he reads
+        for log in ('- v3 — queue 980 (partial): the lock itself', '- v3 — queue 975: a tidy-up of the probe', '- v3 — (hunt LOW #2) the comparer'):
+            code, msg = gate(log)
+            if code != 1 or INSTRUMENT_MARK not in msg:
+                fails.append('the instrument rule: an instrument change logged as %r was not refused for its missing declaration (%s)' % (log, msg[:160]))
+        code, msg = gate('- v3 — queue 975: a tidy-up. %s the comparer’s words' % INSTRUMENT_MARK)
+        if code != 1 or 'has not printed PASS' not in msg:
+            fails.append('the instrument rule: a declared instrument change under an ordinary label did not need its PASS (%s)' % msg[:200])
+        # (4c) a group with no plant caught in it: the PASS could not show it still sees anything
+        write('tools/full-unchanged-plants.json', '{"plants": [{"name": "margin", "groups": "FU1"}, {"name": "toast", "groups": "FU1"}]}\n')
+        code, msg = gate('- v3 — queue 975: a tidy-up. %s the plants' % INSTRUMENT_MARK)
+        if code != 1 or 'no self-test plant is caught in FU2' not in msg:
+            fails.append('the instrument rule: a probe group with no plant caught in it was not refused (%s)' % msg[:200])
+        write('tools/full-unchanged-plants.json', PL0)
+        # (4d) the review's loosen.py: a group's comparison switched off by code and 'box-shadow' dropped from the probe's
+        #      STYLES, declared only as a tidy-up — the list's shrink is a loosening
+        write('tests/full-unchanged.html', PR0.replace("'box-shadow',\n", '\n'))
+        write('tools/_fu_compare.py', "# the comparer\nif 'FU2' in groups and False:\n    pass\n")
+        code, msg = gate('- v3 — queue 975: a tidy-up of the probe. %s tidy' % INSTRUMENT_MARK)
+        if code != 1 or LOOSEN_MARK not in msg or 'box-shadow' not in msg:
+            fails.append('the loosening rule: dropping box-shadow from the probe’s STYLES was not refused as a loosening (%s)' % msg[:200])
+        write('tests/full-unchanged.html', PR0)
+        write('tools/_fu_compare.py', "# the comparer, tightened\nif 'FU2' in groups:\n    pass\n")
         # (5) the PASS cache: a PASS for this exact tree lets it through; ANY later change to a source refuses it again
         write(PASS_FILE, source_hash(d) + ' now HEAD=x\n')
-        code, msg = gate('- v3 — queue 980 (partial): the lock itself')
+        code, msg = gate('- v3 — queue 980 (partial): the lock itself. INSTRUMENT CHANGE: the comparer')
         if code != 0 or not msg.startswith('OK'):
             fails.append('the PASS cache: a PASS for the instrument-only tree was not accepted (%s)' % msg[:200])
-        write('tools/_fu_compare.py', '# the comparer\n')    # back to HEAD's: a Simple release with no instrument change
+        write('tools/_fu_compare.py', "# the comparer\nif 'FU2' in groups:\n    pass\n")    # back to HEAD's: a Simple release with no instrument change
         code, msg = gate('- v3 — queue 980 (partial): the lock itself')
         if code != 1 or 'has not printed PASS' not in msg:
             fails.append('the PASS cache: a PASS taken with a different comparer was accepted (%s)' % msg[:160])
@@ -830,7 +1088,8 @@ def selftest_repo():
         for what, rel, text in (('a key added to FU_INVISIBLE', 'tools/full-unchanged.sh', SH0.replace("meta.SCHEMA_REV  # N1\n", "meta.SCHEMA_REV  # N1\nlayer.start      # I99\n")),
                                 ('a picture tolerance raised', 'tools/full-unchanged.sh', SH0.replace('FU_TOL_PX=3', 'FU_TOL_PX=12')),
                                 ('a threshold raised', 'tools/full-unchanged.sh', SH0.replace('FU_CHAN=24', 'FU_CHAN=40')),
-                                ('a plant taken out', 'tools/full-unchanged-plants.json', '{"plants": [{"name": "margin"}]}\n')):
+                                ('a plant taken out', 'tools/full-unchanged-plants.json', '{"plants": [{"name": "margin", "groups": "FU1,FU2"}]}\n'),
+                                ('a width taken out', 'tools/full-unchanged.sh', SH0.replace('FU_WIDTHS="380 1280"', 'FU_WIDTHS="380"'))):
             old = io.open(os.path.join(d, rel), encoding='utf-8').read()
             write(rel, text)
             for log in ('- v3 — queue 980 (partial): the lock itself', '- v3 — queue 975: a tidy-up', '- v3 — (hunt LOW #2) the probe'):
@@ -877,7 +1136,10 @@ def main():
         return 0
     if cmd == 'why':
         files = changed_files(root)
-        print('\n'.join(trigger(newest_log_line(root), files, hook_lines(root, files))) or 'not triggered')
+        why = trigger(newest_log_line(root), files, hook_lines(root, files))
+        if instrument_changed(files):
+            why.append('the diff changes the Full-unchanged instrument (%s)' % ', '.join(instrument_changed(files)))
+        print('\n'.join(why) or 'not triggered')
         return 0
     if cmd == 'stale-busters':
         s = stale_busters(root)
