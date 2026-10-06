@@ -142,6 +142,11 @@ def main():
     ap.add_argument("--timeout", type=int, default=600, help="seconds to wait for the suite")
     ap.add_argument("--quiet", action="store_true", help="only print the summary line")
     ap.add_argument("--progress", default=None, help="file to rewrite every ~5 s with the running test and how long it has run")
+    # WHICH TESTS RAN, BY NAME (6 Oct, RULES-AUDIT B4). The output only ever carried a count and the FAILURES, so a slice
+    # run with ?only=a%0Ab could not say whether `b` matched anything at all — a title that ran nothing read exactly like
+    # a title that passed. tools/mutate.sh --only needs that difference (a mutation is only SURVIVED by a test that RAN),
+    # so this adds "ran": [{name, ok, pending}] to the JSON. Opt-in: a full pass's output stays the size it was.
+    ap.add_argument("--names", action="store_true", help="also print the name and verdict of every test that ran")
     a = ap.parse_args()
 
     url = a.url or f"http://localhost:{a.port}/tests/run.html"
@@ -447,6 +452,14 @@ def main():
                                        "return (f&&f.contentWindow&&f.contentWindow.__fmSlow)||[];})()") or []
         except Exception:
             data["slowest"] = []
+        ran = None
+        if a.names:
+            # run.html publishes the full pass/fail list as window.__fmResults on the runner page (not the app frame)
+            try:
+                ran = json.loads(cdp.eval("JSON.stringify((window.__fmResults||null) && window.__fmResults.map(function(r){"
+                                          "return {name: r.name, ok: !!r.ok, pending: !!r.pending};}))") or "null")
+            except Exception:
+                ran = None
         green = "✓" in data["sum"] and "Error" not in data["sum"]
         if a.quiet:
             # --quiet trims the PASSING noise, never the failures. It used to print the summary alone,
@@ -456,8 +469,10 @@ def main():
             for row in data["fails"]:
                 print("   FAIL: " + row.replace("\n", " ")[:300])
         else:
-            print(json.dumps({"ok": green, "summary": data["sum"], "failures": data["fails"], "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])},
-                             indent=1, ensure_ascii=False))
+            out = {"ok": green, "summary": data["sum"], "failures": data["fails"], "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
+            if a.names:
+                out["ran"] = ran          # null when the runner page published no list — a reader must then say so, not guess
+            print(json.dumps(out, indent=1, ensure_ascii=False))
         return 0 if green else 1
     finally:
         if cdp:

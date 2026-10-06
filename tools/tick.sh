@@ -16,7 +16,12 @@ cd "$(dirname "$0")/.."
 hr() { printf '\n── %s ──\n' "$1"; }
 
 hr "IN FLIGHT — do not edit the tree or take a browser reading while any of these is true"
-if [ -f .mutation-in-progress ]; then echo "⛔ MUTATION IN PROGRESS: $(cat .mutation-in-progress)"; else echo "no mutation running"; fi
+if [ -f .mutation-in-progress ]; then
+  # since 6 Oct the lock names its pid: a pid that is gone is a KILLED mutation, and the file it names may still be mutated
+  _mp="$(sed -n 's/^pid=//p' .mutation-in-progress | head -1)"
+  if [ -n "$_mp" ] && ! kill -0 "$_mp" 2>/dev/null; then echo "🚨 A KILLED MUTATION (pid $_mp is gone) may have left $(sed -n 's/^file=//p' .mutation-in-progress | head -1) MUTATED — run tools/mutate.sh --restore before anything else"
+  else echo "⛔ $(head -1 .mutation-in-progress)${_mp:+ (pid $_mp)}"; fi
+else echo "no mutation running"; fi
 SUITES="$(pgrep -fl 'tests/_cdp.py' 2>/dev/null | grep -v pgrep | wc -l | tr -d ' ')"
 [ "$SUITES" != "0" ] && echo "⚠️ $SUITES suite run(s) alive (a ship or mutate is in flight — a mid-flight edit lands in a run meant to test the previous tree)" || echo "no suite running"
 [ -n "$(git status --porcelain)" ] && { echo "✏️ uncommitted changes:"; git status --porcelain | head -12; } || echo "tree clean"

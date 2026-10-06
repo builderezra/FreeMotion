@@ -148,7 +148,9 @@ by remembering:
   banner fires: strike the ask (`~~…~~` or a ✅ prefix) or say plainly the answer was to something else.
 
 ```bash
-tools/mutate.sh <file> "<old>" "<new>" ["expected failing test"]
+tools/mutate.sh --only '<test title>' <file> "<old>" "<new>" '<expected title or item>'   # a slice, foreground
+tools/mutate.sh <file> "<old>" "<new>" ["expected failing test"]                          # full suite, launched detached
+tools/mutate.sh --restore                                                                 # undo a KILLED mutation
 ```
 
 ⚠️ **AND DO NOT WRITE A `pgrep` WAIT-LOOP FOR IT.** `until ... ! pgrep -f "tools/mutate.sh" ...` matches
@@ -156,10 +158,12 @@ tools/mutate.sh <file> "<old>" "<new>" ["expected failing test"]
 goes false. Six of these were found still spinning hours after their jobs had finished (1 Sep; Ezra
 spotted them, not me). Nothing was corrupted, because every result had been read from the job's own
 output file, but they burned CPU and buried what was genuinely in flight.
-**Wait on the lock file, which cannot match itself:** `until [ ! -f .mutation-in-progress ]; do sleep 15; done`
-— or better, do not write a waiter at all: `run_in_background: true` already notifies on completion.
-Restores the file **on a trap**, so the tree cannot be left mutated by a timeout, a Ctrl-C or a kill —
-which happened. **Refuses if the old string was not found**, because a mutation that silently did not
+**Wait on the log, which cannot match itself:** full mode prints the line to use —
+`until grep -q '^MUTATE EXIT' .claude/mutate/mutate.log; do sleep 30; done; tail -15 .claude/mutate/mutate.log`.
+Restores the file **on a trap**, so the tree cannot be left mutated by a timeout or a Ctrl-C — and since 6 Oct
+not by a KILL either (which runs no trap): the lock records the pid, the backup and the mutated file's hash, and the
+next run, or `--restore`, puts the file back first (it refuses if the file was edited after the kill, rather than
+guess). `tools/tick.sh` names a killed one. **Refuses if the old string was not found**, because a mutation that silently did not
 apply produces a green run that looks like proof and is not. Holds `.mutation-in-progress` so nothing
 takes a browser measurement against a mutated tree — that produced one confidently wrong reading.
 
@@ -186,7 +190,25 @@ The cause is worth naming because nothing looks wrong at the call site: `js/comp
 cache key with **NUL separators**, the strings were passed as `"$(cat file)"`, and **command
 substitution truncates at the first NUL byte**. Both arguments became the same harmless prefix. The gate
 compares the file with its own backup, so it catches that and every other silent no-op. It runs before
-the suite, so a mistake costs a second rather than four minutes.
+the suite, so a mistake costs a second rather than a whole suite pass.
+
+```bash
+tools/mutate.sh --only 'queue 1013' js/x.js "<old>" "<new>" 'queue 1013'   # …and a run that did not finish is not a result
+```
+Fifth, 6 Oct (RULES-AUDIT B4) — the tool could not finish at all. Its cap was 1800 s while a full pass had grown to
+the number in `tools/.suite-seconds`, and a timed-out run has no FAIL lines, so it read as **"SURVIVED — the assertion is
+DEAD"** (or, on the baseline, as "no tests"). Nobody had used it since 8 Sep, and the next landing is told to run three.
+Now: the cap is max(3600, 1.6 × `tools/.suite-seconds`); `did not finish within` is checked FIRST and reads
+**`TIMED OUT - nothing proven either way`, exit 8** — only 0 (CAUGHT) and 1 (SURVIVED) are verdicts; it refuses
+(exit 10) while `.ship-in-progress` or `.spotcheck-in-progress` exists here or in the main checkout; full mode launches
+itself detached (exit 11, never 0); and every run serves the tree that holds the file on its own free port.
+**`--only`** runs just the named tests through prove.sh's slice machinery (`tests/_cdp.py --names --timeout 600`,
+judged per title by `tools/_spotjudge.py`): every named title must PASS on the unmutated tree first (red → exit 5),
+CAUGHT only if a named title FAILS, SURVIVED only if they all RAN and passed, and a title that ran nothing refuses
+(exit 9) — the count alone cannot tell "did not run" from "passed". Its green cache is keyed on the sources plus the
+titles and width, never `tools/.mutate-green`; no test floor; the 4th argument is required and must be one of the
+named tests. `tools/test-mutate.sh` proves the edge cases against a stub driver in seconds, and ship.sh runs it
+whenever mutate.sh or its judge changes.
 
 ```bash
 tools/rollback.sh                 # list the releases, newest first — changes NOTHING, safe to run

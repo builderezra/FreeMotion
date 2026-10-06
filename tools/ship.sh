@@ -572,6 +572,15 @@ if [ -n "$(git status --porcelain -- tools/ship-bg.sh tools/_shiplock.sh tools/t
     exit 1
   fi
 fi
+# …and so does mutate.sh (RULES-AUDIT B4): its timed-out, did-not-run and killed paths are the silent ones, and its full
+# mode is too long for anyone to watch them happen for real. Seconds, against a stub driver, in a temp directory.
+if [ -n "$(git status --porcelain -- tools/mutate.sh tools/_spotjudge.py tools/test-mutate.sh tools/_shiplock.sh 2>/dev/null)" ]; then
+  echo "→ mutate.sh or its judge changed — proving it before shipping"
+  if ! ./tools/test-mutate.sh; then
+    echo "❌ MUTATE.SH IS BROKEN — not committing, not pushing."
+    exit 1
+  fi
+fi
 
 # Refresh REQUESTS.md's STATUS labels first, so they can never be stale in a commit (queue 352).
 # A label written by hand is true the day it is written and misleading a week later.
