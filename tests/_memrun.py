@@ -70,7 +70,7 @@ def wait_quiet(log):
             busy.append("load %.1f" % load1())
         if others_alive():
             busy.append("another fm-cdp Chrome is alive")
-        if other_headless() and time.time() - t0 < 600:   # a neighbour's probe: give it up to 10 minutes to finish
+        if other_headless() and time.time() - t0 < 180:   # a neighbour's probe: give it up to 3 minutes to finish
             busy.append("another headless Chrome is alive")
         if not busy:
             return
@@ -108,25 +108,58 @@ def stop(proc):
                 pass
 
 
+PLAIN_NAMES = []
+
+
 def run_slice(a, lo, hi, log):
     name = "%d-%d" % (lo, hi)
     mem, prog, res = (os.path.join(a.out, name + ext) for ext in (".mem", ".progress", ".result"))
     for f in (mem, prog):
         if os.path.exists(f):
             os.remove(f)
-    url = "http://localhost:%d/tests/run.html?fmmem=1&fmrange=%s" % (a.port, name)
-    cmd = [sys.executable, os.path.join(HERE, "_cdp.py"), "--port", str(a.port), "--url", url, "--timeout", str(a.timeout),
-           "--quiet", "--progress", prog, "--mem", mem, "--width", str(a.width)]
+    if a.plain:
+        # A NORMAL run of the same slice — no ?fmmem, nothing in the page waits for anybody — sampled from outside every
+        # 2 s, so the instrument's own cost can be told from the suite's (DIR/A-B.plain, one JSON line per sample).
+        from urllib.parse import quote
+        nm = PLAIN_NAMES
+        q = []
+        if lo > 0:
+            q.append("after=" + quote(nm[lo - 1]))
+        q.append("upto=" + quote(nm[hi]))
+        url = "http://localhost:%d/tests/run.html?%s" % (a.port, "&".join(q))
+        cmd = [sys.executable, os.path.join(HERE, "_cdp.py"), "--port", str(a.port), "--url", url, "--timeout", str(a.timeout),
+               "--quiet", "--progress", prog, "--width", str(a.width)]
+        plain = open(os.path.join(a.out, name + ".plain"), "w")
+    else:
+        url = "http://localhost:%d/tests/run.html?fmmem=1&fmrange=%s" % (a.port, name) + ("&fmrepeat=%d" % a.repeat if a.repeat > 1 else "")
+        cmd = [sys.executable, os.path.join(HERE, "_cdp.py"), "--port", str(a.port), "--url", url, "--timeout", str(a.timeout),
+               "--quiet", "--progress", prog, "--mem", mem, "--width", str(a.width)]
+        plain = None
     env = dict(os.environ)
-    if a.infra:
-        env["FM_MEM_INFRA"] = str(a.infra)
+    env["FM_MEM_INFRA"] = str(a.infra or 0)
+    if a.no_deep:
+        env["FM_MEM_DEEP"] = "0"
     t0 = time.time()
     swap0 = swap_used_mb()
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
     verdict, low_free = "", 100
     last_lines = 0
+    sys.path.insert(0, HERE)
+    import _memhook
     while proc.poll() is None:
-        time.sleep(5)
+        time.sleep(2 if plain else 5)
+        if plain:
+            out = subprocess.run(["ps", "-Ao", "pid=,ppid=,command="], capture_output=True, text=True).stdout
+            kids = [int(l.split()[0]) for l in out.splitlines() if len(l.split()) > 2 and l.split()[1] == str(proc.pid) and "Chrome" in l]
+            chrome = kids[0] if kids else None
+            if chrome:
+                snap = _memhook.snapshot_procs(chrome)
+                try:
+                    cur = json.load(open(prog)).get("test", "")
+                except Exception:
+                    cur = ""
+                plain.write(json.dumps({"t": round(time.time() - t0, 1), "test": cur, "procs": {str(k): [v["kind"], v["fp"]] for k, v in snap.items()}}) + "\n")
+                plain.flush()
         ref = max([os.path.getmtime(f) for f in (prog, mem) if os.path.exists(f)] or [t0])
         silent = time.time() - ref
         try:
@@ -171,8 +204,15 @@ def main():
     ap.add_argument("--min-free", type=int, default=8)
     ap.add_argument("--infra", type=int, default=5, help="memory-infra dump every Nth test (0 = never)")
     ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--repeat", type=int, default=1, help="run every test of the slice N times in a row (fmrepeat)")
+    ap.add_argument("--no-deep", action="store_true", help="skip the per-test heap walk")
+    ap.add_argument("--plain", default=None, metavar="NAMES", help="a NORMAL run (no fmmem) sampled from outside; NAMES = a file of "
+                    "the suite's test names in order, one per line (or idx<TAB>line<TAB>name)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
+    if a.plain:
+        global PLAIN_NAMES
+        PLAIN_NAMES = [l.rstrip("\n").split("\t")[-1] for l in open(a.plain, encoding="utf-8") if l.strip()]
     ranges = []
     for r in a.ranges:
         lo, hi = r.split("-")

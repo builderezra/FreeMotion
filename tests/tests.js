@@ -59866,6 +59866,13 @@
       LIST = LIST.slice(_rg[0], _rg[1] + 1);
       window.__fmFiltered = 'FILTERED(fmrange=' + _rg.join('-') + ', ' + LIST.length + ' of ' + T.length + ')';
     }
+    /* …and `fmrepeat=N` runs every test of the slice N times in a row: growth that comes back on every repeat is a LEAK
+       (it grows without bound), growth only on the first run is a cache or a pool warming up (bounded). Measuring only. */
+    var _rep = FM_MEM ? Math.max(1, Math.min(20, parseInt(PIN_QS.get('fmrepeat') || '1', 10) || 1)) : 1;
+    if (_rep > 1) {
+      LIST = [].concat.apply([], LIST.map(function (t) { var a = []; for (var k = 0; k < _rep; k++) a.push(t); return a; }));
+      window.__fmFiltered = (window.__fmFiltered || 'FILTERED(') .replace(/\)$/, '') + ', fmrepeat=' + _rep + ')';
+    }
     if (FM_MEM) { memInstall(); window.__fmMemNames = LIST.map(function (t) { return t.name; }); await memMark(-1, '(before the first test)', { last: LIST.length - 1, gi: LIST.length ? T.indexOf(LIST[0]) - 1 : -1 }); }   // #1085, ?fmmem=1 only
     for (var i = 0; i < LIST.length; i++) {
       var t = LIST[i], ok = true, err = null, notRun = '';
