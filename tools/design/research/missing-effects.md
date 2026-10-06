@@ -25,7 +25,7 @@ Today a "cut" is just two clips touching. Dissolve, Block Dissolve, Wipe, Radial
 
 | # | Item | What it does | Fit | Size | In §B? |
 |---|---|---|---|---|---|
-| 1 | **Transition picker on a cut** | Tap the join between two clips, pick a transition from a short list; the app writes the keyframes. The one change that makes the rest of this section reachable. | UI plus a "preset writes keyframes on existing effects" layer (the same idea as `FM.fxPresets`). No new kernel. | L (UI), then S per transition | no |
+| 1 | **Transition picker on a cut** | Tap the join between two clips, pick a transition from a short list; the app writes the keyframes. The one change that makes the rest of this section reachable. | UI plus a "preset writes keyframes on existing effects" layer (the same idea as `FM.fxPresets`, `js/inspector.js:367`). No new kernel. | L (UI), then S per transition | no |
 | 2 | **Zoom transition** | Outgoing clip zooms in fast with a blur, incoming settles from large | Scale keyframes plus Zoom Blur (both exist) | S | no |
 | 3 | **Whip pan** | Both clips slide sideways with a streak of motion blur | Position keyframes plus Directional Blur (exists) | S | no |
 | 4 | **Flash / white-out** | Brightness spikes to white on the cut | Brightness keyframes (exists) | S | no |
