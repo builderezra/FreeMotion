@@ -208,15 +208,42 @@ def _did_not_run(error, last=""):
     return 2
 
 
+def _driver_world(cdp, fresh=False):
+    """An ISOLATED WORLD in the top document (6 Oct, the PM's port review): the driver's own JavaScript globals, which no
+    page script can replace — a test stubbing window.matchMedia (991 does, in the app frame) cannot answer for the browser
+    here. Created once per document, re-made when the page navigated (the context id then fails)."""
+    if fresh or not getattr(cdp, "world", None):
+        frame = cdp.send("Page.getFrameTree")["frameTree"]["frame"]["id"]
+        cdp.world = cdp.send("Page.createIsolatedWorld", frameId=frame, worldName="fm-driver")["executionContextId"]
+    return cdp.world
+
+
 def _mouse_state(cdp):
-    """True / False for (hover: hover) and (pointer: fine), asked of the TOP document — run.html, whose matchMedia no test
-    stubs (991 replaces the APP frame's on purpose). The answer is the page's: every frame in it shares it. None when the
-    page cannot be asked right now (mid-navigation)."""
-    try:
-        v = cdp.eval("matchMedia(%s).matches" % json.dumps(_platform.MOUSE_QUERY))
-    except Exception:
-        return None
-    return v if isinstance(v, bool) else None
+    """True / False for (hover: hover) and (pointer: fine), asked of the TOP document — the page's answer, which every frame
+    in it shares — in the driver's ISOLATED world, so no stub in the page can answer for it (6 Oct, the PM's review: it was
+    asked of run.html's own matchMedia, which page script can replace). None when the page cannot be asked right now."""
+    expr = "matchMedia(%s).matches" % json.dumps(_platform.MOUSE_QUERY)
+    for fresh in (False, True):
+        try:
+            r = cdp.send("Runtime.evaluate", expression=expr, contextId=_driver_world(cdp, fresh), returnByValue=True)
+            v = r.get("result", {}).get("value")
+            return v if isinstance(v, bool) else None
+        except Exception:
+            continue                 # the world went with a navigation: make it again, once
+    return None
+
+
+def _confirm_mouse(cdp, seconds=3.0):
+    """Poll until the page reports a mouse again, up to `seconds`. True when it does. Called BEFORE a real-input batch is
+    answered (6 Oct, the review): the answer used to go first and the gate re-checked at the next loop, ~1 s of four False
+    answers later — so the next test could start, and report, on a page that had lost its mouse."""
+    t_end = time.time() + seconds
+    while True:
+        if _mouse_state(cdp) is True:
+            return True
+        if time.time() >= t_end:
+            return False
+        time.sleep(0.1)
 
 
 def main():
@@ -549,6 +576,13 @@ def main():
                         if not inp["touch_emu"]:
                             # the page must have its mouse back before the next test (the gate above the input channel)
                             mouse.update(check=True, no=0, after="after the real-input batch of '%s'" % (q.get("name") or track["name"]))
+                    # …and the mouse is CONFIRMED before the test hears its batch is done (6 Oct, the review): otherwise the
+                    # test carries on, and can finish and report, inside the second the loop's own check needs to notice.
+                    if not inp["touch_emu"] and not _confirm_mouse(cdp):
+                        return _did_not_run("This browser reports NO MOUSE after the real-input batch of '%s' — (hover: hover) "
+                                            "and (pointer: fine) did not come back within 3 s, so the test that sent it, and "
+                                            "every mouse-gated test after it, would pass or fail for the wrong reason "
+                                            "(tests/_platform.py)." % (q.get("name") or track["name"]), track["name"])
                     cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
                              "if(w){w.__fmInputErr=%s;w.__fmInputDone=%s;}})()" % (json.dumps(err), json.dumps(q["seq"])))
             except Exception:

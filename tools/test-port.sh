@@ -221,6 +221,38 @@ case "$v" in *"WSL VM's own load only"*"5120 MB available"*) ok "WSL: a pass say
 [ -z "$(note Darwin "$TMP/osrelease-wsl")" ] && ok "the Mac: nothing to add (its load is the whole machine's)" || bad "the Mac printed a WSL note"
 awk '/FM_SHIP_IGNORE_LOAD:-/{f=1} f && /fm_load_blind_note/{found=1} f && /^fi$/{exit} END{exit !found}' tools/ship.sh && ok "ship.sh says it on the load gate's pass path" || bad "ship.sh's load gate does not call fm_load_blind_note"
 
+echo "── the driver's mouse gate asks from its own isolated world, and confirms the mouse before answering a batch (review minor) ──"
+v="$(python3 - <<'PY' 2>&1
+import sys, json
+sys.path.insert(0, 'tests'); sys.dont_write_bytecode = True
+import _cdp
+class Fake:
+    """records what the driver asks; the page's own world would say False (a stub), the isolated world says True"""
+    def __init__(self, answers): self.calls = []; self.answers = list(answers)
+    def send(self, method, **p):
+        self.calls.append((method, p))
+        if method == 'Page.getFrameTree': return {'frameTree': {'frame': {'id': 'F1'}}}
+        if method == 'Page.createIsolatedWorld': return {'executionContextId': 77}
+        if method == 'Runtime.evaluate':
+            if p.get('contextId') == 77: return {'result': {'value': self.answers.pop(0) if self.answers else True}}
+            return {'result': {'value': False}}
+        return {}
+    def eval(self, expr, await_promise=False):
+        self.calls.append(('eval', {'expr': expr})); return False
+f = Fake([True])
+got = _cdp._mouse_state(f)
+iso = [c for c in f.calls if c[0] == 'Runtime.evaluate' and c[1].get('contextId') == 77]
+print('ISOLATED' if (got is True and iso and not [c for c in f.calls if c[0] == 'eval']) else 'MAINWORLD got=%r calls=%r' % (got, [c[0] for c in f.calls]))
+g = Fake([False, False, True])
+print('CONFIRM' if getattr(_cdp, '_confirm_mouse', None) and _cdp._confirm_mouse(g, 2.0) is True else 'NOCONFIRM')
+h = Fake([False] * 100)
+print('GIVESUP' if getattr(_cdp, '_confirm_mouse', None) and _cdp._confirm_mouse(h, 0.3) is False else 'NOGIVEUP')
+PY
+)"
+printf '%s' "$v" | grep -q '^ISOLATED' && ok "_mouse_state reads an isolated world — a page stub (False in the page's world) cannot answer for the browser" || bad "_mouse_state: $v"
+printf '%s' "$v" | grep -q '^CONFIRM' && printf '%s' "$v" | grep -q '^GIVESUP' && ok "_confirm_mouse waits for the mouse to come back, and gives up (False) when it does not" || bad "_confirm_mouse: $v"
+awk '/_confirm_mouse\(cdp\)/{c=NR} /w.__fmInputErr=%s;w.__fmInputDone=%s/{d=NR} END{exit !(c && d && c < d)}' tests/_cdp.py && ok "…and a real-input batch is answered only after it (the line order in tests/_cdp.py)" || bad "the batch is answered before the mouse is confirmed"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"
