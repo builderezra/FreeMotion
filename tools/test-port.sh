@@ -125,6 +125,42 @@ rm -f "$SC/tools/.spotcheck.log"
 out="$(cd "$SC" && FM_CHROME="$TMP/no-such-chrome" tools/spotcheck.sh HEAD 2>&1)"; rc=$?
 [ "$rc" = 2 ] && [ ! -s "$SC/tools/.spotcheck.log" ] && ok "control: with no Chrome it is the machine — exit 2, nothing logged" || bad "no Chrome: rc=$rc log=[$(cat "$SC/tools/.spotcheck.log" 2>/dev/null)]"
 
+echo "── the reaper: the pattern follows FM_CHROME, and 'a run is alive' means a python running _cdp.py (review minor) ──"
+py_reap() { python3 -c 'import sys; sys.path.insert(0, "tests"); import _platform as P
+if sys.argv[1] == "linux": P.sys.platform = "linux"; P.IS_LINUX = True
+print(P.reap_pattern())' "$1"; }
+sh_reap() { PATH="$(shim_os "$1"):$PATH" bash -c '. tools/_platform.sh; fm_chrome_reap_pattern'; }
+for os_ in Darwin Linux; do
+  pos="$( [ "$os_" = Linux ] && echo linux || echo darwin )"
+  for fc in "" "/opt/x/chrome-headless-shell" "/Applications/Chromium.app/Contents/MacOS/Chromium" "/usr/bin/chromium"; do
+    a="$(FM_CHROME="$fc" py_reap "$pos")"; b="$(FM_CHROME="$fc" sh_reap "$os_")"
+    [ "$a" = "$b" ] || bad "the twins disagree on $os_ with FM_CHROME='$fc': python '$a' vs shell '$b'"
+  done
+done
+ok "tests/_platform.py and tools/_platform.sh give the same reap pattern (Mac and Linux, with and without FM_CHROME)"
+p="$(FM_CHROME=/opt/x/chrome-headless-shell sh_reap Linux)"
+printf '%s\n' "/opt/x/chrome-headless-shell --headless=new --user-data-dir=/tmp/fm-cdp-abc about:blank" | grep -qE "$p" \
+  && ok "Linux, FM_CHROME=chrome-headless-shell: its processes are matched (they were not, so never reaped)" || bad "chrome-headless-shell is not matched by '$p'"
+printf '%s\n' "/opt/google/chrome/chrome --type=renderer --user-data-dir=/tmp/fm-cdp-abc" | grep -qE "$p" && ok "…and the stock Chrome still is" || bad "stock chrome not matched by '$p'"
+printf '%s\n' "bash -c echo /opt/x/chrome-headless-shell --user-data-dir=/tmp/fm-cdp-x" | grep -qE "$p" && bad "a decoy SHELL carrying the binary's path is matched by '$p' (it would be SIGKILLed)" || ok "…and a decoy shell carrying its path is not (what is matched is SIGKILLed)"
+p="$(FM_CHROME="/Applications/Chromium.app/Contents/MacOS/Chromium" sh_reap Darwin)"
+printf '%s\n' "/Applications/Chromium.app/Contents/MacOS/Chromium --headless=new --user-data-dir=/var/x/fm-cdp-abc" | grep -qE "$p" && ok "Mac, FM_CHROME=Chromium.app: matched" || bad "Chromium.app is not matched by '$p'"
+# the liveness pattern, against REAL processes on this machine: a python running a _cdp.py, and a shell that only names one
+mkdir -p "$TMP/drv/tests"; printf 'import time\ntime.sleep(8)\n' > "$TMP/drv/tests/_cdp.py"
+python3 "$TMP/drv/tests/_cdp.py" --port 1 & PYPID=$!
+bash -c 'sleep 8; : waiting on tests/_cdp.py' & SHPID=$!
+sleep 1
+dp="$(. tools/_platform.sh; fm_driver_pattern 2>/dev/null)"
+if [ -z "$dp" ]; then bad "no fm_driver_pattern — the liveness check still matches any command line naming _cdp.py"
+else
+  hits="$(pgrep -f "$dp" | tr '\n' ' ')"
+  case " $hits " in *" $PYPID "*) ok "a python running …/tests/_cdp.py is a live run (pid $PYPID)";; *) bad "a running driver is not seen as alive by '$dp' (pgrep: $hits)";; esac
+  case " $hits " in *" $SHPID "*) bad "a shell that merely names tests/_cdp.py is read as a live run (pid $SHPID) — the reaper would stand down for it";; *) ok "a shell that only names tests/_cdp.py is not a live run";; esac
+  [ "$(python3 -c 'import sys; sys.path.insert(0, "tests"); import _platform; print(_platform.driver_pattern())')" = "$dp" ] && ok "the twins agree on the liveness pattern" || bad "tests/_platform.py driver_pattern differs from fm_driver_pattern"
+fi
+kill "$PYPID" "$SHPID" 2>/dev/null; wait "$PYPID" "$SHPID" 2>/dev/null
+grep -q 'fm_driver_pattern' tools/ship.sh && grep -q 'driver_pattern()' tests/_cdp.py && ok "ship.sh and tests/_cdp.py both ask the shared liveness pattern" || bad "ship.sh or tests/_cdp.py still has its own liveness pattern"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"

@@ -19,6 +19,7 @@ sample hashes recorded on the Mac (the 482 "draws the old look byte for byte" te
 rasteriser and audio engine. Same 23 reds at 1280 and 380 on the first full WSL passes, all of them these.
 """
 import os
+import re
 import shutil
 import sys
 
@@ -127,12 +128,27 @@ def reap_pattern():
     and the reaper SIGKILLs what it matches (tools/ship.sh says why that matters). The Mac's processes all live under
     'Google Chrome…'. Linux's all carry argv[0] /opt/google/chrome/chrome, even when started through the google-chrome
     wrapper (measured: 14 of 14 matched, and 0 decoy shells — one with '/opt/google/chrome/chrome --user-data-dir=/tmp/fm-cdp-'
-    in its arguments). Same text as fm_chrome_reap_pattern in tools/_platform.sh. None = no pattern for this OS."""
+    in its arguments). Same text as fm_chrome_reap_pattern in tools/_platform.sh. None = no pattern for this OS.
+    ⚠️ …and the Chrome FM_CHROME names (6 Oct, the PM's port review): the list was fixed, while FM_CHROME may name any
+    binary (chrome-headless-shell, Chromium.app) whose orphans then matched nothing — never reaped, silently."""
+    extra = ""
+    if os.environ.get("FM_CHROME"):
+        extra = re.sub(r'([][\\.*^$+?(){}|/])', r'\\\1', os.path.basename(os.environ["FM_CHROME"]))
     if sys.platform == "darwin":
-        return "Google Chrome.*fm-cdp-"
-    if IS_LINUX:
-        return "^([^ ]*/)?(chrome|chromium|chromium-browser)( |$).*fm-cdp-"
+        return "(Google Chrome|%s).*fm-cdp-" % extra if extra and extra != "Google Chrome" else "Google Chrome.*fm-cdp-"
+    if sys.platform.startswith("linux"):
+        names = ["chrome", "chromium", "chromium-browser"] + ([extra] if extra and extra not in ("chrome", "chromium", "chromium-browser") else [])
+        return "^([^ ]*/)?(%s)( |$).*fm-cdp-" % "|".join(names)
     return None
+
+
+def driver_pattern():
+    """The `pgrep -f` pattern for a RUNNING test driver — a PYTHON process whose arguments name _cdp.py (6 Oct, the review).
+
+    `pgrep -f _cdp.py` also matched a shell running or waiting on one, and a ship.sh whose message names it, so the
+    reaper stood down silently on the runs most likely to leave orphans. Same text as fm_driver_pattern in
+    tools/_platform.sh."""
+    return "^[^ ]*[Pp]ython[0-9.]* .*_cdp\\.py( |$)"
 
 
 # REAL TOUCH (tests/_cdp.py, queue 924): the Mac switches DevTools touch emulation on for a run of touch steps and off

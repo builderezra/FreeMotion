@@ -149,13 +149,32 @@ fm_chrome() {
 # fm_chrome_reap_pattern — the `pgrep -f` pattern for a test Chrome on an fm-cdp- profile, anchored to the CHROME BINARY
 # (ship.sh says why a bare 'fm-cdp-' is dangerous). Linux: every process of one headless Chrome shows argv[0]
 # /opt/google/chrome/chrome, even launched through the google-chrome wrapper (measured 14/14, and 0 decoy shells).
+# ⚠️ …AND THE CHROME FM_CHROME NAMES (6 Oct, the PM's port review). The list was fixed per OS, while FM_CHROME may name any
+# binary (chrome-headless-shell, a renamed Chrome for Testing, Chromium.app): its processes matched nothing and their orphans
+# were never reaped, silently. Its basename (regex-escaped) is added to the list. Same text as tests/_platform.py.
 fm_chrome_reap_pattern() {
+  _fm_extra=""
+  if [ -n "${FM_CHROME:-}" ]; then
+    _fm_extra="$(basename "$FM_CHROME" | sed 's/[][\.*^$+?(){}|/]/\\&/g')"
+  fi
   case "$(uname -s)" in
-    Darwin) echo 'Google Chrome.*fm-cdp-' ;;
-    Linux)  echo '^([^ ]*/)?(chrome|chromium|chromium-browser)( |$).*fm-cdp-' ;;
+    Darwin) if [ -n "$_fm_extra" ] && [ "$_fm_extra" != "Google Chrome" ]; then echo "(Google Chrome|$_fm_extra).*fm-cdp-"
+            else echo 'Google Chrome.*fm-cdp-'; fi ;;
+    Linux)  case "|chrome|chromium|chromium-browser|" in
+              *"|$_fm_extra|"*) _fm_extra="" ;;
+            esac
+            echo "^([^ ]*/)?(chrome|chromium|chromium-browser${_fm_extra:+|$_fm_extra})( |\$).*fm-cdp-" ;;
     *)      echo "fm_chrome_reap_pattern: no pattern for $(uname -s) — orphaned test Chromes are NOT reaped here" >&2; return 1 ;;
   esac
 }
+
+# fm_driver_pattern — the `pgrep -f` pattern for a RUNNING test driver: a PYTHON process whose arguments name _cdp.py.
+# (6 Oct, the PM's port review.) The liveness check was `pgrep -f _cdp.py`, which also matches a shell that is merely
+# running or waiting on one (the Bash tool's wrapper, `timeout … python3 tests/_cdp.py`, an until-loop), and a ship.sh whose
+# commit message names _cdp.py — so the reaper stood down, silently, on exactly the runs most likely to leave orphans.
+# Anchored to the interpreter (argv[0] ends in python/Python, with a version or not); a path with spaces still matches.
+# Same text as tests/_platform.py driver_pattern().
+fm_driver_pattern() { echo '^[^ ]*[Pp]ython[0-9.]* .*_cdp\.py( |$)'; }
 
 # fm_pgrep_args PATTERN — "PID full command line", one per process whose command line matches PATTERN. The Mac's BSD
 # `pgrep -fl` prints exactly that; procps `pgrep -fl` prints only "PID name" (measured: "127179 bash" for a shell running

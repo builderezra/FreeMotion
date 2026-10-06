@@ -162,9 +162,16 @@ fi
 # v16.23, and believing either red would have meant rewriting three correct tests.
 # Safe here and nowhere else: this runs before ship.sh starts anything, and the two locks above have
 # already established that no other run owns this tree.
+# "Another run is alive" means a PYTHON running _cdp.py (fm_driver_pattern, 6 Oct — the PM's review): `pgrep -f '_cdp\.py'`
+# also matched a shell waiting on one, and THIS script when its commit message names _cdp.py, and then reaped nothing,
+# silently. Standing down now names who it stood down for.
+_DRV_ALIVE=""
+command -v pgrep >/dev/null 2>&1 && _DRV_ALIVE="$(fm_pgrep_args "$(fm_driver_pattern)" 2>/dev/null | head -3)"
 if ! command -v pgrep >/dev/null 2>&1; then
   echo "⚠️  pgrep is not installed — orphaned headless Chromes cannot be found or reaped before this run"
-elif ! pgrep -f '_cdp\.py' >/dev/null 2>&1; then
+elif [ -n "$_DRV_ALIVE" ]; then
+  echo "⚠️  not reaping orphaned test Chromes — a suite run is alive: $(printf '%s' "$_DRV_ALIVE" | cut -c1-140 | tr '\n' '|')"
+else
   # ⚠️ MATCH THE CHROME BINARY, NOT THE BARE PROFILE PREFIX. `pgrep -f 'fm-cdp-'` also matches any
   # SHELL whose command line happens to carry that string — including this script if someone ever
   # ships a commit message containing it, in which case pkill would kill the ship mid-flight. That is

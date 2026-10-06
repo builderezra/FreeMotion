@@ -272,9 +272,13 @@ def main():
     # SHELL whose command line carries it — and what matches is SIGKILLed. ship.sh anchored its copy to the binary for that
     # reason; both now take one per-OS pattern (tests/_platform.py reap_pattern, tools/_platform.sh fm_chrome_reap_pattern).
     # Housekeeping still never stops a run — but when it cannot happen it SAYS so, on stderr.
+    # ⚠️ "ANOTHER RUN IS ALIVE" MEANS A PYTHON RUNNING _cdp.py (6 Oct, the PM's port review). `pgrep -f _cdp.py` also matched
+    # any shell running or waiting on one (the Bash tool's wrapper, `timeout … python3 tests/_cdp.py`, an until-loop) and a
+    # ship.sh whose commit message names it — and stood down WITHOUT A WORD on exactly the runs most likely to leave orphans.
+    # Anchored to the interpreter now (tests/_platform.py driver_pattern), and standing down names who it stood down for.
     try:
-        _others = subprocess.run(["pgrep", "-f", "_cdp.py"], capture_output=True, text=True)
-        _live = [int(x) for x in _others.stdout.split() if x.strip().isdigit() and int(x) != os.getpid()]
+        _others = subprocess.run(["pgrep", "-f", _platform.driver_pattern()], capture_output=True, text=True)
+        _live = [int(x) for x in _others.stdout.split() if x.strip().isdigit() and int(x) not in (os.getpid(), os.getppid())]
     except FileNotFoundError:
         print("(reaper skipped: pgrep is not installed, so a killed run's Chrome cannot be found)", file=sys.stderr)
         _live = [1]
@@ -282,6 +286,12 @@ def main():
         _live = [1]                              # cannot tell → assume company, reap nothing
     try:
         if _live:
+            try:
+                _who = subprocess.run(["ps", "-o", "pid=,command=", "-p", ",".join(str(p) for p in _live[:5])],
+                                      capture_output=True, text=True).stdout.strip().replace("\n", " | ")
+            except Exception:
+                _who = ", ".join(str(p) for p in _live[:5])
+            print("(reaper stood down: another suite run is alive — %s)" % _who[:400], file=sys.stderr)
             raise RuntimeError("another suite run is in flight — its browser is not stale")
         _pat = _platform.reap_pattern()
         if not _pat:
