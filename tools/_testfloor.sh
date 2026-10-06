@@ -43,9 +43,34 @@ test_floor_check() {
 # THE SUITE'S TIME CAP, IN ONE PLACE (6 Oct). ship.sh has set it from tools/.suite-seconds since 30 Sep — 1.6x the last green
 # pass, never below an hour — while mutate.sh still hard-coded 1800 s, under the Mac's own measured 2697 s pass. Its runs
 # then timed out with no FAIL line and read as "SURVIVED — the assertion is DEAD". One function, both callers.
+#
+# PER MACHINE (6 Oct, #1071). tools/.suite-seconds held ONE number, and two machines now run the suite: the Mac (2697 s) and
+# the Windows laptop under WSL (2905 s). Each green pass overwrote the other's, so one machine's cap was always set from the
+# other's pass. Now one line per machine — "<machine id> <seconds>" — each pass writes its own line and keeps the rest, and a
+# machine with no line of its own takes the LARGEST known (a cap too long costs a wait; too short kills a good run). A bare
+# number (the old format) counts as one more known value. The id is fm_machine_id (tools/_platform.sh): the short hostname.
+suite_machine() {
+  if command -v fm_machine_id >/dev/null 2>&1; then fm_machine_id
+  else hostname -s 2>/dev/null || uname -n; fi
+}
+# suite_seconds_for [ID] — that machine's last green pass in seconds; its own line, else the largest known, else 0
+suite_seconds_for() {
+  awk -v m="${1:-$(suite_machine)}" '
+    NF == 1 && $1 ~ /^[0-9]+$/ { if ($1 + 0 > max) max = $1 + 0; next }
+    NF >= 2 && $2 ~ /^[0-9]+$/ { if ($1 == m) mine = $2 + 0; if ($2 + 0 > max) max = $2 + 0 }
+    END { if (mine != "") print mine; else print max + 0 }' tools/.suite-seconds 2>/dev/null || echo 0
+}
+# suite_seconds_record SECONDS [ID] — set this machine's line, keep every other machine's (a bare old number is dropped once
+# a machine has its own line: it was the Mac's, and the Mac's own pass replaces it)
+suite_seconds_record() {
+  local id="${2:-$(suite_machine)}" tmp="tools/.suite-seconds.$$.tmp"
+  case "$1" in ''|*[!0-9]*) echo "suite_seconds_record: '$1' is not a number of seconds" >&2; return 1 ;; esac
+  { awk -v m="$id" 'NF >= 2 && $1 != m && $2 ~ /^[0-9]+$/ { print $1, $2 }' tools/.suite-seconds 2>/dev/null
+    echo "$id $1"; } | sort > "$tmp" && mv -f "$tmp" tools/.suite-seconds
+}
 suite_timeout() {
   local last t
-  last="$(cat tools/.suite-seconds 2>/dev/null | tr -dc '0-9')"
+  last="$(suite_seconds_for)"
   t=$(( ${last:-0} * 16 / 10 ))
   [ "$t" -lt 3600 ] && t=3600
   echo "$t"

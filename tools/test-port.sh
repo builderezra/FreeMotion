@@ -279,6 +279,23 @@ grep -q 'font_report "$OUT" desktop' tools/ship.sh && grep -q 'font_report "$POU
 python3 -c 'import sys; sys.path.insert(0, "tests"); import _platform as P; sys.exit(0 if P.MAC_FONT.get("width") and P.MAC_FONT.get("resolved") else 1)' \
   && ok "the Mac's own measurement is recorded (tests/_platform.py MAC_FONT) — without it the check could never say 'different'" || bad "MAC_FONT has no width: the font check is inert"
 
+echo "── tools/.suite-seconds is per machine: each keeps its own line, a new machine takes the largest known (#1071) ──"
+SS="$TMP/ss"; mkdir -p "$SS/tools"
+ss() { ( cd "$SS" && FM_MACHINE_ID="$1" bash -c '. "$0/tools/_platform.sh"; . "$0/tools/_testfloor.sh"; '"$2" "$REPO" ); }
+printf 'mac-a 2697\npc-b 2905\n' > "$SS/tools/.suite-seconds"
+[ "$(ss mac-a 'suite_seconds_for')" = 2697 ] && [ "$(ss pc-b 'suite_seconds_for')" = 2905 ] && ok "each machine reads its own pass (mac-a 2697, pc-b 2905)" || bad "per-machine read: mac-a=$(ss mac-a suite_seconds_for) pc-b=$(ss pc-b suite_seconds_for)"
+[ "$(ss new-c 'suite_seconds_for')" = 2905 ] && ok "a machine with no line takes the largest known (2905)" || bad "missing key: $(ss new-c suite_seconds_for)"
+[ "$(ss mac-a 'suite_timeout')" = 4315 ] && [ "$(ss new-c 'suite_timeout')" = 4648 ] && ok "the cap: 1.6 × its own (mac-a 4315 s), 1.6 × the largest for a new machine (4648 s)" || bad "caps: mac-a=$(ss mac-a suite_timeout) new-c=$(ss new-c suite_timeout)"
+ss pc-b 'suite_seconds_record 3010' >/dev/null
+[ "$(cat "$SS/tools/.suite-seconds")" = "$(printf 'mac-a 2697\npc-b 3010')" ] && ok "a green pass on pc-b rewrites pc-b's line only (mac-a's 2697 kept)" || bad "record: $(tr '\n' '|' < "$SS/tools/.suite-seconds")"
+printf '2697\n' > "$SS/tools/.suite-seconds"
+[ "$(ss pc-b 'suite_seconds_for')" = 2697 ] && ok "the old one-number file still reads (2697 for any machine)" || bad "legacy read: $(ss pc-b suite_seconds_for)"
+ss mac-a 'suite_seconds_record 2700' >/dev/null
+[ "$(cat "$SS/tools/.suite-seconds")" = "mac-a 2700" ] && ok "…and the first pass recorded turns it into a machine's line" || bad "legacy record: $(tr '\n' '|' < "$SS/tools/.suite-seconds")"
+v="$(ss mac-a 'suite_seconds_record notanumber' 2>&1)"; [ "$(cat "$SS/tools/.suite-seconds")" = "mac-a 2700" ] && ok "a non-number is refused and the file is untouched" || bad "bad record: $v"
+grep -q 'suite_seconds_record "$_suite_secs"' tools/ship.sh && grep -q '_last_suite="$(suite_seconds_for)"' tools/ship.sh && ok "ship.sh reads and writes it through these (mutate.sh takes suite_timeout)" || bad "ship.sh still reads or writes tools/.suite-seconds as one number"
+[ "$(awk 'NF >= 2' tools/.suite-seconds | wc -l | tr -d ' ')" -ge 1 ] && ok "the repo's tools/.suite-seconds is in the per-machine format: $(tr '\n' ' ' < tools/.suite-seconds)" || bad "tools/.suite-seconds is still one bare number"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"

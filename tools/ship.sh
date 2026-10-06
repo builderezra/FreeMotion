@@ -833,7 +833,8 @@ SUITE_TIMEOUT=2700
 # note that goes stale as tests are added, so each green pass now records its real length in tools/.suite-seconds
 # (committed with the release) and the cap is 1.6x the last one, never below an hour.
 # The cap is suite_timeout in tools/_testfloor.sh now (6 Oct), because mutate.sh needs the same one and had a stale 1800.
-_last_suite=$(cat tools/.suite-seconds 2>/dev/null | tr -dc '0-9'); _last_suite=${_last_suite:-0}
+# PER MACHINE (6 Oct): this machine's own last pass, else the largest any machine has recorded (tools/_testfloor.sh)
+_last_suite="$(suite_seconds_for)"; _last_suite=${_last_suite:-0}
 SUITE_TIMEOUT="$(suite_timeout)"
 # ⚠️ A TIMEOUT'S REAL CAUSE IS USUALLY THE MACHINE, AND NOTHING HERE MEASURED IT (21 Sep). Three ship
 # cycles went on "the suite ran out of time" — first at prove's 600s, then at the suite's 1800s — before
@@ -891,7 +892,7 @@ notrun_report "$OUT" desktop || { _WHY="a test is NOT RUN HERE on the Mac"; exit
 NOTRUN_ALL="$(notrun_list "$OUT")"
 font_report "$OUT" desktop   # a different font than the Mac's is said, never refused (tools/_testfloor.sh)
 echo "✅ $SUM  (${_suite_secs}s)  $(printf "%s" "$OUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"   # which browser ran (the PM review)
-echo "$_suite_secs" > tools/.suite-seconds
+suite_seconds_record "$_suite_secs"   # this machine's line; the other machines' lines are kept (tools/_testfloor.sh)
 
 # ── THE PHONE PASS (queue 353 clause 3, added 22 Aug) ────────────────────────────────────────────
 # "make sure everything is quality tested as good as possible" — and this app is MOBILE-FIRST, while

@@ -52,6 +52,15 @@ fm_machine_noun() {
   else echo machine; fi
 }
 
+# fm_machine_id — a short, stable name for THIS machine (its short hostname, letters/digits/._- only): the key of its line in
+# tools/.suite-seconds (6 Oct — the Mac and the WSL laptop each keep their own suite length). FM_MACHINE_ID overrides it,
+# for the self-test.
+fm_machine_id() {
+  _fm_v="${FM_MACHINE_ID:-$(hostname -s 2>/dev/null || uname -n)}"
+  _fm_v="$(printf '%s' "$_fm_v" | tr -c 'A-Za-z0-9_.-' '-' | cut -c1-48)"
+  echo "${_fm_v:-unknown}"
+}
+
 # fm_ncpu — the online core count. Linux: getconf, NOT nproc (GNU nproc obeys OMP_NUM_THREADS: measured 2 on 16 cores).
 fm_ncpu() {
   if [ "$(uname -s)" = Darwin ]; then _fm_v="$(sysctl -n hw.ncpu 2>/dev/null)"
