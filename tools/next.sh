@@ -18,6 +18,9 @@
 # rule. Numbered items follow in numeric order.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
+# PYTHONDONTWRITEBYTECODE among others: importing tools/_classify.py must not leave tools/__pycache__ in the tree (6 Oct —
+# nothing ignores it on Linux, and tick.sh then reports the litter as uncommitted work)
+. tools/_platform.sh || exit 1
 
 # ---- THE INBOX GATE (v11.21) --------------------------------------------------------------------
 # REFUSES TO HAND OUT WORK WHILE INBOX.md HAS ANYTHING IN IT.

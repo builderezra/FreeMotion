@@ -132,7 +132,12 @@ ship_status_lines() {
     # Shouting at that one would teach the next session to scroll past the banner, which costs the real
     # refusals this line exists to surface. So the alarm is reserved for a refusal with no stated reason.
     *batched*)    echo "last ship: held back on purpose ($v) — carry on; the notes ride out with the next real change" ;;
-    *overloaded*) echo "⏸ last ship: the MAC was overloaded, not the code ($v) — the tree is a finished release; ship it again once \`sysctl -n vm.loadavg\` is under ~10 (ship.sh refuses in a second otherwise, so trying costs nothing)" ;;
+    # the bar is ship.sh's own (fm_load_bar in tools/_platform.sh), and the command to read the load works on the Mac and
+    # on Linux alike. A caller that has not sourced _platform.sh gets plain words, never an error.
+    *overloaded*) echo "⏸ last ship: the $(fm_machine_noun 2>/dev/null || echo machine) was overloaded, not the code ($v) — the tree is a finished release; ship it again once \`. tools/_platform.sh; fm_load1\` is under $(fm_load_bar 2>/dev/null || echo '1.6x the cores') (ship.sh refuses in a second otherwise, so trying costs nothing)" ;;
+    # ship.sh's "only the Mac ships" gate (6 Oct, the WSL port) is a refusal ON PURPOSE too. Under the alarm below it read
+    # "fix the gate it tripped, ship again" — an instruction to defeat the one rule the PM made hard. The switch-over is the PM's.
+    *"not the shipping machine"*) echo "⏸ last ship: refused ON PURPOSE ($v) — this $(fm_machine_noun 2>/dev/null || echo machine) does not ship or push main until the PM's switch-over. Do NOT set FM_SHIP_ALLOW_NON_MAC (that is the PM's decision, not a session's); work here reaches main only through the Mac." ;;
     "REFUSED rc=130"*|"REFUSED rc=143"*) echo "⚠️ last ship: INTERRUPTED by a signal ($v) — no gate refused it; nothing landed. Re-ship it." ;;
     REFUSED*)     echo "🚨 THE LAST SHIP REFUSED ($v) — the tree is an UNSHIPPED release, not work in progress. Read .claude/ship/ship.log, fix the gate it tripped, ship again." ;;
     *)            echo "last ship: $v" ;;

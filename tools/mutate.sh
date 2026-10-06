@@ -28,6 +28,11 @@ set -uo pipefail
 TOOLS="$(cd "$(dirname "$0")" && pwd -P)"
 SELF="$TOOLS/$(basename "$0")"
 . "$TOOLS/_shiplock.sh"
+# The hash, the suite's time cap and the floor are shared with ship.sh (6 Oct, the WSL port). Every gate below leans on a
+# hash or a byte compare, so a machine missing the tools for them is refused here rather than half-checked later.
+. "$TOOLS/_platform.sh" || { echo "mutate: tools/_platform.sh is missing"; exit 2; }
+. "$TOOLS/_testfloor.sh" || { echo "mutate: tools/_testfloor.sh is missing"; exit 2; }
+fm_require cmp python3 || exit 2
 usage() { sed -n '3,6p' "$SELF" | sed 's/^#//'; exit 2; }
 
 MODE=full; TITLES=""
@@ -81,7 +86,7 @@ recover_killed() {
   fi
   if [ ! -f "$mbak" ]; then echo "❌ a KILLED mutation (pid $mpid) left $LOCK but its backup $mbak is gone — check  git diff -- $mfile  by hand, then rm $LOCK."; exit 10; fi
   if cmp -s "$mfile" "$mbak"; then rm -f "$mbak" "$LOCK"; echo "→ a KILLED mutation (pid $mpid) had left its lock; $mfile was already back to normal — lock cleared."; return 0; fi
-  now="$(shasum "$mfile" 2>/dev/null | cut -d' ' -f1)"
+  now="$(fm_sha1 < "$mfile" 2>/dev/null)"
   if [ -n "$msha" ] && [ "$now" = "$msha" ]; then
     cp "$mbak" "$mfile" && rm -f "$mbak" "$LOCK"
     echo "⚠️  a KILLED mutation (pid $mpid) had left $mfile MUTATED — restored it from its backup."
@@ -207,14 +212,22 @@ fi
 mkdir -p .claude/mutate
 BAK="$ROOT/.claude/mutate/bak.$$"; OUTF="$ROOT/.claude/mutate/out.$$"; TF="$ROOT/.claude/mutate/titles.$$"
 cp "$FILE" "$BAK"
-EXPECTED_SHA="$(shasum "$FILE" | cut -d' ' -f1)"
+# ⚠️ AN EMPTY HASH IS NOT A MATCH (6 Oct, the WSL port). With no hash tool every hash here was "", and "" = "" — the rescue
+# never fired. fm_sha1 refuses instead, and an unreadable hash at restore time rescues anyway: a copy too many costs a
+# delete, a lost edit costs the edit.
+EXPECTED_SHA="$(fm_sha1 < "$FILE")"
+[ -n "$EXPECTED_SHA" ] || { echo "mutate: cannot hash $FILE — refusing (the rescue guard below needs it)"; rm -f "$BAK"; exit 2; }
 SRV=""
 restore() {
-  local now; now="$(shasum "$FILE" 2>/dev/null | cut -d' ' -f1)"
-  if [ -n "$now" ] && [ "$now" != "$EXPECTED_SHA" ]; then
+  local now; now="$(fm_sha1 < "$FILE" 2>/dev/null)"
+  if [ -f "$FILE" ] && { [ -z "$now" ] || [ "$now" != "$EXPECTED_SHA" ]; }; then
     cp "$FILE" "$FILE.rescued"
     echo ""
-    echo "⚠️  $FILE CHANGED WHILE THIS MUTATION HELD IT — those edits are NOT the mutation."
+    if [ -z "$now" ]; then
+      echo "⚠️  $FILE could not be HASHED on the way out, so whether it changed while this mutation held it is unknown."
+    else
+      echo "⚠️  $FILE CHANGED WHILE THIS MUTATION HELD IT — those edits are NOT the mutation."
+    fi
     echo "   Saved them to $FILE.rescued before restoring. Diff it against $FILE and re-apply"
     echo "   anything you meant to keep; then delete the .rescued copy."
   fi
@@ -332,9 +345,9 @@ print(h.hexdigest())
 PYH
 }
 if [ "$MODE" = full ]; then
-  # THE CAP GROWS WITH THE SUITE, the same rule as ship.sh: 1.6x the last green pass, never below an hour.
-  _last=$(cat tools/.suite-seconds 2>/dev/null | tr -dc '0-9'); _last=${_last:-0}
-  CAP=$(( _last * 16 / 10 )); [ "$CAP" -lt 3600 ] && CAP=3600
+  # THE CAP GROWS WITH THE SUITE, the same rule as ship.sh: 1.6x the last green pass, never below an hour — one function
+  # for both (suite_timeout, tools/_testfloor.sh), so the two can never disagree again.
+  CAP="$(suite_timeout)"
   BASE_HASH="$(TREE_HASH "$FILE")"
   # PER WIDTH (6 Oct, the B4 check). Full mode passes --width since B4, and the cache held the tree's hash alone: green at
   # 1280 was cached, then WIDTH=380 skipped its baseline, and a test red only at phone width on the CLEAN tree — the bug
@@ -360,7 +373,7 @@ if [ "$MODE" = full ]; then
     esac
     # A baseline of ZERO tests is not a baseline. Same hole as ship.sh had, and the more dangerous half:
     # caching an empty run as "proven green" would bless every mutation checked against it afterwards.
-    . "$TOOLS/_testfloor.sh"
+    # (test_floor_check is tools/_testfloor.sh, sourced at the top.)
     test_floor_check "$BASE_OUT" || { echo "   Fix that before mutation-checking anything."; exit 6; }
     # cached only if the tree is still the one the baseline started on — an edit made during a 45-minute run was
     # seen by part of it at most, so "green" cannot be vouched for either version
@@ -378,7 +391,7 @@ else
   printf '%s\n' "$TITLES" | sed '/^[[:space:]]*$/d' > "$TF"
   Q="$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(open(sys.argv[1]).read().rstrip("\n"), safe=""))' "$TF")"
   SLICE_TIMEOUT="${MUTATE_SLICE_TIMEOUT:-600}"
-  KEY="$( { TREE_HASH "$FILE"; printf '%s\n%s\n' "$WIDTH" "$TITLES"; } | shasum | cut -d' ' -f1)"
+  KEY="$( { TREE_HASH "$FILE"; printf '%s\n%s\n' "$WIDTH" "$TITLES"; } | fm_sha1)"
   ONLY_CACHE="$(git rev-parse --git-path fm-mutate-only-green 2>/dev/null)"
   if [ -n "$ONLY_CACHE" ] && grep -qxF "$KEY" "$ONLY_CACHE" 2>/dev/null; then
     echo "→ baseline: these titles were proven green on this exact tree already (cached)"
@@ -400,7 +413,7 @@ else
       echo "   Fix these first, then mutation-check."
       exit 5
     fi
-    _was=""; [ "$( { TREE_HASH "$FILE"; printf '%s\n%s\n' "$WIDTH" "$TITLES"; } | shasum | cut -d' ' -f1)" = "$KEY" ] || _was="; NOT cached: the tree changed while it ran"
+    _was=""; [ "$( { TREE_HASH "$FILE"; printf '%s\n%s\n' "$WIDTH" "$TITLES"; } | fm_sha1)" = "$KEY" ] || _was="; NOT cached: the tree changed while it ran"
     [ -n "$ONLY_CACHE" ] && [ -z "$_was" ] && printf '%s\n' "$KEY" >> "$ONLY_CACHE"
     echo "   baseline green ✅ ($(printf '%s\n' "$V" | grep -c '^PASS') named title(s) ran and passed$_was)"
   fi
@@ -432,7 +445,8 @@ PY
 # (Since 6 Oct old == new is also refused up front, before any suite runs; this stays as the backstop.)
 # The mutation is a write this script MADE, so it becomes the new expected content — otherwise the
 # rescue above would fire on every run and cry wolf about the mutation itself.
-EXPECTED_SHA="$(shasum "$FILE" | cut -d' ' -f1)"
+EXPECTED_SHA="$(fm_sha1 < "$FILE")"
+[ -n "$EXPECTED_SHA" ] || { echo "mutate: cannot hash $FILE after the replace — refusing (the restore rescues it)"; exit 2; }
 write_lock "$EXPECTED_SHA"
 cmp -s "$FILE" "$BAK" && nochange_refusal
 

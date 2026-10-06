@@ -60,6 +60,21 @@ trap 'exit 143' TERM
 # which runs no trap at all, leaves "RUNNING <pid>" behind with that pid gone, and tick.sh reads exactly that as KILLED.
 ship_phase gates
 printf 'RUNNING %s %s %s\n' "$$" "$(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><')" "$(date +%s)" > .last-ship 2>/dev/null
+# The answers that differ between the Mac and Linux/WSL (load, cores, the JS parser, which Chrome to reap) come from ONE
+# sourced file, and the suite's time cap from the other (6 Oct, the WSL port). After the trap, so even this refusal is
+# recorded in .last-ship. bash does not stop on a failed `.`, hence the explicit check.
+. "$(dirname "$0")/_platform.sh" || { echo "❌ tools/_platform.sh is missing — the gates below cannot ask this machine anything"; exit 1; }
+. "$(dirname "$0")/_testfloor.sh" || { echo "❌ tools/_testfloor.sh is missing — the suite gates cannot run"; exit 1; }
+# ⚠️ ONLY THE MAC SHIPS — UNTIL THE PM SAYS OTHERWISE (6 Oct, his words: "The Mac is STILL the only machine that ships or
+# pushes to main"). The WSL laptop has this repo, a loop to run and a CLAUDE.md that says "ship an unshipped tree" on a new
+# chat's first message — so the rule is a gate, not a sentence. The PM lifts it at the switch-over, once both full passes are
+# green there; FM_SHIP_ALLOW_NON_MAC=1 is that decision, and a session must not set it on its own.
+if [ "$(fm_os)" != Darwin ] && [ "${FM_SHIP_ALLOW_NON_MAC:-}" != 1 ]; then
+  echo "❌ THIS IS NOT THE MAC — only the Mac ships or pushes main until the PM moves shipping to this $(fm_machine_noun)."
+  echo "   Nothing is committed or pushed. The work stays in this tree; ship it from the Mac."
+  _WHY="not the shipping machine ($(fm_os)) — only the Mac ships until the PM's switch-over"
+  exit 1
+fi
 # ⚠️ THE MESSAGE CAN COME FROM A FILE, AND FOR ANYTHING WITH CODE IN IT, IT SHOULD (25 Aug).
 # Backticks inside a double-quoted shell argument are COMMAND SUBSTITUTION, not code quotes. The gate
 # below has guarded that since a message containing `void ic.offsetWidth` executed it and committed the
@@ -136,17 +151,24 @@ fi
 # v16.23, and believing either red would have meant rewriting three correct tests.
 # Safe here and nowhere else: this runs before ship.sh starts anything, and the two locks above have
 # already established that no other run owns this tree.
-if ! pgrep -f '_cdp\.py' >/dev/null 2>&1; then
+if ! command -v pgrep >/dev/null 2>&1; then
+  echo "⚠️  pgrep is not installed — orphaned headless Chromes cannot be found or reaped before this run"
+elif ! pgrep -f '_cdp\.py' >/dev/null 2>&1; then
   # ⚠️ MATCH THE CHROME BINARY, NOT THE BARE PROFILE PREFIX. `pgrep -f 'fm-cdp-'` also matches any
   # SHELL whose command line happens to carry that string — including this script if someone ever
   # ships a commit message containing it, in which case pkill would kill the ship mid-flight. That is
   # the same self-matching shape as the pgrep wait-loop that span for hours on 1 Sep (CLAUDE.md), so
   # the pattern is anchored to the thing actually being reaped: a headless Chrome on an fm-cdp profile.
-  _PAT='Google Chrome.*fm-cdp-'
-  _ORPH="$(pgrep -f "$_PAT" 2>/dev/null | wc -l | tr -d ' ')"
-  if [ "${_ORPH:-0}" -gt 0 ]; then
-    pkill -9 -f "$_PAT" 2>/dev/null || true
-    echo "→ reaped $_ORPH orphaned headless Chrome process(es) left by an interrupted run (they make a green tree read RED)"
+  # The pattern is per-OS (fm_chrome_reap_pattern): the Mac's 'Google Chrome.*fm-cdp-' matched 0 of the 14 processes of
+  # a Linux Chrome (argv[0] /opt/google/chrome/chrome), so on Linux this reaped nothing, silently (6 Oct).
+  if _PAT="$(fm_chrome_reap_pattern)"; then
+    _ORPH="$(pgrep -f "$_PAT" 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${_ORPH:-0}" -gt 0 ]; then
+      pkill -9 -f "$_PAT" 2>/dev/null || true
+      echo "→ reaped $_ORPH orphaned headless Chrome process(es) left by an interrupted run (they make a green tree read RED)"
+    fi
+  else
+    echo "⚠️  no Chrome reap pattern for this platform — orphaned headless Chromes are NOT reaped before this run"
   fi
 fi
 # .ship-in-progress was written at the top (ship_phase gates) and is removed by _verdict() — deliberately NOT its own trap.
@@ -157,41 +179,66 @@ fi
 # and the suite's own headless Chrome is what tipped it over, so retrying made it worse. A 1-minute load above three
 # times the core count is past anything a green ship has ever run at (they run at 4-8 on 6 cores); refuse up front, say
 # why, and name the cure. FM_SHIP_IGNORE_LOAD=1 is the deliberate override.
-_NCPU="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
-_LOAD1="$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"
 # THE BAR IS 1.6× THE CORE COUNT, AND IT WAS SET BY MEASUREMENT (21 Sep, 6 cores). Ships that STALLED (not one test run in
 # 30 minutes) started at load 13.4 and 12.1; every green ship that day started between 3 and 8. A swap-used bar was tried
 # as well and DISPROVEN the same evening: a run at 9.1GB of swap and load ~4 went all the way through. Swap-used is
 # history — macOS does not shrink it when the machine goes idle — while load is what is happening now.
-if [ -z "${FM_SHIP_IGNORE_LOAD:-}" ] && [ -n "$_LOAD1" ] && awk -v l="$_LOAD1" -v n="$_NCPU" 'BEGIN{exit !(l > 1.6*n)}'; then
-  _SWAP="$(sysctl -n vm.swapusage 2>/dev/null | sed 's/  */ /g')"
-  echo "❌ THE MAC IS TOO BUSY TO RUN THE SUITE — load average ${_LOAD1} on ${_NCPU} cores (green ships start at 3-8; stalled ones at 12+)."
-  echo "   swap: ${_SWAP}"
-  echo "   Nothing is wrong with the code. A heavily swapping or throttling Mac stalls the suite for 30 minutes and then"
-  echo "   times out; starting it anyway only adds a headless browser to the pile. Wait for the load to fall, or free memory"
-  echo "   (quit apps not in use, or restart if swap is several GB), then ship again."
-  _WHY="machine overloaded (load ${_LOAD1} on ${_NCPU} cores) — not a code fault"
-  exit 1
+# The number lives in fm_load_bar (tools/_platform.sh) so tick.sh quotes the same one. It is UNMEASURED on WSL's vCPUs.
+# ⚠️ AND A LOAD THAT CANNOT BE READ IS A REFUSAL, NOT A PASS (6 Oct). This used to read `sysctl … 2>/dev/null` with an
+# empty result skipping the check and `|| echo 4` for the cores — on Linux both sysctl keys error, so the gate switched
+# itself off on every ship there, silently. If the machine cannot be measured, say so and stop; the override stays.
+if [ -z "${FM_SHIP_IGNORE_LOAD:-}" ]; then
+  if ! _NCPU="$(fm_ncpu)" || ! _LOAD1="$(fm_load1)" || ! _BAR="$(fm_load_bar)"; then
+    echo "❌ CANNOT MEASURE THIS $(fm_machine_noun)'S LOAD (the reason is above) — refusing rather than starting a half-hour run blind."
+    echo "   Nothing is wrong with the code. FM_SHIP_IGNORE_LOAD=1 tools/ship.sh … is the deliberate override."
+    _WHY="cannot measure machine load — not a code fault"
+    exit 1
+  fi
+  if LC_ALL=C awk -v l="$_LOAD1" -v b="$_BAR" 'BEGIN{exit !(l+0 > b+0)}'; then
+    _SWAP="$(fm_swap_summary)"
+    if [ "$(fm_os)" = Darwin ]; then
+      echo "❌ THE MAC IS TOO BUSY TO RUN THE SUITE — load average ${_LOAD1} on ${_NCPU} cores (green ships start at 3-8; stalled ones at 12+)."
+      echo "   swap: ${_SWAP}"
+      echo "   Nothing is wrong with the code. A heavily swapping or throttling Mac stalls the suite for 30 minutes and then"
+      echo "   times out; starting it anyway only adds a headless browser to the pile. Wait for the load to fall, or free memory"
+      echo "   (quit apps not in use, or restart if swap is several GB), then ship again."
+    else
+      echo "❌ THIS $(fm_machine_noun) IS TOO BUSY TO RUN THE SUITE — load average ${_LOAD1} on ${_NCPU} cores, over the bar of ${_BAR}"
+      echo "   (1.6x the cores — measured on the 6-core Mac, not yet on this machine)."
+      echo "   swap: ${_SWAP}"
+      echo "   Nothing is wrong with the code. Starting the suite anyway only adds a headless browser to the pile."
+      fm_slow_hint | sed 's/^/   /'
+    fi
+    _WHY="machine overloaded (load ${_LOAD1} on ${_NCPU} cores) — not a code fault"
+    exit 1
+  fi
 fi
 
 # ⚠️ EVERY CHANGED SCRIPT MUST PARSE, AND THIS IS SAID IN ONE SECOND RATHER than after the proof step (25 Sep, v16.97).
 # Six hunt branches were stitched into tests/tests.js by a naive "ours then theirs" merge, which dropped one `});` per
 # seam; nothing noticed until prove.sh had spent its time and every test came back "FMTests did not load". A parse costs
 # a second with the JavaScriptCore that ships with macOS. Plain scripts only — this app has no modules.
-_JSC=/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc
-if [ -x "$_JSC" ]; then
-  _BADJS=""
-  for _f in $( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | grep -E '^(js|tests)/.*\.js$' | sort -u ); do
-    [ -f "$_f" ] || continue
-    _r="$("$_JSC" -e "try { new Function(read('$_f')); print('ok') } catch (e) { print('ERR ' + e) }" 2>&1)"
-    [ "$_r" = "ok" ] || _BADJS="$_BADJS
+# ⚠️ IT USED TO VANISH WHERE THERE IS NO jsc (6 Oct). The whole block sat inside `if [ -x jsc ]`, so on Linux a broken
+# js/ file went straight on to the proof and the suite — the exact v16.97 failure. fm_js_parse asks the same question
+# (`new Function(source)`) of jsc on the Mac and node elsewhere — not `node --check`, which passes `export` and top-level
+# `await`, both syntax errors in a classic <script>. No parser at all is a refusal.
+_BADJS=""
+_JSFILES="$( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | grep -E '^(js|tests)/.*\.js$' | sort -u )"
+if [ -n "$_JSFILES" ] && ! fm_js_parser >/dev/null; then
+  echo "❌ NO JAVASCRIPT PARSER on this machine (jsc or node) — cannot prove the changed scripts parse, so not shipping them."
+  _WHY="no JavaScript parser on this machine — not a code fault"
+  exit 1
+fi
+for _f in $_JSFILES; do
+  [ -f "$_f" ] || continue
+  _r="$(fm_js_parse "$_f")"
+  [ "$_r" = "ok" ] || _BADJS="$_BADJS
    $_f: $_r"
-  done
-  if [ -n "$_BADJS" ]; then
-    echo "❌ A CHANGED SCRIPT DOES NOT PARSE — the app or the suite would not even load:$_BADJS"
-    _WHY="a changed script does not parse"
-    exit 1
-  fi
+done
+if [ -n "$_BADJS" ]; then
+  echo "❌ A CHANGED SCRIPT DOES NOT PARSE — the app or the suite would not even load:$_BADJS"
+  _WHY="a changed script does not parse"
+  exit 1
 fi
 
 # ⚠️ A RELEASE CANNOT RUN WITHOUT A LOCAL SERVER, AND THE OLD FAILURE WAS DISCOVERED TOO LATE (queue 814,
@@ -211,6 +258,13 @@ fi
 # in one run, every one blaming the app for a dropped connection. **So every green run was luck and
 # every red one had to be re-read before it could be believed** — which is the most expensive kind of
 # broken instrument, and exactly the class of fault this file exists to remove.
+# …AND A BROWSER, ASKED THE SAME WAY tests/_cdp.py ASKS (6 Oct): $FM_CHROME, the Mac app, google-chrome on PATH. Without
+# one the proof step would come back NORUN test by test; this says it in a second.
+if ! fm_chrome >/dev/null; then
+  echo "❌ no Chrome to run the suite in (the reason is above). Nothing is committed or pushed."
+  _WHY="no Chrome on this machine — not a code fault"
+  exit 1
+fi
 if ! curl -sf -o /dev/null "http://localhost:8777/tests/run.html"; then
   echo "→ nothing is serving port 8777 — starting one (the suite does not start its own)…"
   nohup "$(dirname "$0")/serve.sh" 8777 >/dev/null 2>&1 </dev/null &
@@ -227,7 +281,10 @@ fi
 # A TEST TITLE WITH A DOUBLE QUOTE IS REFUSED HERE, IN A SECOND, NOT BY THE SUITE TEN MINUTES IN (5 Sep). The suite's own
 # hygiene test catches it — after prove.sh and a full pass — and it caught two in one afternoon (791, then 624), each
 # costing a whole ship. The rule is the suite's; this only moves it to the front of the line.
-_DQ="$(grep -nE "test\('[^'\n]*\"[^'\n]*'" tests/tests.js | head -3)"
+# `[^']`, not `[^'\n]` (6 Oct): inside brackets `\n` is a backslash and the letter n, not a newline — measured on GNU grep,
+# `test('an "x" y'` slipped through, i.e. any title with an n in it (2264 of 2286). grep matches one line at a time, so
+# excluding the newline was never needed.
+_DQ="$(grep -nE "test\('[^']*\"[^']*'" tests/tests.js | head -3)"
 [ -z "$_DQ" ] || { echo "❌ a test title contains a double quote — the FAIL line would be cut short in ship.sh and mutate.sh; use single quotes:"; echo "$_DQ" | cut -c1-160; exit 1; }
 
 # ─── NO NUL BYTES IN SOURCE (28 Aug) ────────────────────────────────────────────────────────────────
@@ -567,7 +624,8 @@ fi
 # that exits 0 reads as "shipped", a refusal that deletes a live ship's lock makes it invisible, a killed ship that reads
 # as "running" waits for ever. A few seconds in a temp directory, against a stub ship.sh; nothing there reaches GitHub.
 # `git status`, not `git diff`: a NEW file is untracked, and `git diff --quiet` says nothing changed.
-if [ -n "$(git status --porcelain -- tools/ship-bg.sh tools/_shiplock.sh tools/test-ship-bg.sh tools/ship.sh 2>/dev/null)" ]; then
+# tools/_platform.sh and tools/_testfloor.sh count too (6 Oct, the WSL merge): ship.sh and mutate.sh both source them now.
+if [ -n "$(git status --porcelain -- tools/ship-bg.sh tools/_shiplock.sh tools/test-ship-bg.sh tools/ship.sh tools/_platform.sh tools/_testfloor.sh 2>/dev/null)" ]; then
   echo "→ the ship launcher or its lock changed — proving them before shipping"
   if ! ./tools/test-ship-bg.sh; then
     echo "❌ THE SHIP LAUNCHER OR ITS LOCK IS BROKEN — not committing, not pushing."
@@ -576,7 +634,7 @@ if [ -n "$(git status --porcelain -- tools/ship-bg.sh tools/_shiplock.sh tools/t
 fi
 # …and so does mutate.sh (RULES-AUDIT B4): its timed-out, did-not-run and killed paths are the silent ones, and its full
 # mode is too long for anyone to watch them happen for real. Seconds, against a stub driver, in a temp directory.
-if [ -n "$(git status --porcelain -- tools/mutate.sh tools/_spotjudge.py tools/test-mutate.sh tools/_shiplock.sh 2>/dev/null)" ]; then
+if [ -n "$(git status --porcelain -- tools/mutate.sh tools/_spotjudge.py tools/test-mutate.sh tools/_shiplock.sh tools/_platform.sh tools/_testfloor.sh 2>/dev/null)" ]; then
   echo "→ mutate.sh or its judge changed — proving it before shipping"
   if ! ./tools/test-mutate.sh; then
     echo "❌ MUTATE.SH IS BROKEN — not committing, not pushing."
@@ -726,8 +784,9 @@ SUITE_TIMEOUT=2700
 # both of v17.18's attempts over the line (stall points 991, then 690 — MOVING, the load sign). A fixed number is a
 # note that goes stale as tests are added, so each green pass now records its real length in tools/.suite-seconds
 # (committed with the release) and the cap is 1.6x the last one, never below an hour.
+# The cap is suite_timeout in tools/_testfloor.sh now (6 Oct), because mutate.sh needs the same one and had a stale 1800.
 _last_suite=$(cat tools/.suite-seconds 2>/dev/null | tr -dc '0-9'); _last_suite=${_last_suite:-0}
-SUITE_TIMEOUT=$(( _last_suite * 16 / 10 )); [ "$SUITE_TIMEOUT" -lt 3600 ] && SUITE_TIMEOUT=3600
+SUITE_TIMEOUT="$(suite_timeout)"
 # ⚠️ A TIMEOUT'S REAL CAUSE IS USUALLY THE MACHINE, AND NOTHING HERE MEASURED IT (21 Sep). Three ship
 # cycles went on "the suite ran out of time" — first at prove's 600s, then at the suite's 1800s — before
 # anyone thought to run `uptime`. The answer was a 6-core Mac in a Spotlight/Photos indexing storm
@@ -737,13 +796,12 @@ SUITE_TIMEOUT=$(( _last_suite * 16 / 10 )); [ "$SUITE_TIMEOUT" -lt 3600 ] && SUI
 # The giveaway that it is load rather than one hung test is that the STALL POINT MOVES between runs — it
 # stopped at queue 294 on one pass and at 433 on the next. So print the evidence right here, where the
 # timeout is announced, instead of leaving the next session to rediscover it by hand.
+# Diagnostic only, so each line may say "?" or "not available" — the OS-specific halves are in tools/_platform.sh.
 _whyslow() {
   echo "   ── the usual cause is the machine, not a broken test. Evidence:"
-  echo "      load average:$(uptime | sed 's/.*load averages*://') across $(sysctl -n hw.ncpu) cores"
-  top -l 2 -o cpu -n 6 -s 2 2>/dev/null | awk '/^PID/{c++; next} c==2 && NF>3 {print "      " substr($0,1,58)}' | head -6
-  echo "      macOS daemons (duetexpertd, photolibraryd, corespotlightd, mediaanalysisd, suggestd) or a high"
-  echo "      kernel_task mean the Mac is indexing or thermally throttling. Wait for it to settle, then ship"
-  echo "      again — and confirm it is load by checking whether the last test above MOVES between runs."
+  echo "      load average:$(uptime | sed 's/.*load averages*://') across $(fm_ncpu || echo '?') cores"
+  fm_top_cpu 6
+  fm_slow_hint | sed 's/^/      /'
 }
 
 if [ "$_last_suite" -gt 0 ]; then echo "→ running the suite (the last green pass took $(( _last_suite / 60 )) minutes; cap ${SUITE_TIMEOUT}s)…"
@@ -778,7 +836,7 @@ if ! printf '%s' "$OUT" | grep -q '"ok": true'; then
   exit 1
 fi
 # …and that it actually RAN. `"ok": true` is only "nothing failed", which a suite of zero tests also is.
-. tools/_testfloor.sh
+# (test_floor_check is tools/_testfloor.sh, sourced at the top.)
 test_floor_check "$OUT" || { echo "   Not committing, not pushing."; exit 1; }
 echo "✅ $SUM  (${_suite_secs}s)"
 echo "$_suite_secs" > tools/.suite-seconds

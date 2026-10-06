@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # REAL-TOUCH TABLE (queue 699 / 707): python3 tests/_rt2.py 8777 "label". Body control runs FIRST.
-# Needs tests/_realtouch.py beside it. Kill stray headless Chromes afterwards: pkill -f "headless=new".
+# Needs tests/_realtouch.py beside it. Kill a stray Chrome of THIS probe afterwards: pkill -f -- '--user-data-dir=[^ ]*fm-rt2-'
+# (NOT pkill -f "headless=new", which also kills a live suite run's browser).
 """Queue 699 — REAL touch (CDP Input.dispatchTouchEvent) against the app on PORT. Body control runs
 FIRST so the grip result is only reported against a control that moved. Prints one line per case."""
-import importlib.util, json, os, sys, tempfile, time
-HERE=os.path.dirname(os.path.abspath(__file__)); REPO="/Users/ezrasmith/Claude/FreeMotion"
+import importlib.util, json, os, shutil, sys, tempfile, time
+HERE=os.path.dirname(os.path.abspath(__file__)); REPO=os.path.dirname(HERE)   # not the Mac's /Users/… path
 spec=importlib.util.spec_from_file_location("_cdp", os.path.join(REPO,"tests","_cdp.py")); _cdp=importlib.util.module_from_spec(spec); spec.loader.exec_module(_cdp)
 PORT=int(sys.argv[1]); LABEL=sys.argv[2] if len(sys.argv)>2 else str(PORT)
 src=open(os.path.join(HERE,"_realtouch.py")).read()
@@ -56,4 +57,7 @@ def main():
     finally:
         if c: c.close()
         proc.terminate()
+        try: proc.wait(timeout=5)
+        except Exception: proc.kill()
+        shutil.rmtree(prof, ignore_errors=True)   # under WSL the temp dir is RAM
 sys.exit(main())

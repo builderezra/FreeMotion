@@ -19,8 +19,12 @@ test_floor_check() {
   if [ -z "$n" ] || [ "$n" -eq 0 ] 2>/dev/null; then
     echo "❌ THE SUITE REGISTERED NO TESTS AT ALL — that is not green, that is a suite that never ran."
     echo "   The usual cause is a syntax error in tests/tests.js, which registers zero tests and so"
-    echo "   fails nothing. Check it parses:"
-    echo "   /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc -e \"new Function(readFile('tests/tests.js'))\""
+    echo "   fails nothing. Its parse, checked now (jsc on the Mac, node elsewhere — tools/_platform.sh fm_js_parse):"
+    if command -v fm_js_parse >/dev/null 2>&1; then
+      echo "   tests/tests.js: $(fm_js_parse tests/tests.js 2>&1 | head -3)"
+    else
+      echo "   (tools/_platform.sh is not loaded here — run:  . tools/_platform.sh; fm_js_parse tests/tests.js)"
+    fi
     return 1
   fi
   floor="$(cat "$floor_file" 2>/dev/null || echo 0)"
@@ -34,4 +38,15 @@ test_floor_check() {
   fi
   printf '%s' "$n" > "$floor_file"
   return 0
+}
+
+# THE SUITE'S TIME CAP, IN ONE PLACE (6 Oct). ship.sh has set it from tools/.suite-seconds since 30 Sep — 1.6x the last green
+# pass, never below an hour — while mutate.sh still hard-coded 1800 s, under the Mac's own measured 2697 s pass. Its runs
+# then timed out with no FAIL line and read as "SURVIVED — the assertion is DEAD". One function, both callers.
+suite_timeout() {
+  local last t
+  last="$(cat tools/.suite-seconds 2>/dev/null | tr -dc '0-9')"
+  t=$(( ${last:-0} * 16 / 10 ))
+  [ "$t" -lt 3600 ] && t=3600
+  echo "$t"
 }

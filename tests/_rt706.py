@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # REAL-TOUCH PROBE for queue 706 (the Add sheet "opens twice" on his phone). Chrome at 380px reproduces
-# NOTHING by any route — see the entry. Run: python3 tests/_rt706.py 8777 [empty]   then: pkill -f "headless=new"
+# NOTHING by any route — see the entry. Run: python3 tests/_rt706.py 8777 [empty]   then: pkill -f -- '--user-data-dir=[^ ]*fm-706-'
+# (NOT pkill -f "headless=new", which also kills a live suite run's browser).
 """Queue 706 — REAL touch at 380px: does one tap open the Add sheet TWICE? For each route (FAB, add row,
 empty-timeline area) count FM.mobile.openAdd() calls per tap and sample the sheet's top edge + .open class
 every 30ms for 900ms, so a reopen / mid-flight re-render shows up as a reversal in the trace."""
-import importlib.util, json, os, sys, tempfile, time
-REPO="/Users/ezrasmith/Claude/FreeMotion"
+import importlib.util, json, os, shutil, sys, tempfile, time
+REPO=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # not the Mac's /Users/… path
 spec=importlib.util.spec_from_file_location("_cdp", os.path.join(REPO,"tests","_cdp.py")); _cdp=importlib.util.module_from_spec(spec); spec.loader.exec_module(_cdp)
 PORT=int(sys.argv[1]); EMPTY = (len(sys.argv)>2 and sys.argv[2]=="empty")
 dbg=_cdp.free_port(); prof=tempfile.mkdtemp(prefix="fm-706-"); proc=_cdp.launch(dbg,380,820,prof); c=None
@@ -67,3 +68,4 @@ finally:
     proc.terminate()
     try: proc.wait(timeout=5)
     except Exception: proc.kill()
+    shutil.rmtree(prof, ignore_errors=True)   # under WSL the temp dir is RAM

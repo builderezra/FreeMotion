@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # REAL-TOUCH TRIM PROBE (queue 707): hold clip 1's left grip past the arm, drag +30px in 6 PACED steps (30ms), and
 # print the trim's own internals (FM._lastTrim: finger term, scroll term, pps, snap) at every step — real touch, then the
-# suite's synthetic path. Needs tests/_realtouch.py beside it. Run: python3 tests/_rt707.py 8777   then pkill -f "headless=new"
+# suite's synthetic path. Needs tests/_realtouch.py beside it. Run: python3 tests/_rt707.py 8777   then
+# pkill -f -- '--user-data-dir=[^ ]*fm-707-'  (NOT pkill -f "headless=new", which also kills a live suite run's browser)
 """Queue 707 — does the timeline's SCALE move under a real-touch trim? Hold a LEFT grip past the arm, drag
 +30px in 6 steps; at down / arm / every move / release log: #timeline width, --head-w, the drawn scale
 (clip 0's width / its duration, in px per second), the layer's start/duration, and body.m-editing.
 Control: the same trim driven by SYNTHETIC PointerEvents, which the suite uses and which trims correctly."""
-import importlib.util, json, os, sys, tempfile, time
-REPO="/Users/ezrasmith/Claude/FreeMotion"; HERE=os.path.dirname(os.path.abspath(__file__))
+import importlib.util, json, os, shutil, sys, tempfile, time
+HERE=os.path.dirname(os.path.abspath(__file__)); REPO=os.path.dirname(HERE)   # not the Mac's /Users/… path
 spec=importlib.util.spec_from_file_location("_cdp", os.path.join(REPO,"tests","_cdp.py")); _cdp=importlib.util.module_from_spec(spec); spec.loader.exec_module(_cdp)
 PORT=int(sys.argv[1]); src=open(os.path.join(HERE,"_realtouch.py")).read()
 def block(n): return src.split(n+' = r"""')[1].split('"""')[0]
@@ -47,3 +48,4 @@ finally:
     proc.terminate()
     try: proc.wait(timeout=5)
     except Exception: proc.kill()
+    shutil.rmtree(prof, ignore_errors=True)   # under WSL the temp dir is RAM

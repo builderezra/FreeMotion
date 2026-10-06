@@ -14,3 +14,5 @@ tools/.mutate-green
 .ship-in-progress.*
 .mutation-in-progress
 .mutation-in-progress.tmp
+# Python bytecode: macOS has a global ignore for it, Linux does not (6 Oct, the WSL port) — tick.sh read it as unshipped work
+__pycache__/

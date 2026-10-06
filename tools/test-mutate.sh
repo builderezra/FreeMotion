@@ -20,7 +20,7 @@ ok()  { printf '  ✅ %s\n' "$1"; }
 bad() { printf '  ❌ %s\n' "$1"; FAILED=1; }
 
 S="$TMP/repo"; mkdir -p "$S/tools" "$S/tests" "$S/js"
-cp "$REPO/tools/mutate.sh" "$REPO/tools/_shiplock.sh" "$REPO/tools/_testfloor.sh" "$REPO/tools/_spotjudge.py" "$REPO/tools/serve.sh" "$S/tools/"
+cp "$REPO/tools/mutate.sh" "$REPO/tools/_shiplock.sh" "$REPO/tools/_testfloor.sh" "$REPO/tools/_platform.sh" "$REPO/tools/_spotjudge.py" "$REPO/tools/serve.sh" "$S/tools/"
 cat > "$S/tests/_cdp.py" <<'STUB'
 #!/usr/bin/env python3
 # STUB driver: answers at once, from the tree on disk. Mode in stub-mode: normal | red | timeout | timeout-mutated | error | zero-mutated
