@@ -251,6 +251,65 @@
     }
     return function () { undo.forEach(function (f) { try { f(); } catch (e) {} }); };
   }
+  /* WHAT EACH TEST LEAVES IN MEMORY (#1085, 7 Oct). One suite run reserved ~8.7 GB on the Windows laptop and froze this 8 GB
+     Mac part-way, and nothing could say WHICH tests grew the page. ?fmmem=1 (a measuring run only — ship.sh, prove.sh,
+     spotcheck.sh and mutate.sh never pass it, and without it nothing below runs, so a normal run is unchanged) makes the
+     runner stop after every test and hand the driver a handshake: tests/_cdp.py --mem FILE then forces a garbage
+     collection, reads the page's heap / node / document counters and every Chrome process's physical footprint, and
+     answers. Growth between two handshakes belongs to the test that ran between them. Also counted here, from inside: the
+     object URLs created during the run and never revoked (a blob URL pins its Blob however the page drops it). A driver
+     that never answers turns the hook off after 20 s, so a ?fmmem=1 run without --mem is only 20 s slower. */
+  var FM_MEM = PIN_QS.get('fmmem') === '1';
+  var MEM = { seq: 0, seen: false, dead: false, urls: null };
+  function memInstall() {
+    if (!FM_MEM || MEM.urls) return;
+    MEM.urls = new Map();
+    var U = window.URL, mk = U.createObjectURL, rv = U.revokeObjectURL;
+    U.createObjectURL = function (o) {
+      var u = mk.apply(this, arguments);
+      try { MEM.urls.set(u, { test: String(window.__fmLastTest || '').slice(0, 90), bytes: (o && typeof o.size === 'number') ? o.size : -1, type: (o && o.type) || (o && o.constructor && o.constructor.name) || '' }); } catch (e) {}
+      return u;
+    };
+    U.revokeObjectURL = function (u) { try { MEM.urls.delete(String(u)); } catch (e) {} return rv.apply(this, arguments); };
+  }
+  async function memPageInfo() {
+    var o = { urls: 0, urlBytes: 0 };
+    try { MEM.urls.forEach(function (v) { o.urls++; if (v.bytes > 0) o.urlBytes += v.bytes; }); } catch (e) {}
+    try {
+      o.domMedia = document.querySelectorAll('video,audio').length; o.domCanvas = document.querySelectorAll('canvas').length;
+      o.domIframes = document.querySelectorAll('iframe').length; o.domNodes = document.getElementsByTagName('*').length;
+      o.layers = (FM.scene && FM.scene.layers || []).length;
+    } catch (e) {}
+    // what the run has STORED: localStorage is mirrored in the renderer's memory, and every project and stored clip a test
+    // leaves behind is carried by every later test that lists, opens or sweeps them
+    try { var ls = 0; for (var k = 0; k < localStorage.length; k++) { var kk = localStorage.key(k); ls += kk.length + (localStorage.getItem(kk) || '').length; } o.lsChars = ls; o.lsKeys = localStorage.length; } catch (e) {}
+    try { o.projects = FM.projects && FM.projects.list ? FM.projects.list().length : -1; } catch (e) {}
+    try {
+      if (FM.storage && FM.storage.listMediaKeys) {
+        var ks = await Promise.race([FM.storage.listMediaKeys(''), new Promise(function (r) { setTimeout(function () { r(null); }, 3000); })]);
+        o.idbKeys = ks ? ks.length : -1;
+      }
+    } catch (e) {}
+    return o;
+  }
+  async function memMark(i, name, extra) {
+    if (!FM_MEM || MEM.dead) return;
+    var seq = ++MEM.seq;
+    window.__fmMemInfo = await memPageInfo();
+    var t0 = Date.now();
+    window.__fmWantMem = Object.assign({ seq: seq, i: i, name: String(name || '') }, extra || {});
+    while (window.__fmMemDone !== seq) {
+      if (Date.now() - t0 > (MEM.seen ? 300000 : 20000)) { if (!MEM.seen) MEM.dead = true; return; }
+      await new Promise(function (r) { setTimeout(r, 40); });
+    }
+    MEM.seen = true;
+  }
+  // the live object URLs a measuring run counted, grouped by the test that made them (read by tests/_cdp.py --mem)
+  window.__fmMemUrls = function () {
+    var by = {};
+    try { MEM.urls.forEach(function (v) { var k = v.test; by[k] = by[k] || { n: 0, bytes: 0, types: {} }; by[k].n++; by[k].bytes += Math.max(0, v.bytes); by[k].types[v.type] = (by[k].types[v.type] || 0) + 1; }); } catch (e) {}
+    return by;
+  };
   /* A TOLERANCE set on the Mac (the share of an effect a fallback may miss it by). lim(case, macLim, measured): the Mac's
      own number on macOS; elsewhere the larger of the Mac's and 1.25 × what that OS measured when it was recorded (a correct
      tree there), so a real regression — measured at 2.8–10 × the Mac's limit when these were written — still fails. */
@@ -59778,6 +59837,14 @@
       catch (e) { BASELINES = {}; }
     }
     var undoFakes = applyFakes();   // ?fmfake= (a proof run only) — put back after the last test
+    /* #1085, ?fmmem=1 only: `fmrange=A-B` runs suite positions A..B (0-based, inclusive) — a measuring run slices the suite
+       by POSITION, because a name substring can match an earlier test first. Stamped FILTERED like every other slice. */
+    if (FM_MEM && /^\d+-\d+$/.test(String(PIN_QS.get('fmrange') || ''))) {
+      var _rg = String(PIN_QS.get('fmrange')).split('-').map(Number);
+      LIST = LIST.slice(_rg[0], _rg[1] + 1);
+      window.__fmFiltered = 'FILTERED(fmrange=' + _rg.join('-') + ', ' + LIST.length + ' of ' + T.length + ')';
+    }
+    if (FM_MEM) { memInstall(); window.__fmMemNames = LIST.map(function (t) { return t.name; }); await memMark(-1, '(before the first test)', { last: LIST.length - 1, gi: LIST.length ? T.indexOf(LIST[0]) - 1 : -1 }); }   // #1085, ?fmmem=1 only
     for (var i = 0; i < LIST.length; i++) {
       var t = LIST[i], ok = true, err = null, notRun = '';
       window.__fmCurPinned = !!t.pinned;   // pinned() refuses in a test that did not declare { pinned: true } (see there)
@@ -59859,6 +59926,7 @@
         }
       } catch (e) {}
       results.push({ name: t.name, item: t.item, pending: t.pending, ok: ok, error: err, notRun: notRun });   // a NOT RUN that leaked state above is a FAIL, not a NOT RUN
+      if (FM_MEM) await memMark(i, t.name, { gi: T.indexOf(t), ms: _ms, ok: ok, last: LIST.length - 1 });   // #1085: what this test left in memory (?fmmem=1 only)
     }
     undoFakes();
     var reg = results.filter(function (r) { return !r.pending; });

@@ -305,6 +305,10 @@ def main():
     # PER-OS BASELINES (6 Oct, #1071): tools/record-baselines.sh runs ?pinned=1&fmrecord=1 and needs what the page captured
     # (tests.js window.__fmBaselineRecord). Written to FILE; a run that published none writes null, and the recorder refuses.
     ap.add_argument("--record-baselines", default=None, metavar="FILE", help="write the page's baseline recording here")
+    # WHAT EACH TEST LEAVES IN MEMORY (#1085, 7 Oct): answer tests.js's ?fmmem=1 handshake after every test with the page's
+    # heap counters and every Chrome process's footprint, one JSON line per test into FILE (tests/_memhook.py). Without
+    # this flag nothing below looks for the handshake, so a normal run is unchanged.
+    ap.add_argument("--mem", default=None, metavar="FILE", help="measuring run: write per-test memory (needs ?fmmem=1 in --url)")
     a = ap.parse_args()
 
     url = a.url or f"http://localhost:{a.port}/tests/run.html"
@@ -457,7 +461,23 @@ def main():
         # and says whether the page was still answering. `--progress FILE` writes the same thing live, so a slow run can be
         # watched instead of waited out.
         track = {"name": "", "since": time.time(), "last_ok": time.time(), "n": 0, "polls": 0}
+        memh, memfh, memst = None, None, {}
+        if a.mem:
+            import _memhook as memh   # noqa: E402 — a measuring run only (#1085)
+            memfh = open(a.mem, "a")
         while time.time() < deadline:
+            if memh is not None and memh.service(cdp, proc.pid, memfh, memst):
+                track["last_ok"] = time.time()
+                if a.progress and time.time() - memst.get("pw", 0) > 5:   # a run of fast tests must not starve the progress file
+                    memst["pw"] = time.time()
+                    try:
+                        with open(a.progress, "w") as pf:
+                            pf.write(json.dumps({"test": "(between tests)", "on_it_s": 0, "tests_seen": memst.get("n", 0),
+                                                 "page_silent_s": 0, "elapsed_s": round(time.time() - (deadline - a.timeout))}) + "\n")
+                    except Exception:
+                        pass
+                memst["n"] = memst.get("n", 0) + 1
+                continue
             if cdp.crashed:
                 return _did_not_run("THE PAGE'S RENDERER CRASHED (last test seen: '%s'), so nothing after it ran. On Linux, "
                                     "look for 'exceed data ulimit' in dmesg: a sandboxed Chrome renderer may hold 8 GB of data "
