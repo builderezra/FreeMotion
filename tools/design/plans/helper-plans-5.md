@@ -60,7 +60,7 @@ After #964 (the last item in P4), skipping standing instructions, #921 and #980 
 
 **Plan once he picks.**
 1. **Record the author when a note is created:** add one small field (the member's colour id) in `js/notepad.js` at creation, only while a session is live; nothing changes for a solo user.
-2. **The sanitiser must keep it:** `sanitizeProjectFields` keeps notes only if they are objects with a string `text` (`js/storage.js:1087-1093`) and does not strip other keys, so a new key survives, but a **collab schema bump is needed** (a sanitiser change; `C.SCHEMA_REV`, `js/collab-core.js`, and its fingerprint test) or two builds would normalise a note two ways.
+2. **The sanitiser must keep it:** `sanitizeProjectFields` keeps notes only if they are objects with a string `text` (`js/storage.js:1065-1070`) and does not strip other keys, so a new key survives, but a **collab schema bump is needed** (a sanitiser change; `C.SCHEMA_REV`, `js/collab-core.js`, and its fingerprint test) or two builds would normalise a note two ways.
 3. **Privacy:** the author colour reveals who wrote a private note. `collab-security.md` F1 already says the owner's private notes reach every guest including viewers; this feature should ship **together with** that fix (a per-note "shared" flag), or it makes the leak more visible.
 4. Draw the indicator in the Notes panel only, behind a live session.
 
