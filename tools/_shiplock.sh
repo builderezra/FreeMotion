@@ -64,14 +64,18 @@ ship_lock_state() {
 # it cleared a dead holder's lock first, whose content is in _OLD); 1 = _HELD=1 a live process holds it (content in
 # _OLD), or _HELD=0 it could not be taken at all.
 _take_lockfile() {
-  local f="$1" line="$2" alive="$3" cur try i
+  local f="$1" line="$2" alive="$3" cur try i got
   _TOOK_OVER=0; _HELD=0; _OLD=""
   for try in 1 2 3 4 5 6 7 8; do
     if ( set -o noclobber; printf '%s\n' "$line" > "$f" ) 2>/dev/null; then return 0; fi
     [ -f "$f" ] || continue                        # gone between the two looks: try again
     cur="$(cat "$f" 2>/dev/null)"
-    if "$alive" "$f"; then _HELD=1; _OLD="$cur"; return 1; fi
-    for i in $(seq 1 50); do mkdir "$f.takeover" 2>/dev/null && break; [ "$i" = 50 ] && { rmdir "$f.takeover" 2>/dev/null; mkdir "$f.takeover" 2>/dev/null; }; sleep 0.1; done
+    if "$alive" "$f"; then _HELD=1; _OLD="$(cat "$f" 2>/dev/null)"; return 1; fi   # the holder NOW, not the earlier read
+    got=0
+    for i in $(seq 1 50); do mkdir "$f.takeover" 2>/dev/null && { got=1; break; }; sleep 0.1; done
+    # still there after 5 s: its holder was killed inside a few milliseconds of work — clear it, and take it if we can
+    [ "$got" = 1 ] || { rmdir "$f.takeover" 2>/dev/null; mkdir "$f.takeover" 2>/dev/null && got=1; }
+    [ "$got" = 1 ] || continue                     # never touch a dead lock without holding the mutex
     if [ -f "$f" ] && [ "$(cat "$f" 2>/dev/null)" = "$cur" ]; then rm -f "$f"; _TOOK_OVER=1; _OLD="$cur"; fi
     rmdir "$f.takeover" 2>/dev/null
   done
@@ -97,7 +101,7 @@ ship_guard() {
     echo "❌ a ship is already running (pid ${opid:-?}, phase ${ophase:-unknown}) — not starting a second one beside it."
     echo "   Watch it instead: .last-ship says PUSHED <hash> or REFUSED when it ends; tools/tick.sh says what it is doing."
   else
-    echo "❌ could not take .ship-in-progress (it kept changing under five attempts) — not starting; run tools/tick.sh."
+    echo "❌ could not take .ship-in-progress (it kept changing through eight attempts) — not starting; run tools/tick.sh."
   fi
   return 1
 }

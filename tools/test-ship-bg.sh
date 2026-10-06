@@ -134,7 +134,7 @@ done
 rm -f .ship-in-progress .last-ship
 same_moment() {   # $1 = how many ship.sh start at once; sets n = how many of them took the lock
   local i; rm -f stub-took "$TMP"/sm.*; touch stub-hold
-  for i in $(seq 1 "$1"); do STUB_HOLD=stub-hold tools/ship.sh -F .claude/ship/msg.txt > "$TMP/sm.$i" 2>&1 & done
+  for i in $(seq 1 "$1"); do STUB_HOLD=stub-hold tools/ship.sh -F .claude/ship/msg.txt > "$TMP/sm.$i" 2>&1 & disown; done   # disowned: no "Killed" notices
   sleep 0.5; rm -f stub-hold; sleep 1
   n="$(sort -u stub-took 2>/dev/null | wc -l | tr -d ' ')"
 }
@@ -148,6 +148,13 @@ printf 'pid=%s phase=desktop since=1\n' "$GONE" > .ship-in-progress      # a KIL
 same_moment 4
 [ "$n" = 1 ] && [ "$(cat "$TMP"/sm.* | grep -c 'previous ship was KILLED')" -ge 1 ] && ok "four ship.sh at once over a KILLED ship's lock → exactly one takes it over" || bad "four over a dead lock: $n took it — $(cat "$TMP"/sm.* | head -c 300)"
 kill_took; rm -f .ship-in-progress .last-ship
+# the takeover mutex itself left behind by a kill (inside its few milliseconds): cleared after 5 s, not held for ever
+mkdir .ship-in-progress.takeover; printf 'pid=%s phase=prove since=1\n' "$GONE" > .ship-in-progress
+tools/ship.sh -F .claude/ship/msg.txt > "$TMP/stalemutex" 2>&1 & disown
+for _ in $(seq 1 40); do [ -s stub-took ] && break; sleep 0.25; done
+[ "$(sort -u stub-took 2>/dev/null | wc -l | tr -d ' ')" = 1 ] && [ ! -d .ship-in-progress.takeover ] && grep -q 'previous ship was KILLED' "$TMP/stalemutex" \
+  && ok "a takeover mutex left by a kill is cleared after 5 s, and the dead lock is taken over" || bad "stale mutex: took=$(cat stub-took 2>/dev/null) dir=$( [ -d .ship-in-progress.takeover ] && echo left || echo gone) — $(head -c 200 "$TMP/stalemutex")"
+kill_took; rm -rf .ship-in-progress .ship-in-progress.takeover .last-ship
 
 echo "── 5. a ship that refuses at once is reported as refused (exit 1), not as launched ──"
 touch stub-refuse
