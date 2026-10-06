@@ -15,7 +15,7 @@
 # Exit codes. ONLY 0 and 1 are verdicts; everything else means nothing was proven either way.
 #   0 CAUGHT · 1 SURVIVED · 2 usage · 3 old string not found · 4 old string ambiguous, or caught by a test you did not
 #   expect · 5 the tree was already red · 6 the suite registered too few tests · 7 the mutation changed nothing ·
-#   8 TIMED OUT, or the run did not happen · 9 a named title did not run · 10 refused: a ship, a spot-check or another
+#   8 TIMED OUT, the run did not happen, or its result did not add up · 9 a named title did not run · 10 refused: a ship, a spot-check or another
 #   mutation is running (or a killed mutation could not be safely restored) · 11 LAUNCHED (full mode, no verdict yet)
 #
 # Why this exists: doing it by hand went wrong twice in one session. A run that timed out mid-way
@@ -247,15 +247,44 @@ cdp() { python3 "$TOOLS/../tests/_cdp.py" --url "$1" --width "$WIDTH" --timeout 
 # Checked FIRST, before anything reads FAIL lines: a timed-out run has none, so it used to read as "SURVIVED — the
 # assertion is DEAD" (an accusation against a good test) or, on the baseline, as "the suite registered no tests". The cap
 # was 1800 s while a full pass had grown to 2697 s, so every full-mode run ended that way and nobody had used it since 8 Sep.
+# ---- AND THE DRIVER'S RESULT IS READ AS JSON (6 Oct, the B4 check) ----------------------------------------------------
+# Full mode called a run red if 'FAIL' appeared ANYWHERE in the driver's output. That output also carries "slowest" (the
+# eight slowest titles) and "sceneLeaks" (titles again), and a real title contains the word: '967 7c a peer connection
+# that has FAILED is held, not closed …' (a 120 s test, a natural top-8). In a green mutated run's slowest list it read
+# ✅ CAUGHT, exit 0; in a green baseline's, THE TREE IS ALREADY RED. Same cure as ship.sh's _fails: parse it, and read
+# "ok" and "failures" only. Line 1: TIMEDOUT | NORUN | GREEN | RED | ODD, a tab, a detail; then one counted failure per
+# line. RED needs "ok": false AND a failure named; GREEN needs no counted failure AND ("ok": true, or the only failures are
+# the 'version on screen' test, which full mode has always set aside — it goes red mid-batch until the release bump).
+# Anything else (ok with a failure named, not-ok with none) does not add up, and is never a verdict.
+drv_read() {   # $1 = the driver's output
+  printf '%s' "$1" | python3 -c '
+import json, sys
+raw = sys.stdin.read(); dec = json.JSONDecoder(); d = None
+for i in [0] + [k + 1 for k, c in enumerate(raw) if c == "\n"]:
+    if raw.startswith("{", i):
+        try: o, _ = dec.raw_decode(raw, i)
+        except ValueError: continue
+        if isinstance(o, dict) and "ok" in o: d = o; break
+flat = lambda s: " ".join(str(s).split())
+if d is None: print("NORUN\tthe driver printed no result: " + flat(raw)[:200]); sys.exit()
+if "did not finish within" in str(d.get("error") or ""): print("TIMEDOUT\tlast test: " + flat(d.get("lastTest") or "?")); sys.exit()
+if "Regression" not in str(d.get("summary") or ""): print("NORUN\t" + flat(d.get("error") or d.get("summary") or "no summary")[:300]); sys.exit()
+fs = [flat(f) for f in (d.get("failures") or [])]
+counted = [f for f in fs if "version on screen" not in f]
+ok = d.get("ok")
+if counted and ok is False: print("RED\t%d failing" % len(counted))
+elif not counted and (ok is True or fs): print("GREEN\t")
+elif counted: print("ODD\tthe driver says ok, yet names %d failure(s)" % len(counted))
+else: print("ODD\tthe driver says NOT ok, yet names no failing test (" + flat(d.get("summary")) + ")")
+for f in counted: print(f)
+'
+}
 no_verdict() {   # $1 = output, $2 = which run
-  if printf '%s' "$1" | grep -q 'did not finish within'; then
-    echo "⏱  TIMED OUT - nothing proven either way ($2 ran out of time; $(printf '%s' "$1" | grep -o '"lastTest": "[^"]*"' | head -1))"
-    exit 8
-  fi
-  if ! printf '%s' "$1" | grep -q '"summary": "[^"]*Regression'; then
-    echo "⚠️  $2 DID NOT RUN - nothing proven either way: $(printf '%s' "$1" | grep -o '"error": "[^"]*"\|"summary": "[^"]*"' | head -1 | cut -c1-300)"
-    exit 8
-  fi
+  local v; v="$(drv_read "$1" | head -1)"
+  case "$v" in
+    TIMEDOUT*) echo "⏱  TIMED OUT - nothing proven either way ($2 ran out of time; ${v#*	})"; exit 8 ;;
+    NORUN*)    echo "⚠️  $2 DID NOT RUN - nothing proven either way: ${v#*	}"; exit 8 ;;
+  esac
 }
 ran_total() { printf '%s' "$1" | grep -o '"summary": "Regression [0-9]*/[0-9]*' | head -1 | sed 's|.*/||'; }
 
@@ -315,14 +344,20 @@ if [ "$MODE" = full ]; then
     echo "→ baseline: proving the suite is green at ${WIDTH}px BEFORE mutating (once per edit and width; cached after; cap ${CAP}s)…"
     BASE_OUT="$(cdp "$URL" "$CAP")"
     no_verdict "$BASE_OUT" "the baseline"
-    BASE_FAILS="$(printf '%s' "$BASE_OUT" | grep -o 'FAIL[^"]*' | grep -v 'version on screen' || true)"
-    if [ -n "$BASE_FAILS" ]; then
-      echo "❌ THE TREE IS ALREADY RED — a mutation check here would prove nothing."
-      echo "   Whatever it 'catches' is just this, still failing:"
-      printf '%s\n' "$BASE_FAILS" | head -4
-      echo "   Fix these first, then mutation-check."
-      exit 5
-    fi
+    BASE_V="$(drv_read "$BASE_OUT")"
+    case "$(printf '%s\n' "$BASE_V" | head -1)" in
+      GREEN*) ;;
+      RED*)
+        echo "❌ THE TREE IS ALREADY RED — a mutation check here would prove nothing."
+        echo "   Whatever it 'catches' is just this, still failing:"
+        printf '%s\n' "$BASE_V" | sed 1d | head -4 | cut -c1-400
+        echo "   Fix these first, then mutation-check."
+        exit 5 ;;
+      *)
+        echo "❌ THE TREE IS NOT PROVEN GREEN — the baseline's result does not add up: $(printf '%s\n' "$BASE_V" | head -1 | cut -f2)"
+        printf '%s\n' "$BASE_V" | sed 1d | head -4 | cut -c1-400
+        exit 5 ;;
+    esac
     # A baseline of ZERO tests is not a baseline. Same hole as ship.sh had, and the more dangerous half:
     # caching an empty run as "proven green" would bless every mutation checked against it afterwards.
     . "$TOOLS/_testfloor.sh"
@@ -405,12 +440,17 @@ if [ "$MODE" = full ]; then
   OUT="$(cdp "$URL" "$CAP")"
   no_verdict "$OUT" "the mutated run"
   [ "$(ran_total "$OUT")" -gt 0 ] 2>/dev/null || { echo "⚠️  the mutated tree registered NO tests — the mutation may have broken the app outright, which is not a test catching it. Nothing proven either way."; exit 8; }
-  FAILS="$(printf '%s' "$OUT" | grep -o 'FAIL[^"]*' | grep -v 'version on screen' || true)"
-  if [ -z "$FAILS" ]; then
-    echo "❌ SURVIVED — the mutation broke the code and every test still passed."
-    echo "   The assertion is DEAD: it cannot see the defect it was written for."
-    exit 1
-  fi
+  V="$(drv_read "$OUT")"
+  case "$(printf '%s\n' "$V" | head -1)" in
+    GREEN*)
+      echo "❌ SURVIVED — the mutation broke the code and every test still passed."
+      echo "   The assertion is DEAD: it cannot see the defect it was written for."
+      exit 1 ;;
+    RED*) FAILS="$(printf '%s\n' "$V" | sed 1d)" ;;
+    *) echo "⚠️  the mutated run's result does not add up — nothing proven either way: $(printf '%s\n' "$V" | head -1 | cut -f2)"
+       printf '%s\n' "$V" | sed 1d | head -4 | cut -c1-400
+       exit 8 ;;
+  esac
 else
   OUT="$(cdp "$URL?only=$Q" "$SLICE_TIMEOUT" --names)"
   no_verdict "$OUT" "the mutated slice"

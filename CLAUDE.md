@@ -202,7 +202,9 @@ Fifth, 6 Oct (RULES-AUDIT B4) — the tool could not finish at all. Its cap was 
 the number in `tools/.suite-seconds`, and a timed-out run has no FAIL lines, so it read as **"SURVIVED — the assertion is
 DEAD"** (or, on the baseline, as "no tests"). Nobody had used it since 8 Sep, and the next landing is told to run three.
 Now: the cap is max(3600, 1.6 × `tools/.suite-seconds`); `did not finish within` is checked FIRST and reads
-**`TIMED OUT - nothing proven either way`, exit 8** — only 0 (CAUGHT) and 1 (SURVIVED) are verdicts; it refuses
+**`TIMED OUT - nothing proven either way`, exit 8** — only 0 (CAUGHT) and 1 (SURVIVED) are verdicts, and full mode reads
+them from the driver's own `"ok"` and `"failures"`, never from a 'FAIL' anywhere in its JSON (a real title says "FAILED", and
+in the `slowest` list it read CAUGHT); a result that does not add up is exit 8 too; it refuses
 (exit 10) while `.ship-in-progress` or `.spotcheck-in-progress` exists here or in the main checkout; full mode launches
 itself detached (exit 11, never 0); and every run serves the tree that holds the file on its own free port.
 **`--only`** runs just the named tests through prove.sh's slice machinery (`tests/_cdp.py --names --timeout 600`,

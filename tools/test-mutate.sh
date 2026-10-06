@@ -55,6 +55,15 @@ for t in tests:
     if narrow: fails.append('FAIL' + t + ' — the row clips at 380px')
 n = len(tests); p = n - len(fails)
 out = {"ok": not fails, "summary": "Regression %d/%d %s" % (p, n, '✓' if not fails else '✗'), "failures": fails, "slowest": [], "sceneLeaks": []}
+# a REAL title (tests.js, item 967 7c) that contains "FAILED": it lands in slowest/sceneLeaks of a green run
+unseen = 'NOT-SEEN' in open('js/a.js').read()
+if mode == 'slowfail' or (mode == 'slowfail-mutated' and unseen):
+    t967 = '967 7c a peer connection that has FAILED is held, not closed — the owner is told'
+    out["slowest"] = [[91000, t967]]; out["sceneLeaks"] = [{"test": t967, "added": ["FAILED-layer"]}]
+if mode == 'okfails-mutated' and unseen:   # a result that does not add up: "ok" with a failure named
+    out["failures"] = ['FAILt-other — named, yet the run says ok']
+if mode == 'version-red':                   # the one failure full mode has always set aside (it needs a release bump)
+    out["ok"] = False; out["failures"] = out["failures"] + ['FAILthe version on screen matches the newest release in POLISH-LOG — v1.3 vs v1.2']
 if names: out["ran"] = ran
 print(json.dumps(out)); sys.exit(0 if not fails else 1)
 STUB
@@ -157,6 +166,27 @@ log="$(full js/a.js 'var b = 2;' 'var b = 5; /*NOT-SEEN*/')"; rc=$?
 [ "$rc" = 1 ] && ! printf '%s' "$log" | grep -q 'proving the suite is green' && restored \
   && ok "control: back at 1280 the 1280 baseline is still cached (no second run), SURVIVED" || bad "1280 control: rc=$rc — $log"
 rm -f stub-narrow-red
+
+echo "── full mode reads the driver's verdict (\"ok\", \"failures\"), not every 'FAIL' anywhere in its JSON ──"
+echo slowfail-mutated > stub-mode; rm -f tools/.mutate-green
+log="$(full js/a.js 'var b = 2;' 'var b = 3; /*NOT-SEEN*/')"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$log" | grep -q 'SURVIVED' && ! printf '%s' "$log" | grep -q 'CAUGHT' && restored \
+  && ok "a GREEN mutated run whose slowest list names \"…has FAILED is held…\" → SURVIVED (exit 1), never CAUGHT" || bad "FAILED in slowest (mutated): rc=$rc — $log"
+echo slowfail > stub-mode; rm -f tools/.mutate-green
+log="$(full js/a.js 'var b = 2;' 'var b = 4; /*NOT-SEEN*/')"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$log" | grep -q 'baseline green' && ! printf '%s' "$log" | grep -q 'ALREADY RED' && restored \
+  && ok "…and a GREEN baseline that names it (slowest, sceneLeaks) is green, not \"ALREADY RED\"" || bad "FAILED in slowest (baseline): rc=$rc — $log"
+log="$(full js/a.js 'return 1;' 'return 1; /*MUTATED*/' 't-catches')"; rc=$?
+[ "$rc" = 0 ] && printf '%s' "$log" | grep -q 'CAUGHT' && restored && ok "control: a real failure beside it is still CAUGHT (exit 0)" || bad "slowfail caught control: rc=$rc — $log"
+echo okfails-mutated > stub-mode
+log="$(full js/a.js 'var b = 2;' 'var b = 5; /*NOT-SEEN*/')"; rc=$?
+[ "$rc" = 8 ] && ! printf '%s' "$log" | grep -q 'CAUGHT' && restored \
+  && ok "a result that does not add up (\"ok\": true, a failure named) → exit 8, never CAUGHT" || bad "ok with failures: rc=$rc — $log"
+echo version-red > stub-mode; rm -f tools/.mutate-green
+log="$(full js/a.js 'var b = 2;' 'var b = 6; /*NOT-SEEN*/')"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$log" | grep -q 'baseline green' && restored \
+  && ok "still set aside: a red 'version on screen' alone is a green baseline and an unseen mutation SURVIVES" || bad "version-red: rc=$rc — $log"
+echo normal > stub-mode; rm -f tools/.mutate-green
 
 echo "── it refuses beside a ship, a spot-check or a live mutation ──"
 printf 'pid=%s phase=desktop since=1\n' "$$" > .ship-in-progress
