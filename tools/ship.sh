@@ -146,6 +146,18 @@ else
   echo "   (FM_SHIP_OFFLINE=1 tools/ship.sh ... commits locally anyway.)"
   exit 1
 fi
+# ⚠️ A RE-RECORDED BASELINE SHIPS ALONE, AND ONLY FROM A RELEASED COMMIT (6 Oct, the port audit, MAJOR). tests/baselines.json is
+# what the pinned 482 / 986 tests compare against everywhere but the Mac, and a recording blesses whatever the code draws — so
+# a release carrying a fresh recording beside the compositor change it hides would pass its pinned tests against itself.
+# Refused here, in a second: baselines.json beside any shipped source, or a changed section whose commit is not in ssh/main
+# (tools/_shipgates.py baseline-gate; tools/record-baselines.sh records only HEAD as committed, and only a released HEAD).
+_BG="$(python3 tools/_shipgates.py baseline-gate)"; _BGRC=$?
+if [ "$_BGRC" != 0 ]; then
+  [ -n "$_BG" ] && echo "$_BG" || echo "❌ the baseline gate could not run (git or its own error, above) — not shipping on a guess."
+  echo "   Nothing is committed or pushed."
+  _WHY="tests/baselines.json beside shipped source, or recorded on an unreleased commit"
+  exit 1
+fi
 # A SPOT-CHECK AND A SHIP DO NOT SHARE THE MACHINE (5 Sep). Two headless suites at once starve the timing-sensitive tests: a
 # two-commit spot-check running under the v15.71 ship's phone pass flaked test 699 ("the CONTROL swipe moved nothing") and cost
 # the whole ship. spotcheck.sh holds .spotcheck-in-progress while it runs and refuses while this lock exists; same here.
