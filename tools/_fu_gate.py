@@ -500,8 +500,8 @@ TOL_VARS = ('FU_TOL_PX', 'FU_CHAN', 'FU_FAINT_TOL_PX', 'FU_FAINT_CHAN', 'FU_GRID
 #   · and the probe's own lists (the styles, attributes, keys, sizes, environments, widths it measures) shrinking is a
 #     loosening, read like the four knobs.
 INSTRUMENT_MARK = 'INSTRUMENT CHANGE:'
-PROBE_LISTS = ('STYLES', 'ATTRS', 'SVG_ATTRS', 'PSEUDO_STYLES', 'KEYS', 'SWEEP_CODES', 'SWEEP_MODS', 'FU6_SIZES', 'ENVS',
-               'HOVER', 'HOVER_MORE', 'ALL')
+PROBE_LISTS = ('STYLES', 'ATTRS', 'SVG_ATTRS', 'PSEUDO', 'KEYS', 'KEYS_TWICE', 'SWEEP_CODES', 'SWEEP_MODS', 'FU6_SIZES',
+               'HOVER', 'HOVER_MORE', 'HOLDS', 'FRIEND', 'ALL')
 NO_PLANT_GROUPS = ('FU7',)   # a record of "no switch yet" (it refuses PASS by itself once one exists): nothing to plant in it
 
 
@@ -527,24 +527,43 @@ def probe_groups(text):
     return [x.strip().strip('\'"') for x in m.group(1).split(',') if x.strip()] if m else []
 
 
-def plant_gaps(probe_text, plants_text):
-    """The probe groups no plant is caught in (a plant is caught in the LAST group of its prefix)."""
+def plant_gaps(probe_text, plants_text, sh_text=None):
+    """The probe groups no plant is caught in (a plant is caught in the LAST group of its prefix) — and, when the driver's
+    text is given, the runs of its FU_RUNS no plant is measured in (the second review: a run nobody plants in could have
+    its comparison switched off and still PASS)."""
     import json
     try:
         ps = json.loads(plants_text).get('plants') or []
     except Exception:
         return ['(the plants file does not read)']
-    caught = set()
+    caught, labels = set(), set()
     for p in ps:
         gs = [g for g in str(p.get('groups') or '').split(',') if g]
         if gs:
             caught.add(gs[-1])
-    return [g for g in probe_groups(probe_text) if g not in caught and g not in NO_PLANT_GROUPS]
+        labels.update(p.get('widths') or [])
+    gaps = [g for g in probe_groups(probe_text) if g not in caught and g not in NO_PLANT_GROUPS]
+    if sh_text is not None:
+        gaps += ['the run %s' % r for r in sorted(shell_runs(sh_text)) if r not in labels]
+    return gaps
+
+
+def shell_runs(sh_text):
+    """{label: (size, input, env, set of groups)} of the driver's FU_RUNS block (the second review: where Full is measured)."""
+    m = re.search(r"^FU_RUNS='\n(.*?)\n'", sh_text or '', re.M | re.S)
+    out = {}
+    if not m:
+        return out
+    for line in m.group(1).split('\n'):
+        f = line.split('#', 1)[0].split()
+        if len(f) >= 5:
+            out[f[0]] = (f[1], f[2], f[3], set(g for g in f[4].split(',') if g))
+    return out
 
 
 def shell_widths(sh_text):
-    m = re.search(r'^FU_WIDTHS="([^"]*)"', sh_text or '', re.M)
-    return set(m.group(1).split()) if m else set()
+    """The runs' labels (v2 called them widths)."""
+    return set(shell_runs(sh_text))
 
 
 def instrument_terms(sh_text, cmp_text, plants_text):
@@ -598,9 +617,17 @@ def loosenings(root):
             gone = sorted(hl[name] - nl.get(name, set()))
             if gone:
                 out.append('the probe’s %s loses %s' % (name, ', '.join(gone[:4]) + (' …' if len(gone) > 4 else '')))
-    gw = sorted(shell_widths(head[0]) - shell_widths(now[0]))
+    hr, nr = shell_runs(head[0]), shell_runs(now[0])
+    gw = sorted(set(hr) - set(nr))
     if gw:
-        out.append('the widths measured lose %s' % ', '.join(gw))
+        out.append('the runs measured lose %s' % ', '.join(gw))
+    for lab in sorted(set(hr) & set(nr)):
+        a, b = hr[lab], nr[lab]
+        if a[:3] != b[:3]:
+            out.append('the run %s is no longer %s %s %s' % (lab, a[0], a[1], a[2]))
+        lost = sorted(a[3] - b[3])
+        if lost:
+            out.append('the run %s loses %s' % (lab, ', '.join(lost)))
     return out
 
 
@@ -946,9 +973,10 @@ def selftest_repo():
               '<script src="js/storage.js?v=30"></script>', '</body>']
         write('index.html', '\n'.join(IX) + '\n')
         write('tools/_fu_compare.py', "# the comparer\nif 'FU2' in groups:\n    pass\n")
-        SH0 = "#!/bin/bash\nFU_INVISIBLE='\nlayer.srcW       # I2\nmeta.SCHEMA_REV  # N1\n'\nFU_TOL_PX=3   # measured\nFU_CHAN=24\nFU_GRID_TOL=4\nFU_WIDTHS=\"380 1280\"\n"
-        PL0 = '{"plants": [{"name": "margin", "groups": "FU1"}, {"name": "toast", "groups": "FU1,FU2"}]}\n'
-        PR0 = "<script>\n  var ALL = ['FU1', 'FU2', 'FU7'];\n  var STYLES = ['display', 'box-shadow',\n    'outline'];\n</script>\n"
+        SH0 = ("#!/bin/bash\nFU_INVISIBLE='\nlayer.srcW       # I2\nmeta.SCHEMA_REV  # N1\n'\nFU_TOL_PX=3   # measured\nFU_CHAN=24\nFU_GRID_TOL=4\n"
+               "FU_RUNS='\n380   380x800   touch  -   FU1,FU2,FU7\n1280  1280x800  mouse  -   FU1,FU2,FU7\n440x956  440x956  touch  -  FU1,FU2   # his phone\n'\n")
+        PL0 = '{"plants": [{"name": "margin", "groups": "FU1", "widths": ["380", "1280"]}, {"name": "toast", "groups": "FU1,FU2", "widths": ["440x956"]}]}\n'
+        PR0 = "<script>\n  var ALL = ['FU1', 'FU2', 'FU7'];\n  var STYLES = ['display', 'box-shadow',\n    'outline'];\n  var PSEUDO = ['::before', '::after'];\n</script>\n"
         write('tools/full-unchanged.sh', SH0)
         write('tools/full-unchanged-plants.json', PL0)
         write('tests/full-unchanged.html', PR0)
@@ -1089,7 +1117,10 @@ def selftest_repo():
                                 ('a picture tolerance raised', 'tools/full-unchanged.sh', SH0.replace('FU_TOL_PX=3', 'FU_TOL_PX=12')),
                                 ('a threshold raised', 'tools/full-unchanged.sh', SH0.replace('FU_CHAN=24', 'FU_CHAN=40')),
                                 ('a plant taken out', 'tools/full-unchanged-plants.json', '{"plants": [{"name": "margin", "groups": "FU1,FU2"}]}\n'),
-                                ('a width taken out', 'tools/full-unchanged.sh', SH0.replace('FU_WIDTHS="380 1280"', 'FU_WIDTHS="380"'))):
+                                ('a run taken out', 'tools/full-unchanged.sh', SH0.replace('440x956  440x956  touch  -  FU1,FU2   # his phone\n', '')),
+                                ('a group taken from a run', 'tools/full-unchanged.sh', SH0.replace('440x956  440x956  touch  -  FU1,FU2', '440x956  440x956  touch  -  FU1')),
+                                ('a run moved to another size', 'tools/full-unchanged.sh', SH0.replace('440x956  440x956  touch', '440x956  380x800  touch')),
+                                ('the pseudo-elements no longer read', 'tests/full-unchanged.html', PR0.replace("var PSEUDO = ['::before', '::after'];", "var PSEUDO = ['::before'];"))):
             old = io.open(os.path.join(d, rel), encoding='utf-8').read()
             write(rel, text)
             for log in ('- v3 — queue 980 (partial): the lock itself', '- v3 — queue 975: a tidy-up', '- v3 — (hunt LOW #2) the probe'):

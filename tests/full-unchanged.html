@@ -39,14 +39,17 @@
   hold); FU2's missing edits; a real export through the export sheet; every key the handler answers, with what each one
   opened; the live session's whole wire, presence included; FU5 unmasked except N1.
 
-  v3 (6 Oct, the second review — a Simple release carrying SIXTEEN changes to Full got a literal PASS): his phone (440×956)
-  is a width of its own, and FU8 boots the app again in the environments v2 never measured — short screens both ways, a
-  phone of 320, a PC of 1024 and of 1680, reduced motion, the dark Home, the other Settings switched on; a friend's EDITS
-  arriving in Full (FU4), not only presence; the saved record and the Home card whole, after every FU2 step; the toast's box
-  and rise; animations started from script (element.animate) and pseudo-elements; a picture of every hovered control, and
-  five more kinds hovered; the un-held swipe, the tap, the pinch, and each hold threshold bracketed; the exported file's
-  sound; every effect / sound / behaviour default; every printable key with every modifier; and the suite's file is never
-  run inside the frame being measured (kitchen921 lives here now).
+  v3 (6 Oct, the second review — a Simple release carrying SIXTEEN changes to Full got a literal PASS): the probe runs at
+  every size and in every environment tools/full-unchanged.sh's FU_RUNS names (his phone 440×956 with the edits; 320×568,
+  956×440, 1280×720, 1024×600 and 1680×1050 for the screens; and `env=settings`, every Setting off its default with reduced
+  motion); a friend's EDITS arriving in Full and his leaving (FU4), not only presence; the saved record and the Home card
+  whole after every FU2 step, and FU5's record whole; the toast's words, rise and box (FU1's 'fu1-toast' pictures it at
+  rest) and a toggle pressed twice; animations started from script (element.animate, wrapped before the app runs) and every
+  pseudo-element with a box; a picture of every hovered control, and six more kinds hovered; the un-held swipe, the tap, the
+  pinch, and each hold timer bracketed by the driver's clock; the exported file's encoder settings, sound bytes and decoded
+  sound; every effect / sound / behaviour default (FU1's registry record) and the ranges the inspector builds; on the PC
+  pass every key a keyboard has with ⇧, ⌥ and ⌘; and the suite's file is never run inside the frame being measured (its
+  kitchen921 is copied here).
 -->
 <style>
   html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
@@ -71,14 +74,21 @@
      BEFORE it goes in — the sanitiser then gets the same input on both sides, and its output is compared byte for byte. */
   var INV = (Q.get('inv') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
   var UPTO = Q.get('upto') || '';   // development only: stop FU2 after the step whose name contains this (the tool never passes it)
+  /* THE ENVIRONMENT (the second review, 6 Oct: the reduced-motion path and the dark Home were never measured, and a change to
+     each passed). '' is the defaults, as every run before. 'settings' is every Setting off its default AT ONCE — the dark
+     Home, Demo mode, Show touches, no system fonts, a 3 s layer length, a fixed shape colour, Detail playback, A–Z order,
+     the three collaboration display switches flipped — AND the OS asking for less motion (tests/_cdp.py emulates
+     prefers-reduced-motion before the app loads). One run per width instead of one per setting: the rules each one turns on
+     do not depend on each other, and a run is a minute. tools/full-unchanged.sh says which runs use it (FU_RUNS). */
+  var ENV = Q.get('env') || '';
+  var ENV_SETTINGS = { sort: 'name', demoMode: true, showTouches: true, systemFonts: false, layerDuration: 3, shapeColor: '#3a7bd5',
+    homeLight: false, playbackQuality: 'detail', collabCursors: false, collabSelections: false, collabCodesOnly: true };
   /* FU1 and FU2 first, in this order: the self-test's plants are measured with a PREFIX of it (FU1 for the pictures, FU1+FU2
      for the edits, FU1..FU3 for the keys, FU1..FU5 for the sanitiser), so whatever one group leaves behind, a plant's run
      reaches its group exactly where the full run did. */
-  /* FU8 last (6 Oct): it boots the app again in each environment, so nothing may run after it — and a plant caught there
-     pays for every group before it, so only the plants that need an environment are measured that far. */
-  var ALL = ['FU1', 'FU2', 'FU3', 'FU6', 'FU4', 'FU5', 'FU7', 'FU8'];
+  var ALL = ['FU1', 'FU2', 'FU3', 'FU6', 'FU4', 'FU5', 'FU7'];
   var GROUPS = (Q.get('groups') || ALL.join(',')).split(',').filter(function (g) { return ALL.indexOf(g) >= 0; });
-  var DUMP = window.__fmDump = { probe: PROBE_VERSION, w: W, h: H, phone: PHONE, groups: GROUPS, step: 'boot', screens: {}, fu2: [], fu3: [], fu4: null, fu5: [], fu6: {}, fu7: null, fu8: { screens: {}, envs: {} }, errors: [], notes: [], fell: [] };
+  var DUMP = window.__fmDump = { probe: PROBE_VERSION, w: W, h: H, phone: PHONE, env: ENV, groups: GROUPS, step: 'boot', screens: {}, fu2: [], fu3: [], fu4: null, fu5: [], fu6: {}, fu7: null, errors: [], notes: [], fell: [] };
   var frame = document.getElementById('app');
   frame.style.width = W + 'px'; frame.style.height = H + 'px';
   var w, D, FM;   // the app frame's window, document and FM, once loaded
@@ -2024,18 +2034,45 @@
   }
 
   /* ═══ BOOT ═══════════════════════════════════════════════════════════════════════════════════════════════════════ */
+  /* Run by the driver in every new document before any of its own scripts (Page.addScriptToEvaluateOnNewDocument), and so in
+     the app frame before the app: self-contained — it is turned into source text. */
+  function frameInit() {
+    if (window === window.top) return;
+    var a = 0x980;
+    Math.random = function () {
+      a = (a + 0x6D2B79F5) >>> 0; var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    var log = window.__fuAnim = [];
+    var orig = Element.prototype.animate;
+    if (orig) Element.prototype.animate = function (kf, opts) {
+      try {
+        if (log.length < 4000) {
+          var o = typeof opts === 'number' ? { duration: opts } : (opts || {});
+          log.push({ el: this, pseudo: (o && o.pseudoElement) || '', kf: JSON.stringify(kf === undefined ? null : kf), opts: JSON.stringify(o) });
+        }
+      } catch (e) {}
+      return orig.apply(this, arguments);
+    };
+  }
   async function main() {
     /* Asked of the driver BEFORE the app frame exists (tests/_cdp.py answers): the phone pass's touch emulation, and a
        seeded Math.random installed in the app frame before any of the app's own scripts run — so the draws it makes at
        boot (which drop-hint variant Home shows, the first shape hue) are the same on every run of the same build. */
+    /* …and (the second review, 6 Oct) element.animate() wrapped in the app frame before any of its scripts run, so an
+       animation started from script is written down (see MOTION), and on the 'settings' environment the OS's
+       prefers-reduced-motion: reduce. */
     window.__fmWantSetup = {
       phone: PHONE,
-      init: '(function () { if (window === window.top) return; var a = 0x980; Math.random = function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; ' +
-            't = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();'
+      reduce: ENV === 'settings',
+      init: '(' + frameInit.toString() + ')();'
     };
     var su = await until('the driver to set the page up (run this through tools/full-unchanged.sh)', function () { return window.__fmSetupDone; }, 20000);
     if (su !== 1) throw new Error('setup: ' + su);
     try { localStorage.setItem('fm.test.seedProject', '1'); } catch (e) {}   // the same boot tests/run.html gives the app (queue 936)
+    if (ENV === 'settings') { try { localStorage.setItem('fm.settings', JSON.stringify(ENV_SETTINGS)); } catch (e) {} }
+    else if (ENV) throw new Error('no environment named ' + ENV);
     step('loading the app');
     var loaded = new Promise(function (r) { frame.addEventListener('load', r, { once: true }); });
     frame.src = '../index.html';
@@ -2045,7 +2082,8 @@
     var missing = CORE.filter(function (k) { return !FM || FM[k] === undefined; });
     if (missing.length) throw new Error('THE APP DID NOT LOAD IN THE PROBE FRAME — FM is missing ' + missing.join(', '));
     w.addEventListener('pagehide', function () { DUMP.errors.push('THE APP FRAME NAVIGATED during: ' + DUMP.step); });
-    await until('the splash to go', function () { return !D.getElementById('splash'); }, 15000);
+    /* gone — or never shown: with reduced motion the intro does not play and stays hidden (index.html), the 'settings' run */
+    await until('the splash to go', function () { var sp = D.getElementById('splash'); return !sp || sp.classList.contains('hidden'); }, 15000);
     seedRandom(0x980);
     await loadPalette();
     installColourGuard();
@@ -2064,12 +2102,24 @@
     D.head.appendChild(st);
     var toast = D.getElementById('toast');
     if (toast) new w.MutationObserver(function () {
-      if (!toast.classList.contains('hidden') && toast.textContent) noteToast(toast.textContent.trim());
+      var up = !toast.classList.contains('hidden');
+      if (up && !toastUp && !TOAST_UNHIDING) noteToastRise(toast);
+      toastUp = up;
+      if (up && toast.textContent && !TOAST_UNHIDING) noteToast(toast.textContent.trim());
     }).observe(toast, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     APP_VERSION = String((D.querySelector('.ver') || {}).textContent || '').trim();
-    DUMP.app = { version: APP_VERSION, inner: [w.innerWidth, w.innerHeight], hoverNone: w.matchMedia('(hover: none)').matches, phoneMq: w.matchMedia('(max-width: 700px)').matches, touch: w.navigator.maxTouchPoints };
+    DUMP.app = { version: APP_VERSION, inner: [w.innerWidth, w.innerHeight], hoverNone: w.matchMedia('(hover: none)').matches, phoneMq: w.matchMedia('(max-width: 700px)').matches, touch: w.navigator.maxTouchPoints,
+      reduce: w.matchMedia('(prefers-reduced-motion: reduce)').matches, home: D.documentElement.getAttribute('data-home'), animateWrapped: !!w.__fuAnim };
     if (w.innerWidth !== W || w.innerHeight !== H) throw new Error('the app frame is ' + w.innerWidth + '×' + w.innerHeight + ', not ' + W + '×' + H);
     if (PHONE && !DUMP.app.hoverNone) throw new Error('the phone pass is not a phone: (hover: none) does not match inside the app frame');
+    if (!DUMP.app.animateWrapped) throw new Error('element.animate is not wrapped in the app frame — the driver did not run the init script, so script animations would go unseen');
+    /* An environment that did not take is a run of the defaults under another name: refused, never compared. */
+    if (ENV === 'settings') {
+      if (!DUMP.app.reduce) throw new Error('the settings environment: prefers-reduced-motion: reduce does not match inside the app frame');
+      var bad = Object.keys(ENV_SETTINGS).filter(function (k) { return FM.settings.get(k) !== ENV_SETTINGS[k]; });
+      if (bad.length) throw new Error('the settings environment: Full did not take ' + bad.map(function (k) { return k + '=' + JSON.stringify(ENV_SETTINGS[k]) + ' (it has ' + JSON.stringify(FM.settings.get(k)) + ')'; }).join(', '));
+      if (DUMP.app.home !== 'dark') throw new Error('the settings environment: Home is not dark (data-home=' + DUMP.app.home + ')');
+    } else if (DUMP.app.reduce) throw new Error('the default environment asks for reduced motion — the driver left an emulation on');
     await settle(400);
     step('FU1 home');
     if (GROUPS.indexOf('FU1') >= 0) await screen('fu1-home', null, { wait: 600 });

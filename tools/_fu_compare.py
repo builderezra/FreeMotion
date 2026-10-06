@@ -7,14 +7,20 @@ Called by tools/full-unchanged.sh, which owns the measured numbers and the one m
     FU_FAINT_TOL_PX, FU_FAINT_CHAN   … and in at most FU_FAINT_TOL_PX where one moved by more than FU_FAINT_CHAN (a faint
                                      recolour over a large area: a panel's border a few levels lighter)
     FU_GRID_TOL         a decoded export frame's 12x12 colour grid may move by at most this many levels per cell
+    FU_AUDIO_TOL        the exported file's decoded sound: a 0.1 s window's RMS or peak (in 1/1000) may move by at most this
+    FU_BYTES_PCT        the exported file's sound track may differ in size by at most this many percent
 
-    python3 tools/_fu_compare.py REF_DIR CAND_DIR [--widths 380,1280] [--groups FU1,FU2] [--max 12] [--json OUT]
+    python3 tools/_fu_compare.py REF_DIR CAND_DIR [--widths 380,1280] [--groups FU1,FU2] [--runs '380=FU1,FU2 1280=FU1'] [--max 12] [--json OUT]
+
+A RUN is named by its label (tools/full-unchanged.sh FU_RUNS: '380', '1280', '440x956', 'env-380' …): each DIR holds
+rec-<label>.json(.gz) and shots-<label>/*.png, and every difference line starts with its label. --runs gives each label its
+own groups (the extra screens and environments measure a prefix of the probe's order, not all of it).
     python3 tools/_fu_compare.py plant NAME DIR      # plant one change from tools/full-unchanged-plants.json into DIR
     python3 tools/_fu_compare.py judge WORK          # did every plant turn it red for its own reason?
     python3 tools/_fu_compare.py measure HEAD HEAD2 MARGIN   # the numbers full-unchanged.sh carries
     python3 tools/_fu_compare.py plants              # list the plants (name, groups, widths) for the shell
 
-Each DIR holds rec-<W>.json (the probe's dump) and shots-<W>/*.png. Exit 0: identical (pictures within the tolerance);
+Each DIR holds rec-<label>.json (the probe's dump) and shots-<label>/*.png. Exit 0: identical (pictures within the tolerance);
 1: differences, the first ones printed BY NAME; 3: the instrument is broken (the probe could not drive REF, a record is
 missing, or a step FELL BACK from Full's own control to the function underneath) — never PASS on a run that did not
 measure what it says, because a step that fails the same way on both sides compares equal.
@@ -393,8 +399,12 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
     tol, chan = envint('FU_TOL_PX'), envint('FU_CHAN')
     ftol, fchan = envint('FU_FAINT_TOL_PX', 10 ** 9), envint('FU_FAINT_CHAN', 255)
     gtol = envint('FU_GRID_TOL', 0)
+    atol = envint('FU_AUDIO_TOL', 0)
+    btol = envint('FU_BYTES_PCT', 0)
+    by_label = groups if isinstance(groups, dict) else None
     diffs, broken, pictures = [], [], []
     for w in widths:
+        groups = by_label.get(w, []) if by_label is not None else groups
         A, B = load(ref_dir, w), load(cand_dir, w)
         broken += instrument_errors(A, w, groups)
         if B is None:
@@ -603,7 +613,7 @@ def sig_hit(line, sig):
     return bool(rest) and all(s in line[m.end():] for s in rest)
 
 
-STEP_LINE = re.compile(r'^\d+ FU\d "[^"]*": ')   # "380 FU2 "<step>": <what differs>" (a value's own JSON never starts a line)
+STEP_LINE = re.compile(r'^[\w.-]+ FU\d "[^"]*": ')   # "380 FU2 "<step>": <what differs>" ("440x956 FU2 …" too; a value's own JSON never starts a line)
 
 
 def judge(work):
@@ -707,6 +717,7 @@ def main():
     ap.add_argument('cand')
     ap.add_argument('--widths', default='380,1280')
     ap.add_argument('--groups', default='FU1,FU2,FU3,FU6,FU4,FU5,FU7')
+    ap.add_argument('--runs', default=None, help="each label's own groups: '380=FU1,FU2 440x956=FU1' (overrides --widths/--groups)")
     ap.add_argument('--max', type=int, default=12)
     ap.add_argument('--json', default=None)
     ap.add_argument('--png-selftest', action='store_true')
@@ -722,7 +733,12 @@ def main():
               'a panel border recoloured by 20 levels counts %d against %d, and the same picture counts %d. Re-measure '
               '(tools/full-unchanged.sh --measure) and lower the tolerances in tools/full-unchanged.sh.' % (moved, tol, faint, ftol, same))
         return 3
-    diffs, broken, pictures = compare(a.ref, a.cand, a.widths.split(','), a.groups.split(','), a.max * 50)
+    if a.runs:
+        runs = [x.split('=', 1) for x in a.runs.split()]
+        labels, groups = [r[0] for r in runs], dict((r[0], r[1].split(',')) for r in runs)
+    else:
+        labels, groups = a.widths.split(','), a.groups.split(',')
+    diffs, broken, pictures = compare(a.ref, a.cand, labels, groups, a.max * 50)
     if a.json:
         json.dump({'diffs': diffs, 'broken': broken, 'pictures': pictures}, open(a.json, 'w'), indent=1, ensure_ascii=False)
     if broken:
