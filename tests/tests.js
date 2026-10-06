@@ -203,7 +203,12 @@
     } catch (e) { ok = false; }
     if (!ok) notRunHere('needs an AAC audio encoder (AudioEncoder mp4a.40.2) — this browser has none (Linux Chrome; the Mac and his iPhone have one)');
   }
-  async function needsBarcodeDetector() {
+  /* '' when this browser has a BarcodeDetector that reads QR codes, else why not — asked, never thrown, so a test whose
+     subject is mostly something else can run all of that and skip ONLY the read (6 Oct, the port audit, MAJOR: 921 S6 said
+     NOT RUN at its top, and it is the one test that proves Reset stops the owner listening on the old link — so off the Mac
+     a release that left the old link live shipped with its only check not run). Such a test calls notRunBarcode(why) at
+     its END: a failure in the part that ran still throws first and reads FAIL. */
+  async function barcodeDetectorWhy() {
     var why = '';
     if (typeof BarcodeDetector === 'undefined') why = 'this browser has no BarcodeDetector';
     else {
@@ -211,7 +216,15 @@
       try { var c = document.createElement('canvas'); c.width = c.height = 8; await new BarcodeDetector({ formats: ['qr_code'] }).detect(c); }
       catch (e) { why = 'this browser exposes BarcodeDetector but cannot detect with it (' + String((e && e.message) || e).slice(0, 80) + ')'; }
     }
-    if (why) notRunHere('needs a working BarcodeDetector (qr_code) — ' + why + ' (the Mac and Android Chrome have one)');
+    return why;
+  }
+  function notRunBarcode(why) {
+    notRunHere('needs a working BarcodeDetector (qr_code) — ' + why + ' (the Mac and Android Chrome have one)');
+  }
+  // for a test whose WHOLE subject is reading a code: NOT RUN HERE at its top
+  async function needsBarcodeDetector() {
+    var why = await barcodeDetectorWhy();
+    if (why) notRunBarcode(why);
   }
   /* ?fmfake=noaac,nobarcode takes a feature AWAY for one run — the proof that the tests above say NOT RUN HERE instead of
      failing or passing on a machine without it. Never passed by ship.sh, prove.sh, spotcheck.sh or mutate.sh; restored at
@@ -37773,8 +37786,12 @@
   test('921 S6 the Share panel hands out a link, a QR the camera reads back as that link, and a 9-character code; Reset makes new ones and the owner stops listening on the old', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S6('the invite panel');
     const S = C.signal;
-    // nothing here can read a QR code back without one — NOT RUN HERE where it is missing, never a red (6 Oct, #1071)
-    await needsBarcodeDetector();
+    /* Only reading the QR back needs a BarcodeDetector, so only that read is skipped where there is none, and the test says
+       NOT RUN HERE at its END (6 Oct, the port audit, MAJOR). It said it at the top, and this is the ONLY test that proves
+       Reset stops the owner listening on the old link and code topics — plus the privacy line, the 9-character code, the
+       live line and the 44 px phone buttons — so off the Mac all of that went unrun. A failure in any of it still throws
+       first, and reads FAIL. */
+    const noReader = await barcodeDetectorWhy();
     await withFakeNet921(async function (net) {
       await withLabs921(async function (ui) {
         await withCollab921([layer921('A')], async function (ctx) {
@@ -37796,9 +37813,11 @@
           document.querySelector('.cs-qrbtn').click();
           const img = document.querySelector('.cs-qr canvas');
           if (!img) throw new Error('[QR] drew nothing');
-          const found = await new BarcodeDetector({ formats: ['qr_code'] }).detect(img);
-          if (!found.length) throw new Error('the QR on screen could not be read by a QR reader at all');
-          if (found[0].rawValue !== link) throw new Error('the QR reads "' + found[0].rawValue + '" — not the invite link');
+          if (!noReader) {
+            const found = await new BarcodeDetector({ formats: ['qr_code'] }).detect(img);
+            if (!found.length) throw new Error('the QR on screen could not be read by a QR reader at all');
+            if (found[0].rawValue !== link) throw new Error('the QR reads "' + found[0].rawValue + '" — not the invite link');
+          }
           document.querySelector('.cs-qrbtn').click();
           if (document.querySelector('.cs-qr')) throw new Error('[QR] a second time did not put it away');
           /* Reset: a new link and code, and the old topics are no longer listened on. */
@@ -37839,6 +37858,8 @@
         });
       });
     });
+    // everything above ran and passed; only the QR read-back did not — said by name, never a pass
+    if (noReader) notRunBarcode(noReader + '; the rest of this test ran and passed, only reading the QR back as the link did not');
   });
 
   test('921 S6 six seconds with nothing from the owner takes the guest Offline — which starts the reconnect — while a guest that hears its pongs stays on; the link is kept, the first word from the owner brings it back, and only a silence as long as the grace closes it', { item: '921', budgetMs: 30000 }, async function () {
@@ -40806,7 +40827,7 @@
     const paint = function () { g.fillStyle = '#6b6f76'; g.fillRect(0, 0, 640, 480); g.drawImage(code, (640 - code.width) >> 1, (480 - code.height) >> 1); };
     paint();
     const stream = cam.captureStream(15);
-    const out = { stream: stream, stops: 0, timer: setInterval(paint, 60) };
+    const out = { stream: stream, stops: 0, timer: setInterval(paint, 60), text: text };   // text: what a stand-in reader may "read" off it
     stream.getTracks().forEach(function (t) { const s0 = t.stop.bind(t); t.stop = function () { out.stops++; s0(); }; });
     out.done = function () { clearInterval(out.timer); try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} };
     return out;
@@ -40815,8 +40836,14 @@
   test('921 S8 [Scan QR] reads the app’s own invite code off the camera into the Join field and waits for a tap — jsQR is fetched only when the scanner opens on a browser with no BarcodeDetector, and the camera always goes off', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S8('the QR scanner');
     if (!C.qr || typeof C.qr.reader !== 'function') throw new Error('there is no QR reader (FM.collab.qr.reader) — the S8 scanner is not built');
-    // the native half cannot be measured without one — NOT RUN HERE where it is missing, never a red (6 Oct, #1071)
-    await needsBarcodeDetector();
+    /* Where no reader can DECODE a code (Linux Chrome, ?fmfake=nobarcode) this test used to say NOT RUN at its top, and
+       everything the Join sheet does with a code went unrun with it (6 Oct, the port audit: the same review as 921 S6).
+       Now the browser's reader is taken away there and a stand-in jsQR that "reads" whatever the stand-in camera holds up
+       does the reading — so the sheet's whole behaviour runs (into the field, camera off, waits for a tap, never joins by
+       itself, not-an-invite, closing mid-scan, a refused camera, no reader at all, the 380 px sheet) — and the two parts that
+       need a real decoder (the browser's reader on the app's own code, and reading back the frame handed to jsQR) are
+       skipped and said NOT RUN HERE at the END, after the rest has passed. */
+    const noReader = await barcodeDetectorWhy();
     const S = C.signal;
     const link = S.inviteLink(S.newRoom());
     const realBD = window.BarcodeDetector;
@@ -40824,12 +40851,22 @@
     const loads = [];
     const cams = [];
     let realCam = null;
+    const STAND_IN_SRI = 'sha384-S8suiteStandInOnlyNotARealHash';
+    // the no-reader path's jsQR: hands back what the newest stand-in camera shows — the pixels must still be RGBA w × h
+    const knowing = function (url, sri) {
+      loads.push({ url: url, sri: sri });
+      return Promise.resolve(function jsQRKnows(data, w, h) {
+        const cam = cams[cams.length - 1];
+        return (data instanceof Uint8ClampedArray && w > 0 && h > 0 && data.length === w * h * 4 && cam) ? { data: cam.text } : null;
+      });
+    };
     try {
       await withLabs921(async function (ui) {
         realCam = ui._camera;
         let next = null;
         ui._camera = function () { if (!next) return Promise.reject({ name: 'NotFoundError' }); const c = next; cams.push(c); next = null; return Promise.resolve(c.stream); };
-        C.qr._load = function (url, sri) { loads.push({ url: url, sri: sri }); return Promise.reject(new Error('jsQR is not reachable from the suite')); };
+        if (noReader) { window.BarcodeDetector = undefined; C.qr.JSQR_SRI = STAND_IN_SRI; C.qr._load = knowing; }
+        else C.qr._load = function (url, sri) { loads.push({ url: url, sri: sri }); return Promise.reject(new Error('jsQR is not reachable from the suite')); };
         C.qr._forget();
         const openSheet = async function () {
           ui.close();
@@ -40838,7 +40875,8 @@
           return { sb: sb, input: document.querySelector('#collab-join .cj-code'), status: document.querySelector('#collab-join .cj-status'), go: document.querySelector('#collab-join .cj-go') };
         };
 
-        /* 1. The app's own invite, read by the browser's reader: into the field, camera off, NOT joined. */
+        /* 1. The app's own invite, read by the browser's reader (the stand-in where none decodes): into the field, camera
+           off, NOT joined. */
         let J = await openSheet();
         if (loads.length) throw new Error('jsQR was requested before anybody opened the scanner');
         if (J.sb.getAttribute('aria-label') !== 'Scan a QR code') throw new Error('[Scan QR] has no name a screen reader can say');
@@ -40850,7 +40888,7 @@
         if (document.querySelector('.cj-scanner')) throw new Error('the camera view is still on the sheet after the code was read');
         if (!/tap Join/.test(J.status.textContent)) throw new Error('after reading an invite the sheet says "' + J.status.textContent + '" — it must wait for a tap on Join, not join by itself');
         if (C.session) throw new Error('reading a QR code JOINED a session by itself — anybody can hold up a code');
-        if (loads.length) throw new Error('jsQR was fetched on a browser that has BarcodeDetector: ' + JSON.stringify(loads));
+        if (!noReader && loads.length) throw new Error('jsQR was fetched on a browser that has BarcodeDetector: ' + JSON.stringify(loads));
 
         /* 2. A QR code that is not an invite: said, left out of the field, and [Scan QR] again turns it off. */
         J.input.value = '';
@@ -40890,47 +40928,52 @@
            for), the sheet points at the Camera app instead, nothing is fetched and no camera is asked for. */
         C.qr.JSQR_SRI = null;
         C.qr._forget();
-        const cams5a = cams.length;
+        const cams5a = cams.length, loads5a = loads.length;
         ui.close();
         await ui.join();
         const sheet5a = await until921S6('the Join sheet with no QR reader', function () { return document.getElementById('collab-join'); }, 4000);
         if (sheet5a.querySelector('.cj-scan')) throw new Error('[Scan QR] is offered on a browser with no BarcodeDetector and no pinned jsQR — every tap can only end in “can’t read QR codes here yet”; on the iPhone this feature is for, it is a guaranteed dead end');
         if (!/camera app/.test(sheet5a.textContent)) throw new Error('with no QR reader the Join sheet does not say the Camera app reads the code: ' + sheet5a.textContent.slice(0, 200));
-        if (loads.length) throw new Error('jsQR was fetched with no integrity hash pinned — a CDN script with the run of a page that holds his AI key: ' + JSON.stringify(loads));
+        if (loads.length !== loads5a) throw new Error('jsQR was fetched with no integrity hash pinned — a CDN script with the run of a page that holds his AI key: ' + JSON.stringify(loads.slice(loads5a)));
         if (cams.length !== cams5a) throw new Error('the camera was started on a browser that has no way to read a QR code');
         if (document.querySelector('.cj-scanner')) throw new Error('an unusable scanner left its box on the sheet');
-        C.qr.JSQR_SRI = 'sha384-S8suiteStandInOnlyNotARealHash';
-        const got = { frames: 0, said: null, shape: null, img: null };
-        C.qr._load = function (url, sri) {
-          loads.push({ url: url, sri: sri });
-          return Promise.resolve(function jsQRStandIn(data, w, h) {
-            got.frames++;
-            if (!(data instanceof Uint8ClampedArray) || data.length !== w * h * 4 || !(w > 0) || !(h > 0)) { got.shape = [data && data.length, w, h]; return null; }
-            if (!got.img) got.img = new ImageData(new Uint8ClampedArray(data), w, h);
-            return got.said ? { data: got.said } : null;
-          });
-        };
-        C.qr._forget();
-        J = await openSheet();
-        if (loads.length) throw new Error('jsQR was requested by opening the Join sheet — only the scanner may ask for it');
-        next = fakeCamera921(C, link);
-        J.sb.click();
-        await until921S6('a frame handed to jsQR', function () { return got.img || got.shape; }, 10000);
-        if (got.shape) throw new Error('the scanner handed jsQR ' + JSON.stringify(got.shape) + ' — not RGBA pixels of width × height');
-        const pic = document.createElement('canvas'); pic.width = got.img.width; pic.height = got.img.height;
-        pic.getContext('2d').putImageData(got.img, 0, 0);
-        const read = await new realBD({ formats: ['qr_code'] }).detect(pic);
-        if (!read.length || read[0].rawValue !== link) throw new Error('the frame the scanner handed to jsQR is not a readable picture of the code (' + (read.length ? read[0].rawValue : 'nothing found') + ')');
-        got.said = read[0].rawValue;
-        await until921S6('the jsQR path to fill the field', function () { return J.input.value === link; }, 6000);
-        if (loads.length !== 1) throw new Error('jsQR was requested ' + loads.length + ' times');
-        if (!/^https:\/\/cdn\.jsdelivr\.net\/npm\/jsqr@\d+\.\d+\.\d+\//.test(loads[0].url)) throw new Error('jsQR came from ' + loads[0].url + ' — the brief allows cdn.jsdelivr.net/npm/ and a pinned version only');
-        if (loads[0].sri !== C.qr.JSQR_SRI) throw new Error('jsQR was requested without its integrity hash (' + loads[0].sri + ')');
-        J.sb.click(); J.sb.click();            // a second scan in the same session reuses what was loaded
-        await settle921(300);
-        if (loads.length !== 1) throw new Error('a second scan fetched jsQR again');
-        ui.close();
-        window.BarcodeDetector = realBD;
+        if (noReader) {
+          // the rest of 5 reads the frame back with a real decoder, which this browser does not have: the stand-in reader again, for 6
+          C.qr.JSQR_SRI = STAND_IN_SRI; C.qr._load = knowing; C.qr._forget();
+        } else {
+          C.qr.JSQR_SRI = STAND_IN_SRI;
+          const got = { frames: 0, said: null, shape: null, img: null };
+          C.qr._load = function (url, sri) {
+            loads.push({ url: url, sri: sri });
+            return Promise.resolve(function jsQRStandIn(data, w, h) {
+              got.frames++;
+              if (!(data instanceof Uint8ClampedArray) || data.length !== w * h * 4 || !(w > 0) || !(h > 0)) { got.shape = [data && data.length, w, h]; return null; }
+              if (!got.img) got.img = new ImageData(new Uint8ClampedArray(data), w, h);
+              return got.said ? { data: got.said } : null;
+            });
+          };
+          C.qr._forget();
+          J = await openSheet();
+          if (loads.length) throw new Error('jsQR was requested by opening the Join sheet — only the scanner may ask for it');
+          next = fakeCamera921(C, link);
+          J.sb.click();
+          await until921S6('a frame handed to jsQR', function () { return got.img || got.shape; }, 10000);
+          if (got.shape) throw new Error('the scanner handed jsQR ' + JSON.stringify(got.shape) + ' — not RGBA pixels of width × height');
+          const pic = document.createElement('canvas'); pic.width = got.img.width; pic.height = got.img.height;
+          pic.getContext('2d').putImageData(got.img, 0, 0);
+          const read = await new realBD({ formats: ['qr_code'] }).detect(pic);
+          if (!read.length || read[0].rawValue !== link) throw new Error('the frame the scanner handed to jsQR is not a readable picture of the code (' + (read.length ? read[0].rawValue : 'nothing found') + ')');
+          got.said = read[0].rawValue;
+          await until921S6('the jsQR path to fill the field', function () { return J.input.value === link; }, 6000);
+          if (loads.length !== 1) throw new Error('jsQR was requested ' + loads.length + ' times');
+          if (!/^https:\/\/cdn\.jsdelivr\.net\/npm\/jsqr@\d+\.\d+\.\d+\//.test(loads[0].url)) throw new Error('jsQR came from ' + loads[0].url + ' — the brief allows cdn.jsdelivr.net/npm/ and a pinned version only');
+          if (loads[0].sri !== C.qr.JSQR_SRI) throw new Error('jsQR was requested without its integrity hash (' + loads[0].sri + ')');
+          J.sb.click(); J.sb.click();            // a second scan in the same session reuses what was loaded
+          await settle921(300);
+          if (loads.length !== 1) throw new Error('a second scan fetched jsQR again');
+          ui.close();
+          window.BarcodeDetector = realBD;
+        }
 
         /* 6. On a 380 px phone: [Scan QR] is thumb-sized beside Paste, the field keeps its room, and with the
            camera open the whole sheet — Join included — is still on the screen. */
@@ -40960,6 +41003,8 @@
       if (realCam && FM.collab.ui) FM.collab.ui._camera = realCam;
       cams.forEach(function (c) { c.done(); });
     }
+    // everything above ran and passed on the stand-in reader; the browser's own reader and the frame read-back did not
+    if (noReader) notRunBarcode(noReader + '; the Join sheet ran and passed on a stand-in reader, only the real decode (the browser reader, and reading back the frame handed to jsQR) did not');
   });
 
   /* An address lookup that answers with the candidate types it is told to — the suite must never reach Google or
