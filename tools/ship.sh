@@ -111,6 +111,16 @@ if [ "$FROM_FILE" = "0" ]; then
   esac
 fi
 [ -f .mutation-in-progress ] && { echo "❌ a mutation check is still in progress — refusing to ship a mutated tree"; exit 1; }
+# ⚠️ A SHIP RUNS ON main (6 Oct, the PM's port review). It commits on whatever branch is checked out and then pushes `main`:
+# from a work branch it would run ~90 minutes of suites, commit there, push whatever LOCAL main holds (its unpushed
+# commits included) and end "PUSH DID NOT LAND". rollback.sh and inbox.sh --done already refuse off main for this reason;
+# FM_SHIP_ALLOW_NON_MAC (the switch-over) makes the WSL port branch a place this could now be run from. Said in a second.
+if ! on_main; then
+  echo "❌ THIS CHECKOUT IS ON $(git symbolic-ref --short -q HEAD 2>/dev/null || echo 'a detached HEAD'), NOT main — a ship commits here and pushes main."
+  echo "   Nothing is committed or pushed. Bring the work onto main (merge it uncommitted, so prove.sh sees it), then ship."
+  _WHY="not on main — a ship commits on main and pushes main"
+  exit 1
+fi
 # LIVE MUST NOT BE AHEAD OF THIS TREE (queue 1066, 5 Oct). Another tool pushed to ssh/main (ChatGPT's v17.22, f7716576) while
 # this tree still sat on v17.21 with its own unshipped work also labelled v17.22. Nothing here looked at the remote until the
 # push, so a ship would have spent ~90 minutes on two suite passes and then been rejected as non-fast-forward. So: fetch

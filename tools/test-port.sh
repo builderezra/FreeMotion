@@ -70,6 +70,18 @@ v="$(dq_in "$TMP/dq2")"
 [ -n "$v" ] && ok "control: a title with a double quote in it is still refused" || bad "the DQ gate no longer catches a real double-quoted title"
 [ -z "$(dq_in "$REPO")" ] && ok "today's tests/tests.js: no double-quoted title" || bad "today's tests.js has a double-quoted title: $(dq_in "$REPO")"
 
+echo "── ship.sh refuses off main in a second (it commits on the checked-out branch and pushes main) — review minor ──"
+B="$TMP/branch"; mkdir -p "$B"
+( cd "$B" && git init -q . && git config user.email t@t && git config user.name t && git checkout -q -b main 2>/dev/null
+  echo '<span>v1.2</span>' > index.html && git add -A && git commit -q -m base && git checkout -q -b work )
+printf 'a release\n' > "$TMP/msg.txt"
+out="$(cd "$B" && FM_SHIP_ALLOW_NON_MAC=1 bash "$REPO/tools/ship.sh" -F "$TMP/msg.txt" 2>&1)"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$out" | grep -q 'NOT main' && grep -q '^REFUSED rc=1 not on main' "$B/.last-ship" && ok "on a work branch: refused at once (exit 1), .last-ship says why" || bad "off main: rc=$rc — $(printf '%s' "$out" | tail -3) — .last-ship: $(cat "$B/.last-ship" 2>/dev/null)"
+[ ! -f "$B/.ship-in-progress" ] && ok "…and its lock is gone" || bad "off main: the ship lock was left behind"
+( cd "$B" && git checkout -q main )
+out="$(cd "$B" && FM_SHIP_ALLOW_NON_MAC=1 bash "$REPO/tools/ship.sh" -F "$TMP/msg.txt" 2>&1)"; rc=$?
+! printf '%s' "$out" | grep -q 'NOT main' && printf '%s' "$out" | grep -q 'GITHUB CANNOT BE REACHED' && ok "control: on main it passes this gate and stops at the next (no 'ssh' remote here — GitHub unreachable)" || bad "on main: rc=$rc — $(printf '%s' "$out" | tail -3)"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"

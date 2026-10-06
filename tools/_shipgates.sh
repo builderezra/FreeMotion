@@ -13,3 +13,7 @@
 # inside brackets `\n` is a backslash and the letter n (measured on GNU grep), and grep matches one line at a time anyway.
 dq_titles() { grep -nE "^[[:space:]]*test\('[^']*\"[^']*'" "$1" | head -3; }
 
+
+# on_main — true when the checkout is on main. ship.sh commits on the checked-out branch and pushes `main`, so anywhere
+# else it would commit on that branch after ~90 minutes of suites and push whatever local main holds (review minor).
+on_main() { [ "$(git symbolic-ref --short -q HEAD 2>/dev/null)" = main ]; }
