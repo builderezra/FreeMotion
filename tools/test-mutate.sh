@@ -28,8 +28,8 @@ import json, sys, urllib.parse, os
 args = sys.argv[1:]
 def opt(n, d=None):
     return args[args.index(n) + 1] if n in args else d
-url, timeout, names = opt('--url', ''), opt('--timeout', '?'), '--names' in args
-open('stub-calls', 'a').write('timeout=%s url=%s\n' % (timeout, url))
+url, timeout, names, width = opt('--url', ''), opt('--timeout', '?'), '--names' in args, opt('--width', '?')
+open('stub-calls', 'a').write('timeout=%s width=%s url=%s\n' % (timeout, width, url))
 mode = open('stub-mode').read().strip() if os.path.exists('stub-mode') else 'normal'
 mutated = 'MUTATED' in open('js/a.js').read()
 # a file the suite loads that is NOT one of the five the old cache key hashed (the real tests.js fetches sw.js)
@@ -49,8 +49,10 @@ fails = []
 ran = []
 for t in tests:
     bad = (t.startswith('t-catches') and (mutated or swbroken)) or (mode == 'red' and t.startswith('t-catches'))
-    ran.append({"name": t, "ok": not bad, "pending": False})
+    narrow = t == 't-other' and width == '380' and os.path.exists('stub-narrow-red')   # red at phone width only
+    ran.append({"name": t, "ok": not (bad or narrow), "pending": False})
     if bad: fails.append('FAIL' + t + (' — sw.js is broken' if swbroken and not mutated else ' — saw the defect'))
+    if narrow: fails.append('FAIL' + t + ' — the row clips at 380px')
 n = len(tests); p = n - len(fails)
 out = {"ok": not fails, "summary": "Regression %d/%d %s" % (p, n, '✓' if not fails else '✗'), "failures": fails, "slowest": [], "sceneLeaks": []}
 if names: out["ran"] = ran
@@ -142,6 +144,19 @@ printf '%s' "$out" | grep -q 'NOT cached: the tree changed while it ran' && ok "
 rm -f tools/.mutate-green; log="$(full js/a.js 'var b = 2;' 'var b = 6; /*NOT-SEEN*/')"; rc=$?
 printf '%s' "$log" | grep -q 'NOT cached: the tree changed while it ran' && [ ! -f tools/.mutate-green ] && ok "full mode: the same, and tools/.mutate-green is not written" || bad "full edit during baseline: rc=$rc — $log"
 echo normal > stub-mode; rm -f late.js
+
+echo "── full mode's cache is per WIDTH: a tree proven green at 1280 is not proven green at 380 ──"
+rm -f tools/.mutate-green
+full js/a.js 'var b = 2;' 'var b = 3; /*NOT-SEEN*/' >/dev/null 2>&1   # 1280: proves green, caches
+touch stub-narrow-red     # t-other is now red at 380 on the CLEAN tree — the bug shape the ship's phone pass exists for
+: > stub-calls
+log="$(WIDTH=380 full js/a.js 'var b = 2;' 'var b = 4; /*NOT-SEEN*/')"; rc=$?
+[ "$rc" = 5 ] && printf '%s' "$log" | grep -q 'ALREADY RED' && restored && grep -q 'width=380' stub-calls \
+  && ok "WIDTH=380 after a 1280 baseline was cached → the baseline runs at 380: ALREADY RED (exit 5), never CAUGHT" || bad "width cache: rc=$rc — $log — calls: $(cat stub-calls)"
+log="$(full js/a.js 'var b = 2;' 'var b = 5; /*NOT-SEEN*/')"; rc=$?
+[ "$rc" = 1 ] && ! printf '%s' "$log" | grep -q 'proving the suite is green' && restored \
+  && ok "control: back at 1280 the 1280 baseline is still cached (no second run), SURVIVED" || bad "1280 control: rc=$rc — $log"
+rm -f stub-narrow-red
 
 echo "── it refuses beside a ship, a spot-check or a live mutation ──"
 printf 'pid=%s phase=desktop since=1\n' "$$" > .ship-in-progress

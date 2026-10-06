@@ -174,8 +174,8 @@ Third one, added 19 Aug after it cost three false proofs in a row on queue 366. 
 meaningless unless the suite was green before it**: if the test is already failing for its own reason —
 an anchored regex against text that carries a prefix, a container selector that matches nothing — the run
 reports `✅ CAUGHT` and proves exactly nothing. It happened three times before anyone thought to check.
-The gate proves the tree green BEFORE applying the mutation, and caches that by a hash of the tree, so
-it costs one extra suite run per EDIT rather than per mutation. "The tree" is every file git sees except the docs
+The gate proves the tree green BEFORE applying the mutation, and caches that by a hash of the tree AND the width
+(`WIDTH=380` proves its own baseline), so it costs one extra suite run per EDIT rather than per mutation. "The tree" is every file git sees except the docs
 (POLISH-LOG.md still counts), tools/design/ and tools/.<dotfile> bookkeeping — since 6 Oct; it was a list of five names,
 and a cache that did not see sw.js change read a red that was sw.js's as `✅ CAUGHT`. A baseline the tree changed
 under is not cached at all.

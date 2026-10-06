@@ -307,9 +307,12 @@ if [ "$MODE" = full ]; then
   _last=$(cat tools/.suite-seconds 2>/dev/null | tr -dc '0-9'); _last=${_last:-0}
   CAP=$(( _last * 16 / 10 )); [ "$CAP" -lt 3600 ] && CAP=3600
   BASE_HASH="$(TREE_HASH "$FILE")"
-  GREEN_FILE="tools/.mutate-green"
-  if [ "$(cat "$GREEN_FILE" 2>/dev/null)" != "$BASE_HASH" ]; then
-    echo "→ baseline: proving the suite is green BEFORE mutating (once per edit; cached after; cap ${CAP}s)…"
+  # PER WIDTH (6 Oct, the B4 check). Full mode passes --width since B4, and the cache held the tree's hash alone: green at
+  # 1280 was cached, then WIDTH=380 skipped its baseline, and a test red only at phone width on the CLEAN tree — the bug
+  # shape the ship's phone pass exists for — read ✅ CAUGHT. One line per width proven, for the current tree only.
+  GREEN_FILE="tools/.mutate-green"; GREEN_KEY="$BASE_HASH w$WIDTH"
+  if ! grep -qxF "$GREEN_KEY" "$GREEN_FILE" 2>/dev/null; then
+    echo "→ baseline: proving the suite is green at ${WIDTH}px BEFORE mutating (once per edit and width; cached after; cap ${CAP}s)…"
     BASE_OUT="$(cdp "$URL" "$CAP")"
     no_verdict "$BASE_OUT" "the baseline"
     BASE_FAILS="$(printf '%s' "$BASE_OUT" | grep -o 'FAIL[^"]*' | grep -v 'version on screen' || true)"
@@ -327,8 +330,8 @@ if [ "$MODE" = full ]; then
     # cached only if the tree is still the one the baseline started on — an edit made during a 45-minute run was
     # seen by part of it at most, so "green" cannot be vouched for either version
     if [ "$(TREE_HASH "$FILE")" = "$BASE_HASH" ]; then
-      printf '%s' "$BASE_HASH" > "$GREEN_FILE"
-      echo "   baseline green ✅ (cached — further mutations on this tree skip it)"
+      { grep "^$BASE_HASH w" "$GREEN_FILE" 2>/dev/null | grep -vxF "$GREEN_KEY"; printf '%s\n' "$GREEN_KEY"; } > "$GREEN_FILE.tmp" && mv -f "$GREEN_FILE.tmp" "$GREEN_FILE"
+      echo "   baseline green ✅ (cached — further mutations on this tree at ${WIDTH}px skip it)"
     else
       echo "   baseline green ✅ — NOT cached: the tree changed while it ran"
     fi
