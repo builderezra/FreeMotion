@@ -9,3 +9,12 @@ tools/.mutate-green
 .spotcheck-in-progress
 .last-ship
 .inbox-seen
+.ship-in-progress.tmp
+# per-process temp and stale-lock names (tools/_shiplock.sh): a kill between write and move must not be committed
+.ship-in-progress.*
+.mutation-in-progress
+.mutation-in-progress.tmp
+# Python bytecode: macOS has a global ignore for it, Linux does not (6 Oct, the WSL port) — tick.sh read it as unshipped work
+__pycache__/
+# a record-baselines.sh proof file (--fake-os … --file .baselines-*.json): never committed
+tests/.baselines-*.json

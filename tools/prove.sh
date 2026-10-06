@@ -18,11 +18,13 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 [ -f .mutation-in-progress ] && { echo "❌ a mutation is in progress — the tree is not the code"; exit 1; }
 WIDTH="${WIDTH:-1280}"
-SRC="$(python3 tools/_srcfiles.py --worktree)"   # index.html counts only beyond its version label / ?v= bumps
+# index.html counts only beyond its version label / ?v= bumps. A helper that could not answer (git failed) is NOT "nothing
+# changed": that empty answer is the exit 0 below, so it refuses instead (6 Oct).
+SRC="$(python3 tools/_srcfiles.py --worktree)" || { echo "❌ prove: could not list the changed app source (the reason is above) — refusing, not passing"; exit 2; }
 if [ -z "$SRC" ]; then echo "○ prove: no app source changed (beyond a version label) — nothing to prove"; exit 0; fi
 LOGLINE="$(grep '^- v[0-9]' POLISH-LOG.md | tail -1)"
 DECLARED=""; printf '%s' "$LOGLINE" | grep -q 'UNPROVABLE:' && DECLARED="$(printf '%s' "$LOGLINE" | grep -o 'UNPROVABLE:.*' | cut -c1-160)"
-TITLES="$(python3 tools/_spottests.py --worktree)"
+TITLES="$(python3 tools/_spottests.py --worktree)" || { echo "❌ prove: could not list the changed tests (the reason is above) — no verdict"; exit 2; }
 if [ -z "$TITLES" ]; then
   if [ -n "$DECLARED" ]; then echo "⚠️  prove: app source changed and NO test changed — shipping on the declaration: $DECLARED"; exit 0; fi
   echo "❌ NO TEST — app source changed ($(echo "$SRC" | tr '\n' ' ')) but no test in tests/tests.js was added or changed."
@@ -53,7 +55,9 @@ run "$P1" "$WIDTH" "$TMP/ctrl"
 python3 tools/_spotjudge.py "$TMP/ctrl" "$TMP/titles" > "$TMP/ctrl.v"
 # REVERTED — HEAD's source with the working tree's tests
 git worktree add -q "$WT" HEAD || { echo "prove: could not create a worktree"; exit 2; }
-rsync -a --delete tests/ "$WT/tests/"
+# …or the REVERTED side runs HEAD's tests, and every changed test reads DEAD or NORUN for the wrong reason (6 Oct: its
+# failure, a missing rsync included, used to be ignored)
+rsync -a --delete tests/ "$WT/tests/" || { echo "prove: could not copy the working tree's tests into the HEAD worktree"; exit 2; }
 # …and the same for the REVERTED worktree, which is where it actually bit: FM came up missing
 # renderScene (compositor.js, 1.1MB — the likeliest casualty of a refused connection) and prove
 # reported "no test matched" for a test that was simply never reached.

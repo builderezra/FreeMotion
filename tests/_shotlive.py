@@ -20,7 +20,7 @@ here already uses.
 There is a companion pattern for measurements rather than pictures: launch the same way and read a
 value out of the page with `cdp.eval(...)` — see the probes referenced from REQUESTS.md 387 and 428.
 """
-import sys, time, tempfile, base64, os
+import sys, time, tempfile, base64, os, shutil
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
 import _cdp as C
@@ -28,7 +28,7 @@ import _cdp as C
 
 def shoot(path, out, w=400, h=840, wait=120):
     port = C.free_port()
-    prof = tempfile.mkdtemp()
+    prof = tempfile.mkdtemp(prefix="fm-shotlive-")   # named, and deleted by _stop: under WSL the temp dir is RAM
     proc = C.launch(port, w, h, prof)
     try:
         cdp = C.CDP(C.ws_url(port))
@@ -49,13 +49,13 @@ def shoot(path, out, w=400, h=840, wait=120):
         cdp.close()
         return title
     finally:
-        _stop(proc)
+        _stop(proc, prof)
 
 
-def _stop(proc):
+def _stop(proc, prof=None):
     """Kill the browser and WAIT for it. `terminate()` alone leaked processes all night on 20 Aug —
     24 of them were found still running, because SIGTERM to the parent does not always take the helpers
-    with it and nothing waited to find out. Terminate, wait, then kill."""
+    with it and nothing waited to find out. Terminate, wait, then kill. Then delete its profile."""
     try:
         proc.terminate()
         proc.wait(timeout=5)
@@ -65,6 +65,8 @@ def _stop(proc):
             proc.wait(timeout=5)
         except Exception:
             pass
+    if prof:
+        shutil.rmtree(prof, ignore_errors=True)
 
 
 def read(path, wait=180, throttle=0, w=400, h=840):
@@ -82,7 +84,7 @@ def read(path, wait=180, throttle=0, w=400, h=840):
     for them — see the note at the top of this file about virtual time.
     """
     port = C.free_port()
-    prof = tempfile.mkdtemp()
+    prof = tempfile.mkdtemp(prefix="fm-shotlive-")
     proc = C.launch(port, w, h, prof)
     try:
         cdp = C.CDP(C.ws_url(port))
@@ -101,7 +103,7 @@ def read(path, wait=180, throttle=0, w=400, h=840):
         cdp.close()
         return out if out.strip() else "(no #out content; title: %s)" % title
     finally:
-        _stop(proc)
+        _stop(proc, prof)
 
 
 if __name__ == "__main__":

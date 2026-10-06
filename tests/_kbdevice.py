@@ -42,7 +42,11 @@ import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# Which Chrome, and the flags that make Linux headless answer like the Mac's, come from tests/_platform.py (6 Oct, the WSL
+# port) — stdlib only, so this file keeps its no-third-party-packages promise. NOT tests/_cdp.py, which needs websocket-client.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.dont_write_bytecode = True     # no tests/__pycache__ litter: nothing ignores it on Linux
+import _platform  # noqa: E402
 W, H, DPR = 390, 844, 3
 IPHONE_UA = ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 "
              "(KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1")
@@ -346,14 +350,24 @@ def main():
     w, h, dpr = (1280, 900, 2) if a.desktop else (W, H, DPR)
     inset_top, inset_bottom = (0, 0) if a.desktop else (a.inset_top, a.inset_bottom)
 
+    # No Chrome is said before anything is started or created (it used to be a FileNotFoundError traceback after both).
+    try:
+        chrome = _platform.chrome_path()
+    except _platform.ChromeNotFound as e:
+        print(e); return 2
+
     srv, base, marker = serve(ROOT, mut)
     profile = tempfile.mkdtemp(prefix="fm-kbdevice-")
     dbg = free_port()
+    # --mute-audio: every test Chrome is silent. On Linux: software canvas + SwiftShader WebGL asked for directly (the Mac's
+    # GL flag crash-loops the GPU process there), plus the Mac's mouse and 0-width scrollbars — tests/_platform.py.
+    # The Mac's command line gains only the mute.
     proc = subprocess.Popen(
-        [CHROME, "--headless=new", "--remote-debugging-port=%d" % dbg, "--user-data-dir=" + profile,
-         "--remote-allow-origins=*", "--no-first-run", "--no-default-browser-check",
+        [chrome, "--headless=new", "--remote-debugging-port=%d" % dbg, "--user-data-dir=" + profile,
+         "--remote-allow-origins=*", "--no-first-run", "--no-default-browser-check", "--mute-audio",
+         *(_platform.gl_flags() if _platform.IS_LINUX else []), *_platform.chrome_extra_flags(),
          "--window-size=%d,%d" % (w, h), "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_platform.chrome_env(profile))
     ws = None
     for _ in range(160):
         try:
@@ -363,7 +377,8 @@ def main():
         except Exception:
             time.sleep(0.25)
     if not ws:
-        print("chrome did not start"); return 2
+        proc.terminate(); shutil.rmtree(profile, ignore_errors=True)   # this return is before the finally below
+        print("chrome did not start (%s)" % chrome); return 2
 
     fails, total, green_under_mutation = [0], [0], []
     try:
@@ -374,8 +389,11 @@ def main():
         c.send("Runtime.enable", {}, sid)
         c.send("Emulation.setDeviceMetricsOverride",
                {"width": w, "height": h, "deviceScaleFactor": dpr, "mobile": not a.desktop}, sid)
-        c.send("Emulation.setTouchEmulationEnabled",
-               {"enabled": not a.desktop, "maxTouchPoints": 5}, sid)
+        # Touch is switched ON for the phone and simply never touched for --desktop: an explicit enabled=False is a no-op on
+        # the Mac, and on Linux it wipes the mouse for the rest of the page (measured), so the "mouse layout" was measured
+        # as (hover: none) and (pointer: none). The desktop run now refuses below unless the page really has a mouse.
+        if not a.desktop:
+            c.send("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5}, sid)
         if not a.desktop:
             c.send("Emulation.setUserAgentOverride", {"userAgent": IPHONE_UA, "platform": "iPhone"}, sid)
         c.send("Emulation.setSafeAreaInsetsOverride",
@@ -396,6 +414,9 @@ def main():
             time.sleep(0.1)
         if not c.ev("!!(window.FM && FM.screen)", sid):
             print("FM.screen never loaded — js/screen.js is missing from index.html"); return 2
+        if a.desktop and not c.ev("matchMedia(%s).matches" % json.dumps(_platform.MOUSE_QUERY), sid):
+            print("this browser reports no mouse (%s is false), so this is not the 1280x900 MOUSE layout — "
+                  "nothing measured (see tests/_platform.py)" % _platform.MOUSE_QUERY); return 2
         c.ev("(()=>{const s=document.getElementById('splash'); if(s) s.remove();})()", sid)
         for _ in range(80):
             if c.ev("document.querySelectorAll('.hm-card').length", sid):

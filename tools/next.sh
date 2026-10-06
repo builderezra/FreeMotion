@@ -18,6 +18,9 @@
 # rule. Numbered items follow in numeric order.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
+# PYTHONDONTWRITEBYTECODE among others: importing tools/_classify.py must not leave tools/__pycache__ in the tree (6 Oct —
+# nothing ignores it on Linux, and tick.sh then reports the litter as uncommitted work)
+. tools/_platform.sh || exit 1
 
 # ---- THE INBOX GATE (v11.21) --------------------------------------------------------------------
 # REFUSES TO HAND OUT WORK WHILE INBOX.md HAS ANYTHING IN IT.
@@ -47,7 +50,9 @@ INBOX_BODY="$(sed -n '/^---$/,$p' INBOX.md 2>/dev/null | sed '1d' | tr -d '[:spa
 if [ -n "$INBOX_BODY" ]; then
   # What was shown is all that `tools/inbox.sh --done` may clear (see there): the logging chat can append
   # while this session is logging, and those lines must survive to the next drain.
-  sed -n '/^---$/,$p' INBOX.md | sed '1d' > .inbox-seen
+  # ON main ONLY (6 Oct, the PM's port review): --done runs on main only, and a snapshot written on a work branch would
+  # outlive the branch switch and let a later --done on main clear lines nobody logged there — inbox.sh's own rule.
+  if [ "$(git symbolic-ref --short HEAD 2>/dev/null)" = main ]; then sed -n '/^---$/,$p' INBOX.md | sed '1d' > .inbox-seen; fi
   echo "=============================================================================="
   echo "⛔  STOP — INBOX.md IS NOT EMPTY. Ezra has said something. Read it FIRST."
   echo "=============================================================================="

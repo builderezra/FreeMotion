@@ -16,9 +16,11 @@ and it is the same three steps each time.** Unless his first message is plainly 
    actionable item."*
    The cadence is HIS, confirmed 20 Sep when asked directly whether to slow it down: *"That was on
    chatgpt, u dont do that. so its fine."* Do not re-litigate it and do not quietly run slower.
-3. **Check for an unshipped release.** `git status --short` — if the tree is dirty, a previous chat
-   was interrupted mid-ship and the fixes are NOT on his phone. Ship it before starting anything new;
-   the work is already done and verified, it just needs to land.
+3. **Check for an unshipped release.** Read tick.sh's `UNSHIPPED RELEASE:` line. If it says yes, ship that first. A dirty tree on its own is normal: INBOX.md, tools/design/pm/ and tools/design/plans/ belong to the logging chat, and uncommitted code with no version bump is the previous batch in progress, so continue it.
+   (`IN FLIGHT` means a ship is running it right now: watch `.claude/ship/ship.log`, do not re-ship. The line is YES
+   when index.html's version label is newer than live's, when `.ship-in-progress` names a dead pid, or when main has
+   commits live does not — committed, never pushed (GitHub dropped out twice on 6 Oct): it says to push them, because
+   re-shipping stops at "nothing to commit".)
 
 **EXCEPTION — the LOGGING chat.** If his first message says this chat is for logging his requests
 (his arrangement: #843 on 10 Sep, restated 26 Sep: under each request goes a READY-TO-BUILD plan, options
@@ -43,8 +45,10 @@ plus the `?v=` cache-busters and add a POLISH-LOG.md entry per release. Commit l
 Ezra authorised this on 2026-08-13 (*"if you can do that then do it every time"*), replacing the old
 GitHub-Desktop-by-hand arrangement. Use `git push ssh main`: the branch's upstream `origin` is the
 HTTPS URL with no stored credentials and fails with "could not read Username", while the `ssh` remote
-points at the same repo and authenticates with his on-disk key. Verify by comparing `git rev-parse HEAD`
-against `git rev-parse ssh/main` — do not trust the push output alone.
+points at the same repo and authenticates with his on-disk key. ship.sh verifies its own push by comparing
+`git rev-parse HEAD` against `git rev-parse ssh/main` — but a SESSION judges a ship by the rule in "SHIPS AND
+SUITES" below (a log line starting `✅ pushed and verified: HEAD == ssh/main` plus `.last-ship`): HEAD == ssh/main
+alone proves nothing.
 
 **The app is live at <https://builderezra.github.io/FreeMotion/>** — GitHub Pages off `main`, which is
 why pushing matters: that URL is what his phone loads and what the installed PWA updates from. Nothing in
@@ -147,7 +151,9 @@ by remembering:
   banner fires: strike the ask (`~~…~~` or a ✅ prefix) or say plainly the answer was to something else.
 
 ```bash
-tools/mutate.sh <file> "<old>" "<new>" ["expected failing test"]
+tools/mutate.sh --only '<test title>' <file> "<old>" "<new>" '<expected title or item>'   # a slice, foreground
+tools/mutate.sh <file> "<old>" "<new>" ["expected failing test"]                          # full suite, launched detached
+tools/mutate.sh --restore                                                                 # undo a KILLED mutation
 ```
 
 ⚠️ **AND DO NOT WRITE A `pgrep` WAIT-LOOP FOR IT.** `until ... ! pgrep -f "tools/mutate.sh" ...` matches
@@ -155,10 +161,12 @@ tools/mutate.sh <file> "<old>" "<new>" ["expected failing test"]
 goes false. Six of these were found still spinning hours after their jobs had finished (1 Sep; Ezra
 spotted them, not me). Nothing was corrupted, because every result had been read from the job's own
 output file, but they burned CPU and buried what was genuinely in flight.
-**Wait on the lock file, which cannot match itself:** `until [ ! -f .mutation-in-progress ]; do sleep 15; done`
-— or better, do not write a waiter at all: `run_in_background: true` already notifies on completion.
-Restores the file **on a trap**, so the tree cannot be left mutated by a timeout, a Ctrl-C or a kill —
-which happened. **Refuses if the old string was not found**, because a mutation that silently did not
+**Wait on the log, which cannot match itself:** full mode prints the line to use —
+`until grep -q '^MUTATE EXIT' .claude/mutate/mutate.log; do sleep 30; done; tail -15 .claude/mutate/mutate.log`.
+Restores the file **on a trap**, so the tree cannot be left mutated by a timeout or a Ctrl-C — and since 6 Oct
+not by a KILL either (which runs no trap): the lock records the pid, the backup and the mutated file's hash, and the
+next run, or `--restore`, puts the file back first (it refuses if the file was edited after the kill, rather than
+guess). `tools/tick.sh` names a killed one. **Refuses if the old string was not found**, because a mutation that silently did not
 apply produces a green run that looks like proof and is not. Holds `.mutation-in-progress` so nothing
 takes a browser measurement against a mutated tree — that produced one confidently wrong reading.
 
@@ -169,8 +177,11 @@ Third one, added 19 Aug after it cost three false proofs in a row on queue 366. 
 meaningless unless the suite was green before it**: if the test is already failing for its own reason —
 an anchored regex against text that carries a prefix, a container selector that matches nothing — the run
 reports `✅ CAUGHT` and proves exactly nothing. It happened three times before anyone thought to check.
-The gate proves the tree green BEFORE applying the mutation, and caches that by a hash of the sources, so
-it costs one extra suite run per EDIT rather than per mutation.
+The gate proves the tree green BEFORE applying the mutation, and caches that by a hash of the tree AND the width
+(`WIDTH=380` proves its own baseline), so it costs one extra suite run per EDIT rather than per mutation. "The tree" is every file git sees except the docs
+(POLISH-LOG.md still counts), tools/design/ and tools/.<dotfile> bookkeeping — since 6 Oct; it was a list of five names,
+and a cache that did not see sw.js change read a red that was sw.js's as `✅ CAUGHT`. A baseline the tree changed
+under is not cached at all.
 
 ```bash
 tools/mutate.sh   # …and now REFUSES when the mutation changed nothing at all
@@ -185,7 +196,27 @@ The cause is worth naming because nothing looks wrong at the call site: `js/comp
 cache key with **NUL separators**, the strings were passed as `"$(cat file)"`, and **command
 substitution truncates at the first NUL byte**. Both arguments became the same harmless prefix. The gate
 compares the file with its own backup, so it catches that and every other silent no-op. It runs before
-the suite, so a mistake costs a second rather than four minutes.
+the suite, so a mistake costs a second rather than a whole suite pass.
+
+```bash
+tools/mutate.sh --only 'queue 1013' js/x.js "<old>" "<new>" 'queue 1013'   # …and a run that did not finish is not a result
+```
+Fifth, 6 Oct (RULES-AUDIT B4) — the tool could not finish at all. Its cap was 1800 s while a full pass had grown to
+the number in `tools/.suite-seconds`, and a timed-out run has no FAIL lines, so it read as **"SURVIVED — the assertion is
+DEAD"** (or, on the baseline, as "no tests"). Nobody had used it since 8 Sep, and the next landing is told to run three.
+Now: the cap is max(3600, 1.6 × `tools/.suite-seconds`); `did not finish within` is checked FIRST and reads
+**`TIMED OUT - nothing proven either way`, exit 8** — only 0 (CAUGHT) and 1 (SURVIVED) are verdicts, and full mode reads
+them from the driver's own `"ok"` and `"failures"`, never from a 'FAIL' anywhere in its JSON (a real title says "FAILED", and
+in the `slowest` list it read CAUGHT); a result that does not add up is exit 8 too; it refuses
+(exit 10) while `.ship-in-progress` or `.spotcheck-in-progress` exists here or in the main checkout; full mode launches
+itself detached (exit 11, never 0); and every run serves the tree that holds the file on its own free port.
+**`--only`** runs just the named tests through prove.sh's slice machinery (`tests/_cdp.py --names --timeout 600`,
+judged per title by `tools/_spotjudge.py`): every named title must PASS on the unmutated tree first (red → exit 5),
+CAUGHT only if a named title FAILS, SURVIVED only if they all RAN and passed, and a title that ran nothing refuses
+(exit 9) — the count alone cannot tell "did not run" from "passed". Its green cache is keyed on the tree plus the
+titles and width, never `tools/.mutate-green`; no test floor; the 4th argument is required and must be one of the
+named tests. `tools/test-mutate.sh` proves the edge cases against a stub driver in seconds, and ship.sh runs it
+whenever mutate.sh or its judge changes.
 
 ```bash
 tools/rollback.sh                 # list the releases, newest first — changes NOTHING, safe to run
@@ -220,39 +251,34 @@ reads. Details in LOOP.md rule 18.
 **Add to this pattern rather than adding notes.** If a mistake could recur, the fix is a script, a test,
 or a gate — not a paragraph.
 
-## ⚠️ RUN THE SUITE IN THE FOREGROUND WITH A LONG TIMEOUT — never background-and-poll
+## ⚠️ SHIPS AND SUITES — launch the ship detached, judge it by its log (6 Oct; replaces "run the suite in the foreground")
 
-**`python3 tests/_cdp.py --port 8777` takes 3–4 minutes. The Bash tool's default timeout is 2 minutes.**
+> **Ships:** write the message to `.claude/ship/msg.txt`, run `tools/ship-bg.sh` (exit 3 means launched, NOT shipped), then Monitor `.claude/ship/ship.log` until a line starts with `SHIP EXIT` or `kill -0` on the pid in `.ship-in-progress` fails. **Shipped** = a log line starts with `✅ pushed and verified: HEAD == ssh/main` AND `.last-ship` is `PUSHED <hash>` with hash == `git rev-parse --short HEAD`. HEAD == ssh/main alone proves nothing, nor do those words elsewhere in the log. `RUNNING` with no live pid means a KILLED ship: re-ship it.
+> **Suites:** a full suite may use `run_in_background` with timeout = 1.6 × `tools/.suite-seconds` × 1000 (at most 7200000). Only `?only=` slices run in the foreground (timeout ≤ 600000). Never write minutes into prose.
 
-⚠️ **30 Sep: THE 3–4 MINUTES ABOVE IS YEARS STALE — a full pass is now ~35 minutes (2186 tests), and a ship (two passes +
-prove) ~90.** The real number is in `tools/.suite-seconds`, written by every green ship pass, and ship.sh sets its cap from
-it (1.6x, never below an hour). Believing "4 minutes" cost an afternoon: a slow pass read as a hang and was chased as one.
-So a full suite run always goes in the background (`run_in_background: true`) — it cannot fit the Bash tool's 600 s cap.
-So a plain foreground call ALWAYS times out, and the reflex after that — background it, then poll for
-the result — is slower than the run itself and has repeatedly ended in waiting on nothing.
+**Why it changed (RULES-AUDIT B1).** This section used to describe a ship as one foreground call with
+`timeout: 600000`. A ship is now two full passes plus the proof (the real length of a pass is in
+`tools/.suite-seconds`), far past any foreground limit — and on 5 Oct a ship launched the way the old text said was
+KILLED by the harness at its 10-minute background limit, after a session followed four sets of written instructions
+that all said the same stale thing. The method that worked lived only in a memory note. Now it is a script:
+- `tools/ship-bg.sh` refuses while a ship's pid is alive or another ship-bg.sh is mid-launch (its own lock,
+  `.claude/ship/launching`), refuses a missing message or one HEAD already shipped with,
+  launches `tools/ship.sh -F .claude/ship/msg.txt` under `nohup` (no `setsid` on this Mac), waits until ship.sh has
+  put its pid in the lock, prints the watch line with that pid, and **exits 3 — never 0**, because on 20 Sep a refusal
+  read as "exit code 0" and the next session built on a release that never landed.
+- `tools/ship.sh` refuses to start beside a live ship (the lock is TAKEN in one step — created with noclobber, so of
+  ships started at the same moment exactly one gets it — BEFORE its trap, so the refusal cannot delete the running
+  ship's lock), says **previous ship was KILLED** when the lock's pid is gone, keeps
+  `pid=<n> phase=<gates|prove|desktop|phone|push> since=<epoch>` in `.ship-in-progress`, and writes
+  `RUNNING <pid> <version> <epoch>` to `.last-ship` until its verdict replaces it. A kill runs no trap, so a ship that
+  was killed is exactly the one still saying RUNNING with its pid gone — `tools/tick.sh` prints that as KILLED.
+- "The commit is on GitHub" is not proof: HEAD == ssh/main is also true when a ship refused and moved nothing.
+- `tools/test-ship-bg.sh` proves all of the above against a stub ship.sh in a temp directory, in seconds, and
+  ship.sh runs it whenever the launcher, the lock or ship.sh itself changes.
 
-⚠️ **`timeout: 900000` DOES NOT WORK — the Bash tool caps at 600000 and silently clamps.** Asking for 900s
-gets 600s, and at 911 tests a double suite run plus the push now exceeds that, so ship.sh gets backgrounded
-mid-flight (24 Aug, v12.28). It still finishes and still pushes — the notification arrives and the output
-file has the result — but that is exactly the background-and-poll this section exists to stop.
-**So: pass `timeout: 600000` (the real maximum) and expect ship.sh to sometimes land in the background.
-When it does, do NOT re-run it.** Read the output file, then verify with `git rev-parse HEAD` against
-`ssh/main` — re-running would re-run two four-minute suites for nothing.
-
-**Always pass an explicit timeout instead:** `timeout: 500000` for a bare suite run — but **`timeout:
-600000` (the cap) for `tools/ship.sh`, which runs the suite TWICE** (desktop, then again at 380px) whenever a
-`js/*.js`, `styles.css` or `index.html` change is being shipped. 500s is not enough for that and the
-ship gets backgrounded mid-push, which is exactly the background-and-poll this section exists to stop.
-Measured at v11.83: two green passes plus the push took just over eight minutes. One call, one result,
-no polling. Ezra has raised this more than once — *"i tried to get you to avoid this. it happens so
-often, you need to stop this issue"* — so treat it as a hard rule, not a preference.
-
-Two things that made it worse, both worth avoiding:
-- A run that times out mid-way **leaves the file mutated** if it was a mutation check. Restore from the
-  backup before doing anything else, and check with `grep -c mutated <file>`.
-- **Never run a browser/preview check while a mutation job is running.** The browser loads whatever is
-  on disk, so a measurement taken then describes the MUTATION, not the code. That has already produced
-  one confidently wrong reading.
+**Never take a browser reading, or edit THIS tree, while `.mutation-in-progress` or `.ship-in-progress` exists.** The
+browser loads whatever is on disk (a reading taken during a mutation describes the MUTATION — that has happened), and
+ship.sh's phone pass and its `git add -A` both read the tree as it is at that moment.
 
 ### Run ONE test, or a slice, instead of the whole suite (2 Sep)
 

@@ -9,10 +9,10 @@ The question: does the clip's `innerEl.setPointerCapture(e.pointerId)` (js/timel
 SILENTLY THROWS for a synthetic pointerId, change what happens to the grip's 300ms arm timer when the
 capture actually succeeds?
 """
-import importlib.util, json, os, sys, tempfile, time
+import importlib.util, json, os, shutil, sys, tempfile, time
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = "/Users/ezrasmith/Claude/FreeMotion"
+HERE =os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(HERE)   # was the Mac's /Users/… path: wrong on any other machine, and in a worktree it loaded MAIN's _cdp
 spec = importlib.util.spec_from_file_location("_cdp", os.path.join(REPO, "tests", "_cdp.py"))
 _cdp = importlib.util.module_from_spec(spec); spec.loader.exec_module(_cdp)
 
@@ -237,6 +237,9 @@ def main():
     finally:
         if c: c.close()
         proc.terminate()
+        try: proc.wait(timeout=5)
+        except Exception: proc.kill()
+        shutil.rmtree(profile, ignore_errors=True)   # under WSL the temp dir is RAM
 
 
 sys.exit(main())

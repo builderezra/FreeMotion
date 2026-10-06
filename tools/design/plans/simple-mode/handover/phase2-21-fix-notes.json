@@ -1,0 +1,237 @@
+[
+ {
+  "index": 0,
+  "title": "Trim and Lift off on a block main clip write only the group row",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review A and D on a main block (a clip grouped in Full with a group look) refuse with Open in Full and move nothing (DESIGN \u00a79.1 main blocks)",
+  "note": "Fixed the 2.1 half (A/D reach planTrimTail/planTrimHead via editor-mode onKey). Both trims now refuse when the main unit's layer is a group, using a new trimBlock line plus an Open in Full button. Commit ceeb2dd2. Before the fix: group 4+2, member still 4+4, C moved to 6. Lift off is 2.2 (planLift is not on this branch). New words key 'Open in Full to trim this': DESIGN says only 'the block line' and gives the split wording, so this wording is a call Ezra may want to see."
+ },
+ {
+  "index": 1,
+  "title": "Into row leaves the clip's sound twin behind",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "planIntoRow and Lift off are not on this branch."
+ },
+ {
+  "index": 2,
+  "title": "Delete's middle cut of a whole-video muted video drops its tail flag",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review Delete that cuts a muted whole-video overlay keeps the end-with-the-video flag on its later piece, so the next trim still takes it to the end (\u00a74.3)",
+  "note": "plan.resized.add(B.id) in planDelete's (iii) media pre step. Commit 6de83ef1. Before the fix: B.sm = {stay, tailEnd:12, cut}, with tail gone. The refuter's 'delete C, L2 ends at 4' step cannot work (L2 starts at 4), so the test checks the next trim instead: D on C to 6 must take the piece to 6."
+ },
+ {
+  "index": 3,
+  "title": "Trims check the blend on one side only",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review a trim never shortens a clip under twice the crossfade on its OTHER side, so a blend never turns into a red overlap (\u00a73.1)",
+  "note": "planTrimTail now also refuses fadesBefore (p|c blend). planTrimHead now also refuses fadesNext (c|n blend). Each half was seen failing on its own before its fix (seam became 'overlap 1'). The 2x-fade controls still pass. Commit f91e1cf0."
+ },
+ {
+  "index": 4,
+  "title": "Close all gaps hairline test and moved hairlines",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "planCloseAll is not on this branch."
+ },
+ {
+  "index": 5,
+  "title": "Append moves an end card but never refuses a keyed camera",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "planAppend is 2.2. riderBlock's camera half is unchanged here."
+ },
+ {
+  "index": 6,
+  "title": "Insert / Into row after a slot pass the slot id to moveLayers",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "planInsert, planIntoRow and the Clips tool are 2.2."
+ },
+ {
+  "index": 7,
+  "title": "Reorder lands hairlines from the old leading seam",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "planReorder is 2.2."
+ },
+ {
+  "index": 8,
+  "title": "Stay put on 2+ items is one undo step per item, drops after five",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "simple-tools.js (the tray) and S.cmd.stay are 2.2. Same defect as #24."
+ },
+ {
+  "index": 9,
+  "title": "A clip added or duplicated in Simple can come back blank ({noSave})",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review a clip duplicated in Simple has its footage on disk at once: locking the phone straight after cannot bring the copy back blank (queue 681)",
+  "note": "Fixed the duplicate half. planDuplicate sets plan.mints, and S.edit calls FM.storage.save() straight after its one commit. Commit 0a14027d. Before the fix, readMedia(copy) was null after flushSync. Control: Full's duplicate passes the same check. For 2.2: the addRecs routes (Append, Insert, Overlay, Music) must also set plan.mints = true."
+ },
+ {
+  "index": 10,
+  "title": "Add clips / Insert / Overlay / Music can ripple after a switch to Full",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "The race is the readPicked await, which is 2.2. Seen in passing and not fixed: S.drain re-arms with setTimeout while jobDepth()>0 (and returns without re-arming while history is muted), so queued edits wait with S.running false. Adding queue.length to busyReason could hold the switch shut forever if the queue is stranded, so that belongs with the 2.2 afterRead/busyReason fix."
+ },
+ {
+  "index": 11,
+  "title": "Insert lands the next clip on the new clips' end, followers move by sum",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "planInsert is 2.2."
+ },
+ {
+  "index": 12,
+  "title": "Into row on a slot member runs Make main clip's ripple",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "planIntoRow and the tray are 2.2."
+ },
+ {
+  "index": 13,
+  "title": "Reorder never moves the tail",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "planReorder is 2.2. When it lands, it should use ripple's new rp.end (added here for #16) as the clip end."
+ },
+ {
+  "index": 14,
+  "title": "Do it anyway on a locked clip loses the lock on the split's second half",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review Do it anyway keeps the lock on every piece it makes: both halves of a split, both pieces of a cut song, and a copy (D7)",
+  "note": "Replaced the _smRelock marker (which cloneLayer strips) with a relock Set held by the runner. After apply it re-locks those ids, every NEW layer of their split lineage, and every copy recorded in plan.copies by planDuplicate (Full's duplicate keeps the lock too). Commit 4bf49118. All three parts failed before the fix; the existing D7 test still passes."
+ },
+ {
+  "index": 15,
+  "title": "Sound \u203a Music with a video file adds a visible full-frame video",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "planAddMusic is 2.2."
+ },
+ {
+  "index": 16,
+  "title": "Tail's new end computed as trackEnd + d, end card misses by 1 ulp",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review an end card lands bit-exact on the new end of the clips after every command, so no 1-ulp black frame opens before it (\u00a73.1)",
+  "note": "ripple() now returns end, the last clip's end exactly as apply() writes it. Delete, both trims, close gap and duplicate land the tail on it (or on start + new duration when the edited clip is last). Commit aff3faea. Before the fix: D and A cases off by 1 ulp, plus a seeded sweep that missed in tail 9/60, head 16/60, close gap 9/29, delete 10/60. After: zero."
+ },
+ {
+  "index": 17,
+  "title": "Append onto an empty clip row puts the clips at the top of the stack",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "planAppend is 2.2. Phase 1's + uses FM.importFiles."
+ },
+ {
+  "index": 18,
+  "title": "Deleting a clip that owns a fade-in cuts long items by b\u2212a",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review deleting a clip that fades in over the one before cuts what runs on through the time that really went, so a voice-over stays in step (\u00a73.6 Delete row)",
+  "note": "Used the refuter's corrected fix: the cut starts at ca = p.end when c's fade went with it (len = \u2212dt). Case (i) lands at ca, (ii) trims to ca, (iii) splits at ca. Commit 6d014a35. Before the fix the voice ran 1 s ahead: [[2,2,0],[4,4,8]] vs [[2,3,0],[5,4,8]]. The title end in the test was moved off the track end, because the tail fit would otherwise repair it and hide the bug."
+ },
+ {
+  "index": 19,
+  "title": "A long video or sound with a speed ramp is cut with its ramp left behind",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review Delete never leaves a cut song\u2019s speed ramp behind its sound: refused until 2.4 moves ramps (or kept in step)",
+  "note": "The cutKeys refusal now also counts FM.isAnimated(l.speed). S.keyCount is unchanged for the tail fit. Commit 98bfcfb9. Before the fix, case (i) drifted 0.4-1.4 s of source and case (iii) also drifted. A flat-speed song is the control and is still cut in step."
+ },
+ {
+  "index": 20,
+  "title": "Phone: More stops working once its sheet has been closed",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "simple-tools.js (More, openPanel) is 2.2."
+ },
+ {
+  "index": 21,
+  "title": "Length field can't be committed on an iPhone and zooms the page",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "The Length row is 2.2."
+ },
+ {
+  "index": 22,
+  "title": "At 1280 the main-clip tray overflows the band",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "#sm-tray is 2.2. This one needs a picture for Ezra before it ships."
+ },
+ {
+  "index": 23,
+  "title": "PC: the line's button lands where \ud83d\uddd1 was",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "In 2.1 the PC #sm-say sits under the timeline with no \ud83d\uddd1 in the row. The hazard appears when 2.2 moves the tray into #sm-say."
+ },
+ {
+  "index": 24,
+  "title": "Stay put on a multi-selection makes one undo step per item",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "Tray and S.cmd.stay are 2.2. Same defect as #8."
+ },
+ {
+  "index": 25,
+  "title": "Phone: tapping the tray's empty space or a line's text deselects",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review a tap on the line Simple is saying, on its row, or on the selected clip keeps the selection (\u00a73.12 rule 2: a tap on the line does nothing)",
+  "note": "Fixed the 2.1 half: '#sm-timeline' added to app.js's deselect-on-empty-tap KEEP list. It is display:none outside Simple, so Full is unchanged. Full's deselect-on-tap tests (4) pass. Commit f484510e. Before the fix, a tap on the line text, on the row, or on the selected clip all deselected; a body tap is the control. For 2.2: '#sm-bar' (the PC tray) and '.sm-menu' must join this list."
+ },
+ {
+  "index": 26,
+  "title": "Keys in the tray, project tools or Simple's menus run Full's shortcuts",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "openMenu and the tray are 2.2."
+ },
+ {
+  "index": 27,
+  "title": "A tray tool loses focus after any press that changes the clip",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "The tray rebuild is 2.2. The sayLine focus half only fires when focus was in #sm-tray, so it is 2.2 as well."
+ },
+ {
+  "index": 28,
+  "title": "In Simple, \u22ef can't close the Loop / preview speed bar it opened",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "The \u22ef capture listener (optsMenu) is in simple-tools.js, which is 2.2."
+ },
+ {
+  "index": 29,
+  "title": "Every line that takes the row is announced twice",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review a line Simple says in its row is announced by ONE live region, not read twice (\u00a73.12 rule 1)",
+  "note": "sayLine no longer copies row lines into #sm-live. #sm-say is already the polite region and is always laid out in Simple. #sm-live keeps opts.live lines (the control). Commit e4d89e0f. Before the fix: 2 regions (sm-say, sm-live)."
+ },
+ {
+  "index": 30,
+  "title": "Three tools' accessible names don't contain their visible labels",
+  "release": "2.2",
+  "outcome": "left-for-2.2",
+  "note": "tool() and those three tools are in simple-tools.js, which is 2.2."
+ },
+ {
+  "index": 31,
+  "title": "The quiet line can show '0:60'",
+  "release": "2.1",
+  "outcome": "fixed",
+  "test": "simple P2.1 \u00b7 review the clips-and-length summary never shows :60 \u2014 the total is rounded before it is split into minutes",
+  "note": "Fixed in FM.spineWords.summary, which exists in 2.1; 2.2's quiet line is its first caller. The total is now rounded first. Commit 543e49fa. Before the fix: '2 clips \u00b7 0:60', '1 clip \u00b7 1:60'."
+ }
+]

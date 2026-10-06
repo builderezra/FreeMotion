@@ -13,6 +13,7 @@
   .green { background: #10331f; color: #57d98a; } .red { background: #3a1518; color: #ff7a85; }
   .row { padding: 7px 11px; border-radius: 7px; margin: 4px 0; display: flex; gap: 10px; align-items: baseline; }
   .row.ok { background: #11251a; } .row.fail { background: #2a1416; } .row.pend { opacity: .8; }
+  .row.notrun { background: #2a2614; } .notrun .tag { color: #e6c35c; flex-basis: 70px; } .pill.notrun { background: #3a3315; color: #e6c35c; }
   .tag { font-weight: 700; flex: 0 0 46px; }
   .ok .tag { color: #57d98a; } .fail .tag { color: #ff7a85; }
   .err { color: #c98; font-size: 12px; }
@@ -127,11 +128,20 @@
          * a failing run only ever showed its three failures, and the three reds were almost certainly
          * downstream of something earlier that still "passed". Diffing two complete runs finds the
          * FIRST test that behaves differently, which is the actual question. tests/_fmdiff.py reads it. */
-        window.__fmResults = res.results.map(function (r) { return { name: r.name, item: r.item || '', ok: !!r.ok, pending: !!r.pending, error: r.error || '' }; });
+        window.__fmResults = res.results.map(function (r) { return { name: r.name, item: r.item || '', ok: !!r.ok, pending: !!r.pending, error: r.error || '', notRun: r.notRun || '' }; });
+        /* NOT RUN HERE (6 Oct, tests.js notRunHere): never a pass and never a FAIL row — tests/_cdp.py reads every
+           `.row.fail` as a failure — so its own row class, its own count beside the summary, and the full list for the
+           driver to print by name (window.__fmNotRun). */
+        window.__fmNotRun = res.notRun || [];
+        var nr = res.regressionNotRun || 0;
         document.getElementById('sum').innerHTML =
           '<span class="pill ' + (res.regressionGreen ? 'green' : 'red') + '">Regression ' + res.regressionPass + '/' + res.regressionTotal + (res.regressionGreen ? ' ✓' : ' ✗') + '</span>' +
+          (nr ? '<span class="pill notrun"> · NOT RUN HERE ' + nr + ' </span>' : '') +
           '<span class="pill">Pending ' + res.pendingPass + '/' + res.pendingTotal + ' built</span>';
+        var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
         document.getElementById('list').innerHTML = res.results.map(function (r) {
+          if (r.notRun) return '<div class="row notrun"><span class="tag">NOT RUN</span><span>' + r.name +
+            ' <span class="err">— NOT RUN HERE: ' + esc(r.notRun) + '</span></span></div>';
           var cls = r.ok ? 'ok' : (r.pending ? 'fail pend' : 'fail');
           return '<div class="row ' + cls + '">' +
             '<span class="tag">' + (r.ok ? 'PASS' : 'FAIL') + '</span>' +

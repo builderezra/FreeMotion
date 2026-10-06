@@ -9,23 +9,73 @@
 # and pruned here rather than left to whichever git incantation a session reaches for.
 set -e
 cd "$(dirname "$0")/.."
-git fetch ssh --prune -q
-if [ -n "$(git log --oneline HEAD..ssh/main)" ]; then
-  git pull --rebase ssh main -q
-  echo "↓ pulled $(git log --oneline HEAD@{1}..HEAD 2>/dev/null | wc -l | tr -d ' ') new commit(s)"
+MODE="${1:-}"
+. tools/_platform.sh || { echo "⛔ tools/_platform.sh is missing — the inbox is UNCHECKED (it says where iCloud is on this machine)"; exit 2; }
+# READ ON ANY BRANCH, DRAIN ON main ONLY (6 Oct, the WSL port). Two steps here WRITE to the branch that is checked out:
+# the `git pull --rebase ssh main` below, and --done's rewrite of INBOX.md (whose iCloud drain markers say "logged" — true
+# only once REQUESTS.md on main has his words). On any other branch — the WSL laptop's port branch, or a work branch on the
+# Mac, which does sit on them (wip/…, 980-*, fu-lock-*) — the pull would drag main INTO that branch on every tick, and
+# --done would clear his notes on a branch that may never ship. But NOT READING there would hide his phone notes for as long
+# as a work branch is checked out (tick.sh runs this every tick). So off main: fetch, show INBOX.md AS IT IS ON ssh/main
+# (the working-tree copy is that branch's, i.e. stale — "inbox empty" while his note sits on the remote, the failure this
+# file's header exists to prevent) and the iCloud files, write NOTHING (not even .inbox-seen), refuse --done, and say
+# "shown, NOT drained".
+_BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+ON_MAIN=0
+if [ "$_BRANCH" = main ]; then ON_MAIN=1; fi
+if [ "$ON_MAIN" = 0 ] && [ "$MODE" = "--done" ]; then
+  echo "⛔ inbox.sh --done drains on main only — this checkout is on ${_BRANCH:-a detached HEAD}. Nothing marked, nothing cleared."
+  echo "   Log his notes VERBATIM into REQUESTS.md on main, then run tools/inbox.sh and tools/inbox.sh --done there."
+  exit 2
 fi
-BODY="$(sed -n '/^---$/,$p' INBOX.md | sed '1d' | sed '/^[[:space:]]*$/d')"
+git fetch ssh --prune -q
+if [ "$ON_MAIN" = 1 ]; then
+  if [ -n "$(git log --oneline HEAD..ssh/main)" ]; then
+    git pull --rebase ssh main -q
+    echo "↓ pulled $(git log --oneline HEAD@{1}..HEAD 2>/dev/null | wc -l | tr -d ' ') new commit(s)"
+  fi
+  INBOX_NAME="INBOX.md"
+else
+  MAIN_INBOX="$(git show ssh/main:INBOX.md)" || { echo "⛔ could not read INBOX.md on ssh/main (the reason is above) — the inbox is UNCHECKED on this branch (${_BRANCH:-a detached HEAD})."; exit 2; }
+  INBOX_NAME="INBOX.md on ssh/main"
+fi
+# the inbox text: the file itself on main (pulled just above), ssh/main's copy anywhere else
+inbox_text() { if [ "$ON_MAIN" = 1 ]; then cat INBOX.md; else printf '%s\n' "$MAIN_INBOX"; fi; }
+body_of() { sed -n '/^---$/,$p' | sed '1d' | tr -d '\r' | sed '/^[[:space:]]*$/d'; }
+BODY="$(inbox_text | body_of)"
 # A MISSING DIVIDER HIDES EVERYTHING. From 20 Sep to 26 Sep INBOX.md had no line of three dashes — the
 # --done below split on the FIRST "---" in the file, which was the one inside the header's own sentence,
 # and cut the divider off. Every sed above then printed nothing, so anything appended read as "inbox
 # empty". Say so instead of reporting a clean inbox.
-grep -q '^---$' INBOX.md || { echo "⛔ INBOX.md HAS NO --- DIVIDER LINE — anything in it is invisible to this script and to next.sh. Put a line of exactly --- under the header."; exit 2; }
+inbox_text | grep -q '^---$' || { echo "⛔ $INBOX_NAME HAS NO --- DIVIDER LINE — anything in it is invisible to this script and to next.sh. Put a line of exactly --- under the header."; exit 2; }
+# ⚠️ OFF main, THE WORKING TREE'S INBOX.md IS READ TOO (6 Oct, the PM's port review — MAJOR). ssh/main's copy alone missed
+# the one place a line is most likely to be: the logging chat on THIS machine appends to the working-tree file, uncommitted.
+# On the WSL laptop's port branch (or a Mac work branch) that read "inbox empty — INBOX.md on ssh/main" with his note sitting
+# in the tree. So: ssh/main's lines, then every line of the tree's copy that ssh/main does not have (a multiset difference —
+# a line in both is shown once), each part labelled, and a ⛔ banner LAST while any tree-only line is not already logged.
+TREE_ONLY=""
+if [ "$ON_MAIN" = 0 ] && [ -f INBOX.md ]; then
+  grep -q '^---$' INBOX.md || { echo "⛔ THIS TREE's INBOX.md HAS NO --- DIVIDER LINE — anything in it is invisible to this script and to next.sh. Put a line of exactly --- under the header."; exit 2; }
+  _MB="$(mktemp "${TMPDIR:-/tmp}/fm-inbox-XXXXXX")" || { echo "⛔ could not make a temp file — the tree's INBOX.md is UNCHECKED"; exit 2; }
+  printf '%s\n' "$BODY" > "$_MB"
+  TREE_ONLY="$(body_of < INBOX.md | awk 'NR == FNR { c[$0]++; next } { if (c[$0] > 0) c[$0]--; else print }' "$_MB" -)"
+  rm -f "$_MB"
+  if [ -n "$TREE_ONLY" ]; then
+    if [ -n "$BODY" ]; then BODY="--- on ssh/main (INBOX.md as committed there) ---
+$BODY"; fi
+    BODY="${BODY:+$BODY
+}--- ONLY IN THIS TREE's INBOX.md (not on ssh/main — the logging chat here, or this branch) ---
+$TREE_ONLY"
+  fi
+  INBOX_NAME="INBOX.md on ssh/main and in this tree"
+fi
 # WHAT WAS SHOWN is what --done may remove — nothing else. Since 26 Sep a second chat (the logging one)
 # appends here while this session works, so anything written between reading the inbox and running
 # --done would have been wiped unlogged by the old "clear everything". The display writes a snapshot;
 # --done removes only lines in it. The --done run itself does not refresh it, or it would bless lines
-# nobody has read yet.
-[ "${1:-}" = "--done" ] || sed -n '/^---$/,$p' INBOX.md | sed '1d' > .inbox-seen
+# nobody has read yet. Off main nothing is written: --done cannot run there, and a snapshot of ssh/main's copy would
+# outlive a branch switch and let a later --done on main clear lines nobody logged.
+if [ "$ON_MAIN" = 1 ] && [ "$MODE" != "--done" ]; then sed -n '/^---$/,$p' INBOX.md | sed '1d' > .inbox-seen; fi
 
 # SECOND CHANNEL: a plain text file in iCloud Drive. His phone can append to it in one tap and it is
 # NOT a git repo, so none of the reasons not to put the project in iCloud apply — no .git to corrupt,
@@ -36,8 +86,19 @@ grep -q '^---$' INBOX.md || { echo "⛔ INBOX.md HAS NO --- DIVIDER LINE — any
 # this script was concerned. Making him get a path exactly right from a phone is not a system; looking
 # in the obvious places is. Every candidate uses the same drain-marker rule, so reading a file twice
 # cannot re-log anything.
-ICLOUD="$HOME/Library/Mobile Documents/com~apple~CloudDocs/FreeMotion-requests.txt"
-if [ -f "$ICLOUD" ]; then
+# ⚠️ A MACHINE WITH NO iCLOUD MUST SAY SO, NOT REPORT IT EMPTY (6 Oct, the WSL port). The paths were ~/Library/Mobile
+# Documents, which does not exist on Linux, so `[ -f ]` was false and this whole channel was skipped without a word —
+# "inbox empty" while his phone notes sat in iCloud, the exact failure the header above forbids. The folders now come
+# from tools/_platform.sh (the same paths on the Mac; FM_ICLOUD_DRIVE / FM_SHORTCUTS_DOCS elsewhere), and when either
+# is missing the rest still runs and a banner says, LAST (tick.sh shows only the tail), which one went unread. BOTH
+# folders, each on its own: the Shortcuts one is where his first real note landed, so FM_ICLOUD_DRIVE alone set is not
+# "iCloud checked" — that read as "inbox empty" with the Shortcuts folder never opened. And the Shortcuts files are read
+# even when FreeMotion-requests.txt is absent (they used to be skipped with it), with a warning that it is.
+ICLOUD_SEEN=1; SC_SEEN=1
+CANDS=()
+if ICLOUD_DIR="$(fm_icloud_drive 2>/dev/null)"; then CANDS+=("$ICLOUD_DIR/FreeMotion-requests.txt"); else ICLOUD_DIR=""; ICLOUD_SEEN=0; fi
+if SC_DIR="$(fm_shortcuts_docs 2>/dev/null)"; then CANDS+=("$SC_DIR/"*.txt); else SC_SEEN=0; fi
+if [ ${#CANDS[@]} -gt 0 ]; then
   # NEVER TRUNCATE THIS FILE. Emptying it from the Mac looked like it worked and then iCloud synced the
   # phone's copy back over the top, so already-logged requests reappeared as if they were new. Deleting
   # a line here is a WRITE, and a write races the phone; appending a marker does not, because the phone
@@ -51,8 +112,7 @@ if [ -f "$ICLOUD" ]; then
   # range never opened and every fresh request was invisible. It printed "inbox empty" while holding a
   # line I had just written to prove it worked. Keep what follows the last marker; only when there is no
   # marker at all does the header need skipping, handled in the same pass.
-  DROP="$(for f in "$HOME/Library/Mobile Documents/com~apple~CloudDocs/FreeMotion-requests.txt" \
-                   "$HOME/Library/Mobile Documents/iCloud~is~workflow~my~workflows/Documents/"*.txt; do
+  DROP="$(for f in "${CANDS[@]}"; do
             [ -f "$f" ] || continue
             awk 'index($0, "### drained"){buf=""; seen=1; next}
                  {buf = buf $0 ORS}
@@ -66,16 +126,42 @@ if [ -f "$ICLOUD" ]; then
 $DROP"
 fi
 
-if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then echo "inbox empty"; else
-  echo "=== UNLOGGED — move these into REQUESTS.md, then run: tools/inbox.sh --done ==="
+ALL_SEEN=1
+if [ "$ICLOUD_SEEN" = 0 ] || [ "$SC_SEEN" = 0 ]; then ALL_SEEN=0; fi
+inbox_key() { printf '%s' "$1" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
+# ${1:0:40}, not `cut -c1-40`: GNU/uutils cut counts BYTES, so on Linux a curly quote or emoji was split and the
+# prefix came out shorter (a looser match) than the Mac's character-counting BSD cut. bash counts characters on both.
+# Off main, REQUESTS.md here is that branch's copy and misses whatever main logged since, so ssh/main's is asked too.
+already_logged() {
+  [ ${#1} -gt 24 ] && { grep -Fq "${1:0:40}" REQUESTS.md 2>/dev/null ||
+    { [ "$ON_MAIN" = 0 ] && git grep -Fq -e "${1:0:40}" ssh/main -- REQUESTS.md 2>/dev/null; }; }
+}
+# the tree-only lines that are NOT already logged — what the ⛔ banner at the end counts (a stale line a work branch still
+# carries from before main drained it is listed as ALREADY LOGGED above, and is not his unread words)
+TREE_UNLOGGED=0
+if [ -n "$TREE_ONLY" ]; then
+  while IFS= read -r _l; do
+    _k="$(inbox_key "$_l")"; [ -n "$_k" ] || continue
+    already_logged "$_k" || TREE_UNLOGGED=$((TREE_UNLOGGED + 1))
+  done <<EOF
+$TREE_ONLY
+EOF
+fi
+if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
+  if [ "$ALL_SEEN" = 0 ]; then echo "$INBOX_NAME is empty — but part of iCloud was NOT checked (see the end)"
+  elif [ "$ON_MAIN" = 1 ]; then echo "inbox empty"
+  else echo "inbox empty — $INBOX_NAME and iCloud, read without pulling (this checkout is on ${_BRANCH:-a detached HEAD})"; fi
+else
+  if [ "$ON_MAIN" = 1 ]; then echo "=== UNLOGGED — move these into REQUESTS.md, then run: tools/inbox.sh --done ==="
+  else echo "=== UNLOGGED — SHOWN, NOT DRAINED (this checkout is on ${_BRANCH:-a detached HEAD}; see the end) ==="; fi
   # ALREADY-LOGGED DETECTION, and it exists because it happened: a drained file came back with its old
   # lines still in it (iCloud re-synced an older copy over the drain marker), so nine requests already
   # written into REQUESTS.md were presented as new. They were caught by reading, which is exactly the
   # kind of catching that fails on the day someone is tired. A line is flagged if a distinctive run of
   # its words is already in REQUESTS.md — the file quotes him verbatim, so that is a reliable signal.
   printf '%s\n' "$BODY" | while IFS= read -r line; do
-    key="$(printf '%s' "$line" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-    if [ ${#key} -gt 24 ] && grep -Fq "$(printf '%s' "$key" | cut -c1-40)" REQUESTS.md 2>/dev/null; then
+    key="$(inbox_key "$line")"
+    if already_logged "$key"; then
       printf '  ⚠️ ALREADY LOGGED — do not add again: %s\n' "$key"
     else
       printf '%s\n' "$line"
@@ -83,11 +169,10 @@ if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then echo "inbox empty";
   done
 fi
 # --done draws a line under everything above it. Append-only, so it cannot race the phone.
-if [ "$1" = "--done" ]; then
+if [ "$MODE" = "--done" ]; then
   # Leading newline: his last line may have none, and a marker glued to the end of his text is a marker
   # on a line that also carries a request — which then gets swallowed with it.
-  for f in "$HOME/Library/Mobile Documents/com~apple~CloudDocs/FreeMotion-requests.txt" \
-           "$HOME/Library/Mobile Documents/iCloud~is~workflow~my~workflows/Documents/"*.txt; do
+  for f in "${CANDS[@]}"; do
     [ -f "$f" ] && printf '\n### drained %s\n' "$(date '+%Y-%m-%d %H:%M')" >> "$f"
   done
   # Split on the divider LINE, never on the first "---" anywhere: the header's own prose contained one,
@@ -116,5 +201,31 @@ if rest:
     print('⚠️ KEPT — these arrived AFTER you read the inbox, so they are NOT logged yet. Log them next:')
     print(rest)
 PYX
-  echo "marked drained"
+  if [ "$ALL_SEEN" = 1 ]; then echo "marked drained"; else echo "marked drained — only what was read; part of iCloud was NOT seen (below)"; fi
+fi
+# THE BANNERS GO LAST — tick.sh shows only the tail of this script.
+if [ -n "$ICLOUD_DIR" ] && [ ! -f "$ICLOUD_DIR/FreeMotion-requests.txt" ]; then
+  echo "⚠️ no FreeMotion-requests.txt in $ICLOUD_DIR — that file had nothing to read. Wrong folder, renamed, or not yet synced down?"
+fi
+if [ "$ON_MAIN" = 0 ]; then
+  echo "⚠️ SHOWN, NOT DRAINED — this checkout is on ${_BRANCH:-a detached HEAD}, not main, so nothing was pulled, written or marked."
+  echo "   His notes are logged and drained on main only: there, log them VERBATIM into REQUESTS.md, then tools/inbox.sh --done."
+  echo "   Until then they are listed again on every run (until the PM's switch-over, the Mac is the machine on main)."
+fi
+if [ "$TREE_UNLOGGED" -gt 0 ]; then
+  echo "⛔ $TREE_UNLOGGED LINE(S) ARE ONLY IN THIS TREE's INBOX.md — not on ssh/main, so the drain on main has never seen them."
+  echo "   They are his words (the logging chat on this machine writes there). They reach REQUESTS.md only through main:"
+  echo "   copy them VERBATIM into INBOX.md on main (the Mac's checkout until the PM's switch-over), then delete them here."
+fi
+if [ "$ALL_SEEN" = 0 ]; then
+  if [ "$ICLOUD_SEEN" = 0 ]; then
+    echo "⛔ THE iCLOUD CHANNEL IS NOT READABLE ON THIS $(fm_machine_noun) — FreeMotion-requests.txt (his one-tap phone notes) was NOT checked."
+    fm_icloud_drive 2>&1 >/dev/null | sed 's/^/   /'
+  fi
+  if [ "$SC_SEEN" = 0 ]; then
+    echo "⛔ THE SHORTCUTS iCLOUD FOLDER IS NOT READABLE ON THIS $(fm_machine_noun) — a phone note mis-aimed there (where his first one landed) was NOT checked."
+    fm_shortcuts_docs 2>&1 >/dev/null | sed 's/^/   /'
+  fi
+  echo "   Only what is listed above was read. Drain the inbox on the Mac, or set FM_ICLOUD_DRIVE and FM_SHORTCUTS_DOCS to synced copies of both folders."
+  exit 3
 fi
