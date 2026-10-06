@@ -368,6 +368,12 @@ def instrument_errors(rec, w, groups):
         for k, v in (rec.get('screens') or {}).items():
             if v.get('err'):
                 out.append('%s FU1 %s: %s' % (w, k, v['err']))
+            for hk, hv in (v.get('hovers') or {}).items():
+                if isinstance(hv, dict) and hv.get('err'):
+                    out.append('%s FU1 %s %s: %s' % (w, k, hk, hv['err']))
+        reg = rec.get('registry')
+        if not isinstance(reg, dict) or reg.get('err') or not reg.get('fx'):
+            out.append('%s FU1: no registry of defaults (%s)' % (w, (reg or {}).get('err') if isinstance(reg, dict) else reg))
     for g, key in (('FU2', 'fu2'), ('FU3', 'fu3'), ('FU5', 'fu5')):
         if g in groups:
             if not rec.get(key):
@@ -454,6 +460,10 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                     local = []
                     json_diff(sa.get('motion'), sb.get('motion'), 'what it animated', local, max(4, per_step))
                     out += ['%s %s: %s' % (w, name, x) for x in local]
+        if 'FU1' in groups and A.get('registry') != B.get('registry'):
+            local = []
+            json_diff(A.get('registry'), B.get('registry'), 'registry', local, max(8, per_step))
+            out += ['%s %s' % (w, x) for x in local]
         if 'FU2' in groups:
             sa, sb = A.get('fu2') or [], B.get('fu2') or []
             for i, ra in enumerate(sa):

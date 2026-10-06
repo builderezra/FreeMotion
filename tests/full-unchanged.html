@@ -274,8 +274,16 @@
     'border-color', 'border-style', 'border-width', 'border-radius', 'box-shadow', 'background-image', 'filter', 'backdrop-filter',
     'outline', 'font-weight', 'font-family', 'letter-spacing', 'fill', 'stroke', 'stroke-width', 'cursor', 'pointer-events',
     'touch-action', 'z-index', 'mix-blend-mode', 'transition', 'animation'];
+  /* min / max / step (the second review, 6 Oct): a slider's or a number box's range is what the inspector builds from an
+     effect's definition, and its default is in FU1's registry record — so a moved range is a difference by name. */
   var ATTRS = ['disabled', 'aria-pressed', 'aria-expanded', 'aria-checked', 'aria-selected', 'aria-hidden', 'role', 'tabindex',
-    'placeholder', 'inputmode', 'type', 'href', 'draggable', 'contenteditable', 'src', 'style'];
+    'placeholder', 'inputmode', 'type', 'href', 'draggable', 'contenteditable', 'src', 'style', 'min', 'max', 'step'];
+  /* ::before AND ::after (the second review, 6 Oct: the inspector card's hover glow is a ::before, and its opacity going
+     1 → .35 passed — the record read the element and never its pseudo-elements). Every pseudo-element that has a box
+     (its `content` is not none) is a row of its own, `<path>::before`, right after its element: the same style columns,
+     its computed left / top / width / height where an element has its rect (a pseudo-element has no rect of its own to
+     read), and its content where an element has its words. */
+  var PSEUDO = ['::before', '::after'];
   var SVG_ATTRS = ['d', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'viewBox',
     'transform', 'fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin', 'offset', 'stop-color', 'href', 'opacity'];
   DUMP.fields = ['path', 'x', 'y', 'w', 'h', 'text', 'aria-label', 'title'].concat(STYLES).concat(['attrs']);
@@ -973,6 +981,8 @@
   async function FU1() {
     await freshCopy('FU1');
     var A = byName('Clip A'), B = byName('Clip B'), Cc = byName('Clip C');
+    step('FU1 every default');
+    try { DUMP.registry = registryRecord(); } catch (e) { DUMP.registry = { err: String(e && e.message || e) }; }
     await screen('fu1-editor-idle', null);
     await screen('fu1-one-selected', async function () { FM.selectLayer(A.id); FM.setTime(1); });
     await screen('fu1-three-selected', async function () { FM.selectLayer(A.id); FM.toggleSelect(B.id); FM.toggleSelect(Cc.id); });
