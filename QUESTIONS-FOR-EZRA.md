@@ -254,15 +254,9 @@ Once you've watched the clips: how fast should the new grow-from-your-tap animat
 
 _You asked for it to be "fairly quick"; the plan's range is 0.26–0.32 seconds, and you choose after seeing the clips, including a slow-motion one._
 
-**Q25 — Push the last Mac-only work to GitHub** (#1085 + 1095 + 1096)
+**Q25 — (done, no answer needed) the last Mac-only work is on GitHub** (#1085 + 1095 + 1096)
 
-Two pieces of work are still only on the old Mac: the memory fixes and measurements for #1085, #1095 and #1096 (branches suite-mem-fix and suite-mem2). Push them to GitHub from the Mac before it goes idle?
-
-- A: Yes, push them (one line on the Mac: git push ssh suite-mem2 suite-mem-fix)
-- B: No, redo that work on the PC
-- *Recommended:* A
-
-_suite-mem-fix holds the written fix for the intro film staying in memory (#1096) and the evidence for the 2.2 GB effects-browser leak (#1095). Nothing else is stuck on the Mac: the other branches and the Mac's request list are already on GitHub, so the 'only on the old Mac' warnings on #929, #970 and #980 are out of date._
+Pushed 7 Oct: branches suite-mem2 (the measuring tools) and suite-mem-fix (the splash-film fix, the unfinished memory guard and tests/1085-memory-measurement.json). Nothing is left only on the old Mac.
 
 **Q26 — Work with friends: your private notes reach every guest** (#1090)
 
