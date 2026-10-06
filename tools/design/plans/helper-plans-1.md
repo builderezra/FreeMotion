@@ -1,7 +1,7 @@
 # Plans for the 5 oldest open items in REQUESTS.md (P1)
 
-Against `origin/main` b46b47d (v17.23). Plans only: no app, test or tool code changed.
 Against `origin/main` b46b47d (v17.23). **Corrected 7 Oct after the PM review (QF2):** items already shipped removed, wrong code assumptions fixed, the risks the first version missed added. Plans only: no app, test or tool code changed.
+**Verified** = I read the line. **Guess** = needs a device or a person.
 
 ## How the 5 were picked (and what I skipped)
 
