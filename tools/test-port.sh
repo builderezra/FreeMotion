@@ -296,7 +296,7 @@ v="$(ss mac-a 'suite_seconds_record notanumber' 2>&1)"; [ "$(cat "$SS/tools/.sui
 grep -q 'suite_seconds_record "$_suite_secs"' tools/ship.sh && grep -q '_last_suite="$(suite_seconds_for)"' tools/ship.sh && ok "ship.sh reads and writes it through these (mutate.sh takes suite_timeout)" || bad "ship.sh still reads or writes tools/.suite-seconds as one number"
 [ "$(awk 'NF >= 2' tools/.suite-seconds | wc -l | tr -d ' ')" -ge 1 ] && ok "the repo's tools/.suite-seconds is in the per-machine format: $(tr '\n' ' ' < tools/.suite-seconds)" || bad "tools/.suite-seconds is still one bare number"
 
-echo "── the feature gate: a release that changes the AAC export audio or the QR code refuses unless their tests RAN here (#1071) ──"
+echo "── the feature gate: a release that changes what a NOT RUN test proves refuses unless it RAN here — AAC, QR, touch, baselines, any other (#1071) ──"
 fg() { printf '%b' "$3" | python3 tools/_shipgates.py feature-gate --files "$1" --diff-file "$2" 2>&1; }
 printf 'diff --git a/js/collab-ui.js b/js/collab-ui.js\n--- a/js/collab-ui.js\n+++ b/js/collab-ui.js\n@@ -1 +1 @@\n-var a = 1;\n+var a = 2; // the Scan QR button\n' > "$TMP/qr.diff"
 printf 'diff --git a/js/collab-ui.js b/js/collab-ui.js\n--- a/js/collab-ui.js\n+++ b/js/collab-ui.js\n@@ -1 +1 @@\n-var a = 1;\n+var a = 2; // the presence dots\n' > "$TMP/noqr.diff"
@@ -312,6 +312,40 @@ v="$(fg js/collab-ui.js "$TMP/qr.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "js/c
 v="$(fg js/collab-ui.js "$TMP/noqr.diff" "$BD")"; rc=$?; [ "$rc" = 0 ] && ok "js/collab-ui.js lines about something else → passes" || bad "collab-ui other: rc=$rc $v"
 v="$(fg js/collab-qr.js "$TMP/empty.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "js/collab-qr.js (all of it) + a QR test NOT RUN → refused" || bad "collab-qr: rc=$rc $v"
 v="$(fg js/exporter.js "$TMP/empty.diff" '?\tthe driver result carries no NOT RUN list\n')"; rc=$?; [ "$rc" = 1 ] && ok "an unknown NOT RUN list ('?') counts against the release — unknown is not 'ran'" || bad "unknown list: rc=$rc $v"
+# THE TWO REASONS THE GATE DID NOT KNOW (6 Oct, the port audit, MAJOR). Off the Mac ~80 real-finger tests say NOT RUN for want
+# of touch emulation and 22 pinned tests for want of a baseline — and what they prove is the whole app, not one file. They
+# were listed and the release went on, so a phone-touch or pinned-render regression shipped from WSL. Any of them, and any
+# reason this gate has no narrower map for, now refuses a release that changes shipped source.
+TOUCH='924 a real finger dragging a LAYER\tneeds real touch emulation (a finger with the phone media state: pointer coarse, hover none, 5 touch points) — Linux headless Chrome\n'
+NOBASE='482 a picture\tno baseline recorded for linux (run tools/record-baselines.sh) — x holds pictures or samples recorded on the Mac\n'
+PART='482 another picture\tthe linux baseline for y is incomplete (1 of 9 keys missing, e.g. k) — run tools/record-baselines.sh\n'
+NOCASE='986 a blur\tthe linux baseline for z has no case c — run tools/record-baselines.sh\n'
+v="$(fg js/timeline.js,styles.css,js/compositor.js "$TMP/empty.diff" "$TOUCH$NOBASE$PART")"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$v" | grep -q 'touch' && printf '%s' "$v" | grep -q 'baseline' && ok "the audit's own case: js/timeline.js, styles.css, js/compositor.js + touch and baseline NOT RUN → refused, naming both" || bad "the audit's case passed the gate: rc=$rc [$v]"
+_fgmiss=""
+for f in js/timeline.js styles.css index.html theme-glass.css sw.js manifest.json vendor/mp4-muxer.js; do
+  v="$(fg "$f" "$TMP/empty.diff" "$TOUCH")"; [ $? = 1 ] || _fgmiss="$_fgmiss $f"
+done
+[ -z "$_fgmiss" ] && ok "a touch NOT RUN refuses a change to ANY shipped file (js/, styles.css, theme-glass.css, index.html, sw.js, manifest.json, vendor/)" || bad "a touch NOT RUN let these through:$_fgmiss"
+_fgmiss=""
+for r in "$NOBASE" "$PART" "$NOCASE"; do v="$(fg js/effects.js "$TMP/empty.diff" "$r")"; [ $? = 1 ] || _fgmiss="$_fgmiss [$(printf '%b' "$r" | cut -f2 | cut -c1-40)]"; done
+[ -z "$_fgmiss" ] && ok "every baseline reason (none recorded, incomplete, a missing case) refuses a js/ change" || bad "a baseline NOT RUN let js/effects.js through:$_fgmiss"
+v="$(fg js/app.js "$TMP/empty.diff" '999 a test\tneeds a gamepad — this browser has none\n')"; rc=$?
+[ "$rc" = 1 ] && ok "a reason the gate has no map for refuses any shipped change (fail-safe: a renamed reason cannot slip past)" || bad "an unmapped NOT RUN reason passed the gate: rc=$rc $v"
+v="$(fg tests/tests.js,tools/ship.sh,REQUESTS.md,tests/baselines.json "$TMP/empty.diff" "$TOUCH$NOBASE")"; rc=$?
+[ "$rc" = 0 ] && ok "control: touch and baseline NOT RUN with only tests, tools and notes changed → passes (listed, not refused)" || bad "a tests/tools-only release was refused for a touch NOT RUN: rc=$rc $v"
+python3 - "$REPO" <<'PY' && ok "the gate's named reasons are the ones tests/tests.js and tests/_cdp.py actually write" || bad "a NOT RUN reason in tests.js or _cdp.py no longer starts the way tools/_shipgates.py expects (it would fall to the catch-all)"
+import sys, re
+sys.path.insert(0, sys.argv[1] + '/tools'); import _shipgates as G
+src = open(sys.argv[1] + '/tests/tests.js', encoding='utf-8').read(); drv = open(sys.argv[1] + '/tests/_cdp.py', encoding='utf-8').read()
+want = {"needs real touch emulation (a finger": "touch", "needs an AAC audio encoder (AudioEncoder": "AAC", "needs a working BarcodeDetector (qr_code)": "QR",
+        "no baseline recorded for linux (run": "baseline", "the linux baseline for \"x\" is incomplete": "baseline", "the linux baseline for \"x\" has no case": "baseline"}
+lits = ["notRunHere('needs real touch emulation (a finger", "'needs an AAC audio encoder (AudioEncoder", "'needs a working BarcodeDetector (qr_code)",
+        "notRunHere('no baseline recorded for ' + FM_OS", "notRunHere('the ' + FM_OS + ' baseline for \"' + name + '\" is incomplete", "notRunHere('the ' + FM_OS + ' baseline for \"' + name + '\" has no case"]
+missing = [l for l in lits if l not in src] + ([] if '"NOTRUN: needs real touch emulation' in drv else ['_cdp.py NOTRUN: needs real touch emulation'])
+wrong = [(r, k, G.claimed_by(r)) for r, k in want.items() if k not in (G.claimed_by(r) or '')]
+if missing or wrong: print("   missing literals:", missing, "| claimed wrongly:", wrong); sys.exit(1)
+PY
 awk '/_shipgates.py feature-gate/{f=NR} /^ship_phase push/{p=NR} END{exit !(f && p && f < p)}' tools/ship.sh && ok "ship.sh asks it after the suite passes, before the commit" || bad "ship.sh does not run the feature gate before the push"
 
 echo "── tools/record-baselines.sh refuses where a recording would be wrong (#1071) ──"
