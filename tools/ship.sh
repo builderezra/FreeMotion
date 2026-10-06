@@ -682,7 +682,9 @@ if [ -n "$(git status --porcelain -- tools/inbox.sh tools/next.sh tools/tick.sh 
   fi
 fi
 # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
-if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/ship.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tools/record-baselines.sh 2>/dev/null)" ]; then
+# EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
+# that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
+if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tools/record-baselines.sh 2>/dev/null)" ]; then
   echo "→ the port's gates or the driver changed — proving them before shipping"
   if ! ./tools/test-port.sh; then
     echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."

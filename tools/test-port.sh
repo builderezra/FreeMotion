@@ -357,6 +357,20 @@ out="$(tools/record-baselines.sh --fake-os linux --file ../x.json 2>&1)"; rc=$?
 [ "$rc" = 2 ] && ok "--file must be a plain name under tests/" || bad "--file path: rc=$rc $out"
 python3 -c 'import json,sys; d=json.load(open("tests/baselines.json")); sys.exit(0 if isinstance(d, dict) and "_about" in d and "macos" not in d else 1)' && ok "tests/baselines.json is tracked, valid, and holds no 'macos' section (the Mac's are the literals)" || bad "tests/baselines.json is missing, not JSON, or holds a macos section"
 
+echo "── ship.sh runs THIS test whenever a file it proves changes (6 Oct, the port audit, minor) ──"
+# A release that edited only tools/_shipgates.py (the feature gate, and the sh() that makes a failed git a refusal) shipped
+# with no self-test at all: ship.sh runs this file only when a file in its trigger list changes, and the list was written by
+# hand. So the list is checked against what this file actually exercises: every tools/ and tests/ script named above.
+TRIG="$(grep -E '^if \[ -n "\$\(git status --porcelain -- .*tools/test-port\.sh' tools/ship.sh | head -1)"
+if [ -z "$TRIG" ]; then bad "ship.sh has no 'git status --porcelain -- … tools/test-port.sh …' trigger line — this check cannot see when it runs"
+else
+  _untrig=""
+  for f in $(grep -oE '(tools|tests)/[A-Za-z0-9_.-]+\.(sh|py)' "$REPO/tools/test-port.sh" | sort -u); do
+    printf '%s\n' "$TRIG" | tr ' ' '\n' | grep -qxF "$f" || _untrig="$_untrig $f"
+  done
+  [ -z "$_untrig" ] && ok "every script this test exercises is in ship.sh's trigger for it ($(printf '%s\n' "$TRIG" | tr ' ' '\n' | grep -cE '^(tools|tests)/') files)" || bad "ship.sh would ship a change to these WITHOUT running this test:$_untrig"
+fi
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"
