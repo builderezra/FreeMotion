@@ -30,7 +30,9 @@ def main():
         print("could not run: %s" % e)
         return 2
     port = _cdp.free_port()
-    profile = tempfile.mkdtemp(prefix="fm-cdp-check-")
+    # NOT an fm-cdp- profile (6 Oct, measured): this process is not a tests/_cdp.py, so another run's reaper — which stands
+    # down only for a live _cdp.py — read this Chrome as an orphan and SIGKILLed it at launch ("Chrome exited (code -9)")
+    profile = tempfile.mkdtemp(prefix="fm-drvchk-")
     proc = None
     cdp = None
     bad = []
