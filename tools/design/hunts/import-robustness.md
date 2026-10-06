@@ -14,7 +14,7 @@ All four kinds of file go through the same gate. A template or element is saved 
 
 ### HIGH: a legal-looking file can freeze the tab, with no warning
 
-**H1. The cost of effects is not bounded.** The stack is capped per layer at `FX_MAX = 120` (`js/storage.js:1371`) and layers at 2,000 (`:1977`, `:1696`), but nothing bounds the product.
+**H1. The cost of effects is not bounded.** The stack is capped per layer at `FX_MAX = 120` (`js/storage.js:1371`) and layers at 2,000 (`:1979`, `:1696`), but nothing bounds the product.
 - **Measured:** one layer with 250, 500, 1,000 or 2,000 blur effects (cut to 120 by the cap) took **about 25 s** to open, every time (24.3 to 25.7 s). **100 layers each with 20 Glow effects did not open in 60 s** (tab frozen); so did 300 and 600 layers. The time is the first full-size render at the end of `applyScene` (`refreshAll`, `requestRender`), not parsing.
 - **Why it matters:** the file is autosaved as the current project, so a project that freezes on open can freeze on every relaunch (**guess**: I did not reload the page; `js/storage.js:1002` says the same shape bricked relaunch for 16000 px canvases).
 - **Smallest fix:** a **budget at open**: count enabled effects across the whole project; above a threshold (say 300) open with effects paused and a banner "N effects are paused so this opens quickly. Turn on" (the preview ladder and `FM._perfOfferState` `js/app.js:469` already exist for the playing case; this is the same idea for the opening case). Also lower `FX_MAX` from 120 to 48: nobody stacks 120.
