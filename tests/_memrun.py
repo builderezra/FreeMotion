@@ -53,8 +53,15 @@ def others_alive():
     return [p for p in r.stdout.split() if p.strip()]
 
 
+def other_headless():
+    """Headless Chromes of any other tool (a probe's own `cdp-…` profile is not caught by the fm-cdp pattern)."""
+    r = subprocess.run(["pgrep", "-f", "Google Chrome --headless"], capture_output=True, text=True)
+    return [p for p in r.stdout.split() if p.strip()]
+
+
 def wait_quiet(log):
     said = False
+    t0 = time.time()
     while True:
         busy = []
         if os.path.exists(MAIN_LOCK) or os.path.exists(SHIP_LOCK):
@@ -63,6 +70,8 @@ def wait_quiet(log):
             busy.append("load %.1f" % load1())
         if others_alive():
             busy.append("another fm-cdp Chrome is alive")
+        if other_headless() and time.time() - t0 < 600:   # a neighbour's probe: give it up to 10 minutes to finish
+            busy.append("another headless Chrome is alive")
         if not busy:
             return
         if not said:

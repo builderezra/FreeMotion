@@ -163,6 +163,9 @@ def app_context(cdp, state, fresh=False):
 _DEEP = [
     ("et", "EventTarget.prototype", r"""function(){
       var by = {}, media = [], cv = { n: 0, detached: 0, px: 0, detachedPx: 0 }, ac = {}, img = { n: 0, px: 0, detached: 0, detachedPx: 0 }, ifr = 0;
+      // WHO MADE IT (tests.js memInstall tags every canvas / media / image / iframe / AudioContext / Worker a test makes)
+      var B = window.__fmMemBorn, who = {};
+      function add(o, kind, px) { var k; try { k = B && B.get(o); } catch (e) {} k = k || '(boot / untagged)'; var w = who[k] || (who[k] = {}); w[kind] = (w[kind] || 0) + 1; if (px) w[kind + 'Px'] = (w[kind + 'Px'] || 0) + px; }
       for (var i = 0; i < this.length; i++) {
         var o = this[i], n;
         // the walk also returns the PROTOTYPES themselves (HTMLVideoElement.prototype…), whose getters throw Illegal invocation
@@ -170,10 +173,10 @@ _DEEP = [
         try { n = o.constructor && o.constructor.name || '?'; } catch (e) { n = '?'; }
         if (n === 'HTMLImageElement') {
           var p = 0; try { p = (o.complete && o.naturalWidth * o.naturalHeight) || 0; } catch (e) {}
-          img.n++; img.px += p; if (!o.isConnected) { img.detached++; img.detachedPx += p; }
+          img.n++; img.px += p; if (!o.isConnected) { img.detached++; img.detachedPx += p; } add(o, 'img', p);
           continue;
         }
-        if (n === 'HTMLIFrameElement') { ifr++; continue; }
+        if (n === 'HTMLIFrameElement') { ifr++; add(o, 'iframe', 0); continue; }
         if (/^(Text|Comment|CDATASection|HTML(Div|Span|Button|Input|Label|Option|Select|Br|LI|Li|UList|Ul|Path|Style|Script|Link|Meta|Anchor|Paragraph|Heading|Unknown|TextArea|Template|Slot|Form|Table.*|Head|Body|Html|Title|Details|Summary|Dialog|Progress|Pre|Font|FieldSet|Fieldset|Legend|Output|Picture|Source|Track|HR|Hr|Mod|Quote|Time|Data|Menu|DList|OList|Area|Map|Base|Embed|Object|Param|Meter|DataList|OptGroup)Element|SVG.*Element|DocumentFragment|ShadowRoot|CSSStyleSheet|XMLDocument|HTMLDocument|Document|Attr)$/.test(n)) { by['(dom)'] = (by['(dom)'] || 0) + 1; continue; }
         by[n] = (by[n] || 0) + 1;
         if (n === 'HTMLVideoElement' || n === 'HTMLAudioElement') {
@@ -181,9 +184,11 @@ _DEEP = [
           try { s = String(o.currentSrc || o.src || (o.srcObject ? '[srcObject]' : '')).slice(0, 60); } catch (e) {}
           try { vw = o.videoWidth || 0; vh = o.videoHeight || 0; paused = o.paused ? 1 : 0; ns = o.networkState; } catch (e) {}
           media.push([n === 'HTMLVideoElement' ? 'v' : 'a', o.isConnected ? 1 : 0, o.readyState, s, vw * vh, paused, ns]);
+          add(o, o.readyState > 0 ? 'mediaLoaded' : 'media', o.readyState > 0 ? vw * vh : 0);
         } else if (n === 'HTMLCanvasElement') {
-          var a = (o.width * o.height) || 0; cv.n++; cv.px += a; if (!o.isConnected) { cv.detached++; cv.detachedPx += a; }
-        } else if (/AudioContext$/.test(n)) { var st = ''; try { st = o.state; } catch (e) {} ac[n + ':' + st] = (ac[n + ':' + st] || 0) + 1; }
+          var a = (o.width * o.height) || 0; cv.n++; cv.px += a; if (!o.isConnected) { cv.detached++; cv.detachedPx += a; } add(o, o.isConnected ? 'cv' : 'cvDet', a);
+        } else if (/AudioContext$/.test(n)) { var st = ''; try { st = o.state; } catch (e) {} ac[n + ':' + st] = (ac[n + ':' + st] || 0) + 1; add(o, n === 'OfflineAudioContext' ? 'oac' : 'ac:' + st, 0); }
+        else if (n === 'Worker' || n === 'OffscreenCanvas' || n === 'VideoFrame') { add(o, n, 0); }
       }
       function norm(s) { return s.replace(/^blob:[^/]*\/\/[^/]*\//, 'blob:').replace(/[0-9a-f]{8}-[0-9a-f-]{27}/, '<uuid>').replace(/^https?:\/\/[^/]*\//, '/'); }
       var mediaSum = { n: media.length, video: 0, detached: 0, loaded: 0, detachedLoaded: 0, playing: 0, px: 0, srcs: {} };
@@ -196,10 +201,13 @@ _DEEP = [
       });
       var keys = Object.keys(mediaSum.srcs).sort(function (x, y) { return mediaSum.srcs[y] - mediaSum.srcs[x]; }).slice(0, 8);
       var top = {}; keys.forEach(function (k) { top[k] = mediaSum.srcs[k]; }); mediaSum.srcs = top;
-      return { by: by, media: mediaSum, canvas: cv, ac: ac, img: img, iframes: ifr };
+      var score = function (w) { return (w.cvPx || 0) + (w.cvDetPx || 0) + (w.mediaLoadedPx || 0) * 1.5 + (w.imgPx || 0) + 4e6 * ((w.mediaLoaded || 0) + (w['ac:running'] || 0) + (w['ac:suspended'] || 0) + (w.Worker || 0) + (w.iframe || 0)) + 1e4 * ((w.cvDet || 0) + (w.img || 0) + (w.media || 0)); };
+      var wk = Object.keys(who).sort(function (x, y) { return score(who[y]) - score(who[x]); });
+      var whoTop = {}; wk.slice(0, 25).forEach(function (k) { whoTop[k] = who[k]; });
+      return { by: by, media: mediaSum, canvas: cv, ac: ac, img: img, iframes: ifr, who: whoTop, whoN: wk.length };
     }"""),
     ("ab", "ArrayBuffer.prototype", "function(){var n=this.length,b=0,big=0,bigB=0;for(var i=0;i<n;i++){var x=0;try{x=this[i].byteLength}catch(e){};b+=x;if(x>=1048576){big++;bigB+=x;}}return {n:n,bytes:b,big:big,bigBytes:bigB};}"),
-    ("bmp", "ImageBitmap.prototype", "function(){var n=this.length,p=0,open=0;for(var i=0;i<n;i++){try{var a=this[i].width*this[i].height;p+=a;if(a)open++}catch(e){}}return {n:n,open:open,px:p};}"),
+    ("bmp", "ImageBitmap.prototype", "function(){var B=window.__fmMemBorn,who={},n=this.length,p=0,open=0;for(var i=0;i<n;i++){try{var a=this[i].width*this[i].height;p+=a;if(a){open++;var k=(B&&B.get(this[i]))||'(untagged)';who[k]=(who[k]||0)+a;}}catch(e){}}var t={};Object.keys(who).sort(function(x,y){return who[y]-who[x]}).slice(0,10).forEach(function(k){t[k]=who[k]});return {n:n,open:open,px:p,who:t};}"),
     ("blob", "Blob.prototype", "function(){var n=this.length,b=0;for(var i=0;i<n;i++){try{b+=this[i].size}catch(e){}}return {n:n,bytes:b};}"),
     ("abuf", "AudioBuffer.prototype", "function(){var n=this.length,s=0;for(var i=0;i<n;i++){try{s+=this[i].length*this[i].numberOfChannels}catch(e){}}return {n:n,samples:s,bytes:s*4};}"),
     ("idata", "ImageData.prototype", "function(){var n=this.length,p=0;for(var i=0;i<n;i++){try{p+=this[i].width*this[i].height}catch(e){}}return {n:n,px:p};}"),
