@@ -14,7 +14,7 @@ The queue classifier (`tools/_classify.py`, run on `REQUESTS.md` at this commit)
 
 **State (verified in the entry and in code).** Instrumented 1 Oct. On 5 Oct the leak list named one cause and it was fixed: `q915aCleanup` now passes `{ confirmed: true }` (`tests/tests.js:980-989`). The entry stays open until a run shows the pair gone.
 
-**New evidence: the other three leaks it listed are real, deterministic, and still there.** I ran the whole suite twice in my container (two independent passes, v17.23). Both printed the **identical** `sceneLeaks` list (the runner's report-only record of what a test leaves in the shared scene, `tests/tests.js:59582-59600`):
+**New evidence: the other three leaks it listed are real, deterministic, and still there.** I ran the whole suite twice in my container (two independent passes, v17.23). Both printed the **identical** `sceneLeaks` list (the runner's report-only record of what a test leaves in the shared scene, `tests/tests.js:59578-59630`):
 
 | leaving test | leaves | why (read in code) |
 |---|---|---|
@@ -28,7 +28,7 @@ The queue classifier (`tools/_classify.py`, run on `REQUESTS.md` at this commit)
 1. **`:13490`:** wrap the body after `FM.history.reset()` in `try { … } finally { FM.scene.layers.splice(FM.scene.layers.indexOf(L), 1); FM.history.reset(); }`. One layer, one line.
 2. **`:42418` (`notes stay with their own project`):** take `const orig = FM.projects.currentId();` at the top; in `finally` do `try { if (orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}` **before** the removes, and `await` each `FM.projects.remove(id)`. Same shape as `q915aCleanup`.
 3. **`:85031`:** the same two lines (capture `orig` at the top, reopen in `finally` before removing `made`).
-4. **Then make the leak check bite.** `tests/tests.js:59590-59600` reports and never fails ("nothing turns red for it until the list is understood"). Once 1 to 3 are in and two full runs show an empty list, change it to fail the offending test with `left layers in the shared scene: …`, unless the test passes `{ leaves: true }`. That turns the whole bug class into an error at the test that causes it.
+4. **Then make the leak check bite.** `tests/tests.js:59581` and `:59628` report and never fail ("nothing turns red for it until the list is understood"). Once 1 to 3 are in and two full runs show an empty list, change it to fail the offending test with `left layers in the shared scene: …`, unless the test passes `{ leaves: true }`. That turns the whole bug class into an error at the test that causes it.
 **Test:** the list itself is the test. Proof of the guard: a throwaway test that pushes a layer and returns must turn red under step 4.
 **Close #996 when:** two full runs (desktop and 380) print `sceneLeaks: []` and the pair has not recurred. **Effort:** an hour, plus the runs. **Guess:** whether the original pink-layer variant (232,52,135) had a fourth cause; the 5 Oct entry says earlier occurrences named other leftovers.
 
@@ -51,7 +51,7 @@ The queue classifier (`tools/_classify.py`, run on `REQUESTS.md` at this commit)
 
 ## #1001 An import that throws leaves an empty "Imported project" behind
 
-**Reproduced both paths.** `importObject` (`js/storage.js:1988-2009`) creates the project **before** `applyScene`. With `applyScene` made to **throw**: a new project exists and is current, and the throw escapes. With `applyScene` returning **`false`**: a new project exists and is current too, and the code's own comment ("the user must still be told rather than left in an empty project") is not true, because the `false` branch does not undo the create either. A valid import adds exactly one project (control).
+**Reproduced both paths.** `importObject` (`js/storage.js:1989-2010`, the `applyScene` call is `:2000`) creates the project **before** `applyScene`. With `applyScene` made to **throw**: a new project exists and is current, and the throw escapes. With `applyScene` returning **`false`**: a new project exists and is current too, and the code's own comment ("the user must still be told rather than left in an empty project") is not true, because the `false` branch does not undo the create either. A valid import adds exactly one project (control).
 
 **Build**
 1. In `importObject`: remember `const prev = FM.projects.currentId();` before the create. Wrap the `applyScene` call in `try`. On a throw or a `false`, run one helper `undoImport(pid, prev)`: `await FM.projects.open(prev, { confirmed: true })` (when `prev` exists), `await FM.projects.remove(pid)`, then the existing "could not be opened" toast, and `return false`.
@@ -89,7 +89,7 @@ The queue classifier (`tools/_classify.py`, run on `REQUESTS.md` at this commit)
 
 **Build**
 1. Add a strict reader beside `idbGet`: `idbGetStrict(db, key)` resolves `{ ok: true, value }` or `{ ok: false }` on `onerror` or a thrown exception. Add `idbGetMediaStrict` that follows a pointer the same way and reports `{ ok: false }` if either read errored (a pointer at a genuinely absent target stays "absent, skip": that is a state the file really can be in).
-2. In `duplicateFrom`'s loop (`:2666`): if `!r.ok` then `whole = false; break;`, so the existing rollback (`:2677-2682`) runs. Keep the quiet skip for a real absence.
+2. In `duplicateFrom`'s loop (`:2666`): if `!r.ok` then `whole = false; break;`, so the existing rollback (`:2679-2684`) runs. Keep the quiet skip for a real absence.
 3. `js/home.js:1425`: reword to `'Could not duplicate that project, nothing was copied'`. It is shown for both causes.
 **Test** (`1003 a clip that cannot be read stops the duplicate`): the script I used (patch `IDBObjectStore.prototype.get` to fail for `/^l_/` keys), modelled on `tests/tests.js:770-815`. Assert `duplicate` returns `false`, adds no card, leaves no new `fm.proj.*` key and no new clip key. Restore the patch in `finally`. **Fails on v17.23** (`true`, a card). Control: same call without the fault returns true.
 **Effort:** an hour. **Risk:** a flaky read now cancels a duplicate instead of making a quietly incomplete one, which is the intent.
