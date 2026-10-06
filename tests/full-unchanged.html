@@ -2493,6 +2493,28 @@
     } catch (e) { out.err = String(e && e.message || e); }
     finally { await endSession(); }
   }
+  /* Sam's edits, made to HIS copy (the engine guest's document), each one the way a person's edit reads to the engine. */
+  function gl(g, name) { var L = (g.layers || []).filter(function (l) { return l && l.name === name; })[0]; if (!L) throw new Error('Sam’s copy has no layer named ' + name); return L; }
+  function r6(v) { return Math.round(v * 1e6) / 1e6; }
+  var FRIEND = [
+    ['Sam moves Clip C half a second later', function (g) { var L = gl(g, 'Clip C'); L.start = r6((L.start || 0) + 0.5); }],
+    ['Sam trims 0.3 s off the end of Clip A', function (g) { var L = gl(g, 'Clip A'); L.duration = r6(Math.max(0.3, L.duration - 0.3)); }],
+    ['Sam adds a text', function (g) {
+      var T = clone(gl(g, 'Text'));
+      T.id = 'sam_text_1'; T.name = 'Sam’s text'; T.text = 'from Sam'; T.start = 0.2; delete T.parent;
+      g.layers.push(T);
+    }],
+    ['Sam deletes the song', function (g) {
+      var i = g.layers.findIndex(function (l) { return l && l.name === 'Song'; });
+      if (i < 0) throw new Error('Sam’s copy has no Song'); g.layers.splice(i, 1);
+    }],
+    ['Sam renames Clip B', function (g) { gl(g, 'Clip B').name = 'Clip B (Sam)'; }],
+    ['Sam puts a blur on Clip C', function (g) { var L = gl(g, 'Clip C'); L.effects = (L.effects || []).concat([{ type: 'blur', enabled: true, params: { radius: 4 } }]); }],
+    ['Sam turns the blur up', function (g) {
+      var L = gl(g, 'Clip C'), fx = (L.effects || []).filter(function (e) { return e && e.type === 'blur'; }).slice(-1)[0];
+      if (!fx) throw new Error('Sam’s Clip C has no blur to turn up'); fx.params.radius = 9;
+    }]
+  ];
 
   /* ═══ FU5: documents. Each fixture document through the sanitiser, then the import door (applyScene), a save and an
      open (load) — the bytes at each stage. Compared with NOTHING masked but N1 (SCHEMA_REV / SCHEMA_FP, recorded under
@@ -2740,28 +2762,6 @@
   async function FU7() {
     DUMP.fu7 = { hasSwitch: !!(FM.editor) || !!D.getElementById('cv-editor'), wired: false };
   }
-  /* Sam's edits, made to HIS copy (the engine guest's document), each one the way a person's edit reads to the engine. */
-  function gl(g, name) { var L = (g.layers || []).filter(function (l) { return l && l.name === name; })[0]; if (!L) throw new Error('Sam’s copy has no layer named ' + name); return L; }
-  function r6(v) { return Math.round(v * 1e6) / 1e6; }
-  var FRIEND = [
-    ['Sam moves Clip C half a second later', function (g) { var L = gl(g, 'Clip C'); L.start = r6((L.start || 0) + 0.5); }],
-    ['Sam trims 0.3 s off the end of Clip A', function (g) { var L = gl(g, 'Clip A'); L.duration = r6(Math.max(0.3, L.duration - 0.3)); }],
-    ['Sam adds a text', function (g) {
-      var T = clone(gl(g, 'Text'));
-      T.id = 'sam_text_1'; T.name = 'Sam’s text'; T.text = 'from Sam'; T.start = 0.2; delete T.parent;
-      g.layers.push(T);
-    }],
-    ['Sam deletes the song', function (g) {
-      var i = g.layers.findIndex(function (l) { return l && l.name === 'Song'; });
-      if (i < 0) throw new Error('Sam’s copy has no Song'); g.layers.splice(i, 1);
-    }],
-    ['Sam renames Clip B', function (g) { gl(g, 'Clip B').name = 'Clip B (Sam)'; }],
-    ['Sam puts a blur on Clip C', function (g) { var L = gl(g, 'Clip C'); L.effects = (L.effects || []).concat([{ type: 'blur', enabled: true, params: { radius: 4 } }]); }],
-    ['Sam turns the blur up', function (g) {
-      var L = gl(g, 'Clip C'), fx = (L.effects || []).filter(function (e) { return e && e.type === 'blur'; }).slice(-1)[0];
-      if (!fx) throw new Error('Sam’s Clip C has no blur to turn up'); fx.params.radius = 9;
-    }]
-  ];
 
   /* ═══ BOOT ═══════════════════════════════════════════════════════════════════════════════════════════════════════ */
   /* Run by the driver in every new document before any of its own scripts (Page.addScriptToEvaluateOnNewDocument), and so in
