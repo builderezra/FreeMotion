@@ -943,6 +943,9 @@ fi
 # changes the code that test is the only proof of: the AAC export audio (js/exporter.js, js/export-resume.js, js/audio-*.js,
 # vendor/mp4-muxer.js) or the QR code (js/collab-qr.js, and js/collab-ui.js lines about qr/barcode/jsqr/scan). Those tests
 # must have RUN, and passed, on the machine shipping this tree — the Mac. The map is FEATURES in tools/_shipgates.py.
+# A real finger (touch emulation), a pinned picture (a per-OS baseline) and any NOT RUN reason the map does not name cover
+# the whole app, so while one is NOT RUN, ANY change to shipped source (js/, vendor/, styles.css, theme-glass.css,
+# index.html, sw.js, manifest.json) refuses (6 Oct, the port audit, MAJOR: off the Mac those two were listed and shipped).
 if [ -n "${NOTRUN_ALL:-}" ]; then
   _FG="$(printf '%s\n' "$NOTRUN_ALL" | python3 tools/_shipgates.py feature-gate)"; _FGRC=$?
   if [ "$_FGRC" != 0 ]; then

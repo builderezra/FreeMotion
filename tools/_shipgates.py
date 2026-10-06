@@ -26,19 +26,42 @@ def sh(cmd):
 # ---- THE FEATURE GATE (6 Oct, #1071 — his answer: the recommended plan) -----------------------------------------------
 # A test that needs a feature this machine lacks says NOT RUN HERE (tests/tests.js) and the release goes on — EXCEPT when
 # the release changes the very code that test is the only proof of. Then it refuses: those tests must have RUN, and passed,
-# on the machine shipping this tree (the Mac has every feature). Each feature: the NOT RUN reason its tests give (the
-# prefix tests.js writes), the files that are its code, and — for a file that is mostly about something else — the words a
-# changed line must carry to count. Chosen globs (fnmatch, repo-relative):
+# on the machine shipping this tree (the Mac has every feature). Each feature: the NOT RUN reason its tests give (a regex
+# matched at the START of the reason tests.js writes), the files that are its code, and — for a file that is mostly about
+# something else — the words a changed line must carry to count. Chosen globs (fnmatch, repo-relative):
 #   AAC export audio: js/exporter.js, js/export-resume.js, js/audio-*.js, vendor/mp4-muxer.js — the export's audio track,
 #     its mix and effects, and the muxer that writes it; the 215 / 690 tests that need an AAC encoder are their proof.
 #   QR / BarcodeDetector: js/collab-qr.js (all of it), and js/collab-ui.js lines that mention qr, barcode, jsqr or scan —
-#     the Share panel's QR and the [Scan QR] reader; 921 S6 / S8 are their proof.
+#     the Share panel's QR and the [Scan QR] reader; the QR read in 921 S6 and the native reader in 921 S8 are their proof.
+#   REAL TOUCH and THE PINNED PICTURES (6 Oct, the port audit, MAJOR): ~80 real-finger tests (924, and every test that sends
+#     a touch through realInput924) and the 22 pinned 482 / 986 tests. What they prove is not one file: a finger reaches the
+#     whole UI (styles.css's touch-only rules, the fine-pointer JS in app.js, timeline.js, home.js, settings.js, the collab
+#     files…) and a pinned picture is drawn by the whole render path. So while one of them is NOT RUN, ANY change to shipped
+#     source refuses. The gate used to know only AAC and QR, and off the Mac these were listed and the release went on.
+#   ANYTHING ELSE (reason None): a NOT RUN reason no entry above claims refuses any shipped source too. A renamed reason, or a
+#     new kind of NOT RUN test, can then only make the gate STRICTER, never wave a release past it unnoticed.
+SHIPPED = ["index.html", "styles.css", "theme-glass.css", "sw.js", "manifest.json", "js/*", "vendor/*"]
 FEATURES = [
-    {"name": "the AAC export audio", "reason": "needs an AAC audio encoder",
+    {"name": "the AAC export audio", "reason": r"needs an AAC audio encoder",
      "globs": ["js/exporter.js", "js/export-resume.js", "js/audio-*.js", "vendor/mp4-muxer.js"], "lines": {}},
-    {"name": "the QR code (BarcodeDetector)", "reason": "needs a working BarcodeDetector",
+    {"name": "the QR code (BarcodeDetector)", "reason": r"needs a working BarcodeDetector",
      "globs": ["js/collab-qr.js", "js/collab-ui.js"], "lines": {"js/collab-ui.js": r"(?i)qr|barcode|jsqr|scan"}},
+    {"name": "the app under a real finger (touch emulation)", "reason": r"needs real touch emulation",
+     "globs": SHIPPED, "lines": {}},
+    {"name": "the pictures and sounds pinned to the Mac (a per-OS baseline)", "reason": r"no baseline recorded for |the \S+ baseline for ",
+     "globs": SHIPPED, "lines": {}},
+    {"name": "the app (a NOT RUN reason this gate has no narrower map for)", "reason": None,
+     "globs": SHIPPED, "lines": {}},
 ]
+
+
+def claimed_by(why):
+    """the name of the feature whose NOT RUN reason `why` is: the first named entry that matches, else the catch-all"""
+    import re
+    for f in FEATURES:
+        if f["reason"] is not None and re.match(f["reason"], why or ''):
+            return f["name"]
+    return next(f["name"] for f in FEATURES if f["reason"] is None)
 
 
 def changed_lines(diff_text, path):
@@ -70,7 +93,7 @@ def feature_gate(files, diff_text, notrun_lines):
             hit.append(p)
         if not hit:
             continue
-        missing = [n for n, why, *_ in nr if n == '?' or why.startswith(f["reason"])]
+        missing = [n for n, why, *_ in nr if n == '?' or claimed_by(why) == f["name"]]
         if missing:
             out.append((f["name"], hit, missing))
     return out
@@ -87,6 +110,9 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "feature-gate
                            + sh(['git', 'ls-files', '--others', '--exclude-standard']).split()))
         diff_text = sh(['git', 'diff', 'HEAD'])
     refusals = feature_gate(files, diff_text, sys.stdin.read().split('\n'))
+    def first(xs, k, sep):
+        return sep.join(xs[:k]) + (' … and %d more' % (len(xs) - k) if len(xs) > k else '')
     for name, hit, missing in refusals:
-        print("❌ THIS RELEASE CHANGES %s (%s) BUT ITS TESTS DID NOT RUN HERE: %s" % (name, ', '.join(hit), '; '.join(missing[:6])))
+        print("❌ THIS RELEASE CHANGES %s (%s) BUT %d OF ITS TESTS DID NOT RUN HERE: %s"
+              % (name, first(hit, 6, ', '), len(missing), first(missing, 6, '; ')))
     sys.exit(1 if refusals else 0)

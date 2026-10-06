@@ -59737,6 +59737,7 @@
       var t = LIST[i], ok = true, err = null, notRun = '';
       window.__fmCurPinned = !!t.pinned;   // pinned() refuses in a test that did not declare { pinned: true } (see there)
       window.__fmNotRunHere = '';          // set by notRunHere() even when the test catches its throw
+      window.__fmPcBatches = 0;            // real mouse/wheel/key batches this test sent (realInput924 — a touch NOT RUN says so)
       /* ⚠️ EVERY TEST STARTS WITH localStorage.setItem RESOLVING TO THE PROTOTYPE (26 Sep). A test that stubs it and then
          "restores" with `localStorage.setItem = realSet` leaves an OWN property on the instance, and an own property shadows
          Storage.prototype — so every later test that stubs the PROTOTYPE (a full phone, a refused write) stubbed nothing.
@@ -87257,11 +87258,17 @@
        leaves the page mouseless for good (tests/_platform.py), so touch went in WITHOUT it: the mouse layout under a
        finger, a phone regression green there and red on his phone. The driver now says which it can do
        (__fmDriverCaps.touchEmulation, written every poll) and refuses touch it cannot emulate; this turns either into
-       NOT RUN HERE before a single step is sent. Mouse, wheel and key steps are unaffected. */
+       NOT RUN HERE before a single step is sent. Mouse, wheel and key steps are unaffected.
+       ⚠️ SO A TEST THAT USES BOTH SENDS ITS MOUSE HALF FIRST (6 Oct, the port audit, MAJOR). NOT RUN ends the test at its
+       first touch, so a test that ran its phone half first never reached its PC half there either — a PC regression NOT RUN
+       on a machine whose real mouse could have caught it. Every test that mixes the two runs the mouse / wheel / key half,
+       and throws whatever it found, BEFORE its first touch; the reason then says how much ran (window.__fmPcBatches, which
+       the runner zeroes per test), so a NOT RUN list shows which tests had their PC half proven here. */
     const hasTouch = (steps || []).some(s => /^touch/.test(String(s && s.t || '')));
     const caps = window.__fmDriverCaps;
+    const pcRan = () => (window.__fmPcBatches > 0 ? ' — its PC half ran first and passed (' + window.__fmPcBatches + ' real mouse/wheel/key batch' + (window.__fmPcBatches === 1 ? '' : 'es') + ')' : '');
     if (hasTouch && caps && caps.touchEmulation === false)
-      notRunHere('needs real touch emulation (a finger with the phone\'s media state: pointer coarse, hover none, 5 touch points) — this browser\'s driver cannot switch it on and off without losing the mouse (' + (caps.why || 'Linux headless Chrome') + ')');
+      notRunHere('needs real touch emulation (a finger with the phone\'s media state: pointer coarse, hover none, 5 touch points) — this browser\'s driver cannot switch it on and off without losing the mouse (' + (caps.why || 'Linux headless Chrome') + ')' + pcRan());
     const seq = (window.__fmInputSeq = (window.__fmInputSeq || 0) + 1);
     window.__fmInputErr = '';
     window.__fmWantInput = { seq: seq, steps: steps };
@@ -87270,8 +87277,9 @@
       if (Date.now() > deadline) throw new Error('no real input arrived for ' + what + ' — this test needs tests/_cdp.py, which turns __fmWantInput into trusted touches and clicks');
       await new Promise(r => setTimeout(r, 40));
     }
-    if (/^NOTRUN: /.test(window.__fmInputErr || '')) notRunHere(String(window.__fmInputErr).slice(8));
+    if (/^NOTRUN: /.test(window.__fmInputErr || '')) notRunHere(String(window.__fmInputErr).slice(8) + pcRan());
     if (window.__fmInputErr) throw new Error('the driver could not send the input for ' + what + ': ' + window.__fmInputErr);
+    if (!hasTouch) window.__fmPcBatches = (window.__fmPcBatches || 0) + 1;
     await new Promise(r => setTimeout(r, 30));   // let the recorder's deferred reads land
   }
   async function onScreen924(fn) {
@@ -87509,8 +87517,9 @@
     }
     try {
       await onScreen924(async function () {
-        await atPhoneWidth(function () { return once('touch', 'phone (360)'); }, 360);
+        // the PC half FIRST: a browser that cannot emulate a finger stops at the first tap (realInput924), so it still runs this
         await atWideWidth(function () { return once('mouse', 'PC (1100)'); }, 1100);
+        await atPhoneWidth(function () { return once('touch', 'phone (360)'); }, 360);
       });
     } finally {
       try { if (FM.collab.ui.close) FM.collab.ui.close(); } catch (e) {}
@@ -88024,8 +88033,9 @@
     }
     try {
       await onScreen924(async function () {
-        await atPhoneWidth(function () { return run('phone (360)', 'touch'); }, 360);
+        // the PC half FIRST: a browser that cannot emulate a finger stops at the first touch (realInput924), so it still runs this
         await atWideWidth(function () { return run('PC (1100)', 'wheel'); }, 1100);
+        await atPhoneWidth(function () { return run('phone (360)', 'touch'); }, 360);
       });
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
   });
@@ -89789,53 +89799,15 @@
       if (FM.storage.flushSync()) throw new Error('setup: the save did not fail, so the phone is not full and this measures nothing');
       realDialog = true;
       await onScreen924(async function () {
-        /* 1. he opens his other project — and says Stay, with a finger, at phone width */
-        await atPhoneWidth(async function () {
-          window.__fmStep = '690 storage: 1 open → Stay';
-          const going = FM.projects.open(b);
-          const s = await hfAskUp('when he opened another project with unsaved work on a full phone');
-          const stay = hfCentre(s.querySelector('.fm-ask-cancel'));
-          if (!stay.w || !stay.h) throw new Error('the Stay button has no size on a phone, so he cannot tap it');
-          await realInput924([{ t: 'touchStart', x: stay.x, y: stay.y, ms: 60 }, { t: 'touchEnd', x: stay.x, y: stay.y, ms: 0 }], 'a finger on Stay');
-          const res = await going;
-          if (res !== false) throw new Error('after Stay, projects.open() answered ' + res + ' instead of false — its callers cannot tell the switch did not happen');
-          if (FM.projects.currentId() !== a) throw new Error('he said Stay and was moved to another project anyway');
-          if (!has('HUNTf unsaved')) throw new Error('he said Stay and the text layer he had just added is gone');
-          if (!/HUNTf full A/.test(asked[0] && asked[0].title || '')) throw new Error('the question does not name the project that is not saved: ' + JSON.stringify(asked[0] && asked[0].title).replace(/"/g, "'"));
-          /* 2. + → Create: the same question, and Stay leaves no half-made project behind */
-          window.__fmStep = '690 storage: 2 create → Stay';
-          const n0 = FM.projects.list().length;
-          const making = FM.projects.create({ name: 'HUNTf never made' });
-          const s2 = await hfAskUp('when he created a new project with unsaved work on a full phone');
-          const stay2 = hfCentre(s2.querySelector('.fm-ask-cancel'));
-          await realInput924([{ t: 'touchStart', x: stay2.x, y: stay2.y, ms: 60 }, { t: 'touchEnd', x: stay2.x, y: stay2.y, ms: 0 }], 'a finger on Stay (Create)');
-          const pid = await making;
-          if (pid !== false) throw new Error('after Stay, projects.create() answered ' + pid + ' instead of false');
-          if (FM.projects.list().length !== n0) throw new Error('after Stay on Create a project was still added (' + n0 + ' → ' + FM.projects.list().length + ')');
-          if (FM.projects.currentId() !== a || !has('HUNTf unsaved')) throw new Error('after Stay on Create he was not left in his project with his work');
-          /* 3. Home → a card: asked BEFORE the push starts, and Stay leaves him on Home */
-          window.__fmStep = '690 storage: 3 Home card → Stay';
-          FM.home.open(); await sleep(250);
-          const tapping = FM.home._openProject(b);
-          const s3 = await hfAskUp('when he tapped another project card on Home');
-          const app = document.getElementById('app');
-          if (document.body.classList.contains('fm-pushing') || (app && app.classList.contains('fm-push-wait'))) throw new Error('the question came up half-way through the push into the editor — Home was already sliding away under it');
-          const stay3 = hfCentre(s3.querySelector('.fm-ask-cancel'));
-          await realInput924([{ t: 'touchStart', x: stay3.x, y: stay3.y, ms: 60 }, { t: 'touchEnd', x: stay3.x, y: stay3.y, ms: 0 }], 'a finger on Stay (Home card)');
-          const r3 = await tapping;
-          if (r3 !== null) throw new Error('after Stay on a Home card tap, openProject answered ' + r3 + ' (null means he chose to stay; false would make its ⋯ actions say busy)');
-          await sleep(200);
-          if (!FM.home.isOpen()) throw new Error('after Stay on a Home card tap, Home closed anyway');
-          if (FM.projects.currentId() !== a || !has('HUNTf unsaved')) throw new Error('after Stay on a Home card tap his project or its unsaved layer was lost');
-          FM.home.close(); await sleep(200);
-        }, 380);
-        /* 4. Leave anyway, with a mouse at a PC width — the door is not locked, it is asked. The frame is slid so the
-           button sits inside the browser window in BOTH passes (the phone pass's window is 380 px wide) — the same
-           trick the 924 Export test uses; a click aimed outside the window lands nowhere. */
-        window.__fmStep = '690 storage: 4 open → Leave anyway';
+        /* 1. Leave anyway, with a mouse at a PC width — the door is not locked, it is asked. FIRST (6 Oct, the port
+           audit): a browser that cannot emulate a finger stops this test at its first tap (realInput924), so the half it
+           CAN run goes before it — this one used to come last and never ran there. The frame is slid so the button sits
+           inside the browser window in BOTH passes (the phone pass's window is 380 px wide) — the same trick the 924
+           Export test uses; a click aimed outside the window lands nowhere. */
+        window.__fmStep = '690 storage: 1 open → Leave anyway';
         await atWideWidth(async function () {
           const leaving = FM.projects.open(b);
-          const s4 = await hfAskUp('the fourth time');
+          const s4 = await hfAskUp('when he opened another project with unsaved work on a full disk');
           const okb = s4.querySelector('.fm-ask-ok');
           if (!/Leave anyway/.test(okb.textContent)) throw new Error('the answer that throws the work away is not labelled Leave anyway: ' + okb.textContent);
           const fe = window.frameElement, l0 = fe.style.left, t0 = fe.style.top;
@@ -89847,9 +89819,61 @@
             await realInput924([{ t: 'mouseMove', x: go.x, y: go.y, ms: 40 }, { t: 'mouseDown', x: go.x, y: go.y, ms: 60 }, { t: 'mouseUp', x: go.x, y: go.y, ms: 60 }], 'a click on Leave anyway');
           } finally { fe.style.left = l0; fe.style.top = t0; }
           if ((await leaving) !== true || FM.projects.currentId() !== b) throw new Error('Leave anyway did not open the other project');
+          if (!/HUNTf full A/.test(asked[0] && asked[0].title || '')) throw new Error('the question does not name the project that is not saved: ' + JSON.stringify(asked[0] && asked[0].title).replace(/"/g, "'"));
         }, 1100);
+        /* …and back into his project with new unsaved work, for the finger half. B saves fine, so leaving it asks nothing. */
+        window.__fmStep = '690 storage: back to A with new unsaved work';
+        realDialog = false;
+        await FM.projects.open(a); await sleep(100);
+        if (FM.projects.currentId() !== a) throw new Error('setup: could not go back to project A after Leave anyway');
+        if (asked.length !== 1) throw new Error('setup: going back to project A from project B, which saves fine, asked a question (' + asked.length + ' asked so far)');
+        const L3 = FM.makeLayer('text', { name: 'HUNTf unsaved 2', text: 'my second title', x: 160, y: 90 });
+        L3.start = 0; L3.duration = 2; FM.scene.layers.push(L3); FM.refreshAll(); FM.history.commit();
+        await sleep(900);   // the 600 ms autosave runs and fails
+        if (FM.storage.flushSync()) throw new Error('setup: back in project A the save did not fail, so the phone is not full and the finger half measures nothing');
+        realDialog = true;
+        /* 2. he opens his other project — and says Stay, with a finger, at phone width */
+        await atPhoneWidth(async function () {
+          window.__fmStep = '690 storage: 2 open → Stay';
+          const going = FM.projects.open(b);
+          const s = await hfAskUp('when he opened another project with unsaved work on a full phone');
+          const stay = hfCentre(s.querySelector('.fm-ask-cancel'));
+          if (!stay.w || !stay.h) throw new Error('the Stay button has no size on a phone, so he cannot tap it');
+          await realInput924([{ t: 'touchStart', x: stay.x, y: stay.y, ms: 60 }, { t: 'touchEnd', x: stay.x, y: stay.y, ms: 0 }], 'a finger on Stay');
+          const res = await going;
+          if (res !== false) throw new Error('after Stay, projects.open() answered ' + res + ' instead of false — its callers cannot tell the switch did not happen');
+          if (FM.projects.currentId() !== a) throw new Error('he said Stay and was moved to another project anyway');
+          if (!has('HUNTf unsaved 2')) throw new Error('he said Stay and the text layer he had just added is gone');
+          if (!/HUNTf full A/.test(asked[1] && asked[1].title || '')) throw new Error('the question does not name the project that is not saved: ' + JSON.stringify(asked[1] && asked[1].title).replace(/"/g, "'"));
+          /* 3. + → Create: the same question, and Stay leaves no half-made project behind */
+          window.__fmStep = '690 storage: 3 create → Stay';
+          const n0 = FM.projects.list().length;
+          const making = FM.projects.create({ name: 'HUNTf never made' });
+          const s2 = await hfAskUp('when he created a new project with unsaved work on a full phone');
+          const stay2 = hfCentre(s2.querySelector('.fm-ask-cancel'));
+          await realInput924([{ t: 'touchStart', x: stay2.x, y: stay2.y, ms: 60 }, { t: 'touchEnd', x: stay2.x, y: stay2.y, ms: 0 }], 'a finger on Stay (Create)');
+          const pid = await making;
+          if (pid !== false) throw new Error('after Stay, projects.create() answered ' + pid + ' instead of false');
+          if (FM.projects.list().length !== n0) throw new Error('after Stay on Create a project was still added (' + n0 + ' → ' + FM.projects.list().length + ')');
+          if (FM.projects.currentId() !== a || !has('HUNTf unsaved 2')) throw new Error('after Stay on Create he was not left in his project with his work');
+          /* 4. Home → a card: asked BEFORE the push starts, and Stay leaves him on Home */
+          window.__fmStep = '690 storage: 4 Home card → Stay';
+          FM.home.open(); await sleep(250);
+          const tapping = FM.home._openProject(b);
+          const s3 = await hfAskUp('when he tapped another project card on Home');
+          const app = document.getElementById('app');
+          if (document.body.classList.contains('fm-pushing') || (app && app.classList.contains('fm-push-wait'))) throw new Error('the question came up half-way through the push into the editor — Home was already sliding away under it');
+          const stay3 = hfCentre(s3.querySelector('.fm-ask-cancel'));
+          await realInput924([{ t: 'touchStart', x: stay3.x, y: stay3.y, ms: 60 }, { t: 'touchEnd', x: stay3.x, y: stay3.y, ms: 0 }], 'a finger on Stay (Home card)');
+          const r3 = await tapping;
+          if (r3 !== null) throw new Error('after Stay on a Home card tap, openProject answered ' + r3 + ' (null means he chose to stay; false would make its ⋯ actions say busy)');
+          await sleep(200);
+          if (!FM.home.isOpen()) throw new Error('after Stay on a Home card tap, Home closed anyway');
+          if (FM.projects.currentId() !== a || !has('HUNTf unsaved 2')) throw new Error('after Stay on a Home card tap his project or its unsaved layer was lost');
+          FM.home.close(); await sleep(200);
+        }, 380);
       });
-      if (asked.length !== 4) throw new Error('expected exactly four questions (open, create, Home card, open), got ' + asked.length);
+      if (asked.length !== 4) throw new Error('expected exactly four questions (open, then open, create and Home card), got ' + asked.length);
     } finally {
       Storage.prototype.setItem = realSet; FM.ask = realAsk;
       if (localStorage.setItem !== instSet) localStorage.setItem = instSet;
@@ -94569,35 +94593,6 @@
     const saved = FM.scene;
     const bad = [];
     try {
-      /* THE PHONE: hold a clip, carry it into the right edge, hold there while the timeline scrolls, let go. */
-      await atPhoneWidth(async function () {
-        await onScreen924(async function () {
-          const L = await hunt4aScene([{ start: 0, duration: 2 }, { start: 2, duration: 2 }, { start: 0, duration: 8 }], 8);
-          FM.setTime(1); FM.timeline.updatePlayhead(); await sleep(400);
-          const tl = document.getElementById('timeline'), tr = tl.getBoundingClientRect();
-          const cr = hunt4aClip(L[0].id).getBoundingClientRect();
-          const x = cr.left + cr.width / 2, y = cr.top + cr.height / 2;
-          if (x > 370 || y > 740 || x < 10) throw new Error('setup: the clip is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
-          const sl0 = tl.scrollLeft, s0 = L[0].start, edgeX = tr.right - 6;
-          const D = huntDowns();
-          const steps = [{ t: 'touchStart', x: x, y: y, ms: 600 }];
-          for (let k = 1; k <= 10; k++) steps.push({ t: 'touchMove', x: x + (edgeX - x) * k / 10, y: y, ms: 40 });
-          steps.push({ t: 'touchMove', x: edgeX, y: y, ms: 700 });
-          try { await realInput924(steps, 'holding the clip and carrying it into the right edge'); } finally { D.stop(); }
-          const R = hunt4aAtRelease(L[0].id);
-          try { await realInput924([{ t: 'touchEnd', x: edgeX, y: y, ms: 0 }], 'letting go at the edge'); await sleep(500); } finally { R.stop(); }
-          if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch') throw new Error('CONTROL: the hold was not a trusted touch (' + hunt4aSay(D.downs) + ')');
-          if (!(L[0].start > s0 + 1)) throw new Error('CONTROL: the hold and carry did not move the clip (start ' + s0 + ' -> ' + L[0].start.toFixed(2) + ') — no clip drag happened');
-          if (!(R.rec.sl > sl0 + 100)) throw new Error('CONTROL: holding at the right edge did not scroll the timeline (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px), so there was nothing to throw back');
-          const onAt = R.rec.clip && R.rec.clip.right > tr.left + 70 && R.rec.clip.left < tr.right;
-          if (!onAt) throw new Error('CONTROL: at the moment he let go the clip was not on screen either (' + hunt4aSay(R.rec.clip) + ')');
-          const after = hunt4aClip(L[0].id).getBoundingClientRect();
-          const off = after.left >= tr.right - 4 || after.right <= tr.left + 70;
-          if (off || Math.abs(tl.scrollLeft - R.rec.sl) > (tr.width / 3)) {
-            bad.push('on the phone he held a clip and carried it to the right edge; the timeline scrolled with him (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px) and the clip sat under his finger at x ' + Math.round(R.rec.clip.left) + '..' + Math.round(R.rec.clip.right) + '; the moment he let go the timeline jumped back to ' + Math.round(tl.scrollLeft) + ' px and the clip is now at x ' + Math.round(after.left) + '..' + Math.round(after.right) + ', off a ' + Math.round(tr.right) + ' px screen — he has to scroll to find what he just placed');
-          }
-        });
-      }, 380);
       /* THE PC: drag a clip's right trim handle into the right edge with the mouse, hold while it extends, let go. Only
          when the driver's window is wide enough to reach the PC timeline (the 1280 pass); the phone half runs in both. */
       if (hunt4aWide()) {
@@ -94627,6 +94622,39 @@
           });
         }, 1280);
       }
+      /* The PC half runs FIRST and says what it found BEFORE the finger (6 Oct, the port audit): a browser that cannot
+         emulate a finger stops this test at its first touch (realInput924), and a failure collected before that point would
+         be reported as NOT RUN with it — so the PC verdict is thrown here, and only then does the phone half begin. */
+      if (bad.length) throw new Error(bad.join('; AND '));
+      /* THE PHONE: hold a clip, carry it into the right edge, hold there while the timeline scrolls, let go. */
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = await hunt4aScene([{ start: 0, duration: 2 }, { start: 2, duration: 2 }, { start: 0, duration: 8 }], 8);
+          FM.setTime(1); FM.timeline.updatePlayhead(); await sleep(400);
+          const tl = document.getElementById('timeline'), tr = tl.getBoundingClientRect();
+          const cr = hunt4aClip(L[0].id).getBoundingClientRect();
+          const x = cr.left + cr.width / 2, y = cr.top + cr.height / 2;
+          if (x > 370 || y > 740 || x < 10) throw new Error('setup: the clip is at ' + Math.round(x) + ',' + Math.round(y) + ', out of reach of real input');
+          const sl0 = tl.scrollLeft, s0 = L[0].start, edgeX = tr.right - 6;
+          const D = huntDowns();
+          const steps = [{ t: 'touchStart', x: x, y: y, ms: 600 }];
+          for (let k = 1; k <= 10; k++) steps.push({ t: 'touchMove', x: x + (edgeX - x) * k / 10, y: y, ms: 40 });
+          steps.push({ t: 'touchMove', x: edgeX, y: y, ms: 700 });
+          try { await realInput924(steps, 'holding the clip and carrying it into the right edge'); } finally { D.stop(); }
+          const R = hunt4aAtRelease(L[0].id);
+          try { await realInput924([{ t: 'touchEnd', x: edgeX, y: y, ms: 0 }], 'letting go at the edge'); await sleep(500); } finally { R.stop(); }
+          if (!D.downs.length || !D.downs[0].trusted || D.downs[0].kind !== 'touch') throw new Error('CONTROL: the hold was not a trusted touch (' + hunt4aSay(D.downs) + ')');
+          if (!(L[0].start > s0 + 1)) throw new Error('CONTROL: the hold and carry did not move the clip (start ' + s0 + ' -> ' + L[0].start.toFixed(2) + ') — no clip drag happened');
+          if (!(R.rec.sl > sl0 + 100)) throw new Error('CONTROL: holding at the right edge did not scroll the timeline (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px), so there was nothing to throw back');
+          const onAt = R.rec.clip && R.rec.clip.right > tr.left + 70 && R.rec.clip.left < tr.right;
+          if (!onAt) throw new Error('CONTROL: at the moment he let go the clip was not on screen either (' + hunt4aSay(R.rec.clip) + ')');
+          const after = hunt4aClip(L[0].id).getBoundingClientRect();
+          const off = after.left >= tr.right - 4 || after.right <= tr.left + 70;
+          if (off || Math.abs(tl.scrollLeft - R.rec.sl) > (tr.width / 3)) {
+            bad.push('on the phone he held a clip and carried it to the right edge; the timeline scrolled with him (' + Math.round(sl0) + ' -> ' + Math.round(R.rec.sl) + ' px) and the clip sat under his finger at x ' + Math.round(R.rec.clip.left) + '..' + Math.round(R.rec.clip.right) + '; the moment he let go the timeline jumped back to ' + Math.round(tl.scrollLeft) + ' px and the clip is now at x ' + Math.round(after.left) + '..' + Math.round(after.right) + ', off a ' + Math.round(tr.right) + ' px screen — he has to scroll to find what he just placed');
+          }
+        });
+      }, 380);
       if (bad.length) throw new Error(bad.join('; AND '));
     } finally { hunt4aCleanup(saved); }
   });
@@ -94680,8 +94708,11 @@
       return { worst: worst, t: TIMES[at], was: before[at], now: now[at], start: v.start };
     }
     try {
-      for (const kind of ['touch', 'mouse']) {
+      // the mouse FIRST, and its verdict before the finger (6 Oct, the port audit): a browser that cannot emulate a finger
+      // stops this test at its first touch (realInput924), and a failure collected before that would be reported NOT RUN with it
+      for (const kind of ['mouse', 'touch']) {
         if (kind === 'mouse' && !hunt4aWide()) continue;   // the 380 pass cannot reach the PC timeline; the finger half runs in both
+        if (kind === 'touch' && bad.length) throw new Error(bad.join('; AND '));
         const run = async (fn) => kind === 'touch' ? atPhoneWidth(fn, 380) : atWideWidth(fn, 1280);
         await run(async function () {
           await onScreen924(async function () {
@@ -96643,13 +96674,20 @@
       if (over > 2.5 / 30) bad.push('at ' + where + ' he ' + (touch ? 'tapped' : 'clicked') + ' at ' + stop.at.toFixed(3) + ' s and playback stopped at ' + FM.time.toFixed(3) + ' s, ' + Math.round(over * 1000) + ' ms (' + Math.round(over * 30) + ' frames) later');
     }
     try {
-      await atPhoneWidth(async function () { await onScreen924(async function () { await run('380 px', true); }); }, 380);
+      /* The mouse and the double tap FIRST, and their verdict before the finger (6 Oct, the port audit): a browser that
+         cannot emulate a finger stops this test at its first touch (realInput924), and anything found before that would be
+         reported NOT RUN with it. So both are judged, and thrown, before the phone half begins. */
       // the 380 pass's driver window cannot reach a pill that sits at x 640 of a 1280 frame; the finger half runs in both
       if (hunt4aWide()) await atWideWidth(async function () { await onScreen924(async function () { await run('1280 px', false); }); }, 1280);
       /* …and a double tap while playing still stops it ONCE. The stop no longer waits, so the second tap of a double tap
          finds playback already stopped, and would START it again 240 ms later unless it is ignored, as it always was. A
          real double tap brings a dblclick with it, which cancels that start anyway and would hide the case — but a
-         phone's double tap can arrive without one, so two bare clicks are sent here, 80 ms apart. */
+         phone's double tap can arrive without one, so two bare clicks are sent here, 80 ms apart. On its own beat clip:
+         at 380 nothing above has made one. */
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const L2 = FM.makeLayer('shape', { name: 'HUNT-a beat', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#e0245e', start: 0, duration: 8 });
+      FM.scene = scene([L2], { project: { width: 1080, height: 1920, fps: 30, duration: 8, background: '#000000' } });
+      FM.refreshAll(); FM.selectLayer(null); FM.loop = false;
       FM.pause(); FM.setTime(0.5); await sleep(300);   // any 240 ms window left by the taps above has closed
       FM.play();
       await sleep(300);
@@ -96660,6 +96698,9 @@
       pill2.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       await sleep(500);
       if (FM.playing) bad.push('a double tap on the pill while playing stopped it and then started it again 240 ms later - the second tap was not ignored');
+      if (bad.length) throw new Error('stopping playback with the play pill overshoots the moment he taps, so he cannot stop on a beat: ' + bad.join('; '));
+      FM.pause(); await sleep(300);
+      await atPhoneWidth(async function () { await onScreen924(async function () { await run('380 px', true); }); }, 380);
       if (bad.length) throw new Error('stopping playback with the play pill overshoots the moment he taps, so he cannot stop on a beat: ' + bad.join('; '));
     } finally {
       FM.pause(); FM.scene = saved; FM.time = t0; try { FM.refreshAll(); } catch (e) {}
@@ -98012,11 +98053,14 @@
     try {
       try { localStorage.setItem('fm.fx.tapHint', '1'); } catch (e) {}
       const said = [];
-      await atPhoneWidth(async function () { await onScreen924(async function () { said.push(await run(false, 380)); }); }, 380);
-      // The PC half needs the driver's own window to be wide: the 380 pass cannot reach the PC transport, which sits past x 380.
+      const verdict = () => { const bad = said.filter(Boolean); if (bad.length) throw new Error(h6Say(bad.join('. And ') + '. Every undo while tuning an effect folds its controls away, and he has to find the effect and open it again to carry on')); };
+      /* The PC half FIRST, and its verdict before the finger (6 Oct, the port audit): a browser that cannot emulate a finger
+         stops this test at its first touch (realInput924), and a finding collected before that would be reported NOT RUN.
+         The PC half needs the driver's own window to be wide: the 380 pass cannot reach the PC transport, which sits past x 380. */
       if (hunt4aWide()) await atWideWidth(async function () { await onScreen924(async function () { said.push(await run(true, 1280)); }); }, 1280);
-      const bad = said.filter(Boolean);
-      if (bad.length) throw new Error(h6Say(bad.join('. And ') + '. Every undo while tuning an effect folds its controls away, and he has to find the effect and open it again to carry on'));
+      verdict();
+      await atPhoneWidth(async function () { await onScreen924(async function () { said.push(await run(false, 380)); }); }, 380);
+      verdict();
     } finally {
       hb2Restore(keep);
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
@@ -98945,6 +98989,49 @@
           const pick = function () {
             return Array.prototype.filter.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'), function (c) { const y = hcPt(c).y; return y > 260 && y < 500; })[0];
           };
+          /* Three seeded cards in a row, on screen, clear of the select bar — for the drag-selects below. */
+          const run = async function (needPic) {
+            await sleep(300);
+            const cards = Array.prototype.slice.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'));
+            const top = document.getElementById('hm-selbar') ? document.getElementById('hm-selbar').getBoundingClientRect().top : 700;
+            for (let i = 0; i + 2 < cards.length; i++) {
+              const y0 = hcPt(cards[i]).y, y2 = hcPt(cards[i + 2]).y;
+              const img = cards[i].querySelector('.hm-thumb img');
+              if (needPic && !(img && img.complete && img.naturalWidth)) continue;
+              if (y0 > 200 && y2 + 30 < Math.min(top, 700)) return [cards[i], cards[i + 1], cards[i + 2]];
+            }
+            throw new Error('setup: no three cards in a row on screen with Select on' + (needPic ? ', the first with its picture showing' : ''));
+          };
+          const reselect = async function () {
+            const b = document.getElementById('hm-select-btn');
+            if (FM.home._selectionState().selectMode) { b.click(); await sleep(300); }
+            b.click(); await sleep(400);
+            if (!FM.home._selectionState().selectMode || FM.home._selectionState().selected.length) throw new Error('setup: could not start Select again with nothing ticked');
+          };
+          /* THE MOUSE FIRST (6 Oct, the port audit): a browser that cannot emulate a finger stops this test at its first touch
+             (realInput924), so the half it CAN run goes before it — this one used to come last and never ran there. With
+             Select on, a real mouse drag, which cannot scroll anything, still paints the run. Started on a seeded card's
+             picture, the biggest thing on it (a drag from a picture picks the picture up instead), so the list is brought to
+             the seeded cards first: on a full run the suite's own projects fill the first screen. */
+          const seeded = document.querySelector('#home-screen .hm-card[data-pid="' + ids[0] + '"]');
+          if (!seeded) throw new Error('setup: the first seeded project has no card on Home');
+          sc.scrollTop += seeded.getBoundingClientRect().top - sc.getBoundingClientRect().top - 240; await sleep(400);
+          await reselect();
+          const tri2 = await run(true), want2 = tri2.map(function (c) { return c.dataset.pid; });
+          const m0 = hcPt(tri2[0], 40), mEnd = hcPt(tri2[2], 40).y;   // on the card's picture — the biggest thing on it
+          const drag = [{ t: 'mouseMove', x: m0.x, y: m0.y, ms: 40 }, { t: 'mouseDown', x: m0.x, y: m0.y, ms: 60 }];
+          for (let k = 1; k <= 10; k++) drag.push({ t: 'mouseMove', x: m0.x, y: Math.round(m0.y + (mEnd - m0.y) * k / 10), ms: 30 });
+          drag.push({ t: 'mouseUp', x: m0.x, y: mEnd, ms: 0 });
+          await realInput924(drag, 'a mouse drag down over three cards with Select on');
+          await sleep(500);
+          const gotMouse = FM.home._selectionState().selected.slice().sort().join();
+          if (gotMouse !== want2.slice().sort().join()) {
+            throw new Error('with Select on, a real mouse dragged from the picture on ' + ha7Name(want2[0]) + ' down to ' + ha7Name(want2[2]) + ' and the ticks are [' + FM.home._selectionState().selected.map(ha7Name).join(', ') + '] — on PC a drag has to paint the run (a drag from a picture picks the picture up instead)');
+          }
+          /* …then the finger: Select off, back at the top. */
+          document.getElementById('hm-select-btn').click(); await sleep(400);
+          if (FM.home._selectionState().selectMode) throw new Error('setup: the Select button did not turn Select off after the mouse drag');
+          sc.scrollTop = 0; await sleep(400);
           /* CONTROL: with Select off, the same real swipe scrolls the list — the gesture and the driver are fine. */
           const c0 = pick(); if (!c0) throw new Error('setup: no card sits between y 260 and 500 on Home');
           await realInput924(ha7Swipe(hcPt(c0, 70), -250), 'a swipe up on the Home list with Select off');
@@ -98968,25 +99055,7 @@
               (ticked.length ? ' while ' + ticked.length + ' project(s) he only swiped across got ticked (' + ticked.map(ha7Name).join(', ') + ')' : '') +
               ': every swipe that starts on a card paints ticks instead of scrolling, so he cannot get down to the projects further down to select them — only the thin strip beside the cards scrolls');
           }
-          /* …AND THE DRAG-SELECT IS STILL THERE. Three seeded cards in a row, on screen, clear of the select bar. */
-          const run = async function (needPic) {
-            await sleep(300);
-            const cards = Array.prototype.slice.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'));
-            const top = document.getElementById('hm-selbar') ? document.getElementById('hm-selbar').getBoundingClientRect().top : 700;
-            for (let i = 0; i + 2 < cards.length; i++) {
-              const y0 = hcPt(cards[i]).y, y2 = hcPt(cards[i + 2]).y;
-              const img = cards[i].querySelector('.hm-thumb img');
-              if (needPic && !(img && img.complete && img.naturalWidth)) continue;
-              if (y0 > 200 && y2 + 30 < Math.min(top, 700)) return [cards[i], cards[i + 1], cards[i + 2]];
-            }
-            throw new Error('setup: no three cards in a row on screen with Select on' + (needPic ? ', the first with its picture showing' : ''));
-          };
-          const reselect = async function () {
-            const b = document.getElementById('hm-select-btn');
-            if (FM.home._selectionState().selectMode) { b.click(); await sleep(300); }
-            b.click(); await sleep(400);
-            if (!FM.home._selectionState().selectMode || FM.home._selectionState().selected.length) throw new Error('setup: could not start Select again with nothing ticked');
-          };
+          /* …AND THE DRAG-SELECT IS STILL THERE under a finger: a hold, then a slide. */
           await reselect();
           const tri = await run(), want = tri.map(function (c) { return c.dataset.pid; });
           const a = hcPt(tri[0], 70), end = hcPt(tri[2], 70).y + 20;
@@ -99000,18 +99069,6 @@
           if (gotHold !== want.slice().sort().join()) {
             throw new Error('with Select on, he held ' + ha7Name(want[0]) + ' and slid the same finger over ' + ha7Name(want[1]) + ' to ' + ha7Name(want[2]) + ' and the ticks are [' + FM.home._selectionState().selected.map(ha7Name).join(', ') +
               '] — the drag-select he asked for has to survive the swipe fix' + (Math.abs(sc.scrollTop - sHold) > 2 ? ' (the list scrolled ' + Math.round(sc.scrollTop - sHold) + ' px instead)' : ''));
-          }
-          await reselect();
-          const tri2 = await run(true), want2 = tri2.map(function (c) { return c.dataset.pid; });
-          const m0 = hcPt(tri2[0], 40), mEnd = hcPt(tri2[2], 40).y;   // on the card's picture — the biggest thing on it
-          const drag = [{ t: 'mouseMove', x: m0.x, y: m0.y, ms: 40 }, { t: 'mouseDown', x: m0.x, y: m0.y, ms: 60 }];
-          for (let k = 1; k <= 10; k++) drag.push({ t: 'mouseMove', x: m0.x, y: Math.round(m0.y + (mEnd - m0.y) * k / 10), ms: 30 });
-          drag.push({ t: 'mouseUp', x: m0.x, y: mEnd, ms: 0 });
-          await realInput924(drag, 'a mouse drag down over three cards with Select on');
-          await sleep(500);
-          const gotMouse = FM.home._selectionState().selected.slice().sort().join();
-          if (gotMouse !== want2.slice().sort().join()) {
-            throw new Error('with Select on, a real mouse dragged from the picture on ' + ha7Name(want2[0]) + ' down to ' + ha7Name(want2[2]) + ' and the ticks are [' + FM.home._selectionState().selected.map(ha7Name).join(', ') + '] — on PC a drag has to paint the run (a drag from a picture picks the picture up instead)');
           }
         }, 380);
       });
@@ -110343,7 +110400,8 @@
     const ripples = () => document.getAnimations().filter(a => /^np947-/.test(a.id || '') && a.playState === 'running');
     const made = [];
     try {
-      for (const where of ['phone', 'pc']) {
+      // the PC FIRST (6 Oct, the port audit): a browser that cannot emulate a finger stops this test at its first touch (realInput924)
+      for (const where of ['pc', 'phone']) {
         await (where === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
           await onScreen924(async function () {
             if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
@@ -111745,8 +111803,9 @@
         await wait(2200);                              // past the first-open entrance, if this open ran it
         const pt = home.querySelector('.hm-tab[data-tab="projects"]');
         if (pt && !pt.classList.contains('active')) { pt.click(); await wait(700); }
-        await atPhoneWidth(() => oneWidth(390, '390', 'tap'), 390);
+        // the PC FIRST (6 Oct, the port audit): a browser that cannot emulate a finger stops this test at its first touch (realInput924)
         await atWideWidth(() => oneWidth(1280, '1280', 'click'), 1280);
+        await atPhoneWidth(() => oneWidth(390, '390', 'tap'), 390);
       });
     } finally {
       FM.projects.list = list0;
