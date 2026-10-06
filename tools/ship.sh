@@ -65,6 +65,7 @@ printf 'RUNNING %s %s %s\n' "$$" "$(grep -o '>v[0-9][0-9.]*<' index.html | head 
 # recorded in .last-ship. bash does not stop on a failed `.`, hence the explicit check.
 . "$(dirname "$0")/_platform.sh" || { echo "❌ tools/_platform.sh is missing — the gates below cannot ask this machine anything"; exit 1; }
 . "$(dirname "$0")/_testfloor.sh" || { echo "❌ tools/_testfloor.sh is missing — the suite gates cannot run"; exit 1; }
+. "$(dirname "$0")/_shipgates.sh" || { echo "❌ tools/_shipgates.sh is missing — the gates below cannot run"; exit 1; }
 # ⚠️ ONLY THE MAC SHIPS — UNTIL THE PM SAYS OTHERWISE (6 Oct, his words: "The Mac is STILL the only machine that ships or
 # pushes to main"). The WSL laptop has this repo, a loop to run and a CLAUDE.md that says "ship an unshipped tree" on a new
 # chat's first message — so the rule is a gate, not a sentence. The PM lifts it at the switch-over, once both full passes are
@@ -283,8 +284,9 @@ fi
 # costing a whole ship. The rule is the suite's; this only moves it to the front of the line.
 # `[^']`, not `[^'\n]` (6 Oct): inside brackets `\n` is a backslash and the letter n, not a newline — measured on GNU grep,
 # `test('an "x" y'` slipped through, i.e. any title with an n in it (2264 of 2286). grep matches one line at a time, so
-# excluding the newline was never needed.
-_DQ="$(grep -nE "test\('[^']*\"[^']*'" tests/tests.js | head -3)"
+# excluding the newline was never needed. And ANCHORED to a declaration (the PM's review): dq_titles in tools/_shipgates.sh,
+# where tools/test-port.sh runs it against a regex `.test('…"…')` line that the unanchored pattern refused every ship on.
+_DQ="$(dq_titles tests/tests.js)"
 [ -z "$_DQ" ] || { echo "❌ a test title contains a double quote — the FAIL line would be cut short in ship.sh and mutate.sh; use single quotes:"; echo "$_DQ" | cut -c1-160; exit 1; }
 
 # ─── NO NUL BYTES IN SOURCE (28 Aug) ────────────────────────────────────────────────────────────────

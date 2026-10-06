@@ -56,6 +56,20 @@ out="$(PATH="$(shim_os Linux):$PATH" bash -c '. tools/_testfloor.sh; notrun_repo
 out="$(PATH="$(shim_os Darwin):$PATH" bash -c '. tools/_testfloor.sh; notrun_report "$1" desktop' _ '{"ok": true, "summary": "Regression 2/2 ✓", "failures": [], "notRun": []}')"; rc=$?
 [ "$rc" = 0 ] && [ -z "$out" ] && ok "control: none NOT RUN on the Mac → silent, 0" || bad "notrun_report none: rc=$rc $out"
 
+echo "── ship.sh's double-quote title gate matches a test DECLARATION, not a .test('…\"…') call (review minor) ──"
+# ship.sh's own _DQ line, evaluated in a fixture — so this tests what ship.sh does, whatever it does
+DQLINE="$(grep -m1 '^_DQ=' tools/ship.sh)"
+dq_in() { ( cd "$1" && . "$REPO/tools/_shipgates.sh" 2>/dev/null; eval "$DQLINE"; printf '%s' "$_DQ" ); }
+mkdir -p "$TMP/dq1/tests" "$TMP/dq2/tests"
+printf "  test('a plain title', function () {\n    if (!/x/.test('<b class=\"x\">')) throw new Error('no');\n    var v = latest('a \"b\" c');\n  });\n" > "$TMP/dq1/tests/tests.js"
+printf "  test('a \"quoted\" title', function () {});\n" > "$TMP/dq2/tests/tests.js"
+[ -n "$DQLINE" ] || bad "ship.sh has no _DQ= line any more — this check cannot see the gate"
+v="$(dq_in "$TMP/dq1")"
+[ -z "$v" ] && ok "a regex .test('<b class=\"x\">') and a latest('a \"b\" c') call are not test titles — no refusal" || bad "the DQ gate refuses on a line that declares no test: $v"
+v="$(dq_in "$TMP/dq2")"
+[ -n "$v" ] && ok "control: a title with a double quote in it is still refused" || bad "the DQ gate no longer catches a real double-quoted title"
+[ -z "$(dq_in "$REPO")" ] && ok "today's tests/tests.js: no double-quoted title" || bad "today's tests.js has a double-quoted title: $(dq_in "$REPO")"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"
