@@ -253,6 +253,32 @@ printf '%s' "$v" | grep -q '^ISOLATED' && ok "_mouse_state reads an isolated wor
 printf '%s' "$v" | grep -q '^CONFIRM' && printf '%s' "$v" | grep -q '^GIVESUP' && ok "_confirm_mouse waits for the mouse to come back, and gives up (False) when it does not" || bad "_confirm_mouse: $v"
 awk '/_confirm_mouse\(cdp\)/{c=NR} /w.__fmInputErr=%s;w.__fmInputDone=%s/{d=NR} END{exit !(c && d && c < d)}' tests/_cdp.py && ok "…and a real-input batch is answered only after it (the line order in tests/_cdp.py)" || bad "the batch is answered before the mouse is confirmed"
 
+echo "── the driver says when the app's text was measured in another font than the Mac's (review minor) ──"
+v="$(python3 - <<'PY' 2>&1
+import sys, json
+sys.path.insert(0, 'tests'); sys.dont_write_bytecode = True
+import _cdp, _platform
+if not hasattr(_cdp, '_font_parity'): print('NOFONT'); sys.exit()
+class Fake:
+    def __init__(self, ans): self.ans = ans
+    def eval(self, expr, await_promise=False): return json.dumps(self.ans)
+_platform.MAC_FONT = {"resolved": "-apple-system", "width": 400.0}
+a = _cdp._font_parity(Fake({"stack": "x", "resolved": "-apple-system", "width": 400.2}))
+b = _cdp._font_parity(Fake({"stack": "x", "resolved": "DejaVu Sans", "width": 452.1}))
+c = _cdp._font_parity(Fake({"stack": "x", "resolved": "-apple-system", "width": 409.0}))
+print('SAME' if a["same"] is True else 'A=%r' % a)
+print('DIFF' if b["same"] is False and c["same"] is False else 'B=%r C=%r' % (b, c))
+PY
+)"
+printf '%s' "$v" | grep -q '^SAME' && printf '%s' "$v" | grep -q '^DIFF' && ok "_font_parity: the Mac's font within 0.5 px is the same; another font, or 9 px wider, is not" || bad "_font_parity: $v"
+l="$(. tools/_testfloor.sh; font_report '{"ok": true, "fontParity": {"resolved": "DejaVu Sans", "width": 452.1, "same": false, "mac": {"resolved": "-apple-system", "width": 400}}}' phone)"
+case "$l" in *"FONT (phone pass)"*"DejaVu Sans"*"-apple-system"*) ok "ship.sh's font_report says it, naming both fonts";; *) bad "font_report: [$l]";; esac
+l="$(. tools/_testfloor.sh; font_report '{"ok": true, "fontParity": {"resolved": "-apple-system", "width": 400, "same": true}}' phone)"
+[ -z "$l" ] && ok "…and says nothing when the font is the Mac's" || bad "font_report on the same font: [$l]"
+grep -q 'font_report "$OUT" desktop' tools/ship.sh && grep -q 'font_report "$POUT" phone' tools/ship.sh && ok "ship.sh reports it after both passes" || bad "ship.sh does not call font_report after both passes"
+python3 -c 'import sys; sys.path.insert(0, "tests"); import _platform as P; sys.exit(0 if P.MAC_FONT.get("width") and P.MAC_FONT.get("resolved") else 1)' \
+  && ok "the Mac's own measurement is recorded (tests/_platform.py MAC_FONT) — without it the check could never say 'different'" || bad "MAC_FONT has no width: the font check is inert"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"

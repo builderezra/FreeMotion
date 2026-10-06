@@ -92,3 +92,26 @@ notrun_report() {
   fi
   return 0
 }
+# font_report — one ⚠️ line when the driver measured the app's text in a different font than the Mac's (tests/_cdp.py
+# fontParity, 6 Oct — the PM's review). Reported, never refused: a different font moves every width, wrap and clip the
+# suite measures, so a layout green here is not proven for his iPhone — the Mac's passes are the ones that say so.
+font_report() {
+  printf '%s' "$1" | python3 -c '
+import json, sys
+raw = sys.stdin.read(); dec = json.JSONDecoder()
+for i in [0] + [k + 1 for k, c in enumerate(raw) if c == "\n"]:
+    if raw.startswith("{", i):
+        try: d, _ = dec.raw_decode(raw, i)
+        except ValueError: continue
+        if isinstance(d, dict) and "ok" in d:
+            f = d.get("fontParity") or {}
+            if f.get("same") is False:
+                m = f.get("mac") or {}
+                print("⚠️  FONT (%s pass): the app text was measured in %s (%s px), the Mac draws it in %s (%s px) — widths, wraps"
+                      " and clipping on this pass are NOT the Mac or iPhone ones; trust a layout once the Mac passes it too."
+                      % (sys.argv[1], f.get("resolved"), f.get("width"), m.get("resolved"), m.get("width")))
+            break
+' "${2:-a}" 2>/dev/null
+  return 0
+}
+

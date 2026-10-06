@@ -233,6 +233,42 @@ def _mouse_state(cdp):
     return None
 
 
+FONT_JS = r"""(function(){
+  var f = document.getElementById('app'), w = f && f.contentWindow; if (!w || !w.document || !w.document.body) return null;
+  var stack = w.getComputedStyle(w.document.body).fontFamily || '';
+  var c = w.document.createElement('canvas').getContext('2d'), REF = %s;
+  function width(ff) { c.font = '16px ' + ff; return c.measureText(REF).width; }
+  // the first family in the stack this browser HAS: a family it lacks falls back, so it measures the same as the fallback
+  var fams = stack.split(',').map(function (s) { return s.trim(); }), used = '';
+  var GENERIC = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-sans-serif|ui-serif|ui-monospace|math|emoji)$/i;
+  for (var i = 0; i < fams.length && !used; i++) {
+    var x = fams[i];
+    if (GENERIC.test(x)) { used = x; break; }
+    if (width(x + ', monospace') !== width('monospace') || width(x + ', serif') !== width('serif')) used = x;
+  }
+  return JSON.stringify({ stack: stack, resolved: used.replace(/"/g, ''), width: Math.round(width(stack) * 100) / 100 });
+})()"""
+
+
+def _font_parity(cdp):
+    """The app's resolved font and the width of a reference string in it, compared with the Mac's (tests/_platform.py
+    MAC_FONT). Reported, never judged: {"resolved", "width", "mac", "same"} — "same" None when the Mac's width is not
+    recorded yet. None when it could not be measured (the app frame was gone)."""
+    try:
+        got = json.loads(cdp.eval(FONT_JS % json.dumps(_platform.FONT_REF)) or "null")
+    except Exception:
+        return None
+    if not isinstance(got, dict):
+        return None
+    mac = _platform.MAC_FONT
+    same = None
+    if mac.get("width") is not None:
+        same = (got.get("resolved") == mac.get("resolved")
+                and abs(float(got.get("width") or 0) - float(mac["width"])) <= _platform.FONT_TOLERANCE_PX)
+    got.update({"mac": mac, "same": same})
+    return got
+
+
 def _confirm_mouse(cdp, seconds=3.0):
     """Poll until the page reports a mouse again, up to `seconds`. True when it does. Called BEFORE a real-input batch is
     answered (6 Oct, the review): the answer used to go first and the gate re-checked at the next loop, ~1 s of four False
@@ -689,6 +725,8 @@ def main():
             return _did_not_run("the runner's NOT RUN HERE list (window.__fmNotRun) could not be read, so whether every test "
                                 "ran is unknown.", track["name"])
         green = "✓" in data["sum"] and "Error" not in data["sum"]
+        # THE FONT THE TEXT WAS MEASURED IN (6 Oct, the PM's review) — reported, never judged: see tests/_platform.py MAC_FONT
+        font = _font_parity(cdp)
         if a.quiet:
             # --quiet trims the PASSING noise, never the failures. It used to print the summary alone,
             # which lost the one thing worth having: on 2026-08-13 a desktop run came back 230/231 and
@@ -698,9 +736,12 @@ def main():
                 print("   FAIL: " + row.replace("\n", " ")[:300])
             for r in not_run:
                 print("   NOT RUN HERE: " + str(r.get("name", ""))[:160] + " — " + str(r.get("reason", "")).replace("FAIL", "fail")[:200])
+            if font and font.get("same") is False:
+                print("   ⚠️ FONT: text was measured in %s (%.2f px) — the Mac's is %s (%s px); widths, wraps and clipping here are "
+                      "not the Mac's or his iPhone's" % (font.get("resolved"), font.get("width") or 0, font["mac"].get("resolved"), font["mac"].get("width")))
         else:
             out = {"ok": green, "summary": data["sum"], "failures": data["fails"], "notRun": not_run, "browser": _browser(),
-                   "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
+                   "fontParity": font, "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
             if a.names:
                 out["ran"] = ran          # null when the runner page published no list — a reader must then say so, not guess
             print(json.dumps(out, indent=1, ensure_ascii=False))

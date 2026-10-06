@@ -152,6 +152,19 @@ def reap_pattern():
     return None
 
 
+# THE APP'S FONT, AS THE MAC DRAWS IT (6 Oct, the PM's port review). styles.css's stack starts with Apple fonts
+# (-apple-system, BlinkMacSystemFont, "SF Pro Display"), which Linux does not have, so there every text-width, wrap and
+# clipping measurement — and every text-bearing pixel hash — is taken in a fallback font that is on neither his iPhone nor
+# the Mac, and a label-clipping regression like queue 431 can pass there if the fallback is narrower. tests/_cdp.py measures
+# FONT_REF at 16px in the app's resolved font after every run and compares it with these numbers, measured on the Mac
+# (Chrome 154, 6 Oct). A difference is REPORTED (fontParity in the JSON, a line from ship.sh) — never a pass or a fail.
+FONT_REF = "The quick brown fox jumps — Export · Add layer · 0123456789"
+# Measured on the Mac, 6 Oct (Chrome 154 headless, the app frame at 900 px): Chrome resolves the stack's BlinkMacSystemFont
+# as "system-ui" (-apple-system is not a family canvas text can be measured in), and FONT_REF at 16px is 450.9 px wide.
+MAC_FONT = {"resolved": "system-ui", "width": 450.9}
+FONT_TOLERANCE_PX = 0.5
+
+
 def driver_pattern():
     """The `pgrep -f` pattern for a RUNNING test driver — a PYTHON process whose arguments name _cdp.py (6 Oct, the review).
 
