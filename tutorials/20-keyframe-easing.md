@@ -5,11 +5,11 @@ You'll be able to change how a move feels, from steady to eased or bouncy.
 1. First make a move with two keyframes (tutorial 04). Keep the clip selected with the **Position / Scale** card open.
 2. Slide the timeline so the middle line sits between the two diamonds. The curve you edit belongs to the stretch the playhead is in.
 3. On the left edge of the panel, tap the small curve button just under the big diamond. A graph opens.
-4. A new move is **Linear**: the same speed all the way. Under the graph is a row of small curve pictures. From the left they are Linear, Ease In, Ease Out, Ease In-Out, Overshoot and Anticipate. Tap one.
+4. A new move is **Linear**: the same speed all the way. Under the graph are two rows. The top row is the kind of curve (**Bezier**, **Bounce**, **Steps**). The row below it has six small curve pictures. From the left they are Linear, Ease In, Ease Out, Ease In-Out, Overshoot and Anticipate. Tap one.
 5. Drag either round handle on the graph to draw your own curve.
 6. For bouncy motion, tap **Bounce** in the row of kinds (**Bezier**, **Bounce**, **Steps**). Its pictures are Bounce, Elastic, Cyclic and Random.
 7. Slide the timeline back before the move and quick-tap the time counter to watch it.
-8. To close the graph, tap **‹ Position / Scale** at the top of the panel. (The back arrow at the top left would close the clip's whole options panel instead.)
+8. To close the graph, tap **‹ Position / Scale** at the top of the panel. (Not the back arrow at the top left: on a phone that deselects the clip, and on a computer it goes Home.)
 
 On a computer: the same. The graph opens in the panel at the bottom left, and you drag the handles with the mouse.
 
@@ -36,3 +36,5 @@ If it doesn't work: If the graph is empty it says "Animate this property (tap �
 | Tip: loop button | js/graph-editor.js:488 | yes |
 | Tip: copy and paste graph buttons | js/graph-editor.js:525 | yes |
 | If: empty-graph message | js/graph-editor.js:440 | yes |
+| 4 two rows under the graph: kinds, then presets | js/graph-editor.js:550 | yes |
+| 8 phone back arrow deselects; computer goes Home | js/mobile.js:347, js/app.js:6909-6912 | yes |

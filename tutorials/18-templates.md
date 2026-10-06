@@ -14,7 +14,7 @@ On a computer: the same. Click instead of tap.
 
 Tip: **Save template file…** in the same menu makes a file you can send to anyone.
 
-If it doesn't work: If you tapped the card itself, a message says **Editing "name"**. That is the template, not a new project. Tap the back arrow at the top left until you reach Home (the first tap only deselects a clip), which saves it, then use the three dots and **New project from template**.
+If it doesn't work: If you tapped the card itself, a message says **Editing "name"**. That is the template, not a new project, and anything you change is saved into the template when you go Home. If you changed something, tap undo until it's back how it was. Then go Home with the back arrow at the top left (on a phone the first tap only deselects a clip), and use the three dots and **New project from template**.
 
 ### Verification (checked against the code at b46b47d, v17.23)
 
@@ -35,3 +35,5 @@ If it doesn't work: If you tapped the card itself, a message says **Editing "nam
 | 7 Delete template… then Delete | js/home.js:2015 | yes |
 | Tip: Save template file… | js/home.js:2007 | yes |
 | If: Editing message | js/home.js:2037 | yes |
+| If: tapping a card edits the template; going Home writes back | js/home.js:2030-2037, :3387 | yes |
+| If: on a computer the back button goes straight Home | js/app.js:6909-6912 | yes |

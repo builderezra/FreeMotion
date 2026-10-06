@@ -5,7 +5,7 @@ You'll be able to move the whole scene as if a camera were filming it.
 1. If you see a single timeline row with an edit panel under it, tap the back arrow at the top left **once** to deselect. (With nothing selected it goes Home.) Then tap the row that says "Tap to add a layer".
 2. Tap the **Elements** tab, then **Camera**. If you can't see it, swipe the tiles sideways. This is a virtual camera inside your project, not your phone's camera.
 3. A **Camera** layer appears and nothing changes yet. A project can only have one. Adding a second says "Scene already has a camera".
-4. With the camera selected, open **Position / Scale**. Make sure the first of the four icons on the right edge (Move) is lit.
+4. With the camera selected, open **Position / Scale**. The first of the four icons on the right edge (Move) should be lit. If it isn't, tap it once. (Tapping it while it's lit switches to the anchor point and hides the diamond. Tap it again to come back.)
 5. Slide the timeline to the start. Tap the diamond on the left edge. That is your first keyframe.
 6. Slide later, tap the diamond again, then tap the **X** number and type a clearly different number. Press Return.
 7. Slide back to the start and quick-tap the time counter. The whole scene pans.
@@ -36,3 +36,4 @@ If it doesn't work: If nothing moves, check the camera is the selected layer whe
 | 8 smears when the CAMERA moves | js/inspector.js:5823 | yes |
 | Tip: FOV and Distance need depth | js/inspector.js:5837 | yes |
 | Tip: Field of view / Distance rows | js/inspector.js:5842 | yes |
+| 4 Move pressed while lit switches to anchor and hides the diamond | js/inspector.js:5370-5378, :4970-4977 | yes |

@@ -15,7 +15,7 @@ On a computer: click an empty spot in the timeline so nothing is selected. The A
 
 Tip: Only layers **below** the adjustment are changed. A title above it stays untouched.
 
-If it doesn't work: If your video doesn't change, the adjustment is below it. Delete it, tap the small up-down switch in the row with the time counter to move the add row to the top, and add it again.
+If it doesn't work: If your video doesn't change, the adjustment is below it. Delete it. Tap the small up-down switch in the row with the time counter until its knob sits at the top (that moves the add row to the top of the timeline), then add the adjustment again. Brightness and Saturation come back on by themselves, but you'll need to redo any changes you made.
 
 ### Verification (checked against the code at b46b47d, v17.23)
 
@@ -37,3 +37,4 @@ If it doesn't work: If your video doesn't change, the adjustment is below it. De
 | If: new layers land at the add row position | js/app.js:2943 | yes |
 | If: the up-down switch moves the add row | index.html:544 | yes |
 | PC: Delete key deletes the layer | js/app.js:9020 | yes |
+| If: the switch sends the add row to the end furthest from it | js/app.js:2927 | yes |
