@@ -118,6 +118,146 @@
     throw e;
   }
 
+  /* PER-OS BASELINES (6 Oct, #1071 — his answer: the recommended plan). Some tests pin output recorded ON THE MAC: picture
+     hashes and sample hashes "byte for byte as on v17.xx" (482), a blur tolerance measured there (986 C24). Another OS's
+     rasteriser and audio engine give other bytes for the same, correct code — the first WSL pass had 16 such reds with
+     nothing broken. So a pinned value is looked up PER OS:
+       • macOS — the literal in this file, exactly as it was. Nothing about the Mac's tests changes.
+       • another OS — tests/baselines.json[<os>], recorded there by tools/record-baselines.sh on a tree the Mac has passed.
+         Not recorded (or not every key) → NOT RUN HERE: no baseline recorded for <os> (run tools/record-baselines.sh).
+     A test that pins declares { pinned: true } — the recorder runs exactly those (?pinned=1), and pinned() refuses in one
+     that does not. Compare with pinSame(table, key, got), never `got !== table[key]`, so a recording run can capture got.
+     ?fmos=<name> fakes the OS and ?fmbaselines=<file under tests/> another baselines file — for the proof runs only; ship.sh,
+     prove.sh, spotcheck.sh and mutate.sh never pass either. ?fmrecord=1 is the recorder's (tools/record-baselines.sh). */
+  var PIN_QS = (function () { try { return new URLSearchParams((window.top || window).location.search); } catch (e) { return new URLSearchParams(''); } })();
+  var FM_OS = (function () {
+    var fake = PIN_QS.get('fmos');
+    if (fake) return String(fake).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    var p = ''; try { p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || ''; } catch (e) {}
+    if (/mac/i.test(p)) return 'macos';
+    if (/linux|x11|cros/i.test(p)) return 'linux';
+    if (/win/i.test(p)) return 'windows';
+    return 'unknown';
+  })();
+  var FM_RECORD = PIN_QS.get('fmrecord') === '1';
+  var BASELINES = null;                    // tests/baselines.json, read once by run() before the first test (not on the Mac)
+  var PIN_TABLES = {};                     // key → the table a recording run hands out (so a second call gets the same one)
+  var PIN_REC = (typeof WeakMap === 'function') ? new WeakMap() : null;   // a table being RECORDED → its key
+  var PIN_LOG = { tables: {}, tols: {}, macKeys: {} };   // what a recording run captured (window.__fmBaselineRecord at the end)
+  function pinKey(name) { return String(window.__fmLastTest || '?') + ' / ' + name; }
+  function pinGuard(name) {
+    if (!window.__fmCurPinned) throw new Error('pinned(' + name + ') in a test that does not declare { pinned: true } — tools/record-baselines.sh runs only those (?pinned=1), so on another OS this one would never be recorded');
+    if (FM_RECORD && FM_OS === 'macos') throw new Error('a baseline-recording run on macOS: the Mac\'s values are the literals in tests/tests.js — there is nothing to record (tools/record-baselines.sh refuses this before it starts)');
+  }
+  function pinOs() { return (BASELINES && BASELINES[FM_OS]) || null; }
+  function pinned(name, macTable) {
+    pinGuard(name);
+    if (FM_OS === 'macos') return macTable;
+    var key = pinKey(name), macKeys = Object.keys(macTable);
+    if (FM_RECORD) {
+      if (!PIN_TABLES[key]) {
+        var t = Array.isArray(macTable) ? macTable.slice() : Object.assign({}, macTable);
+        PIN_TABLES[key] = t; PIN_REC.set(t, key); PIN_LOG.tables[key] = PIN_LOG.tables[key] || {}; PIN_LOG.macKeys[key] = macKeys;
+      }
+      return PIN_TABLES[key];
+    }
+    var os = pinOs(), rec = os && os.tables && os.tables[key];
+    if (!rec) notRunHere('no baseline recorded for ' + FM_OS + ' (run tools/record-baselines.sh) — "' + name + '" holds pictures or samples recorded on the Mac');
+    var miss = macKeys.filter(function (k) { return !Object.prototype.hasOwnProperty.call(rec, k); });
+    if (miss.length) notRunHere('the ' + FM_OS + ' baseline for "' + name + '" is incomplete (' + miss.length + ' of ' + macKeys.length + ' keys missing, e.g. ' + miss[0] + ') — run tools/record-baselines.sh');
+    if (Array.isArray(macTable)) return macKeys.map(function (k) { return rec[k]; });
+    var out = {}; macKeys.forEach(function (k) { out[k] = rec[k]; });
+    return out;
+  }
+  /* got === table[k] — or, in a recording run, remember got as this OS's value and say yes. The table then holds what was
+     recorded, so a later CONTROL in the same test ("the new control must draw something else than the default") compares
+     against this OS's default, not the Mac's. */
+  function pinSame(table, k, got) {
+    var key = PIN_REC && PIN_REC.get(table);
+    if (key !== undefined) { PIN_LOG.tables[key][k] = got; table[k] = got; return true; }
+    return got === table[k];
+  }
+  function pinRecording(table) { return !!(PIN_REC && PIN_REC.has(table)); }
+  // table[k][i] (a pinned table of arrays: the Glitch kernel's two plate sizes)
+  function pinSameAt(table, k, i, got) {
+    var key = PIN_REC && PIN_REC.get(table);
+    if (key !== undefined) {
+      var a = PIN_LOG.tables[key][k] || (table[k] || []).slice();   // a copy: never write into the Mac's literal
+      a[i] = got; PIN_LOG.tables[key][k] = a; table[k] = a; return true;
+    }
+    return got === (table[k] || [])[i];
+  }
+  // the keys of a shared pinned table that ONE test reads (a module-level table several tests read a slice of)
+  function pinPick(o, keys) { var r = {}; keys.forEach(function (k) { if (Object.prototype.hasOwnProperty.call(o, k)) r[k] = o[k]; }); return r; }
+
+  /* FEATURES A BROWSER MAY NOT HAVE (6 Oct, #1071). Asked of the FEATURE, never of the OS name: a test that cannot measure
+     its subject here says NOT RUN HERE: needs <feature> — by name, never a pass, never a red. Linux Chrome has no AAC
+     encoder (AudioEncoder mp4a.40.2 unsupported; decoding works) and no BarcodeDetector backend; the Mac and his iPhone have
+     both. tools/ship.sh refuses a release whose diff touches the export-audio or QR code unless these RAN and passed on the
+     machine shipping it. Call at the TOP of the test, before it stubs anything (several stub AudioEncoder themselves). */
+  async function needsAac() {
+    var ok = false;
+    try {
+      ok = typeof AudioEncoder !== 'undefined' &&
+        !!(await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 160000 })).supported;
+    } catch (e) { ok = false; }
+    if (!ok) notRunHere('needs an AAC audio encoder (AudioEncoder mp4a.40.2) — this browser has none (Linux Chrome; the Mac and his iPhone have one)');
+  }
+  async function needsBarcodeDetector() {
+    var why = '';
+    if (typeof BarcodeDetector === 'undefined') why = 'this browser has no BarcodeDetector';
+    else {
+      // a browser can EXPOSE it and still not implement it (Linux Chrome with the feature flag: detect() rejects)
+      try { var c = document.createElement('canvas'); c.width = c.height = 8; await new BarcodeDetector({ formats: ['qr_code'] }).detect(c); }
+      catch (e) { why = 'this browser exposes BarcodeDetector but cannot detect with it (' + String((e && e.message) || e).slice(0, 80) + ')'; }
+    }
+    if (why) notRunHere('needs a working BarcodeDetector (qr_code) — ' + why + ' (the Mac and Android Chrome have one)');
+  }
+  /* ?fmfake=noaac,nobarcode takes a feature AWAY for one run — the proof that the tests above say NOT RUN HERE instead of
+     failing or passing on a machine without it. Never passed by ship.sh, prove.sh, spotcheck.sh or mutate.sh; restored at
+     the end of the run. noaac: AudioEncoder answers mp4a "unsupported" and refuses to configure it, as Linux Chrome does;
+     nobarcode: BarcodeDetector is undefined, as on Linux and Safari. */
+  var FAKES = String(PIN_QS.get('fmfake') || '').split(',').filter(Boolean);
+  function applyFakes() {
+    var undo = [];
+    if (FAKES.indexOf('noaac') >= 0 && typeof window.AudioEncoder !== 'undefined') {
+      var RealAE = window.AudioEncoder, isAac = function (c) { return !!(c && /^mp4a/i.test(String(c.codec || ''))); };
+      var FakeAE = function (init) {
+        var e = new RealAE(init), cfg = e.configure.bind(e);
+        e.configure = function (c) { if (isAac(c)) throw new DOMException('Unsupported codec (fmfake=noaac)', 'NotSupportedError'); return cfg(c); };
+        return e;
+      };
+      FakeAE.isConfigSupported = function (c) { return isAac(c) ? Promise.resolve({ supported: false, config: c }) : RealAE.isConfigSupported(c); };
+      window.AudioEncoder = FakeAE;
+      undo.push(function () { window.AudioEncoder = RealAE; });
+    }
+    if (FAKES.indexOf('nobarcode') >= 0 && typeof window.BarcodeDetector !== 'undefined') {
+      var RealBD = window.BarcodeDetector;
+      window.BarcodeDetector = undefined;
+      undo.push(function () { window.BarcodeDetector = RealBD; });
+    }
+    return function () { undo.forEach(function (f) { try { f(); } catch (e) {} }); };
+  }
+  /* A TOLERANCE set on the Mac (the share of an effect a fallback may miss it by). lim(case, macLim, measured): the Mac's
+     own number on macOS; elsewhere the larger of the Mac's and 1.25 × what that OS measured when it was recorded (a correct
+     tree there), so a real regression — measured at 2.8–10 × the Mac's limit when these were written — still fails. */
+  var TOL_HEADROOM = 1.25;
+  function pinTol(name) {
+    pinGuard(name);
+    if (FM_OS === 'macos') return { lim: function (c, macLim) { return macLim; } };
+    var key = pinKey(name);
+    if (FM_RECORD) {
+      var o = PIN_LOG.tols[key] = PIN_LOG.tols[key] || {};
+      return { lim: function (c, macLim, measured) { o[c] = Math.max(o[c] || 0, Number(measured) || 0); return Infinity; } };
+    }
+    var os = pinOs(), rec = os && os.tols && os.tols[key];
+    if (!rec) notRunHere('no baseline recorded for ' + FM_OS + ' (run tools/record-baselines.sh) — "' + name + '" is a tolerance measured on the Mac');
+    return { lim: function (c, macLim) {
+      if (!Object.prototype.hasOwnProperty.call(rec, c)) notRunHere('the ' + FM_OS + ' baseline for "' + name + '" has no case "' + c + '" — run tools/record-baselines.sh');
+      return Math.max(macLim, rec[c] * TOL_HEADROOM);
+    } };
+  }
+
   /* A NAME WITH A DOUBLE QUOTE IN IT TRUNCATES ITS OWN FAILURE REPORT, and this is a note turned into
      a gate. tools/mutate.sh and tools/ship.sh both read the runner's JSON with `grep -o 'FAIL[^"]*'`,
      because the summary is JSON and a greedy match would run past it — so the first `"` inside a test
@@ -37633,7 +37773,8 @@
   test('921 S6 the Share panel hands out a link, a QR the camera reads back as that link, and a 9-character code; Reset makes new ones and the owner stops listening on the old', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S6('the invite panel');
     const S = C.signal;
-    if (typeof BarcodeDetector === 'undefined') throw new Error('this browser has no BarcodeDetector, so nothing here can read a QR code back — this test cannot measure the one thing that matters about it');
+    // nothing here can read a QR code back without one — NOT RUN HERE where it is missing, never a red (6 Oct, #1071)
+    await needsBarcodeDetector();
     await withFakeNet921(async function (net) {
       await withLabs921(async function (ui) {
         await withCollab921([layer921('A')], async function (ctx) {
@@ -40674,7 +40815,8 @@
   test('921 S8 [Scan QR] reads the app’s own invite code off the camera into the Join field and waits for a tap — jsQR is fetched only when the scanner opens on a browser with no BarcodeDetector, and the camera always goes off', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S8('the QR scanner');
     if (!C.qr || typeof C.qr.reader !== 'function') throw new Error('there is no QR reader (FM.collab.qr.reader) — the S8 scanner is not built');
-    if (typeof BarcodeDetector === 'undefined') throw new Error('this browser has no BarcodeDetector, so the native half cannot be measured here');
+    // the native half cannot be measured without one — NOT RUN HERE where it is missing, never a red (6 Oct, #1071)
+    await needsBarcodeDetector();
     const S = C.signal;
     const link = S.inviteLink(S.newRoom());
     const realBD = window.BarcodeDetector;
@@ -59567,7 +59709,7 @@
      * mutation cost a five-minute suite per attempt before this existed. The summary is stamped FILTERED so
      * neither ship.sh nor mutate.sh — which never pass a filter — could ever read a partial run as green. */
     // tests.js is evaluated INSIDE the app frame, so the runner page's query lives on window.top.
-    var qs = null; try { qs = new URLSearchParams((window.top || window).location.search); if (!qs.get('only') && !qs.get('upto') && !qs.get('after')) qs = new URLSearchParams(location.search); } catch (e) {}
+    var qs = null; try { qs = new URLSearchParams((window.top || window).location.search); if (!qs.get('only') && !qs.get('upto') && !qs.get('after') && !qs.get('pinned')) qs = new URLSearchParams(location.search); } catch (e) {}
     var only = qs && qs.get('only'), upto = qs && qs.get('upto'), after = qs && qs.get('after');
     var LIST = T;
     // `?after=<substring>&upto=<substring>` runs the tests in suite ORDER between two names (exclusive / inclusive),
@@ -59578,7 +59720,19 @@
     // `?only=` may carry SEVERAL substrings separated by newlines (%0A) — tools/prove.sh runs every test a
     // release changed in ONE pass rather than one Chrome per test (5 Sep). A single value still works as before.
     if (only) { var onlyList = String(only).split('\n').filter(Boolean); LIST = LIST.filter(function (t) { return onlyList.some(function (o) { return String(t.name).indexOf(o) >= 0; }); }); }
-    if (only || upto || after) window.__fmFiltered = 'FILTERED(' + [only && 'only=' + only, after && 'after=' + after, upto && 'upto=' + upto].filter(Boolean).join(' ') + ', ' + LIST.length + ' of ' + T.length + ')';
+    // `?pinned=1` runs only the tests that pin a per-OS baseline ({ pinned: true }) — tools/record-baselines.sh's slice
+    var pinnedOnly = qs && qs.get('pinned') === '1';
+    if (pinnedOnly) LIST = LIST.filter(function (t) { return t.pinned; });
+    if (only || upto || after || pinnedOnly) window.__fmFiltered = 'FILTERED(' + [only && 'only=' + only, after && 'after=' + after, upto && 'upto=' + upto, pinnedOnly && 'pinned=1'].filter(Boolean).join(' ') + ', ' + LIST.length + ' of ' + T.length + ')';
+    // the per-OS baselines (pinned(), above): read once, and only where they are needed — the Mac's are the literals here.
+    // A file that cannot be read is NOT "no difference": every pinned test then says NOT RUN HERE, by name.
+    if (FM_OS !== 'macos' && !FM_RECORD) {
+      var bfile = String(PIN_QS.get('fmbaselines') || 'baselines.json');
+      if (!/^[A-Za-z0-9_.-]+\.json$/.test(bfile)) bfile = 'baselines.json';
+      try { var br = await fetch('../tests/' + bfile + '?t=' + Date.now(), { cache: 'no-store' }); BASELINES = br.ok ? await br.json() : {}; }
+      catch (e) { BASELINES = {}; }
+    }
+    var undoFakes = applyFakes();   // ?fmfake= (a proof run only) — put back after the last test
     for (var i = 0; i < LIST.length; i++) {
       var t = LIST[i], ok = true, err = null, notRun = '';
       window.__fmCurPinned = !!t.pinned;   // pinned() refuses in a test that did not declare { pinned: true } (see there)
@@ -59660,6 +59814,7 @@
       } catch (e) {}
       results.push({ name: t.name, item: t.item, pending: t.pending, ok: ok, error: err, notRun: notRun });   // a NOT RUN that leaked state above is a FAIL, not a NOT RUN
     }
+    undoFakes();
     var reg = results.filter(function (r) { return !r.pending; });
     if (window.__fmFiltered) results.__filtered = window.__fmFiltered;
     results.__slowest = window.__fmSlow || [];   // the eight slowest tests of this run (ms, name)
@@ -59667,6 +59822,14 @@
     // NOT RUN HERE: counted in the total (so the test floor still sees every registered test), never in the passes, and
     // green only means "nothing that RAN failed" — run.html prints the count beside the summary and lists every one.
     var notRunList = results.filter(function (r) { return r.notRun; }).map(function (r) { return { name: r.name, item: r.item || '', reason: r.notRun }; });
+    // a baseline-recording run (?fmrecord=1) publishes what it captured, and which tables did not see every Mac key
+    if (FM_RECORD) {
+      var incomplete = Object.keys(PIN_LOG.macKeys).filter(function (k) {
+        return PIN_LOG.macKeys[k].some(function (mk) { return !Object.prototype.hasOwnProperty.call(PIN_LOG.tables[k] || {}, mk); });
+      });
+      window.__fmBaselineRecord = { os: FM_OS, tables: PIN_LOG.tables, tols: PIN_LOG.tols, incomplete: incomplete,
+                                    tests: LIST.filter(function (t) { return t.pinned; }).map(function (t) { return t.name; }) };
+    }
     return {
       regressionPass: reg.filter(function (r) { return r.ok; }).length,
       regressionTotal: reg.length,
@@ -66044,6 +66207,8 @@
   }
 
   test('export: a browser with no AAC encoder ships an honest silent file, not one promising a track (queue 215)', { item: '215' }, async function () {
+    // its control needs a REAL AAC encode (measured 6 Oct: with AAC taken away it went red) — NOT RUN HERE without one (#1071)
+    await needsAac();
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     const P = FM.scene.project;
     const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height, toast: FM.toast };
@@ -66140,6 +66305,8 @@
   }
 
   test('export: a soundtrack that is entirely muted says so instead of shipping a silent file (queue 215)', { item: '215' }, async function () {
+    // its control needs a REAL AAC encode (measured 6 Oct: with AAC taken away it went red) — NOT RUN HERE without one (#1071)
+    await needsAac();
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     const P = FM.scene.project;
     const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height };
@@ -89361,6 +89528,8 @@
    * FIXED (queue 690): a look-ahead limiter (js/exporter.js limitMix) turns down only the moments that would clip, so
    * the song keeps its level before and after the overlap, and the overlap is still held under 1.0. */
   test('690 one short sound effect over a song turns down only the overlap in the exported file, not the whole song', { item: '690', budgetMs: 120000 }, async function () {
+    // its control needs a REAL AAC encode (measured 6 Oct: with AAC taken away it went red) — NOT RUN HERE without one (#1071)
+    await needsAac();
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, made = [];
@@ -99389,6 +99558,8 @@
    * soundtrack as an M4A through FM.exporter.encodeM4A.
    * CONTROL: in the soundtrack the exporter builds before encoding, the click is at 1.000 s. */
   test('690 the sound in an exported video and an exported M4A lines up with the picture, and the audio track ends with the video', { item: '690', budgetMs: 120000 }, async function () {
+    // its control needs a REAL AAC encode (measured 6 Oct: with AAC taken away it went red) — NOT RUN HERE without one (#1071)
+    await needsAac();
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, made = [];
@@ -111713,7 +111884,8 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
-  test('986 C24 on a device without ctx.filter, Halation, Compound Blur, Backfill, Liquid Glass and Motion Blur (Footage) keep their blur', { item: '986', budgetMs: 90000 }, function () {
+  test('986 C24 on a device without ctx.filter, Halation, Compound Blur, Backfill, Liquid Glass and Motion Blur (Footage) keep their blur', { item: '986', pinned: true, budgetMs: 90000 }, function () {
+    const TOL = pinTol('blur share');   // the Mac's limits on macOS; this OS's recorded share x 1.25 elsewhere (tests.js pinTol)
     /* Only the nine CSS effects asked ctxFilterOK(); these five set ctx.filter = 'blur(…)' regardless, and on his
        class of phone that string is silently IGNORED. FM._forceNoCtxFilter alone cannot show it — the effects never
        asked — so ctx.filter is made genuinely dead for the duration (the descriptor swap queue 836's test uses).
@@ -111753,7 +111925,7 @@
           FM._forceNoCtxFilter = true; FM._noGL = noGL; FM.glColor._reset();
           let dead;
           try { dead = cases[name](1)(); } finally { if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc); FM._forceNoCtxFilter = false; FM._noGL = false; }
-          const err = mean(dead, ref), lim = noGL ? 0.15 : 0.1;
+          const err = mean(dead, ref), lim = TOL.lim(name + (noGL ? ' noGL' : ''), noGL ? 0.15 : 0.1, err / size);
           if (!(err <= size * lim)) bad.push(name + (noGL ? ' (no WebGL either)' : '') + ' misses the real filter by ' + err.toFixed(2) + ' — ' + (err / size).toFixed(2) + ' of the effect itself (' + size.toFixed(2) + ')');
         }
       }
@@ -112956,7 +113128,7 @@
     colorbalance: { preserve: 0, soft: 100 },
   };
 
-  test('482 polish 1 every new control is in the catalogue at a default that draws the old look - the 56 library filters and the seven effects render byte for byte as on v17.14', { item: '482', budgetMs: 120000 }, function () {
+  test('482 polish 1 every new control is in the catalogue at a default that draws the old look - the 56 library filters and the seven effects render byte for byte as on v17.14', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
        render-time fill (queue 784) agrees with that default — a fill that read a different literal off the kernel would
        restyle every saved project the first time it drew. Leak edge is the one that must stay ABSENT: it follows Leak. */
@@ -112992,8 +113164,8 @@
        0.5 render) is re-captured after that fix — and again after the #986 batch 2 review taught it a ramp from a step (this
        texture's blue channel is a steep sawtooth: MEASURED against the export shrunk, Blueprint's 0.5 render went from 56
        levels off to 22, Comic Ink's from 7.7 to 6.3); the first (240 wide, the export) is v17.14's to the byte. */
-    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
-    const HEAD_FX = { 'filmgrain/image': '2e19d26a/0f06368b', 'filmgrain/shape': '4c6e1d70/1923071e', 'lightleak/image': '8d3548c2/dd26433f', 'lightleak/shape': '85f6b0dc/a682c6df', 'glow/image': '4982cf31/73d5725a', 'glow/shape': '079f0f43/40fb8939', 'letterbox/image': '13ff85ed/ac039da2', 'letterbox/shape': '3842b4f7/62416c45', 'faded/image': '5fdf89a1/0bf1c4cb', 'faded/shape': 'dc16c171/9d8844ae', 'temperature/image': '971867df/50ef3714', 'temperature/shape': '6f093827/cf9c7296', 'colorbalance/image': '971867df/50ef3714', 'colorbalance/shape': '6f093827/cf9c7296' };
+    const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
+    const HEAD_FX = pinned('HEAD_FX', { 'filmgrain/image': '2e19d26a/0f06368b', 'filmgrain/shape': '4c6e1d70/1923071e', 'lightleak/image': '8d3548c2/dd26433f', 'lightleak/shape': '85f6b0dc/a682c6df', 'glow/image': '4982cf31/73d5725a', 'glow/shape': '079f0f43/40fb8939', 'letterbox/image': '13ff85ed/ac039da2', 'letterbox/shape': '3842b4f7/62416c45', 'faded/image': '5fdf89a1/0bf1c4cb', 'faded/shape': 'dc16c171/9d8844ae', 'temperature/image': '971867df/50ef3714', 'temperature/shape': '6f093827/cf9c7296', 'colorbalance/image': '971867df/50ef3714', 'colorbalance/shape': '6f093827/cf9c7296' });
     const all = FM.filters.all();
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
@@ -113002,14 +113174,14 @@
       all.forEach(f => {
         const L = clip(); L.effects = [FM.filters.makeInstance(f.id)];
         const got = shots482(L);
-        if (got !== HEAD_FILTERS[f.id]) moved.push(f.name + ' ' + HEAD_FILTERS[f.id] + ' -> ' + got);
+        if (!pinSame(HEAD_FILTERS, f.id, got)) moved.push(f.name + ' ' + HEAD_FILTERS[f.id] + ' -> ' + got);
       });
       Object.keys(NEW482).forEach(type => {
         ['image', 'shape'].forEach(kind => {
           const L = kind === 'image' ? clip() : FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 });
           L.start = 0; L.duration = 4; L.effects = [FM.fxRegistry.makeInstance(type)];
           const got = shots482(L);
-          if (got !== HEAD_FX[type + '/' + kind]) moved.push('a new ' + type + ' on ' + kind + ' ' + HEAD_FX[type + '/' + kind] + ' -> ' + got);
+          if (!pinSame(HEAD_FX, type + '/' + kind, got)) moved.push('a new ' + type + ' on ' + kind + ' ' + HEAD_FX[type + '/' + kind] + ' -> ' + got);
         });
       });
     } finally { ids.forEach(id => FM.media.remove(id)); }
@@ -113660,7 +113832,8 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
-  test('986 C24 batch 2 on a device without ctx.filter, the mask feather, Luma Matte feather, 3D shading, Temporal Denoise smoothing, Light Wrap, camera focus blur and an adjustment grade keep their look', { item: '986', budgetMs: 120000 }, function () {
+  test('986 C24 batch 2 on a device without ctx.filter, the mask feather, Luma Matte feather, 3D shading, Temporal Denoise smoothing, Light Wrap, camera focus blur and an adjustment grade keep their look', { item: '986', pinned: true, budgetMs: 120000 }, function () {
+    const TOL = pinTol('look share');   // the Mac's limits on macOS; this OS's recorded share x 1.25 elsewhere (tests.js pinTol)
     /* The v17.14 C24 fix covered five effects; these seven sites set ctx.filter too, and where it is silently ignored
        (his class of phone) each lost its look. MEASURED on 768c83d0 with ctx.filter made genuinely dead (the descriptor
        swap C24's test uses), the error against the real filter as a share of the look itself: the shape mask's
@@ -113722,7 +113895,7 @@
             FM._forceNoCtxFilter = true; FM._noGL = noGL; FM.glColor._reset();
             let dead;
             try { dead = build(1)(); } finally { if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc); FM._forceNoCtxFilter = false; FM._noGL = false; }
-            const err = mean(dead, ref), lim = (noGL ? limNoGL : limGL) + (phone ? PHONE_SLACK : 0);
+            const err = mean(dead, ref), lim = TOL.lim(name + where + (noGL ? ' noGL' : ''), (noGL ? limNoGL : limGL) + (phone ? PHONE_SLACK : 0), err / size);
             if (!(err <= size * lim)) bad.push(name + where + (noGL ? ' (no WebGL either)' : '') + ' misses the real filter by ' + err.toFixed(2) + ' - ' + (err / size).toFixed(2) + ' of the look itself (' + size.toFixed(2) + ')');
           }
         }
@@ -113748,6 +113921,7 @@
   /* runs cases { name: build(on, render) → () => pixels } at the export, a half-size and his phone's 0.28 preview, and
      returns every miss: the dead-filter picture off the real one by more than `lim(noGL, phone)` of the look itself */
   const _986r2Sweep = (cases, noGLs, lim) => {
+    const TOL = pinTol('sweep share');   // the Mac's limits on macOS; this OS's recorded share x 1.25 elsewhere (tests.js pinTol)
     if (!FM.ctxFilterOK || !FM.ctxFilterOK()) throw new Error('no ctx.filter in this browser, so there is no reference picture to compare against');
     if (!FM.glColor || !FM.glColor.available()) throw new Error('WebGL is not available, so his phone’s path cannot be exercised: ' + (FM.glColor ? FM.glColor.stats().reason : 'no FM.glColor'));
     const was = { force: FM._forceNoCtxFilter, noGL: FM._noGL }, bad = [];
@@ -113761,7 +113935,7 @@
           const size = _986r2Mean(ref, bare);
           if (!(size > 1)) throw new Error('CONTROL: ' + name + where + ' changes the picture by only ' + size.toFixed(2) + ' with ctx.filter working - the fixture is not showing it');
           for (const noGL of noGLs) {
-            const err = _986r2Mean(_986r2Dead(() => cases[name](1, R)(), noGL), ref), L = lim(noGL, phone);
+            const err = _986r2Mean(_986r2Dead(() => cases[name](1, R)(), noGL), ref), L = TOL.lim(name + where + (noGL ? ' noGL' : ''), lim(noGL, phone), err / size);
             if (!(err <= size * L)) bad.push(name + where + (noGL ? ' (no WebGL either)' : '') + ' misses the real filter by ' + err.toFixed(2) + ' - ' + (err / size).toFixed(2) + ' of the look itself (' + size.toFixed(2) + '), limit ' + L);
           }
         }
@@ -113787,7 +113961,7 @@
   const _986r2Rect = (o) => { const L = FM.makeLayer('shape', Object.assign({ shape: 'rect', x: 100, y: 75, shapeW: 120, shapeH: 90, fill: '#ffffff' }, o)); L.start = 0; L.duration = 4; return L; };
   const _986r2Adj = (fx) => { const A = FM.makeLayer('adjustment', { name: 'a' }); A.start = 0; A.duration = 4; A.effects = fx; return A; };
 
-  test('986 C24 review Glow after a colour effect keeps the grade on a device without ctx.filter - on an adjustment layer and on a clip', { item: '986', budgetMs: 90000 }, function () {
+  test('986 C24 review Glow after a colour effect keeps the grade on a device without ctx.filter - on an adjustment layer and on a clip', { item: '986', pinned: true, budgetMs: 90000 }, function () {
     /* The colour pass renders into the GPU's one canvas and the Glow's halo is blurred into that SAME canvas — with no
        Blur between them nothing copied the graded picture out first, so the halo overwrote it and the layer drew as the
        frame blurred under its own glow. MEASURED with ctx.filter dead and WebGL on, the error against the real filter
@@ -113803,7 +113977,7 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
-  test('986 C24 review a feathered pen mask keeps its feather on a device without ctx.filter', { item: '986', budgetMs: 120000 }, function () {
+  test('986 C24 review a feathered pen mask keeps its feather on a device without ctx.filter', { item: '986', pinned: true, budgetMs: 120000 }, function () {
     /* buildMaskAlpha (js/masks.js) blurs each pen mask's fill with ctx.filter and had no other way, so where the filter
        is ignored every feathered pen mask drew a hard edge. MEASURED with ctx.filter dead: 1.00 of the feather's look
        lost on a shape, on a photo and inverted, at 1, 0.5 and 0.28, with WebGL or without, on 768c83d0 and on the
@@ -113818,7 +113992,7 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
-  test('986 C24 review a defocused layer casts its drop shadow from the blurred layer on a device without ctx.filter', { item: '986', budgetMs: 90000 }, function () {
+  test('986 C24 review a defocused layer casts its drop shadow from the blurred layer on a device without ctx.filter', { item: '986', pinned: true, budgetMs: 90000 }, function () {
     /* ctx.filter draws the layer blurred and THEN takes the shadow from that blurred picture, under it. The batch-2
        fallback drew the layer and its shadow sharp on its plate and blurred the pair, so the shadow came out lighter
        through the soft edge. MEASURED with ctx.filter dead, a 90x60 shape 250 deep behind the focus with a shadow at
@@ -113835,7 +114009,7 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
-  test('986 C24 review a colour chain that passes 1 clamps between effects as ctx.filter does - in the shader and on an adjustment layer', { item: '986', budgetMs: 150000 }, function () {
+  test('986 C24 review a colour chain that passes 1 clamps between effects as ctx.filter does - in the shader and on an adjustment layer', { item: '986', pinned: true, budgetMs: 150000 }, function () {
     /* ctx.filter clamps after EVERY function; the shader multiplied the whole chain into one matrix and clamped once, so
        a value pushed past 1 by Contrast or Brightness came back down under a later Sepia or Contrast instead of staying
        white. MEASURED against the real filter with ctx.filter dead: library filters on an adjustment layer — Acid Wash
@@ -114416,7 +114590,7 @@
     return { n: r.n / (k * k), cx: (r.cx + 0.5) / k, cy: (r.cy + 0.5) / k, x0: r.x0 / k, x1: (r.x1 + 1) / k, y0: r.y0 / k, y1: (r.y1 + 1) / k, w: r.w / k, h: r.h / k, ang: r.ang };
   };
 
-  test('482 2.0 Motion - every new Wiggle, Shake, Pulse, Swing, Orbit and Drift control is in the catalogue at a default that moves the old way, and saved and new movers render byte for byte as on v17.18', { item: '482', budgetMs: 120000 }, function () {
+  test('482 2.0 Motion - every new Wiggle, Shake, Pulse, Swing, Orbit and Drift control is in the catalogue at a default that moves the old way, and saved and new movers render byte for byte as on v17.18', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old motion, and the
        render-time fill (queue 784) agrees with that default. Vertical amount is the one that must stay ABSENT: it follows
        Amount, so a new wiggle keeps moving the same distance both ways when he changes Amount. */
@@ -114451,7 +114625,7 @@
     /* 2. THE PICTURES, against v17.18: all seven movers (Spin too, which shares their code), new and saved, on a clip that
        reaches the frame edge, on a shape inside it, on a clip half off the frame, the three-key Shake of the oldest projects
        and the five shipped Shake presets. */
-    const HEAD = { 'wiggle new clip': '9ab1153b/4c8cdbf3/e1752b5c', 'wiggle new shape': '154c5216/a1350ba5/b8ae71fd', 'wiggle old clip': '99064f3c/9dbbfebf/2b026d75', 'wiggle old edge': '44af2d04/3ab1cd39/a4180688',
+    const HEAD = pinned('HEAD', { 'wiggle new clip': '9ab1153b/4c8cdbf3/e1752b5c', 'wiggle new shape': '154c5216/a1350ba5/b8ae71fd', 'wiggle old clip': '99064f3c/9dbbfebf/2b026d75', 'wiggle old edge': '44af2d04/3ab1cd39/a4180688',
       'shake new clip': '2b5fe0fc/bd9aba9a/93381561', 'shake new shape': 'e72ff41b/1a63b315/c1287650', 'shake old clip': '0c982690/20fbe4a4/0eff5c4c', 'shake old edge': '6f66cdcd/fd78b8fe/b2368af3',
       'swing new clip': 'e51ec192/c0360142/9c540ff4', 'swing new shape': 'c2b50197/696eaf2f/8951ef9a', 'swing old clip': 'f59e428c/4cf35f8d/a1d5b873', 'swing old edge': '8cd05a48/ef8ef461/59884a7d',
       'spin new clip': 'bafcf302/549bc62b/9d9a3249', 'spin new shape': 'e14ae77f/dbdb3474/07e027ab', 'spin old clip': '28a7b965/9d72f6a0/e6191b61', 'spin old edge': '9191cad9/2ef9def4/cb3bc2ec',
@@ -114459,11 +114633,11 @@
       'drift new clip': '4c33c3f5/84fa1b85/6934e945', 'drift new shape': 'fa82ad37/2e2e59c6/6934e945', 'drift old clip': 'ad0c0733/496f948b/6934e945', 'drift old edge': '1892655e/8bade145/6934e945',
       'orbit new clip': '23e741c4/613be371/d4fb404e', 'orbit new shape': '065277de/015a95a5/4fa195e4', 'orbit old clip': '4a1fa6cb/1a055354/5e62476d', 'orbit old edge': '4b89e9f1/f9bf764d/b8861eaf',
       'drift slow edge': '56eb56ef/2256674d/ad30d756', 'shake three-key clip': 'dd7339f6/356e7ee8/5d479e6e',
-      'shake preset s-beatslam': '191f45ff/bd6db1eb/3f8f16c7', 'shake preset s-quake': 'f2e1d3e7/500eacf9/fcf5c91d', 'shake preset s-handheld': 'd90f95a0/a4c25752/e702c2c8', 'shake preset s-hypex': '20773597/e8cf7e99/1792c06b', 'shake preset s-rumble': '511178dc/57d58892/9eee6b24' };
+      'shake preset s-beatslam': '191f45ff/bd6db1eb/3f8f16c7', 'shake preset s-quake': 'f2e1d3e7/500eacf9/fcf5c91d', 'shake preset s-handheld': 'd90f95a0/a4c25752/e702c2c8', 'shake preset s-hypex': '20773597/e8cf7e99/1792c06b', 'shake preset s-rumble': '511178dc/57d58892/9eee6b24' });
     const tex = fix482(), ids = [], moved = [], cases = cases482b();
     if (cases.length !== Object.keys(HEAD).length) throw new Error('setup: ' + cases.length + ' cases against ' + Object.keys(HEAD).length + ' hashes captured on v17.18 - re-capture them on the build before the change');
     try {
-      cases.forEach(([name, make]) => { const got = shots482b(make(tex, ids)); if (got !== HEAD[name]) moved.push(name + ' ' + HEAD[name] + ' -> ' + got); });
+      cases.forEach(([name, make]) => { const got = shots482b(make(tex, ids)); if (!pinSame(HEAD, name, got)) moved.push(name + ' ' + HEAD[name] + ' -> ' + got); });
     } finally { ids.forEach(id => FM.media.remove(id)); }
     if (moved.length) throw new Error(moved.length + ' movers draw differently from v17.18 at the new defaults - a new control changed a motion he already has: ' + moved.slice(0, 8).join('; '));
   });
@@ -114919,20 +115093,20 @@
         const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, CFG[name]);
         if (how === 'absent') Object.keys(NEW4822[type]).forEach(k => { delete e.params[k]; });
         L.effects = [e];
-        const got = shots4822(L), want = HEAD[type + '/' + name + '/' + kind];
-        if (got !== want) moved.push(type + ' ' + name + ' on ' + kind + ' (new keys ' + how + ') ' + want + ' -> ' + got);
+        const wkey = type + '/' + name + '/' + kind, want = HEAD[wkey], got = shots4822(L);
+        if (!pinSame(HEAD, wkey, got)) moved.push(type + ' ' + name + ' on ' + kind + ' (new keys ' + how + ') ' + want + ' -> ' + got);
       })));
       if (extra) extra(moved);
     } finally { ids.forEach(id => FM.media.remove(id)); }
     if (moved.length) throw new Error(moved.length + ' pictures differ from v17.18 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
   }
 
-  test('482 2.5 Speed Lines - Style, Angle, Clear zone shape and Boil are in the catalogue at defaults that draw the old lines byte for byte as on v17.18', { item: '482', budgetMs: 120000 }, function () {
+  test('482 2.5 Speed Lines - Style, Angle, Clear zone shape and Boil are in the catalogue at defaults that draw the old lines byte for byte as on v17.18', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     catalogue4822('speedlines', { mode: 1, angle: -35, aspect: 250, boil: 12 });
     const CFG = { def: {}, spin: { spin: 120 }, add: { blend: 1, color: '#ffffff' }, inner0: { inner: 0 }, many: { count: 200, jitter: 1, width: 40, length: 100 }, off: { x: 20, y: 80, inner: 50 } };
-    const HEAD = { 'speedlines/def/image': '9cf5ac3b/05f39b3c/9cf5ac3b', 'speedlines/def/shape': 'cd37ea72/8b6b3971/cd37ea72', 'speedlines/spin/image': '6e955b1c/dfec28b6/343dbca4', 'speedlines/spin/shape': '7106e761/c60c5739/08bfa79a', 'speedlines/add/image': 'c5c0f61b/88f0f11d/c5c0f61b', 'speedlines/add/shape': 'bc2a11c9/a8ba5b5a/bc2a11c9', 'speedlines/inner0/image': '6aa6368e/f5fcd8a6/6aa6368e', 'speedlines/inner0/shape': '4211fd8e/2cafb3db/4211fd8e', 'speedlines/many/image': '15ee496e/66559f61/15ee496e', 'speedlines/many/shape': '3ce66d4f/a951d271/3ce66d4f', 'speedlines/off/image': '6442e5ed/26600223/6442e5ed', 'speedlines/off/shape': '4d159f4e/0448830f/4d159f4e' };
+    const HEAD = pinned('HEAD', { 'speedlines/def/image': '9cf5ac3b/05f39b3c/9cf5ac3b', 'speedlines/def/shape': 'cd37ea72/8b6b3971/cd37ea72', 'speedlines/spin/image': '6e955b1c/dfec28b6/343dbca4', 'speedlines/spin/shape': '7106e761/c60c5739/08bfa79a', 'speedlines/add/image': 'c5c0f61b/88f0f11d/c5c0f61b', 'speedlines/add/shape': 'bc2a11c9/a8ba5b5a/bc2a11c9', 'speedlines/inner0/image': '6aa6368e/f5fcd8a6/6aa6368e', 'speedlines/inner0/shape': '4211fd8e/2cafb3db/4211fd8e', 'speedlines/many/image': '15ee496e/66559f61/15ee496e', 'speedlines/many/shape': '3ce66d4f/a951d271/3ce66d4f', 'speedlines/off/image': '6442e5ed/26600223/6442e5ed', 'speedlines/off/shape': '4d159f4e/0448830f/4d159f4e' });
     // …and his own size: a 1080x1920 export frame, where the lines' geometry is at full resolution.
-    const BIG = { def: '394b214b', spin: 'f556ded8', add: '8b0c433b', inner0: '61dac916', many: 'fb79cdfc', off: '652e6c3a' };
+    const BIG = pinned('BIG', { def: '394b214b', spin: 'f556ded8', add: '8b0c433b', inner0: '61dac916', many: 'fb79cdfc', off: '652e6c3a' });
     pictures4822('speedlines', CFG, HEAD, moved => {
       Object.keys(BIG).forEach(name => ['present', 'absent'].forEach(how => {
         const L = FM.makeLayer('shape', { shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#d8d0c0', start: 0, duration: 4 }); L.start = 0; L.duration = 4;
@@ -114942,18 +115116,18 @@
         const cv = offscreen(1080, 1920), x = cv.getContext('2d', { willReadFrequently: true });
         FM.renderScene(x, { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, 1.1);
         const got = hash482(x, cv);
-        if (got !== BIG[name]) moved.push('speedlines ' + name + ' at 1080x1920 (new keys ' + how + ') ' + BIG[name] + ' -> ' + got);
+        if (!pinSame(BIG, name, got)) moved.push('speedlines ' + name + ' at 1080x1920 (new keys ' + how + ') ' + BIG[name] + ' -> ' + got);
       }));
     });
   });
 
-  test('482 2.7 Glitch - Uneven slices, Block damage, Pattern and Edges are in the catalogue at defaults that tear byte for byte as on v17.18', { item: '482', budgetMs: 120000 }, function () {
+  test('482 2.7 Glitch - Uneven slices, Block damage, Pattern and Edges are in the catalogue at defaults that tear byte for byte as on v17.18', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     catalogue4822('glitch', { jitter: 60, blocks: 0.5, seed: 7, wrap: 2 });
     const CFG = { def: {}, dir1: { dir: 1 }, speed0: { speed: 0 }, dense: { bands: 240, split: 5, amount: 1 }, few: { bands: 3 }, mosh: { amount: 0.34, bands: 90, split: 5 }, dir1dense: { dir: 1, bands: 60, amount: 0.9 } };
-    const HEAD = { 'glitch/def/image': '07466116/8dace74c/075a01ba', 'glitch/def/shape': '6928a451/fc3540a1/464c242d', 'glitch/dir1/image': 'b1c58630/2dbc480d/db6d58d0', 'glitch/dir1/shape': 'de0eeba2/33f61c51/0c39162e', 'glitch/speed0/image': '286c388a/170b528c/286c388a', 'glitch/speed0/shape': '633afba1/072d0299/633afba1', 'glitch/dense/image': '97248263/9cb12ca0/7f2567ba', 'glitch/dense/shape': '48383ba6/57ac4cfc/b4da1d36', 'glitch/few/image': '673ee562/324fda38/bdb979d6', 'glitch/few/shape': 'ba2187f5/aadfd6dd/5a74939d', 'glitch/mosh/image': '451f4224/ae12a3a2/d557ffdc', 'glitch/mosh/shape': '395bf938/5da855c4/dd62f580', 'glitch/dir1dense/image': 'b3fe9349/73d6cebb/8d4c6b98', 'glitch/dir1dense/shape': '052cf054/726b27b3/f863a1dc' };
+    const HEAD = pinned('HEAD', { 'glitch/def/image': '07466116/8dace74c/075a01ba', 'glitch/def/shape': '6928a451/fc3540a1/464c242d', 'glitch/dir1/image': 'b1c58630/2dbc480d/db6d58d0', 'glitch/dir1/shape': 'de0eeba2/33f61c51/0c39162e', 'glitch/speed0/image': '286c388a/170b528c/286c388a', 'glitch/speed0/shape': '633afba1/072d0299/633afba1', 'glitch/dense/image': '97248263/9cb12ca0/7f2567ba', 'glitch/dense/shape': '48383ba6/57ac4cfc/b4da1d36', 'glitch/few/image': '673ee562/324fda38/bdb979d6', 'glitch/few/shape': 'ba2187f5/aadfd6dd/5a74939d', 'glitch/mosh/image': '451f4224/ae12a3a2/d557ffdc', 'glitch/mosh/shape': '395bf938/5da855c4/dd62f580', 'glitch/dir1dense/image': 'b3fe9349/73d6cebb/8d4c6b98', 'glitch/dir1dense/shape': '052cf054/726b27b3/f863a1dc' });
     /* …and the kernel straight, on plates whose height is NOT a multiple of the slice count (the rows below the last slice
        must stay untouched, as they always were), at four moments. */
-    const KERN = { def: ['7d326e80/806cc930/c811e940/ec79cdb4', 'fa3233f7/38720daf/5c9c28f7/00f5d0bf'], dir1: ['eea0c026/6444297e/c10d2a72/a9cd40ae', '1ef5c6ad/c0736313/1ef4475e/c3aef708'], speed0: ['7d326e80/7d326e80/7d326e80/7d326e80', 'fa3233f7/fa3233f7/fa3233f7/fa3233f7'], dense: ['1c6a645a/9be70e43/18186310/f888adfe', '384abed7/eb8dd3ff/c81e25d7/fe6c660f'], few: ['c41d8060/dc367834/d3ebc52c/b799a354', 'a2f4ae57/b44981f3/d94f31b7/480bbd2b'], mosh: ['a99ded4b/8d01651c/00b402a7/052c6b72', 'cb7c14b9/0f40dae1/d4e1efa9/0a525131'], dir1dense: ['4c34db2b/3d8063a9/08ccd5c2/0cef6cfc', '5d4b90ad/883541dd/e8764d8b/bef8c8d2'] };
+    const KERN = pinned('KERN', { def: ['7d326e80/806cc930/c811e940/ec79cdb4', 'fa3233f7/38720daf/5c9c28f7/00f5d0bf'], dir1: ['eea0c026/6444297e/c10d2a72/a9cd40ae', '1ef5c6ad/c0736313/1ef4475e/c3aef708'], speed0: ['7d326e80/7d326e80/7d326e80/7d326e80', 'fa3233f7/fa3233f7/fa3233f7/fa3233f7'], dense: ['1c6a645a/9be70e43/18186310/f888adfe', '384abed7/eb8dd3ff/c81e25d7/fe6c660f'], few: ['c41d8060/dc367834/d3ebc52c/b799a354', 'a2f4ae57/b44981f3/d94f31b7/480bbd2b'], mosh: ['a99ded4b/8d01651c/00b402a7/052c6b72', 'cb7c14b9/0f40dae1/d4e1efa9/0a525131'], dir1dense: ['4c34db2b/3d8063a9/08ccd5c2/0cef6cfc', '5d4b90ad/883541dd/e8764d8b/bef8c8d2'] });
     const hb = d => { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); };
     const K = FM._FX_TABLES.PIXEL_FX.glitch;
     pictures4822('glitch', CFG, HEAD, moved => {
@@ -114966,7 +115140,7 @@
           K(d, W, H, p, t, 1);
           return hb(d);
         }).join('/');
-        if (got !== KERN[name][wi]) moved.push('the Glitch kernel ' + name + ' on a ' + W + 'x' + H + ' plate (new keys ' + how + ') ' + KERN[name][wi] + ' -> ' + got);
+        if (!pinSameAt(KERN, name, wi, got)) moved.push('the Glitch kernel ' + name + ' on a ' + W + 'x' + H + ' plate (new keys ' + how + ') ' + KERN[name][wi] + ' -> ' + got);
       })));
     });
   });
@@ -115345,14 +115519,16 @@
     if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
     Object.keys(SET).forEach(k => { if (got.params[k] !== SET[k]) throw new Error('a saved ' + type + ' ' + k + ' of ' + SET[k] + ' comes back from the load sanitiser as ' + got.params[k]); });
     const ids = [], moved = [];
+    // the per-OS slice of HEAD482B this test reads (tests.js pinned(): the Mac's literal on macOS)
+    const H = pinned('HEAD482B ' + type, pinPick(HEAD482B, pics.map(p => p[0]).concat(control.map(c => c[0]))));
     try {
       pics.forEach(([name, kind, over]) => {
         const h = PICS482B[type](kind, over, ids);
-        if (h !== HEAD482B[name]) moved.push(name + ' ' + HEAD482B[name] + ' -> ' + h);
+        if (!pinSame(H, name, h)) moved.push(name + ' ' + H[name] + ' -> ' + h);
       });
       if (moved.length) throw new Error(moved.length + ' pictures differ from v17.18 at the new defaults - a new control changed a look he already has: ' + moved.join('; '));
       control.forEach(([name, kind, over, what]) => {
-        if (PICS482B[type](kind, over, ids) === HEAD482B[name]) throw new Error('CONTROL: ' + what + ' draws the default picture on this fixture - the pinned hashes cannot see the new control, so they prove nothing');
+        if (PICS482B[type](kind, over, ids) === H[name]) throw new Error('CONTROL: ' + what + ' draws the default picture on this fixture - the pinned hashes cannot see the new control, so they prove nothing');
       });
     } finally { ids.forEach(id => FM.media.remove(id)); }
   }
@@ -115360,7 +115536,7 @@
   /* 2.3 FLASH (DARKEN) — Rhythm and Hold dark. The flashes were only ever random value-noise, so a strobe on the beat, a
      double hit or a build-up into a drop meant keyframing Depth by hand. Driven through the kernel on a grey pixel (200) at
      the default Depth 0.45, so a full hit reads 110; the clip is passed as the kernel's 8th argument, as the renderer does. */
-  test('482 2.3 Flash (darken) - Steady, Double hit and Build-up put full-depth hits on the beat from the clip start, Hold dark holds them, the preview matches the export, and the defaults draw the old picture', { item: '482', budgetMs: 90000 }, function () {
+  test('482 2.3 Flash (darken) - Steady, Double hit and Build-up put full-depth hits on the beat from the clip start, Hold dark holds them, the preview matches the export, and the defaults draw the old picture', { item: '482', pinned: true, budgetMs: 90000 }, function () {
     const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
     if (!K || !K.flashdark) throw new Error('the Flash (darken) kernel is not reachable');
     const base = FM.fxRegistry.makeInstance('flashdark').params;
@@ -115435,7 +115611,7 @@
      same grid, and every hold was the same length. A white 20 px square crossing a black frame at 110 px/s, at 5 holds a
      second (six frames each at 30 fps), is 22 px on per hold — so a hold is read off the square's left edge and the ghost
      never overlaps it. Played in order from a cleared hold, frame by frame, as an export plays it. */
-  test('482 2.4 Frame Stutter - Trail strength sets the ghost, Phase moves the hold boundaries, Irregular holds vary the hold lengths the same way every run and on the preview, and the defaults draw the old picture', { item: '482', budgetMs: 90000 }, function () {
+  test('482 2.4 Frame Stutter - Trail strength sets the ghost, Phase moves the hold boundaries, Irregular holds vary the hold lengths the same way every run and on the preview, and the defaults draw the old picture', { item: '482', pinned: true, budgetMs: 90000 }, function () {
     const P = { width: 240, height: 180, fps: 30, duration: 3, background: '#000000' };
     const play = (over, w, frames) => {
       const L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 90, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 3 });
@@ -115494,7 +115670,7 @@
   /* 2.6 MOTION BLUR (OBJECT) — Shutter phase. The shutter window was always centred on the frame, so half the smear ran
      AHEAD of a moving layer. A white 40 px box crossing a black 480x120 frame at 400 px/s, Shutter 6 frames (80 px of
      travel), 48 samples; the lit extent of the centre row says where the smear is. */
-  test('482 2.6 Motion Blur (Object) - Shutter phase -100 trails behind only, +100 runs ahead, a layer that has just stopped still smears behind, the preview matches the export, and the default draws the old picture', { item: '482', budgetMs: 90000 }, function () {
+  test('482 2.6 Motion Blur (Object) - Shutter phase -100 trails behind only, +100 runs ahead, a layer that has just stopped still smears behind, the preview matches the export, and the default draws the old picture', { item: '482', pinned: true, budgetMs: 90000 }, function () {
     const P = { width: 480, height: 120, fps: 30, duration: 2, background: '#000000' };
     const span = (over, t, w, stop) => {
       const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 60, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 2 });
@@ -115960,7 +116136,7 @@
     return out;
   }
 
-  test('482 3.0 Echo and Reverb - Tone, Low cut, Tape wobble, Pre-delay and Width are in the catalogue at defaults that are the old sound, and saved and new Echoes and Reverbs render sample for sample as on v17.19', { item: '482', budgetMs: 120000 }, async function () {
+  test('482 3.0 Echo and Reverb - Tone, Low cut, Tape wobble, Pre-delay and Width are in the catalogue at defaults that are the old sound, and saved and new Echoes and Reverbs render sample for sample as on v17.19', { item: '482', pinned: true, budgetMs: 120000 }, async function () {
     const reg = FM.audioFxRegistry;
     /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), keyframable, at a default that is the old
        sound: [label, min, max, def]. */
@@ -115994,7 +116170,7 @@
     /* 2. THE SOUND, against v17.19 (7bbeb5bc): FNV hashes of the float bits of both output channels, per case, for a mono
        noise, a stereo noise, a stereo sine sweep and a click — captured on v17.19 with this very helper. Equal hashes mean
        the same samples, not close ones. */
-    const HEAD = {
+    const HEAD = pinned('HEAD', {
       'echo new': '0fc3bd79/0fc3bd79 0fc3bd79/ea728fe9 d7d3557e/79c69d5c 1ee902a3/1ee902a3',
       'echo saved': '0fc3bd79/0fc3bd79 0fc3bd79/ea728fe9 d7d3557e/79c69d5c 1ee902a3/1ee902a3',
       'echo tuned': '903f7c13/903f7c13 903f7c13/d2cc06ac a1c177b0/458ac611 d151ecd8/d151ecd8',
@@ -116003,10 +116179,10 @@
       'reverb saved': '2955416a/58d0b688 2955416a/c4567675 dc5038ec/ac819a27 e8c1e391/16bfd8e5',
       'reverb tuned': 'c9ac4629/8a56625c c9ac4629/1b85beb1 936510f4/bd251ee7 fc6d4255/e2dea649',
       'reverb then echo': '4aac71a9/3cf1589f 4aac71a9/73f934f4 f52ca11d/cb2d298a a75a23cd/bd135f25',
-    };
+    });
     const got = await hashes482c(FM), moved = [];
     if (Object.keys(got).length !== Object.keys(HEAD).length) throw new Error('setup: ' + Object.keys(got).length + ' cases against ' + Object.keys(HEAD).length + ' hashes captured on v17.19 - re-capture them on the build before the change');
-    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    Object.keys(HEAD).forEach(k => { if (!pinSame(HEAD, k, got[k])) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
     if (moved.length) throw new Error(moved.length + ' Echo / Reverb cases sound different from v17.19 at the new defaults - a new control changed a sound he already has (if Chrome itself was just updated, re-capture these on v17.19 first): ' + moved.join('; '));
     // …and the preview's per-frame path renders those very samples.
     const cs = cases482c();
@@ -116017,10 +116193,11 @@
     /* 3. THE ANIMATED ROOM (a keyframed Size and Decay builds a bank of rooms). v17.19 does not render it bit for bit the same
        twice (measured: two renders of one project differ by up to 6e-8), so it is pinned by the level of every render,
        captured on v17.19: the jitter there is 3e-12, and a changed room moves it by far more than 1e-9. */
-    const ROOM = [0.128755291962931, 0.1291481156041802, 0.1287552919646793, 0.12918241600039032, 0.22005921217016017, 0.1266366244347596, 0.0012326715398602254, 0.0012319410957585227];
+    const ROOM = pinned('ROOM', [0.128755291962931, 0.1291481156041802, 0.1287552919646793, 0.12918241600039032, 0.22005921217016017, 0.1266366244347596, 0.0012326715398602254, 0.0012319410957585227]);
     const b0 = FM._irBanksBuilt || 0;
     const lv = await roomLevels482c(FM);
     if ((FM._irBanksBuilt || 0) - b0 < RENDERS482C.length) throw new Error('setup: the animated room built ' + ((FM._irBanksBuilt || 0) - b0) + ' banks in ' + RENDERS482C.length + ' renders - this checks the still-room path only');
+    if (pinRecording(ROOM)) lv.forEach((v, i) => pinSame(ROOM, i, v));   // a recording run takes this OS's levels
     const worst = Math.max.apply(null, lv.map((v, i) => Math.abs(v - ROOM[i])));
     if (!(worst <= 1e-9)) throw new Error('an animated-room Reverb renders at levels ' + lv.map(v => v.toFixed(9)).join(', ') + ' where v17.19 renders ' + ROOM.map(v => v.toFixed(9)).join(', ') + ' (off by up to ' + worst.toExponential(2) + ')');
   });
@@ -117191,7 +117368,7 @@
      ops in PIXEL_FX, so the adjustment path hands its snapshot to the very kernel the clip runs: over a clip that fills the
      frame the two pictures must be the SAME BYTES, at the export and on a half-size preview. MEASURED after the change: 0
      bytes differ for all twenty at both sizes, and every one moves at least 4,800 channel values off the ungraded frame. */
-  test('482 5.1 Adjustment layer - Teal & Orange, Exposure and 18 more colour effects grade everything below it exactly as they grade the clip itself, on the export and a half-size preview, and the frame-shaped effects stay off', { item: '482', budgetMs: 120000 }, function () {
+  test('482 5.1 Adjustment layer - Teal & Orange, Exposure and 18 more colour effects grade everything below it exactly as they grade the clip itself, on the export and a half-size preview, and the frame-shaped effects stay off', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     const A0 = FM.makeLayer('adjustment', { name: 'probe' });
     const refused = ADJ4825.filter(ty => !FM.fxRegistry.supportsLayer(ty, A0));
     if (refused.length) throw new Error('an adjustment layer still refuses ' + refused.length + ' colour effects: ' + refused.join(', ') + ' - he picks Teal & Orange for an adjustment layer and is told it only does colour grades');
@@ -117242,15 +117419,15 @@
       if (kept.indexOf('tealorange') < 0) bad.push('the Teal & Orange filter lands on an adjustment layer as [' + kept.join(', ') + '] - its own Teal & Orange is still dropped');
     } finally { if (had) FM.media.set('_4825adj', had); else FM.media.remove('_4825adj'); }
     /* What an adjustment layer could already do draws exactly as on v17.20. */
-    const HEAD_ADJ = { posterize: '6cdee479/c797f115/14278b23', tint: '88a82fbb/9517c0d0/03a55847', threshold: '6f2d2214/3df5b1d5/276281bd', duotone: '33379941/20cd2e5c/507aa416',
+    const HEAD_ADJ = pinned('HEAD_ADJ', { posterize: '6cdee479/c797f115/14278b23', tint: '88a82fbb/9517c0d0/03a55847', threshold: '6f2d2214/3df5b1d5/276281bd', duotone: '33379941/20cd2e5c/507aa416',
       rgbsplit: '4e4dc449/e8deba7e/2c3c158c', levels: 'ea9b97e7/aecfa9ae/b9a7e733', pixelate: '9266b085/6fa13505/59e0a8ee', brightness: '331e1eb1/4820da1b/ce038b1c',
-      saturate: 'aa6e175c/864297b9/82cee017', grayscale: 'ea4c0ca3/46e66bbc/299ab456' };
+      saturate: 'aa6e175c/864297b9/82cee017', grayscale: 'ea4c0ca3/46e66bbc/299ab456' });
     const tex2 = fix482(), ids = [];
     try {
       Object.keys(HEAD_ADJ).forEach(ty => {
         const L = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex2, width: 200, height: 150 }); ids.push(L.id);
         const got = shots4825([adjOf([FM.fxRegistry.makeInstance(ty)]), L]);
-        if (got !== HEAD_ADJ[ty]) bad.push('an adjustment layer carrying ' + ty + ' draws ' + got + ', not v17.20\'s ' + HEAD_ADJ[ty]);
+        if (!pinSame(HEAD_ADJ, ty, got)) bad.push('an adjustment layer carrying ' + ty + ' draws ' + got + ', not v17.20\'s ' + HEAD_ADJ[ty]);
       });
     } finally { ids.forEach(id => FM.media.remove(id)); }
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
@@ -117260,7 +117437,7 @@
      makeInstance, so a default that moved a pixel would restyle all of them (and queue 675's distance test). Pinned against
      v17.20 at three sizes: new and saved instances on a clip and a shape, a keyframed Shadows, the kernel itself on a buffer
      with transparent, half-transparent and opaque rows, and the 17 filters. */
-  test('482 5.2 Highlights & Shadows - Whites, Blacks, Tonal width, Local radius and Colour boost are in the catalogue at defaults that draw the old curve byte for byte as on v17.20, and the 17 library filters built on it do not move', { item: '482', budgetMs: 120000 }, function () {
+  test('482 5.2 Highlights & Shadows - Whites, Blacks, Tonal width, Local radius and Colour boost are in the catalogue at defaults that draw the old curve byte for byte as on v17.20, and the 17 library filters built on it do not move', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     const ps = FM.fxRegistry.paramsOf('highlightsshadows') || [], inst = FM.fxRegistry.makeInstance('highlightsshadows');
     const LABEL = { whites: 'Whites', blacks: 'Blacks', width: 'Tonal width', radius: 'Local radius', sat: 'Colour boost' };
     Object.keys(HS4825).forEach(k => {
@@ -117281,13 +117458,13 @@
     if (!got) throw new Error('the load sanitiser dropped the whole Highlights & Shadows');
     Object.keys(SET).forEach(k => { if (got.params[k] !== SET[k]) throw new Error('a saved Highlights & Shadows ' + k + ' of ' + SET[k] + ' comes back from the load sanitiser as ' + got.params[k]); });
     /* THE PICTURES, against v17.20. */
-    const HEAD = { 'new/image': 'fe509255/bd92cb80/e307f9f7', 'saved-25-45/image': '7c05cead/1d2da996/02c04141', 'empty/image': 'fe509255/bd92cb80/e307f9f7', 'kf/image': '36fd608c/d33765cf/b7a51eb1',
-      'new/shape': 'c1dcf9ef/b99d1828/227036ab', 'saved-25-45/shape': 'bff54164/491fd283/9abfab2d', 'empty/shape': 'c1dcf9ef/b99d1828/227036ab', 'kf/shape': '906a659a/c51b1033/272d6e20' };
-    const KERN = { '-40/50': 'ed110990', '-25/-45': '560fb8a6', '30/-30': 'b4ef388a', '100/100': 'f406986c', '-100/-100': '194984b4', '0/0': '97df3dc5', '-8/14': 'de520e6f' };
-    const FLT = { blackout: '47650b5d/85d01e92/25d2b458', bloodline: 'a37b429d/b263bf4f/c41bf6f5', copperplate: 'e615f9ed/dad40cf8/f68cbe73', desert: 'd3ae8c56/4be4b22e/713fe7de',
+    const HEAD = pinned('HEAD', { 'new/image': 'fe509255/bd92cb80/e307f9f7', 'saved-25-45/image': '7c05cead/1d2da996/02c04141', 'empty/image': 'fe509255/bd92cb80/e307f9f7', 'kf/image': '36fd608c/d33765cf/b7a51eb1',
+      'new/shape': 'c1dcf9ef/b99d1828/227036ab', 'saved-25-45/shape': 'bff54164/491fd283/9abfab2d', 'empty/shape': 'c1dcf9ef/b99d1828/227036ab', 'kf/shape': '906a659a/c51b1033/272d6e20' });
+    const KERN = pinned('KERN', { '-40/50': 'ed110990', '-25/-45': '560fb8a6', '30/-30': 'b4ef388a', '100/100': 'f406986c', '-100/-100': '194984b4', '0/0': '97df3dc5', '-8/14': 'de520e6f' });
+    const FLT = pinned('FLT', { blackout: '47650b5d/85d01e92/25d2b458', bloodline: 'a37b429d/b263bf4f/c41bf6f5', copperplate: 'e615f9ed/dad40cf8/f68cbe73', desert: 'd3ae8c56/4be4b22e/713fe7de',
       fog: 'a782a9c4/9d1a16e7/26c6bf92', infrared: 'f130bcec/fbfe26ed/01d6988c', ink: '33db7275/294ba8d1/bf7c7bef', lowkey: 'df424918/5e2981c7/19044a35', matte: 'badc4502/b215d215/dc3862c0',
       midnight: '91d88f6d/33e67930/15606c13', noir: '8f65ef53/bb24bfcb/ed9c6f3a', platinum: 'aff4ae77/33607f4f/fdae3e52', poppy: 'e816a502/03770590/c05970c3', silver: 'dacb5546/7d6000f3/849201e5',
-      technicolor: 'bb3ee832/a1d09dff/0cb1eda6', tropic: '63da082f/7f7f98aa/b170001a', whiteout: '6556ce3e/5a6bebdb/0a38b46d' };
+      technicolor: 'bb3ee832/a1d09dff/0cb1eda6', tropic: '63da082f/7f7f98aa/b170001a', whiteout: '6556ce3e/5a6bebdb/0a38b46d' });
     const withHS = FM.filters.all().filter(f => { const b = FM.filters.makeInstance(f.id); return (b.effects || []).some(e => e.type === 'highlightsshadows'); }).map(f => f.id).sort();
     if (withHS.join(',') !== Object.keys(FLT).sort().join(',')) throw new Error('setup: the library filters carrying Highlights & Shadows are now ' + withHS.join(', ') + ' - re-capture the hashes on the build before the change');
     const tex = fix482(), ids = [], moved = [];
@@ -117303,10 +117480,10 @@
         [['new', () => FM.fxRegistry.makeInstance('highlightsshadows')], ['saved-25-45', () => raw({ highlights: -25, shadows: -45 })], ['empty', () => raw({})],
          ['kf', () => raw({ highlights: 30, shadows: { kf: [{ t: 0, v: -60 }, { t: 2, v: 80 }] } })]].forEach(([n, mk]) => {
           const h = shots4825([L(kind, mk())]);
-          if (h !== HEAD[n + '/' + kind]) moved.push('a ' + n + ' Highlights & Shadows on a ' + kind + ' ' + HEAD[n + '/' + kind] + ' -> ' + h);
+          if (!pinSame(HEAD, n + '/' + kind, h)) moved.push('a ' + n + ' Highlights & Shadows on a ' + kind + ' ' + HEAD[n + '/' + kind] + ' -> ' + h);
         });
       });
-      Object.keys(FLT).forEach(id => { const h = shots4825([L('image', FM.filters.makeInstance(id))]); if (h !== FLT[id]) moved.push('the ' + id + ' filter ' + FLT[id] + ' -> ' + h); });
+      Object.keys(FLT).forEach(id => { const h = shots4825([L('image', FM.filters.makeInstance(id))]); if (!pinSame(FLT, id, h)) moved.push('the ' + id + ' filter ' + FLT[id] + ' -> ' + h); });
     } finally { ids.forEach(id => FM.media.remove(id)); }
     const K = FM._FX_TABLES.PIXEL_FX.highlightsshadows, W = 256, H = 40;
     Object.keys(KERN).forEach(key => {
@@ -117315,7 +117492,7 @@
       K(a, W, H, { highlights: h, shadows: s }, 0.5);
       let hh = 0x811c9dc5 >>> 0; for (let i = 0; i < a.length; i++) { hh ^= a[i]; hh = Math.imul(hh, 16777619) >>> 0; }
       const hx = ('00000000' + hh.toString(16)).slice(-8);
-      if (hx !== KERN[key]) moved.push('the kernel at Highlights ' + h + ' / Shadows ' + s + ' ' + KERN[key] + ' -> ' + hx);
+      if (!pinSame(KERN, key, hx)) moved.push('the kernel at Highlights ' + h + ' / Shadows ' + s + ' ' + KERN[key] + ' -> ' + hx);
     });
     if (moved.length) throw new Error(moved.length + ' pictures differ from v17.20 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
   });
@@ -117648,7 +117825,7 @@
   }
   const NEW5 = { tealorange: { mode: 0, skin: 0, balance: 0, keep: 0 }, tint: { mode: 0, soft: 100 }, duotone: { blend: 0 } };
 
-  test('482 5.3 Teal & Orange, 5.4 Tint and 5.5 Duotone - every new control is in the catalogue at a default that draws the old look, and the 56 library filters, saved and new grades and the adjustment-layer Tint and Duotone render byte for byte as on v17.20', { item: '482', budgetMs: 120000 }, function () {
+  test('482 5.3 Teal & Orange, 5.4 Tint and 5.5 Duotone - every new control is in the catalogue at a default that draws the old look, and the 56 library filters, saved and new grades and the adjustment-layer Tint and Duotone render byte for byte as on v17.20', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
        render-time fill (queue 784) agrees with that default. */
     Object.keys(NEW5).forEach(type => {
@@ -117677,17 +117854,17 @@
     /* 2. THE PICTURES, against v17.20. A new instance (every new key spelled out at its default), saved instances with only the
        old keys (the fast loops and the slow ones: Tint under a Range with Keep brightness, a curved Duotone, a moved Split
        point), and Tint and Duotone on an adjustment layer — a new one there must be the saved default to the byte. */
-    const HEAD = { 'tealorange/new/image': '6557cd64/057560f0', 'tealorange/new/shape': 'd9017533/a41411f2', 'tealorange/saved0': '6557cd64/057560f0', 'tealorange/saved1': '64b5af31/8465cbc8',
+    const HEAD = pinned('HEAD', { 'tealorange/new/image': '6557cd64/057560f0', 'tealorange/new/shape': 'd9017533/a41411f2', 'tealorange/saved0': '6557cd64/057560f0', 'tealorange/saved1': '64b5af31/8465cbc8',
       'tint/new/image': '5756b47b/bab79518', 'tint/new/shape': 'c8af3b80/1b6b8316', 'tint/saved0': '5756b47b/bab79518', 'tint/saved1': 'beeab85a/f4994eba', 'tint/saved2': 'bfdb9ce3/53fb1c0e',
       'tint/adj0': '88a82fbb/9517c0d0', 'tint/adj1': 'e9a3fe9a/cfd57f9a', 'tint/adj2': 'cdeaa823/171bb34e', 'tint/adjnew': '88a82fbb/9517c0d0',
       'duotone/new/image': 'eb248c41/c7a74304', 'duotone/new/shape': 'b34fa899/e8eb1c75', 'duotone/saved0': 'eb248c41/c7a74304', 'duotone/saved1': '53ee2f7d/e65b77c5',
-      'duotone/adj0': '33379941/20cd2e5c', 'duotone/adj1': '47da023d/9451c545', 'duotone/adjnew': '33379941/20cd2e5c' };
+      'duotone/adj0': '33379941/20cd2e5c', 'duotone/adj1': '47da023d/9451c545', 'duotone/adjnew': '33379941/20cd2e5c' });
     const SAVED = {
       tealorange: [{ amount: 0.6 }, { amount: 0.8, pivot: 35, spread: 60 }],
       tint: [{ amount: 1, color: '#ff3366' }, { amount: 0.7, color: '#3080ff', range: 2, preserve: 1 }, { amount: 0.5, color: '#20c080', range: 1 }],
       duotone: [{ amount: 1, color: '#241a52', color2: '#ff9e5e' }, { amount: 0.8, color: '#102040', color2: '#ffd080', balance: 30, contrast: 140 }],
     };
-    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
+    const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
     const all = FM.filters.all();
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
@@ -117696,7 +117873,7 @@
     const adj = fx => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = [fx]; return A; };
     const got = {};
     try {
-      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots5([L]); if (h !== HEAD_FILTERS[f.id]) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
+      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots5([L]); if (!pinSame(HEAD_FILTERS, f.id, h)) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
       Object.keys(SAVED).forEach(type => {
         ['image', 'shape'].forEach(kind => { const L = kind === 'image' ? clip() : shape(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/new/' + kind] = shots5([L]); });
         SAVED[type].forEach((p, i) => { const L = clip(); L.effects = [{ type: type, enabled: true, params: Object.assign({}, p) }]; got[type + '/saved' + i] = shots5([L]); });
@@ -117705,7 +117882,7 @@
         got[type + '/adjnew'] = shots5([adj(FM.fxRegistry.makeInstance(type)), clip()]);
       });
     } finally { ids.forEach(id => FM.media.remove(id)); }
-    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    Object.keys(HEAD).forEach(k => { if (!pinSame(HEAD, k, got[k])) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
     if (moved.length) throw new Error(moved.length + ' pictures differ from v17.20 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
   });
 
@@ -117928,7 +118105,7 @@
     return at(ex, 1, 50, 37);
   }
 
-  test('482 5.0 Grading depth - every new Gradient Map, Cross Process and Exposure control is in the catalogue at a default that draws the old look, and saved and new ones render byte for byte as on v17.20', { item: '482', budgetMs: 120000 }, function () {
+  test('482 5.0 Grading depth - every new Gradient Map, Cross Process and Exposure control is in the catalogue at a default that draws the old look, and saved and new ones render byte for byte as on v17.20', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
        render-time fill (queue 784) agrees with that default. */
     Object.keys(NEW4825).forEach(type => {
@@ -117958,12 +118135,12 @@
     /* 2. THE PICTURES, against v17.20: new and saved instances on batch 1's textured clip and on a shape, Cross Process's
        library filter, and each kernel on a plate that holds every byte value — as saved (old keys only) and with every new
        key written at its default, as a new instance carries them. */
-    const HEAD = { 'gradientmap new clip': '5ed9f58e/9bf2c507/5829f284', 'gradientmap new shape': '40bfe52a/98cd3076/9cfa180d', 'gradientmap old0 clip': '5ed9f58e/9bf2c507/5829f284', 'gradientmap old1 clip': '64860ad0/4dd159c6/831dd646',
+    const HEAD = pinned('HEAD', { 'gradientmap new clip': '5ed9f58e/9bf2c507/5829f284', 'gradientmap new shape': '40bfe52a/98cd3076/9cfa180d', 'gradientmap old0 clip': '5ed9f58e/9bf2c507/5829f284', 'gradientmap old1 clip': '64860ad0/4dd159c6/831dd646',
       'crossprocess new clip': 'd8346020/7ad099e6/ca5fe90f', 'crossprocess new shape': '30f454ec/9b295c3a/d6b49903', 'crossprocess old0 clip': 'd8346020/7ad099e6/ca5fe90f', 'crossprocess old1 clip': 'db0cc63e/03df253c/80808e26',
       'exposure new clip': 'd02da0e6/a9f518be/02e177ee', 'exposure new shape': 'c2432315/2ac97931/7be82666', 'exposure old0 clip': 'd02da0e6/a9f518be/02e177ee', 'exposure old1 clip': '49281b4b/f823faf9/8ee0cc35', 'exposure old2 clip': '8e01107a/e6c3e5e2/8d42772c',
       'filter crossproc': 'acf0a29a/9d14facb/dc96297e',
       'kernel gradientmap 0': 'c1074855', 'kernel gradientmap 1': '17b9210d', 'kernel crossprocess 0': 'e18802ca', 'kernel crossprocess 1': '2d373472', 'kernel crossprocess 2': '1b1a9586', 'kernel crossprocess 3': '75cba76c',
-      'kernel exposure 0': '41233134', 'kernel exposure 1': 'cfcfaed0', 'kernel exposure 2': '4f41ceb8', 'kernel exposure 3': 'f5f5182c', 'kernel exposure 4': '46a3a8d8', 'kernel exposure 5': '60c9d63c' };
+      'kernel exposure 0': '41233134', 'kernel exposure 1': 'cfcfaed0', 'kernel exposure 2': '4f41ceb8', 'kernel exposure 3': 'f5f5182c', 'kernel exposure 4': '46a3a8d8', 'kernel exposure 5': '60c9d63c' });
     const got = {}, tex = fix482(), ids = [];
     const clip = () => { const L = FM.makeLayer('image', { name: '482b5 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
     const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
@@ -117982,7 +118159,7 @@
     Object.keys(KP).forEach(type => KP[type].forEach((pp, i) => { const a = plate(); P[type](a, W, H, JSON.parse(JSON.stringify(pp)), 0.5, 1); got['kernel ' + type + ' ' + i] = hk(a); }));
     Object.keys(KP).forEach(type => KP[type].forEach((pp, i) => { const a = plate(); P[type](a, W, H, Object.assign(JSON.parse(JSON.stringify(pp)), NEW4825[type]), 0.5, 1); got['kernel ' + type + ' ' + i + ' +new'] = hk(a); }));
     const moved = [];
-    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    Object.keys(HEAD).forEach(k => { if (!pinSame(HEAD, k, got[k])) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
     Object.keys(got).filter(k => / \+new$/.test(k)).forEach(k => { const base = k.replace(/ \+new$/, ''); if (got[k] !== HEAD[base]) moved.push(k + ' (new keys at their defaults) ' + HEAD[base] + ' -> ' + got[k]); });
     if (moved.length) throw new Error(moved.length + ' pictures differ from v17.20 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
   });
@@ -118515,7 +118692,7 @@
     return worst;
   }
 
-  test('482 6.0 Vignette and the three Glows - every new control is in the catalogue at a default that draws the old look, and the 56 library filters and saved and new vignettes and glows render byte for byte as on v17.21', { item: '482', budgetMs: 120000 }, function () {
+  test('482 6.0 Vignette and the three Glows - every new control is in the catalogue at a default that draws the old look, and the 56 library filters and saved and new vignettes and glows render byte for byte as on v17.21', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     /* 1. DECLARED, so the load sanitiser keeps them (the whitelist-drift lesson), at a default that is the old look, and the
        render-time fill (queue 784) agrees with that default. */
     Object.keys(NEW6L).forEach(type => {
@@ -118555,12 +118732,12 @@
        vignettes, a vignette under a glow, a 9:16 frame — and every library filter, several of which carry a Vignette, a Light
        Glow or a Soft Glow. (The same capture on text layers matched too; text is left out here because a hash of a glyph
        depends on the font having loaded.) */
-    const HEAD = { 'vignette/new/image': 'a1b0fcc6/fd97be8a/079558be', 'vignette/new/shape': '0354a2ad/fa237aba/9f058392', 'vignette/saved0': 'a1b0fcc6/fd97be8a/079558be', 'vignette/saved1': '3cdeaea3/7d4c7190/c3fff14e', 'vignette/saved2': '771e086c/3ff9fbb9/a637cc57', 'vignette/saved3': 'a24ebbba/3eefe4e0/cd2e67d4', 'vignette/turned': '635d5076/054f00eb/bdd11f23',
+    const HEAD = pinned('HEAD', { 'vignette/new/image': 'a1b0fcc6/fd97be8a/079558be', 'vignette/new/shape': '0354a2ad/fa237aba/9f058392', 'vignette/saved0': 'a1b0fcc6/fd97be8a/079558be', 'vignette/saved1': '3cdeaea3/7d4c7190/c3fff14e', 'vignette/saved2': '771e086c/3ff9fbb9/a637cc57', 'vignette/saved3': 'a24ebbba/3eefe4e0/cd2e67d4', 'vignette/turned': '635d5076/054f00eb/bdd11f23',
       'lightglow/new/image': 'de7739a3/50e95599/e9719abe', 'lightglow/new/shape': '3999ea27/7dab0371/bb577e30', 'lightglow/saved0': 'de7739a3/50e95599/e9719abe', 'lightglow/saved1': '4146690d/cea1d27a/469057e6', 'lightglow/saved2': '0f44cc98/d97f473c/9578c33b', 'lightglow/turned': '428f3395/3629582c/3d1b83eb',
       'softglow/new/image': '2313991c/14f7b616/41e03268', 'softglow/new/shape': 'a794638c/7c58305f/e7ea7e3d', 'softglow/saved0': '2313991c/14f7b616/41e03268', 'softglow/saved1': 'e210f8c6/4a26c52f/15f94880', 'softglow/saved2': '2a178ea9/c1557fd8/cba45f24', 'softglow/turned': 'ff79f67a/23167c56/bdfb3e14',
       'darkglow/new/image': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/new/shape': '1632b83f/5ee145c1/52fec795', 'darkglow/saved0': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/saved1': '19c1f079/f2b3f244/c2c5b04b', 'darkglow/turned': 'b2bf37bb/8f2959c2/b51e33bf',
-      'vignette/two': 'c980b5eb/48320ab8/5ded4a65', 'vignette+lightglow': 'd384b0a2/c77913cb/3338f54b', 'vignette/916': 'aa743808/6ee64211/92a8396d' };
-    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170/be58f9d4', bleach: '1977b932/76d5d015/ba6e10b2', crossproc: 'acf0a29a/9d14facb/dc96297e', faded: 'a8e3abe0/a929108a/dc05b899', vhs: 'bdccef7c/0184d197/20969b19', crt: '3feeb8ae/f60a6812/150aac2e', super8: '8b1d335f/ea2c4e6c/17aa5210', oldfilm: 'd0622b4f/6f4a53b3/f89904f8', dreamy: 'eab5ec29/4247011c/29d9bb5d', goldenhour: 'ee5aed2f/4b233a42/da504085', leak: 'c2c748d2/87bb9ddd/ce931043', neonnight: '08607532/7c0377ff/4abf756c', comic: 'bc2fcaa9/51c97a8b/4893b084', poster: '2b7f3ca4/52708d5d/302b3b24', thermal: 'e9f15dba/7a794c09/ecd25db2', nightvis: '7da0c88d/48579343/1451e314', blackout: '47650b5d/85d01e92/aa9a8e22', coldsteel: '1c0c3370/939023f0/b8ed9c8d', bloodline: 'a37b429d/b263bf4f/6d3175e5', static: '3019a5c0/4e2326e2/27291a77', nightdrive: '6380c2e1/b6e2a474/ca429a21', overdrive: '6cf2492b/56809eb8/f9ab38af', whiteout: '6556ce3e/5a6bebdb/73b83b9d', silver: 'dacb5546/7d6000f3/db5b741f', noir: '8f65ef53/bb24bfcb/f1dc70ad', platinum: 'aff4ae77/33607f4f/22c8c41e', ink: '33db7275/294ba8d1/fff6673d', fog: 'a782a9c4/9d1a16e7/20b20252', newsprint: 'd152da6e/ce85482d/5e432742', poppy: 'e816a502/03770590/cff55b40', candy: 'e15bfa73/6d0e4269/9ed50f33', sunbaked: '362d46b3/5f693c48/7b6ae8bc', ash: '6e86014e/270f0a6c/c080a681', midnight: '91d88f6d/33e67930/77296bf8', ultraviolet: '67f9268e/e9fe1dab/6afb1b12', tropic: '63da082f/7f7f98aa/ed762ae9', popsicle: '57df7430/4bf81d13/a5c6edd5', hivis: '138d623f/a6c1fa8c/cc12d3c7', matte: 'badc4502/b215d215/84f073fa', ember: 'd708d744/352f47b8/12001d60', halo: '9f8a302c/19eb5be6/946507eb', moonbeam: '9e67006e/3f091acc/ba90a2f5', copperplate: 'e615f9ed/dad40cf8/9b1ced60', polaroid: '5204851d/aea53a15/34478585', kodachrome: '74022162/90930e37/e93a3f48', technicolor: 'bb3ee832/a1d09dff/32864c22', blueprint: '5e54dee2/56dc9473/2e2b369f', riso: 'ae8c0657/b084d9b9/7a02b349', infrared: 'f130bcec/fbfe26ed/26d342e1', xerox: '0980cf2d/94fba5dd/d0637982', acidwash: 'f0a25738/daca65ad/6e124a82', moonlight: '172c152f/6a125aec/01662260', lowkey: 'df424918/5e2981c7/c302dc1d', arctic: '41b5af55/c53d1c0f/ee82a4cc', desert: 'd3ae8c56/4be4b22e/169980e4', datamosh: 'da587345/ecb2b369/c6e1743b' };
+      'vignette/two': 'c980b5eb/48320ab8/5ded4a65', 'vignette+lightglow': 'd384b0a2/c77913cb/3338f54b', 'vignette/916': 'aa743808/6ee64211/92a8396d' });
+    const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170/be58f9d4', bleach: '1977b932/76d5d015/ba6e10b2', crossproc: 'acf0a29a/9d14facb/dc96297e', faded: 'a8e3abe0/a929108a/dc05b899', vhs: 'bdccef7c/0184d197/20969b19', crt: '3feeb8ae/f60a6812/150aac2e', super8: '8b1d335f/ea2c4e6c/17aa5210', oldfilm: 'd0622b4f/6f4a53b3/f89904f8', dreamy: 'eab5ec29/4247011c/29d9bb5d', goldenhour: 'ee5aed2f/4b233a42/da504085', leak: 'c2c748d2/87bb9ddd/ce931043', neonnight: '08607532/7c0377ff/4abf756c', comic: 'bc2fcaa9/51c97a8b/4893b084', poster: '2b7f3ca4/52708d5d/302b3b24', thermal: 'e9f15dba/7a794c09/ecd25db2', nightvis: '7da0c88d/48579343/1451e314', blackout: '47650b5d/85d01e92/aa9a8e22', coldsteel: '1c0c3370/939023f0/b8ed9c8d', bloodline: 'a37b429d/b263bf4f/6d3175e5', static: '3019a5c0/4e2326e2/27291a77', nightdrive: '6380c2e1/b6e2a474/ca429a21', overdrive: '6cf2492b/56809eb8/f9ab38af', whiteout: '6556ce3e/5a6bebdb/73b83b9d', silver: 'dacb5546/7d6000f3/db5b741f', noir: '8f65ef53/bb24bfcb/f1dc70ad', platinum: 'aff4ae77/33607f4f/22c8c41e', ink: '33db7275/294ba8d1/fff6673d', fog: 'a782a9c4/9d1a16e7/20b20252', newsprint: 'd152da6e/ce85482d/5e432742', poppy: 'e816a502/03770590/cff55b40', candy: 'e15bfa73/6d0e4269/9ed50f33', sunbaked: '362d46b3/5f693c48/7b6ae8bc', ash: '6e86014e/270f0a6c/c080a681', midnight: '91d88f6d/33e67930/77296bf8', ultraviolet: '67f9268e/e9fe1dab/6afb1b12', tropic: '63da082f/7f7f98aa/ed762ae9', popsicle: '57df7430/4bf81d13/a5c6edd5', hivis: '138d623f/a6c1fa8c/cc12d3c7', matte: 'badc4502/b215d215/84f073fa', ember: 'd708d744/352f47b8/12001d60', halo: '9f8a302c/19eb5be6/946507eb', moonbeam: '9e67006e/3f091acc/ba90a2f5', copperplate: 'e615f9ed/dad40cf8/9b1ced60', polaroid: '5204851d/aea53a15/34478585', kodachrome: '74022162/90930e37/e93a3f48', technicolor: 'bb3ee832/a1d09dff/32864c22', blueprint: '5e54dee2/56dc9473/2e2b369f', riso: 'ae8c0657/b084d9b9/7a02b349', infrared: 'f130bcec/fbfe26ed/26d342e1', xerox: '0980cf2d/94fba5dd/d0637982', acidwash: 'f0a25738/daca65ad/6e124a82', moonlight: '172c152f/6a125aec/01662260', lowkey: 'df424918/5e2981c7/c302dc1d', arctic: '41b5af55/c53d1c0f/ee82a4cc', desert: 'd3ae8c56/4be4b22e/169980e4', datamosh: 'da587345/ecb2b369/c6e1743b' });
     const all = FM.filters.all();
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [], got = {};
@@ -118574,7 +118751,7 @@
       darkglow: [{ amount: 0.6, radius: 6, threshold: 40 }, { amount: 0.9, radius: 20, threshold: 70 }],
     };
     try {
-      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots6l([L]); if (h !== HEAD_FILTERS[f.id]) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
+      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots6l([L]); if (!pinSame(HEAD_FILTERS, f.id, h)) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
       Object.keys(SAVED).forEach(type => {
         [['image', clip], ['shape', shape]].forEach(([kind, mk]) => { const L = mk(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/new/' + kind] = shots6l([L]); });
         SAVED[type].forEach((p, i) => { const L = clip(); L.effects = [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(p)) }]; got[type + '/saved' + i] = shots6l([L]); });
@@ -118584,7 +118761,7 @@
       { const L = clip(); L.effects = [FM.fxRegistry.makeInstance('lightglow'), FM.fxRegistry.makeInstance('vignette')]; got['vignette+lightglow'] = shots6l([L]); }
       { const S = FM.makeLayer('shape', { shape: 'rect', x: 54, y: 96, shapeW: 108, shapeH: 192, fill: '#c0c0c0' }); S.start = 0; S.duration = 4; S.effects = [FM.fxRegistry.makeInstance('vignette')]; got['vignette/916'] = shots6l([S], 108, 192); }
     } finally { ids.forEach(id => FM.media.remove(id)); }
-    Object.keys(HEAD).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    Object.keys(HEAD).forEach(k => { if (!pinSame(HEAD, k, got[k])) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
     if (moved.length) throw new Error(moved.length + ' pictures differ from v17.21 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
   });
 
@@ -118985,14 +119162,15 @@
     Object.keys(SET).forEach(k => { if (got.params[k] !== SET[k]) throw new Error('a saved ' + type + ' ' + k + ' of ' + SET[k] + ' comes back from the load sanitiser as ' + got.params[k]); });
   }
   function unmoved4826(only) {
-    const now = pics4826(only), moved = Object.keys(now).filter(k => now[k] !== HEAD4826[k]).map(k => k + ' ' + HEAD4826[k] + ' -> ' + now[k]);
+    const now = pics4826(only), H = pinned('HEAD4826 ' + only, pinPick(HEAD4826, Object.keys(now)));
+    const moved = Object.keys(now).filter(k => !pinSame(H, k, now[k])).map(k => k + ' ' + H[k] + ' -> ' + now[k]);
     if (Object.keys(now).length < 10) throw new Error('setup: only ' + Object.keys(now).length + ' pictures were drawn');
     if (moved.length) throw new Error(moved.length + ' pictures differ from v17.21 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
   }
   const ds4826 = (set) => Object.assign({}, FM.fxRegistry.makeInstance('dropshadow').params, { color: '#000000' }, set);
 
   /* 6.3 — THE OLD SHADOWS DO NOT MOVE. */
-  test('482 6.3 Drop Shadow - Spread, Smoothness and Shadow only are in the catalogue at defaults that draw the old shadow byte for byte as on v17.21, Distance reaches 300 and Softness 80 with their defaults unchanged, a saved value survives the load sanitiser, and the 56 library filters do not move', { item: '482', budgetMs: 120000 }, function () {
+  test('482 6.3 Drop Shadow - Spread, Smoothness and Shadow only are in the catalogue at defaults that draw the old shadow byte for byte as on v17.21, Distance reaches 300 and Softness 80 with their defaults unchanged, a saved value survives the load sanitiser, and the 56 library filters do not move', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     declared4826('dropshadow', {
       spread: { label: 'Spread', def: 0, min: 0, max: 100, unit: '%', overriddenBy: 'softness', liveAbove: 0 },
       smooth: { label: 'Smoothness', def: 1, min: 1, max: 3, overriddenBy: 'softness', liveAbove: 0 },
@@ -119009,7 +119187,8 @@
     const carry = FM.filters.all().filter(f => (FM.filters.makeInstance(f.id).effects || []).some(e => e.type === 'dropshadow' || e.type === 'stroke')).map(f => f.id);
     if (carry.length) throw new Error('setup: the library filters ' + carry.join(', ') + ' now carry a Drop Shadow or a Stroke - pin them by name');
     const f = filters4826();
-    if (f.n !== FILTERS4826.n || f.hash !== FILTERS4826.hash) throw new Error('the ' + f.n + ' library filters render ' + f.hash + ', not ' + FILTERS4826.hash + ' as on v17.21 - one of them moved (queue 675\'s distance test names which)');
+    const F4826 = pinned('FILTERS4826', FILTERS4826);
+    if (!pinSame(F4826, 'n', f.n) || !pinSame(F4826, 'hash', f.hash)) throw new Error('the ' + f.n + ' library filters render ' + f.hash + ', not ' + F4826.hash + ' as on v17.21 - one of them moved (queue 675\'s distance test names which)');
     unmoved4826('dropshadow');
     /* CONTROL: the pinned fixture can see the new controls at all */
     const ids = [];
@@ -119098,7 +119277,7 @@
 
   /* 6.4 — STROKE COLOUR'S OFFSET, the sticker double outline. MEASURED on v17.21 with a 40x30 block, Width 4: 2 px out is the
      red outline and 12 px out is empty whatever Offset says (no such control) — the reverse of a 10 px gap. */
-  test('482 6.4 Stroke Colour - Offset puts a clear gap between the layer and its outline when Position is Outside, round corners stay round, Centre and Inside ignore it, the defaults draw the old outline byte for byte as on v17.21, and the preview matches the export', { item: '482', budgetMs: 120000 }, function () {
+  test('482 6.4 Stroke Colour - Offset puts a clear gap between the layer and its outline when Position is Outside, round corners stay round, Centre and Inside ignore it, the defaults draw the old outline byte for byte as on v17.21, and the preview matches the export', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     const K = FM._FX_TABLES.PIXEL_FX.stroke, W = 160, H = 120, bad = [];
     const block = () => { const a = new Uint8ClampedArray(W * H * 4); for (let y = 45; y < 75; y++) for (let x = 60; x < 100; x++) { const i = (y * W + x) * 4; a[i] = 40; a[i + 1] = 120; a[i + 2] = 220; a[i + 3] = 255; } return a; };
     const run = (set, ps) => { const a = block(); K(a, W, H, Object.assign({}, FM.fxRegistry.makeInstance('stroke').params, { color: '#ff0000', width: 4 }, set), 0.3, ps || 1); return a; };
@@ -119375,7 +119554,7 @@
   const NEW6 = { lensflare: { size: 100, rays: 6, rotation: 0, ghosts: 0, halo: 0, streak: 0 }, linstreaks: { both: 0, threshold: 0, color: '#ffffff' },
     spinstreaks: { threshold: 0, dir: 0 }, glowscan: { angle: 30, span: 0, pause: 0, loop: 0 } };
 
-  test('482 6.0 Lens Flare, Linear and Spin Streaks and Glow Scan - every new control is in the catalogue at a default that draws the old look, and the 56 library filters and saved and new flares, streaks and scans render byte for byte as on v17.21', { item: '482', budgetMs: 120000 }, function () {
+  test('482 6.0 Lens Flare, Linear and Spin Streaks and Glow Scan - every new control is in the catalogue at a default that draws the old look, and the 56 library filters and saved and new flares, streaks and scans render byte for byte as on v17.21', { item: '482', pinned: true, budgetMs: 120000 }, function () {
     /* 1. DECLARED, so the load sanitiser keeps them, at a default that is the old look, and the render-time fill agrees. */
     Object.keys(NEW6).forEach(type => {
       const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
@@ -119400,7 +119579,7 @@
     });
     /* 2. THE PICTURES, against v17.21: a new instance (every new key at its default) on a clip and on an ellipse, and saved
        instances holding only the old keys — the default flare, a moved two-colour one, every Glow Scan direction. */
-    const HEAD = { 'lensflare/new/image': 'a5eb45bc/e068126b/a5eb45bc', 'lensflare/new/shape': 'f017597b/a7d29d52/f017597b', 'lensflare/saved0/image': 'a5eb45bc/e068126b/a5eb45bc', 'lensflare/saved0/shape': 'f017597b/a7d29d52/f017597b',
+    const HEAD = pinned('HEAD', { 'lensflare/new/image': 'a5eb45bc/e068126b/a5eb45bc', 'lensflare/new/shape': 'f017597b/a7d29d52/f017597b', 'lensflare/saved0/image': 'a5eb45bc/e068126b/a5eb45bc', 'lensflare/saved0/shape': 'f017597b/a7d29d52/f017597b',
       'lensflare/saved1/image': '81a42512/06f53a54/81a42512', 'lensflare/saved1/shape': 'd516f9ae/f0b914a8/d516f9ae', 'lensflare/saved2/image': '1c2bcd3a/2a2fd902/1c2bcd3a', 'lensflare/saved2/shape': '98b5b2f2/d91f0123/98b5b2f2',
       'linstreaks/new/image': '2e35c1a8/b1390d8e/2e35c1a8', 'linstreaks/new/shape': '368ac31b/d4b7ec90/368ac31b', 'linstreaks/saved0/image': '2e35c1a8/b1390d8e/2e35c1a8', 'linstreaks/saved0/shape': '368ac31b/d4b7ec90/368ac31b',
       'linstreaks/saved1/image': 'b32b4129/c4c6b89d/b32b4129', 'linstreaks/saved1/shape': '1cf98588/e7c5ee7b/1cf98588',
@@ -119408,14 +119587,14 @@
       'spinstreaks/saved1/image': '217b7ef6/43587c51/217b7ef6', 'spinstreaks/saved1/shape': '8f106870/54946fbd/8f106870',
       'glowscan/new/image': 'e9d0635a/9df85d52/8f125992', 'glowscan/new/shape': '706ebe18/aa3c47dc/9731fe31', 'glowscan/saved0/image': 'e9d0635a/9df85d52/8f125992', 'glowscan/saved0/shape': '706ebe18/aa3c47dc/9731fe31',
       'glowscan/saved1/image': '8402597d/760395a0/b702a6c6', 'glowscan/saved1/shape': '108d2cac/9c5adb97/5d766f4e', 'glowscan/saved2/image': '529e1515/650c2851/01e0cfcc', 'glowscan/saved2/shape': '5e325498/bfb5626f/dde238c4',
-      'glowscan/saved3/image': 'b4cf29e1/922f456a/16759aa6', 'glowscan/saved3/shape': 'c8775204/055c519e/44ecc0c7' };
+      'glowscan/saved3/image': 'b4cf29e1/922f456a/16759aa6', 'glowscan/saved3/shape': 'c8775204/055c519e/44ecc0c7' });
     const SAVED = {
       lensflare: [{ x: 0.3, y: 0.3, intensity: 1 }, { x: 0.75, y: 0.2, intensity: 1.6, color: '#ffd080', color2: '#80b0ff' }, { x: 0.5, y: 0.6, intensity: 0.6 }],
       linstreaks: [{ length: 30, angle: 90 }, { length: 55, angle: 30, samples: 16 }],
       spinstreaks: [{ amount: 0.5 }, { amount: 0.8, centerx: 30, centery: 65, decay: 0.2, samples: 20 }],
       glowscan: [{ speed: 1.5, width: 60, color: '#ffffff' }, { speed: 1, width: 30, amount: 0.6, direction: 1, color: '#80ffcc' }, { speed: 0.7, width: 90, direction: 2, color: '#ffffff' }, { speed: 2.3, width: 20, direction: 3, color: '#ff8040' }],
     };
-    const HEAD_FILTERS = { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' };
+    const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
     const all = FM.filters.all();
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
@@ -119423,14 +119602,14 @@
     const shape = () => { const L = FM.makeLayer('shape', { shape: 'ellipse', x: 110, y: 95, shapeW: 120, shapeH: 80, fill: '#c06040', start: 0, duration: 4 }); L.start = 0; L.duration = 4; return L; };
     const got = {};
     try {
-      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots5([L]); if (h !== HEAD_FILTERS[f.id]) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
+      all.forEach(f => { const L = clip(); L.effects = [FM.filters.makeInstance(f.id)]; const h = shots5([L]); if (!pinSame(HEAD_FILTERS, f.id, h)) moved.push('the ' + f.name + ' filter ' + HEAD_FILTERS[f.id] + ' -> ' + h); });
       Object.keys(SAVED).forEach(type => {
         ['image', 'shape'].forEach(kind => { const L = kind === 'image' ? clip() : shape(); L.effects = [FM.fxRegistry.makeInstance(type)]; got[type + '/new/' + kind] = shots6([L]); });
         SAVED[type].forEach((p, i) => { ['image', 'shape'].forEach(kind => { const L = kind === 'image' ? clip() : shape(); L.effects = [{ type: type, enabled: true, params: Object.assign({}, p) }]; got[type + '/saved' + i + '/' + kind] = shots6([L]); }); });
       });
     } finally { ids.forEach(id => FM.media.remove(id)); }
     if (Object.keys(got).length !== Object.keys(HEAD).length) throw new Error('setup: ' + Object.keys(got).length + ' pictures rendered against ' + Object.keys(HEAD).length + ' pinned');
-    Object.keys(got).forEach(k => { if (got[k] !== HEAD[k]) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
+    Object.keys(got).forEach(k => { if (!pinSame(HEAD, k, got[k])) moved.push(k + ' ' + HEAD[k] + ' -> ' + got[k]); });
     if (moved.length) throw new Error(moved.length + ' pictures differ from v17.21 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 8).join('; '));
   });
 

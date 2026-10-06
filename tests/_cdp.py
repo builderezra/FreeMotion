@@ -296,6 +296,9 @@ def main():
     # a title that passed. tools/mutate.sh --only needs that difference (a mutation is only SURVIVED by a test that RAN),
     # so this adds "ran": [{name, ok, pending}] to the JSON. Opt-in: a full pass's output stays the size it was.
     ap.add_argument("--names", action="store_true", help="also print the name and verdict of every test that ran")
+    # PER-OS BASELINES (6 Oct, #1071): tools/record-baselines.sh runs ?pinned=1&fmrecord=1 and needs what the page captured
+    # (tests.js window.__fmBaselineRecord). Written to FILE; a run that published none writes null, and the recorder refuses.
+    ap.add_argument("--record-baselines", default=None, metavar="FILE", help="write the page's baseline recording here")
     a = ap.parse_args()
 
     url = a.url or f"http://localhost:{a.port}/tests/run.html"
@@ -703,6 +706,14 @@ def main():
                                        "return (f&&f.contentWindow&&f.contentWindow.__fmSlow)||[];})()") or []
         except Exception:
             data["slowest"] = []
+        if a.record_baselines:
+            try:
+                rec = cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                               "return JSON.stringify((w&&w.__fmBaselineRecord)||null);})()") or "null"
+            except Exception:
+                rec = "null"
+            with open(a.record_baselines, "w", encoding="utf-8") as rf:
+                rf.write(rec)
         ran = None
         if a.names:
             # run.html publishes the full pass/fail list as window.__fmResults on the runner page (not the app frame)

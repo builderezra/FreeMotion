@@ -16,3 +16,5 @@ tools/.mutate-green
 .mutation-in-progress.tmp
 # Python bytecode: macOS has a global ignore for it, Linux does not (6 Oct, the WSL port) — tick.sh read it as unshipped work
 __pycache__/
+# a record-baselines.sh proof file (--fake-os … --file .baselines-*.json): never committed
+tests/.baselines-*.json

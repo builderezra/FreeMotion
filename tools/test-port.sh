@@ -296,6 +296,33 @@ v="$(ss mac-a 'suite_seconds_record notanumber' 2>&1)"; [ "$(cat "$SS/tools/.sui
 grep -q 'suite_seconds_record "$_suite_secs"' tools/ship.sh && grep -q '_last_suite="$(suite_seconds_for)"' tools/ship.sh && ok "ship.sh reads and writes it through these (mutate.sh takes suite_timeout)" || bad "ship.sh still reads or writes tools/.suite-seconds as one number"
 [ "$(awk 'NF >= 2' tools/.suite-seconds | wc -l | tr -d ' ')" -ge 1 ] && ok "the repo's tools/.suite-seconds is in the per-machine format: $(tr '\n' ' ' < tools/.suite-seconds)" || bad "tools/.suite-seconds is still one bare number"
 
+echo "── the feature gate: a release that changes the AAC export audio or the QR code refuses unless their tests RAN here (#1071) ──"
+fg() { printf '%b' "$3" | python3 tools/_shipgates.py feature-gate --files "$1" --diff-file "$2" 2>&1; }
+printf 'diff --git a/js/collab-ui.js b/js/collab-ui.js\n--- a/js/collab-ui.js\n+++ b/js/collab-ui.js\n@@ -1 +1 @@\n-var a = 1;\n+var a = 2; // the Scan QR button\n' > "$TMP/qr.diff"
+printf 'diff --git a/js/collab-ui.js b/js/collab-ui.js\n--- a/js/collab-ui.js\n+++ b/js/collab-ui.js\n@@ -1 +1 @@\n-var a = 1;\n+var a = 2; // the presence dots\n' > "$TMP/noqr.diff"
+: > "$TMP/empty.diff"
+AAC='215 a test\tneeds an AAC audio encoder (AudioEncoder mp4a.40.2) — this browser has none\n'
+BD='921 S8 a test\tneeds a working BarcodeDetector (qr_code) — this browser has no BarcodeDetector\n'
+v="$(fg js/exporter.js "$TMP/empty.diff" "$AAC")"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$v" | grep -q 'AAC export audio (js/exporter.js)' && ok "js/exporter.js changed + an AAC test NOT RUN → refused, naming both" || bad "exporter + AAC not run: rc=$rc $v"
+v="$(fg js/audio-fx.js "$TMP/empty.diff" "$AAC")"; rc=$?; [ "$rc" = 1 ] && ok "js/audio-*.js counts too" || bad "audio-fx + AAC not run: rc=$rc $v"
+v="$(fg js/exporter.js "$TMP/empty.diff" '')"; rc=$?; [ "$rc" = 0 ] && ok "control: js/exporter.js changed, every test ran → passes" || bad "exporter, all ran: rc=$rc $v"
+v="$(fg js/timeline.js "$TMP/empty.diff" "$AAC")"; rc=$?; [ "$rc" = 0 ] && ok "control: an unrelated file + AAC NOT RUN → passes (listed, not refused)" || bad "unrelated + AAC: rc=$rc $v"
+v="$(fg js/collab-ui.js "$TMP/qr.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "js/collab-ui.js lines about QR + a QR test NOT RUN → refused" || bad "collab-ui qr: rc=$rc $v"
+v="$(fg js/collab-ui.js "$TMP/noqr.diff" "$BD")"; rc=$?; [ "$rc" = 0 ] && ok "js/collab-ui.js lines about something else → passes" || bad "collab-ui other: rc=$rc $v"
+v="$(fg js/collab-qr.js "$TMP/empty.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "js/collab-qr.js (all of it) + a QR test NOT RUN → refused" || bad "collab-qr: rc=$rc $v"
+v="$(fg js/exporter.js "$TMP/empty.diff" '?\tthe driver result carries no NOT RUN list\n')"; rc=$?; [ "$rc" = 1 ] && ok "an unknown NOT RUN list ('?') counts against the release — unknown is not 'ran'" || bad "unknown list: rc=$rc $v"
+awk '/_shipgates.py feature-gate/{f=NR} /^ship_phase push/{p=NR} END{exit !(f && p && f < p)}' tools/ship.sh && ok "ship.sh asks it after the suite passes, before the commit" || bad "ship.sh does not run the feature gate before the push"
+
+echo "── tools/record-baselines.sh refuses where a recording would be wrong (#1071) ──"
+out="$(PATH="$(shim_os Darwin):$PATH" tools/record-baselines.sh 2>&1)"; rc=$?
+[ "$rc" = 2 ] && printf '%s' "$out" | grep -q "this is the Mac" && ok "on the Mac: refused (its baselines ARE the literals in tests.js)" || bad "record on the Mac: rc=$rc $out"
+out="$(tools/record-baselines.sh --fake-os linux 2>&1)"; rc=$?
+[ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'never into the tracked tests/baselines.json' && ok "a fake OS may never write the tracked file" || bad "fake into tracked: rc=$rc $out"
+out="$(tools/record-baselines.sh --fake-os linux --file ../x.json 2>&1)"; rc=$?
+[ "$rc" = 2 ] && ok "--file must be a plain name under tests/" || bad "--file path: rc=$rc $out"
+python3 -c 'import json,sys; d=json.load(open("tests/baselines.json")); sys.exit(0 if isinstance(d, dict) and "_about" in d and "macos" not in d else 1)' && ok "tests/baselines.json is tracked, valid, and holds no 'macos' section (the Mac's are the literals)" || bad "tests/baselines.json is missing, not JSON, or holds a macos section"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"

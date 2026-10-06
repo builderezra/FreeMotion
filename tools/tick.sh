@@ -61,6 +61,14 @@ echo "app version: $(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><'
 # The first-message check reads THIS line (CLAUDE.md step 3, RULES-AUDIT B5) — not `git status`, which is dirty most of
 # the time for reasons that are not an unshipped release (the logging chat's files, the batch in progress).
 unshipped_release_line
+# PER-OS BASELINES (6 Oct, #1071): off the Mac, the 22 tests that pin the Mac's pictures and tolerances say NOT RUN HERE
+# until this OS's values are recorded — said here every tick, so the one command that records them is never a memory.
+case "$(fm_os)" in
+  Darwin) ;;
+  *) _OSK="$(fm_os | tr 'A-Z' 'a-z')"
+     python3 -c 'import json,sys; d=json.load(open("tests/baselines.json")); sys.exit(0 if isinstance(d.get(sys.argv[1]), dict) and d[sys.argv[1]].get("tables") else 1)' "$_OSK" 2>/dev/null \
+       || echo "⚠️ NO BASELINES RECORDED FOR '$_OSK' — 22 pinned tests say NOT RUN HERE on this machine until they are: tools/record-baselines.sh (on a tree the Mac has passed), then commit tests/baselines.json." ;;
+esac
 hr "QUEUE — oldest first; his words before audit findings; BUILT OUT items are not work"
 # next.sh exits 2 with a STOP banner while INBOX.md has a line (6 Oct, the PM's port review): the sed below starts at
 # ACTIONABLE, which that banner never reaches, so the queue used to read EMPTY right under an inbox that looked empty too.

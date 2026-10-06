@@ -938,6 +938,21 @@ else
   echo "· no shipped source changed — skipping the phone pass"
 fi
 
+# ⚠️ A RELEASE THAT CHANGES WHAT A NOT-RUN TEST PROVES REFUSES (6 Oct, #1071 — his answer: the recommended plan). Elsewhere
+# than the Mac a test that needs a missing feature says NOT RUN HERE and the release goes on — but not when this release
+# changes the code that test is the only proof of: the AAC export audio (js/exporter.js, js/export-resume.js, js/audio-*.js,
+# vendor/mp4-muxer.js) or the QR code (js/collab-qr.js, and js/collab-ui.js lines about qr/barcode/jsqr/scan). Those tests
+# must have RUN, and passed, on the machine shipping this tree — the Mac. The map is FEATURES in tools/_shipgates.py.
+if [ -n "${NOTRUN_ALL:-}" ]; then
+  _FG="$(printf '%s\n' "$NOTRUN_ALL" | python3 tools/_shipgates.py feature-gate)"; _FGRC=$?
+  if [ "$_FGRC" != 0 ]; then
+    [ -n "$_FG" ] && echo "$_FG" || echo "❌ the feature gate could not run (git or its own error, above) — not shipping on a guess."
+    echo "   Ship this release from a machine that runs them (the Mac). Nothing is committed or pushed."
+    _WHY="changes code whose tests did not run on this machine"
+    exit 1
+  fi
+fi
+
 ship_phase push
 git add -A
 git commit -q -m "$MSG" || { echo "ship: nothing to commit"; exit 1; }
