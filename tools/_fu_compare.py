@@ -604,6 +604,10 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                         for k in ('cls', 'focus', 'exp'):
                             if pa_.get(k) != pb_.get(k):
                                 out.append('%s FU6 %s %s: %s %s → %s' % (w, size, part, k, short(pa_.get(k)), short(pb_.get(k))))
+                        if pa_.get('motion') != pb_.get('motion'):
+                            local = []
+                            json_diff(pa_.get('motion'), pb_.get('motion'), 'what it animated', local, max(4, per_step))
+                            out += ['%s FU6 %s %s: %s' % (w, size, part, x) for x in local]
                 if size == 'function':
                     local = []
                     json_diff(va, vb, 'FU6 function', local, limit)

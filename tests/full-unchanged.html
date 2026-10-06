@@ -228,8 +228,28 @@
      element, the property or @keyframes name, the computed duration, delay, easing (and iterations), and an animation's
      keyframes — sorted, so the order two rAFs happened to fire in is not a difference. Then they are finished as before. */
   var motionLog = null;
-  function motionStart() { motionLog = Object.create(null); }
-  function motionTake() { var m = motionLog ? Object.keys(motionLog).sort() : []; motionLog = null; return m; }
+  function motionStart() { motionLog = Object.create(null); motionPending.length = 0; try { if (w && w.__fuAnim) w.__fuAnim.length = 0; } catch (e) {} }
+  function motionTake() { cssMotion(); scriptMotion(); var m = motionLog ? Object.keys(motionLog).sort() : []; motionLog = null; return m; }
+  /* …AND EVERY ANIMATION STARTED FROM SCRIPT (the second review, 6 Oct). element.animate() fires no transitionrun and no
+     animationstart, and finishFinite() jumps it to its end before anything is measured — so the cog's Canvas↔Friends flight
+     went from 460 ms with its spring curve to 700 ms ease-in-out and nothing saw it. The driver's init script (main, below)
+     wraps Element.prototype.animate in the app frame before any of the app's scripts run and keeps each call — the element,
+     its keyframes, its options (duration, delay, easing, iterations, fill) — in window.__fuAnim; a screen's motion takes them
+     with the CSS ones. Numbers in the keyframes are rounded to 1/100 (they are layout, measured where the call was made). */
+  function roundNums(s) { return String(s).replace(/-?\d+\.\d{3,}/g, function (m) { return String(Math.round(parseFloat(m) * 100) / 100); }); }
+  function scriptMotion() {
+    var q = null;
+    try { q = w && w.__fuAnim; } catch (e) { q = null; }
+    if (!q || !q.length) return;
+    var rows = q.splice(0);
+    if (!motionLog) return;
+    rows.forEach(function (c) {
+      try {
+        var t = c.el && c.el.nodeType === 1 ? pathOf(c.el) + (c.pseudo || '') : String(c.el);
+        motionLog[JSON.stringify(['W', t, short(roundNums(c.kf), 1500), roundNums(c.opts)])] = 1;
+      } catch (e) {}
+    });
+  }
   /* …and every animation that never ends and is running on the screen now, whenever it started (a spinner, a glint, a
      pulse started at boot sends no animationstart while the screen is reached): its timing and its keyframes, so a change
      to an infinite animation is seen even though the picture freezes it at its first frame. */
@@ -250,18 +270,29 @@
     try {
       var t = e.target; if (!t || t.nodeType !== 1) return;
       var cs = w.getComputedStyle(t, e.pseudoElement || null), row;
+      /* The element's PATH is read when the screen's motion is taken, not here (measured 6 Oct at 320×568: the ⋯ strip
+         gains `sb-scrolls` a frame after its slide starts, so the path read at animationstart had it on one run of HEAD and
+         not the next). The timing is read here, while it is the one that was started. */
       if (e.type === 'transitionrun') {
-        row = ['T', pathOf(t) + (e.pseudoElement || ''), e.propertyName, cs.transitionProperty, cs.transitionDuration, cs.transitionDelay, cs.transitionTimingFunction];
+        row = ['T', t, (e.pseudoElement || ''), e.propertyName, cs.transitionProperty, cs.transitionDuration, cs.transitionDelay, cs.transitionTimingFunction];
       } else {
         var kf = '';
         try {
           var an = t.getAnimations().filter(function (a) { return a.animationName === e.animationName; })[0];
           if (an) kf = JSON.stringify(an.effect.getKeyframes().map(function (k) { var o = {}; Object.keys(k).sort().forEach(function (x) { if (x !== 'computedOffset') o[x] = k[x]; }); return o; }));
         } catch (er) {}
-        row = ['A', pathOf(t) + (e.pseudoElement || ''), e.animationName, cs.animationDuration, cs.animationDelay, cs.animationTimingFunction, cs.animationIterationCount, kf.slice(0, 1500)];
+        row = ['A', t, (e.pseudoElement || ''), e.animationName, cs.animationDuration, cs.animationDelay, cs.animationTimingFunction, cs.animationIterationCount, kf.slice(0, 1500)];
       }
-      motionLog[JSON.stringify(row)] = 1;
+      motionPending.push(row);
     } catch (er) {}
+  }
+  var motionPending = [];
+  function cssMotion() {
+    var rows = motionPending.splice(0);
+    if (!motionLog) return;
+    rows.forEach(function (r) {
+      try { motionLog[JSON.stringify([r[0], pathOf(r[1]) + r[2]].concat(r.slice(3)))] = 1; } catch (e) {}
+    });
   }
 
   /* ═══ THE LAYOUT RECORD (DESIGN §0.4.5 "two comparisons per screen", 1) ═════════════════════════════════════════════
@@ -2222,7 +2253,10 @@
           try { w.localStorage.removeItem('fm.cvPair'); } catch (e) {}
           if (!(await openCog())) { r.noCog = cogWhere(); return; }
           r.canvas = cogRecord();
-          await openFriends(); r.friends = cogRecord();
+          /* the Canvas → Friends flight is element.animate() (js/app.js): what it animated, the script's calls included
+             (the second review, 6 Oct: 460 ms spring → 700 ms ease-in-out passed at all fourteen sizes) */
+          motionStart();
+          await openFriends(); r.friends = cogRecord(); r.friends.motion = motionTake();
           FM.closeCanvasDialog(); await settle();
           await mustOpenCog(); r.reopened = cogRecord();     // the cog remembers the last of Canvas / Friends
           FM.closeCanvasDialog(); await settle();
@@ -2246,10 +2280,11 @@
       press('#cv-go'); await settle(300);
       fn.apply = await stateRecord();
       step('FU6 the Canvas ↔ Friends swap');
-      await mustOpenCog(); await openFriends(); fn.swapToFriends = cogRecord();
+      await mustOpenCog(); motionStart(); await openFriends(); fn.swapToFriends = cogRecord(); fn.swapToFriends.motion = motionTake();
       var cvBar = D.getElementById('cv-mini-exp') || D.getElementById('cv-mini');
+      motionStart();
       if (cvBar && cvBar.getClientRects().length) { cvBar.click(); await settle(350); }
-      fn.swapBack = cogRecord();
+      fn.swapBack = cogRecord(); fn.swapBack.motion = motionTake();
       FM.closeCanvasDialog(); await settle();
     } catch (e) { fn.err = String(e && e.message || e); closeTransient(); }
   }
