@@ -10,3 +10,4 @@ P1 | 2026-10-06 | plans/helper-1 | plans for the 5 oldest real open items (Editi
 T3F | 2026-10-06 | tutorials-drafts | applied all 7 PM fixes to 07-10 (1c113b6); 10 now says reopen the menu and delete the COPY
 H1 | 2026-10-06 | hunt/1085-suite-memory | measured full run to test ~1924: renderer RSS 372-1085 MB (NOT 8.7 GB), ~300 MB floor creep, three spike-and-fall tests, guard proposed
 H6 | 2026-10-06 | hunt/phone-perf | top 10 per-frame hot paths reasoned from code; biggest: updatePlayhead/syncKeyRail/readout DOM work every rAF and forced layout in canvas-edit (not timed on a device)
+T5 | 2026-10-06 | tutorials-drafts | tutorials 17-20 (friends, templates, elements, easing) with file:line tables; Home has an empty Tutorials tab they could fill
