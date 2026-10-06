@@ -106,15 +106,14 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
     *"cant you have the test suite run while u move on to the next thing? … i want more progress faster
     but not at the quality cost … if u notice that the testers actually notice a lot of good stuff dont
     get rid of them."*
-    **He is right about the bottleneck.** The suite is ~946 tests and ~9 minutes a pass. One item was
-    costing up to FOUR passes — one to check, two inside ship.sh, one or two for a mutation — so ~35
-    minutes of idle waiting for a change that often takes two minutes to write. 33 releases in 36 hours,
-    almost all of it watching a progress bar.
+    **He is right about the bottleneck.** One item was costing up to FOUR suite passes — one to check, two
+    inside ship.sh, one or two for a mutation (lengths: `tools/.suite-seconds`) — of idle waiting for a change
+    that often takes two minutes to write. 33 releases in 36 hours, almost all of it watching a progress bar.
     **So: work 3–5 queue items, then ONE ship covering them all.** Same tests, same gates, a quarter of
     the waiting.
-    ⚠️ **Do NOT edit the tree while a suite is running.** ship.sh runs the suite twice and the second
-    pass loads from disk, so a mid-flight edit lands in a run that is meant to be testing the previous
-    state. That is why the answer is BATCHING rather than literally editing while it runs.
+    ⚠️ **Build during ships (6 Oct, RULES-AUDIT B2).** While ship.sh runs, do not touch THIS tree: the phone pass reloads from disk, and `git add -A` commits whatever is here at the end. Instead, BEFORE starting the ship, create one worktree under `.claude/worktrees/` for the next-oldest item and write code there while the ship runs. Mid-ship, reuse an existing worktree (`git switch -c <branch> <base>`) instead of adding a new one. Code only: no suite, no browser, no Workflow or agents. Merge it into this tree as UNCOMMITTED changes (so prove.sh runs) only when `.ship-in-progress` is gone, no ship.sh is alive, and the ship's log shows `pushed and verified`. If the ship REFUSED, keep the worktree separate until the re-ship lands.
+    Never put a worktree in a new top-level folder: `git add -A` would sweep it into a release. Worktrees live
+    under `.claude/` (gitignored).
     ⚠️ **KEEP the mutation checks.** He singled them out — they have caught something real every single
     time, including two of my own dead tests and a cross-test leak. Batch them too: mutate once per
     batch on the riskiest assertion, not once per item.

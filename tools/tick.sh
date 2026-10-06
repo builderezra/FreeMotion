@@ -15,7 +15,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 hr() { printf '\n── %s ──\n' "$1"; }
 
-hr "IN FLIGHT — do not edit the tree or take a browser reading while any of these is true"
+hr "IN FLIGHT — while any of these is true, take no browser reading and do not edit THIS tree; keep building in your worktree (created before the ship)"
 if [ -f .mutation-in-progress ]; then
   # since 6 Oct the lock names its pid: a pid that is gone is a KILLED mutation, and the file it names may still be mutated
   _mp="$(sed -n 's/^pid=//p' .mutation-in-progress | head -1)"
