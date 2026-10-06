@@ -1,0 +1,5 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>1084 prototypes side by side</title>
+<style>body{margin:0;background:#07090f;color:#eef2f8;font:13px -apple-system,Segoe UI,sans-serif;padding:14px}.row{display:flex;gap:14px;align-items:flex-start}iframe{width:400px;height:880px;border:0;background:#07090f}.bar{display:flex;gap:8px;margin-bottom:10px}button{background:#1e2533;color:#eef2f8;border:1px solid #2b3547;border-radius:9px;padding:8px 12px;font:inherit;font-weight:600}</style></head><body>
+<div class="bar"><button onclick="tap(60,420)">Tap all: top-left</button><button onclick="tap(190,560)">Tap all: centre</button><button onclick="tap(330,700)">Tap all: bottom-right</button></div>
+<div class="row"><iframe src="a-circle-reveal.html?state=layers?state=layers"></iframe><iframe src="b-row-expands.html?state=layers"></iframe><iframe src="c-slide-up.html?state=layers"></iframe></div>
+<script>function tap(x,y){document.querySelectorAll('iframe').forEach(function(f){f.contentWindow.postMessage({type:'demo',x:x,y:y},'*')})}</script></body></html>

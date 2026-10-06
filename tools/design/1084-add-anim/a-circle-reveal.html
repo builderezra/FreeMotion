@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>1084 prototype: (a) Circle reveal from the tap point</title>
+<style>:root{--bg:#0e1320;--stage:#131b26;--panel:#161c28;--panel-2:#1e2533;--panel-3:#283143;--line:#2b3547;--line-soft:#1f2734;--text:#eef2f8;--text-dim:#8b96a8;--text-faint:#59647a;--accent:#29d9bb;--accent-soft:rgba(41,217,187,.15);--kf:#ffce4a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:#07090f;color:var(--text);font:13px -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Inter,sans-serif}
+body{display:flex;flex-direction:column;align-items:center;padding:14px 0 28px;min-height:100vh}
+.title{width:380px;margin:0 0 8px;font-size:12px;color:var(--text-dim);line-height:1.4}
+.title b{color:var(--text);font-size:14px;display:block;margin-bottom:2px}
+/* THE PHONE: exactly 380 x 760 so a screen recording of this box is the phone layout */
+.phone{position:relative;width:380px;height:760px;overflow:hidden;background:var(--bg);border-radius:26px;border:1px solid var(--line);isolation:isolate;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.topbar{position:absolute;left:0;right:0;top:0;height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.topbar .name{font-weight:600;font-size:14px}.topbar .btn{width:30px;height:30px;border-radius:9px;background:var(--panel-2);border:1px solid var(--line);display:grid;place-items:center;color:var(--text-dim)}
+.topbar .exp{background:var(--accent);color:#04201b;font-weight:700;font-size:12px;width:auto;padding:0 12px;border-color:transparent}
+.stage{position:absolute;left:0;right:0;top:44px;height:300px;background:var(--stage);display:grid;place-items:center}
+.canvas{width:169px;height:300px;background:#000;border-radius:2px;box-shadow:0 0 0 1px #000;position:relative;overflow:hidden}
+.canvas i{position:absolute;display:block}
+.tl{position:absolute;left:0;right:0;top:344px;bottom:0;background:var(--bg)}
+.ruler{height:28px;border-bottom:1px solid var(--line-soft);display:flex;align-items:flex-end;gap:0;padding:0 0 4px 62px;color:var(--text-faint);font-size:10px}
+.ruler span{width:60px}
+.row{position:relative;height:42px;display:flex;align-items:center;border-bottom:1px solid var(--line-soft)}
+.row .head{width:62px;padding-left:10px;color:var(--text-dim);font-size:11px;white-space:nowrap}
+.row .clip{height:30px;border-radius:7px;position:absolute;top:6px;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:600;color:rgba(255,255,255,.92)}
+.playline{position:absolute;left:150px;top:0;bottom:0;width:2px;background:var(--accent);opacity:.9;box-shadow:0 0 8px var(--accent)}
+/* the Add row: the real one is dashed teal on a tinted ground (.tl-addrow, 40px + 1px margins = 42px slot) */
+.addrow{position:absolute;left:10px;right:10px;height:40px;border-radius:10px;display:flex;align-items:center;gap:10px;padding:0 12px;color:var(--accent);font-weight:600;font-size:13px;cursor:pointer;background:var(--accent-soft);border:1.5px dashed rgba(41,217,187,.55)}
+.addrow .plus{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#04201b;display:grid;place-items:center;font-weight:800;font-size:16px;line-height:1}
+/* the empty-project area: the whole timeline panel is one big tap target */
+.empty{position:absolute;inset:0;margin:12px;border-radius:16px;border:1.5px dashed rgba(41,217,187,.45);background:radial-gradient(120% 90% at 50% 40%,rgba(41,217,187,.12),rgba(41,217,187,.03));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--accent);font-weight:600;font-size:15px;cursor:pointer}
+.empty .orb{width:64px;height:64px;border-radius:50%;background:var(--accent);color:#04201b;display:grid;place-items:center;font-size:38px;font-weight:300;line-height:1;box-shadow:0 0 0 0 rgba(41,217,187,.5);animation:orb 2.4s ease-out infinite}
+@keyframes orb{0%{box-shadow:0 0 0 0 rgba(41,217,187,.45)}70%{box-shadow:0 0 0 22px rgba(41,217,187,0)}100%{box-shadow:0 0 0 0 rgba(41,217,187,0)}}
+.rm .empty .orb,.rm-os .empty .orb{animation:none}
+@media (prefers-reduced-motion:reduce){.empty .orb{animation:none}}
+/* the Add sheet, as the app draws it on a phone: glass (82% tint), 16px top corners, reaches the canvas */
+.scrim{position:absolute;inset:0;background:rgba(2,6,10,.55);opacity:0;pointer-events:none;z-index:5}
+.sheet{position:absolute;left:0;right:0;top:344px;bottom:0;z-index:7;visibility:hidden;background:rgba(12,28,37,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);border-radius:16px 16px 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.55);padding:0 14px 18px;display:flex;flex-direction:column}
+.sheet.is-arriving *{pointer-events:none}
+.grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 8px}
+.sh-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sh-head b{font-size:15px}.sh-head button{background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:6px 12px;font:inherit;font-weight:600}
+.tabs{display:flex;gap:7px;margin-bottom:12px}
+.tab{flex:1 1 0;min-width:0;text-align:center;padding:9px 0;border-radius:10px;background:rgba(4,10,14,.38);border:1px solid var(--line);color:var(--text-dim);font-size:12px;font-weight:600}
+.tab.on{color:var(--accent);border-color:rgba(41,217,187,.55);background:var(--accent-soft)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.card{border-radius:12px;padding:12px 4px 9px;display:flex;flex-direction:column;align-items:center;gap:7px;background:rgba(var(--t,41,217,187),.10);border:1px solid rgba(var(--t,41,217,187),.26);font-size:11px;font-weight:600;color:var(--text)}
+.card svg{width:24px;height:24px;stroke:rgb(var(--t,41,217,187));fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ringhost{position:absolute;left:0;right:0;top:344px;bottom:0;z-index:9;pointer-events:none;overflow:hidden;border-radius:16px 16px 0 0}
+.ring{position:absolute;border-radius:50%;border:2px solid rgba(190,255,245,.9);box-shadow:0 0 14px rgba(41,217,187,.8),inset 0 0 18px rgba(41,217,187,.35);opacity:0;transform:scale(0)}
+.skin{position:absolute;z-index:8;pointer-events:none;opacity:0}
+.touch{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:rgba(255,255,255,.28);border:2px solid rgba(255,255,255,.7);z-index:20;pointer-events:none;opacity:0}
+/* director panel: outside the 380px phone, so a crop of the phone is clean */
+.ctl{width:380px;margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;color:var(--text-dim)}
+.ctl button,.ctl select{background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:7px 10px;font:inherit;font-weight:600}
+.ctl label{display:flex;align-items:center;gap:5px}
+.note{width:380px;margin-top:10px;color:var(--text-faint);font-size:11px;line-height:1.45}
+</style></head>
+<body data-mode="circle">
+<div class="title"><b>(a) Circle reveal from the tap point</b>The menu is created around your finger and pulses out in a circle. Pick 260 or 340 ms. In an empty project tap anywhere in the big area; with layers, tap the Add row.</div>
+<div class="phone">
+  <div class="topbar"><div class="btn">&#8249;</div><div class="name">My project</div><div class="btn exp">Export</div></div>
+  <div class="stage"><div class="canvas"></div></div>
+  <div class="tl" id="tl" data-state="empty"></div>
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet"><div id="inner" style="display:flex;flex-direction:column;flex:1"></div></div>
+  <div class="ringhost" id="ringhost"></div>
+  <div class="skin" id="skin"></div>
+  <div class="touch" id="touch"></div>
+</div>
+<div class="ctl">
+  <button id="stateBtn" type="button">Project: empty</button><label>Speed <select id="dur"><option value="260">260 ms</option><option value="340" selected>340 ms</option></select></label>
+  <button id="pTL" type="button">Tap top-left</button><button id="pC" type="button">Tap centre</button><button id="pBR" type="button">Tap bottom-right</button>
+  <button id="closeBtn" type="button">Close</button><button id="loopBtn" type="button">Auto loop</button>
+  <label><input type="checkbox" id="slow"> Slow-mo x4</label>
+  <label><input type="checkbox" id="rm"> Reduced motion</label>
+  <label><input type="checkbox" id="dim" checked> Dim behind</label>
+</div>
+<div class="note">Plain HTML, CSS and JS, nothing from the app. The box above is exactly 380 x 760. Closing: tap Done, the dimmed area, press Esc, or the Close button. Colours and sizes are the app's (panel #161c28, accent #29d9bb, glass sheet 88% tint, 16 px top corners).</div>
+<script>(function () {
+  'use strict';
+  var MODE = document.body.dataset.mode;                       // 'circle' | 'row' | 'slide'
+  var $ = function (s) { return document.querySelector(s); };
+  var phone = $('.phone'), sheet = $('#sheet'), inner = $('#inner'), scrim = $('#scrim'), ringhost = $('#ringhost'), skin = $('#skin'), touch = $('#touch'), tl = $('#tl');
+  var SH = { top: 344, h: 416, w: 380 };                       // the sheet's box: from the canvas's bottom to the screen's bottom, as the app draws it
+  var Q = new URLSearchParams(location.search);
+  var EASE_OUT = 'cubic-bezier(.3,.55,.3,1)', EASE_IN = 'cubic-bezier(.5,0,.85,.35)';
+  var isOpen = false, busy = false, origin = null, anims = [], loop = null;
+
+  function reduced() { return $('#rm').checked || matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  function slow() { return $('#slow').checked ? 4 : 1; }
+  function dur() { var d = $('#dur'); return d ? +d.value : 300; }
+  function dim() { return $('#dim').checked; }
+  function A(el, kf, o) { var a = el.animate(kf, Object.assign({ fill: 'both' }, o)); anims.push(a); return a; }
+  function cancelAll() { anims.forEach(function (a) { try { a.cancel(); } catch (e) {} }); anims = []; }
+  function done() { return Promise.all(anims.map(function (a) { return a.finished; })).catch(function () {}); }
+
+  /* ---------- the fake editor (phone layout, the app's colours) ---------- */
+  var ICON = {
+    text: '<path d="M6 5h12M12 5v14M9 19h6"/>', cap: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M7 14h6"/>',
+    pen: '<path d="M4 20l1-4L16 5l3 3L8 19z"/>', shape: '<rect x="5" y="5" width="14" height="14" rx="1.5"/>',
+    cam: '<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3"/>', adj: '<circle cx="12" cy="12" r="8"/><path d="M4 12h16"/>',
+    grp: '<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h7A1.5 1.5 0 0 1 19 10v7a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 3 17z"/>', ctl: '<circle cx="12" cy="12" r="7"/><path d="M12 8v8M8 12h8"/>'
+  };
+  var CARDS = [['Text', 'text', '41,217,187'], ['Captions', 'cap', '255,206,74'], ['Sketching', 'pen', '255,138,101'], ['Custom shape', 'shape', '129,140,248'],
+    ['Camera', 'cam', '41,217,187'], ['Controller', 'ctl', '255,206,74'], ['Adjustment', 'adj', '255,138,101'], ['New group', 'grp', '129,140,248']];
+  $('#inner').innerHTML = '<div class="grab"></div><div class="sh-head"><b>Add</b><button type="button" id="done">Done</button></div>' +
+    '<div class="tabs"><div class="tab on">Elements</div><div class="tab">Shape</div><div class="tab">Media</div><div class="tab">Audio</div><div class="tab">Templates</div></div>' +
+    '<div class="grid">' + CARDS.map(function (c) { return '<div class="card" style="--t:' + c[2] + '"><svg viewBox="0 0 24 24">' + ICON[c[1]] + '</svg>' + c[0] + '</div>'; }).join('') + '</div>';
+  $('.canvas').innerHTML = '<i style="left:0;top:0;right:0;bottom:0;background:linear-gradient(160deg,#1b2a48,#0d1426)"></i><i style="left:30px;top:90px;width:110px;height:110px;border-radius:50%;background:#29d9bb;opacity:.9"></i><i style="left:18px;top:220px;width:130px;height:10px;border-radius:5px;background:#ffce4a"></i>';
+
+  function renderTl() {
+    var layers = tl.dataset.state === 'layers';
+    if (!layers) {
+      tl.innerHTML = '<div class="empty" id="trigger"><div class="orb">+</div><div>Tap here to start creating</div></div>';
+      $('#trigger').addEventListener('click', function (e) { tapAt(e.clientX, e.clientY); });
+    } else {
+      tl.innerHTML = '<div class="ruler"><span>0:00</span><span>0:02</span><span>0:04</span><span>0:06</span></div>' +
+        '<div class="row"><div class="head">Title</div><div class="clip" style="left:70px;width:120px;background:#818cf8">Hello</div></div>' +
+        '<div class="row"><div class="head">Photo</div><div class="clip" style="left:70px;width:230px;background:#29d9bb;color:#04201b">beach.jpg</div></div>' +
+        '<div class="row"><div class="head">Music</div><div class="clip" style="left:70px;width:260px;background:#ff8a65">song.mp3</div></div>' +
+        '<div class="playline"></div>' +
+        '<div class="addrow" id="addrow" style="top:157px"><span class="plus">+</span><span>Tap to add a layer</span></div>';
+      $('#addrow').addEventListener('click', function (e) { tapAt(e.clientX, e.clientY); });
+    }
+  }
+  function setState(s) { hardClose(); tl.dataset.state = s; renderTl(); $('#stateBtn').textContent = 'Project: ' + (s === 'layers' ? 'with layers' : 'empty'); }
+
+  /* ---------- geometry ---------- */
+  function pr() { return phone.getBoundingClientRect(); }
+  function rowRect() {   // the Add row, in phone coordinates
+    var r = $('#addrow').getBoundingClientRect(), p = pr();
+    return { l: r.left - p.left, t: r.top - p.top, r: r.right - p.left, b: r.bottom - p.top };
+  }
+  function farthest(ox, oy) {   // radius that just covers the sheet's farthest corner from (ox, oy), sheet coordinates
+    return Math.max(Math.hypot(ox, oy), Math.hypot(SH.w - ox, oy), Math.hypot(ox, SH.h - oy), Math.hypot(SH.w - ox, SH.h - oy));
+  }
+  function setSkin(rc) {
+    skin.style.left = rc.l + 'px'; skin.style.top = rc.t + 'px'; skin.style.width = (rc.r - rc.l) + 'px'; skin.style.height = (rc.b - rc.t) + 'px';
+    skin.innerHTML = '<div class="addrow" style="left:0;right:0;top:0;position:absolute"><span class="plus">+</span><span>Tap to add a layer</span></div>';
+  }
+
+  /* ---------- OPEN ---------- */
+  function show() { sheet.style.visibility = 'visible'; sheet.classList.add('is-arriving'); scrim.style.pointerEvents = 'auto'; }
+  function open(x, y) {
+    if (isOpen || busy) return;
+    cancelAll(); busy = true; isOpen = true; origin = { x: x, y: y };
+    show();
+    var k = slow(), D = dur() * k, rm = reduced();
+    if (dim()) A(scrim, [{ opacity: 0 }, { opacity: 1 }], { duration: rm ? 160 * k : D, easing: 'ease-out' });
+    if (rm) {
+      if (MODE === 'slide') A(sheet, [{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }], { duration: 220 * k, easing: 'ease' });   // the app's own reduced-motion slide
+      else A(sheet, [{ opacity: 0 }, { opacity: 1 }], { duration: 160 * k, easing: 'ease-out' });                                                   // new modes: a plain fade
+    } else if (MODE === 'slide') {
+      sheet.style.transformOrigin = '50% 100%';
+      A(sheet, [{ opacity: 0, transform: 'perspective(1400px) translateY(100%) rotateX(-58deg)' }, { opacity: 1, offset: .55 }, { opacity: 1, transform: 'perspective(1400px) translateY(0) rotateX(0deg)' }], { duration: 360 * k, easing: 'cubic-bezier(.18,.85,.28,1.02)' });
+    } else if (MODE === 'circle') {
+      var ox = x, oy = y - SH.top, R = farthest(ox, oy);
+      A(sheet, [{ clipPath: 'circle(0px at ' + ox + 'px ' + oy + 'px)' }, { clipPath: 'circle(' + R + 'px at ' + ox + 'px ' + oy + 'px)' }], { duration: D, easing: EASE_OUT });
+      A(inner, [{ opacity: 0 }, { opacity: 0, offset: .3 }, { opacity: 1 }], { duration: D, easing: 'ease-out' });
+      ringhost.innerHTML = '<div class="ring" style="width:' + 2 * R + 'px;height:' + 2 * R + 'px;left:' + (ox - R) + 'px;top:' + (oy - R) + 'px"></div><div class="ring" style="width:' + 2 * R + 'px;height:' + 2 * R + 'px;left:' + (ox - R) + 'px;top:' + (oy - R) + 'px;opacity:.5"></div>';
+      var rings = ringhost.querySelectorAll('.ring');
+      A(rings[0], [{ transform: 'scale(0)', opacity: .95 }, { opacity: .75, offset: .6 }, { transform: 'scale(1)', opacity: 0 }], { duration: D, easing: EASE_OUT });
+      A(rings[1], [{ transform: 'scale(0)', opacity: 0 }, { opacity: .5, offset: .15 }, { transform: 'scale(1)', opacity: 0 }], { duration: D * 1.18, easing: EASE_OUT });
+    } else {   // row
+      var rc = rowRect(), t = rc.t - SH.top, b = SH.h - (rc.b - SH.top);
+      var from = 'inset(' + t + 'px ' + (SH.w - rc.r) + 'px ' + b + 'px ' + rc.l + 'px round 10px)', to = 'inset(0px 0px 0px 0px round 16px 16px 0px 0px)';
+      setSkin(rc);
+      A(sheet, [{ clipPath: from, backgroundColor: 'rgba(41,217,187,.18)' }, { clipPath: to, backgroundColor: 'rgba(12,28,37,.88)' }], { duration: D, easing: EASE_OUT });
+      A(inner, [{ opacity: 0 }, { opacity: 0, offset: .6 }, { opacity: 1 }], { duration: D, easing: 'ease-out' });
+      A(skin, [{ opacity: 1 }, { opacity: 0, offset: .4 }, { opacity: 0 }], { duration: D, easing: 'ease-out' });
+    }
+    done().then(function () { sheet.classList.remove('is-arriving'); busy = false; });
+  }
+
+  /* ---------- CLOSE (the same shape back) ---------- */
+  function close() {
+    if (!isOpen) return;
+    isOpen = false; busy = true; scrim.style.pointerEvents = 'none';
+    var cur = anims.slice(); cur.forEach(function (a) { try { a.cancel(); } catch (e) {} }); anims = [];
+    var k = slow(), rm = reduced(), D = dur() * k * .8;
+    if (dim()) A(scrim, [{ opacity: 1 }, { opacity: 0 }], { duration: rm ? 120 * k : D, easing: 'ease-in' });
+    if (rm) {
+      if (MODE === 'slide') A(sheet, [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }], { duration: 220 * k, easing: 'ease' });
+      else A(sheet, [{ opacity: 1 }, { opacity: 0 }], { duration: 120 * k, easing: 'ease-in' });
+    } else if (MODE === 'slide') {
+      A(sheet, [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }], { duration: 220 * k, easing: 'ease' });   // today's close: the base rule's .22s slide
+    } else if (MODE === 'circle') {
+      var ox = origin.x, oy = origin.y - SH.top, R = farthest(ox, oy);
+      A(sheet, [{ clipPath: 'circle(' + R + 'px at ' + ox + 'px ' + oy + 'px)' }, { clipPath: 'circle(0px at ' + ox + 'px ' + oy + 'px)' }], { duration: D, easing: EASE_IN });
+      A(inner, [{ opacity: 1 }, { opacity: 0, offset: .4 }, { opacity: 0 }], { duration: D, easing: 'ease-in' });
+    } else {
+      var rc = rowRect(), t = rc.t - SH.top, b = SH.h - (rc.b - SH.top);
+      var to = 'inset(' + t + 'px ' + (SH.w - rc.r) + 'px ' + b + 'px ' + rc.l + 'px round 10px)', from = 'inset(0px 0px 0px 0px round 16px 16px 0px 0px)';
+      setSkin(rc);
+      A(sheet, [{ clipPath: from, backgroundColor: 'rgba(12,28,37,.88)' }, { clipPath: to, backgroundColor: 'rgba(41,217,187,.18)' }], { duration: D, easing: EASE_IN });
+      A(inner, [{ opacity: 1 }, { opacity: 0, offset: .4 }, { opacity: 0 }], { duration: D, easing: 'ease-in' });
+      A(skin, [{ opacity: 0 }, { opacity: 0, offset: .6 }, { opacity: 1 }], { duration: D, easing: 'ease-out' });
+    }
+    done().then(function () { sheet.style.visibility = 'hidden'; cancelAll(); ringhost.innerHTML = ''; skin.style.opacity = 0; busy = false; });
+  }
+  function hardClose() { cancelAll(); isOpen = false; busy = false; sheet.style.visibility = 'hidden'; sheet.classList.remove('is-arriving'); scrim.style.pointerEvents = 'none'; ringhost.innerHTML = ''; skin.style.opacity = 0; }
+
+  function showTouch(x, y) {
+    touch.style.left = x + 'px'; touch.style.top = y + 'px';
+    var a = touch.animate([{ opacity: 0, transform: 'scale(1.5)' }, { opacity: 1, transform: 'scale(1)', offset: .35 }, { opacity: 1, transform: 'scale(.82)', offset: .7 }, { opacity: 0, transform: 'scale(.82)' }], { duration: 220 * slow(), fill: 'none' });
+    return a.finished.catch(function () {});
+  }
+  function tapAt(cx, cy) { var p = pr(); open(cx - p.left, cy - p.top); }
+  function demo(x, y) {   // a programmatic tap, with a visible finger, for recording
+    if (MODE === 'row') { if (tl.dataset.state !== 'layers') setState('layers'); var rc = rowRect(); x = (rc.l + rc.r) / 2; y = (rc.t + rc.b) / 2; }
+    return showTouch(x, y).then(function () { open(x, y); });
+  }
+
+  /* ---------- controls ---------- */
+  scrim.addEventListener('click', function () { if (!sheet.classList.contains('is-arriving')) close(); });   // the arriving sheet takes no taps (the app's .is-arriving guard)
+  $('#done').addEventListener('click', close);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+  $('#stateBtn').addEventListener('click', function () { setState(tl.dataset.state === 'layers' ? 'empty' : 'layers'); });
+  $('#closeBtn').addEventListener('click', close);
+  [['pTL', 60, 420], ['pC', 190, 560], ['pBR', 330, 700]].forEach(function (p) { var b = $('#' + p[0]); if (b) b.addEventListener('click', function () { if (isOpen) { hardClose(); } demo(p[1], p[2]); }); });
+  var loopBtn = $('#loopBtn'), looping = false, PTS = [[60, 420], [190, 560], [330, 700], [310, 470]];
+  loopBtn.addEventListener('click', function () {
+    looping = !looping; loopBtn.textContent = looping ? 'Stop loop' : 'Auto loop';
+    var i = 0;
+    (function step() {
+      if (!looping) return;
+      hardClose(); var p = PTS[i++ % PTS.length];
+      demo(p[0], p[1]).then(function () {
+        setTimeout(function () { if (!looping) return; close(); setTimeout(step, (dur() * .8 + 500) * slow()); }, 1300 * slow());
+      });
+    })();
+  });
+  $('#rm').addEventListener('change', function () { document.documentElement.classList.toggle('rm', $('#rm').checked); });
+
+  // deterministic frame access for stills and recordings: __proto.seek(ms) pauses every running animation at that time
+  window.__proto = {
+    open: open, close: close, demo: demo, setState: setState, hardClose: hardClose,
+    seek: function (ms) { document.getAnimations().forEach(function (a) { a.pause(); a.currentTime = ms; }); },
+    state: function () { return { open: isOpen, busy: busy, arriving: sheet.classList.contains('is-arriving'), mode: MODE }; }
+  };
+  window.addEventListener('message', function (e) { if (e.data && e.data.type === 'demo') { hardClose(); demo(e.data.x, e.data.y); } });
+
+  tl.dataset.state = Q.get('state') || (MODE === 'row' ? 'layers' : 'empty');
+  if (Q.get('dur') && $('#dur')) $('#dur').value = Q.get('dur');
+  if (Q.get('slow')) $('#slow').checked = true;
+  if (Q.get('rm')) { $('#rm').checked = true; document.documentElement.classList.add('rm'); }
+  renderTl(); $('#stateBtn').textContent = 'Project: ' + (tl.dataset.state === 'layers' ? 'with layers' : 'empty');
+})();
+</script>
+</body></html>
