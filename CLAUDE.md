@@ -45,7 +45,8 @@ GitHub-Desktop-by-hand arrangement. Use `git push ssh main`: the branch's upstre
 HTTPS URL with no stored credentials and fails with "could not read Username", while the `ssh` remote
 points at the same repo and authenticates with his on-disk key. ship.sh verifies its own push by comparing
 `git rev-parse HEAD` against `git rev-parse ssh/main` — but a SESSION judges a ship by the rule in "SHIPS AND
-SUITES" below (the log's "pushed and verified" plus `.last-ship`): HEAD == ssh/main alone proves nothing.
+SUITES" below (a log line starting `✅ pushed and verified: HEAD == ssh/main` plus `.last-ship`): HEAD == ssh/main
+alone proves nothing.
 
 **The app is live at <https://builderezra.github.io/FreeMotion/>** — GitHub Pages off `main`, which is
 why pushing matters: that URL is what his phone loads and what the installed PWA updates from. Nothing in
@@ -250,7 +251,7 @@ or a gate — not a paragraph.
 
 ## ⚠️ SHIPS AND SUITES — launch the ship detached, judge it by its log (6 Oct; replaces "run the suite in the foreground")
 
-> **Ships:** write the message to `.claude/ship/msg.txt`, run `tools/ship-bg.sh` (exit 3 means launched, NOT shipped), then Monitor `.claude/ship/ship.log` until `SHIP EXIT` appears or `kill -0` on the pid in `.ship-in-progress` fails. **Shipped** = the log says `pushed and verified` AND `.last-ship` is `PUSHED <hash>` with hash == `git rev-parse --short HEAD`. HEAD == ssh/main alone proves nothing. `RUNNING` with no live pid means a KILLED ship: re-ship it.
+> **Ships:** write the message to `.claude/ship/msg.txt`, run `tools/ship-bg.sh` (exit 3 means launched, NOT shipped), then Monitor `.claude/ship/ship.log` until a line starts with `SHIP EXIT` or `kill -0` on the pid in `.ship-in-progress` fails. **Shipped** = a log line starts with `✅ pushed and verified: HEAD == ssh/main` AND `.last-ship` is `PUSHED <hash>` with hash == `git rev-parse --short HEAD`. HEAD == ssh/main alone proves nothing, nor do those words elsewhere in the log. `RUNNING` with no live pid means a KILLED ship: re-ship it.
 > **Suites:** a full suite may use `run_in_background` with timeout = 1.6 × `tools/.suite-seconds` × 1000 (at most 7200000). Only `?only=` slices run in the foreground (timeout ≤ 600000). Never write minutes into prose.
 
 **Why it changed (RULES-AUDIT B1).** This section used to describe a ship as one foreground call with

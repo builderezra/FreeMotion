@@ -13,6 +13,24 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 REPO="$PWD"
+
+# ── THIS SELF-TEST'S OWN OUTPUT MUST NOT READ AS A SHIP'S RESULT (6 Oct, the B1 check) ──
+# ship.sh runs this with its stdout going into .claude/ship/ship.log, BEFORE any suite, whenever the launcher changes. It
+# used to print "the previous ship's "pushed and verified" / "SHIP EXIT 0" are gone from the log" — so the log of every
+# such ship, including one that then REFUSED, held the success words, and an unanchored grep (or the tail of an early
+# refusal) read them as success. So the run is captured and searched for those words; it fails if any line has them.
+if [ -z "${FM_SHIPBG_SELFTEST_INNER:-}" ]; then
+  _self="$(mktemp "${TMPDIR:-/tmp}/fm-shipbg-self-XXXXXX")"
+  FM_SHIPBG_SELFTEST_INNER=1 "$0" "$@" 2>&1 | tee "$_self"; _rc=${PIPESTATUS[0]}
+  _hits="$(grep -nE 'pushed and verified|SHIP EXIT' "$_self" | cut -d: -f1 | head -5 | tr '\n' ' ')"
+  rm -f "$_self"
+  if [ -n "$_hits" ]; then
+    printf '  ❌ %s\n' "this self-test printed a ship's success or exit words (output line(s) $_hits) — ship.sh writes this output into ship.log before any suite, where they read as a result"
+    echo "❌ ship-bg.sh: a check failed — see above"; exit 1
+  fi
+  printf '  ✅ %s\n' "nothing this self-test printed reads as a ship's success or exit line"
+  exit "$_rc"
+fi
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/fm-shipbg-test-XXXXXX")"
 STUBPID=""
 kill_stub() { pkill -P "$1" 2>/dev/null; kill -9 "$1" 2>/dev/null; }
@@ -62,11 +80,11 @@ echo "v1.3 — the release being shipped" > .claude/ship/msg.txt
 out="$(tools/ship-bg.sh 2>&1)"; rc=$?; never0 $rc
 STUBPID="$(ship_lock_pid .ship-in-progress)"
 [ "$rc" = 3 ] && ok "launched → exit 3" || bad "launch: rc=$rc — $out"
-printf '%s\n' "$out" | grep -qxF 'LAUNCHED - NOT shipped yet; success is only "pushed and verified" in .claude/ship/ship.log' \
+printf '%s\n' "$out" | grep -qxF 'LAUNCHED - NOT shipped yet; shipped is only a line starting "✅ pushed and verified: HEAD == ssh/main" in .claude/ship/ship.log AND .last-ship = PUSHED <the short hash of HEAD>' \
   && ok "prints the LAUNCHED line word for word" || bad "the LAUNCHED line is missing or reworded — $out"
 [ -n "$STUBPID" ] && ship_pid_alive "$STUBPID" && ok "the lock names the live stub (pid $STUBPID), and the watch line names it: $(printf '%s' "$out" | grep -c "kill -0 $STUBPID") line(s)" || bad "no live pid in the lock: $(cat .ship-in-progress 2>/dev/null)"
 case "$(cat .last-ship)" in "RUNNING $STUBPID v1.3 "*) ok ".last-ship says RUNNING $STUBPID v1.3 …";; *) bad ".last-ship is '$(cat .last-ship)'";; esac
-grep -q 'pushed and verified\|SHIP EXIT 0' .claude/ship/ship.log && bad "the previous ship's success is still in ship.log — it would read as THIS ship's" || ok "the previous ship's \"pushed and verified\" / \"SHIP EXIT 0\" are gone from the log"
+grep -q 'pushed and verified\|SHIP EXIT 0' .claude/ship/ship.log && bad "the previous ship's success is still in ship.log — it would read as THIS ship's" || ok "the previous ship's success line and exit line are gone from the log"
 sleep 1; grep -q 'phase=desktop' .ship-in-progress && ok "the phase moves on (phase=desktop)" || bad "phase did not move: $(cat .ship-in-progress)"
 
 echo "── 3. a second launch while the first is alive is refused, and touches nothing ──"
@@ -155,6 +173,16 @@ echo '<span class="ver">v1.1</span>' > index.html
 l="$(unshipped_release_line)"; case "$l" in *"live is AHEAD"*) ok "label behind live → NO, and says live is ahead";; *) bad "behind live: $l";; esac
 echo '<span class="ver">v1.10</span>' > index.html
 l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: YES"*) ok "v1.10 is newer than v1.2 (numbers, not text)";; *) bad "v1.10 vs v1.2: $l";; esac
+
+echo "── 7. every instruction that says what SHIPPED means quotes the success line whole, from the start of the line ──"
+# The words alone are also in this self-test's history and in comments; only ship.sh's own line, with ✅ and
+# "HEAD == ssh/main", is the result — and with .last-ship's PUSHED <hash>, the two-part rule.
+for f in CLAUDE.md LOOP.md tools/tick.sh; do
+  loose="$(grep -n 'pushed and verified' "$REPO/$f" | grep -v '✅ pushed and verified: HEAD == ssh/main' | cut -d: -f1 | tr '\n' ' ')"
+  [ -z "$loose" ] && ok "$f: every mention is the whole line (✅ … HEAD == ssh/main)" || bad "$f line(s) $loose name the success words without the rest of the line"
+done
+grep -n 'Build during ships' "$REPO/LOOP.md" | grep -q 'PUSHED <hash>' \
+  && ok "LOOP.md: the build-during-ships merge waits for .last-ship's PUSHED <hash> too, not the log's words alone" || bad "LOOP.md's build-during-ships merge condition does not name .last-ship's PUSHED <hash>"
 
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ ship-bg.sh: every check passed"; exit 0; fi

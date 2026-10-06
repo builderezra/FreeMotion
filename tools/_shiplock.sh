@@ -114,7 +114,7 @@ _ship_ago() { local s="${1:-0}"; [ "$s" -gt 0 ] 2>/dev/null || { echo "?"; retur
 ship_status_lines() {
   local st; st="$(ship_lock_state .ship-in-progress)"
   case "$st" in
-    live*) set -- $st; echo "🚢 SHIP RUNNING — pid $2, phase $3 for $(_ship_ago "$4"). Do not re-ship; watch .claude/ship/ship.log for \"SHIP EXIT\"." ;;
+    live*) set -- $st; echo "🚢 SHIP RUNNING — pid $2, phase $3 for $(_ship_ago "$4"). Do not re-ship; watch .claude/ship/ship.log for a line starting \"SHIP EXIT\"." ;;
     dead*) set -- $st; echo "🚨 SHIP KILLED — .ship-in-progress names pid $2 (phase $3) and it is gone. Nothing after that phase happened: the release did NOT land. Re-ship it (tools/ship-bg.sh)." ;;
   esac
   [ -f .last-ship ] || return 0

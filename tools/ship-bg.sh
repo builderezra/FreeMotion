@@ -11,8 +11,9 @@
 #
 # IT NEVER EXITS 0. On 20 Sep a ship REFUSED and the caller read "exit code 0" (piped through tail), and the next
 # session built on a release that never landed. A launcher that exited 0 would bring that back: "the command
-# succeeded" would mean "a ship started", which is not "shipped". Shipped is only ship.log saying "pushed and
-# verified" AND .last-ship saying PUSHED <hash> with hash == git rev-parse --short HEAD.
+# succeeded" would mean "a ship started", which is not "shipped". Shipped is only a ship.log line STARTING with
+# "✅ pushed and verified: HEAD == ssh/main" AND .last-ship saying PUSHED <hash> with hash == git rev-parse --short HEAD.
+# The words alone are not enough: ship.sh's self-tests print into the same log before any suite runs.
 #
 # No setsid (it does not exist on this Mac); nohup + disown is what survived on 5 Oct. .claude/ is gitignored, so
 # ship.sh's `git add -A` cannot sweep the log or the message into the release.
@@ -75,7 +76,7 @@ if [ -z "$pid" ] && grep -q '^SHIP EXIT' .claude/ship/ship.log 2>/dev/null; then
   exit 1
 fi
 
-echo 'LAUNCHED - NOT shipped yet; success is only "pushed and verified" in .claude/ship/ship.log'
+echo 'LAUNCHED - NOT shipped yet; shipped is only a line starting "✅ pushed and verified: HEAD == ssh/main" in .claude/ship/ship.log AND .last-ship = PUSHED <the short hash of HEAD>'
 if [ -n "$pid" ]; then
   echo "   ship.sh pid $pid. Watch it (Monitor, or Bash with run_in_background):"
   echo "   until grep -q '^SHIP EXIT' .claude/ship/ship.log || ! kill -0 $pid 2>/dev/null; do sleep 30; done; tail -25 .claude/ship/ship.log; cat .last-ship"

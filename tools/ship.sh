@@ -5,8 +5,10 @@
 #   tools/ship.sh -F <file>          # …or read the message from a file / from - for stdin
 #
 # A ship outlasts every harness timeout, so it is LAUNCHED, not called: write the message to .claude/ship/msg.txt and run
-# tools/ship-bg.sh (exit 3 = launched, NOT shipped). The verdict is .claude/ship/ship.log ("pushed and verified", then
-# "SHIP EXIT <rc>") and .last-ship (PUSHED <hash> == git rev-parse --short HEAD). See CLAUDE.md, "SHIPS AND SUITES".
+# tools/ship-bg.sh (exit 3 = launched, NOT shipped). The verdict is .claude/ship/ship.log (a line starting
+# "✅ pushed and verified: HEAD == ssh/main", then one starting "SHIP EXIT <rc>") and .last-ship (PUSHED <hash> ==
+# git rev-parse --short HEAD). See CLAUDE.md, "SHIPS AND SUITES". Nothing printed before the push may carry those words:
+# the self-tests below print into the same log (tools/test-ship-bg.sh checks its own output for them).
 #
 # Refuses to push unless: the tree is not mid-mutation, the suite is fully green, the version label
 # and the newest POLISH-LOG entry agree, and the push actually landed. That last one matters —
