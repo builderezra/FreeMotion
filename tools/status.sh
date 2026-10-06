@@ -13,6 +13,7 @@
 # The verdict comes from tools/_classify.py, which tools/next.sh also uses. ONE rule, two readers.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
+. tools/_platform.sh || exit 1   # no tools/__pycache__ from importing _classify (see next.sh)
 python3 - <<'PY'
 import re, sys
 sys.path.insert(0, 'tools')

@@ -11,7 +11,7 @@ The suite cannot do this from inside the page: going offline is a browser-level 
 one. So this drives CDP directly — load once so the worker installs and caches, then
 `Network.emulateNetworkConditions` with offline:true, reload, and ask whether the app came up.
 """
-import sys, time, tempfile, os
+import sys, time, tempfile, os, shutil
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _cdp as C
@@ -21,7 +21,7 @@ URL = "http://localhost:8777/index.html"
 
 def boot_offline():
     port = C.free_port()
-    prof = tempfile.mkdtemp()
+    prof = tempfile.mkdtemp(prefix="fm-offboot-")   # named, and deleted below: under WSL the temp dir is RAM
     proc = C.launch(port, 420, 860, prof)
     out = []
     try:
@@ -68,6 +68,9 @@ def boot_offline():
         return out
     finally:
         proc.terminate()
+        try: proc.wait(timeout=5)
+        except Exception: proc.kill()
+        shutil.rmtree(prof, ignore_errors=True)
 
 
 if __name__ == "__main__":

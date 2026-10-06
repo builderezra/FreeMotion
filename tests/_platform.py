@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""What differs between the Mac's headless Chrome and this machine's — ONE place, so the suite means the same thing on both.
+
+The twin of tools/_platform.sh: the Chrome lookup order and the reap pattern are the same text in both files, and must stay
+that way (`python3 tests/_platform.py` prints this side's answers; `. tools/_platform.sh; fm_chrome; fm_chrome_reap_pattern`
+prints the other's). STDLIB ONLY: tests/_kbdevice.py promises no third-party packages and imports this.
+
+WHY IT EXISTS (6 Oct, the WSL port). Every tool here was written on the Mac, and the Mac's headless Chrome quietly answers
+questions the suite depends on: it reports a MOUSE ((hover: hover) and (pointer: fine) — test 991's PC case throws without
+it, the 976 rail tests return early and so pass untested), its scrollbars are 0-width overlays, and --use-gl=swiftshader
+works. Linux headless Chrome (154, measured in WSL) answers all three differently. Each answer below says what it fixes.
+"""
+import os
+import shutil
+import sys
+
+IS_LINUX = sys.platform.startswith("linux")
+MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+PATH_NAMES = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
+MOUSE_QUERY = "(hover: hover) and (pointer: fine)"
+
+
+class ChromeNotFound(RuntimeError):
+    pass
+
+
+def chrome_path():
+    """The Chrome binary: $FM_CHROME, else the Mac app, else the first of PATH_NAMES on PATH. Raises ChromeNotFound.
+
+    An FM_CHROME that is set but wrong REFUSES rather than falling back: someone set it on purpose, and a run on a
+    different browser than the one they named would be a silent substitution."""
+    want = os.environ.get("FM_CHROME", "")
+    if want:
+        if os.path.isfile(want) and os.access(want, os.X_OK):
+            return want
+        raise ChromeNotFound("FM_CHROME is set to %r, which is not an executable file — fix it or unset it "
+                             "(a wrong FM_CHROME is never silently ignored)." % want)
+    if os.path.isfile(MAC_CHROME) and os.access(MAC_CHROME, os.X_OK):
+        return MAC_CHROME
+    for name in PATH_NAMES:
+        p = shutil.which(name)
+        if p:
+            return p
+    raise ChromeNotFound("no Chrome found — tried $FM_CHROME (unset), %r, and %s on PATH. Install google-chrome "
+                         "(Linux: https://www.google.com/chrome/) or set FM_CHROME to its binary." % (MAC_CHROME, ", ".join(PATH_NAMES)))
+
+
+def find_chrome():
+    """chrome_path(), or None — for module-level defaults that must not crash an import."""
+    try:
+        return chrome_path()
+    except ChromeNotFound:
+        return None
+
+
+def gl_flags():
+    """The GL choice for every test Chrome (see the note in tests/_cdp.py launch() for why software GL is the default).
+
+    Linux Chrome 154 no longer honours --use-gl=swiftshader: measured in WSL, the GPU process exits 5-9 times at every
+    launch ("Requested GL implementation (gl=none,angle=none) not found") before Chrome gives up on it — hidden, and at
+    the mercy of its GPU-crash budget. What it falls back TO is the Mac's picture: canvas, compositing and raster
+    "Software only", WebGL on SwiftShader (chrome://gpu). --disable-gpu --enable-unsafe-swiftshader asks for exactly that
+    state directly, with 0 GPU-process exits — same feature status, same WebGL renderer.
+    ⚠️ NOT --use-angle=swiftshader, the obvious fix: Chrome then counts SwiftShader as a GPU and ACCELERATES canvas and
+    raster on it, and the pixels move — measured on the export slice, 482 5.1's hashes and 482 2.1's zoom stopped matching
+    the values recorded on the Mac (both pass with this set and with the old flags; both fail with ANGLE).
+    The Mac keeps the flags its known-good runs were measured with. FM_GL=angle is the real GPU — under WSL that is
+    WSL's paravirtualised adapter, not one of Ezra's devices (untested)."""
+    if os.environ.get("FM_GL") == "angle":
+        return ["--use-angle=default", "--enable-gpu"]
+    if IS_LINUX:
+        return ["--disable-gpu", "--enable-unsafe-swiftshader"]
+    return ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"]
+
+
+def chrome_extra_flags():
+    """Flags that make THIS OS's headless Chrome answer like the Mac's. Empty on the Mac.
+
+    Linux (measured, Chrome 154 in WSL):
+      * a MOUSE. Headless Linux has no input devices: hover:none, pointer:none, so every (hover: hover) and
+        (pointer: fine) branch in the app and the suite takes the finger's path at 1280px. These blink settings make
+        the baseline hover + fine, like the Mac, in every frame and across navigations. (A touch-emulation OFF wipes
+        them for the rest of the page — which is why tests/_cdp.py sends Linux's real touch WITHOUT emulation.)
+      * 0-width scrollbars. The Mac's are overlays (offsetWidth - clientWidth = 0); Linux's classic bars take 15px from
+        every scroller. --enable-features=OverlayScrollbar does nothing here; --hide-scrollbars gives 0."""
+    if IS_LINUX:
+        return ["--hide-scrollbars",
+                "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2"]
+    return []
+
+
+def chrome_env(profile):
+    """The environment for a test Chrome: on Linux its temp files go INSIDE the profile, which every caller deletes.
+
+    /tmp is tmpfs (RAM) under WSL, and each launch left 3-4 /tmp/com.google.Chrome.* entries behind even after a clean
+    exit (measured 4/3/4/4); with TMPDIR=profile it left none. None = inherit, as the Mac always has."""
+    if IS_LINUX:
+        return dict(os.environ, TMPDIR=profile)
+    return None
+
+
+def reap_pattern():
+    """The `pgrep -f` pattern for a test Chrome on an fm-cdp- profile — anchored to the CHROME BINARY, never the bare prefix.
+
+    A bare 'fm-cdp-' also matches any shell whose command line carries that string (a commit message, a wrapper script),
+    and the reaper SIGKILLs what it matches (tools/ship.sh says why that matters). The Mac's processes all live under
+    'Google Chrome…'. Linux's all carry argv[0] /opt/google/chrome/chrome, even when started through the google-chrome
+    wrapper (measured: 14 of 14 matched, and 0 decoy shells — one with '/opt/google/chrome/chrome --user-data-dir=/tmp/fm-cdp-'
+    in its arguments). Same text as fm_chrome_reap_pattern in tools/_platform.sh. None = no pattern for this OS."""
+    if sys.platform == "darwin":
+        return "Google Chrome.*fm-cdp-"
+    if IS_LINUX:
+        return "^([^ ]*/)?(chrome|chromium|chromium-browser)( |$).*fm-cdp-"
+    return None
+
+
+# REAL TOUCH (tests/_cdp.py, queue 924): the Mac switches DevTools touch emulation on for a run of touch steps and off
+# after, and OFF hands the page back its mouse. On Linux there is no mouse to hand back: ANY setTouchEmulationEnabled
+# (enabled=False) — even one with no ON before it — leaves the page pointer:none / hover:none until a cross-document
+# navigation, which run.html never does (measured; nothing else restores it: setEmulatedMedia ignores hover/pointer,
+# and the protocol has no pointer override). So after the first finger test, every later mouse-gated test would run
+# without a mouse. Input.dispatchTouchEvent WITHOUT emulation still delivers trusted touchstart/touchend and
+# pointerType 'touch' pointer events and click (measured), and the mouse survives. The one residual difference: during
+# a gesture Linux shows maxTouchPoints 0, no ontouchstart and pointer fine, where the Mac shows 5 and coarse — the app
+# reads those only in js/collab-presence.js and js/collab-ui.js.
+REAL_TOUCH_VIA_EMULATION = not IS_LINUX
+
+
+if __name__ == "__main__":
+    print("chrome:", find_chrome() or "(none)")
+    print("reap pattern:", reap_pattern())
+    print("gl flags:", " ".join(gl_flags()))
+    print("extra flags:", " ".join(chrome_extra_flags()) or "(none)")
+    print("real touch via emulation:", REAL_TOUCH_VIA_EMULATION)

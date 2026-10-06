@@ -11,6 +11,11 @@
 set -uo pipefail
 FILE="$1"; OLD="$2"; NEW="$3"; EXPECT="${4:-}"
 [ -f "$FILE" ] || { echo "mutate: no such file: $FILE"; exit 2; }
+# The hash, the suite's time cap and the floor are shared with ship.sh (6 Oct, the WSL port). Every gate below leans on a
+# hash or a byte compare, so a machine missing the tools for them is refused here rather than half-checked later.
+. "$(dirname "$0")/_platform.sh" || { echo "mutate: tools/_platform.sh is missing"; exit 2; }
+. "$(dirname "$0")/_testfloor.sh" || { echo "mutate: tools/_testfloor.sh is missing"; exit 2; }
+fm_require cmp python3 || exit 2
 BAK="$(mktemp)"; LOCK=".mutation-in-progress"
 cp "$FILE" "$BAK"
 # ---- THE RESTORE MUST NOT EAT SOMEBODY ELSE'S WORK ---------------------------------------------
@@ -23,13 +28,21 @@ cp "$FILE" "$BAK"
 # every other bug this repo has found lately — a guard whose stated scope was narrower than its reach.
 # So: remember what this script last WROTE, and if the file on disk is not that, the difference came
 # from somewhere else. Rescue it beside the file and say so loudly rather than restoring over it.
-EXPECTED_SHA="$(shasum "$FILE" | cut -d' ' -f1)"
+# ⚠️ AN EMPTY HASH IS NOT A MATCH (6 Oct). With no hash tool every hash here was "", and "" = "" — the rescue never fired
+# and the baseline gate below compared "" with a missing cache file and skipped itself. fm_sha1 refuses instead, and an
+# unreadable hash at restore time rescues anyway: a copy too many costs a delete, a lost edit costs the edit.
+EXPECTED_SHA="$(fm_sha1 < "$FILE")"
+[ -n "$EXPECTED_SHA" ] || { echo "mutate: cannot hash $FILE — refusing (the rescue guard below needs it)"; rm -f "$BAK"; exit 2; }
 restore() {
-  local now; now="$(shasum "$FILE" 2>/dev/null | cut -d' ' -f1)"
-  if [ -n "$now" ] && [ "$now" != "$EXPECTED_SHA" ]; then
+  local now; now="$(fm_sha1 < "$FILE" 2>/dev/null)"
+  if [ -f "$FILE" ] && { [ -z "$now" ] || [ "$now" != "$EXPECTED_SHA" ]; }; then
     cp "$FILE" "$FILE.rescued"
     echo ""
-    echo "⚠️  $FILE CHANGED WHILE THIS MUTATION HELD IT — those edits are NOT the mutation."
+    if [ -z "$now" ]; then
+      echo "⚠️  $FILE could not be HASHED on the way out, so whether it changed while this mutation held it is unknown."
+    else
+      echo "⚠️  $FILE CHANGED WHILE THIS MUTATION HELD IT — those edits are NOT the mutation."
+    fi
     echo "   Saved them to $FILE.rescued before restoring. Diff it against $FILE and re-apply"
     echo "   anything you meant to keep; then delete the .rescued copy."
   fi
@@ -51,11 +64,22 @@ echo "MUTATION IN PROGRESS on $FILE — do not run a browser check OR EDIT THIS 
 # meant an edit there did NOT invalidate the cached green baseline — so a mutation could be run against a
 # tree whose last proven-green state predated the change being tested. Exactly the hole this gate exists
 # to close, one file wide.
-BASE_HASH="$(cat index.html styles.css theme-glass.css js/*.js tests/tests.js 2>/dev/null | shasum | cut -d' ' -f1)"
+BASE_HASH="$(cat index.html styles.css theme-glass.css js/*.js tests/tests.js 2>/dev/null | fm_sha1)"
+[ -n "$BASE_HASH" ] || { echo "mutate: cannot hash the sources — refusing (the green-baseline cache is keyed on that hash)"; exit 2; }
 GREEN_FILE="tools/.mutate-green"
+SUITE_TO="$(suite_timeout)"   # 1.6x the last green pass, never under an hour — the same cap ship.sh uses
+# A RUN THAT NEVER REACHED A VERDICT IS NOT EVIDENCE EITHER WAY (6 Oct). _cdp.py exits 0 green, 1 red, 2 did-not-run (no
+# server, no Chrome, out of time), and a crash is a traceback with no summary. Only a "Regression P/T" summary with T > 0
+# means the suite ran; anything else is said as DID NOT RUN, never read as "no FAIL lines, so it survived".
+suite_ran() { [ "$1" -le 1 ] && printf '%s' "$2" | grep -qE '"summary": "Regression [0-9]+/[1-9]'; }
 if [ "$(cat "$GREEN_FILE" 2>/dev/null)" != "$BASE_HASH" ]; then
   echo "→ baseline: proving the suite is green BEFORE mutating (once per edit; cached after)…"
-  BASE_OUT="$(python3 tests/_cdp.py --port 8777 --timeout 1800 2>&1)"
+  BASE_OUT="$(python3 tests/_cdp.py --port 8777 --timeout "$SUITE_TO" 2>&1)"; BASE_RC=$?
+  if ! suite_ran "$BASE_RC" "$BASE_OUT"; then
+    echo "❌ THE BASELINE SUITE DID NOT RUN (exit $BASE_RC) — so there is no baseline, and no mutation is checked."
+    printf '%s' "$BASE_OUT" | grep -o '"error": "[^"]*"' | head -1
+    exit 8
+  fi
   BASE_FAILS="$(printf '%s' "$BASE_OUT" | grep -o 'FAIL[^"]*' | grep -v 'version on screen' || true)"
   if [ -n "$BASE_FAILS" ]; then
     echo "❌ THE TREE IS ALREADY RED — a mutation check here would prove nothing."
@@ -66,7 +90,7 @@ if [ "$(cat "$GREEN_FILE" 2>/dev/null)" != "$BASE_HASH" ]; then
   fi
   # A baseline of ZERO tests is not a baseline. Same hole as ship.sh had, and the more dangerous half:
   # caching an empty run as "proven green" would bless every mutation checked against it afterwards.
-  . tools/_testfloor.sh
+  # (test_floor_check is tools/_testfloor.sh, sourced at the top.)
   test_floor_check "$BASE_OUT" || { echo "   Fix that before mutation-checking anything."; exit 6; }
   printf '%s' "$BASE_HASH" > "$GREEN_FILE"
   echo "   baseline green ✅ (cached — further mutations on this tree skip it)"
@@ -117,7 +141,8 @@ PY
 # Comparing the file against its own backup catches that and every other silent no-op, whatever caused it.
 # The mutation is a write this script MADE, so it becomes the new expected content — otherwise the
 # rescue above would fire on every run and cry wolf about the mutation itself.
-EXPECTED_SHA="$(shasum "$FILE" | cut -d' ' -f1)"
+EXPECTED_SHA="$(fm_sha1 < "$FILE")"
+[ -n "$EXPECTED_SHA" ] || { echo "mutate: cannot hash $FILE after the replace — refusing (the restore rescues it)"; exit 2; }
 if cmp -s "$FILE" "$BAK"; then
   echo "mutate: the file is BYTE-IDENTICAL after the replace - the mutation changed nothing, so a green"
   echo "        run proves nothing about the test. Usually old and new are the same text."
@@ -126,7 +151,12 @@ if cmp -s "$FILE" "$BAK"; then
   exit 7
 fi
 
-OUT="$(python3 tests/_cdp.py --port 8777 --timeout 1800 2>&1)"
+OUT="$(python3 tests/_cdp.py --port 8777 --timeout "$SUITE_TO" 2>&1)"; RC=$?
+if ! suite_ran "$RC" "$OUT"; then
+  echo "❌ THE SUITE DID NOT RUN against the mutation (exit $RC) — no verdict, CAUGHT or SURVIVED. The file is restored on exit."
+  printf '%s' "$OUT" | grep -o '"error": "[^"]*"' | head -1
+  exit 8
+fi
 FAILS="$(printf '%s' "$OUT" | grep -o 'FAIL[^"]*' | grep -v 'version on screen' || true)"
 if [ -z "$FAILS" ]; then
   echo "❌ SURVIVED — the mutation broke the code and every test still passed."

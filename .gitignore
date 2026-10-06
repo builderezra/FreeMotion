@@ -9,3 +9,5 @@ tools/.mutate-green
 .spotcheck-in-progress
 .last-ship
 .inbox-seen
+# Python bytecode: macOS has a global ignore for it, Linux does not (6 Oct, the WSL port) — tick.sh read it as unshipped work
+__pycache__/

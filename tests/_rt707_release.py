@@ -2,8 +2,8 @@
 # RELEASE BISECT (queue 707): does lifting the finger after a trim-hold retime the clip? Tremor in X vs Y, 1px vs 3px,
 # with every public FM.* on the release path wrapped to name the culprit. Found the phantom compatibility click that
 # lands on the edit sheet opened under the finger. Run: python3 tests/_rt707_release.py   (server on :8777)
-import importlib.util, json, os, sys, tempfile, time
-HERE=os.path.dirname(os.path.abspath(__file__)); REPO="/Users/ezrasmith/Claude/FreeMotion"
+import importlib.util, json, os, shutil, sys, tempfile, time
+HERE=os.path.dirname(os.path.abspath(__file__)); REPO=os.path.dirname(HERE)   # not the Mac's /Users/… path
 spec=importlib.util.spec_from_file_location("_cdp", os.path.join(REPO,"tests","_cdp.py")); _cdp=importlib.util.module_from_spec(spec); spec.loader.exec_module(_cdp)
 src=open(os.path.join(HERE,"_realtouch.py")).read()
 def block(n): return src.split(n+' = r"""')[1].split('"""')[0]
@@ -41,3 +41,6 @@ try:
 finally:
     if c: c.close()
     proc.terminate()
+    try: proc.wait(timeout=5)
+    except Exception: proc.kill()
+    shutil.rmtree(prof, ignore_errors=True)   # under WSL the temp dir is RAM
