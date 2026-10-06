@@ -47,6 +47,10 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 sys.dont_write_bytecode = True
 import _platform  # noqa: E402
+# THE PAGE'S MEMORY IS WATCHED ON EVERY RUN (#1085, 7 Oct): one suite run reserved ~8.7 GB on the Windows laptop and froze this
+# 8 GB Mac part-way, and nothing could say which test grew the page. tests/_memguard.py reads the page's renderer as the suite
+# runs, fails the run BY NAME when it grows past a budget set from measurement, and prints the biggest growers at the end.
+import _memguard  # noqa: E402
 
 # The Chrome binary ($FM_CHROME, else the Mac app, else google-chrome… on PATH). Still a module attribute because probes
 # compare against it; None when there is none, and launch() then refuses, naming everything it tried.
@@ -214,6 +218,37 @@ def _did_not_run(error, last=""):
     return 2
 
 
+def _mem_print(guard, quiet):
+    """The run's memory line and its biggest growers (#1085), printed at the end of EVERY run — never silently. A quiet run
+    prints them on stdout after its summary line; a JSON run on stderr BEFORE the JSON, flushed, because every reader of the
+    JSON (ship.sh, prove.sh, spotcheck.sh, _spotjudge.py) parses from the first '{' to the end of the output."""
+    try:
+        lines = guard.lines()
+    except Exception as e:                       # the report must never be what breaks a run's verdict
+        lines = ["MEMORY  (could not report: %s)" % str(e)[:200].replace("{", "(").replace("}", ")")]
+    stream = sys.stdout if quiet else sys.stderr
+    for ln in lines:
+        print(("   " if quiet else "") + ln, file=stream)
+    stream.flush()
+
+
+def _mem_stopped(guard, quiet, last):
+    """The memory guard stopped the run (tests/_memguard.py): RED, by name, exit 1 — the same verdict a crossing gets at the
+    end of a finished run, only sooner. Not 'did not run': the suite did run, and this is what it found."""
+    row = guard.failure_row() or "FAIL MEMORY BUDGET — the run was stopped by the memory guard"
+    name = (guard.crossed or {}).get("test") or last or ""
+    summary = "Regression STOPPED by the memory guard at test '%s'" % _memguard._clean(name, 120)
+    if quiet:
+        print(summary + "   [" + _browser() + "]")
+        print("   FAIL: " + row.replace("\n", " ")[:600])
+        _mem_print(guard, True)
+    else:
+        _mem_print(guard, False)
+        print(json.dumps({"ok": False, "summary": summary, "failures": [row], "notRun": [], "browser": _browser(),
+                          "lastTest": _memguard._clean(name, 300), "memory": guard.report()}, indent=1, ensure_ascii=False))
+    return 1
+
+
 def _driver_world(cdp, fresh=False):
     """An ISOLATED WORLD in the top document (6 Oct, the PM's port review): the driver's own JavaScript globals, which no
     page script can replace — a test stubbing window.matchMedia (991 does, in the app frame) cannot answer for the browser
@@ -309,7 +344,12 @@ def main():
     # heap counters and every Chrome process's footprint, one JSON line per test into FILE (tests/_memhook.py). Without
     # this flag nothing below looks for the handshake, so a normal run is unchanged.
     ap.add_argument("--mem", default=None, metavar="FILE", help="measuring run: write per-test memory (needs ?fmmem=1 in --url)")
+    # THE MEMORY BUDGET (#1085): how far the page's renderer may grow above its lowest in one run before the run fails by name
+    # (tests/_memguard.py, where the number is measured). 0 = no budget, for a run measuring the leak rather than gating on it.
+    ap.add_argument("--mem-budget", type=float, default=None, metavar="MB",
+                    help="memory budget in MB (default %d; 0 = off)" % _memguard.DEFAULT_BUDGET_MB)
     a = ap.parse_args()
+    budget = a.mem_budget if a.mem_budget is not None else _memguard.DEFAULT_BUDGET_MB
 
     url = a.url or f"http://localhost:{a.port}/tests/run.html"
 
@@ -338,6 +378,16 @@ def main():
         _platform.chrome_path()
     except _platform.ChromeNotFound as e:
         return _did_not_run(str(e))
+    # THE MEMORY GUARD PROVES ITSELF FIRST (#1085): its failure mode is silence — a guard that never crosses reads exactly like
+    # a suite that never grows — so its rules are driven with fake readings before every run (milliseconds, no Chrome), and a
+    # broken guard is a run that did NOT run, said so.
+    try:
+        _gfails = _memguard.selftest()
+    except Exception as e:
+        _gfails = ["it crashed: %s" % e]
+    if _gfails:
+        return _did_not_run("the memory guard's self-test failed (tests/_memguard.py): " + "; ".join(_gfails)[:500]
+                            .replace("{", "(").replace("}", ")"))
 
     # ⚠️ REAP ANY CHROME A KILLED RUN LEFT BEHIND — the cleanup at the end of main() cannot do it, and
     # that is exactly the point. Its `finally` terminates Chrome and deletes the profile, which is
@@ -465,7 +515,12 @@ def main():
         if a.mem:
             import _memhook as memh   # noqa: E402 — a measuring run only (#1085)
             memfh = open(a.mem, "a")
+        guard = _memguard.Guard(proc.pid, budget)   # #1085: every run — see tests/_memguard.py
         while time.time() < deadline:
+            if guard.tick(cdp) == "stop":
+                # PAST TWICE THE BUDGET, OR THE MAC UNDER 8% FREE AFTER A CROSSING: the run ends HERE, red, naming the test.
+                # Every test after this line would run on a swapping machine, and the freeze is what this exists to prevent.
+                return _mem_stopped(guard, a.quiet, track["name"])
             if memh is not None and memh.service(cdp, proc.pid, memfh, memst):
                 track["last_ok"] = time.time()
                 if a.progress and time.time() - memst.get("pw", 0) > 5:   # a run of fast tests must not starve the progress file
@@ -713,10 +768,11 @@ def main():
             # was the only way to say which tests had grown
             if not last_seen and track["name"]:
                 last_seen = track["name"]
+            _mem_print(guard, False)   # a run that ran out of time is often one that ran out of memory: say where it went (stderr: this answer is JSON even when quiet)
             print(json.dumps({"ok": False, "error": "suite did not finish within %ds" % a.timeout,
                               "lastTest": last_seen, "onItSeconds": round(time.time() - track["since"]),
                               "testsSeen": track["n"], "pageSilentSeconds": round(time.time() - track["last_ok"]),
-                              "slowest": slow, "browser": _browser()}))
+                              "slowest": slow, "browser": _browser(), "memory": guard.report()}))
             return 2
 
         data = json.loads(payload)
@@ -762,6 +818,13 @@ def main():
             return _did_not_run("the runner's NOT RUN HERE list (window.__fmNotRun) could not be read, so whether every test "
                                 "ran is unknown.", track["name"])
         green = "✓" in data["sum"] and "Error" not in data["sum"]
+        # THE MEMORY BUDGET (#1085): a run whose page grew past it is RED, by name, however every test came out — the next
+        # 2 GB leak must stop a release the day it lands, not freeze the Mac a week later. Appended LAST, so a reader that
+        # quotes the first failure (spotcheck.sh) still quotes a test's own when there is one.
+        mem_row = guard.failure_row()
+        if mem_row:
+            green = False
+            data["fails"] = list(data["fails"]) + [mem_row]
         # THE FONT THE TEXT WAS MEASURED IN (6 Oct, the PM's review) — reported, never judged: see tests/_platform.py MAC_FONT
         font = _font_parity(cdp)
         if a.quiet:
@@ -776,9 +839,12 @@ def main():
             if font and font.get("same") is False:
                 print("   ⚠️ FONT: text was measured in %s (%.2f px) — the Mac's is %s (%s px); widths, wraps and clipping here are "
                       "not the Mac's or his iPhone's" % (font.get("resolved"), font.get("width") or 0, font["mac"].get("resolved"), font["mac"].get("width")))
+            _mem_print(guard, True)       # after the summary line: readers take the FIRST line of a quiet run as its summary
         else:
+            _mem_print(guard, False)      # on stderr, BEFORE the JSON: readers parse from the first '{' to the end
             out = {"ok": green, "summary": data["sum"], "failures": data["fails"], "notRun": not_run, "browser": _browser(),
-                   "fontParity": font, "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
+                   "fontParity": font, "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", []),
+                   "memory": guard.report()}
             if a.names:
                 out["ran"] = ran          # null when the runner page published no list — a reader must then say so, not guess
             print(json.dumps(out, indent=1, ensure_ascii=False))

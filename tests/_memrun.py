@@ -151,6 +151,9 @@ def run_slice(a, lo, hi, log):
         cmd = [sys.executable, os.path.join(HERE, "_cdp.py"), "--port", str(a.port), "--url", url, "--timeout", str(a.timeout),
                "--quiet", "--progress", prog, "--mem", mem, "--width", str(a.width)]
         plain = None
+    # a measuring run measures the leak rather than gating on it: _cdp.py's memory guard (tests/_memguard.py) still reports,
+    # but must not stop a slice whose growth is the very thing being measured — this runner has its own free-memory stop
+    cmd += ["--mem-budget", "0"]
     env = dict(os.environ)
     env["FM_MEM_INFRA"] = str(a.infra or 0)
     if a.no_deep:

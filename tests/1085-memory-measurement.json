@@ -1,0 +1,127 @@
+{
+ "method": "Branch suite-mem2, made from ca51a60f in worktree /Users/ezrasmith/Claude/FreeMotion/.claude/worktrees/wf_e19bbde3-3c7-1. There are 4 commits (7ed261ca, e4037b54, 869aee7a, 47b92e2a). Nothing was pushed, and REQUESTS.md, POLISH-LOG.md, INBOX.md and the version label were not touched.\n\nI kept the previous measurer's hook from refs/backup/suite-mem-0138 and fixed one bug in it. Its heap walk returned 0 for every object type, because Runtime.queryObjects only returns objects created in the same context as the prototype handle. The prototype is now evaluated inside the app frame's own context.\n\nWhat each test runs through, only when the address has ?fmmem=1 (a normal run is unchanged):\n- **Handshake:** tests.js stops after every test, and `tests/_cdp.py --mem` answers it.\n- **Readings per test:**\n  - two forced garbage collections\n  - Performance.getMetrics and Runtime.getHeapUsage\n  - macOS phys_footprint of every Chrome process (libproc)\n  - a heap walk in the app frame: media elements and what they have loaded, canvases and their pixels (detached ones and their size histogram), images, AudioContexts by state, Workers, bitmaps, VideoFrames, Blobs, ArrayBuffers, WebGL contexts\n  - a DOM census by tag and class, unrevoked object URLs, localStorage size, project count and stored media keys\n  - every 5th test, Chrome's memory-infra dump: allocators per process, such as media/frame_buffers, canvas, cc/image_memory, discardable, blink_gc, malloc\n- **Creator tags:** tests.js remembers, weakly, which test was running when each canvas, video, audio, image, iframe, AudioContext, Worker or bitmap was made. The walk groups survivors by the test that made them.\n\nNew files:\n- `tests/_memrun.py` runs one slice per Chrome. It waits on the given condition and also for neighbours' recently started headless Chromes, stops a slice whose page is silent for 2 minutes or whose free memory falls under 8%, and supports `--repeat N` (fmrepeat) and `--plain` (a normal run, sampled from outside).\n- `tests/_memreport.py` gives each test's growth, decomposed exactly into growth that lasted to the slice's end. It tracks the page's renderer by pid.\n- `tests/_memretain.py` takes a V8 heap snapshot after a slice and prints the shortest retaining path of every detached canvas, media element or AudioContext.\n\nCoverage and checks:\n- All 2286 tests were measured in 16 fresh slices of 150, one Chrome at a time.\n- One slice (1200-1349) went silent at test 1279. That test is designed to block the main thread for minutes on purpose, so it is not a memory freeze; I re-ran the slice with a 500-second limit.\n- The instrument was checked against plain runs with nothing added: 0-749 in one continuous run, and 1200-1349.\n- The 20 biggest growers were re-run alone 3 to 4 times in a row, to tell a leak (grows every run) from a cache warming up (grows once). Retaining paths come from heap snapshots.\n- Raw data is in /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/mem2/ (sweep/, plain/, rep*/, rows.json, snap1279.json).",
+ "top_growers": [
+  {
+   "test": "#1279 every tile in the browser picks instead of applying, and Done adds what you picked (queue 333)",
+   "growth_mb": 2157,
+   "what_is_held": "335 detached 1080x1920 canvases plus about 115 thumbnails of 192x192 (memory-infra canvas = 2072 MB, malloc 2.4 GB). Heap snapshot: they sit in compositor.js depth-indexed scratch pools \u2014 _pfPool 104 depths (an A and a B canvas each), _cfPool 40 depths, _wpPool 9 depths \u2014 reached through compositor module scope (FM._chromaKey closure). The sweep picks about 195 tiles and never unpicks, so the live preview renders all of them as one stack. drawPixelEffect then nests about 104 deep, each depth allocates a full-project canvas pair, and the pools never shrink. Reproduced alone (renderer 351 -> 2544 MB) and in a plain run (renderer 3015 MB at the slice's end). This is the Windows 8.76 GB around position ~1328.",
+   "in": "app"
+  },
+  {
+   "test": "(every app instance at boot: index.html splash film, splash-v2.mp4 3840x2160)",
+   "growth_mb": 176,
+   "what_is_held": "A detached, loaded <video id=splash-vid>: media/frame_buffers 163 MB plus webmediaplayer 13.4 MB, for the whole run in every slice. Held by tests.js SPLASH_AT_LOAD (line 23) AND, with that edge removed, by the app itself: the document keydown listener's closure keeps `vid` in the splash code in index.html. dismiss() removes #splash but never clears the src. A real app bug that every first load of a session hits. It is also paid again by every extra app frame the tests boot (tier-3 collab tests, 776, 783).",
+   "in": "app"
+  },
+  {
+   "test": "#1575 783: the dark look's intro is never bright after the mark has animated, and the light look's still ends white",
+   "growth_mb": 168,
+   "what_is_held": "Chrome compositor (cc) discardable memory: +585 MB when run alone (cc 533 MB, discardable/shared memory about 543 MB), left after the test boots two full app instances in iframes, each playing the 4K splash film. Re-runs add 0, so it is bounded.",
+   "in": "test"
+  },
+  {
+   "test": "#894 a project can never open at a size that cannot be opened (queue 470)",
+   "growth_mb": 102,
+   "what_is_held": "Skia/discardable image memory of about 112 MB (skia 112 -> discardable 112) from the oversize fixture. Alone: +124 MB, then +2 and +0, so bounded.",
+   "in": "test"
+  },
+  {
+   "test": "#614 921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device's own records, and the picture renders",
+   "growth_mb": 89,
+   "what_is_held": "Grows on EVERY run (+98, +77, +72 MB). The renderer's cc decoded-image cache grows 77 -> 146 -> 214 MB, the browser process grows by about 80 MB per run, and 6 small detached canvases are added per run.",
+   "in": "unknown"
+  },
+  {
+   "test": "#904 filters are toggle-then-Add, and nothing applies until you press it (queue 464)",
+   "growth_mb": 62,
+   "what_is_held": "136 fx-browser sample tiles of 192x192 (fx-thumbs.js `cache` Map, kept for the session by design) plus 9 full-res compositor pool canvases. Canvas allocator 92-100 MB. Alone: +140, then +19 and +4, so bounded.",
+   "in": "app"
+  },
+  {
+   "test": "#820 no effect erases the layer at a single parameter extreme (queue 264)",
+   "growth_mb": 59,
+   "what_is_held": "62 detached canvases (42 at 180x320, 6 at 540x960): compositor scratch canvases (_tiA/_tiB, _thA/_thB, _wpPool) and _mflow. _mflow is the per-layer motion-flow cache, LRU-capped at 12 layers, and FM.resetMotionFlowCache exists. Alone: +83 once, then +4 canvases per run until the cap.",
+   "in": "app"
+  },
+  {
+   "test": "#1818 690 a preset row tapped while he has numbered picks adds his picks and then the preset, in one go",
+   "growth_mb": 59,
+   "what_is_held": "146 layer-preview canvases of 152x116 (fx-thumbs layer LRU, 10 MB cap), 98 sample tiles of 192x192, cc 38 MB. Alone: +163, then +11 and -4, so bounded.",
+   "in": "app"
+  },
+  {
+   "test": "#1950 690 with Fade in on his captions, the caption he is typing shows on the canvas while he types it",
+   "growth_mb": 49,
+   "what_is_held": "cc 19 MB plus DOM: +566 nodes per run that are no longer in the document (detached), so something still holds them. Memory alone: +52, +12, +2.",
+   "in": "unknown"
+  },
+  {
+   "test": "#1574 776: the intro film plays through and is never faded out while the splash is still up",
+   "growth_mb": 45,
+   "what_is_held": "malloc and partition_alloc after booting two app iframes, each with the splash film. Alone: +41 once, so bounded.",
+   "in": "test"
+  },
+  {
+   "test": "#1692 794: the does-nothing-here probe stays quiet for Time Warp Scan and its ghost-gated siblings",
+   "growth_mb": 41,
+   "what_is_held": "Detached canvases 14 -> 18 -> 22 (canvas allocator 56 -> 67 -> 79 MB, +12-16 MB per run). Held by compositor.js _mflow (layerId -> {cv}, a new entry for every new layer id, LRU-capped at 12) plus _pfPool full-res pairs.",
+   "in": "app"
+  },
+  {
+   "test": "#900 export: an animated Reverb reaches the real mix, anchored to the clip's own time",
+   "growth_mb": 39,
+   "what_is_held": "Audio export path: partition_alloc +5 MB and audio buffers about 3.7 MB. Alone: +30 once, then +1, so bounded.",
+   "in": "app"
+  },
+  {
+   "test": "#739 921 S8 a 500-layer project under a 4x CPU throttle: the commit-hook diff stays within 30 ms",
+   "growth_mb": 38,
+   "what_is_held": "blink_gc +6, v8 +3, malloc +14 from the 500-layer fixture. Alone: +38, +12, -1, so bounded.",
+   "in": "test"
+  },
+  {
+   "test": "#57 915.5Br a reused VIDEO is stored as a pointer that says video, and reopens as a playing video, not blank",
+   "growth_mb": 35,
+   "what_is_held": "Grows on EVERY run (+82, +72, +57, +68). Breakdown (FM_MEM_INFRA_ALL=cc): cc/image_memory/.../at_raster, the compositor's decoded-image cache, at 56 -> 111 -> 167 -> 224 MB (discardable, capped by Chrome's budget). Also 4 <video> elements held for up to 20 s by pending app timers (DOMTimer closure -> rec.el).",
+   "in": "unknown"
+  },
+  {
+   "test": "#1812 690 the AI Director, a re-roll and the Assistant only ever change the project they were started in",
+   "growth_mb": 35,
+   "what_is_held": "discardable 20-24 MB, blink_gc +5 MB, one full-res pool canvas. Alone: +54, +9, +10, a slight creep.",
+   "in": "app"
+  },
+  {
+   "test": "#1923 690 Undo and Redo keep open the effect whose slider he just moved, on the phone and on the PC",
+   "growth_mb": 34,
+   "what_is_held": "6 compositor-pool canvases of 1080x1920 (canvas allocator 42 MB) plus cc 15 MB. Alone: +131 once, then 0 and +5, so bounded.",
+   "in": "app"
+  },
+  {
+   "test": "#2090 974 review: with #947 C the + turns into an x under the card - a real tap on that x closes the card",
+   "growth_mb": 33,
+   "what_is_held": "About 100 MB of compositor cc memory. Alone: +146 once, then +7 and -11, so bounded.",
+   "in": "unknown"
+  },
+  {
+   "test": "#740 921 S8 adversarial peer fuzz: a minute of malformed, oversized, out-of-order and hostile messages",
+   "growth_mb": 33,
+   "what_is_held": "Grows each run but slowing (+96, +52, +27): blink_gc 29 -> 34 -> 38, renderer malloc +26 per run, browser process malloc spikes to 488 MB.",
+   "in": "unknown"
+  },
+  {
+   "test": "#2123 989 after a real reload the Home arrow draws once - one front from its start to the tip",
+   "growth_mb": 32,
+   "what_is_held": "cc 54 MB, bounded (alone +76 once). The browser process swings by 200-230 MB during the test.",
+   "in": "test"
+  },
+  {
+   "test": "#1953 690 on a full phone a replaced photo that could not be stored stays the new photo, at its size",
+   "growth_mb": 32,
+   "what_is_held": "Grows on EVERY run (+171, +55, +63): renderer cc 112 -> 168 -> 219 MB, browser process malloc 75 -> 146 -> 302 MB. The first run also leaves its context menu in the DOM (14 .ctx-item, 8 .ctx-swatch).",
+   "in": "unknown"
+  }
+ ],
+ "total_growth_mb": 4943,
+ "results": "One test explains most of #1085. **Test #1279** (the fx-sweep, \"every tile in the browser picks instead of applying\u2026 (queue 333)\") adds about 2.16 GB to the page's renderer and never gives it back.\n\n**How #1279 holds it:** it picks about 195 effects without unpicking any, so the live preview renders all of them as one stack. compositor.js's depth-indexed scratch pools (_pfPool, _cfPool, _wpPool) grow to about 104 levels. Each level holds a pair of 1080x1920 canvases (8.3 MB each), and the pools never shrink: 335 full-res canvases, about 2.0-2.8 GB.\n- Proven by a heap snapshot: the retaining path is FM._chromaKey's closure context -> _pfPool[d].A and .B.\n- Reproduced alone: renderer 351 -> 2544 MB.\n- Reproduced in a plain run with nothing added: renderer 3015 MB at the end of slice 1200-1349.\n- Position 1279 sits just before the Windows report's 8.76 GB at the quality-ladder test (position 1328).\n- This is a real APP bug: a user picking many effects would hit it too. Two possible fixes, neither applied: (a) the test unpicks each tile after checking it; (b) the app trims the pools above a depth limit, which only lands with a test that fails first.\n\n**Whole-suite numbers (measured after forced garbage collection, fresh slices):**\n- The page renderer starts at about 350 MB and grows by +4943 MB summed over all 2286 tests. #1279 is 2157 MB of that.\n- Without #1279, slices grow 60-380 MB per 150 tests.\n- A plain continuous run of 0-749 grew less than the slice sum (+525 MB against 675 MB), because caches warm up only once. Per-slice numbers are an upper bound, and adding them up works.\n- JS heap stays at 5-17 MB the whole time. The growth is native: canvas backing stores, the compositor's cc/discardable image memory, malloc, blink_gc.\n- media/frame_buffers stays flat at 163 MB in every slice, so no decoded video accumulates.\n\n**App bugs, each with evidence (report separately):**\n1. **#1279's effect pools**: depth-indexed scratch pools never shrink (above).\n2. **Splash film**: the 4K splash costs 176 MB per app instance for the whole session. index.html's splash code removes #splash but never clears `vid.src`, and a document keydown listener's closure keeps `vid` alive. The heap snapshot shows this path even with the harness's reference removed. The harness also holds it, through tests.js SPLASH_AT_LOAD (line 23).\n\n**Test-side leaks, fixable in tests or helpers:**\n- **AudioContexts**: 10 places in tests.js construct `new AudioContext()` and never close it: the tests at lines 7219, 10841, 26871, 65867, 65936, 66376, 71920 and 95928, plus the helpers q215SilentProbe (66445) and mixPeakProbe (66524). Slice 1200-1349 ended with 13 running at once. Each one holds an audio output stream, which matters for the coreaudiod stalls.\n- **Media records**: the 482 3.x audio-panel tests leave about 20 loaded media elements in the app's FM.media `store`, as records for layers they removed without FM.releaseMediaFor.\n- **Extra app frames**: the 776 and 783 tests boot extra app iframes, which leave about 585 MB of compositor tile and image memory (bounded).\n\n**Transient peaks, freed after the test:**\n- Tier-3 collab tests (581, 582, 622, 674) boot three extra app instances in their own renderers: +1.0 to 1.45 GB of Chrome memory while they run, about 528 MB of it the three splash films.\n- The browser process swings between 80 and 900 MB in plain runs as well. memory-infra puts it in browser malloc, not blob storage, IndexedDB or devtools; the cause is not attributed.\n\n**Grows on every run (from the repeats):**\n- #57, #614 and #1953: about 55-75 MB per run of cc decoded-image or compositor memory. #1953 also adds about 140 MB per run to the browser process.\n- #740 (the fuzz test): blink_gc and malloc creep each run.\n- #1692 and #820 add a few canvases per run through the `_mflow` cache, capped at 12 layers.\n- Everything else in the top 20 is a cache warming up once: compositor pools, the fx-thumbs cache, Skia and cc caches.\n\n**Not memory:** some slices showed red tests (300-449, 450-599, 1050-1199, 1200-1349, 1500-1649). In 1200-1349 the plain run without the hook had the same red count (4 there, 5 with the hook), so it comes from starting a run mid-suite; I did not check the others. The plain 0-749 run was 750/750 green."
+}

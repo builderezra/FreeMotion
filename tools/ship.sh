@@ -876,6 +876,9 @@ _suite_t0=$SECONDS
 mkdir -p .claude/ship
 OUT="$(python3 tests/_cdp.py --port 8777 --timeout $SUITE_TIMEOUT --progress .claude/ship/progress-desktop.json 2>&1)"
 _suite_secs=$(( SECONDS - _suite_t0 ))
+# #1085: the page's memory over the pass, said on EVERY ship whatever the verdict (tests/_memguard.py), so a renderer creeping
+# towards its budget is seen releases before the run that crosses it fails
+printf '%s\n' "$OUT" | grep -m1 '^MEMORY' | cut -c1-400
 SUM="$(printf '%s' "$OUT" | grep -o '"summary": "[^"]*"' | head -1)"
 if printf '%s' "$OUT" | grep -q 'did not finish within'; then
   echo "⏱  THE SUITE RAN OUT OF TIME after ${SUITE_TIMEOUT}s — it did NOT fail. Nothing is committed or pushed."
@@ -927,6 +930,7 @@ if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; th
   ship_phase phone
   echo "→ running the suite again at PHONE width (380px)…"
   POUT="$(python3 tests/_cdp.py --port 8777 --width 380 --timeout $SUITE_TIMEOUT --progress .claude/ship/progress-phone.json 2>&1)"
+  printf '%s\n' "$POUT" | grep -m1 '^MEMORY' | sed 's/^/phone /' | cut -c1-400   # #1085, as for the desktop pass
   PSUM="$(printf '%s' "$POUT" | grep -o '"summary": "[^"]*"' | head -1)"
   if printf '%s' "$POUT" | grep -q 'did not finish within'; then
     echo "⏱  THE PHONE PASS RAN OUT OF TIME after ${SUITE_TIMEOUT}s — it did NOT fail. Nothing committed or pushed."
