@@ -6,7 +6,7 @@ Against `origin/main` b46b47d3 (v17.23). Nothing in the app, the tests or the to
 
 **Question:** does one renderer of the test page reach the 8 GiB VmData limit that Linux Chrome enforces, and which tests are responsible?
 
-**Answer, measured:** in one continuous run of the whole suite the app's renderer went from **915 MB to a peak of 6125 MB VmData** (the floor after a forced garbage collection went 826 to 5782 MB, and it was still climbing at the end). **That is 1.9 GB (24%) under 8 GiB.** Resident memory (RSS) peaked at only **1627 MB** (floor 266 to 670 MB), so the pressure is address space the allocator keeps, not memory in use. Five steps account for 3.6 of the 4.9 GB of growth, and two of them are tests that really allocate (Reverb, 1080x1920 kernel plates) while the biggest is a threshold a warm process crosses.
+**Answer, measured:** in one continuous run of the whole suite the app's renderer went from **915 MB to a peak of 6125 MB VmData** (the floor after a forced garbage collection went 826 to 5782 MB, and it was still climbing at the end). **That is 2067 MiB (25%) under 8 GiB (8192 MiB; the sampler reports kB divided by 1024).** Resident memory (RSS) peaked at only **1627 MB** (floor 266 to 670 MB), so the pressure is address space the allocator keeps, not memory in use. Five steps account for 3411 of the 5210 MB of growth, and two of them are tests that really allocate (Reverb, 1080x1920 kernel plates) while the biggest is a threshold a warm process crosses.
 
 This corrects my earlier H1 ("could not reproduce 8.7 GB"), which sampled RSS and a partial run. See the corrections block in `hunt/1085-suite-memory`.
 
@@ -80,7 +80,7 @@ The WebGL line matters: I expected software GL to be the big one and it is not (
 
 ## What this means for Ezra's Linux laptop (Guess, and said as one)
 
-- In my container the renderer peaks about **1.9 GB under** the limit. That is a margin, not safety, because (a) mine runs `--no-sandbox`, which does not set the data limit, so nothing could be refused here; (b) three export tests did not run; (c) the peak is at the end of the suite and still rising; (d) a laptop with a GPU moves some memory out of the renderer, which should help and which I could not test.
+- In my container the renderer peaks about **2 GiB under** the limit. That is a margin, not safety, because (a) mine runs `--no-sandbox`, which does not set the data limit, so nothing could be refused here; (b) three export tests did not run; (c) the peak is at the end of the suite and still rising; (d) a laptop with a GPU moves some memory out of the renderer, which should help and which I could not test.
 - **If it does refuse on his machine, the first place to look is the rows above, not a leak:** nothing here shows live objects growing, only allocator regions staying reserved.
 
 ## Options, cheapest first (not done; these are builder's calls)
