@@ -211,7 +211,7 @@ cleanup() {
   done
   for p in "${CDPS[@]:-}"; do [ -n "$p" ] && { pkill -KILL -P "$p" 2>/dev/null; kill -KILL "$p" 2>/dev/null; }; done
   [ -n "$SERVER" ] && kill "$SERVER" 2>/dev/null
-  for p in "${WATCH[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null; done
+  for p in "${WATCH[@]:-}"; do ours "$p" && kill "$p" 2>/dev/null; done
   [ -n "$LOCK" ] && rm -rf "$LOCK"
   rm -f "${FU_SELF_COPY:-/nonexistent}"
   [ -n "${FU_KEEP:-}" ] && say "(kept $WORK)" || rm -rf "$WORK"
@@ -223,12 +223,20 @@ trap 'exit 130' INT TERM
 # most two seconds: when this script's PID is gone, it TERMs the child (and the child cleans up after itself), then the
 # work folder and the port's lock go too.
 ME=$$
+# …AND A WATCHDOG GOES WITH ITS CHILD (6 Oct, seen on the first three-hour run): each loop used to wait for the script
+# alone, so every probe that had long finished kept one — 55 bash loops two hours in, each forking a `sleep` every two
+# seconds (~27 forks a second, and PIDs recycled fast enough that a finished child's number can come round again) on a
+# Mac with 8 GB. Now a loop ends when its child does; the server's lives the whole run, so a SIGKILLed script still loses
+# its work folder through that one. And cleanup kills only loops that are still this script's children — never a number
+# a finished loop gave back.
 watch_child() {   # watch_child <pid>
-  ( trap '' INT; while kill -0 "$ME" 2>/dev/null; do sleep 2; done
+  ( trap '' INT
+    while kill -0 "$ME" 2>/dev/null; do kill -0 "$1" 2>/dev/null || exit 0; sleep 2; done
     kill -TERM "$1" 2>/dev/null; sleep 12; kill -KILL "$1" 2>/dev/null
     [ -z "${FU_KEEP:-}" ] && rm -rf "$WORK"; [ -n "$LOCK" ] && rm -rf "$LOCK" ) >/dev/null 2>&1 &
   WATCH+=($!)
 }
+ours() { [ -n "$1" ] && [ "$(ps -o ppid= -p "$1" 2>/dev/null | tr -d ' ')" = "$ME" ]; }
 
 if [ "$MODE" = run ]; then
   # ship.sh bumps a stale ?v= in index.html BEFORE its gate asks for this PASS — so a PASS measured on a stale tree is for
