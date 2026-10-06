@@ -1,6 +1,7 @@
 # Plans for the next 5 oldest open items (P2)
 
 Against `origin/main` b46b47d (v17.23). Plans only: no app, test or tool code changed, and nothing was run in a browser for this.
+**Corrected 7 Oct after the PM review (QF2):** wrong assumptions fixed, tests that would flake or could not fail replaced, and the corrections are marked **[corrected]** in the text.
 **Verified** = I read the line (or ran a script over the source). **Guess** = needs a real device.
 
 ## Which five, and why these
@@ -31,7 +32,7 @@ As in P1, most of these wait on him, so each plan says what to build so the wait
 
 **Risks.** Raising a ceiling adds reach but changes what an effect can be (his own rule, #545: nothing visual ships unseen). Every batch so far shipped "every default sample-identical or byte-identical", which is the right guard to keep.
 
-**Test that proves it.** Each batch's own tests plus the preview-versus-export test from `preview-export-parity.md` for every effect touched (H5 found stateful temporal effects are the unguarded class).
+**Test that proves it.** Each batch's own tests plus the preview-versus-export test from `preview-export-parity.md` for every effect touched. **[corrected]** The stale-table finding is correct (all nine ceilings are raised) but the entry already records it as "ROUND 3 SHIPPED v14.81", so it saves no work: it only means nobody should re-do the 29-sliders item.
 
 **Needs pictures first:** batch 4 (already drawn, waiting on him), 8.2, 9.1, 9.2, 15.4.
 
@@ -49,13 +50,13 @@ As in P1, most of these wait on him, so each plan says what to build so the wait
 **The gap in the evidence (verified from the entry).** Every measurement was on the fast Mac. The very failure the repo keeps naming ("measured on THIS machine, found acceptable, moved on") is still unaddressed here: **nobody has measured the open under CPU throttle.** The driver already has the seam: `tests/_cdp.py:251-269` (`window.__fmWantCpu = {rate, until}`), used by the 921 S8 test (`tests/tests.js:39787`).
 
 **Plan.**
-1. Do the missing measurement at 4x and 6x throttle, with 16 cards and with a 30-layer project, by copying test 75993 and setting `__fmWantCpu`. Pass criteria: no gap over 33 ms during the 520 ms push. This needs no new code in the app.
-2. If it fails (a **guess** that it will, since a phone is 4-6x slower on layout and first paint), the suspect named in the entry is the editor's first build landing inside the push tail. The smallest fix: start the heavy build one frame *before* the push begins (while the card is still gliding out) so it is not competing with the slide-in, or postpone non-visible work (filmstrips, waveforms, the layer-list build) until `animationend` of `fm-push-in` (`styles.css:7229`). Both are changes to the order of calls in `js/home.js` and `js/storage.js` open path.
+1. **[corrected] Do the missing measurement at 4x and 6x throttle as a one-off probe, not a ship-gating assertion.** Copy test 75993 (it runs `atPhoneWidth`) and set `__fmWantCpu`; read the frame gaps and write them in the entry. Do **not** make "no gap over 33 ms" a suite test: the 508 test itself "does not assert smoothness", a threshold would flake on a loaded 8 GB Mac running a ~35-minute suite, and `fm-push-in` is a `translate3d` animation (`styles.css:7229-7232`) that the compositor runs, so main-thread rAF gaps can pass while the phone still janks on GPU rasterising the new editor.
+2. **[corrected]** If a fix is wanted, do not describe filmstrips, waveforms and the layer list as "non-visible work": they are on screen as the editor slides in, so deferring them shows an empty timeline arriving, **a visible change to the Full editor**. Show Ezra a before/after screen recording at phone width before shipping any deferral. The smallest candidate fix is still to start the heavy build one frame before the push begins (so it is not competing with the slide-in); that is a reorder of calls in `js/home.js` and `js/storage.js`, not a deferral.
 3. Keep asking him for one paste of "Your last project open", but make it unnecessary: the same flight-recorder idea as `helper-plans-1.md` §1 would write the report on every open, not only after a tap he remembers to copy.
 
 **Risks.** Reordering the build can show a half-built editor for one frame (a visible flash); test with a screenshot at the first frame of the slide-in. The desktop swap stays instant (measured case only).
 
-**Test.** The existing 508 test plus a throttled variant asserting worst gap under 33 ms; it must fail with the build reorder reverted.
+**Test.** **[corrected]** If a fix lands, guard it deterministically: assert that no heavy build call runs between push start and `animationend` (that fails on HEAD). The existing 508 test stays as it is.
 
 **Needs pictures first:** no (it is motion), but a short screen recording of before and after at 6x would show him the result.
 
@@ -75,9 +76,9 @@ As in P1, most of these wait on him, so each plan says what to build so the wait
 - **C:** leave as is and add a one-line hint on the card ("Tap to edit · ⋯ to use").
 Drawn at 380 px with the three card states, sent as a sheet.
 
-**Risks.** Changing the tap reverses a decision he made on 1 Sep; the three tests that mention the tap (`tests/tests.js:61427`, `:75746`, and the 505 pair) assert the current behaviour and must flip with a stated reason (the repo's rule, as the 619 entry did for its own flips).
+**Risks.** Changing the tap reverses a decision he made on 1 Sep. **[corrected]** No existing test pins what the card tap does: `tests/tests.js:75746` calls `FM.templates.openForEdit` directly and `:61427` tests update-in-place, so neither will "flip" (the 505 pair is `:75628` for elements and `:75746`). The existing 619 test at `:78359` ("the template media-swap opens only with media") must stay green. The new card-tap test is therefore the only guard.
 
-**Test.** Tap the card; assert the sheet shows both labels; tap each; assert the fill-in sheet opens or the template workspace opens. Must fail on HEAD (no sheet today).
+**Test.** Tap the card; assert the sheet shows both labels; tap each; assert the fill-in sheet opens or the template workspace opens. Must fail on HEAD (no sheet today). Keep the picture-first step: this changes the Full editor's Home tap.
 
 **Needs pictures first:** **yes** (the sheet and the three options).
 
@@ -92,7 +93,7 @@ Drawn at 380 px with the three card states, sent as a sheet.
 **A concrete suspect found by reading (this one is new).** While playing, `tick()` calls `FM.audioFxLive.applyAt(FM.time)` on **every animation frame** (`js/app.js:2478`). That reaches each live effect chain's `applyAt` (`js/audio-fx.js:1619-1625`), which loops over **every parameter of every effect** and calls `b.u.set(key, valueAt(...), when, sceneTime)`. `set` is `AudioParam.setValueAtTime(v, when)` with **no check that the value changed** (`js/audio-fx.js:243-247`). So a static, un-animated chain of 3 effects with 4 params each appends about 12 timeline events per frame, around 720 a second, to Web Audio's per-parameter event lists for as long as the project plays. The pitch shifter's `reshape` also does `cancelScheduledValues` plus ramps (`js/audio-fx.js:1419`). **Guess:** on iOS Safari a growing event list and the main-thread cost of 60 calls a second per param could produce exactly "fine without effects, glitchy with them". I cannot say how Safari prunes that list.
 
 **Plan.**
-1. In `applyAt`, skip `set` when the parameter is not keyframed and its value equals the last one written to that parameter (store `b._last[key]`). Keyframed and custom setters are untouched. Result: static chains write once, then nothing.
+1. In `applyAt` (`js/audio-fx.js:1619-1625`), skip `set` when the parameter is not keyframed and its value equals the last one written to that parameter (store `b._last[key]`). Keyframed and custom setters are untouched. **[corrected]** The first draft also said the pitch shifter's `reshape` was part of the problem: its static setters are already change-gated, so that part was wrong. That `applyAt` writes every parameter every frame is verified (`js/app.js:2478` to `js/audio-fx.js:1619-1625`, no change check); that it is **the cause** of the cut-outs is **unproven**. The fix is still cheap and invisible, and it has a real counting test.
 2. Make it provable on the phone without a paste: add the number of `setValueAtTime` calls per second to the "Your last playback" report (`js/audio-health.js`), so one report says whether it was the cause.
 3. Keep the ask to him as is (one report, effects on).
 
@@ -110,17 +111,17 @@ Drawn at 380 px with the three card states, sent as a sheet.
 
 **State (verified).** Measured as one open and one render (the entry). Fixes since: the hinge keyframe owns `transform` while the slide transition is off (`styles.css:9954`; the base rule keeps the slide for the close, `styles.css:4807`); a short downward drag no longer re-opens the sheet (#934). The sheet's top is measured once, before it opens (`js/mobile.js:391-396`, called at `:403`); the only other caller is `FM.mobile.syncAddSheetTop` in the export object (`:451`). Test `tests/tests.js:76240`.
 
-**What is still unexplained, and a candidate nobody has named.** After `.open` is added, the menu's pager (tabs and pages) is already built and is rendered *before* the sheet moves (`redrawAdd()` at `js/mobile.js:403`). If that pager scrolls or re-lays out after the open (remembered tab, `scrollLeft` restore), the user would see the content shift one more time after the sheet arrived, which reads as "opens twice". **Guess:** I did not trace the pager's own scroll. The entry itself says the one thing it cannot see here is CSS animation, so reading will not settle it.
+**What is still unexplained, and a candidate with real support [corrected].** `redrawAdd()` (`js/mobile.js:403`) builds the pager, then `js/addmenu.js:1424-1430` restores its `scrollLeft` one `requestAnimationFrame` later whenever `startPage > 0` (after switching tabs or adding a layer in the same session). That is a content jump during the hinge, which would read as "opens twice". Also **[corrected]** `syncAddSheetTop` has a second caller: the window `resize` listener (`js/mobile.js:449`); the export object is not a caller.
 
 **Plan.**
-1. Ask the device, not the guess: the same flight-recorder trick as #508. For 700 ms after each `openAdd`, record `#add-sheet.getBoundingClientRect().top` and `#add-grid` scroll offsets every frame into `fm.lastAddOpenReport`. "Twice" is then a number: more than one plateau or any reversal in the top.
+1. Ask the device, not the guess: the same flight-recorder trick as #508. For 700 ms after each `openAdd`, record `#add-sheet.getBoundingClientRect().top`, `pager.scrollLeft` and the `startPage` jump every frame into `fm.lastAddOpenReport`, and include the `resize` caller in the trace. It is additive, so safe for the Full editor.
 2. Show it in Settings next to "Your last project open", with Copy.
 3. Meanwhile ask him for a **3-second screen recording** of one open (cheaper than a description, and it shows which of the two shapes it is).
 4. If the pager is the cause: build the pager at its final scroll position before the sheet moves, or fade the content in after `animationend`.
 
 **Risks.** The recorder runs only for 700 ms after an open, so it costs nothing in normal use.
 
-**Test.** Drive `openAdd`, collect the recorded tops, assert a single monotonic motion (reuse the `getComputedStyle` approach of test 76240 but over time). Must fail if the pager is moved after the open.
+**Test.** Drive `openAdd`, collect the recorded tops and the pager offset. **[corrected]** Do not assert "single monotonic motion": the hinge easing is `cubic-bezier(.18,.85,.28,1.02)` under `perspective` and `rotateX` (`styles.css:9954-9958`), so the box deliberately passes its end point. Measure the overshoot first and give the reversal check a tolerance taken from it; assert the pager offset does not change after the sheet starts to move. Must fail if the pager is moved after the open.
 
 **Needs pictures first:** no.
 
