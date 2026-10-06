@@ -425,6 +425,9 @@ if [ -n "$ORDER_MSG" ]; then
   echo "   just told you.\" Nothing rots at the bottom is the whole point of the list."
   echo "   Either do $NEXTUP first, or — if he told you to do this now, or the build was broken —"
   echo "   write \"JUMPED: <reason>\" into $NEXTUP's entry and it will stop holding the queue."
+  # RULES-AUDIT B3 (6 Oct): the escape hatch above is for HIS "do this now" or a broken build — not a way to get a
+  # batch of someone else's fixes past an item he asked for. Whether those land between Simple-mode releases is his call.
+  echo "   Never JUMP an item in his own words (e.g. #980) just to get a land release through. Ask him."
   exit 1
 fi
 
