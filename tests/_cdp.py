@@ -191,10 +191,20 @@ class CDP:
             pass
 
 
+# WHICH BROWSER RAN, IN EVERY RESULT (6 Oct, the PM's port review). Nothing recorded it, so a run on a different Chrome — or on
+# Chromium, which differs in exactly what the app probes (H.264, AAC) — read the same as one on the Mac's. The path is known
+# from launch, the product ("HeadlessChrome/154.0…") once DevTools answers; a did-not-run result carries what was known.
+BROWSER = {"path": "", "product": ""}
+
+
+def _browser():
+    return (BROWSER["path"] + (" " + BROWSER["product"] if BROWSER["product"] else "")).strip()
+
+
 def _did_not_run(error, last=""):
     """Print the runner's 'the suite did NOT run' answer (exit code 2) — never a FAIL, which ship.sh would read as red."""
     print(json.dumps({"ok": False, "error": error.replace("FAIL", "fail") + " The suite did NOT run to a verdict.",
-                      "lastTest": last.replace("FAIL", "fail")}))   # a title can carry FAIL ('967 7c … FAILED …')
+                      "lastTest": last.replace("FAIL", "fail"), "browser": _browser()}))   # a title can carry FAIL ('967 7c … FAILED …')
     return 2
 
 
@@ -328,6 +338,7 @@ def main():
 
     dbg = free_port()
     profile = tempfile.mkdtemp(prefix="fm-cdp-")
+    BROWSER["path"] = CHROME or _platform.find_chrome() or ""
     try:
         proc = launch(dbg, a.width, a.height, profile)
     except Exception as e:
@@ -340,6 +351,10 @@ def main():
         except Exception as e:
             # a Chrome that never came up ran no test: say so with its own last words, not a traceback (exit 1 = "red")
             return _did_not_run("Chrome did not start (%s). Its stderr: %s" % (e, chrome_stderr_tail(profile)))
+        try:
+            BROWSER["product"] = str(cdp.send("Browser.getVersion").get("product") or "")
+        except Exception:
+            BROWSER["product"] = "(version not reported)"
         cdp.send("Page.enable")
         cdp.send("Runtime.enable")
         try:
@@ -602,7 +617,7 @@ def main():
             print(json.dumps({"ok": False, "error": "suite did not finish within %ds" % a.timeout,
                               "lastTest": last_seen, "onItSeconds": round(time.time() - track["since"]),
                               "testsSeen": track["n"], "pageSilentSeconds": round(time.time() - track["last_ok"]),
-                              "slowest": slow}))
+                              "slowest": slow, "browser": _browser()}))
             return 2
 
         data = json.loads(payload)
@@ -644,13 +659,13 @@ def main():
             # --quiet trims the PASSING noise, never the failures. It used to print the summary alone,
             # which lost the one thing worth having: on 2026-08-13 a desktop run came back 230/231 and
             # the name of the failing test went with it, so a real (if rare) flake could not be chased.
-            print(data["sum"])
+            print(data["sum"] + "   [" + _browser() + "]")
             for row in data["fails"]:
                 print("   FAIL: " + row.replace("\n", " ")[:300])
             for r in not_run:
                 print("   NOT RUN HERE: " + str(r.get("name", ""))[:160] + " — " + str(r.get("reason", "")).replace("FAIL", "fail")[:200])
         else:
-            out = {"ok": green, "summary": data["sum"], "failures": data["fails"], "notRun": not_run,
+            out = {"ok": green, "summary": data["sum"], "failures": data["fails"], "notRun": not_run, "browser": _browser(),
                    "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
             if a.names:
                 out["ran"] = ran          # null when the runner page published no list — a reader must then say so, not guess

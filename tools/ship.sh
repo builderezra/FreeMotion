@@ -886,7 +886,7 @@ test_floor_check "$OUT" || { echo "   Not committing, not pushing."; exit 1; }
 # NOT RUN HERE, by name (6 Oct, #1071): printed after every pass, and on the Mac a refusal (tools/_testfloor.sh notrun_report)
 notrun_report "$OUT" desktop || { _WHY="a test is NOT RUN HERE on the Mac"; exit 1; }
 NOTRUN_ALL="$(notrun_list "$OUT")"
-echo "✅ $SUM  (${_suite_secs}s)"
+echo "✅ $SUM  (${_suite_secs}s)  $(printf "%s" "$OUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"   # which browser ran (the PM review)
 echo "$_suite_secs" > tools/.suite-seconds
 
 # ── THE PHONE PASS (queue 353 clause 3, added 22 Aug) ────────────────────────────────────────────
@@ -927,7 +927,7 @@ if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; th
   test_floor_check "$POUT" || { echo "   Not committing, not pushing."; exit 1; }
   notrun_report "$POUT" phone || { _WHY="a test is NOT RUN HERE on the Mac"; exit 1; }
   NOTRUN_ALL="$(printf '%s\n%s\n' "$NOTRUN_ALL" "$(notrun_list "$POUT")" | sed '/^$/d' | sort -u)"
-  echo "✅ phone $PSUM"
+  echo "✅ phone $PSUM  $(printf "%s" "$POUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"
 else
   echo "· no shipped source changed — skipping the phone pass"
 fi

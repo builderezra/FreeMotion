@@ -169,6 +169,25 @@ out="$(PYTHONPATH="$TMP/nows" python3 tests/_cdp.py --port 1 2>&1)"; rc=$?
   && ok "websocket-client missing → exit 2 and a JSON error naming it and the install line" || bad "websocket-client missing: rc=$rc — $(printf '%s' "$out" | tail -2)"
 grep -q "python3 -c 'import websocket'" tools/ship.sh && ok "ship.sh asks for it up front, beside Chrome" || bad "ship.sh does not check for websocket-client before the suite"
 
+echo "── which browser: Chromium on PATH is never used silently, and every driver result names the browser (review minor) ──"
+mkdir -p "$TMP/onlychromium" "$TMP/withchrome"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/onlychromium/chromium"; chmod +x "$TMP/onlychromium/chromium"
+cp "$TMP/onlychromium/chromium" "$TMP/withchrome/chromium"; cp "$TMP/onlychromium/chromium" "$TMP/withchrome/google-chrome"
+BASEPATH="/usr/bin:/bin:/usr/sbin:/sbin"
+pyc() { _FM_MAC_APP=/nonexistent PATH="$1:$BASEPATH" FM_CHROME="${2:-}" python3 -c 'import sys; sys.path.insert(0, "tests"); import _platform as P
+try: print("USE " + P.chrome_path())
+except P.ChromeNotFound as e: print("REFUSED " + str(e))'; }
+shc() { _FM_MAC_APP=/nonexistent PATH="$1:$BASEPATH" FM_CHROME="${2:-}" bash -c '. tools/_platform.sh; if p="$(fm_chrome 2>"$0")"; then echo "USE $p"; else echo "REFUSED $(cat "$0")"; fi' "$TMP/err.txt"; }
+for f in pyc shc; do
+  v="$($f "$TMP/onlychromium")"
+  case "$v" in REFUSED*"is NOT used unless FM_CHROME"*) ok "$f: only chromium on PATH → refused, and the refusal names it and FM_CHROME";; *) bad "$f: only chromium on PATH: $v";; esac
+  v="$($f "$TMP/withchrome")"
+  [ "$v" = "USE $TMP/withchrome/google-chrome" ] && ok "$f: google-chrome on PATH is used (over chromium)" || bad "$f: with google-chrome: $v"
+  v="$($f "$TMP/onlychromium" "$TMP/onlychromium/chromium")"
+  [ "$v" = "USE $TMP/onlychromium/chromium" ] && ok "$f: FM_CHROME naming chromium is a decision — used" || bad "$f: FM_CHROME=chromium: $v"
+done
+grep -q '"browser": _browser()' tests/_cdp.py && [ "$(grep -c '_browser()' tests/_cdp.py)" -ge 4 ] && ok "tests/_cdp.py puts the browser in the result, the timeout and every did-not-run" || bad "tests/_cdp.py does not name the browser in every result"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"

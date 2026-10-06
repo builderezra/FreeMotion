@@ -24,8 +24,14 @@ import shutil
 import sys
 
 IS_LINUX = sys.platform.startswith("linux")
-MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-PATH_NAMES = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
+# _FM_MAC_APP is a TEST SEAM only (tools/test-port.sh points it at nothing, to reach the PATH half on a Mac)
+MAC_CHROME = os.environ.get("_FM_MAC_APP") or "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# ⚠️ GOOGLE CHROME ONLY, UNLESS FM_CHROME SAYS OTHERWISE (6 Oct, the PM's port review). chromium / chromium-browser were in
+# this list, so a machine without google-chrome ran the suite in Chromium without a word — and Chromium builds differ in
+# exactly what the app probes (the H.264 encoders, AAC); Ubuntu's is a snap with a private /tmp. Naming one in FM_CHROME
+# is a decision; finding one on PATH is not. They are named in the refusal so the choice is one line away.
+PATH_NAMES = ("google-chrome", "google-chrome-stable")
+CHROMIUM_NAMES = ("chromium", "chromium-browser")
 MOUSE_QUERY = "(hover: hover) and (pointer: fine)"
 
 
@@ -50,8 +56,12 @@ def chrome_path():
         p = shutil.which(name)
         if p:
             return p
+    other = [shutil.which(n) for n in CHROMIUM_NAMES if shutil.which(n)]
     raise ChromeNotFound("no Chrome found — tried $FM_CHROME (unset), %r, and %s on PATH. Install google-chrome "
-                         "(Linux: https://www.google.com/chrome/) or set FM_CHROME to its binary." % (MAC_CHROME, ", ".join(PATH_NAMES)))
+                         "(Linux: https://www.google.com/chrome/) or set FM_CHROME to its binary.%s"
+                         % (MAC_CHROME, ", ".join(PATH_NAMES),
+                            (" %s is on PATH but is NOT used unless FM_CHROME names it (a Chromium build may lack what the "
+                             "app probes: H.264, AAC)." % other[0]) if other else ""))
 
 
 def find_chrome():

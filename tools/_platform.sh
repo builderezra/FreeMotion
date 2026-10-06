@@ -127,22 +127,31 @@ fm_js_parse() {
   fi
 }
 
-# fm_chrome — the Chrome binary the test tooling launches: $FM_CHROME, else the Mac app, else google-chrome,
-# google-chrome-stable, chromium or chromium-browser on PATH. Refuses (stderr, return 1) when there is none — and when
-# FM_CHROME is set but wrong, rather than quietly using another browser.
+# fm_chrome — the Chrome binary the test tooling launches: $FM_CHROME, else the Mac app, else google-chrome or
+# google-chrome-stable on PATH (Chromium only when FM_CHROME names it — 6 Oct, the PM's review). Refuses (stderr, return 1)
+# when there is none — and when FM_CHROME is set but wrong, rather than quietly using another browser.
 fm_chrome() {
   if [ -n "${FM_CHROME:-}" ]; then
     if [ -f "$FM_CHROME" ] && [ -x "$FM_CHROME" ]; then echo "$FM_CHROME"; return 0; fi
     echo "fm_chrome: FM_CHROME is set to '$FM_CHROME', which is not an executable file — fix it or unset it" >&2
     return 1
   fi
-  if [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
-    echo "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; return 0
+  # _FM_MAC_APP is a TEST SEAM only (tools/test-port.sh points it at nothing, to reach the PATH half on a Mac)
+  _fm_app="${_FM_MAC_APP:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+  if [ -x "$_fm_app" ]; then
+    echo "$_fm_app"; return 0
   fi
-  for _fm_n in google-chrome google-chrome-stable chromium chromium-browser; do
+  # GOOGLE CHROME ONLY, unless FM_CHROME names another (6 Oct, the PM's port review) — tests/_platform.py says why
+  for _fm_n in google-chrome google-chrome-stable; do
     if command -v "$_fm_n" >/dev/null 2>&1; then command -v "$_fm_n"; return 0; fi
   done
-  echo "fm_chrome: no Chrome found — tried \$FM_CHROME (unset), /Applications/Google Chrome.app, google-chrome, google-chrome-stable, chromium and chromium-browser on PATH. Install google-chrome or set FM_CHROME." >&2
+  echo "fm_chrome: no Chrome found — tried \$FM_CHROME (unset), /Applications/Google Chrome.app, google-chrome and google-chrome-stable on PATH. Install google-chrome or set FM_CHROME." >&2
+  for _fm_n in chromium chromium-browser; do
+    if command -v "$_fm_n" >/dev/null 2>&1; then
+      echo "   $(command -v "$_fm_n") is on PATH but is NOT used unless FM_CHROME names it (a Chromium build may lack what the app probes: H.264, AAC)." >&2
+      break
+    fi
+  done
   return 1
 }
 
