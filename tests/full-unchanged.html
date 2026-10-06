@@ -413,11 +413,14 @@
   async function capture(name, opts) {
     opts = opts || {};
     step('capture ' + name);
-    if (!opts.keepToast && FM.hideToast) FM.hideToast();
+    // (a toast measured at rest must be put away by its OWN timer: hidden here, its timer would fire again mid-measurement)
+    if (!opts.keepToast && !opts.restToast && FM.hideToast) FM.hideToast();
     await settle(opts.wait);
     var motion = motionTake().concat(infiniteNow());
     var quiet = await canvasesQuiet();
     var pvs = opts.noPreview ? {} : await previewState();
+    var toastRec = opts.restToast ? { words: takeToasts(), first: takeToastFirst() } : null;
+    if (opts.restToast) await toastAtRest();
     var fr = freezeInfinite();
     try {
       await raf2();
@@ -426,8 +429,9 @@
       var rec = layoutRecord(opts.root ? D.querySelector(opts.root) : D.body, opts.skip);
       DUMP.screens[name] = { layout: rec, focus: D.activeElement ? pathOf(D.activeElement) : '', canvasesQuiet: quiet,
         pv: pvs.pv || null, pvHash: pvs.pvHash || '', motion: motion };
+      if (toastRec) DUMP.screens[name].toast = toastRec;
       if (!opts.noShot) { await shot(name); if (!opts.noPreview) await shotNoPreview(name); }
-    } finally { unfreeze(fr); }
+    } finally { unfreeze(fr); await toastAway(); }
   }
 
   /* ═══ REAL INPUT (tests/_cdp.py's channel, queue 924): a finger, a mouse that hovers ═════════════════════════════
@@ -517,6 +521,44 @@
     if (toastLog[toastLog.length - 1] !== t) toastLog.push(t);
   }
   function takeToasts() { var t = toastLog; toastLog = []; return t; }
+  /* THE TOAST ITSELF, NOT ONLY ITS WORDS (the second review, 6 Oct: every screen hid the toast before measuring, so it
+     moving 24 px up the phone passed). The first toast a step raises is measured the moment it rises — the observer in
+     BOOT calls this in the same task as FM.toast: its rise (the toast-in animation's name, timing and keyframes, read
+     before it is finished) and then its box where it lands (layoutRecord, the animation jumped to its end). FU1's
+     'fu1-toast' screen also pictures it. */
+  var toastFirst = null, toastUp = false, TOAST_UNHIDING = false;
+  /* The toast at rest, for a picture: it is put away by its own timer (a toast times out on the wall clock, and a screen
+     takes longer than its second to measure), so the probe waits for that and then shows Full's own element again —
+     its words, its classes but the rise, its place — for the instant of the measurement. */
+  async function toastAtRest() {
+    var t = D.getElementById('toast');
+    if (!t) return null;
+    await until('the toast to put itself away', function () { return t.classList.contains('hidden'); }, 9000);
+    TOAST_UNHIDING = true;
+    t.classList.remove('hidden');
+    await raf2();
+    return t;
+  }
+  async function toastAway() {
+    if (!TOAST_UNHIDING) return;
+    if (FM.hideToast) FM.hideToast();
+    await raf2();
+    TOAST_UNHIDING = false;
+  }
+  function noteToastRise(t) {
+    if (toastFirst) return;
+    var rise = [];
+    try {
+      t.getAnimations().forEach(function (a) {
+        var ef = a.effect, ct = ef.getComputedTiming();
+        var kf = JSON.stringify(ef.getKeyframes().map(function (k) { var o = {}; Object.keys(k).sort().forEach(function (x) { if (x !== 'computedOffset') o[x] = k[x]; }); return o; }));
+        rise.push([a.animationName || a.transitionProperty || 'script', ct.duration, ct.delay, ct.easing, String(ct.iterations), short(kf, 600)]);
+        if (isFinite(ct.endTime)) a.finish();
+      });
+    } catch (e) { rise.push('unreadable: ' + (e && e.message)); }
+    toastFirst = { rise: rise.sort(), box: layoutRecord(t) };
+  }
+  function takeToastFirst() { var f = toastFirst; toastFirst = null; return f; }
   function histInfo() {
     var s = FM.history && FM.history._steps ? FM.history._steps() : null;
     return { canUndo: !!(FM.history && FM.history.canUndo()), canRedo: !!(FM.history && FM.history.canRedo()), len: s ? s.len : null, index: s ? s.index : null };
@@ -967,7 +1009,7 @@
     FM.selectLayer(null); FM.setTime(0);
     await settle(300); await mediaSettled();
     await resetView();
-    takeToasts();
+    takeToasts(); takeToastFirst();
     return id;
   }
 
@@ -1016,6 +1058,15 @@
       var end = 0; FM.scene.layers.forEach(function (l) { if (l.type !== 'group' && l.start + l.duration > end) end = l.start + l.duration; });
       FM.setTime(end);
     });
+    /* THE TOAST (the second review, 6 Oct: it moving 24 px up the phone, and the M toggle's 'Benchmark removed' reworded,
+       both passed — every screen hid it, and no step pressed M on a benchmark). M twice where there is none — 'Benchmark
+       added', then 'Benchmark removed' — and the toast's words, its rise and landed box (the first one), and the toast at
+       rest on the screen, in the layout record and both pictures. */
+    await screen('fu1-toast', async function () {
+      FM.selectLayer(null); FM.setTime(0.75); await settle();
+      key('KeyM', 'm'); await settle(120);
+      key('KeyM', 'm'); await settle(60);
+    }, { restToast: true });
     /* A PLAYING frame, held still: the transport is really playing (its button, its classes), and FM.clockNow — the one
        clock the play loop reads — is pinned to 1.25 s for the instant of the measurement, so the readout and the playhead
        are the same on both sides instead of wherever the wall clock happened to be. */
@@ -1627,7 +1678,7 @@
       var nm = steps[i][0], err = '', opt = steps[i][2] || {};
       step('FU2 ' + nm);
       if (before) await before();
-      takeToasts();
+      takeToasts(); takeToastFirst();
       CUR_FELL = []; CUR_SURF = {};
       try { await steps[i][1](); } catch (e) { err = String(e && e.message || e); }
       var fell = CUR_FELL, surf = CUR_SURF; CUR_FELL = null; CUR_SURF = null;
@@ -1860,7 +1911,7 @@
           await restoreFrom(base);
           if (pass) { FM.selectLayer(byName('Clip B').id); }
           FM.setTime(2.5);
-          await settle(60); takeToasts();
+          await settle(60); takeToasts(); takeToastFirst();
           FM.clockNow = function () { return FM.time; };
           key(K[0], K[1], K[2]);
           await settle(160);

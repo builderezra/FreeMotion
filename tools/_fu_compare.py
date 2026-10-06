@@ -526,6 +526,11 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                 for k in ('focus', 'pv', 'pvHash'):
                     if sa.get(k) != sb.get(k):
                         out.append('%s %s: %s %s → %s' % (w, name, {'pv': 'the preview’s backing store', 'pvHash': 'what the preview drew'}.get(k, k), short(sa.get(k)), short(sb.get(k))))
+                for k in ('toast', 'playing'):
+                    if sa.get(k) != sb.get(k):
+                        local = []
+                        json_diff(sa.get(k), sb.get(k), {'toast': 'the toast'}.get(k, k), local, max(4, per_step))
+                        out += ['%s %s: %s' % (w, name, x) for x in local]
                 if sa.get('motion') != sb.get('motion'):
                     local = []
                     json_diff(sa.get('motion'), sb.get('motion'), 'what it animated', local, max(4, per_step))
