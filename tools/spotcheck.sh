@@ -121,11 +121,14 @@ CTRL=()
 while IFS= read -r t; do
   r="$(run_one "$t")"; CTRL+=("$r")
   echo "    ${r%%|*}  ${t:0:90}"; [ "${r%%|*}" = "PASS" ] || echo "         ${r#*|}"
-  # A control that did not run is no evidence about the release either way, so it is no verdict — never NO-CONTROL, which is
-  # logged NOT-PROVEN. NO-CONTROL stays for a control that RAN and was red (or matched no test): that is the release's.
+  # A control that did not run is no evidence about the release either way WHEN THE MACHINE IS WHY (Chrome or the server gone):
+  # no verdict, nothing logged. ⚠️ BUT ASK, THE WAY THE REVERTED SIDE ASKS (6 Oct, the PM's port review). NOSUITE also covers
+  # _cdp.py's own timeout — a changed test that HANGS, or now takes past 300 s — and with Chrome and the server healthy that
+  # is the release's, not the machine's: it is NO-CONTROL below (logged NOT-PROVEN), as it was before the port. Blaming the
+  # machine every time meant a hanging test was never recorded, and every later spot-check of it repeated the excuse.
   if [ "${r%%|*}" = NOSUITE ]; then
-    echo "spotcheck: the control did not run to a verdict (above) — the runner, Chrome or the server, not $SHORT. No verdict, nothing logged."
-    exit 2
+    env_ok || { echo "spotcheck: the control did not run to a verdict, and Chrome or the server is gone (above) — not $SHORT. No verdict, nothing logged."; exit 2; }
+    echo "         Chrome and the server are fine, so this is the test's own (a hang, or past the 300 s budget): NO-CONTROL."
   fi
   # a test this machine cannot run (NOT RUN HERE) proves nothing about the release either way: no verdict, nothing logged
   if [ "${r%%|*}" = NOTHERE ]; then

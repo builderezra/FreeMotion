@@ -102,6 +102,29 @@ out="$(cd "$G" && PATH="$TMP/badgit:$PATH" python3 "$TMP/buster.py" 2>&1)"; rc=$
 out="$(cd "$G" && python3 "$TMP/buster.py" 2>&1)"; rc=$?
 [ "$rc" = 0 ] && printf '%s' "$out" | grep -q 'js/a.js (still ?v=1)' && ok "control: with a working git it names js/a.js's stale buster" || bad "buster control: rc=$rc $out"
 
+echo "── spotcheck: a control that TIMED OUT on a healthy machine is the release's NO-CONTROL, not 'the machine' (review minor) ──"
+SC="$TMP/spot"; mkdir -p "$SC/tools" "$SC/tests" "$SC/js"
+cp tools/spotcheck.sh tools/_platform.sh tools/_srcfiles.py tools/_spottests.py tools/serve.sh "$SC/tools/"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/fakechrome"; chmod +x "$TMP/fakechrome"
+cat > "$SC/tests/_cdp.py" <<'STUB'
+#!/usr/bin/env python3
+# STUB driver: every run is _cdp.py's own timeout (no summary, exit 2) — what a changed test that HANGS looks like
+import json, sys
+print(json.dumps({"ok": False, "error": "suite did not finish within 300s", "lastTest": "t-hangs"})); sys.exit(2)
+STUB
+( cd "$SC" && git init -q . && git config user.email t@t && git config user.name t
+  echo '<html></html>' > index.html; echo 'var a = 1;' > js/a.js; printf '.spotcheck-in-progress\n' > .gitignore
+  printf "var qs; qs.get('only');\n  test('t-other', function () {});\n" > tests/tests.js
+  git add -A && git commit -q -m base
+  echo 'var a = 2;' > js/a.js; printf "  test('t-hangs on the fix', function () {});\n" >> tests/tests.js
+  git add -A && git commit -q -m 'a fix with a test' )
+out="$(cd "$SC" && FM_CHROME="$TMP/fakechrome" tools/spotcheck.sh HEAD 2>&1)"; rc=$?
+logged="$(cat "$SC/tools/.spotcheck.log" 2>/dev/null)"
+[ "$rc" = 1 ] && printf '%s' "$logged" | grep -q 'NOT-PROVEN NO-CONTROL' && ok "a hanging control with Chrome and the server healthy → NOT-PROVEN NO-CONTROL, logged" || bad "a hanging control on a healthy machine: rc=$rc log=[$logged] — $(printf '%s' "$out" | tail -2)"
+rm -f "$SC/tools/.spotcheck.log"
+out="$(cd "$SC" && FM_CHROME="$TMP/no-such-chrome" tools/spotcheck.sh HEAD 2>&1)"; rc=$?
+[ "$rc" = 2 ] && [ ! -s "$SC/tools/.spotcheck.log" ] && ok "control: with no Chrome it is the machine — exit 2, nothing logged" || bad "no Chrome: rc=$rc log=[$(cat "$SC/tools/.spotcheck.log" 2>/dev/null)]"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"
