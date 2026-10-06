@@ -97,3 +97,32 @@ ship_status_lines() {
   esac
 }
 
+# 17.23 > 17.9 numerically, part by part.
+_ver_newer() { awk -v a="$1" -v b="$2" 'BEGIN { na = split(a, x, "."); nb = split(b, y, "."); n = na > nb ? na : nb
+  for (i = 1; i <= n; i++) { if (x[i] + 0 > y[i] + 0) exit 0; if (x[i] + 0 < y[i] + 0) exit 1 } exit 1 }'; }
+
+# UNSHIPPED RELEASE (RULES-AUDIT B5). YES when index.html's version label is newer than live's (ssh/main), or when a
+# ship's lock names a dead pid. Otherwise NO, whatever .last-ship says — .last-ship only explains why. A dirty tree on
+# its own is NOT an unshipped release: INBOX.md, tools/design/pm/ and tools/design/plans/ belong to the logging chat,
+# and code with no version bump is the batch in progress.
+unshipped_release_line() {
+  local here live st
+  here="$(grep -o '>v[0-9][0-9.]*<' index.html 2>/dev/null | head -1 | tr -d '><v')"
+  live="$(git show ssh/main:index.html 2>/dev/null | grep -o '>v[0-9][0-9.]*<' | head -1 | tr -d '><v')"
+  st="$(ship_lock_state .ship-in-progress)"
+  case "$st" in
+    dead*) set -- $st; echo "UNSHIPPED RELEASE: YES — a ship was KILLED mid-flight (pid $2, phase $3; index.html v${here:-?}, live v${live:-?}). Re-ship it before anything new."; return 0 ;;
+  esac
+  if [ -z "$here" ] || [ -z "$live" ]; then echo "UNSHIPPED RELEASE: UNKNOWN — could not read the version label (here v${here:-?}, ssh/main v${live:-?}; did \`git fetch ssh\` fail?)"; return 0; fi
+  if _ver_newer "$here" "$live"; then
+    case "$st" in
+      live*) set -- $st; echo "UNSHIPPED RELEASE: IN FLIGHT — v$here is being shipped now (pid $2, phase $3). Do not re-ship; watch .claude/ship/ship.log." ;;
+      *) local why=""; [ -f .last-ship ] && why=" (.last-ship: $(head -c 120 .last-ship | tr -d '\n'))"
+         echo "UNSHIPPED RELEASE: YES — index.html says v$here, live (ssh/main) is v$live$why. Ship it first." ;;
+    esac
+  elif _ver_newer "$live" "$here"; then
+    echo "UNSHIPPED RELEASE: NO — and live is AHEAD of this tree (ssh/main v$live, index.html v$here): bring it in before any ship (ship.sh refuses until you do)."
+  else
+    echo "UNSHIPPED RELEASE: NO — v$here is live. A dirty tree is the batch in progress (or the logging chat's files): continue it."
+  fi
+}

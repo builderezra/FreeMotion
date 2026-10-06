@@ -39,8 +39,13 @@ hr "INBOX — Ezra writes here from his phone; if anything is listed, log it VER
 hr "REMOTE"
 git fetch ssh --prune -q 2>/dev/null
 L="$(git rev-parse HEAD)"; R="$(git rev-parse ssh/main 2>/dev/null)"
-if [ "$L" = "$R" ]; then echo "HEAD == ssh/main ($(git rev-parse --short HEAD)) — pushed"; else echo "⚠️ HEAD $(git rev-parse --short HEAD) != ssh/main $(git rev-parse --short ssh/main 2>/dev/null) — a release did not land, or the remote moved (pull first)"; fi
+# HEAD == ssh/main alone proves nothing (it is also true when a ship refused and moved nothing) — the UNSHIPPED RELEASE
+# line below is the one that says whether a release is waiting.
+if [ "$L" = "$R" ]; then echo "HEAD == ssh/main ($(git rev-parse --short HEAD))"; else echo "⚠️ HEAD $(git rev-parse --short HEAD) != ssh/main $(git rev-parse --short ssh/main 2>/dev/null) — commits here that live does not have, or the remote moved (pull first)"; fi
 echo "app version: $(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><')   newest log: $(grep -oE '^- v[0-9.]+' POLISH-LOG.md | tail -1 | sed 's/^- //')   test floor: $(cat tools/.test-floor 2>/dev/null)"
+# The first-message check reads THIS line (CLAUDE.md step 3, RULES-AUDIT B5) — not `git status`, which is dirty most of
+# the time for reasons that are not an unshipped release (the logging chat's files, the batch in progress).
+unshipped_release_line
 hr "QUEUE — oldest first; his words before audit findings; BUILT OUT items are not work"
 ./tools/next.sh 2>&1 | sed -n '/^ACTIONABLE/,$p' | head -60
 ./tools/next.sh 2>&1 | grep -A3 'STALE ASKS' | head -8

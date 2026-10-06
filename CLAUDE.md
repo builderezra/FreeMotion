@@ -16,9 +16,9 @@ and it is the same three steps each time.** Unless his first message is plainly 
    actionable item."*
    The cadence is HIS, confirmed 20 Sep when asked directly whether to slow it down: *"That was on
    chatgpt, u dont do that. so its fine."* Do not re-litigate it and do not quietly run slower.
-3. **Check for an unshipped release.** `git status --short` — if the tree is dirty, a previous chat
-   was interrupted mid-ship and the fixes are NOT on his phone. Ship it before starting anything new;
-   the work is already done and verified, it just needs to land.
+3. **Check for an unshipped release.** Read tick.sh's `UNSHIPPED RELEASE:` line. If it says yes, ship that first. A dirty tree on its own is normal: INBOX.md, tools/design/pm/ and tools/design/plans/ belong to the logging chat, and uncommitted code with no version bump is the previous batch in progress, so continue it.
+   (`IN FLIGHT` means a ship is running it right now: watch `.claude/ship/ship.log`, do not re-ship. The line is YES
+   when index.html's version label is newer than live's, or when `.ship-in-progress` names a dead pid.)
 
 **EXCEPTION — the LOGGING chat.** If his first message says this chat is for logging his requests
 (his arrangement: #843 on 10 Sep, restated 26 Sep: under each request goes a READY-TO-BUILD plan, options

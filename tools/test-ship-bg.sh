@@ -99,6 +99,25 @@ out="$(tools/ship-bg.sh 2>&1)"; rc=$?; never0 $rc
 [ "$rc" = 1 ] && printf '%s' "$out" | grep -q 'REFUSED' && ok "immediate refusal → exit 1, with the log's tail" || bad "immediate refusal: rc=$rc — $out"
 rm -f stub-refuse
 
+echo "── 6. UNSHIPPED RELEASE (B5): from the version label and the lock, never from a dirty tree or .last-ship alone ──"
+git update-ref refs/remotes/ssh/main HEAD            # "live" is the v1.2 commit
+rm -f .ship-in-progress; echo "REFUSED rc=1" > .last-ship
+mkdir -p tools/design/pm; echo "logging chat's notes" > INBOX.md; echo "plan" > tools/design/pm/PM-STATE.md; echo "// batch in progress" > half-done.js
+l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: NO"*) ok "dirty tree, no version bump, a REFUSED .last-ship → NO";; *) bad "dirty tree: $l";; esac
+echo '<span class="ver">v1.3</span>' > index.html
+l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: YES"*v1.3*v1.2*) ok "label v1.3, live v1.2 → YES";; *) bad "bumped label: $l";; esac
+echo "v1.3 — the release being shipped" > .claude/ship/msg.txt
+tools/ship-bg.sh >/dev/null 2>&1; STUBPID="$(ship_lock_pid .ship-in-progress)"
+l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: IN FLIGHT"*"$STUBPID"*) ok "…while a ship is running it → IN FLIGHT (do not re-ship)";; *) bad "live ship: $l";; esac
+pkill -P "$STUBPID" 2>/dev/null; kill -9 "$STUBPID" 2>/dev/null; sleep 0.5
+echo '<span class="ver">v1.2</span>' > index.html
+l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: YES"*KILLED*) ok "a dead pid in .ship-in-progress → YES, even with the label equal to live";; *) bad "killed ship: $l";; esac
+STUBPID=""; rm -f .ship-in-progress
+echo '<span class="ver">v1.1</span>' > index.html
+l="$(unshipped_release_line)"; case "$l" in *"live is AHEAD"*) ok "label behind live → NO, and says live is ahead";; *) bad "behind live: $l";; esac
+echo '<span class="ver">v1.10</span>' > index.html
+l="$(unshipped_release_line)"; case "$l" in "UNSHIPPED RELEASE: YES"*) ok "v1.10 is newer than v1.2 (numbers, not text)";; *) bad "v1.10 vs v1.2: $l";; esac
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ ship-bg.sh: every check passed"; exit 0; fi
 echo "❌ ship-bg.sh: a check failed — see above"; exit 1
