@@ -543,25 +543,122 @@ TOL_VARS = ('FU_TOL_PX', 'FU_CHAN', 'FU_FAINT_TOL_PX', 'FU_FAINT_CHAN', 'FU_GRID
 #   · and the probe's own lists (the styles, attributes, keys, sizes, environments, widths it measures) shrinking is a
 #     loosening, read like the four knobs.
 INSTRUMENT_MARK = 'INSTRUMENT CHANGE:'
+# THE LISTS ARE READ AS JAVASCRIPT, not by a regex (6 Oct): v2's reader took every quoted string in a list's text, and the
+# probe's comments carry apostrophes — HOLDS's "HEAD's threshold, the driver's wait", HOVER_MORE's "its picture's margin" —
+# so it paired quotes ACROSS them and read junk like `', 350, 200, 430, '`: HOVER_MORE's selectors were not read at all
+# (an entry taken out read as nothing), and HOLDS's numbers only by that accident. Now comments are stripped outside
+# strings and each list is split at its own top-level commas:
+#   · a list of plain words (STYLES, ATTRS …): each word;
+#   · a list of entries whose parts are plain (KEYS, FU6_SIZES, HOLDS …): each entry WHOLE — a hold's wait moved from 430
+#     to 600, straight past a timer moved to 500 (the review's own escape), reads as the old entry lost;
+#   · a list of entries with lists or functions inside (HOVER, HOVER_MORE, FRIEND): each part as `name › part`, so a
+#     selector taken out of an entry is lost, and one added is not a loosening;
+#   · ENV_SETTINGS, an object (the Settings the env-* runs turn off their defaults): its `key: value` pairs — one taken
+#     out, or set back to its default, is a Setting no longer measured off it.
 PROBE_LISTS = ('STYLES', 'ATTRS', 'SVG_ATTRS', 'PSEUDO', 'KEYS', 'KEYS_TWICE', 'SWEEP_CODES', 'SWEEP_MODS', 'FU6_SIZES',
-               'HOVER', 'HOVER_MORE', 'HOLDS', 'FRIEND', 'ALL')
+               'HOVER', 'HOVER_MORE', 'HOLDS', 'FRIEND', 'ALL', 'ENV_SETTINGS')
 NO_PLANT_GROUPS = ('FU7',)   # a record of "no switch yet" (it refuses PASS by itself once one exists): nothing to plant in it
 
 
+def _js_scan(text, i, n=None):
+    """The index just past the string, line comment or block comment that starts at text[i], or None if none does."""
+    n = len(text) if n is None else n
+    c = text[i]
+    if c in '\'"`':
+        j = i + 1
+        while j < n and text[j] != c:
+            j += 2 if text[j] == '\\' else 1
+        return min(j + 1, n)
+    if text.startswith('//', i):
+        j = text.find('\n', i)
+        return n if j < 0 else j
+    if text.startswith('/*', i):
+        j = text.find('*/', i + 2)
+        return n if j < 0 else j + 2
+    return None
+
+
+def _js_literal(text, name):
+    """('[' or '{', the literal's inside) for `var NAME = [...]` / `{...}`, matched by depth outside strings and comments."""
+    m = re.search(r'\bvar %s\s*=\s*([\[{])' % name, text or '')
+    if not m:
+        return None, None
+    i0 = m.start(1)
+    depth, j, n = 0, i0, len(text)
+    while j < n:
+        k = _js_scan(text, j, n)
+        if k is not None:
+            j = k
+            continue
+        c = text[j]
+        if c in '([{':
+            depth += 1
+        elif c in ')]}':
+            depth -= 1
+            if depth == 0:
+                return m.group(1), text[i0 + 1:j]
+        j += 1
+    return None, None
+
+
+def _js_items(body):
+    """The top-level comma-separated parts of a literal's inside, comments dropped, whitespace collapsed."""
+    items, cur, depth, j, n = [], [], 0, 0, len(body)
+    while j < n:
+        k = _js_scan(body, j, n)
+        if k is not None:
+            if body[j] in '\'"`':
+                cur.append(body[j:k])
+            else:
+                cur.append(' ')
+            j = k
+            continue
+        c = body[j]
+        if c in '([{':
+            depth += 1
+        elif c in ')]}':
+            depth -= 1
+        if c == ',' and depth == 0:
+            items.append(''.join(cur))
+            cur = []
+        else:
+            cur.append(c)
+        j += 1
+    items.append(''.join(cur))
+    return [re.sub(r'\s+', ' ', x).strip() for x in items if x.strip()]
+
+
+def _js_words(x):
+    return [m.group(2) for m in re.finditer(r"(['\"`])((?:(?!\1)[^\\]|\\.)*)\1", x)]
+
+
 def probe_lists(text):
-    """{list name: set of its entries} for the probe's measured lists — an entry is a top-level [...] item when the list
-    holds arrays (KEYS, FU6_SIZES), else each quoted string."""
+    """{list name: set of its entries} for the probe's measured lists (how each kind is read: the comment above)."""
     out = {}
     for name in PROBE_LISTS:
-        m = re.search(r'\bvar %s\s*=\s*\[(.*?)\n?\s*\];' % name, text or '', re.S)
-        if not m:
+        kind, body = _js_literal(text, name)
+        if kind is None:
             continue
-        body = m.group(1)
-        if re.search(r'^\s*\[', body):
-            items = set(re.sub(r'\s+', ' ', x) for x in re.findall(r'\[[^\[\]]*\]', body))
-        else:
-            items = set(re.findall(r"'((?:[^'\\]|\\.)*)'", body))
-        out[name] = items
+        items = _js_items(body)
+        if kind == '{':
+            out[name] = set(items)
+            continue
+        if not any(x.startswith('[') for x in items):
+            out[name] = set(w for x in items for w in _js_words(x))
+            continue
+        got = set()
+        for x in items:
+            parts = _js_items(x[1:-1]) if x.startswith('[') and x.endswith(']') else [x]
+            if not any(p.startswith('[') or p.startswith('function') or p.startswith('async') or '=>' in p for p in parts):
+                got.add(x)
+                continue
+            nm = (_js_words(parts[0]) or [parts[0]])[0]
+            for p in parts[1:]:
+                if p.startswith('[') and p.endswith(']'):
+                    got.update('%s › %s' % (nm, q) for q in _js_items(p[1:-1]))
+                else:
+                    got.add('%s › %s' % (nm, p))
+        out[name] = got
     return out
 
 
@@ -1021,7 +1118,18 @@ def selftest_repo():
         SH0 = ("#!/bin/bash\nFU_INVISIBLE='\nlayer.srcW       # I2\nmeta.SCHEMA_REV  # N1\n'\nFU_TOL_PX=3   # measured\nFU_CHAN=24\nFU_GRID_TOL=4\n"
                "FU_RUNS='\n380   380x800   touch  -   FU1,FU2,FU7\n1280  1280x800  mouse  -   FU1,FU2,FU7\n440x956  440x956  touch  -  FU1,FU2   # his phone\n'\n")
         PL0 = '{"plants": [{"name": "margin", "groups": "FU1", "widths": ["380", "1280"]}, {"name": "toast", "groups": "FU1,FU2", "widths": ["440x956"]}]}\n'
-        PR0 = "<script>\n  var ALL = ['FU1', 'FU2', 'FU7'];\n  var STYLES = ['display', 'box-shadow',\n    'outline'];\n  var PSEUDO = ['::before', '::after'];\n</script>\n"
+        PR0 = ("<script>\n  var ALL = ['FU1', 'FU2', 'FU7'];\n  var STYLES = ['display', 'box-shadow',\n    'outline'];\n  var PSEUDO = ['::before', '::after'];\n"
+               "  var ENV_SETTINGS = { sort: 'name', demoMode: true,\n    homeLight: false };\n"
+               # the comments carry apostrophes, as the probe's do (v2's reader paired quotes across them)
+               "  var HOLDS = [   // [what, HEAD's threshold, the driver's wait short of it, past it (ms), and the two steps' names]\n"
+               "    ['the clip hold', 350, 200, 430, 'hold 200 ms', 'hold 430 ms']\n  ];\n"
+               # HOVER_MORE as the probe has it (6 Oct), word for word: v2's reader saw NONE of its selectors
+               "  var HOVER_MORE = [   // [what, candidate selectors, how it is reached, canvases hidden for its picture, its picture's margin (null: its own size; -1: no picture)]\n"
+               "    ['menu item', ['#ctx-menu .ctx-item:not(.disabled) ~ .ctx-item:not(.disabled)'], 'the layer menu', '', null],\n"
+               "    ['add tab', ['.addmenu-tab:not(.active)'], 'nothing selected', '', null],\n"
+               "    ['clip grip', ['#tl-tracks .clip.selected .clip-grip.right', '#tl-tracks .clip .clip-grip.right'], 'Clip A selected', '', null],\n"
+               "    ['effect category', ['#fx-browser .fxb-banner'], 'the effects browser', '', -1],\n"
+               "    ['cog bar', ['#cv-fr-bar', '#cv-fr-exp'], 'the cog', '', null]\n  ];\n</script>\n")
         write('tools/full-unchanged.sh', SH0)
         write('tools/full-unchanged-plants.json', PL0)
         write('tests/full-unchanged.html', PR0)
@@ -1200,7 +1308,16 @@ def selftest_repo():
                                 ('a run taken out', 'tools/full-unchanged.sh', SH0.replace('440x956  440x956  touch  -  FU1,FU2   # his phone\n', '')),
                                 ('a group taken from a run', 'tools/full-unchanged.sh', SH0.replace('440x956  440x956  touch  -  FU1,FU2', '440x956  440x956  touch  -  FU1')),
                                 ('a run moved to another size', 'tools/full-unchanged.sh', SH0.replace('440x956  440x956  touch', '440x956  380x800  touch')),
-                                ('the pseudo-elements no longer read', 'tests/full-unchanged.html', PR0.replace("var PSEUDO = ['::before', '::after'];", "var PSEUDO = ['::before'];"))):
+                                ('the pseudo-elements no longer read', 'tests/full-unchanged.html', PR0.replace("var PSEUDO = ['::before', '::after'];", "var PSEUDO = ['::before'];")),
+                                # the env runs' Settings (an object, not a list): one taken out, one set back to its default
+                                ('a Setting the env runs no longer turn', 'tests/full-unchanged.html', PR0.replace(" demoMode: true,", "")),
+                                ('a Setting set back to its default', 'tests/full-unchanged.html', PR0.replace("homeLight: false", "homeLight: true")),
+                                # a bracketed hold's "past" wait moved past a 500 ms timer, its step's words kept
+                                ('a hold’s wait moved, its name kept', 'tests/full-unchanged.html', PR0.replace("350, 200, 430,", "350, 200, 600,")),
+                                # a hovered kind taken out, and a selector taken out of one
+                                ('a hovered kind taken out', 'tests/full-unchanged.html', PR0.replace("    ['cog bar', ['#cv-fr-bar', '#cv-fr-exp'], 'the cog', '', null]\n", "").replace("'the effects browser', '', -1],", "'the effects browser', '', -1]")),
+                                ('a hovered kind’s selector taken out', 'tests/full-unchanged.html', PR0.replace("'#tl-tracks .clip.selected .clip-grip.right', '#tl-tracks .clip .clip-grip.right'", "'#tl-tracks .clip.selected .clip-grip.right'")),
+                                ('a hovered kind’s selector swapped for a looser one', 'tests/full-unchanged.html', PR0.replace("'#ctx-menu .ctx-item:not(.disabled) ~ .ctx-item:not(.disabled)'", "'#ctx-menu .ctx-item'"))):
             old = io.open(os.path.join(d, rel), encoding='utf-8').read()
             write(rel, text)
             for log in ('- v3 — queue 980 (partial): the lock itself', '- v3 — queue 975: a tidy-up', '- v3 — (hunt LOW #2) the probe'):
@@ -1215,6 +1332,13 @@ def selftest_repo():
         if 'see less' in gate('- v3 — queue 980 (partial): the lock itself')[1]:
             fails.append('the loosening rule: a LOWER tolerance was read as a loosening')
         write('tools/full-unchanged.sh', SH0)
+        for what, text in (('one more Setting in the env runs', PR0.replace("homeLight: false", "homeLight: false, playbackQuality: 'detail'")),
+                           ('one more selector for a hovered kind', PR0.replace("['#cv-fr-bar', '#cv-fr-exp']", "['#cv-fr-bar', '#cv-fr-exp', '#cv-fr-x']")),
+                           ('one more hovered kind', PR0.replace("'the cog', '', null]\n", "'the cog', '', null],\n    ['key rail', ['#key-s'], 'Clip A selected', '', null]\n"))):
+            write('tests/full-unchanged.html', text)   # MORE measured: never a loosening
+            if 'see less' in gate('- v3 — queue 980 (partial): the lock itself')[1]:
+                fails.append('the loosening rule: %s was read as a loosening' % what)
+        write('tests/full-unchanged.html', PR0)
     except Exception as e:
         fails.append('the repository self-test could not run: %s' % e)
     finally:
