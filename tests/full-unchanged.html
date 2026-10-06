@@ -2188,7 +2188,40 @@
         });
       };
       var rec = []; rec.noFrames = true;
-      await runFU2(fu2Steps(), rec, async function () { return wire(); });
+      await runFU2(fu2Steps({}), rec, async function () { return wire(); });
+      /* A FRIEND'S EDITS ARRIVING IN FULL (the second review, 6 Oct: the guest only ever sent presence and acks, so a toast
+         'A friend moved N clips' added to how Full RECEIVES an edit — DESIGN's own V12, dropped — passed). Sam, the engine
+         guest on the loopback link, now edits his copy the ways Full's own edits go — a move, a trim, an add, a delete, a
+         rename, an effect — and each goes over the wire on the probe's clock. After each: the wire, Full's document, its
+         selection and history, the toasts and the first one's box, the timeline's layout record, and a picture with the
+         preview hidden. Before the role change, which makes him a Viewer whose edits are refused. */
+      out.friend = [];
+      for (var fi = 0; fi < FRIEND.length; fi++) {
+        var fn0 = FRIEND[fi][0], fr0 = { name: fn0, err: '' };
+        step('FU4 ' + fn0);
+        takeToasts(); takeToastFirst();
+        try {
+          FRIEND[fi][1](s.gdoc);
+          s.G.tick('full'); s.loop.settle(); pump();
+          await settle(250);
+        } catch (e) { fr0.err = String(e && e.message || e); }
+        fr0.wire = await wire();
+        await settle(150);
+        fr0.doc = canonDoc(); fr0.sel = selInfo(); fr0.hist = histInfo(); fr0.toasts = takeToasts(); fr0.toastBox = takeToastFirst();
+        try {
+          await canvasesQuiet(2000);
+          var tlT = D.getElementById('tl-tracks');
+          // the record AND the picture in one frozen instant (measured 6 Oct: the Add tab's glint, caught mid-sweep, was
+          // 36 px of difference between two runs of HEAD when the picture came after the thaw)
+          var frz = freezeInfinite();
+          try {
+            await raf2(); frz = frz.concat(freezeInfinite());
+            fr0.timeline = tlT && vis(tlT) ? layoutRecord(tlT) : 'not on screen';
+            await shotNoPreview('fu4-friend-' + (fi + 1));
+          } finally { unfreeze(frz); }
+        } catch (e) { fr0.err = fr0.err || String(e && e.message || e); }
+        out.friend.push(fr0);
+      }
       /* The People menu's role (DESIGN I8, U.setMemberRole): the cog's Friends block, Sam's role button, Viewer. */
       step('FU4 the People menu: Sam becomes a Viewer');
       var role = { name: 'the People menu: Sam becomes a Viewer', err: '', fell: [], surf: {} };
@@ -2212,6 +2245,26 @@
       if (role.fell.length) DUMP.fell = DUMP.fell.concat(role.fell.map(function (f) { return role.name + ' — ' + f; }));
       out.steps = rec.map(function (r) { return { name: r.name, err: r.err, fell: r.fell, wire: r.extra, toasts: r.state.toasts }; });
       out.guestDoc = canon(clone({ project: s.gdoc.project, layers: s.gdoc.layers }), s.gdoc.layers);
+      /* …and he leaves: his own goodbye over the wire (the session's stop, as his Leave sends it). What Full says, its
+         document, and the Friends block after. */
+      step('FU4 Sam leaves');
+      var lv = out.leave = { name: 'Sam leaves (his goodbye)', err: '' };
+      takeToasts(); takeToastFirst();
+      try { s.G.stop('left'); s.loop.settle(); pump(); await settle(250); } catch (e) { lv.err = String(e && e.message || e); }
+      lv.wire = await wire();
+      lv.doc = canonDoc(); lv.toasts = takeToasts(); lv.toastBox = takeToastFirst();
+      /* the Friends block now offers a new invite: its code is crypto-random (collab-signal.js randomBytes), a new one on
+         every run, so it is written @code — that a code is shown, and where, stays compared */
+      var maskCode = function (v) { return typeof v === 'string' ? v.replace(/\b[0-9A-Z]{3}-[0-9A-Z]{3}-[0-9A-Z]{3}\b/g, '@code') : v; };
+      try {
+        if (s.C.ui && s.C.ui.openPeople) await s.C.ui.openPeople();
+        await settle(400);
+        var cdl = D.getElementById('canvas-dialog');
+        var frz2 = freezeInfinite();
+        try { lv.friends = cdl && vis(cdl) ? layoutRecord(cdl, '#cv-editor').map(function (row) { return row.map(maskCode); }) : 'not on screen'; }
+        finally { unfreeze(frz2); }
+      } catch (e) { lv.err = lv.err || String(e && e.message || e); }
+      closeTransient(); await settle(200);
     } catch (e) { out.err = String(e && e.message || e); }
     finally { await endSession(); }
   }
@@ -2374,6 +2427,28 @@
   async function FU7() {
     DUMP.fu7 = { hasSwitch: !!(FM.editor) || !!D.getElementById('cv-editor'), wired: false };
   }
+  /* Sam's edits, made to HIS copy (the engine guest's document), each one the way a person's edit reads to the engine. */
+  function gl(g, name) { var L = (g.layers || []).filter(function (l) { return l && l.name === name; })[0]; if (!L) throw new Error('Sam’s copy has no layer named ' + name); return L; }
+  function r6(v) { return Math.round(v * 1e6) / 1e6; }
+  var FRIEND = [
+    ['Sam moves Clip C half a second later', function (g) { var L = gl(g, 'Clip C'); L.start = r6((L.start || 0) + 0.5); }],
+    ['Sam trims 0.3 s off the end of Clip A', function (g) { var L = gl(g, 'Clip A'); L.duration = r6(Math.max(0.3, L.duration - 0.3)); }],
+    ['Sam adds a text', function (g) {
+      var T = clone(gl(g, 'Text'));
+      T.id = 'sam_text_1'; T.name = 'Sam’s text'; T.text = 'from Sam'; T.start = 0.2; delete T.parent;
+      g.layers.push(T);
+    }],
+    ['Sam deletes the song', function (g) {
+      var i = g.layers.findIndex(function (l) { return l && l.name === 'Song'; });
+      if (i < 0) throw new Error('Sam’s copy has no Song'); g.layers.splice(i, 1);
+    }],
+    ['Sam renames Clip B', function (g) { gl(g, 'Clip B').name = 'Clip B (Sam)'; }],
+    ['Sam puts a blur on Clip C', function (g) { var L = gl(g, 'Clip C'); L.effects = (L.effects || []).concat([{ type: 'blur', enabled: true, params: { radius: 4 } }]); }],
+    ['Sam turns the blur up', function (g) {
+      var L = gl(g, 'Clip C'), fx = (L.effects || []).filter(function (e) { return e && e.type === 'blur'; }).slice(-1)[0];
+      if (!fx) throw new Error('Sam’s Clip C has no blur to turn up'); fx.params.radius = 9;
+    }]
+  ];
 
   /* ═══ BOOT ═══════════════════════════════════════════════════════════════════════════════════════════════════════ */
   /* Run by the driver in every new document before any of its own scripts (Page.addScriptToEvaluateOnNewDocument), and so in

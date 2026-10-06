@@ -393,9 +393,11 @@ def instrument_errors(rec, w, groups):
             out.append('%s FU4: nothing recorded%s' % (w, (' — ' + f4['err']) if f4.get('err') else ''))
         if f4.get('err'):
             out.append('%s FU4: %s' % (w, f4['err']))
-        for r in f4.get('steps') or []:
+        for r in (f4.get('steps') or []) + (f4.get('friend') or []) + ([f4['leave']] if isinstance(f4.get('leave'), dict) else []):
             if r.get('err'):
                 out.append('%s FU4 "%s": %s' % (w, r.get('name'), r['err']))
+        if not f4.get('friend'):
+            out.append('%s FU4: no edit of the friend’s was recorded' % w)
     if 'FU6' in groups:
         f6 = rec.get('fu6') or {}
         if len([k for k in f6 if k != 'function']) < 14:
