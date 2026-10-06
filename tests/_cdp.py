@@ -315,6 +315,10 @@ def main():
                                     inp["touch_emu"] = True
                                 typ = {"touchStart": "touchStart", "touchMove": "touchMove", "touchEnd": "touchEnd", "touchCancel": "touchCancel"}[t]
                                 pts = [] if typ in ("touchEnd", "touchCancel") else [{"x": x, "y": y, "id": 1}]
+                                # queue 980 (the second review): `pts` is several fingers at once — the probe's pinch
+                                if isinstance(st.get("pts"), list) and typ not in ("touchEnd", "touchCancel"):
+                                    pts = [{"x": float(p.get("x", 0)) + q["ox"], "y": float(p.get("y", 0)) + q["oy"], "id": i + 1}
+                                           for i, p in enumerate(st["pts"])]
                                 cdp.send("Input.dispatchTouchEvent", type=typ, touchPoints=pts)
                                 inp["touch_down"] = typ in ("touchStart", "touchMove")
                             elif t == "wheel":

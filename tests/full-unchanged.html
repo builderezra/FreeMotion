@@ -1393,9 +1393,9 @@
     var b = firstVisibleSel(['#btn-split', '#key-s', '.qr-btn[title="Split at playhead"]']);
     return via('the split button', b, async function () { await FM.splitLayer(FM.scene.selectedId); });
   }
-  function fu2Steps() {
+  function fu2Steps(o) {
     var ctx = {};
-    return [
+    return (o && o.gestures ? function (steps) { return steps.concat(gestureSteps()); } : function (steps) { return steps; })([
       ['add text (Add → Elements → Text)', async function () {
         FM.setTime(2);
         var c = await addCard('object', /^Text\b/);
@@ -1781,7 +1781,189 @@
         FM.selectLayer(D2.id); await settle();
         key('Delete', 'Delete'); await settle(200);
       }]
+    ]);
+  }
+  /* ═══ THE PHONE'S OTHER GESTURES, AND EVERY HOLD BRACKETED (the second review, 6 Oct). Only held drags were driven, so a
+     finger swiping over a clip scrubbing 1.5× as far passed, and the clip hold going 350 → 500 ms compared "same as HEAD"
+     (the probe held 600 ms, past either). So, on the phone pass, after FU2's script: an un-held swipe over a clip and over
+     the empty timeline, a plain tap, a two-finger pinch — and each of Full's three hold timers bracketed: a hold 120 ms
+     SHORT of it must not grab, one 120 ms PAST it must. The numbers are HEAD's, written here (timeline.js: the clip hold
+     350 ms, the grip arm ARM_MS 300, the diamond hold KF_HOLD_MS 320) — never read from the build being measured, which
+     would move the bracket with the change it exists to catch.
+     ⚠️ THESE HOLDS ARE TIMED BY THE DRIVER, in ONE request (finger down, `ms` on the driver's clock, then the moves). A hold
+     timed on the page's clock (touchDrag, above) can only be long enough, never short enough: its moves wait for the
+     driver's next poll, up to a quarter of a second later, which would carry a 230 ms hold past 350. */
+  /* The driver's own wait is the hold LESS the time the page took to take the finger down (measured 6 Oct: the hold the app
+     sees runs 20–45 ms over the wait asked for, as the touch is acked only once the page has handled it) — so the wait is
+     150 ms short of HEAD's timer for "short", and 80 ms past it for "past", which lands the real hold 100–125 ms past it:
+     inside the timer on HEAD, and short of a timer moved to 500 (the review's own change). */
+  var HOLDS = [   // [what, HEAD's threshold, the driver's wait short of it, past it (ms), and the two steps' names]
+    ['the clip hold', 350, 200, 430, 'hold a clip 200 ms, then drag it (short of the 350 ms clip hold: must not grab)', 'hold a clip 430 ms, then drag it (past the 350 ms clip hold: must grab)'],
+    ['the grip arm', 300, 150, 380, 'hold a clip’s right grip 150 ms, then drag it (short of the 300 ms grip arm: must not trim)', 'hold a clip’s right grip 380 ms, then drag it (past the 300 ms grip arm: must trim)'],
+    ['the diamond hold', 320, 170, 400, 'hold a diamond 170 ms, then drag it (short of the 320 ms diamond hold: must not move it)', 'hold a diamond 400 ms, then drag it (past the 320 ms diamond hold: must move it)']
+  ];
+  /* A finger's whole gesture timed by the DRIVER, in one request: down, `holdMs` on the driver's clock, then moved in six
+     24 ms steps, RESTED 250 ms where it stopped, and lifted (an un-held swipe: holdMs 0). The rest is what makes it
+     measurable: a finger lifted while still moving flings the timeline on, as far as its last few events' speed says —
+     measured 6 Oct, the same swipe left the playhead at 1.744 s on one run of HEAD and 1.643 s on the next. */
+  async function fingerGesture(x, y, dx, dy, holdMs) {
+    var steps = [{ t: 'touchStart', x: x, y: y, ms: holdMs || 0 }];
+    for (var k = 1; k <= 6; k++) steps.push({ t: 'touchMove', x: x + dx * k / 6, y: y + dy * k / 6, ms: k === 6 ? 250 : 24 });
+    steps.push({ t: 'touchEnd', x: x + dx, y: y + dy, ms: 0 });
+    await realInput(steps);
+    await settle(200);
+  }
+  /* …and a bracketed hold: the whole move lands within 32 ms of the hold's end (two moves 16 ms apart, both far past any
+     slop), so "held 230 ms" means the finger moved before 262 ms — a six-step drag would still be moving at 374 ms, past a
+     350 ms timer, and a short hold would grab after all (measured 6 Oct: the diamond held 200 ms moved). Then it rests
+     250 ms before it lifts, as fingerGesture does, so a short hold's scrub does not fling on by its last speed. */
+  /* …and what the hold REALLY was, read back (measured 6 Oct, with the Mac's load at 24: the clip hold moved to 500 ms and
+     the finger "held 470 ms" grabbed anyway — the real hold was over 500). The page's own event times give the hold the
+     app saw (first touch pointermove − pointerdown); a 5 ms ticker on the page's thread, on the app frame's clock, gives
+     every stall over 30 ms (start, end) — a thread stalled when the app's timer falls due runs it late. Returned for the
+     step to judge. */
+  async function fingerHoldThenMove(x, y, dx, holdMs) {
+    var ev = { down: null, move: null }, stalls = [], last = w.performance.now();
+    var onDown = function (e) { if (e.pointerType === 'touch' && ev.down == null) ev.down = e.timeStamp; };
+    var onMove = function (e) { if (e.pointerType === 'touch' && ev.down != null && ev.move == null) ev.move = e.timeStamp; };
+    w.addEventListener('pointerdown', onDown, true); w.addEventListener('pointermove', onMove, true);
+    var tick = setInterval(function () { var n = w.performance.now(); if (n - last > 30) stalls.push([last, n]); last = n; }, 5);
+    try {
+      await realInput([{ t: 'touchStart', x: x, y: y, ms: holdMs }, { t: 'touchMove', x: x + dx / 2, y: y, ms: 16 },
+        { t: 'touchMove', x: x + dx, y: y, ms: 250 }, { t: 'touchEnd', x: x + dx, y: y, ms: 0 }]);
+    } finally {
+      clearInterval(tick);
+      w.removeEventListener('pointerdown', onDown, true); w.removeEventListener('pointermove', onMove, true);
+    }
+    await settle(250);
+    return { down: ev.down, held: ev.down != null && ev.move != null ? ev.move - ev.down : null, stalls: stalls };
+  }
+  async function fingerTap(x, y) {
+    await realInput([{ t: 'touchStart', x: x, y: y, ms: 60 }, { t: 'touchEnd', x: x, y: y, ms: 0 }]);
+    await settle(250);
+  }
+  /* Two fingers, `d0` apart, spread to `d1` about (cx, cy), level — the timeline's pinch (tests/_cdp.py takes `pts`). */
+  async function fingerPinch(cx, cy, d0, d1) {
+    var at = function (d) { return [{ x: cx - d / 2, y: cy }, { x: cx + d / 2, y: cy }]; };
+    var steps = [{ t: 'touchStart', pts: at(d0), ms: 40 }];
+    for (var k = 1; k <= 8; k++) steps.push({ t: 'touchMove', pts: at(d0 + (d1 - d0) * k / 8), ms: 24 });
+    steps.push({ t: 'touchEnd', pts: [], ms: 0 });
+    await realInput(steps);
+    await settle(250);
+  }
+  function midLeft(e) { var r = e.getBoundingClientRect(); return { x: r.left + Math.min(30, r.width / 2), y: r.top + r.height / 2 }; }
+  function midOf(e) { var r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+  /* The clip a gesture is aimed at: by FU2's end some clips sit inside closed groups and some are slivers (a split 0.05 s
+     in), so the WIDEST piece of Clip A, B or C on the timeline (the first of the widest, in the stack's order) — at least
+     40 px, or the finger has nowhere to land clear of the grips. */
+  function clipTarget() {
+    var best = null, bw = 0;
+    FM.scene.layers.forEach(function (l) {
+      if (l.type === 'group' || ['Clip A', 'Clip B', 'Clip C'].indexOf(l.name) < 0) return;
+      var c = D.querySelector('#tl-tracks .clip[data-id="' + l.id + '"]');
+      var wd = c ? c.getBoundingClientRect().width : 0;
+      if (wd > bw + 0.5) { best = l; bw = wd; }
+    });
+    if (!best || bw < 40) throw new Error('no piece of Clip A, B or C is on the timeline and 40 px wide (widest ' + Math.round(bw) + ' px)');
+    return best;
+  }
+  /* A spot on the timeline's tracks where no clip, grip or diamond is: scanned from the bottom right of what is on screen. */
+  function emptyTimelinePoint() {
+    var tl = el('#timeline', 'the timeline'), tr = tl.getBoundingClientRect();
+    var bottom = Math.min(tr.bottom, w.innerHeight) - 6, top = Math.max(tr.top, 0) + 40;
+    for (var y = bottom; y > top; y -= 8) {
+      for (var x = tr.right - 24; x > tr.left + 24; x -= 16) {
+        var at = D.elementFromPoint(x, y);
+        if (at && tl.contains(at) && !(at.closest && at.closest('.clip, .clip-grip, .kf-dot, button, input, .tl-ruler, #tl-ruler'))) return { x: x, y: y };
+      }
+    }
+    throw new Error('no empty spot on the timeline to swipe');
+  }
+  function liveDiamonds(L) { return [].slice.call(clipEl(L).parentElement.querySelectorAll('.kf-dot.kf-live')); }
+  async function diamondTarget() {
+    var L = FM.scene.layers.filter(function (l) { return l.type !== 'group' && FM.isAnimated(l.transform.opacity) && l.transform.opacity.kf.length >= 2; })[0];
+    if (!L) throw new Error('no clip with two opacity keys to hold a diamond on');
+    FM.selectLayer(L.id); FM.setTime(L.start + 0.05); await settle();
+    if (!(await openCard(/Mixing/))) fellOnly('the Mixing card was not on screen');
+    var dots = liveDiamonds(L);
+    if (dots.length < 2) throw new Error(L.name + ' shows ' + dots.length + ' live diamonds with the Mixing card open');
+    await centerOn(dots[dots.length - 1]);
+    dots = liveDiamonds(L);
+    return el(dots[dots.length - 1], 'the last diamond');
+  }
+  function gestureSteps() {
+    var NF = { noFrames: true };
+    var steps = [
+      ['swipe over a clip without holding (phone: an un-held finger on a clip scrubs the playhead)', async function () {
+        FM.selectLayer(null); FM.setTime(2); await resetView(); await settle();
+        var L = clipTarget();
+        await centerOn(clipEl(L));
+        var c = clipEl(L), p = midLeft(c); mustHit(c, p.x, p.y, 'the swipe');
+        await fingerGesture(p.x, p.y, -48, 0, 0);
+      }, NF],
+      ['swipe the empty timeline without holding (phone)', async function () {
+        FM.selectLayer(null); FM.setTime(2); await resetView(); await settle();
+        var p = emptyTimelinePoint();
+        await fingerGesture(p.x, p.y, -60, 0, 0);
+      }, NF],
+      ['tap a clip (phone: a plain tap)', async function () {
+        FM.selectLayer(null); await resetView(); await settle();
+        var L = clipTarget();
+        await centerOn(clipEl(L));
+        var c = clipEl(L), p = midOf(c); mustHit(c, p.x, p.y, 'the tap');
+        await fingerTap(p.x, p.y);
+      }, NF],
+      ['pinch the timeline open (phone: two fingers)', async function () {
+        FM.selectLayer(null); FM.setTime(2); await resetView(); await settle();
+        var p = emptyTimelinePoint(), tl = el('#timeline', 'the timeline'), tr = tl.getBoundingClientRect();
+        await fingerPinch(Math.max(tr.left + 80, Math.min(tr.right - 80, p.x)), p.y, 60, 150);
+      }, NF]
     ];
+    /* A HOLD THAT WAS NOT THE HOLD ASKED FOR IS DONE AGAIN, never measured. "Short": the app saw the finger move at least 60
+       ms before HEAD's timer (a stall then does not matter — a waiting move is taken before a waiting timer). "Past": the
+       app saw it move 60–130 ms after HEAD's timer (so a timer moved 150 ms later is still not reached), and the page's
+       thread was not stalled over 40 ms anywhere from just before the timer fell due to the move (fingerHoldThenMove). A
+       try that missed is put back
+       (the drag it made undone, the playhead and the view set again — so the record carries no trace of it: these steps
+       record no history depth, which an undo would leave a redo in) and tried again, four times at most; a hold that cannot
+       be timed is an error, and an error on HEAD is a broken instrument, never a PASS. */
+    HOLDS.forEach(function (h) {
+      [[h[2], h[4]], [h[3], h[5]]].forEach(function (b) {
+        var ms = b[0];
+        steps.push([b[1], async function () {
+          var tries = [], t0 = FM.time;
+          for (var attempt = 0; attempt < 4; attempt++) {
+            FM.setTime(t0);
+            await resetView();
+            var t, L;
+            if (h[0] === 'the clip hold') { FM.selectLayer(null); await settle(); L = clipTarget(); await centerOn(clipEl(L)); t = clipEl(L); }
+            else if (h[0] === 'the grip arm') {
+              L = clipTarget(); FM.selectLayer(L.id); await settle();
+              await centerOn(el(clipEl(L).querySelector('.clip-grip.right'), 'the clip’s right grip'));
+              t = el(clipEl(L).querySelector('.clip-grip.right'), 'the clip’s right grip');
+            } else t = await diamondTarget();
+            var p = h[0] === 'the clip hold' ? midLeft(t) : midOf(t);
+            mustHit(t, p.x, p.y, 'the hold');
+            var before = JSON.stringify(canonDoc());
+            var got = await fingerHoldThenMove(p.x, p.y, h[0] === 'the diamond hold' ? 30 : (h[0] === 'the grip arm' ? -30 : 48), ms);
+            var T = h[1], short = ms < T, stall = 0;
+            if (got.held != null && !short) got.stalls.forEach(function (g) {
+              var a = Math.max(g[0], got.down + T - 20), z = Math.min(g[1], got.down + got.held);
+              if (z - a > 0 && g[1] - g[0] > stall) stall = g[1] - g[0];
+            });
+            tries.push(Math.round(got.held) + '/' + Math.round(stall));
+            if (got.held != null && (short ? got.held <= T - 60 : (got.held >= T + 60 && got.held <= T + 130 && stall <= 40))) return;
+            if (JSON.stringify(canonDoc()) !== before) {
+              FM.history.undo(); await settle(150);
+              if (JSON.stringify(canonDoc()) !== before) throw new Error('a mistimed hold (' + tries.join(', ') + ' ms held/stalled) could not be undone');
+            }
+            closeTransient(); await settle(150);
+          }
+          throw new Error('the ' + ms + ' ms hold could not be timed in four tries (held/stalled: ' + tries.join(', ') + ' ms)');
+        }, { noFrames: true, noHist: true }]);
+      });
+    });
+    return steps;
   }
   async function runFU2(steps, rec, after, before) {
     for (var i = 0; i < steps.length; i++) {
@@ -1802,7 +1984,7 @@
       if (opt.mustMove && st.frames && st.frames.length > 1 && st.frames.every(function (f) { return f === st.frames[0]; })) {
         err = err || ('its frames at ' + (opt.times() || []).map(function (t) { return Math.round(t * 1000) / 1000; }).join(', ') + ' s are one picture: nothing it guards reached a frame');
       }
-      if (opt.times && !rec.noFrames) st.framesAt = await frameHashes(FRAME_TIMES);
+      if (opt.times && !rec.noFrames && !opt.noFrames) st.framesAt = await frameHashes(FRAME_TIMES);
       var entry = { name: nm, err: err, fell: fell, surf: surf, state: st };
       if (fell.length) DUMP.fell = DUMP.fell.concat(fell.map(function (f) { return nm + ' — ' + f; }));
       if (after) entry.extra = await after(nm);
