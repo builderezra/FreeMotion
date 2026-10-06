@@ -575,9 +575,78 @@
       await sleep(60);
     }
   }
+  /* ═══ EVERY DEFAULT (the second review, 6 Oct: Brightness's default going 1.3 → 1.2 passed — only about 25 of the 206
+     effect types ever reach a document the probe records, so an effect's default was compared only if it happened to be
+     in one). Cheap and registry-wide instead of rendering each: every effect's definition as the registry holds it (its
+     params' default, min, max, step, labels, options, category, gates) and the instance it makes; every sound effect's
+     the same; every behaviour's, and the instance it makes on EACH of its channels (an amount is converted to the
+     channel's units at creation); the effect presets and the easing presets. Functions are not data and are left out.
+     FU1, once; the random generator is put back after, so the rest of the group draws what it always drew. */
+  function plainOf(v) {
+    try { return JSON.parse(JSON.stringify(v === undefined ? null : v)); } catch (e) { return 'unserialisable: ' + (e && e.message); }
+  }
+  function registryRecord() {
+    var saved = RNG.a, out = {};
+    try {
+      var fx = FM.fxRegistry, au = FM.audioFxRegistry, be = FM.behaviorRegistry;
+      if (!fx || !au || !be) throw new Error('a registry is missing (FM.fxRegistry / FM.audioFxRegistry / FM.behaviorRegistry)');
+      out.EFFECTS = plainOf(FM.EFFECTS);
+      out.fx = {};
+      (fx.allIncludingHidden ? fx.allIncludingHidden() : fx.all()).forEach(function (e) {
+        if (e && e.type) out.fx[e.type] = { def: plainOf(e), inst: plainOf(fx.makeInstance(e.type)) };
+      });
+      out.fxCategories = plainOf(fx.categories ? fx.categories() : null);
+      out.fxGates = plainOf(fx.gates ? fx.gates() : null);
+      out.audio = {};
+      au.all().forEach(function (d) { if (d && d.type) out.audio[d.type] = { def: plainOf(d), inst: plainOf(au.makeInstance(d.type)) }; });
+      out.audioFeatured = plainOf(FM.AFX_FEATURED);
+      out.behaviours = {};
+      be.all().forEach(function (d) {
+        if (!d || !d.type) return;
+        var r = { def: plainOf(d), inst: plainOf(be.makeInstance(d.type)), on: {} };
+        (d.props || []).forEach(function (p) { r.on[p] = plainOf(be.makeInstance(d.type, p)); });
+        out.behaviours[d.type] = r;
+      });
+      out.effectPresets = plainOf(FM.EFFECT_PRESETS);
+      out.easePresets = plainOf(FM.EASE_PRESETS);
+    } finally { RNG.a = saved; }
+    return out;
+  }
+  /* ═══ WHAT IS STORED (the second review, 6 Oct: every saved project record gaining `ed`, and every Home card gaining `ed`
+     and `clips`, passed — FU2 and FU3 read the document in memory, and FU5 kept two keys of the saved record). After each
+     FU2 step Full's own autosave is run to its end (FM.storage.save: the scene document, then the Home card — exactly what
+     its 600 ms timer runs) and both are read back WHOLE: the saved record with only its save counter `rev` taken out, and
+     this project's card from FM.projects.list() with only its picture (`thumb`) left out and its wall-clock times
+     written @time. The record's project and layers are written "≡ doc" when they are the step's document exactly (they
+     are on HEAD), so a record that saves something else is still a difference by name. */
+  function maskClock(v) {
+    if (typeof v === 'number' && v > 1e12 && v < 1e13) return '@time';
+    if (Array.isArray(v)) return v.map(maskClock);
+    if (v && typeof v === 'object') { var o = {}; Object.keys(v).forEach(function (k) { o[k] = maskClock(v[k]); }); return o; }
+    return v;
+  }
+  async function storedRecord(pid, doc) {
+    await FM.storage.save(); if (FM.storage.settled) await FM.storage.settled();
+    var raw = w.localStorage.getItem('fm.proj.' + pid), out = { record: null, card: null };
+    if (raw) {
+      var r = JSON.parse(raw);
+      delete r.rev;
+      var c = canon(r, r.layers || []);
+      if (doc && JSON.stringify({ project: c.project, layers: c.layers }) === JSON.stringify(doc)) { c.project = '≡ doc'; c.layers = '≡ doc'; }
+      out.record = c;
+    }
+    var card = (FM.projects.list() || []).filter(function (e) { return e && e.id === pid; })[0];
+    if (card) {
+      var cc = clone(card);
+      delete cc.thumb;
+      cc.id = cc.id === pid ? '@this' : cc.id;
+      out.card = maskClock(cc);
+    }
+    return out;
+  }
   async function stateRecord(opts) {
     opts = opts || {};
-    var rec = { doc: canonDoc(), hist: histInfo(), toasts: takeToasts(), sel: selInfo(), time: Math.round(FM.time * 1e6) / 1e6,
+    var rec = { doc: canonDoc(), hist: histInfo(), toasts: takeToasts(), toastBox: takeToastFirst(), sel: selInfo(), time: Math.round(FM.time * 1e6) / 1e6,
       playing: !!FM.playing, panels: panelsOpen() };
     if (!opts.noFrames) rec.frames = await frameHashes(opts.times);
     return rec;
@@ -1553,7 +1622,9 @@
       try { await steps[i][1](); } catch (e) { err = String(e && e.message || e); }
       var fell = CUR_FELL, surf = CUR_SURF; CUR_FELL = null; CUR_SURF = null;
       await settle(200);
-      var st = await stateRecord({ noFrames: !!rec.noFrames, times: opt.times ? (opt.times() || null) : null });
+      var st = await stateRecord({ noFrames: !!(rec.noFrames || opt.noFrames), times: opt.times ? (opt.times() || null) : null });
+      if (rec.storedPid) { try { st.stored = await storedRecord(rec.storedPid, st.doc); } catch (e) { err = err || ('the stored record could not be read: ' + (e && e.message || e)); } }
+      if (opt.noHist) delete st.hist;   // a retried hold (gestureSteps) may have undone a try: no redo of it may reach the record
       /* A GUARD THAT DRAWS NOTHING MOVING MEASURES NOTHING (6 Oct: the Follow's and both Bounces' three frames were one
          picture on HEAD, so their planted changes passed). Its frames must differ from each other, or the step fails —
          and an error on HEAD is a broken instrument, never a PASS. */
@@ -1934,7 +2005,9 @@
         await FM.storage.applyScene(clone(d));
         r.imported = canonDoc();
         FM.storage.markDirty(); await FM.storage.save(); if (FM.storage.settled) await FM.storage.settled();
-        r.saved = (function () { var s = JSON.parse(w.localStorage.getItem('fm.proj.' + pid)); return canon({ project: s.project, layers: s.layers }, s.layers); })();
+        /* the WHOLE saved record, less only its save counter (the second review: FU5 kept two of its keys, and a key added
+           to every saved record passed — DESIGN FU5 says "any byte that differs") */
+        r.saved = (function () { var s = JSON.parse(w.localStorage.getItem('fm.proj.' + pid)); delete s.rev; return canon(s, s.layers || []); })();
         FM.scene.layers = []; await FM.storage.load();
         r.reopened = canonDoc();
       } catch (e) { r.err = String(e && e.message || e); }
