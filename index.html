@@ -178,6 +178,12 @@
              light look the page has to end white TOO or the last frame is a white rectangle on a black
              page, which is the seam queue 162 fixed. It just must not outlive the splash. */
           try { document.documentElement.classList.remove('splash-on', 'splash-on-light'); } catch (e) {}
+          /* …AND THE FILM LETS GO (#1085). Removing #splash did not unload the <video>: it kept its source and its
+             decoded 4K frames — measured 163 MB of media frame buffers + 13 MB of player — for the rest of the session,
+             because the keydown listener below closes over `vid` and so kept the element alive. Nothing shows it any
+             more, so the listener goes and the source is emptied (removeAttribute + load() is what frees the player). */
+          try { document.removeEventListener('keydown', onSplashKey); } catch (e) {}
+          try { vid.pause(); vid.removeAttribute('src'); vid.load(); } catch (e) {}
         }, quick ? 320 : 1000);
       }
       // Begin the hand-off BEFORE the last frame, not on it. `ended` stays as the backstop for a
@@ -203,7 +209,8 @@
       vid.addEventListener('ended', function () { dismiss(); });
       vid.addEventListener('error', function () { dismiss(true); });
       sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(true); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(true); });
+      function onSplashKey(e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(true); }   // named so the removal can take it off again (#1085)
+      document.addEventListener('keydown', onSplashKey);
       setTimeout(function () { dismiss(true); }, 5000);            // hard cap — nothing holds the editor hostage
       // NO poster attribute on the <video>: iOS renders its own play control over a video that has a
       // poster and is not playing, and with a 2.8MB file that state can last the whole splash. The
