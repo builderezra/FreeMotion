@@ -7075,7 +7075,9 @@ window.FM = window.FM || {};
         lastLayerId = null;
         if (title) title.textContent = '';
         const tw = (FM.spineWords && FM.spineWords.tools) || {};
-        root.appendChild(el('div', 'sm-band-hint', layer ? (tw.bandHintSel || 'Its tools are below · More opens the rest') : (tw.bandHint || 'Tap a clip to see its tools')));
+        /* on PC every tool is on show under the band (his pick B), so it only says where they are; the phone's words are today's */
+        const pcBand = !(window.matchMedia && window.matchMedia('(max-width: 700px)').matches);
+        root.appendChild(el('div', 'sm-band-hint', layer ? (pcBand ? (tw.bandHintSelPc || 'Its tools are below') : (tw.bandHintSel || 'Its tools are below · More opens the rest')) : (tw.bandHint || 'Tap a clip to see its tools')));
         return;
       }
       if (!layer) {

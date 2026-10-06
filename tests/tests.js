@@ -122470,8 +122470,10 @@
         bin.click(); await v.idle();
         if (!/locked/.test(v.say())) throw new Error('CONTROL: no locked line: “' + v.say() + '”');
         await v.sleep(450);                                                   // armed
+        /* 🗑's old BOX, both ways: since his pick B the PC tray has two rows, 🗑 is in the second and the line takes the first,
+           so a button may stand above 🗑's column without being anywhere a second click lands (it was across only, one row) */
         document.querySelectorAll('#sm-say .sm-say-b').forEach(b => { const q = b.getBoundingClientRect();
-          if (q.right > r.left + 0.5 && q.left < r.right - 0.5) throw new Error('“' + b.textContent + '” lies over 🗑’s old place: ' + Math.round(q.left) + '–' + Math.round(q.right) + ' vs ' + Math.round(r.left) + '–' + Math.round(r.right)); });
+          if (q.right > r.left + 0.5 && q.left < r.right - 0.5 && q.bottom > r.top + 0.5 && q.top < r.bottom - 0.5) throw new Error('“' + b.textContent + '” lies over 🗑’s old place: ' + Math.round(q.left) + '–' + Math.round(q.right) + ' × ' + Math.round(q.top) + '–' + Math.round(q.bottom) + ' vs ' + Math.round(r.left) + '–' + Math.round(r.right) + ' × ' + Math.round(r.top) + '–' + Math.round(r.bottom)); });
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
         if (hit) hit.click(); await v.idle();
         const C = v.L('C');
@@ -122636,5 +122638,230 @@
     const m = Object.keys(miss).map(c => c + ' ' + miss[c] + '/' + ran[c]);
     if (m.length) fails.push('the end card missed the new end of the clips in: ' + m.join(', '));
     if (fails.length) throw new Error(fails.join(' · '));
+  });
+  /* ═══ SIMPLE MODE 2.2 · THE PC TRAY ON TWO ROWS — HIS PICK B (6 Oct, his words: do reconmended; queue 980) ═══════════════
+     The sheet he picked from: tools/design/plans/simple-mode/p22-review-shots/sheet-tray-pc.jpg. At 1280 a main clip's nine
+     tools are ~530 px of buttons in a ~306 px band, so in one row (option A) Lift off, Duplicate, Crop and Close gap sat off
+     the edge with nothing showing they were there. On PC the tray now lays a clip's tools out on two rows of ceil(n/2), More
+     and Delete in the last two places; the band grows by one row only while it holds two. While More's panel is open the tray
+     is one row again, so the panel keeps its room, and the second click of a double click never presses a tool that moved
+     under it. The phone keeps its one row with More and Delete pinned (finding 22). Each test below but the phone's control
+     fails on option A by what it measures. */
+  /* A PC window w × h as it first opens: the frame's height as well, because the band's height follows it, and no band height
+     left behind by a drag (the divider writes --tl-h on <html>; an earlier test left 201 px, under the band's 232 px floor) */
+  async function smTrayBAt(w, h, fn) {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html’s iframe (no window.frameElement) to reach a PC window');
+    const h0 = fe.style.height, root = document.documentElement, tl0 = root.style.getPropertyValue('--tl-h');
+    fe.style.height = h + 'px';
+    root.style.removeProperty('--tl-h');
+    try { return await atWideWidth(fn, w); }
+    finally {
+      fe.style.height = h0;
+      if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h');
+      window.dispatchEvent(new Event('resize')); await new Promise(r => setTimeout(r, 80));
+    }
+  }
+  /* every tray tool: inside the band and the window, not covered at its centre, at least 44 × 32, its words inside it; the
+     rows it sits on (tools per row, top to bottom) and the reading order (row by row, left to right) */
+  function smTrayBMeasure() {
+    const tray = document.getElementById('sm-tray'), band = document.getElementById('inspector-panel').getBoundingClientRect();
+    const bs = Array.from(tray.querySelectorAll('.sm-tool')), bad = [];
+    bs.forEach(b => {
+      const r = b.getBoundingClientRect(), id = b.dataset.tool;
+      if (r.left < band.left - 0.5 || r.right > band.right + 0.5 || r.top < band.top - 0.5 || r.bottom > band.bottom + 0.5) bad.push(id + ' lies outside the band (' + Math.round(r.left) + '–' + Math.round(r.right) + ' in ' + Math.round(band.left) + '–' + Math.round(band.right) + ')');
+      if (r.left < -0.5 || r.top < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) bad.push(id + ' is off screen');
+      if (r.width < 44 || r.height < 32) bad.push(id + ' is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px');
+      const x = r.left + r.width / 2, y = r.top + r.height / 2, e = document.elementFromPoint(x, y);
+      if (!e || !b.contains(e)) bad.push(id + ' is covered at its centre by ' + (e ? (e.dataset && e.dataset.tool) || e.id || e.getAttribute('class') || e.tagName : 'nothing'));
+      const lb = b.querySelector('.sm-tool-l'), q = lb && lb.getBoundingClientRect();
+      if (q && (q.left < r.left - 0.5 || q.right > r.right + 0.5)) bad.push(id + '’s words run out of its button');
+    });
+    if (tray.scrollWidth > tray.clientWidth + 1) bad.push('the tray scrolls sideways (' + tray.scrollWidth + ' px in ' + tray.clientWidth + ')');
+    const rows = {};
+    bs.forEach(b => { const y = Math.round(b.getBoundingClientRect().top); rows[y] = (rows[y] || 0) + 1; });
+    const order = bs.slice().sort((a, b) => { const p = a.getBoundingClientRect(), q = b.getBoundingClientRect(); return Math.abs(p.top - q.top) > 2 ? p.top - q.top : p.left - q.left; }).map(b => b.dataset.tool);
+    return { bad: bad, rows: Object.keys(rows).map(Number).sort((a, b) => a - b).map(y => rows[y]), order: order };
+  }
+  const smBoxesMeet = (a, b) => a.right > b.left + 0.5 && a.left < b.right - 0.5 && a.bottom > b.top + 0.5 && a.top < b.bottom - 0.5;
+
+  test('simple P2.2 · tray B at 1280 on PC a clip with every tool shows all nine on two rows — none outside the band, covered or scrolled to, More and Delete last — and the band grows by one row only while it holds two (his pick B)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 800, async function () {
+      /* B has a 1 s gap after it, so Close gap joins its tray: the longest main-clip tray there is */
+      await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const say = document.getElementById('sm-say'), sayH = () => say.getBoundingClientRect().height;
+        if (document.getElementById('sm-bar').parentNode !== document.getElementById('inspector-panel')) throw new Error('CONTROL: the tray is not in the PC band');
+        const h1 = sayH();                                                    // nothing selected: the quiet line, one row
+        if (h1 < 44 || h1 > 60) throw new Error('CONTROL: the quiet line’s row is ' + h1 + ' px');
+        FM.selectLayer(v.L('B').id); await v.sleep(150);
+        const want = ['length', 'earlier', 'later', 'lift', 'duplicateClip', 'crop', 'seam', 'more', 'delete'];
+        const got = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
+        if (got.join() !== want.join()) throw new Error('CONTROL: the tray is ' + got + ', want ' + want);
+        const m = smTrayBMeasure();
+        if (m.bad.length) throw new Error('1280×800, nine tools: ' + m.bad.join(' · '));
+        if (m.rows.length !== 2) throw new Error('1280×800: the nine tools sit on ' + m.rows.length + ' row(s) ' + JSON.stringify(m.rows) + ', want two');
+        if (m.rows.some(n => n < 2) || Math.abs(m.rows[0] - m.rows[1]) > 1) throw new Error('1280×800: the rows are uneven ' + JSON.stringify(m.rows) + ' (never a lone tool on a row)');
+        if (m.order.slice(-2).join() !== 'more,delete') throw new Error('1280×800: More and Delete are not in the last places: ' + m.order);
+        if (Math.abs(sayH() - 2 * h1) > 1.5) throw new Error('1280×800: the band holds two rows at ' + sayH() + ' px, want twice the one row’s ' + h1);
+        const hint = document.querySelector('#inspector .sm-band-hint');
+        if (!hint || hint.textContent !== 'Its tools are below' || FM.spineWords.tools.bandHintSelPc !== 'Its tools are below') throw new Error('1280×800: the band’s words are “' + (hint && hint.textContent) + '”, want “Its tools are below” from the words file');
+        /* five or fewer: a title's four tools sit on one row and the band is one row again */
+        FM.selectLayer(v.L('On A').id); await v.sleep(150);
+        const t = smTrayBMeasure();
+        if (t.bad.length || t.rows.length !== 1) throw new Error('a title’s ' + t.order.length + ' tools: ' + JSON.stringify(t.rows) + ' ' + t.bad.join(' · '));
+        if (t.order.slice(-2).join() !== 'more,delete') throw new Error('a title: More and Delete are not last: ' + t.order);
+        if (Math.abs(sayH() - h1) > 0.5) throw new Error('a title’s one row left the band at ' + sayH() + ' px, want ' + h1);
+        /* a choice of several keeps one row */
+        FM.scene.selectedIds = [v.L('A').id, v.L('C').id]; FM.scene.selectedId = v.L('A').id; FM.refreshAll(); await v.sleep(150);
+        if (!smTool('delete') || smTrayBMeasure().rows.length !== 1 || Math.abs(sayH() - h1) > 0.5) throw new Error('two selected: the tray is not one row (' + sayH() + ' px)');
+        /* Length's own row keeps one row, and Done gives the two rows back */
+        FM.selectLayer(null); FM.selectLayer(v.L('B').id); await v.sleep(120);
+        smTool('length').click(); await v.sleep(150);
+        if (!document.querySelector('#sm-tray.sm-tray-len') || Math.abs(sayH() - h1) > 0.5) throw new Error('Length’s row: the band is ' + sayH() + ' px, want one row of ' + h1);
+        smTool('lenBack').click(); await v.sleep(150);
+        if (Math.abs(sayH() - 2 * h1) > 1.5 || smTrayBMeasure().rows.length !== 2) throw new Error('Done did not give back the two rows (' + sayH() + ' px)');
+        /* nothing selected: the quiet line, one row */
+        FM.selectLayer(null); await v.sleep(150);
+        if (Math.abs(sayH() - h1) > 0.5) throw new Error('nothing selected: the band stays at ' + sayH() + ' px, want ' + h1);
+      });
+    }, 1280);
+  });
+
+  test('simple P2.2 · tray B at 1280 a line with a button keeps the two-row band, never lands where Delete was, and a second click there presses nothing — on a locked clip and after a delete takes the selection away (finding 23 with two rows)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 800, async function () {
+      await smP2((W, H) => [smT('On B', 3.5, 1, W, H), smV('C', 6, 3, W, H, { locked: true }), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const say = document.getElementById('sm-say'), bar = document.getElementById('sm-bar'), sayH = () => say.getBoundingClientRect().height;
+        const h1 = sayH();
+        /* 1 · Delete on a locked clip: the line says why with Do it anyway, the selection stays */
+        FM.selectLayer(v.L('C').id); await v.sleep(150);
+        const bin = smTool('delete');
+        if (!bin) throw new Error('CONTROL: no Delete in the tray');
+        const top0 = bar.getBoundingClientRect().top, h2 = sayH(), r = bin.getBoundingClientRect();
+        if (Math.abs(h2 - 2 * h1) > 1.5) throw new Error('a clip’s eight tools: the band is ' + h2 + ' px, want two rows of ' + h1);
+        bin.click(); await v.idle();
+        if (!/locked/.test(v.say())) throw new Error('CONTROL: no locked line: “' + v.say() + '”');
+        await v.sleep(450);                                                   // armed
+        if (!say.querySelector('.sm-say-b')) throw new Error('CONTROL: the locked line has no button');
+        if (Math.abs(sayH() - h2) > 0.5 || Math.abs(bar.getBoundingClientRect().top - top0) > 0.5) throw new Error('the line made the band jump: ' + h2 + ' → ' + sayH() + ' px, top ' + top0 + ' → ' + bar.getBoundingClientRect().top);
+        say.querySelectorAll('.sm-say-b').forEach(b => { const q = b.getBoundingClientRect(); if (smBoxesMeet(q, r)) throw new Error('“' + b.textContent + '” lies over Delete’s old place'); });
+        let hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (hit) hit.click(); await v.idle();
+        const C = v.L('C');
+        if (!C || C.locked !== true) throw new Error('a second click where Delete was deleted or unlocked the locked clip');
+        FM.simpleTimeline.clearSay(); await v.sleep(60);
+        C.locked = false;                                                     // so B's delete may close up behind it
+        /* 2 · Delete on B, which has a title on it: the clip goes, the selection with it, and the line says so with Undo. The
+           band still holds two rows while the line is said, so Undo cannot drop into the row where Delete was */
+        FM.selectLayer(v.L('B').id); await v.sleep(150);
+        const rb = smTool('delete').getBoundingClientRect();
+        smTool('delete').click(); await v.idle();
+        if (v.L('B') || !/Deleted/.test(v.say())) throw new Error('CONTROL: B was not deleted with a line: “' + v.say() + '”');
+        await v.sleep(450);
+        const undo = say.querySelector('.sm-say-b');
+        if (!undo) throw new Error('CONTROL: the delete line has no Undo');
+        if (Math.abs(sayH() - h2) > 0.5) throw new Error('the band dropped to ' + sayH() + ' px under the delete line, so its Undo could land where Delete was');
+        if (smBoxesMeet(undo.getBoundingClientRect(), rb)) throw new Error('Undo lies over Delete’s old place');
+        hit = document.elementFromPoint(rb.left + rb.width / 2, rb.top + rb.height / 2);
+        if (hit) hit.click(); await v.idle();
+        if (v.L('B')) throw new Error('a second click where Delete was pressed Undo');
+        /* the line goes: the band is one row again (nothing is selected) */
+        FM.simpleTimeline.clearSay(); await v.sleep(60);
+        if (Math.abs(sayH() - h1) > 0.5) throw new Error('after the line the band stays at ' + sayH() + ' px with nothing selected, want ' + h1);
+      });
+    }, 1280);
+  });
+
+  test('simple P2.2 · tray B at 1280×800, 1280×720 and 960×700 every tool is on show and nothing in the band above it is cut off — the title and Its tools are below show whole — and a band dragged under 232 px keeps one row with the project tools whole', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const out = [];
+    for (const [w, h] of [[1280, 800], [1280, 720], [960, 700]]) {
+      await smTrayBAt(w, h, async function () {
+        await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+          FM.selectLayer(v.L('B').id); await v.sleep(150);
+          const at = w + '×' + h + ': ', m = smTrayBMeasure();
+          if (innerHeight !== h) throw new Error('CONTROL: ' + at + 'the window is ' + innerWidth + '×' + innerHeight);
+          if (m.order.length !== 9) throw new Error('CONTROL: ' + at + 'the tray is ' + m.order);
+          if (m.bad.length || m.rows.length !== 2) throw new Error(at + JSON.stringify(m.rows) + ' ' + m.bad.join(' · '));
+          const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint');
+          const title = document.querySelector('#inspector-panel .panel-title'), tb = title.getBoundingClientRect();
+          if (!hint || hint.textContent !== 'Its tools are below') throw new Error(at + 'the band says “' + (hint && hint.textContent) + '”');
+          const hb = hint.getBoundingClientRect();
+          if (hb.top < ib.top - 0.5 || hb.bottom > ib.bottom + 0.5) throw new Error(at + 'Its tools are below is cut off: ' + Math.round(hb.top) + '–' + Math.round(hb.bottom) + ' in ' + Math.round(ib.top) + '–' + Math.round(ib.bottom));
+          if (insp.scrollHeight > insp.clientHeight + 1) throw new Error(at + 'the band above the tools has to scroll (' + insp.scrollHeight + ' in ' + insp.clientHeight + ')');
+          if (hint.scrollWidth > hint.clientWidth + 1) throw new Error(at + 'Its tools are below runs out sideways');
+          if (tb.height < 20 || tb.bottom > ib.top + 0.5 || tb.top < document.getElementById('inspector-panel').getBoundingClientRect().top - 0.5) throw new Error(at + 'the title row is cut: ' + JSON.stringify([tb.top, tb.bottom, ib.top]));
+          out.push(at + Math.round(ib.height) + ' px above the tools');
+          /* THE DIVIDER DRAGS THE BAND DOWN TO 150 (remembered as fm_tl_h): under the 232 px two rows need, the tray keeps one row
+             with More and Delete pinned, so the project tools stay whole in the band — and the rows follow the drag itself */
+          if (w !== 1280 || h !== 800) return;
+          const root = document.documentElement, band = () => document.getElementById('inspector-panel').getBoundingClientRect();
+          root.style.setProperty('--tl-h', '200px'); await v.sleep(150);
+          if (Math.abs(band().height - 200) > 1) throw new Error('CONTROL: the band did not follow --tl-h (' + band().height + ')');
+          const s = smTrayBMeasure(), pins = document.querySelector('#sm-tray .sm-pins'), tl = document.getElementById('sm-tools').getBoundingClientRect();
+          if (s.rows.length !== 1 || !pins || !pins.querySelector('[data-tool="more"]') || !pins.querySelector('[data-tool="delete"]')) throw new Error('a band dragged to 200 px: the tray is ' + JSON.stringify(s.rows) + ' row(s), More and Delete ' + (pins ? '' : 'not ') + 'pinned');
+          if (tl.bottom > band().bottom + 0.5 || tl.top < band().top) throw new Error('a band dragged to 200 px: the project tools fall out of it (' + Math.round(tl.top) + '–' + Math.round(tl.bottom) + ' in ' + Math.round(band().top) + '–' + Math.round(band().bottom) + ')');
+          root.style.removeProperty('--tl-h'); await v.sleep(150);
+          if (smTrayBMeasure().rows.length !== 2) throw new Error('the band back at its own height did not get the two rows back');
+        });
+      }, w);
+    }
+    console.log('tray B room: ' + out.join(' · '));
+  });
+
+  test('simple P2.2 · tray B at 1280×720 More opens its panel with the room it always had — the tray goes back to one row with More and Delete pinned — and the second click of a double click on More presses nothing that moved under it', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 720, async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const say = document.getElementById('sm-say'), insp = document.getElementById('inspector');
+        FM.selectLayer(v.L('B').id); await v.sleep(150);
+        const m = smTrayBMeasure();
+        if (m.order.length !== 8) throw new Error('CONTROL: the tray is ' + m.order);
+        if (m.rows.length !== 2) throw new Error('1280×720: before More the eight tools sit on ' + m.rows.length + ' row(s), want two');
+        const h2 = say.getBoundingClientRect().height, more = smTool('more'), r = more.getBoundingClientRect();
+        const x = r.left + 4, y = r.top + r.height / 2, doc0 = v.doc(), s0 = v.steps();
+        const click = (el, n) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: x, clientY: y }));
+        click(more, 1); await v.sleep(200);                                   // the first click of a double click
+        if (document.querySelector('#inspector .sm-band-hint')) throw new Error('CONTROL: More did not open the panel');
+        const h1 = say.getBoundingClientRect().height, ih = insp.getBoundingClientRect().height;
+        if (Math.abs(h1 - h2 / 2) > 1) throw new Error('with the panel open the tray is ' + h1 + ' px tall, want one row of ' + h2 / 2);
+        if (ih < 80) throw new Error('1280×720: the panel has ' + Math.round(ih) + ' px, under one row of its own buttons');
+        if (insp.scrollHeight > insp.clientHeight + 1) throw new Error('1280×720: the panel’s first view is cut off (' + insp.scrollHeight + ' px in ' + insp.clientHeight + ')');
+        const pins = document.querySelector('#sm-tray .sm-pins');
+        if (!pins || !pins.querySelector('[data-tool="more"]') || !pins.querySelector('[data-tool="delete"]')) throw new Error('with the panel open More and Delete are not pinned together at the end of one row');
+        /* the second click comes down where More was, on whatever tool moved there */
+        const hit = document.elementFromPoint(x, y), under = hit && hit.closest && hit.closest('.sm-tool');
+        if (!under || under.dataset.tool === 'more' || under.getAttribute('aria-disabled') === 'true') throw new Error('CONTROL: no working tool moved under More’s old place (' + (under ? under.dataset.tool : hit && hit.getAttribute('class')) + '), so this measures nothing');
+        click(under, 2); await v.idle();
+        if (v.steps() !== s0 || v.doc() !== doc0) throw new Error('the second click of a double click on More pressed ' + under.dataset.tool);
+        /* another clip: its panel is not open, so its tools are on two rows again with the band’s words */
+        FM.selectLayer(v.L('A').id); await v.sleep(150);
+        if (smTrayBMeasure().rows.length !== 2 || !document.querySelector('#inspector .sm-band-hint')) throw new Error('another clip did not get the two rows and the words back');
+      });
+    }, 1280);
+  });
+
+  test('simple P2.2 · tray B at 380 the phone keeps its one row with More and Delete pinned at the right end, and its words (control: the same before and after his pick B)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const say = document.getElementById('sm-say'), tray = document.getElementById('sm-tray');
+        const h1 = say.getBoundingClientRect().height;
+        FM.selectLayer(v.L('B').id); await v.sleep(150);
+        const bs = Array.from(tray.querySelectorAll('.sm-tool'));
+        if (bs.length !== 9) throw new Error('CONTROL: the tray is ' + bs.map(b => b.dataset.tool));
+        const tops = new Set(bs.map(b => Math.round(b.getBoundingClientRect().top)));
+        if (tops.size !== 1) throw new Error('380: the tools sit on ' + tops.size + ' rows');
+        if (Math.abs(say.getBoundingClientRect().height - h1) > 0.5) throw new Error('380: the row grew to ' + say.getBoundingClientRect().height + ' px');
+        const pins = tray.querySelector('.sm-pins');
+        if (!pins || !pins.querySelector('[data-tool="more"]') || !pins.querySelector('[data-tool="delete"]') || getComputedStyle(pins).position !== 'sticky') throw new Error('380: More and Delete are not pinned together at the right end');
+        if (tray.scrollWidth <= tray.clientWidth + 1) throw new Error('380: nine tools fit one phone row without scrolling — the control no longer measures the phone');
+        tray.scrollLeft = 0; await v.sleep(30);
+        ['length', 'more', 'delete'].forEach(id => { const r = smTool(id).getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!e || !smTool(id).contains(e)) throw new Error('380: ' + id + ' cannot be pressed'); });
+        if (FM.spineWords.tools.bandHintSel !== 'Its tools are below · More opens the rest') throw new Error('380: the phone’s words changed: ' + FM.spineWords.tools.bandHintSel);
+      });
+    }, 380);
   });
 })();

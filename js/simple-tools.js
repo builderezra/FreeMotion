@@ -1,7 +1,9 @@
 /* FreeMotion — FM.simpleTools: the Simple editor's two rows (Simple mode Phase 2, DESIGN.md §8.2, §8.3, §8.5; his D10).
  *
  * THE TRAY ROW (#sm-tray, inside #sm-say): the selected item's tools; with nothing selected, one quiet line ("4 clips ·
- * 0:15"). #sm-say's lines take the same 52 px row for a moment (§3.12), so nothing appears, disappears or moves.
+ * 0:15"). #sm-say's lines take the same 52 px row for a moment (§3.12), so nothing appears, disappears or moves. On PC a
+ * tray of more than five tools lies on TWO such rows (his pick B, 6 Oct; one again while More's panel is open), and a line
+ * takes the top one.
  * THE PROJECT TOOLS ROW (#sm-tools): Clips · Text · Sound · Overlay — it never goes away (D10 A). Phase 3 adds Captions,
  * Look for all, Effects and Ask to the same row.
  * Phone: both rows sit under the Simple timeline; a tool that needs a panel opens today's panel docked under the tray
@@ -42,6 +44,16 @@ window.FM = window.FM || {};
   const phone = window.matchMedia ? window.matchMedia('(max-width: 700px)') : { matches: false };
   let bar = null, sayEl = null, tray = null, tools = null, menu = null;
   let panelFor = null, lengthFor = null, lengthEdge = 'end', lastSig = '', lastSel = null;
+  let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
+  let roomy = false;                 // PC, and the band is tall enough for the tray's two rows (roomForTwo)
+  /* TWO ROWS NEED A BAND THAT HOLDS THEM: its title (33), both rows (104), the project tools (57) and one whole line of words
+     above them — 232 px, the band's own floor at every PC size (styles.css --tl-h). The divider drags it down to 150 and the
+     height is remembered (fm_tl_h), and two rows there pushed the project tools out of the band: a lower band keeps one row. */
+  function roomForTwo() {
+    if (phone.matches) return false;
+    const band = document.getElementById('inspector-panel');
+    return !!band && band.getBoundingClientRect().height >= 231.5;
+  }
   const isSimple = () => !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
   function el(tag, cls, text) { const d = document.createElement(tag); if (cls) d.className = cls; if (text != null) d.textContent = text; return d; }
 
@@ -60,6 +72,15 @@ window.FM = window.FM || {};
     tray = document.getElementById('sm-tray'); tools = document.getElementById('sm-tools');
     if (!bar || !tray || !tools) { bar = null; return false; }
     if (phone.addEventListener) phone.addEventListener('change', () => { place(); lastSig = ''; FM.simpleTools.sync(); });
+    /* a held second row goes when the line does (rows() below) */
+    if (sayEl && window.MutationObserver) new MutationObserver(fitRows).observe(sayEl, { attributes: true, attributeFilter: ['class'] });
+    /* …and the rows follow the band's height: a window resize, or the divider's drag (it writes --tl-h on <html>) */
+    const reroom = () => {
+      if (!bar || !isSimple() || !FM.selectionIds || FM.selectionIds().length !== 1) return;   // only one item's tools ever take two rows
+      if (roomForTwo() !== roomy) { lastSig = ''; FM.simpleTools.sync(); }
+    };
+    window.addEventListener('resize', reroom);
+    if (window.MutationObserver) new MutationObserver(reroom).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
     buildTools();
     /* Simple's ⋯ (§8.2): Close all gaps when there is one, then everything else in Full's own ⋯ strip. Capture phase, and
        only while Simple is on screen, so Full's ⋯ is exactly today's. */
@@ -96,7 +117,17 @@ window.FM = window.FM || {};
     b.setAttribute('aria-label', !full ? face : full.toLowerCase().indexOf(face.toLowerCase()) >= 0 ? full : face + ', ' + full);
     if (t.pressed != null) b.setAttribute('aria-pressed', t.pressed ? 'true' : 'false');
     if (t.disabled) b.setAttribute('aria-disabled', 'true');
-    b.addEventListener('click', e => { e.stopPropagation(); if (b.getAttribute('aria-disabled') === 'true') { if (t.why && FM.spine) FM.spine.say(t.why); return; } closeMenu(); t.run(b); });
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      /* THE SECOND CLICK OF A DOUBLE CLICK NEVER PRESSES A TOOL THAT TOOK THE FIRST ONE'S PLACE (his pick B). On PC the tray
+         changes shape under a press — More opens a panel and the tray goes to one row, Done gives the two rows back — and the
+         second click came down on whatever had moved under the pointer: Move later where More was, Crop where Done was. The
+         same tool pressed twice (Move later, +1 frame) still counts twice. A pointer's click count only (keyboard: 0). */
+      if (e.detail >= 2 && lastPress && lastPress.fill !== fills && lastPress.id !== t.id) return;
+      if (e.detail >= 1) lastPress = { id: t.id, fill: fills };
+      if (b.getAttribute('aria-disabled') === 'true') { if (t.why && FM.spine) FM.spine.say(t.why); return; }
+      closeMenu(); t.run(b);
+    });
     return b;
   }
 
@@ -253,6 +284,54 @@ window.FM = window.FM || {};
     openMenu(btn, items);
   }
 
+  /* What the tray holds; true when it lies on two rows */
+  function fillTray(R, ids, one, S) {
+    if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
+    if (!ids.length) { tray.appendChild(quietLine(R)); return false; }
+    if (ids.length > 1) {   // §8.5b: the intersection — Stay put on all, Delete (one main clip at a time in 2.2)
+      const w = W();
+      tray.appendChild(el('div', 'sm-quiet', (w.selected || (n => n + ' selected'))(ids.length)));
+      const all = ids.every(id => !R.isMain(id));
+      if (all) tray.appendChild(tool({ id: 'stay', label: w.stay || 'Stay put', icon: 'pin', run: () => S.cmd.stayMany(ids, true) }));   // ONE step for all of them (§3.2 rule 2)
+      tray.appendChild(tool({ id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (all) { if (FM.deleteSelected) FM.deleteSelected(); } else S.say((FM.spineWords.lines || {}).deleteOne || 'Delete one clip at a time'); } }));
+      return false;
+    }
+    const list = trayFor(R, one);
+    /* PC, HIS PICK B (6 Oct, "do reconmended"; tools/design/plans/simple-mode/p22-review-shots/sheet-tray-pc.jpg): more than
+       five tools lay out on TWO rows of ceil(n/2), every one on show. At 1280 a clip's nine are ~530 px of buttons in a ~306 px
+       band, and in one row Lift off, Duplicate, Crop and Close gap sat off the edge with nothing showing they were there. More
+       and 🗑 take the last two places of the second row (styles.css). The phone keeps its one row and its pinned end.
+       WHILE MORE'S PANEL IS OPEN the tray is today's one row (More and 🗑 pinned, the rest a scroll or a wheel away): the panel
+       docks in the band above the tray (D20 A), and two rows left it 36 px at 1280×720 and 44 at 1280×800, under one row of its
+       own buttons. One row gives it back the room it has always had (88 / 96 px). */
+    if (roomy && list.length > 5 && panelFor !== one) {
+      tray.style.setProperty('--sm-cols', String(Math.ceil(list.length / 2)));
+      list.forEach(t => tray.appendChild(tool(t)));
+      return true;
+    }
+    /* More and 🗑 share ONE sticky end (review finding 22): More is the only way to every other setting, and with 8 tools at
+       ~54 px it sat past the 307 px band at 1280, or under 🗑 at 380, where a mouse could never reach it */
+    const pins = el('div', 'sm-pins');
+    list.forEach(t => (t.id === 'more' || t.pin ? pins : tray).appendChild(tool(t)));
+    if (pins.firstChild) tray.appendChild(pins);
+    return false;
+  }
+  /* THE BAND'S HEIGHT FOLLOWS THE TRAY'S ROWS (his pick B): #sm-say is two rows tall only while the tray holds two — but it
+     never drops to one under a line being said, nor just before one. A command that takes the selection away (Delete) refills
+     the tray to the one-row quiet line and THEN says its line with Undo (js/spine-edit.js speakDone, same task); a band that
+     dropped a row there would put that Undo in the row where 🗑 was pressed (finding 23's hazard). So the drop waits a
+     microtask, and while a line shows it waits for the line to go (the observer in mount). */
+  function rows(two) {
+    tray.classList.toggle('sm-tray-2', two);
+    if (!two) tray.style.removeProperty('--sm-cols');
+    if (!sayEl) return;
+    if (two) sayEl.classList.add('sm-two');
+    else if (sayEl.classList.contains('sm-two')) Promise.resolve().then(fitRows);
+  }
+  function fitRows() {
+    if (sayEl && sayEl.classList.contains('sm-two') && !tray.classList.contains('sm-tray-2') && !sayEl.classList.contains('sm-saying')) sayEl.classList.remove('sm-two');
+  }
+
   FM.simpleTools = {
     /* Called by the Simple timeline's rebuild and by syncSelectionChrome: re-draws the tray only when what it shows changed */
     sync() {
@@ -267,7 +346,8 @@ window.FM = window.FM || {};
       if (panelFor && (ids.length !== 1 || ids[0] !== panelFor)) panelFor = null;
       if (lengthFor && (ids.length !== 1 || ids[0] !== lengthFor || !R.isMain(lengthFor))) lengthFor = null;
       const one = ids.length === 1 ? ids[0] : null, l = one && FM.layerById(FM.scene, one);
-      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
+      roomy = !!one && roomForTwo();   // measured only for one item, the only tray that can take two rows
+      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
       if (sig === lastSig) return;
       lastSig = sig;
       /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the
@@ -283,23 +363,11 @@ window.FM = window.FM || {};
       }
     },
     _fill(R, ids, one, S) {
+      fills++;
       tray.textContent = '';
       tray.classList.toggle('sm-tray-len', !!lengthFor);
-      if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return; }
-      if (!ids.length) { tray.appendChild(quietLine(R)); return; }
-      if (ids.length > 1) {   // §8.5b: the intersection — Stay put on all, Delete (one main clip at a time in 2.2)
-        const w = W();
-        tray.appendChild(el('div', 'sm-quiet', (w.selected || (n => n + ' selected'))(ids.length)));
-        const all = ids.every(id => !R.isMain(id));
-        if (all) tray.appendChild(tool({ id: 'stay', label: w.stay || 'Stay put', icon: 'pin', run: () => S.cmd.stayMany(ids, true) }));   // ONE step for all of them (§3.2 rule 2)
-        tray.appendChild(tool({ id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (all) { if (FM.deleteSelected) FM.deleteSelected(); } else S.say((FM.spineWords.lines || {}).deleteOne || 'Delete one clip at a time'); } }));
-        return;
-      }
-      /* More and 🗑 share ONE sticky end (review finding 22): More is the only way to every other setting, and with 8 tools at
-         ~54 px it sat past the 307 px band at 1280, or under 🗑 at 380, where a mouse could never reach it */
-      const pins = el('div', 'sm-pins');
-      trayFor(R, one).forEach(t => (t.id === 'more' || t.pin ? pins : tray).appendChild(tool(t)));
-      if (pins.firstChild) tray.appendChild(pins);
+      let two = false;
+      try { two = fillTray(R, ids, one, S); } finally { rows(two); }
     },
     /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
     openPanel(id) { panelFor = id; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },   // a closed sheet comes back (finding 20)
