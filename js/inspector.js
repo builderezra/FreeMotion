@@ -7074,10 +7074,11 @@ window.FM = window.FM || {};
       if (FM.simpleTools && FM.simpleTools.bandIdle && FM.simpleTools.bandIdle(layer)) {
         lastLayerId = null;
         if (title) title.textContent = '';
-        const tw = (FM.spineWords && FM.spineWords.tools) || {};
-        /* on PC every tool is on show under the band (his pick B), so it only says where they are; the phone's words are today's */
-        const pcBand = !(window.matchMedia && window.matchMedia('(max-width: 700px)').matches);
-        root.appendChild(el('div', 'sm-band-hint', layer ? (pcBand ? (tw.bandHintSelPc || 'Its tools are below') : (tw.bandHintSel || 'Its tools are below · More opens the rest')) : (tw.bandHint || 'Tap a clip to see its tools')));
+        /* the words come from FM.simpleTools: "Its tools are below" alone only while every tool is on show on the PC tray's two
+           rows (his pick B), otherwise today's words; data-sel lets the tray put them right when its rows change (finding 3) */
+        const hint = el('div', 'sm-band-hint', FM.simpleTools.bandWords(layer));
+        if (layer) hint.dataset.sel = '1';
+        root.appendChild(hint);
         return;
       }
       if (!layer) {

@@ -122918,4 +122918,41 @@
       });
     }, 1280);
   });
+
+  test('simple P2.2 · tray B on PC the band says “Its tools are below” only while the tools really lie on two rows — a band dragged to 192 px, a landscape phone at 844×390 and a title’s four tools keep one row and today’s “· More opens the rest”, and the words follow the rows when the drag flips them (checker finding 3)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const SHORT = 'Its tools are below', LONG = 'Its tools are below · More opens the rest';
+    if (FM.spineWords.tools.bandHintSelPc !== SHORT || FM.spineWords.tools.bandHintSel !== LONG) throw new Error('CONTROL: the words file changed: “' + FM.spineWords.tools.bandHintSelPc + '” / “' + FM.spineWords.tools.bandHintSel + '”');
+    const words = () => { const h = document.querySelector('#inspector .sm-band-hint'); return h ? h.textContent : null; };
+    const rowsNow = () => { const m = smTrayBMeasure(); return m.rows.length; };
+    await smTrayBAt(1280, 720, async function () {
+      await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const root = document.documentElement;
+        FM.selectLayer(v.L('B').id); await v.sleep(150);
+        if (rowsNow() !== 2 || words() !== SHORT) throw new Error('CONTROL: 1280×720 at its own band: ' + rowsNow() + ' row(s), “' + words() + '”');
+        /* the divider dragged down to 192 (it writes --tl-h on <html>): one row, the rest off the edge — the words say More */
+        root.style.setProperty('--tl-h', '192px'); await v.sleep(150);
+        const tray = document.getElementById('sm-tray');
+        if (rowsNow() !== 1 || tray.scrollWidth <= tray.clientWidth + 1) throw new Error('CONTROL: a band at 192 px did not keep one scrolling row (' + rowsNow() + ' row(s), ' + tray.scrollWidth + ' in ' + tray.clientWidth + ')');
+        if (words() !== LONG) throw new Error('a band dragged to 192 px: one row with ' + Math.round(tray.scrollWidth - tray.clientWidth) + ' px of tools off the edge, and the band says “' + words() + '”, want “' + LONG + '”');
+        /* …and back: the drag flips the rows, and the words with them, with no new selection */
+        root.style.removeProperty('--tl-h'); await v.sleep(150);
+        if (rowsNow() !== 2 || words() !== SHORT) throw new Error('the band back at its own height: ' + rowsNow() + ' row(s), “' + words() + '”, want two rows and “' + SHORT + '”');
+        /* a title's four tools fit one row: nothing is off the edge, More is there, and the words are today's */
+        FM.selectLayer(v.L('On A').id); await v.sleep(150);
+        if (rowsNow() !== 1 || words() !== LONG) throw new Error('a title’s four tools on one row: the band says “' + words() + '”, want “' + LONG + '”');
+        FM.selectLayer(null); await v.sleep(150);
+        if (words() !== (FM.spineWords.tools.bandHint || 'Tap a clip to see its tools')) throw new Error('nothing selected: the band says “' + words() + '”');
+      });
+    }, 1280);
+    /* a landscape phone is a PC layout (wider than 700) with a short band: one row, so today's words */
+    await smTrayBAt(844, 390, async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        FM.selectLayer(v.L('B').id); await v.sleep(150);
+        if (document.getElementById('sm-bar').parentNode !== document.getElementById('inspector-panel')) throw new Error('CONTROL: 844×390 is not the PC band');
+        if (rowsNow() !== 1) throw new Error('CONTROL: 844×390 holds ' + rowsNow() + ' rows in a ' + document.getElementById('inspector-panel').getBoundingClientRect().height + ' px band');
+        if (words() !== LONG) throw new Error('844×390: one row, and the band says “' + words() + '”, want “' + LONG + '”');
+      });
+    }, 844);
+  });
 })();

@@ -338,9 +338,24 @@ window.FM = window.FM || {};
   function rows(two) {
     tray.classList.toggle('sm-tray-2', two);
     if (!two) tray.style.removeProperty('--sm-cols');
+    hintFollows();
     if (!sayEl) return;
     if (two) sayEl.classList.add('sm-two');
     else if (sayEl.classList.contains('sm-two')) Promise.resolve().then(fitRows);
+  }
+  /* THE BAND'S WORDS FOLLOW THE TRAY'S REAL ROWS (checker finding 3). "Its tools are below" alone is right only while every
+     tool is on show on two rows; a one-row tray — a band dragged under what two rows need, a landscape phone, a title's four
+     tools, Length's row — keeps today's "· More opens the rest". js/inspector.js draws the words (bandWords) and may do so
+     before the tray is refilled for a new selection, and a drag flips the rows with no redraw at all, so every refill puts
+     the selected-item words right. */
+  function bandWords(layer) {
+    const w = W();
+    if (!layer) return w.bandHint || 'Tap a clip to see its tools';
+    return tray && tray.classList.contains('sm-tray-2') ? (w.bandHintSelPc || 'Its tools are below') : (w.bandHintSel || 'Its tools are below · More opens the rest');
+  }
+  function hintFollows() {
+    const h = document.querySelector('#inspector > .sm-band-hint[data-sel]');
+    if (h) { const t = bandWords(true); if (h.textContent !== t) h.textContent = t; }
   }
   function fitRows() {
     if (sayEl && sayEl.classList.contains('sm-two') && !tray.classList.contains('sm-tray-2') && !sayEl.classList.contains('sm-saying')) sayEl.classList.remove('sm-two');
@@ -391,6 +406,9 @@ window.FM = window.FM || {};
     /* js/mobile.js asks before raising the sheet for a selection; js/inspector.js before drawing the band */
     sheetHeld(id) { return isSimple() && panelFor !== id; },
     bandIdle(layer) { return isSimple() && !(layer && panelFor === layer.id); },
+    /* …and the words it shows there while idle: a selected item's say where its tools are, "· More opens the rest" unless
+       every tool is on show on the tray's two rows */
+    bandWords: bandWords,
     _reset() { panelFor = null; lengthFor = null; lastSig = ''; closeMenu(); },   // suite seam
     _menu: () => menu,
     ICON: ICON
