@@ -56,7 +56,23 @@ def others_alive():
 def other_headless():
     """Headless Chromes of any other tool (a probe's own `cdp-…` profile is not caught by the fm-cdp pattern)."""
     r = subprocess.run(["pgrep", "-f", "Google Chrome --headless"], capture_output=True, text=True)
-    return [p for p in r.stdout.split() if p.strip()]
+    pids = [p for p in r.stdout.split() if p.strip()]
+    if not pids:
+        return []
+    # only a RECENT one is a neighbour's run in flight; one alive for over 20 minutes is a long-lived or stale browser
+    out = subprocess.run(["ps", "-o", "pid=,etime=", "-p", ",".join(pids)], capture_output=True, text=True).stdout
+    fresh = []
+    for line in out.splitlines():
+        p = line.split()
+        if len(p) == 2:
+            parts = p[1].replace("-", ":").split(":")
+            secs = 0
+            for x in parts:
+                secs = secs * 60 + int(x)
+            if p[1].count("-") or secs < 1200:
+                if not p[1].count("-"):
+                    fresh.append(p[0])
+    return fresh
 
 
 def wait_quiet(log):

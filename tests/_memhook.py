@@ -164,7 +164,7 @@ _DEEP = [
     ("et", "EventTarget.prototype", r"""function(){
       var by = {}, media = [], cv = { n: 0, detached: 0, px: 0, detachedPx: 0 }, ac = {}, img = { n: 0, px: 0, detached: 0, detachedPx: 0 }, ifr = 0;
       // WHO MADE IT (tests.js memInstall tags every canvas / media / image / iframe / AudioContext / Worker a test makes)
-      var B = window.__fmMemBorn, who = {};
+      var B = window.__fmMemBorn, who = {}, sizes = {};
       function add(o, kind, px) { var k; try { k = B && B.get(o); } catch (e) {} k = k || '(boot / untagged)'; var w = who[k] || (who[k] = {}); w[kind] = (w[kind] || 0) + 1; if (px) w[kind + 'Px'] = (w[kind + 'Px'] || 0) + px; }
       for (var i = 0; i < this.length; i++) {
         var o = this[i], n;
@@ -186,7 +186,7 @@ _DEEP = [
           media.push([n === 'HTMLVideoElement' ? 'v' : 'a', o.isConnected ? 1 : 0, o.readyState, s, vw * vh, paused, ns]);
           add(o, o.readyState > 0 ? 'mediaLoaded' : 'media', o.readyState > 0 ? vw * vh : 0);
         } else if (n === 'HTMLCanvasElement') {
-          var a = (o.width * o.height) || 0; cv.n++; cv.px += a; if (!o.isConnected) { cv.detached++; cv.detachedPx += a; } add(o, o.isConnected ? 'cv' : 'cvDet', a);
+          var a = (o.width * o.height) || 0; cv.n++; cv.px += a; if (!o.isConnected) { cv.detached++; cv.detachedPx += a; } add(o, o.isConnected ? 'cv' : 'cvDet', a); if (!o.isConnected && a) { var sk = o.width + 'x' + o.height; sizes[sk] = (sizes[sk] || 0) + 1; }
         } else if (/AudioContext$/.test(n)) { var st = ''; try { st = o.state; } catch (e) {} ac[n + ':' + st] = (ac[n + ':' + st] || 0) + 1; add(o, n === 'OfflineAudioContext' ? 'oac' : 'ac:' + st, 0); }
         else if (n === 'Worker' || n === 'OffscreenCanvas' || n === 'VideoFrame') { add(o, n, 0); }
       }
@@ -204,7 +204,8 @@ _DEEP = [
       var score = function (w) { return (w.cvPx || 0) + (w.cvDetPx || 0) + (w.mediaLoadedPx || 0) * 1.5 + (w.imgPx || 0) + 4e6 * ((w.mediaLoaded || 0) + (w['ac:running'] || 0) + (w['ac:suspended'] || 0) + (w.Worker || 0) + (w.iframe || 0)) + 1e4 * ((w.cvDet || 0) + (w.img || 0) + (w.media || 0)); };
       var wk = Object.keys(who).sort(function (x, y) { return score(who[y]) - score(who[x]); });
       var whoTop = {}; wk.slice(0, 25).forEach(function (k) { whoTop[k] = who[k]; });
-      return { by: by, media: mediaSum, canvas: cv, ac: ac, img: img, iframes: ifr, who: whoTop, whoN: wk.length };
+      var szTop = {}; Object.keys(sizes).sort(function (x, y) { var px = function (k) { var p = k.split('x'); return p[0] * p[1] * sizes[k]; }; return px(y) - px(x); }).slice(0, 8).forEach(function (k) { szTop[k] = sizes[k]; });
+      return { by: by, media: mediaSum, canvas: cv, ac: ac, img: img, iframes: ifr, who: whoTop, whoN: wk.length, detSizes: szTop };
     }"""),
     ("ab", "ArrayBuffer.prototype", "function(){var n=this.length,b=0,big=0,bigB=0;for(var i=0;i<n;i++){var x=0;try{x=this[i].byteLength}catch(e){};b+=x;if(x>=1048576){big++;bigB+=x;}}return {n:n,bytes:b,big:big,bigBytes:bigB};}"),
     ("bmp", "ImageBitmap.prototype", "function(){var B=window.__fmMemBorn,who={},n=this.length,p=0,open=0;for(var i=0;i<n;i++){try{var a=this[i].width*this[i].height;p+=a;if(a){open++;var k=(B&&B.get(this[i]))||'(untagged)';who[k]=(who[k]||0)+a;}}catch(e){}}var t={};Object.keys(who).sort(function(x,y){return who[y]-who[x]}).slice(0,10).forEach(function(k){t[k]=who[k]});return {n:n,open:open,px:p,who:t};}"),
@@ -261,7 +262,11 @@ _INFRA_KEYS = ("malloc", "partition_alloc", "blink_gc", "v8", "media", "media/fr
                "gpu/shared_images", "gpu/gl", "partition_alloc/partitions/array_buffer", "partition_alloc/partitions/buffer",
                "partition_alloc/partitions/fast_malloc", "partition_alloc/partitions/layout", "v8/main", "v8/workers",
                "v8/main/heap", "v8/main/global_handles", "audio", "webaudio", "web_audio", "mojo", "site_storage", "leveldatabase",
-               "indexeddb", "sqlite", "media/video_frame_pool", "media/audio")
+               "indexeddb", "sqlite", "media/video_frame_pool", "media/audio", "site_storage", "site_storage/blob_storage",
+               "site_storage/indexed_db", "devtools", "devtools/sessions", "mojo/queued_ipc_channel_message", "canvas/ResourceProvider",
+               "blink_objects/Document", "blink_objects/Node", "blink_objects/JSEventListener", "blink_objects/Frame",
+               "blink_objects/RTCPeerConnection", "blink_objects/AudioHandler", "parkable_images", "web_cache/Image_resources",
+               "cc/tile_memory", "cc/resource_memory", "frame_evictor", "iosurface")
 
 
 def infra_dump(cdp):
@@ -308,7 +313,21 @@ def infra_dump(cdp):
         if "private_footprint_bytes" in pt:
             v = pt["private_footprint_bytes"]
             rec["pf"] = int(v, 16) if isinstance(v, str) else v
+        extra = tuple(x for x in os.environ.get("FM_MEM_INFRA_ALL", "").split(",") if x)   # e.g. "cc,media": every key under them
         for k, v in dumps.get("allocators", {}).items():
+            if extra and k.startswith(extra) and k.count("/") <= 3:
+                sz = v.get("attrs", {}).get("size", {}).get("value")
+                if sz is not None and int(sz, 16) >= 1 << 20:
+                    rec[k] = int(sz, 16)
+                continue
+            # one compositor per frame tree (cc/tile_manager_<id>): how many there are, and the biggest, says whether tile
+            # memory is one budget filling up or a new compositor per test
+            if k.startswith("cc/tile_manager_") and k.count("/") == 1:
+                sz = v.get("attrs", {}).get("size", {}).get("value")
+                if sz is not None:
+                    rec["cc/tile_managers"] = rec.get("cc/tile_managers", 0) + 1
+                    rec["cc/tile_manager_max"] = max(rec.get("cc/tile_manager_max", 0), int(sz, 16))
+                continue
             if k not in _INFRA_KEYS and not (k.startswith("media/webmediaplayer/") and k.count("/") == 2):
                 continue
             sz = v.get("attrs", {}).get("size", {}).get("value")
