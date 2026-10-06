@@ -122894,4 +122894,28 @@
       });
     }, 1280);
   });
+
+
+  test('simple P2.2 · tray B at 1280×720 after the window was once 500 px tall the band is left at 230 px, and its tools still lie on two rows there with the words above them whole — two rows need what the band’s parts measure, not a fixed 232 (checker finding 2)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 720, async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const fe = window.frameElement, root = document.documentElement, band = () => document.getElementById('inspector-panel').getBoundingClientRect();
+        /* the window made short and tall again: js/app.js's resize re-clamp writes --tl-h 230 at 500 px, and it stays */
+        fe.style.height = '500px'; window.dispatchEvent(new Event('resize')); await v.sleep(200);
+        fe.style.height = '720px'; window.dispatchEvent(new Event('resize')); await v.sleep(200);
+        const tl = parseFloat(root.style.getPropertyValue('--tl-h'));
+        if (innerHeight !== 720 || !(tl < 232) || Math.abs(band().height - tl) > 1) throw new Error('CONTROL: the round trip did not leave a band under 232 px (window ' + innerHeight + ', --tl-h “' + root.style.getPropertyValue('--tl-h') + '”, band ' + band().height + ')');
+        FM.selectLayer(v.L('B').id); await v.sleep(150);
+        const m = smTrayBMeasure();
+        if (m.order.length !== 9) throw new Error('CONTROL: the tray is ' + m.order);
+        if (m.bad.length || m.rows.length !== 2) throw new Error('a band left at ' + tl + ' px: the nine tools sit on ' + m.rows.length + ' row(s) ' + JSON.stringify(m.rows) + ' ' + m.bad.join(' · ') + ' — his pick B silently turned back into A');
+        const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint'), tb = document.getElementById('sm-tools').getBoundingClientRect();
+        if (!hint) throw new Error('CONTROL: the band shows no words');
+        const hb = hint.getBoundingClientRect();
+        if (hb.top < ib.top - 0.5 || hb.bottom > ib.bottom + 0.5 || insp.scrollHeight > insp.clientHeight + 1) throw new Error('a band at ' + tl + ' px with two rows cuts its words: ' + Math.round(hb.top) + '–' + Math.round(hb.bottom) + ' in ' + Math.round(ib.top) + '–' + Math.round(ib.bottom) + ' (scroll ' + insp.scrollHeight + ' in ' + insp.clientHeight + ')');
+        if (tb.top < band().top - 0.5 || tb.bottom > band().bottom + 0.5) throw new Error('a band at ' + tl + ' px with two rows pushes the project tools out of it');
+      });
+    }, 1280);
+  });
 })();

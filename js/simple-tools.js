@@ -46,13 +46,22 @@ window.FM = window.FM || {};
   let panelFor = null, lengthFor = null, lengthEdge = 'end', lastSig = '', lastSel = null;
   let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
   let roomy = false;                 // PC, and the band is tall enough for the tray's two rows (roomForTwo)
-  /* TWO ROWS NEED A BAND THAT HOLDS THEM: its title (33), both rows (104), the project tools (57) and one whole line of words
-     above them — 232 px, the band's own floor at every PC size (styles.css --tl-h). The divider drags it down to 150 and the
-     height is remembered (fm_tl_h), and two rows there pushed the project tools out of the band: a lower band keeps one row. */
+  /* TWO ROWS NEED A BAND THAT HOLDS THEM: its title (33), the bar's edge and project tools (1 + 57), both rows (104) and one
+     whole line of words above them (#inspector's 4 px top + .sm-band-hint's 6 + 13 × 1.4 + 6, styles.css) — 230 px today.
+     MEASURED FROM THE BAND'S OWN PARTS, never a fixed number (checker finding 2): it was 232, the band's CSS floor, but a
+     window once shorter than 504 px leaves an inline --tl-h behind (js/app.js's resize re-clamp: 230 at 500 px) that stays
+     when the window grows back, and his pick B then silently turned back into option A until a reload. The divider drags
+     the band down to 150 and the height is remembered (fm_tl_h); two rows there pushed the project tools out of the band, so
+     a band shorter than this keeps one row. */
+  const TWO_ROWS = 104, WORDS_LINE = 6 + 13 * 1.4 + 6;
   function roomForTwo() {
-    if (phone.matches) return false;
-    const band = document.getElementById('inspector-panel');
-    return !!band && band.getBoundingClientRect().height >= 231.5;
+    if (phone.matches || !bar || !sayEl) return false;
+    const band = document.getElementById('inspector-panel'), insp = document.getElementById('inspector');
+    if (!band || !insp || bar.parentNode !== band) return false;
+    const hgt = n => n.getBoundingClientRect().height;
+    let need = hgt(bar) - hgt(sayEl) + TWO_ROWS + (parseFloat(getComputedStyle(insp).paddingTop) || 0) + WORDS_LINE;
+    for (const c of band.children) if (c !== bar && c !== insp && getComputedStyle(c).position !== 'absolute') need += hgt(c);   // the title row
+    return hgt(band) >= Math.ceil(need - 0.01);
   }
   const isSimple = () => !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
   function el(tag, cls, text) { const d = document.createElement(tag); if (cls) d.className = cls; if (text != null) d.textContent = text; return d; }
