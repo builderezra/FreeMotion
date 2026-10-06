@@ -271,6 +271,28 @@
       return u;
     };
     U.revokeObjectURL = function (u) { try { MEM.urls.delete(String(u)); } catch (e) {} return rv.apply(this, arguments); };
+    /* WHO MADE WHAT IS STILL ALIVE. Every canvas, media element, image, iframe, AudioContext, Worker, OffscreenCanvas,
+       VideoFrame and ImageBitmap made from here on is remembered (weakly — this keeps nothing alive) against the test that
+       was running, so the driver's heap walk can group what a slice still holds by the test that made it. */
+    var born = MEM.born = window.__fmMemBorn = new WeakMap();
+    var tag = function (o) { try { if (o && typeof o === 'object') born.set(o, String(window.__fmLastTest || '(boot)').slice(0, 90)); } catch (e) {} return o; };
+    try {
+      var ce = Document.prototype.createElement;
+      Document.prototype.createElement = function (n) {
+        var el = ce.apply(this, arguments);
+        if (/^(canvas|video|audio|img|iframe)$/i.test(String(n))) tag(el);
+        return el;
+      };
+    } catch (e) {}
+    ['Image', 'Audio', 'AudioContext', 'OfflineAudioContext', 'Worker', 'OffscreenCanvas', 'VideoFrame'].forEach(function (k) {
+      var C = window[k];
+      if (typeof C !== 'function') return;
+      try { window[k] = new Proxy(C, { construct: function (t, a, nt) { return tag(Reflect.construct(t, a, nt)); } }); } catch (e) {}
+    });
+    try {
+      var cib = window.createImageBitmap;
+      if (cib) window.createImageBitmap = function () { return cib.apply(this, arguments).then(tag); };
+    } catch (e) {}
   }
   async function memPageInfo() {
     var o = { urls: 0, urlBytes: 0 };

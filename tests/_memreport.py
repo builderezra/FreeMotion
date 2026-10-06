@@ -173,7 +173,7 @@ def main():
     print("\nTOP %d by growth that stayed (page renderer, MB):" % a.top)
     for r in sorted(allrows, key=lambda r: -r["stayRend"])[:a.top]:
         print("  %4d %+7.1f (step %+7.1f, all %+7.1f) %-80s %s" % (r["gi"], r["stayRend"], r["dRend"], r["dAll"], r["name"][:80], fmt_feat(r)))
-    print("\nTOTAL: stayed %+.0f MB, steps %+.0f MB over %d tests" % (sum(r["stayRend"] for r in allrows), sum(r["dRend"] for r in allrows), len(allrows)))
+    print("\nTOTAL: the page renderer grew %+.0f MB over %d measured tests (sum of per-test steps inside the slices)" % (sum(r["dRend"] for r in allrows), len(allrows)))
 
 
 if __name__ == "__main__":
