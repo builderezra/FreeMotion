@@ -40,12 +40,12 @@ One thing I found while planning that the H4 report did not say: **the app alrea
 This is a protocol change, so it is bigger than it looks. Everything below is required; leaving any step out leaves a hole.
 
 1. **Stop sending them:** `const DENY = [..., 'notes'];` at `js/collab-session.js:31`. That removes `notes` from the diff, the hash and the snapshot.
-2. **Refuse them coming in.** `viewOfProject` only controls what is SENT. A remote op is applied straight onto the live project (`D.apply(doc(), op, liveOpts())`, `js/collab-session.js:441`, `:540`, where `doc()` is the live scene, `:144`), and the host's `validOp` (`js/collab-host.js:190-216`) has no key rule for the `P` root. So an older build, or a hostile peer, could still write `['P','notes',...]` into the owner's real notes. Add to `validOp`, in the `else` branch after the `P.valid` check:
+2. **Refuse them coming in.** `viewOfProject` only controls what is SENT. A remote op is applied straight onto the live project (`D.apply(doc(), op, liveOpts())`, `js/collab-session.js:441`, `:540`, where `doc()` is the live scene, `:144`), and the host's `validOp` (`js/collab-host.js:188-226`) has no key rule for the `P` root. So an older build, or a hostile peer, could still write `['P','notes',...]` into the owner's real notes. Add to `validOp`, in the `else` branch after the `P.valid` check:
    ```js
    if (op.p[0] === 'P' && C.DENY && C.DENY.indexOf(op.p[1]) >= 0) return 'private';
    ```
    (`C.DENY` is set at `js/collab-session.js:1703`; read it at call time, since the host file loads first, `index.html:1140` against `:1147`.) **Side effect to know about:** this also starts refusing writes to the five existing keys, which today are only withheld, not refused. Nothing the app sends writes them (they are excluded from the diff), so I expect no change, but run the S-series.
-3. **Make the schema fingerprint notice.** `SCHEMA_FP` hashes the sanitiser's output, not `DENY` (`js/collab-core.js:236-251`), so a change to `DENY` would not fail the fingerprint gate (`tests/tests.js:30289`). Add `'|deny' + P.canon(C.DENY)` to the string that is hashed, then bump `C.SCHEMA_REV` and paste the new `SCHEMA_FP` as the failing test instructs. **Coordination:** main is at 7, the Simple branches take 8 (`js/collab-core.js:48` there), and #482 polish batches also bump it. Take the next free number at merge time; do not hard-code 8.
+3. **Make the schema fingerprint notice.** `SCHEMA_FP` hashes the sanitiser's output, not `DENY` (`js/collab-core.js:223-243` (the hash is built at `:238`)), so a change to `DENY` would not fail the fingerprint gate (`tests/tests.js:30289`). Add `'|deny' + P.canon(C.DENY)` to the string that is hashed, then bump `C.SCHEMA_REV` and paste the new `SCHEMA_FP` as the failing test instructs. **Coordination:** main is at 7, the Simple branches take 8 (`js/collab-core.js:48` there), and #482 polish batches also bump it. Take the next free number at merge time; do not hard-code 8.
 4. **Say so.** Replace Option A's Notes pad line with "These notes stay on this device." (shown while a session is live) and drop the `PRIVACY_FULL` sentence.
 5. **Existing copies keep what they already received.** A guest who joined before this ships keeps the owner's notes in their saved copy; they cannot be recalled. Say so in the release note.
 
@@ -94,7 +94,7 @@ This is a protocol change, so it is bigger than it looks. Everything below is re
 
 ## F5. A peer's picture is decoded with no pixel limit
 
-**Verified facts.** `FM.loadImageFile` (`js/media.js:802-806`) resolves once the image loads and checks nothing about size; its only cap is GIF frames at 64 million pixels (`:725`). The peer path is `writeRecord` (`js/collab-media.js:1191-1210`): it **stores the file first** (`FM.storage.writeMedia`, `:1198`) and only then loads it, and the caller treats a `false` as "out of room" (`:1162-1163`: `if (!ok) { outOfRoom(ctl, e.fid); return false; }`).
+**Verified facts.** `FM.loadImageFile` (`js/media.js:801`) resolves once the image loads and checks nothing about size; its only cap is GIF frames at 64 million pixels (`:725`). The peer path is `writeRecord` (`js/collab-media.js:1191-1210`): it **stores the file first** (`FM.storage.writeMedia`, `:1198`) and only then loads it, and the caller treats a `false` as "out of room" (`:1162-1163`: `if (!ok) { outOfRoom(ctl, e.fid); return false; }`).
 
 **Two traps to avoid, both found by reading the call site:**
 - **Do not put the cap in `loadImageFile`.** That is also the path for his OWN photos. A phone camera at 48 MP (8064 x 6048 = 48.8 MP) is legitimate and a 200 MP sensor exists, so a global 50 MP cap would refuse his own pictures. Cap the peer path only.
