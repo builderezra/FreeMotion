@@ -112,6 +112,9 @@
   function notRunHere(reason) {
     var e = new Error('NOT RUN HERE: ' + reason);
     e.fmNotRun = String(reason);
+    // …and remembered for the runner, so a test that catches the throw (a try/catch that collects messages) is still
+    // reported NOT RUN, never a pass on the half that ran without what it needed
+    if (!window.__fmNotRunHere) window.__fmNotRunHere = e.fmNotRun;
     throw e;
   }
 
@@ -59579,6 +59582,7 @@
     for (var i = 0; i < LIST.length; i++) {
       var t = LIST[i], ok = true, err = null, notRun = '';
       window.__fmCurPinned = !!t.pinned;   // pinned() refuses in a test that did not declare { pinned: true } (see there)
+      window.__fmNotRunHere = '';          // set by notRunHere() even when the test catches its throw
       /* ⚠️ EVERY TEST STARTS WITH localStorage.setItem RESOLVING TO THE PROTOTYPE (26 Sep). A test that stubs it and then
          "restores" with `localStorage.setItem = realSet` leaves an OWN property on the instance, and an own property shadows
          Storage.prototype — so every later test that stubs the PROTOTYPE (a full phone, a refused write) stubbed nothing.
@@ -59613,6 +59617,9 @@
       }
       finally {
         if (hangTimer) clearTimeout(hangTimer);
+        // a notRunHere() the test swallowed (caught and carried on, or turned into a message) is still NOT RUN HERE:
+        // whatever it reported after that ran without the thing it needed
+        if (window.__fmNotRunHere && !notRun) { ok = false; err = null; notRun = String(window.__fmNotRunHere); }
         // the eight slowest tests so far, readable by the runner on a timeout — the suite doubled in length
         // on 2 Sep and nothing could say which tests had grown
         var _ms = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - _t0);
@@ -87075,6 +87082,19 @@
    * saying so rather than passing on nothing. The switch is SAMPLED ON EVERY MOVE WHILE THE FINGER IS DOWN — "live"
    * means before the release, and the release is the one moment all the earlier probes happened to agree. */
   async function realInput924(steps, what) {
+    /* A REAL FINGER NEEDS TOUCH EMULATION, AND A BROWSER WITHOUT IT SAYS NOT RUN HERE (6 Oct, the PM's port review, MAJOR).
+       On the Mac the driver switches DevTools touch emulation on for a run of touch steps: during the gesture the page
+       reports what a phone reports — (pointer: coarse), (hover: none), maxTouchPoints 5 — and the touch-only CSS
+       (styles.css's @media (hover: none) and (pointer: coarse) targets) and the app's fine-pointer JS (js/app.js,
+       js/elements-browser.js, js/home.js, js/settings.js, the collab files) take the finger's path. On Linux that switch
+       leaves the page mouseless for good (tests/_platform.py), so touch went in WITHOUT it: the mouse layout under a
+       finger, a phone regression green there and red on his phone. The driver now says which it can do
+       (__fmDriverCaps.touchEmulation, written every poll) and refuses touch it cannot emulate; this turns either into
+       NOT RUN HERE before a single step is sent. Mouse, wheel and key steps are unaffected. */
+    const hasTouch = (steps || []).some(s => /^touch/.test(String(s && s.t || '')));
+    const caps = window.__fmDriverCaps;
+    if (hasTouch && caps && caps.touchEmulation === false)
+      notRunHere('needs real touch emulation (a finger with the phone\'s media state: pointer coarse, hover none, 5 touch points) — this browser\'s driver cannot switch it on and off without losing the mouse (' + (caps.why || 'Linux headless Chrome') + ')');
     const seq = (window.__fmInputSeq = (window.__fmInputSeq || 0) + 1);
     window.__fmInputErr = '';
     window.__fmWantInput = { seq: seq, steps: steps };
@@ -87083,6 +87103,7 @@
       if (Date.now() > deadline) throw new Error('no real input arrived for ' + what + ' — this test needs tests/_cdp.py, which turns __fmWantInput into trusted touches and clicks');
       await new Promise(r => setTimeout(r, 40));
     }
+    if (/^NOTRUN: /.test(window.__fmInputErr || '')) notRunHere(String(window.__fmInputErr).slice(8));
     if (window.__fmInputErr) throw new Error('the driver could not send the input for ' + what + ': ' + window.__fmInputErr);
     await new Promise(r => setTimeout(r, 30));   // let the recorder's deferred reads land
   }

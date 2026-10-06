@@ -405,8 +405,11 @@ def main():
                 if want != cpu[0]:
                     cdp.send("Emulation.setCPUThrottlingRate", rate=want)
                     cpu[0] = want
+                # …and what this driver can do for a real-input request (tests.js realInput924 reads it before sending
+                # touch: a browser that cannot emulate it reports the test NOT RUN HERE instead of a finger on the mouse layout)
                 cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
-                         "if(w) w.__fmCpuRate=%s;})()" % json.dumps(cpu[0]))
+                         "if(w){w.__fmCpuRate=%s;w.__fmDriverCaps=%s;}})()" % (json.dumps(cpu[0]), json.dumps(
+                             {"touchEmulation": bool(_platform.REAL_TOUCH_VIA_EMULATION), "why": _platform.REAL_TOUCH_WHY})))
             except Exception:
                 pass
             # A TEST MAY ASK FOR REAL INPUT, AND ONLY THIS DRIVER CAN GIVE IT (queue 924). A synthetic pointer event
@@ -418,7 +421,9 @@ def main():
             # position on the page, sleeps `ms` after it, and answers `__fmInputDone = seq`. Touch emulation is
             # switched on only for a run of touch steps and off again after, so no other test sees a touch device.
             # ⚠️ EXCEPT ON LINUX (6 Oct): there, switching it OFF leaves the page with no mouse for good (measured — see
-            # tests/_platform.py REAL_TOUCH_VIA_EMULATION), so the touch steps go in without it. The Mac path is unchanged.
+            # tests/_platform.py REAL_TOUCH_VIA_EMULATION). Sending the touch WITHOUT emulation was tried and the PM's review
+            # struck it (a finger on the mouse layout), so a touch batch is refused there and the test says NOT RUN HERE.
+            # The Mac path is unchanged.
             # The frame must be on screen for the events to reach it — the test moves it and puts it back.
             try:
                 want_in = cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
@@ -428,6 +433,12 @@ def main():
                 if want_in:
                     q = json.loads(want_in)
                     err = ''
+                    # TOUCH THAT CANNOT BE EMULATED IS NOT SENT AT ALL (6 Oct, the port review's MAJOR): not one step of the
+                    # batch, so no half-gesture is left behind; the answer starts "NOTRUN: " and the test says NOT RUN HERE.
+                    _touch = any(str(st.get("t", "")).startswith("touch") for st in q["steps"])
+                    if _touch and not _platform.REAL_TOUCH_VIA_EMULATION:
+                        err = "NOTRUN: needs real touch emulation (the phone's media state during a finger) — " + _platform.REAL_TOUCH_WHY
+                        q["steps"] = []
                     try:
                         for st in q["steps"]:
                             t = st.get("t", "")

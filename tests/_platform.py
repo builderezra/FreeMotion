@@ -142,9 +142,17 @@ def reap_pattern():
 # and the protocol has no pointer override). So after the first finger test, every later mouse-gated test would run
 # without a mouse. Input.dispatchTouchEvent WITHOUT emulation still delivers trusted touchstart/touchend and
 # pointerType 'touch' pointer events and click (measured), and the mouse survives. The one residual difference: during
-# a gesture Linux shows maxTouchPoints 0, no ontouchstart and pointer fine, where the Mac shows 5 and coarse — the app
-# reads those only in js/collab-presence.js and js/collab-ui.js.
-REAL_TOUCH_VIA_EMULATION = not IS_LINUX
+# a gesture Linux shows maxTouchPoints 0, no ontouchstart and pointer fine, where the Mac shows 5 and coarse.
+# ⚠️ THAT "ONE RESIDUAL DIFFERENCE" WAS NOT SMALL (6 Oct, the PM's port review, MAJOR). It is the phone's media state, and
+# the app reads it well beyond the collab files: styles.css's @media (hover: none) / (pointer: coarse) blocks (the 44px .vr-*
+# targets, the 48px .pb-grip, and others), js/app.js (the frame-cache budget), js/elements-browser.js and js/home.js
+# (autofocus only with a keyboard), js/settings.js (pointer: fine). Touch sent without emulation runs a finger against the
+# MOUSE layout: a phone regression green here and red on his phone. So it is no longer sent: where touch cannot be
+# emulated, the driver refuses every touch step and the test reports NOT RUN HERE (tests.js realInput924), by name.
+# FM_FAKE_NO_TOUCH_EMULATION=1 makes the Mac answer the same way — only to prove that path; a NOT RUN refuses a Mac ship.
+REAL_TOUCH_VIA_EMULATION = not IS_LINUX and os.environ.get("FM_FAKE_NO_TOUCH_EMULATION") != "1"
+REAL_TOUCH_WHY = ("FM_FAKE_NO_TOUCH_EMULATION=1 (a proof run)" if os.environ.get("FM_FAKE_NO_TOUCH_EMULATION") == "1"
+                  else "Linux headless Chrome: turning touch emulation off leaves the page with no mouse" if IS_LINUX else "")
 
 
 if __name__ == "__main__":
