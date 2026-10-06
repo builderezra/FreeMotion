@@ -650,6 +650,14 @@ if [ -n "$(git status --porcelain -- tools/inbox.sh tools/next.sh tools/tick.sh 
     exit 1
   fi
 fi
+# …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
+if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/ship.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tools/record-baselines.sh 2>/dev/null)" ]; then
+  echo "→ the port's gates or the driver changed — proving them before shipping"
+  if ! ./tools/test-port.sh; then
+    echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."
+    exit 1
+  fi
+fi
 
 # Refresh REQUESTS.md's STATUS labels first, so they can never be stale in a commit (queue 352).
 # A label written by hand is true the day it is written and misleading a week later.
@@ -847,6 +855,9 @@ fi
 # …and that it actually RAN. `"ok": true` is only "nothing failed", which a suite of zero tests also is.
 # (test_floor_check is tools/_testfloor.sh, sourced at the top.)
 test_floor_check "$OUT" || { echo "   Not committing, not pushing."; exit 1; }
+# NOT RUN HERE, by name (6 Oct, #1071): printed after every pass, and on the Mac a refusal (tools/_testfloor.sh notrun_report)
+notrun_report "$OUT" desktop || { _WHY="a test is NOT RUN HERE on the Mac"; exit 1; }
+NOTRUN_ALL="$(notrun_list "$OUT")"
 echo "✅ $SUM  (${_suite_secs}s)"
 echo "$_suite_secs" > tools/.suite-seconds
 
@@ -886,6 +897,8 @@ if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; th
     exit 1
   fi
   test_floor_check "$POUT" || { echo "   Not committing, not pushing."; exit 1; }
+  notrun_report "$POUT" phone || { _WHY="a test is NOT RUN HERE on the Mac"; exit 1; }
+  NOTRUN_ALL="$(printf '%s\n%s\n' "$NOTRUN_ALL" "$(notrun_list "$POUT")" | sed '/^$/d' | sort -u)"
   echo "✅ phone $PSUM"
 else
   echo "· no shipped source changed — skipping the phone pass"

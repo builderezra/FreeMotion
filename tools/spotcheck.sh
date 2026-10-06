@@ -94,6 +94,15 @@ run_one() {  # $1 = title -> "PASS|summary" / "FAIL|summary failures" / "NORUN|s
     echo "NOSUITE|$why"; return
   fi
   if [ -z "$ran" ] || [ "$ran" = "0" ]; then echo "NORUN|$sum"; return; fi
+  # NOT RUN HERE (6 Oct, tests.js notRunHere): the test needs what THIS machine lacks. Absent from the failures, it used to
+  # read PASS; it is this machine's limit, not the release's — the callers below log no verdict for it.
+  why="$(printf '%s' "$out" | python3 -c 'import sys,json
+raw=sys.stdin.read(); i=raw.find("{")
+try: d=json.loads(raw[i:])
+except Exception: d={}
+nr=d.get("notRun") or []
+print(("NOT RUN HERE: " + nr[0].get("name","")[:80] + " — " + str(nr[0].get("reason",""))[:200]) if nr else "")' 2>/dev/null)"
+  if [ -n "$why" ]; then echo "NOTHERE|$why"; return; fi
   if printf '%s' "$out" | grep -q '"ok": true'; then echo "PASS|$sum"; return; fi
   echo "FAIL|$sum :: $(printf '%s' "$out" | python3 -c 'import sys,json
 raw=sys.stdin.read(); i=raw.find("{")
@@ -116,6 +125,11 @@ while IFS= read -r t; do
   # logged NOT-PROVEN. NO-CONTROL stays for a control that RAN and was red (or matched no test): that is the release's.
   if [ "${r%%|*}" = NOSUITE ]; then
     echo "spotcheck: the control did not run to a verdict (above) — the runner, Chrome or the server, not $SHORT. No verdict, nothing logged."
+    exit 2
+  fi
+  # a test this machine cannot run (NOT RUN HERE) proves nothing about the release either way: no verdict, nothing logged
+  if [ "${r%%|*}" = NOTHERE ]; then
+    echo "spotcheck: ${t:0:80} cannot run on this machine (${r#*|}) — not $SHORT's fault. No verdict, nothing logged; check it where it runs."
     exit 2
   fi
 done <<< "$TITLES"
@@ -143,6 +157,8 @@ while IFS= read -r t; do
     PASS/NOSUITE)
       env_ok || { echo "spotcheck: the run without the fix did not run, and Chrome or the server is gone (above) — not $SHORT. No verdict, nothing logged."; exit 2; }
       tag="NORUN"; VERDICT=1;;
+    PASS/NOTHERE)
+      echo "spotcheck: without the fix, ${t:0:80} could not run on this machine (${r#*|}) — no verdict, nothing logged."; exit 2;;
     *)          tag="NO-CONTROL"; VERDICT=1;;
   esac
   case "$tag" in CAUGHT) mark="✅";; DEAD) mark="⚠️";; *) mark="❌";; esac

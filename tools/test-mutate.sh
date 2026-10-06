@@ -47,14 +47,20 @@ if only:
 if mode == 'zero-mutated' and mutated: tests = []
 fails = []
 ran = []
+notrun = []
 for t in tests:
+    # NOT RUN HERE (tests.js notRunHere): the catching test cannot run on this machine once the tree is mutated
+    if mode == 'notrun-mutated' and mutated and t.startswith('t-catches'):
+        notrun.append({"name": t, "item": "", "reason": "needs an AAC audio encoder - this browser has none"})
+        ran.append({"name": t, "ok": False, "pending": False, "notRun": "needs an AAC audio encoder"})
+        continue
     bad = (t.startswith('t-catches') and (mutated or swbroken)) or (mode == 'red' and t.startswith('t-catches'))
     narrow = t == 't-other' and width == '380' and os.path.exists('stub-narrow-red')   # red at phone width only
     ran.append({"name": t, "ok": not (bad or narrow), "pending": False})
     if bad: fails.append('FAIL' + t + (' — sw.js is broken' if swbroken and not mutated else ' — saw the defect'))
     if narrow: fails.append('FAIL' + t + ' — the row clips at 380px')
-n = len(tests); p = n - len(fails)
-out = {"ok": not fails, "summary": "Regression %d/%d %s" % (p, n, '✓' if not fails else '✗'), "failures": fails, "slowest": [], "sceneLeaks": []}
+n = len(tests); p = n - len(fails) - len(notrun)
+out = {"ok": not fails, "summary": "Regression %d/%d %s" % (p, n, '✓' if not fails else '✗'), "failures": fails, "notRun": notrun, "slowest": [], "sceneLeaks": []}
 # a REAL title (tests.js, item 967 7c) that contains "FAILED": it lands in slowest/sceneLeaks of a green run
 unseen = 'NOT-SEEN' in open('js/a.js').read()
 if mode == 'slowfail' or (mode == 'slowfail-mutated' and unseen):
@@ -203,6 +209,14 @@ no such title' js/a.js 'return 1;' 'return 1; /*MUTATED*/' 't-catches' 2>&1)"; r
 [ "$rc" = 9 ] && restored && ok "a named title that ran nothing → exit 9 (the count alone said 1/1 green)" || bad "norun: rc=$rc — $out"
 out="$(tools/mutate.sh --only 't-catches' js/a.js 'return 1;' 'return 1; /*MUTATED*/' 't-catches' 2>&1)"; rc=$?
 [ "$rc" = 0 ] && restored && ok "--only CAUGHT → exit 0" || bad "--only caught: rc=$rc — $out"
+
+echo "── NOT RUN HERE is never SURVIVED and never a pass (6 Oct) ──"
+echo notrun-mutated > stub-mode
+log="$(full js/a.js 'return 1;' 'return 1; /*MUTATED*/' 't-catches')"; rc=$?
+[ "$rc" = 8 ] && ! printf '%s' "$log" | grep -q 'SURVIVED' && printf '%s' "$log" | grep -q 'did NOT RUN HERE' && restored && ok "full mode: the catching test NOT RUN HERE on the mutated tree → exit 8, never SURVIVED" || bad "notrun full: rc=$rc — $log"
+out="$(tools/mutate.sh --only 't-catches' js/a.js 'return 1;' 'return 1; /*MUTATED*/' 't-catches' 2>&1)"; rc=$?
+[ "$rc" = 9 ] && printf '%s' "$out" | grep -q 'NOT RUN HERE' && restored && ok "--only: a named title NOT RUN HERE → exit 9 (a named title did not run), never SURVIVED or CAUGHT" || bad "notrun only: rc=$rc — $out"
+rm -f stub-mode
 mutate_by_hand() { perl -pi -e 's{return 1;}{return 1; /*MUTATED*/}' js/a.js; }   # perl: same on macOS and Linux
 cp js/a.js "$TMP/a.orig"; mutate_by_hand
 printf 'MUTATION IN PROGRESS on js/a.js\npid=999999\nfile=js/a.js\nbak=%s\nsha=%s\nsrv=\nport=\n' "$TMP/a.orig" "$(shasum js/a.js | cut -d' ' -f1)" > .mutation-in-progress

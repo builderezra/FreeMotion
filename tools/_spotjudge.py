@@ -22,6 +22,22 @@ if d.get('error'):
 summary = d.get('summary', '')
 fails = d.get('failures') or []
 import re
+# NOT RUN HERE (6 Oct, tests.js notRunHere): a test this machine cannot run — no AAC encoder, no BarcodeDetector, no touch
+# emulation, no baseline recorded for this OS. It is NEVER a PASS: in the count-only path below it is simply absent from
+# the failures, which read as PASS; in the `ran` path its ok is false, which read as FAIL. Both wrong, so it is asked FIRST:
+# a title that matched a not-run test is NORUN, with the reason, whatever else it matched.
+_nr = d.get('notRun') or []
+def _not_run_for(t):
+    hit = [r for r in _nr if r.get('name') == t] or [r for r in _nr if t in (r.get('name') or '')]
+    return hit[0] if hit else None
+_titles_left = []
+for t in titles:
+    nr = _not_run_for(t)
+    if nr:
+        print('NORUN\t%s\tNOT RUN HERE: %s' % (t, str(nr.get('reason', ''))[:200]))
+    else:
+        _titles_left.append(t)
+titles = _titles_left
 # WHEN THE RUN SAYS WHICH TESTS RAN (tests/_cdp.py --names, 6 Oct), A TITLE IS JUDGED ON WHAT RAN — so a title that
 # matched nothing is NORUN, not "PASS" (below, the count-only path cannot tell those apart). A title is matched the way
 # ?only= matched it: exactly if some test has that name, otherwise as a substring; it FAILS if any test it matched

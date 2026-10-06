@@ -286,7 +286,11 @@ fs = [flat(f) for f in (d.get("failures") or [])]
 counted = [f for f in fs if "version on screen" not in f]
 ok = d.get("ok")
 if counted and ok is False: print("RED\t%d failing" % len(counted))
-elif not counted and (ok is True or fs): print("GREEN\t")
+elif not counted and (ok is True or fs):
+    # NOT RUN HERE (6 Oct): green among the tests that RAN, with these not run on this machine. A verdict needs them
+    # named — a mutated run that is green here may simply not have run the test that catches it.
+    nr = d.get("notRun") or []
+    print(("GREEN-NOTRUN\t%d did NOT RUN HERE: " % len(nr) + "; ".join(flat(r.get("name", ""))[:90] + " — " + flat(r.get("reason", ""))[:90] for r in nr[:6])) if nr else "GREEN\t")
 elif counted: print("ODD\tthe driver says ok, yet names %d failure(s)" % len(counted))
 else: print("ODD\tthe driver says NOT ok, yet names no failing test (" + flat(d.get("summary")) + ")")
 for f in counted: print(f)
@@ -359,6 +363,7 @@ if [ "$MODE" = full ]; then
     no_verdict "$BASE_OUT" "the baseline"
     BASE_V="$(drv_read "$BASE_OUT")"
     case "$(printf '%s\n' "$BASE_V" | head -1)" in
+      GREEN-NOTRUN*) echo "   (green among the tests that ran — $(printf '%s\n' "$BASE_V" | head -1 | cut -f2 | cut -c1-300))" ;;
       GREEN*) ;;
       RED*)
         echo "❌ THE TREE IS ALREADY RED — a mutation check here would prove nothing."
@@ -456,6 +461,11 @@ if [ "$MODE" = full ]; then
   [ "$(ran_total "$OUT")" -gt 0 ] 2>/dev/null || { echo "⚠️  the mutated tree registered NO tests — the mutation may have broken the app outright, which is not a test catching it. Nothing proven either way."; exit 8; }
   V="$(drv_read "$OUT")"
   case "$(printf '%s\n' "$V" | head -1)" in
+    GREEN-NOTRUN*)
+      # never SURVIVED: the test that would catch it may be one this machine cannot run (6 Oct, NOT RUN HERE)
+      echo "⚠️  nothing proven either way — every test that RAN passed, but $(printf '%s\n' "$V" | head -1 | cut -f2 | cut -c1-400)"
+      echo "   One of those may be the test that catches this. Mutation-check it on a machine that runs them all (the Mac)."
+      exit 8 ;;
     GREEN*)
       echo "❌ SURVIVED — the mutation broke the code and every test still passed."
       echo "   The assertion is DEAD: it cannot see the defect it was written for."

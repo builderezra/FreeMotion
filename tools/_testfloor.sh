@@ -50,3 +50,45 @@ suite_timeout() {
   [ "$t" -lt 3600 ] && t=3600
   echo "$t"
 }
+
+# ---- NOT RUN HERE, BY NAME (6 Oct, #1071) ----------------------------------------------------------------------------
+# tests.js's third verdict: a test that needs what this machine lacks (an AAC encoder, a BarcodeDetector, touch emulation,
+# a baseline recorded for this OS) says NOT RUN HERE instead of failing or quietly passing. tests/_cdp.py lists every one
+# under "notRun" in its JSON — always, [] when there are none. This prints them "name<TAB>reason", one a line, and nothing
+# when there are none; a result with NO notRun list at all is not "none" (a driver that could not say), so it prints one
+# "?" line and the caller treats it as a NOT RUN it cannot name.
+notrun_list() {
+  printf '%s' "$1" | python3 -c '
+import json, sys
+raw = sys.stdin.read(); dec = json.JSONDecoder(); d = None
+for i in [0] + [k + 1 for k, c in enumerate(raw) if c == "\n"]:
+    if raw.startswith("{", i):
+        try: o, _ = dec.raw_decode(raw, i)
+        except ValueError: continue
+        if isinstance(o, dict) and "ok" in o: d = o; break
+flat = lambda s: " ".join(str(s).split())
+if d is None or not isinstance(d.get("notRun"), list):
+    print("?\tthe driver result carries no NOT RUN list, so whether every test ran is unknown"); sys.exit()
+for r in d["notRun"]: print(flat(r.get("name", ""))[:200] + "\t" + flat(r.get("reason", ""))[:240])
+'
+}
+
+# What ship.sh says after each pass: the list, by name, and — on the Mac — a refusal. The Mac is the reference machine:
+# every feature, its own baselines (the literals in tests/tests.js), real touch emulation. A NOT RUN there is a test that
+# lost its only machine, which is news, not noise. Elsewhere it is listed and the release goes on, EXCEPT where its diff
+# touches what a not-run test covers (ship.sh's feature gate). $1 = the driver output, $2 = which pass. Returns 1 to refuse.
+notrun_report() {
+  local nr n
+  nr="$(notrun_list "$1")"
+  [ -n "$nr" ] || return 0
+  n="$(printf '%s\n' "$nr" | wc -l | tr -d ' ')"
+  echo "⚠️  NOT RUN HERE on the $2 pass — $n test(s) need what this machine does not have (never counted as a pass):"
+  printf '%s\n' "$nr" | head -40 | awk -F'\t' '{ printf "     · %s — %s\n", substr($1, 1, 110), $2 }'
+  [ "$n" -gt 40 ] && echo "     … and $((n - 40)) more"
+  if [ "$(uname -s)" = Darwin ]; then
+    echo "❌ THE MAC RUNS EVERY TEST — a NOT RUN HERE on it means a test lost the one machine that runs it (a Chrome update"
+    echo "   that dropped a feature, a baseline that went missing). Find out why before shipping; nothing is committed or pushed."
+    return 1
+  fi
+  return 0
+}

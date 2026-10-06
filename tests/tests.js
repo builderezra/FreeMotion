@@ -96,7 +96,23 @@
   var T = [];
   function test(name, opts, fn) {
     if (typeof opts === 'function') { fn = opts; opts = {}; }
-    T.push({ name: name, pending: !!opts.pending, item: opts.item || '', fn: fn , budgetMs: (opts && opts.budgetMs) || 0});
+    T.push({ name: name, pending: !!opts.pending, item: opts.item || '', fn: fn , budgetMs: (opts && opts.budgetMs) || 0, pinned: !!(opts && opts.pinned)});
+  }
+
+  /* NOT RUN HERE — THE RUNNER'S THIRD VERDICT (6 Oct, the move to the Windows laptop, #1071). A test that needs something
+     this machine does not have (an AAC encoder, a BarcodeDetector, real touch emulation, a baseline recorded for this OS)
+     used to have two ways to say so, both wrong: throw, and read RED on a machine where nothing is broken (23 such reds on
+     the first WSL pass); or `return`, and read GREEN without testing anything — the exact hole the seam-skip gate below
+     exists to close. So it says a third thing, by name and with its reason: NOT RUN HERE. It is NEVER a pass — the summary
+     counts it apart ("Regression P/T ✓ · NOT RUN HERE n", P counting passes only), tests/_cdp.py lists every one under
+     "notRun", tools/ship.sh prints them, prove.sh / spotcheck.sh / mutate.sh read one as "did not run" (never as PASS or
+     SURVIVED), and a release whose diff touches what such a test covers refuses unless it RAN here (ship.sh).
+     Decide it from the FEATURE, never from the OS name — except the per-OS baselines (pinned(), below), which are an OS's
+     own pictures by definition. Call it at the TOP of the test, before anything is changed. */
+  function notRunHere(reason) {
+    var e = new Error('NOT RUN HERE: ' + reason);
+    e.fmNotRun = String(reason);
+    throw e;
   }
 
   /* A NAME WITH A DOUBLE QUOTE IN IT TRUNCATES ITS OWN FAILURE REPORT, and this is a note turned into
@@ -59561,7 +59577,8 @@
     if (only) { var onlyList = String(only).split('\n').filter(Boolean); LIST = LIST.filter(function (t) { return onlyList.some(function (o) { return String(t.name).indexOf(o) >= 0; }); }); }
     if (only || upto || after) window.__fmFiltered = 'FILTERED(' + [only && 'only=' + only, after && 'after=' + after, upto && 'upto=' + upto].filter(Boolean).join(' ') + ', ' + LIST.length + ' of ' + T.length + ')';
     for (var i = 0; i < LIST.length; i++) {
-      var t = LIST[i], ok = true, err = null;
+      var t = LIST[i], ok = true, err = null, notRun = '';
+      window.__fmCurPinned = !!t.pinned;   // pinned() refuses in a test that did not declare { pinned: true } (see there)
       /* ⚠️ EVERY TEST STARTS WITH localStorage.setItem RESOLVING TO THE PROTOTYPE (26 Sep). A test that stubs it and then
          "restores" with `localStorage.setItem = realSet` leaves an OWN property on the instance, and an own property shadows
          Storage.prototype — so every later test that stubs the PROTOTYPE (a full phone, a refused write) stubbed nothing.
@@ -59589,7 +59606,11 @@
        * longest honest test (the soak runs take ~12s) and far short of the runner's own limit. */
       var hangTimer = 0, budget = (t.budgetMs > 0) ? t.budgetMs : 45000;   // a long-by-design test declares its own budget
       try { var r = t.fn(); if (r && typeof r.then === 'function') await Promise.race([r, new Promise(function (_, rej) { hangTimer = setTimeout(function () { rej(new Error('timed out after ' + Math.round(budget / 1000) + 's (last step: ' + (window.__fmStep || 'none set') + ') — an await that never settles (a throw inside a callback the test did not await), or a test that has grown past its budget; a long-by-design test declares budgetMs in its options')); }, budget); })]); }
-      catch (e) { ok = false; err = String((e && e.message) || e); }
+      catch (e) {
+        ok = false;
+        // NOT RUN HERE is a verdict of its own (notRunHere, above) — never a pass, and not a failure of the code either
+        if (e && e.fmNotRun) notRun = String(e.fmNotRun); else err = String((e && e.message) || e);
+      }
       finally {
         if (hangTimer) clearTimeout(hangTimer);
         // the eight slowest tests so far, readable by the runner on a timeout — the suite doubled in length
@@ -59599,7 +59620,7 @@
       }
       if (window.__fmDetachedHits && window.__fmDetachedHits.length) {
         var hits = window.__fmDetachedHits.map(function (h) { return h.type + ' on ' + h.el; }).join(', ');
-        if (ok) { ok = false; err = 'dispatched a gesture event on a DETACHED element: ' + hits + ' — a rebuild replaced it; re-acquire it (see attached())'; }
+        if (ok || notRun) { ok = false; notRun = ''; err = 'dispatched a gesture event on a DETACHED element: ' + hits + ' — a rebuild replaced it; re-acquire it (see attached())'; }
         else err += ' [also dispatched on a detached element: ' + hits + ']';
       }
       /* HYGIENE, charged to the test that caused it. A timeline gesture that outlives the test which
@@ -59611,7 +59632,7 @@
       try {
         var drag = (FM.timeline && FM.timeline._dragState) ? FM.timeline._dragState() : null;
         if (drag && drag.any) {
-          if (ok) { ok = false; err = 'left a timeline gesture live after finishing (' + drag.live.join(', ') + ') — leaked state that corrupts whatever runs next'; }
+          if (ok || notRun) { ok = false; notRun = ''; err = 'left a timeline gesture live after finishing (' + drag.live.join(', ') + ') — leaked state that corrupts whatever runs next'; }
           if (FM.timeline._abortGestures) FM.timeline._abortGestures();
         }
         /* …and a pointer a finished test left DOWN is never a finger (queue 781). Many tests press without releasing;
@@ -59630,16 +59651,21 @@
           }
         }
       } catch (e) {}
-      results.push({ name: t.name, item: t.item, pending: t.pending, ok: ok, error: err });
+      results.push({ name: t.name, item: t.item, pending: t.pending, ok: ok, error: err, notRun: notRun });   // a NOT RUN that leaked state above is a FAIL, not a NOT RUN
     }
     var reg = results.filter(function (r) { return !r.pending; });
     if (window.__fmFiltered) results.__filtered = window.__fmFiltered;
     results.__slowest = window.__fmSlow || [];   // the eight slowest tests of this run (ms, name)
     var pend = results.filter(function (r) { return r.pending; });
+    // NOT RUN HERE: counted in the total (so the test floor still sees every registered test), never in the passes, and
+    // green only means "nothing that RAN failed" — run.html prints the count beside the summary and lists every one.
+    var notRunList = results.filter(function (r) { return r.notRun; }).map(function (r) { return { name: r.name, item: r.item || '', reason: r.notRun }; });
     return {
       regressionPass: reg.filter(function (r) { return r.ok; }).length,
       regressionTotal: reg.length,
-      regressionGreen: reg.every(function (r) { return r.ok; }),
+      regressionNotRun: reg.filter(function (r) { return r.notRun; }).length,
+      regressionGreen: reg.every(function (r) { return r.ok || r.notRun; }),
+      notRun: notRunList,
       pendingPass: pend.filter(function (r) { return r.ok; }).length,
       pendingTotal: pend.length,
       results: results

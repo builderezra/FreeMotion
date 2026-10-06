@@ -592,9 +592,22 @@ def main():
             # run.html publishes the full pass/fail list as window.__fmResults on the runner page (not the app frame)
             try:
                 ran = json.loads(cdp.eval("JSON.stringify((window.__fmResults||null) && window.__fmResults.map(function(r){"
-                                          "return {name: r.name, ok: !!r.ok, pending: !!r.pending};}))") or "null")
+                                          "return {name: r.name, ok: !!r.ok, pending: !!r.pending, notRun: r.notRun || ''};}))") or "null")
             except Exception:
                 ran = None
+        # NOT RUN HERE, BY NAME AND REASON, IN EVERY RESULT (6 Oct, #1071). tests.js's third verdict: a test that needs what this
+        # machine lacks (an AAC encoder, a BarcodeDetector, touch emulation, a baseline for this OS). Never a pass, never a FAIL row
+        # (run.html gives it its own), and always present — [] when none — so a reader can tell "none" from "not reported".
+        # ship.sh prints it, _spotjudge.py / spotcheck.sh / mutate.sh read a listed test as "did not run".
+        try:
+            not_run = json.loads(cdp.eval("JSON.stringify((window.__fmNotRun||[]).map(function(r){"
+                                          "return {name: r.name, item: r.item || '', reason: r.reason};}))") or "[]")
+        except Exception:
+            not_run = None
+        if not isinstance(not_run, list):
+            # the runner finished but its NOT RUN list could not be read: that is not "none", so it is not green either
+            return _did_not_run("the runner's NOT RUN HERE list (window.__fmNotRun) could not be read, so whether every test "
+                                "ran is unknown.", track["name"])
         green = "✓" in data["sum"] and "Error" not in data["sum"]
         if a.quiet:
             # --quiet trims the PASSING noise, never the failures. It used to print the summary alone,
@@ -603,8 +616,11 @@ def main():
             print(data["sum"])
             for row in data["fails"]:
                 print("   FAIL: " + row.replace("\n", " ")[:300])
+            for r in not_run:
+                print("   NOT RUN HERE: " + str(r.get("name", ""))[:160] + " — " + str(r.get("reason", "")).replace("FAIL", "fail")[:200])
         else:
-            out = {"ok": green, "summary": data["sum"], "failures": data["fails"], "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
+            out = {"ok": green, "summary": data["sum"], "failures": data["fails"], "notRun": not_run,
+                   "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
             if a.names:
                 out["ran"] = ran          # null when the runner page published no list — a reader must then say so, not guess
             print(json.dumps(out, indent=1, ensure_ascii=False))
