@@ -122864,4 +122864,34 @@
       });
     }, 380);
   });
+
+  /* ═══ TRAY B, THE CHECKER'S FINDINGS (6 Oct, queue 980) ═══════════════════════════════════════════════════════════════
+     Four findings from the measured review of ed0525c7; each test below fails on that commit by what it measures. */
+  test('simple P2.2 · tray B at 1280×720 a double click on Close gap closes that gap only — the second click comes down on the Fix that took its place under the same tool id, and presses nothing (checker finding 1)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 720, async function () {
+      /* C has a 1 s gap before it (B ends at 5) and a 0.5 s overlap after it (D starts at 9.5): its seam tool says Close gap,
+         and once that gap is closed the same button, with the same data-tool, says Fix and means D's overlap */
+      await smP2((W, H) => [smV('E', 12, 2, W, H), smV('D', 9.5, 2.5, W, H), smV('C', 6, 4, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        FM.selectLayer(v.L('C').id); await v.sleep(150);
+        const seam = smTool('seam'), m = smTrayBMeasure();
+        if (!seam || !/Close gap/.test(seam.textContent)) throw new Error('CONTROL: C’s tray has no Close gap (' + m.order + ')');
+        if (m.rows.length !== 2 || m.bad.length) throw new Error('CONTROL: C’s tools are not all on show on two rows: ' + JSON.stringify(m.rows) + ' ' + m.bad.join(' · '));
+        const r = seam.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, s0 = v.steps();
+        const click = (el, n) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: x, clientY: y }));
+        click(seam, 1); await v.idle(); await v.sleep(120);                  // the first click of a double click
+        if (v.steps() !== s0 + 1 || Math.abs(v.L('C').start - 5) > 1e-6) throw new Error('CONTROL: the first click did not close C’s gap in one step (steps ' + (v.steps() - s0) + ', C at ' + v.L('C').start + ')');
+        const hit = document.elementFromPoint(x, y), under = hit && hit.closest && hit.closest('.sm-tool');
+        if (!under || under.dataset.tool !== 'seam' || !/Fix/.test(under.textContent)) throw new Error('CONTROL: the tool under the pointer is not the Fix that took Close gap’s place (' + (under ? under.dataset.tool + ' “' + under.textContent + '”' : hit && hit.getAttribute('class')) + '), so this measures nothing');
+        const s1 = v.steps(), d1 = v.L('D').start, doc1 = v.doc();
+        click(under, 2); await v.idle(); await v.sleep(60);                  // the second click, 90 ms later on his mouse
+        if (v.steps() !== s1 || v.doc() !== doc1) throw new Error('the second click of a double click on Close gap pressed Fix, which was never on screen when he clicked: ' + (v.steps() - s0) + ' undo steps, D ' + d1 + ' → ' + v.L('D').start);
+        /* POSITIVE CONTROL: a click of its own on that Fix still presses it */
+        const fix = smTool('seam'), q = fix.getBoundingClientRect();
+        fix.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: 1, clientX: q.left + 4, clientY: q.top + 4 }));
+        await v.idle(); await v.sleep(60);
+        if (v.steps() !== s1 + 1) throw new Error('a single click of its own on Fix did nothing (steps ' + (v.steps() - s1) + ')');
+      });
+    }, 1280);
+  });
 })();

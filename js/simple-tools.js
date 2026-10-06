@@ -122,9 +122,13 @@ window.FM = window.FM || {};
       /* THE SECOND CLICK OF A DOUBLE CLICK NEVER PRESSES A TOOL THAT TOOK THE FIRST ONE'S PLACE (his pick B). On PC the tray
          changes shape under a press — More opens a panel and the tray goes to one row, Done gives the two rows back — and the
          second click came down on whatever had moved under the pointer: Move later where More was, Crop where Done was. The
-         same tool pressed twice (Move later, +1 frame) still counts twice. A pointer's click count only (keyboard: 0). */
-      if (e.detail >= 2 && lastPress && lastPress.fill !== fills && lastPress.id !== t.id) return;
-      if (e.detail >= 1) lastPress = { id: t.id, fill: fills };
+         same tool pressed twice (Move later, +1 frame) still counts twice. A pointer's click count only (keyboard: 0).
+         "Same tool" is what the button DOES (t.key), not only its data-tool: the seam tool keeps the id 'seam' while it turns
+         from Close gap (the gap before the clip) into Fix (the overlap after it), and a double click on Close gap pressed that
+         Fix too — every seam closed, with Fix never on screen when he clicked (checker finding 1). */
+      const key = t.key || t.id;
+      if (e.detail >= 2 && lastPress && lastPress.fill !== fills && lastPress.key !== key) return;
+      if (e.detail >= 1) lastPress = { key: key, fill: fills };
       if (b.getAttribute('aria-disabled') === 'true') { if (t.why && FM.spine) FM.spine.say(t.why); return; }
       closeMenu(); t.run(b);
     });
@@ -189,7 +193,8 @@ window.FM = window.FM || {};
         crop
       ];
       /* §8.2: a clip next to a gap or an overlap offers Close gap / Fix too (the seam chip's command) */
-      const seamTool = (e, s) => ({ id: 'seam', label: s.kind === 'gap' ? (w.closeGap || 'Close gap') : (w.fix || 'Fix'), icon: 'check', run: () => S.cmd.closeSeam(e.id) });
+      /* its key names the seam it closes, so a double click never runs on into the next seam (the guard in tool()) */
+      const seamTool = (e, s) => ({ id: 'seam', key: 'seam:' + e.id + ':' + s.kind, label: s.kind === 'gap' ? (w.closeGap || 'Close gap') : (w.fix || 'Fix'), icon: 'check', run: () => S.cmd.closeSeam(e.id) });
       if (sb && (sb.kind === 'gap' || sb.kind === 'overlap') && !sb.covered) out.push(seamTool(R.main[i], sb));
       else if (sa && (sa.kind === 'gap' || sa.kind === 'overlap') && !sa.covered) out.push(seamTool(na, sa));
       out.push(more, del);
