@@ -23,7 +23,26 @@ export PYTHONDONTWRITEBYTECODE=1 PYTHONUTF8=1
 fm_os() { uname -s; }
 
 # fm_is_wsl — true when this Linux is WSL (its load and memory pressure are partly on the Windows host, invisible from here).
-fm_is_wsl() { grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; }
+# (_FM_OSRELEASE is a test seam: tools/test-port.sh points it at a fake osrelease file to be "WSL" on any machine.)
+fm_is_wsl() { [ "$(uname -s)" = Linux ] && grep -qi microsoft "${_FM_OSRELEASE:-/proc/sys/kernel/osrelease}" 2>/dev/null; }
+
+# fm_mem_available_mb — memory the kernel says a new process could have (Linux MemAvailable), in MB; returns 1 elsewhere.
+fm_mem_available_mb() {
+  [ -r "${_FM_MEMINFO:-/proc/meminfo}" ] || { echo "fm_mem_available_mb: no /proc/meminfo on this platform" >&2; return 1; }
+  awk '/^MemAvailable:/{ printf "%d\n", $2 / 1024; f = 1 } END { exit !f }' "${_FM_MEMINFO:-/proc/meminfo}"
+}
+
+# fm_load_blind_note — one line when a load gate PASSED on a machine whose load it cannot fully see (6 Oct, the PM's review).
+# Under WSL the 1-minute load is the VM's: Defender scanning the repo, the Search indexer and Vmmem short of memory are on
+# the Windows side and never appear in it, so a pass there is a pass on what could be measured — said, not implied. Says
+# what the VM has free, which a floor could later be set from (not set here: 1.6x the cores is itself unmeasured on WSL).
+fm_load_blind_note() {
+  if fm_is_wsl; then
+    echo "⚠️  load gate passed on the WSL VM's own load only — Windows-side load (Defender, the indexer, Vmmem) is not measured;" \
+         "the VM has $(fm_mem_available_mb 2>/dev/null || echo '?') MB available."
+  fi
+  return 0
+}
 
 # fm_machine_noun — what to call this machine in a message: Mac, WSL machine or Linux machine.
 fm_machine_noun() {

@@ -230,6 +230,9 @@ if [ -z "${FM_SHIP_IGNORE_LOAD:-}" ]; then
     _WHY="machine overloaded (load ${_LOAD1} on ${_NCPU} cores) — not a code fault"
     exit 1
   fi
+  # …and when it PASSES on WSL, say what it could not see (6 Oct, the PM's review): the load above is the VM's, and the
+  # usual WSL stalls (Defender, the Search indexer, Vmmem short of memory) are on the Windows side. One line, never silent.
+  fm_load_blind_note
 fi
 
 # ⚠️ EVERY CHANGED SCRIPT MUST PARSE, AND THIS IS SAID IN ONE SECOND RATHER than after the proof step (25 Sep, v16.97).

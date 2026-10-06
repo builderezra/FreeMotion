@@ -211,6 +211,16 @@ if [ "$rc" = 0 ] && [ -f "$TMP/argv.txt" ]; then
   grep -q '^--user-data-dir=' "$TMP/argv.txt" && ok "…on its own profile (removed after)" || bad "_shot.sh has no profile of its own"
 else bad "_shot.sh did not run under the fake Chrome: rc=$rc $out"; fi
 
+echo "── the load gate says when it passed blind: on WSL it sees the VM's load only (review minor) ──"
+printf '5.15.153.1-microsoft-standard-WSL2\n' > "$TMP/osrelease-wsl"; printf '6.8.0-45-generic\n' > "$TMP/osrelease-linux"
+printf 'MemTotal:       16000000 kB\nMemAvailable:    5242880 kB\n' > "$TMP/meminfo"
+note() { PATH="$(shim_os "$1"):$PATH" _FM_OSRELEASE="$2" _FM_MEMINFO="$TMP/meminfo" bash -c '. tools/_platform.sh; fm_load_blind_note' 2>&1; }
+v="$(note Linux "$TMP/osrelease-wsl")"
+case "$v" in *"WSL VM's own load only"*"5120 MB available"*) ok "WSL: a pass says it saw the VM only, and what the VM has free";; *) bad "WSL pass note: [$v]";; esac
+[ -z "$(note Linux "$TMP/osrelease-linux")" ] && ok "plain Linux: nothing to add" || bad "plain Linux printed a WSL note"
+[ -z "$(note Darwin "$TMP/osrelease-wsl")" ] && ok "the Mac: nothing to add (its load is the whole machine's)" || bad "the Mac printed a WSL note"
+awk '/FM_SHIP_IGNORE_LOAD:-/{f=1} f && /fm_load_blind_note/{found=1} f && /^fi$/{exit} END{exit !found}' tools/ship.sh && ok "ship.sh says it on the load gate's pass path" || bad "ship.sh's load gate does not call fm_load_blind_note"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"
