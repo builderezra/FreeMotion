@@ -266,18 +266,47 @@ ran_total() { printf '%s' "$1" | grep -o '"summary": "Regression [0-9]*/[0-9]*' 
 # nothing. That happened three times in one session on queue 366 before anyone checked.
 #
 # So the tree must be PROVEN GREEN before the mutation is applied. It is cached by a hash of the
-# sources, so the cost is one extra suite run per EDIT, not per mutation — and a session that checks
+# tree (TREE_HASH, below), so the cost is one extra suite run per EDIT, not per mutation — and a session that checks
 # three mutations against one change pays it once.
-# theme-glass.css joined this list on 20 Aug: it is a real stylesheet the app ships, and leaving it out
-# meant an edit there did NOT invalidate the cached green baseline — so a mutation could be run against a
-# tree whose last proven-green state predated the change being tested. Exactly the hole this gate exists
-# to close, one file wide.
-SRC_HASH() { cat index.html styles.css theme-glass.css js/*.js tests/tests.js 2>/dev/null | shasum | cut -d' ' -f1; }
+# WHAT "THIS EXACT TREE" MEANS, FOR BOTH CACHES (6 Oct, the B4 check). The key used to be a LIST of five names —
+# index.html, styles.css, theme-glass.css, js/*.js, tests/tests.js (theme-glass.css was added on 20 Aug, the first time
+# the list was found one file short). The suite also loads sw.js, manifest.json, vendor/, tests/run.html,
+# tests/collab-agent.js, tests/_fixtures/, splash.mp4, tools/rollback.sh and POLISH-LOG.md. So: a green baseline was
+# cached, sw.js was then broken, a mutation was checked — "proven green on this exact tree already (cached)" — and the
+# mutated run's red, which was sw.js's and not the mutation's, read ✅ CAUGHT. A list drifts; the tree does not.
+# Now every file git sees counts (tracked, and untracked-but-not-ignored), by path and content. Three kinds are left out
+# because no test loads them and they change all day without touching the app — measured 6 Oct, every mention of them
+# in tests/ is a comment: the docs (*.md) EXCEPT POLISH-LOG.md, which the version-label test fetches; tools/design/,
+# which the logging chat writes; and tools/.<dotfile> bookkeeping (.suite-seconds, .test-floor, the logs), which ships
+# and this script write. The mutated file always counts, whatever those rules say. Counting a file too many costs one
+# baseline; leaving out a file a test reads is this bug again — so the exceptions are few, and each was looked for.
+TREE_HASH() {   # $1 = the file being mutated (always counted)
+  python3 - "$1" <<'PYH'
+import hashlib, subprocess, sys
+mut = sys.argv[1].encode()
+listed = subprocess.run(['git', 'ls-files', '-co', '--exclude-standard', '-z'], capture_output=True).stdout
+def left_out(p):
+    if p == mut: return False
+    if p.startswith(b'.claude/') or p.startswith(b'.mutation-in-progress'): return True   # this script's own run
+    if p.endswith(b'.md') and p != b'POLISH-LOG.md': return True
+    if p.startswith(b'tools/design/'): return True
+    if p.startswith(b'tools/.') and b'/' not in p[len(b'tools/'):]: return True
+    return False
+h = hashlib.sha1()
+for p in sorted(set(x for x in listed.split(b'\0') if x)):
+    if left_out(p): continue
+    try:
+        with open(p, 'rb') as f: d = hashlib.sha1(f.read()).hexdigest().encode()
+    except OSError: d = b'(missing)'
+    h.update(p + b'\0' + d + b'\n')
+print(h.hexdigest())
+PYH
+}
 if [ "$MODE" = full ]; then
   # THE CAP GROWS WITH THE SUITE, the same rule as ship.sh: 1.6x the last green pass, never below an hour.
   _last=$(cat tools/.suite-seconds 2>/dev/null | tr -dc '0-9'); _last=${_last:-0}
   CAP=$(( _last * 16 / 10 )); [ "$CAP" -lt 3600 ] && CAP=3600
-  BASE_HASH="$(SRC_HASH)"
+  BASE_HASH="$(TREE_HASH "$FILE")"
   GREEN_FILE="tools/.mutate-green"
   if [ "$(cat "$GREEN_FILE" 2>/dev/null)" != "$BASE_HASH" ]; then
     echo "→ baseline: proving the suite is green BEFORE mutating (once per edit; cached after; cap ${CAP}s)…"
@@ -295,17 +324,23 @@ if [ "$MODE" = full ]; then
     # caching an empty run as "proven green" would bless every mutation checked against it afterwards.
     . "$TOOLS/_testfloor.sh"
     test_floor_check "$BASE_OUT" || { echo "   Fix that before mutation-checking anything."; exit 6; }
-    printf '%s' "$BASE_HASH" > "$GREEN_FILE"
-    echo "   baseline green ✅ (cached — further mutations on this tree skip it)"
+    # cached only if the tree is still the one the baseline started on — an edit made during a 45-minute run was
+    # seen by part of it at most, so "green" cannot be vouched for either version
+    if [ "$(TREE_HASH "$FILE")" = "$BASE_HASH" ]; then
+      printf '%s' "$BASE_HASH" > "$GREEN_FILE"
+      echo "   baseline green ✅ (cached — further mutations on this tree skip it)"
+    else
+      echo "   baseline green ✅ — NOT cached: the tree changed while it ran"
+    fi
   fi
 else
   # --only: the NAMED tests must each PASS on the unmutated tree, every one of them must actually RUN, and the cache is
-  # keyed on the sources AND the titles (and width) — never tools/.mutate-green, which means "the WHOLE suite was green".
+  # keyed on the tree (TREE_HASH) AND the titles (and width) — never tools/.mutate-green, which means "the WHOLE suite was green".
   # No test floor here: a slice is meant to be small.
   printf '%s\n' "$TITLES" | sed '/^[[:space:]]*$/d' > "$TF"
   Q="$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(open(sys.argv[1]).read().rstrip("\n"), safe=""))' "$TF")"
   SLICE_TIMEOUT="${MUTATE_SLICE_TIMEOUT:-600}"
-  KEY="$( { SRC_HASH; printf '%s\n%s\n' "$WIDTH" "$TITLES"; } | shasum | cut -d' ' -f1)"
+  KEY="$( { TREE_HASH "$FILE"; printf '%s\n%s\n' "$WIDTH" "$TITLES"; } | shasum | cut -d' ' -f1)"
   ONLY_CACHE="$(git rev-parse --git-path fm-mutate-only-green 2>/dev/null)"
   if [ -n "$ONLY_CACHE" ] && grep -qxF "$KEY" "$ONLY_CACHE" 2>/dev/null; then
     echo "→ baseline: these titles were proven green on this exact tree already (cached)"
@@ -327,8 +362,9 @@ else
       echo "   Fix these first, then mutation-check."
       exit 5
     fi
-    [ -n "$ONLY_CACHE" ] && printf '%s\n' "$KEY" >> "$ONLY_CACHE"
-    echo "   baseline green ✅ ($(printf '%s\n' "$V" | grep -c '^PASS') named title(s) ran and passed)"
+    _was=""; [ "$( { TREE_HASH "$FILE"; printf '%s\n%s\n' "$WIDTH" "$TITLES"; } | shasum | cut -d' ' -f1)" = "$KEY" ] || _was="; NOT cached: the tree changed while it ran"
+    [ -n "$ONLY_CACHE" ] && [ -z "$_was" ] && printf '%s\n' "$KEY" >> "$ONLY_CACHE"
+    echo "   baseline green ✅ ($(printf '%s\n' "$V" | grep -c '^PASS') named title(s) ran and passed$_was)"
   fi
 fi
 # --------------------------------------------------------------------------------------------------

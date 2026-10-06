@@ -174,8 +174,11 @@ Third one, added 19 Aug after it cost three false proofs in a row on queue 366. 
 meaningless unless the suite was green before it**: if the test is already failing for its own reason —
 an anchored regex against text that carries a prefix, a container selector that matches nothing — the run
 reports `✅ CAUGHT` and proves exactly nothing. It happened three times before anyone thought to check.
-The gate proves the tree green BEFORE applying the mutation, and caches that by a hash of the sources, so
-it costs one extra suite run per EDIT rather than per mutation.
+The gate proves the tree green BEFORE applying the mutation, and caches that by a hash of the tree, so
+it costs one extra suite run per EDIT rather than per mutation. "The tree" is every file git sees except the docs
+(POLISH-LOG.md still counts), tools/design/ and tools/.<dotfile> bookkeeping — since 6 Oct; it was a list of five names,
+and a cache that did not see sw.js change read a red that was sw.js's as `✅ CAUGHT`. A baseline the tree changed
+under is not cached at all.
 
 ```bash
 tools/mutate.sh   # …and now REFUSES when the mutation changed nothing at all
@@ -205,7 +208,7 @@ itself detached (exit 11, never 0); and every run serves the tree that holds the
 **`--only`** runs just the named tests through prove.sh's slice machinery (`tests/_cdp.py --names --timeout 600`,
 judged per title by `tools/_spotjudge.py`): every named title must PASS on the unmutated tree first (red → exit 5),
 CAUGHT only if a named title FAILS, SURVIVED only if they all RAN and passed, and a title that ran nothing refuses
-(exit 9) — the count alone cannot tell "did not run" from "passed". Its green cache is keyed on the sources plus the
+(exit 9) — the count alone cannot tell "did not run" from "passed". Its green cache is keyed on the tree plus the
 titles and width, never `tools/.mutate-green`; no test floor; the 4th argument is required and must be one of the
 named tests. `tools/test-mutate.sh` proves the edge cases against a stub driver in seconds, and ship.sh runs it
 whenever mutate.sh or its judge changes.

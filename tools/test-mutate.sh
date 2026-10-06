@@ -32,6 +32,9 @@ url, timeout, names = opt('--url', ''), opt('--timeout', '?'), '--names' in args
 open('stub-calls', 'a').write('timeout=%s url=%s\n' % (timeout, url))
 mode = open('stub-mode').read().strip() if os.path.exists('stub-mode') else 'normal'
 mutated = 'MUTATED' in open('js/a.js').read()
+# a file the suite loads that is NOT one of the five the old cache key hashed (the real tests.js fetches sw.js)
+swbroken = os.path.exists('sw.js') and 'BROKEN' in open('sw.js').read()
+if mode == 'edit-during' and not mutated: open('late.js', 'a').write('// written while the baseline ran\n')
 if mode == 'timeout' or (mode == 'timeout-mutated' and mutated):
     print(json.dumps({"ok": False, "error": "suite did not finish within %ss" % timeout, "lastTest": "t-catches"})); sys.exit(2)
 if mode == 'error':
@@ -45,9 +48,9 @@ if mode == 'zero-mutated' and mutated: tests = []
 fails = []
 ran = []
 for t in tests:
-    bad = (t.startswith('t-catches') and mutated) or (mode == 'red' and t.startswith('t-catches'))
+    bad = (t.startswith('t-catches') and (mutated or swbroken)) or (mode == 'red' and t.startswith('t-catches'))
     ran.append({"name": t, "ok": not bad, "pending": False})
-    if bad: fails.append('FAIL' + t + ' — saw the defect')
+    if bad: fails.append('FAIL' + t + (' — sw.js is broken' if swbroken and not mutated else ' — saw the defect'))
 n = len(tests); p = n - len(fails)
 out = {"ok": not fails, "summary": "Regression %d/%d %s" % (p, n, '✓' if not fails else '✗'), "failures": fails, "slowest": [], "sceneLeaks": []}
 if names: out["ran"] = ran
@@ -56,6 +59,9 @@ STUB
 echo '<html><span class="ver">v1.2</span></html>' > "$S/index.html"
 echo 'run' > "$S/tests/run.html"; echo '// tests' > "$S/tests/tests.js"
 printf 'function a() {\n  return 1;\n}\nvar b = 2;\n' > "$S/js/a.js"
+echo '// service worker' > "$S/sw.js"
+# what the real repo ignores (.claude/ holds mutate.sh's own log and backups), and the stub's bookkeeping
+printf '.claude/\n.mutation-in-progress\n.mutation-in-progress.tmp\ntools/.mutate-green\nstub-*\n' > "$S/.gitignore"
 echo 10 > "$S/tools/.suite-seconds"; echo 1 > "$S/tools/.test-floor"
 cd "$S" || exit 1
 git init -q . && git config user.email t@t && git config user.name t && git add -A && git commit -q -m base
@@ -107,6 +113,35 @@ out="$(tools/mutate.sh js/a.js 'return 9;' 'x' 2>&1)"; rc=$?; [ "$rc" = 3 ] && o
 printf 'var c = 1;\nvar c = 1;\n' >> js/a.js; git commit -qam dup; ORIG="$(shasum js/a.js)"
 out="$(tools/mutate.sh js/a.js 'var c = 1;' 'x' 2>&1)"; rc=$?; [ "$rc" = 4 ] && ok "unique: an ambiguous old string → exit 4" || bad "ambiguous: rc=$rc — $out"
 out="$(tools/mutate.sh js/a.js 'return 1;' 'return 1;' 2>&1)"; rc=$?; [ "$rc" = 7 ] && ok "changed-something: old == new → exit 7" || bad "no change: rc=$rc — $out"
+
+echo "── a green-baseline cache vouches only for the tree it saw — every file the suite can load, not a list ──"
+# The caches hashed five names (index.html, styles.css, theme-glass.css, js/*.js, tests/tests.js). Break a file the suite
+# loads that is not among them and the cached "green" outlived it: the mutated run's red was sw.js's, and read CAUGHT.
+echo normal > stub-mode
+tools/mutate.sh --only 't-catches' js/a.js 'var b = 2;' 'var b = 3; /*NOT-SEEN*/' 't-catches' >/dev/null 2>&1   # proves green, caches
+out="$(tools/mutate.sh --only 't-catches' js/a.js 'var b = 2;' 'var b = 4; /*NOT-SEEN*/' 't-catches' 2>&1)"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$out" | grep -q '(cached)' && restored \
+  && ok "control: nothing changed → the --only baseline comes from its cache, and an unseen mutation SURVIVES (exit 1)" || bad "--only cache control: rc=$rc — $out"
+echo '// BROKEN' >> sw.js
+out="$(tools/mutate.sh --only 't-catches' js/a.js 'var b = 2;' 'var b = 5; /*NOT-SEEN*/' 't-catches' 2>&1)"; rc=$?
+[ "$rc" = 5 ] && printf '%s' "$out" | grep -q 'ALREADY RED' && restored \
+  && ok "--only: sw.js broken after the cache was written → the baseline runs again: ALREADY RED (exit 5), never CAUGHT" || bad "--only stale cache: rc=$rc — $out"
+git checkout -q -- sw.js; rm -f tools/.mutate-green
+full js/a.js 'var b = 2;' 'var b = 3; /*NOT-SEEN*/' >/dev/null 2>&1   # proves green, caches
+log="$(full js/a.js 'var b = 2;' 'var b = 4; /*NOT-SEEN*/')"; rc=$?
+[ "$rc" = 1 ] && ! printf '%s' "$log" | grep -q 'proving the suite is green' && restored \
+  && ok "control: full mode, nothing changed → no second baseline, SURVIVED (exit 1)" || bad "full cache control: rc=$rc — $log"
+echo '// BROKEN' >> sw.js
+log="$(full js/a.js 'var b = 2;' 'var b = 5; /*NOT-SEEN*/')"; rc=$?
+[ "$rc" = 5 ] && printf '%s' "$log" | grep -q 'ALREADY RED' && restored \
+  && ok "full mode: the same → ALREADY RED (exit 5), never CAUGHT" || bad "full stale cache: rc=$rc — $log"
+git checkout -q -- sw.js
+echo edit-during > stub-mode      # someone keeps working while the baseline runs: the green it proved was a mix
+out="$(tools/mutate.sh --only 't-catches the' js/a.js 'var b = 2;' 'var b = 6; /*NOT-SEEN*/' 't-catches' 2>&1)"; rc=$?   # a title set not cached yet
+printf '%s' "$out" | grep -q 'NOT cached: the tree changed while it ran' && ok "--only: a tree edited during the baseline is not cached" || bad "--only edit during baseline: rc=$rc — $out"
+rm -f tools/.mutate-green; log="$(full js/a.js 'var b = 2;' 'var b = 6; /*NOT-SEEN*/')"; rc=$?
+printf '%s' "$log" | grep -q 'NOT cached: the tree changed while it ran' && [ ! -f tools/.mutate-green ] && ok "full mode: the same, and tools/.mutate-green is not written" || bad "full edit during baseline: rc=$rc — $log"
+echo normal > stub-mode; rm -f late.js
 
 echo "── it refuses beside a ship, a spot-check or a live mutation ──"
 printf 'pid=%s phase=desktop since=1\n' "$$" > .ship-in-progress
