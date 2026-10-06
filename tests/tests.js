@@ -119811,7 +119811,11 @@
        (tools/_fu_compare.py judge). */
     ['margin', 'toast', 'floor', 'overlay', 'icon', 'hover', 'sheetmotion', 'cropbar', 'halfres', 'shift34', 'key', 'addtab', 'touch',
      'group', 'uiroute', 'speedtoast', 'colour', 'export', 'bounce', 'manifest', 'sanitiser', 'endnudge', 'matte', 'follow', 'seam',
-     'zoomstep'].forEach(function (n) {
+     'zoomstep',
+     /* the second review's sixteen (6 Oct), its clip hold, and one plant in every run tools/full-unchanged.sh FU_RUNS adds */
+     'w440', 'h720', 'friendtoast', 'savefield', 'indexfield', 'reduce', 'darkhome', 'toastpos', 'marktoast', 'cogflight', 'cathover',
+     'ctxhover', 'scrubrate', 'audiobr', 'brightdef', 'keyf2', 'hold500', 'tiny320', 'sideways', 'band1226', 'widepc', 'detail',
+     'pixels'].forEach(function (n) {
       if (names.indexOf(n) < 0) throw new Error('the self-test lost its "' + n + '" plant — the lock can no longer prove it sees that kind of change');
     });
     const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
