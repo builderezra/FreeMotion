@@ -40,7 +40,7 @@ I list them because "must not change" is his rule and these are the exceptions, 
 - **`FM.history.commit(meta)`:** no caller outside Simple passes an argument, and nothing passes `commit` by reference, so Full's `meta` is always `null`. `metas` stays index-for-index with `stack` at every mutation (`js/history.js:275`, `:309-317`).
 - **CSS is additive and Simple-scoped:** 309 added lines, none removed; every selector hangs on `sm-`, `ed-`, `cv-ed`, `#sm` or `body.ed-simple`.
 - **`layerAABB` gained a fourth argument** (`js/compositor.js:15314`); every caller passes three, so nothing changes.
-- **`FM.addMediaLayer` returns the layer now** (`js/app.js:3151`); every other caller ignores it.
+- **`FM.addMediaLayer` returns the layer now** (`js/app.js:3149`); every other caller ignores it.
 
 ## 380 px (measured, headless Chromium with device emulation, not a phone)
 
@@ -56,7 +56,7 @@ Simple mode, 3 clips and a title, one clip selected, on `980-p22-trayb2`:
 | 430x932 | 430 | 199x354 | 108 | none | no |
 
 - **No horizontal overflow and no tap target under 44 px** (smallest tool 54x50) at any of the six sizes.
-- **On a phone 667 px tall or less the preview picture is 171 px high** (`js/mobile.js:278-279` says the stage clamp bottoms out at a 180 px floor below 694 px). It works; it is small. Reported as a fact, not a defect.
+- **On a phone 667 px tall or less the preview picture is 171 px high** (`js/mobile.js:280` says the stage clamp bottoms out at a 180 px floor below 694 px). It works; it is small. Reported as a fact, not a defect.
 - **The seven-tool tray is about 392 px wide**, so at 390 and below it scrolls sideways (the pin stays on screen). A person with a first-time phone may not see the last tool; that is a layout fact, I did not test discovery.
 
 ## Full against main (measured)
@@ -70,7 +70,7 @@ Both builds served from separate folders, same scene (three video layers and a t
 | 390x844 | 51 / 51 | none |
 | 1280x800 | 56 / 56 | none |
 
-Two runs each. **One false alarm worth knowing:** `#add-grid` is 301.6 px high on some loads and 282 px on others, **on main as well** (main gave 282 in 1 of 7 loads), so it is a pre-existing race, not Simple's. The comparison only counts a difference that appears in both runs.
+Two runs each. **One false alarm worth knowing:** `#add-grid` is 301.6 px high on some loads and 282 px on others, **on main as well** (main gave 282 in 1 of the 8 loads I took), so it is a pre-existing race, not Simple's. The comparison only counts a difference that appears in both runs.
 
 **What this does not cover:** one scene, Home open, one selection. It is a sanity check, not a substitute for `tools/full-unchanged.sh`.
 
