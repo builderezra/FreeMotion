@@ -13,6 +13,10 @@ HOW TO WORK THIS LIST
 - Reply with ONE line per finished item.
 
 THE LIST (highest value first)
+- QF1  DO NEXT, before any new item: apply tools/design/helper/fixes/T45-fixes.md to tutorials 11-20 (two of them can lose a user's work).
+- QF2  Then correct plans P1 and P2 from fixes/P12-fixes.md (some steps are already shipped, and some rest on code that doesn't exist).
+- QF3  Then add the corrections in fixes/H156-notes.md to the top of hunts H1, H5 and H6.
+- QUALITY RULE from now on: before you push anything, re-read each claim as a skeptic and trace it in code. A shorter, correct document beats a long one with wrong steps.
 - T3F  URGENT, DO NEXT (before H2): apply tools/design/helper/fixes/T3-fixes.md on this branch to tutorials 07-10 on tutorials-drafts. 10's steps currently delete the ORIGINAL project.
 - H1  #1085 suite memory hunt. Already assigned: tools/design/hunts/1085-suite-memory.md on branch hunt/1085-suite-memory.
 - T3  Tutorials 07–10 (effects, speed, export options, projects). Already assigned: tutorials-drafts.
