@@ -42,7 +42,7 @@ As in P1, most of these wait on him, so each plan says what to build so the wait
 **His clauses (verbatim).** "the button you press … doesn't smoothly glide to the left with like a nice animation and then the project comes in smoothly from the right" (24 Aug). "the animation for opening a project still isn't smooth, work hard on making this look good" (27 Aug). Confirmed still bad on his device 1 Sep.
 
 **What exists (verified).**
-- The push has two phases (queue 128): the card glides out at once, the editor slides in after (`PUSH_IN_MS = 520`, `js/home.js:179`). Phone only: `pushAllowed` is `max-width: 700px` (`js/home.js:~486`).
+- The push has two phases (queue 128): the card glides out at once, the editor slides in after (`PUSH_IN_MS = 520`, `js/home.js:179`). Phone only: `pushAllowed` is `max-width: 700px` (`js/home.js:489`).
 - The instrument is built. Every push records its frames from the glide until 400 ms after Home is gone and writes `fm.lastOpenReport` (`js/home.js:168`), shown in Settings under "Your last project open" with Copy (`js/settings.js:936`, `:951`). Test `tests/tests.js:75993`.
 - Measured on the Mac: 56 frames over 900 ms, worst gap 17.9 ms, 0 of 56 over 33 ms, and the backdrop-blur hypothesis refuted with 16 cards (entry text).
 
@@ -89,14 +89,14 @@ Drawn at 380 px with the three card states, sent as a sheet.
 
 **State (verified).** The watcher exists (`js/audio-health.js`, 276 lines; tests `tests/tests.js:66547`, `:80378`). Two audio faults were fixed on 25 Sep (#934). The entry's hypothesis that the picture's cost caused it was measured and refuted.
 
-**A concrete suspect found by reading (this one is new).** While playing, `tick()` calls `FM.audioFxLive.applyAt(FM.time)` on **every animation frame** (`js/app.js:2478`). That reaches each live effect chain's `applyAt` (`js/audio-fx.js:1619-1625`), which loops over **every parameter of every effect** and calls `b.u.set(key, valueAt(...), when, sceneTime)`. `set` is `AudioParam.setValueAtTime(v, when)` with **no check that the value changed** (`js/audio-fx.js:243-247`). So a static, un-animated chain of 3 effects with 4 params each appends about 12 timeline events per frame, around 720 a second, to Web Audio's per-parameter event lists for as long as the project plays. The pitch shifter's `reshape` also does `cancelScheduledValues` plus ramps (`js/audio-fx.js:~1415-1421`). **Guess:** on iOS Safari a growing event list and the main-thread cost of 60 calls a second per param could produce exactly "fine without effects, glitchy with them". I cannot say how Safari prunes that list.
+**A concrete suspect found by reading (this one is new).** While playing, `tick()` calls `FM.audioFxLive.applyAt(FM.time)` on **every animation frame** (`js/app.js:2478`). That reaches each live effect chain's `applyAt` (`js/audio-fx.js:1619-1625`), which loops over **every parameter of every effect** and calls `b.u.set(key, valueAt(...), when, sceneTime)`. `set` is `AudioParam.setValueAtTime(v, when)` with **no check that the value changed** (`js/audio-fx.js:243-247`). So a static, un-animated chain of 3 effects with 4 params each appends about 12 timeline events per frame, around 720 a second, to Web Audio's per-parameter event lists for as long as the project plays. The pitch shifter's `reshape` also does `cancelScheduledValues` plus ramps (`js/audio-fx.js:1419`). **Guess:** on iOS Safari a growing event list and the main-thread cost of 60 calls a second per param could produce exactly "fine without effects, glitchy with them". I cannot say how Safari prunes that list.
 
 **Plan.**
 1. In `applyAt`, skip `set` when the parameter is not keyframed and its value equals the last one written to that parameter (store `b._last[key]`). Keyframed and custom setters are untouched. Result: static chains write once, then nothing.
 2. Make it provable on the phone without a paste: add the number of `setValueAtTime` calls per second to the "Your last playback" report (`js/audio-health.js`), so one report says whether it was the cause.
 3. Keep the ask to him as is (one report, effects on).
 
-**Risks.** A value that was changed by something other than `applyAt` (a ramp, a glide) must invalidate the cache; the code already tracks `glided` for the pitch shifter (`js/audio-fx.js:~1405`). Export is separate (`schedule()`), so renders are untouched.
+**Risks.** A value that was changed by something other than `applyAt` (a ramp, a glide) must invalidate the cache; the code already tracks `glided` for the pitch shifter (`js/audio-fx.js:1411`). Export is separate (`schedule()`), so renders are untouched.
 
 **Test.** A stand-in `AudioParam` that counts `setValueAtTime`: play 1 s of fake ticks on a 3-effect static chain; today the count grows with ticks, after it is the parameter count. Must fail on HEAD. Plus the existing tests for chains, which already guard the audible result.
 
