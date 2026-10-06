@@ -20,7 +20,10 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 REPO="$PWD"
-TMP="$(mktemp -d -t fm-rollback-test)"
+# The XXXXXX template form, as prove.sh and spotcheck.sh use: BSD `mktemp -d -t name` appends its own suffix, but GNU and
+# uutils refuse a -t template with no X's (6 Oct, measured) — TMP came back empty and every path below became /fake.git, /work.
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/fm-rollback-test-XXXXXX")"
+{ [ -n "$TMP" ] && [ -d "$TMP" ]; } || { echo "❌ could not make a temp dir — nothing was tested"; exit 1; }
 trap 'rm -rf "$TMP"' EXIT
 FAILED=0
 ok()   { printf '  ✅ %s\n' "$1"; }
@@ -30,6 +33,9 @@ echo "── setting up a throwaway clone (the live site cannot be reached from 
 git init -q --bare "$TMP/fake.git"
 git clone -q "$REPO" "$TMP/work" 2>/dev/null || { echo "❌ could not clone"; exit 1; }
 cd "$TMP/work"
+# rollback.sh publishes `main`, and a clone's only branch is whatever the source checkout is on — main on the Mac, a work
+# or port branch anywhere else. Name it main here so the test exercises the publish, not a missing branch (no-op on main).
+git checkout -q -B main
 # the script under test is the WORKING COPY's, not HEAD's — this must catch a fault before it ships
 cp "$REPO/tools/rollback.sh" tools/rollback.sh
 git add tools/rollback.sh && git commit -q -m "fixture: the rollback.sh under test"

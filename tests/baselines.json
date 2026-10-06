@@ -1,0 +1,3 @@
+{
+ "_about": "Per-OS baselines for the tests that pin the Mac's output (tests/tests.js pinned()/pinTol()). The Mac's values are the literals in tests.js; each other OS's are recorded here by tools/record-baselines.sh."
+}

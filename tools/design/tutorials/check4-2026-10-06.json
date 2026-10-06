@@ -1,0 +1,398 @@
+[
+ {
+  "file": "01-first-video",
+  "verdict": "fix",
+  "steps": [
+   {
+    "n": "1",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "index.html:703 Projects tab (it is also the default: js/home.js:83 tab = 'projects'); index.html:716 #hm-new; styles.css:5602 makes it a 58px round button fixed at bottom centre (48px at styles.css:6990); js/home.js:2557 hides it only on Tutorials; js/home.js:3231 click calls newFromTab, which on Projects opens the New project dialog (home.js:3140+)"
+   },
+   {
+    "n": "2",
+    "ok": true,
+    "problem": "Accurate. 9:16 is already selected the first time (home.js npAspect defaults to '9:16'; later the last-used shape is remembered), and the dialog calls this setting 'Aspect ratio'.",
+    "correct_text": "",
+    "evidence": "index.html:717-725 'New project', 'Name', 'Aspect ratio', the 9:16 tile with 'Phone' marked active; js/home.js newProjectDialog: npAspect = saved.aspect || '9:16'"
+   },
+   {
+    "n": "3",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "index.html:770 #hm-create 'Create'; js/home.js:3179-3193 createFromDialog -> FM.projects.create -> FM.home.close({push:true}) opens the editor"
+   },
+   {
+    "n": "4",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "js/timeline.js:2794-2796 addRowLabel() returns 'Tap here to start creating' when there are no layers; timeline.js:3447-3452 SVG plus plus label; styles.css:8903-8934 .tl-addrow--empty: flex column with the 64px round + (border-radius 50%) above the 15px label, centred, row min-height min(52vh,300px); timeline.js:2864 isEmptyStart is phone-only; timeline.js:3480-3491 a row click calls openFromArea -> FM.mobile.openAdd (timeline.js:3324-3332)"
+   },
+   {
+    "n": "5",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "js/addmenu.js:377 { key:'media', label:'Media' }; tabs in order: Elements, Shape, Media, Audio, Template (238/326/377/464/517); the label is shown on the phone sheet (addmenu.js:1455, styles.css:1417); the first time it opens on Elements (TABS[0]), after that on the last tab used (addmenu.js:625-660)"
+   },
+   {
+    "n": "6",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "js/addmenu.js:423 { label:'Import media', add:fileImport }; addmenu.js:58-68 pickFiles clicks #file-input with accept 'video/*,image/*,audio/*'; js/app.js handleFiles (5489+) has no prompt between picking and adding"
+   },
+   {
+    "n": "7",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "js/app.js:3098-3101 insertLayer then scene.selectedId = layer.id, refreshAll; js/mobile.js:48-90 syncSheet opens the inspector on a new selection; mobile.js:271-293 dockSheet places it 6px under the selected clip's timeline row (the solo view)"
+   },
+   {
+    "n": "8",
+    "ok": true,
+    "problem": "Accurate. Only caveat: pressing and holding the counter for about half a second turns 'Looped playback' on or off and does not play (app.js:6750-6756), so 'tap' should mean a quick tap. The 00:00:00 format is mm:ss:frames.",
+    "correct_text": "",
+    "evidence": "index.html:557 #time-readout '00:00:00'; js/app.js:725 readout = p2(m):p2(sec):p2(ff); app.js:6766-6782 click: if playing, pause at once, otherwise togglePlay after 240ms; #transport sits at the top of #timeline-panel (index.html:499/528), above the docked sheet, so the counter is still visible while the clip is selected"
+   },
+   {
+    "n": "9",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "index.html:338 #m-back is the first item in #topbar-m (back chevron at top left); js/mobile.js:342-350 with body.m-editing the tap calls FM.selectLayer(null) (deselect, which closes the sheet), otherwise FM.home.open(); app.js:1018-1023 relabels it 'Close clip options'; styles.css:4214 body.m-editing hides #m-export"
+   },
+   {
+    "n": "10",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "index.html:395 #m-export aria-label='Export', icon path 'M12 15V4M8 8l4-4 4 4M6 20h12' (up arrow over a bar). It is the last visible control in #topbar-m once the clip buttons (m-group/m-dup/m-maskgroup/m-del/m-more, index.html:396-409) are hidden; mobile.js:368 clicks the hidden #btn-export, and app.js:6952 then opens the export dialog"
+   },
+   {
+    "n": "11",
+    "ok": true,
+    "problem": "Accurate for a first export. The button text follows the remembered format (app.js:5894-5896: Export GIF / Export audio / Save frame), so it only says 'Export MP4' while the format is still MP4, which is the default.",
+    "correct_text": "",
+    "evidence": "index.html:958 #exp-go 'Export MP4'; index.html:851 the first format option is mp4; app.js:5894-5896 label switch; app.js:8707 click -> runExport"
+   },
+   {
+    "n": "12",
+    "ok": true,
+    "problem": "The mechanics are confirmed. 'Downloads' is OS behaviour and the code cannot confirm it: on iPhone a plain download lands in Files > Downloads, not Photos, and Safari may first show its own small download prompt. On Android the share sheet often has no plain 'save to phone' choice (only Photos upload, Drive, Files and so on).",
+    "correct_text": "When Export ready shows, tap Save, then choose the option in your phone's sheet that saves the video (on iPhone, Save Video). If no share sheet appears, the video was downloaded instead (on iPhone: Files > Downloads). If you close the sheet by mistake, tap Save again.",
+    "evidence": "index.html:832 'Export ready', 838 #xr-save 'Save'; js/app.js:6297-6326 onSave: a 'cancelled' result keeps the card open with Save enabled again; js/exporter.js:66-75 deliver(): navigator.share when canShare files, AbortError -> 'cancelled', otherwise download() (exporter.js:47-53 <a download>); exporter.js:1623 save: () => deliver(...)"
+   },
+   {
+    "n": "PC",
+    "ok": false,
+    "problem": "Mostly right, but there are three wording errors. (a) 'there is no big + (phone only)' reads as if Home's round + (step 1) is also missing on a computer. It is there; only the timeline's big + (step 4) is phone-only. (b) On a computer the back arrow is not at the top left: the top bar is hidden and #btn-back is moved to the left end of the row under the picture. 'Skip step 9' is still right, because it goes straight to Home. (c) The Add panel's tabs can lose their names and show only icons when the panel is short (TAB_WORDS_GO), so 'Media' may be a picture icon whose name shows on hover. Also, below about 1226px window width the Export group hangs in a second strip just under that row; counted from the right it is still third. Confirmed: the Add panel is open when nothing is selected (inspector title 'Add'), it sits at the bottom left beside the timeline, a file dropped anywhere on the editor is imported, Export is always visible and third from the right, and Save either shares or downloads.",
+    "correct_text": "On a computer: steps 1-3 are the same. At step 4 there is no big + in the timeline (that is phone only). The Add panel is already open at the bottom left, beside the timeline. Click its Media tab (the picture icon; its name may be hidden when the panel is short), then Import media, or drag a file onto the picture. Your clip's options then take the Add panel's place. Skip step 9: on a computer the back arrow (left end of the row under the picture) goes straight to Home. Export is always showing: it is the up-arrow third from the right end of the row under the picture (on a narrower window that group sits in a strip just under the row). At step 12, depending on the browser, Save either downloads the video or opens your computer's share window.",
+    "evidence": "js/timeline.js:2864 isEmptyStart phone-only; index.html:716 #hm-new exists on every width; js/inspector.js no-selection branch: title 'Add', FM.addMenu.render(root,{variant:'panel'}); styles.css:6466-6476 (min-width:701px) inspector band grid-area 2/1/3/3 (bottom left), timeline 2/3/3/4; styles.css:8241 body #topbar {display:none}; js/app.js:7660-7661 grab('btn-back') into #t-home; styles.css:8212 #t-home absolute at the row's left edge; app.js:6909-6912 #btn-back: exitGroup else FM.home.open (no deselect); app.js:7737 far row order help, notes, settings, export, opts, amfit; styles.css:8223 #t-far right:14px; styles.css:8269-8276 below 1226px #t-far top:100% (strip under the row); styles.css:6530 #btn-export font-size:0 (icon only); styles.css:5969 .addmenu--tabs-ico hides the tab labels, js/tilefit.js:66 TAB_WORDS_GO = true; app.js:8735-8741 window drop -> handleFiles"
+   },
+   {
+    "n": "Tip",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "js/addmenu.js:157-168 libEntries maps FM.mediaLib items to tiles whose add is FM.mediaLib.use(mid); addmenu.js:461 appends them to the Media tab; app.js:3105 FM.mediaLib.add on every import"
+   },
+   {
+    "n": "Trouble",
+    "ok": true,
+    "problem": "Accurate. 'then Media' is redundant but harmless: the Add menu reopens on the last tab used, so it will already be on Media.",
+    "correct_text": "If it doesn't work: tapping Import media closes the Add menu. If you back out of your phone's picker, tap \"Tap here to start creating\" again (it reopens on Media), then tap Import media.",
+    "evidence": "js/mobile.js:386 addOpts onAfterAdd: closeAdd; addmenu.js:1143 card click: o.add(); after(); addmenu.js:625-660 rememberTab persists 'fm.addmenu'.tab; app.js:6919 the file input's cancel event only clears the audio flag, so the user has to reopen the menu"
+   }
+  ],
+  "missing": "Step 12 says nothing for Android users whose share sheet has no plain 'save to phone' choice. They need a line like: pick Photos or Files, or download instead. Step 8 could also say 'a quick tap', because a half-second hold on the counter switches Looped playback instead of playing.",
+  "summary": "I traced every step of the phone flow in the b46b47d3 code and all twelve hold up. The + opens the New project dialog with 9:16 already picked. After Create, the empty phone timeline shows the 64px round + with 'Tap here to start creating' under it, and tapping it opens the Add sheet. The Media tab then gives 'Import media', which closes the sheet and opens the picker. The new clip is selected, with its options docked under its timeline row. A tap on the 00:00:00 counter plays (after 240ms) and a second tap pauses at once. The back arrow at top left deselects the clip, which brings back #m-export, hidden while a clip is selected. The Export dialog's button reads 'Export MP4', and Export ready then Save shares the file or downloads it; closing the share sheet keeps Save live. The only errors are in the 'On a computer' paragraph. 'No big +' can be read as covering Home's + too. The back arrow on a computer sits at the left end of the row under the picture, not the top left. The Add panel's tab names can be hidden, leaving icons only. Export's 'third from the right' is correct, including on windows under 1226px where that group drops into a strip under the row. Verdict: fix (wording only, the flow is correct)."
+ },
+ {
+  "file": "04-animate-with-keyframes",
+  "verdict": "fix",
+  "steps": [
+   {
+    "n": "1",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "js/timeline.js:2190-2194 (a touch on a clip creates clipTap, and touch-down does not select); js/timeline.js:5495-5503 (a clean tap with no movement calls FM.selectLayer); js/mobile.js:48-89 (syncSheet opens the sheet for any new single selection, then dockSheet docks it under the clip's row at mobile.js:271-293); js/inspector.js:7091 (a new layer resets the view to the card grid)"
+   },
+   {
+    "n": "2",
+    "ok": true,
+    "problem": "Correct: the centre line is fixed and the content scrolls under it, and a horizontal drag on a clip scrubs. But if the finger rests still for about 0.35 s before moving, the clip is picked up and moved in time instead (armHold, finger still for more than 150 ms when the 350 ms timer fires). Not wrong, but worth a caveat (see 'missing').",
+    "correct_text": "",
+    "evidence": "js/timeline.js:11-16 (fixed-centre playhead on phone and desktop); js/timeline.js:5266-5315 (a move of more than 8 px scrubs, using FM.scrubTime); js/timeline.js:2200-2262 (press and hold on any unlocked clip grabs it after 350 ms if the finger has settled)"
+   },
+   {
+    "n": "3",
+    "ok": true,
+    "problem": "The label is exactly 'Position / Scale'. It is in the card list for image, text and shape layers (Volume is the card that gets dropped). On the phone the label shows under the icon; the tile-fit rungs that can hide labels are PC only.",
+    "correct_text": "",
+    "evidence": "js/inspector.js:2677 {key:'transform', label:'Position / Scale'}; js/inspector.js:3823 (shape/text/image keep transform); js/inspector.js:3966-3968 (cat-label span); js/inspector.js:4049-4056 (fitCards is PC only); js/inspector.js:5911-5913 (the transform card builds moveTransformPanel)"
+   },
+   {
+    "n": "4",
+    "ok": false,
+    "problem": "The right rail does have four mode buttons (Move, Rotate, Scale, Skew), Move is first, and the lit state is the teal .on class. The default mode is set at inspector.js:4890; the cited 7151 is the easing editor's fallback. Two gaps. (a) The step never says what to do if Move is not lit. (b) FM._mtMode persists for the whole session, and in Anchor mode (pressing Move while already on Move) the Move button STILL lights up (mt-mode-alt). The panel then shows 'Anchor X / Anchor Y / Centre the anchor' and has NO diamond, so step 5 is impossible even though this check passed.",
+    "correct_text": "Check that the first of the four buttons on the right edge of the panel (Move) is lit. If it isn't, tap it. If the panel shows 'Anchor X' and 'Centre the anchor' instead of X, Y and Z, tap Move once more.",
+    "evidence": "js/inspector.js:4319 MT_MODES ['move','rotate','scale','skew']; js/inspector.js:4890 (the mode defaults to 'move'); js/inspector.js:5366-5380 (right rail: Move is .on in both move and anchor mode, and pressing Move while on Move switches to anchor); js/inspector.js:4979-4984 (no diamond or easing button when props is empty, i.e. anchor mode); js/inspector.js:5325-5345 (anchor panel)"
+   },
+   {
+    "n": "5",
+    "ok": false,
+    "problem": "The keyframe button is the top button of the left rail and adds a keyframe at the playhead. But it is a 38 px square button and the rail is vertically centred, so it is not 'at the top' of the panel. Also, the X, Y and Z number boxes each carry a genuinely SMALL 9 px diamond in their top-right corner, and that diamond keys only that one value. 'The small diamond at the top' is ambiguous. Once tapped, the button turns amber/yellow (.here), which is a useful thing to tell the user.",
+    "correct_text": "On the left edge of the panel there is a column of buttons. Tap the top one, the \u25c6 diamond (not the tiny diamonds on the number boxes). It turns yellow: that is your first keyframe.",
+    "evidence": "js/inspector.js:4925-4926 (kfBtn '\u25c6', title 'Add a keyframe at the playhead'); js/inspector.js:4979-4984 (\u25c6 then the easing button in the left rail); styles.css:399-407 (.mt-rail is a centred column, buttons are 38x38, .mt-kf.here is the --kf yellow); js/inspector.js:4466-4486 and styles.css:6622-6631 (the 9 px per-box diamond keys only opts.kfKey)"
+   },
+   {
+    "n": "6",
+    "ok": true,
+    "problem": "Same hold-to-pick-up caveat as step 2.",
+    "correct_text": "",
+    "evidence": "js/timeline.js:11-16, 5266-5315, 2200-2262"
+   },
+   {
+    "n": "7",
+    "ok": true,
+    "problem": "At a new time no keyframe sits within half a frame, so the click recomputes, chooses Add, and keys x and y at the current (unchanged) value.",
+    "correct_text": "",
+    "evidence": "js/inspector.js:4927-4970 (decides add or remove at click time on the primary channels x and y); js/scene.js:417-431 toggleKeyframe and upsertKeyframe"
+   },
+   {
+    "n": "8",
+    "ok": true,
+    "problem": "True. A tap with no movement on the X number opens type-in (contentEditable). Committing a typed value calls mtSetXY with typed=true, then mtSet, then setTransform, which upserts at the playhead and so overwrites the second keyframe (within half a frame). Small omissions: the box is a contentEditable div with no numeric inputmode, so a full text keyboard appears, and the value is only applied on Return or when you tap away (blur). Also X moves the picture sideways only.",
+    "correct_text": "",
+    "evidence": "js/inspector.js:5008 mtVBox('X'); js/inspector.js:4527-4555 (pointerup with no move calls startEdit, and finish() commits on Enter or blur); js/inspector.js:4375-4377 (a typed value is exact, no snap); js/scene.js:333-343 setTransform; js/scene.js:308-317 upsertKeyframe"
+   },
+   {
+    "n": "9",
+    "ok": true,
+    "problem": "The time pill (#time-readout, shown as 00:00:00) is the play button: a tap starts playback after a 240 ms wait and a tap while playing stops at once. It sits in #transport above the timeline and is not hidden when the sheet is open. Holding it toggles looped playback instead, which is fine for a tap.",
+    "correct_text": "",
+    "evidence": "index.html:557 (#time-readout, role=button); js/app.js:6735-6782 (click: pause if playing, otherwise togglePlay after 240 ms; a 550 ms hold toggles loop); styles.css:4831 (only #add-fab is hidden while the inspector is open)"
+   },
+   {
+    "n": "result line (white diamonds)",
+    "ok": true,
+    "problem": "True. New keyframes have e:'linear', and .kf-dot.ease-linear is an 11 px white diamond, drawn only on the selected layer's row. The X and Y diamonds share one pixel, so the user sees one per time. While Position / Scale is open they are solid, and the one under the playhead is drawn larger with a ring. With the card closed they show as white outlines. After the Tip's easing they change colour (teal for ease, yellow for overshoot).",
+    "correct_text": "",
+    "evidence": "js/scene.js:420 (e:'linear'); js/timeline.js:2614-2663 (only the selected layer, one diamond per property, kf-live/kf-idle); styles.css:3516-3525, 3538-3557"
+   },
+   {
+    "n": "On a computer",
+    "ok": false,
+    "problem": "'Bottom left' is correct: the Studio grid is the only desktop layout and it puts #inspector-panel in the bottom band at the left. The cited inspector.js:4896 is the keyframe rail and does not show this. But 'it is the same' is wrong for the sliding steps 2, 6 and 9. With a mouse, a press on a clip arms a clip MOVE, and dragging it more than 4 px shifts the clip in time instead of moving the playhead. On a computer you have to drag the ruler or empty timeline space, or scroll. Tapping the X number and the time pill does work the same, and Space also plays.",
+    "correct_text": "On a computer: the same steps, in the panel at the bottom left. To slide the timeline, drag the time ruler or an empty part of the timeline (or scroll). Dragging the clip itself moves the clip. Press Enter after typing the X number. Space also plays and stops.",
+    "evidence": "styles.css:6467-6481 (@media min-width 701px: #inspector-panel grid-area 2/1/3/3, timeline 2/3/3/4); js/settings.js:82-88 (Classic layout removed); js/timeline.js:2264-2275 (a mouse press on a clip sets up clipMove); js/timeline.js:5320-5321 (it moves after 4 px); js/timeline.js:5083-5096 (the ruler and empty lanes scrub)"
+   },
+   {
+    "n": "Tip (easing)",
+    "ok": false,
+    "problem": "The curve button really is directly under \u25c6, and FM.openEasingCurve switches the sheet to an inline editor. What appears is not 'a row of small curve pictures'. It is a back button ('\u2039  Position / Scale'), a large graph, a row of NAMED family buttons (Bezier, Bounce, Steps\u2026), and under that a row of six unlabelled curve pictures (Linear, Ease In, Ease Out, Ease In-Out, Overshoot, Anticipate). The first one, Linear, is already in use, so tapping it changes nothing. Overshoot and Anticipate, and the Bounce family, do the opposite of 'soften'. With two keyframes, any playhead position edits the one segment, so that part is fine.",
+    "correct_text": "Tip: to soften the movement, tap the curve button just under the \u25c6. A graph opens with two rows of buttons under it. In the bottom row of small curve pictures, tap the S-shaped one (Ease In-Out), then play it again. Tap \u2039 Position / Scale to go back.",
+    "evidence": "js/inspector.js:4980-4983 (mt-ease, then FM.openEasingCurve); js/graph-editor.js:587 (openEasingCurve sets _mtEasing); js/inspector.js:7146-7152 (back button '\u2039  Position / Scale'); js/graph-editor.js:33-40 (PRESETS order, Linear first); js/graph-editor.js:267-278 (preset buttons are canvas glyphs with a title only); js/graph-editor.js:476-486, 550 (family row with labels above the preset row); js/eases.js:186-194 (families); js/graph-editor.js:355-364 (applyPreset); js/graph-editor.js:155-170 (pickKfs)"
+   },
+   {
+    "n": "If it doesn't work",
+    "ok": true,
+    "problem": "Accurate. Every canvas move and pinch on an animated layer goes through FM.shiftTransform, which shifts all keyframes by the same amount and never adds one. The X/Y boxes (and the swipe pad in the card) go through setTransform and do key at the playhead. Small framing issue: this is always how a canvas drag behaves once the layer is animated, not an occasional fault.",
+    "correct_text": "",
+    "evidence": "js/canvas-edit.js:659-661 (a canvas drag uses shiftTransform: 'never adds a keyframe'); js/scene.js:346-370 (shiftTransform moves every keyframe by the delta); js/inspector.js:4371 and 5148 (the trackpad and boxes use mtSet, then setTransform)"
+   }
+  ],
+  "missing": "Phone: in steps 2, 6 and 9, start moving your finger straight away. Pressing and holding still on a clip for about a third of a second picks the clip up and moves it in time (timeline.js:2200-2262), and that is easy for a beginner to do by accident. Swiping on the time ruler avoids it. A plain tap on empty timeline space deselects the layer and closes the panel. When typing the X value, press Return or tap away to apply it; the keyboard is a full text keyboard, not a number pad. Computer: dragging the clip moves the clip, so drag the ruler instead. Also missing: what to do if Move is not lit, including the anchor-mode case where Move looks lit but the diamond is gone.",
+  "summary": "The core flow is correct in code: select, Position / Scale, \u25c6 at the start, move later, \u25c6, type X (which updates the second keyframe through setTransform's upsert), then tap the time pill to play and stop. The white linear keyframe diamonds and the canvas-drag-never-keys warning are both accurate. Needs small fixes, not a redo. (1) Step 4 has no action for when Move is not lit, and misses that Anchor mode also lights Move but removes the \u25c6. (2) Step 5's 'small diamond at the top' is ambiguous: the rail \u25c6 is a 38 px button in a vertically centred column, while each X/Y/Z box has a genuinely small 9 px diamond of its own. (3) 'On a computer: it is the same' is wrong for sliding the timeline, because a mouse drag on a clip moves the clip after 4 px. The bottom-left panel claim is right (Studio grid, styles.css:6479), but its citation is wrong. (4) The easing Tip undersells what appears (a graph, a named family row and a six-glyph preset row), and 'tap one' can pick Linear, which changes nothing, or Overshoot/Bounce, which don't soften. (5) The phone hold-to-pick-up-clip pitfall is not mentioned. Several citations have drifted a little (e.g. 7151 is the easing editor's default, not the panel's, which is at 4890; type-in is about 4527, not 4389)."
+ },
+ {
+  "file": "05-add-a-title",
+  "verdict": "fix",
+  "steps": [
+   {
+    "n": "1",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "timeline.js:11-16: the playhead line is pinned at the centre of the screen and the content scrolls under it. app.js:3140 addTextLayer uses makeLayer('text', {... start: FM.time, duration: FM.defaultLayerDuration()}). timeline.js:2190-2200: a horizontal drag on a clip by touch scrubs the playhead and does not select the clip."
+   },
+   {
+    "n": "2",
+    "ok": false,
+    "problem": "On a phone the add row is not drawn while any layer is selected. A layer is almost always selected at this point, because importing a video selects it. With one layer selected the timeline switches to the one-row 'solo' view, and buildTracks only adds the add row when nothing is soloed. The + button is also hidden on phones, so the add row is the only way in. A user who has just imported their video sees one row with an edit panel under it, and no 'Tap to add a layer' row anywhere. Smaller point: in an empty project the row reads 'Tap here to start creating' instead.",
+    "correct_text": "If the timeline shows only one row with an edit panel under it, a clip is selected. Tap the back arrow (\u2039) at the top left once to deselect it. Then tap the row on the timeline that says \"Tap to add a layer\".",
+    "evidence": "timeline.js:2838-2843 soloLayerId() is the selected id on a phone. timeline.js:3941-3966: `if (addRowWanted() && !soloId)` is the only place the add row is inserted. app.js:3028-3100 addMediaLayer sets scene.selectedId = layer.id. styles.css:4205 `#add-fab { display: none !important; }` with the comment 'THE + BUTTON IS GONE (queue 294)'. mobile.js:345 the #m-back click in m-editing runs FM.selectLayer(null). timeline.js:2794-2795 addRowLabel() gives 'Tap to add a layer' when layers exist and 'Tap here to start creating' when there are none."
+   },
+   {
+    "n": "3",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "addmenu.js:238 the first tab has key 'object' and label 'Elements'. addmenu.js:1007: the menu reopens on the last tab used (saved in localStorage), so tapping Elements first is correct. addmenu.js:175: INSTANT[0] is 'Text' and calls FM.addTextLayer. addmenu.js:1143: tapping a tile runs o.add() synchronously, so focusing the field stays inside the tap. styles.css:1501: tab labels are visible on the phone sheet."
+   },
+   {
+    "n": "4",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "scene.js:720-721 a new text layer gets base.text = props.text || 'Text'. app.js:3148 calls FM.textEdit.start(layer.id, { selectAll: true }). text-edit.js:984-986 runs input.focus() and then input.select() when opts.selectAll is set."
+   },
+   {
+    "n": "5",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "text-edit.js:874 the font button holds .te-font-lbl plus a \u25be caret. text-edit.js:226 the label is fontLabel(l.fontFamily) (default 'Inter, sans-serif' per scene.js:724). text-edit.js:469-476 each .te-font-card in the horizontal .te-font-rail shows 'Abc' in that font plus its name, and an Import card comes last. The phone bar is pinned to the top (text-edit.js:20-21, 685)."
+   },
+   {
+    "n": "6",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "text-edit.js:875 the size button is the number, then a 'pt' unit, then \u25be. text-edit.js:493-501 buildSizePop is a range slider from 8 to 400 with step 1 and a live value."
+   },
+   {
+    "n": "7",
+    "ok": false,
+    "problem": "The swatch is not round. It is a 22px square with 6px rounded corners. The position (far left) is correct. 'Pick a colour' is also vague: the popover holds a colour box that opens the phone's own colour picker, a hex-code box, an eyedropper, and recent-colour chips when there are any. It is not a palette of swatches.",
+    "correct_text": "Tap the small colour square at the far left of the bar. Tap the colour box to choose a colour, or type a code like #ff0000.",
+    "evidence": "styles.css:1226 `.te-swatch { width: 22px; height: 22px; border-radius: 6px; ...}`. text-edit.js:886 bar.append(colorBtn, alignBtn, fontBtn, sizeBtn, extrasBtn, doneBtn). text-edit.js:504-517 buildColorPop calls FM._colorField. inspector.js:252-296 colorField = <input type=color> + hex text box + eyedropper + recent colours."
+   },
+   {
+    "n": "8",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "text-edit.js:878 doneBtn is '\u2713'. text-edit.js:886 it is appended last, so it sits at the far right. text-edit.js:768-778 commit() writes the text and tears the editor down without deselecting, so the title stays selected."
+   },
+   {
+    "n": "9",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "canvas-edit.js:395-401: when a layer is selected, a press anywhere on the preview starts a 'move' drag of that layer (so the finger does not have to land on the text itself). After step 8 the title is still selected."
+   },
+   {
+    "n": "10",
+    "ok": true,
+    "problem": "This works as written on a phone. The '(a bar on the right)' hint is loose, because both trim icons draw two vertical lines. The trim-end icon is a ']' bracket on the right plus a line left of centre. 'The right-hand one of the three' is unambiguous anyway. On a computer this step is different; see the PC entry.",
+    "correct_text": "",
+    "evidence": "inspector.js:3565-3570: with the playhead inside the clip (clipPlayheadSide 0), the row shows Trim start, Split, Trim end. inspector.js:3613 'Trim end to playhead' icon path 'M18 4v16M18 4h-4M18 20h-4M10 4v16' calls clipOp('trimEnd'). timeline.js:109-123 clipTrimEnd sets duration = FM.time - start. inspector.js:7141: quickRow is first in the home view. inspector.js:6999-7001: the row rebuilds when the playhead crosses the clip edge. settings.js:20 layerDuration defaults to 5."
+   },
+   {
+    "n": "On a computer",
+    "ok": false,
+    "problem": "Two of the three claims hold. The text card sits at the bottom of the picture, because the inspector column is hidden while editing text, so the editor falls back to the floating card. The Add panel is at the bottom left of the Studio layout. But the Add panel only shows when nothing is selected, and after an import the video is selected, so that spot shows the clip's options instead. More importantly, the paragraph implies step 10 is the same on a computer, and it is not. The three trim icon buttons are hidden at 701px and wider. In their place are A / S / D keycaps on the panel's title line. D trims the end only while the playhead is inside the title; with the playhead after it, D moves the whole clip to the playhead. The 'two different buttons' troubleshooting does not apply on a computer, where the three keys are always shown.",
+    "correct_text": "On a computer: click the \"New layers go here\" line (or an empty spot) so nothing is selected. The Add panel then shows at the bottom left. The text controls sit on a small card at the bottom of the picture. To end the title, put the playhead inside it and press D, or click the D key at the top of the panel.",
+    "evidence": "text-edit.js:20-30 DESKTOP_MQ is '(min-width: 701px)' with the floating card. text-edit.js:602-660 layoutDesktop: dockRect() is null because styles.css:6601 hides #inspector-panel while text-editing, so the card goes at the stage bottom. timeline.js:3483-3490: on PC the add row's action is FM.selectLayer(null), because the add menu IS the inspector band when nothing is selected. styles.css:2510 `@media (min-width: 701px) { .qr-btn.qr-trim { display: none; } }`. index.html:491-495 #key-rail has A/S/D. timeline.js:5760-5785 syncKeyRail. timeline.js:186 plus the comment at ~200: D cuts the right part when inside, and brings the clip right when the playhead is after it."
+   },
+   {
+    "n": "Tip",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "text-edit.js:877 extrasBtn 'Aa'. text-edit.js:519-526 buildExtrasPop calls FM._textExtras. inspector.js:5690-5740 buildTextExtras: Style, Spacing (-10..60), Line height, Curve, Animate (None, Fade in, Typewriter, Pop, ...)."
+   },
+   {
+    "n": "If it doesn't work",
+    "ok": true,
+    "problem": "Accurate on a phone: outside the clip the row swaps to Move and Extend (two buttons). Right after step 4 the playhead sits exactly on the title's start, which counts as outside (t <= start + 1e-4), so this note will be needed. It misses the most likely failure, though: no add row, because a clip is selected (see step 2).",
+    "correct_text": "",
+    "evidence": "inspector.js:3555-3608: if (side) \u2192 qr-nudge Move/Extend pair, else the three trims. app.js:4799-4804 clipPlayheadSide returns -1 when t <= start + 1e-4."
+   }
+  ],
+  "missing": "Two things are missing. (1) The deselect step before step 2. On a phone, the 'Tap to add a layer' row is not drawn at all while a clip is selected, and an imported video is selected by default (app.js addMediaLayer; timeline.js:3966 `addRowWanted() && !soloId`). The + button is also hidden (styles.css:4205). A typical user who has just imported a video therefore cannot find step 2's row. Tell them to tap the back arrow (\u2039) at the top left once when they see a single timeline row with an edit panel under it. Warn them to do this only in that state: with nothing selected, the same arrow goes to the Home screen (mobile.js:342-350). (2) On a computer, step 10 and its troubleshooting are different. The trim buttons are the A / S / D keys on the panel's title line (press D with the playhead inside the title). The 'two different buttons' state never appears there.",
+  "summary": "The cited lines all check out, and the order of steps 1 and 3-10 is right on a phone. The tutorial's real gap is in step 2. On a phone the 'Tap to add a layer' row only exists while nothing is selected. Importing a video selects it, which puts the timeline in single-row view with no add row. The + button is hidden on phones, so a typical user is stuck until told to tap the back arrow at the top left once. Step 7 calls the colour swatch round, but it is a small rounded square (styles.css:1226), and the colour popover holds a colour box plus a hex-code box, not a palette. The 'On a computer' paragraph is right about the text card at the bottom of the picture and the Add panel at the bottom left. It leaves out three things: you must have nothing selected to see the Add panel, step 10's three buttons are hidden on a computer, and their place is taken by the A / S / D keys (press D with the playhead inside the title). The Tip and the troubleshooting note are accurate for phones. Verdict: fix (add the deselect step, adjust step 7's wording, extend the computer paragraph)."
+ },
+ {
+  "file": "06-add-music",
+  "verdict": "fix",
+  "steps": [
+   {
+    "n": "1",
+    "ok": false,
+    "problem": "The label is right: 'Tap to add a layer' shows once the project has any layer. But on a phone the add row is only drawn when no clip is selected. When a clip is selected, the timeline shows just that clip's row and leaves out the add row. Right after you import a video it is selected automatically, so in the usual starting state this row is not on screen. The step also never says to put the playhead at the start first, and the song lands at the playhead (see step 3).",
+    "correct_text": "Slide the timeline all the way back to the start (00:00:00). If a clip is selected and its edit panel is open, tap an empty part of the timeline first so every layer shows. Then tap the row that says \"Tap to add a layer\".",
+    "evidence": "js/timeline.js:2794-2796 addRowLabel ('Tap to add a layer' / 'Tap here to start creating'); js/timeline.js:3935-3941 solo view draws only the selected row; js/timeline.js:3966 `if (addRowWanted() && !soloId)` means no add row while a clip is selected; js/timeline.js:5477-5480 a tap on an empty lane deselects; js/timeline.js:3478-3484 a phone tap opens FM.mobile.openAdd"
+   },
+   {
+    "n": "2",
+    "ok": true,
+    "problem": "",
+    "correct_text": "",
+    "evidence": "js/addmenu.js:464 tab key 'audio' label 'Audio'; js/addmenu.js:478 'Import audio' -> audioImport; js/addmenu.js:51,58-79 the picker accepts audio files and also videos (their sound is taken out, js/app.js:5501-5513)"
+   },
+   {
+    "n": "3",
+    "ok": false,
+    "problem": "The timeline has no 'audio part'. The song becomes an ordinary layer row, placed where the add row was. It starts at the playhead, which is 0 only when the project is empty. It is selected automatically, so its edit panel opens without a tap. On a phone, the timeline then shows only the song's row (the video row is hidden). 'Tap it to select it' does no harm, but it is not needed. The cited addmenu.js:473-474 is about songs being listed in the Audio TAB of the Add menu, not about the timeline.",
+    "correct_text": "The song appears as a new layer (a bar with a sound wave) just below the add row, starting where the playhead was. It is selected for you and its edit panel opens. While it is selected, only the song's row shows on the timeline.",
+    "evidence": "js/app.js:3055 `start = first ? 0 : Math.min(FM.time, P.duration)`; js/app.js:2936-2943 insertLayer splices at FM.clampAddAt(); js/app.js:3098-3100 insertLayer then selectedId = layer.id; js/mobile.js:48-90 syncSheet opens the sheet for a new selection (and the dockSheet note on queue 531 says an added layer 'instantly opens up'); js/timeline.js:2151-2180 waveform for a pictureless clip; js/timeline.js:3935-3941 solo row"
+   },
+   {
+    "n": "4",
+    "ok": true,
+    "problem": "Correct. For a song the panel shows exactly three cards: Speed, Volume and Effects, with the three small icon buttons above them.",
+    "correct_text": "",
+    "evidence": "js/inspector.js:2679 {key:'volume', label:'Volume'}; js/inspector.js:3813 audioOnly keeps only ['speed','volume','effects']; js/inspector.js:7139-7141 quickRow + categoryGrid on the home view"
+   },
+   {
+    "n": "5",
+    "ok": true,
+    "problem": "Correct. Tapping the number (shown as e.g. '100%') opens the type-in editor. The ruler is reversed, so dragging left raises the value. The range is 0-1000%. Dragging the number itself also scrubs it.",
+    "correct_text": "",
+    "evidence": "js/inspector.js:5612 mtVBox('Volume', ..., {unit:'%', max: VOL_MAX*100}); js/inspector.js:4513-4530 a tap opens the type-in editor; js/inspector.js:5624-5629 tickStrip; js/inspector.js:975-985 'drag LEFT to raise the value'"
+   },
+   {
+    "n": "6",
+    "ok": true,
+    "problem": "Correct. The labels are exactly 'Fade in (s)' and 'Fade out (s)'. They sit under the volume ruler, each as a ruler with a type-in box. The ruler is reversed (drag left to raise) and typed values are limited to 0..fmax.",
+    "correct_text": "",
+    "evidence": "js/inspector.js:5641 the volume row comes first; js/inspector.js:5645 fmax; js/inspector.js:5648-5649 rangeRow('Fade in (s)') and rangeRow('Fade out (s)'); js/inspector.js:217-243 rangeRow = tickStrip plus a text box (change event clamps to min/max)"
+   },
+   {
+    "n": "7",
+    "ok": false,
+    "problem": "This step does not work in this order on a phone, for two reasons. (1) After steps 4-6 you are inside the Volume card. The three icon buttons (quickRow) are built only on the card-grid home view, so they are not on screen until you tap '\u2039  Volume'. (2) While the song is selected, the phone timeline shows only the song's row and hides the video, so you cannot see 'where the video ends'. You have to tap an empty part of the timeline (which deselects and shows all rows), slide the timeline, then tap the song again. Re-selecting reopens the card grid with the three buttons. The button description is acceptable: the right-hand one is 'Trim end to playhead'. Its icon is two upright lines with a bracket on the right one. If the playhead is outside the song, the three buttons turn into two move/extend buttons.",
+    "correct_text": "Tap \"\u2039 Volume\" to go back to the cards. Tap an empty part of the timeline so all your layers show, then slide the timeline until the playhead line sits at the end of your video. Tap the song again. With the playhead inside the song, tap the right-hand one of the three small buttons above the cards (Trim end to playhead).",
+    "evidence": "js/inspector.js:7139-7141 quickRow only when view==='home'; js/inspector.js:7212-7215 the '\u2039  Volume' back button resets the view to home; js/inspector.js:7074-7076 and 7091 deselecting then re-selecting reopens the grid; js/inspector.js:3611-3613 trimStart / split / trimEnd buttons; js/inspector.js:3564-3600 the move/extend pair when the playhead is off the clip; js/timeline.js:3935-3941 solo row; js/timeline.js:5477-5480 a tap on an empty lane deselects"
+   },
+   {
+    "n": "8",
+    "ok": true,
+    "problem": "Correct. The time pill (00:00:00) in the middle of the transport row is play/pause, with about a 240ms delay before playback starts. After the trim the playhead sits at the project end, and play rewinds to 0, so you hear it from the start. Tap again to pause.",
+    "correct_text": "",
+    "evidence": "index.html:557 #time-readout 'Tap: play / pause'; js/app.js:6766-6782 click -> togglePlay after 240ms; js/app.js:2514 `if (FM.time >= duration - 1e-3) FM.time = 0`"
+   },
+   {
+    "n": "On a computer",
+    "ok": false,
+    "problem": "'It is the same' is false in three places. (a) At 701px and wider the add row is a thin line labelled 'New layers go here', not 'Tap to add a layer'. With nothing selected, the Add menu is already showing in the bottom-left panel, and clicking the line just deselects. (b) The three trim icon buttons from step 7 are hidden by CSS at 701px and wider. On a computer you use the A / S / D keycaps on the panel's title line instead (D = trim end), or press D on the keyboard. Like the phone buttons, the keycaps show only on the clip's card grid, not inside the Volume card. (c) Play is a click on the time counter or the Space key. 'Bottom left' is right: the panel band sits under the left rail.",
+    "correct_text": "On a computer: the steps are the same, with three differences. The Add menu and the clip panel sit in the bottom-left panel; when nothing is selected the Add menu is already showing (the add line in the timeline reads \"New layers go here\"). To cut the song, put the playhead at the video's end, select the song, and press D (or click the D key on the panel's title row). Click the time counter or press Space to play.",
+    "evidence": "js/timeline.js:3423-3426,3452 PC row label 'New layers go here'; js/timeline.js:3484 a PC click deselects; js/inspector.js:7071-7085 Add menu when nothing is selected; styles.css:2510 `@media (min-width:701px){.qr-btn.qr-trim{display:none}}`; js/timeline.js:201-213 clipKeyAction, 'd' -> clipTrimEnd; js/timeline.js:5761-5807 key rail shown only when view==='home'; styles.css:6465-6482 the inspector band at grid-area 2/1/3/3 (bottom left)"
+   },
+   {
+    "n": "Tip",
+    "ok": true,
+    "problem": "Correct. The speaker button sits immediately left of the volume ruler and toggles a whole-clip mute. Tap it again to unmute. While muted the number still shows the real level.",
+    "correct_text": "",
+    "evidence": "js/inspector.js:5630-5641 vol-mute, srow.append(mute, slider); layer.muted toggle"
+   },
+   {
+    "n": "If it doesn't work",
+    "ok": true,
+    "problem": "Mostly right. A hold picks the clip up after 350ms once the finger has been still for 150ms, so 'half a second' is fine. The fade limit is min(10 s, song length rounded), never below 1 s. Prevention is better than this cure: the song lands at the playhead, so moving the playhead to 00:00:00 before step 1 avoids the problem. As an alternative to dragging: with the song selected and the playhead slid before it, the left of the two buttons that replace the trims is 'Move clip left to the playhead'.",
+    "correct_text": "",
+    "evidence": "js/timeline.js:2196-2266 hold timer 350ms with the finger still >150ms; js/inspector.js:5645 fmax = max(1, min(10, duration)); js/app.js:3055 start = playhead; js/inspector.js:3564-3590 the Move clip to playhead button"
+   }
+  ],
+  "missing": "The song is imported AT THE PLAYHEAD (js/app.js:3055), clamped to the project end. A user who has just played the video to the end will get a song that starts after the video. The tutorial needs a first step: slide the timeline back to 00:00:00, and tap an empty part of the timeline so nothing is selected. Without the deselect, the add row is hidden in the phone's single-row view (js/timeline.js:3966).",
+  "summary": "The labels and controls the tutorial names all match the code: 'Tap to add a layer', Audio > 'Import audio', the Volume card, the reversed ruler, 'Fade in (s)'/'Fade out (s)', the mute speaker, and the time pill as play/pause. Three parts are wrong. Step 3 invents an 'audio part' of the timeline: the song is a normal layer placed at the add row and the playhead, and it is selected automatically. Step 7 cannot be done as written on a phone, because the trim buttons are only on the card grid (you must tap '\u2039 Volume' first) and the video row is hidden while the song is selected. The 'On a computer' paragraph is wrong: the PC hides those buttons and uses the A/S/D keycaps or the D key, and its add line reads 'New layers go here'. Step 1 also fails if a clip is selected, and the tutorial never tells the user to put the playhead at the start before importing."
+ }
+]

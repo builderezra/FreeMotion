@@ -1,8 +1,8 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Oct at v17.23
+> ## 📌 WHAT I NEED FROM YOU — updated 6 Oct at v17.24
 >
-> **State:** v17.23 — **more choice on glows, shadows, vignettes and flares** (#482 batch 6): a vignette that fits a 9:16 frame, glows that spill past the edges of text, a spreadable drop shadow and a shadow-only mode, a stroke with a gap (sticker outline), flares with more rays, ghosts, a ring and an anamorphic streak, two-way streaks, and a Glow Scan at any angle. The simple editor (#980) Phase 1 is being built: first a lock that refuses any release changing the editor you use today. **Your picks waiting: the Filters tab (A/B/C) and the simple editor’s D18, D22, D23, D24.** v17.22 — **the new Home look**: Settings, centred wordmark, Search and Profile across the top; Select and Join in keyboard-accessible menus; a local profile photo; a bottom phone dock and a soft fade as project cards scroll; light and dark, phone and PC layouts. Previous: v17.21 — **deeper colour grading** (#482 batch 5): 20 colour effects now work on adjustment layers; Highlights & Shadows gets Local radius (lifts a dark subject without milky blacks), Whites, Blacks, Tonal width and Colour boost; Teal & Orange gets Protect skin and split-by-hue; Tint, Duotone, Gradient Map, Cross Process and Exposure gain blend modes and options. **Your pick waiting: the Filters tab, A, B or C** (pictures sent; A recommended). v17.20 — **more choice on the sound effects** (#482 batch 3): Echo gets Tone / Low cut / Tape wobble, Reverb gets Pre-delay / Tone / Low cut / Width, Pitch Shift gets Fine tune and ±24, the EQs get movable corners, the Compressor gets Output / Mix and a live bar, the Limiter gets Input gain / Release, and a playing sound effect shows ■ to stop it. Saved projects sound the same until you move one. v17.19 — **more choice on the movers and rhythms** (#482 batch 2): Wiggle, Shake, Pulse, Swing, Orbit, Drift, Flash (darken), Frame Stutter, Motion Blur, Speed Lines and Glitch each gained controls — patterns so two layers move differently, Hide edges for shakes, heartbeat/bounce pulses, a swing that settles, tickers that wrap, steady and build-up strobes, uneven glitch slices and block damage. Nothing changes on a saved project until you move one. v17.18 — **on PC the New project + no longer hides behind your project cards** (#992: with enough projects it sat under them and a click opened a project instead). v17.17 — **Gradient Overlay fades stronger and weaker in the effects sheet preview** (#995, your answer), so you see its whole range before adding it; it still lands at its usual strength. v17.16 — **the last 9 of the 26 effect/sound bugs fixed** (#986 closed): more blurs and colour grades that could go missing on your iPhone now keep their look; Clouds, Starfield, Find Edges and Emboss look on the phone preview as they export; audio search finds karaoke, robot, chipmunk… v17.15 — **more choice on the film looks** (Film Grain, Light Leak, Glow, Letterbox, Faded Film, Temperature, Colour Balance — #482/#966 batch 1); one door for saving a whole look (#994); the Sketching bar says Close (#834). v17.14 — **17 effect/filter/sound bugs fixed** (#986 batch 1): a filter on an adjustment layer now works, blurs survive on your iPhone class of device, vignettes stack and match the export, shadows under soft edges, shaking/spinning clips no longer show empty corners, Chroma Key Pro on a blue screen removes blue spill, Film Grain on the phone matches the export, the Limiter really limits (saved Limiters get a little quieter), the sound-effect ▶ plays exactly what Add adds. **Your list of everything waiting on you was sent by the logging chat (#993)** and REQUESTS.md now matches it. v17.13 — **your New project + animation is the ripple** (#947, your pick — Cancel closes it at once); **“Tap here to start creating” opens the menu straight away**, with the glowing lines round the menu's edges (#981); **the old PC Share button is gone** — the cog is the way in (#983); **on PC the captions menu opens where the Add menu is**, and the timeline stays squished (#984); the clapper rests between snaps (#988); the Home arrow draws once after a refresh (#989); **Toggle dark mode** (#990); “Project 1” clears itself when you name a project (#991); narrow PC windows: every button takes its own click (#979). **Your picks waiting: #982 Join icon (A–D), #985 export (A–C), #987 note colours (A–C), #970 (A/B).** v17.12 — **your 28 Sep picks**: the original car back plus a front-view car, eye A, blue corner lines (#973); **every animation with options now plays one at random** so you can decide over time — the empty-project tap, the clapperboard, the New project + (#974, #964, #957, #947); small Notes is a box on the phone (#975); **no white scrollbar on PC** — ‹ › arrows on hover, and the New rows slide with a mouse (#976, #977); **the cog opens Friends beside Canvas settings on PC** (#978); resizing no longer resets the playhead (#955); a paused friend catches up in under a second (#971). **#970 needs your A or B** (pictures sent). v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
+> **State:** v17.24 — **the Windows laptop can take over** (#1071): the tools run there, tests a machine cannot run say so by name instead of failing, and the shipping tools from his rules audit (#1073) are in. Next: the lock, then the simple editor step by step. v17.23 — **more choice on glows, shadows, vignettes and flares** (#482 batch 6): a vignette that fits a 9:16 frame, glows that spill past the edges of text, a spreadable drop shadow and a shadow-only mode, a stroke with a gap (sticker outline), flares with more rays, ghosts, a ring and an anamorphic streak, two-way streaks, and a Glow Scan at any angle. The simple editor (#980) Phase 1 is being built: first a lock that refuses any release changing the editor you use today. **Your picks waiting: the Filters tab (A/B/C) and the simple editor’s D18, D22, D23, D24.** v17.22 — **the new Home look**: Settings, centred wordmark, Search and Profile across the top; Select and Join in keyboard-accessible menus; a local profile photo; a bottom phone dock and a soft fade as project cards scroll; light and dark, phone and PC layouts. Previous: v17.21 — **deeper colour grading** (#482 batch 5): 20 colour effects now work on adjustment layers; Highlights & Shadows gets Local radius (lifts a dark subject without milky blacks), Whites, Blacks, Tonal width and Colour boost; Teal & Orange gets Protect skin and split-by-hue; Tint, Duotone, Gradient Map, Cross Process and Exposure gain blend modes and options. **Your pick waiting: the Filters tab, A, B or C** (pictures sent; A recommended). v17.20 — **more choice on the sound effects** (#482 batch 3): Echo gets Tone / Low cut / Tape wobble, Reverb gets Pre-delay / Tone / Low cut / Width, Pitch Shift gets Fine tune and ±24, the EQs get movable corners, the Compressor gets Output / Mix and a live bar, the Limiter gets Input gain / Release, and a playing sound effect shows ■ to stop it. Saved projects sound the same until you move one. v17.19 — **more choice on the movers and rhythms** (#482 batch 2): Wiggle, Shake, Pulse, Swing, Orbit, Drift, Flash (darken), Frame Stutter, Motion Blur, Speed Lines and Glitch each gained controls — patterns so two layers move differently, Hide edges for shakes, heartbeat/bounce pulses, a swing that settles, tickers that wrap, steady and build-up strobes, uneven glitch slices and block damage. Nothing changes on a saved project until you move one. v17.18 — **on PC the New project + no longer hides behind your project cards** (#992: with enough projects it sat under them and a click opened a project instead). v17.17 — **Gradient Overlay fades stronger and weaker in the effects sheet preview** (#995, your answer), so you see its whole range before adding it; it still lands at its usual strength. v17.16 — **the last 9 of the 26 effect/sound bugs fixed** (#986 closed): more blurs and colour grades that could go missing on your iPhone now keep their look; Clouds, Starfield, Find Edges and Emboss look on the phone preview as they export; audio search finds karaoke, robot, chipmunk… v17.15 — **more choice on the film looks** (Film Grain, Light Leak, Glow, Letterbox, Faded Film, Temperature, Colour Balance — #482/#966 batch 1); one door for saving a whole look (#994); the Sketching bar says Close (#834). v17.14 — **17 effect/filter/sound bugs fixed** (#986 batch 1): a filter on an adjustment layer now works, blurs survive on your iPhone class of device, vignettes stack and match the export, shadows under soft edges, shaking/spinning clips no longer show empty corners, Chroma Key Pro on a blue screen removes blue spill, Film Grain on the phone matches the export, the Limiter really limits (saved Limiters get a little quieter), the sound-effect ▶ plays exactly what Add adds. **Your list of everything waiting on you was sent by the logging chat (#993)** and REQUESTS.md now matches it. v17.13 — **your New project + animation is the ripple** (#947, your pick — Cancel closes it at once); **“Tap here to start creating” opens the menu straight away**, with the glowing lines round the menu's edges (#981); **the old PC Share button is gone** — the cog is the way in (#983); **on PC the captions menu opens where the Add menu is**, and the timeline stays squished (#984); the clapper rests between snaps (#988); the Home arrow draws once after a refresh (#989); **Toggle dark mode** (#990); “Project 1” clears itself when you name a project (#991); narrow PC windows: every button takes its own click (#979). **Your picks waiting: #982 Join icon (A–D), #985 export (A–C), #987 note colours (A–C), #970 (A/B).** v17.12 — **your 28 Sep picks**: the original car back plus a front-view car, eye A, blue corner lines (#973); **every animation with options now plays one at random** so you can decide over time — the empty-project tap, the clapperboard, the New project + (#974, #964, #957, #947); small Notes is a box on the phone (#975); **no white scrollbar on PC** — ‹ › arrows on hover, and the New rows slide with a mouse (#976, #977); **the cog opens Friends beside Canvas settings on PC** (#978); resizing no longer resets the playhead (#955); a paused friend catches up in under a second (#971). **#970 needs your A or B** (pictures sent). v17.11 — **Notes and Help open small and remember their size per project** (#968), **the small Help on your phone is really small** (#969, about half the screen), and **the invite code and QR start blurred for streaming — tap to show** (#972). v17.10 — **Work with friends, batches 4–5, the last** (#967, as recommended): one name everywhere (Work with friends · Share live · Join), the long code is the “swap code”, plain words instead of relay/session, privacy in one line with the full list a tap away, and on the phone a comments bubble with a count plus an “Ask to edit” button for a friend who can only view. **One thing only your phone can do: send yourself an invite link from your phone to your PC and join** — this Mac cannot reach the online helpers the link uses. v17.09 — **Work with friends, batch 3** (#967, as recommended): reopening a project you shared asks “Carry on sharing?” instead of going live by itself, Home badges every shared state (LIVE above the length, grey SHARED · paused), and switching projects while a friend who joined by code is in asks first. v17.08 — **Work with friends, batch 2** (#967, built to every recommendation on the sheet — say a letter to change one): a switch that stays in the Friends block so you can always turn it off, the person+ always on the video, a “Join” button on Home, a red ● LIVE on your video while you share, the switch at the top of Settings, and “How it works” in three lines. v17.07 — seven planned fixes at once: **the top bar on your phone** (#920 — built blind: tell me if the fade and the black bar are gone), the arrow and the clapping clapperboard (#957), the PC Add menu drags to the top (#958), the corner lines (#959), matching Import buttons (#960), a proper car and eye (#961, #962), and panels that shrink well on PC (#963). v17.06 — **Work with friends, batch 1** (#967): the code swap works with a real gap, a phone in the background no longer cuts a friend off, OFF really turns every project off, Stop sharing is on Home, and it says when someone leaves. The look changes wait on your picks on the #967 sheet. v17.05 — **one drawn ✕ everywhere** (#965, your B: the Settings ✕ is the search ✕ at 28px, and every typed ✕ in the app is now the same drawn one). v17.04 — **Friends now opens WITH Canvas settings on your phone** (#945, everything you recommended-picked): the bar above the card, ⤢ swaps them, it remembers which you had open, the person+ opens it with Friends big, and opening it never starts sharing — only Start sharing does. v17.03 — **the cog turns on your phone too** (#946), **Cancel is gone from the phone Select bar, Done goes blue while selecting, and the search ✕ is a proper centred disc** (#950–#952, matching the picture you sent). **Three design sheets are waiting on your pick:** the Friends block beside Canvas settings (#945), the New project + entrance (#947) and the Templates/Elements + menu (#948). v17.02 — **the extra + on PC is gone and the Share button closes when you tap it again** (#944), and **the people shapes are the airport sign** you picked (#929; the heart and its icon still wait on your pick). v17.01: your picks — the arrow to the +, the dark-ink light on the light Home, big Notes/Shortcuts, opening on Home — and a seventh bug hunt.
 >
 > ### 👉 [**Open the unblock list**](https://claude.ai/code/artifact/0ab35f83-9721-4e5e-b881-23c6e8b537a7)
 > Everything below is on that page, laid out so you can tap through it on your phone and send me one
@@ -49,16 +49,18 @@ gone stale · releases that still owe a proof · the standing reminders.
 | **Before you touch the queue** | If `INBOX.md` has anything under its `---`, **log it into this file VERBATIM with the next number and clear the inbox — before any other work.** He writes there from his phone so he never has to interrupt you. |
 | **Before you claim anything** | A fix ships with a test that **FAILS when the fix is reverted**. `tools/ship.sh` reverts it and checks. "It works" without that is the exact thing he caught and distrusts. |
 
-**Shipping is one command** (never `git commit` / `git push` by hand):
+**Shipping is one launcher** (never `git commit` / `git push` by hand). A ship outlasts every harness timeout, so it is launched, not called. Write the commit message to `.claude/ship/msg.txt` (first line e.g. `v17.xx — queue NNN: what changed`), then:
 
 ```bash
-nohup tools/ship.sh "v16.xx — queue NNN: what changed" > /tmp/ship.log 2>&1 < /dev/null & disown
+tools/ship-bg.sh        # exit 3 = LAUNCHED, NOT shipped. It prints the line to watch it with.
 ```
 
 It runs the suite twice (desktop, then 380px), checks the version label == the newest POLISH-LOG line
 == this file's stamp, bumps the `?v=` cache-busters, proves every `queue NNN` you claimed, and pushes.
-**It refuses rather than shipping something wrong.** It takes ~8 minutes; poll `[ -f .ship-in-progress ]`,
-never re-run it. Then confirm `git rev-parse HEAD` == `git rev-parse ssh/main`.
+**It refuses rather than shipping something wrong**, and it refuses to start beside a ship that is still running.
+
+> **Ships:** write the message to `.claude/ship/msg.txt`, run `tools/ship-bg.sh` (exit 3 means launched, NOT shipped), then Monitor `.claude/ship/ship.log` until `SHIP EXIT` appears or `kill -0` on the pid in `.ship-in-progress` fails. **Shipped** = the log says `pushed and verified` AND `.last-ship` is `PUSHED <hash>` with hash == `git rev-parse --short HEAD`. HEAD == ssh/main alone proves nothing. `RUNNING` with no live pid means a KILLED ship: re-ship it.
+> **Suites:** a full suite may use `run_in_background` with timeout = 1.6 × `tools/.suite-seconds` × 1000 (at most 7200000). Only `?only=` slices run in the foreground (timeout ≤ 600000). Never write minutes into prose.
 
 **Three writing rules he has enforced personally, each after catching a miss:**
 1. **Quote him verbatim and in full** in the entry, before paraphrasing anything. A summary is where
@@ -34513,6 +34515,17 @@ re-opened #480, which I had marked done and had not fixed.
       2. [ ] Step 1.2, the invisible engine (FM.timedLists, js/spine-words.js, js/spine.js) — nothing on screen, Full identical, proven by the lock. Ships on its own. (🔨 building after the lock.)
       3. [ ] Step 1.3, the view he holds (the cog's third block, Simple's timeline) — D18 A, D22 A, D23 A, D24 B answered 5 Oct (recommended, via the logging chat): build and ship after the engine; show him the cog block and D16 icons first.
       4. [ ] Phase 2 (BUILD-PLAN-PHASE2.md): editing clip after clip, after Phase 1, one release per step.
+      📍 **6 Oct ~00:30 — first browser runs (the Mac crashed at 23:46 and was picked up after):** steps 1.2 + 1.3 + the cog, 54/54 at 900 and 380; Phase 2 releases 2.1 + 2.2 on top, 81/81 at both. The first run found three real bugs, each fixed and mutation-proven: the first switch after the app reopened a project flipped straight back to Full (cog T10b); a refused switch shook again on every reopen (T13b); its reduced-motion rule lost the cascade (T15, now on real reduced motion from the driver). Checked against the approved pictures: the switch had no knob, What should you use? ran off the phone's block, and sideways (D24 B) the bar sat over the cog — all fixed, T12 now checks each. **Pictures sent** (tools/design/plans/simple-mode/cog/built/): the cog on phone, PC and sideways beside the approved designs, and the Simple timeline with the D16 chips. The lock (item 1) is being finished by a workflow (14 review findings); nothing ships before it.
+      📍 **6 Oct ~02:30 — Phase 1 reviewed** (three readers, each finding checked by a refuter; nothing found in the save format): five real defects in the switch, all fixed and mutation-proven — Open in Full saved the project as Full and skipped the questions (R1: it is now a hop through the guard, writing no memory, and a refusal is said in Simple's line); a switch never left Edit Group, so the + filed new clips inside a group (R2); the redo warning came when no step was made, and its counts were wrong (R3); a lost drag held the switch forever (R4). Phase 1 58/58 and Phase 1 + Phase 2 85/85 at 900 and 380. Phase 2 is being reviewed the same way now.
+      📍 **6 Oct ~03:40 — Phase 2 review:** 20 findings, 11 confirmed so far — the worst: a clip added or duplicated in Simple can come back BLANK after reopening (its media save was skipped); the rest are wrong results in corners (an end card left behind by a reorder, a sound twin left behind by Into row, a block trimmed only on its group row, Stay put on several items making several undo steps). A network outage at 03:14 killed the checks on the other nine and the UI lens; those are re-running. Phase 2 does not ship until every confirmed one is fixed with a test. Step 1.2 is ready on its own (36/36 at both widths) and ships right after the lock.
+      📍 **6 Oct ~05:10 — Phase 2 review complete:** 32 confirmed (none refuted), incl. the UI lens: on the phone More stops working after its sheet closes and the Length field cannot be committed on an iPhone; at 1280 the tray runs off its band; on PC the line's button lands where 🗑 was (a second click deletes a locked clip); keys in the tray run Full's shortcuts. Fixing release 2.1's share first on its own branch (each with a test that fails first), then 2.2's — so the two still ship one at a time.
+      📍 **6 Oct ~06:20 — Phase 2 fixed:** 2.1's eleven and 2.2's twenty-two review findings, each with a test seen failing first; Phase 1 + Phase 2 120/120 at 900 and 380. New words he has not seen: 'Open in Full to trim this', 'Open in Full to lift this off', 'Open in Full to put this card in the clip row', 'After the card'.
+      ✅ HE ANSWERED (6 Oct, ~06:25, in chat): *"do reconmended"* → **B, two rows, every tool on show**. ~~ASK (6 Oct, sheet sent: tools/design/plans/simple-mode/p22-review-shots/sheet-tray-pc.jpg): on PC at 1280 the clip tools do not fit one row — A one row, More + Delete pinned, four tools off the edge (built now); B two rows, every tool on show (recommended); C one row with a › cue. If he is silent when 2.2 is next to ship, build B (rule 16).~~
+      🔨 **6 Oct ~08:00 — B built** (branch 980-p22-trayb2, a7000c6f): on PC a clip's tools sit on two rows (ceil(n/2) columns, More and Delete last), the band grows only while it holds two rows, a line with a button takes the top row so it never lands where Delete was, the hint reads 'Its tools are below' only while the tools really are on two rows; the phone unchanged. An adversarial check at 7 widths x 4 heights found 3 small defects, all fixed with tests; 126/126 at 900 and 380.
+      ❓ASK (6 Oct, sheet sent: tools/design/plans/simple-mode/p22-review-shots/sheet-tray-more-pc.jpg): while More's panel is open on a laptop screen the panel and two rows do not both fit — 1 one row while the panel is open (built now, four tools off the edge); 2 two rows stay (the panel's first row of buttons cut); 3 one row with More turned into Done and a › cue (recommended). If he is silent when 2.2 is next to ship, build 3 (rule 16).
+      📍 **6 Oct ~13:00 — the lock's second review** found 3 blockers and 12 smaller holes (16 changes to Full still passed; once the first Simple release shipped, every ordinary release would have been refused; his phone size and short PC screens never measured). The second fixer closed 4 (incl. the ordinary-release one) before the app restarted; a workflow is finishing the rest, then replays each to prove it is caught. A full lock run takes ~77 min, on top of each Simple release's ~90-min ship.
+      ❓ASK (6 Oct): each review of the lock finds new ways a change to Full can slip past — no probe can prove 'unchanged' completely. A keep hardening until a review finds nothing (days; every Simple release costs ~77 min more); B fix the blockers and the likeliest holes, ship it as a strong net with its known gaps written down, keep hardening between releases (recommended); C drop the lock and rely on the reviews and the suite. Building B meanwhile.
+      📍 **6 Oct ~19:40 — the lock's second-review fixes are committed** (branch fu-lock-r4, 14 commits d518bc0e…a69d93be: the 16 changes, his phone and short screens, the stored records, every effect default, every key, the toast, script animations, pseudo-element hover, a friend's edits, the phone's other gestures, the exported sound) — the fixer then died on an API overload (529) before its final run. A finisher is doing the last gate item, the full lock run and the 60-release ordinary replay, then a re-check replays each finding.
       ⚠️ **Note for the build plan (30 Sep, v17.15; updated 1 Oct, v17.19):** the collab SCHEMA_REV is now **5** (the #482 polish batches 1–3 added effect and audio params) — BUILD-PLAN step 1.2's `SCHEMA_REV 3` must become **6** when it is built (one more than whatever `C.SCHEMA_REV` in js/collab-core.js says then). (It waited for his word to build; he gave it on 1 Oct — D15 A, Phase 1 from the revised plan, PLAN LANDED above.)
 
 
@@ -34915,12 +34928,68 @@ re-opened #480, which I had marked done and had not fixed.
       Attach to #215 / #604 / #677: fix first (count the encoded audio chunks; 0 means no track and an honest message), then his next export report says whether the loss is the encoder or the Photos import. His GO (5 Oct) puts this first in the bug backlog.
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
+      📥 **5 Oct, ~17:22 and ~19:50 — the PM verified ChatGPT's fix for this; land it (moved from INBOX whole):**
+      ### 05 Oct 2026, ~17:22 AWST — VERIFIED: ChatGPT's f25e15d3 (#1013, empty-audio export guard) and 3170a94c (#1014, panorama) — land together, between Simple-mode releases, before B1
+
+      **PM's note (not his words).** Two independent reviewers per commit (correctness, and his-outcome). Full instructions: `tools/design/chatgpt-tasks/pile/FIRST-TWO.md`. Nothing was run in a browser (your ship was in progress), so it was reasoned from the code plus `git merge-tree`.
+      - **Both: land-after-fix, in ONE release.** They close your existing #1013 (hunt MEDIUM) and #1014 (hunt HIGH), so retag both tests from `'TBD'` to those numbers and claim `queue 1013` and `queue 1014`.
+      - **Applying:** only `index.html` conflicts (the pile's own ?v= numbering). Bump from main's values instead: `exporter.js?v=126→127`, and `app.js?v=468→469` once. Use the `git show … | git apply -3 --index` route from the land-list block.
+      - **f25e15d3 fixes** (do them yourself unless ChatGPT's `fix-for f25e15d3` commit is already on `refs/pile/codex-690`):
+        - add the "decoded peak" decode-back line to the export report (AudioDecoder, as `aacPriming` already does), so a non-zero frame count of silence is distinguishable;
+        - console.warn and a "late AAC" line if a chunk arrives after the track was dropped;
+        - in the test, use `new AudioBuffer(...)` instead of an AudioContext that is never closed, stub the toast, and tighten the positive control to about 15 frames;
+        - don't claim the `hasAudio` change as independently proven (the "revert to !!mix" mutation survives).
+      - **3170a94c fixes:**
+        - make its round trip a real reopen (autosave, then `FM.storage.load()`, then assert width, height and transform are unchanged);
+        - drop or reword the long-side clause/assertion that claims legacy panoramas are detected.
+      - **What he will see:** a normal export looks the same, but the report line reads "TRACK WRITTEN · N AAC frames · X KB · Ys · decoded peak P". If his phone's encoder ever produces nothing, the card says "NO SOUND — the audio encoder produced no sound frames" instead of the old false "Sound ✓". **Update #215/#604/#677:** this is a guard plus a diagnostic, not a confirmed cure. His next export report decides it (0 frames = his phone's encoder; more than 0 with a peak above 0 = the loss is after the file, in Photos/sharing). New panorama imports keep their shape on reopen.
+      - **Order:** his words put Simple mode first. Land this pair in the first gap between Simple-mode releases, before B1.
+      ### 05 Oct 2026, ~19:50 AWST — UPDATE to the 17:22 block: ChatGPT's two fix-for commits arrived and are VERIFIED. Land them, do not redo the fixes
+
+      **PM's note (not his words).** `refs/pile/codex-690` is refreshed to ChatGPT's tip `ed27177e`. Both follow-ups the 17:22 block asked for are on it, and they cover every fix listed there. I reviewed them by reading only, since your ship was running: no browser. Every helper the new tests call exists on main (`q915aPng`, `FM.storage.settled`, `sleep`, `FM.storage.removeMedia`, `FM.projects.remove`).
+      - **The release is now four commits, in this order: `f25e15d3 f3109105 3170a94c 3c712a1d`.** Each one goes through the usual `git show --binary --format= <sha> -- . ':(exclude)outside' ':(exclude)index.html' ':(exclude)tests/tests.js' | git apply -3 --index`. Paste the two tests by hand as blocks, taking each test's FINAL version, the one from the fix-for commit. Retag them `1013` and `1014`. Bump `exporter.js` and `app.js` `?v=` once each from main's values.
+      - **f3109105** (follows f25e15d3): adds `decodedAACPeak()`, which decodes the kept AAC chunks back and records a `decoded peak` line in the export report. It also adds a console.warn and a `late AAC` line for a chunk that arrives after the track was dropped, and updates only this export's saved report. The test uses `new AudioBuffer`, stubs the toast and console.warn, expects 13–17 frames and a decoded peak of at least 0.1, and fires a late callback.
+        - **One optional hardening, not a blocker:** `await dec.flush()` has no timeout. A phone decoder that never settles would hang the export on a diagnostic. `aacPriming()` already runs the same unguarded decode on every export, so the risk is not new, but a `Promise.race` with a ~5 s cap returning null ("unavailable") is cheap.
+        - **Correction to the 17:22 block:** the peak is its own report line (`decoded peak 0.4xx`), not appended to the `audio` line.
+      - **3c712a1d** (follows 3170a94c): the test is now a real reopen. It creates a temporary project, imports, autosaves, waits for `settled()`, runs `FM.storage.load()`, and asserts the width, height and transform JSON are unchanged and the photo is still centred. The false "legacy 8000x1000 is detected" claim and its assertion are gone, and the `app.js` comment is reworded to match. It cleans up by reopening the prior project and removing the temp one.
+      - **Prove:** the 1013 test must fail with exporter.js reverted to main and the 1014 test with app.js and storage at main. If the 1014 one does not fail (main may already reopen panoramas correctly), it is a regression guard. Write `UNPROVABLE: <why>` for it rather than forcing it.
+      - **Still unverified, so do not land yet:** ChatGPT's newer `ba6fb835` (reconnect clash), `837fca68` (inspector keyboard), `007e0eeb` (Tab focus) and `ed27177e` (storage diagnosis), plus its staged #1019–#1026 branches. Their browser checks are pending until your ship ends. The PM will verify them and send a block.
+      ⏩ Land as ONE release with its pair (f25e15d3 f3109105 3170a94c 3c712a1d), retag the tests 1013, claim queue 1013 — in the first gap between Simple-mode releases, before B1 (#1069). The JUMPED line above stays: ChatGPT built it, the builder lands it.
+      ⚠️ 6 Oct ~04:10: superseded — ChatGPT's chain on v17.23 has the proven fix (2ea47a00; see #1068). Land that one; branch land-1013 (the pile's pair) is retired.
 - [ ] **1014 — A panorama import makes a canvas that changes shape when the project is reopened (hunt HIGH #1014)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 2
       Where: js/app.js:3020-3026 (fitProjectSize caps only the short side, at 2160) vs js/storage.js:1004-1010 (clampProjectDims caps each side at 7680, called at :890, :1777). The oversize warning at js/app.js:2982 checks only the short side · He sees: 16000×4000 → 8640×2160 project → reopens as 7680×2160. 9000×2000 is not capped at import and reopens as 7680×2000. The photo is then off-centre with its right edge cut, and nothing tells him. Arithmetic reproduced; the on-screen effect is inferred, not seen · Fix: Cap the long side at 7680 in fitProjectSize too, keeping the aspect ratio. Make the warning check both sides · Test: Unit: fitProjectSize(16000,4000) has both sides ≤ 7680. Round trip: import a 16000×4000 still, save, reopen, and assert the dims are unchanged and the layer is still centred. Mutation: drop the long-side cap
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
+      📥 **5 Oct, ~17:22 and ~19:50 — the PM verified ChatGPT's fix for this; land it (moved from INBOX whole):**
+      ### 05 Oct 2026, ~17:22 AWST — VERIFIED: ChatGPT's f25e15d3 (#1013, empty-audio export guard) and 3170a94c (#1014, panorama) — land together, between Simple-mode releases, before B1
+
+      **PM's note (not his words).** Two independent reviewers per commit (correctness, and his-outcome). Full instructions: `tools/design/chatgpt-tasks/pile/FIRST-TWO.md`. Nothing was run in a browser (your ship was in progress), so it was reasoned from the code plus `git merge-tree`.
+      - **Both: land-after-fix, in ONE release.** They close your existing #1013 (hunt MEDIUM) and #1014 (hunt HIGH), so retag both tests from `'TBD'` to those numbers and claim `queue 1013` and `queue 1014`.
+      - **Applying:** only `index.html` conflicts (the pile's own ?v= numbering). Bump from main's values instead: `exporter.js?v=126→127`, and `app.js?v=468→469` once. Use the `git show … | git apply -3 --index` route from the land-list block.
+      - **f25e15d3 fixes** (do them yourself unless ChatGPT's `fix-for f25e15d3` commit is already on `refs/pile/codex-690`):
+        - add the "decoded peak" decode-back line to the export report (AudioDecoder, as `aacPriming` already does), so a non-zero frame count of silence is distinguishable;
+        - console.warn and a "late AAC" line if a chunk arrives after the track was dropped;
+        - in the test, use `new AudioBuffer(...)` instead of an AudioContext that is never closed, stub the toast, and tighten the positive control to about 15 frames;
+        - don't claim the `hasAudio` change as independently proven (the "revert to !!mix" mutation survives).
+      - **3170a94c fixes:**
+        - make its round trip a real reopen (autosave, then `FM.storage.load()`, then assert width, height and transform are unchanged);
+        - drop or reword the long-side clause/assertion that claims legacy panoramas are detected.
+      - **What he will see:** a normal export looks the same, but the report line reads "TRACK WRITTEN · N AAC frames · X KB · Ys · decoded peak P". If his phone's encoder ever produces nothing, the card says "NO SOUND — the audio encoder produced no sound frames" instead of the old false "Sound ✓". **Update #215/#604/#677:** this is a guard plus a diagnostic, not a confirmed cure. His next export report decides it (0 frames = his phone's encoder; more than 0 with a peak above 0 = the loss is after the file, in Photos/sharing). New panorama imports keep their shape on reopen.
+      - **Order:** his words put Simple mode first. Land this pair in the first gap between Simple-mode releases, before B1.
+      ### 05 Oct 2026, ~19:50 AWST — UPDATE to the 17:22 block: ChatGPT's two fix-for commits arrived and are VERIFIED. Land them, do not redo the fixes
+
+      **PM's note (not his words).** `refs/pile/codex-690` is refreshed to ChatGPT's tip `ed27177e`. Both follow-ups the 17:22 block asked for are on it, and they cover every fix listed there. I reviewed them by reading only, since your ship was running: no browser. Every helper the new tests call exists on main (`q915aPng`, `FM.storage.settled`, `sleep`, `FM.storage.removeMedia`, `FM.projects.remove`).
+      - **The release is now four commits, in this order: `f25e15d3 f3109105 3170a94c 3c712a1d`.** Each one goes through the usual `git show --binary --format= <sha> -- . ':(exclude)outside' ':(exclude)index.html' ':(exclude)tests/tests.js' | git apply -3 --index`. Paste the two tests by hand as blocks, taking each test's FINAL version, the one from the fix-for commit. Retag them `1013` and `1014`. Bump `exporter.js` and `app.js` `?v=` once each from main's values.
+      - **f3109105** (follows f25e15d3): adds `decodedAACPeak()`, which decodes the kept AAC chunks back and records a `decoded peak` line in the export report. It also adds a console.warn and a `late AAC` line for a chunk that arrives after the track was dropped, and updates only this export's saved report. The test uses `new AudioBuffer`, stubs the toast and console.warn, expects 13–17 frames and a decoded peak of at least 0.1, and fires a late callback.
+        - **One optional hardening, not a blocker:** `await dec.flush()` has no timeout. A phone decoder that never settles would hang the export on a diagnostic. `aacPriming()` already runs the same unguarded decode on every export, so the risk is not new, but a `Promise.race` with a ~5 s cap returning null ("unavailable") is cheap.
+        - **Correction to the 17:22 block:** the peak is its own report line (`decoded peak 0.4xx`), not appended to the `audio` line.
+      - **3c712a1d** (follows 3170a94c): the test is now a real reopen. It creates a temporary project, imports, autosaves, waits for `settled()`, runs `FM.storage.load()`, and asserts the width, height and transform JSON are unchanged and the photo is still centred. The false "legacy 8000x1000 is detected" claim and its assertion are gone, and the `app.js` comment is reworded to match. It cleans up by reopening the prior project and removing the temp one.
+      - **Prove:** the 1013 test must fail with exporter.js reverted to main and the 1014 test with app.js and storage at main. If the 1014 one does not fail (main may already reopen panoramas correctly), it is a regression guard. Write `UNPROVABLE: <why>` for it rather than forcing it.
+      - **Still unverified, so do not land yet:** ChatGPT's newer `ba6fb835` (reconnect clash), `837fca68` (inspector keyboard), `007e0eeb` (Tab focus) and `ed27177e` (storage diagnosis), plus its staged #1019–#1026 branches. Their browser checks are pending until your ship ends. The PM will verify them and send a block.
+      ⏩ Land as ONE release with its pair (f25e15d3 f3109105 3170a94c 3c712a1d), retag the tests 1014, claim queue 1014 — in the first gap between Simple-mode releases, before B1 (#1069). The JUMPED line above stays: ChatGPT built it, the builder lands it.
+      ⚠️ 6 Oct ~04:10: superseded — ChatGPT's chain on v17.23 has the proven fix (9cec73a1; see #1068). Land that one; branch land-1013 (the pile's pair) is retired.
 - [ ] **1015 — Edits a guest makes while offline go out without the clash check if they edit again before the host's catch-up reply, and silently overwrite the owner's newer change (hunt MEDIUM #1015)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 3
@@ -35239,7 +35308,7 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): the 5 Oct HANDOFF block (in #980)
       Structural, his rule: git fetch ssh first, refuse if ssh/main is not an ancestor of HEAD ("live has moved on: pull first"). Measured 5 Oct: live was f7716576 (ChatGPT's v17.22), the tree 28104a3e.
       🔨 5 Oct (shipped with v17.23's tooling): the gate is in tools/ship.sh, right after the mutation check — fetch, refuse if ssh/main is not an ancestor of HEAD, warn and carry on when offline. Checked both ways by hand (this tree passes; 28104a3e would be refused). Left open for one thing: a self-test that keeps it honest, like _classify.py's.
-
+      🔨 **6 Oct ~03:55 — the gate now also refuses when GitHub cannot be reached** (it used to warn and carry on). github.com dropped out from this Mac twice in one night (03:14, 03:50 — ssh and https both), and a ship launched into that spends ~90 minutes for a push that cannot land; a fetch with no limit also HANGS rather than fails. The fetch now gets 15 s to connect (measured against the real outage: exit 128 after 15 s) and an unreachable remote stops the ship before anything runs; FM_SHIP_OFFLINE=1 commits locally anyway. Ships with the next release.
 - [x] **1067 — PM lane split: the verified ChatGPT bug lists are ChatGPT's to fix; the builder lands its verified commits** (5 Oct, ~16:15 AWST, via INBOX — the logging chat as project manager; NOT his words) ✅ **LOGGED**
       Moved from INBOX.md whole:
       ### 05 Oct 2026, ~16:15 AWST — PM lane split: the VERIFIED ChatGPT bug lists are now ChatGPT's to fix; you land them, you don't build them
@@ -35250,3 +35319,330 @@ re-opened #480, which I had marked done and had not fixed.
       - ChatGPT's fixes accumulate as one linear series on `codex/690-reviewed-local` (on top of live v17.22) in `/private/tmp/freemotion-*`. The PM verifies them in batches and hands you **ordered land lists** here. Land them between Simple-mode releases; Simple mode stays first.
       - Nothing about your Simple-mode work changes.
       Applied: every item it names carries the JUMPED line above; the needs-his-OK, device-run, taste-call and test-gap items, and #1066, stay the builder's.
+
+- [ ] **1068 — Land ChatGPT's verified pile in batches B1–B8, between Simple-mode releases (his "make sure this gets done properly without needing my input")** (5 Oct, ~17:16 AWST, via INBOX — his words + the PM's land list)
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+      Moved from INBOX.md whole:
+      ### 05 Oct 2026, ~17:16 AWST — ChatGPT pile reviewed: land list ready (261 commits on codex/690-reviewed-local)
+
+      **His words (verbatim):** "Okay im leaving my laptop now, make sure this gets done properly without needing my input."
+
+      **PM's plan (not his words).** Per #1067, the builder lands ChatGPT's verified commits between Simple-mode releases; Simple mode stays first.
+      Full plan: `tools/design/chatgpt-tasks/pile/LAND-LIST.md` (batches B1–B8, his questions, the drop list, ChatGPT's rules).
+      Verdicts on the 261 commits: 72 land as-is, 89 land after a fix, 41 wait on his answer, 59 dropped.
+      The pile does NOT contain the empty-audio export fix (#604/#215). When ChatGPT's fix for it arrives, it lands before B1.
+
+      **Already done by the PM (5 Oct):** the pile is copied into our repo, so /private/tmp being wiped loses nothing. `refs/pile/codex-690-reviewed` = `6ed01d4d` (the reviewed tip, which these batches name) and `refs/pile/codex-690` = ChatGPT's live tip (it keeps adding, linearly on top). Never write in ChatGPT's clone. Refresh with `git fetch /private/tmp/freemotion-reviewed-local-20261005 codex/690-reviewed-local:refs/pile/codex-690`.
+
+      **First batch to land, after the current Simple-mode release: B1, "saving, importing, offline and small app fixes" (14 commits).**
+      This batch does not touch compositor.js or collab-core and needs no schema bump. Land it before Simple Phase 2, which rewrites history.commit() and FM.replaceMedia.
+      Apply in this order:
+      `52843cc2 9cd5923c a4de4183 e808c3c2 b48cb48f f1ac5fa8 e987e4f3 2e5e0cf0 70797f4c 1fdd128b 5e8337da b69c5795 5cf39d11 d662aa35`
+      Apply each one uncommitted with:
+      `git show --binary --format= <sha> -- . ':(exclude)outside' ':(exclude)index.html' ':(exclude)tests/tests.js' | git apply -3 --index`
+      Paste each test into tests.js as a block (never union-merge). Bump each touched file's ?v= once from live.
+      Fixes required before shipping B1:
+      - 2e5e0cf0: exportFile must fall back to IndexedDB, or "no longer stored" is sometimes false.
+      - 70797f4c: buildBackup must cap fonts at _backupEmbedLimit, not Infinity (iPhone memory). Keep #1038 open.
+      - f1ac5fa8: add a rejecting-fetch test case. Keep #1042 open.
+      - b69c5795: fix before landing. Do not resync across a split (the song goes silent after the cut). Remap keyframes only on a speed change or a move. Add split, trim and move tests. Bump audio-tools ?v= from live 7.
+      - d662aa35: leave out the sw.js?v=1 register change (the exclude above already does).
+      - Every test is tagged item 'TBD'. Log B1 as one hunt-tagged REQUESTS entry and use its number. 9cd5923c+a4de4183 close #1051. They do NOT close #1040.
+      Tests: the batch's own tests, plus 888, 915, 1051, SW 306/430 and the karaoke tests, at 900 and --width 380. Then ship.sh.
+      What he sees: honest warnings when a file is missing footage or fonts; broken project files refused cleanly; Remove Vocals stays in sync.
+
+      **After B1:**
+      - B2: keyframed Speed stops jumping. 26 commits; needs v17.23 shipped. Fix Glow Scan's travel branch first.
+      - B3: preview matches export, plus effect memory. 12 commits; Unsharp Protect colour must default to 0.
+      - B4 and B5: opt-in controls on existing effects. Before/after sheets.
+      - B6: 13 new effects, picture sheet.
+      - B7: 4 sound packs, listening page.
+      - B8: C31 stills half, squashed, low priority.
+      Fonts, worker export, shapes and the other new features wait on his answers in LAND-LIST.md §3.
+      Drop all of T08, T14, T27, T30, T33 and T39, plus the merges. v17.23 or live already has them, or they are only notes.
+
+      ❓ASK (his questions, recommended answers in LAND-LIST.md §3; none blocks B1–B5):
+      - Fonts: yes, but keep old titles unchanged.
+      - ChatGPT's 12 drawn fonts: none until he has seen a sheet.
+      - Shapes: keep today's.
+      - Worker export: after #604.
+      - Colour pack, audio tools, audio effects, Filter layer tile, Overdrive sun, Stripes smoothing, Poster Print.
+
+      **Two newer ChatGPT commits beyond the reviewed tip are being verified by the PM now:** `f25e15d3` "Guard empty AAC output before MP4 muxing" (the empty-audio-track export defect; may be his no-sound bug #215/#604/#677) and `3170a94c` "Keep panorama canvas within persisted size limits" (batch-2 §1b.2). If they verify, they land FIRST, before B1. A follow-up block will say.
+      ❓ASK (his, none blocks B1–B5; recommended answers in tools/design/chatgpt-tasks/pile/LAND-LIST.md §3): fonts, ChatGPT's 12 drawn fonts, shapes, worker export, colour pack, audio tools, audio effects, Filter layer tile, Overdrive sun, Stripes smoothing, Poster Print.
+
+      📥 **6 Oct, ~04:10 — ChatGPT is out of usage until 11 Oct; its finished chain of 7 fixes on v17.23 is ready (moved from INBOX whole):**
+      ### 06 Oct 2026, ~04:10 AWST — ChatGPT is out of usage until 11 Oct; its finished chain of 7 fixes on v17.23 is ready to land — PM note, NOT his words
+
+      **PM's note (not his words).**
+      - **ChatGPT is stopped.** It hit its usage limit at 03:05 AWST: "You've hit your usage limit … try again at Oct 11th, 2026 2:24 PM". Its heartbeat still fires every minute and fails at once, which costs nothing. It stays ACTIVE so the work resumes by itself if Ezra adds credits. That is his call and is not asked of him.
+      - **What it left is clean.** One linear chain on v17.23 (b46b47d3), branch **`chatgpt/1059-detect-speech-fallback`** (tip 13e5b1ea; worktree clean; the refs are already in this repo). Its land-ready table is at the end of its STATE.md (~/.codex/visualizations/…/freemotion-takeover/STATE.md).
+      - **Proven** (focused test, red with the fix reverted, green with it; muted Chromium on its own port):
+        - `2ea47a00` #1013 empty AAC track: supersedes the pile's f25e15d3 plus fix-for in FIRST-TWO.md.
+        - `9cec73a1` #1014 panorama reopen: supersedes 3170a94c plus fix-for.
+        - `ba154a37` #1040 missing transform on import.
+        - `a22dbc46` #1041 nested styled groups.
+        - `13e5b1ea` #1059 Detect speech fallback.
+      - **NOT proven:** `d8fa4fbb` #1015 guest reconnect clash and `8c813c78` #1016 keyboard numeric values. GATE BLOCKER: their focused tests on port 8894 "could not bootstrap the app frame", and one reverted #1015 run failed setup with undefined innerHTML. Run them yourself, once on the tree and once on HEAD, before landing them.
+      - **Landing order waits on his answer** to the RULES-AUDIT question: between Simple releases, or after Simple mode. Until then, do not land. When it is time, apply per commit, uncommitted, with the usual `git show … | git apply -3 --index` route (excluding index.html/tests.js/outside), then bump `?v=` from live once.
+      ⚠️ This SUPERSEDES the pile's #1013/#1014 pair the builder had prepared on branch land-1013 (f25e15d3+f3109105, 3170a94c+3c712a1d): land 2ea47a00 and 9cec73a1 instead. Landing waits on his answer to the RULES-AUDIT question (a) (#1073).
+- [ ] **1069 — Land ChatGPT batch B1: saving, importing, offline and small app fixes (14 commits, with the five fixes the land list names) (hunt MEDIUM #1069)** (5 Oct — the PM's land list, #1068; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Order and fixes: #1068's block (52843cc2 … d662aa35; fix 2e5e0cf0, 70797f4c, f1ac5fa8, b69c5795; leave out d662aa35's sw.js change). Its tests are tagged 'TBD' in the pile — retag them 1069. 9cd5923c + a4de4183 close #1051, not #1040.
+
+- [ ] **1070 — The test browsers play sound through his speakers: add --mute-audio** (5 Oct, ~22:28 AWST, via INBOX — his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole:
+      ### 05 Oct 2026, ~22:28 AWST — Test browsers play sound through his speakers: add --mute-audio
+
+      **His words (verbatim):** "Also i think when u do testing you play audio noises but for some reason i hear them out of my speakers which means i have to constantly have my pc muted. I dont mind if theres a genuine need for this and no fix but if theres a way for this to stop playing for me then lmk"
+
+      **Logger's plan (not his words).** Headless Chrome still plays sound through the Mac's real output device. `tests/_cdp.py`'s `launch()` has no `--mute-audio`, so every suite and ship pass plays test tones aloud.
+      - **Change:** add `"--mute-audio",` to the flag list in `tests/_cdp.py` `launch()`, beside the two WebRTC flags, with a one-line comment quoting him. Make it AFTER v17.23 lands, never mid-ship: the 380 pass re-launches `_cdp.py`.
+      - **Measured by the PM, ~22:25, in a standalone headless Chrome:** with `--mute-audio`, a real-time AudioContext reports `running` and its clock advances 1.13–1.15 s over a 1.2 s wait. An AnalyserNode reads RMS 0.704–0.710 off a unit sine, the correct value of 1/√2. OfflineAudioContext renders a peak of 1.0. That was 4 of 4 muted runs, identical to unmuted. One earlier cold-start run had the clock not yet started, in a fresh profile, unrelated to the flag. So the flag mutes the output and leaves what the tests measure alone.
+      - **Proof before shipping:** run every audio, sound, export-audio and voice test with `?only=` at 900 and 380, and confirm the same results as without the flag. If any `voice:` test depends on the real output device, that would show here. Bring it in with the next release; it is test-harness only, so log it `UNPROVABLE: harness flag, verified by the audio-test pairing`.
+      - **ChatGPT has been told** to add the same flag to its own Chrome launches.
+      Clauses (his):
+      1. [ ] Test runs make no sound on his Mac (if there is a genuine need and no fix, tell him).
+      🔨 **6 Oct ~01:40 — built and checked, ships with the next release:** `--mute-audio` is in tests/_cdp.py's Chrome flags (a comment quotes him). It mutes only the OUTPUT; nothing in the app uses speechSynthesis, which would bypass it. Checked on the 290 audio / voice / export tests at 900 and 380: 288/290 with the flag, and the SAME two fail the same way without it in the same partial run (‘opening the export dialog stops the transport’ cannot start the transport outside the full suite; 914.9 adds no undo step after it) — both pass in the full suite, so the flag changes nothing measurable. One more thing it may help: the run WITHOUT the flag froze for 36 minutes on a sound test (986 C12), the coreaudio stall that has hung runs before; the muted run did not. The log line will say UNPROVABLE: a harness flag — sound out of the Mac's speakers is not something the suite can hear.
+- [ ] **1071 — Move the work to his more powerful Windows laptop (another time, not tonight), after a clean reset; keep his files** (5 Oct, ~22:40 and ~22:50 AWST, via INBOX — his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole:
+      ### 05 Oct 2026, ~22:40 AWST — Move the work to his more powerful laptop (another time, not tonight)
+
+      **His words (verbatim):** "also i have a way more powerful laptop with lots of storage, i just havent been using it coz its impractical to bring around, could have a virus ( my computer nerd friend whos really smart found one on my pc recently and got rid of it, might be worth you having a gander). but if we switch to it we can just remote control from this laptop anyways so it wont lose and practicality. What do you say, worth switching? not tonight ofc but another time"
+
+      **Logger's plan (not his words). PM's recommendation: yes, worth it. The machine is today's bottleneck.**
+      - **Measured on this Mac, 5 Oct:**
+        - 6 cores and 8 GB RAM, with swap at 5.4 of 6 GB.
+        - 8–9 GB of disk free.
+        - A suite pass takes 45 min and a ship ~90.
+        - Timing-sensitive collab tests flake under load, and seven v17.23 attempts were refused in one evening.
+      - **Expected on a stronger machine:**
+        - Faster passes.
+        - The desktop and 380 passes can run side by side instead of one after the other.
+        - ChatGPT's browser checks can run during a ship.
+        - No disk squeeze.
+      - **❓ASK (him, when he next has it out):** the model, or a photo of its About / System Information page. Is it Windows or a Mac?
+        - The tooling is bash + python with macOS-isms (`stat -f`, `/Applications/Google Chrome.app`, `DEVELOPER_DIR`, the iCloud inbox path). On a Mac it moves as-is. On Windows it runs under WSL2, after a small porting pass the PM will scope first.
+      - **Virus first, before anything sensitive goes on it** (his GitHub SSH key, which can push to the live site; his logged-in Claude and ChatGPT accounts):
+        - Recommended: reset or reinstall the OS fresh. After a known infection that is the only reliable "clean".
+        - If he would rather not: the PM does a check when it is set up (startup items, scheduled tasks, unusual processes and network connections, a full plus offline Defender scan), and says plainly that a check is weaker than a fresh install.
+      - **Remote control:** keep this Mac as the screen.
+        - The work runs on the new machine: the Claude desktop app's Remote Control, or Screen Sharing / Chrome Remote Desktop.
+        - The new machine must stay awake and on power. A Mac uses `caffeinate` or the app's keep-awake; Windows uses its power settings.
+      - **Move order (one evening):** fresh OS → Chrome, git, python, Claude app, Codex app → clone from GitHub (not a copy of this disk) → new SSH key added to GitHub → run one full suite to measure it → switch the loop over → retire this Mac's loop.
+      ### 05 Oct 2026, ~22:50 AWST — UPDATE to the powerful-laptop block: it is Windows; he wants to keep his files
+
+      **His words (verbatim):** "its a windows laptop, the only reason i dont want to reset is i have some files and stuff on it i dont want to lose, but surely i can put that on an external storage without worries of virus coming through? well the external storage could be infected to as ive used it lots. may be worth reseting the storage drive first as well, but by plugging it in i could be letting a virus get into it."
+
+      **Logger's plan (not his words).** ✅ The OS question in the earlier block is answered: **Windows**, so the tooling runs under WSL2 after a porting pass that the PM scopes before the move. His files survive the reset this way:
+      1. **Scan before copying.** Run a Microsoft Defender full scan, then a Defender Offline scan. Both are built in.
+      2. **Copy only personal files** (photos, videos, music, PDFs and documents) onto the external drive. Leave out programs and installers (`.exe .msi .bat .cmd .ps1 .vbs .js .scr .lnk .jar .iso`), macro Office files (`.docm .xlsm`), and zips containing those. Programs get reinstalled from the official sites.
+      3. **Reset** with "Remove everything" plus "Clean the drive", or use a fresh install from Microsoft's USB tool.
+      4. **Bring the files back.** After the reset, scan the external drive with Defender before opening anything on it, then copy back. Never run a program from the old drive.
+
+      On his drive worry: a file on a USB drive does nothing until it is OPENED or RUN. Windows has not auto-run USB drives since Windows 7, and photos and documents are not programs. The Mac is also a safe place to plug the drive in, because Windows viruses cannot run on macOS.
+      ~~BUILT OUT UNTIL HE brings the laptop out~~ — he has (6 Oct), see below.
+      ✅ UNBLOCKED (6 Oct): he is moving now — his words, relayed by the logging chat: "lets get this whole thing on my laptop and moving"; and later, "look yeah whatever you think is best, just let me know what you need me to do" (which answers the push and the OS-specific-tests question below — the recommended answers).
+      📥 **6 Oct, ~18:10 — the Windows (WSL) report and what is left before the PC can take over (moved from INBOX whole):**
+      ### 06 Oct 2026, ~18:10 AWST — Windows laptop (WSL) report: tooling works; what is left before it can take over — PM note, NOT his words
+
+      **What the PC Claude reported (pasted by Ezra):**
+      - Notes installed: global CLAUDE.md, /mobile-pass and /ship-check, and 43 memory notes.
+      - `port/wsl` pushed at 5b562175: 3 tooling-only commits on b46b47d3.
+      - Full suite on WSL is 2265/2288 at both 1280 and 380, taking 2905 s against the Mac's 2697 s (about 7% slower per pass). The SAME 23 reds at both widths are all environment-only, and every 921 collab and timing test is green:
+        - 15 byte-exact picture/sample hashes recorded on the Mac (482);
+        - 1 blur tolerance set on the Mac (986 C24);
+        - 4 that need an AAC encoder Linux Chrome lacks (215 x2, 690 x2);
+        - 2 that need BarcodeDetector (921 S6/S8);
+        - 1 emoji font, already fixed with fonts-noto-color-emoji.
+      - The test page reserves about **8.7 GB over a suite run**. The first Linux pass died on Chrome's 8 GB renderer cap. That may explain the Mac's swap pressure and its reboot.
+
+      **PM's plan (builder; nothing here ships before he answers the ❓ASK):**
+      1. **Merge `port/wsl` from the Mac, as one release with the rules-audit B1–B5 tools.** Both touch ship.sh, tick.sh and inbox.sh. Apply the PM's adversarial review of the port first, from `tools/design/pm/port-wsl-review.json`:
+         - MAJOR: inbox.sh off main must show the working-tree INBOX lines as well as ssh/main's, never "inbox empty" while a local line exists.
+         - MAJOR: on Linux, real touch is sent without touch emulation, so the page reports a mouse during gestures. Either fix it or make those tests say NOT RUN on Linux.
+         - Then the minors: the anchored double-quote title regex, a ship.sh main-branch gate, control NOSUITE in spotcheck, the reaper pattern built from the chosen Chrome binary, and checked git exit codes.
+      2. **Per-machine suite length.** `tools/.suite-seconds` is shared, but the PC is 2905 s and the Mac 2697 s. Key it by machine.
+      3. **(hunt MEDIUM) Suite memory.** The page reserves about 8.7 GB over one run. Find the leak (tests that leave media, bitmaps, AudioContexts or workers alive) and add a guard that fails a run whose renderer grows past a set budget.
+      4. ❓ASK (Ezra, asked by the PM): **OS-specific tests.**
+         - The recommended answer: the 16 hash and tolerance tests get a per-OS baseline, recorded once on each machine. The 6 AAC/Barcode tests report a visible "NOT RUN HERE: needs AAC encoder (Mac/phone)" count instead of failing, never a silent skip.
+         - Add a structural ship.sh rule: a release that touches export-audio or QR code refuses unless those tests ran green on a machine that has the feature (the Mac) for that HEAD.
+      ✅ HE ANSWERED the OS-specific-tests ❓ASK: "whatever you think is best" → the recommended answer (per-OS baselines for the 16; a visible NOT RUN HERE for the 6; the ship.sh rule that export-audio / QR changes need those tests green on the Mac). The memory hunt is #1085.
+      📍 Builder's order (6 Oct): the lock first, then ONE release with port/wsl + the rules-audit B1–B5 tools (#1073, after the PM's port review fixes), then Simple 1.2 onward. The Mac stays the only shipper until that release is live and the WSL suite is green or NOT-RUN-only.
+- [ ] **1072 — His second (free) Claude account gets a tutorials job, on a lower model, monitored** (6 Oct, ~00:10 AWST, via INBOX — his words)
+      **STATUS: 📌 NOTE — nothing to build**
+      Moved from INBOX.md whole:
+      ### 06 Oct 2026, ~00:10 AWST — Give his second (free) Claude account a tutorials job, on a lower model, monitored
+
+      **His words (verbatim):** "On my google that i have open (take control of my pc to see) i have another claude account open and i want you to delagate it a task. This task cannot interfere with other stuff. an idea for it could be creating tutorails. it isnt a pro sub so it has less usage, make sure its running a lower model. Monitor its output and make sure the tutorials are actually good and good for the app"
+
+      **Logger's plan (not his words).** The PM (logging chat) drives the second account in his Chrome on claude.ai, on the lowest model offered. It writes step-by-step FreeMotion tutorials from PM-written fact sheets taken from the code, so it never guesses at buttons. It has no access to the Mac or the repo, so it cannot interfere with the builder or ChatGPT. The PM checks every tutorial against the code and the live app before keeping it. Kept tutorials go in `tools/design/tutorials/`, and only Simple-mode-independent features are covered while #980 is being built. BUILDER: log it, nothing to build. If these become a public tutorial series, BEFORE-PUBLISHING.md (Alight Motion look) applies first.
+      Clauses (his): 1. [ ] delegate it a task (tutorials) · 2. [ ] it cannot interfere with other stuff · 3. [ ] a lower model · 4. [ ] monitor it — the tutorials actually good and good for the app.
+      JUMPED: not the builder's lane — the logging chat drives his second account and checks each tutorial against the code (his arrangement); the builder has nothing to build unless he picks to show them in the app (#1082).
+
+- [ ] **1073 — Rules audit: no rule should be slowing us down or causing issues** (6 Oct, ~02:00 AWST, via INBOX — his words; the audit is the PM's: tools/design/pm/RULES-AUDIT.md)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole:
+      ### 06 Oct 2026, ~02:00 AWST — Rules audit done: changes for the BUILDER (his request, verbatim below)
+
+      **His words (verbatim):** "Make sure none of the rules chatgpt or you have set up are slowing us down or causing issues, i may of set a rule ages ago that doesnt fit well for right now." Later the same night: "look, time to achieve stuff doesnt bother me, as long as it is well spent time and not wasted. if tests are proved to be genuinely helpful then keep testing and take your time getting it right"
+
+      **PM's plan (not his words).** A read-only, adversarially verified audit of every standing rule (CLAUDE.md, LOOP.md, tools/ gates, memory, ChatGPT's prompt, the PM's rules) is in **`tools/design/pm/RULES-AUDIT.md`**. Its "Changes for the builder" section B1–B13 has the exact files, lines and wording, and none of it weakens a proof gate. In short:
+      - **Before your next ship:**
+        - **B4** mutate.sh: its cap is 1800 s but a pass is 2697 s, so it cannot finish. FIRST-TWO.md tells the land-1013 release to run three mutations.
+        - **B1** a `tools/ship-bg.sh` launcher that exits 3 ("launched, NOT shipped"), live-pid checks in ship.sh, and the same two-line ship rule in CLAUDE.md, LOOP.md rule 6, tick.sh:104, REQUESTS.md:53-62 and the suite-timeout memory.
+        - **B3** the oldest-first refusal text must say: never JUMP an item in his own words (e.g. #980) just to get a land release through.
+      - **Soon:**
+        - **B2** build during ships: create the next worktree BEFORE a ship and reuse it mid-ship.
+        - **B5** first-message step 3 reads tick.sh's `UNSHIPPED RELEASE:` line, not "is the tree dirty".
+        - **B6** ship.sh guards: a source-hash re-check before `git add -A`, wait up to 20 min for load before the phone pass but never refuse after a green desktop pass, STALLED detection, PASSES-ALONE / FAILS-ALONE diagnosis on a red pass, and its own server port.
+        - **B7** a docs-only fast path: 163 lines of his words are on this Mac only.
+        - **B8** a cheaper one-minute tick: move the LOOP.md narrative to LOOP-HISTORY.md; the tick.sh trims.
+        - **B9** inbox wording. **B10** the unblock-list line at the top of REQUESTS.md. **B11** memory merges.
+      - **Before the Windows laptop:** **B12** port checks must refuse, never silently skip.
+      - **Only after his yes:** **B13** his global ~/.claude/CLAUDE.md.
+
+      **Three practical notes:**
+      1. **#1065** is JUMPED: ChatGPT already built it as 57a745ea. Land it after its browser check and the 380px check; do not rebuild it.
+      2. **#1068**'s fetch line points at /private/tmp, which the reboot emptied. The branches are already in this repo under refs/heads/codex/*; LAND-LIST.md is updated to match.
+      3. Before each land ship, run ChatGPT's still-pending focused tests as one `?only=` slice.
+
+      **Already done by the PM:**
+      - PM-STATE lanes and tick rules.
+      - LAND-LIST fetch line, and ChatGPT's rule A is now "focused tests only, never a full suite; your landing ship is the full-suite gate".
+      - ChatGPT's heartbeat prompt REPLACED with the audited rules: one worktree, never stash, start new fixes from v17.23, real REQUESTS numbers on tests, never take his-words items. A backup is at ~/FreeMotion-backups/automation.toml.before-audit-2026-10-06.
+      - Its two /tmp bundles moved to ~/FreeMotion-backups/.
+      - Two memory fixes: chatgpt-prompts-one-block and chatgpt-codex-interlude.
+
+      ❓ASK (his, when he is back; the PM asks him):
+      - (a) ChatGPT's checked fixes land BETWEEN Simple releases, or only AFTER Simple mode is finished?
+      - (b) Republish the unblock list at a new private link: yes or no?
+      - (c) Yes to correcting his global CLAUDE.md (the "nothing leaves the device" exception for collab relays; moved folders; the old Slot game/FreeMotion copy)?
+      - Also his hands: Spotlight Search Privacy for ~/Claude/FreeMotion, ~/.codex and ~/Library/Application Support/Claude.
+      Clauses (his): 1. [ ] none of the rules (mine or ChatGPT's) slow us down or cause issues · 2. [ ] an old rule that does not fit now gets changed. (And his steer: time well spent, tests kept where they are genuinely helpful.)
+      📍 Builder's order: B4, B1 and B3 before the next ship that needs them (B4 only matters to a release that runs mutate.sh — the land releases); B2, B5–B11 soon; B12 before the Windows move; B13 only after his yes.
+      🔨 **6 Oct ~14:30 — B1, B3 (its wording), B4, B2 (text) and B5 built** on branch rules-audit-b1b5 (4ffff138), each self-tested (tools/test-ship-bg.sh, tools/test-mutate.sh, all green): ship-bg.sh launches a ship and exits 3 — never 0 — and refuses beside a live one; ship.sh records its pid and phase, and a killed ship reads as KILLED; mutate.sh's cap follows the measured suite length, a timeout reads TIMED OUT (exit 8), never SURVIVED, and an --only mode proves a mutation on a slice. An adversarial check found 6 defects (2 major: a cached green baseline that missed the mutated file or the width, so a mutation could read CAUGHT on a tree already red); all six fixed (branch rules-audit-b1b5-fix, 1f7610a1), each with a self-test case that failed first; tools/test-mutate.sh 31 checks and tools/test-ship-bg.sh 40 checks green. Ships in a tools release between Simple releases.
+- [ ] **1074 — Phone: after the first import, Export is hidden (hunt LOW #1074)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      1. **Phone: after the first import, Export is hidden.** The new clip is auto-selected (app.js:3099-3100), which sets body.m-editing (app.js:1007), and `body.m-editing #m-export { display:none }` (styles.css:4214) removes the Export button until the user finds the back arrow. Tapping back a second time goes to Home. A beginner who just added their first clip cannot see how to export. Options to draw: keep Export visible in the clip header, or do not auto-select after the first import.
+
+- [ ] **1075 — Phone: grabbing a clip to move it gives no visual signal on iPhone (hunt LOW #1075)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      2. **Phone: grabbing a clip to move it gives no visual signal on iPhone.** It only calls navigator.vibrate(10), which Safari does not support. The edge grips turn teal, but the clip body shows nothing. A lift or shadow on grab would fix it.
+
+- [ ] **1076 — PC: the S key splits only when the playhead is over the selected clip (hunt LOW #1076)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      3. **PC: the S key splits only when the playhead is over the selected clip.** Otherwise it STRETCHES the clip's near edge out to the playhead (app.js KeyA/KeyS/KeyD), a surprising, different edit from a "split" key.
+
+- [ ] **1077 — Effects browser: the "does nothing here" badge swallows the tap (hunt LOW #1077)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      4. **Effects browser: the "does nothing here" badge swallows the tap.** On a full-frame clip, tapping the badge on the Drop Shadow tile shows a toast and does NOT pick the tile (fx-browser.js ~929). The user has to know to tap the picture instead.
+
+- [ ] **1078 — Drop Shadow → Shadow only on a full-frame clip turns the whole picture black (hunt LOW #1078)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      5. **Drop Shadow → Shadow only on a full-frame clip turns the whole picture black**, which reads as broken. A hint in the control, such as "make the clip smaller first", would help.
+
+- [ ] **1079 — Phone: while a clip is selected, the "Tap to add a layer" row and the + are not drawn at all (hunt LOW #1079)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      6. **Phone: while a clip is selected, the "Tap to add a layer" row and the + are not drawn at all** (timeline.js:3966 `addRowWanted() && !soloId`; styles.css:4205). Import auto-selects the new clip, so straight after importing a video a beginner cannot find how to add a title or a song. This is the same family as trap 1 (Export hidden), and one fix could cover both. Draw options: keep "add" reachable in the solo view, or do not auto-select after import.
+
+- [ ] **1080 — A song or file is added AT THE PLAYHEAD (hunt LOW #1080)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      7. **A song or file is added AT THE PLAYHEAD** (app.js:3055), clamped to the project end. Someone who has just watched their video to the end gets the song starting after the video. Options: start audio at 0 when the playhead is at the project end, or show where it landed.
+
+- [ ] **1081 — PC export: Save may open the OS Share window with no way to save the MP4 on Windows (hunt MEDIUM #1081)** (6 Oct, ~03:55 — the PM's tutorial review, round 3; NOT his words; PLAUSIBLE, not yet run)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      1. **(hunt MEDIUM) PC Save → share sheet. PLAUSIBLE, not yet run.** `deliver()` (exporter.js:66-75) calls `navigator.share` whenever `canShare({files})` is true, and nothing checks whether the device is a phone. The ready card has only Save and Discard (app.js:6305-6320). Desktop Chrome/Edge on Windows and Safari on Mac support sharing files, so a PC user likely gets the OS Share window instead of a download, and on Windows that window has no "save to disk". It matters more now that he is moving to a Windows laptop.
+         - **Test:** on Windows Chrome, export, then Save. Is there any way to get the file onto disk?
+         - **Likely fix:** on a non-touch, wide screen, download the file, or offer Download beside Share.
+
+- [ ] **1082 — Show the checked tutorials in Home's Tutorials tab? (hunt LOW #1082)** (6 Oct, ~03:55 — the PM's note, NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      2. **(note) The app already has a home for tutorials.** Home's **Tutorials** tab is a placeholder reading "Short walkthroughs of the editor will live here." (home.js:2601-2605). The second Claude account is writing checked how-to tutorials on branch `tutorials-drafts`: 01 first video, 02 trim/split, 03 glow and shadow. 02 and 03 pass a three-round step-by-step code check, and 01 is on its last two fixes. 04 keyframes, 05 titles and 06 music are being written.
+         - Showing them in that tab is a design decision for him. Draw options first (#545).
+         - Also check BEFORE-PUBLISHING.md if they go public.
+      ❓ASK: does he want the checked tutorials in Home's Tutorials tab (draw options first, #545; BEFORE-PUBLISHING.md if they go public)?
+
+- [ ] **1083 — PC: a second, hidden back button in the top left that shows on hover (his pick: B, the glass pill ‹ Projects)** (6 Oct, ~10:40 AWST, via INBOX — his words; plan and his pick from the logging chat)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole:
+      ### 06 Oct 2026, ~10:40 AWST — PC: a second, hidden back button in the top left that shows on hover
+
+      **His words (verbatim):** "on pc i often find myself looking for the back button to get out of projects in the top left but it isnt there, its in a functionally better spot but i think it might be a good idea to make a second hidden back button to exit a project hidden in the top left and when you hover over that area its shows. make sure it looks good"
+
+      **Logger's plan (not his words):** in progress. The logging chat is mapping the PC top-left and drawing options over a real screenshot of the editor. A follow-up block will carry the options, his pick, the exact CSS/JS and the test. Design request, so pictures first (#545). It must not move or change the existing back button ("its in a functionally better spot").
+      ### 06 Oct 2026, ~10:55 AWST — PLAN for the 10:40 block (PC hidden back button in the top-left) — options drawn, waiting on his pick
+
+      **Logger's plan (not his words).**
+      - **Options were rendered INTO the live editor** at PC 1280x800, crisp at 2x, and sent to him: `tools/design/pc-back-hover/options.jpg` (crops: `{idle,a,b,c}-corner.png`).
+        - **A:** the existing back chevron on a 34px glass tile.
+        - **B (recommended):** a glass pill reading "‹ Projects".
+        - **C:** a quarter-circle glass corner that grows out of the top-left.
+        - ❓ASK: his pick, A, B or C. The plan below is written for B; A and C differ only in the CSS block.
+      - **Where it goes.** On PC (≥701px) `#topbar` is hidden and `#main` (the stage) spans the whole top row (styles.css:6476-6480, measured `#main` = 0,0,1280x560), so the top-left of the screen is the stage's top-left. It is empty in the editor's resting state.
+        - The real back button `#btn-back` stays where it is (`#t-home`, left of the transport row, app.js:7666-7667; styles.css:8212). This is a SECOND door, not a move. He said "its in a functionally better spot".
+      - **The change:**
+        - **HTML:** `<button id="btn-back-corner" class="corner-back" aria-label="Back to projects" tabindex="-1">` holding the same chevron SVG as `#btn-back`, plus `<span>Projects</span>`. Put it inside `#main` so it scrolls and layers with the stage; `position:absolute; left:14px; top:14px; z-index` above the canvas overlays but below dialogs and sheets.
+        - **Click:** delegate to `document.getElementById('btn-back').click()`, so behaviour stays identical: leave a group first, then Home (app.js:6909-6913).
+        - **CSS, idle:** `opacity:0; transform:translateX(-6px); pointer-events:none`.
+        - **CSS, revealed:** opacity 1, transform none, pointer-events auto, over 160ms ease-out.
+        - **The hot zone** is a transparent `::before` or a sibling 180x120px at the top-left that reveals on `:hover`. The pill keeps itself shown while hovered (`#main .corner-zone:hover .corner-back, .corner-back:hover, .corner-back:focus-visible`).
+        - **B's look:** height 34, radius 17, padding 0 14px 0 10px, gap 6, 13px/600, `background: rgba(233,244,247,.09)`, `border:1px solid rgba(233,244,247,.18)`, `backdrop-filter: blur(12px)`, `box-shadow: 0 6px 18px rgba(0,0,0,.35)`, text `rgb(233,244,247)`. These are the exact values the picture was drawn with, in the app's own tokens.
+        - **Light-chrome Home theme (body.white-chrome):** check the editor is dark there too. If not, use a light glass variant.
+      - **Gates:**
+        - Only `@media (min-width:701px) and (hover:hover) and (pointer:fine)`. A touch screen never gets an invisible button, and phones are untouched.
+        - Hidden while any dialog or sheet is open, during text editing (body.text-editing) and drawing (body.drawing), and in fullscreen/preview mode. Check what else lives at the stage's top-left: canvas zoom/fit chips, selection toolbars, the Simple-mode cog (#980). Measure each state at 1280x800 and 1024x700 and move the zone if anything collides.
+        - `prefers-reduced-motion`: opacity only, no slide.
+      - **Tests (tests/tests.js):**
+        1. At 1280 wide the corner button exists, has opacity 0 and pointer-events none at rest; hovering the zone gives opacity 1 (wait for the transition), and its rect does not overlap any visible control (elementFromPoint over its box).
+        2. Clicking it calls the same path as #btn-back: inside a group it exits the group; at top level it opens Home.
+        3. At 380 wide (`--width 380` pass) it is `display:none`, and on `(hover:none)` it never shows.
+        4. Prove: each test fails with the CSS/JS removed.
+      - **#980 overlap check:** Simple mode on PC adds its own chrome. The builder must confirm the corner is still free in Simple mode, or hide the corner button there if Simple has its own exit.
+      ### 06 Oct 2026, ~10:50 AWST — HIS PICK for the PC hidden back button: B
+
+      **His words (verbatim):** "B"
+
+      **Logger's note (not his words).** ✅ He answered the ❓ASK in the ~10:55 PLAN block (written just before; the timestamps there are approximate): **B**, the glass pill reading "‹ Projects". It appears when the mouse is over the stage's top-left corner. Build it exactly as that plan says (its CSS values are the ones the picture was drawn with: `tools/design/pc-back-hover/b-corner.png`). It joins the queue in order, behind #980 Simple mode.
+      Clauses (his): 1. [ ] on PC, a second hidden back button in the top left that exits the project · 2. [ ] it shows when the mouse is over that area · 3. [ ] it looks good (his pick B) · 4. [ ] the existing back button stays where it is ("its in a functionally better spot").
+      ✅ HE ANSWERED the ❓ASK (6 Oct ~10:50): "B". Waits its turn behind #980.
+
+- [ ] **1084 — Phone: the Add menu grows out of where you tapped (a second animation mode, with a Settings toggle)** (6 Oct, ~14:35 AWST, via INBOX — his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole:
+      ### 06 Oct 2026, ~14:35 AWST — Phone: the Add menu grows out of where you tapped (a second animation mode, with a Settings toggle)
+
+      **His words (verbatim):** "Log this request so basically currently the animation for when you open up the ad menu on mobile folds up from the bottom but I had a cool idea where instead it basically wherever you touched from it basically expands out from where you touched and as I created from where you touched so like for instance let's say you started a new project and it's got that massive area. It's just like tap here to start creating and you can tap anywhere and wherever you type basically from around where your finger touched it will like be created around it. It will like pulse out from like a circle outwards but like in a nice looking way and it'll be fairly quick and also they're not safe if you're actually in the middle of editing and it's and you tap on the tap to add layer bar or tap to add whatever layer you tap on that and then the actual layer to add stuff like the tap to add layer basically expands up and down until it's created that menu like it'll just like expand from where it was on the timeline to fill up the screen area where it's supposed to be, I think this would be a very smooth and cool animation. Make sure it actually works because you've done a lot of design stuff already for that animation for popping up and stuff so it'll be a lot clashing and maybe just make it so it's reversible if I don't like what you're not doing and I prefer the old way like just have a toggle switch to change the two modes in the settings and yeah you're gonna pretty much have to rethink the animation and design a lot from what it used to be because you made all of those cool colour patterns and stuff that happen when you tap and the lines glowing and everything but you're gonna have to rethink all of that now and rework it sort it actually matches this new design but yeah, just log this"
+
+      **His clauses (to tick one by one):**
+      1. Phone Add menu: instead of folding up from the bottom, it opens FROM WHERE YOU TOUCHED.
+      2. Empty project (the big "Tap here to start creating" area): tap anywhere; the menu is created around the finger, pulsing out from a circle, nice-looking and fairly quick.
+      3. Mid-edit: tapping the "Tap to add a layer" row makes that row itself expand up and down until it fills the area where the menu belongs.
+      4. "Make sure it actually works": the existing open animations, press pulses, colour patterns and glowing lines must not clash with it. Rethink and rework them so they match the new design.
+      5. Reversible: a Settings toggle between the new mode and the old fold-up mode.
+
+      **Logger's plan (not his words); a design request, so animated options are shown to him before anything ships (#545).**
+      - **Where:** `js/mobile.js` `openAdd()` (~:398) and `closeAdd()`; `js/timeline.js` `openFromArea()` (~:3324), which already knows the tap point; the sheet's `.is-arriving` tap guard (styles.css ~:8876, pointer-events off while it arrives; keep it); the add-row press pulse `@keyframes tl-addpulse` (styles.css ~:9848) and the empty-start orb.
+      - **Mechanism:** read the pointer's clientX/Y from the opening tap and pass it as `openAdd({origin:{x,y}, from:'point'|'row', rowRect})`.
+        - **Point mode (clause 2):** animate `clip-path: circle(0 at x y)` → `circle(150% at x y)` on the sheet, ~260–320 ms ease-out, with a soft ring pulse layer for the "pulse out from a circle".
+        - **Row mode (clause 3):** animate from `inset(rowTop 0 rowBottom 0)` → `inset(0)`, so the bar grows up and down into the sheet. The sheet's content fades in for the last ~40% so text never shows squashed.
+        - **Close:** the same shape in reverse, back to the point or row.
+      - **Clash work (clause 4):** stage the old pulses so they hand over to the new reveal instead of running on top of it. The row's glow/colour sweep becomes the edge of the expanding shape. Retire or retune `tl-addpulse` in the new mode only. Old mode stays byte-identical.
+      - **Toggle (clause 5):** a Settings item such as "Add menu animation: From your tap / Slide up", default to be his pick. Store it with the other settings (js/settings.js). Under `prefers-reduced-motion`, both modes use a plain fade.
+      - **Show him first:** record 2–3 short phone-size clips (380px) of each mode at real speed, and a slow-motion version, drawn through the app. Let him pick timings before building it fully.
+      - **Tests:**
+        - The sheet's clip-path animation origin equals the tap point (±2px), and equals the row's rect in row mode.
+        - Taps are ignored while arriving (the existing guard).
+        - With the setting off, the old path is unchanged: assert today's animation classes and keyframes are still used.
+        - Reduced motion uses a fade only.
+        - Close reverses to the origin.
+        - Run at --width 380.
+      - ❓ASK (when drawn): the default (new or old), and the speed after he sees the clips.
+      - **Queue:** in order, behind #980 Simple mode. Check it against Simple mode's own phone add flow too, which may share openAdd.
+      Waits its turn behind #980. Design request: animated options shown to him first (#545).
+
+- [ ] **1085 — The test page reserves about 8.7 GB over one suite run: find the leak and fail a run past a memory budget (hunt MEDIUM #1085)** (6 Oct, ~18:10 — the PC Claude's report via the PM; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      The first Linux pass died on Chrome's 8 GB renderer cap; it may be what keeps pushing this 8 GB Mac into swap (the 23:46 reboot, the 17:36 load 41). Find the tests that leave media, bitmaps, AudioContexts or workers alive, and add a guard that fails a run whose renderer grows past a set budget. Full plan: #1071's 18:10 block.

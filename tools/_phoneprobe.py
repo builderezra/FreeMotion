@@ -14,9 +14,13 @@ which fall off a cliff?  A cost that scales cleanly with the throttle is honest 
 scales WORSE than the throttle is a real finding, because something is timing out or thrashing.
 
 Run:  python3 tools/_phoneprobe.py --port 8777
+
+⚠️ Numbers taken under WSL (SwiftShader, or FM_GL=angle on WSL's virtual GPU, 16 vCPUs) are not comparable with the
+Mac's: compare only within one machine, as the GPU-vs-CPU rows below already do.
 """
-import argparse, json, os, statistics, sys, tempfile, time
+import argparse, json, os, shutil, statistics, sys, tempfile, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests"))
+sys.dont_write_bytecode = True   # no tests/__pycache__ litter in the repo (nothing ignores it on Linux)
 import importlib.util
 _spec = importlib.util.spec_from_file_location(
     "_cdp", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "_cdp.py"))
@@ -298,6 +302,9 @@ def sweep(port):
     finally:
         if cdp: cdp.close()
         proc.terminate()
+        try: proc.wait(timeout=10)
+        except Exception: proc.kill()
+        shutil.rmtree(profile, ignore_errors=True)   # under WSL the temp dir is RAM
     if d.get("qualityDegradedMidRun"):
         print("\n\u26a0\ufe0f  RANKING IS NOT TRUSTWORTHY: the app's adaptive quality moved during the run"
               " (factor %s -> %s). Effects measured later were rendered at a SMALLER plate, so this"
@@ -372,6 +379,9 @@ def main():
     finally:
         if cdp: cdp.close()
         proc.terminate()
+        try: proc.wait(timeout=10)
+        except Exception: proc.kill()
+        shutil.rmtree(profile, ignore_errors=True)   # under WSL the temp dir is RAM
 
     gpu = [r for r in rows if r.get("gl")]
     cpu = [r for r in rows if not r.get("gl")]

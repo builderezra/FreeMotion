@@ -21,7 +21,8 @@ script" as the real one — so this needs its own headless Chrome. It also needs
 #      passed with no service worker at all. Network.setCacheDisabled is what makes the test mean
 #      something: with it on, only the worker can answer.
 import sys, os, time, tempfile, shutil
-sys.path.insert(0, "/Users/ezrasmith/Claude/FreeMotion/tests")
+# this file's own folder, not the Mac's /Users/…/tests: from a worktree that quietly imported MAIN's _cdp.py instead
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _cdp
 
 URL = "http://127.0.0.1:8791/index.html"

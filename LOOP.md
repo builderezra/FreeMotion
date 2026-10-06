@@ -19,15 +19,12 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 5. **Ship properly:** bump the version label in `index.html` AND the `?v=` cache-buster for EVERY file
    touched (a missed buster reads as "the fix does not work" — it has), add a plain-language
    `POLISH-LOG.md` entry, tick the `REQUESTS.md` entry with its version, then
-   `tools/ship.sh "message"`. Never commit around ship.sh.
-6. **Suite in the FOREGROUND with `timeout: 500000`** — and **`timeout: 600000` for `tools/ship.sh`**,
-   which runs the suite twice (desktop + 380px) on any shipped source change. Never background-and-poll.
-   ⚠️ **`900000` DOES NOT WORK and this rule used to say it did.** The Bash tool caps at 600000 and
-   silently clamps, so asking for 900s gets 600s — the rule was telling every session to use a number
-   that cannot happen. 600000 is the real maximum, and at 964 tests a double run plus the push still
-   sometimes exceeds it. **When ship.sh lands in the background, do NOT re-run it**: read its output
-   file and verify with `git rev-parse HEAD` against `ssh/main`. Re-running costs two more four-minute
-   suites for nothing. (CLAUDE.md has said this for days; this file contradicted it.)
+   ship it with `tools/ship-bg.sh` (rule 6). Never commit around ship.sh.
+6. **Ships and suites — the same two lines as CLAUDE.md ("SHIPS AND SUITES") and tools/tick.sh (6 Oct, RULES-AUDIT B1):**
+   **Ships:** write the message to `.claude/ship/msg.txt`, run `tools/ship-bg.sh` (exit 3 means launched, NOT shipped), then Monitor `.claude/ship/ship.log` until a line starts with `SHIP EXIT` or `kill -0` on the pid in `.ship-in-progress` fails. **Shipped** = a log line starts with `✅ pushed and verified: HEAD == ssh/main` AND `.last-ship` is `PUSHED <hash>` with hash == `git rev-parse --short HEAD`. HEAD == ssh/main alone proves nothing, nor do those words elsewhere in the log. `RUNNING` with no live pid means a KILLED ship: re-ship it.
+   **Suites:** a full suite may use `run_in_background` with timeout = 1.6 × `tools/.suite-seconds` × 1000 (at most 7200000). Only `?only=` slices run in the foreground (timeout ≤ 600000). Never write minutes into prose.
+   (This rule used to say "foreground, `timeout: 600000`" — written for a ship a fraction of today's length. On 5 Oct a
+   ship started that way was killed at the harness's 10-minute limit.)
 7. **Mobile-first:** verify at ~380px before calling any UI change done.
 8. **Surface every open question in the reply.** 28 questions once piled up unasked. Never block
    silently, and never re-ask something he has already answered.
@@ -109,15 +106,14 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
     *"cant you have the test suite run while u move on to the next thing? … i want more progress faster
     but not at the quality cost … if u notice that the testers actually notice a lot of good stuff dont
     get rid of them."*
-    **He is right about the bottleneck.** The suite is ~946 tests and ~9 minutes a pass. One item was
-    costing up to FOUR passes — one to check, two inside ship.sh, one or two for a mutation — so ~35
-    minutes of idle waiting for a change that often takes two minutes to write. 33 releases in 36 hours,
-    almost all of it watching a progress bar.
+    **He is right about the bottleneck.** One item was costing up to FOUR suite passes — one to check, two
+    inside ship.sh, one or two for a mutation (lengths: `tools/.suite-seconds`) — of idle waiting for a change
+    that often takes two minutes to write. 33 releases in 36 hours, almost all of it watching a progress bar.
     **So: work 3–5 queue items, then ONE ship covering them all.** Same tests, same gates, a quarter of
     the waiting.
-    ⚠️ **Do NOT edit the tree while a suite is running.** ship.sh runs the suite twice and the second
-    pass loads from disk, so a mid-flight edit lands in a run that is meant to be testing the previous
-    state. That is why the answer is BATCHING rather than literally editing while it runs.
+    ⚠️ **Build during ships (6 Oct, RULES-AUDIT B2).** While ship.sh runs, do not touch THIS tree: the phone pass reloads from disk, and `git add -A` commits whatever is here at the end. Instead, BEFORE starting the ship, create one worktree under `.claude/worktrees/` for the next-oldest item and write code there while the ship runs. Mid-ship, reuse an existing worktree (`git switch -c <branch> <base>`) instead of adding a new one. Code only: no suite, no browser, no Workflow or agents. Merge it into this tree as UNCOMMITTED changes (so prove.sh runs) only when `.ship-in-progress` is gone, no ship.sh is alive, and the ship SHIPPED by rule 6's two-part test: a log line starts with `✅ pushed and verified: HEAD == ssh/main` AND `.last-ship` is `PUSHED <hash>` with hash == `git rev-parse --short HEAD`. The words alone prove nothing: a ship that touched the launcher prints its self-tests into the same log before any suite. If the ship REFUSED, keep the worktree separate until the re-ship lands.
+    Never put a worktree in a new top-level folder: `git add -A` would sweep it into a release. Worktrees live
+    under `.claude/` (gitignored).
     ⚠️ **KEEP the mutation checks.** He singled them out — they have caught something real every single
     time, including two of my own dead tests and a cross-test leak. Batch them too: mutate once per
     batch on the riskiest assertion, not once per item.

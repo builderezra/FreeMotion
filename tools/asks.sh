@@ -11,6 +11,7 @@
 # list of open questions is one more thing to forget to update, which is the bug this is fixing.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
+. tools/_platform.sh || exit 1   # no tools/__pycache__ from importing _classify (see next.sh)
 python3 - "REQUESTS.md" <<'PY'
 import re, sys
 sys.path.insert(0, 'tools')

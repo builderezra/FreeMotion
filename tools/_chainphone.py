@@ -22,11 +22,12 @@ times; getImageData(0,0,1,1) is the fence that cannot be deferred past.
 
 Run:  python3 tools/_chainphone.py            (starts its own server)
 """
-import argparse, json, os, subprocess, sys, tempfile, time, importlib.util
+import argparse, json, os, shutil, subprocess, sys, tempfile, time, importlib.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
-_spec = importlib.util.spec_from_file_location("_cdp", os.path.join(ROOT, "tests", "_cdp.py"))
+sys.dont_write_bytecode = True   # no tests/__pycache__ litter in the repo (nothing ignores it on Linux)
+_spec =importlib.util.spec_from_file_location("_cdp", os.path.join(ROOT, "tests", "_cdp.py"))
 _cdp = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_cdp)
 
 SETUP = r"""
@@ -165,6 +166,9 @@ def main():
         if cdp: cdp.close()
         proc.terminate()
         srv.terminate()
+        try: proc.wait(timeout=10)
+        except Exception: proc.kill()
+        shutil.rmtree(profile, ignore_errors=True)   # under WSL the temp dir is RAM
 
 
 if __name__ == "__main__":

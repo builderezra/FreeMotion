@@ -27,6 +27,7 @@ the question. Needs the dev server on --port (tools/serve.sh).
 import argparse, json, os, shutil, sys, tempfile, time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tests'))
+sys.dont_write_bytecode = True   # no tests/__pycache__ litter in the repo (nothing ignores it on Linux)
 import _cdp  # noqa: E402  (launch / ws_url / CDP)
 
 
@@ -52,6 +53,11 @@ def main():
     if not a.out:
         ap.error('give the PNG path (positional, or --out)')
 
+    try:
+        _cdp._platform.chrome_path()     # no Chrome: one line and exit 2, before a profile exists (6 Oct — it was a traceback)
+    except _cdp._platform.ChromeNotFound as e:
+        print('shot.py: %s' % e, file=sys.stderr)
+        sys.exit(2)
     profile = tempfile.mkdtemp(prefix='fm-shot-')
     dport = _cdp.free_port()
     proc = _cdp.launch(dport, a.width, a.height, profile)
@@ -89,6 +95,10 @@ def main():
                                                             {'name': 'any-pointer', 'value': 'coarse'}])
             if not cdp.eval("matchMedia('(hover: none)').matches"):
                 raise RuntimeError('the shot is not a phone: (hover: none) does not match, so touch-only rules are off')
+        elif not cdp.eval("matchMedia('%s').matches" % _cdp._platform.MOUSE_QUERY):
+            # …and the mirror (6 Oct): a PC shot must be drawn for a MOUSE. Linux headless has none unless
+            # tests/_platform.py's flag gives it one, and then the PC layout came out as a finger's, silently.
+            raise RuntimeError('the shot is not a PC: %s does not match, so mouse-only rules are off' % _cdp._platform.MOUSE_QUERY)
         time.sleep(1.2)   # the intro and the home cards' rise
         if a.setup is not None:
             cdp.eval("(function(){ try { if (window.FM && FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {} })()")

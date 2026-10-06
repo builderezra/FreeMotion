@@ -8,19 +8,31 @@ the kind of thing macOS's bash 3.2 mis-parses. Prints one title per line.
 """
 import re, subprocess, sys
 
+def git(*a):
+    """git's stdout — or exit 2 with its error. A FAILED git used to read as "no test changed", which prove.sh reports as
+    NO TEST and spotcheck.sh logs as NO-TEST: an accusation made on no evidence (6 Oct; see _srcfiles.py for when git fails)."""
+    r = subprocess.run(['git'] + list(a), capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.stderr.write("_spottests.py: `git %s` failed: %s\n" % (" ".join(a), r.stderr.strip()[:400]))
+        sys.exit(2)
+    return r.stdout
+
 def titles_for(h):
     """h = a commit, or '--worktree' for the uncommitted changes against HEAD (tools/prove.sh)."""
     if h == '--worktree':
-        diff = subprocess.run(['git', 'diff', 'HEAD', '-U0', '--', 'tests/tests.js'], capture_output=True, text=True).stdout
-        post = open('tests/tests.js', encoding='utf-8').read().split('\n')
+        diff = git('diff', 'HEAD', '-U0', '--', 'tests/tests.js')
     else:
         # first-parent diff, so a MERGE is read too (a plain `git show` of a merge prints no hunks) — see _srcfiles.py
-        diff = subprocess.run(['git', 'diff', '-U0', h + '^1', h, '--', 'tests/tests.js'],
-                              capture_output=True, text=True).stdout
-        post = subprocess.run(['git', 'show', h + ':tests/tests.js'], capture_output=True, text=True).stdout.split('\n')
+        diff = git('diff', '-U0', h + '^1', h, '--', 'tests/tests.js')
+    if not re.search(r'^@@ ', diff, re.M):
+        return []          # no hunk in tests/tests.js: nothing to name (and nothing to read, even where the file never existed)
+    if h == '--worktree':
+        post = open('tests/tests.js', encoding='utf-8').read().split('\n')
+    else:
+        post = git('show', h + ':tests/tests.js').split('\n')
     head = re.compile(r"""^\s*test\(\s*(['"])""")
     def decl_title(line):
-        """The JS string literal that opens a test() call, escapes honoured — a regex `(.*?)\1\s*,` stopped at the first
+        r"""The JS string literal that opens a test() call, escapes honoured — a regex `(.*?)\1\s*,` stopped at the first
         quote followed by a comma INSIDE the title (v15.38's title carries one) and reported a truncated name."""
         m = head.match(line)
         if not m: return None

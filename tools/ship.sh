@@ -4,6 +4,12 @@
 #   tools/ship.sh "<commit message>"
 #   tools/ship.sh -F <file>          # …or read the message from a file / from - for stdin
 #
+# A ship outlasts every harness timeout, so it is LAUNCHED, not called: write the message to .claude/ship/msg.txt and run
+# tools/ship-bg.sh (exit 3 = launched, NOT shipped). The verdict is .claude/ship/ship.log (a line starting
+# "✅ pushed and verified: HEAD == ssh/main", then one starting "SHIP EXIT <rc>") and .last-ship (PUSHED <hash> ==
+# git rev-parse --short HEAD). See CLAUDE.md, "SHIPS AND SUITES". Nothing printed before the push may carry those words:
+# the self-tests below print into the same log (tools/test-ship-bg.sh checks its own output for them).
+#
 # Refuses to push unless: the tree is not mid-mutation, the suite is fully green, the version label
 # and the newest POLISH-LOG entry agree, and the push actually landed. That last one matters —
 # `origin` is an HTTPS URL with no stored credentials and fails with "could not read Username", so
@@ -32,12 +38,44 @@ SHIPPED=0
 _WHY=""            # a refusal may be the repo working as INTENDED (see the docs-only batch gate) — say which
 _verdict() {
   _rc=$?
-  rm -f .ship-in-progress
+  # only OUR lock: a refusal must never delete the lock of a ship that is still running (see the guard below)
+  [ "$(ship_lock_pid .ship-in-progress)" = "$$" ] && rm -f .ship-in-progress
   { if [ "${SHIPPED:-0}" = 1 ]; then printf 'PUSHED %s\n' "$(git rev-parse --short HEAD 2>/dev/null)"
     elif [ -n "${_WHY:-}" ]; then printf 'REFUSED rc=%s %s\n' "$_rc" "$_WHY"
     else printf 'REFUSED rc=%s\n' "$_rc"; fi; } > .last-ship 2>/dev/null
 }
-trap _verdict EXIT INT TERM
+# ⚠️ ONE SHIP AT A TIME, CHECKED BEFORE THE TRAP (6 Oct, RULES-AUDIT B1). A ship now runs for well over an hour,
+# detached (tools/ship-bg.sh), so "is one already running?" is a real question — and it must be answered BEFORE the
+# trap below exists, because _verdict's cleanup on a refusal would delete the running ship's lock and overwrite its
+# .last-ship. A lock whose pid is gone is a KILLED ship (a kill skips every trap): said, and carried on from.
+. "$(dirname "$0")/_shiplock.sh"
+ship_guard || exit 1
+trap _verdict EXIT
+# A signal ENDS the ship. With `trap _verdict EXIT INT TERM` the handler ran on a TERM and the script then CARRIED ON —
+# it had deleted its own lock and went on towards the commit and the push with nothing on disk saying a ship was
+# running. Exiting runs the one EXIT handler above (see the note: one handler), which records rc=130 / rc=143.
+trap 'exit 130' INT
+trap 'exit 143' TERM
+# The lock carries this ship's pid and phase, and .last-ship says RUNNING until a verdict replaces it — so a KILL,
+# which runs no trap at all, leaves "RUNNING <pid>" behind with that pid gone, and tick.sh reads exactly that as KILLED.
+ship_phase gates
+printf 'RUNNING %s %s %s\n' "$$" "$(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><')" "$(date +%s)" > .last-ship 2>/dev/null
+# The answers that differ between the Mac and Linux/WSL (load, cores, the JS parser, which Chrome to reap) come from ONE
+# sourced file, and the suite's time cap from the other (6 Oct, the WSL port). After the trap, so even this refusal is
+# recorded in .last-ship. bash does not stop on a failed `.`, hence the explicit check.
+. "$(dirname "$0")/_platform.sh" || { echo "❌ tools/_platform.sh is missing — the gates below cannot ask this machine anything"; exit 1; }
+. "$(dirname "$0")/_testfloor.sh" || { echo "❌ tools/_testfloor.sh is missing — the suite gates cannot run"; exit 1; }
+. "$(dirname "$0")/_shipgates.sh" || { echo "❌ tools/_shipgates.sh is missing — the gates below cannot run"; exit 1; }
+# ⚠️ ONLY THE MAC SHIPS — UNTIL THE PM SAYS OTHERWISE (6 Oct, his words: "The Mac is STILL the only machine that ships or
+# pushes to main"). The WSL laptop has this repo, a loop to run and a CLAUDE.md that says "ship an unshipped tree" on a new
+# chat's first message — so the rule is a gate, not a sentence. The PM lifts it at the switch-over, once both full passes are
+# green there; FM_SHIP_ALLOW_NON_MAC=1 is that decision, and a session must not set it on its own.
+if [ "$(fm_os)" != Darwin ] && [ "${FM_SHIP_ALLOW_NON_MAC:-}" != 1 ]; then
+  echo "❌ THIS IS NOT THE MAC — only the Mac ships or pushes main until the PM moves shipping to this $(fm_machine_noun)."
+  echo "   Nothing is committed or pushed. The work stays in this tree; ship it from the Mac."
+  _WHY="not the shipping machine ($(fm_os)) — only the Mac ships until the PM's switch-over"
+  exit 1
+fi
 # ⚠️ THE MESSAGE CAN COME FROM A FILE, AND FOR ANYTHING WITH CODE IN IT, IT SHOULD (25 Aug).
 # Backticks inside a double-quoted shell argument are COMMAND SUBSTITUTION, not code quotes. The gate
 # below has guarded that since a message containing `void ic.offsetWidth` executed it and committed the
@@ -73,11 +111,26 @@ if [ "$FROM_FILE" = "0" ]; then
   esac
 fi
 [ -f .mutation-in-progress ] && { echo "❌ a mutation check is still in progress — refusing to ship a mutated tree"; exit 1; }
+# ⚠️ A SHIP RUNS ON main (6 Oct, the PM's port review). It commits on whatever branch is checked out and then pushes `main`:
+# from a work branch it would run ~90 minutes of suites, commit there, push whatever LOCAL main holds (its unpushed
+# commits included) and end "PUSH DID NOT LAND". rollback.sh and inbox.sh --done already refuse off main for this reason;
+# FM_SHIP_ALLOW_NON_MAC (the switch-over) makes the WSL port branch a place this could now be run from. Said in a second.
+if ! on_main; then
+  echo "❌ THIS CHECKOUT IS ON $(git symbolic-ref --short -q HEAD 2>/dev/null || echo 'a detached HEAD'), NOT main — a ship commits here and pushes main."
+  echo "   Nothing is committed or pushed. Bring the work onto main (merge it uncommitted, so prove.sh sees it), then ship."
+  _WHY="not on main — a ship commits on main and pushes main"
+  exit 1
+fi
 # LIVE MUST NOT BE AHEAD OF THIS TREE (queue 1066, 5 Oct). Another tool pushed to ssh/main (ChatGPT's v17.22, f7716576) while
 # this tree still sat on v17.21 with its own unshipped work also labelled v17.22. Nothing here looked at the remote until the
 # push, so a ship would have spent ~90 minutes on two suite passes and then been rejected as non-fast-forward. So: fetch
-# first and refuse in one second if live is not in this tree's history. If the remote cannot be reached, say so and carry
-# on — the push at the end still verifies, so an offline ship loses nothing it had before this gate.
+# first and refuse in one second if live is not in this tree's history.
+# ⚠️ AND IF GITHUB CANNOT BE REACHED, REFUSE TOO (6 Oct). It used to warn and carry on, on the grounds that the push verifies
+# at the end. But on 6 Oct github.com dropped out from this Mac twice in one night (03:14 and 03:50, ssh and https both), and a
+# ship launched into that spends ~90 minutes on two suite passes for a push that cannot land. Worse, a fetch with no time limit
+# HANGS rather than fails when the network half-answers, and the ship would sit there. So the fetch gets 15 seconds to connect,
+# and an unreachable remote stops the ship before anything runs. FM_SHIP_OFFLINE=1 says "commit locally anyway, I know".
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3}"
 if git fetch -q ssh 2>/dev/null; then
   if ! git merge-base --is-ancestor ssh/main HEAD; then
     echo "❌ LIVE HAS MOVED ON: ssh/main ($(git rev-parse --short ssh/main)) is not in this tree's history (HEAD $(git rev-parse --short HEAD))."
@@ -85,8 +138,25 @@ if git fetch -q ssh 2>/dev/null; then
     echo "   (git cherry-pick --no-commit <branch>), renumber if the versions collide. Shipping now would run the whole suite and then fail at the push."
     exit 1
   fi
+elif [ "${FM_SHIP_OFFLINE:-}" = "1" ]; then
+  echo "⚠️  could not reach GitHub (ssh) — FM_SHIP_OFFLINE=1, so carrying on; the push at the end will fail and the commit stays local"
 else
-  echo "⚠️  could not reach ssh to check whether live has moved on — carrying on; the push at the end still verifies"
+  echo "❌ GITHUB CANNOT BE REACHED (git fetch ssh failed or took over 15 s to connect). The push at the end would fail after ~90"
+  echo "   minutes of suite passes. Wait until this answers 200, then ship:  curl -s -m 8 -o /dev/null -w '%{http_code}' https://github.com"
+  echo "   (FM_SHIP_OFFLINE=1 tools/ship.sh ... commits locally anyway.)"
+  exit 1
+fi
+# ⚠️ A RE-RECORDED BASELINE SHIPS ALONE, AND ONLY FROM A RELEASED COMMIT (6 Oct, the port audit, MAJOR). tests/baselines.json is
+# what the pinned 482 / 986 tests compare against everywhere but the Mac, and a recording blesses whatever the code draws — so
+# a release carrying a fresh recording beside the compositor change it hides would pass its pinned tests against itself.
+# Refused here, in a second: baselines.json beside any shipped source, or a changed section whose commit is not in ssh/main
+# (tools/_shipgates.py baseline-gate; tools/record-baselines.sh records only HEAD as committed, and only a released HEAD).
+_BG="$(python3 tools/_shipgates.py baseline-gate)"; _BGRC=$?
+if [ "$_BGRC" != 0 ]; then
+  [ -n "$_BG" ] && echo "$_BG" || echo "❌ the baseline gate could not run (git or its own error, above) — not shipping on a guess."
+  echo "   Nothing is committed or pushed."
+  _WHY="tests/baselines.json beside shipped source, or recorded on an unreleased commit"
+  exit 1
 fi
 # A SPOT-CHECK AND A SHIP DO NOT SHARE THE MACHINE (5 Sep). Two headless suites at once starve the timing-sensitive tests: a
 # two-commit spot-check running under the v15.71 ship's phone pass flaked test 699 ("the CONTROL swipe moved nothing") and cost
@@ -104,20 +174,34 @@ fi
 # v16.23, and believing either red would have meant rewriting three correct tests.
 # Safe here and nowhere else: this runs before ship.sh starts anything, and the two locks above have
 # already established that no other run owns this tree.
-if ! pgrep -f '_cdp\.py' >/dev/null 2>&1; then
+# "Another run is alive" means a PYTHON running _cdp.py (fm_driver_pattern, 6 Oct — the PM's review): `pgrep -f '_cdp\.py'`
+# also matched a shell waiting on one, and THIS script when its commit message names _cdp.py, and then reaped nothing,
+# silently. Standing down now names who it stood down for.
+_DRV_ALIVE=""
+command -v pgrep >/dev/null 2>&1 && _DRV_ALIVE="$(fm_pgrep_args "$(fm_driver_pattern)" 2>/dev/null | head -3)"
+if ! command -v pgrep >/dev/null 2>&1; then
+  echo "⚠️  pgrep is not installed — orphaned headless Chromes cannot be found or reaped before this run"
+elif [ -n "$_DRV_ALIVE" ]; then
+  echo "⚠️  not reaping orphaned test Chromes — a suite run is alive: $(printf '%s' "$_DRV_ALIVE" | cut -c1-140 | tr '\n' '|')"
+else
   # ⚠️ MATCH THE CHROME BINARY, NOT THE BARE PROFILE PREFIX. `pgrep -f 'fm-cdp-'` also matches any
   # SHELL whose command line happens to carry that string — including this script if someone ever
   # ships a commit message containing it, in which case pkill would kill the ship mid-flight. That is
   # the same self-matching shape as the pgrep wait-loop that span for hours on 1 Sep (CLAUDE.md), so
   # the pattern is anchored to the thing actually being reaped: a headless Chrome on an fm-cdp profile.
-  _PAT='Google Chrome.*fm-cdp-'
-  _ORPH="$(pgrep -f "$_PAT" 2>/dev/null | wc -l | tr -d ' ')"
-  if [ "${_ORPH:-0}" -gt 0 ]; then
-    pkill -9 -f "$_PAT" 2>/dev/null || true
-    echo "→ reaped $_ORPH orphaned headless Chrome process(es) left by an interrupted run (they make a green tree read RED)"
+  # The pattern is per-OS (fm_chrome_reap_pattern): the Mac's 'Google Chrome.*fm-cdp-' matched 0 of the 14 processes of
+  # a Linux Chrome (argv[0] /opt/google/chrome/chrome), so on Linux this reaped nothing, silently (6 Oct).
+  if _PAT="$(fm_chrome_reap_pattern)"; then
+    _ORPH="$(pgrep -f "$_PAT" 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${_ORPH:-0}" -gt 0 ]; then
+      pkill -9 -f "$_PAT" 2>/dev/null || true
+      echo "→ reaped $_ORPH orphaned headless Chrome process(es) left by an interrupted run (they make a green tree read RED)"
+    fi
+  else
+    echo "⚠️  no Chrome reap pattern for this platform — orphaned headless Chromes are NOT reaped before this run"
   fi
 fi
-touch .ship-in-progress   # removed by _verdict() — deliberately NOT its own trap, see the note up top
+# .ship-in-progress was written at the top (ship_phase gates) and is removed by _verdict() — deliberately NOT its own trap.
 
 # ⚠️ DO NOT START A HALF-HOUR RUN ON A MACHINE THAT CANNOT FINISH IT (21 Sep). The timeout diagnosis (_whyslow, below)
 # explains a stall AFTER it has cost 30 minutes. Twice on 21 Sep the machine was already visibly unable before a single
@@ -125,41 +209,70 @@ touch .ship-in-progress   # removed by _verdict() — deliberately NOT its own t
 # and the suite's own headless Chrome is what tipped it over, so retrying made it worse. A 1-minute load above three
 # times the core count is past anything a green ship has ever run at (they run at 4-8 on 6 cores); refuse up front, say
 # why, and name the cure. FM_SHIP_IGNORE_LOAD=1 is the deliberate override.
-_NCPU="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
-_LOAD1="$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"
 # THE BAR IS 1.6× THE CORE COUNT, AND IT WAS SET BY MEASUREMENT (21 Sep, 6 cores). Ships that STALLED (not one test run in
 # 30 minutes) started at load 13.4 and 12.1; every green ship that day started between 3 and 8. A swap-used bar was tried
 # as well and DISPROVEN the same evening: a run at 9.1GB of swap and load ~4 went all the way through. Swap-used is
 # history — macOS does not shrink it when the machine goes idle — while load is what is happening now.
-if [ -z "${FM_SHIP_IGNORE_LOAD:-}" ] && [ -n "$_LOAD1" ] && awk -v l="$_LOAD1" -v n="$_NCPU" 'BEGIN{exit !(l > 1.6*n)}'; then
-  _SWAP="$(sysctl -n vm.swapusage 2>/dev/null | sed 's/  */ /g')"
-  echo "❌ THE MAC IS TOO BUSY TO RUN THE SUITE — load average ${_LOAD1} on ${_NCPU} cores (green ships start at 3-8; stalled ones at 12+)."
-  echo "   swap: ${_SWAP}"
-  echo "   Nothing is wrong with the code. A heavily swapping or throttling Mac stalls the suite for 30 minutes and then"
-  echo "   times out; starting it anyway only adds a headless browser to the pile. Wait for the load to fall, or free memory"
-  echo "   (quit apps not in use, or restart if swap is several GB), then ship again."
-  _WHY="machine overloaded (load ${_LOAD1} on ${_NCPU} cores) — not a code fault"
-  exit 1
+# The number lives in fm_load_bar (tools/_platform.sh) so tick.sh quotes the same one. It is UNMEASURED on WSL's vCPUs.
+# ⚠️ AND A LOAD THAT CANNOT BE READ IS A REFUSAL, NOT A PASS (6 Oct). This used to read `sysctl … 2>/dev/null` with an
+# empty result skipping the check and `|| echo 4` for the cores — on Linux both sysctl keys error, so the gate switched
+# itself off on every ship there, silently. If the machine cannot be measured, say so and stop; the override stays.
+if [ -z "${FM_SHIP_IGNORE_LOAD:-}" ]; then
+  if ! _NCPU="$(fm_ncpu)" || ! _LOAD1="$(fm_load1)" || ! _BAR="$(fm_load_bar)"; then
+    echo "❌ CANNOT MEASURE THIS $(fm_machine_noun)'S LOAD (the reason is above) — refusing rather than starting a half-hour run blind."
+    echo "   Nothing is wrong with the code. FM_SHIP_IGNORE_LOAD=1 tools/ship.sh … is the deliberate override."
+    _WHY="cannot measure machine load — not a code fault"
+    exit 1
+  fi
+  if LC_ALL=C awk -v l="$_LOAD1" -v b="$_BAR" 'BEGIN{exit !(l+0 > b+0)}'; then
+    _SWAP="$(fm_swap_summary)"
+    if [ "$(fm_os)" = Darwin ]; then
+      echo "❌ THE MAC IS TOO BUSY TO RUN THE SUITE — load average ${_LOAD1} on ${_NCPU} cores (green ships start at 3-8; stalled ones at 12+)."
+      echo "   swap: ${_SWAP}"
+      echo "   Nothing is wrong with the code. A heavily swapping or throttling Mac stalls the suite for 30 minutes and then"
+      echo "   times out; starting it anyway only adds a headless browser to the pile. Wait for the load to fall, or free memory"
+      echo "   (quit apps not in use, or restart if swap is several GB), then ship again."
+    else
+      echo "❌ THIS $(fm_machine_noun) IS TOO BUSY TO RUN THE SUITE — load average ${_LOAD1} on ${_NCPU} cores, over the bar of ${_BAR}"
+      echo "   (1.6x the cores — measured on the 6-core Mac, not yet on this machine)."
+      echo "   swap: ${_SWAP}"
+      echo "   Nothing is wrong with the code. Starting the suite anyway only adds a headless browser to the pile."
+      fm_slow_hint | sed 's/^/   /'
+    fi
+    _WHY="machine overloaded (load ${_LOAD1} on ${_NCPU} cores) — not a code fault"
+    exit 1
+  fi
+  # …and when it PASSES on WSL, say what it could not see (6 Oct, the PM's review): the load above is the VM's, and the
+  # usual WSL stalls (Defender, the Search indexer, Vmmem short of memory) are on the Windows side. One line, never silent.
+  fm_load_blind_note
 fi
 
 # ⚠️ EVERY CHANGED SCRIPT MUST PARSE, AND THIS IS SAID IN ONE SECOND RATHER than after the proof step (25 Sep, v16.97).
 # Six hunt branches were stitched into tests/tests.js by a naive "ours then theirs" merge, which dropped one `});` per
 # seam; nothing noticed until prove.sh had spent its time and every test came back "FMTests did not load". A parse costs
 # a second with the JavaScriptCore that ships with macOS. Plain scripts only — this app has no modules.
-_JSC=/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc
-if [ -x "$_JSC" ]; then
-  _BADJS=""
-  for _f in $( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | grep -E '^(js|tests)/.*\.js$' | sort -u ); do
-    [ -f "$_f" ] || continue
-    _r="$("$_JSC" -e "try { new Function(read('$_f')); print('ok') } catch (e) { print('ERR ' + e) }" 2>&1)"
-    [ "$_r" = "ok" ] || _BADJS="$_BADJS
+# ⚠️ IT USED TO VANISH WHERE THERE IS NO jsc (6 Oct). The whole block sat inside `if [ -x jsc ]`, so on Linux a broken
+# js/ file went straight on to the proof and the suite — the exact v16.97 failure. fm_js_parse asks the same question
+# (`new Function(source)`) of jsc on the Mac and node elsewhere — not `node --check`, which passes `export` and top-level
+# `await`, both syntax errors in a classic <script>. No parser at all is a refusal.
+_BADJS=""
+# (a git that cannot answer is a refusal, not "no script changed" — changed_js_files in tools/_shipgates.sh, 6 Oct review)
+_JSFILES="$(changed_js_files)" || { echo "❌ git could not list the changed scripts (above) — cannot prove they parse, so not shipping them."; _WHY="git could not list the changed files"; exit 1; }
+if [ -n "$_JSFILES" ] && ! fm_js_parser >/dev/null; then
+  echo "❌ NO JAVASCRIPT PARSER on this machine (jsc or node) — cannot prove the changed scripts parse, so not shipping them."
+  _WHY="no JavaScript parser on this machine — not a code fault"
+  exit 1
+fi
+for _f in $_JSFILES; do
+  [ -f "$_f" ] || continue
+  _r="$(fm_js_parse "$_f")"
+  [ "$_r" = "ok" ] || _BADJS="$_BADJS
    $_f: $_r"
-  done
-  if [ -n "$_BADJS" ]; then
-    echo "❌ A CHANGED SCRIPT DOES NOT PARSE — the app or the suite would not even load:$_BADJS"
-    _WHY="a changed script does not parse"
-    exit 1
-  fi
+done
+if [ -n "$_BADJS" ]; then
+  echo "❌ A CHANGED SCRIPT DOES NOT PARSE — the app or the suite would not even load:$_BADJS"
+  _WHY="a changed script does not parse"
+  exit 1
 fi
 
 # ⚠️ A RELEASE CANNOT RUN WITHOUT A LOCAL SERVER, AND THE OLD FAILURE WAS DISCOVERED TOO LATE (queue 814,
@@ -179,6 +292,21 @@ fi
 # in one run, every one blaming the app for a dropped connection. **So every green run was luck and
 # every red one had to be re-read before it could be believed** — which is the most expensive kind of
 # broken instrument, and exactly the class of fault this file exists to remove.
+# …AND A BROWSER, ASKED THE SAME WAY tests/_cdp.py ASKS (6 Oct): $FM_CHROME, the Mac app, google-chrome on PATH. Without
+# one the proof step would come back NORUN test by test; this says it in a second.
+if ! fm_chrome >/dev/null; then
+  echo "❌ no Chrome to run the suite in (the reason is above). Nothing is committed or pushed."
+  _WHY="no Chrome on this machine — not a code fault"
+  exit 1
+fi
+# …and the driver's one third-party module (6 Oct, the PM's review): a fresh Ubuntu has none, and the first suite run would
+# end "DID NOT RUN" half an hour into a ship instead of here, in a second.
+if ! python3 -c 'import websocket' >/dev/null 2>&1; then
+  echo "❌ the Python module websocket-client is not installed — tests/_cdp.py cannot talk to Chrome. Nothing is committed or pushed."
+  echo "   Linux: sudo apt install python3-websocket    Mac: pip3 install websocket-client"
+  _WHY="websocket-client missing on this machine — not a code fault"
+  exit 1
+fi
 if ! curl -sf -o /dev/null "http://localhost:8777/tests/run.html"; then
   echo "→ nothing is serving port 8777 — starting one (the suite does not start its own)…"
   nohup "$(dirname "$0")/serve.sh" 8777 >/dev/null 2>&1 </dev/null &
@@ -195,7 +323,11 @@ fi
 # A TEST TITLE WITH A DOUBLE QUOTE IS REFUSED HERE, IN A SECOND, NOT BY THE SUITE TEN MINUTES IN (5 Sep). The suite's own
 # hygiene test catches it — after prove.sh and a full pass — and it caught two in one afternoon (791, then 624), each
 # costing a whole ship. The rule is the suite's; this only moves it to the front of the line.
-_DQ="$(grep -nE "test\('[^'\n]*\"[^'\n]*'" tests/tests.js | head -3)"
+# `[^']`, not `[^'\n]` (6 Oct): inside brackets `\n` is a backslash and the letter n, not a newline — measured on GNU grep,
+# `test('an "x" y'` slipped through, i.e. any title with an n in it (2264 of 2286). grep matches one line at a time, so
+# excluding the newline was never needed. And ANCHORED to a declaration (the PM's review): dq_titles in tools/_shipgates.sh,
+# where tools/test-port.sh runs it against a regex `.test('…"…')` line that the unanchored pattern refused every ship on.
+_DQ="$(dq_titles tests/tests.js)"
 [ -z "$_DQ" ] || { echo "❌ a test title contains a double quote — the FAIL line would be cut short in ship.sh and mutate.sh; use single quotes:"; echo "$_DQ" | cut -c1-160; exit 1; }
 
 # ─── NO NUL BYTES IN SOURCE (28 Aug) ────────────────────────────────────────────────────────────────
@@ -364,11 +496,9 @@ import _classify as C
 md = io.open('REQUESTS.md', encoding='utf-8').read()
 partials = set(os.environ.get('PARTIALS', '').split())
 closes = set(int(n) for n in os.environ.get('CLOSES', '').split() if n not in partials)
-try:
-    diff = subprocess.check_output(['git', 'diff', 'HEAD', '--', 'REQUESTS.md'],
-                                   stderr=subprocess.DEVNULL).decode('utf-8', 'replace')
-except Exception:
-    diff = ''
+# a git that cannot answer ends this gate (exit 3, the reason on stderr) — never "nothing closed" (6 Oct, the port review)
+from _shipgates import sh as _git_sh
+diff = _git_sh(['git', 'diff', 'HEAD', '--', 'REQUESTS.md'])
 for num, suf in C.closed_in_diff(diff):
     if num is None:
         closes.add(-1)            # an unnumbered entry — older than every number
@@ -385,7 +515,7 @@ if nxt and closes:
                if num is None else '#%d%s' % (num, suf)
         print('%s|%s|%s' % (','.join('#%d' % n for n in late), name, head.strip()[:130]))
 PYORDER
-)"
+)" || { echo "❌ the oldest-first gate could not run (git or its own error, above) — not shipping on a guess."; _WHY="the queue-order gate could not run"; exit 1; }
 if [ -n "$ORDER_MSG" ]; then
   LATE="${ORDER_MSG%%|*}"; REST="${ORDER_MSG#*|}"; NEXTUP="${REST%%|*}"; NEXTHEAD="${REST#*|}"
   echo "❌ QUEUE ORDER — this release closes $LATE, but $NEXTUP is open and workable and comes first."
@@ -395,6 +525,9 @@ if [ -n "$ORDER_MSG" ]; then
   echo "   just told you.\" Nothing rots at the bottom is the whole point of the list."
   echo "   Either do $NEXTUP first, or — if he told you to do this now, or the build was broken —"
   echo "   write \"JUMPED: <reason>\" into $NEXTUP's entry and it will stop holding the queue."
+  # RULES-AUDIT B3 (6 Oct): the escape hatch above is for HIS "do this now" or a broken build — not a way to get a
+  # batch of someone else's fixes past an item he asked for. Whether those land between Simple-mode releases is his call.
+  echo "   Never JUMP an item in his own words (e.g. #980) just to get a land release through. Ask him."
   exit 1
 fi
 
@@ -409,7 +542,7 @@ fi
 # NEW files are exempt: they have no previous ?v= to differ from, and being referenced at all is enough.
 BUSTER_MISS="$(python3 - <<'PYEOF'
 import subprocess, re, sys
-def sh(c): return subprocess.run(c, shell=True, capture_output=True, text=True).stdout
+sys.path.insert(0, 'tools'); from _shipgates import sh   # a failed git exits 3 here, never "nothing changed" (6 Oct)
 changed = set()
 for line in sh("git status --porcelain").splitlines():
     parts = line[3:].split(" -> ")
@@ -429,7 +562,7 @@ for f in sorted(watched):
     if b_now == b_was:
         print("%s (still ?v=%s)" % (f, b_now))
 PYEOF
-)"
+)" || { echo "❌ the cache-buster gate could not run (git or its own error, above) — not shipping on a guess."; _WHY="git could not answer the cache-buster gate"; exit 1; }
 if [ -n "$BUSTER_MISS" ]; then
   # ⚠️ IT BUMPS THEM RATHER THAN REFUSING (6 Sep). This gate refused twice in one day, on two different
   # releases, for the same reason both times — and a gate that only says "you forgot" leaves the forgetting
@@ -444,12 +577,13 @@ if [ -n "$BUSTER_MISS" ]; then
 import re
 names = []
 import subprocess
-out = subprocess.run("git status --porcelain", shell=True, capture_output=True, text=True).stdout
+import sys; sys.path.insert(0, 'tools'); from _shipgates import sh
+out = sh("git status --porcelain")
 for line in out.splitlines():
     f = line[3:].split(" -> ")[-1].strip()
     if re.match(r'^(js/.*\.js|styles\.css|theme-glass\.css)$', f): names.append(f)
 src = open('index.html', encoding='utf-8').read()
-was = subprocess.run("git show HEAD:index.html", shell=True, capture_output=True, text=True).stdout
+was = sh("git show HEAD:index.html")
 for f in sorted(set(names)):
     m_now = re.search(re.escape(f) + r'\?v=([0-9]+)', src)
     m_was = re.search(re.escape(f) + r'\?v=([0-9]+)', was)
@@ -459,9 +593,10 @@ for f in sorted(set(names)):
     print("   ✅ %s ?v=%s → ?v=%d" % (f, m_now.group(1), int(m_now.group(1)) + 1))
 open('index.html', 'w', encoding='utf-8').write(src)
 PYEOF
+  [ $? = 0 ] || { echo "❌ the cache-buster bump could not run (git or its own error, above) — not shipping on a guess."; _WHY="git could not answer the cache-buster gate"; exit 1; }
   STILL="$(python3 - <<'PYEOF'
 import subprocess, re, sys
-def sh(c): return subprocess.run(c, shell=True, capture_output=True, text=True).stdout
+sys.path.insert(0, 'tools'); from _shipgates import sh   # a failed git exits 3 here, never "nothing changed" (6 Oct)
 changed = set()
 for line in sh("git status --porcelain").splitlines():
     changed.add(line[3:].split(" -> ")[-1].strip())
@@ -474,7 +609,7 @@ for f in sorted(watched):
     if n is None or o is None: continue
     if n == o: print("%s (still ?v=%s)" % (f, n))
 PYEOF
-)"
+)" || { echo "❌ the cache-buster re-check could not run (git or its own error, above) — not shipping on a guess."; _WHY="git could not answer the cache-buster gate"; exit 1; }
   if [ -n "$STILL" ]; then
     echo "❌ A FILE CHANGED AND ITS CACHE-BUSTER COULD NOT BE BUMPED — not committing, not pushing."
     echo "$STILL" | sed 's/^/   /'
@@ -525,6 +660,46 @@ if ! git diff --cached --quiet -- tools/rollback.sh 2>/dev/null || ! git diff --
   if ! ./tools/test-rollback.sh; then
     echo "❌ THE FAILSAFE IS BROKEN — not committing, not pushing."
     echo "   Every ❌ above is a way his undo button fails at the moment he needs it."
+    exit 1
+  fi
+fi
+# THE LAUNCHER AND THE LOCK PROVE THEMSELVES TOO (6 Oct, RULES-AUDIT B1). Every way they can be wrong is silent — a launcher
+# that exits 0 reads as "shipped", a refusal that deletes a live ship's lock makes it invisible, a killed ship that reads
+# as "running" waits for ever. A few seconds in a temp directory, against a stub ship.sh; nothing there reaches GitHub.
+# `git status`, not `git diff`: a NEW file is untracked, and `git diff --quiet` says nothing changed.
+# tools/_platform.sh and tools/_testfloor.sh count too (6 Oct, the WSL merge): ship.sh and mutate.sh both source them now.
+if [ -n "$(git status --porcelain -- tools/ship-bg.sh tools/_shiplock.sh tools/test-ship-bg.sh tools/ship.sh tools/_platform.sh tools/_testfloor.sh 2>/dev/null)" ]; then
+  echo "→ the ship launcher or its lock changed — proving them before shipping"
+  if ! ./tools/test-ship-bg.sh; then
+    echo "❌ THE SHIP LAUNCHER OR ITS LOCK IS BROKEN — not committing, not pushing."
+    exit 1
+  fi
+fi
+# …and so does mutate.sh (RULES-AUDIT B4): its timed-out, did-not-run and killed paths are the silent ones, and its full
+# mode is too long for anyone to watch them happen for real. Seconds, against a stub driver, in a temp directory.
+if [ -n "$(git status --porcelain -- tools/mutate.sh tools/_spotjudge.py tools/test-mutate.sh tools/_shiplock.sh tools/_platform.sh tools/_testfloor.sh 2>/dev/null)" ]; then
+  echo "→ mutate.sh or its judge changed — proving it before shipping"
+  if ! ./tools/test-mutate.sh; then
+    echo "❌ MUTATE.SH IS BROKEN — not committing, not pushing."
+    exit 1
+  fi
+fi
+# …and so does the inbox (6 Oct, the PM's port review): "inbox empty" while his note sits in a file is the failure the
+# whole inbox exists to prevent, and every way into it is silent. Seconds, in a throwaway repo with a local "ssh" remote.
+if [ -n "$(git status --porcelain -- tools/inbox.sh tools/next.sh tools/tick.sh tools/test-inbox.sh tools/_platform.sh 2>/dev/null)" ]; then
+  echo "→ the inbox readers changed — proving them before shipping"
+  if ! ./tools/test-inbox.sh; then
+    echo "❌ THE INBOX READERS ARE BROKEN — not committing, not pushing."
+    exit 1
+  fi
+fi
+# …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
+# EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
+# that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
+if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tools/record-baselines.sh 2>/dev/null)" ]; then
+  echo "→ the port's gates or the driver changed — proving them before shipping"
+  if ! ./tools/test-port.sh; then
+    echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."
     exit 1
   fi
 fi
@@ -639,6 +814,7 @@ if [ -n "$REQ_GONE" ] && ! printf '%s' "$MSG" | grep -q 'DROPS REQUEST:'; then
   exit 1
 fi
 
+ship_phase prove
 echo "→ proving the release (its changed tests must fail without the fix)…"
 tools/prove.sh || { echo "   Not committing, not pushing."; exit 1; }
 
@@ -670,8 +846,10 @@ SUITE_TIMEOUT=2700
 # both of v17.18's attempts over the line (stall points 991, then 690 — MOVING, the load sign). A fixed number is a
 # note that goes stale as tests are added, so each green pass now records its real length in tools/.suite-seconds
 # (committed with the release) and the cap is 1.6x the last one, never below an hour.
-_last_suite=$(cat tools/.suite-seconds 2>/dev/null | tr -dc '0-9'); _last_suite=${_last_suite:-0}
-SUITE_TIMEOUT=$(( _last_suite * 16 / 10 )); [ "$SUITE_TIMEOUT" -lt 3600 ] && SUITE_TIMEOUT=3600
+# The cap is suite_timeout in tools/_testfloor.sh now (6 Oct), because mutate.sh needs the same one and had a stale 1800.
+# PER MACHINE (6 Oct): this machine's own last pass, else the largest any machine has recorded (tools/_testfloor.sh)
+_last_suite="$(suite_seconds_for)"; _last_suite=${_last_suite:-0}
+SUITE_TIMEOUT="$(suite_timeout)"
 # ⚠️ A TIMEOUT'S REAL CAUSE IS USUALLY THE MACHINE, AND NOTHING HERE MEASURED IT (21 Sep). Three ship
 # cycles went on "the suite ran out of time" — first at prove's 600s, then at the suite's 1800s — before
 # anyone thought to run `uptime`. The answer was a 6-core Mac in a Spotlight/Photos indexing storm
@@ -681,19 +859,22 @@ SUITE_TIMEOUT=$(( _last_suite * 16 / 10 )); [ "$SUITE_TIMEOUT" -lt 3600 ] && SUI
 # The giveaway that it is load rather than one hung test is that the STALL POINT MOVES between runs — it
 # stopped at queue 294 on one pass and at 433 on the next. So print the evidence right here, where the
 # timeout is announced, instead of leaving the next session to rediscover it by hand.
+# Diagnostic only, so each line may say "?" or "not available" — the OS-specific halves are in tools/_platform.sh.
 _whyslow() {
   echo "   ── the usual cause is the machine, not a broken test. Evidence:"
-  echo "      load average:$(uptime | sed 's/.*load averages*://') across $(sysctl -n hw.ncpu) cores"
-  top -l 2 -o cpu -n 6 -s 2 2>/dev/null | awk '/^PID/{c++; next} c==2 && NF>3 {print "      " substr($0,1,58)}' | head -6
-  echo "      macOS daemons (duetexpertd, photolibraryd, corespotlightd, mediaanalysisd, suggestd) or a high"
-  echo "      kernel_task mean the Mac is indexing or thermally throttling. Wait for it to settle, then ship"
-  echo "      again — and confirm it is load by checking whether the last test above MOVES between runs."
+  echo "      load average:$(uptime | sed 's/.*load averages*://') across $(fm_ncpu || echo '?') cores"
+  fm_top_cpu 6
+  fm_slow_hint | sed 's/^/      /'
 }
 
 if [ "$_last_suite" -gt 0 ]; then echo "→ running the suite (the last green pass took $(( _last_suite / 60 )) minutes; cap ${SUITE_TIMEOUT}s)…"
 else echo "→ running the suite (cap ${SUITE_TIMEOUT}s)…"; fi
+ship_phase desktop
 _suite_t0=$SECONDS
-OUT="$(python3 tests/_cdp.py --port 8777 --timeout $SUITE_TIMEOUT 2>&1)"
+# --progress: a pass that runs out of time leaves WHERE its time went (7 Oct: v17.24 stopped at test 765 of 2286 and the log
+# could not say whether the page froze or crawled). .claude/ship/ is gitignored.
+mkdir -p .claude/ship
+OUT="$(python3 tests/_cdp.py --port 8777 --timeout $SUITE_TIMEOUT --progress .claude/ship/progress-desktop.json 2>&1)"
 _suite_secs=$(( SECONDS - _suite_t0 ))
 SUM="$(printf '%s' "$OUT" | grep -o '"summary": "[^"]*"' | head -1)"
 if printf '%s' "$OUT" | grep -q 'did not finish within'; then
@@ -721,10 +902,14 @@ if ! printf '%s' "$OUT" | grep -q '"ok": true'; then
   exit 1
 fi
 # …and that it actually RAN. `"ok": true` is only "nothing failed", which a suite of zero tests also is.
-. tools/_testfloor.sh
+# (test_floor_check is tools/_testfloor.sh, sourced at the top.)
 test_floor_check "$OUT" || { echo "   Not committing, not pushing."; exit 1; }
-echo "✅ $SUM  (${_suite_secs}s)"
-echo "$_suite_secs" > tools/.suite-seconds
+# NOT RUN HERE, by name (6 Oct, #1071): printed after every pass, and on the Mac a refusal (tools/_testfloor.sh notrun_report)
+notrun_report "$OUT" desktop || { _WHY="a test is NOT RUN HERE on the Mac"; exit 1; }
+NOTRUN_ALL="$(notrun_list "$OUT")"
+font_report "$OUT" desktop   # a different font than the Mac's is said, never refused (tools/_testfloor.sh)
+echo "✅ $SUM  (${_suite_secs}s)  $(printf "%s" "$OUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"   # which browser ran (the PM review)
+suite_seconds_record "$_suite_secs"   # this machine's line; the other machines' lines are kept (tools/_testfloor.sh)
 
 # ── THE PHONE PASS (queue 353 clause 3, added 22 Aug) ────────────────────────────────────────────
 # "make sure everything is quality tested as good as possible" — and this app is MOBILE-FIRST, while
@@ -739,8 +924,9 @@ echo "$_suite_secs" > tools/.suite-seconds
 # module, which is the failure mode this file exists to remove.
 PHONE_RELEVANT="$(git diff --cached --name-only; git diff --name-only)"
 if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; then
+  ship_phase phone
   echo "→ running the suite again at PHONE width (380px)…"
-  POUT="$(python3 tests/_cdp.py --port 8777 --width 380 --timeout $SUITE_TIMEOUT 2>&1)"
+  POUT="$(python3 tests/_cdp.py --port 8777 --width 380 --timeout $SUITE_TIMEOUT --progress .claude/ship/progress-phone.json 2>&1)"
   PSUM="$(printf '%s' "$POUT" | grep -o '"summary": "[^"]*"' | head -1)"
   if printf '%s' "$POUT" | grep -q 'did not finish within'; then
     echo "⏱  THE PHONE PASS RAN OUT OF TIME after ${SUITE_TIMEOUT}s — it did NOT fail. Nothing committed or pushed."
@@ -761,11 +947,33 @@ if printf '%s' "$PHONE_RELEVANT" | grep -qE '^(styles\.css|index\.html|js/)'; th
     exit 1
   fi
   test_floor_check "$POUT" || { echo "   Not committing, not pushing."; exit 1; }
-  echo "✅ phone $PSUM"
+  notrun_report "$POUT" phone || { _WHY="a test is NOT RUN HERE on the Mac"; exit 1; }
+  NOTRUN_ALL="$(printf '%s\n%s\n' "$NOTRUN_ALL" "$(notrun_list "$POUT")" | sed '/^$/d' | sort -u)"
+  font_report "$POUT" phone
+  echo "✅ phone $PSUM  $(printf "%s" "$POUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"
 else
   echo "· no shipped source changed — skipping the phone pass"
 fi
 
+# ⚠️ A RELEASE THAT CHANGES WHAT A NOT-RUN TEST PROVES REFUSES (6 Oct, #1071 — his answer: the recommended plan). Elsewhere
+# than the Mac a test that needs a missing feature says NOT RUN HERE and the release goes on — but not when this release
+# changes the code that test is the only proof of: the AAC export audio (js/exporter.js, js/export-resume.js, js/audio-*.js,
+# vendor/mp4-muxer.js) or the QR code (js/collab-qr.js, and js/collab-ui.js lines about qr/barcode/jsqr/scan). Those tests
+# must have RUN, and passed, on the machine shipping this tree — the Mac. The map is FEATURES in tools/_shipgates.py.
+# A real finger (touch emulation), a pinned picture (a per-OS baseline) and any NOT RUN reason the map does not name cover
+# the whole app, so while one is NOT RUN, ANY change to shipped source (js/, vendor/, styles.css, theme-glass.css,
+# index.html, sw.js, manifest.json) refuses (6 Oct, the port audit, MAJOR: off the Mac those two were listed and shipped).
+if [ -n "${NOTRUN_ALL:-}" ]; then
+  _FG="$(printf '%s\n' "$NOTRUN_ALL" | python3 tools/_shipgates.py feature-gate)"; _FGRC=$?
+  if [ "$_FGRC" != 0 ]; then
+    [ -n "$_FG" ] && echo "$_FG" || echo "❌ the feature gate could not run (git or its own error, above) — not shipping on a guess."
+    echo "   Ship this release from a machine that runs them (the Mac). Nothing is committed or pushed."
+    _WHY="changes code whose tests did not run on this machine"
+    exit 1
+  fi
+fi
+
+ship_phase push
 git add -A
 git commit -q -m "$MSG" || { echo "ship: nothing to commit"; exit 1; }
 git push -q ssh main 2>&1 | tail -2
