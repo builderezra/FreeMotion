@@ -59895,6 +59895,42 @@
     if (left > 8 * 180 * 320) throw new Error('after a full-size frame and a thumbnail-size one, the canvas-effect pool still holds ' + left + ' pixels (' + Math.round(left * 4 / 1048576) + ' MB): the entry the frames did not reach was kept at export size');
   });
 
+
+  /* H40: AN EXPORT LEAVES NO TEMPORAL PLATES BEHIND. Temporal Denoise, Frame Stutter, Time Warp Scan and Motion Blur (Footage) keep the
+     previous frame of every layer in `_mflow` (compositor.js), one full-plate canvas per layer, up to 12 layers. The cache is cleared when an
+     export STARTS (exporter.js: it must not blur against preview history) and never when one ENDS, so after an export of a 1080 x 1920
+     project the plates stay at export size (measured: 8.3 MB for one layer, up to 12 of them) until the next project open or export.
+     Run through FM._runExport (the entry the Export button calls) as a GIF, so it needs no H.264 encoder. CONTROL: the fixture really did
+     put a plate in the cache during the export. */
+  test('H40 an export leaves no temporal plates behind in the motion-flow cache', { item: 'H40', budgetMs: 90000 }, async function () {
+    if (!FM._runExport || !FM._setExportSoloId || !FM._mflowSize) throw new Error('setup: FM._runExport, FM._setExportSoloId or FM._mflowSize is missing');
+    const fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
+    if (!fmtEl || !rangeEl) throw new Error('setup: the export dialog is missing from this build');
+    const saved = FM.scene, fmt0 = fmtEl.value, range0 = rangeEl.value, rs0 = FM.renderScene;
+    const dl = hunt2dCatchDownloads();
+    let peak = 0;
+    try {
+      await atPhoneWidth(async function () {
+        if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        const S = FM.makeLayer('shape', { name: 'H40 mover', shape: 'rect', x: 20, y: 24, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 1 });
+        S.effects = [FM.fxRegistry.makeInstance('temporaldenoise')];
+        S.transform.x = { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 1, v: 54, e: 'linear' }] };
+        FM.scene = scene([S], { project: { width: 64, height: 48, fps: 10, duration: 1, background: '#000000' } });
+        FM.selectLayer(null); FM.refreshAll();
+        FM.renderScene = function () { const r = rs0.apply(this, arguments); if (FM._exporting) peak = Math.max(peak, FM._mflowSize()); return r; };
+        fmtEl.value = 'gif'; rangeEl.value = 'whole'; FM._setExportSoloId(null);
+        await FM._runExport();
+      });
+      if (!peak) throw new Error('CONTROL: during the export no temporal plate was ever held, so what is left afterwards says nothing');
+      if (FM._mflowSize() !== 0) throw new Error('the export finished and the motion-flow cache still holds ' + FM._mflowSize() + ' layer plate(s) at export size — they stay until the next project open or export');
+    } finally {
+      FM.renderScene = rs0; dl.stop();
+      fmtEl.value = fmt0; rangeEl.value = range0; if (FM._expPrefsSave) FM._expPrefsSave();
+      const ov = document.getElementById('export-overlay'); if (ov) ov.classList.add('hidden');
+      FM.scene = saved; try { FM.resetMotionFlowCache(); FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

@@ -1633,6 +1633,7 @@ window.FM = window.FM || {};
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         if (releaseVideos) releaseVideos();   // queue 690 — any strip that waited on the export is drawn now
         FM._exporting = false;
+        if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();   // H40: the plates are export-sized; the start of an export clears them, its end must too
         /* Throw the saved chunks away on a finished file and on Cancel — the first has nothing left to
          * resume, and the second is someone saying they no longer want it. Any OTHER exit keeps them:
          * an exception on the way out is precisely the case this whole file exists for, and deleting
@@ -1733,6 +1734,7 @@ window.FM = window.FM || {};
         FM._exportTransparent = false;
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;
+        if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();   // H40: the plates are export-sized; the start of an export clears them, its end must too
       }
     },
 
@@ -1803,6 +1805,7 @@ window.FM = window.FM || {};
         FM._exportTransparent = false;
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;
+        if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();   // H40: the plates are export-sized; the start of an export clears them, its end must too
       }
     },
   };
