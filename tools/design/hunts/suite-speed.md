@@ -4,7 +4,7 @@ Against `origin/main` b46b47d3 (v17.23). Nothing in the app, the tests or the to
 
 ## How it was measured (so it can be repeated)
 
-The runner only keeps the eight slowest tests (`tests/tests.js:59910-59911` on v17.24; `:59598` on v17.23), so I gave the driver a copy of itself (scratch, not committed) that installs a setter on `window.__fmLastTest` before the page loads. `tests/tests.js:59576` writes that name at the start of every test, so each write is a timestamped test start, sent out through `console.debug`. The per-test time is the gap to the next start. **That gives exact seconds for all 2285 tests, not a sample.**
+The runner only keeps the eight slowest tests (`tests/tests.js:59910-59911` on v17.24; `:59598` on v17.23), so I gave the driver a copy of itself (scratch, not committed) that installs a setter on `window.__fmLastTest` before the page loads. `tests/tests.js:59882` (v17.24; `:59576` on v17.23) writes that name at the start of every test, so each write is a timestamped test start, sent out through `console.debug`. The per-test time is the gap to the next start. **That gives exact seconds for all 2285 tests, not a sample.**
 
 - Pass A: tests 1 to 1926 (to `690 the easing curve…`). Pass C: tests 1928 to 2287, started in a fresh Chrome.
 - Two tests are NOT covered: `:97997` (`690 swiping the share sheet…`) and `:98071` (`690 an export holds the screen awake…`) hang the page in my container. They run a real MP4 export through WebCodecs, and the page stops answering for 10 minutes. A third export test (`:98167`) was skipped by the same slicing. That is a limit of my container, not a finding about the suite.
