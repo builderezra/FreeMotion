@@ -1,6 +1,6 @@
 # Plans for the five after P6 (P7): #996, #1000, #1001, #1002, #1003
 
-Against `origin/main` b46b47d3 (v17.23). Plans only: no app, test or tool code changed. Everything marked **Reproduced** I ran in my own container against the unmodified v17.23 page, with a script that calls the app's own functions and cleans up the projects it makes. **Guess** says so.
+Against `origin/main` b46b47d3 (v17.23); main is now v17.24 with the same app code. **`tests/tests.js` line numbers moved in v17.24: they are given below as of v17.24 and the tests are named by title; search by title, not line.** Plans only: no app, test or tool code changed. Everything marked **Reproduced** I ran in my own container against the unmodified v17.23 page, with a script that calls the app's own functions and cleans up the projects it makes. **Guess** says so.
 
 ## Which five, and why these
 
@@ -12,23 +12,23 @@ The queue classifier (`tools/_classify.py`, run on `REQUESTS.md` at this commit)
 
 ## #996 Two render tests fail together, only in the full phone pass
 
-**State (verified in the entry and in code).** Instrumented 1 Oct. On 5 Oct the leak list named one cause and it was fixed: `q915aCleanup` now passes `{ confirmed: true }` (`tests/tests.js:980-989`). The entry stays open until a run shows the pair gone.
+**State (verified in the entry and in code).** Instrumented 1 Oct. On 5 Oct the leak list named one cause and it was fixed: `q915aCleanup` (`tests/tests.js:1152-1163` on v17.24) now passes `{ confirmed: true }`. The entry stays open until a run shows the pair gone.
 
-**New evidence: the other three leaks it listed are real, deterministic, and still there.** I ran the whole suite twice in my container (two independent passes, v17.23). Both printed the **identical** `sceneLeaks` list (the runner's report-only record of what a test leaves in the shared scene, `tests/tests.js:59578-59630`):
+**New evidence: the other three leaks it listed are real, deterministic, and still there.** I ran the whole suite twice in my container (two independent passes, v17.23). Both printed the **identical** `sceneLeaks` list (the runner's report-only record of what a test leaves in the shared scene, near `tests/tests.js:59888` on v17.24; search for `sceneLeaks`):
 
 | leaving test | leaves | why (read in code) |
 |---|---|---|
-| `undo / redo grey out when there is nothing behind or ahead` (`tests/tests.js:13490`) | a `Shape` | adds `L` with `FM.scene.layers.unshift(L)` and never removes it (body ends after `agree('after redo')`) |
-| `the home + catches taps well outside itself, without getting bigger` (`:42448`) | `Box`, `Box copy`, `Path copy` | **not its own fault**: they come from the test just before it, `notes stay with their own project` (`:42418`), whose `finally` does `FM.projects.remove(id)` without awaiting and **without reopening the project that was open**, so the app is left on a deleted project and the next scene load brings the copies back |
-| `869: a backup carries every project, puts them back…` (`:85031`) | `TplProbe` | its `finally` removes `made` and strays but never switches back to the project that was open |
+| `undo / redo grey out when there is nothing behind or ahead` (`tests/tests.js:13662`) | a `Shape` | adds `L` with `FM.scene.layers.unshift(L)` and never removes it (body ends after `agree('after redo')`) |
+| `the home + catches taps well outside itself, without getting bigger` (`:42739`) | `Box`, `Box copy`, `Path copy` | **not its own fault**: they come from the test just before it, `notes stay with their own project` (`:42709`), whose `finally` does `FM.projects.remove(id)` without awaiting and **without reopening the project that was open**, so the app is left on a deleted project and the next scene load brings the copies back |
+| `869: a backup carries every project, puts them back…` (`:85362`) | `TplProbe` | its `finally` removes `made` and strays but never switches back to the project that was open |
 
 (The 380 pass of H13 will add a third run when it ends; I have not looked at it yet.)
 
 **Plan**
-1. **`:13490`:** wrap the body after `FM.history.reset()` in `try { … } finally { FM.scene.layers.splice(FM.scene.layers.indexOf(L), 1); FM.history.reset(); }`. One layer, one line.
-2. **`:42418` (`notes stay with their own project`):** take `const orig = FM.projects.currentId();` at the top; in `finally` do `try { if (orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}` **before** the removes, and `await` each `FM.projects.remove(id)`. Same shape as `q915aCleanup`.
-3. **`:85031`:** the same two lines (capture `orig` at the top, reopen in `finally` before removing `made`).
-4. **Then make the leak check bite.** `tests/tests.js:59581` and `:59628` report and never fail ("nothing turns red for it until the list is understood"). Once 1 to 3 are in and two full runs show an empty list, change it to fail the offending test with `left layers in the shared scene: …`, unless the test passes `{ leaves: true }`. That turns the whole bug class into an error at the test that causes it.
+1. **`undo / redo grey out…` (`:13662`):** wrap the body after `FM.history.reset()` in `try { … } finally { FM.scene.layers = FM.scene.layers.filter(x => x && x.id !== L.id); FM.history.reset(); }`. **Not** `splice(indexOf(L), 1)`: `history.restore` swaps in a parsed snapshot (`js/history.js:80`, `FM.scene.layers = s.layers`), so after a redo `L` is no longer in the array, `indexOf(L)` is -1 and `splice(-1, 1)` deletes the LAST layer, a different one. Filter by id.
+2. **`notes stay with their own project` (`:42709`):** take `const orig = FM.projects.currentId();` at the top; in `finally` do `try { if (orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}` **before** the removes, and `await` each `FM.projects.remove(id)`. Same shape as `q915aCleanup`.
+3. **`869: a backup carries every project…` (`:85362`):** the same two lines (capture `orig` at the top, reopen in `finally` before removing `made`).
+4. **Then make the leak check bite.** The `sceneLeaks` code in the runner (near `:59888`) reports and never fails ("nothing turns red for it until the list is understood"). Once 1 to 3 are in and two full runs show an empty list, change it to fail the offending test with `left layers in the shared scene: …`, unless the test passes `{ leaves: true }`. That turns the whole bug class into an error at the test that causes it.
 **Test:** the list itself is the test. Proof of the guard: a throwaway test that pushes a layer and returns must turn red under step 4.
 **Close #996 when:** two full runs (desktop and 380) print `sceneLeaks: []` and the pair has not recurred. **Effort:** an hour, plus the runs. **Guess:** whether the original pink-layer variant (232,52,135) had a fourth cause; the 5 Oct entry says earlier occurrences named other leftovers.
 
@@ -42,7 +42,7 @@ The queue classifier (`tools/_classify.py`, run on `REQUESTS.md` at this commit)
 
 **Build**
 1. In `save()` right after `let sceneOk = writeScene();` (`:747`): `const stale = (_writeFail === 'stale');` and run the blob loop only when `!stale`. **Keep it for `'refused'`** (quota), as the entry says.
-2. Stop `notePending(jobs)` (`:745`) from recording notes for a tab already known to be stale: compute `_stale` before it.
+2. Stop `notePending(jobs)` (`:745`) from recording notes for a stale tab: **move `notePending(jobs)` to just after `writeScene()` (the same synchronous tick) and skip it when `_writeFail === 'stale'`.** `_stale` is only set inside `writeScene` (`:115`), so it is still false on the first stale save and cannot be read before the write; the check has to come after it.
 3. **Do not** change the comparison at `:790` to "only when the job's rev is higher": undo legitimately writes older revs (the entry's warning, and it is right).
 **Test** (name: `1000 a stale tab does not overwrite a newer media file`): exactly the script I used: seed A at rev 0 and save; write the newer doc and B at rev 1; edit and save; assert `_sceneRevState().stale` is true and `readMedia` still gives rev 1 and 65 bytes. **Fails on v17.23** (rev 0, 64 bytes). Control: a non-stale save with a replaced file (`mediaRev` bumped) still writes the new blob.
 **Effort:** an hour. **Risk:** low. **ChatGPT's commit, when it arrives:** check it skips the loop on `'stale'` only, and that its test fails when the guard is removed.
@@ -54,8 +54,9 @@ The queue classifier (`tools/_classify.py`, run on `REQUESTS.md` at this commit)
 **Reproduced both paths.** `importObject` (`js/storage.js:1989-2010`, the `applyScene` call is `:2000`) creates the project **before** `applyScene`. With `applyScene` made to **throw**: a new project exists and is current, and the throw escapes. With `applyScene` returning **`false`**: a new project exists and is current too, and the code's own comment ("the user must still be told rather than left in an empty project") is not true, because the `false` branch does not undo the create either. A valid import adds exactly one project (control).
 
 **Build**
-1. In `importObject`: remember `const prev = FM.projects.currentId();` before the create. Wrap the `applyScene` call in `try`. On a throw or a `false`, run one helper `undoImport(pid, prev)`: `await FM.projects.open(prev, { confirmed: true })` (when `prev` exists), `await FM.projects.remove(pid)`, then the existing "could not be opened" toast, and `return false`.
+1. In `importObject`: remember `const prev = FM.projects.currentId();` before the create. Wrap the `applyScene` call in `try`. On a throw or a `false`, run one helper `undoImport(pid, prev)`: **always** reopen the previous project with `await FM.projects.open(prev || null, { confirmed: true })` (as `restoreBackup` does at `js/storage.js:1958`; `null` means Home when nothing was open, not "skip the reopen"), then `await FM.projects.remove(pid)`, then the existing "could not be opened" toast, and `return false`.
 2. Leave `importFile`'s outer catch as it is (it still toasts), but it must no longer find a new project behind it.
+   **`restoreBackup` (`js/storage.js:1951`) calls `importObject` once per backup entry and today leaves one empty card per failed entry; the same fix covers that, so test it too (a backup with two bad entries must leave no extra cards).**
 3. Optional hardening from the entry: cap nesting depth in `sceneFileProblem` with an iterative walk (about 200 levels = damaged file). Not required to close the item.
 **Test** (`1001 a failed import leaves no project behind`): count `FM.projects.list().length` and note `currentId()`; make `FM.storage.applyScene` throw once, then return false once; call `importObject(validObj, null, { quiet: true, confirmed: true })` each time. Assert the count is unchanged, the previous project is still current, and a toast fired. **Fails on v17.23** (count +1 both times). Control: a valid object adds exactly 1. Restore the patch in `finally`.
 **Effort:** an hour. **Order:** after #1002. **ChatGPT's commit:** check both the throw and the `false` path, and that the previous project is reopened, not just the new one removed.
@@ -64,11 +65,11 @@ The queue classifier (`tools/_classify.py`, run on `REQUESTS.md` at this commit)
 
 ## #1002 A collaborator's bad edit can half-apply on the host's copy and crash its receive loop
 
-**Reproduced the sanitiser half (not the host loop).** `sanitizeUnsafeValues` (the seam `FM.storage_sanitizeUnsafeValues`) on a layer whose `fillGradient` is `'bad'`, `5` or `true` **throws** (`Cannot create property 'angle' on string 'bad'`); `[1,2]` and `null` do not throw but stay non-objects; `{c0:'#fff',angle:'999'}` is clamped to 360 (control). `FM.storage._sanitizeLayers([layer])` throws the same way, which is the every-open load path.
+**Reproduced the sanitiser half (not the host loop).** `sanitizeUnsafeValues` (the seam `FM.storage_sanitizeUnsafeValues`) on a layer whose `fillGradient` is `'bad'`, `5` or `true` **throws** (`Cannot create property 'angle' on string 'bad'`); `[1,2]` and `null` do not throw but stay non-objects; `{c0:'#fff',angle:'999'}` is clamped to 360 (control). `FM.storage._sanitizeLayers([layer])` throws the same way. **That is not the every-open load path:** `_sanitizeLayers` is `sanitizeImportedLayers` (`js/storage.js:1655`), which runs on import, history restore (`js/history.js:71`) and the collab bridge. The every-open load is `js/storage.js:903`, which calls `sanitizeUnsafeValues` directly.
 
 **The compound with #1001 (Reproduced):** `importObject` of a project file whose layer has `fillGradient: 'bad'`: `sceneFileProblem` returns `null` (passes), then `importObject` **throws** and leaves the new empty project as current.
 
-**Where.** `js/storage.js:1537` checks only `if (l.fillGradient)` and `:1542` assigns `.angle` onto it. The host side (`js/collab-host.js:661` applies, `:684-686` runs the invariants, the throw escapes `H.receive`, `:883`) is from the entry's reading and from its JSC reproduction; **I did not reproduce the host half**.
+**Where.** `js/storage.js:1537` checks only `if (l.fillGradient)` and `:1542` assigns `.angle` onto it. The host side (`js/collab-host.js:666` applies the op, `D.apply(base, op)`; `:661` is a comment; `invariantFix` is `:685-693` with `inv.layer(c)` at `:691`; the throw escapes `H.receive`, `:883`) is from the entry's reading and from its JSC reproduction; **I did not reproduce the host half**.
 
 **Build**
 1. In `sanitizeUnsafeValues`, before `:1537`: `if (l.fillGradient != null && (typeof l.fillGradient !== 'object' || Array.isArray(l.fillGradient))) delete l.fillGradient;`. Fixes string, number, `true` and array in one line, on every path that goes through it (open, import, undo restore, collab clone).
