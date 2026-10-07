@@ -1,14 +1,10 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- ⚠️ These three lines were MISSING and it is not cosmetic (21 Sep). This page is written for
-     HIS PHONE and it is handed to him as a FILE whenever the artifact cannot be republished — which
-     is the situation it has been in since 20 Sep. Opened as a file, with no charset, every em-dash
-     and curly quote in it renders as mojibake; with no viewport, a phone lays it out at 980px and
-     zooms out, so the 380px layout that was carefully verified never actually reaches him. Both
-     faults are invisible when it is served as an artifact, because the platform supplies the
-     headers — which is exactly why nobody saw them. -->
-<title>FreeMotion Unblock List</title>
+<!-- Written for his phone and handed to him as a FILE, so the charset and viewport lines matter (see the 21 Sep note in git history).
+     Rebuilt 7 Oct from `tools/asks.sh` (40 open asks). Every card is data in the JSON block below and is drawn with
+     createElement + textContent only: nothing from REQUESTS.md is ever parsed as markup. -->
+<title>FreeMotion: your questions</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
@@ -169,138 +165,198 @@
   footer { color: var(--faint); font-size: 12.5px; margin: 34px 0 0; line-height: 1.5; }
 
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-</style>
 
+  /* H36 additions: the accept-all button, quick answers, the item tag. */
+  .accept { display: block; width: 100%; margin: 18px 0 0; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 11px;
+    padding: 13px 16px; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; }
+  .acceptnote { color: var(--dim); font-size: 12.5px; margin: 7px 0 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { background: var(--sunk); border: 1.5px solid var(--line); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; color: var(--text); cursor: pointer; }
+  .chip:hover { border-color: var(--faint); }
+  .rec-flag { color: var(--accent); font-weight: 600; }
+  .norec { color: var(--wait); font-size: 12.5px; margin-top: 8px; }
+  .tag { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--faint); margin: 0 0 3px; }
+</style>
 <div class="wrap">
   <header>
-    <h1>Everything FreeMotion is waiting on you for</h1>
-    <!-- No number in this sentence on purpose (21 Sep): it said "Twenty-nine" while the real figure was
-         25, and a hand-written count is a thing that rots between the day it is typed and the day he
-         opens the page. The chips underneath count themselves; this line just says what the page IS. -->
-    <p class="stand">Every open item that is built as far as it can go without you is here. Most need a tap or a
-      letter; a few need a test or a report from your phone. Pick as you go — the page remembers — then hit
-      <b>Copy my answers</b> and paste the lot back in one message.</p>
-    <ul class="tally">
-      <li><span class="n">3</span> new today</li>
-      <li><span class="n">12</span> need a report pasted</li>
-      <li><span class="n">7</span> need a letter</li>
-      <li><span class="n">4</span> need a quick look</li>
-    </ul>
+    <h1>Your questions, in one place</h1>
+    <p class="stand">Everything FreeMotion is waiting on you for. Most are a tap on a letter; the recommended one is already chosen,
+      so you only change what you disagree with. The phone checks are grouped at the bottom as <b>Try this on your phone</b>.
+      When you are done, tap <b>Copy my answers</b> and paste the lot back in one message.</p>
+    <ul class="tally" id="tally"></ul>
+    <button class="accept" id="accept" type="button">Accept every recommendation</button>
+    <p class="acceptnote" id="acceptnote">Picks the recommended option on every card that has one. The phone checks and the cards with no recommendation are left for you.</p>
   </header>
-
-  <!-- ══ THE CARDS ARE DATA NOW (25 Sep, v16.97) ══ Rebuilt from a sweep in which twelve agents read every open entry in
-       full and a thirteenth checked the rest of the repo for anything missed — 60 asks, plus the decisions made for him.
-       The hand-written cards had drifted: #454 was still asking after he had answered it, #202's ask had never been on
-       the page at all, and the "New today" answer boxes were never wired to the Copy button (they were .say, the script
-       reads .note). One JSON block below, rendered by one function, with textContent only — nothing here is HTML. -->
   <div id="groups"></div>
   <script type="application/json" id="unblock-data">
 {
- "asOf": "25 Sep 2026, v16.97 — 30 Sep: #406 card removed (#994 settled it), #482 speed and #834 Close moved to Already decided, #482 Gradient Overlay card names 0.8 / 0.5",
  "groups": [
   {
    "id": "picks",
    "title": "Quick picks",
-   "desc": "Answer with the letter. Where I drew options and sent pictures, the letters are those same options.",
+   "desc": "Tap a letter. The recommended one is already chosen for you; change any you disagree with. Where I have no recommendation, nothing is chosen.",
    "items": [
     {
-     "n": 1,
-     "num": "936",
      "kind": "pick",
-     "title": "The empty Projects screen on a fresh start — what should it say?",
-     "text": "A fresh start now opens on an empty Projects screen (v16.97). Picture sent 25 Sep.",
+     "num": "482",
+     "title": "Gradient Overlay: where should its strength start?",
+     "text": "It starts at 0.8, so the pink-to-blue gradient covers most of your photo. You can still slide it after you add it; this only picks where it starts.",
      "options": [
-      [
-       "A",
-       "“Make your first edit” — Tap + to start a project — drop in a video, a photo or some text and bring it to life."
-      ],
-      [
-       "B",
-       "“Nothing here yet — let’s make something” — Tap + to start your first project."
-      ],
-      [
-       "C",
-       "“Your projects will live here” — Tap + to start one. Everything you make stays on this device."
-      ]
-     ],
-     "rec": "A"
-    },
-    {
-     "n": 2,
-     "num": "927",
-     "kind": "pick",
-     "title": "Big Notes and Shortcuts — the grab corner",
-     "text": "Built and working on a branch; 11 pictures sent 25 Sep.",
-     "options": [
-      [
-       "A",
-       "Arc"
-      ],
-      [
-       "B",
-       "Grip lines"
-      ],
-      [
-       "C",
-       "Expand button"
-      ]
-     ],
-     "rec": "A"
-    },
-    {
-     "n": 3,
-     "num": "927",
-     "kind": "pick",
-     "title": "Big Notes and Shortcuts — how big is big",
-     "text": "",
-     "options": [
-      [
-       "Roomy",
-       "Roomy"
-      ],
-      [
-       "Focus",
-       "Focus"
-      ],
-      [
-       "Most",
-       "Most of the screen"
-      ]
-     ],
-     "rec": "Focus"
-    },
-    {
-     "n": 4,
-     "num": "929",
-     "kind": "pick",
-     "title": "The people shapes",
-     "text": "Traced from real published pictograms; 14 pages sent to your phone.",
-     "options": [
-      [
-       "A",
-       "The airport-sign people (public domain)"
-      ],
-      [
-       "B",
-       "Mapbox’s map icons"
-      ],
-      [
-       "C",
-       "Google’s icon set (no arms)"
-      ],
       [
        "Keep",
-       "Keep today’s"
+       "Keep 0.8, as it is today"
+      ],
+      [
+       "Gentler",
+       "Start at 0.5, so half the photo shows through"
       ]
      ],
-     "rec": "A"
+     "rec": "Gentler",
+     "also": ""
     },
     {
-     "n": 5,
-     "num": "929",
      "kind": "pick",
+     "num": "482",
+     "title": "The Filters tab: which layout?",
+     "text": "All three have Strength before Add, hold-to-compare, search, Your filters and Add to all clips. Pictures were sent on 1 Oct. If you say nothing, A is what gets built.",
+     "options": [
+      [
+       "A",
+       "Two rows with everything showing"
+      ],
+      [
+       "B",
+       "One row, with Clear and Add to all clips tucked into a ▾ menu"
+      ],
+      [
+       "C",
+       "A “This clip / All clips” switch before Add"
+      ]
+     ],
+     "rec": "A",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "775 + 918",
+     "title": "Buttons overlap on a narrow PC window",
+     "text": "Below about 1050px wide, buttons in the top row slide under each other; clicking Layer actions can even close your project.",
+     "options": [
+      [
+       "A",
+       "Drop the version label and the ? help button (the two nobody presses)"
+      ],
+      [
+       "B",
+       "Fold help, view options and settings into one ⋯ button"
+      ],
+      [
+       "C",
+       "Use the phone-style row when the window is narrow"
+      ]
+     ],
+     "rec": "A",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "970",
+     "title": "PC, two layers selected: the ⋯ layer options button is hidden",
+     "text": "Between about 1160 and 1386px wide it sits under the version chip and cannot be clicked.",
+     "options": [
+      [
+       "A",
+       "Put the extra band under the row whenever the window is narrower than about 1380px"
+      ],
+      [
+       "B",
+       "Keep one row and show the band only while two or more layers are selected (the row jumps when you shift-click a second layer)"
+      ]
+     ],
+     "rec": "A",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "985 + 917",
+     "title": "The Export box: which design?",
+     "text": "Every setting stays reachable in all three (a list of all 34 is on file). Whichever you pick, a phone will show the full “Same as project, 1080×1920” instead of cutting it off.",
+     "options": [
+      [
+       "A",
+       "“What you’ll get”: a picture, the length and “about 34 MB”; five buttons (Video, GIF, Picture, Sound, Frames); four plain rows; the expert settings under More options"
+      ],
+      [
+       "B",
+       "“Pick a goal”: six tiles (Best quality, Smaller to send, GIF, Picture, Sound only, Frame by frame), then Fine-tune"
+      ],
+      [
+       "C",
+       "“Sliders + size”: a Video/GIF/Picture/Sound/Frames switch, the file size in big type, three sliders with a star on the recommended stop"
+      ]
+     ],
+     "rec": "A",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "917",
+     "title": "The Add sheet’s see-through glass",
+     "text": "The timeline shows faintly behind your photos and videos in the Add sheet.",
+     "options": [
+      [
+       "A",
+       "Keep the glass; it matches the rest of the app"
+      ],
+      [
+       "B",
+       "Make it solid"
+      ]
+     ],
+     "rec": "A",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "917 + 918",
+     "title": "The custom background colour box looks like a second Black swatch",
+     "text": "In New project and Canvas settings it starts black (and on PC it runs 19px past its column).",
+     "options": [
+      [
+       "A",
+       "Give it a rainbow ring like the shape-colour swatch"
+      ],
+      [
+       "B",
+       "Leave it black"
+      ]
+     ],
+     "rec": "A",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "917",
+     "title": "Effect option rows on a very small phone (320px)",
+     "text": "Some rows leave one button alone on a second line. No recommendation was recorded.",
+     "options": [
+      [
+       "Above",
+       "Put the labels above the buttons on phones"
+      ],
+      [
+       "Leave",
+       "Leave as it is"
+      ]
+     ],
+     "rec": "",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "929",
      "title": "The heart shape",
-     "text": "Two faults found and fixed: the bulge near the bottom and the ‘little lines’ in the icon.",
+     "text": "Two faults were found and fixed: the bulge near the bottom, and the little lines in its icon.",
      "options": [
       [
        "A",
@@ -315,14 +371,14 @@
        "A textbook heart"
       ]
      ],
-     "rec": "A"
+     "rec": "A",
+     "also": ""
     },
     {
-     "n": 6,
-     "num": "929",
      "kind": "pick",
-     "title": "The heart’s icon in Add → Shape",
-     "text": "Either way it is now drawn from the heart’s own shape, so it matches what you add.",
+     "num": "929",
+     "title": "The heart’s tile in Add → Shape",
+     "text": "Either way it is drawn from the heart’s own shape, so it matches what you add.",
      "options": [
       [
        "Outline",
@@ -333,30 +389,196 @@
        "Filled"
       ]
      ],
-     "rec": "Outline"
+     "rec": "Outline",
+     "also": ""
     },
     {
-     "n": 7,
-     "num": "912",
-     "kind": "say",
-     "title": "Which of the ten new filters do you want to keep?",
-     "text": "All built; picture sheets sent 22 Sep. 1 Sepia · 2 Digicam · 3 Portrait Film · 4 Moody · 5 Cyberpunk · 6 Tungsten · 7 Airy · 8 Colour Splash · 9 Cyanotype · 10 HDR. The ones you do not pick get deleted.",
-     "placeholder": "e.g. 1 4 5 9 — or “all”"
-    },
-    {
-     "n": 8,
-     "num": "858",
-     "kind": "say",
-     "title": "Four filters look extreme — tone any down?",
-     "text": "Poster Print and Photocopy (almost all black-and-white dots), Old Film (very heavy texture), Teal & Orange (turns the whole frame blue).",
-     "placeholder": "leave them — or name the ones to tone down"
-    },
-    {
-     "n": 9,
-     "num": "904",
      "kind": "pick",
-     "title": "Flash (darken)’s “Darkest” slider mostly does nothing",
-     "text": "It only works when set lighter than the flash’s own Depth — including in all ten built-in TikTok-look presets.",
+     "num": "948",
+     "title": "Templates and Elements: what should + open?",
+     "text": "Today it opens a tiny menu. All three options start a blank template as well. Pictures were sent on 26 Sep.",
+     "options": [
+      [
+       "A",
+       "One card: start from scratch with shape chips, and a sideways row of your projects"
+      ],
+      [
+       "B",
+       "Two big picture tiles; “From a project” slides to a full page of projects"
+      ],
+      [
+       "C",
+       "A bottom sheet with three rows, including Open a file"
+      ]
+     ],
+     "rec": "A",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "948",
+     "title": "Templates and Elements: fix the three things that still act like projects?",
+     "text": "(2) A new element sits as a hidden draft until you save it; (3) editing one looks the same as editing a project, with Export still there; (4) their shared files are project files. Each fix becomes its own job.",
+     "options": [
+      [
+       "All",
+       "Yes, fix all three"
+      ],
+      [
+       "None",
+       "No, leave them"
+      ]
+     ],
+     "rec": "All",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "954",
+     "title": "Effect renames away from Alight Motion: the 40 new names",
+     "text": "No recommendation recorded. If you want some crossed out, say which on the line you send back.",
+     "options": [
+      [
+       "OK",
+       "OK as they are"
+      ],
+      [
+       "Some",
+       "Cross some out (I will name them)"
+      ]
+     ],
+     "rec": "",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "954",
+     "title": "The 70 plain effect names",
+     "text": "They are already different from Alight Motion’s.",
+     "options": [
+      [
+       "Keep",
+       "Keep them"
+      ],
+      [
+       "Rename",
+       "Rename them too"
+      ]
+     ],
+     "rec": "Keep",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "954",
+     "title": "The proposed order of the effect categories",
+     "text": "No recommendation recorded.",
+     "options": [
+      [
+       "OK",
+       "OK as proposed"
+      ],
+      [
+       "Change",
+       "I want it changed (I will say how)"
+      ]
+     ],
+     "rec": "",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "964",
+     "title": "The tap animation on an empty project: its colour",
+     "text": "Pictures sent. The menu now opens straight away (your 29 Sep answer).",
+     "options": [
+      [
+       "A",
+       "Aurora"
+      ],
+      [
+       "B",
+       "Rings and sparks"
+      ],
+      [
+       "C",
+       "Key ripple"
+      ]
+     ],
+     "rec": "A",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "964",
+     "title": "The tap animation: where do the lights start?",
+     "text": "",
+     "options": [
+      [
+       "Bottom",
+       "Bottom-middle, meeting at the top"
+      ],
+      [
+       "Finger",
+       "The edge nearest your finger"
+      ]
+     ],
+     "rec": "Bottom",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "982",
+     "title": "Home: which icon replaces the word “Join”?",
+     "text": "Four icons were drawn at phone size (sheet sent 29 Sep). It will still say “Join” to a screen reader and on hover.",
+     "options": [
+      [
+       "A",
+       "An arrow into a doorway (sharpest at phone size)"
+      ],
+      [
+       "B",
+       "An open door (blurs when small)"
+      ],
+      [
+       "C",
+       "An arrow into a person (looks like Share)"
+      ],
+      [
+       "D",
+       "An arrow through a link (reads as copy link)"
+      ]
+     ],
+     "rec": "A",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "987",
+     "title": "Collab notes: how do you see who wrote one?",
+     "text": "Notes do not record who wrote them yet; this also fixes two gaps found on the way (an open Notes panel does not update when a friend edits, and ✕ deletes by position).",
+     "options": [
+      [
+       "A",
+       "A dot and a name"
+      ],
+      [
+       "B",
+       "A colour stripe"
+      ],
+      [
+       "C",
+       "Their face: the same initial-in-a-circle as the people chip and Comments"
+      ]
+     ],
+     "rec": "C",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "904",
+     "title": "Flash (darken): its “Darkest” slider mostly does nothing",
+     "text": "It only works when set lighter than the flash’s own Depth, including in all ten built-in TikTok-look presets.",
      "options": [
       [
        "A",
@@ -364,21 +586,21 @@
       ],
       [
        "B",
-       "Remove Darkest and keep the look you have — Depth already does the job"
+       "Remove Darkest and keep the look you have; Depth already does the job"
       ]
      ],
-     "rec": "B"
+     "rec": "B",
+     "also": ""
     },
     {
-     "n": 10,
-     "num": "904",
      "kind": "pick",
-     "title": "Blink runs at half the speed it says",
-     "text": "Set to “2 Hz” it blinks once a second.",
+     "num": "904",
+     "title": "Blink runs at half the speed its label says",
+     "text": "Set to 2 Hz it blinks once a second.",
      "options": [
       [
        "A",
-       "Keep every existing Blink the same speed and make the number honest from now on"
+       "Keep every Blink you made looking the same, and make the number honest from now on"
       ],
       [
        "B",
@@ -386,913 +608,670 @@
       ],
       [
        "C",
-       "Keep the speed, just drop the Hz label"
+       "Keep the speed and drop the Hz label"
       ]
      ],
-     "rec": "A"
+     "rec": "A",
+     "also": ""
     },
     {
-     "n": 11,
-     "num": "911",
      "kind": "pick",
-     "title": "Snow & Rain — default flake size",
-     "text": "5px reads tiny on a phone.",
-     "options": [
-      [
-       "A",
-       "New ones start at 8px (ones you already made stay at 5px)"
-      ],
-      [
-       "B",
-       "Leave it at 5px"
-      ]
-     ],
-     "rec": "A"
-    },
-    {
-     "n": 12,
-     "num": "482",
-     "kind": "pick",
-     "title": "Gradient Overlay’s default strength",
-     "text": "It starts at 0.8 today, so the pink-to-blue gradient covers most of your photo. The picture shows both on the same photo. The slider still goes anywhere after you add it — this only picks where it starts.",
-     "options": [
-      [
-       "Keep",
-       "Keep 0.8, today’s default"
-      ],
-      [
-       "Gentler",
-       "Start at 0.5, so half the photo shows through"
-      ]
-     ],
-     "rec": "Gentler"
-    },
-    {
-     "n": 14,
-     "num": "534",
-     "kind": "pick",
-     "title": "Rename the “Stroke Colour” effect?",
-     "text": "You looked for an outline effect and couldn’t find it under this name.",
-     "options": [
-      [
-       "Rename",
-       "Rename it to an “Outline …” name"
-      ],
-      [
-       "Keep",
-       "Keep “Stroke Colour”"
-      ]
-     ],
-     "rec": ""
-    },
-    {
-     "n": 15,
-     "num": "664",
-     "kind": "pick",
-     "title": "Line height — its own effect tile?",
-     "text": "Today it is a setting inside the Text Spacing effect.",
-     "options": [
-      [
-       "Own tile",
-       "Its own tile, easier to find"
-      ],
-      [
-       "Keep",
-       "Keep it inside Text Spacing"
-      ]
-     ],
-     "rec": ""
-    },
-    {
-     "n": 16,
-     "num": "92",
-     "kind": "pick",
-     "title": "Audio effects browser — pull down for Favourites?",
-     "text": "It still makes you swipe sideways to reach your favourites; the visual one pulls down.",
-     "options": [
-      [
-       "Yes",
-       "Yes, same treatment as the visual browser"
-      ],
-      [
-       "Leave",
-       "Leave it"
-      ]
-     ],
-     "rec": ""
-    },
-    {
-     "n": 17,
-     "num": "917",
-     "kind": "pick",
-     "title": "The phone Export box cuts off its own values",
-     "text": "(“Same as project …”)",
-     "options": [
-      [
-       "A",
-       "Put the labels above the dropdowns on phones"
-      ],
-      [
-       "B",
-       "Shorten the wording (e.g. “Project — 1080×1920”)"
-      ]
-     ],
-     "rec": "A"
-    },
-    {
-     "n": 18,
-     "num": "917",
-     "kind": "pick",
-     "title": "The Add sheet’s see-through glass",
-     "text": "The timeline shows faintly behind your photos and videos.",
-     "options": [
-      [
-       "A",
-       "Keep the glass — it matches the rest of the app"
-      ],
-      [
-       "B",
-       "Make it solid"
-      ]
-     ],
-     "rec": "A"
-    },
-    {
-     "n": 19,
-     "num": "917 + 918",
-     "kind": "pick",
-     "title": "The custom background colour box is plain black",
-     "text": "In New project and Canvas settings it looks like a second Black swatch (and on PC it runs past its column).",
-     "options": [
-      [
-       "A",
-       "Give it a rainbow ring like the shape-colour swatch"
-      ],
-      [
-       "B",
-       "Leave it black"
-      ]
-     ],
-     "rec": "A"
-    },
-    {
-     "n": 20,
-     "num": "917",
-     "kind": "pick",
-     "title": "Effect option rows on a small phone (320px)",
-     "text": "Some rows leave one button alone on a second line.",
-     "options": [
-      [
-       "Above",
-       "Labels above the buttons on phones"
-      ],
-      [
-       "Leave",
-       "Leave as is"
-      ]
-     ],
-     "rec": ""
-    },
-    {
-     "n": 21,
-     "num": "775 + 918",
-     "kind": "pick",
-     "title": "Buttons overlap on a narrow PC window",
-     "text": "Under about 1050px wide, buttons in the row slide under others — clicking Layer actions can even close your project.",
-     "options": [
-      [
-       "A",
-       "Drop the version label and the ? help button"
-      ],
-      [
-       "B",
-       "Fold help, view options and settings into one ⋯ button"
-      ],
-      [
-       "C",
-       "Use the phone-style row below ~1050px"
-      ]
-     ],
-     "rec": "A"
-    },
-    {
-     "n": 22,
-     "num": "867",
-     "kind": "pick",
-     "title": "PC add menu: Controller and New group tiles look alike",
-     "text": "Drawn options were sent.",
-     "options": [
-      [
-       "1",
-       "New group joins the coloured family (green)"
-      ],
-      [
-       "2",
-       "Keep New group quiet but properly blue"
-      ],
-      [
-       "3",
-       "Option 1 plus a stronger background on both tiles"
-      ]
-     ],
-     "rec": "1"
-    },
-    {
-     "n": 23,
-     "num": "425",
-     "kind": "pick",
-     "title": "PC layer row: should Copy move right too?",
-     "text": "Parent, bin and ⋯ moved right; Copy stayed left because a day earlier you asked for it there.",
-     "options": [
-      [
-       "A",
-       "Move Copy right too (the switch goes with it)"
-      ],
-      [
-       "B",
-       "Leave Copy on the left"
-      ]
-     ],
-     "rec": "B"
-    },
-    {
-     "n": 26,
-     "num": "937",
-     "kind": "pick",
-     "title": "Linking a layer whose animation can’t be kept exactly",
-     "text": "Some animated layers can’t keep their exact path when linked to a turned parent. Today linking goes ahead and a message names the layer; grouping leaves that layer out.",
-     "options": [
-      [
-       "Keep",
-       "Keep: link it and show the message"
-      ],
-      [
-       "Refuse",
-       "Make linking refuse, like grouping"
-      ]
-     ],
-     "rec": ""
-    },
-    {
-     "n": 27,
-     "num": "effects plan",
-     "kind": "say",
-     "title": "Corner Pin, LUT import, Curves — want any?",
-     "text": "You said “idk what any of those are” — say “show me” and I’ll send pictures of each first.",
-     "placeholder": "show me / none / a name"
-    }
-   ]
-  },
-  {
-   "id": "tests",
-   "title": "Try on your phone or PC",
-   "desc": "Each of these is something only your device can answer.",
-   "items": [
-    {
-     "n": 28,
-     "num": "920",
-     "kind": "say",
-     "title": "The top of the screen — one smooth surface now?",
-     "text": "v16.96, no reinstall needed. Look at Home in light mode, Home in dark mode, and inside a project.",
-     "placeholder": "one surface now — or which screen still has a bar/fade"
-    },
-    {
-     "n": 29,
-     "num": "936",
-     "kind": "say",
-     "title": "Delete every project — do you get the empty screen?",
-     "text": "Force-update first (tap the version number). On v16.97 you should get the empty Projects screen, not “Untitled”.",
-     "placeholder": "empty screen / still shows Untitled"
-    },
-    {
-     "n": 30,
-     "num": "215 · 604 · 677",
-     "kind": "say",
-     "title": "Do exports have sound?",
-     "text": "Export one video with a song and one with only sound effects, save both to your camera roll and play them in Photos. Also: does “Project 27” from 9 Sep have sound?",
-     "placeholder": "sound / muted — for each"
-    },
-    {
-     "n": 31,
-     "num": "663",
-     "kind": "say",
-     "title": "Does phone audio still cut in and out?",
-     "text": "v16.94 fixed two iPhone audio faults. Especially once effects are added.",
-     "placeholder": "still cuts out / better now"
-    },
-    {
-     "n": 32,
-     "num": "676 · 706",
-     "kind": "say",
-     "title": "Does the Add menu still open twice?",
-     "text": "One cause was fixed. If it still happens: does it slide up, drop and come up again, does a second copy land on top, or does the layer get added twice? A 3-second screen recording settles it.",
-     "placeholder": "fixed / which of the three"
-    },
-    {
-     "n": 33,
-     "num": "768",
-     "kind": "say",
-     "title": "Scrubbing with a layer selected — still jumpy?",
-     "text": "Two likely causes were fixed on 25 Sep.",
-     "placeholder": "smooth now / still jumpy"
-    },
-    {
-     "n": 34,
      "num": "834",
-     "kind": "say",
-     "title": "Pinch a layer with one finger starting on a corner square",
-     "text": "Does it resize, or drag away with your other finger?",
-     "placeholder": "resizes / drags"
-    },
-    {
-     "n": 35,
-     "num": "619",
-     "kind": "say",
-     "title": "Templates → ⋯ → New project from template",
-     "text": "That opens the Insert your Media screen, where you swap clips, words and colours. Is it what you wanted?",
-     "placeholder": "yes / what’s missing"
-    },
-    {
-     "n": 36,
-     "num": "921",
-     "kind": "say",
-     "title": "Live collaboration on your Mac and iPhone together",
-     "text": "Settings → Labs on both, tap Share on the Mac, then open the link, scan the QR or type the code on the iPhone. If it won’t connect, Settings → Labs → Test connection gives a report to paste.",
-     "placeholder": "works / what went wrong / paste the report"
-    },
-    {
-     "n": 37,
-     "num": "96",
-     "kind": "say",
-     "title": "Has a song with NO effects ever refused to play since late August?",
-     "text": "Your 10 Sep note (“fine until adding effects”) suggests no — a plain “no” closes this.",
-     "placeholder": "no / yes — file type and length"
-    },
-    {
-     "n": 38,
-     "num": "934",
-     "kind": "say",
-     "title": "Two calls I made — keep both?",
-     "text": "(1) A short sound over a song now dips only the overlap in exports, not the whole song. (2) Undoing a Delete brings the layer back selected with its panel open.",
-     "placeholder": "keep both / reverse (1) / reverse (2)"
-    }
-   ]
-  },
-  {
-   "id": "reports",
-   "title": "Reports to paste",
-   "desc": "Only your phone can make these. Settings has a Copy button for each.",
-   "items": [
-    {
-     "n": 39,
-     "num": "202",
-     "kind": "say",
-     "title": "What’s slow → Measure, taken WHILE PLAYING",
-     "text": "One plain video clip or your effect-heavy project. Or just say “still laggy” or “fine now” after v16.95.",
-     "placeholder": "paste the report — or still laggy / fine now"
-    },
-    {
-     "n": 40,
-     "num": "lag",
-     "kind": "say",
-     "title": "Stack a few effects on one layer, then Measure",
-     "text": "Its GPU and DEVICE lines show whether the graphics-chip speedups reached your phone.",
-     "placeholder": "paste the report"
-    },
-    {
-     "n": 41,
-     "num": "508",
-     "kind": "say",
-     "title": "Open a project from Home, then Your last project open → Copy",
-     "text": "Shows which frames of the opening slide ran slow on your phone.",
-     "placeholder": "paste the report"
-    },
-    {
-     "n": 42,
-     "num": "657",
-     "kind": "say",
-     "title": "Play AND drag the playhead ~10 s, then What’s slow → Copy",
-     "text": "The only sample so far came from the PC, and scrubbing wasn’t measured.",
-     "placeholder": "paste the report"
-    },
-    {
-     "n": 43,
-     "num": "845",
-     "kind": "say",
-     "title": "Play a sound with audio effects until it glitches, then Your last playback → Copy",
-     "text": "The old report came from a broken instrument (fixed in v16.10).",
-     "placeholder": "paste the report"
-    },
-    {
-     "n": 44,
-     "num": "768",
-     "kind": "say",
-     "title": "If scrubbing is still jumpy: Your last scrub → Copy",
-     "text": "Names the cost so the fix isn’t another guess.",
-     "placeholder": "paste the report"
-    },
-    {
-     "n": 45,
-     "num": "129",
-     "kind": "say",
-     "title": "Next time a clip lands with no picture: A clip with no picture → Copy",
-     "text": "Most likely a screen recording. That one report says which of two fixes it needs.",
-     "placeholder": "paste the report (when it happens)"
-    },
-    {
-     "n": 46,
-     "num": "860",
-     "kind": "say",
-     "title": "Next time an icon doesn’t show properly — screenshot it",
-     "text": "Three hunts found nothing; one photo turns it into a fix.",
-     "placeholder": "where, which device — or haven’t seen it since"
-    }
-   ]
-  },
-  {
-   "id": "decisions",
-   "title": "Bigger decisions",
-   "desc": "No rush on any of these; nothing is broken while they wait.",
-   "items": [
-    {
-     "n": 47,
-     "num": "856",
-     "kind": "pick",
-     "title": "The Assistant’s pro version — how does it get its key?",
-     "text": "A ‘hidden built-in key’ can’t truly be hidden in the app.",
+     "title": "Sketching: what should Cancel do?",
+     "text": "Today it only closes the bar, and every stroke is already saved as a Sketch layer, so nothing is cancelled.",
      "options": [
       [
        "A",
-       "Stay local-only: people bring their own key, pro unlocks features"
+       "Make Cancel throw away the whole drawing from this session"
       ],
       [
        "B",
-       "Our own small server for pro users (costs, accounts, no longer local-only)"
+       "Rename the button to Close (Undo already takes back a stroke; a Cancel that deletes work you can see is the more dangerous one)"
+      ]
+     ],
+     "rec": "B",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "856",
+     "title": "An AI you can talk to that edits for you",
+     "text": "These change what the app is. A key shipped inside the app cannot be hidden.",
+     "options": [
+      [
+       "A",
+       "Keep it local-only: you bring your own key, and Pro unlocks features, not a key"
+      ],
+      [
+       "B",
+       "A small server of ours proxies the model for Pro users (real cost per user, real accounts)"
       ],
       [
        "C",
        "Hold the whole idea until after launch"
       ]
      ],
-     "rec": "A"
+     "rec": "A",
+     "also": ""
     },
     {
-     "n": 48,
-     "num": "847",
      "kind": "pick",
-     "title": "A cloud backstop for the work loop?",
-     "text": "Today the loop stops whenever this chat closes, until a new FreeMotion chat turns it back on.",
+     "num": "1090",
+     "title": "Work with friends: the owner’s private Notes",
+     "text": "Right now the owner’s Notes text and reminders sync to every guest, viewers included, and nothing says so.",
+     "options": [
+      [
+       "Owner",
+       "Keep notes on the owner’s device only"
+      ],
+      [
+       "Share",
+       "Keep sharing them and say so on the Share screen"
+      ]
+     ],
+     "rec": "Owner",
+     "also": ""
+    }
+   ]
+  },
+  {
+   "id": "pile",
+   "title": "ChatGPT’s pile: your eleven questions",
+   "desc": "None of these blocks the first five batches. Each recommendation is the one written in the land list.",
+   "items": [
+    {
+     "kind": "pick",
+     "num": "1068",
+     "title": "Fonts",
+     "text": "ChatGPT bundled 13 fonts (2 it drew, 11 free open-licence ones) in a sectioned font picker. It also switches every title from your phone’s system font to real Inter, which looks slightly different and may re-wrap old text.",
      "options": [
       [
        "Yes",
-       "Yes, set up the cloud backstop"
+       "Yes to the fonts, but old projects keep looking exactly as they do now"
       ],
       [
        "No",
-       "No, leave it session-only"
+       "No fonts"
       ]
      ],
-     "rec": ""
+     "rec": "Yes",
+     "also": ""
     },
     {
-     "n": 49,
-     "num": "777",
      "kind": "pick",
-     "title": "This page’s old link died around 21 Sep",
-     "text": "Did you delete it on purpose? It’s kept up to date either way.",
+     "num": "1068",
+     "title": "ChatGPT’s 12 hand-drawn fonts",
+     "text": "Meridian Serif, Lilt Marker, Vector Mono, Foundry Slab, Cloud Pop, Signal Pixel, Aperture Stencil, Ribbon Script, Palais Deco, Blackthorn, Reed, Stormbrush. Two have no accents.",
      "options": [
       [
-       "Publish",
-       "Publish it again at a new link"
+       "None",
+       "None until you have seen one sheet (24px and 48px, over video); then only your picks"
+      ],
+      [
+       "All",
+       "All twelve"
+      ]
+     ],
+     "rec": "None",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "1068",
+     "title": "ChatGPT’s redrawn shapes",
+     "text": "About 23 shapes, including your heart and the thumbs-up and envelope traced from your own references. Its own reviewer said the set must not be released as final.",
+     "options": [
+      [
+       "Keep",
+       "Keep today’s shapes (pick individual ones later from an old-versus-new sheet)"
+      ],
+      [
+       "New",
+       "Take ChatGPT’s set"
+      ]
+     ],
+     "rec": "Keep",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "1068",
+     "title": "Background export",
+     "text": "The app stays usable while exporting. Not tried on your iPhone; if it fails partway, that export fails instead of quietly using the old way.",
+     "options": [
+      [
+       "Later",
+       "Later, after the no-sound export bug (#604) is fixed"
+      ],
+      [
+       "Now",
+       "Now"
+      ]
+     ],
+     "rec": "Later",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "1068",
+     "title": "Colour-grading pack (10 effects)",
+     "text": "Colour Wheels (round pucks on the phone too), Clarity & Dehaze, B&W Mixer and Auto Grade are recommended; HSL Mixer would merge into HSL Bands; Channel Mixer skipped (Channel Remap exists). It also asks which camera you shoot (iPhone Apple Log? DJI?) for the log converters; say on the line you send back.",
+     "options": [
+      [
+       "Yes",
+       "Yes, as recommended"
+      ],
+      [
+       "No",
+       "No colour pack"
+      ]
+     ],
+     "rec": "Yes",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "1068",
+     "title": "Audio clean-up tools in the Volume panel",
+     "text": "Reduce Noise and Auto-duck (music dips under speech).",
+     "options": [
+      [
+       "First",
+       "Reduce Noise first, Auto-duck after it"
+      ],
+      [
+       "No",
+       "Neither"
+      ]
+     ],
+     "rec": "First",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "1068",
+     "title": "Eight new audio effects",
+     "text": "Graphic EQ, Hum Remover, De-esser, Channel Utility, Stereoizer, Auto-Wah, Noise Gate, Loudness Match; with buttons like the visual effects instead of drop-downs.",
+     "options": [
+      [
+       "All",
+       "Yes to all eight"
+      ],
+      [
+       "No",
+       "None"
+      ]
+     ],
+     "rec": "All",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "1068",
+     "title": "A “Filter layer” tile in Add → Elements",
+     "text": "One tap drops an empty adjustment layer over the clip and opens Filters. You would pick its icon from 2 or 3 drawn options first.",
+     "options": [
+      [
+       "Yes",
+       "Yes, after I pick the icon"
+      ],
+      [
+       "No",
+       "No"
+      ]
+     ],
+     "rec": "Yes",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "1068",
+     "title": "The Overdrive filter’s sun turns lavender",
+     "text": "Fix it so it stays white? A before/after picture comes first.",
+     "options": [
+      [
+       "Fix",
+       "Yes, fix it"
       ],
       [
        "Leave",
-       "Leave it unpublished (it was deleted on purpose)"
+       "Leave it"
       ]
      ],
-     "rec": ""
+     "rec": "Fix",
+     "also": ""
     },
     {
-     "n": 50,
-     "num": "545",
      "kind": "pick",
-     "title": "A FreeMotion design system (icons, colours, type)",
-     "text": "You asked to hold this.",
+     "num": "1068",
+     "title": "Soft edges on Diagonal Stripes, and on Checker/Grid at an angle",
+     "text": "Today they have stair-steps. Changing it alters existing Stripes layers.",
      "options": [
       [
-       "Now",
-       "Make the design system now"
+       "Switch",
+       "Behind a “Smooth edges” switch, off by default"
       ],
       [
-       "Identity first",
-       "Do the look-our-own identity pass first"
+       "Always",
+       "Always smooth"
       ],
       [
-       "Hold",
-       "Keep holding"
+       "Leave",
+       "Leave as is"
       ]
      ],
-     "rec": ""
+     "rec": "Switch",
+     "also": ""
     },
     {
-     "n": 51,
-     "num": "identity",
      "kind": "pick",
-     "title": "The “make it ours” pass before going public",
-     "text": "The look still copies Alight Motion; it must change before any public link, store listing, demo video or invite to someone else.",
-     "options": [
-      [
-       "Hold",
-       "Keep holding until launch"
-      ],
-      [
-       "Now",
-       "Start now"
-      ]
-     ],
-     "rec": "Hold"
-    },
-    {
-     "n": 52,
-     "num": "identity",
-     "kind": "pick",
-     "title": "Were these copied from Alight Motion screenshots?",
-     "text": "The effect browser’s press-and-hold card (v4.50) and the preset sheet (v4.59). Only you know.",
-     "options": [
-      [
-       "Yes",
-       "Yes, copied from AM"
-      ],
-      [
-       "No",
-       "No, our own"
-      ],
-      [
-       "Not sure",
-       "Not sure"
-      ]
-     ],
-     "rec": ""
-    },
-    {
-     "n": 53,
-     "num": "206",
-     "kind": "say",
-     "title": "Shape edit points (“a million dots”)",
-     "text": "You asked me to wait for you on this. Sit down with me now, or still later? And can I count and rank the fiddliest shapes first? That changes nothing in the app.",
-     "placeholder": "now / later — and yes/no to counting first"
-    },
-    {
-     "n": 54,
-     "num": "923",
-     "kind": "pick",
-     "title": "Easy + deep editor: one switch, or also per clip?",
-     "text": "Ideas only — nothing is built until you say so.",
-     "options": [
-      [
-       "One switch",
-       "One Quick/Full switch for the whole project"
-      ],
-      [
-       "Per clip",
-       "Also open a single clip in Full from Quick"
-      ]
-     ],
-     "rec": ""
-    },
-    {
-     "n": 55,
-     "num": "923",
-     "kind": "pick",
-     "title": "Easy + deep editor: what are the two modes called?",
+     "num": "1068",
+     "title": "Poster Print prints pure black-and-white dots",
      "text": "",
-     "options": [
-      [
-       "Quick / Full",
-       "Quick / Full"
-      ],
-      [
-       "Cut / Motion",
-       "Cut / Motion"
-      ],
-      [
-       "Easy / Pro",
-       "Easy / Pro"
-      ]
-     ],
-     "rec": ""
-    },
-    {
-     "n": 56,
-     "num": "923",
-     "kind": "pick",
-     "title": "Easy + deep editor: who is the first version for?",
-     "text": "",
-     "options": [
-      [
-       "Little",
-       "People with little skill"
-      ],
-      [
-       "Lots",
-       "People with lots of skill"
-      ],
-      [
-       "Quick",
-       "Lots of skill, wants it quick"
-      ]
-     ],
-     "rec": ""
-    },
-    {
-     "n": 57,
-     "num": "923",
-     "kind": "pick",
-     "title": "Easy + deep editor: build a first version yet?",
-     "text": "The brainstorm suggests starting with Quick Edit on any project, the Quick/Full switch, and beat sync.",
-     "options": [
-      [
-       "Yes",
-       "Yes, build a first version"
-      ],
-      [
-       "Not yet",
-       "Not yet"
-      ]
-     ],
-     "rec": ""
-    }
-   ]
-  },
-  {
-   "id": "mac",
-   "title": "Only you can do these on the Mac",
-   "desc": "Each is one line in Terminal that needs your password, or a file only you have.",
-   "items": [
-    {
-     "n": 58,
-     "num": "882",
-     "kind": "say",
-     "title": "Make the Xcode fix permanent — or leave the workaround",
-     "text": "Nothing is broken meanwhile. The one line: sudo xcode-select -s /Library/Developer/CommandLineTools",
-     "placeholder": "ran it / leave it"
-    },
-    {
-     "n": 59,
-     "num": "882",
-     "kind": "say",
-     "title": "The ChatGPT chat logs you offered on 20 Sep",
-     "text": "They may hold requests you made there that never got written down here.",
-     "placeholder": "sent / not bothering"
-    },
-    {
-     "n": 60,
-     "num": "129",
-     "kind": "say",
-     "title": "Optional: turn on Safari automation",
-     "text": "Lets me test the no-picture clip in real Safari, the nearest thing to your phone’s engine. The one line: sudo safaridriver --enable",
-     "placeholder": "done / skip"
-    }
-   ]
-  },
-  {
-   "id": "vetoes",
-   "title": "Already decided — say one word to reverse",
-   "desc": "Nothing waits on these — each was decided while you were away. Tap the button, or say the word, only if you want it the other way.",
-   "items": [
-    {
-     "n": 13,
-     "num": "482",
-     "kind": "pick",
-     "title": "Effect speed sliders: left as they are — raise them?",
-     "text": "Glitch speed, scanline roll, cloud drift and similar. Faster is taste, not something I can measure, so I left them alone. Tap Yes to have them opened up.",
-     "options": [
-      [
-       "Yes",
-       "Yes, raise them — open up the speed controls"
-      ]
-     ],
-     "rec": ""
-    },
-    {
-     "n": 25,
-     "num": "834",
-     "kind": "pick",
-     "title": "The sketch bar’s Cancel now says Close",
-     "text": "Every stroke is already saved as a layer the moment you lift your finger, so the button only ever closed the bar. It says Close now; what it does has not changed, and Undo still takes back one stroke. Custom shape keeps Cancel, because there it really throws the points away.",
      "options": [
       [
        "A",
-       "Make it Cancel, and have it throw away the whole drawing from this session"
+       "Black dots over posterised colour (folded into the planned Halftone mode control)"
+      ],
+      [
+       "B",
+       "Coloured dots"
+      ],
+      [
+       "C",
+       "Leave it"
       ]
      ],
-     "rec": ""
+     "rec": "A",
+     "also": ""
+    }
+   ]
+  },
+  {
+   "id": "small",
+   "title": "Small decisions and favours",
+   "desc": "No recommendation was recorded for these, so nothing is chosen.",
+   "items": [
+    {
+     "kind": "pick",
+     "num": "777",
+     "title": "Publish this page to a new link?",
+     "text": "The old link is unreachable. Publishing without your say-so would leave you with two pages and no way to tell which is live.",
+     "options": [
+      [
+       "Yes",
+       "Yes, publish it to a new link"
+      ],
+      [
+       "No",
+       "No, hand it to me another way"
+      ]
+     ],
+     "rec": "",
+     "also": ""
     },
     {
-     "n": 61,
-     "num": "395 · 484 · 539 · 583 · 624 · 642 · 760 · 763 · 813 · 851",
+     "kind": "pick",
+     "num": "847",
+     "title": "A cloud backstop for the loop",
+     "text": "Want a cloud routine so the loop survives this chat being closed?",
+     "options": [
+      [
+       "Yes",
+       "Yes"
+      ],
+      [
+       "No",
+       "No"
+      ]
+     ],
+     "rec": "",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "882",
+     "title": "Xcode",
+     "text": "Leave the DEVELOPER_DIR workaround in place, or run the one permanent line yourself: sudo xcode-select -s /Library/Developer/CommandLineTools",
+     "options": [
+      [
+       "Leave",
+       "Leave the workaround"
+      ],
+      [
+       "Run",
+       "I will run the sudo line"
+      ]
+     ],
+     "rec": "",
+     "also": ""
+    },
+    {
+     "kind": "pick",
+     "num": "882",
+     "title": "ChatGPT’s chat logs",
+     "text": "You offered them. They probably hold no code, but may hold requests you made to Codex that were never written down.",
+     "options": [
+      [
+       "Send",
+       "I will send them"
+      ],
+      [
+       "Skip",
+       "Skip them"
+      ]
+     ],
+     "rec": "",
+     "also": ""
+    },
+    {
      "kind": "say",
-     "title": "Decisions made for you",
-     "text": "MP3 (#395) · the new effect names (#484) · squish damping (#539) · “Save as preset” wording (#583) · “open it” (#624) · home background (#642) · PC shape tiles (#760) · play/skip buttons (#763) · Comic Ink weight (#813) · “use the ⧉” (#851).",
-     "placeholder": "leave all — or name the ones to reverse"
+     "num": "912",
+     "title": "Which of the ten new filters do you want to keep?",
+     "text": "All built; two picture sheets sent 22 Sep. The ones you do not pick get deleted. (Names as of the last list: 1 Sepia, 2 Digicam, 3 Portrait Film, 4 Moody, 5 Cyberpunk, 6 Tungsten, 7 Airy, 8 Colour Splash, 9 Cyanotype, 10 HDR.)",
+     "chips": [
+      "all",
+      "none"
+     ],
+     "placeholder": "e.g. 1 4 5 9, or “all”",
+     "also": ""
+    }
+   ]
+  },
+  {
+   "id": "phone",
+   "title": "Try this on your phone",
+   "desc": "Only your phone can answer these. Tap a quick answer or type your own. A paste from Settings is fine where it says so.",
+   "items": [
+    {
+     "kind": "say",
+     "num": "unnumbered · 202 · 692",
+     "title": "Is playing and editing still laggy?",
+     "text": "Since v16.95. If it is: put a few effects on a video layer, then Settings → What’s slow → Measure, press play and let it play for ten seconds, then Copy and paste it here. One report taken while playing answers all three items.",
+     "chips": [
+      "Fine now",
+      "Still laggy"
+     ],
+     "placeholder": "fine now, or paste the report",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "215 · 604 · 677",
+     "title": "Do exports have sound?",
+     "text": "Export something short with sound, save it to your camera roll and play it from Photos. One answer closes all three items.",
+     "chips": [
+      "Plays with sound",
+      "No sound"
+     ],
+     "placeholder": "with sound / no sound",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "663 · 845",
+     "title": "Does audio still cut out or glitch?",
+     "text": "Since v16.94, now that effects are the known trigger. If it does: play it until it glitches, stop, then Settings → Your last playback → Copy and paste it.",
+     "chips": [
+      "Fine now",
+      "Still glitches"
+     ],
+     "placeholder": "fine now, or paste the report",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "676 · 706",
+     "title": "Does the Add menu still open twice?",
+     "text": "Two fixes have gone in (v15.08 and v16.94). If it does, which is it: it slides up, drops and slides up again, or it opens once and a second copy lands on top?",
+     "chips": [
+      "Fixed",
+      "Still twice"
+     ],
+     "placeholder": "fixed / which of the two",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "768",
+     "title": "Scrubbing with a layer selected: still jumpy?",
+     "text": "Two likely causes were fixed on 25 Sep.",
+     "chips": [
+      "Smooth now",
+      "Still jumpy"
+     ],
+     "placeholder": "",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "508",
+     "title": "Opening a project: still janky?",
+     "text": "Open a project from Home, then Settings → Your last project open → Copy, and paste it.",
+     "chips": [
+      "Fine now",
+      "Still janky"
+     ],
+     "placeholder": "paste the report, or fine now / still janky",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "129",
+     "title": "A clip that landed with no picture",
+     "text": "If a screen recording (or any clip) has landed with no picture since v15.69: Settings → A clip with no picture → Copy, and paste it.",
+     "chips": [
+      "Never happened since",
+      "Happened"
+     ],
+     "placeholder": "never since / paste the report",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "834",
+     "title": "Pinching with one finger on a corner square",
+     "text": "Put two fingers on a selected layer with one finger starting on a corner square. Does it resize, or drag away with your other finger?",
+     "chips": [
+      "Resizes",
+      "Drags"
+     ],
+     "placeholder": "",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "619",
+     "title": "Templates → ⋯ → New project from template",
+     "text": "That opens the fill-in sheet, where you tap each slot and put in your own clip, words or colours. Is that what you asked for? (Tapping the card itself opens the template for editing.)",
+     "chips": [
+      "Yes, that’s it",
+      "Not quite"
+     ],
+     "placeholder": "yes / what’s missing",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "920",
+     "title": "The top of the screen: one smooth surface now?",
+     "text": "Look at Home in light mode, Home in dark mode, inside a project, and going in and out of projects. Are the fade and the black bar gone?",
+     "chips": [
+      "Gone",
+      "Still there"
+     ],
+     "placeholder": "gone / which screen still has it",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "921",
+     "title": "Live collaboration on your Mac and iPhone together",
+     "text": "Settings → Labs on both, tap Share on the Mac, then open the link, scan the QR or type the code on the iPhone. If it will not connect, Settings → Labs → Test connection gives a report to paste.",
+     "chips": [
+      "Works",
+      "Did not connect"
+     ],
+     "placeholder": "works / what went wrong / paste the report",
+     "also": ""
+    },
+    {
+     "kind": "say",
+     "num": "860",
+     "title": "An icon that does not display",
+     "text": "Send one screenshot of an icon not displaying. Two passes could not find it.",
+     "chips": [
+      "Sending one",
+      "None seen lately"
+     ],
+     "placeholder": "sending a screenshot / none seen",
+     "also": ""
     }
    ]
   }
  ]
 }
   </script>
-  <script>
-  (function () {
-    var data = JSON.parse(document.getElementById('unblock-data').textContent);
-    var root = document.getElementById('groups');
-    function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-    data.groups.forEach(function (g) {
-      var sec = el('section'); sec.id = g.id;
-      var head = el('div', 'shead'); head.appendChild(el('h2', null, g.title)); head.appendChild(el('span', 'count', ''));
-      sec.appendChild(head);
-      if (g.desc) sec.appendChild(el('p', 'sdesc', g.desc));
-      g.items.forEach(function (it) {
-        var card = el('div', 'card');
-        card.dataset.id = 'i' + it.n; card.dataset.item = it.num + ' · item ' + it.n; card.dataset.kind = it.kind;
-        var ask = el('div', 'ask');
-        var h3 = el('h3');
-        var tag = el('span', 'mono', it.n + ' · #' + it.num + '  '); tag.style.color = 'var(--faint)';
-        h3.appendChild(tag); h3.appendChild(document.createTextNode(it.title));
-        ask.appendChild(h3);
-        if (it.text) ask.appendChild(el('p', null, it.text));
-        card.appendChild(ask);
-        if (it.kind === 'pick') {
-          var opts = el('div', 'opts');
-          it.options.forEach(function (o) {
-            var btn = el('button', 'opt'); btn.dataset.v = o[0]; btn.type = 'button';
-            btn.appendChild(el('span', 'key', o[0]));
-            var lab = el('span', null, o[1]);
-            if (it.rec && it.rec === o[0]) lab.appendChild(el('span', 'rec', ' — recommended'));
-            btn.appendChild(lab); opts.appendChild(btn);
-          });
-          card.appendChild(opts);
-        } else {
-          var ta = el('textarea', 'note'); ta.rows = 2; ta.placeholder = it.placeholder || '';
-          card.appendChild(ta);
-        }
-        sec.appendChild(card);
-      });
-      root.appendChild(sec);
-    });
-  })();
-  </script>
-
   <footer>
-    Rebuilt from REQUESTS.md at v16.97 (25 Sep) by a full sweep of every open entry · closed in the same sweep because they were not
-    really waiting on you: #95, #454 and #810 (answered or superseded), plus old questions in ten more · #202 was waiting on you but
-    hidden from every list by a sorting bug, now fixed. The counts at the top of each section are worked out by the page itself.<br>
-    Anything you skip stays exactly where it is &mdash; nothing gets dropped.
+    Built from <span class="mono">tools/asks.sh</span> on 7 Oct (40 open asks). Items that ask the same thing share one card (the lag question covers
+    three items, the export-sound question three, the add-menu question two) and show every item number, so one answer reaches all of them.
+    #956 (the reminder to go through a page of questions) is this page. #967 has no live question left (its picks were built as recommended).
+    The recommendation on each card is the one written in its entry; where an entry gave none, the card says so and nothing is chosen.<br>
+    Anything you skip stays exactly where it is, and nothing gets dropped.
   </footer>
 </div>
-
 <div class="bar">
   <div class="inner">
-    <p class="status" id="status">Nothing picked yet.</p>
+    <p class="status" id="status">Loading.</p>
     <button class="send" id="send" disabled>Copy my answers</button>
   </div>
 </div>
-
 <script>
-/* ⚠️ THE NUMBERS ON THIS PAGE COUNT THEMSELVES (21 Sep). Every figure here was hand-written prose, and
-   prose has no test: the tally said "3 new today" beside a section holding 4 cards, and "Four quick
-   looks" sat over 3. That is the same failure the version stamp in REQUESTS.md is gated for — a summary
-   quietly describing a state that has moved on. This page is the ONE thing Ezra opens to answer
-   everything, so a count he cannot trust is worse here than anywhere else. Now the cards are the source
-   of truth and the numbers are derived, so adding a card is the whole job. */
 (function () {
-  function countUp() {
-    var cards = document.querySelectorAll('.card');
-    if (!cards.length) return;                       // never blank the page out if the markup moves
-    var kind = { tap: 0, pick: 0, say: 0 };
-    cards.forEach(function (c) { var k = c.dataset.kind; if (k in kind) kind[k]++; });
-    var newToday = document.querySelectorAll('#new .card').length;
-    var rows = [[newToday, 'new today'], [kind.tap, 'need a report pasted'],
-                [kind.pick, 'need a letter'], [kind.say, 'need a line from you']];
-    var ul = document.querySelector('.tally');
-    if (ul) {
-      ul.textContent = '';
-      rows.forEach(function (r) {
-        if (!r[0]) return;                            // a category with nothing in it is not news
-        var li = document.createElement('li');
-        var n = document.createElement('span'); n.className = 'n'; n.textContent = r[0];
-        li.appendChild(n); li.appendChild(document.createTextNode(' ' + r[1]));
-        ul.appendChild(li);
-      });
-    }
-    document.querySelectorAll('section').forEach(function (sec) {
-      var c = sec.querySelector('.count'); if (!c) return;
-      var n = sec.querySelectorAll('.card').length;
-      c.textContent = n + (n === 1 ? ' item' : ' items');
-    });
+  'use strict';
+  var KEY = 'fm.unblock.v3';   // v3 (7 Oct): new card set; older answers belong to different questions
+  var data = JSON.parse(document.getElementById('unblock-data').textContent);
+  var state = {}, order = [], cardData = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { state = {}; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  var n = 0;
+  data.groups.forEach(function (g) { g.items.forEach(function (it) { n++; it.id = 'c' + n; it.n = n; cardData[it.id] = it; order.push(it.id); }); });
+
+  // a recommended pick counts as answered until he changes it; his own choice (stored) wins
+  function valueOf(it) {
+    if (Object.prototype.hasOwnProperty.call(state, it.id)) return state[it.id];
+    return it.kind === 'pick' && it.rec ? it.rec : '';
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', countUp);
-  else countUp();
+
+  var root = document.getElementById('groups'), cards = {};
+  data.groups.forEach(function (g) {
+    var sec = el('section'); sec.id = g.id;
+    var head = el('div', 'shead'); head.appendChild(el('h2', null, g.title));
+    var cnt = el('span', 'count', ''); cnt.dataset.group = g.id; head.appendChild(cnt); sec.appendChild(head);
+    if (g.desc) sec.appendChild(el('p', 'sdesc', g.desc));
+    g.items.forEach(function (it) {
+      var card = el('div', 'card'); card.dataset.id = it.id; cards[it.id] = card;
+      var ask = el('div', 'ask');
+      ask.appendChild(el('p', 'tag', '#' + it.num));
+      ask.appendChild(el('h3', null, it.title));
+      if (it.text) ask.appendChild(el('p', null, it.text));
+      card.appendChild(ask);
+      if (it.kind === 'pick') {
+        var opts = el('div', 'opts');
+        it.options.forEach(function (o) {
+          var b = el('button', 'opt'); b.type = 'button'; b.dataset.v = o[0];
+          b.appendChild(el('span', 'key', o[0].length > 3 ? '' : o[0]));
+          var lab = el('span', null, o[1]);
+          if (it.rec === o[0]) lab.appendChild(el('span', 'rec-flag', '  (recommended)'));
+          b.appendChild(lab);
+          b.addEventListener('click', function () {
+            if (valueOf(it) === o[0]) state[it.id] = ''; else state[it.id] = o[0];   // tapping the chosen one clears it ('' is a deliberate "no answer")
+            save(); paint(); });
+          opts.appendChild(b);
+        });
+        card.appendChild(opts);
+        if (!it.rec) card.appendChild(el('p', 'norec', 'No recommendation recorded: your call.'));
+      } else {
+        if (it.chips && it.chips.length) {
+          var ch = el('div', 'chips');
+          it.chips.forEach(function (c) {
+            var b = el('button', 'chip', c); b.type = 'button';
+            b.addEventListener('click', function () { state[it.id] = c; var t = card.querySelector('textarea'); t.value = c; save(); paint(); });
+            ch.appendChild(b);
+          });
+          card.appendChild(ch);
+        }
+        var ta = el('textarea', 'note'); ta.rows = 2; ta.placeholder = it.placeholder || '';
+        ta.value = typeof state[it.id] === 'string' ? state[it.id] : '';
+        ta.addEventListener('input', function () { var v = ta.value.trim(); if (v) state[it.id] = v; else delete state[it.id]; save(); paint(); });
+        card.appendChild(ta);
+      }
+      sec.appendChild(card);
+    });
+    root.appendChild(sec);
+  });
+
+  function paint() {
+    var done = 0, picks = 0, says = 0;
+    order.forEach(function (id) {
+      var it = cardData[id], card = cards[id], v = valueOf(it), on = !!v;
+      card.classList.toggle('done', on);
+      if (on) done++;
+      if (it.kind === 'pick') { picks++; card.querySelectorAll('.opt').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.v === v ? 'true' : 'false'); }); }
+      else says++;
+    });
+    document.querySelectorAll('.count').forEach(function (c) {
+      var g = data.groups.filter(function (x) { return x.id === c.dataset.group; })[0];
+      var k = g.items.length, d = g.items.filter(function (it) { return !!valueOf(it); }).length;
+      c.textContent = d + ' of ' + k;
+    });
+    var tally = document.getElementById('tally'); tally.textContent = '';
+    [[picks, 'letters to pick'], [says, 'phone checks and lines']].forEach(function (r) {
+      var li = el('li'); li.appendChild(el('span', 'n', String(r[0]))); li.appendChild(document.createTextNode(' ' + r[1])); tally.appendChild(li);
+    });
+    var st = document.getElementById('status'); st.textContent = '';
+    var untouched = order.filter(function (id) { var it = cardData[id]; return it.kind === 'pick' && it.rec && !Object.prototype.hasOwnProperty.call(state, id); }).length;
+    st.appendChild(el('b', null, String(done))); st.appendChild(document.createTextNode(' of ')); st.appendChild(el('b', null, String(order.length)));
+    st.appendChild(document.createTextNode(' have an answer' + (untouched ? ' (' + untouched + ' are recommendations you have not touched)' : '') + '. The page remembers.'));
+    document.getElementById('send').disabled = done === 0;
+  }
+
+  document.getElementById('accept').addEventListener('click', function () {
+    order.forEach(function (id) { var it = cardData[id]; if (it.kind === 'pick' && it.rec) state[id] = it.rec; });
+    save(); paint();
+    var a = document.getElementById('acceptnote'); a.textContent = 'Done: every recommended option is chosen. Change any card you disagree with, then Copy my answers.';
+  });
+
+  function build() {
+    var picks = [], says = [];
+    order.forEach(function (id) {
+      var it = cardData[id], v = valueOf(it); if (!v) return;
+      var opt = it.kind === 'pick' ? it.options.filter(function (o) { return o[0] === v; })[0] : null;
+      var line = '#' + it.num + (it.kind === 'pick' ? ' → ' + v + (it.rec === v ? ' (recommended)' : '') + '   (' + it.title + ')' : ': ' + v + '   (' + it.title + ')');
+      (it.kind === 'pick' ? picks : says).push(line);
+    });
+    var out = ['FreeMotion: my answers'];
+    if (picks.length) out.push('', 'PICKS', picks.join('\n'));
+    if (says.length) out.push('', 'PHONE CHECKS AND LINES', says.join('\n'));
+    return out.join('\n');
+  }
+
+  var send = document.getElementById('send');
+  send.addEventListener('click', function () {
+    var text = build();
+    function done() { send.textContent = 'Copied, paste it to me'; setTimeout(function () { send.textContent = 'Copy my answers'; }, 2600); }
+    function fallback() {
+      var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed'; ta.style.top = '-1000px'; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) { send.textContent = 'Select and copy'; }
+      setTimeout(function () { ta.remove(); }, 0);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
+  });
+
+  paint();
+  window.__unblock = { build: build, state: function () { return state; }, count: function () { return order.length; } };
 })();
-</script>
-<script>
-  (function () {
-    var KEY = 'fm.unblock.v2';   // v2 (25 Sep): the cards were renumbered; v1 answers belong to different questions
-    var state = {};
-    try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { state = {}; }
-
-    function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
-
-    var cards = [].slice.call(document.querySelectorAll('.card'));
-
-    cards.forEach(function (card) {
-      var id = card.dataset.id, kind = card.dataset.kind;
-
-      var tick = card.querySelector('.tick');
-      if (tick) {
-        if (state[id]) { tick.setAttribute('aria-pressed', 'true'); card.classList.add('done'); }
-        tick.addEventListener('click', function () {
-          var on = tick.getAttribute('aria-pressed') !== 'true';
-          tick.setAttribute('aria-pressed', on ? 'true' : 'false');
-          card.classList.toggle('done', on);
-          if (on) state[id] = card.dataset.label || true; else delete state[id];
-          save(); render();
-        });
-      }
-
-      card.querySelectorAll('.opt').forEach(function (btn) {
-        if (state[id] === btn.dataset.v) { btn.setAttribute('aria-pressed', 'true'); card.classList.add('done'); }
-        btn.addEventListener('click', function () {
-          var already = btn.getAttribute('aria-pressed') === 'true';
-          card.querySelectorAll('.opt').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
-          if (already) { delete state[id]; card.classList.remove('done'); }
-          else { btn.setAttribute('aria-pressed', 'true'); state[id] = btn.dataset.v; card.classList.add('done'); }
-          save(); render();
-        });
-      });
-
-      var note = card.querySelector('.note');
-      if (note) {
-        if (typeof state[id] === 'string' && kind === 'say') { note.value = state[id]; card.classList.add('done'); }
-        note.addEventListener('input', function () {
-          var v = note.value.trim();
-          if (v) state[id] = v; else delete state[id];
-          card.classList.toggle('done', !!v);
-          save(); render();
-        });
-      }
-    });
-
-    function build() {
-      var picks = [], notes = [], taps = [];
-      cards.forEach(function (card) {
-        var id = card.dataset.id, v = state[id];
-        if (!v) return;
-        var head = card.querySelector('h3');
-        var title = head ? head.textContent.replace(/\s+/g, ' ').replace(/^#[\d\s·#+]+/, '').trim() : id;
-        var num = card.dataset.item || id;
-        if (card.dataset.kind === 'pick') picks.push('#' + num + ' → ' + v + '   (' + title + ')');
-        else if (card.dataset.kind === 'say') notes.push('#' + num + ': ' + v);
-        else taps.push(card.dataset.label || title);
-      });
-      var out = ['FreeMotion — my answers'];
-      if (picks.length) out.push('', 'PICKS', picks.join('\n'));
-      if (notes.length) out.push('', 'ANSWERS', notes.join('\n'));
-      if (taps.length) out.push('', 'DONE / SENDING', taps.map(function (t) { return '· ' + t; }).join('\n'));
-      return out.join('\n');
-    }
-
-    var status = document.getElementById('status'), send = document.getElementById('send');
-
-    function render() {
-      // Count answers to cards that are ON the page. A card taken off (30 Sep: #406's, once #994 settled it) can
-      // leave its old answer in storage, and counting that would read "3 of 2 answered".
-      var n = cards.filter(function (c) { return !!state[c.dataset.id]; }).length;
-      send.disabled = n === 0;
-      status.innerHTML = n === 0
-        ? 'Nothing picked yet.'
-        : '<b>' + n + '</b> of <b>' + cards.length + '</b> answered — the page remembers, so you can stop and come back.';
-    }
-
-    send.addEventListener('click', function () {
-      var text = build();
-      function done() {
-        send.textContent = 'Copied — paste it to me';
-        setTimeout(function () { send.textContent = 'Copy my answers'; }, 2600);
-      }
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done, fallback);
-      } else fallback();
-      function fallback() {
-        var ta = document.createElement('textarea');
-        ta.value = text; ta.setAttribute('readonly', '');
-        ta.style.position = 'fixed'; ta.style.top = '-1000px';
-        document.body.appendChild(ta); ta.select();
-        try { document.execCommand('copy'); done(); }
-        catch (e) { send.textContent = 'Select and copy'; }
-        setTimeout(function () { ta.remove(); }, 0);
-      }
-    });
-
-    render();
-  })();
 </script>
