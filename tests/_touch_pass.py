@@ -47,8 +47,13 @@ def load(path):
     return None
 
 
-def run_one(name, a):
-    url = "http://localhost:%d/tests/run.html?only=%s" % (a.port, urllib.parse.quote(name))
+def run_one(name, a, after=None):
+    # alone (?only=<name>), or IN ORDER: every test after the previous finger test up to this one, as the full pass runs them
+    if a.in_order:
+        q = "upto=%s" % urllib.parse.quote(name) + ("&after=%s" % urllib.parse.quote(after) if after else "")
+    else:
+        q = "only=%s" % urllib.parse.quote(name)
+    url = "http://localhost:%d/tests/run.html?%s" % (a.port, q)
     env = dict(os.environ, FM_TOUCH_PAGE="1")
     try:
         p = subprocess.run([sys.executable, os.path.join(HERE, "_cdp.py"), "--port", str(a.port), "--width", str(a.width),
@@ -86,18 +91,25 @@ def main():
     ap.add_argument("--timeout", type=int, default=300, help="seconds per finger test")
     ap.add_argument("--out", default=None, help="write the per-test verdicts here (JSON)")
     ap.add_argument("--remaining", default=None, help="write the NOT RUN list minus the finger tests that passed (name<TAB>reason)")
+    # A VALIDATION, NOT A SHIP STEP (the PM, 7 Oct): a page of its own is CLEANER than the suite's — no earlier test's scene,
+    # selection or settings — so a finger test that only passes alone would be a false green. --in-order gives each finger test
+    # the tests that run before it in the full pass (from the previous finger test on) in the same fresh browser. About one full
+    # pass of time; compare its verdicts with the alone run's.
+    ap.add_argument("--in-order", action="store_true", help="run each finger test after its suite-order predecessors")
     a = ap.parse_args()
     d = load(a.src)
     if d is None or not isinstance(d.get("notRun"), list):
         print("touch pass: %s has no driver result with a NOT RUN list — nothing can be judged" % a.src)
         return 2
     touch = [x for x in d["notRun"] if str(x.get("reason", "")).startswith(TOUCH_REASON)]
-    res = {"width": a.width, "from": a.src, "total": len(touch), "pass": [], "red": [], "notRun": []}
+    res = {"width": a.width, "from": a.src, "mode": "in-order" if a.in_order else "alone", "total": len(touch), "pass": [], "red": [], "notRun": []}
     t_all = time.time()
+    prev = None
     for x in touch:
         n = x["name"]
         t0 = time.time()
-        verdict, why = run_one(n, a)
+        verdict, why = run_one(n, a, prev)
+        prev = n
         res["pass" if verdict == "pass" else "red" if verdict == "red" else "notRun"].append({"name": n, "why": why})
         print("   %-6s %3ds  %s%s" % ({"pass": "pass", "red": "RED", "notrun": "NOTRUN"}[verdict], time.time() - t0, flat(n)[:100],
                                     "" if verdict == "pass" else "  — " + why[:200]), flush=True)

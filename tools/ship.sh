@@ -942,6 +942,12 @@ touch_pass() {   # $1 = width, $2 = the pass's saved driver output, $3 = a name 
     return 1
   fi
   NOTRUN_PASS="$(cat ".claude/ship/notrun-$3.tsv")"
+  # SAID IN THE LOG, NOT ONLY DONE (the PM, 7 Oct): a reader of ship.log must see that the finger tests really ran
+  python3 - ".claude/ship/touch-$3.json" "$1" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+print("✅ finger tests at %spx: %d of %d RAN here, one browser each, and passed — removed from NOT RUN; %d still NOT RUN; verdicts: %s" % (sys.argv[2], len(d["pass"]), d["total"], len(d["notRun"]), sys.argv[1]))
+PYEOF
 }
 touch_pass 1280 .claude/ship/suite-desktop.out desktop || { _WHY="a real-finger test was red at 1280px"; exit 1; }
 NOTRUN_ALL="$NOTRUN_PASS"
