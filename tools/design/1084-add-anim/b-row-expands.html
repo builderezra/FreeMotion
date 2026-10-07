@@ -33,7 +33,13 @@ body{display:flex;flex-direction:column;align-items:center;padding:14px 0 28px;m
 @media (prefers-reduced-motion:reduce){.empty .orb{animation:none}}
 /* the Add sheet, as the app draws it on a phone: glass (82% tint), 16px top corners, reaches the canvas */
 .scrim{position:absolute;inset:0;background:rgba(2,6,10,.55);opacity:0;pointer-events:none;z-index:5}
-.sheet{position:absolute;left:0;right:0;top:344px;bottom:0;z-index:7;visibility:hidden;background:rgba(12,28,37,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);border-radius:16px 16px 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.55);padding:0 14px 18px;display:flex;flex-direction:column}
+.sheet{position:absolute;left:0;right:0;top:344px;bottom:0;z-index:7;visibility:hidden;background:#0c1c25;padding:0 14px 18px;display:flex;flex-direction:column}
+/* D4b: NO blur filter and NO translucent glass while it moves (the old b blurred the timeline behind a moving, see-through sheet, which smeared and ghosted it): the panel is opaque, the dim behind is a plain scrim */
+.edge,.edge2{position:absolute;z-index:9;pointer-events:none;visibility:hidden}
+.edge{border:1.5px dashed rgba(41,217,187,.6);box-shadow:0 0 14px rgba(41,217,187,.5)}
+.edge2{border:1px solid var(--line);border-bottom:0;box-shadow:0 -12px 40px rgba(0,0,0,.55)}
+.rowskin{position:absolute;z-index:8;pointer-events:none;visibility:hidden;display:flex;align-items:center;gap:10px;padding:0 12px;color:var(--accent);font-weight:600;font-size:13px}
+.rowskin .plus{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#04201b;display:grid;place-items:center;font-weight:800;font-size:16px;line-height:1}
 .sheet.is-arriving *{pointer-events:none}
 .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 8px}
 .sh-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -55,19 +61,20 @@ body{display:flex;flex-direction:column;align-items:center;padding:14px 0 28px;m
 .note{width:380px;margin-top:10px;color:var(--text-faint);font-size:11px;line-height:1.45}
 </style></head>
 <body data-mode="row">
-<div class="title"><b>(b) The Add row stretches into the menu</b>Mid-edit: the "Tap to add a layer" row grows up and down until it is the menu; the menu's contents fade in for the last 40%. Only meaningful with layers (the button switches for you).</div>
+<div class="title"><b>(b) The Add row stretches into the menu (D4b, redrawn)</b>The row itself is the growing shape: an opaque panel starts on the row's own rectangle and its top and bottom edges move outward, the row's dashed border riding the moving edge. The menu fades in once over the last 40%; closing is the exact reverse (it fades out first). Needs layers (the button switches for you).</div>
 <div class="phone">
   <div class="topbar"><div class="btn">&#8249;</div><div class="name">My project</div><div class="btn exp">Export</div></div>
   <div class="stage"><div class="canvas"></div></div>
   <div class="tl" id="tl" data-state="empty"></div>
   <div class="scrim" id="scrim"></div>
   <div class="sheet" id="sheet"><div id="inner" style="display:flex;flex-direction:column;flex:1"></div></div>
-  <div class="ringhost" id="ringhost"></div>
-  <div class="skin" id="skin"></div>
+  <div class="edge" id="edge"></div>
+  <div class="edge2" id="edge2"></div>
+  <div class="rowskin" id="rowskin"><span class="plus">+</span><span>Tap to add a layer</span></div>
   <div class="touch" id="touch"></div>
 </div>
 <div class="ctl">
-  <button id="stateBtn" type="button">Project: empty</button><label>Speed <select id="dur"><option value="260" selected>260 ms</option><option value="340" >340 ms</option></select></label>
+  <button id="stateBtn" type="button">Project: empty</button><label>Speed <select id="dur"><option value="300" selected>300 ms</option><option value="380">380 ms</option></select></label>
   <button id="pTL" type="button">Tap top-left</button><button id="pC" type="button">Tap centre</button><button id="pBR" type="button">Tap bottom-right</button>
   <button id="closeBtn" type="button">Close</button><button id="loopBtn" type="button">Auto loop</button>
   <label><input type="checkbox" id="slow"> Slow-mo x4</label>
@@ -138,66 +145,75 @@ body{display:flex;flex-direction:column;align-items:center;padding:14px 0 28px;m
     skin.innerHTML = '<div class="addrow" style="left:0;right:0;top:0;position:absolute"><span class="plus">+</span><span>Tap to add a layer</span></div>';
   }
 
-  /* ---------- OPEN ---------- */
-  function show() { sheet.style.visibility = 'visible'; sheet.classList.add('is-arriving'); scrim.style.pointerEvents = 'auto'; }
+  /* ---------- the row grows into the menu (D4b) ----------
+   * ONE set of paused-then-played animations, built once per open. Close is the same objects played BACKWARDS (reverse()), so the
+   * curve is identical both ways by construction and nothing is ever toggled: the menu's contents fade in over the last 40% going out
+   * and therefore fade out FIRST coming back. */
+  var PANEL = '#0c1c25', SKIN_FROM = null;
+  var edge = $('#edge'), edge2 = $('#edge2'), rowskin = $('#rowskin');
+  function over(rgba, bg) {   // an opaque colour that looks like rgba laid over bg, so the growing panel starts the SAME colour as the row
+    var m = rgba.match(/[\d.]+/g).map(Number), a = m.length > 3 ? m[3] : 1, b = bg.match(/\d+/g).map(Number);
+    return 'rgb(' + [0, 1, 2].map(function (i) { return Math.round(m[i] * a + b[i] * (1 - a)); }).join(',') + ')';
+  }
+  var lastD = 0;
+  function build() {
+    cancelAll();
+    var rc = rowRect(), k = slow(), D = dur() * k, rm = reduced(); lastD = D;
+    var rowSolid = over(getComputedStyle($('#addrow')).backgroundColor, getComputedStyle($('#tl')).backgroundColor || 'rgb(14,19,32)');
+    var fromClip = 'inset(' + (rc.t - SH.top) + 'px ' + (SH.w - rc.r) + 'px ' + (SH.h - (rc.b - SH.top)) + 'px ' + rc.l + 'px round 10px 10px 10px 10px)';
+    var toClip = 'inset(0px 0px 0px 0px round 16px 16px 0px 0px)';
+    var geoFrom = { top: rc.t + 'px', bottom: (SH.top + SH.h - rc.b) + 'px', left: rc.l + 'px', right: (SH.w - rc.r) + 'px', borderRadius: '10px 10px 10px 10px' };
+    var geoTo = { top: SH.top + 'px', bottom: '0px', left: '0px', right: '0px', borderRadius: '16px 16px 0px 0px' };
+    rowskin.style.left = rc.l + 'px'; rowskin.style.top = rc.t + 'px'; rowskin.style.width = (rc.r - rc.l) + 'px'; rowskin.style.height = (rc.b - rc.t) + 'px';
+    if (dim()) A(scrim, [{ opacity: 0 }, { opacity: 1 }], { duration: rm ? 160 * k : D, easing: 'ease-out' });
+    if (rm) {   // reduced motion: no growth at all, a plain fade of the finished panel
+      A(sheet, [{ opacity: 0, clipPath: toClip, backgroundColor: PANEL }, { opacity: 1, clipPath: toClip, backgroundColor: PANEL }], { duration: 160 * k, easing: 'ease-out' });
+      A(inner, [{ opacity: 1 }, { opacity: 1 }], { duration: 160 * k });
+    } else {
+      A(sheet, [{ clipPath: fromClip, backgroundColor: rowSolid, opacity: 1 }, { clipPath: toClip, backgroundColor: PANEL, opacity: 1 }], { duration: D, easing: EASE_OUT });
+      A(edge, [Object.assign({}, geoFrom), Object.assign({}, geoTo)], { duration: D, easing: EASE_OUT });
+      A(edge2, [Object.assign({}, geoFrom), Object.assign({}, geoTo)], { duration: D, easing: EASE_OUT });
+      A(edge, [{ opacity: 1 }, { opacity: 1, offset: .25 }, { opacity: 0 }], { duration: D, easing: 'linear', composite: 'replace' });   // the dashed row edge hands over to the panel's own hairline
+      A(edge2, [{ opacity: 0 }, { opacity: 0, offset: .5 }, { opacity: 1 }], { duration: D, easing: 'linear' });
+      A(rowskin, [{ opacity: 1 }, { opacity: 0, offset: .35 }, { opacity: 0 }], { duration: D, easing: 'linear' });   // the row's own words live INSIDE the growing panel, then go
+      A(inner, [{ opacity: 0 }, { opacity: 0, offset: .6 }, { opacity: 1 }], { duration: D, easing: 'linear' });      // contents: once, over the last 40%
+    }
+    anims.forEach(function (a) { a.pause(); a.currentTime = 0; });
+  }
+  function show() {
+    sheet.style.visibility = 'visible'; edge.style.visibility = edge2.style.visibility = rowskin.style.visibility = reduced() ? 'hidden' : 'visible';
+    sheet.classList.add('is-arriving'); scrim.style.pointerEvents = 'auto';
+  }
+  function hide() { sheet.style.visibility = 'hidden'; edge.style.visibility = edge2.style.visibility = rowskin.style.visibility = 'hidden'; sheet.classList.remove('is-arriving'); scrim.style.pointerEvents = 'none'; }
   function open(x, y) {
     if (isOpen || busy) return;
-    cancelAll(); busy = true; isOpen = true; origin = { x: x, y: y };
-    show();
-    var k = slow(), D = dur() * k, rm = reduced();
-    if (dim()) A(scrim, [{ opacity: 0 }, { opacity: 1 }], { duration: rm ? 160 * k : D, easing: 'ease-out' });
-    if (rm) {
-      if (MODE === 'slide') A(sheet, [{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }], { duration: 220 * k, easing: 'ease' });   // the app's own reduced-motion slide
-      else A(sheet, [{ opacity: 0 }, { opacity: 1 }], { duration: 160 * k, easing: 'ease-out' });                                                   // new modes: a plain fade
-    } else if (MODE === 'slide') {
-      sheet.style.transformOrigin = '50% 100%';
-      A(sheet, [{ opacity: 0, transform: 'perspective(1400px) translateY(100%) rotateX(-58deg)' }, { opacity: 1, offset: .55 }, { opacity: 1, transform: 'perspective(1400px) translateY(0) rotateX(0deg)' }], { duration: 360 * k, easing: 'cubic-bezier(.18,.85,.28,1.02)' });
-    } else if (MODE === 'circle') {
-      var ox = x, oy = y - SH.top, R = farthest(ox, oy);
-      A(sheet, [{ clipPath: 'circle(0px at ' + ox + 'px ' + oy + 'px)' }, { clipPath: 'circle(' + R + 'px at ' + ox + 'px ' + oy + 'px)' }], { duration: D, easing: EASE_OUT });
-      A(inner, [{ opacity: 0 }, { opacity: 0, offset: .3 }, { opacity: 1 }], { duration: D, easing: 'ease-out' });
-      ringhost.innerHTML = '<div class="ring" style="width:' + 2 * R + 'px;height:' + 2 * R + 'px;left:' + (ox - R) + 'px;top:' + (oy - R) + 'px"></div><div class="ring" style="width:' + 2 * R + 'px;height:' + 2 * R + 'px;left:' + (ox - R) + 'px;top:' + (oy - R) + 'px;opacity:.5"></div>';
-      var rings = ringhost.querySelectorAll('.ring');
-      A(rings[0], [{ transform: 'scale(0)', opacity: .95 }, { opacity: .75, offset: .6 }, { transform: 'scale(1)', opacity: 0 }], { duration: D, easing: EASE_OUT });
-      A(rings[1], [{ transform: 'scale(0)', opacity: 0 }, { opacity: .5, offset: .15 }, { transform: 'scale(1)', opacity: 0 }], { duration: D * 1.18, easing: EASE_OUT });
-    } else {   // row
-      var rc = rowRect(), t = rc.t - SH.top, b = SH.h - (rc.b - SH.top);
-      var from = 'inset(' + t + 'px ' + (SH.w - rc.r) + 'px ' + b + 'px ' + rc.l + 'px round 10px)', to = 'inset(0px 0px 0px 0px round 16px 16px 0px 0px)';
-      setSkin(rc);
-      A(sheet, [{ clipPath: from, backgroundColor: 'rgba(41,217,187,.18)' }, { clipPath: to, backgroundColor: 'rgba(12,28,37,.88)' }], { duration: D, easing: EASE_OUT });
-      A(inner, [{ opacity: 0 }, { opacity: 0, offset: .6 }, { opacity: 1 }], { duration: D, easing: 'ease-out' });
-      A(skin, [{ opacity: 1 }, { opacity: 0, offset: .4 }, { opacity: 0 }], { duration: D, easing: 'ease-out' });
-    }
+    busy = true; isOpen = true; origin = { x: x, y: y };
+    unfreeze(); build(); show();
+    anims.forEach(function (a) { a.playbackRate = 1; a.currentTime = 0; a.play(); });
     done().then(function () { sheet.classList.remove('is-arriving'); busy = false; });
   }
-
-  /* ---------- CLOSE (the same shape back) ---------- */
   function close() {
     if (!isOpen) return;
-    isOpen = false; busy = true; scrim.style.pointerEvents = 'none';
-    var cur = anims.slice(); cur.forEach(function (a) { try { a.cancel(); } catch (e) {} }); anims = [];
-    var k = slow(), rm = reduced(), D = dur() * k * .8;
-    if (dim()) A(scrim, [{ opacity: 1 }, { opacity: 0 }], { duration: rm ? 120 * k : D, easing: 'ease-in' });
-    if (rm) {
-      if (MODE === 'slide') A(sheet, [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }], { duration: 220 * k, easing: 'ease' });
-      else A(sheet, [{ opacity: 1 }, { opacity: 0 }], { duration: 120 * k, easing: 'ease-in' });
-    } else if (MODE === 'slide') {
-      A(sheet, [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }], { duration: 220 * k, easing: 'ease' });   // today's close: the base rule's .22s slide
-    } else if (MODE === 'circle') {
-      var ox = origin.x, oy = origin.y - SH.top, R = farthest(ox, oy);
-      A(sheet, [{ clipPath: 'circle(' + R + 'px at ' + ox + 'px ' + oy + 'px)' }, { clipPath: 'circle(0px at ' + ox + 'px ' + oy + 'px)' }], { duration: D, easing: EASE_IN });
-      A(inner, [{ opacity: 1 }, { opacity: 0, offset: .4 }, { opacity: 0 }], { duration: D, easing: 'ease-in' });
-    } else {
-      var rc = rowRect(), t = rc.t - SH.top, b = SH.h - (rc.b - SH.top);
-      var to = 'inset(' + t + 'px ' + (SH.w - rc.r) + 'px ' + b + 'px ' + rc.l + 'px round 10px)', from = 'inset(0px 0px 0px 0px round 16px 16px 0px 0px)';
-      setSkin(rc);
-      A(sheet, [{ clipPath: from, backgroundColor: 'rgba(12,28,37,.88)' }, { clipPath: to, backgroundColor: 'rgba(41,217,187,.18)' }], { duration: D, easing: EASE_IN });
-      A(inner, [{ opacity: 1 }, { opacity: 0, offset: .4 }, { opacity: 0 }], { duration: D, easing: 'ease-in' });
-      A(skin, [{ opacity: 0 }, { opacity: 0, offset: .6 }, { opacity: 1 }], { duration: D, easing: 'ease-out' });
-    }
-    done().then(function () { sheet.style.visibility = 'hidden'; cancelAll(); ringhost.innerHTML = ''; skin.style.opacity = 0; busy = false; });
+    isOpen = false; busy = true; scrim.style.pointerEvents = 'none'; sheet.classList.add('is-arriving');
+    anims.forEach(function (a) { a.reverse(); });
+    done().then(function () { hide(); cancelAll(); busy = false; });
   }
-  function hardClose() { cancelAll(); isOpen = false; busy = false; sheet.style.visibility = 'hidden'; sheet.classList.remove('is-arriving'); scrim.style.pointerEvents = 'none'; ringhost.innerHTML = ''; skin.style.opacity = 0; }
+  var FROZEN = [[scrim, ['opacity']], [sheet, ['opacity', 'clipPath', 'backgroundColor']], [edge, ['top', 'bottom', 'left', 'right', 'borderRadius', 'opacity']],
+                [edge2, ['top', 'bottom', 'left', 'right', 'borderRadius', 'opacity']], [rowskin, ['opacity']], [inner, ['opacity']]];
+  function unfreeze() { FROZEN.forEach(function (f) { f[1].forEach(function (p) { f[0].style[p] = ''; }); }); }
+  function hardClose() { cancelAll(); unfreeze(); isOpen = false; busy = false; hide(); }
+  /* EXACT FRAMES for recordings and stills: no timers, no promises, no compositor. The animations are built, paused at the asked time, their
+   * COMPUTED values are copied to inline styles and the animations cancelled, so every frame is a plain main-thread style change that a
+   * screenshot cannot show stale (opacity animations run on the compositor, and a headless screenshot after a seek showed the PREVIOUS frame's
+   * opacity for them: menu contents missing for the whole open and then snapping in). Same numbers, because they come from the same animation. */
+  function frame(phase, ms) {
+    cancelAll(); unfreeze(); isOpen = true; build(); show();
+    var t = phase === 'close' ? Math.max(0, lastD - ms) : Math.min(lastD, ms);
+    anims.forEach(function (a) { a.pause(); a.currentTime = t; });
+    FROZEN.forEach(function (f) { var cs = getComputedStyle(f[0]); f[1].forEach(function (p) { f[0].style[p] = cs[p]; }); });
+    cancelAll();
+    return phase;
+  }
 
   function showTouch(x, y) {
     touch.style.left = x + 'px'; touch.style.top = y + 'px';
@@ -233,9 +249,10 @@ body{display:flex;flex-direction:column;align-items:center;padding:14px 0 28px;m
 
   // deterministic frame access for stills and recordings: __proto.seek(ms) pauses every running animation at that time
   window.__proto = {
-    open: open, close: close, demo: demo, setState: setState, hardClose: hardClose,
-    seek: function (ms) { document.getAnimations().forEach(function (a) { a.pause(); a.currentTime = ms; }); },
-    state: function () { return { open: isOpen, busy: busy, arriving: sheet.classList.contains('is-arriving'), mode: MODE }; }
+    open: open, close: close, demo: demo, setState: setState, hardClose: hardClose, frame: frame,
+    duration: function () { return lastD || dur() * slow(); },
+    seek: function (ms) { frame('open', ms); },
+    state: function () { return { open: isOpen, busy: busy, arriving: sheet.classList.contains('is-arriving'), mode: MODE, D: lastD }; }
   };
   window.addEventListener('message', function (e) { if (e.data && e.data.type === 'demo') { hardClose(); demo(e.data.x, e.data.y); } });
 
