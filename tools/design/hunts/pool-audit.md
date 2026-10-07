@@ -1,0 +1,67 @@
+# H40: every module-level cache, pool and array in js/, audited for the H19b shape (grows, never trims)
+
+Base `origin/main` 2e3fd7a9 (v17.25). Labels: **Verified** = read in the code at the line given; **Measured** = run in my container (Chromium 141 headless, software GL, 1280 and 380 px); **Guess** = not run. MB = million bytes unless a test message says MiB (79 MiB = 83 MB). A 1080 x 1920 canvas is 8.3 MB.
+
+## What I did
+1. **Found every collection** (`scripts/h40_scan.py`): every `const|let|var X = new Map|Set|WeakMap|WeakSet(` / `[]` / `{}` / `Object.create(null)` declared at module level in `js/*.js`: **133**, with every line that grows it (`.set .push .add`, `X[k] =`) and every line that trims it (`delete .clear .shift .pop .splice`, `.length = 0`, reassignment). The full table with file:line for both is `pool-audit-appendix.md`. Whether an entry is trimmed was then **read by me** for every collection that could be large; the appendix says which ones I read and which I classified from the name and the trim lines only.
+2. **Measured what they hold** (`scripts/h40_instr.py` puts a getter on every one of the 133 in a scratch copy; `scripts/h40_sizer.js` sizes each: canvases at w x h x 4, bitmaps, typed arrays, AudioBuffers, strings, entries). Scenario, run 4 times in one page: a new 1080 x 1920 project, two 900 x 1200 images, a text and a shape layer, 20 to 40 random effects (every one rendered at a random moment), 30 scrubs, 12 undo and 12 redo, the effects browser opened and closed, a save. Then one pass through all 12 effect categories, then a 0.6 s GIF export of a 1080 x 1920 project. Raw: `scripts/h40_sz_0.json` and `h40_sz_3.json`.
+3. **Not covered:** the ~60 lazily created single scratch canvases (`let _x = null; … _x = document.createElement('canvas')`: 56 in compositor.js, 1 each in gl-color.js, gl-warp.js and tilefit.js, 2 in masks.js). Each is ONE canvas that follows the plate size, so the bound is one 8.3 MB canvas each, ~500 MB if every one were at export size at once (**Guess**, not measured); I did not take them one by one. Also not covered: arrays held inside objects rather than at module level, and the 94 tests that cannot run here.
+
+## What I withdrew
+- **The undo stack (`history.js:10`)**: I expected it to be the big one. It is capped at 120 snapshots or 48 million characters (history.js:297-304) and a 40-layer project with 6 effects on each (a 56 KB snapshot) filled the 120 for 6.5 MB. The cap only matters for a snapshot of ~400 KB or more. Not in the top 5.
+- **"Strings with one non-Latin-1 character cost twice as much, so the char cap is really 96 MB."** I measured it in V8 (node 22): the same strings with and without a U+2019 took the same heap. No finding.
+- **`media.js:10` `store`**: grew by 5 entries in one round. They were the 11 pinned 96 x 96 `_fxthumb*` photographs (the effects browser's own pictures), not leaked clips: after leaving each project only the current project's two images were left. Released correctly.
+
+## Ranked by risk to a phone (Measured sizes; hours are a Guess)
+| rank | what | where | size | grows with | trimmed? |
+|---|---|---|---|---|---|
+| 1 | effects browser sample tiles | fx-thumbs.js `cache` :1028 | **83 MB** after one pass through the 12 categories (40 animated tiles = 59 MB, 165 stills = 24 MB), ~7 MB per category | every effect tile ever shown | **No cap**: only the layer previews are on the 10 MB LRU (:1488-1506) |
+| 2 | scratch pools, idle entries kept at export size | compositor.js `_pfPool :4286`, `_cfPool :11581`, `_wpPool :9135`, `_mgPool :18411`, `_expPool :11583` and 12 more | **190 MB** of canvas pixels right after a 0.6 s GIF export (pf 83, cf 50, dsp 33, wp 17, mflow 8); `_pfPool` alone sat at 36.8 MB idle | every effect depth ever reached; every export | H19's patch trims the DEPTH, not the size of the entries it keeps, and covers 5 of 17 pools |
+| 3 | motion-flow plates | compositor.js `_mflow` :12249 | 8.3 MB per layer at export size, up to 12 layers (~100 MB) | each layer with Temporal Denoise, Frame Stutter, Time Warp Scan, Motion Blur (Footage) in an export | cleared when an export STARTS (exporter.js:1052) and on project open, never when it ends |
+| 4 | decoded sound | media.js `store`: `rec.audioBuffer`, set by exporter.js:561 | ~88 MB per four-minute stereo song (arithmetic), 264 MB for three | every clip the export mixes | nothing frees it until the layer is deleted |
+| 5 | files kept for undo of a replaced clip | storage.js `_prevFiles` :677 | one `File` per replaced clip per revision; RAM per file **not measured** | every Replace media / undo of one | **never** |
+
+Everything else I measured was under 10 MB at the end of the scenario or has a cap (appendix). The 17 pools together held 45 MB in a quiet editor (after preview frames) and 191 MB right after an export.
+
+## The five, each with the smallest trim and a test that fails first
+Every patch applies **alone** on main with `git apply`. Stacked, their test hunks all land at the same line, so use `git apply --include='js/*'` for the code and paste the tests, or apply one at a time. Each was run at 1280 and 380 unless noted; "red" is the test with the code half of the patch not applied.
+
+### 1. `pool-audit-patches/1-fx-thumbs-stock-cap.patch`: the sample tiles get a 32 MB LRU
+- Cause: `remember()` (fx-thumbs.js:1496) is called only when `m.layerId` (:1582); a sample tile (`cache.set` at :1581) is never evicted. Callers of `cache`: :1505 (eviction), :1581 (set), :1798 (`cache.clear` on invalidate), `_uncache` seam; I traced each.
+- Trim: `rememberStock` with its own list and `STOCK_CACHE_MAX = 32 MB`, called in the same place; `meta` is NOT deleted on eviction (a filter or preset tile still needs its recipe to be generated again); the invalidate clears the new list; `_uncache` removes from it. A new seam `FM.fxThumbs.cacheBytes()` sums the real cache.
+- Test: `H40 the effect sample tiles stay under their memory cap…` mounts every effect's tile, waits for the queue to drain, asks `cacheBytes() ≤ 42 MB` (the two caps) and that tiles still cache and an evicted one paints again. **Red with only the seam: "holds 79 MiB… over the 42 MiB the two caps allow"; green with the cap at 1280.** Not run at 380 (**Guess**: same).
+- Cost: reopening a category after eviction regenerates its tiles (~5 to 8 s for a category in this container; **Measured** during the sweep, a phone will differ).
+
+### 2. `pool-audit-patches/2-pool-idle-release.patch` (applies on top of H19's two patches in `hunt/1095-fx-browser-leak`): release the idle entries the floor keeps, and add `_dspPool`
+- Cause: H19's `_trimPool` keeps the first two entries of each pool at whatever size the last user gave them. After an export every kept entry of every pool is 1080 x 1920 until a preview frame reaches that exact slot. Every acquire site resizes on use, so a 0 x 0 entry is re-sized by its next user: **Verified** for pf :4412, wp :9182 and :9451, exp :11731 and :11752, mg :18450, cf (drawCanvasEffect), dsp (dspSlot, :10183).
+- Trim: entries from the depth the pool reached in the last window up to the floor go to 0 x 0; `_dspPool` joins the high-water scheme; the trim timer re-arms once after a window that saw a draw (without that, the window that finds the idle entries never runs: my first version failed on exactly this).
+- Test: `H40 a pool entry the floor keeps is released when nothing uses it…` draws a 2-deep stack at 1080 x 1920, then a 1-deep one at 180 x 320, waits two windows and asks `_poolStats().cf.px`. **H19 alone: red, 4,262,400 px (16 MB) still held. With the patch: green at 1280 and 380, and H19's own test still green.**
+- **Not done:** the other 11 pools (`_pmPool :3355, _mbPool :3507, _fcPool :4492, _sqPool :9574, _t3Pool :11859, _dfPool :14605, _miPool :14923, _pxPool :15007, _fbPool :16680, _olPool :17089, _adjFcPool :17947`). `_mbPool.acc` and `_fbPool`/`_fbAvg` hold TEMPORAL state (motion-blur accumulation), so zeroing them mid-session would reset a feedback trail; they need their own rule, not this one. `_dspPool` is in the code but has **no catching test** (the only effects that use it need a second layer).
+
+### 3. `pool-audit-patches/3-mflow-clear-after-export.patch`: clear the motion-flow plates when an export ends
+- One line at each of the three `FM._exporting = false;` sites (exporter.js:1635, 1735, 1805, all in the `finally` of mp4, gif and png): `FM.resetMotionFlowCache()`. Callers of `_mflow`: `_mfRec` (compositor.js:12254) for denoise, stutter, time warp and motion flow; the preview rebuilds a plate from the next frame ("a backwards seek or a jump over 0.35 s shows the frame unblurred", the existing contract).
+- Seam `FM._mflowSize()` (compositor.js, after `resetMotionFlowCache`). Test: `H40 an export leaves no temporal plates behind…` exports a GIF of a 64 x 48 project with a moving box under Temporal Denoise. Control: a plate was held during the export. **Red with the seam only ("still holds 1 layer plate(s)"), green with the three lines, 1280 and 380.** Only the GIF site is exercised: the MP4 and PNG sites are the same line (**Guess** that they behave the same; MP4 cannot run in this container).
+
+### 4. `pool-audit-patches/5-audio-mix-frees-pcm.patch`: the mix puts back the PCM it decoded
+- Cause: `buildAudioMix` (exporter.js:481) decodes with `FM.decodeAudio` and stores the full-fidelity buffer on the record (:561-563). `audio-tools.js:20-24` already says why that slot is never filled by the Save-as-WAV tools ("~90MB for four minutes of stereo… nothing frees that slot (queue 834 clause 17)"); the export never got the same treatment.
+- Trim: note which records have `audioBuffer === undefined` when the mix starts and put them back to `undefined` at its three exits (no OAC is not one: nothing was decoded; cancel, nothing mixed, done). A buffer already there (reverse playback app.js:2629, audio-react :43-46, the exporter's second use) is left alone. Every other reader re-decodes when the slot is undefined (audio-play `requestPlay`, audio-react, waveform): **Verified by reading**, not by playing a song.
+- Test: `H40 an audio mix frees the PCM it decoded, and leaves a buffer that was already there`: two clips through `FM.exporter.buildAudioMix`; control: a mix came back. **Red on main ("decoded "H40 fresh" to full PCM… and left it on the media record"), green with the patch, 1280 and 380.** My first shape (a wrapper function) turned `#215: an export audio warning reaches a surface…` red because that test reads `String(FM.exporter.buildAudioMix)` and counts `exportSay(` in it; the final patch edits the function in place and the 76-test export/audio/mix slice has the same reds as main (all `NO_VIDEO_CODEC` from this container and one timing test).
+- Cost: the next preview play of that clip decodes it again (1 to 3 s for a song, **Guess**).
+
+### 5. `pool-audit-patches/4-prevfiles-sweep.patch`: `_prevFiles` follows the media sweep
+- Cause: `stashPrevMedia` (storage.js:698-706, 726-729) fills `_prevFiles`; nothing deletes (its comment says "Session-only on purpose" and relies on the boot sweep for the IDB copy, not the Map). A clip deleted and then lost from the undo stack keeps its original referenced for the rest of the session.
+- Trim: in `FM.releaseUnreachableMedia` (storage.js:2319, called by history when it discards a snapshot, history.js:309) drop `_prevFiles` entries for ids that are in no scene, not pinned, in no snapshot and not reachable by a collab undo: the same three questions the function asks of the media record. It runs before the "store is empty" early return, because a replaced clip's record can already be gone.
+- Test: `H40 the file kept for undo of a replaced clip is dropped once the clip is unreachable, and kept while it is in the scene`: control that both are kept; swept `[]`: the ghost goes and the in-scene one stays; a snapshot naming it keeps it; the last snapshot gone releases it. **Red on main, green with the patch, 1280 and 380.**
+- **The weak one of the five:** I did not measure what a kept `File` costs in RAM (a `File` read from IndexedDB is a blob handle, usually disk-backed); the Map and the `File` objects are certain, the megabytes are not. It is ranked 5th for that reason.
+
+## Neighbouring tests
+All five patches stacked on one tree and the same filter run on main and on it (`export`, `thumb`, `tile`, `audio`, `media`, `prev`, `pool`, `undo`, `history`, `motion`, `blur`, `effect`): see the result line at the end of this file (**filled in when that run finished**).
+
+## Estimates per hour of phone editing (Guess, from the measured sizes)
+| item | per event (Measured) | events per hour (Guess) | per hour |
+|---|---|---|---|
+| sample tiles | ~7 MB per category browsed, no cap | 4 to 12 categories | 28 to 83 MB, never released |
+| scratch pools | up to 190 MB after an export, 45 MB idle | 1 to 3 exports | peak 190 MB, the idle floor stays |
+| motion-flow plates | 8.3 MB per layer per export | 1 to 3 exports x 1 to 4 such layers | 8 to 100 MB |
+| decoded sound | 88 MB per four-minute stereo song | 1 to 3 exports x 1 to 3 songs | 88 to 264 MB (the same songs are decoded once per record, so it does not multiply by exports) |
+| kept undo files | not measured | rare | unknown |

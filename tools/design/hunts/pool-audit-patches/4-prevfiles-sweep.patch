@@ -1,0 +1,67 @@
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..7f42e7eb 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -2320,9 +2320,21 @@ window.FM = window.FM || {};
+     if (FM._mediaBusy) return 0;               // a pack is hydrating; its ids are in flight
+     const store = (FM.media && FM.media.all && FM.media.all()) || {};
+     const ids = Object.keys(store);
+-    if (!ids.length) return 0;
+     const live = new Set(((FM.scene && FM.scene.layers) || []).map(l => l.id));
+     const snaps = snapshots || [];
++    /* H40: THE FILES KEPT FOR UNDO OF A REPLACED CLIP GO WHEN NOTHING CAN BRING THE CLIP BACK. `_prevFiles` (this file) holds a File
++       per replaced clip per revision for the whole session and nothing ever took one out: a layer deleted, then lost from the undo
++       stack, kept its original media referenced until the page closed. The same three questions this function asks of a media record
++       are asked here: in the scene, owned by something else, or reachable from a snapshot or a collab undo. The `prev:` records on disk are
++       the boot sweep's, as before. This runs BEFORE the empty-store return below, because a replaced clip's record can be long gone. */
++    Array.from(_prevFiles.keys()).forEach(id => {
++      if (live.has(id)) return;
++      if (FM.media && FM.media.isPinned && FM.media.isPinned(id)) return;
++      for (let i = 0; i < snaps.length; i++) if (snaps[i].indexOf(id) >= 0) return;
++      if (FM.collab && FM.collab.reachable && FM.collab.reachable(id)) return;
++      _prevFiles.delete(id);
++    });
++    if (!ids.length) return 0;
+     let freed = 0;
+     ids.forEach(id => {
+       if (live.has(id)) return;
+diff --git a/tests/tests.js b/tests/tests.js
+index 1900efa6..4ae9c0b0 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -59828,6 +59828,35 @@
+     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
+   });
+ 
++  /* H40: THE FILE KEPT FOR UNDO OF A REPLACED CLIP IS LET GO ONCE NOTHING CAN BRING THE CLIP BACK. `_prevFiles` (storage.js) kept a File per replaced
++     clip per revision for the whole session. Two ghosts: one layer that is not in the scene and not in any snapshot (must go), one that is in
++     the scene (must stay, or undo of a replace would lose the original). Run through FM.releaseUnreachableMedia, the call history makes
++     whenever it discards a snapshot. CONTROL: both are kept before the sweep. */
++  test('H40 the file kept for undo of a replaced clip is dropped once the clip is unreachable, and kept while it is in the scene', { item: 'H40' }, async function () {
++    if (!FM.storage || !FM.storage.stashPrevMedia || !FM.storage.hasPrevMedia || !FM.releaseUnreachableMedia) throw new Error('setup: the prev-media seams are gone');
++    const saved = FM.scene, gone = 'layer_h40_gone', here = 'layer_h40_here';
++    const rec = () => ({ file: new File([new Uint8Array(64)], 'a.png', { type: 'image/png' }), kind: 'image' });
++    try {
++      const L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, start: 0, duration: 1 }); L.id = here;
++      FM.scene = scene([L]);
++      await FM.storage.stashPrevMedia(gone, rec(), 3);
++      await FM.storage.stashPrevMedia(here, rec(), 3);
++      if (!FM.storage.hasPrevMedia(gone, 3) || !FM.storage.hasPrevMedia(here, 3)) throw new Error('CONTROL: the two files were not kept before the sweep');
++      FM.releaseUnreachableMedia([]);
++      if (FM.storage.hasPrevMedia(gone, 3)) throw new Error('the file kept for a clip that is in no scene and no snapshot is still held after the sweep that frees its media');
++      if (!FM.storage.hasPrevMedia(here, 3)) throw new Error('the file kept for a clip that is IN the scene was let go: undo of its replace would lose the original');
++      FM.releaseUnreachableMedia(['{"layers":[{"id":"' + here + '"}]}']);   // …and a snapshot that names a clip keeps it too
++      FM.scene = scene([]);
++      FM.releaseUnreachableMedia(['{"layers":[{"id":"' + here + '"}]}']);
++      if (!FM.storage.hasPrevMedia(here, 3)) throw new Error('a clip still named by an undo snapshot lost its kept file');
++      FM.releaseUnreachableMedia([]);
++      if (FM.storage.hasPrevMedia(here, 3)) throw new Error('the last snapshot that named the clip is gone and its kept file is still held');
++    } finally {
++      FM.scene = saved;
++      for (const id of [gone, here]) { try { await FM.storage.removeMedia('prev:' + id + ':3'); } catch (e) {} }
++    }
++  });
++
+   async function run() {
+     var results = [];
+     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
