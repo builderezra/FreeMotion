@@ -59962,6 +59962,35 @@
     }
   });
 
+  /* H40: THE FILE KEPT FOR UNDO OF A REPLACED CLIP IS LET GO ONCE NOTHING CAN BRING THE CLIP BACK. `_prevFiles` (storage.js) kept a File per replaced
+     clip per revision for the whole session. Two ghosts: one layer that is not in the scene and not in any snapshot (must go), one that is in
+     the scene (must stay, or undo of a replace would lose the original). Run through FM.releaseUnreachableMedia, the call history makes
+     whenever it discards a snapshot. CONTROL: both are kept before the sweep. */
+  test('H40 the file kept for undo of a replaced clip is dropped once the clip is unreachable, and kept while it is in the scene', { item: 'H40' }, async function () {
+    if (!FM.storage || !FM.storage.stashPrevMedia || !FM.storage.hasPrevMedia || !FM.releaseUnreachableMedia) throw new Error('setup: the prev-media seams are gone');
+    const saved = FM.scene, gone = 'layer_h40_gone', here = 'layer_h40_here';
+    const rec = () => ({ file: new File([new Uint8Array(64)], 'a.png', { type: 'image/png' }), kind: 'image' });
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, start: 0, duration: 1 }); L.id = here;
+      FM.scene = scene([L]);
+      await FM.storage.stashPrevMedia(gone, rec(), 3);
+      await FM.storage.stashPrevMedia(here, rec(), 3);
+      if (!FM.storage.hasPrevMedia(gone, 3) || !FM.storage.hasPrevMedia(here, 3)) throw new Error('CONTROL: the two files were not kept before the sweep');
+      FM.releaseUnreachableMedia([]);
+      if (FM.storage.hasPrevMedia(gone, 3)) throw new Error('the file kept for a clip that is in no scene and no snapshot is still held after the sweep that frees its media');
+      if (!FM.storage.hasPrevMedia(here, 3)) throw new Error('the file kept for a clip that is IN the scene was let go: undo of its replace would lose the original');
+      FM.releaseUnreachableMedia(['{"layers":[{"id":"' + here + '"}]}']);   // …and a snapshot that names a clip keeps it too
+      FM.scene = scene([]);
+      FM.releaseUnreachableMedia(['{"layers":[{"id":"' + here + '"}]}']);
+      if (!FM.storage.hasPrevMedia(here, 3)) throw new Error('a clip still named by an undo snapshot lost its kept file');
+      FM.releaseUnreachableMedia([]);
+      if (FM.storage.hasPrevMedia(here, 3)) throw new Error('the last snapshot that named the clip is gone and its kept file is still held');
+    } finally {
+      FM.scene = saved;
+      for (const id of [gone, here]) { try { await FM.storage.removeMedia('prev:' + id + ':3'); } catch (e) {} }
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

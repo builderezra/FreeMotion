@@ -2320,9 +2320,21 @@ window.FM = window.FM || {};
     if (FM._mediaBusy) return 0;               // a pack is hydrating; its ids are in flight
     const store = (FM.media && FM.media.all && FM.media.all()) || {};
     const ids = Object.keys(store);
-    if (!ids.length) return 0;
     const live = new Set(((FM.scene && FM.scene.layers) || []).map(l => l.id));
     const snaps = snapshots || [];
+    /* H40: THE FILES KEPT FOR UNDO OF A REPLACED CLIP GO WHEN NOTHING CAN BRING THE CLIP BACK. `_prevFiles` (this file) holds a File
+       per replaced clip per revision for the whole session and nothing ever took one out: a layer deleted, then lost from the undo
+       stack, kept its original media referenced until the page closed. The same three questions this function asks of a media record
+       are asked here: in the scene, owned by something else, or reachable from a snapshot or a collab undo. The `prev:` records on disk are
+       the boot sweep's, as before. This runs BEFORE the empty-store return below, because a replaced clip's record can be long gone. */
+    Array.from(_prevFiles.keys()).forEach(id => {
+      if (live.has(id)) return;
+      if (FM.media && FM.media.isPinned && FM.media.isPinned(id)) return;
+      for (let i = 0; i < snaps.length; i++) if (snaps[i].indexOf(id) >= 0) return;
+      if (FM.collab && FM.collab.reachable && FM.collab.reachable(id)) return;
+      _prevFiles.delete(id);
+    });
+    if (!ids.length) return 0;
     let freed = 0;
     ids.forEach(id => {
       if (live.has(id)) return;
