@@ -1,0 +1,35 @@
+diff --git a/js/collab-core.js b/js/collab-core.js
+index f4894a72..a4b1dbec 100644
+--- a/js/collab-core.js
++++ b/js/collab-core.js
+@@ -41,7 +41,7 @@ window.FM = window.FM || {};
+      a variant; Exposure gained Gamma and Work in.
+      Bumped to 7 by #482 polish batch 6: Vignette, Light / Soft / Dark Glow, Drop Shadow, Stroke, Lens Flare, Linear and Spin
+      Streaks and Glow Scan gained controls. */
+-  C.SCHEMA_REV = 7;
++  C.SCHEMA_REV = 8;
+ 
+   C.active = false;      // no session is running
+   C.role = 'owner';
+@@ -224,7 +224,11 @@ window.FM = window.FM || {};
+     FM.storage._sanitizeLayers(L);
+     const defs = (FM.fxRegistry.all() || []).map(function (e) {
+       return [e.type, (e.params || []).map(function (p) {
+-        return [p.key, p.type, p.default, p.legacy, p.min, p.max, p.keyframable !== false ? 1 : 0];
++        /* #H23: a segment's option VALUES are part of what the sanitiser enforces (it drops a value that is not in `options`), so they are
++           hashed; labels are not (the sanitiser never reads one). Only segments carry the extra element, so every other tuple keeps its shape. */
++        const t = [p.key, p.type, p.default, p.legacy, p.min, p.max, p.keyframable !== false ? 1 : 0];
++        if (p.type === 'segment') t.push((p.options || []).map(function (o) { return Array.isArray(o) ? o[0] : o; }));
++        return t;
+       })];
+     }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+     /* …AND THE AUDIO EFFECTS' (#482 batch 3 review). Only FM.fxRegistry was hashed, and the fixture's one audio effect is
+@@ -240,7 +244,7 @@ window.FM = window.FM || {};
+ 
+   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
+      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
+-  C.SCHEMA_FP = 1911166791531509;   // #482 polish batch 6 (SCHEMA_REV 7): eight glow/shadow/vignette/flare effects gained controls
++  C.SCHEMA_FP = 8654069891821355;   // #482 polish batch 6 (SCHEMA_REV 7): eight glow/shadow/vignette/flare effects gained controls
+ 
+   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
+    *

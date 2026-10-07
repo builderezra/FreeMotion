@@ -1,0 +1,35 @@
+diff --git a/tests/tests.js b/tests/tests.js
+index 1900efa6..ee20a442 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -30453,6 +30453,30 @@
+     if (P.canon(w) === P.canon(raw)) throw new Error('CONTROL: the sanitiser left a deliberately broken layer untouched, so idempotence here means nothing');
+   });
+ 
++  /* #1097-class blind spot (H23): the sanitiser drops a segment value that is not in the control's `options` (storage.js, the
++     'segment' branch), but the fingerprint hashed key, type, default, legacy, min, max and keyframable and NOT the options. So a
++     build that appended one option to an existing control hashed the same as the build before it, and the two joined one session
++     while the older one stripped the newer's choice. The values are hashed (not the labels: a label is invisible to the sanitiser). */
++  test('921 S1 the schema fingerprint sees an option appended to an existing segment control, and ignores a renamed label', { item: '921' }, function () {
++    const C = need921('the schema fingerprint');
++    const base = C.schemaFingerprint();
++    if (base === null) throw new Error('schemaFingerprint() could not be computed');
++    let target = null;
++    (FM.fxRegistry.all() || []).some(function (e) { return (e.params || []).some(function (p) { if (p.type === 'segment' && p.options && p.options.length > 1) { target = p; return true; } return false; }); });
++    if (!target) throw new Error('CONTROL: no segment control found in the registry, so this test measures nothing');
++    const opts = target.options, was0 = opts[0][1];
++    try {
++      opts.push([987654, 'appended']);
++      const grown = C.schemaFingerprint();
++      if (grown === base) throw new Error('an option appended to ' + target.key + ' left the fingerprint unchanged (' + base + '): two builds that differ by that option would join one session and the older would strip the newer\'s choice');
++      opts.pop();
++      opts[0][1] = was0 + ' (renamed)';
++      const renamed = C.schemaFingerprint();
++      if (renamed !== base) throw new Error('renaming a label changed the fingerprint: labels are invisible to the sanitiser and must not move it');
++    } finally { while (opts.length && opts[opts.length - 1][0] === 987654) opts.pop(); opts[0][1] = was0; }
++    if (C.schemaFingerprint() !== base) throw new Error('CONTROL: the registry was not restored');
++  });
++
+   test('921 S1 the schema fingerprint gate', { item: '921' }, function () {
+     const C = need921('the schema fingerprint');
+     const got = C.schemaFingerprint();
