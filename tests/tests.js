@@ -59854,7 +59854,7 @@
     const poolLen = () => FM._readbackHint().A.length;
     const base = poolLen();
     const h1 = draw(12);
-    if (poolLen() < base + 12) throw new Error('CONTROL: a stack of 12 canvas effects did not grow the pool (' + base + ' to ' + poolLen() + ') — nothing below measures anything');
+    if (poolLen() < 12) throw new Error('CONTROL: a stack of 12 canvas effects did not grow the pool to 12 entries (' + base + ' to ' + poolLen() + ') — nothing below measures anything');
     draw(1);
     await sleep(7500);   // two trim windows of 3 s
     const after = poolLen();
@@ -59866,6 +59866,33 @@
     // …and a deep stack drawn again after the trim is the same picture (the entries are re-created exactly as the first time)
     const h2 = draw(12);
     if (h1 !== h2) throw new Error('a 12-deep stack drew a different picture after the pools were trimmed (hash ' + h1 + ' then ' + h2 + ')');
+  });
+
+  /* H40: THE ENTRIES THE POOL FLOOR KEEPS ARE RELEASED WHEN NOTHING USES THEM. The 1095 trim never drops a pool's first two entries, so after a
+     full-size frame (an export draws at the project's own size) the entry the next frames do not reach stays at that size: two plates
+     of 1080 x 1920 per pool, measured at 190 MB across the pools right after a 0.6 s GIF export. Draw a 2-deep stack at full size, then
+     only a 1-deep one at thumbnail size, wait out two trim windows, and ask for the pixels the canvas-effect pool still holds.
+     CONTROL: the full-size frame really did fill it. */
+  test('H40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame', { item: 'H40', budgetMs: 40000 }, async function () {
+    if (!FM._poolStats) throw new Error('the pool seam FM._poolStats is gone (1095)');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const mk = function (n, w, h) {
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'pool', x: w / 2, y: h / 2, shapeW: w / 3, shapeH: w / 3, fill: '#c05030' });
+      L.start = 0; L.duration = 3; L.effects = [];
+      for (let i = 0; i < n; i++) L.effects.push(FM.fxRegistry.makeInstance('wiggle'));
+      return { project: { width: w, height: h, fps: 30, duration: 3, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
+    };
+    const draw = function (n, w, h) {
+      const c = offscreen(w, h); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      FM.renderScene(c.getContext('2d', { willReadFrequently: true }), mk(n, w, h), 0.5);
+    };
+    draw(2, 1080, 1920);
+    const big = FM._poolStats().cf.px;
+    if (big < 4 * 1080 * 1920) throw new Error('CONTROL: a 2-deep stack at 1080 x 1920 left only ' + big + ' pixels in the pool — nothing below measures anything');
+    draw(1, 180, 320);
+    await sleep(7500);   // two trim windows of 3 s
+    const left = FM._poolStats().cf.px;
+    if (left > 8 * 180 * 320) throw new Error('after a full-size frame and a thumbnail-size one, the canvas-effect pool still holds ' + left + ' pixels (' + Math.round(left * 4 / 1048576) + ' MB): the entry the frames did not reach was kept at export size');
   });
 
   async function run() {

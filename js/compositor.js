@@ -4290,7 +4290,7 @@ window.FM = window.FM || {};
      once carried 20 canvas effects (or an effects-browser sheet with 170 picks stacked in its preview) left 40 (or 340) plate-sized
      canvases behind after the stack was gone: measured, 20 wiggles keep 40 canvases through a forced garbage collection.
      _hw is the deepest each pool reached since the last trim; FM._trimScratch (end of this file's pool code) frees the entries above it. */
-  const _hw = { pf: 0, wp: 0, cf: 0, exp: 0, mg: 0 };
+  const _hw = { pf: 0, wp: 0, cf: 0, exp: 0, mg: 0, dsp: 0 };
   /* ---- CROP THE READBACK TO THE LAYER (#692, route 2) ------------------------------------------------------------
    * The lag's measured cause: every pixel kernel walked the WHOLE plate — 1080x1920 of arithmetic for a layer covering
    * 1.3% of it — and the full-frame getImageData/putImageData round trip alone was an 8–12ms floor. Five rounds bounded
@@ -10179,7 +10179,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * the preview ends up soft AND slow. Every export canvas is unstamped, so ps is exactly 1 there and
    * every dimension below is the number it always was. */
   function dspSlot(W, H, ps) {
-    const d = _dspLvl;
+    const d = _dspLvl; if (d >= _hw.dsp) _hw.dsp = d + 1;
     if (!_dspPool[d]) _dspPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), M: document.createElement('canvas'), C: document.createElement('canvas'), q: document.createElement('canvas') };
     const s = _dspPool[d];
     if (s.A.width !== W || s.A.height !== H) { s.A.width = W; s.A.height = H; s.B.width = W; s.B.height = H; s.M.width = W; s.M.height = H; s.C.width = W; s.C.height = H; }
@@ -18548,25 +18548,35 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      an entry the next time a stack reaches that depth, exactly as they did the first time. Never runs mid-render: the depths are
      all zero between frames, and the timer re-arms if one is not. Two trims are needed to shrink past a stack that was just drawn
      (the first keeps what the last window used), so the memory is back within about 6 s of the last deep frame. */
-  function _trimPool(pool, keep, pair) {
-    for (let i = keep; i < pool.length; i++) {
-      const e = pool[i]; if (!e) continue;
-      if (pair) { e.A.width = 0; e.A.height = 0; e.B.width = 0; e.B.height = 0; } else { e.width = 0; e.height = 0; }
-    }
+  function _zeroEntry(e) {   // an entry is a canvas or an object of canvases (A, B, M, C, q …); width = 0 releases the backing store
+    if (!e) return;
+    if (e.nodeName === 'CANVAS') { e.width = 0; e.height = 0; return; }
+    for (const k in e) { const c = e[k]; if (c && c.nodeName === 'CANVAS') { c.width = 0; c.height = 0; } }
+  }
+  /* H40: …AND THE ENTRIES THE FLOOR KEEPS GO TO 0 x 0 WHEN NOTHING USED THEM THIS WINDOW. The first two entries of a pool are never dropped,
+     but each is two plate-sized canvases left at whatever size the last user gave it: after a 1080 x 1920 export, every kept entry of
+     every pool sat at 1080 x 1920 until a preview frame happened to use that very slot (measured: 190 MB of canvas pixels right after a
+     0.6 s GIF export). Every acquire site resizes on use (`if (cv.width !== W …)`, the lines this file is built on), so a zeroed entry is
+     re-sized by its next user exactly as a new one is. `used` = the depth the pool reached since the last trim. */
+  function _trimPool(pool, keep, pair, used) {
+    for (let i = keep; i < pool.length; i++) _zeroEntry(pool[i]);
     if (pool.length > keep) pool.length = keep;
+    for (let i = used || 0; i < pool.length; i++) _zeroEntry(pool[i]);
   }
   FM._trimScratch = function () {
-    if (_pfDepth || _wpDepth || _cfDepth || _expDepth) return false;
-    _trimPool(_pfPool, Math.max(2, _hw.pf), true); _trimPool(_wpPool, Math.max(2, _hw.wp), true);
-    _trimPool(_cfPool, Math.max(2, _hw.cf), true); _trimPool(_mgPool, Math.max(2, _hw.mg), true);
-    _trimPool(_expPool, Math.max(2, _hw.exp), false);
-    _hw.pf = _hw.wp = _hw.cf = _hw.exp = _hw.mg = 0;
+    if (_pfDepth || _wpDepth || _cfDepth || _expDepth || _dspLvl || _dispDepth) return false;
+    _trimPool(_pfPool, Math.max(2, _hw.pf), true, _hw.pf); _trimPool(_wpPool, Math.max(2, _hw.wp), true, _hw.wp);
+    _trimPool(_cfPool, Math.max(2, _hw.cf), true, _hw.cf); _trimPool(_mgPool, Math.max(2, _hw.mg), true, _hw.mg);
+    _trimPool(_expPool, Math.max(2, _hw.exp), false, _hw.exp);
+    _trimPool(_dspPool, Math.max(2, _hw.dsp), false, _hw.dsp);
+    _hw.pf = _hw.wp = _hw.cf = _hw.exp = _hw.mg = _hw.dsp = 0;
     return true;
   };
   FM._poolStats = function () {   // suite seam: how many entries each pool holds, and the pixels in them
     const px = (cv) => (cv ? cv.width * cv.height : 0);
     const pair = (pool) => ({ n: pool.length, px: pool.reduce((a, e) => a + (e ? px(e.A) + px(e.B) : 0), 0) });
-    return { pf: pair(_pfPool), wp: pair(_wpPool), cf: pair(_cfPool), mg: pair(_mgPool),
+    const all = (pool) => ({ n: pool.length, px: pool.reduce((a, e) => { let n = 0; if (e) for (const k in e) n += px(e[k]); return a + n; }, 0) });
+    return { pf: pair(_pfPool), wp: pair(_wpPool), cf: pair(_cfPool), mg: pair(_mgPool), dsp: all(_dspPool),
              exp: { n: _expPool.length, px: _expPool.reduce((a, e) => a + px(e), 0) } };
   };
   let _trimTimer = 0;
@@ -18574,9 +18584,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (_trimTimer) return;
     _trimTimer = setTimeout(function () {
       _trimTimer = 0;
+      const _wasUsed = _hw.pf || _hw.wp || _hw.cf || _hw.exp || _hw.mg || _hw.dsp;
       if (!FM._trimScratch()) { _scheduleTrim(); return; }
-      // a pool still holds more than the floor: arm the second window now, so the memory comes back even if nothing renders again
-      if (_pfPool.length > 2 || _wpPool.length > 2 || _cfPool.length > 2 || _mgPool.length > 2 || _expPool.length > 2) _scheduleTrim();
+      // a pool still holds more than the floor, or this window saw a draw: arm the next window now, so the memory comes back even if
+      // nothing renders again (H40: the window AFTER a draw is the one that finds the entries nothing used, and releases them)
+      if (_wasUsed || _pfPool.length > 2 || _wpPool.length > 2 || _cfPool.length > 2 || _mgPool.length > 2 || _expPool.length > 2 || _dspPool.length > 2) _scheduleTrim();
     }, 3000);
   }
   FM._platePixels = function () {
