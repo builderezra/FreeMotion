@@ -1,0 +1,13 @@
+diff --git a/tests/tests.js b/tests/tests.js
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -91635,7 +91635,8 @@
+       if (!row || row.classList.contains('hidden') || !row.getBoundingClientRect().height) throw new Error('CONTROL: the Custom size row is not on screen for ' + fmt + ', so the dialog never offered it');
+       $('exp-go').click();
+       const t0 = Date.now();
+-      while (!dl.files.length && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 40));
++      /* #1031: a GIF and a frames zip end on the ready card now, like the MP4; Save is what hands the file to the download link (no share sheet here) */
++      while (!dl.files.length && Date.now() - t0 < 30000) { const rd = $('export-ready'); if (rd && !rd.classList.contains('hidden')) $('xr-save').click(); await new Promise(r => setTimeout(r, 40)); }
+       const f = dl.files[0];
+       if (!f || !f.blob) throw new Error('setup: the ' + fmt + ' export handed nothing to the download link');
+       await new Promise(r => setTimeout(r, 1100));   // the progress card lingers 900 ms on Done

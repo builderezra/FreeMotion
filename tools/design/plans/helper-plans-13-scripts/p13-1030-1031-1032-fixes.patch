@@ -1,0 +1,175 @@
+diff --git a/js/app.js b/js/app.js
+index 0e2685ac..2c6a8815 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -6185,9 +6185,9 @@ window.FM = window.FM || {};
+       /* outW/outH go to ALL THREE (queue 690). They used to reach the MP4 only, so a Custom size typed
+          for a GIF or PNG frames — boxes on screen, no warning — came out at the project size. */
+       if (fmt === 'gif') {
+-        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, outW, outH, onProgress });
++        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, outW, outH, onProgress, onReady: showExportReady });   // #1031: the card, as the MP4
+       } else if (fmt === 'frames') {
+-        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress });
++        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress, onReady: showExportReady });
+       } else {
+         await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress, onNote,
+                                 onReady: showExportReady });
+@@ -6196,12 +6196,7 @@ window.FM = window.FM || {};
+        * progress overlay — repeating "saved to your Downloads" behind it would be a second, and often
+        * wrong, answer (it may have gone to Photos, or been discarded). Every other format still
+        * downloads straight away and still gets told so. (queue 141 part 4) */
+-      if (fmt !== 'mp4') {
+-        status.textContent = 'Done — saved to your Downloads.';
+-        setTimeout(() => overlay.classList.add('hidden'), 900);
+-      } else {
+-        overlay.classList.add('hidden');
+-      }
++      overlay.classList.add('hidden');   // #1031: every format ends on the card now (it falls back to a plain download where the page has none)
+     } catch (e) {
+       overlay.classList.add('hidden');
+       if (e.message === 'NO_WEBCODECS') alert('Export needs the WebCodecs video encoder. Please open FreeMotion in Google Chrome.');
+@@ -6277,13 +6272,13 @@ window.FM = window.FM || {};
+         // decode fell through to 'no soundtrack' — the same words a project with no audio gets.
+         'all-unreadable': 'none of the audio clips could be read',
+       };
+-      const sound = out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
++      const sound = out.noSound ? '' : out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
+                   : out.hasAudio ? 'Sound ✓'
+                   : 'no soundtrack';
+       document.getElementById('xr-meta').textContent =
+         (mb < 0.1 ? (Math.round(out.blob.size / 1024) + ' KB') : (mb.toFixed(1) + ' MB')) +
+         ' · ' + mmss + ' · ' + out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps' +
+-        ' · ' + sound;
++        (sound ? ' · ' + sound : '');
+       const xrm = document.getElementById('xr-meta');
+       if (xrm) xrm.classList.toggle('xr-nosound', !!out.audioDropped);
+       /* …AND SAY IT SURVIVED (queue 47, v14.34). This card is the last thing on screen, and until now
+diff --git a/js/collab-comments.js b/js/collab-comments.js
+index 94ed2ee5..b0f89371 100644
+--- a/js/collab-comments.js
++++ b/js/collab-comments.js
+@@ -76,8 +76,11 @@ window.FM = window.FM || {};
+     const s = Math.max(0, Math.floor(+t || 0));
+     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+   }
+-  function ago(at) {
+-    const m = Math.round((Date.now() - (+at || 0)) / 60000);
++  /* #1030: A COMMENT IS STAMPED BY THE HOST'S CLOCK (collab-host sanitizeComment), so it is aged against the host's clock, as this device
++     estimates it from the pongs (collab-session `hostNow`). Alone or on the owner's own device that is Date.now(), exactly as before. */
++  function hostNow() { const s = C.session; return (s && C.active && s.hostNow) ? s.hostNow() : Date.now(); }
++  function ago(at, nowMs) {
++    const m = Math.round(((nowMs == null ? hostNow() : nowMs) - (+at || 0)) / 60000);
+     if (!(m >= 1)) return 'just now';
+     if (m < 60) return m + ' min ago';
+     const h = Math.round(m / 60);
+@@ -102,6 +105,7 @@ window.FM = window.FM || {};
+     return { mid: myMid(), name: (p && p.name) || 'You', color: (p && p.color) || GREY };
+   }
+   function mine(x) { return !!x && isObj(x.by) && x.by.mid === myMid(); }
++  CM._ago = ago;   // suite seam (#1030)
+   CM.canWrite = function () { return role() !== 'viewer'; };
+   /* Owner and Editor: anyone's. Commenter: their own. Viewer: nothing. The host enforces the same table;
+      this only decides which buttons are drawn. */
+@@ -134,7 +138,7 @@ window.FM = window.FM || {};
+        the toast sits at 60, so Post simply appeared to do nothing. And "resolve" was the wrong advice — the
+        ceiling counts resolved comments too (the host's does), so only deleting makes room. */
+     if (l.length >= MAX_COMMENTS) { say('This project has ' + MAX_COMMENTS + ' comments — delete some first to add another'); return null; }
+-    const c = { id: rid('c_'), by: me(), at: Date.now(), text: tx, replies: [] };
++    const c = { id: rid('c_'), by: me(), at: hostNow(), text: tx, replies: [] };
+     if (o.pin !== false) {
+       c.t = Math.round((+FM.time || 0) * 1000) / 1000;
+       const sel = FM.scene.selectedId;
+@@ -151,7 +155,7 @@ window.FM = window.FM || {};
+     if (!c || !tx || !CM.canWrite()) return null;
+     if (!Array.isArray(c.replies)) c.replies = [];
+     if (c.replies.length >= MAX_REPLIES) return null;
+-    const r = { id: rid('r_'), by: me(), at: Date.now(), text: tx };
++    const r = { id: rid('r_'), by: me(), at: hostNow(), text: tx };
+     c.replies.push(r);
+     see(c, r);
+     commit(); changed();
+diff --git a/js/collab-session.js b/js/collab-session.js
+index 4aaf3080..e16b1c4b 100644
+--- a/js/collab-session.js
++++ b/js/collab-session.js
+@@ -131,6 +131,10 @@ window.FM = window.FM || {};
+        suite never goes quiet by itself, and a guest ticked by hand in a test would read a long pause
+        between two ticks as the host going silent. The UI turns it on for the links it makes. */
+     let liveness = false, lastHeard = now(), lastPing = 0, pingN = 0, lastTick = 0;
++    /* #1030: THE HOST'S CLOCK, AS THIS DEVICE SEES IT. Every pong carries the host's `hc` (see `case 'ping'`) and nothing read it, so a comment
++       the host stamped with ITS clock was aged against THIS device's (collab-comments `ago`). `hostOff` = host time minus ours at the moment a
++       pong arrives (off by the one-way delay, under a second, against a label that says minutes). Zero until the first pong, which is today's behaviour. */
++    let hostOff = 0;
+     let quiet = null;                          // #967: the link this guest went Offline on by SILENCE and kept open
+ 
+     /* ── hot set (§9) ────────────────────────────────────────────────────────────────────────── */
+@@ -811,7 +815,7 @@ window.FM = window.FM || {};
+          Queued behind an export, a `lease-no` would leave the text editor open on a layer somebody else
+          holds for as long as the export runs. */
+       if (C.presence && C.presence.onCtl(S, 'h', msg)) return;
+-      if (msg.t === 'pong') return;                 // S6: consumed by the silence clock above, never queued
++      if (msg.t === 'pong') { if (typeof msg.hc === 'number' && isFinite(msg.hc)) hostOff = msg.hc - now(); return; }   // S6: consumed by the silence clock above, never queued; #1030: …and its `hc` is the host's clock
+       /* §8.9: a guest queues WHOLE incoming messages while frozen or busy, so an export or a half-built
+          paste never sees a document somebody else is changing underneath it. */
+       if ((frozen() || busy()) && msg.t !== 'welcome') { msgQueue.push({ kind: 'msg', msg: msg }); S.stats.queued++; return; }
+@@ -1462,6 +1466,7 @@ window.FM = window.FM || {};
+        closes the link — which is what starts the reconnect. Without it a host whose phone locked leaves
+        the data channel open-but-dead for the thirty-odd seconds ICE takes to call it failed, and the
+        guest sits on "Live" typing into nothing. */
++    S.hostNow = function () { return now() + hostOff; };   // #1030: the host's clock as estimated here (the owner's own clock IS the host's)
+     S.setLiveness = function (on) { liveness = !!on; lastHeard = now(); lastPing = 0; lastTick = 0; return liveness; };
+     /* #967: SILENCE THAT IS THIS DEVICE'S OWN IS NOT THE OWNER GOING AWAY. A phone in the background runs no timers, and
+        an owner with nothing to say only speaks when pinged — so a guest who glanced at Messages for six seconds came
+diff --git a/js/exporter.js b/js/exporter.js
+index b16cdd73..9d4b23bf 100644
+--- a/js/exporter.js
++++ b/js/exporter.js
+@@ -63,9 +63,9 @@ window.FM = window.FM || {};
+   // Takes the finished file as a BLOB (see createMp4Sink). It used to take the muxer's ArrayBuffer and
+   // do `new Blob([buffer])` here, which meant that at the moment of delivery the whole movie existed
+   // TWICE — once on the JS heap, once in blob storage. A blob in, a blob out: no copy. (#47)
+-  async function deliver(blob, name) {
++  async function deliver(blob, name, type) {   // #1031: `type` for the GIF and the frames zip; the MP4 passes none and is what it was
+     let file = null;
+-    try { file = new File([blob], name, { type: 'video/mp4' }); } catch (e) {}
++    try { file = new File([blob], name, { type: type || 'video/mp4' }); } catch (e) {}
+     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+       try { await navigator.share({ files: [file], title: name }); return 'shared'; }
+       catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
+@@ -1727,7 +1727,11 @@ window.FM = window.FM || {};
+           await nextTick();   // yield so the Cancel tap can land between frames (throttle-proof — see nextTick)
+         }
+         const blob = gif.finish();
+-        download(blob, (opts.name || 'freemotion-export') + '.gif');
++        const gifName = (opts.name || 'freemotion-export') + '.gif';
++        /* #1031: A GIF IS OFFERED TO THE SHARE SHEET LIKE THE MP4, through the same card. An <a download> on iPhone puts it in Files; the sheet's
++           Save Image is what puts it in Photos, and a fresh tap on the card's Save is what lets the sheet open after a long render. */
++        if (typeof opts.onReady === 'function') await opts.onReady({ blob: blob, name: gifName, poster: null, width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start), noSound: true, save: () => deliver(blob, gifName, 'image/gif') });
++        else download(blob, gifName);
+       } finally {
+         if (releaseVideos) releaseVideos();   // queue 690
+         FM._exportTransparent = false;
+@@ -1797,7 +1801,9 @@ window.FM = window.FM || {};
+           if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, 'frames');
+         }
+         const zipBlob = zip.finish();
+-        download(zipBlob, base + '_frames.zip');
++        const zipName = base + '_frames.zip';
++        if (typeof opts.onReady === 'function') await opts.onReady({ blob: zipBlob, name: zipName, poster: null, width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start), noSound: true, save: () => deliver(zipBlob, zipName, 'application/zip') });   // #1031
++        else download(zipBlob, zipName);
+       } finally {
+         if (releaseVideos) releaseVideos();   // queue 690
+         FM._exportTransparent = false;
+diff --git a/js/settings.js b/js/settings.js
+index c1ac6d14..bc3a74a4 100644
+--- a/js/settings.js
++++ b/js/settings.js
+@@ -460,7 +460,7 @@ window.FM = window.FM || {};
+       jumpHead.appendChild(el('div', 'set-label', 'Reports from this device'));
+       jumpHead.appendChild(el('div', 'set-hint', 'Your last playback, export, project open, scrub and blank clip — the reports the unblock list asks you to copy.'));
+       const jumpBtn = el('button', 'set-action', 'Show'); jumpBtn.type = 'button';
+-      jumpBtn.addEventListener('click', () => { const r = document.getElementById('set-reports'); if (r && r._open) r._open(true); if (r && r.scrollIntoView) r.scrollIntoView({ block: 'start', behavior: 'smooth' }); });   // #967 batch 2: the reports are one folded row — it opens first
++      jumpBtn.addEventListener('click', () => { const r = document.getElementById('set-reports'); if (r && r._open) r._open(true); if (r && r.scrollIntoView) r.scrollIntoView({ block: 'start', behavior: (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'auto' : 'smooth' }); });   // #1032: no animation for someone who asked for none (home.js:1572 and rail-arrows.js:56 already ask)   // #967 batch 2: the reports are one folded row — it opens first
+       jump.append(jumpHead, jumpBtn);
+       body.appendChild(group(jump));
+     }
