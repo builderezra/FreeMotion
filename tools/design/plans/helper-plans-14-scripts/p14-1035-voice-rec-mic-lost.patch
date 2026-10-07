@@ -1,0 +1,35 @@
+diff --git a/js/voice-rec.js b/js/voice-rec.js
+index a0e2f8e4..1a089c30 100644
+--- a/js/voice-rec.js
++++ b/js/voice-rec.js
+@@ -543,6 +543,10 @@ window.FM = window.FM || {};
+       }
+       stream = s;
+       micTracks = s.getTracks ? s.getTracks() : [];
++      /* #1035: THE MIC CAN BE TAKEN AWAY MID-TAKE. A track that ENDS (headset pulled, permission revoked) or is MUTED (a phone call on iPhone: the
++         track stays live and the recorder writes silence) used to leave the panel on "Recording" with the clock counting on nothing. Either ends
++         the take now, keeping what was heard, and says why. */
++      micTracks.forEach(function (t) { try { t.addEventListener('ended', micLost); t.addEventListener('mute', micLost); } catch (e) {} });
+       state = 'idle';
+       startMeter();
+       paint();
+@@ -606,6 +610,9 @@ window.FM = window.FM || {};
+      recording indicator burning while the app is not even on screen is the worst case here.
+      Module-level rather than a closure inside open(), so the suite can drive this exact path without
+      having to redefine document.hidden. */
++  function micLost() {
++    if (state === 'recording') stop('The microphone was interrupted, so the take stopped there. Everything up to here is kept.');
++  }
+   function bgStop() {
+     if (state === 'recording') stop('The app went to the background, so the take stopped there.');
+   }
+@@ -675,7 +682,9 @@ window.FM = window.FM || {};
+     recorder = null;
+     // THE MIC GOES DOWN THE INSTANT THE TAKE ENDS. Review, retake and Add all work off the blob, so
+     // there is no reason to keep the indicator lit while you listen back.
++    var lostMic = micTracks.some(function (t) { return t.readyState === 'ended'; });   // #1035: the recorder can stop by itself when the mic goes
+     releaseMic();
++    if (lostMic && !ui._note) ui._note = 'The microphone was interrupted, so the take stopped there. Everything up to here is kept.';
+     blob = chunks.length ? new Blob(chunks, { type: mime || (chunks[0] && chunks[0].type) || '' }) : null;
+     chunks = [];
+ 
