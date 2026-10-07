@@ -39,3 +39,12 @@ H13 | 2026-10-07 | hunt/v1724-precheck | SUPERSEDED, stopped by PM: partial note
 H17 | 2026-10-07 | hunt/1097-linux-touch | Lead 2 (fresh page per finger test) runs 84 of 88 real-finger tests at 1280 and 380; per-page mouse loss measured; 4 diamond-hold reds are a focusout/compat-mouse race, not a lead problem; patch included, not applied
 H19 | 2026-10-07 | hunt/1095-fx-browser-leak | Held by the compositor scratch pools (never shrunk, indexed by stack depth); sweep keeps 97 to 109 plate canvases (0.8 to 1 GB) after close; patch frees 792 MB to 128 MB within 4 s; test fails on main, passes patched
 H18 | 2026-10-07 | hunt/parallel-passes | Measured: both widths at once 1134 s vs 2215 s one after the other (1.95x), each pass within 3% of solo; one red only in parallel (699 trim grip, n=1, also red alone); ready-to-build plan
+QF4-H16 | 2026-10-07 | hunt/chatgpt-chain-review | 8 corrections applied; verified exporter.js lines (cancel check is :1427), no needsAac in the chain, no ?v= bump, the 1013 note records the intermittent bootstrap
+QF4-H12 | 2026-10-07 | hunt/1085-vmdata | 9 corrections applied; fixture sizes checked in the test source; added pass-F numbers for the queue 333 sweep (passed, 317 s, floor +178 MB, RSS peak 812)
+QF4-H11 | 2026-10-07 | hunt/suite-speed | 7 corrections applied; Mac column recomputed in code (452 s of about 3325, 13.6%); line numbers refreshed for 3 rows
+QF4-H9 | 2026-10-07 | hunt/simple-mode-review | 6 corrections applied; 88 changed lines confirmed as +64/-24; trial merge of fu-lock-r5 conflicts in ship.sh
+QF4-H15 | 2026-10-07 | plans/collab-privacy | F2 rewritten: Option C added with 7 callers traced; F2 'one-word fix' withdrawn; F5 uses ctl.bad; one open question (card does not store role/roExport)
+QF4-P7 | 2026-10-07 | plans/helper-7 | 6 corrections applied: filter-by-id, notePending after writeScene, always reopen prev, sanitizeImportedLayers vs load path, host line numbers
+QF4-P8 | 2026-10-07 | plans/helper-8 | 9 corrections applied; kept-copy key moved out of the fm.proj. prefix (5 scanners read it); open() refusal moved before teardown, caller contract traced
+QF4-H20 | 2026-10-07 | plans/import-caps | 9 corrections applied; parity measured for photo, video, text and glow (glow halo visibly differs); audio-react bake measured at 530 to 1140 keys a minute so a 5000 cap can cut a 10-minute bake
+QF4-R3 | 2026-10-07 | research/effect-specs | 19 corrections applied, each checked against v17.24 code; flashdark is a strobe, radialwipe has no maxR, T4 should be a Glitch preset
