@@ -4290,7 +4290,7 @@ window.FM = window.FM || {};
      once carried 20 canvas effects (or an effects-browser sheet with 170 picks stacked in its preview) left 40 (or 340) plate-sized
      canvases behind after the stack was gone: measured, 20 wiggles keep 40 canvases through a forced garbage collection.
      _hw is the deepest each pool reached since the last trim; FM._trimScratch (end of this file's pool code) frees the entries above it. */
-  const _hw = { pf: 0, wp: 0, cf: 0, exp: 0, mg: 0, dsp: 0 };
+  const _hw = { pf: 0, wp: 0, cf: 0, exp: 0, mg: 0, dsp: 0, fc: 0, adj: 0 };
   /* ---- CROP THE READBACK TO THE LAYER (#692, route 2) ------------------------------------------------------------
    * The lag's measured cause: every pixel kernel walked the WHOLE plate — 1080x1920 of arithmetic for a layer covering
    * 1.3% of it — and the full-frame getImageData/putImageData round trip alone was an 8–12ms floor. Five rounds bounded
@@ -4524,7 +4524,7 @@ window.FM = window.FM || {};
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
     const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
-    const d = _fcDepth++;
+    const d = _fcDepth++; if (d >= _hw.fc) _hw.fc = d + 1;
     try {
       if (!_fcPool[d]) _fcPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), M: document.createElement('canvas') };
       const P = _fcPool[d];
@@ -17968,6 +17968,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   function adjFilterPlate(ctx, layer, t, scene, effs, depth) {
     const cw = ctx.canvas.width, ch = ctx.canvas.height;
+    if (depth >= _hw.adj) _hw.adj = depth + 1;
     if (!_adjFcPool[depth]) _adjFcPool[depth] = { A: document.createElement('canvas'), M: document.createElement('canvas') };
     const P = _adjFcPool[depth];
     ['A', 'M'].forEach(k => { if (P[k].width !== cw || P[k].height !== ch) { P[k].width = cw; P[k].height = ch; } });
@@ -18565,19 +18566,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     for (let i = used || 0; i < pool.length; i++) _zeroEntry(pool[i]);
   }
   FM._trimScratch = function () {
-    if (_pfDepth || _wpDepth || _cfDepth || _expDepth || _dspLvl || _dispDepth) return false;
+    if (_pfDepth || _wpDepth || _cfDepth || _expDepth || _dspLvl || _dispDepth || _fcDepth) return false;
     _trimPool(_pfPool, Math.max(2, _hw.pf), true, _hw.pf); _trimPool(_wpPool, Math.max(2, _hw.wp), true, _hw.wp);
     _trimPool(_cfPool, Math.max(2, _hw.cf), true, _hw.cf); _trimPool(_mgPool, Math.max(2, _hw.mg), true, _hw.mg);
     _trimPool(_expPool, Math.max(2, _hw.exp), false, _hw.exp);
     _trimPool(_dspPool, Math.max(2, _hw.dsp), false, _hw.dsp);
-    _hw.pf = _hw.wp = _hw.cf = _hw.exp = _hw.mg = _hw.dsp = 0;
+    _trimPool(_fcPool, Math.max(2, _hw.fc), false, _hw.fc); _trimPool(_adjFcPool, Math.max(2, _hw.adj), false, _hw.adj);
+    _hw.pf = _hw.wp = _hw.cf = _hw.exp = _hw.mg = _hw.dsp = _hw.fc = _hw.adj = 0;
     return true;
   };
   FM._poolStats = function () {   // suite seam: how many entries each pool holds, and the pixels in them
     const px = (cv) => (cv ? cv.width * cv.height : 0);
     const pair = (pool) => ({ n: pool.length, px: pool.reduce((a, e) => a + (e ? px(e.A) + px(e.B) : 0), 0) });
     const all = (pool) => ({ n: pool.length, px: pool.reduce((a, e) => { let n = 0; if (e) for (const k in e) n += px(e[k]); return a + n; }, 0) });
-    return { pf: pair(_pfPool), wp: pair(_wpPool), cf: pair(_cfPool), mg: pair(_mgPool), dsp: all(_dspPool),
+    return { pf: pair(_pfPool), wp: pair(_wpPool), cf: pair(_cfPool), mg: pair(_mgPool), dsp: all(_dspPool), fc: all(_fcPool), adj: all(_adjFcPool),
              exp: { n: _expPool.length, px: _expPool.reduce((a, e) => a + px(e), 0) } };
   };
   let _trimTimer = 0;
@@ -18585,11 +18587,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (_trimTimer) return;
     _trimTimer = setTimeout(function () {
       _trimTimer = 0;
-      const _wasUsed = _hw.pf || _hw.wp || _hw.cf || _hw.exp || _hw.mg || _hw.dsp;
+      const _wasUsed = _hw.pf || _hw.wp || _hw.cf || _hw.exp || _hw.mg || _hw.dsp || _hw.fc || _hw.adj;
       if (!FM._trimScratch()) { _scheduleTrim(); return; }
       // a pool still holds more than the floor, or this window saw a draw: arm the next window now, so the memory comes back even if
       // nothing renders again (H40: the window AFTER a draw is the one that finds the entries nothing used, and releases them)
-      if (_wasUsed || _pfPool.length > 2 || _wpPool.length > 2 || _cfPool.length > 2 || _mgPool.length > 2 || _expPool.length > 2 || _dspPool.length > 2) _scheduleTrim();
+      if (_wasUsed || _pfPool.length > 2 || _wpPool.length > 2 || _cfPool.length > 2 || _mgPool.length > 2 || _expPool.length > 2 || _dspPool.length > 2 || _fcPool.length > 2 || _adjFcPool.length > 2) _scheduleTrim();
     }, 3000);
   }
   FM._platePixels = function () {
