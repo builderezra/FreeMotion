@@ -62148,7 +62148,10 @@
     });
   });
 
-  window.FMTests = { tests: T, run: run };
+  /* `kit` (queue 980): the suite's own fixture documents. tests/full-unchanged.html no longer loads this file to reach them
+     (the second review, 6 Oct: the suite must not run inside the frame the lock measures) — it carries its own copy of
+     kitchen921. Read-only builders; nothing here runs a test. */
+  window.FMTests = { tests: T, run: run, kit: { kitchen921: kitchen921 } };
 
   /* ================= queue 306: the service worker's silent downgrade =============================
    * Ezra, for weeks: *"an older version of our project shows up when you refresh"*, and later *"The
@@ -120174,5 +120177,259 @@
     if (src.indexOf(old) > src.indexOf('lsSide<lsSides')) throw new Error('the side loop comes before the v17.21 loop, so it is still in the path One way takes');
   });
 
+
+  /* ═══ THE "FULL UNCHANGED" LOCK (queue 980 (partial); BUILD-PLAN.md §3.2, DESIGN.md §0.4.5). His rule, 1 Oct: "i dont want
+     the original editor changing in design and function". tools/full-unchanged.sh measures it; these two keep the instrument
+     from going blind QUIETLY as Full grows — the failure a lock never reports about itself. */
+  function fu980Keys(src) {
+    const m = /var KEYS = \[([\s\S]*?)\n  \];/.exec(src);
+    if (!m) return null;
+    const out = [];
+    m[1].replace(/\['([A-Za-z0-9]+)',\s*'(?:[^'\\]|\\.)*'(?:,\s*\{([^}]*)\})?\]/g, function (_, code, mods) {
+      // ⌘ combos as `+meta`; a shifted DIGIT as `+shift` too (review of v1: Shift+2/3/4 add Captions / Sketching /
+      // Custom shape and FU3 pressed only Shift+1, so a swapped pair passed)
+      out.push(code + (mods && /meta/.test(mods) ? '+meta' : (mods && /shift/.test(mods) && /^Digit/.test(code) ? '+shift' : '')));
+      return _;
+    });
+    return out;
+  }
+  function fu980Handler(app) {
+    const a = app.indexOf("window.addEventListener('keydown', e => {\n      const mod = e.metaKey || e.ctrlKey;");
+    const b = app.indexOf("window.addEventListener('keyup'", a);
+    return a >= 0 && b > a ? app.slice(a, b) : null;
+  }
+  /* What the handler answers, read from its own source: every e.code it names, every ⌘ letter, the arrows, the digits. */
+  function fu980Wanted(h) {
+    const want = new Set();
+    h.replace(/e\.code === '([A-Za-z0-9]+)'/g, function (_, c) { want.add(c); return _; });
+    h.replace(/mod && \(e\.key === '([a-z])'/g, function (_, k) { want.add('Key' + k.toUpperCase() + '+meta'); return _; });
+    if (/e\.code\.indexOf\('Arrow'\) === 0/.test(h)) ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].forEach(function (c) { want.add(c); });
+    /* EVERY digit the handler answers, plain and shifted (review of v1: only Digit1 was demanded, and FU3 pressed 1, 3 and 5,
+       so a 2, 4, 6–9 or Shift+2–4 remap went unseen): the plain range from its own `^Digit[a-b]$`, the shifted ones up to
+       its own `n <= N`. */
+    const dr = /\^Digit\[(\d)-(\d)\]\$/.exec(h);
+    if (dr) for (let d = +dr[1]; d <= +dr[2]; d++) want.add('Digit' + d);
+    const sr = /if \(e\.shiftKey\) \{ if \(n <= (\d)/.exec(h);
+    if (sr) for (let d = 1; d <= +sr[1]; d++) want.add('Digit' + d + '+shift');
+    if (/e\.key === '\?'/.test(h)) want.add('Slash');
+    if (/e\.code === 'KeyA' \|\| e\.code === 'KeyS' \|\| e\.code === 'KeyD'/.test(h)) ['KeyA', 'KeyS', 'KeyD'].forEach(function (c) { want.add(c); });
+    return want;
+  }
+
+  /* THE SWEEP (the second review, 6 Oct): a shortcut written with e.key — `else if (e.key === 'f' || e.key === 'F')` — was
+     read by nothing above and pressed by nothing in FU3, so it passed both. The probe now sweeps every key a keyboard has on
+     the PC pass (SWEEP_CODES); this reads every e.key / e.code literal in Full's handler AND in every other script that
+     listens for keydown on the window or the document, and demands each be a key the probe presses. */
+  function fu980Sweep(src) {
+    const m = /var SWEEP_CODES = \[([\s\S]*?)\];/.exec(src);
+    if (!m) return null;
+    const out = [];
+    m[1].replace(/'([A-Za-z0-9]+)'/g, function (_, c) { out.push(c); return _; });
+    return out;
+  }
+  const FU980_CHAR_CODE = { '-': 'Minus', '_': 'Minus', '=': 'Equal', '+': 'Equal', '[': 'BracketLeft', '{': 'BracketLeft', ']': 'BracketRight',
+    '}': 'BracketRight', '\\': 'Backslash', '|': 'Backslash', ';': 'Semicolon', ':': 'Semicolon', "'": 'Quote', '"': 'Quote', ',': 'Comma',
+    '<': 'Comma', '.': 'Period', '>': 'Period', '/': 'Slash', '?': 'Slash', '`': 'Backquote', '~': 'Backquote', ' ': 'Space',
+    '!': 'Digit1', '@': 'Digit2', '#': 'Digit3', '$': 'Digit4', '%': 'Digit5', '^': 'Digit6', '&': 'Digit7', '*': 'Digit8', '(': 'Digit9', ')': 'Digit0' };
+  const FU980_NAMED = { Esc: 'Escape', Spacebar: 'Space', Del: 'Delete', Left: 'ArrowLeft', Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown' };
+  const FU980_NOT_KEYS = { Shift: 1, Meta: 1, Control: 1, Alt: 1, AltGraph: 1, CapsLock: 1, Dead: 1, Process: 1, Unidentified: 1, OS: 1 };
+  /* The code a key literal is pressed by: 'f' → KeyF, '?' → Slash, 'Esc' → Escape, 'F2' → F2. A literal that is not a key
+     value (a storage event's `e.key === 'fm.profile'`) is not read. */
+  function fu980KeyCode(k) {
+    if (/^[a-z]$/i.test(k)) return 'Key' + k.toUpperCase();
+    if (/^[0-9]$/.test(k)) return 'Digit' + k;
+    if (k.length === 1) return FU980_CHAR_CODE[k] || null;
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(k) || FU980_NOT_KEYS[k]) return null;
+    return FU980_NAMED[k] || k;
+  }
+  function fu980Literals(src) {
+    const out = new Set();
+    src.replace(/\b(?:e|ev|evt|event)\.key\s*===?\s*'((?:[^'\\]|\\.)*)'/g, function (_, k) { const c = fu980KeyCode(k.replace(/\\(.)/g, '$1')); if (c) out.add(c); return _; });
+    src.replace(/\b(?:e|ev|evt|event)\.code\s*===?\s*'([A-Za-z0-9]+)'/g, function (_, c) { out.add(c); return _; });
+    return out;
+  }
+
+  test('980 FU lock: the Full-unchanged probe presses every key Full’s keydown handler answers (FU3), so a new shortcut cannot slip past the lock', { item: '980' }, async function () {
+    const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    if (!probe) throw new Error('tests/full-unchanged.html is missing — the Full-unchanged lock (queue 980) has no probe, so nothing measures Full against HEAD');
+    const app = await fetch('js/app.js', { cache: 'no-store' }).then(function (r) { return r.text(); });
+    const h = fu980Handler(app);
+    if (!h) throw new Error('could not find Full’s window keydown handler in js/app.js by its first line — update fu980Handler, or this guard is blind');
+    const keys = fu980Keys(probe);
+    if (!keys || keys.length < 20) throw new Error('could not read the probe’s KEYS list (' + (keys ? keys.length : 'none') + ')');
+    const have = new Set(keys);
+    const want = fu980Wanted(h);
+    if (want.size < 25) throw new Error('only ' + want.size + ' keys were read out of the handler — the reader has gone blind, not the probe');
+    const missing = Array.from(want).filter(function (c) { return !have.has(c); });
+    if (missing.length) throw new Error('Full’s keydown handler answers ' + missing.join(', ') + ' and the Full-unchanged probe (FU3) never presses it — add it to KEYS in tests/full-unchanged.html');
+    if (!have.has('KeyE')) throw new Error('FU3 must press E (Full has no E; DESIGN §0.4.2 B14)');
+    if (want.size < 40) throw new Error('only ' + want.size + ' keys were read out of the handler (the digits alone are 13) — the reader has gone blind');
+    /* POSITIVE CONTROLS: a key planted in the handler is seen as missing, and so is a shifted digit the probe stops pressing,
+       so "nothing missing" above is a finding. */
+    const planted = fu980Wanted(h.replace("e.code === 'KeyM'", "e.code === 'KeyJ') {} else if (e.code === 'KeyM'"));
+    if (!planted.has('KeyJ') || have.has('KeyJ')) throw new Error('CONTROL: a planted KeyJ in the handler (a key the probe never presses) was not read as a key the probe misses');
+    const fewer = new Set(fu980Keys(probe.replace("['Digit3', '#', { shift: true }], ", '')));
+    if (fewer.has('Digit3+shift') || !want.has('Digit3+shift')) throw new Error('CONTROL: a probe that stops pressing Shift+3 was not read as missing it');
+    /* …and EVERY key literal, e.key as well as e.code, in the handler and in every other script listening for keydown on the
+       window or the document, is a key the probe presses (KEYS, or the PC pass's sweep). */
+    const sweep = fu980Sweep(probe);
+    if (!sweep || sweep.length < 80) throw new Error('could not read the probe’s SWEEP_CODES (' + (sweep ? sweep.length : 'none') + ') — the FU3 key sweep is gone, so a shortcut written with e.key would pass');
+    const pressed = new Set(keys.map(function (k) { return k.split('+')[0]; }).concat(sweep));
+    const index = await fetch('index.html', { cache: 'no-store' }).then(function (r) { return r.text(); });
+    const srcs = Array.from(new Set((index.match(/src="(js\/[^"?]+\.js)/g) || []).map(function (x) { return x.slice(5); })));
+    if (srcs.length < 40) throw new Error('only ' + srcs.length + ' scripts were read out of index.html — the reader has gone blind');
+    const listening = [], unpressed = [];
+    for (const f of srcs) {
+      const src = f === 'js/app.js' ? app : await fetch(f, { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+      if (!/(?:window|document)\.addEventListener\('keydown'/.test(src)) continue;
+      listening.push(f);
+      fu980Literals(src).forEach(function (c) { if (!pressed.has(c)) unpressed.push(f + ': ' + c); });
+    }
+    if (listening.indexOf('js/app.js') < 0 || listening.length < 5) throw new Error('only ' + listening.length + ' scripts listen for keydown on the window or the document (' + listening.join(', ') + ') — the reader has gone blind');
+    if (unpressed.length) throw new Error('these keys are named by a keydown listener and the Full-unchanged probe never presses them: ' + unpressed.join(', ') + ' — add each to KEYS or SWEEP_CODES in tests/full-unchanged.html');
+    /* CONTROLS: an e.key shortcut planted in the handler is read as its key, and a sweep without that key is read as missing it. */
+    const lit = fu980Literals(h.replace("e.code === 'KeyM'", "e.key === 'f' || e.key === 'F') {} else if (e.code === 'KeyM'"));
+    if (!lit.has('KeyF')) throw new Error('CONTROL: a shortcut written `e.key === \'f\'` was not read as KeyF');
+    if (fu980Literals('if (e.key === \'fm.profile\') {}').size) throw new Error('CONTROL: a storage event’s e.key was read as a key');
+    const sweepLess = new Set(fu980Sweep(probe.replace("'KeyF', ", '')));
+    if (sweepLess.has('KeyF') || keys.some(function (k) { return k.split('+')[0] === 'KeyF'; })) throw new Error('CONTROL: a sweep without KeyF was not read as missing it');
+  });
+
+  test('980 FU lock: every self-test plant still lands exactly once in Full’s source, so the lock can still prove it sees (the margin, the toast, the floor, and all nineteen changes the 1 Oct review slipped past v1)', { item: '980' }, async function () {
+    const raw = await fetch('tools/full-unchanged-plants.json', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    if (!raw) throw new Error('tools/full-unchanged-plants.json is missing — the Full-unchanged lock (queue 980) has no self-test, so a green verdict would mean nothing');
+    const plants = JSON.parse(raw).plants || [];
+    const names = plants.map(function (p) { return p.name; });
+    /* DESIGN's three, and the review's blocker — a Simple release carrying these nineteen changes to Full passed v1 — one
+       plant each: P1 overlay, P12 icon, P3 hover, P4 sheetmotion, P13 cropbar, V1 halfres, P5 shift34, Q2 key, Q3 addtab,
+       P6 touch, P10 group, P11 uiroute, T1 speedtoast, P7 colour, P8 export, P9 bounce, R1 manifest, S1 sanitiser, E1
+       endnudge; and DESIGN's B4 / B5 guards, which v1 had no step for: matte, follow, seam; and the review's Q1 (finding 4:
+       a changed zoom step left every FU3 record the same), zoomstep. Each must turn the lock red BY NAME on every run
+       (tools/_fu_compare.py judge). */
+    ['margin', 'toast', 'floor', 'overlay', 'icon', 'hover', 'sheetmotion', 'cropbar', 'halfres', 'shift34', 'key', 'addtab', 'touch',
+     'group', 'uiroute', 'speedtoast', 'colour', 'export', 'bounce', 'manifest', 'sanitiser', 'endnudge', 'matte', 'follow', 'seam',
+     'zoomstep',
+     /* the second review's sixteen (6 Oct), its clip hold, and one plant in every run tools/full-unchanged.sh FU_RUNS adds */
+     'w440', 'h720', 'friendtoast', 'savefield', 'indexfield', 'reduce', 'darkhome', 'toastpos', 'marktoast', 'cogflight', 'cathover',
+     'ctxhover', 'scrubrate', 'audiobr', 'brightdef', 'keyf2', 'hold500', 'tiny320', 'sideways', 'band1226', 'widepc', 'detail',
+     'pixels'].forEach(function (n) {
+      if (names.indexOf(n) < 0) throw new Error('the self-test lost its "' + n + '" plant — the lock can no longer prove it sees that kind of change');
+    });
+    const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    const order = ['FU1', 'FU2', 'FU3', 'FU6', 'FU4', 'FU5', 'FU7'];
+    for (const p of plants) {
+      const src = await fetch(p.file, { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+      if (!src) throw new Error('the ' + p.name + ' plant edits ' + p.file + ', which cannot be read');
+      if (p.append != null) {
+        // the rule's first selector (an id or a class) must still be something Full has, or the plant styles nothing
+        const sel = (/\n\s*([#.][\w-]+)[^{\n]*\{/.exec(p.append) || [])[1];
+        const idHome = sel ? (await fetch('index.html', { cache: 'no-store' }).then(function (r) { return r.text(); })) + src : '';
+        if (!sel || idHome.indexOf(sel.slice(1)) < 0) throw new Error('the ' + p.name + ' plant styles ' + sel + ', which Full no longer has');
+      } else {
+        const n = src.split(p.old).length - 1;
+        if (n !== 1) throw new Error('the ' + p.name + ' plant’s anchor appears ' + n + ' times in ' + p.file + ' (want 1): ' + p.old.slice(0, 120) + ' — the lock’s self-test would refuse every run; if Full changed here with his yes, move the plant');
+        if (p.new === p.old) throw new Error('the ' + p.name + ' plant changes nothing');
+      }
+      // a plant is measured with a PREFIX of the probe's group order, or its reference run is not the one it is compared with
+      const gs = String(p.groups || '').split(',');
+      if (gs.join(',') !== order.slice(0, gs.length).join(',')) throw new Error('the ' + p.name + ' plant runs groups ' + p.groups + ', which is not a prefix of ' + order.join(','));
+      // …and the step it is caught BY is still in the probe (FU2's names, FU3's keys)
+      const sig0 = (p.sig || [])[0] || '';
+      if (gs.indexOf('FU2') >= 0 && !/^FU\d/.test(sig0) && sig0.charAt(0) !== '#' && probe.indexOf(sig0) < 0) throw new Error('the step “' + sig0 + '” the ' + p.name + ' plant is caught by is gone from the probe');
+      // …and a step's or a key's NAME is only WHERE: the signature must also say WHAT differs (6 Oct: a plant was "caught"
+      // because its step's name held the word its signature asked for, on a line that differed for another reason)
+      if (/^(FU3 ")/.test(sig0) || (gs.indexOf('FU2') >= 0 && !/^(FU\d|#|fu1-)/.test(sig0) && sig0.indexOf('the preview') < 0)) {
+        if ((p.sig || []).length < 2) throw new Error('the ' + p.name + ' plant’s signature names only where it is caught (' + sig0 + '), not what differs there');
+      }
+    }
+    if (probe.indexOf("var ALL = ['" + order.join("', '") + "'];") < 0) throw new Error('the probe’s group order is not ' + order.join(', ') + ' — the plants’ prefixes no longer line up with it');
+    /* CONTROL: the counter really counts — an anchor written twice reads as 2. */
+    const a = plants.filter(function (p) { return p.old; })[0].old;
+    if (('x' + a + 'y' + a).split(a).length - 1 !== 2) throw new Error('CONTROL: the anchor counter does not count');
+  });
+
+  /* The 1 Oct review of the lock: FU2 left out edits DESIGN §0.4.5 lists (a mask, both inserts, the B4/B5 guards, I8's single
+     frame and People-menu role, I9's edge scroll), drove the speed, the Group button and the ◆ through the functions under
+     them, never sent a touch on the phone pass, never ran the exporter, and nothing refused a step that fell back. This keeps
+     each of those in the probe — the failure being guarded is the probe quietly losing a step as Full grows. */
+  function fu980Coverage(probe, cmp) {
+    const missing = [];
+    const need = [
+      ['a mask through the effects browser', 'a mask on Clip C (Effects → + Add Effect → Mask'],
+      ['a template insert', 'insert the FU template (Add → Template)'],
+      ['an element insert', 'insert the FU element (Add → Elements → FU element)'],
+      ['a Follow on a split target (B4)', 'a Follow on a split target'],
+      ['a luma matte on a split source (B4)', 'a luma matte on a split source'],
+      ['Bounce on a camera', 'Bounce on a camera'],
+      ['Bounce across a split (B5)', 'Bounce across a split'],
+      ['the edge scroll (I9)', 'into the edge zone for 12 frames'],
+      ['the single frame (I8)', 'a single frame (Export → Single frame PNG)'],
+      ['a real export', 'export (Export → MP4'],
+      ['the People menu’s role (I8)', 'the People menu: Sam becomes a Viewer'],
+      ['the Speed card’s own box', "fellOnly('the Speed % box"],
+      ['the Group button', "via('the Group button'"],
+      ['the Masking group button', "via('the Masking group button'"],
+      ['the ◆', "via('the Opacity ◆'"],
+      ['a real finger on the phone pass', "t: 'touchStart'"],
+      ['a hover on the PC pass', "t: 'mouseMove'"],
+      ['the preview with its overlays', "shot(name + '~nopv')"],
+      /* 6 Oct, the blocker's last ways past (T1, E1, P5) and the B4 guard as Full routes it, each with its plant */
+      ['the Speed card’s solve button (T1)', 'speed so Clip C ends at the playhead (the Speed card’s ⇥ button)'],
+      ['the playhead parked on the last layer’s end (E1, queue 549)', "screen('fu1-at-end'"],
+      ['which drawing tool a key opened (P5)', 'drawMode: FM.drawTool && FM.drawTool.active'],
+      ['the luma matte through the effects browser and its Matte layer list (B4)', "addEffectThroughBrowser(P, 'luma matte'"],
+      ['a finger that misses its target fails the step', 'function mustHit(target, x, y, what)'],
+      ['the text editor a new text opens', "surface('the text editor'"],
+      ['every infinite animation on screen, with its keyframes', 'function infiniteNow()'],
+      ['a render guard whose frames do not move fails its step', 'mustMove: true'],
+      ['keys that really are keys (setTransform only writes one on a keyed prop)', 'function keyTwo(L, k, t0, v0, t1, v1)']
+    ];
+    need.forEach(function (n) { if (probe.indexOf(n[1]) < 0) missing.push(n[0]); });
+    if (cmp.indexOf("rec.get('fell')") < 0 || cmp.indexOf('FELL BACK') < 0) missing.push('the comparer refusing a step that fell back');
+    if (cmp.indexOf('def sig_hit(') < 0 || cmp.indexOf('sig_hit(x, sig)') < 0) missing.push('the judge reading a plant’s signature in what differs, not in a step’s name');
+    return missing;
+  }
+
+  test('980 FU lock: the probe drives every Full edit DESIGN §0.4.5 FU2 lists through Full’s own controls (and a real finger on the phone), and a step that falls back is refused', { item: '980' }, async function () {
+    const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    const cmp = await fetch('tools/_fu_compare.py', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    if (!probe || !cmp) throw new Error('tests/full-unchanged.html or tools/_fu_compare.py is missing — the Full-unchanged lock (queue 980) cannot measure');
+    const missing = fu980Coverage(probe, cmp);
+    if (missing.length) throw new Error('the Full-unchanged probe no longer covers: ' + missing.join('; ') + ' — a change to Full there would pass the lock');
+    /* CONTROL: a probe that lost its mask step is read as missing it. */
+    if (fu980Coverage(probe.split('a mask on Clip C (Effects').join('a rename'), cmp).indexOf('a mask through the effects browser') < 0) throw new Error('CONTROL: a probe without its mask step was not read as missing it');
+  });
+
+  /* The 6 Oct proof runs of the lock: four of its probe's guards measured NOTHING on HEAD, or measured the machine, and
+     each was found only by running HEAD against itself — the B4 Follow sat on a clip that had left the screen long before
+     the cut, the B5 split Bounce held one key on its tail (so the ring stops there on HEAD), a mask tap mapped through a
+     preview that was shedding pixels on one run and not the other, and the live wire of a step held whatever the media
+     layer's wall-clock sweep and the host's checksum timer had happened to send. Each is fixed in the probe; this keeps
+     each fix there, because the failure it guards is silent: a probe step that draws one picture three times passes every
+     plant aimed at it, and a wire that races fails every honest run. */
+  function fu980Measures(probe) {
+    const missing = [];
+    [
+      ['the Follow guard on Pick D, the one picture on screen on both sides of the cut', 'a Follow on a split target (Pick D follows Clip B'],
+      ['the Follow guard refusing a follower that does not span the cut', 'does not span the cut at '],
+      ['the split Bounce with a key past the cut, so the tail holds two', 'jumpOn(C, k0, k1, kHold)'],
+      ['a mask tap waiting for the preview to be back at the top of its quality ladder', 'await previewSettled();\n            var pr = await stableRect(pv);'],
+      ['FU4 on the probe’s own clock (the host, the guest and presence)', 'startSession(true, true)'],
+      ['FU4 ending each step with one whole media reconcile, awaited', 'media._reconcile(s.S)'],
+      ['FU4 reading the wire only once nothing new has gone out', 'while (same < 3 && Date.now() - t0 < 4000)'],
+      ['FU4 keeping each kind of message in its own order, not interleaved by arrival', 'msgs.sort(function (a, b) { return a.k < b.k ? -1 : a.k > b.k ? 1 : a.i - b.i; });'],
+      ['a guard whose frames do not move failing its step', 'mustMove: true']
+    ].forEach(function (n) { if (probe.indexOf(n[1]) < 0) missing.push(n[0]); });
+    return missing;
+  }
+
+  test('980 FU lock: the probe guards measure Full on HEAD and not the machine (the Follow across the cut, a key past the split, mask taps at the top of the preview ladder, the live wire on the probe clock)', { item: '980' }, async function () {
+    const probe = await fetch('tests/full-unchanged.html', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; });
+    if (!probe) throw new Error('tests/full-unchanged.html is missing — the Full-unchanged lock (queue 980) cannot measure');
+    const missing = fu980Measures(probe);
+    if (missing.length) throw new Error('the Full-unchanged probe no longer has: ' + missing.join('; ') + ' — its guard there measures nothing on HEAD, or measures the machine');
+    /* CONTROL: a probe whose FU4 stopped awaiting the reconcile is read as missing it. */
+    if (fu980Measures(probe.split('media._reconcile(s.S)').join('media.tick(s.S)')).indexOf('FU4 ending each step with one whole media reconcile, awaited') < 0) throw new Error('CONTROL: a probe without the awaited reconcile was not read as missing it');
+  });
 
 })();
