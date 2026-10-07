@@ -59931,6 +59931,37 @@
     }
   });
 
+  /* H40: AN AUDIO MIX DOES NOT LEAVE EVERY CLIP'S DECODED SOUND ON ITS MEDIA RECORD. buildAudioMix decodes each clip it mixes to full float PCM
+     (~88 MB for four minutes of stereo at 48 kHz) and parks it on `rec.audioBuffer`, where nothing frees it until the layer is removed: a project with
+     three songs holds ~260 MB of PCM after the first export, for the rest of the session. A buffer the mix decoded ITSELF is put back to
+     "not decoded" when the mix is done (preview and reverse re-decode on demand, as they did the first time); one that was already there
+     (reverse playback, audio-react) is left alone. CONTROL: the mix is real, and the pre-decoded clip is still decoded. */
+  test('H40 an audio mix frees the PCM it decoded, and leaves a buffer that was already there', { item: 'H40' }, async function () {
+    if (!FM.exporter || !FM.exporter.buildAudioMix || !FM.decodeAudio || !FM.audioBufferToWav) throw new Error('setup: the mixer or the decoder is not reachable');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('no OfflineAudioContext');
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration, made = [];
+    try {
+      const oac = new OAC(2, 48000, 48000);
+      const buf = oac.createBuffer(2, 48000, 48000);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 20) * 0.5; }
+      const wav = () => new File([FM.audioBufferToWav(buf)], 'h40.wav', { type: 'audio/wav' });
+      const A = FM.makeLayer('video', { name: 'H40 fresh', start: 0, duration: 1 }), B = FM.makeLayer('video', { name: 'H40 kept', start: 0, duration: 1 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(A, B); made.push(A.id, B.id);
+      FM.media.set(A.id, { kind: 'video', file: wav(), duration: 1, width: 2, height: 2 });                          // audioBuffer: undefined, the mix decodes it
+      FM.media.set(B.id, { kind: 'video', file: wav(), audioBuffer: buf, duration: 1, width: 2, height: 2 });       // already decoded by someone else
+      FM.scene.project.duration = 2;
+      FM._lastAudioDrops = null;
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 2);
+      if (!mix || !mix.audioBuffer) throw new Error('CONTROL: the mixer produced no mix, so what it left behind says nothing (dropped: ' + JSON.stringify(FM._lastAudioDrops) + ')');
+      if (FM.media.get(B.id).audioBuffer !== buf) throw new Error('the mixer replaced or dropped a buffer somebody else had already decoded (reverse playback and audio-react rely on it)');
+      if (FM.media.get(A.id).audioBuffer) throw new Error('the mix decoded "' + A.name + '" to full PCM (' + Math.round(FM.media.get(A.id).audioBuffer.length * FM.media.get(A.id).audioBuffer.numberOfChannels * 4 / 1024) + ' KB here, ~88 MB for a four-minute song) and left it on the media record');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.scene.project.duration = dur0;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

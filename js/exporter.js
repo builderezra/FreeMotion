@@ -474,7 +474,18 @@ window.FM = window.FM || {};
   }
   FM._limitMix = limitMix;   // suite seam: the limiter is pure arithmetic, so it can be driven on a buffer directly
 
+  /* H40: the mix decodes each clip it mixes to full float PCM (~88 MB for four minutes of stereo) and parks it on rec.audioBuffer, where nothing
+     frees it until the layer goes. A buffer the MIX decoded is put back to "not decoded" when the mix is done; one somebody else decoded
+     (reverse playback, audio-react: app.js, audio-react.js) was there before and is left alone. Every other reader decodes on demand when the slot
+     is undefined (audio-play requestPlay, audio-react, waveform), as it did the first time. A throw out of the render leaves them as before. */
+  function _freshPcmRecs() {
+    const fresh = [];
+    try { const all = (FM.media && FM.media.all && FM.media.all()) || {}; for (const id in all) if (all[id] && all[id].audioBuffer === undefined) fresh.push(all[id]); } catch (e) {}
+    return fresh;
+  }
+  function _freePcm(fresh, out) { fresh.forEach(m => { if (m.audioBuffer) m.audioBuffer = undefined; }); return out; }
   async function buildAudioMix(scene, from, to) {
+    const _fresh = _freshPcmRecs();
     const P = scene.project;
     const sampleRate = 48000, channels = 2;
     from = from || 0; to = (to == null) ? P.duration : to;
@@ -508,7 +519,7 @@ window.FM = window.FM || {};
          the time goes. Only inside an export: the audio-only WAV path shares this mixer and never resets
          the flag, so a stale Cancel from an earlier export must not empty its soundtrack. run() turns
          the null into CANCELLED on the very next line. */
-      if (FM._exporting && FM._exportCancel) return null;
+      if (FM._exporting && FM._exportCancel) return _freePcm(_fresh, null);
       const hiddenOrSolo = layer.visible === false || (FM.groupHidden && FM.groupHidden(layer)) || (soloActive && !layer.solo);
       if (hiddenOrSolo) {
         /* SUPPRESSED IS NOT THE SAME AS SILENT, and this `continue` was the last one in the mixer with
@@ -771,7 +782,7 @@ window.FM = window.FM || {};
     }
     FM._lastAudioDrops = dropped;   // the suite reads this rather than scraping toasts
     FM._lastAudioSuppressed = suppressed;
-    if (!any) return null;
+    if (!any) return _freePcm(_fresh, null);
     const rendered = await oac.startRendering();
     chains.forEach(c => { try { c.dispose(); } catch (e) {} });
     /* ⚠️ SAMPLES ARE NOT SOUND — the fifth silent loss, and the only one that survives everything above
@@ -837,7 +848,7 @@ window.FM = window.FM || {};
       exportSay('Exporting with NO SOUND — every audio clip is muted or at zero volume');
       if (FM.toast) FM.toast('Exporting with NO SOUND — every audio clip is muted or at zero volume', 5600);
     }
-    return { audioBuffer: rendered, sampleRate, channels };
+    return _freePcm(_fresh, { audioBuffer: rendered, sampleRate, channels });
   }
 
   /* ═══ THE ENCODER'S WARM-UP IS NOT PART OF THE SOUND (queue 690, audio hunt) ═══════════════════════
