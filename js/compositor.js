@@ -1919,11 +1919,19 @@ window.FM = window.FM || {};
     for (let i = 0; i < n; i++) out.push(Math.max(0, ((i < m ? wl : wl + 2) - 1) / 2));
     return out;
   }
+  let _cpuBlurA = null, _cpuBlurB = null; const CPU_BLUR_CAP = 2097152;   // floats per array
   function cpuBlurCanvas(cv, W, H, sigma) {        // premultiplied, transparent past the edge — what 'blur()' draws
     const g = cv.getContext('2d');
     let img; try { img = g.getImageData(0, 0, W, H); } catch (e) { return false; }
     const d = img.data, N = W * H;
-    let a = new Float32Array(N * 4), b = new Float32Array(N * 4);
+    /* queue 1010: the pair is kept between calls up to a cap (an 8 MB array each, a 1080x1920 blur at r 40 fits), so a lost
+       WebGL context does not allocate 67 MB twice a second; a bigger plate allocates per call as before and keeps nothing.
+       Both are fully overwritten below (a by the premultiply loop, b by every pass), so a stale pair cannot leak into the output. */
+    let a, b;
+    if (N * 4 <= CPU_BLUR_CAP) {
+      if (!_cpuBlurA || _cpuBlurA.length < N * 4) { _cpuBlurA = new Float32Array(N * 4); _cpuBlurB = new Float32Array(N * 4); }
+      a = _cpuBlurA; b = _cpuBlurB;
+    } else { a = new Float32Array(N * 4); b = new Float32Array(N * 4); }
     for (let i = 0; i < N; i++) { const j = i * 4, al = d[j + 3] / 255; a[j] = d[j] * al; a[j + 1] = d[j + 1] * al; a[j + 2] = d[j + 2] * al; a[j + 3] = d[j + 3]; }
     const pass = (src, dst, r, horiz) => {
       const len = horiz ? W : H, lines = horiz ? H : W, step = horiz ? 4 : W * 4, inv = 1 / (2 * r + 1);
