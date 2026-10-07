@@ -6,6 +6,7 @@
 # which is how one of them got run against a mutated tree.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. tools/_platform.sh   # PYTHONDONTWRITEBYTECODE: loading tests/_cdp.py must not leave tests/__pycache__ (nothing ignores it on Linux)
 PAGE="${1:?usage: tools/probe.sh _name.html [seconds]}"
 WAIT="${2:-120}"
 [ -f "tests/$PAGE" ] || { echo "no such probe: tests/$PAGE"; exit 2; }
@@ -19,13 +20,18 @@ SRV=$!
 trap 'kill $SRV 2>/dev/null || true' EXIT
 sleep 1
 python3 - "$PAGE" "$WAIT" "$PORT" <<'PY'
-import sys, os, tempfile, time
+import sys, os, shutil, tempfile, time
 sys.path.insert(0, os.path.join(os.getcwd(), "tests"))
 import importlib.util
 spec = importlib.util.spec_from_file_location("cdpmod", "tests/_cdp.py")
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 page, wait, port = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
-dp = m.free_port(); prof = tempfile.mkdtemp()
+try:
+    m._platform.chrome_path()          # no Chrome: say so in one line (it was a traceback)
+except m._platform.ChromeNotFound as e:
+    sys.exit("probe.sh: %s" % e)
+# an fm- prefix and a delete at the end: under WSL the temp dir is RAM, and an unnamed profile was left there every run
+dp = m.free_port(); prof = tempfile.mkdtemp(prefix="fm-probe-")
 proc = m.launch(dp, 1280, 900, prof); cdp = None
 try:
     cdp = m.CDP(m.ws_url(dp))
@@ -45,4 +51,7 @@ try:
 finally:
     if cdp: cdp.close()
     proc.terminate()
+    try: proc.wait(timeout=10)
+    except Exception: proc.kill()
+    shutil.rmtree(prof, ignore_errors=True)
 PY

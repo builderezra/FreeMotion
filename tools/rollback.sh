@@ -89,6 +89,18 @@ elif [ "${2:-}" = "--check" ]; then
 fi
 [ "${2:-}" = "--check" ] && exit 0
 
+# ── IT PUBLISHES main, SO IT RUNS ON main (6 Oct) ─────────────────────────────────────────────────
+# Everything below commits on the CURRENT branch and then pushes the local branch called main. On any other branch (a Mac
+# work branch, the WSL laptop's port branch) that restored the files on the wrong branch and pushed a stale or unrelated
+# main — "the push did not land" at best. Refuse before touching anything. Kept inside this file on purpose:
+# test-rollback.sh exercises this one file in a throwaway clone, so it must not depend on any other tool.
+_BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+if [ "$_BRANCH" != main ]; then
+  echo "❌ a rollback publishes main, but this checkout is on ${_BRANCH:-a detached HEAD}. Nothing was changed."
+  echo "   Switch to main first (git switch main), then run this again."
+  exit 1
+fi
+
 # ── ASK BEFORE PUBLISHING, BECAUSE THE NEXT STEP IS PUBLIC ───────────────────────────────────────
 # One argument and this commits AND pushes to the URL his installed app updates from. A mistyped version
 # silently republishes the wrong build. One keystroke is not a tutorial, and it is the difference between

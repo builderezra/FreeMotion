@@ -1,0 +1,114 @@
+[
+ {
+  "severity": "blocker",
+  "where": "tools/full-unchanged.sh + tests/full-unchanged.html + tools/_fu_compare.py (the lock as a whole), commit 4ea395bb",
+  "what": "A Simple release carrying 16 changes to Full gets a literal PASS, and the ship.sh gate says OK. Each change was confirmed live in a real browser, meaning it really changes Full. The 16, grouped by cause (details in the findings below): (A) his phone width 440 px: the transport skip margin; short screens \u2264720 px tall: view-bar gaps. (B) a friend's edit arriving in Full now shows 'A friend moved N clips' (DESIGN V12). (C) every saved project record gains `ed`, and every Home index card gains `ed` and `clips` (DESIGN I15). (D) the reduced-motion path; the dark Home top bar. (E) the toast sits 24 px higher on the phone; the 'Benchmark removed' toast is reworded. (F) the cog's Canvas\u2194Friends flight goes from 460 ms with its spring curve to 700 ms ease-in-out. (G) the inspector card's hover glow; the menu-item hover colour. (H) a one-finger swipe over a clip scrubs 1.5\u00d7 as far. (I) the export soundtrack drops from 160 to 96 kb/s. (J) Brightness defaults to 1.2 instead of 1.3. (K) F zooms the timeline. A 17th change, the clip hold going from 350 to 500 ms, also compared 'same as HEAD'. It was stopped only by an accident: it overwrote the touch plant's anchor line.",
+  "verified_by": "Scratch clone of 4ea395bb with a replayed release: the 16 changes, a new js/spine.js, the busters bumped, and a log line '- v17.24 \u2014 queue 980 (partial)'. Patch at /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/rv926/simple-release-16.patch; full log in rv926/e2e2.out. Running FU_MAX_LOAD=8 tools/full-unchanged.sh printed: 'both sides measured in 1213s', '\u2705 same as HEAD (62 pictures compared \u2026)', all 26 plants '\u2705 \u2026 caught', then 'PASS \u2014 Full is unchanged against HEAD (4ea395bb) \u2026 Cached for sources 0aace2d7e26ff5e544cb989d'. Then `python3 tools/_fu_gate.py check` printed 'OK: full-unchanged PASS on this tree \u2026' (rc 0). Liveness: rv926/live.py, hold.py and work/v12check.html on HEAD vs the changed copy; numbers in each finding below (rv926/live.json).",
+  "fix": "Fix the causes below. Then add one plant per cause to tools/full-unchanged-plants.json, so the self-test proves each new measurement sees its kind of change."
+ },
+ {
+  "severity": "blocker",
+  "where": "tools/_fu_gate.py simple_owned_lines() / is_simple_commit() (provenance), via hook_lines() in check()",
+  "what": "After the first Simple release ships, every ordinary release is refused. ship.sh commits one release as one commit, and that commit includes index.html's version label and every ?v= buster it bumped. git blame then credits those lines to the Simple commit. The next ordinary release has to bump the version label (and any shared buster), so 'the diff changes a line a Simple release wrote' fires. The release is then refused for naming another queue item. Even without that, it would need a PASS it can never get, because it changes Full on purpose. There is no override, so #482 batches, hunt fixes and every other Full change would stop the day Simple ships. The gate's self-test misses this because its scratch Simple release never touches a version label or a buster.",
+  "verified_by": "Scratch clone of 4ea395bb. Commit 7f30ebcb 'v17.24 \u2014 queue 980 (partial)': new js/spine.js, a 'Simple mode' hook line in js/app.js, app.js?v= and storage.js?v= bumped, label v17.24. Then an uncommitted ordinary release: one styles.css rule, styles.css?v=754, label v17.25, log '- v17.25 \u2014 queue 975 \u2026'. `python3 tools/_fu_gate.py check` \u2192 'REFUSE: this is a Simple release (the diff changes a line a Simple release wrote in index.html (~@@ -268 +268 @@ changes line 268 of HEAD, which Simple release 7f30ebcb wrote)), and the newest POLISH-LOG line also names queue 975 \u2026' (rc 1). `why` gives the same reason. The self-test still reports \u2705.",
+  "fix": "In simple_owned_lines, skip a hunk when every removed/added pair is identical after masking the version label (>v\\d+(\\.\\d+)*<) and ?v=<number>. A pure insertion between two such lines should not count either. Add a selftest_repo case: a Simple commit that bumps the label and busters, followed by an ordinary release that bumps them again, must be NOT-TRIGGERED."
+ },
+ {
+  "severity": "blocker",
+  "where": "tests/full-unchanged.html (the FU1/FU2 widths 380\u00d7800 and 1280\u00d7800 only; FU6 at other sizes records #canvas-dialog only); styles.css @media (min-width: 400px), @media (max-height: 720px), @media (max-width: 1226px)",
+  "what": "The editor is never measured at the phone he actually uses (440\u00d7956, the size DESIGN gives for his phone) or on any screen shorter than 800 px. Full has its own rules there. Two changes passed. w440: `#transport #btn-tostart { margin-right: -4px }` \u2192 0px, inside the min-width:400px block that exists 'because his phone is 440'. h720: `#view-bar, #opt-bar { --sb-gap: 2px; --sb-pad: 3px }` \u2192 0px / 1px, which applies to any \u2264720 px-tall window, such as a 1280\u00d7720 laptop. A third change (the transport band 40\u219244 px at \u22641226 px wide) was caught only by accident: it happened to move the cog dialog in FU6. A 701\u20131226 px change that does not move #canvas-dialog would pass.",
+  "verified_by": "Literal PASS in the 16-change run (finding 1). Liveness: computed margin-right of #btn-tostart at 440\u00d7956 (touch): HEAD -4px, changed 0px. --sb-gap on #view-bar at 1280\u00d7700: HEAD 2px, changed 0px (rv926/live.json). The first probe batch (rv926/work/cmp-smug-1280.json) showed the 1226 change caught only through 'FU6 768x1024 canvas \u2026 y 334 \u2192 338'.",
+  "fix": "Run FU1's screens (layout and pictures) and FU2's state at 440\u00d7956 with touch, his phone. Also run at least one short size each way, for example 375\u00d7667 touch and 1280\u00d7720 mouse. Better still, loop FU1 over FU6_SIZES, not just the cog. Add a plant inside @media (min-width: 400px)."
+ },
+ {
+  "severity": "major",
+  "where": "tools/_fu_gate.py check() / loosenings() / INSTRUMENT_FILES",
+  "what": "The 'two-release route' is closed only for four settings: FU_INVISIBLE keys, the tolerance numbers, plant names and PNG_UNSTABLE. Any other loosening of the probe or comparer goes unnoticed, so the fixer's claim that the route is closed holds only for those four. Example: an ordinary release that switches off FU6's comparison in _fu_compare.py and drops 'box-shadow' from the probe's STYLES gets NOT-TRIGGERED. Logged as queue 980 instead, it needs only a PASS. That PASS compares HEAD against itself with plants, and no plant covers FU6 or box-shadow (FU6 has no plant at all), so it passes. No LOOSENS THE LOCK line is ever asked for, and the next release (Simple) is then judged by the weaker instrument. The lock's suite guards do not check STYLES or the FU6 comparison either.",
+  "verified_by": "rv926/gate_exp.py 'loosen' on a scratch clone of 4ea395bb: `if 'FU6' in groups:` changed to `if 'FU6' in groups and False:` in tools/_fu_compare.py, and \"'box-shadow',\" removed from STYLES in tests/full-unchanged.html. Log '- v17.24 \u2014 queue 975: a tidy-up of the probe' \u2192 check rc=0 'NOT-TRIGGERED'. Log '- v17.24 \u2014 queue 980 (partial): the lock itself' \u2192 only 'has not printed PASS'; no LOOSENS refusal.",
+  "fix": "Make any change to INSTRUMENT_FILES fire the gate, whatever the label: it needs a fresh PASS plus a declaration line ('INSTRUMENT CHANGE: <what>'). Refuse it unless it either adds or keeps a plant for each part it touches, or carries LOOSENS THE LOCK. Add a plant on FU6 (the cog) so FU6 has a positive control."
+ },
+ {
+  "severity": "major",
+  "where": "tests/full-unchanged.html FU4 (startSession: the guest is plainAdapter and never edits) and FU1's session screen (presence only)",
+  "what": "How Full reacts when a friend edits is never driven. The guest engine sends nothing but presence and acks, and FU4 records only what the host sends. So any change to Full's receiving side passes, including DESIGN's own V12 ('Sam moved 4 clips' toasts in Full, removed). The change tested: in collab-session.js applyIncoming, a `toast('A friend moved N clips')` when a peer's ops land (!oo.own && oo.by !== S.mid). The join path (collab-ui.js admission, 'Sam joined' toast) is never run either.",
+  "verified_by": "Literal PASS in the 16-change run. Liveness: rv926/work/v12check.html, where the host shares, a loopback guest moves a clip 0.5 s, then G.tick + settle. HEAD: hostStartAfter 0.5, no toasts. Changed: 'A friend moved 1 clip' (rv926/v12-head.json, v12-smug2.json). A first version keyed on collab-bridge afterApply was caught, because it also fired on the host's own \u2318Z (FU4 steps 15/16). This one fires only on a peer's edit, and nothing caught it.",
+  "fix": "In FU4, have the guest make Full-like edits after the host's script: move, trim, add, delete, rename, change an effect. Record Full's document, selection, toasts, timeline layout and a picture after each one. Also admit one guest through the link path, so the join/leave toasts and Friends list are recorded."
+ },
+ {
+  "severity": "major",
+  "where": "tests/full-unchanged.html FU5 (r.saved keeps only {project, layers} of the saved record); FU2/FU3 read the in-memory document only; nothing reads the Home index card",
+  "what": "New stored fields pass. savefield: storage.js sceneDoc() adds `ed:'full'` to every saved project record. indexfield: touchCurrent() adds `ed` and `clips` to every Home index card, which is exactly DESIGN I15 ('touchCurrent writes clips on the index card'), dropped. DESIGN FU5 says 'any byte that differs', but the probe compares two keys of the record.",
+  "verified_by": "Literal PASS in the 16-change run. Liveness (rv926/live.json): saved record keys [layers, project, rev, selectedId, selectedIds] \u2192 plus 'ed'; index card keys gain 'clips' and 'ed' (cardClips 3).",
+  "fix": "In FU5, compare the whole parsed saved record with only `rev` removed. After each FU2 step, record the whole saved record and the current FM.projects.list() entry (thumb excluded), masked only by FU_INVISIBLE."
+ },
+ {
+  "severity": "major",
+  "where": "tests/_cdp.py setup (only hover/pointer are emulated) and tests/full-unchanged.html (Settings left at defaults except collabLabs)",
+  "what": "Full's reduced-motion path (51 rules in styles.css, plus JS branches) and its non-default settings are never measured. The two that passed: under reduced motion, `#opt-bar { transition: none }` became `opacity .6s ease`. The dark Home look (Settings homeLight off) got its top bar coloured: `html[data-home=\"dark\"] \u2026 .hm-top` background transparent \u2192 rgba(60,0,90,.55). demoMode, showTouches and playbackQuality are just as unmeasured.",
+  "verified_by": "Literal PASS in the 16-change run. Liveness: with prefers-reduced-motion emulated, #opt-bar computed transition 'none' \u2192 'opacity 0.6s'. With homeLight=false and Home open, data-home 'dark', .hm-top background rgba(0,0,0,0) \u2192 rgba(60,0,90,0.55) (rv926/live.json).",
+  "fix": "Add an FU1 pass (Home plus the editor screens, layout and pictures) with Emulation.setEmulatedMedia prefers-reduced-motion: reduce. Add one with homeLight=false, and one with the other non-default Settings switched on."
+ },
+ {
+  "severity": "major",
+  "where": "tests/full-unchanged.html capture() (FM.hideToast before every measurement) and FU3 (one M per restored document)",
+  "what": "The toast's look, position and rise-in animation are never measured: every screen hides it first, and only its words are logged. Its words are compared only on paths the script happens to drive. toastpos: `#toast { bottom: 244px }` \u2192 268px, so every editor toast on the phone sits 24 px higher. marktoast: 'Benchmark removed' \u2192 'Marker taken off'. That toast is the M key on an existing benchmark, which FU3 never reaches because it presses M once per fresh document.",
+  "verified_by": "Literal PASS in the 16-change run. Liveness: phone toast rect top/bottom 519/556 \u2192 495/532 (live.json). Pressing M twice: HEAD [\u2026 'Benchmark removed'], changed [\u2026 'Marker taken off'] (hold.py output).",
+  "fix": "When the first toast of a FU2/FU3 step appears, record layoutRecord(#toast) and a picture clip of it, including the toast-in animation timing. Add a second M press (the toggle) and the other toggle-off paths to FU3."
+ },
+ {
+  "severity": "major",
+  "where": "tests/full-unchanged.html noteMotion (listens only to transitionrun/animationstart), finishFinite()/freezeInfinite(), FU6 (cogRecord after settle)",
+  "what": "Animations started from JavaScript with element.animate() are invisible to the lock. They fire no transitionrun or animationstart, and finishFinite() jumps every finite one to its end before anything is measured. The change tested was the cog's Canvas\u2194Friends flight in app.js: `const DUR = 460, EASE = 'cubic-bezier(.2,.85,.25,1.06)'` \u2192 `700, 'ease-in-out'`. That is the exact function step 1.3 edits to add the Editor block, and FU6 swaps it at all 14 sizes. The fixer's item 8 ('animation timing, easing and keyframes are now recorded per screen') covers CSS only.",
+  "verified_by": "Literal PASS in the 16-change run. Liveness: during the swap, getAnimations() on #canvas-dialog gives ['460 cubic-bezier(0.2, 0.85, 0.25, 1.06)', '460 linear'] on HEAD and ['700 ease-in-out', '700 linear'] changed (live.json).",
+  "fix": "Before any app script runs, wrap Element.prototype.animate in the app frame (through the driver's init script). Log the target path, keyframes, duration, delay, easing and iterations into motionLog. Read getAnimations() before finishFinite, and record the FU6 swap's motion."
+ },
+ {
+  "severity": "major",
+  "where": "tests/full-unchanged.html hoverScreen() (layoutRecord of the hovered target only, no picture, 8 controls) and layoutRecord (no pseudo-elements)",
+  "what": "Hover styles drawn on ::before/::after, or on controls outside the 8 hovered ones, are not seen. cathover: `.cat-card:hover::before { opacity: 1 }` \u2192 .35, the inspector card's hover glow, and the inspector card is one of the 8 hovered toolbars. ctxhover: `.ctx-item:hover { background: var(--panel-3) }` \u2192 #6a2c8f; menu items are never hovered.",
+  "verified_by": "Literal PASS in the 16-change run. Liveness with a real CDP mouse: hovered .cat-card ::before opacity '1' \u2192 '0.35'. The second layer-menu item hovered: background rgb(23,44,54) \u2192 rgb(106,44,143) (live.json). The first item is focused and styled by :focus-visible, so it was not used.",
+  "fix": "Take a clipped picture of every hovered control and its neighbours. Add getComputedStyle(el, '::before'/'::after') for the paint styles to layoutRecord. Hover more control types: a menu item, Add tabs, a clip grip, an effect tile, the cog's bars."
+ },
+ {
+  "severity": "major",
+  "where": "tests/full-unchanged.html FU2 touch steps (clip held 600 ms; grips and diamond 500 ms) \u2014 no un-held swipe, tap or pinch",
+  "what": "Only held touch drags are driven, so the most common phone gestures and the hold thresholds are not measured. scrubrate: timeline.js scrubs the playhead 1.5\u00d7 as far when a finger swipes over a clip (`FM.scrubTime(snapT(clipTap.baseTime - 1.5 * \u2026))`). hold500: the clip hold went 350 \u2192 500 ms and still compared '\u2705 same as HEAD' at both widths in the first lock run. Only the touch plant (whose anchor is that exact line) stopped it, with the misleading remedy 'update tools/full-unchanged-plants.json'. The grip arm (ARM_MS 300) and the diamond hold (KF_HOLD_MS 320) have no such accidental guard against the probe's 500 ms hold.",
+  "verified_by": "scrubrate: literal PASS in the 16-change run. Liveness (rv926/hold.py, real CDP touch, 48 px swipe with no hold): playhead 3 \u2192 1.6 s on HEAD, 3 \u2192 0.858 s changed. hold500: rv926/e2e.out shows '\u2705 same as HEAD (62 pictures \u2026)' then '\u274c the touch plant's anchor appears 0 times'. Liveness: a 420 ms hold then 48 px moves Clip B 2 \u2192 2.764 on HEAD and leaves it at 2 when changed.",
+  "fix": "Drive an un-held swipe on a clip and on the empty timeline, a plain tap on a clip, and a two-finger pinch. Bracket each hold threshold read from its seam (FM._trimArmMs, add seams for the clip hold and KF_HOLD_MS): hold threshold\u221260 ms (must not grab) and threshold+60 ms (must grab)."
+ },
+ {
+  "severity": "major",
+  "where": "tests/full-unchanged.html mp4Info / decodedGrid / 'export frames and audio'",
+  "what": "The exported file's sound is never compared. mp4Info keeps the track sample count, stts and an stsd hash (mp4-muxer writes a constant esds bitrate), the decoded grid is video only, and exportAudio is the mix built before encoding. audiobr: exporter.js encodeAudio `bitrate: 160000` \u2192 96000, so the soundtrack of every MP4 export loses quality.",
+  "verified_by": "Literal PASS in the 16-change run. Liveness: AudioEncoder.prototype.configure wrapped during FM.exporter.run: bitrates [160000, 160000] on HEAD, [160000, 96000] changed. The first is the priming probe; the second is the real encode (live.json).",
+  "fix": "Record a hash of the stsz sample-size table (or each track's total sample bytes). Decode the exported file's audio (decodeAudioData) into the same 0.1 s RMS/peak windows, compared within a measured tolerance."
+ },
+ {
+  "severity": "major",
+  "where": "tests/full-unchanged.html FU5 (the documents) and FU2 (the effects it adds)",
+  "what": "An effect's default passes unless that effect happens to be in a recorded document. Only about 25 of 206 effect types reach any record: the kitchen921 seeds, FU2's Mask, Luma Matte and Blur, and the behaviours. brightdef: Brightness Amount default 1.3 \u2192 1.2 (compositor.js) passed. The same kind of change to Vignette was caught only because kitchen921 seed 1 happens to carry a vignette.",
+  "verified_by": "Literal PASS in the 16-change run. Liveness: FM.fxRegistry.makeInstance('brightness').params.amount 1.3 \u2192 1.2 (live.json). Vignette 0.6 \u2192 0.5 was caught by 'FU5[3].sanitised[3].effects[1].params.amount: 0.6 \u2192 0.5' (rv926/work/cmp-smug-380.json).",
+  "fix": "In FU5, record makeInstance(type) for every registry type (effects, audio effects, behaviours), plus each param's min/max/step/def as the inspector builds them. Also add 'min', 'max' and 'step' to the probe's ATTRS."
+ },
+ {
+  "severity": "major",
+  "where": "tests/full-unchanged.html KEYS (FU3) and the suite guard fu980Wanted() in tests/tests.js",
+  "what": "A new shortcut written with e.key passes both the probe and its suite guard. FU3 presses a fixed KEYS list, and the guard reads only `e.code === '\u2026'`, \u2318-letter, arrow, digit and '?' patterns. keyf2: `else if (e.key === 'f' || e.key === 'F') { \u2026 FM.timeline.zoomBy(1.5); }` added to Full's window keydown handler. The same key written as `e.code === 'KeyF'` is seen by the guard and would turn the suite red. Shortcuts in any other keydown listener are unread too.",
+  "verified_by": "Literal PASS in the 16-change run. Liveness: timeline zoom 1 \u2192 1.5 on F (live.json). The guard's regexes applied to the handler: KeyF read for the e.code form, not read for the e.key form; KEYS never contains KeyF (rv926 inline check).",
+  "fix": "Have FU3 press every printable key (a\u2013z, 0\u20139, punctuation, Enter, PageUp/Down, Insert) with no modifier, \u21e7, \u2318 and \u2325, and record the state. Also have the guard read `e.key === '\u2026'` literals and the other window/document keydown listeners."
+ },
+ {
+  "severity": "minor",
+  "where": "tests/full-unchanged.html FU5 (injects tests.js as a script into the app frame) and tools/_fu_gate.py INSTRUMENT_FILES / PROBE_FILES",
+  "what": "tests/tests.js is served from the tree to both sides and runs inside the measured app frame at FU5. Its top-level statements run against the app before the sanitiser, save and load checks. It is still not instrument, so a Simple release may change it together with app code. The same change to tests/full-unchanged.html is refused, which shows the instrument rule is meant to cover this.",
+  "verified_by": "rv926/gate_exp.py 'testsjs' on a scratch clone. App change, js/spine.js and a top-level line appended to tests/tests.js \u2192 only 'has not printed PASS'. The same release with tests/full-unchanged.html changed instead \u2192 'it changes the instrument that judges it'. The injection is `var sc = D.createElement('script'); sc.textContent = src; D.body.appendChild(sc);` with D the app document.",
+  "fix": "Do not execute tests.js in the probe. Take kitchen921 from HEAD's tests.js by extracting that function's source, or move the fixture builder into the probe (the instrument). Putting tests.js into INSTRUMENT_FILES would block every Simple release that adds tests."
+ },
+ {
+  "severity": "minor",
+  "where": "tools/_fu_gate.py HOOKS ('the layer\u2019s sm key', 'FM.storage.hydrating', 'a pick', 'a \"Simple mode\" marker') and REGION_HEAD (FM.editor\\w*, FM.spine\\w* prefixes)",
+  "what": "Ordinary Full code is refused as 'a Simple release', with no override. Each of these lines, added in an ordinary 'queue 975' release, was refused: `const PAD = { sm: 4, md: 8, lg: 16 };`, `.chip.sm { \u2026 }`, `.hm-card.hydrating { \u2026 }`, `el.classList.add('pick');`, `const fn = FM.eyedropper.pick;` and a comment mentioning 'simple mode'. Also, an ordinary helper named `FM.editorHints = function () {\u2026}` ships quietly, because the hooks are anchored. But the next ordinary one-line fix inside it is refused, because REGION_HEAD matches the prefix. No current shipped line matches a hook (scan clean), so these are latent, but every one is a common idiom.",
+  "verified_by": "rv926/gate_exp.py 'quiet': each of the six lines \u2192 rc 1 'REFUSE: this is a Simple release (the diff adds \u2026)'. rv926/gate_exp.py run on a second clone: release 1 adding FM.editorHints \u2192 'NOT-TRIGGERED'; release 2 changing `return 1` to `return 2` inside it \u2192 'REFUSE \u2026 a line of one of Simple\u2019s own functions \u2026 inside lines 9152\u20139154 of HEAD'. rv926/hookscan.py: 0 matches in today's shared files.",
+  "fix": "Make these hooks name Simple's exact identifiers in context: `l.sm`/`layer.sm`/`sm.` inside storage.js, `FM.storage.hydrating`, `l.pick`/`pick: { b`. Make REGION_HEAD list exact names (FM.spine =, FM.editor =, FM.timedLists = \u2026), not prefixes. Add the six lines and an FM.editorX function to QUIET."
+ }
+]

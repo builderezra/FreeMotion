@@ -18,11 +18,13 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 [ -f .mutation-in-progress ] && { echo "❌ a mutation is in progress — the tree is not the code"; exit 1; }
 WIDTH="${WIDTH:-1280}"
-SRC="$(python3 tools/_srcfiles.py --worktree)"   # index.html counts only beyond its version label / ?v= bumps
+# index.html counts only beyond its version label / ?v= bumps. A helper that could not answer (git failed) is NOT "nothing
+# changed": that empty answer is the exit 0 below, so it refuses instead (6 Oct).
+SRC="$(python3 tools/_srcfiles.py --worktree)" || { echo "❌ prove: could not list the changed app source (the reason is above) — refusing, not passing"; exit 2; }
 if [ -z "$SRC" ]; then echo "○ prove: no app source changed (beyond a version label) — nothing to prove"; exit 0; fi
 LOGLINE="$(grep '^- v[0-9]' POLISH-LOG.md | tail -1)"
-DECLARED=""; printf '%s' "$LOGLINE" | grep -q 'UNPROVABLE:' && DECLARED="$(printf '%s' "$LOGLINE" | grep -o 'UNPROVABLE:.*' | cut -c1-160)"
-TITLES="$(python3 tools/_spottests.py --worktree)"
+DECLARED=""; grep -q 'UNPROVABLE:' <<<"$LOGLINE" && DECLARED="$(printf '%s' "$LOGLINE" | grep -o 'UNPROVABLE:.*' | cut -c1-160)"
+TITLES="$(python3 tools/_spottests.py --worktree)" || { echo "❌ prove: could not list the changed tests (the reason is above) — no verdict"; exit 2; }
 if [ -z "$TITLES" ]; then
   if [ -n "$DECLARED" ]; then echo "⚠️  prove: app source changed and NO test changed — shipping on the declaration: $DECLARED"; exit 0; fi
   echo "❌ NO TEST — app source changed ($(echo "$SRC" | tr '\n' ' ')) but no test in tests/tests.js was added or changed."
@@ -53,7 +55,9 @@ run "$P1" "$WIDTH" "$TMP/ctrl"
 python3 tools/_spotjudge.py "$TMP/ctrl" "$TMP/titles" > "$TMP/ctrl.v"
 # REVERTED — HEAD's source with the working tree's tests
 git worktree add -q "$WT" HEAD || { echo "prove: could not create a worktree"; exit 2; }
-rsync -a --delete tests/ "$WT/tests/"
+# …or the REVERTED side runs HEAD's tests, and every changed test reads DEAD or NORUN for the wrong reason (6 Oct: its
+# failure, a missing rsync included, used to be ignored)
+rsync -a --delete tests/ "$WT/tests/" || { echo "prove: could not copy the working tree's tests into the HEAD worktree"; exit 2; }
 # …and the same for the REVERTED worktree, which is where it actually bit: FM came up missing
 # renderScene (compositor.js, 1.1MB — the likeliest casualty of a refused connection) and prove
 # reported "no test matched" for a test that was simply never reached.
@@ -72,7 +76,7 @@ while IFS=$'\t' read -r cv ct cr; do
                # this release, which no later spotcheck can fix (it reverts to a parent that lacks the seam too). The
                # real test is a mutation that keeps the seam and removes only the behaviour, and that needs a reminder
                # that outlives the ship. tick.sh lists every WEAK here with no RESOLVED line after it.
-               if printf '%s' "$rr" | grep -qiE 'seams? (are |is )?missing|missing seam|seam.{0,40}missing|is not a function|not exposed|not reachable|undefined'; then
+               if grep -qiE 'seams? (are |is )?missing|missing seam|seam.{0,40}missing|is not a function|not exposed|not reachable|undefined' <<<"$rr"; then
                  echo "         (WEAK: it fails on a missing seam, not on the behaviour — logged in tools/.weak-proofs.log until a mutation proves the behaviour)"
                  printf '%s\tWEAK\t%s\t%s\n' "$(date '+%Y-%m-%d %H:%M')" "$ct" "${rr:0:160}" >> "$(dirname "$0")/.weak-proofs.log"
                fi;;
