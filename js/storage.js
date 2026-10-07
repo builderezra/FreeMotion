@@ -674,6 +674,12 @@ window.FM = window.FM || {};
   /* queue 690: which revisions of which layer have a kept file (see stashPrevMedia), and WHICH File object each
      one holds. Session-only on purpose: a kept file is only reachable through undo, and undo does not outlive
      the session — so after a reload nothing is looked up, even while the boot sweep has not yet run. */
+  /* H44: …AND IT HOLDS THEM WEAKLY. The only things asked of this map are "is a file kept at this revision" (the key) and "is this the very
+     object already kept" (stashPrevMedia's identity check); nothing reads a File back out of it (takePrevMedia reads the disk). A strong
+     reference kept every File a replace ever put away alive for the whole session: harmless for a picker file (disk-backed, measured
+     3 MB for 36 clips), but a File built in memory (a camera or recorder blob, a song's WAV, media a peer sent) stays in RAM with it:
+     measured 254 MB of browser memory for 36 such files, back at once when the map was emptied. */
+  const weakFile = f => (typeof WeakRef === 'function' ? new WeakRef(f) : { deref: () => f });
   const _prevFiles = new Map();
   function prevKey(id, rev) { return 'prev:' + id + ':' + (rev || 0); }
   FM.storage = {
@@ -697,12 +703,13 @@ window.FM = window.FM || {};
       if (!id || !rec || !rec.file) return false;
       rev = rev || 0;
       const kept = _prevFiles.get(id);
-      if (kept && kept.get(rev) === rec.file) return true;   // this exact file is already kept at this revision
+      const held = kept && kept.get(rev);
+      if (held && held.deref() === rec.file) return true;   // this exact file is already kept at this revision
       try {
         const db = await openDB();
         const ok = await idbPut(db, prevKey(id, rev), { file: rec.file, kind: rec.kind, rev: rev, at: Date.now() });
         db.close();
-        if (ok) { if (!kept) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(rev, rec.file); }
+        if (ok) { if (!kept) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(rev, weakFile(rec.file)); }
         return ok;
       } catch (e) { return false; }
     },
@@ -725,7 +732,7 @@ window.FM = window.FM || {};
         db.close();
         /* the file read back IS what that slot holds, so a later stash of this same object at this revision
            (the clip it restores, put away again by the next undo or redo) is a no-op rather than a second copy */
-        if (got && got.file) { if (!_prevFiles.has(id)) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(got.rev || 0, got.file); }
+        if (got && got.file) { if (!_prevFiles.has(id)) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(got.rev || 0, weakFile(got.file)); }
         return got || null;
       } catch (e) { return null; }
     },
