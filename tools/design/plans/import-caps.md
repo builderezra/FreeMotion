@@ -13,14 +13,14 @@ H8 said the freeze on opening a heavy project is "the first full-size render at 
 | and inside it, the native `drawImage` that flushes the render | 88% of all samples |
 | `applyScene`, the timeline rebuild, the inspector, the preview | about 0.2 s together |
 
-`makeThumb` renders the whole scene onto a **full-size** project canvas (`src.width = P.width` at `:2142`, then `FM.renderScene(...)` at `:2149`) and only then halves it down to the 360 px card picture (`:2152-2158`). Canvas drawing is deferred, so the cost only shows when something reads the pixels, which is why a plain `FM.renderScene` call timed at 6 to 48 ms in my first attempt and the real cost was invisible. With a pixel read-back forced:
+`makeThumb` renders the whole scene onto a **full-size** project canvas (`src.width = P.width` at `:2140`, then `FM.renderScene(...)` at `:2148`) and only then halves it down to the 360 px card picture (the loop at `:2151`). **A second function does the same for template and element thumbnails** (`:2215-2219`, with `pickThumbTime`); give it the same fix. Canvas drawing is deferred, so the cost only shows when something reads the pixels, which is why a plain `FM.renderScene` call timed at 6 to 48 ms in my first attempt and the real cost was invisible. With a pixel read-back forced:
 
 | scene, 1080 x 1920 | render at scale 1 | at 0.5 | at 0.25 |
 |---|---|---|---|
 | 10 blurs | 473 ms | 110 ms | 33 ms |
 | 10 glows | **8218 ms** | 694 ms | 162 ms |
 
-**It is not only an import problem.** `touchCurrent` runs on every autosave and re-captures the thumbnail "at most every 12 s when not playing" (`js/storage.js:2468`). So a project whose full-size render costs N seconds blocks the editor for N seconds **every 12 seconds of editing**. That fits the oldest open item (#6.33 "Editing lags, and gets bad fast"). **Guess:** that this is Ezra's lag. I have not run his projects; it is the strongest measured lead I have seen.
+**It is not only an import problem.** `touchCurrent` runs on every autosave and re-captures the thumbnail "at most every 12 s when not playing" (`js/storage.js:2468`). So a project whose full-size render costs N seconds blocks the editor for N seconds **every 12 seconds of editing**. That fits the oldest open item, the unnumbered "Editing lags, and gets bad fast" (`REQUESTS.md:3536`). **Guess:** that this is Ezra's lag. I have not run his projects; it is the strongest measured lead I have seen.
 
 ### Fix 0 (do this first, it removes the freeze at every entry path at once)
 
@@ -67,7 +67,7 @@ The app already chose some numbers; reuse them so there is one story. Basis for 
 | layers per project | 2000 (`:1979`) | **keep 2000** | already agreed with collab (`LIMITS.LAYERS`) and with the S8 500-layer performance test |
 | effects per layer | 120 (`FX_MAX`, `:1371`) | **keep 120** | **lowering it would delete saved effects on open** (H8 suggested 48; I now think that is the wrong trade). With Fix 0 the 120-blur freeze (25 s) is gone, so the cap no longer has to protect the tab |
 | children of a Filter | 24 (`FX_CHILD_MAX`) | keep | exists |
-| keyframes per property | **none** (audio and masks: 200, `AFX_MAX_KF` `:1095`, `MASK_MAX_KF` `:1274`) | **5000, the first 5000 by time** | measured import plus timeline rebuild: 2000 keys 0.3 s, 10 000 keys 1.9 s, 40 000 keys 18 s (superlinear). 5000 is about 0.7 s, and well above what the app's own sparse generators (`audioReact.bake`, `js/audio-react.js:372`, "never one keyframe per frame") write. Not a number from his projects |
+| keyframes per property | **none** (audio and masks: 200, `AFX_MAX_KF` `:1095`, `MASK_MAX_KF` `:1274`) | **5000, the first 5000 by time** | measured import plus timeline rebuild: 2000 keys 0.3 s, 10 000 keys 1.9 s, 40 000 keys 18 s (superlinear). 5000 is roughly 0.7 s (interpolated between my 2000 and 10 000 measurements: **Guess**), and well above what the app's own sparse generators (`audioReact.bake`, `js/audio-react.js:372`, "never one keyframe per frame") write. Not a number from his projects |
 | points in a path or shape | none (masks: 2000, `:1274`) | **20 000** | measured: 20 000 points 0.8 s, 80 000 9.9 s |
 | text length | none | **200 000 characters** | the same number collab already allows for a text leaf (`STRING_LEAF`), so anything that can be shared live can be opened. (H8 suggested 20 000; that would make a shared project unopenable.) |
 | fonts embedded in one file | none | **16 fonts and 40 MB** | measured: one real TTF is 885 KB, 200 of them took 8.5 s and 177 MB. 16 x 885 KB is 14 MB, so 40 MB leaves room for large CJK fonts |
@@ -100,7 +100,7 @@ Related reproductions that belong with these (all Reproduced): a `fillGradient` 
 ## 5. Tests (each must fail on v17.23 first)
 
 Use the cases I ran in H8 (each in a fresh page, real functions, hostile object in, scene and project list out). Names and assertions:
-- `caps K keyframes`: one property with 50 000 keyframes; after import at most 5000 remain, they are the earliest, the import takes under 1.5 s (v17.23: about 4 s for 50 000, 9 s for 40 000), and a toast fired once.
+- `caps K keyframes`: one property with 50 000 keyframes; after import at most 5000 remain, they are the earliest, the import takes under 1.5 s (v17.23: 9 s at 40 000, so more at 50 000), and a toast fired once.
 - `caps P points`: 100 000 points; at most 20 000 remain; under 1.5 s (v17.23: more than 10 s).
 - `caps T text`: 2 000 000 characters; 200 000 remain; layer still loads.
 - `caps F fonts`: 40 valid fonts; 16 registered, the rest reported; total bytes under 40 MB.
