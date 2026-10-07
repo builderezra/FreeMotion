@@ -4285,6 +4285,12 @@ window.FM = window.FM || {};
 
   const _pfPool = [];
   let _pfDepth = 0;
+  /* THE SCRATCH POOLS SHRINK WHEN THE STACK DOES (#1095). Every pool below is indexed by NESTING DEPTH and each entry is two
+     full-plate canvases, created the first time a stack reaches that depth and then kept for the life of the page. So a layer that
+     once carried 20 canvas effects (or an effects-browser sheet with 170 picks stacked in its preview) left 40 (or 340) plate-sized
+     canvases behind after the stack was gone: measured, 20 wiggles keep 40 canvases through a forced garbage collection.
+     _hw is the deepest each pool reached since the last trim; FM._trimScratch (end of this file's pool code) frees the entries above it. */
+  const _hw = { pf: 0, wp: 0, cf: 0, exp: 0, mg: 0 };
   /* ---- CROP THE READBACK TO THE LAYER (#692, route 2) ------------------------------------------------------------
    * The lag's measured cause: every pixel kernel walked the WHOLE plate — 1080x1920 of arithmetic for a layer covering
    * 1.3% of it — and the full-frame getImageData/putImageData round trip alone was an 8–12ms floor. Five rounds bounded
@@ -4396,7 +4402,7 @@ window.FM = window.FM || {};
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
     const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
-    const d = _pfDepth++;
+    const d = _pfDepth++; if (d >= _hw.pf) _hw.pf = d + 1;
     try {
       if (!_pfPool[d]) _pfPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
       const pA = _pfPool[d].A, pB = _pfPool[d].B;
@@ -9169,7 +9175,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
     const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
-    const d = _wpDepth++;
+    const d = _wpDepth++; if (d >= _hw.wp) _hw.wp = d + 1;
     try {
       if (!_wpPool[d]) _wpPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
       const wA = _wpPool[d].A, wB = _wpPool[d].B;
@@ -9438,7 +9444,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     if (!(W > 0) || !(H > 0)) return false;
-    const d = _wpDepth++;
+    const d = _wpDepth++; if (d >= _hw.wp) _hw.wp = d + 1;
     try {
       if (!_wpPool[d]) _wpPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
       const wA = _wpPool[d].A;
@@ -11719,6 +11725,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * re-enters drawCanvasEffect, which can call expand() again, and a second expanded plate would
      * otherwise overwrite the one the outer tiles() is still holding a reference to. */
     const _e = _expDepth;
+    if (_e >= _hw.exp) _hw.exp = _e + 1;
     if (!_expPool[_e]) _expPool[_e] = document.createElement('canvas');
     const _expC = _expPool[_e];
     if (_expC.width !== EW || _expC.height !== EH) { _expC.width = EW; _expC.height = EH; }
@@ -11739,7 +11746,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      and depth as the expanded plate, for the same re-entry reason. */
   function renderShiftedPlate(layer, fx, t, scene, ps, W, H, ox, oy) {
     FM._fxStats.plates++;
-    const _e = _expDepth;
+    const _e = _expDepth; if (_e >= _hw.exp) _hw.exp = _e + 1;
     if (!_expPool[_e]) _expPool[_e] = document.createElement('canvas');
     const cv = _expPool[_e];
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
@@ -11770,7 +11777,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
     const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
-    const _d = _cfDepth++;
+    const _d = _cfDepth++; if (_d >= _hw.cf) _hw.cf = _d + 1;
     try {
     if (!_cfPool[_d]) _cfPool[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
     const _cfA = _cfPool[_d].A, _cfB = _cfPool[_d].B;
@@ -18417,6 +18424,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function buildGroupUnit(ctx, u, t, scene) {
     const P = scene.project;
     const _d = u.depth || 0;
+    if (_d >= _hw.mg) _hw.mg = _d + 1;
     if (!_mgPool[_d]) _mgPool[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
     const _mgA = _mgPool[_d].A, _mgB = _mgPool[_d].B;
     /* THE PLATE LIVES ON THE TARGET'S PIXEL GRID, not the project's — the same rule the camera plate
@@ -18535,6 +18543,42 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* Suite seam: what the two target-scaled plates actually got allocated at. There is no other way to
      see it — the pools are private — and the whole point of the change is a SIZE, not a timing, so it
      has to be assertable without a stopwatch. */
+  /* TRIM THE SCRATCH POOLS (#1095). Frees every pool entry above the deepest stack drawn since the last trim (never fewer than 2
+     kept), setting width and height to 0 so the backing stores are released rather than merely unreferenced. The pools re-create
+     an entry the next time a stack reaches that depth, exactly as they did the first time. Never runs mid-render: the depths are
+     all zero between frames, and the timer re-arms if one is not. Two trims are needed to shrink past a stack that was just drawn
+     (the first keeps what the last window used), so the memory is back within about 6 s of the last deep frame. */
+  function _trimPool(pool, keep, pair) {
+    for (let i = keep; i < pool.length; i++) {
+      const e = pool[i]; if (!e) continue;
+      if (pair) { e.A.width = 0; e.A.height = 0; e.B.width = 0; e.B.height = 0; } else { e.width = 0; e.height = 0; }
+    }
+    if (pool.length > keep) pool.length = keep;
+  }
+  FM._trimScratch = function () {
+    if (_pfDepth || _wpDepth || _cfDepth || _expDepth) return false;
+    _trimPool(_pfPool, Math.max(2, _hw.pf), true); _trimPool(_wpPool, Math.max(2, _hw.wp), true);
+    _trimPool(_cfPool, Math.max(2, _hw.cf), true); _trimPool(_mgPool, Math.max(2, _hw.mg), true);
+    _trimPool(_expPool, Math.max(2, _hw.exp), false);
+    _hw.pf = _hw.wp = _hw.cf = _hw.exp = _hw.mg = 0;
+    return true;
+  };
+  FM._poolStats = function () {   // suite seam: how many entries each pool holds, and the pixels in them
+    const px = (cv) => (cv ? cv.width * cv.height : 0);
+    const pair = (pool) => ({ n: pool.length, px: pool.reduce((a, e) => a + (e ? px(e.A) + px(e.B) : 0), 0) });
+    return { pf: pair(_pfPool), wp: pair(_wpPool), cf: pair(_cfPool), mg: pair(_mgPool),
+             exp: { n: _expPool.length, px: _expPool.reduce((a, e) => a + px(e), 0) } };
+  };
+  let _trimTimer = 0;
+  function _scheduleTrim() {
+    if (_trimTimer) return;
+    _trimTimer = setTimeout(function () {
+      _trimTimer = 0;
+      if (!FM._trimScratch()) { _scheduleTrim(); return; }
+      // a pool still holds more than the floor: arm the second window now, so the memory comes back even if nothing renders again
+      if (_pfPool.length > 2 || _wpPool.length > 2 || _cfPool.length > 2 || _mgPool.length > 2 || _expPool.length > 2) _scheduleTrim();
+    }, 3000);
+  }
   FM._platePixels = function () {
     return {
       group: _mgPool.map(function (p) { return (p && p.A) ? [p.A.width, p.A.height] : null; }),
@@ -19472,4 +19516,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       try { ctx.drawImage(m.el, (W - dw) / 2, (H - dh) / 2, dw, dh); } catch (e) {}
     }
   };
+  /* #1095: every render arms one trim (see FM._trimScratch). Wrapped here, after FM.renderScene exists, so each caller (preview,
+     export, thumbnails, the effects browser) gets it without edits. */
+  const _renderScene0 = FM.renderScene;
+  FM.renderScene = function () { try { return _renderScene0.apply(this, arguments); } finally { _scheduleTrim(); } };
 })(window.FM);
