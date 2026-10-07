@@ -88,7 +88,7 @@ def main():
     ap.add_argument("--port", type=int, default=8777)
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--from", dest="src", required=True, help="the full pass's tests/_cdp.py JSON")
-    ap.add_argument("--timeout", type=int, default=300, help="seconds per finger test")
+    ap.add_argument("--timeout", type=int, default=None, help="seconds per finger test (default 300; 3600 with --in-order)")
     ap.add_argument("--out", default=None, help="write the per-test verdicts here (JSON)")
     ap.add_argument("--remaining", default=None, help="write the NOT RUN list minus the finger tests that passed (name<TAB>reason)")
     # A VALIDATION, NOT A SHIP STEP (the PM, 7 Oct): a page of its own is CLEANER than the suite's — no earlier test's scene,
@@ -97,6 +97,11 @@ def main():
     # pass of time; compare its verdicts with the alone run's.
     ap.add_argument("--in-order", action="store_true", help="run each finger test after its suite-order predecessors")
     a = ap.parse_args()
+    # IN ORDER, THE FIRST SLICE IS MOST OF THE SUITE (7 Oct, measured): the first finger test is test 1770 of 2287, so its slice
+    # is ~3/4 of a full pass (~1970 s on the laptop) — a per-test cap of 300 s, or even 1500, ends it as "no verdict" for the
+    # wrong reason. Later slices are short (at most 61 tests between two finger tests).
+    if a.timeout is None:
+        a.timeout = 3600 if a.in_order else 300
     d = load(a.src)
     if d is None or not isinstance(d.get("notRun"), list):
         print("touch pass: %s has no driver result with a NOT RUN list — nothing can be judged" % a.src)
