@@ -65,7 +65,7 @@ Length is mm:ss measured on the file. "Source MB" is the file as downloaded (the
 | 50 | The Hope | TAD | cinematic | 3:39 | 5.26 (mp3) | 1.8 | 2.68 | [the-hope](https://opengameart.org/content/the-hope) |
 | 51 | Once Upon a Time (loop) | TAD | cinematic / light | 0:57 | 1.85 (mp3) | 0.47 | 0.7 | [once-upon-a-time-loop](https://opengameart.org/content/once-upon-a-time-loop) |
 | 52 | Outlive (Short version) | TAD | cinematic | 0:26 | 0.64 (mp3) | 0.22 | 0.32 | [outlive-short-version](https://opengameart.org/content/outlive-short-version) |
-**Totals (Measured):** the 44 Holizna tracks are 133.8 minutes, 280.8 MB as ogg, **67.0 MB** at AAC 64 and **100.9 MB** at AAC 96 (0.50 and 0.75 MB per minute). By collection title: lo-fi 14 tracks (Happy Lo-Fi 7, Lo-Fi and Chill 7), chill 6, upbeat 7 plus funk 6 and retro wave 7 (the last two read as upbeat or cinematic synth), cinematic 8 singles. There are more Holizna collections than I downloaded (Lo-Fi and Chill has 2 more zips, Retro Wave 1 more, Sad Lo-Fi 2, and others), so 30+ is not the limit.
+**Totals (Measured):** the 44 Holizna tracks are 133.8 minutes, 280.8 MB as ogg, **67.0 MB** at AAC 64 and **100.9 MB** at AAC 96 (0.50 and 0.75 MB per minute). By collection title: lo-fi 14 tracks (Happy Lo-Fi 7, Lo-Fi and Chill 7), chill 6, upbeat 11 (Gamer Beats 4, Happy Pop Electronic 7), funk 6, retro wave 7 (those last two read as upbeat or cinematic synth), cinematic 8 singles. There are more Holizna collections than I downloaded (Lo-Fi and Chill has 2 more zips, Retro Wave 1 more, Sad Lo-Fi 2, and others), so 30+ is not the limit.
 
 ## Why `.m4a` (AAC) and not Ogg or Opus
 The app decodes music with `decodeAudioData` and plays it through an `<audio>`/`<video>` element (media.js, `FM.loadVideoFile`), on both iPhone and Android. AAC in an `.m4a` is the one format both decode everywhere (**Read** the app's own picker list, addmenu.js:51, which names `.m4a` first for iOS; **Guess** that older iPhones do not decode Ogg Vorbis, which is why I did not keep the `.ogg`). An MP3 would also work but is about 30 percent bigger at the same quality (**Guess**, not measured).
@@ -78,7 +78,7 @@ Measured sizes: 0.50 MB per minute at 64 kbps stereo, 0.75 at 96 (a joint-stereo
 | Tiny | 10 | 60 s | **4.8 MB** | 7.2 MB |
 | Starter (my pick) | 12 | 90 s | **8.6 MB** | 13.0 MB |
 | Bigger | 15 | 90 s | 10.8 MB | 16.2 MB |
-| Everything above, full length | 52 | 2:34 average | about 75 MB | about 115 MB |
+| Everything above, full length | 52 | 2:49 average | about 75 MB | about 115 MB |
 
 (The pack arithmetic was done in code from the measured 0.50 and 0.75 MB per minute.) **My pick: 12 tracks of 90 seconds at 64 kbps, 8.6 MB: three each of upbeat, chill, lo-fi, cinematic**, cut at a bar line with a short fade. Because the app is local-first, the pack should not be in the first load: fetch it the first time someone taps Music.
 
