@@ -4,7 +4,7 @@ Against `origin/main` b46b47d3 (v17.23). Nothing in the app, the tests or the to
 
 ## How it was measured (so it can be repeated)
 
-The runner only keeps the eight slowest tests (`tests/tests.js:59598`), so I gave the driver a copy of itself (scratch, not committed) that installs a setter on `window.__fmLastTest` before the page loads. `tests/tests.js:59576` writes that name at the start of every test, so each write is a timestamped test start, sent out through `console.debug`. The per-test time is the gap to the next start. **That gives exact seconds for all 2285 tests, not a sample.**
+The runner only keeps the eight slowest tests (`tests/tests.js:59910-59911` on v17.24; `:59598` on v17.23), so I gave the driver a copy of itself (scratch, not committed) that installs a setter on `window.__fmLastTest` before the page loads. `tests/tests.js:59576` writes that name at the start of every test, so each write is a timestamped test start, sent out through `console.debug`. The per-test time is the gap to the next start. **That gives exact seconds for all 2285 tests, not a sample.**
 
 - Pass A: tests 1 to 1926 (to `690 the easing curve…`). Pass C: tests 1928 to 2287, started in a fresh Chrome.
 - Two tests are NOT covered: `:97997` (`690 swiping the share sheet…`) and `:98071` (`690 an export holds the screen awake…`) hang the page in my container. They run a real MP4 export through WebCodecs, and the page stops answering for 10 minutes. A third export test (`:98167`) was skipped by the same slicing. That is a limit of my container, not a finding about the suite.
@@ -21,7 +21,7 @@ The runner only keeps the eight slowest tests (`tests/tests.js:59598`), so I gav
 | Slowest 10 / slowest 30 | 734 s (22%) / 1097 s (32%) |
 | By family | 921 collab 253 tests, 662 s. 690 hunt tests 168 tests, 655 s. Home, guest and window-width tests (955 to 992) 137 tests, 555 s. 482 polish panels 114 tests, 124 s |
 
-**Caveat that matters for every number here: software GL.** `js/fx-thumbs.js:1064-1070` itself says a stock thumbnail strip is "30 seconds in headless software GL" and "3ms of main thread" on a GPU. So render-bound tests are slower here than on Ezra's Mac and the saving there will be smaller. The #1 test below is 324 s here against about 49 s on a Mac (its own comment, `:63596-63604`).
+**Caveat that matters for every number here: software GL.** `js/fx-thumbs.js:1064-1070` itself says a stock thumbnail strip is "30 seconds in headless software GL" and "3ms of main thread" on a GPU. So render-bound tests are slower here than on Ezra's Mac and the saving there will be smaller. The #1 test below is 324 s here, and **over 240 s in the Mac phone pass too** (`tests/tests.js:63928-63931` on v17.24: it failed every phone pass at a 240 s budget on 21 Sep, and measured 261 to 279 s alone at 380 px). The ~49 s I quoted before was the warm full-suite figure from an older comment, not the phone pass.
 
 ## The finding that changes what to try: sleeping is not where the time is
 
@@ -33,12 +33,14 @@ I counted every literal `sleep(N)` style call in each test body (once per call s
 
 ## The 30 slowest tests
 
+*Line numbers: the first, second and fourth rows are refreshed to v17.24 (main now has `tests/tests.js` about +170 to +420 lines later than v17.23, depending on where in the file). The other rows still carry v17.23 numbers; search by the test title.*
+
 | s | where | test | what makes it slow | safe speed-up (no assertion dropped) | est. saving | status |
 |---|---|---|---|---|---|---|
-| 323.6 | `tests/tests.js:63595` | every tile in the browser picks instead of applying, and Done adds what you pi | `_openCategory` renders every tile's thumbnail; the test's own comment (:63596-63617) says the cost is thumbnail rendering and `js/fx-thumbs.js:1064-1070` says a stock strip is "30 seconds in headless software GL". Assertions are taps, picks and the preview list, not pixels of a thumbnail. | One-line suite seam so `FM.fxThumbs` hands back the plain sample for THIS test (thumbnails keep their own tests). Prove with a mutation that the pick assertions still turn red. | ~300 s here; about 40 s on a Mac with a GPU | Verified driver, Guess saving |
-| 120.9 | `tests/tests.js:32485` | 921 S3 when a link says it is open, every channel is open — a bulk send straig | 40 sequential `rtcPair921()` pairings (:32487), each a real loopback WebRTC handshake, nothing else (no sleeps). | Run the 40 pairings in 5 batches of 8 with `Promise.all`; every pairing still asserts its three channels and its own byte (`:32491-32500` unchanged). Needs a check that the pairs share nothing. | ~90 s | Verified driver, Guess saving |
+| 323.6 | `tests/tests.js:63922` | every tile in the browser picks instead of applying, and Done adds what you pi | `_openCategory` renders every tile's thumbnail; the test's own comment (:63923-63944) says the cost is thumbnail rendering and `js/fx-thumbs.js:1064-1070` says a stock strip is "30 seconds in headless software GL". Assertions are taps, picks and the preview list, not pixels of a thumbnail. | A suite seam so `FM.fxThumbs` hands back the plain sample for THIS test (thumbnails keep their own tests). `js/fx-thumbs.js` already has one (`_sliceMs`, `:1174` and `:1819`), so this extends an existing seam, but it is still an **app-code change that needs a `?v=` bump**. Prove with a mutation that the pick assertions still turn red. | ~300 s here; on a Mac, most of the 240 to 279 s phone-pass time (see the table below) | Verified driver, Guess saving |
+| 120.9 | `tests/tests.js:32657` | 921 S3 when a link says it is open, every channel is open — a bulk send straig | 40 sequential `rtcPair921()` pairings (:32659), each a real loopback WebRTC handshake, nothing else (no sleeps). | Only if each pairing checks its channels and sends on bulk in its own continuation the moment its `opened` resolves. Checking after `Promise.all` lets late pairs finish opening and hides the race the test exists for. Prove it with a mutation that makes `opened` resolve on the control channel alone. Also needs a check that the pairs share nothing. | ~90 s | Verified driver, Guess saving |
 | 63.6 | `tests/tests.js:39910` | 921 S8 adversarial peer fuzz: a minute of malformed, oversized, out-of-order a | A minute of hostile traffic by design (CLAUDE.md: "takes just over a minute on purpose"; loop of 5001 at :39910+). | None proposed. The minute is the claim. | 0 | Unread past the loop count |
-| 41.1 | `tests/tests.js:101307` | 967 1 a guest who joins with a code waits for the owner to paste it — no 20-se | Real `sleep(ICE_CONNECT + 3000)` = 23 s (`tests.js:101326`) to prove the guest has not given up past the 20 s clock, plus a second leg. | None safe: the wait is the measurement. A shorter `LIMITS.ICE_CONNECT` would test a different number, and Chrome's own ICE timer cannot be faked. | 0 | Verified |
+| 41.1 | `tests/tests.js:101723` | 967 1 a guest who joins with a code waits for the owner to paste it — no 20-se | Real `sleep(ICE_CONNECT + 3000)` = 23 s (`tests.js:101748`) to prove the guest has not given up past the 20 s clock, plus a second leg. | None safe: the wait is the measurement. A shorter `LIMITS.ICE_CONNECT` would test a different number, and Chrome's own ICE timer cannot be faked. | 0 | Verified |
 | 39.4 | `tests/tests.js:110287` | 979 on a PC window from 701px every control on the transport row takes its own | Steps through widths (`setW`: resize event, 3 frames, panel-settle wait, then `elementFromPoint` on every control at three x positions each). | None without dropping a width. Cost is relayout per width in software rendering, not sleeping (1.2 s of literal sleeps in 39 s). | 0 | Verified shape, Guess cause |
 | 33.1 | `tests/tests.js:107293` | 955 resizing the window keeps the playhead where it was — 900→1280, 1280→1600, | Four window-width changes (900 to 1280 to 1600 and back), 2.1 s literal sleeps in 33 s. | None without dropping a width. | 0 | Unread |
 | 29.1 | `tests/tests.js:106745` | 968 Notes and the Help menu: made big in one project they stay big there, a ne | Zero literal sleeps in 29 s, so it is waiting on real timers or rebuilds. | Needs a profile before any change. | unknown | Unread |
@@ -71,19 +73,21 @@ I counted every literal `sleep(N)` style call in each test body (once per call s
 | lever | here | on a Mac with a GPU |
 |---|---|---|
 | Readiness sleeps to polls: 433 s of sleeps, assume 40% are readiness waits and a poll costs 25% of the sleep | 130 s | 130 s |
-| `every tile…` stops rendering thumbnails | 299 s | 40 s |
+| `every tile…` stops rendering thumbnails | 299 s | 231 s (240 s phone-pass lower bound minus a 9 s residual) |
 | 921 S3 forty pairings in 5 batches of 8 | 91 s | 91 s |
-| **Total** | **520 s of 3409 (15%)** | **261 s of about 3134 (8%)** |
+| **Total** | **520 s of 3409 (15%)** | **452 s of about 3325 (13.6%)** (computed: 130 + 231 + 91; base 3409 - 324 + 240) |
 
-The 40% and the batch size are guesses. The rest are measured. **So the honest answer is: about 8 to 15% from safe test edits, not the halving the pass would need.**
+The 40% and the batch size are guesses (and the 921 S3 batching is conditional, see its row). The rest are measured, except the Mac column, which rests on the 240 s lower bound from the test's own comment and a residual I carried over. **So the honest answer is: about 14 to 15% from safe test edits, not the halving the pass would need.** (The first version said 8% on the Mac because it used a 49 s figure for the sweep.)
 
 ## The lever that is bigger, and is not a test change
 
-`tools/ship.sh` runs the whole suite twice (desktop, then 380 px). They are independent passes, so two Chromes on separate profiles and ports could run side by side. On paper that takes the ship from about two passes to about one (114 to about 62 minutes on my numbers). Two cautions, both from CLAUDE.md: a CPU-throttle test (`921 S8 a 500-layer project under a 4× CPU throttle`) says never to run beside another heavy job, and a Mac with less memory may not take two renderers that each reach several GB (see `1085-vmdata.md`). This is a tool change, so it is the builder's call. I did not try it.
+`tools/ship.sh` runs the whole suite twice (desktop, then 380 px). They are independent passes, so two Chromes on separate profiles and ports could run side by side. On paper that takes the ship from about two passes to about one (114 to about 62 minutes on my numbers). **The main risk, ahead of the throttle test:** `tools/ship.sh:161-164` records that two headless suites at once flaked test 699 and cost a ship (a spot-check ran under the v15.71 ship's phone pass), and spotcheck and ship refuse to overlap for that reason. (H18, `hunt/parallel-passes`, later measured two passes at once here: 1.95x faster, one extra red in a single run.) Then the CPU-throttle test (`921 S8 a 500-layer project under a 4× CPU throttle`) says never to run beside another heavy job.
+It needs this `ship.sh` work: one `ship_phase` value that covers both passes; cancelling the other pass on a red or a timeout (today the phone pass never starts after a red desktop pass); not recording a contended pass through `suite_seconds_record` (`ship.sh:921`); and staggered starts, because of the `_cdp.py` start-up reaper (`tests/_cdp.py:371-407`).
+**Memory:** the machine that now ships is the 7.7 GB WSL laptop (`tools/.suite-seconds` has a `DESKTOP-HC64AE0` line), not a Mac. Its temp profiles are on tmpfs, i.e. RAM (the comment at `tests/_cdp.py:401-402`); VmData is reserved address space, so measure peak RSS and swap in a trial run before trusting two at once (see `1085-vmdata.md`). This is a tool change, so it is the builder's call. I did not try it in this report.
 
 ## Two small things that would make the next version of this report free
 
-1. `tests/tests.js:59598` could keep every test's `_ms` in `results` (it already measures it at :59597) instead of the eight slowest, so `_cdp.py` can print the top 30 on every run.
+1. `tests/tests.js:59910` could keep every test's `_ms` in `results` (it already measures it there, v17.24) instead of the eight slowest, so `_cdp.py` can print the top 30 on every run.
 2. The two export tests above could ask `VideoEncoder.isConfigSupported` first and skip with a named reason when H.264 is missing. At the moment a missing encoder shows as a 10-minute silent stall, which is exactly the "read as a hang" trap the CLAUDE.md note about the suite time describes.
 
 ## What I did not do
