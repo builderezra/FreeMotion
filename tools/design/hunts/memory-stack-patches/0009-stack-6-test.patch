@@ -1,0 +1,60 @@
+From 0f6003ba6a974129740ef725805efd459f76783d Mon Sep 17 00:00:00 2001
+From: h <h@h>
+Date: Wed, 7 Oct 2026 22:41:23 +0000
+Subject: [PATCH 09/14] stack: 6-test
+
+---
+ tests/tests.js | 37 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/tests/tests.js b/tests/tests.js
+index df63030a..31687c5d 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -59991,6 +59991,43 @@
+     }
+   });
+ 
++  /* H43: THE FILTER-CONTAINER PLATES ARE RELEASED WHEN NOTHING USES THEM. A Filter box at a strength between 0 and 1 draws its children
++     into three plate-sized canvases (_fcPool: A, B, M), and an Adjustment layer carrying one does the same into two per nesting level
++     (_adjFcPool). Neither was in the 1095 / H40 trim, so after a 1080 x 1920 export they sat at that size for the rest of the session:
++     measured 24.9 MB and 33.2 MB (a quiet editor holds under 2 MB of either). Draw both at full size, then only a plain thumbnail-size
++     frame, wait out two trim windows, and ask for the pixels they still hold. CONTROL: the full-size frame really filled them. */
++  test('H43 the Filter-container plates are released when nothing uses them, after a full-size frame', { item: 'H43', budgetMs: 40000 }, async function () {
++    if (!FM._poolStats) throw new Error('the pool seam FM._poolStats is gone (1095)');
++    const sleep = ms => new Promise(r => setTimeout(r, ms));
++    const box = function () {
++      const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
++      b.effects = [FM.fxRegistry.makeInstance('pixelate')]; b.params = Object.assign({}, b.params, { strength: 0.5 });
++      return b;
++    };
++    const mk = function (w, h, withBoxes) {
++      const L = FM.makeLayer('shape', { shape: 'rect', name: 'pool', x: w / 2, y: h / 2, shapeW: w / 3, shapeH: w / 3, fill: '#c05030' });
++      L.start = 0; L.duration = 3; L.effects = withBoxes ? [box()] : [];
++      const layers = [L];
++      if (withBoxes) { const A = FM.makeLayer('adjustment', { start: 0, duration: 3 }); A.effects = [box()]; layers.unshift(A); }
++      return { project: { width: w, height: h, fps: 30, duration: 3, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] };
++    };
++    const draw = function (w, h, withBoxes) {
++      const c = offscreen(w, h); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
++      FM.renderScene(c.getContext('2d', { willReadFrequently: true }), mk(w, h, withBoxes), 0.5);
++    };
++    draw(1080, 1920, true);
++    const big = FM._poolStats();
++    if (big.fc.px < 3 * 1080 * 1920) throw new Error('CONTROL: a Filter box at full size left only ' + big.fc.px + ' pixels in its pool — nothing below measures anything');
++    if (big.adj.px < 2 * 1080 * 1920) throw new Error('CONTROL: an Adjustment layer with a Filter box at full size left only ' + big.adj.px + ' pixels in its pool — nothing below measures anything');
++    draw(180, 320, false);
++    await sleep(7500);   // two trim windows of 3 s
++    const left = FM._poolStats();
++    if (left.fc.px > 8 * 180 * 320) throw new Error('after a full-size frame and a thumbnail-size one, the Filter-container pool still holds ' + left.fc.px + ' pixels (' + Math.round(left.fc.px * 4 / 1048576) + ' MB): the trim does not reach it');
++    if (left.adj.px > 8 * 180 * 320) throw new Error('after a full-size frame and a thumbnail-size one, the Adjustment Filter-container pool still holds ' + left.adj.px + ' pixels (' + Math.round(left.adj.px * 4 / 1048576) + ' MB): the trim does not reach it');
++    const again = function () { const c = offscreen(540, 960); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0; FM.renderScene(c.getContext('2d', { willReadFrequently: true }), mk(540, 960, true), 0.5); return FM._poolStats(); }();
++    if (again.fc.px < 3 * 540 * 960) throw new Error('a Filter box drawn after the trim did not get its plates back (' + again.fc.px + ' pixels)');
++  });
++
+   async function run() {
+     var results = [];
+     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
+-- 
+2.43.0
+

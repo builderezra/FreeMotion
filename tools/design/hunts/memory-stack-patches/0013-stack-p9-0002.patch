@@ -1,0 +1,87 @@
+From 41dd233730699fd33d1e39044d96b4abaa204f59 Mon Sep 17 00:00:00 2001
+From: h <h@h>
+Date: Wed, 7 Oct 2026 22:41:41 +0000
+Subject: [PATCH 13/14] stack: p9-0002
+
+---
+ js/compositor.js | 10 +++++++++-
+ tests/tests.js   | 38 ++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 47 insertions(+), 1 deletion(-)
+
+diff --git a/js/compositor.js b/js/compositor.js
+index c91f6b0d..7274a01f 100644
+--- a/js/compositor.js
++++ b/js/compositor.js
+@@ -1919,11 +1919,19 @@ window.FM = window.FM || {};
+     for (let i = 0; i < n; i++) out.push(Math.max(0, ((i < m ? wl : wl + 2) - 1) / 2));
+     return out;
+   }
++  let _cpuBlurA = null, _cpuBlurB = null; const CPU_BLUR_CAP = 2097152;   // floats per array
+   function cpuBlurCanvas(cv, W, H, sigma) {        // premultiplied, transparent past the edge — what 'blur()' draws
+     const g = cv.getContext('2d');
+     let img; try { img = g.getImageData(0, 0, W, H); } catch (e) { return false; }
+     const d = img.data, N = W * H;
+-    let a = new Float32Array(N * 4), b = new Float32Array(N * 4);
++    /* queue 1010: the pair is kept between calls up to a cap (an 8 MB array each, a 1080x1920 blur at r 40 fits), so a lost
++       WebGL context does not allocate 67 MB twice a second; a bigger plate allocates per call as before and keeps nothing.
++       Both are fully overwritten below (a by the premultiply loop, b by every pass), so a stale pair cannot leak into the output. */
++    let a, b;
++    if (N * 4 <= CPU_BLUR_CAP) {
++      if (!_cpuBlurA || _cpuBlurA.length < N * 4) { _cpuBlurA = new Float32Array(N * 4); _cpuBlurB = new Float32Array(N * 4); }
++      a = _cpuBlurA; b = _cpuBlurB;
++    } else { a = new Float32Array(N * 4); b = new Float32Array(N * 4); }
+     for (let i = 0; i < N; i++) { const j = i * 4, al = d[j + 3] / 255; a[j] = d[j] * al; a[j + 1] = d[j + 1] * al; a[j + 2] = d[j + 2] * al; a[j + 3] = d[j + 3]; }
+     const pass = (src, dst, r, horiz) => {
+       const len = horiz ? W : H, lines = horiz ? H : W, step = horiz ? 4 : W * 4, inv = 1 / (2 * r + 1);
+diff --git a/tests/tests.js b/tests/tests.js
+index f352ed6f..97490b75 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -60088,6 +60088,44 @@
+     }
+   });
+ 
++  /* ═══ #1010 — the no-GPU blur fallback allocated two big Float32Arrays on EVERY call (js/compositor.js cpuBlurCanvas). ═══
++     67 MB per call at 1080x1920. Reached only when ctx.filter is unusable and WebGL blur returns null, which the seam below
++     forces. Counted with a Proxy on Float32Array so it needs no seam; output must not change, and a pair left over from a
++     different picture must not show through (call 3 repeats call 1 after call 2 drew something else). */
++  test('1010 the CPU blur reuses its scratch buffers, draws the same picture every time, and a plate past the cap still blurs', { item: '1010', budgetMs: 60000 }, async function () {
++    if (typeof FM._drawBlurredNoFilter !== 'function') throw new Error('the no-filter blur seam is missing (FM._drawBlurredNoFilter)');
++    const RealF32 = window.Float32Array, realBlur = FM.glColor && FM.glColor.blur;
++    let big = 0, bigBytes = 0;
++    const run = function (w, h, r, shade) {
++      const src = offscreen(w, h), sg = src.getContext('2d'); sg.fillStyle = shade; sg.fillRect(w * 0.3, h * 0.3, w * 0.4, h * 0.4);
++      const dst = offscreen(w, h), dg = dst.getContext('2d');
++      FM._drawBlurredNoFilter(dg, src, r, 0, 0, w, h);
++      return Array.from(dg.getImageData(0, 0, w, h).data);
++    };
++    try {
++      if (FM.glColor) FM.glColor.blur = function () { return null; };
++      window.Float32Array = new Proxy(RealF32, { construct: function (t, a, nt) { if (typeof a[0] === 'number' && a[0] >= 100000) { big++; bigBytes += a[0] * 4; } return Reflect.construct(t, a, nt); } });
++      run(160, 120, 5, '#ff4d6d');   // warm: whichever pair the build keeps is made here
++      big = 0;
++      const first = run(160, 120, 5, '#ff4d6d');
++      const other = run(160, 120, 5, '#22c55e');
++      const again = run(160, 120, 5, '#ff4d6d');
++      if (big > 0) throw new Error('three blurs of the same 160x120 plate made ' + big + ' new big Float32Arrays (' + Math.round(bigBytes / 1e6 * 10) / 10 + ' MB): the scratch pair is allocated per call');
++      let diff = 0; for (let i = 0; i < first.length; i++) if (first[i] !== again[i]) diff++;
++      if (diff) throw new Error('the same blur drawn again after a different picture differs in ' + diff + ' bytes: the reused buffers leak the previous picture');
++      let mid = 0; for (let i = 0; i < other.length; i += 4) if (other[i + 3] > 0 && other[i] !== first[i]) mid++;
++      if (!mid) throw new Error('CONTROL: the green and the pink blur came out the same, so the comparison above proves nothing');
++      // control: a plate past the cap still works (it may allocate; it just must not break)
++      big = 0;
++      const huge = run(800, 800, 6, '#ff4d6d');
++      const i0 = (400 * 800 + 400) * 4, edge = (400 * 800 + 240 - 3) * 4;
++      if (huge[i0 + 3] !== 255 || !(huge[edge + 3] > 0 && huge[edge + 3] < 255)) throw new Error('a plate past the buffer cap did not blur: centre alpha ' + huge[i0 + 3] + ', edge alpha ' + huge[edge + 3]);
++    } finally {
++      window.Float32Array = RealF32;
++      if (FM.glColor) FM.glColor.blur = realBlur;
++    }
++  });
++
+   async function run() {
+     var results = [];
+     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
+-- 
+2.43.0
+

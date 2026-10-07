@@ -1,0 +1,248 @@
+From 401fdfd3fdb020b5b644bb7d93b9b691e30454d2 Mon Sep 17 00:00:00 2001
+From: h <h@h>
+Date: Wed, 7 Oct 2026 22:41:42 +0000
+Subject: [PATCH 14/14] stack: p9-0003
+
+---
+ js/exporter.js |  39 +++++++++-------
+ tests/tests.js | 122 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 144 insertions(+), 17 deletions(-)
+
+diff --git a/js/exporter.js b/js/exporter.js
+index 0fe1241c..9199cece 100644
+--- a/js/exporter.js
++++ b/js/exporter.js
+@@ -880,18 +880,19 @@ window.FM = window.FM || {};
+     const key = sampleRate + '/' + channels;
+     const known = _primingByEncoder.get(Enc);
+     if (known && known[key] != null) return known[key];
++    let enc = null;   // queue 1011: hoisted so the finally can close an encoder the catch walked away from
+     try {
+       const F = AAC_FRAME, N = 12 * F, WIN = 4 * F;
+       const AT = [1500, 1500 + 5 * F + 517];   // two clicks, neither on a frame boundary, further apart than WIN
+       const sig = new Float32Array(N); AT.forEach(a => { sig[a] = 0.9; });
+       const chunks = []; let cfg = null, err = null;
+-      const enc = new Enc({ output: (c, m) => { chunks.push(c); if (!cfg && m && m.decoderConfig) cfg = m.decoderConfig; }, error: e => { err = e; } });
++      enc = new Enc({ output: (c, m) => { chunks.push(c); if (!cfg && m && m.decoderConfig) cfg = m.decoderConfig; }, error: e => { err = e; } });
+       enc.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 160000 });
+       for (let off = 0; off < N; off += F) {   // framed exactly as encodeAudio frames the mix
+         const planar = new Float32Array(F * channels);
+         for (let c = 0; c < channels; c++) planar.set(sig.subarray(off, off + F), c * F);
+         const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: F, numberOfChannels: channels, timestamp: Math.round(off / sampleRate * 1e6), data: planar });
+-        enc.encode(ad); ad.close();
++        try { enc.encode(ad); } finally { ad.close(); }
+       }
+       await enc.flush(); enc.close();
+       if (err || !cfg || !chunks.length) return 0;
+@@ -912,6 +913,7 @@ window.FM = window.FM || {};
+       const k = known || {}; k[key] = lands[0]; _primingByEncoder.set(Enc, k);
+       return lands[0];
+     } catch (e) { return 0; }
++    finally { if (enc && enc.state !== 'closed') { try { enc.close(); } catch (e) {} } }
+   }
+   /* Drops the `skip` warm-up frames, re-times what is left from 0, keeps only the frames the mix fills,
+      and cuts the last one's duration to the mix's own end. The decoder description rides the first frame
+@@ -960,17 +962,18 @@ window.FM = window.FM || {};
+     }
+     const frameSize = 1024, fed = lead + total;
+     let ts = 0;
+-    for (let off = 0; off < fed; off += frameSize) {
+-      const n = Math.min(frameSize, fed - off);
+-      const planar = new Float32Array(n * channels);   // starts as zeros — which is what the lead is
+-      const a = Math.max(off, lead);                     // the part of this frame the mix itself fills
+-      if (off + n > a) for (let c = 0; c < channels; c++) planar.set(chData[c].subarray(a - lead, off + n - lead), c * n + (a - off));
+-      const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round(ts), data: planar });
+-      enc.encode(ad); ad.close();
+-      ts += (n / sampleRate) * 1e6;
+-    }
+-    await enc.flush();
+-    enc.close();
++    try {   // queue 1011: a throw from encode or flush used to leave the AudioData and the AudioEncoder open
++      for (let off = 0; off < fed; off += frameSize) {
++        const n = Math.min(frameSize, fed - off);
++        const planar = new Float32Array(n * channels);   // starts as zeros — which is what the lead is
++        const a = Math.max(off, lead);                     // the part of this frame the mix itself fills
++        if (off + n > a) for (let c = 0; c < channels; c++) planar.set(chData[c].subarray(a - lead, off + n - lead), c * n + (a - off));
++        const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round(ts), data: planar });
++        try { enc.encode(ad); } finally { ad.close(); }
++        ts += (n / sampleRate) * 1e6;
++      }
++      await enc.flush();
++    } finally { if (enc.state !== 'closed') { try { enc.close(); } catch (e) {} } }
+     if (encErr) throw encErr;
+     if (skip) {
+       let kept = null;
+@@ -1261,7 +1264,7 @@ window.FM = window.FM || {};
+ 
+       FM._exporting = true;   // tells the compositor to skip the preview-only hold-frame capture/substitution (#13,#22)
+       // Hoisted out of the try so the finally can shut the recorder down before deciding what to keep.
+-      let delivered = false, recorder = null, poster = null, releaseVideos = null;
++      let delivered = false, recorder = null, poster = null, releaseVideos = null, encoder = null;   // encoder: hoisted so the finally can close it (queue 1011)
+       try {
+       /* CANCEL DURING "Decoding frames…" STOPS HERE (queue 916, clause 3). prepareCaches breaks out of its
+        * loop on the flag, and its own comment says that stops the export going on into "the audio mix,
+@@ -1450,7 +1453,7 @@ window.FM = window.FM || {};
+        * `if (encErr) throw encErr` after its flush. Same shape, and the asymmetry was the whole of the
+        * QA report's point. Thrown after flush() so the encoder is drained first. */
+       let vidErr = null;
+-      const encoder = new VideoEncoder({
++      encoder = new VideoEncoder({
+         output: (chunk, meta) => { muxer.addVideoChunk(chunk, meta); if (recorder) recorder.add(chunk, meta); },
+         error: e => { vidErr = e; console.error('video encode', e); },
+       });
+@@ -1505,8 +1508,8 @@ window.FM = window.FM || {};
+         const frame = new VideoFrame(outCanvas, { timestamp: Math.round(f * frameDurUs), duration: Math.round(frameDurUs) });
+         // `f === resumeFrom` forces the seam to be an IDR. A fresh encoder would almost certainly open
+         // with one anyway, but "almost certainly" is not a thing to hang a file's decodability on.
+-        encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 || f === resumeFrom });
+-        frame.close();
++        try { encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 || f === resumeFrom }); }
++        finally { frame.close(); }   // queue 1011: a throwing encode (an encoder that already errored) must not strand the frame
+         while (encoder.encodeQueueSize > 8) await nextTick();
+         // ONE unconditional yield per frame. Without it this loop only ever returned to the event
+         // loop when the encoder fell behind — so on a machine whose encoder keeps up, the whole
+@@ -1642,6 +1645,8 @@ window.FM = window.FM || {};
+         // a heavy reversed/slow clip doesn't keep multiple GB resident and OOM mobile Safari. Preview
+         // re-decodes a lightweight downscaled cache on the next scrub/play. (#3)
+         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
++        // queue 1011: every exit that did not reach the success close below (a throw from render or encode) left the hardware encoder open
++        if (encoder && encoder.state !== 'closed') { try { encoder.close(); } catch (e) {} }
+         if (releaseVideos) releaseVideos();   // queue 690 — any strip that waited on the export is drawn now
+         FM._exporting = false;
+         if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();   // H40: the plates are export-sized; the start of an export clears them, its end must too
+diff --git a/tests/tests.js b/tests/tests.js
+index 97490b75..b8ae2607 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -60126,6 +60126,128 @@
+     }
+   });
+ 
++  /* ═══ #1011 — a failed export closed its VideoFrame only on success and never closed the encoder (js/exporter.js run, encodeAudio,
++     aacPriming). A throwing encode() skipped frame.close(); any throw from the frame loop skipped encoder.close() because the
++     encoder was a const inside the try and the finally could not see it. Stubs stand in for the encoders (this container has no
++     H.264 or AAC), so the test runs everywhere; the counting is on the REAL VideoFrame and AudioData classes. */
++  test('1011 an export that fails closes every VideoFrame and its VideoEncoder', { item: '1011', budgetMs: 60000 }, async function () {
++    const RealVE = window.VideoEncoder, RealVF = window.VideoFrame, RealAE = window.AudioEncoder, RealAD = window.AudioData;
++    if (!RealVF || !RealAD) throw new Error('this browser has no VideoFrame / AudioData, so there is nothing to count');
++    const realRender = FM.renderScene, saved = FM.scene;
++    const videoRun = async function (failWhere) {
++      let frames = 0, closed = 0; const encs = []; let n = 0;
++      class StubEnc {
++        constructor() { this.state = 'unconfigured'; this.encodeQueueSize = 0; this.calls = 0; encs.push(this); }
++        configure() { this.state = 'configured'; }
++        encode() { this.calls++; if (failWhere === 'encode' && this.calls === 3) throw new Error('boom: encode on frame 3'); }
++        async flush() {}
++        close() { this.state = 'closed'; }
++        static async isConfigSupported(c) { return { supported: true, config: c }; }
++      }
++      const rc = RealVF.prototype.close;
++      window.VideoEncoder = StubEnc;
++      RealVF.prototype.close = function () { closed++; return rc.call(this); };
++      window.VideoFrame = class extends RealVF { constructor() { super(...arguments); frames++; } };
++      if (failWhere === 'render') FM.renderScene = function () { n++; if (n === 3) throw new Error('boom: render on frame 3'); return realRender.apply(this, arguments); };
++      const L = FM.makeLayer('shape', { shape: 'rect', x: 32, y: 32, shapeW: 40, shapeH: 40, fill: '#f44', start: 0, duration: 1 });
++      FM.scene = { project: { width: 64, height: 64, fps: 10, duration: 1, background: '#000' }, layers: [L], selectedId: null, selectedIds: [] };
++      let err = null;
++      try { await FM.exporter.run({ scale: 1, fps: 10, bitrate: 300000, name: 'x1011', from: 0, to: 1, outW: 64, outH: 64, onReady: function () {} }); } catch (e) { err = String(e && e.message || e); }
++      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; RealVF.prototype.close = rc; FM.renderScene = realRender; FM.scene = saved;
++      return { err: err, frames: frames, closed: closed, states: encs.map(e => e.state), encs: encs.length };
++    };
++    const audioRun = async function () {
++      let made = 0, closed = 0; const encs = [];
++      class StubAE {
++        constructor() { this.state = 'unconfigured'; this.calls = 0; encs.push(this); }
++        configure() { this.state = 'configured'; }
++        encode() { this.calls++; if (this.calls === 3) throw new Error('boom: audio encode 3'); }
++        async flush() {}
++        close() { this.state = 'closed'; }
++        static async isConfigSupported(c) { return { supported: true, config: c }; }
++      }
++      const rc = RealAD.prototype.close;
++      window.AudioEncoder = StubAE;
++      RealAD.prototype.close = function () { closed++; return rc.call(this); };
++      window.AudioData = class extends RealAD { constructor() { super(...arguments); made++; } };
++      const total = 1024 * 8, ch = new Float32Array(total);
++      const mix = { audioBuffer: { length: total, numberOfChannels: 1, getChannelData: () => ch }, sampleRate: 48000, channels: 1 };
++      let err = null;
++      try { await FM._encodeAudio(function () {}, mix); } catch (e) { err = String(e && e.message || e); }
++      window.AudioEncoder = RealAE; window.AudioData = RealAD; RealAD.prototype.close = rc;
++      return { err: err, made: made, closed: closed, states: encs.map(e => e.state) };
++    };
++    try {
++      const ctl = await videoRun(null);
++      if (ctl.frames < 5 || ctl.frames !== ctl.closed) throw new Error('CONTROL: a run with no failure made ' + ctl.frames + ' VideoFrames and closed ' + ctl.closed);
++      for (const where of ['encode', 'render']) {
++        const r = await videoRun(where);
++        if (!r.err || r.err.indexOf('boom') < 0) throw new Error('CONTROL: the ' + where + ' failure never reached the export (got ' + r.err + ')');
++        if (r.frames !== r.closed) throw new Error('a failed export (' + where + ' throws on frame 3) made ' + r.frames + ' VideoFrames and closed ' + r.closed + ': ' + (r.frames - r.closed) + ' leaked');
++        if (r.encs !== 1 || r.states[0] !== 'closed') throw new Error('a failed export (' + where + ' throws on frame 3) left its VideoEncoder ' + JSON.stringify(r.states));
++      }
++    } finally {
++      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; window.AudioEncoder = RealAE; window.AudioData = RealAD; FM.renderScene = realRender; FM.scene = saved;
++    }
++  });
++
++  test('1011 an audio encode that fails closes every AudioData and AudioEncoder it opened', { item: '1011', budgetMs: 60000 }, async function () {
++    const RealVE = window.VideoEncoder, RealVF = window.VideoFrame, RealAE = window.AudioEncoder, RealAD = window.AudioData;
++    if (!RealVF || !RealAD) throw new Error('this browser has no VideoFrame / AudioData, so there is nothing to count');
++    const realRender = FM.renderScene, saved = FM.scene;
++    const videoRun = async function (failWhere) {
++      let frames = 0, closed = 0; const encs = []; let n = 0;
++      class StubEnc {
++        constructor() { this.state = 'unconfigured'; this.encodeQueueSize = 0; this.calls = 0; encs.push(this); }
++        configure() { this.state = 'configured'; }
++        encode() { this.calls++; if (failWhere === 'encode' && this.calls === 3) throw new Error('boom: encode on frame 3'); }
++        async flush() {}
++        close() { this.state = 'closed'; }
++        static async isConfigSupported(c) { return { supported: true, config: c }; }
++      }
++      const rc = RealVF.prototype.close;
++      window.VideoEncoder = StubEnc;
++      RealVF.prototype.close = function () { closed++; return rc.call(this); };
++      window.VideoFrame = class extends RealVF { constructor() { super(...arguments); frames++; } };
++      if (failWhere === 'render') FM.renderScene = function () { n++; if (n === 3) throw new Error('boom: render on frame 3'); return realRender.apply(this, arguments); };
++      const L = FM.makeLayer('shape', { shape: 'rect', x: 32, y: 32, shapeW: 40, shapeH: 40, fill: '#f44', start: 0, duration: 1 });
++      FM.scene = { project: { width: 64, height: 64, fps: 10, duration: 1, background: '#000' }, layers: [L], selectedId: null, selectedIds: [] };
++      let err = null;
++      try { await FM.exporter.run({ scale: 1, fps: 10, bitrate: 300000, name: 'x1011', from: 0, to: 1, outW: 64, outH: 64, onReady: function () {} }); } catch (e) { err = String(e && e.message || e); }
++      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; RealVF.prototype.close = rc; FM.renderScene = realRender; FM.scene = saved;
++      return { err: err, frames: frames, closed: closed, states: encs.map(e => e.state), encs: encs.length };
++    };
++    const audioRun = async function () {
++      let made = 0, closed = 0; const encs = [];
++      class StubAE {
++        constructor() { this.state = 'unconfigured'; this.calls = 0; encs.push(this); }
++        configure() { this.state = 'configured'; }
++        encode() { this.calls++; if (this.calls === 3) throw new Error('boom: audio encode 3'); }
++        async flush() {}
++        close() { this.state = 'closed'; }
++        static async isConfigSupported(c) { return { supported: true, config: c }; }
++      }
++      const rc = RealAD.prototype.close;
++      window.AudioEncoder = StubAE;
++      RealAD.prototype.close = function () { closed++; return rc.call(this); };
++      window.AudioData = class extends RealAD { constructor() { super(...arguments); made++; } };
++      const total = 1024 * 8, ch = new Float32Array(total);
++      const mix = { audioBuffer: { length: total, numberOfChannels: 1, getChannelData: () => ch }, sampleRate: 48000, channels: 1 };
++      let err = null;
++      try { await FM._encodeAudio(function () {}, mix); } catch (e) { err = String(e && e.message || e); }
++      window.AudioEncoder = RealAE; window.AudioData = RealAD; RealAD.prototype.close = rc;
++      return { err: err, made: made, closed: closed, states: encs.map(e => e.state) };
++    };
++    try {
++      const a = await audioRun();
++      if (!a.err || a.err.indexOf('boom') < 0) throw new Error('CONTROL: the audio failure never reached encodeAudio (got ' + a.err + ')');
++      if (a.made !== a.closed) throw new Error('a failed audio encode made ' + a.made + ' AudioData and closed ' + a.closed);
++      if (a.states.some(st => st !== 'closed')) throw new Error('a failed audio encode left an AudioEncoder ' + JSON.stringify(a.states) + ' (aacPriming and encodeAudio each open one)');
++    } finally {
++      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; window.AudioEncoder = RealAE; window.AudioData = RealAD; FM.renderScene = realRender; FM.scene = saved;
++    }
++  });
++
+   async function run() {
+     var results = [];
+     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
+-- 
+2.43.0
+

@@ -1,0 +1,63 @@
+From 196cde6e3a43c8c7d097dcb86df4e8d0552609f6 Mon Sep 17 00:00:00 2001
+From: h <h@h>
+Date: Wed, 7 Oct 2026 22:40:44 +0000
+Subject: [PATCH 02/14] stack: 1095-test
+
+---
+ tests/tests.js | 40 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/tests/tests.js b/tests/tests.js
+index 1900efa6..eb91a0d6 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -59828,6 +59828,46 @@
+     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
+   });
+ 
++  /* #1095 — THE SCRATCH POOLS GAVE BACK NOTHING. Every canvas-effect pool is indexed by nesting depth and each entry is two plate-sized
++     canvases that were created the first time a stack reached that depth and then kept for the life of the page. So 20 stacked effects
++     left 40 canvases behind after the stack was gone (measured: through a forced garbage collection, in a headless Chromium); the
++     effects browser stacks one effect per pick in its preview, and a sweep of every tile measured ~335 plate-sized canvases (about
++     2.2 GB at 1080x1920 on the Mac). The fix trims each pool to the deepest stack drawn in the last 3 s window, so after a deep frame
++     and then shallow ones the pools are small within two windows (about 6 s). */
++  test('1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture', { item: '1095', budgetMs: 40000 }, async function () {
++    if (!FM._readbackHint) throw new Error('the pool seam FM._readbackHint is gone');
++    const sleep = ms => new Promise(r => setTimeout(r, ms));
++    const mk = function (n) {
++      const L = FM.makeLayer('shape', { shape: 'rect', name: 'pool', x: 90, y: 160, shapeW: 120, shapeH: 120, fill: '#c05030' });
++      L.start = 0; L.duration = 3; L.effects = [];
++      for (let i = 0; i < n; i++) L.effects.push(FM.fxRegistry.makeInstance('wiggle'));
++      return { project: { width: 180, height: 320, fps: 30, duration: 3, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
++    };
++    const draw = function (n) {
++      const c = offscreen(180, 320); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
++      const g = c.getContext('2d', { willReadFrequently: true });
++      FM.renderScene(g, mk(n), 0.5);
++      const d = g.getImageData(0, 0, 180, 320).data; let h = 0;
++      for (let i = 0; i < d.length; i += 31) h = (h * 31 + d[i]) >>> 0;
++      return h;
++    };
++    const poolLen = () => FM._readbackHint().A.length;
++    const base = poolLen();
++    const h1 = draw(12);
++    if (poolLen() < base + 12) throw new Error('CONTROL: a stack of 12 canvas effects did not grow the pool (' + base + ' to ' + poolLen() + ') — nothing below measures anything');
++    draw(1);
++    await sleep(7500);   // two trim windows of 3 s
++    const after = poolLen();
++    if (after > base + 4) throw new Error('after a 12-deep stack and one shallow frame, the canvas-effect pool still holds ' + after + ' entries (' + base + ' before) — each entry is two plate-sized canvases kept for the life of the page');
++    if (FM._poolStats) {   // the seam the fix adds: the pixels, not just the count
++      const st = FM._poolStats().cf;
++      if (st.px > 8 * 180 * 320) throw new Error('the pool is down to ' + st.n + ' entries but still holds ' + st.px + ' pixels');
++    }
++    // …and a deep stack drawn again after the trim is the same picture (the entries are re-created exactly as the first time)
++    const h2 = draw(12);
++    if (h1 !== h2) throw new Error('a 12-deep stack drew a different picture after the pools were trimmed (hash ' + h1 + ' then ' + h2 + ')');
++  });
++
+   async function run() {
+     var results = [];
+     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
+-- 
+2.43.0
+

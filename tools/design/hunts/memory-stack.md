@@ -1,0 +1,3 @@
+# H51: the memory patch stack (PARTIAL, pushed early because H52 took priority)
+
+Status 7 Oct: the stack is built and every step applies to main (2e3fd7a9, v17.25) in order; the full suite runs and the session measurement are NOT done yet. `memory-stack-patches/` holds the 14 ordered patches (`git am` onto main). Order: 1095 scratch pools (H19, H19b is the same patch), its test, H40 1 to 5, H43 (fc and adjFc plates), H43 test, H44 (weak prevFiles), H44 test, H27 #1009, #1010, #1011. Conflicts: none in js/ (all three-way clean); every test hunk collides at the same append point and was re-appended by script, each commit syntax-checked with `node --check`.

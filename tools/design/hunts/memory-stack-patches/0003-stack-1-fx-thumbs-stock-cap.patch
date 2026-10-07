@@ -1,0 +1,120 @@
+From 084b47b9e0e659c963847b2fd30e1698be523e16 Mon Sep 17 00:00:00 2001
+From: h <h@h>
+Date: Wed, 7 Oct 2026 22:40:45 +0000
+Subject: [PATCH 03/14] stack: 1-fx-thumbs-stock-cap
+
+---
+ js/fx-thumbs.js | 28 +++++++++++++++++++++++++---
+ tests/tests.js  | 31 +++++++++++++++++++++++++++++++
+ 2 files changed, 56 insertions(+), 3 deletions(-)
+
+diff --git a/js/fx-thumbs.js b/js/fx-thumbs.js
+index e39228ca..c85ecff8 100644
+--- a/js/fx-thumbs.js
++++ b/js/fx-thumbs.js
+@@ -1506,6 +1506,24 @@ window.FM = window.FM || {};
+     }
+   }
+   function touch(key) { const i = layerKeys.indexOf(key); if (i >= 0) { layerKeys.splice(i, 1); layerKeys.push(key); } }
++  /* THE SAMPLE TILES GET A CAP TOO (H40). `cache` held every sample tile for the whole session, the layer previews above being the
++     only entries on the LRU. Measured: one pass through all 12 categories (205 effects) left 83.3 MB of canvases in it, 59 MB of them
++     the 40 animated tiles (10 frames of 192 x 192 each). A tile evicted here is simply generated again the next time its category is
++     opened, exactly as the first time; its `meta` stays, so a filter or preset tile still knows its recipe. */
++  const stockKeys = [];
++  let stockBytes = 0;
++  const STOCK_CACHE_MAX = 32 * 1024 * 1024;
++  function rememberStock(key, entry) {
++    const i = stockKeys.indexOf(key);
++    if (i >= 0) stockKeys.splice(i, 1); else stockBytes += bytesOf(entry);
++    stockKeys.push(key);
++    while (stockBytes > STOCK_CACHE_MAX && stockKeys.length > 1) {
++      const old = stockKeys.shift();
++      const e = cache.get(old);
++      if (e) stockBytes -= bytesOf(e);
++      cache.delete(old);
++    }
++  }
+ 
+   // ---- shared animation ticker (one interval repaints every live animated tile) ----
+   const live = new Map();     // canvasEl -> frames[] (dropped once the canvas leaves the DOM)
+@@ -1580,6 +1598,7 @@ window.FM = window.FM || {};
+         queue.shift();
+         if (!provisional) cache.set(key, entry);
+         if (m && m.layerId) remember(key, entry);
++        else if (!provisional) rememberStock(key, entry);
+         const ws = pendingQ.get(key) || [];
+         pendingQ.delete(key);
+         ws.forEach(function (cv) { if (cv._fxType === key) paint(cv, entry); });   // skip tiles re-mounted to another key meanwhile
+@@ -1795,7 +1814,7 @@ window.FM = window.FM || {};
+         cvs.forEach(function (cv) { if (cv && cv._fxType) inflight.push(cv); });
+       });
+       FM.fxThumbs.stopAll();
+-      cache.clear(); layerKeys.length = 0; layerBytes = 0;
++      cache.clear(); layerKeys.length = 0; layerBytes = 0; stockKeys.length = 0; stockBytes = 0;
+       const seen = new Set();
+       els.concat(inflight).forEach(function (cv) {
+         if (seen.has(cv)) return;
+@@ -1806,7 +1825,10 @@ window.FM = window.FM || {};
+     },
+     /* What the layer-preview cache is holding. Exposed because "it is capped at 10MB" is a claim,
+      * and a claim about memory that nothing can read is a claim nobody will ever check. */
+-    stats: function () { return { layerEntries: layerKeys.length, layerBytes: layerBytes, cap: LAYER_CACHE_MAX, keys: cache.size }; },
++    /* Suite seam (H40): what the tile cache really holds, in canvas bytes, every frame of every entry. The two caps above count
++       the same thing entry by entry; this is the check that they add up. */
++    cacheBytes: function () { let n = 0; cache.forEach(function (e) { n += bytesOf(e); }); return n; },
++    stats: function () { return { layerEntries: layerKeys.length, layerBytes: layerBytes, cap: LAYER_CACHE_MAX, stockEntries: stockKeys.length, stockBytes: stockBytes, stockCap: STOCK_CACHE_MAX, keys: cache.size }; },
+     /* The GENERATION side of the same argument (queue 110). Mounting a whole category at once left
+        most tiles blank, and working out why took five probes precisely because none of this was
+        readable from outside: whether the queue still held the keys, whether anything was waiting on
+@@ -1817,7 +1839,7 @@ window.FM = window.FM || {};
+     /* Halt the ticker + pending generation (cache retained) — call when the browser closes. */
+     /* Suite seams (queue 712): a per-tick budget, and a way to make one key cold again. */
+     _sliceMs: function (v) { if (v !== undefined) sliceOverride = v; return sliceMs(); },
+-    _uncache: function (key) { cache.delete(key); jobs.delete(key); },
++    _uncache: function (key) { const si = stockKeys.indexOf(key); if (si >= 0) { stockKeys.splice(si, 1); const e = cache.get(key); if (e) stockBytes -= bytesOf(e); } cache.delete(key); jobs.delete(key); },
+     stopAll: function () {
+       if (raf) { cancelAnimationFrame(raf); raf = 0; deferred = 0; }
+       queue.length = 0; pendingQ.clear(); jobs.clear();
+diff --git a/tests/tests.js b/tests/tests.js
+index eb91a0d6..ac6e4294 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -120215,4 +120215,35 @@
+   });
+ 
+ 
++
++  /* H40: THE SAMPLE-TILE CACHE IS CAPPED. fx-thumbs `cache` kept every sample tile for the session (only the layer previews were on the
++     LRU): one pass through the 12 categories left 83 MB of canvases (Measured, 205 effects). This mounts every effect's sample tile,
++     lets the generator drain, and asks that the stock entries stay under their cap, that the cache is not simply empty (a cap that
++     evicts everything also passes a size check), and that an evicted tile paints again when it is mounted again. */
++  test('H40 the effect sample tiles stay under their memory cap, and an evicted one is generated again on mount', { item: 'H40', budgetMs: 120000 }, async function () {
++    const sleep = ms => new Promise(r => setTimeout(r, ms));
++    if (!FM.fxThumbs || !FM.fxThumbs.queueState || !FM.fxRegistry) throw new Error('fxThumbs.queueState or the registry is missing');
++    if (!FM.fxThumbs.cacheBytes) throw new Error('FM.fxThumbs.cacheBytes (the suite seam that sums the cache) is missing');
++    const types = FM.fxRegistry.all().map(f => f.type);
++    const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-9999px;top:0;width:400px;height:400px;overflow:hidden';
++    document.body.appendChild(host);
++    const cvs = [];
++    try {
++      for (const t of types) { const c = document.createElement('canvas'); host.appendChild(c); FM.fxThumbs.mount(c, t); cvs.push(c); }
++      const end = Date.now() + 100000;
++      while (Date.now() < end) { const q = FM.fxThumbs.queueState(); if (!q.queued && !q.pending && !q.jobs) break; await sleep(300); }
++      const st = FM.fxThumbs.stats(), real = FM.fxThumbs.cacheBytes();
++      /* what the cache REALLY holds (every frame of every entry), against the two caps: the layer previews' 10 MB and the sample tiles' 32 MB */
++      const CAP = 10 * 1048576 + 32 * 1048576;
++      if (real > CAP) throw new Error('after mounting all ' + types.length + ' effects the tile cache holds ' + Math.round(real / 1048576) + ' MB of canvases, over the ' + Math.round(CAP / 1048576) + ' MB the two caps allow');
++      if (FM.fxThumbs.queueState().cached < 10) throw new Error('only ' + FM.fxThumbs.queueState().cached + ' tiles are cached after mounting ' + types.length + ' effects — the cap is evicting almost everything, or nothing was generated');
++      // an evicted tile comes back: find a type that is no longer cached by mounting a fresh canvas and waiting for it to paint
++      const probe = document.createElement('canvas'); host.appendChild(probe);
++      FM.fxThumbs.mount(probe, types[0]);
++      const end2 = Date.now() + 20000;
++      while (Date.now() < end2 && !probe.classList.contains('ready')) await sleep(200);
++      if (!probe.classList.contains('ready')) throw new Error('the first effect\'s tile never painted when it was mounted again');
++    } finally { host.remove(); }
++  });
++
+ })();
+-- 
+2.43.0
+
