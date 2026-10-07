@@ -1,0 +1,124 @@
+From 72c1ed8722ec4538c25185da8a68cc23e69ec114 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 7 Oct 2026 10:18:42 +0000
+Subject: [PATCH 1/3] queue 1009: fill pictures from a left project are freed
+ (by last use, not liveness)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TnKnDxL9jETj2CCp8XMAQx
+---
+ js/compositor.js | 27 ++++++++++++++++++++-------
+ js/storage.js    |  1 +
+ tests/tests.js   | 37 +++++++++++++++++++++++++++++++++++++
+ 3 files changed, 58 insertions(+), 7 deletions(-)
+
+diff --git a/js/compositor.js b/js/compositor.js
+index 944ab78b..9a86285c 100644
+--- a/js/compositor.js
++++ b/js/compositor.js
+@@ -15161,6 +15161,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
+   // Media-fill pictures (a shape filled with an image), decoded lazily from the self-contained data
+   // URL stashed on layer.fillImage — needs no extra IndexedDB plumbing and survives reload.
+   const _fillImg = {};
++  /* queue 1009: pictures decided by LAST USE, never by "is the layer in FM.scene" (a template or element thumbnail renders a
++     mini scene whose layers are not in FM.scene.layers, so liveness would thrash all 50 of its fills). Over 8 records, every
++     record unused for 30 s goes (all of them, not one), and a project switch passes force: that is the one moment everything
++     is dead. The Image is blanked so its decode can be freed, not just unreferenced. */
++  function pruneFillImages(force) {
++    const keys = Object.keys(_fillImg);
++    if (!force && keys.length <= 8) return;
++    const now = performance.now();
++    keys.forEach(function (k) {
++      const r = _fillImg[k];
++      if (!force && now - (r.at || 0) < 30000) return;
++      r.img.onload = r.img.onerror = null; r.img.src = '';
++      delete _fillImg[k];
++    });
++  }
++  FM._pruneFillImages = pruneFillImages;
++  FM._fillImageCount = function () { return Object.keys(_fillImg).length; };
+   function getFillImage(layer) {
+     const src = layer.fillImage;
+     if (!src) return null;
+@@ -15171,17 +15188,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
+       // Evict only a DEAD entry (its layer left the scene) — never keys[0], which is the next live
+       // layer about to be drawn: FIFO eviction chased the draw pointer and thrashed every fill to the
+       // blue placeholder + re-decoded every image every frame once a project had >40 media fills.
+-      const keys = Object.keys(_fillImg);
+-      if (keys.length > 40) {
+-        const live = new Set((FM.scene && FM.scene.layers || []).map(l => l.id));   // flat array incl. group children
+-        const dead = keys.find(k => !live.has(k) && k !== layer.id);
+-        if (dead) delete _fillImg[dead];
+-      }
+-      rec = _fillImg[layer.id] = { src: src, img: new Image(), ready: false };
++      pruneFillImages(false);
++      rec = _fillImg[layer.id] = { src: src, img: new Image(), ready: false, at: performance.now() };
+       rec.img.onload = () => { rec.ready = true; FM.requestRender(); };
+       rec.img.onerror = () => { rec.failed = true; };   // corrupt data URL → placeholder, no endless retry
+       rec.img.src = src;
+     }
++    rec.at = performance.now();
+     return rec.ready ? rec.img : null;
+   }
+   // Paint the CURRENT path with the layer's fill (solid / gradient / media), honouring fillOpacity
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..7c2af82c 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -2530,6 +2530,7 @@ window.FM = window.FM || {};
+       // OUTGOING project's layer ids and nothing else ever clears them (only the exporter did), so
+       // the store grew for the whole session and a re-used id could inherit a stranger's frame.
+       if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
++      if (FM._pruneFillImages) FM._pruneFillImages(true);   // queue 1009: the outgoing project's fill pictures
+       if (FM._resetPlayQuality) FM._resetPlayQuality();   // queue 690: the playback quality learned on the outgoing project is not evidence about this one
+       if (FM.viewport) FM.viewport.reset();   // fresh project → fresh view (preview pan/zoom is never saved)
+       FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.scene.layers = []; FM.time = 0;
+diff --git a/tests/tests.js b/tests/tests.js
+index 1900efa6..4f5cd9c2 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -120175,4 +120175,41 @@
+   });
+ 
+ 
++  /* ═══ #1009 — fill pictures from a project he has left were kept for the whole session (js/compositor.js getFillImage). ═══
++     The cache evicted ONE dead entry per miss and only past 40, so a 100-fill project followed by any other project kept about
++     100 decoded pictures (and their data-URL strings) alive. Counted with WeakRefs on the Images themselves and a REAL garbage
++     collection (tests/_cdp.py), so it needs no seam in the app and fails on main for the reason it names. */
++  test('1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice', { item: '1009', budgetMs: 90000 }, async function () {
++    const orig = FM.projects.currentId(), wasOpen = FM.home.isOpen(), made = [], RealImage = window.Image, refs = [];
++    const fill = n => { const c = offscreen(64, 64), g = c.getContext('2d'); g.fillStyle = 'hsl(' + (n * 37 % 360) + ',70%,' + (30 + n % 40) + '%)'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#fff'; g.fillRect(n % 50, (n * 7) % 50, 9, 9); return c.toDataURL('image/png'); };
++    const draw = async function (n) {
++      const c = offscreen(160, 120);
++      for (let k = 0; k < 3; k++) { FM.renderScene(c.getContext('2d'), FM.scene, 0.5); await sleep(120); }
++    };
++    try {
++      if (wasOpen) FM.home.close();
++      window.Image = function () { const im = new RealImage(); refs.push(new WeakRef(im)); return im; };
++      window.Image.prototype = RealImage.prototype;
++      const a = await FM.projects.create({ name: 'FX1009 A', width: 320, height: 240 }); made.push(a);
++      const N = 60, urls = [];
++      for (let i = 0; i < N; i++) { urls.push(fill(i)); const L = FM.makeLayer('shape', { shape: 'rect', x: 20 + (i % 10) * 28, y: 20 + Math.floor(i / 10) * 28, shapeW: 24, shapeH: 24, fill: '#fff', start: 0, duration: 3 }); L.fillMode = 'media'; L.fillImage = urls[i]; FM.scene.layers.push(L); }
++      await draw();
++      const made1 = refs.length;
++      if (made1 < N) throw new Error('CONTROL: only ' + made1 + ' of ' + N + ' fill pictures were decoded — the fills did not draw, so the count below means nothing');
++      await draw();
++      if (refs.length !== made1) throw new Error('inside one project the ' + N + ' fills were decoded again on a second draw (' + (refs.length - made1) + ' new Images): the cache is thrashing');
++      const b = await FM.projects.create({ name: 'FX1009 B', width: 320, height: 240 }); made.push(b);
++      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff', start: 0, duration: 3 }); L.fillMode = 'media'; L.fillImage = fill(500); FM.scene.layers.push(L);
++      await draw();
++      await FM.projects.open(a, { confirmed: true }); await FM.projects.open(b, { confirmed: true });
++      await draw(); await sleep(300);
++      await hf2Gc('after leaving the 60-fill project');
++      const alive = refs.filter(r => r.deref()).length;
++      if (alive > 4) throw new Error(alive + ' of the ' + refs.length + ' fill pictures are still alive after the project that used them was left and a forced collection: getFillImage keeps them for the whole session');
++    } finally {
++      window.Image = RealImage;
++      await q915aCleanup(made, orig, wasOpen, [], [], []);
++    }
++  });
++
+ })();
+-- 
+2.43.0
+
