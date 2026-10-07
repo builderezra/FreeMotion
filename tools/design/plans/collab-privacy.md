@@ -6,12 +6,12 @@ Source findings: `tools/design/hunts/collab-security.md` on branch `hunt/collab-
 
 | | Option A | Option B | my pick |
 |---|---|---|---|
-| **F1 notes** | Say it where he writes it: a line in the Notes pad while a session is live, one sentence in the "What gets sent?" list. No wire change. | Make notes private to each device: notes stop syncing. Needs a schema number bump, so every friend must update at once. | **A** |
-| **F2 "can only watch"** | Make the menu label true: "Viewer: can watch and play it". Defaults unchanged. | A, plus new rooms start with "Viewers and commenters can export" switched off. | **A**, with B as a one-line follow-up if he wants it |
+| **F1 notes** | Say it where he writes it: a line in the Notes pad while a session is live, one sentence in the "What gets sent?" list. No wire change. | Make notes private to each device: notes stop syncing. Needs a schema number bump, so every friend must update at once. | **B** (the PM's recommendation on #1090, "owner-only"; still Ezra's call, #1090's ASK is open). A is the cheap interim. |
+| **F2 "can only watch"** | Change the words so they say what a Viewer can do (export, and a kept copy). Defaults unchanged. | A, plus new rooms start with "Viewers and commenters can export" switched off. **B alone does not make "only watch" true** (see B). | **C** (below, the PM's pick on #1091: make "only watch" true: with export off, Leave and Keep as my own copy offer delete only). A is the interim wording. |
 
 F4 (address wording) and F5 (pixel cap) need no decision from him, except one number in F5 (below).
 
-One thing I found while planning that the H4 report did not say: **the app already tells the truth about export in two places** (the owner's switch row, `js/collab-ui.js:1819-1821`: "Their device makes the video, so this only asks it not to...", and the Viewer's own panel, `:3121`). Only the role MENU label is untrue (`js/collab-ui.js:50`). So F2 is a one-word fix, not a new screen.
+One thing I found while planning that the H4 report did not say: **the app already tells the truth about export in two places** (the owner's switch row, `js/collab-ui.js:1819-1821`: "Their device makes the video, so this only asks it not to...", and the Viewer's own panel, `:3121`). Only the role MENU label is untrue (`js/collab-ui.js:50`). But **those two honest places do not make the role label true, and F2 is not a one-word fix.** The two strings are honest about *export* only. A Viewer still receives every clip, and keeps a full copy on Leave (`js/collab-ui.js:3189-3224`) or on Home's "Keep as my own copy" (`js/home.js:1401-1407`), whatever `roExport` says (#1091). Also note `:3121` sits in the **guest's own panel**, which the owner choosing the role never sees.
 
 ---
 
@@ -64,8 +64,8 @@ This is a protocol change, so it is bigger than it looks. Everything below is re
 
 ### Option A: fix the label only (recommended)
 
-1. `ROLES[2][2]`: `'can only watch'` becomes `'can watch and play it'`. (The Viewer's own line, `:3109-3110`, already reads "you can watch, not change the edit".)
-2. Tests: `tests/tests.js:105716-105719` pins `/^Viewer — can only watch/`; change it to `can watch and play it`. `tests/tests.js:106380-106392` pins the panel line and already says "you can export a video"; leave it.
+1. `ROLES[2][2]`: `'can only watch'` must change, but **not** to `'can watch and play it'`: that is not true while `roExport` defaults on (a Viewer can export and keep a copy). Use wording that names export and the kept copy, for example `'can watch, and export or keep a copy unless you turn that off'` (the builder can shorten it to fit the menu at 380). `js/collab-ui.js:1043` has the same problem, it already says "View only — you can watch and play it"; change it with the label. (The Viewer's own line, `:3109-3110`, already reads "you can watch, not change the edit".)
+2. Tests: `tests/tests.js:105716-105719` (v17.23; find it by the role-words test title) pins `/^Viewer — can only watch/`; change it to the new wording. `tests/tests.js:106380-106392` pins the panel line and already says "you can export a video"; leave it.
 **Tests that must fail on v17.23:** the changed regex in the role-words test. Add no other test.
 **Effort:** ten minutes. **Risk:** none.
 
@@ -74,8 +74,25 @@ This is a protocol change, so it is bigger than it looks. Everything below is re
 1. Do A.
 2. `js/collab-ui.js:360`: `roExport: true` becomes `roExport: false` in the new-room settings. **Only new rooms:** `pushSettings` (`:1017`) reads the saved room's own value, and a saved room already has `roExport` written, so existing rooms keep theirs (Guess: I read the creation path, not a migration of rooms saved before the field existed; `st.roExport !== false` treats a missing field as ON, so those stay ON).
 3. Tests: `collab F2b a new room starts with export off for viewers and commenters` (create a room through the Share flow, read `hostRoom.settings.roExport` through the settings row's checked state, assert off) and one that a saved room with `roExport: true` stays on after reload.
+**B does not make "only watch" true.** `roExport` is enforced only by `exportGate` (`js/collab-media.js:1295-1299`), which returns early when there is no active session (`:1291-1292`), and Leave and Keep-as-my-own-copy ignore it entirely (below), so a Viewer still ends with a full copy.
 **Honest limit, to say in the release note:** this only asks the guest's app to hold back; their device still holds the clips and a screen recording works. The switch row already says exactly that.
 **Effort:** an hour. **Risk:** a first-time owner who wants a friend to export now has to find the switch.
+
+### Option C (the PM's pick, #1091): make "only watch" true
+
+For a **Viewer or Commenter with `roExport` false**, Leave and Home's "Keep as my own copy" offer **delete only**: no `detachLinked`, so no full copy of the owner's clips survives on the guest's device.
+**Callers to trace (the QUALITY RULE: every route that turns a shared copy into the guest's own project), all on main:**
+1. `leaveKeeping` in `js/collab-ui.js:3211-3224` (`C.leave({ keep: true })` at `:3224`): the live Leave button.
+2. `js/home.js:1401-1407`: Home's "Keep as my own copy" (`FM.collab.leave({ keep: true })` or `FM.projects.detachLinked`).
+3. `js/collab-session.js:1984` (`C.leave`: `o.keep === false ? projects.remove : projects.detachLinked`): the one function behind 1 and 2 for a live session.
+4. `js/collab-ui.js:3299-3304`: Leave on an **ended** shared card, calling `detachLinked(pid)` directly.
+5. `js/collab-ui.js:4604-4608` `detachEnded`: when the owner removes you, the session ends or the link is lost, the app **automatically** detaches ("removed you, this is now your own copy"). With C this must also not hand a full copy to a restricted guest.
+6. `js/collab-ui.js:5411`: the Labs switch turned off while a guest (`C.leave({ keep: true })`).
+7. `js/collab-session.js:1894`: `onConflict === 'keepFirst'` (a same-device clash), `detachLinked(clash.pid)`.
+The one choke point for all seven is `FM.projects.detachLinked` (`js/storage.js:2749`), so the rule should live there or in a helper both it and `C.leave` call. **Unverified, and it decides the shape:** `detachLinked` works from the stored card, and `patchCollab` only writes `ended` and `seen` (`js/storage.js:2733-2739`); I did not find the guest's role or `roExport` stored on the card, so paths 4, 5 and 7 (no live session) may have nothing to decide with unless the join saves them. Check that before building; if absent, store `role` and `roExport` on the card at join and on every settings change.
+**Behaviour to decide with Ezra (small):** what a restricted guest sees instead (Leave: "Leave and delete this copy"; Keep as my own copy: hidden or replaced by delete). Path 5 cannot ask, so it should delete or keep the linked read-only card marked ended; that is a choice, not a code detail.
+**Test (must fail on v17.23):** `collab F2c a Viewer who leaves with export off keeps no project card`: join as a viewer in a room with `roExport` false, press Leave, and assert the project list holds no card for it (and with `roExport` true, one card, so the control proves the test can see a kept copy). Repeat for the owner removing the guest (path 5).
+**Effort:** about a day with the tests (seven callers). **Risk:** a Viewer who relied on keeping a copy loses it when export is off; that is the point.
 
 ---
 
@@ -94,21 +111,23 @@ This is a protocol change, so it is bigger than it looks. Everything below is re
 
 ## F5. A peer's picture is decoded with no pixel limit
 
-**Verified facts.** `FM.loadImageFile` (`js/media.js:801`) resolves once the image loads and checks nothing about size; its only cap is GIF frames at 64 million pixels (`:725`). The peer path is `writeRecord` (`js/collab-media.js:1191-1210`): it **stores the file first** (`FM.storage.writeMedia`, `:1198`) and only then loads it, and the caller treats a `false` as "out of room" (`:1162-1163`: `if (!ok) { outOfRoom(ctl, e.fid); return false; }`).
+**Verified facts.** `FM.loadImageFile` (`js/media.js:801`) resolves once the image loads and checks nothing about size; its only cap is GIF frames at 64 million pixels (`:726`). The peer path is `writeRecord` (`js/collab-media.js:1191-1211`): it **stores the file first** (`FM.storage.writeMedia`, `:1198`) and only then loads it, and the caller treats a `false` as "out of room" (`:1162-1163`: `if (!ok) { outOfRoom(ctl, e.fid); return false; }`).
 
 **Two traps to avoid, both found by reading the call site:**
 - **Do not put the cap in `loadImageFile`.** That is also the path for his OWN photos. A phone camera at 48 MP (8064 x 6048 = 48.8 MP) is legitimate and a 200 MP sensor exists, so a global 50 MP cap would refuse his own pictures. Cap the peer path only.
 - **Do not return `false` from `writeRecord` for a too-big picture.** That reads as "out of room" and shows the wrong message, and it may retry.
 
+**What "refused" means here, precisely:** the cap acts before the picture is saved as media (`writeMedia`) or decoded (`loadImageFile`), but the received parts already sit in `collab:part:` records (`partPrefix`, `js/collab-media.js:855`) until `dropParts` (`:1068`) deletes them, so "refused" is not "never touched storage".
+
 **Build:**
 1. A header reader `FM.imageHeaderSize(file)` in `js/media.js` that reads the first 64 KB (JPEG: scan for an SOFn marker, which can sit after EXIF) and returns `{w, h}` or `null` for PNG (IHDR, bytes 16 to 23), GIF (bytes 6 to 9), WebP (`VP8 `, `VP8L`, `VP8X`) and JPEG. It decodes nothing, so a 20000 x 20000 PNG header costs nothing.
-2. In `js/collab-media.js`, before the `writeRecord` loop at `:1150-1165` (once per file), if `kind === 'image'` and `w * h > FM.PEER_IMAGE_MAX_PIXELS` (**64e6**, the same number the GIF check already uses at `js/media.js:725`): drop the transfer's parts (`dropParts`), set `ctl.refused[e.fid] = 1`, make `planWants` skip refused files (so it is not asked for again), show one toast, "A picture from NAME is too big to open on this device (W x H), so it was not added", and do **not** send `have`.
+2. In `js/collab-media.js`, before the `writeRecord` loop at `:1150-1165` (once per file), if `kind === 'image'` and `w * h > FM.PEER_IMAGE_MAX_PIXELS` (**64e6**, the same number the GIF check already uses at `js/media.js:726`): drop the transfer's parts (`dropParts`), set `ctl.bad[e.fid] = 1` (`planWants` already skips bad files, `js/collab-media.js:627`; the same pattern as the font cap at `:630`, so it is not asked for again), show one toast, "A picture from NAME is too big to open on this device (W x H), so it was not added", and do **not** send `have`.
 3. `null` from the header reader (an unknown format) falls through to today's behaviour.
 
 **One number for Ezra (or the builder):** 64 million pixels means 8000 x 8000. It refuses a 100 MP or 200 MP phone photo a friend sends, which is the safe side for a phone (a 108 MP picture is about 430 MB decoded). Say so in the toast so a friend knows to send a smaller one.
 
 **Tests:**
-- `collab F5 a peer's 20000 x 20000 picture is refused before anything is stored or decoded`: build a minimal PNG whose IHDR says 20000 x 20000 (about 70 bytes), run it through the peer receive path with `FM.storage.writeMedia` and `FM.loadImageFile` spied; assert neither is called, the transfer is marked refused, and the toast text names the size. Must fail on v17.23 (it calls both).
+- `collab F5 a peer's 20000 x 20000 picture is refused before it is saved as media or decoded`: build a minimal PNG whose IHDR says 20000 x 20000 (about 70 bytes), run it through the peer receive path with `FM.storage.writeMedia` and `FM.loadImageFile` spied; assert neither is called, `ctl.bad[fid]` is set, and the toast text names the size. Must fail on v17.23 (it calls both).
 - `collab F5 the header reader`: PNG, GIF, WebP (all three kinds) and a JPEG with EXIF before the SOF marker return the right size; a truncated file returns `null`.
 - `collab F5 his own big photo is untouched`: `FM.loadImageFile` of a 70 MP header-only image does not hit the cap (the cap lives only on the peer path).
 **Effort:** about half a day. **Risk:** a legit large picture from a friend is refused, with a message.
