@@ -60051,6 +60051,43 @@
     if (!FM.storage.hasPrevMedia(id, 4)) throw new Error('the revision stopped being reported as kept once the File was collected');
   });
 
+  /* ═══ #1009 — fill pictures from a project he has left were kept for the whole session (js/compositor.js getFillImage). ═══
+     The cache evicted ONE dead entry per miss and only past 40, so a 100-fill project followed by any other project kept about
+     100 decoded pictures (and their data-URL strings) alive. Counted with WeakRefs on the Images themselves and a REAL garbage
+     collection (tests/_cdp.py), so it needs no seam in the app and fails on main for the reason it names. */
+  test('1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice', { item: '1009', budgetMs: 90000 }, async function () {
+    const orig = FM.projects.currentId(), wasOpen = FM.home.isOpen(), made = [], RealImage = window.Image, refs = [];
+    const fill = n => { const c = offscreen(64, 64), g = c.getContext('2d'); g.fillStyle = 'hsl(' + (n * 37 % 360) + ',70%,' + (30 + n % 40) + '%)'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#fff'; g.fillRect(n % 50, (n * 7) % 50, 9, 9); return c.toDataURL('image/png'); };
+    const draw = async function (n) {
+      const c = offscreen(160, 120);
+      for (let k = 0; k < 3; k++) { FM.renderScene(c.getContext('2d'), FM.scene, 0.5); await sleep(120); }
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      window.Image = function () { const im = new RealImage(); refs.push(new WeakRef(im)); return im; };
+      window.Image.prototype = RealImage.prototype;
+      const a = await FM.projects.create({ name: 'FX1009 A', width: 320, height: 240 }); made.push(a);
+      const N = 60, urls = [];
+      for (let i = 0; i < N; i++) { urls.push(fill(i)); const L = FM.makeLayer('shape', { shape: 'rect', x: 20 + (i % 10) * 28, y: 20 + Math.floor(i / 10) * 28, shapeW: 24, shapeH: 24, fill: '#fff', start: 0, duration: 3 }); L.fillMode = 'media'; L.fillImage = urls[i]; FM.scene.layers.push(L); }
+      await draw();
+      const made1 = refs.length;
+      if (made1 < N) throw new Error('CONTROL: only ' + made1 + ' of ' + N + ' fill pictures were decoded — the fills did not draw, so the count below means nothing');
+      await draw();
+      if (refs.length !== made1) throw new Error('inside one project the ' + N + ' fills were decoded again on a second draw (' + (refs.length - made1) + ' new Images): the cache is thrashing');
+      const b = await FM.projects.create({ name: 'FX1009 B', width: 320, height: 240 }); made.push(b);
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff', start: 0, duration: 3 }); L.fillMode = 'media'; L.fillImage = fill(500); FM.scene.layers.push(L);
+      await draw();
+      await FM.projects.open(a, { confirmed: true }); await FM.projects.open(b, { confirmed: true });
+      await draw(); await sleep(300);
+      await hf2Gc('after leaving the 60-fill project');
+      const alive = refs.filter(r => r.deref()).length;
+      if (alive > 4) throw new Error(alive + ' of the ' + refs.length + ' fill pictures are still alive after the project that used them was left and a forced collection: getFillImage keeps them for the whole session');
+    } finally {
+      window.Image = RealImage;
+      await q915aCleanup(made, orig, wasOpen, [], [], []);
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

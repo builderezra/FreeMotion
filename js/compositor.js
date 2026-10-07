@@ -15169,6 +15169,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // Media-fill pictures (a shape filled with an image), decoded lazily from the self-contained data
   // URL stashed on layer.fillImage — needs no extra IndexedDB plumbing and survives reload.
   const _fillImg = {};
+  /* queue 1009: pictures decided by LAST USE, never by "is the layer in FM.scene" (a template or element thumbnail renders a
+     mini scene whose layers are not in FM.scene.layers, so liveness would thrash all 50 of its fills). Over 8 records, every
+     record unused for 30 s goes (all of them, not one), and a project switch passes force: that is the one moment everything
+     is dead. The Image is blanked so its decode can be freed, not just unreferenced. */
+  function pruneFillImages(force) {
+    const keys = Object.keys(_fillImg);
+    if (!force && keys.length <= 8) return;
+    const now = performance.now();
+    keys.forEach(function (k) {
+      const r = _fillImg[k];
+      if (!force && now - (r.at || 0) < 30000) return;
+      r.img.onload = r.img.onerror = null; r.img.src = '';
+      delete _fillImg[k];
+    });
+  }
+  FM._pruneFillImages = pruneFillImages;
+  FM._fillImageCount = function () { return Object.keys(_fillImg).length; };
   function getFillImage(layer) {
     const src = layer.fillImage;
     if (!src) return null;
@@ -15179,17 +15196,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // Evict only a DEAD entry (its layer left the scene) — never keys[0], which is the next live
       // layer about to be drawn: FIFO eviction chased the draw pointer and thrashed every fill to the
       // blue placeholder + re-decoded every image every frame once a project had >40 media fills.
-      const keys = Object.keys(_fillImg);
-      if (keys.length > 40) {
-        const live = new Set((FM.scene && FM.scene.layers || []).map(l => l.id));   // flat array incl. group children
-        const dead = keys.find(k => !live.has(k) && k !== layer.id);
-        if (dead) delete _fillImg[dead];
-      }
-      rec = _fillImg[layer.id] = { src: src, img: new Image(), ready: false };
+      pruneFillImages(false);
+      rec = _fillImg[layer.id] = { src: src, img: new Image(), ready: false, at: performance.now() };
       rec.img.onload = () => { rec.ready = true; FM.requestRender(); };
       rec.img.onerror = () => { rec.failed = true; };   // corrupt data URL → placeholder, no endless retry
       rec.img.src = src;
     }
+    rec.at = performance.now();
     return rec.ready ? rec.img : null;
   }
   // Paint the CURRENT path with the layer's fill (solid / gradient / media), honouring fillOpacity
