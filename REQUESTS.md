@@ -35650,7 +35650,16 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       The first Linux pass died on Chrome's 8 GB renderer cap; it may be what keeps pushing this 8 GB Mac into swap (the 23:46 reboot, the 17:36 load 41). Find the tests that leave media, bitmaps, AudioContexts or workers alive, and add a guard that fails a run whose renderer grows past a set budget. Full plan: #1071's 18:10 block.
       📍 **7 Oct ~01:40 — it now stops this Mac shipping at all:** v17.24's full suite froze twice at the desktop pass — page silent for minutes at test 765 (00:4x, ran to the 72-min cap) and at test 201 (01:24; stopped by hand at 350 s silent) — with the test Chrome squeezed to under 1 MB resident and swap at ~7 of 8 GB. Not a crash (the driver's new crash detection stayed quiet) and not this release's flags (only --mute-audio and --use-mock-keychain on the Mac). A hunt workflow is measuring growth per test on slices, then fixing the worst leaks in the tests and adding a budget guard that fails a run by name.
+      📍 **7 Oct — measured, parked at the switch-over:** total growth ~4.9 GB over the measured slices; the biggest by far is an APP leak (#1095, the effects browser, ~2.2 GB), then the splash film (#1096, ~176 MB), then compositor and image caches. Two fixes written (the splash film; the fx sweep test putting each pick back) and a budget guard half built — on branches suite-mem2 and suite-mem-fix, LOCAL to the Mac: push them with `git push ssh suite-mem2 suite-mem-fix`.
+      📥 **Moved in from INBOX.md, 7 Oct (the block, verbatim):**
+      ### 07 Oct 2026, ~03:35 AWST — #1085 note: the 8.7 GB was VmData (reserved address space), not resident memory — PM finding, NOT his words
 
+      The cloud helper ran the full suite in its own Linux container while sampling memory. Renderer RSS peaked at about 1.1 GB, and roughly 250-300 MB never came back, though that was measured without a forced GC. It "could not reproduce 8.7 GB".
+      The PM's check (`tools/design/pm/helper-batch2-verified.json`, hunts): your own commit ca74942c quotes the kernel line "VmData 8760119296 exceed data ulimit 8589934592". That is **reserved data, not resident memory**, so the two numbers don't contradict each other.
+      For #1085:
+      - (a) a guard built on RSS would miss this, and on the Mac RSS FALLS exactly when memory is short (pages get swapped out). Sample VmData on Linux, and on the Mac a footprint figure such as `vmmap --summary` / phys_footprint, or call performance.measureUserAgentSpecificMemory in-page with a forced GC.
+      - (b) "pools only grow" is true only of `_fxScratch`; the pool canvases resize to the exact size on every use.
+      - (c) the Mac's real problem tonight was swap pressure from everything at once: two AIs, test Chrome, Spotlight and the keychain daemons. Treat the suite's footprint as one contributor, not the whole cause.
 - [ ] **1086 — Export: one clip's sound fails to read, the export goes out without it, and the ready card still says Sound ✓ (hunt MEDIUM #1086)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
       **STATUS: 🟢 READY — nothing is stopping this**
       1. CONFIRMED: a project where ONE clip's sound fails to read exports with that sound missing, yet the ready card says "Sound ✓".
@@ -35712,6 +35721,19 @@ re-opened #480, which I had marked done and had not fixed.
       **Also seen:** two headless Chromes from about 10 h ago (pids 27887/27888, `--disable-gpu --hide-scrollbars`, profiles `tmp.5Y5UB…`/`tmp.2clbC…`, parents 27132/27133 still alive, ~54 MB, idle). These look like a hung screenshot helper. Clean them up after the ship.
       🔨 7 Oct ~00:55: built into tests/_cdp.py in release/v17.24 (unshipped). MEASURED, INCONCLUSIVE: secd ran 31–84% with the flag and 34–84% without, against 63–98% with no test Chrome at all — other apps drive most of it; kept as harmless (921 S0 12/12 both ways). Still to do: tests/_kbdevice.py, tests/_shot.sh, tools/shot.py. The two 10-hour-old headless Chromes (pids 27887/27888) are NOT the builder's: their parents are `./shot.sh terremoto …` and `./shot.sh pandc …` screenshots of outside sites, so they were left for whoever ran them.
 
+- [ ] **1095 — Phone and PC: after picking from the effects browser, ~335 full-size (1080x1920) canvases stay alive — about 2.2 GB — so a long editing session can run a phone out of memory (hunt HIGH #1095)** (7 Oct — found by the #1085 suite-memory measurement on the Mac; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Measured per test with a heap walk: test #1279 ('every tile in the browser picks instead of applying') left 335 detached 1080x1920 canvases plus ~115 thumbnails of 192x192 (memory-infra canvas 2072 MB, malloc 2.4 GB). It is the app holding them, not the test — a user browsing effects for a while would hit the same. Also: the compositor's scratch canvases (_tiA/_tiB, _thA/_thB, _wpPool) and fx-thumbs' caches only grow (#1089 overlaps). Evidence: tests/1085-memory-measurement.json on branch suite-mem-fix (LOCAL to the Mac until pushed). Fix with a test that fails first (count the live canvases after browsing N effects), then measure a long session on his phone.
+
+- [ ] **1096 — The intro film (splash-v2.mp4) stays loaded in memory for the whole session after the splash has gone (~176 MB) (hunt MEDIUM #1096)** (7 Oct — the #1085 measurement; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      dismiss() removes #splash but never empties the <video>, so its decoded frames (media/frame_buffers ~163 MB + webmediaplayer 13 MB) live on. A fix is written and committed on branch suite-mem-fix (597ca2ef, 'the intro film lets go once the splash has gone') — LOCAL to the Mac until pushed; verify on his phone.
+
+- [ ] **1097 — The laptop cannot ship ANY app change until the ~80 real-finger tests run on Linux** (7 Oct — found while writing SWITCHOVER.md; NOT his words; part of the move, #1071)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      On Linux headless Chrome those tests report NOT RUN HERE (turning touch emulation off wipes the Mac-like mouse settings), and while any of them is NOT RUN the feature gate refuses every shipped-source change, by design. The Mac can no longer run a full suite (8 GB, #1085). So every Simple-mode release waits on this. Lead: drive hover/pointer through CDP Emulation.setEmulatedMedia and re-apply after each touch batch. Fallback: the Mac runs ONLY the NOT RUN tests for an exact tree and writes an attestation the gate accepts.
+      ❓ASK (if Linux cannot do it): may the laptop ship app changes on a Mac-run attestation of just those tests? (SWITCHOVER.md §5)
+
 - [ ] **1098 — Test like the phone, but also see the PC's real speed, and find Windows issues (his answer, 7 Oct, while the laptop shipped v17.24)** (7 Oct, ~09:55 AWST — his words, in the laptop builder's chat)
       **STATUS: 🟢 READY — nothing is stopping this**
 
@@ -35735,3 +35757,17 @@ re-opened #480, which I had marked done and had not fixed.
       3. [ ] *"and also find issues with windows"* — run the app (and where possible the suite) in Windows Chrome/Edge on
          this laptop, not only in Linux Chrome under WSL. He has enabled Claude in Chrome here, which can drive his real
          Windows Chrome. Related: #1081 (PC export Save may open the Windows Share window).
+
+- [ ] **1099 — Opening a file can freeze the app: caps on layers, effects, keyframes, path points and fonts, and shape checks in the sanitiser (hunt MEDIUM #1099)** (7 Oct ~04:05 AWST — via INBOX, the PM's note on the cloud helper's hunt/import-robustness; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+
+      📥 **The INBOX block, verbatim:**
+      ### 07 Oct 2026, ~04:05 AWST — (hunt MEDIUM) Opening a file can freeze the app: measured by the cloud helper — PM note, NOT his words
+
+      The cloud helper's `hunt/import-robustness` report (`tools/design/hunts/import-robustness.md` on that branch) was **measured in a real browser**, not just read, against v17.23. The PM has not re-verified it, so reproduce each case before fixing it.
+      - **Freezes:** 100 layers × 20 glows froze the tab for over 60 s; 120 blurs took 25 s; 40k keyframes took 9 s; 80k path points took 10 s; a 500-project backup took over 60 s.
+      - **Shape checks:** 200 fonts were accepted with no cap. `project` given as an array was accepted. `project: "x"` silently produced an empty project.
+
+      These come in through opening a shared project, a backup or a template, or through Work-with-friends. The smallest fixes are caps on layers, effects per layer, keyframes, path points and fonts, refused with a plain message, plus shape checks in the sanitiser (see the whitelist-drift memory: refuse bad shapes, keep plain fields). Log as one hunt item.
+
+      Also on helper branches, for later (queue order, not now): `design/beginner-traps` (3 HTML options per trap, one recommended) and `design/tutorials-tab` (3 layouts; A, cards, recommended). Both are design work, so the pictures go to Ezra before anything is built (#545). The PM will render them and show him.

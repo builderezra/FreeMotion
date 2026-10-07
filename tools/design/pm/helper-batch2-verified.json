@@ -1,0 +1,346 @@
+{
+ "tutorials": {
+  "items": [
+   {
+    "what": "T11 Style a title: Customise Text opens the editor; the Aa sheet has Style B/I, Spacing, Line height, Curve and Animate (Pop etc.); dragging the ruler left raises the value; the tick is at the far right; on a computer the editor is a card at the bottom of the picture",
+    "verdict": "ok",
+    "problem": "",
+    "fix_or_replacement": "",
+    "evidence": "inspector.js:4027 (the element card on a text layer calls textEdit.start); inspector.js:5690-5751 (buildTextExtras); inspector.js:979 (drag LEFT raises); text-edit.js:882 bar.append(colorBtn, alignBtn, fontBtn, sizeBtn, extrasBtn, doneBtn); styles.css:6601 hides the PC side column for plain text, so layoutDesktop falls back to the card floating at the bottom of the stage"
+   },
+   {
+    "what": "T12 step 8: \"Tick Caption background for a box behind the words.\"",
+    "verdict": "wrong",
+    "problem": "Add > Captions creates the layer with captionBg = true, so the box is already there and the setting is already ticked. A beginner who follows the step turns the box OFF.",
+    "fix_or_replacement": "8. **Caption background** is ticked to start with, which puts a box behind the words. Untick it if you want the words on their own.",
+    "evidence": "app.js:3485 `layer.captionBg = true;` in FM.addCaptionLayer; inspector.js:5757 checkRow('Caption background', !!layer.captionBg, ...)"
+   },
+   {
+    "what": "T12 Tip: Detect speech \"lays down empty captions\" (LOSE-WORK RISK)",
+    "verdict": "fix",
+    "problem": "detect() throws away the whole caption list and its timings and builds a new one. Old words move only onto the single new caption they overlap most, one for one. Any typed caption that doesn't line up with detected speech loses its words. Because the tip comes after steps 3-7, a user who typed captions first and then taps Detect speech loses words and timings without warning. Undo is the only way back. Also, the starting words \"First caption\" / \"Second caption\" are carried over, so the new captions are not empty.",
+    "fix_or_replacement": "Tip: **\ud83c\udf99 Detect speech**, at the top of that captions list, finds where someone talks and replaces your captions with new ones timed to the speech, all on your device. Use it **before** you type: it doesn't write the words for you, and words that don't line up with speech are dropped. If you lose words, tap undo straight away.",
+    "evidence": "captions.js:276-317 (old = typed cues; cues rebuilt from detected segments; `capLayer.captions = cues;` best-overlap carry with a `used` set); app.js:3483-3484 placeholder texts"
+   },
+   {
+    "what": "T12 step 4: the cue strip shows \"a count like 1/2\"",
+    "verdict": "fix",
+    "problem": "The label actually reads \"Cue 1 / 2\" (or \"Cue \u2014\").",
+    "fix_or_replacement": "4. Under the bar at the top is a small strip: **\u2039**, a count like **Cue 1 / 2**, **\u203a** and **+**. Tap **\u203a** to reach the next caption and type it. Tap **+** to add a new caption after this one.",
+    "evidence": "text-edit.js:198-202 updateCueNav: 'Cue ' + (active.cueIndex + 1) + ' / ' + cues.length"
+   },
+   {
+    "what": "T13 Tip: \"The bar counts your strokes (\\\"3 strokes\\\")\"",
+    "verdict": "wrong",
+    "problem": "On any screen narrower than 420px, which includes a ~380px phone, the stroke count is display:none. A phone user never sees it.",
+    "fix_or_replacement": "Tip: On a computer, the bar counts your strokes (\"3 strokes\"). On a phone there isn't room, so the count is hidden.",
+    "evidence": "styles.css:6079-6080 `@media (max-width: 419px) { #draw-bar .db-hint { display: none; } }` (queue 896 comment: count never readable on a phone)"
+   },
+   {
+    "what": "T13 step 5: the eraser lets you \"drag over a stroke to rub it out\"",
+    "verdict": "fix",
+    "problem": "The eraser deletes the WHOLE stroke you touch. It can't rub out part of one, and it only reaches strokes from the current sketch. A beginner expecting to rub out a little bit loses a whole stroke.",
+    "fix_or_replacement": "5. Tap the eraser icon, then touch or drag over a stroke. The whole stroke disappears; it can't rub out just part of one. Tap the eraser again to go back to drawing. If the wrong stroke goes, tap the undo arrow.",
+    "evidence": "draw-tool.js:572-577 'WHOLE STROKES, not part of one'; strokeIndexAt walks sessionSubs only (draw-tool.js:586-598)"
+   },
+   {
+    "what": "T13 step 3: \"A small bar covers the picture.\"",
+    "verdict": "fix",
+    "problem": "On a phone the bar is pinned to the bottom of the screen. On a computer it sits UNDER the picture and does not cover it.",
+    "fix_or_replacement": "3. A small bar appears at the bottom of the screen (on a computer, just under the picture). Press and drag on the picture to draw. Lift your finger and the stroke stays.",
+    "evidence": "styles.css:6012 #draw-bar bottom: safe-area+16px; styles.css:6024-6028 @media (min-width:701px) top: var(--fm-canvas-bottom)+14px"
+   },
+   {
+    "what": "T14 step 5: \"After three points the bar says it is ready to finish\"",
+    "verdict": "wrong",
+    "problem": "That message is the same .db-hint element, and it is hidden below 420px. On a ~380px phone the bar says nothing.",
+    "fix_or_replacement": "5. Once you have three or more points, tap **Done**, or tap your first point again to close the shape.",
+    "evidence": "draw-tool.js:766 hint text 'Done / Enter to finish\u2026'; styles.css:6079-6080 .db-hint display:none under 420px"
+   },
+   {
+    "what": "T14 step 7: \"drag its handles to shape a curve\"",
+    "verdict": "fix",
+    "problem": "Points placed with Custom shape are plain corner points ([x,y], no curve flag), so selecting one shows no handles. The panel's own hint only promises handles \"on a curve point\". Since the order is step 7 then step 8, a beginner looks for handles that aren't there.",
+    "fix_or_replacement": "7. Tap a point to select it. Your points start sharp, so there are no handles yet.\n8. On the left edge, the three icon buttons under the diamond make the selected point smooth (Curve), sharp (Corner), or delete it (the bin). After **Curve**, drag the point's handles to bend the line. Tap a hollow ring to add a point; double-tap a point to delete it.",
+    "evidence": "draw-tool.js:684-686 finish() passes t.points (pushed as [x,y] at 254/815); app.js:3376-3377 keeps p[2] only if present; inspector.js:4862 hint 'on a curve point, drag its handles'"
+   },
+   {
+    "what": "T14 steps 3/4 and Tip: a tap places a point straight away; the pad plus + Add point nudges it; Cancel throws the points away; at least 3 points are needed",
+    "verdict": "ok",
+    "problem": "",
+    "fix_or_replacement": "",
+    "evidence": "draw-tool.js:246-256 (tap pushes a point immediately; landing on the first point finishes); 809-818 + Add point; 666-690 finish needs >=3 points or toasts 'Tap at least 3 points, then Done'; 749-756 Cancel label in vector mode"
+   },
+   {
+    "what": "T15 step 4: \"Make sure the first of the four icons on the right edge (Move) is lit.\"",
+    "verdict": "fix",
+    "problem": "Tapping Move while it is already lit switches to anchor-point mode. Move stays lit (alt style), but the \u25c6 diamond and the easing button are not drawn there, so step 5 (\"Tap the diamond\") fails. A beginner told to \"make sure it's lit\" is likely to tap it.",
+    "fix_or_replacement": "4. With the camera selected, open **Position / Scale**. The first of the four icons on the right edge (Move) should be lit. If it isn't, tap it once. (Tapping it while it's lit switches to the anchor point and hides the diamond. Tap it again to come back.)",
+    "evidence": "inspector.js:5370-5378 (Move pressed on Move \u2192 'anchor'); inspector.js:4970-4977 kfBtn/easeBtn only appended `if (props.length)`, and MT_PROPS.anchor is empty"
+   },
+   {
+    "what": "T15 steps 3, 8 and Tip: the camera is neutral and only one is allowed; Camera Options blur tab has a Motion blur tick; there is a Z box in Position / Scale",
+    "verdict": "ok",
+    "problem": "",
+    "fix_or_replacement": "",
+    "evidence": "app.js:3453-3463; inspector.js:5812-5823; inspector.js:5003-5005 (X/Y/Z boxes in Move mode)"
+   },
+   {
+    "what": "T16 'If it doesn't work': \"tap the small up-down switch ... to move the add row to the top\"",
+    "verdict": "fix",
+    "problem": "The switch sends the add row to whichever end it is FURTHEST from. If the add row is in the upper half, one tap sends it to the BOTTOM, and the re-added adjustment lands under everything again. Deleting the layer also throws away any grading tweaks.",
+    "fix_or_replacement": "If it doesn't work: If your video doesn't change, the adjustment is below it. Delete it. Tap the small up-down switch in the row with the time counter until its knob sits at the top (that moves the add row to the top of the timeline), then add the adjustment again. Brightness and Saturation come back on by themselves, but you'll need to redo any changes you made.",
+    "evidence": "app.js:2926-2927 `moveAddMarker(p < 0.5 ? n : 0); // to the end it is FURTHEST from`; app.js:2843-2865 p = addAt / layers.length"
+   },
+   {
+    "what": "T16 steps 3-8: arrives with Brightness and Saturation on; has Effects and Mixing (Opacity) cards; bin in the phone top bar; Delete key on a computer",
+    "verdict": "ok",
+    "problem": "",
+    "fix_or_replacement": "",
+    "evidence": "app.js:3467-3475; inspector.js:3801 adjustment cats = blend/transform/presets/effects; index.html:407 #m-del"
+   },
+   {
+    "what": "T17 step 6: \"A card asks you to let them in. Tap Allow.\"",
+    "verdict": "wrong",
+    "problem": "For a friend joining, the card reads \"<name> wants to join \"<project>\" as Editor.\" and its buttons are **Don't allow** / **Let in**. \"Allow\" / \"Not now\" appear only when an existing member asks to edit. The card also turns the friend away by itself after 2 minutes. The draft's verification row (\"Allow / Not now\") checked the wrong branch.",
+    "fix_or_replacement": "6. A card says your friend wants to join. Tap **Let in**. Answer within 2 minutes, or it turns them away and they have to try again.",
+    "evidence": "collab-ui.js pumpKnock ~4090-4120: `const asking = k.info.kind === 'ask'`; text `who + ' wants to join \u2026'`; `btn('ck-yes accent', asking ? 'Allow' : 'Let in', \u2026)`; KNOCK_TIMEOUT 120000"
+   },
+   {
+    "what": "T17 step 5: friend opens the link \u2192 \"Join a friend's project\" sheet \u2192 Join",
+    "verdict": "fix",
+    "problem": "For a first-time friend, the pending-join path first shows other cards. On iPhone Safari it shows \"Open this in your FreeMotion app\". If the feature is off on their device, it asks \"Turn on Work with friends to join\" (Turn on / Not now). With no profile, it asks \"What should others see?\". Only then does the Join sheet appear. A friend following the tutorial meets three unexplained cards.",
+    "fix_or_replacement": "5. Your friend opens the link. The first time, FreeMotion asks them to turn on Work with friends (they tap **Turn on**) and to pick a name and colour (they tap **Continue**). On an iPhone it may first offer to open the link in the FreeMotion app instead of Safari; they follow its steps. Then a sheet called **Join a friend's project** appears, and they tap **Join**.",
+    "evidence": "collab-ui.js U.resumePendingJoin ~4985-5010 (landingCard if iOS browser \u2192 labsCard if !labsOn \u2192 U.profile() \u2192 drawJoin); labsCard title 'Turn on Work with friends to join', buttons 'Not now'/'Turn on'; landingCard 'Open this in your FreeMotion app'"
+   },
+   {
+    "what": "T17 step 4: \"You now have a link, a QR picture and a short code\" + 'No link?' paragraph",
+    "verdict": "fix",
+    "problem": "The QR picture is behind a **QR** button and is not shown by default. The link and short code are frosted until tapped (#972). Share\u2026 appears only where the browser supports it. The short code stops working 30 minutes after the card is closed, which matters for the 'No link?' route.",
+    "fix_or_replacement": "4. You now have a link and a short code. The short code is blurred until you tap it, and **QR** shows a code your friend can scan. Tap **Copy link** and paste it into a message to your friend. On most phones **Share\u2026** is next to it.\n\nNo link? Your friend can type the short code instead (it stops working 30 minutes after you close the sharing card). On Home they tap the person icon at the top, then **Join a friend's project\u2026**, type the code and tap **Join**.",
+    "evidence": "collab-ui.js:2102-2115 (Copy link; Share\u2026 only `if (navigator.share)`; 'QR' toggle button); 2117-2124 + 2131 short code, veil until tapped, 'stops working \u2026 minutes after you close this'; CODE_TTL 30*60000 (collab-core.js:126)"
+   },
+   {
+    "what": "T17 step 7: \"open the round button again and tap Stop sharing\"",
+    "verdict": "fix",
+    "problem": "Once a session is live, the person-plus button is hidden and replaced by the people chip, which shows your friend's initials in a coloured circle. It opens the same panel, but it no longer looks like the button step 1 described.",
+    "fix_or_replacement": "7. You are both editing the same project. When you are done, tap the round button again (it now shows your friend's initials) and tap **Stop sharing**.",
+    "evidence": "styles.css:11073 `#stage:has(> #collab-people) > #btn-share.cs-stagebtn { display: none; }`; collab-presence.js:1150-1190 drawChip/fillChip (initials, click \u2192 openPeople)"
+   },
+   {
+    "what": "T18 'If it doesn't work': go Home \"which saves it\" after tapping a template card by mistake (LOSE-WORK RISK)",
+    "verdict": "fix",
+    "problem": "Tapping the card opens the template itself, and going Home writes every change back INTO the template. A beginner who has already swapped media or typed words, thinking it was a new project, overwrites their template with no prompt. On a computer, the back button goes straight Home, so the 'first tap only deselects' remark applies only to phones.",
+    "fix_or_replacement": "If it doesn't work: If you tapped the card itself, a message says **Editing \"name\"**. That is the template, not a new project, and anything you change is saved into the template when you go Home. If you changed something, tap undo until it's back how it was. Then go Home with the back arrow at the top left (on a phone the first tap only deselects a clip), and use the three dots and **New project from template**.",
+    "evidence": "home.js:2030-2037 edit() \u2192 templates.openForEdit, toast 'your changes save back to it when you go Home'; home.js:3385-3391 Home open \u2192 FM.templates.commitDraft(); app.js:6909-6912 PC #btn-back \u2192 home.open() (no deselect step)"
+   },
+   {
+    "what": "T18 steps 1, 2, 5, 7: Templates is the second tab; the \u22ef menu has New project from template / Save template file\u2026 / Delete template\u2026 with a Delete confirm; Save as template\u2026 is on a project card",
+    "verdict": "ok",
+    "problem": "",
+    "fix_or_replacement": "",
+    "evidence": "index.html:703-706 tab order projects, templates, elements, tutorials; home.js:2003-2015; home.js:1471-1474"
+   },
+   {
+    "what": "T19 step 4: \"Tap the card called Custom elements\"",
+    "verdict": "fix",
+    "problem": "Custom elements is the 9th and last tile on the Elements tab, and the Add menu is paged, so on a phone it is usually on a later page. Tutorials 12-16 tell the user to swipe; this one doesn't.",
+    "fix_or_replacement": "4. Tap the card called **Custom elements** (four small squares). If you can't see it, swipe the tiles sideways. A browser opens with a search box. Tap your element. A message says **Inserted** and its name.",
+    "evidence": "addmenu.js:174-330 (INSTANT 4 tiles + Camera, Controller, Adjustment, New group, then Custom elements pushed last); addmenu.js:1325 pageCount = ceil(opts.length / perPage)"
+   },
+   {
+    "what": "T19 steps 5-6: \"Your element arrives as new layers\" / change the saved element",
+    "verdict": "fix",
+    "problem": "The element is inserted on top of all layers, STARTING AT THE PLAYHEAD, so with the playhead partway in it won't show at the start. Editing the saved element later doesn't change copies already added to projects, because insert makes fresh copies.",
+    "fix_or_replacement": "5. Your element arrives as new layers on top, starting where the playhead is (slide the timeline to the right spot before step 3). Move, resize or restyle them like any layer.\n6. To change the saved element itself, go Home and open the **Elements** tab. Tap its card. A message says **Editing** and its name. Your changes save back when you go Home. Projects you already added it to keep their own copy.",
+    "evidence": "storage.js:3620-3625 elements.insert: reIdLayers copy, `l.start += FM.time - t0`, `FM.scene.layers = re.layers.concat(...)` (prepended = top)"
+   },
+   {
+    "what": "T20 step 4: \"Under the graph is a row of small curve pictures. From the left they are Linear\u2026\"",
+    "verdict": "fix",
+    "problem": "Under the graph are TWO rows: first the kinds row (Bezier / Bounce / Steps, each with its own little curve picture and label), then the six preset pictures. A beginner reading \"from the left\" on the first row they see is looking at the kinds.",
+    "fix_or_replacement": "4. A new move is **Linear**: the same speed all the way. Under the graph are two rows. The top row is the kind of curve (**Bezier**, **Bounce**, **Steps**). The row below it has six small curve pictures. From the left they are Linear, Ease In, Ease Out, Ease In-Out, Overshoot and Anticipate. Tap one.",
+    "evidence": "graph-editor.js:582 `wrap.append(main, famWrap, presetWrap)`; graph-editor.js:471-479 famWrap buttons each draw a glyph + label"
+   },
+   {
+    "what": "T20 step 8: \"(The back arrow at the top left would close the clip's whole options panel instead.)\" with \"On a computer: the same\"",
+    "verdict": "fix",
+    "problem": "On a phone the top-left back arrow deselects the clip. On a computer it leaves the project and goes Home.",
+    "fix_or_replacement": "8. To close the graph, tap **\u2039 Position / Scale** at the top of the panel. (Not the back arrow at the top left: on a phone that deselects the clip, and on a computer it goes Home.)",
+    "evidence": "mobile.js:347 m-editing \u2192 selectLayer(null); app.js:6909-6912 PC #btn-back \u2192 exitGroup or FM.home.open(); inspector.js:7146-7147 '\u2039  Position / Scale'"
+   },
+   {
+    "what": "T20 steps 2, 3, 6: the curve button is under \u25c6; new keys are Linear; the segment is the one at the playhead; Bounce family is Bounce/Elastic/Cyclic/Random; loop/copy/paste beside the graph",
+    "verdict": "ok",
+    "problem": "",
+    "fix_or_replacement": "",
+    "evidence": "inspector.js:4972-4976; scene.js:316,421 e:'linear'; graph-editor.js:156-171 pickKfs; eases.js:185-197; graph-editor.js:488-573"
+   }
+  ],
+  "summary": "I checked tutorials 11-20 on refs/remotes/h/tutorials-drafts (38934196) against the app code at b46b47d3, about 3 claims per file. The code was extracted read-only to the scratchpad. Tutorial 11 is clean.\n\n**Could make a user lose work:**\n- **12 (Tip):** Detect speech throws away the caption list and its timings and builds a new one. Typed words survive only on the one new caption they overlap most; the rest are dropped (captions.js:276-317). The tip comes after the typing steps, so it needs to say \"use it before you type, undo if words go\".\n- **18 ('If it doesn't work'):** tapping a template card edits the template itself, and going Home saves every change into it (home.js:3385 commitDraft). The draft tells the user to go Home \"which saves it\" without warning that this overwrites the template.\n- **16 ('If it doesn't work'), minor:** delete-and-re-add throws away any grading tweaks, and the up-down switch sends the add row to whichever end is furthest away. One tap can send it to the bottom (app.js:2926-2927).\n\n**Wrong outright:**\n- **17 step 6:** the button says **Let in**, not Allow. \"Allow / Not now\" only appears when a member asks to edit. The draft's own verification table cites the wrong branch.\n- **12 step 8:** Caption background is already ticked on a new caption track (app.js:3485), so following the step turns the box off.\n- **13 Tip and 14 step 5:** the bar's stroke count and \"ready to finish\" message are hidden on phones narrower than 420px (styles.css:6079-6080), so a ~380px phone never shows them.\n\n**Smaller fixes (exact replacement text is in each item):**\n- **12:** the strip label reads \"Cue 1 / 2\", not \"1/2\".\n- **13:** the eraser removes whole strokes, not part of one. The bar sits at the bottom of the screen, or under the picture on a computer.\n- **14:** new points are sharp corners, so there are no handles until you tap Curve.\n- **15:** tapping Move while it is already lit switches to the anchor point and hides the diamond that step 5 needs.\n- **17:**\n  - A first-time friend sees extra cards before the Join sheet: turn on Work with friends, pick a name, and on an iPhone in Safari an \"open in the app\" card.\n  - QR is a button, and the short code is blurred until tapped and lasts 30 minutes after the card is closed.\n  - Once a friend joins, the round button shows their initials.\n- **19:** Custom elements is usually on a later tile page, and an element lands at the playhead.\n- **20:** there are two rows under the graph (kinds first, then presets). On a computer the top-left back arrow goes Home.\n\nNot checked: tutorial 18's \"Insert your Media\" sheet also offers \"Your colour\" for shapes, which the draft leaves out (an omission, not an error). On the PC captions dock the caption list also shows under the field, which the draft doesn't mention."
+ },
+ "plans": {
+  "items": [
+   {
+    "what": "P1 \u00a71.1 (Editing lags + #202): render the 12-second autosave card thumbnail at card size instead of full project size",
+    "verdict": "fix",
+    "problem": "The code location is right. `makeThumb` is at storage.js:2133, the full-size `src` at :2140, `renderScene` at :2147 (the plan says :2149 for `s`, actually :2148) and the 12 s gate at :2468. The claim that the compositor would scale px parameters is also right: renderScene works out __fmRS from canvas.width/P.width (compositor.js:18745) and pxToPlate is at :3929.\n\nThe plan misses two risks. (1) The comment on makeThumb says the progressive halving exists because a single 1080->180 drawImage made 'the old mushy cards'. The compositor draws layers with default smoothing (only 2 imageSmoothingQuality lines in 19,475), so a 360px plate brings that downscale back, and pinThumbnail and template/element pack thumbnails (liveThumbOf) share this function. (2) The comment at compositor.js:3890-3894 says thumbnails stay byte-identical *because* they are rendered unstamped at project size. Px-unit effects not routed through pxToPlate will look different on the cards, which is a visible change to Home.\n\nTest (a) is weak. A canvas's width is set after createElement, so the hook has to read the width afterwards. It also only checks `src`: the effect pools (H3 \u00a72) are resized, not created, so the test cannot see them bouncing to full size, and that bouncing is the main cost.",
+    "fix_or_replacement": "Render at about 2x card size (720px on the longest side) and keep one halving step. That is about 7x cheaper than 1080x1920 and keeps the averaging step. Zero the width and height of the temp canvases. Show Ezra before/after cards (photo, video and a heavy-effect project) at the size Home shows them before shipping. In the test, spy on the HTMLCanvasElement width setter (or _fxScratchInfo) during FM.storage.makeThumb on a 1080x1920 project and assert no plate wider than 720. That fails on HEAD.",
+    "evidence": "git show b46b47d3:js/storage.js 2130-2162 (the halving comment: 'a single 1080\u2192180 drawImage skipped most source pixels = the old mushy cards'). compositor.js:3890-3899 and 18738-18748. grep -c imageSmoothingQuality compositor.js = 2. h/hunt/app-memory app-memory.md \u00a71-2 (pools resized on every use)."
+   },
+   {
+    "what": "P1 \u00a71.2: a 'flight recorder' of slow frames saved to localStorage, shown in Settings \u2192 What's slow",
+    "verdict": "ok",
+    "problem": "The gap is real. perf-probe.js (480 lines) has 0 localStorage uses, and the only persisted perf evidence is fm.lastPerfReport, written after a manual 10 s Measure (app.js:498). The plan leaves out one thing: app.js:472-487 already pops a 'Playback is struggling \u2014 tap to measure' toast when the quality ladder is exhausted, so measuring is not purely manual. The recorder is additive: one Settings block, matching the existing report rows (settings.js:752 'What's slow', :455 the reports jump). That is safe for the Full editor, and it works at 380px the same way the existing rows do.",
+    "fix_or_replacement": "Hook it in app.js's notePlaybackCost/maybeOfferPerfProbe path, where the render ms, gap and tier are already known, rather than in a new perf-probe module. A new file would need a script tag and its own ?v=. Write only on slow frames and throttle the writes, as planned.",
+    "evidence": "git grep \"'fm.last\" b46b47d3 -- js/ lists 10 report keys including fm.lastPerfReport (app.js:498). app.js:472-487 maybeOfferPerfProbe. settings.js:752, :794."
+   },
+   {
+    "what": "P1 \u00a71.3: an optional 'this scene is too heavy to preview at full quality' toast, attributed to 'his own line in entry E'",
+    "verdict": "wrong",
+    "problem": "This is not Ezra's line. In #202 it is Claude's own note ('plus, possibly, warning him when a scene's cost has passed\u2026'). The behaviour also already exists twice: FM.warnOversizeProject toasts 'This project is N megapixels \u2014 tap to fix the lag' (app.js:2987-2999), and maybeOfferPerfProbe toasts 'Playback is struggling' once the ladder is spent and frames are still late (app.js:472-487). A third toast would duplicate them.",
+    "fix_or_replacement": "Drop it. If wording is the problem, reword the existing struggling toast, and only after showing Ezra the text.",
+    "evidence": "REQUESTS.md@b46b47d3 #202 tail (entry lines 10035-10298): 'possibly, warning him when a scene's cost has passed what the preview can hold'. app.js:2987, :2999, :484."
+   },
+   {
+    "what": "P1 \u00a72: the visual identity pass (BEFORE-PUBLISHING) \u2014 draw 3 home-screen and 3 Add-menu options, then a comment-only sweep of 'alight'",
+    "verdict": "fix",
+    "problem": "The plan is out of date. It says 'the whole phone layout\u2026 is untouched' and step 1 is drawing new home-screen options, but v17.22 (f7716576, two releases before b46b47d) re-laid-out Home 'from the approved reference': centred wordmark, Settings/Search/Profile across the top, four destinations around New. BEFORE-PUBLISHING.md was not updated by that commit, so its 'done' item 1 may be partly met and nobody has recorded it.\n\nThe comment sweep is low-risk but not free. The 'alight' mentions are spread across 20+ js files plus index.html, so ship.sh's ?v= gate needs a buster bump for each, and prove.sh needs UNPROVABLE for a comment-only change. The item is also HELD by him (raise it, let him decide). Not building the main work without pictures is correct.",
+    "fix_or_replacement": "First compare v17.22's Home against done-item 1 and update BEFORE-PUBLISHING.md. Then draw options only for what is still borrowed (the Add menu, colour/type, words). Ask before the comment sweep, and batch it into a release that already bumps those files.",
+    "evidence": "git show --stat f7716576 ('v17.22 \u2014 Home layout from the approved reference'; touches home.js and styles.css, not BEFORE-PUBLISHING.md). POLISH-LOG v17.22 line 1538. BEFORE-PUBLISHING.md:114-137. git grep -c -i alight b46b47d3 -- js/ index.html."
+   },
+   {
+    "what": "P1 \u00a73: #47(b), export off the main thread (S0 inventory script, S1 canvas factory, S2 frame source with a demuxer, S3 worker behind Labs), plus a 'cheap win: yield every N frames'",
+    "verdict": "fix",
+    "problem": "The locations are right: FM.exporter at exporter.js:1160, seekVideo at :173, only vendor/mp4-muxer.js, no `new Worker` in app code, _mflow at compositor.js:12249. The counts are line counts: 94 lines contain createElement (118 occurrences) and 254 lines contain drawImage (268).\n\nThe 'cheap win' is already shipped. exporter.js:1500-1508 does 'ONE unconditional yield per frame' over MessageChannel, tagged (#47).\n\nThe staging contradicts the entry. The entry's 27 Aug ruling is 'NOT NOW\u2026 Revisit the moment #604 and #215 are closed', and both are still open, yet the plan's build order puts S0/S1 fourth. S1 is a 94-site refactor of the whole renderer, which is risky to Full-editor function for no visible gain.\n\nThe test is contradictory. A pure refactor (S1) cannot 'fail with the factory change reverted'; only S3's main-vs-worker hash comparison can.\n\nSmall error: the plan calls mp4box.js MIT. I believe it is BSD-3-Clause; check before vendoring.",
+    "fix_or_replacement": "Remove the yield idea. Keep only S0 (a read-only inventory) until #604/#215 close. When S1 happens, its proof is either UNPROVABLE (pure refactor) or a seam test that counts FM._mkCanvas use. The frame-hash test belongs to S3.",
+    "evidence": "exporter.js:1500-1508 (`await nextTick();` \u2026 '(#47)'). REQUESTS.md@b46b47d3 #47 entry lines 5053+, offsets 97-109 ('NOT NOW \u2014 and the reason is #604\u2026 Revisit the moment #604 and #215 are closed'). grep -c vs grep -o counts on compositor.js."
+   },
+   {
+    "what": "P1 \u00a74: #129 short screen recording shows no picture \u2014 a fallback decode path, the report in the flight recorder, and a 'no picture, tap for why' banner on the clip",
+    "verdict": "fix",
+    "problem": "The locations are right: _hevcFromProbe at media.js:319, blankClipFacts at :394, codecSupport at :423, refused-at-load at :204, the HEVC fixture, and tests at tests.js:66721 and :83293. Two things are wrong.\n\n(1) The fallback 'to the WebCodecs path the exporter already needs for frames (js/frames.js)' does not exist. frames.js seeks the same <video> element and calls createImageBitmap on it (frames.js:86, :198). The only WebCodecs use in the app is encoding (EncodedVideoChunk in export-resume.js). If the element cannot decode the file, frames.js cannot either. The plan's own \u00a73 notes there is no demuxer.\n\n(2) The clip banner is a new visual on the Full editor's timeline. Under his standing design rule it needs options shown to him first, and the plan does not say so.\n\nMinor: the 15 s timer is FM.decodeWait at media.js:292; :596 is the toast.",
+    "fix_or_replacement": "Drop the frames.js/WebCodecs fallback. A real fallback needs a demuxer plus VideoDecoder, which is the same vendor decision as \u00a73. Draw the banner options at 380px and get his pick before building. fm.lastBlankClip is already persisted and copyable (settings.js:1028), so folding it into the recorder adds little.",
+    "evidence": "git show b46b47d3:js/frames.js lines 78-86 and 198 (el.currentTime seeks, createImageBitmap(el)). git grep VideoDecoder b46b47d3 -- js/ finds only EncodedVideoChunk in export-resume.js. media.js:292 decodeWait=15000. media.js:598 is the toast."
+   },
+   {
+    "what": "P1 \u00a75: #202 one video layer lags \u2014 no more ladder work; covered by \u00a71",
+    "verdict": "ok",
+    "problem": "Accurate. The entry says the ladder was cleared by measurement (v11.29), that 'tier 0 at 10.7 fps' was a paused sample, and 'Do not spend another round on the ladder itself'. notePlaybackCost returns early unless playing or dragging (app.js:311-312). The only flaw is the \u00a71.3 toast mislabelled as his line (see that item).",
+    "fix_or_replacement": "None beyond \u00a71.3.",
+    "evidence": "REQUESTS.md@b46b47d3 entry 10035, offsets 247-250. app.js:311-312."
+   },
+   {
+    "what": "P2 A: #482 improve every effect \u2014 follow backlog batches 7-15; the claim that the entry's 31 Aug table of nine short sliders is stale",
+    "verdict": "ok",
+    "problem": "The stale-table claim is true. All nine ceilings read as P2 says at b46b47d: Dither 64 (:204), Halftone 120 (:209), Find Edges 24 (:243), Emboss 18 (:259), CRT 40 (:327), Chunk Noise 300 (:522), Iridescence 60 (:595), Shockwave 600 (:1454), Lens k1 \u00b13 (:1589). It is not a new finding, though. The same entry already says '\u2705 ROUND 3 SHIPPED v14.81 \u2014 30 CEILINGS RAISED', with these exact values, a few lines below the table, so it does not shorten the work. The backlog (1,399 lines, table at :71-88), tools/design/482/batch4 and the shipped batches 1/2/3/5/6 are all as stated. Building batch by batch with defaults byte-identical is consistent with his rules, and the picture-first batches (4, 8.2, 9.1/9.2, 15.4) are correctly flagged.",
+    "fix_or_replacement": "Reword the 'finding' as 'already recorded at v14.81'. Nothing else to change.",
+    "evidence": "awk over compositor.js@b46b47d3 at lines 204/209/243/259/327/522/595/1454/1589. REQUESTS.md #482 entry offsets 3-17 (the table) and 31-55 ('ROUND 3 SHIPPED v14.81')."
+   },
+   {
+    "what": "P2 B: #508 opening a project is janky \u2014 throttled measurement, then move or defer the editor build out of the 520 ms push",
+    "verdict": "fix",
+    "problem": "The locations are right: lastOpenReport at home.js:168, PUSH_IN_MS=520 at :179, pushAllowed max-width 700px at :489-490, settings.js:936/:951, test 75993 (runs atPhoneWidth), _cdp.py:249-269 throttle seam, fm-push-in at styles.css:7229.\n\nThe proposed suite test ('no gap over 33 ms under 4-6x throttle') has three problems. The 508 test deliberately 'does not assert smoothness'. A frame-gap threshold on a loaded 8 GB Mac running a ~35-minute suite will flake. And fm-push-in is a translate3d animation driven by the compositor, so main-thread rAF gaps can pass while the phone still janks on GPU rasterising the new editor.\n\nStep 2 calls filmstrips, waveforms and the layer list 'non-visible work', but they are on screen in the editor as it slides in. Deferring them shows an empty timeline arriving, which is a visible change to the Full editor.",
+    "fix_or_replacement": "Run the throttled reading as a one-off probe, not a ship-gating assertion. If a fix lands, guard it deterministically: assert that no heavy build call runs between push start and animationend (that fails on HEAD). Show him a before/after screen recording at phone width before shipping any deferral.",
+    "evidence": "home.js:168, :179, :489-490. tests.js:75993-76018 (atPhoneWidth, _pushAllowed). The test's own header: 'It does not assert smoothness'. styles.css:7229-7232 (translate3d keyframes)."
+   },
+   {
+    "what": "P2 C: #619 pressing a template should offer the media swap \u2014 a two-choice sheet on tap (A), tap = use (B), or a hint (C)",
+    "verdict": "fix",
+    "problem": "The code and the conflict are accurately described: 'New project from template' at home.js:2003, edit() at :2027, use() at :2040, selectify(card\u2026, edit) at :2078, the #505 comment at :2019-2025, and the #619 entry's own \u23f8 note. Drawing options first is right for a change to the Full editor's Home tap.\n\nThe test section is wrong. Tests 61427 and 75746 do not drive the card tap: 75746 calls FM.templates.openForEdit directly, and 61427 tests update-in-place. So they will not 'flip'. The '505 pair' are 75628 (elements) and 75746. The plan also misses the existing 619 test at tests.js:78359 ('the template media-swap opens only with media'). Among the 505/619/343 tests nothing asserts what the card tap does, so the new test is the only guard.",
+    "fix_or_replacement": "Correct the risk paragraph: no existing test pins the tap, so write the new card-tap test (sheet shows both labels \u2192 each opens the right place) and keep 78359 green. Keep the picture-first step.",
+    "evidence": "tests.js:75746-75785 (const pid = await T.openForEdit(tid)). grep of test titles for items 505/619/343: 61427, 69749, 75628, 75746, 78359. home.js:2003-2078."
+   },
+   {
+    "what": "P2 D: #663 audio cuts in and out \u2014 the suspect that applyAt rewrites every effect parameter every frame; fix = skip unchanged non-keyframed values",
+    "verdict": "ok",
+    "problem": "The code fact is verified. tick() calls FM.audioFxLive.applyAt(FM.time) every frame (app.js:2478). The chain's applyAt (audio-fx.js:1618-1625) calls b.u.set for every param of every effect, and set (\u2248:242-246) is a bare setValueAtTime with no change check for AudioParam-backed params. 'Effects' in his trigger does mean audio effects (#845).\n\nOne part is wrong. Pitch Shift's reshape does not run per frame on a static value: its custom setters are change-gated (`if (v !== st)` / `if (v !== ct)`, \u2248:1476/:1482). Only the keyframed glide writes per frame, by design.\n\nAs a cause it is unproven. Chrome prunes past timeline events, WebKit's behaviour is unknown, and the main-thread cost is microseconds. #845 names the larger suspect: the MediaElementSource route itself. The fix is cheap and invisible, and the existing applyAt tests (tests.js \u2248116911-116924: 'the only way a dragged slider reaches the sound') still pass with a last-value cache, because a dragged value differs. The counting test is real and fails on HEAD.",
+    "fix_or_replacement": "Strike the reshape sentence. Key the cache on the built unit, reset it on rebuild, and keep custom setters always called, as planned. The reversed-clip chains (audio-play.js applyAt, called from audio-fx-live.js:513-522) share the same chain object, so test both. Ship it with the per-second set count in 'Your last playback' so his next paste decides it.",
+    "evidence": "app.js:2478. audio-fx.js:1618-1625, 242-246, 1411-1424, 1476, 1482. audio-fx-live.js:513-522. #845 entry (REQUESTS.md:30120). tests.js:116181-116924 (applyAt usage)."
+   },
+   {
+    "what": "P2 E: #676 the add menu opens twice \u2014 a per-frame recorder of #add-sheet's top and the pager scroll for 700 ms, then a fix if the pager moves",
+    "verdict": "fix",
+    "problem": "The locations are right: syncAddSheetTop at mobile.js:391-397, called at :403, the hinge at styles.css:9954, the base slide at :4807, test 76240.\n\nThe statement that the only other caller is the export object is wrong: the window resize listener also calls syncAddSheetTop (mobile.js:449). The export object is not a caller.\n\nP2's unverified pager guess has real support. addmenu.js:1424-1430 restores the pager's scrollLeft one requestAnimationFrame after render whenever startPage > 0, which happens after switching tabs or adding a layer in the same session. That is a content jump during the hinge.\n\nThe test's 'single monotonic motion / any reversal' will trip on the designed overshoot. The easing is cubic-bezier(.18,.85,.28,1.02) under rotateX with perspective, so the box goes slightly past its end.",
+    "fix_or_replacement": "Add the resize caller to the trace, and record pager.scrollLeft and the startPage jump. Give the reversal check a tolerance measured from the hinge's own overshoot (his tolerance-from-measurement rule). The recorder is additive, so it is safe for the Full editor.",
+    "evidence": "mobile.js:449 (window resize \u2192 syncAddSheetTop). addmenu.js:1424-1430 (requestAnimationFrame(jump) sets pager.scrollLeft = startPage*clientWidth). styles.css:9954-9958 (cubic-bezier(.18,.85,.28,1.02), perspective rotateX)."
+   }
+  ],
+  "summary": "I checked every code location the two plans cite against b46b47d3 by reading the files directly; nothing was run. Almost every reference lands within 0-2 lines of the right code, and the REQUESTS.md line numbers for all 10 items match. The problems are in substance, not in where the plans point.\n\n**helper-1 (P1):**\n- **Already shipped:** the #47 \"cheap win\" (yield during export so Cancel stays responsive) is already in the exporter, tagged #47 (exporter.js:1500-1508).\n- **Wrong:** the #129 fallback relies on a WebCodecs decode path in frames.js that does not exist. frames.js only seeks the same video element.\n- **Out of date:** the identity-pass plan wants to draw new Home layouts, but v17.22 already re-laid-out Home from an approved reference, and BEFORE-PUBLISHING.md was never updated to say so.\n- **Duplicates existing toasts:** the \"too heavy\" toast is already covered by two existing toasts, and the line it calls Ezra's is Claude's own.\n- **Missed risk in the thumbnail fix:** rendering the card at card size likely brings back the \"mushy cards\" that progressive halving was added to cure. Its test would miss the effect canvases being resized, which is the real cost.\n- **Out of order:** #47 S0/S1 is scheduled although the entry says not until #604/#215 close. S1 is a pure refactor, so its test cannot fail when reverted.\n- **Needs pictures first:** the #129 clip banner is a new visual in the editor's timeline, and the plan doesn't flag it.\n\n**helper-2 (P2):**\n- **#482:** the stale-table claim is correct. All nine ceilings are raised (Halftone 120, Find Edges 24, Lens \u00b13, Dither 64, Iridescence 60, Emboss 18, CRT 40, Chunk Noise 300, Shockwave 600). But the same entry already records this as \"ROUND 3 SHIPPED v14.81\", so it saves no work.\n- **#663:** the claim that every effect parameter is rewritten every frame is verified (app.js:2478 \u2192 audio-fx.js:1618-1625, no change check). Pitch Shift's static setters are already change-gated, though, so the reshape part is wrong. As the cause of the cut-outs it is still unproven. The skip-unchanged fix is cheap, invisible and has a real counting test that fails on HEAD.\n- **#508:** the \"no gap over 33 ms\" throttled assertion would flake and can't see the GPU-driven slide. The work it calls \"non-visible\" (filmstrips, waveforms, layer list) is on screen as the editor slides in.\n- **#619:** the tests it says must \"flip\" don't drive the card tap. It also misses the existing 619 test at tests.js:78359.\n- **#676:** it misses that a window resize also re-measures the sheet (mobile.js:449). Its \"single motion\" test would trip on the hinge's designed overshoot. Its pager guess does have real support: the add menu restores its page one frame after opening (addmenu.js:1424-1430).\n\nChanges that touch the existing editor's look or behaviour (#619 tap, #508 build order, the #129 banner, the thumbnail) all need options or a before/after shown to Ezra first. The proposed Settings report rows are additive and fine for phone width.\n\nFiles checked: tools/design/plans/helper-plans-1.md on refs/remotes/h/plans/helper-1 (34e103ba) and tools/design/plans/helper-plans-2.md on refs/remotes/h/plans/helper-2 (b5dba317). The only file I wrote was a scratch copy of REQUESTS.md at /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/1a172f83-0fdf-4f37-9706-58687655dccd/scratchpad/REQ.md."
+ },
+ "hunts": {
+  "summary": "I checked all three hunt reports against b46b47d3, reading only. Most of their line references are right. Each report has one central claim that is overstated or rests on a wrong premise.\n\n**H1 (suite memory):** The 8.7 GB figure was never resident memory. Commit ca74942c quotes the kernel line \"VmData 8760119296 exceed data ulimit 8589934592\" and calls it \"RESERVED data, not resident memory\". H1 sampled only resident memory (RSS) and total virtual size, never VmData. So \"could not reproduce\" compares two different numbers, and the results do not contradict each other. Its proposed guard would also use RSS, which on the Mac falls exactly when the Mac is short of memory. The 250-300 MB \"leak\" was sampled without a forced garbage collection. \"Pools only grow\" is true only of `_fxScratch`; the pool canvases resize to the exact size on every use.\n\n**H5 (preview vs export):** The mechanism is real: Motion Flow and Temporal Denoise move their state on by one fixed step per render, with no allowance for time between frames. But the stated cause is wrong. `tick()` draws at most one frame per project frame (app.js:2484-2486), so the preview does not render at 60/120 Hz. The real causes are frames dropped on a slow phone and an export frame rate that differs from the project's. Both the proposed fix and the proposed 1/30 vs 1/60 test therefore miss. Frame Stutter is wrongly rated HIGH: it advances on the clock, not per render. The 480 vs 720 branch exists (compositor.js:13354), but it sets the size the Pixel Motion blur is drawn at, not the motion analysis, which is 160 px in both (:12285). The record cache holds 13 entries, not 12.\n\n**H6 (phone performance):** All four per-frame paths exist and run on every animation frame, outside the once-per-project-frame draw check. They sit at app.js:2505-2506, not the cited 2487-2488. Much of the cost is overstated because writing an unchanged value or toggling a class that is already set costs little. The real per-frame costs are each clip label's `maxWidth`, a layer lookup that grows with the square of the layer count, and two forced layouts per frame in canvas-edit.js. Those forced layouts happen when the selected layer moves, or when the rotate knob has been moved because it would sit off the stage (a portrait clip filling the frame on his phone). That case is worse than H6 says.",
+  "items": [
+   {
+    "what": "H1 claim 1: 'I could not reproduce 8.7 GB'. Renderer RSS (resident memory) peaked at 1085 MB and virtual size was 1.4 TB, so 'the suite itself does not need that much'.",
+    "verdict": "wrong",
+    "problem": "The method does not match the original figure. The 8.7 GB was VmData, the data segment that the Linux renderer sandbox caps at 8 GiB (RLIMIT_DATA). It is neither RSS nor VmSize. Commit ca74942c (6 Oct, before H1) quotes the kernel line 'VmData 8760119296 exceed data ulimit 8589934592' and its _cdp.py note says 'it was 8.7 GB of RESERVED data, not resident memory'. H1's numbers (1.1 GB RSS, 1.4 TB VmSize) and the 8.7 GB VmData can all be true at once, so 'not reproduced' is not a finding. H1's own guard (section 4) reads VmRSS from /proc/<pid>/status, the same file that holds VmData, and never reads VmData. On the Mac RSS is the wrong number entirely: the 7 Oct stall had the test Chrome 'squeezed to under 1 MB resident' with swap at ~7 of 8 GB, so an RSS budget would pass at the very moment the Mac is drowning. H1 did correctly note that the driver is headless and asked which metric was meant. Its 'headed browser' guess does not apply, because _cdp.py launches --headless=new everywhere. Its hang at test 1924 matches how a sandbox-cap crash looked on b46b47d3's driver, which has no Inspector.targetCrashed and waited silently, but it reported flat 948 MB memory. Nobody checked dmesg for 'exceed data ulimit' or whether the renderer process was still alive, so the cause is unknown.",
+    "fix_or_replacement": "Sample VmData alongside VmRSS (same /proc/<pid>/status read), and check `dmesg | grep 'exceed data ulimit'` at any hang. On the Mac, read phys_footprint (`footprint -p <pid>` / `vmmap -summary`), never ps RSS. Base the budget guard on VmData (Linux) or footprint (Mac). An RSS-only guard cannot catch either the Linux crash or the Mac swap stall.",
+    "evidence": "git show ca74942c (commit message; tests/_cdp.py docstring lines ~90-96); REQUESTS.md:35460 and :35649 ('died on Chrome's 8 GB renderer cap'); REQUESTS.md #1085 7 Oct note ('under 1 MB resident ... swap ~7 of 8 GB'); b46b47d3:tests/_cdp.py:44 (--headless=new, no --no-sandbox, no targetCrashed); H1 report section 0 and section 4 step 1 (VmRSS only)."
+   },
+   {
+    "what": "H1 claim 2: the RSS floor stepped from ~400 to ~650 MB around tests 700-1000, so 250-300 MB 'never came back' and is 'the only thing that looks like a leak'.",
+    "verdict": "fix",
+    "problem": "This is a measurement, not a demonstrated leak. The samples are RSS every 15 s with no forced garbage collection. On Linux RSS also includes memory the allocator keeps after freeing it (PartitionAlloc/malloc caches), so a raised floor can be allocator retention or delayed collection rather than live objects. The driver already has a GC seam (tests/_cdp.py:365-388, HeapProfiler.collectGarbage twice), but H1 did not use it for the floor samples. The run is also partial (84%) on a different OS from the one that failed. The cited spike tests are at the stated lines: 709 at tests.js:5584, voice at :24419, 921 fuzz at :39910, 538 at :7341, 921 Labs at :40823, run() at :59540, 690 at :97902.",
+    "fix_or_replacement": "Call it 'floor rose ~250 MB, cause unknown'. To prove a leak, force GC through __fmWantGc before each floor sample and record VmData, RSS and PSS (smaps_rollup), then bisect with ?after=&upto= against a stretch where the floor stays flat.",
+    "evidence": "b46b47d3:tests/_cdp.py:365-388 (GC seam exists; JSHeap metrics only); H1 sections 1 and 5 (sampling every 15 s, no GC, attribution marked 'guess'); test line numbers checked by sed on b46b47d3:tests/tests.js."
+   },
+   {
+    "what": "H1 claim 3 (ranked suspect 1): compositor scratch canvases and _fxScratch 'only grow, never shrink', with no `.width = 0` anywhere in js/. Blamed for the floor step and for real users' memory.",
+    "verdict": "fix",
+    "problem": "Only partly right. Correct: _fxScratch only grows (compositor.js:4690-4694; its own comment says 'The buffer only ever GROWS'), and `git grep` finds no `.width = 0` / `.height = 0` in js/. Wrong: the pool canvases do not only grow. Each use resizes to the exact W\u00d7H (`if (off.width !== W || off.height !== H) { off.width = W; ...}` at compositor.js:3398 and :3482; _dspPool :10177-10178; _fbPool :16750-16752). They shrink back on the next smaller preview render, which H6 item 9 itself describes as 'resized back and forth'. What is really held is pools for effects no longer in the scene, or nesting depths no longer reached, each at its last size, and never released. Linking this to the 250-300 MB floor is a guess (the report admits it). 94 `document.createElement('canvas')` calls in the compositor make that size possible but not proven.",
+    "fix_or_replacement": "Change the claim to: '_fxScratch only grows; pool canvases follow the last render size and are never released while idle.' The releaseScratch() idea still stands (zero all pools and drop _fxScratch on project switch and after export). Add a test through FM._fxScratchInfo (compositor.js:4696) that reads 0 bytes after the release.",
+    "evidence": "compositor.js:3353-3358 (pmSlot), :3398, :3482, :4690-4696, :10177-10178, :16750-16752, :18414 (_mgPool); `git grep -E '\\.width\\s*=\\s*0|\\.height\\s*=\\s*0' b46b47d3 -- js` returns nothing; grep -c of createElement('canvas') in compositor.js = 94."
+   },
+   {
+    "what": "H5 claim 1 (M2, ranked HIGH): Motion Flow, Time Warp Scan, Frame Stutter and Temporal Denoise move their state on once per rendered frame with no time-between-frames scaling. The preview 'renders at the display's rate (60 or 120 times a second)' while export renders at fps, so the two differ.",
+    "verdict": "fix",
+    "problem": "The mechanism is confirmed but the premise is wrong. Confirmed: Motion Flow advances once per render (compositor.js:13235), Echo uses a constant persist (:13272), Frame Blend a constant alpha (:13260), and Temporal Denoise advances at :12724 with a fixed 0.5\u00d7strength blend at :12790. Nothing is scaled by the time step. Wrong: playback draws at most ONE canvas frame per PROJECT frame. tick() computes fno = floor(t\u00b7fps) and renders only when it changes (app.js:2484-2486), and its comment says it 'stops repainting an identical frame twice on a 60 Hz screen showing 30 fps'. Video 'seeked' repaints are suppressed during play (app.js:3075). So in steady playback the preview takes the same number of steps as an export at 'Same as project'. The real divergences: (a) frames dropped on a slow phone (app.js:2486 counts them), each one a missing step and a wider gap, so Echo fades more slowly per second and Frame Blend/Smear compare against an older frame; (b) an export frame rate different from the project's (index.html:891 #exp-fps); (c) preview times sit off the frame grid by up to one frame (minor). Frame Stutter is misclassified: it re-captures only when its clock-derived quantum q changes (`if (rec.t !== q)`, compositor.js:13193). The only difference is which moment the first render in a hold captures, so HIGH is overstated. Time Warp's strips (:12900-12906) differ only under (a) or (b). The proposed fix ('advance only when the project frame number changes') is essentially what playback already does and would not fix (a) or (b). The proposed 1/30 vs 1/60 test models a case that does not happen in playback.",
+    "fix_or_replacement": "Scale each step by the real time step: Echo fade = persist^(dt\u00b7fpsRef), Frame Blend alpha and Denoise weight likewise, and a gap well beyond a frame counts as a drop, not a step. Test: render 2 s at 30 fps once with every frame and once with every other frame skipped (a 15-step run standing in for dropped frames), plus once with export fps 24 on a 30 fps project, and compare the last frame within a measured tolerance. Downgrade Frame Stutter to LOW-MEDIUM (its only difference is a hold entered mid-way by a scrub or a dropped frame).",
+    "evidence": "app.js:2442 tick, :2483-2486 (one draw per project frame, drop counter), :2505-2506 (UI per rAF), :1716 (smooth clock), :3075 (seeked guarded by FM.playing); compositor.js:12724, :12790, :12900, :12906, :13193, :13235, :13260, :13272; exporter.js:1468/1477 (t = start + f/fps); index.html:891."
+   },
+   {
+    "what": "H5 claim 2 (M4): 'Motion Flow pixel-motion analysis width is 480 px in the preview, 720 px in the export', a visible difference.",
+    "verdict": "fix",
+    "problem": "The branch exists exactly as cited: `const WW = Math.min(FM._exporting ? 720 : 480, W)` (compositor.js:13354). But it is not the analysis width. The motion field is block-matched at FW = 160 in both preview and export (compositor.js:12285, via _mfField at :13302). 480/720 is the working size the Pixel Motion (style 0) blur is drawn at before being stretched back over the sharp frame. Blur length is kept in step (vScale = WW/F.FW\u00b7amount), so the difference is the blur's softness and detail, not its length. It also only applies when the plate is wider than 480: a reduced preview plate (e.g. 1080 \u00d7 0.35 = 378) is under the cap either way. H5 measured nothing to back 'visible'. The other _exporting branches it lists are all where it says (:2094, :17677, :17692, :18862, :19018).",
+    "fix_or_replacement": "Reword it as 'Pixel Motion blur is drawn at 480 px in preview vs 720 px in export (the motion analysis is 160 px in both)'. Rate it LOW-MEDIUM until a render comparison of a 1080-wide plate shows a difference. If it shows, scaling the preview cap with plateScale is better than forcing 720 in the preview (cost) or 480 in the export (quality).",
+    "evidence": "compositor.js:12285 (FW = 160), :13302 (F = _mfField(ref, A, W, H, thr)), :13354-13358 (WW/WH, vScale), and the full list of _exporting branches (git grep): :2094, :13354, :17677, :17692, :18862, :19018."
+   },
+   {
+    "what": "H5 claim 3 (M3): records share one 12-entry cache, so 13 stateful instances thrash every frame. Motion Flow keys on the bare layer id, so two on one layer share a record. A preview resolution change resets everything.",
+    "verdict": "fix",
+    "problem": "Mostly confirmed, with an off-by-one. Eviction runs only when `keys.length > 12` before inserting (compositor.js:12258), so the cache holds 13 records and cyclic thrashing starts at the 14th instance, not the 13th. Thrashing is real once over the cap, because eviction takes the least recently used entry by `at`. Confirmed: Motion Flow uses the bare id (`const id = layer.id`, :13223-13224) while the others add ':dn' / ':tw' / ':fs', so two Motion Flow effects on one layer share one record. Confirmed: a size change resets every record (:12268). This matters more than H5 says: on a phone the adaptive quality ladder changes the plate size during playback, so every tier change wipes trails and denoise history in the preview only. The exporter clears all records before it starts (exporter.js:1052).",
+    "fix_or_replacement": "Say '13 entries; thrash from 14 instances'. Key each record per effect instance (layer id + effect index or uid), and make eviction loud. Treat a ladder tier change as the larger preview-only reset: resample the stored canvases to the new size rather than clearing them.",
+    "evidence": "compositor.js:12249-12270 (_mflow, cap at :12258, size reset at :12268), :12723 (':dn'), :12888 (':tw'), :13177 (':fs'), :13223-13224 (bare id); exporter.js:1052."
+   },
+   {
+    "what": "H6 claim 1: updatePlayhead touches every clip every frame (two querySelectorAll, a linear layerById per clip, a classList.toggle, and label.style.left and maxWidth writes), costing O(layers) DOM writes 60 times a second.",
+    "verdict": "fix",
+    "problem": "Confirmed: it runs on every rAF (called at app.js:2505, outside the once-per-frame draw check at :2485), with querySelectorAll at timeline.js:5843 and :5846, FM.layerById per clip at :5847 (a linear `layers.find`, scene.js:833-835, so O(clips \u00d7 layers) per frame), and label writes at :5872 and :5882. Overstated: `label.style.left` is a constant per clip (:5872), and a same-value inline style write does not invalidate style. classList.toggle(token, force) does nothing when the state already matches (DOM spec). The write that genuinely invalidates every frame is maxWidth (:5882). It depends on sL, so while the timeline scrolls it changes for every clip whose label starts left of the viewport's right edge. The O(n\u00b2) lookup and the maxWidth churn are the real cost. 'Largest' is unmeasured.",
+    "fix_or_replacement": "H6's fix holds: a clip-to-layer Map built in rebuild(), move the label.left write into buildTracks, and write maxWidth only for clips that intersect the viewport and only on a change of 1 px or more. For the test, use a MutationObserver count or a timing of the function at 30 clips. Same-value writes may still produce mutation records, so assert a large drop, not near zero.",
+    "evidence": "timeline.js:5810-5888 (updatePlayhead), :5820 (author's '180 calls to 90 renders'), :5843, :5846-5847, :5872, :5882; scene.js:833-835; app.js:2485, :2505."
+   },
+   {
+    "what": "H6 claim 2: syncKeyRail runs inside updatePlayhead every frame, recomputing targets and side, building titles, setting aria-label, toggling classes and writing --insp-extra, which 'can invalidate the panel subtree'.",
+    "verdict": "fix",
+    "problem": "It does run every rAF (timeline.js:5812) and redoes clipToolTargets (filter, :70), clipToolSide (:74-79), view and browser checks, three title strings and three aria-label/data-state writes (:5804). But almost every write repeats the previous value: `--insp-extra` (:5784) changes only when `shown` flips, so the claimed per-frame subtree invalidation does not happen. Titles and states change only when the playhead crosses a clip edge or the selection changes. What remains each frame is JS work, string building and same-value attribute sets (mutation records, accessibility tree updates if active): real but small. 'Medium' is overstated. One subtle point H6 missed: syncKeyRail writes before updatePlayhead's deliberately read-first layout reads (scrollLeft/clientWidth/scrollWidth at :5833-5841). On a crossing frame, its class toggles can therefore force a synchronous layout, partly undoing the queue-387 ordering.",
+    "fix_or_replacement": "H6's signature early-return is correct and cheap: `(n, side, view, inBrowser)`, plus the selection ids and n. Also move the syncKeyRail call to after the geometry reads in updatePlayhead.",
+    "evidence": "timeline.js:70-79, :5761-5809 (syncKeyRail), :5784, :5804, :5812, :5822-5841 (queue 387 read-first note and reads)."
+   },
+   {
+    "what": "H6 claim 3: forced layout on every render when a layer is selected. canvas-edit update() writes box styles, then placeRotKnob reads three getBoundingClientRect, inside every playback frame.",
+    "verdict": "fix",
+    "problem": "The read-after-write pattern is confirmed. update() writes width/height/left/top/transformOrigin/transform (canvas-edit.js:862-937), then placeRotKnob calls rotKnob.classList.remove (:945) followed by three getBoundingClientRect (:946). It runs from render() (app.js:126) on every drawn frame. 'Every render' is too strong. When the selected layer is still and the knob sits on the stage, every write repeats the old value and the rects come from clean layout, which is cheap. Two cases are worse than H6 says. (a) Any selected layer that moves forces one synchronous layout per drawn frame. (b) When the knob has been moved because it would sit off the stage, the remove at :945 dirties layout before the reads and the add at :953 dirties it again after them. updatePlayhead's clientWidth/scrollWidth reads (timeline.js:5833-5841) then force a second layout in the same tick. Case (b) is the one placeRotKnob's own comment calls typical on his phone: a portrait photo or video fitted to fill a 9:16 project.",
+    "fix_or_replacement": "Cache the box signature (w,h,cx,cy,rot,skew,shift) plus the stage rect and skip placeRotKnob when unchanged. Compute the knob class without the remove-then-add (toggle each class only when the decision changes). Test by spying on Element.prototype.getBoundingClientRect over 60 frames, once with a still layer whose knob is relocated (portrait fill) and once with an animated layer.",
+    "evidence": "canvas-edit.js:862-937 (update), :940-954 (placeRotKnob; :945 remove, :946 three rects, :953 add); comment above :940 (portrait fill on the phone); app.js:126; timeline.js:5833-5841."
+   },
+   {
+    "what": "H6 claims 4-5: updateReadout does the whole inspector sync every frame (title, markers, syncTransform, syncPlayhead, refreshEasing redraw), and items 1-4 run at display rate rather than draw rate (cited app.js:2487-2488).",
+    "verdict": "fix",
+    "problem": "The display-rate claim is confirmed, but the line reference is wrong. At b46b47d3, updatePlayhead() and updateReadout() run on every rAF at app.js:2505-2506, after the `if (fno !== _lastDrawnFrame)` block (:2485), not at 2487-2488. updateReadout (app.js:720-766) does rebuild and write the title every call (:732), runs markers.some twice and getElementById. But the heavy parts are conditional. syncTransform (:761 \u2192 inspector.js:5388) returns at once unless the Move & Transform panel is attached. refreshEasing (:765 \u2192 graph-editor.js:567-571) redraws only when the easing canvas is in the document. syncPlayhead (:764 \u2192 inspector.js:6997-7002) rebuilds only on a crossing. 'The whole inspector sync every frame' is true only with those panels open.",
+    "fix_or_replacement": "Correct the line reference to app.js:2505-2506. The fix stands: inside the draw check, run updateReadout and updatePlayhead's clip loop. Keep only the scrollLeft write per rAF, plus maxWidth if the label cap must follow the scroll smoothly. Set readoutEl.title on change, not per call.",
+    "evidence": "app.js:2484-2486, :2505-2506, :720-766 (:732 title, :761, :764, :765); inspector.js:5388 (document.contains early return), :5682 (alternate syncTransform), :6997-7002; graph-editor.js:567-571."
+   }
+  ]
+ }
+}
