@@ -533,6 +533,20 @@ echo '{"ok": true, "summary": "x", "failures": []}' > "$TPD/nolist.json"
 grep -q 'touch_pass 1280 .claude/ship/suite-desktop.out' tools/ship.sh && grep -q 'touch_pass 380 .claude/ship/suite-phone.out' tools/ship.sh \
   && ok "ship.sh runs it after the 1280 and the 380 pass" || bad "ship.sh does not run tests/_touch_pass.py after both passes"
 awk '/^touch_pass 1280/{t=NR} /_shipgates.py feature-gate/{f=NR} END{exit !(t && f && t < f)}' tools/ship.sh && ok "…before the feature gate reads the NOT RUN list" || bad "the touch pass runs after the feature gate — it cannot clear a finger test's NOT RUN"
+# prove.sh's finger NORUNs (7 Oct, v17.26 was refused for two finger tests that had passed with a real finger): the same pass
+# runs on both sides and tools/_spotjudge.py --merge-touch puts its verdicts in place of the NORUN lines
+printf 'NORUN\tfinger ok\tNOT RUN HERE: %s\nNORUN\tfinger red\tNOT RUN HERE: %s\nNORUN\tfinger aac\tNOT RUN HERE: %s\nNORUN\tan aac test\tNOT RUN HERE: needs an AAC audio encoder\nPASS\ta plain test\n' "$TR" "$TR" "$TR" > "$TPD/v"
+cp "$TPD/v" "$TPD/v0"
+python3 tools/_spotjudge.py --merge-touch "$TPD/v" "$TPD/o.json"
+v="$(cut -f1,2 "$TPD/v" | tr '\t\n' ':|')"
+[ "$v" = "PASS:finger ok|FAIL:finger red|NORUN:finger aac|NORUN:an aac test|PASS:a plain test|" ] \
+  && ok "prove.sh: a finger test's own-page verdict replaces its NORUN (pass → PASS, red → FAIL, NOT RUN there → NORUN); other lines untouched" \
+  || bad "merge-touch: $v"
+grep -q '^NORUN	finger aac	NOT RUN HERE: needs an AAC audio encoder$' "$TPD/v" && ok "…a finger test NOT RUN in its own page keeps THAT page's reason" || bad "merge-touch reason: $(grep 'finger aac' "$TPD/v")"
+cp "$TPD/v0" "$TPD/v1"; python3 tools/_spotjudge.py --merge-touch "$TPD/v1" "$TPD/no-such.json"
+cmp -s "$TPD/v0" "$TPD/v1" && ok "…and with no finger-pass result every line stays as it was (still NORUN, still refused)" || bad "merge-touch with no JSON changed the verdicts"
+[ "$(grep -c '^ *fingers "\$P1"' tools/prove.sh)" -ge 2 ] && [ "$(grep -c '^ *fingers "\$P2"' tools/prove.sh)" -ge 2 ] && grep -q -- '--merge-touch' tools/prove.sh \
+  && ok "prove.sh runs the finger pass on the tree AND the reverted side, at its width and in the 380 re-check" || bad "prove.sh does not hand its finger NORUNs to tests/_touch_pass.py on both sides"
 echo
 echo "── ship.sh runs THIS test whenever a file it proves changes (6 Oct, the port audit, minor) ──"
 # A release that edited only tools/_shipgates.py (the feature gate, and the sh() that makes a failed git a refusal) shipped
