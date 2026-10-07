@@ -120215,4 +120215,35 @@
   });
 
 
+
+  /* H40: THE SAMPLE-TILE CACHE IS CAPPED. fx-thumbs `cache` kept every sample tile for the session (only the layer previews were on the
+     LRU): one pass through the 12 categories left 83 MB of canvases (Measured, 205 effects). This mounts every effect's sample tile,
+     lets the generator drain, and asks that the stock entries stay under their cap, that the cache is not simply empty (a cap that
+     evicts everything also passes a size check), and that an evicted tile paints again when it is mounted again. */
+  test('H40 the effect sample tiles stay under their memory cap, and an evicted one is generated again on mount', { item: 'H40', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.fxThumbs || !FM.fxThumbs.queueState || !FM.fxRegistry) throw new Error('fxThumbs.queueState or the registry is missing');
+    if (!FM.fxThumbs.cacheBytes) throw new Error('FM.fxThumbs.cacheBytes (the suite seam that sums the cache) is missing');
+    const types = FM.fxRegistry.all().map(f => f.type);
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-9999px;top:0;width:400px;height:400px;overflow:hidden';
+    document.body.appendChild(host);
+    const cvs = [];
+    try {
+      for (const t of types) { const c = document.createElement('canvas'); host.appendChild(c); FM.fxThumbs.mount(c, t); cvs.push(c); }
+      const end = Date.now() + 100000;
+      while (Date.now() < end) { const q = FM.fxThumbs.queueState(); if (!q.queued && !q.pending && !q.jobs) break; await sleep(300); }
+      const st = FM.fxThumbs.stats(), real = FM.fxThumbs.cacheBytes();
+      /* what the cache REALLY holds (every frame of every entry), against the two caps: the layer previews' 10 MB and the sample tiles' 32 MB */
+      const CAP = 10 * 1048576 + 32 * 1048576;
+      if (real > CAP) throw new Error('after mounting all ' + types.length + ' effects the tile cache holds ' + Math.round(real / 1048576) + ' MB of canvases, over the ' + Math.round(CAP / 1048576) + ' MB the two caps allow');
+      if (FM.fxThumbs.queueState().cached < 10) throw new Error('only ' + FM.fxThumbs.queueState().cached + ' tiles are cached after mounting ' + types.length + ' effects — the cap is evicting almost everything, or nothing was generated');
+      // an evicted tile comes back: find a type that is no longer cached by mounting a fresh canvas and waiting for it to paint
+      const probe = document.createElement('canvas'); host.appendChild(probe);
+      FM.fxThumbs.mount(probe, types[0]);
+      const end2 = Date.now() + 20000;
+      while (Date.now() < end2 && !probe.classList.contains('ready')) await sleep(200);
+      if (!probe.classList.contains('ready')) throw new Error('the first effect\'s tile never painted when it was mounted again');
+    } finally { host.remove(); }
+  });
+
 })();

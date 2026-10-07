@@ -1506,6 +1506,24 @@ window.FM = window.FM || {};
     }
   }
   function touch(key) { const i = layerKeys.indexOf(key); if (i >= 0) { layerKeys.splice(i, 1); layerKeys.push(key); } }
+  /* THE SAMPLE TILES GET A CAP TOO (H40). `cache` held every sample tile for the whole session, the layer previews above being the
+     only entries on the LRU. Measured: one pass through all 12 categories (205 effects) left 83.3 MB of canvases in it, 59 MB of them
+     the 40 animated tiles (10 frames of 192 x 192 each). A tile evicted here is simply generated again the next time its category is
+     opened, exactly as the first time; its `meta` stays, so a filter or preset tile still knows its recipe. */
+  const stockKeys = [];
+  let stockBytes = 0;
+  const STOCK_CACHE_MAX = 32 * 1024 * 1024;
+  function rememberStock(key, entry) {
+    const i = stockKeys.indexOf(key);
+    if (i >= 0) stockKeys.splice(i, 1); else stockBytes += bytesOf(entry);
+    stockKeys.push(key);
+    while (stockBytes > STOCK_CACHE_MAX && stockKeys.length > 1) {
+      const old = stockKeys.shift();
+      const e = cache.get(old);
+      if (e) stockBytes -= bytesOf(e);
+      cache.delete(old);
+    }
+  }
 
   // ---- shared animation ticker (one interval repaints every live animated tile) ----
   const live = new Map();     // canvasEl -> frames[] (dropped once the canvas leaves the DOM)
@@ -1580,6 +1598,7 @@ window.FM = window.FM || {};
         queue.shift();
         if (!provisional) cache.set(key, entry);
         if (m && m.layerId) remember(key, entry);
+        else if (!provisional) rememberStock(key, entry);
         const ws = pendingQ.get(key) || [];
         pendingQ.delete(key);
         ws.forEach(function (cv) { if (cv._fxType === key) paint(cv, entry); });   // skip tiles re-mounted to another key meanwhile
@@ -1795,7 +1814,7 @@ window.FM = window.FM || {};
         cvs.forEach(function (cv) { if (cv && cv._fxType) inflight.push(cv); });
       });
       FM.fxThumbs.stopAll();
-      cache.clear(); layerKeys.length = 0; layerBytes = 0;
+      cache.clear(); layerKeys.length = 0; layerBytes = 0; stockKeys.length = 0; stockBytes = 0;
       const seen = new Set();
       els.concat(inflight).forEach(function (cv) {
         if (seen.has(cv)) return;
@@ -1806,7 +1825,10 @@ window.FM = window.FM || {};
     },
     /* What the layer-preview cache is holding. Exposed because "it is capped at 10MB" is a claim,
      * and a claim about memory that nothing can read is a claim nobody will ever check. */
-    stats: function () { return { layerEntries: layerKeys.length, layerBytes: layerBytes, cap: LAYER_CACHE_MAX, keys: cache.size }; },
+    /* Suite seam (H40): what the tile cache really holds, in canvas bytes, every frame of every entry. The two caps above count
+       the same thing entry by entry; this is the check that they add up. */
+    cacheBytes: function () { let n = 0; cache.forEach(function (e) { n += bytesOf(e); }); return n; },
+    stats: function () { return { layerEntries: layerKeys.length, layerBytes: layerBytes, cap: LAYER_CACHE_MAX, stockEntries: stockKeys.length, stockBytes: stockBytes, stockCap: STOCK_CACHE_MAX, keys: cache.size }; },
     /* The GENERATION side of the same argument (queue 110). Mounting a whole category at once left
        most tiles blank, and working out why took five probes precisely because none of this was
        readable from outside: whether the queue still held the keys, whether anything was waiting on
@@ -1817,7 +1839,7 @@ window.FM = window.FM || {};
     /* Halt the ticker + pending generation (cache retained) — call when the browser closes. */
     /* Suite seams (queue 712): a per-tick budget, and a way to make one key cold again. */
     _sliceMs: function (v) { if (v !== undefined) sliceOverride = v; return sliceMs(); },
-    _uncache: function (key) { cache.delete(key); jobs.delete(key); },
+    _uncache: function (key) { const si = stockKeys.indexOf(key); if (si >= 0) { stockKeys.splice(si, 1); const e = cache.get(key); if (e) stockBytes -= bytesOf(e); } cache.delete(key); jobs.delete(key); },
     stopAll: function () {
       if (raf) { cancelAnimationFrame(raf); raf = 0; deferred = 0; }
       queue.length = 0; pendingQ.clear(); jobs.clear();
