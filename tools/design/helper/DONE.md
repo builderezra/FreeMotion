@@ -48,3 +48,4 @@ QF4-P7 | 2026-10-07 | plans/helper-7 | 6 corrections applied: filter-by-id, note
 QF4-P8 | 2026-10-07 | plans/helper-8 | 9 corrections applied; kept-copy key moved out of the fm.proj. prefix (5 scanners read it); open() refusal moved before teardown, caller contract traced
 QF4-H20 | 2026-10-07 | plans/import-caps | 9 corrections applied; parity measured for photo, video, text and glow (glow halo visibly differs); audio-react bake measured at 530 to 1140 keys a minute so a 5000 cap can cut a 10-minute bake
 QF4-R3 | 2026-10-07 | research/effect-specs | 19 corrections applied, each checked against v17.24 code; flashdark is a strobe, radialwipe has no maxR, T4 should be a Glitch preset
+D5 | 2026-10-07 | design/1084-add-anim | 4 looping GIFs (a 260, a 340, b, c) plus a side-by-side, 380x760 phone box, 30 ms steps shown 30 ms each (loop 2.32 s), 0.66 to 2.48 MB; tools/design/1084-add-anim/gifs/
