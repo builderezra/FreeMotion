@@ -492,6 +492,48 @@ PY
 )"
 [ -z "$hits" ] && ok "tools/ship.sh, tools/prove.sh, tools/mutate.sh and tools/spotcheck.sh search text with grep <<<, never printf | grep -q" || bad "a printf/echo | grep -q is back (pipefail reads a big answer as false): $hits"
 
+echo "── #1097: the finger tests a Linux pass could not run, each in a browser of its own (tests/_touch_pass.py) ──"
+# a STUB driver answers by the ?only= name and logs FM_TOUCH_PAGE, so every judgement the runner makes is seen without a browser
+TPD="$TMP/tp"; mkdir -p "$TPD/tests"; cp tests/_touch_pass.py "$TPD/tests/"
+cat > "$TPD/tests/_cdp.py" <<'STUB'
+import json, os, sys, urllib.parse
+url = sys.argv[sys.argv.index("--url") + 1]; name = urllib.parse.unquote(url.split("only=", 1)[1])
+open(os.environ["TP_LOG"], "a").write(os.environ.get("FM_TOUCH_PAGE", "-") + "\t" + name + "\n")
+r = lambda ok, ran, fails=(), nr=(): print(json.dumps({"ok": ok, "summary": "x", "failures": list(fails), "notRun": list(nr), "ran": ran}))
+if name == "finger red": r(False, [{"name": name, "ok": False}], ["FAILfinger red — the switch froze"])
+elif name == "finger aac": r(True, [{"name": name, "ok": False, "notRun": "needs an AAC audio encoder"}], nr=[{"name": name, "reason": "needs an AAC audio encoder"}])
+elif name == "finger prefix": r(True, [{"name": name + " and a longer one", "ok": True}])
+elif name == "finger crash": print("Traceback (most recent call last): boom")
+else: r(True, [{"name": "a neighbour the substring also caught", "ok": True}, {"name": name, "ok": True}])
+STUB
+TR="needs real touch emulation (a finger with the phone's media state) — Linux headless Chrome"
+python3 - "$TPD/full.json" "$TR" <<'PY'
+import json, sys
+nr = [{"name": n, "reason": sys.argv[2]} for n in ("finger ok", "finger red", "finger aac", "finger prefix", "finger crash")]
+nr.append({"name": "an aac test", "reason": "needs an AAC audio encoder (AudioEncoder mp4a.40.2)"})
+open(sys.argv[1], "w").write(json.dumps({"ok": True, "summary": "Regression 1/7 ✓", "failures": [], "notRun": nr}, indent=1))
+PY
+out="$(cd "$TPD" && TP_LOG="$TPD/log" python3 tests/_touch_pass.py --from full.json --out o.json --remaining r.tsv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && ok "a red finger test → exit 1 (ship.sh refuses)" || bad "touch pass with a red: rc=$rc — $(printf '%s' "$out" | tail -2)"
+v="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(" ".join(x["name"].replace(" ","_") for x in d["pass"]), "|", " ".join(sorted(x["name"].replace(" ","_") for x in d["red"])), "|", " ".join(x["name"].replace(" ","_") for x in d["notRun"]))' "$TPD/o.json")"
+[ "$v" = "finger_ok | finger_crash finger_prefix finger_red | finger_aac" ] && ok "verdicts: only the exact test's own green passes; no verdict, a name that matched only a longer test, and a failure are all RED; another NOT RUN stays NOT RUN" || bad "verdicts: $v"
+grep -q '^finger ok	' "$TPD/r.tsv" && bad "a finger test that passed is still in the remaining NOT RUN list" || ok "a finger test that passed leaves the NOT RUN list (it RAN, in its own browser)"
+grep -q '^finger aac	needs an AAC audio encoder$' "$TPD/r.tsv" && ok "…one NOT RUN for another reason stays, with THAT reason (the feature gate reads it)" || bad "the AAC-in-its-page reason is not in the remaining list: $(cat "$TPD/r.tsv")"
+grep -q '^an aac test	needs an AAC audio encoder (AudioEncoder mp4a.40.2)$' "$TPD/r.tsv" && [ "$(wc -l < "$TPD/r.tsv" | tr -d ' ')" = 5 ] && ok "…and a non-finger NOT RUN is kept unchanged, never run here (5 lines remain)" || bad "remaining list: $(cat "$TPD/r.tsv")"
+[ "$(cut -f1 "$TPD/log" | sort -u)" = 1 ] && ! grep -q 'an aac test' "$TPD/log" && [ "$(wc -l < "$TPD/log" | tr -d ' ')" = 5 ] && ok "each finger test ran once, with FM_TOUCH_PAGE=1; the AAC-only test was not run" || bad "driver calls: $(cat "$TPD/log")"
+python3 - "$TPD/green.json" "$TR" <<'PY'
+import json, sys
+open(sys.argv[1], "w").write(json.dumps({"ok": True, "summary": "x", "failures": [], "notRun": [{"name": "finger ok", "reason": sys.argv[2]}]}))
+PY
+(cd "$TPD" && TP_LOG="$TPD/log2" python3 tests/_touch_pass.py --from green.json --remaining g.tsv >/dev/null 2>&1); rc=$?
+[ "$rc" = 0 ] && [ ! -s "$TPD/g.tsv" ] && ok "control: every finger test green → exit 0 and nothing left NOT RUN" || bad "all green: rc=$rc remaining=[$(cat "$TPD/g.tsv")]"
+echo '{"ok": true, "summary": "x", "failures": []}' > "$TPD/nolist.json"
+(cd "$TPD" && TP_LOG="$TPD/log3" python3 tests/_touch_pass.py --from nolist.json >/dev/null 2>&1); rc=$?
+[ "$rc" = 2 ] && ok "a result with no NOT RUN list → exit 2 (nothing judged), never 'all passed'" || bad "no list: rc=$rc"
+grep -q 'touch_pass 1280 .claude/ship/suite-desktop.out' tools/ship.sh && grep -q 'touch_pass 380 .claude/ship/suite-phone.out' tools/ship.sh \
+  && ok "ship.sh runs it after the 1280 and the 380 pass" || bad "ship.sh does not run tests/_touch_pass.py after both passes"
+awk '/^touch_pass 1280/{t=NR} /_shipgates.py feature-gate/{f=NR} END{exit !(t && f && t < f)}' tools/ship.sh && ok "…before the feature gate reads the NOT RUN list" || bad "the touch pass runs after the feature gate — it cannot clear a finger test's NOT RUN"
+echo
 echo "── ship.sh runs THIS test whenever a file it proves changes (6 Oct, the port audit, minor) ──"
 # A release that edited only tools/_shipgates.py (the feature gate, and the sh() that makes a failed git a refusal) shipped
 # with no self-test at all: ship.sh runs this file only when a file in its trigger list changes, and the list was written by

@@ -189,7 +189,16 @@ def driver_pattern():
 # MOUSE layout: a phone regression green here and red on his phone. So it is no longer sent: where touch cannot be
 # emulated, the driver refuses every touch step and the test reports NOT RUN HERE (tests.js realInput924), by name.
 # FM_FAKE_NO_TOUCH_EMULATION=1 makes the Mac answer the same way — only to prove that path; a NOT RUN refuses a Mac ship.
-REAL_TOUCH_VIA_EMULATION = not IS_LINUX and os.environ.get("FM_FAKE_NO_TOUCH_EMULATION") != "1"
+# ⚠️ …AND ONE PAGE PER FINGER TEST IS HOW LINUX GETS IT BACK (7 Oct, #1097 — the cloud helper's H17 "lead 2", measured: 84 of 88
+# finger tests pass at 1280 and at 380). The mouse is lost per PAGE, not per browser: a fresh browser still has it. So a finger
+# test run in a page of its own can have REAL emulation — the phone's media state, exactly as on the Mac — and the page is thrown
+# away after. FM_TOUCH_PAGE=1 is that mode; only tests/_touch_pass.py sets it, one browser per finger test. In it, tests/_cdp.py
+# refuses a SECOND finger test in the same page (NOT RUN, named — that page has no mouse any more) and does not wait for the
+# mouse to come back after the first. A full pass never sets it: its finger tests stay NOT RUN, and _touch_pass.py runs them
+# after it, one page each. Measured on this laptop (7 Oct): no single CDP call restores the mouse in the same page (15 tried,
+# with a reload as the positive control), so a page per test is the whole of the fix.
+TOUCH_PAGE = IS_LINUX and os.environ.get("FM_TOUCH_PAGE") == "1"
+REAL_TOUCH_VIA_EMULATION = (not IS_LINUX or TOUCH_PAGE) and os.environ.get("FM_FAKE_NO_TOUCH_EMULATION") != "1"
 REAL_TOUCH_WHY = ("FM_FAKE_NO_TOUCH_EMULATION=1 (a proof run)" if os.environ.get("FM_FAKE_NO_TOUCH_EMULATION") == "1"
                   else "Linux headless Chrome: turning touch emulation off leaves the page with no mouse" if IS_LINUX else "")
 

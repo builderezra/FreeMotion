@@ -1,0 +1,788 @@
+[
+ {
+  "id": "H16",
+  "overall": "fix",
+  "summary": "The code reading holds up. I read the diffs of #1014, #1040, #1041, #1059, #1015 and #1016 against the branch source and found no side effects on unrelated paths, and their land verdicts are sound. The #1013 section has two problems. First, the run instruction is wrong: it says the laptop has AAC, but v17.24's own tests/tests.js:193-205 says Linux Chrome has no AAC encoder. On the laptop the committed #1013 test would fail outright, because its positive control needs a real AAC encode. Since v17.24 a test like this must call `await needsAac()` at the top, and the chain was written on v17.23 and does not. That is the real collision with v17.24. Separately, tools/ship.sh:974-990 refuses any exporter.js change unless the AAC tests ran on the machine shipping it, so the chain can only ship from the Mac. Second, the timeout finding is real (`await dec.flush()` has no cap), but the report puts the hang in the wrong place. decodedAACPeak runs before the muxer is built and before any video frame is rendered (branch exporter.js:1401-1437), not after the render, and Cancel is not checked until line 1427. The proposed Promise.race fix works with the existing catch. The text-merge claim is plausible: the chain's tests.js hunks sit next to, but do not overlap, v17.24's hunks (66012 vs 66013). It names a `release/v17.24` branch, but v17.24 is on main as 05d06c53. The report also misses that none of the 7 commits bump the `?v=` cache-busters. Its explanation of why #1015/#1016 never passed is honestly labelled a guess. ChatGPT's own #1013 note shows the same port-8894 setup booted the app once and dropped a half-loaded boot, which fits an intermittent bootstrap failure better than broken code. The cause is still unproven.",
+  "claims": [
+   {
+    "claim": "#1013 land-after-fix: decodedAACPeak awaits dec.flush() with no timeout, and a hang would stall the export after the video has rendered",
+    "verdict": "partly",
+    "evidence": "Branch js/exporter.js:908-934: `await dec.flush()` has no timeout, which is confirmed. But it is called at line 1416, inside the audio phase, which runs BEFORE `new Mp4Muxer.Muxer` (1434) and the frame loop. The comment says these chunks were 'produced before the muxer was built'. Cancel is only checked at 1427, after this await. The pre-existing encodeAudio `await enc.flush()` (991) has no timeout either.",
+    "correction": "A hang would stall the export before any video renders, and Cancel would not work during it. The Promise.race fix is correct and sufficient for decodedAACPeak. The existing catch returns null, which the report prints as 'unavailable'. Clear the timer as well. Expect 8 s to occasionally cut a very long soundtrack's decode on a slow phone. That is harmless, because the value is diagnostic only."
+   },
+   {
+    "claim": "Run the #1013 test on the laptop (it has H.264 and AAC); expect pass with the fix and fail reverted",
+    "verdict": "wrong",
+    "evidence": "tests/tests.js:193-205 (v17.24) says 'Linux Chrome has no AAC encoder (AudioEncoder mp4a.40.2 unsupported)', and needsAac() emits NOT RUN HERE for exactly this. The chain test (tests.js diff hunk @@ -66012 +66208) starts with a positive control that needs a real AAC encode. Without one it throws 'the real encoder control did not prove a counted audio track' both with and without the fix. tools/ship.sh:974-990 refuses a release touching js/exporter.js unless the AAC tests ran on the shipping machine, which is the Mac.",
+    "correction": "Run it on the Mac only, and add `await needsAac();` as the first line of the #1013 test."
+   },
+   {
+    "claim": "The chain merges cleanly onto release/v17.24, so landing order does not matter",
+    "verdict": "partly",
+    "evidence": "v17.24 is on main as 05d06c53, not a release branch. Comparing the two `git diff -U0` outputs for tests/tests.js: the chain inserts after lines 19765, 31836, 57004, 60018, 60071, 66012 and 119737, and v17.24 inserts `await needsAac()` after 66013. The hunks are next to each other but do not overlap, so a text merge is plausible. Semantically they collide: the chain's AAC test is written to the pre-v17.24 convention, as above.",
+    "correction": "Say that the text merges, but the #1013 test must adopt v17.24's needsAac() and the release must ship from the Mac."
+   },
+   {
+    "claim": "#1014, #1040, #1041, #1059 land with no side effects",
+    "verdict": "confirmed",
+    "evidence": "#1014: k = min(1, 2160/short, 7680/long). Storage clamps each side to 7680 (storage.js:1006), and so do Canvas and New Project (app.js:8246, home.js:2971). projectIsOversize's only callers are app.js:2994 and 8278. #1040: sanitizeUnsafeValues runs only on load/import/history/collab (storage.js:903, 1647, 1779; history.js:71). tests.js is injected into the app frame (run.html:122), so the prototype check sees one realm. #1041: `git grep` on the branch finds childOwner only at compositor.js:18409/18415/18479, and innerOf nowhere. Two-level nesting behaves as before. #1059: hasAudioTrack is false for non-video layers (media.js:938), and audioSources() returns only video layers with a file (captions.js:174-179).",
+    "correction": ""
+   },
+   {
+    "claim": "#1015 land: the catchingUp window always closes because the host always answers a reconnect with tail or snap; owner unaffected",
+    "verdict": "confirmed",
+    "evidence": "collab-host.js:947-952 returns a tail (empty if nothing was missed) or null, in which case a snapshot is sent (collab-session.js sendCopy:812-818). Branch collab-session.js sets catchupCopySeen in the tail case (865) and onSnap. endCatchup runs from onAck and replayOutstanding. The owner returns at line 314 before `outstanding` is touched, so only markOffline's flags reach it. One residual effect, by design: a deliberate re-set to an earlier offline value during catch-up is delayed, not lost, because base keeps the old value and the next diff after endCatchup sends it. Not run: a host that never answers.",
+    "correction": ""
+   },
+   {
+    "claim": "#1016 land after one iPhone check (Enter now calls finish(true), which rebuilds the inspector, instead of blur())",
+    "verdict": "confirmed",
+    "evidence": "Branch inspector.js:4552-4554: finish() removes the blur/keydown listeners and then calls FM.inspector.refresh(), so there is no double finish. The new keydown handler (4557+) returns while contentEditable is set, and a listener added during dispatch does not fire for the same event. Whether iOS dismisses the keyboard when the focused node is removed needs a device run, as the report says.",
+    "correction": ""
+   },
+   {
+    "claim": "#1015/#1016 never passed on ChatGPT's machine because of a half-loaded app frame from plain http.server, not because of the tests or fixes",
+    "verdict": "unverifiable",
+    "evidence": "The report labels the cause a guess, which is correct. The part 'not the tests and not the fixes' rests on the helper's container runs (pass, and fail when reverted, at 380 and 1280), which I am not allowed to repeat. ChatGPT's 1013 note says the same port-8894 setup ran #1013 to a real pass/fail and threw away 'one incomplete app-frame bootstrap'. That points to an intermittent bootstrap failure, which supports the 'broken instrument' reading without proving the http.server mechanism.",
+    "correction": "Settle it by running `?only=` for the #1015 and #1016 tests through tools/serve.sh on the Mac, with and without each commit's js/ change reverted."
+   }
+  ],
+  "builder_items": [
+   {
+    "title": "#1013 test must declare needsAac() and ship from the Mac",
+    "severity": "MEDIUM",
+    "what": "The chain's #1013 test (\"export: a zero-chunk AAC encode cannot masquerade as a soundtrack\") needs a real AAC encode for its positive control. Since v17.24, Linux Chrome (the laptop) has none, and the test would fail rather than report NOT RUN HERE. Add `await needsAac();` as its first line. The release touches js/exporter.js, so ship.sh's feature gate only lets it ship from the Mac.",
+    "where": "tests/tests.js (chain hunk @@ -66012 +66208); needsAac at tests/tests.js:198; gate at tools/ship.sh:974-990"
+   },
+   {
+    "title": "Cap decodedAACPeak's flush with a timeout",
+    "severity": "MEDIUM",
+    "what": "The new decode-back check awaits AudioDecoder.flush() with no timeout. It runs before the muxer and video render, and before the Cancel check. A decoder that never settles would hang the export at the audio stage, and Cancel would not work. Replace `await dec.flush();` with a Promise.race against an 8 s rejecting timer, and clear the timer afterwards. The existing catch turns the rejection into null, which prints as 'decoded peak unavailable'.",
+    "where": "js/exporter.js decodedAACPeak (branch lines 908-934, flush at 930); called at 1416"
+   },
+   {
+    "title": "Bump ?v= cache-busters for every changed file",
+    "severity": "LOW",
+    "what": "None of the 7 commits change index.html. They change js/app.js, captions.js, collab-session.js, compositor.js, exporter.js, inspector.js, storage.js and styles.css, so each needs its ?v= bumped or ship.sh refuses.",
+    "where": "index.html script/link tags"
+   }
+  ],
+  "helper_fixes": [
+   "#1013 'Run on the laptop (it has H.264 and AAC)' is wrong. Linux Chrome has no AAC encoder (tests/tests.js:193-205), so this run must be on the Mac.",
+   "#1013: add a finding that the test must start with `await needsAac();` (v17.24 convention). Without it, it is red on Linux instead of NOT RUN HERE.",
+   "#1013 skeptic finding 1: change 'would hang the export after the video has rendered' to 'would hang the export at the audio stage, before the muxer and any video frame, and Cancel is not checked until after it' (branch exporter.js:1401-1437).",
+   "#1013 skeptic finding 1: drop 'only a hang is not'. encodeAudio's own `await enc.flush()` (exporter.js:991) was already uncapped, so the new code adds a second uncapped wait rather than introducing the risk.",
+   "#1013 exact fix: add 'clear the timer once flush settles; 8 s may cut a very long soundtrack's decode on a slow phone, which only prints unavailable'.",
+   "Summary bullet: replace 'release/v17.24' with 'main at v17.24 (05d06c53)'. Add that the #1013 release must ship from the Mac (tools/ship.sh:974-990 feature gate on js/exporter.js).",
+   "Add: none of the 7 commits bump index.html ?v= cache-busters for the 7 changed js files and styles.css, so the builder must bump them.",
+   "'Why #1015 and #1016 never passed' bullet: change 'it is not the tests and not the fixes' to 'my runs show the tests and fixes behave correctly here'. Note that ChatGPT's 1013 note shows the same port-8894 setup also produced an incomplete bootstrap, so it was intermittent."
+  ]
+ },
+ {
+  "id": "H12",
+  "overall": "fix",
+  "summary": "The measurements may well be honest. The arithmetic mostly adds up: 8192-6125=2067 MiB is 25%, and the five steps do sum to 3411. The Reverb and Squish code paths are described correctly. But the \"1080x1920 kernel plates\" claim is wrong for all three tests it names. :82443 uses 200x260 plates. :82649 allocates exactly one 1080x1920 array. :83769 renders on a 640x520 comp, not a 1080x1920 plate (its cold +218 MB fits 640x520 getImageData churn). The test that really sweeps 1080x1920 plates, :83717 (tree :84048), is never named. The step window \":80547 to :83259\" does not even contain :83769. Calling Squish a \"trigger, not a cause\" is a guess presented as verified. Its roughly 2,600 fresh 480x480 renders, each with a 0.92 MB getImageData, line up with the report's own \"1966 maps of exactly 1 MB\" and its typed-array micro-test. The report never mentions the Mac's #1095 suspect, the queue 333 effects-browser sweep (v17.23 :63595, tree :63922). It also never says whether that test passed in its container (87 tests failed there). And its \"dropped canvases +0 MB\" micro-test does not test canvases that are kept alive after leaving the page, which is what #1095 blames. So H12 neither confirms nor refutes #1095. Option 1 (split at :47436) is safe for test proofs, but it moves the queue 333 sweep into the second Chrome. That test's own comment says it takes minutes when run cold.",
+  "claims": [
+   {
+    "claim": "Squish sweep (:25574) does 20 wall/inset sweeps, each step a fresh 480x480 render plus getImageData(0,0,480,480), thousands of steps",
+    "verdict": "confirmed",
+    "evidence": "tree tests.js:25604-25612 sq480 = offscreen(480,480) + renderScene + getImageData 480x480 (v17.23 :25432-25440); :25720-25743 sqSweep runs s0..s1 = size+20 = 130 steps; :25746-25767 runs 4 walls x 5 insets = 20 sweeps, about 2,600 renders. The next test (:25776) adds about 400 more over the inset range."
+   },
+   {
+    "claim": "The Squish sweep is a threshold trigger, not a real allocator (cold 0)",
+    "verdict": "partly",
+    "evidence": "This is an interpretation, but the report presents it under 'Verified'. The code churns about 2.4 GB of 0.92 MB ImageData plus about 2,600 canvases. The report's own maps reading (1966 regions of exactly 1 MB) and its typed-array micro-test (+128 MB kept) both fit this test being a real contributor. A single cold run that does not reproduce in a fresh process does not separate the two readings.",
+    "correction": "Label it 'Guess': Squish is either a trigger or a heavy churner whose retention depends on process state. Settle it by running the Squish group after a warm-up of unrelated tests, then with sq480 reusing one cleared canvas, and comparing VmData each time."
+   },
+   {
+    "claim": "Reverb (:47436) renders through OfflineAudioContext for 4-12 s at 48 kHz, and an animated room builds up to 6 rooms with impulse buffers cached in _irCache",
+    "verdict": "confirmed",
+    "evidence": "tree tests.js:47740-47814: SR 48000, renders of 4, 4, 4, 12, 4, 5, 5 and 5 s. js/audio-fx.js:642 K = max(2, min(6, ...)), :668-671 one convolver per room with impulse(). _irCache :126 is bounded at about 13 entries (:149-151), so it is not an unbounded pool. The 61-68 MB per OfflineAudioContext figure is the helper's own micro-measurement: unverifiable without a run."
+   },
+   {
+    "claim": "Kernel-plate tests :82443, :82649 and :83769 are real allocators on 1080x1920 plates",
+    "verdict": "wrong",
+    "evidence": "v17.23 :82443 (tree :82774) Tilt Shift/Matte Choker uses W 200 x H 260 fixtures (:82812-82818); 1080x1920 appears only in a comment. :82649 (tree :82980) uses 420x320 plus exactly ONE 1080x1920 Uint8ClampedArray (:83104-83107). :83769 (tree :84100) uses a 640x520 comp (:84105), with 2 shots x 5 positions x 2 param sets per member. The real 1080x1920 sweep is :83717 (tree :84048-84069): at least 30 admitted kernels each get mk(...,1080,1920), about 8.3 MB apiece. The report never names it.",
+    "correction": "Rename the family to 'kernel-identity sweeps'. Give the real sizes: 200x260 for :82443, 420x320 plus one 1080x1920 array for :82649, 640x520 for :83769. Add :83717 as the true 1080x1920 sweep. Note that :83717 and :83769 both fall outside the stated :80547-:83259 window."
+   },
+   {
+    "claim": "Headroom is 2067 MiB (25%) under 8 GiB, and five steps explain 3411 of 5210 MB of growth",
+    "verdict": "partly",
+    "evidence": "8192-6125=2067 and 2067/8192=25.2% are correct. The steps (350+1369+947+392+353) do sum to 3411. But the steps are post-GC floor deltas, while 5210 is peak minus start (6125-915). Floor growth was 826 to 5782 = 4956, so the steps explain about 69%, not 65%.",
+    "correction": "Say 'five steps account for 3411 of the 4956 MB growth of the post-GC floor', or compare peak to peak."
+   },
+   {
+    "claim": "WebGL is ruled out",
+    "verdict": "partly",
+    "evidence": "Ruled out only for headless software GL with --no-sandbox, where 4 contexts cost +4 MB. On his GPU laptop, and on the Mac, canvas and GL backing lives elsewhere. The report admits this in its 'Guess' section, but the headline says 'refuted' without that scope.",
+    "correction": "Write 'not a VmData driver under software GL in a headless container; untested with a GPU'."
+   },
+   {
+    "claim": "Agreement with the Mac's #1095 (about 335 detached 1080x1920 canvases after the queue 333 sweep 'every tile in the browser picks instead of applying')",
+    "verdict": "unverifiable",
+    "evidence": "H12 never mentions it. The test is v17.23 :63595 (tree :63922, budgetMs 420000, at phone width, tapping every tile, each tap feeding the live preview). The staircase shows no step attributed between :49896 and :80547, only +465 MB spread over 650 s. But H12 does not say whether this test passed in its container. Its canvas micro-test drops canvases (+0 MB), which says nothing about canvases that stay referenced. Settle it with a run of ?only=every%20tile%20in%20the%20browser that samples VmData before and after, plus a heap snapshot counting detached HTMLCanvasElement."
+   },
+   {
+    "claim": "Option 1, splitting the run into two Chromes at about :47436, is cheap and safe",
+    "verdict": "partly",
+    "evidence": "Slicing exists (tree tests.js:59845, ?after=/?upto=) and changes no assertion, so no proof is weakened. But the queue 333 sweep's own comment (tree :63923-63927) says an earlier test warms the thumbnail cache, so it takes about 49 s in the full suite and minutes when run cold. Any seam has to keep that warm-up in the same Chrome, or the phone pass gets slower or hits its 420 s budget."
+   }
+  ],
+  "builder_items": [
+   {
+    "title": "The real 1080x1920 memory sweep is a test H12 does not name",
+    "severity": "MEDIUM",
+    "what": "For #1085/#1095, look at the crop-admitted kernel identity test. For every one of 30 or more admitted kernels it allocates a fresh 1080x1920 Uint8ClampedArray (about 8.3 MB each, so 250 MB or more of churn in one test), plus whatever _cropIdentity copies. H12 blamed the neighbouring tests instead, and those use 200x260, 420x320 and 640x520 plates. If you want to cut address-space churn without weakening the proof, build that big fixture once outside the loop and copy it per kernel, since mk() returns the same bytes every time. Prove it still catches a wrong crop with mutate.sh --only.",
+    "where": "tests/tests.js:84048-84069 (v17.23 :83717)"
+   },
+   {
+    "title": "Squish continuity sweeps make about 3,000 fresh 480x480 canvases plus ImageData",
+    "severity": "LOW",
+    "what": "sq480 creates a new offscreen 480x480 canvas and a 0.92 MB getImageData on every step. The one-pixel sweep (20 sweeps x about 130 steps) and the inset-slider sweep (about 400 steps) together run about 3,000 of them. The 0.92 MB size matches the thousands of exactly-1 MB maps H12 found in the renderer. This is the largest single step in H12's staircase (+1369 MB). Before calling it only a trigger, measure it with sq480 reusing one canvas, cleared with clearRect before each render so every step still starts blank.",
+    "where": "tests/tests.js:25604-25612, 25720-25774, 25776-25803"
+   },
+   {
+    "title": "If the run is split into two Chromes, keep the queue 333 sweep's warm-up on the same side",
+    "severity": "LOW",
+    "what": "The effects-browser sweep relies on an earlier test having warmed the thumbnail cache: about 49 s warm against minutes cold, with a 420 s budget already raised once. A seam at the Reverb test (:47727) puts it in the second Chrome. Check where the cache gets warmed before choosing the seam.",
+    "where": "tests/tests.js:63922-63937"
+   }
+  ],
+  "helper_fixes": [
+   "Replace '1080x1920 kernel plates (:82443, :82649, :83769)' with the real sizes: :82443 uses 200x260 fixtures; :82649 uses 420x320 plus one 1080x1920 array; :83769 uses a 640x520 comp.",
+   "Add :83717 ('692: every crop-admitted kernel draws the same picture cropped…') as the actual 1080x1920 sweep: 30 or more kernels x mk(450,900,180,150,1080,1920).",
+   "Row 4 'what it allocates': change 'on 1080x1920 plates' to 'on a 640x520 comp, 2 shots x 5 positions x 2 param sets per member, each with a full getImageData'.",
+   "Staircase row +392: the window ':80547 to :83259' does not contain :83769; either widen the window or drop :83769 from that row.",
+   "Headline: change '3411 of the 5210 MB of growth' to '3411 of the 4956 MB growth of the post-GC floor (826 to 5782)'; 5210 is peak minus start and does not compare like for like.",
+   "Move 'the biggest is a threshold a warm process crosses' and 'rows with cold 0 are triggers, not causes' out of the Verified sections and label them Guess; one cold run does not separate a trigger from a heavy churner.",
+   "Scope the WebGL line: 'not a VmData driver under headless software GL with --no-sandbox; untested on a GPU'.",
+   "Add a section on the Mac's #1095 suspect, the queue 333 effects-browser sweep (v17.23 :63595): say whether it passed in pass F, give VmData across it, and note the canvas micro-test dropped canvases rather than keeping them referenced, so it cannot speak to 'detached but retained'.",
+   "Option 1: note that a seam at :47436 moves the queue 333 sweep into the second Chrome, and that its own comment says it runs for minutes on a cold thumbnail cache (budget 420 s)."
+  ]
+ },
+ {
+  "id": "H11",
+  "overall": "fix",
+  "summary": "H11 is useful and mostly careful. Its main finding holds up: sleeping is not where the suite's time goes, so safe test edits give a modest cut, not a halving. Three things need fixing before a builder acts on it. (1) The 921 S3 proposal, as written, weakens the proof. The test catches a race that lasts a few milliseconds, and it only works if each pair's channels are checked the moment that pair's `opened` resolves. Batching with Promise.all and then running the unchanged checks moves the check to after the slowest pair in the batch has opened. (2) The Mac estimate for the 'every tile' test rests on a stale ~49 s. The same comment block records that the test went past 240 s in every phone pass on 21 Sep and took 261-279 s alone at 380px. So the saving on a real machine is far larger than 40 s, and the '8% on a Mac' total understates it. (3) The parallel-pass idea leaves out the strongest argument against it, which is already in tools/ship.sh:161-164: two headless suites on one machine flaked a timing test and cost a whole ship, and that is why spotcheck and ship refuse to run side by side. _cdp.py does pick its own free debug port and temp profile, and the two --progress and .out files are already separate, so there is no port or file clash. But it would also need: a two-value ship_phase, a new rule for how a red desktop pass stops the phone pass (today the phone pass never starts if desktop is red), a .suite-seconds reading that is not inflated by contention, and starts staggered so neither run's start-up reaper races the other's Chrome. Memory on the 7.7 GB WSL laptop, which now ships (the DESKTOP-HC64AE0 line in tools/.suite-seconds), is a real risk the report pins only on 'a Mac with less memory'. Line numbers have drifted by roughly 300 in tests.js in the v17.24 tree (for example 'every tile' is now at :63922, 921 S3 at :32657, 967 1 at :101723), but the content they point to matches.",
+  "claims": [
+   {
+    "claim": "921 S3 forty pairings can run in 5 batches of 8 with Promise.all with every assertion unchanged, saving ~90 s",
+    "verdict": "wrong",
+    "evidence": "tests/tests.js:32651-32675: the test guards a race of a few milliseconds ('at the moment `opened` resolves, all three channels must be open'). The readyState check runs synchronously right after `await rtcPair921()`, which resolves on Promise.all([h.opened, g.opened]) at :32576-32579. If the 8 pairings are awaited together and the checks at :32662-32672 then run unchanged, 7 of the 8 pairs are checked late, after the slowest pair has opened, which gives their bulk channel time to open. The 1-in-10 race this test exists to catch would then pass. The pairs share no state (each builds its own RtcLink at :32569-32570), so concurrency itself is fine.",
+    "correction": "Batching is only assertion-preserving if each pairing's channel check and bulk send run in that pairing's own continuation (rtcPair921().then(check)), so each check happens the moment that pair opens. Then prove it with a mutation that makes `opened` resolve on ctl alone, and check that the batched test still goes red."
+   },
+   {
+    "claim": "The 'every tile…' test (324 s) can stop rendering thumbnails through a suite seam without dropping an assertion; it takes about 49 s on a Mac, so the Mac saving is ~40 s",
+    "verdict": "partly",
+    "evidence": "The assertions really don't need thumbnails. tests/tests.js:63971-64011 checks that the stack does not grow, that the pick registers, that the swept count is at least 40, that the pick reaches _fxPreview.list, and that Done adds it. The comment at :63932-63934 confirms the cost is `_openCategory` rendering tiles. But the same comment, :63928-63931, says the test passed 240 s and failed every phone pass on 21 Sep, and measured 261, 266 and 279 s alone at 380px. ~49 s is the stale 2 Sep figure. fx-thumbs.js already has a suite seam, `_sliceMs` (js/fx-thumbs.js:1174 and :1818). The proposed seam is an app-code change, so it needs a ?v= bump.",
+    "correction": "The saving on a shipping machine is about 200-250 s, not ~40 s, so the '8% on a Mac' total is too low. Reuse or extend the existing fx-thumbs seam, and restore it in a finally."
+   },
+   {
+    "claim": "967 1 really waits ICE_CONNECT + 3000 ms and the wait is the measurement, so no safe cut",
+    "verdict": "confirmed",
+    "evidence": "tests/tests.js:101748 `await sleep((C.LIMITS.ICE_CONNECT || 20000) + 3000)`. The assertions at :101750-101753 check that the guest has not given up after that wait."
+   },
+   {
+    "claim": "The runner only keeps the eight slowest tests",
+    "verdict": "confirmed",
+    "evidence": "tests/tests.js:59908 and :59951 `results.__slowest = window.__fmSlow` (the eight slowest). `window.__fmLastTest` is written per test at :59882. Line numbers drifted about +300 from the report's :59576/:59598."
+   },
+   {
+    "claim": "fx-thumbs.js says a stock strip is ~30 s in headless software GL and 3 ms on a GPU",
+    "verdict": "confirmed",
+    "evidence": "js/fx-thumbs.js:1070-1072 (the report cites 1064-1070, which is drift)."
+   },
+   {
+    "claim": "The two ship passes are independent, so they could run in parallel on separate profiles and ports (114 → ~62 min); the cautions are the CPU-throttle test and memory on a smaller Mac",
+    "verdict": "partly",
+    "evidence": "Mechanically compatible: tests/_cdp.py:411-412 picks a free debug port and a mkdtemp profile per run, both passes share the static server on 8777, and the progress and out files are already separate (tools/ship.sh:877/881 and 938/939). Not covered by the report: tools/ship.sh:161-164 records that two headless suites at once flaked test 699 and cost a ship, which is why spotcheck and ship refuse to overlap. The phone pass only runs after a green desktop pass (ship.sh:891-921, then 935-938). ship_phase holds a single value. suite_seconds_record (ship.sh:921) would store a pass slowed by contention, which raises every future cap. The _cdp.py start-up reaper (:371-407) checks for other drivers before it kills fm-cdp Chromes and deletes fm-cdp-* profiles, so a badly staggered second start could reap the first run's browser. That window is milliseconds, but it is real. The memory risk applies to the 7.7 GB WSL laptop, which now ships (tools/.suite-seconds: DESKTOP-HC64AE0 2543; ship.sh:880 mentions 'the first laptop ship'), and its temp profiles live on tmpfs, which is RAM (_cdp.py:401-402).",
+    "correction": "State the documented flake precedent (ship.sh:161-164) as the main risk. List the ship.sh changes needed: phase field, red-pass cancellation, .suite-seconds recording, staggered start. Move the memory caution to the WSL laptop."
+   },
+   {
+    "claim": "Two passes at once fit in memory (each page ~7.6 GB VmData, ~1.6 GB RSS, 7.7 GB WSL)",
+    "verdict": "unverifiable",
+    "evidence": "VmData is reserved address space, not resident memory. Two renderers at ~1.6 GB RSS plus browser and GPU processes, the tier-3 extra app frames (h./a./b.localhost), and two tmpfs profiles could approach 5 GB or more of 7.7 GB. Settling it needs one trial run on the laptop (outside a ship) of both passes at once, logging peak RSS and swap from free -m every 10 s, plus a check that the 921 S8 throttle test and the 699 swipe control stay green."
+   },
+   {
+    "claim": "Literal sleeps total ~433 s of 3409 s, so poll-instead-of-sleep is worth at most ~7 min",
+    "verdict": "unverifiable",
+    "evidence": "Per-test timings come from the helper's own instrumented run (software GL, 4 vCPU). Settling it needs the per-test _ms list from a real suite pass on the laptop. The direction is plausible: 921 S3, 'every tile' and 967 1 are slow for non-sleep reasons, as described."
+   }
+  ],
+  "builder_items": [
+   {
+    "title": "Do not batch 921 S3 pairings with checks run after Promise.all",
+    "severity": "MEDIUM",
+    "what": "If this test is sped up, each pairing's readyState check and bulk send must run in that pairing's own continuation, right after its `opened` resolves. Checking the whole batch after Promise.all lets late pairs' bulk channels finish opening, which hides the 1-in-10 race the test exists to catch. Prove it with a mutation: make `opened` resolve on ctl only, and the test must still go red.",
+    "where": "tests/tests.js:32657-32675 (rtcPair921 at :32566-32582)"
+   },
+   {
+    "title": "Parallel ship passes conflict with the existing no-two-suites rule",
+    "severity": "MEDIUM",
+    "what": "Running the 1280 and 380 passes at once is exactly the setup that flaked test 699 and cost a ship. That is why ship.sh refuses to run beside a spot-check. If it is tried anyway, ship.sh needs: a two-value phase, cancelling the other pass on red or timeout, not recording a contended pass into .suite-seconds, and staggered starts so _cdp.py's start-up reaper cannot kill the other run's Chrome or delete its profile. First do a trial on the 7.7 GB WSL laptop, outside a ship, logging memory, swap and flaky timing tests.",
+    "where": "tools/ship.sh:161-164, 872-938, 921; tests/_cdp.py:371-412"
+   },
+   {
+    "title": "The 'every tile' thumbnail seam is the real big win, larger than the report says",
+    "severity": "LOW",
+    "what": "The test's assertions (no stack growth, pick registers, swept >= 40, preview list, Done adds) don't depend on thumbnails, so skipping thumbnail rendering for this test keeps the proof. On a real machine it saves ~200-250 s per phone pass, not ~40 s (the comment records 261-279 s, and it overran 240 s in the phone pass). Prefer extending the existing `_sliceMs` suite seam, restore it in a finally, and remember a js/fx-thumbs.js change needs its ?v= bump.",
+    "where": "tests/tests.js:63922-64019; js/fx-thumbs.js:1174, 1818"
+   }
+  ],
+  "helper_fixes": [
+   "921 S3 row: replace 'Run the 40 pairings in 5 batches of 8 with Promise.all; :32491-32500 unchanged' with 'Only if each pairing checks its channels and sends on bulk in its own continuation the moment its opened resolves; checking after Promise.all lets late pairs finish opening and hides the race. Prove with a mutation that makes opened resolve on ctl alone.'",
+   "Row 1 and the savings table: replace 'about 49 s on a Mac' with 'over 240 s in the Mac phone pass (tests.js:63928-63931: failed every phone pass at a 240 s budget on 21 Sep; 261-279 s alone at 380px)', and recompute the Mac column, which comes out above 8%.",
+   "Row 1: note that js/fx-thumbs.js already has a suite seam (`_sliceMs`, :1174/:1818) and that a new seam is an app-code change that needs a ?v= bump.",
+   "Parallel-pass section: add tools/ship.sh:161-164 (two headless suites at once flaked test 699 and cost a ship; spotcheck and ship refuse to overlap) as the main risk, ahead of the CPU-throttle test.",
+   "Parallel-pass section: list the ship.sh work it needs: one ship_phase value holding both passes, cancelling the other pass on red or timeout (today the phone pass never starts after a red desktop pass), not recording a contended pass via suite_seconds_record (ship.sh:921), and staggered starts because of the _cdp.py start-up reaper (:371-407).",
+   "Parallel-pass section: replace 'a Mac with less memory' with 'the 7.7 GB WSL laptop, which now ships (tools/.suite-seconds DESKTOP-HC64AE0); temp profiles there are on tmpfs, i.e. RAM (_cdp.py:401-402); VmData is reserved address space, so measure peak RSS and swap in a trial run before trusting two at once'.",
+   "Refresh tests.js line numbers against v17.24 (about +300 drift): 'every tile' :63922, 921 S3 :32657, 967 1 :101723 with the sleep at :101748, slowest list :59908/:59951; fx-thumbs software-GL comment is at :1070-1072."
+  ]
+ },
+ {
+  "id": "H9",
+  "overall": "fix",
+  "summary": "H9 is mostly accurate on the code. Branch relationships, SCHEMA_REV 8, the #sm-bar leak mechanism, #ed-live, the history metas lockstep, the Full gates, the additive CSS and fu-lock-r5 touching no app file all check out against ssh/980-p22-trayb2 and ssh/fu-lock-r5. It needs four corrections. (1) Its \"no tap target under 44 px\" claim only covers the resting tray. The Length row's value field is 36 px tall, and the black-band button can be 40 px wide. (2) It understates the schema clash: the 921 S1 gate catches a fingerprint change but cannot force a SCHEMA_REV bump. (3) It calls fu-lock-r5 \"safe to merge on its own\", but that branch is based on v17.23, and v17.24 rewrote tools/ship.sh (+300/-76). (4) Its baseline is v17.23 while ssh/main is now v17.24; the app code is the same apart from the version label. I found no Full-changing edit in shared files that the report missed. I checked spine.onCopy (it strips only Simple fields), the hidden #btn-sm-split in #transport (nothing reads #transport's children), any main use of layer.sm, pick or srcW (none), and the :has() rules on #inspector-panel (they need .sm-band-hint, which only Simple draws). The 380 px table and the Full-versus-main pixel comparison need a browser run, which I was not allowed to do.",
+  "claims": [
+   {
+    "claim": "trayb2 (a7000c6f) is 61 commits on v17.23 main and contains 980-p22 (bda3802e, 30 commits). 980-phase2 (f368458d) is not an ancestor; p22 carries the same 2.2 commit in a later form.",
+    "verdict": "confirmed",
+    "evidence": "git rev-list --count ssh/main..ssh/980-p22-trayb2 = 61; merge-base = b46b47d3; p22 is an ancestor (exit 0) and phase2 is not (exit 1); ssh/980-p22..ssh/980-phase2 = 1 commit with the same message as bda3802e. phase2 to p22 in spine-edit.js is +64/-24, i.e. 88 changed lines, not '88 more lines'.",
+    "correction": "Say '88 changed lines (+64/-24)', not '88 more lines'."
+   },
+   {
+    "claim": "Finding 1 (medium): the branch sets SCHEMA_REV = 8, so it can collide with main's next polish batch. It would fail loudly via the 921 S1 fingerprint test, so this is a merge-day cost.",
+    "verdict": "partly",
+    "evidence": "Branch js/collab-core.js:48 sets SCHEMA_REV = 8 and :257 sets SCHEMA_FP = 8673617696742561. Main (v17.24) js/collab-core.js:44 is 7, and its :41-43 comment shows polish batches bump this number when effects gain controls (batch 6 took 7), so the next batch would take 8. No other ssh/ branch is at 8 today. tests/tests.js:30284-30291 (branch) only compares the fingerprint, and its message says 'bump SCHEMA_REV and set SCHEMA_FP'. Pasting the new fingerprint alone turns it green. collab-signal.js:1559-1560 decides join compatibility by PROTO and SCHEMA_REV only, so a merged Simple build at rev 8 and a polish-only build at rev 8 would accept each other while normalising projects differently. Also, the comments at branch collab-core.js:172 and :176 still say 'SCHEMA_REV 7'.",
+    "correction": "The collision is loud only for the fingerprint. Nothing forces the rev number to move. On merge day, SCHEMA_REV must be bumped past whatever main has reached (9 if a batch took 8), not just the fingerprint re-pasted."
+   },
+   {
+    "claim": "Finding 2 (low): #sm-bar is left inside Full's #inspector-panel after a Simple visit on PC, it is display:none in Full, and nothing reads that panel's children.",
+    "verdict": "confirmed",
+    "evidence": "js/simple-tools.js:367-369: sync() calls mount() and place() before the isSimple() check. On PC, place() (:71-77) only ever appends the bar to #inspector-panel; only the phone branch puts it back in #sm-timeline. Nothing moves it back when switching to Full (editor-mode.js apply :125-155; app.js:1012 calls sync only when simple). The phone/PC media 'change' listener (:83) also calls place() in Full. styles.css:11784 sets #sm-bar { display:none }. I found no :last-child, lastElementChild or .children reader of #inspector-panel in main's js or css. The flex-column rules at styles.css:9417 and the :has(#sm-say.sm-two) rules at :11838-11839 are unaffected: the first ignores a display:none child, the second needs .sm-band-hint.",
+    "correction": "Also mention the phone/PC media 'change' listener at simple-tools.js:83, which re-places the bar in Full."
+   },
+   {
+    "claim": "Finding 3 (low): after one switch, Full gains a visually hidden aria-live #ed-live on body.",
+    "verdict": "confirmed",
+    "evidence": "js/editor-mode.js:176-178: announce() creates div#ed-live (.sm-vh, role=status, aria-live=polite) on body and writes 'Full editor' or 'Simple editor'. It runs only from set() (:169) or a hop (:208), i.e. only on a real switch."
+   },
+   {
+    "claim": "Finding 4: Full-visible exceptions: the third cog block for everyone (GATED=false), srcW/srcH/srcRev on every media layer, pick on multi-file imports, and the sm.cut de-click rule.",
+    "verdict": "confirmed",
+    "evidence": "editor-mode.js:17 GATED=false and enabled() is always true, so app.js cvEdSync builds the block on every open. The app.js addMediaLayer hunk writes srcW/srcH/srcRev when width and height are in (0, 16384]. handleFiles passes pick only when files.length > 1. simpleCutContinuous returns true unless later.sm.cut === true, and the only writer is spine-edit.js. The cvPairSwap rewrite (cardShrinks = from==='canvas', z-index 3/2/1, EXP[from]) gives the same values as before when only two blocks exist."
+   },
+   {
+    "claim": "Checked and clean: Full never passes a meta to history.commit, metas stays index-for-index with stack, CSS is additive (309 lines, none removed), layerAABB callers pass three args, and every Simple gate returns false in Full.",
+    "verdict": "confirmed",
+    "evidence": "The only history.commit(...) call with an argument is spine-edit.js:871. Every stack mutation in branch history.js (:275, :309-317) has a matching metas mutation. git diff --stat shows styles.css with 309 insertions and 0 deletions. In Full, history undo/redo, timeline rebuild/updatePlayhead/keyRail, mobile sheetHeld/dockSheet, inspector bandIdle, app.js selection classes and editor.onKey are all gated on isSimple() or FM.spine.running."
+   },
+   {
+    "claim": "380 px: no horizontal overflow and no tap target under 44 px at six sizes (smallest tool 54x50).",
+    "verdict": "partly",
+    "evidence": "The measurement covered the resting tray with one clip selected. Code shows Simple controls under 44 px that it never opened. The Length row's value input .sm-len-v is 72x36 (branch styles.css:11804; built at simple-tools.js:236). The black-band button .sm-band is 52 px tall but can be as narrow as 40 px (simple-timeline.js:301, Math.max(40, ...)). Overflow and the measured sizes would need a headless run at 320-430 with the Length row open and a black band showing.",
+    "correction": "Narrow the claim to 'no project or tray tool under 44 px'. List the Length field (36 px tall) and the black band (can be 40 px wide) as not measured or under 44."
+   },
+   {
+    "claim": "Full against main: 51/51 or 56/56 visible ids identical at four viewports.",
+    "verdict": "unverifiable",
+    "evidence": "It needs both builds served side by side and an element-by-element comparison in a browser, which I could not run. The code paths I read are consistent with no visible difference: #btn-sm-split and #sm-timeline are display:none in Full (styles.css:11682), and nothing reads #transport's children.",
+    "correction": "Add that main is now v17.24 (05d06c53). The app code is the same as v17.23 apart from the version label."
+   },
+   {
+    "claim": "fu-lock-r5 touches no app file, adds +39 lines to tools/ship.sh, and is safe to merge on its own.",
+    "verdict": "partly",
+    "evidence": "Against its merge-base b46b47d3 (v17.23), git diff --stat for js, styles.css, index.html and sw.js is empty, and ship.sh is +39 (plus the new tools/_fu_*.py, full-unchanged.sh and plants.json). But ssh/main v17.24 changed tools/ship.sh by +300/-76 since v17.23, so those 39 lines have to be merged into a much-changed file.",
+    "correction": "Say it touches no app file, but its ship.sh hunk was written against v17.23's ship.sh and needs a merge with v17.24's rewrite. It is not a clean drop-in."
+   }
+  ],
+  "builder_items": [
+   {
+    "title": "Simple's SCHEMA_REV 8 will clash with main's next polish batch, and the test cannot make anyone bump it",
+    "severity": "MEDIUM",
+    "what": "The Simple branches set collab SCHEMA_REV to 8. Main is at 7, and every effects polish batch bumps it, so the next batch will also take 8. The 921 S1 test only checks the fingerprint, so pasting the new fingerprint and leaving 8 makes it pass. Two builds both saying rev 8 with different sanitiser rules would then be allowed into the same live session and disagree about the project. On merge day, bump SCHEMA_REV one past whatever main has reached and re-measure the fingerprint. Also fix the stale 'SCHEMA_REV 7' comments.",
+    "where": "ssh/980-p22-trayb2 js/collab-core.js:48, :172, :176, :257; main js/collab-core.js:44; js/collab-signal.js:1559-1560; tests/tests.js:30284-30291"
+   },
+   {
+    "title": "#sm-bar stays in Full's inspector panel after a Simple visit on PC",
+    "severity": "LOW",
+    "what": "sync() moves the bar before it checks the mode, and the PC path of place() only ever appends it to #inspector-panel. Nothing moves it back when switching to Full, and a phone/PC width change in Full moves it again. It is display:none in Full, so nothing shows today. Either move it back to #sm-timeline when leaving Simple, or call place() only while in Simple.",
+    "where": "ssh/980-p22-trayb2 js/simple-tools.js:71-77, :83, :367-369; styles.css:11784"
+   },
+   {
+    "title": "Some Simple controls are under 44 px",
+    "severity": "LOW",
+    "what": "The Length row's value field is 36 px tall, and the black 'runs past the end' band button can be as narrow as 40 px. Both are tappable controls on a phone. The helper's 44 px check did not open the Length row or show a band.",
+    "where": "ssh/980-p22-trayb2 styles.css:11804 (.sm-len-v height 36px); js/simple-timeline.js:301 (Math.max(40, ...))"
+   }
+  ],
+  "helper_fixes": [
+   "Baseline line: main is now v17.24 (05d06c53). The app code is the same as v17.23 b46b47d3 apart from the version label. Say the review was done against v17.23.",
+   "Branch table, 980-phase2 row: replace '88 more lines in spine-edit.js' with '88 changed lines in spine-edit.js (+64/-24)'.",
+   "Finding 1: add that the 921 S1 gate (tests/tests.js:30288-30291) only compares SCHEMA_FP. Re-pasting the fingerprint while leaving SCHEMA_REV at 8 passes, and join compatibility (collab-signal.js:1559-1560) reads only PROTO and SCHEMA_REV. Merge day must bump the rev past main's, not just re-pin the fingerprint.",
+   "Finding 1: note the stale '(SCHEMA_REV 7)' comments at branch js/collab-core.js:172 and :176.",
+   "Finding 2: add that the phone/PC media 'change' listener (simple-tools.js:83) also calls place() in Full after the first Simple visit.",
+   "380 px section: change 'no tap target under 44 px' to 'no tray or project tool under 44 px in the resting state'. Add: not measured with the Length row open (.sm-len-v is 72x36, styles.css:11804) or with a black band showing (.sm-band can be 40 px wide, simple-timeline.js:301).",
+   "fu-lock-r5 section: replace 'safe to merge on its own' with: touches no app file, but its +39-line ship.sh hunk is against v17.23. v17.24 changed tools/ship.sh by +300/-76, so it needs a manual merge."
+  ]
+ },
+ {
+  "id": "H15",
+  "overall": "fix",
+  "summary": "The F1 facts and the wire steps for Option B are right. DENY at js/collab-session.js:31 has no 'notes', and viewOfProject feeds the hash, the outgoing diff (via collab-bridge.js:116) and the host base that the snapshot is cut from. The host's validOp (collab-host.js:188-226) has no rule for keys under the P root, so a refusal is needed. SCHEMA_FP does not see DENY. F5 is in the right place: the peer path, not loadImageFile.\n\nF2 is where the plan goes wrong, and it contradicts #1091. It calls F2 \"a one-word fix\" because the app \"already says the honest thing in two places\". Those two strings exist (collab-ui.js:1820, :3121), but they cover export only. The plan never deals with the real hole: Leave, and Home's \"Keep as my own copy\", keep a full copy of every clip whatever roExport says (collab-ui.js:3189-3224, home.js:1401-1407, collab-session.js:1984). So Option B (\"export off for new rooms\") does not make \"only watch\" true. The PM's recommendation (no kept copy on Leave when export is off) is missing from the plan entirely. The suggested new label \"can watch and play it\" still leaves out export and keeping a copy.\n\nF5 adds a new ctl.refused flag and a planWants change. That duplicates the existing ctl.bad mechanism, which planWants already skips.",
+  "claims": [
+   {
+    "claim": "F1: the owner's Notes-pad text syncs to every guest. Notes live in scene.project.notes. DENY (collab-session.js:31) withholds only five keys, applied by viewOfProject to the diff, the hash and the snapshot. notes is a synced id-keyed array.",
+    "verdict": "confirmed",
+    "evidence": "notepad.js:22-27 list() creates P.notes on the project. collab-session.js:31 DENY = ofTemplate/ofTemplateRev/ofElement/returnTo/fromTemplate, with no notes. viewOfProject (:33-43) is used for the hash (:1037), by the bridge view behind the diff (collab-bridge.js:116), and by the host base the snapshot copies (collab-host.js:939). collab-path.js:251 KEYED has notes:'id'."
+   },
+   {
+    "claim": "F1 Option B step 2: the host has no key rule for the P root, and remote ops are applied straight onto the live doc, so a refusal in validOp is required as well as DENY.",
+    "verdict": "confirmed",
+    "evidence": "collab-host.js:188-226 validOp checks path validity, the root, key fields, element and anchor rules, but nothing per P key. collab-session.js:144 doc() = A.doc(); D.apply(doc(), …) at :441 and :540. C.DENY is exported at collab-session.js:1703. The receiving side applies a snapshot as an in-place diff from view() (:1004-1018), so a new-build device's own notes are not wiped by the owner's snapshot. Step 1 is therefore safe."
+   },
+   {
+    "claim": "F1 Option B step 3: SCHEMA_FP hashes the sanitiser output, not DENY, so a change to DENY would not trip the fingerprint gate and the hash needs a DENY term plus a SCHEMA_REV bump.",
+    "verdict": "confirmed",
+    "evidence": "collab-core.js:238 hashes L, defs, adefs, OP_GRAMMAR, der and SCHEMA_REV. der runs the fixture through _viewOfProject (:213), but the fixture project (:194) holds no denied key, so changing DENY leaves the number unchanged. SCHEMA_REV = 7 at collab-core.js:44. Without the bump, a new owner and an old guest would disagree on the hash, because one includes notes and the other does not."
+   },
+   {
+    "claim": "The app already tells the truth about viewer export in two places (collab-ui.js:1819-1821 and :3121); only the role menu label is untrue, so F2 is a one-word fix.",
+    "verdict": "partly",
+    "evidence": "Both strings exist. :1820 is the owner's switch: 'this only asks it not to … their copy is on their device either way'. :3121 is the guest's own panel: 'You can export a video of it on this device.' But :3121 is shown only to the viewer, never to the owner picking the role. And neither string fixes the substance #1091 confirmed: Leave keeps a full copy even with export off. Leave runs C.leave({keep:true}) whatever roExport is set to (collab-ui.js:3189-3224 to collab-session.js:1984 detachLinked), and so does Home's 'Keep as my own copy' (home.js:1401-1407).",
+    "correction": "Say the two strings are honest about EXPORT only. F2 is not a one-word fix: a Viewer receives every clip and can keep a full copy through Leave or Home 'Keep as my own copy', with no roExport check."
+   },
+   {
+    "claim": "F2 Option A: changing ROLES[2][2] to 'can watch and play it' makes the label true.",
+    "verdict": "wrong",
+    "evidence": "With roExport defaulting to true (collab-ui.js:360, collab-session.js:1536), a Viewer can also export a video (collab-core.js:422 canExport) and keep a full copy on Leave (collab-ui.js:3224). 'can watch and play it' leaves both out. It also repeats the existing line at collab-ui.js:1043, 'View only — you can watch and play it'.",
+    "correction": "A true label would name export and the kept copy, e.g. 'can watch, export and keep a copy'. Or pair the label with the PM's fix that makes 'only watch' true."
+   },
+   {
+    "claim": "F2 Option B (new rooms start with roExport off) is the stronger fix.",
+    "verdict": "wrong",
+    "evidence": "roExport is enforced only in exportGate (collab-media.js:1295-1299), and that returns true at once when there is no active session (:1291-1292). Leave (collab-ui.js:3211-3224) and Home 'Keep as my own copy' (home.js:1401-1407) never read roExport, so a Viewer with export off still leaves with every clip. The PM's recommended option (no kept copy on Leave when export is off) is not in the plan. Whether a linked copy opened while not live can export unchecked needs a run: open a Viewer's linked copy with the owner offline and try Export.",
+    "correction": "Add an Option C matching the PM's recommendation. When the guest is a Viewer or Commenter and roExport is false, Leave and Home 'Keep as my own copy' offer delete only, with no detachLinked. Also say plainly that the raw clips sit on the guest's device during the session either way."
+   },
+   {
+    "claim": "F5: put the 64 MP cap on the peer path only, not in loadImageFile. writeRecord stores first and then decodes, and a false return reads as 'out of room'. Use a new ctl.refused flag plus a planWants change so the file is not asked for again.",
+    "verdict": "partly",
+    "evidence": "Placement is right. FM.loadImageFile (media.js:801) is also the path for his own photos. writeRecord stores the file at collab-media.js:1196, then decodes at :1202, and a false return goes to outOfRoom at :1162-1163. But ctl.bad[fid] already exists: planWants skips it (:627), and the font size cap already uses it as the precedent (:630). So a new flag and a planWants edit are redundant. 'Before anything is stored' is loose: the received parts are already in collab: IndexedDB records (:1088) until dropParts runs. The GIF cap is at media.js:726, not :725.",
+    "correction": "Reuse ctl.bad[fid] = 1 (and ctl.failed++ / M.ui.sync) instead of a new ctl.refused, with no planWants change. Say 'before it is saved as media or decoded', not 'before anything is stored'."
+   }
+  ],
+  "builder_items": [
+   {
+    "title": "A Viewer keeps a full copy on Leave even when export is off",
+    "severity": "MEDIUM",
+    "what": "Leave and Home's 'Keep as my own copy' always run detachLinked, which copies every clip into the guest's own project. Neither reads roExport. So 'Viewer: can only watch' stays untrue whatever the label or the export switch says. The PM's recommendation (no kept copy on Leave when export is off, for Viewers and Commenters) needs a change at these three doors, and the plan does not include it.",
+    "where": "js/collab-ui.js:3189-3224 (Leave dialog and leaveKeeping), js/home.js:1401-1407 (Keep as my own copy), js/collab-session.js:1984 (C.leave keep branch)"
+   },
+   {
+    "title": "The owner's Notes-pad notes sync to every guest, viewers included",
+    "severity": "MEDIUM",
+    "what": "project.notes is not in DENY, so it travels in the snapshot, the ops and the hash. Option B's three wire steps are correct as written: add 'notes' to DENY, refuse P-root ops on DENY keys in validOp, add DENY to the SCHEMA_FP string and bump SCHEMA_REV (currently 7).",
+    "where": "js/collab-session.js:31; js/collab-host.js:188-226; js/collab-core.js:44 and :238"
+   },
+   {
+    "title": "F5 peer image cap: reuse ctl.bad instead of a new flag",
+    "severity": "LOW",
+    "what": "planWants already skips ctl.bad[fid], and the font size cap already uses that pattern. Mark an oversized peer image bad there rather than adding ctl.refused and editing planWants. Keep the cap off FM.loadImageFile, because his own photos also go through it.",
+    "where": "js/collab-media.js:627-630 (planWants), :1147-1165 (applyFile loop), :1191-1211 (writeRecord)"
+   }
+  ],
+  "helper_fixes": [
+   "Line 14: replace 'So F2 is a one-word fix, not a new screen' with: the two strings are honest about export only; a Viewer still receives every clip and keeps a full copy on Leave (collab-ui.js:3189-3224) or Home 'Keep as my own copy' (home.js:1401-1407), whatever roExport says (#1091).",
+   "Line 14: note that :3121 is in the guest's own panel, which the owner choosing the role never sees.",
+   "F2 Option A: 'can watch and play it' is not true while roExport defaults on; use wording that names export and the kept copy, and note that collab-ui.js:1043 already says 'you can watch and play it'.",
+   "F2 Option B: add that roExport is enforced only by exportGate (collab-media.js:1295-1299), which returns early when there is no active session (:1291-1292), and that Leave and Keep-as-my-own-copy ignore it, so B does not make 'only watch' true.",
+   "Add an F2 Option C (the PM's pick): for a Viewer or Commenter with roExport false, Leave and Home 'Keep as my own copy' offer delete only (no detachLinked); list collab-ui.js:3211-3224, home.js:1401-1407 and collab-session.js:1984 as the places to change, plus a test that a Viewer leaving with export off keeps no project card.",
+   "Update the decision table and 'my pick' for F2 to match #1091 and the PM's recommendation (notes owner-only; make 'only watch' true).",
+   "F5 step 2: replace 'set ctl.refused[e.fid] = 1, make planWants skip refused files' with 'set ctl.bad[e.fid] = 1 (planWants already skips bad, collab-media.js:627; same pattern as the font cap at :630)'.",
+   "F5: change 'refused before anything is stored' to 'before it is saved as media or decoded'; the received parts already sit in collab: records until dropParts.",
+   "F5: the GIF 64e6 check is at js/media.js:726, not :725; writeRecord spans :1191-1211."
+  ]
+ },
+ {
+  "id": "P7",
+  "overall": "fix",
+  "summary": "Most of P7 holds up. I read all four storage bugs (#1000, #1001, #1002 sanitiser half, #1003) through the v17.23/v17.24 code, and each is real where the report says it is (js/ is identical between the two). The fix directions go after the cause and match VERIFIED.md sections 1.1 to 1.4. None of these items has clauses in Ezra's own words: all are hunt or ChatGPT findings, and four are JUMPED to ChatGPT's lane, which the plan says. Four corrections are needed before handing it over. (1) The #996 step-1 cleanup would delete the WRONG layer: after redo, L is no longer in the scene. (2) The #1000 step 2 says to \"compute _stale before notePending\", but _stale is only set inside writeScene. (3) The #1002 text calls _sanitizeLayers the every-open load path. It is not: load() calls sanitizeUnsafeValues directly at storage.js:903. (4) The #1001 plan skips the reopen when there was no previous project; it should reopen null, as restoreBackup does. Also, the tests.js line numbers no longer match because tests.js changed in v17.24. The container runs themselves cannot be re-checked here, but the code paths they describe are confirmed by reading.",
+  "claims": [
+   {
+    "claim": "#1000: a stale tab's save still runs the blob loop and overwrites a newer replaced file with its older rev",
+    "verdict": "confirmed",
+    "evidence": "js/storage.js:747 writeScene() returns false with _writeFail='stale' (:111, :115), but save() never checks it. The loop at :768-800 runs unconditionally, and :790 writes whenever existing.rev !== job.rev, so disk rev 1 gets overwritten by the stale tab's rev 0 job (planBlobWrites :572). idbPut's only scene-blob caller is :796. warnStale toast :89 claims nothing was saved over his work."
+   },
+   {
+    "claim": "#1000 build step 2: stop notePending for a stale tab by computing _stale before it (:745)",
+    "verdict": "partly",
+    "evidence": "notePending (:599-612) runs before writeScene, and _stale only becomes true inside writeScene (:115). On the FIRST stale save the flag is still false, so checking _stale first does not catch it. The stale job (r:0) then overwrites the newer tab's note (r:1) because had.r !== j.rev (:606).",
+    "correction": "Call notePending right AFTER writeScene and skip it when _writeFail === 'stale'. Both calls are synchronous with no await between them, so the 'noted in the same tick as the document' guarantee in the comment at :740-742 still holds."
+   },
+   {
+    "claim": "#1001: importObject creates the project before applyScene; a throw or a false return leaves an empty current project",
+    "verdict": "confirmed",
+    "evidence": "js/storage.js:1993-1999 creates and opens the project; :2000 awaits applyScene. The false branch at :2001-2005 only toasts and does not undo the create. A throw escapes to importFile's catch (:2027, toast 'Could not read that project file') or to restoreBackup's catch (:1951), which leaves one empty card per failed entry."
+   },
+   {
+    "claim": "#1002 / compound: a non-object fillGradient makes sanitizeUnsafeValues throw, so an import of such a file passes sceneFileProblem and then throws",
+    "verdict": "confirmed",
+    "evidence": "storage.js is strict (:8). :1537 tests only truthiness and :1542 assigns .angle onto it, which throws for a string, number or true. sceneFileProblem (:1974-1981) never looks at layer fields. applyScene :1698 calls sanitizeImportedLayers, which reaches sanitizeUnsafeValues at :1647, after create. The proposed one-line typeof/Array guard fixes the cause on every path."
+   },
+   {
+    "claim": "#1002: FM.storage._sanitizeLayers is the every-open load path",
+    "verdict": "wrong",
+    "evidence": "_sanitizeLayers = sanitizeImportedLayers (:1655), which is used by applyScene, history.restore (history.js:71, inside try/catch) and collab-bridge.js:144. The every-open load is storage.js:903, which calls sanitizeUnsafeValues directly. That path throws too, so the fix location is still right.",
+    "correction": "The load path is storage.js:903 (load() calls sanitizeUnsafeValues per layer). _sanitizeLayers covers import, undo restore and collab."
+   },
+   {
+    "claim": "#1003: duplicate returns true and makes a card even when a clip read errors",
+    "verdict": "confirmed",
+    "evidence": "idbGet (:175) resolves null on onerror or an exception. idbGetMedia (:215-221) passes that null through. duplicateFrom :2666-2667 does 'if (!rec) continue', so whole stays true and :2678 returns done(true). duplicate (:2617) returns !== null, so true. home.js:1425 toast says 'storage is full' for every failure."
+   },
+   {
+    "claim": "#996: the three leaks are real, and the step-1 fix for the undo/redo test is splice(indexOf(L),1)",
+    "verdict": "partly",
+    "evidence": "The leaks are real in the code: the undo/redo test (tests.js:13662-13688) unshifts L and never removes it; 'notes stay with their own project' (:42709-42731) removes without await and without reopening the original. But history.restore replaces FM.scene.layers with a freshly parsed snapshot (history.js:65, :80), so after redo indexOf(L) === -1, and splice(-1,1) removes the scene's LAST layer, a layer that is not the test's.",
+    "correction": "Remove by id: FM.scene.layers = FM.scene.layers.filter(x => x && x.id !== L.id). Line numbers have also shifted in v17.24."
+   },
+   {
+    "claim": "#1002 host half: collab-host.js:661 applies, :684-686 invariants, the throw escapes H.receive at :883",
+    "verdict": "partly",
+    "evidence": "The apply is at collab-host.js:666 (D.apply); :661 is inside a comment. invariantFix is :685-693, with inv.layer(c) at :691. applyAndFix is called at :883 inside H.receive (:847) with no try. The mechanism holds, but running it needs the S1 host harness (an '921 S1'-style test run) to confirm the escape and the half-apply."
+   }
+  ],
+  "builder_items": [
+   {
+    "title": "Stale tab overwrites newer media files",
+    "severity": "HIGH",
+    "what": "save() writes clip files even after writeScene() refused because the tab is stale. An older tab's rev-0 file overwrites a newer replaced file (rev 1) from the other tab or the installed PWA, and the new clip is lost for good. Fix: after writeScene, skip the blob loop when _writeFail === 'stale' (keep it for 'refused'). Move notePending after writeScene and skip it on stale. Do not change the rev comparison, because undo writes older revs.",
+    "where": "js/storage.js:743-747, :768-800 (comparison at :790)"
+   },
+   {
+    "title": "Non-object fillGradient throws in the sanitiser",
+    "severity": "MEDIUM",
+    "what": "sanitizeUnsafeValues assigns .angle onto fillGradient after a truthiness check only. In strict mode a string, number or true throws. This kills any import of such a file after the project is created, the collab host's invariant pass, and load() of any stored doc that holds one. Fix: delete fillGradient when it is non-null and not a plain object (also drop arrays).",
+    "where": "js/storage.js:1537-1543 (reached from :903 load, :1647 import, collab-bridge.js:144)"
+   },
+   {
+    "title": "Failed import leaves an empty project behind",
+    "severity": "LOW",
+    "what": "importObject creates and opens the new project before applyScene. A throw or a false return leaves him in an empty project named after the file, and restoreBackup leaves one empty card per failed entry. Fix: try/catch around applyScene; on a throw or false, reopen the previous project with {confirmed:true} (null when none was open, as at :1958), remove the new one, toast, and return false.",
+    "where": "js/storage.js:1989-2006"
+   },
+   {
+    "title": "Duplicate claims success when a clip read errors",
+    "severity": "LOW",
+    "what": "idbGet resolves null on a read error, the same as 'absent', and duplicateFrom skips the clip and returns success. Fix: add a strict reader that tells an error from an absence, and set whole=false on an error so the rollback at :2679-2682 runs. Make the Home toast generic instead of 'storage is full'.",
+    "where": "js/storage.js:175, :215-221, :2666-2667, :2678; js/home.js:1425"
+   },
+   {
+    "title": "#996 cleanup plan would delete the wrong layer",
+    "severity": "LOW",
+    "what": "After redo, FM.scene.layers is a parsed snapshot, so the test's L object is gone. splice(indexOf(L),1) becomes splice(-1,1) and removes the last real layer. Remove the test layer by id instead. Also await remove() and reopen the original project with {confirmed:true} in the notes test, as q915aCleanup does.",
+    "where": "tests/tests.js:13662-13688 (undo/redo test), :42709-42731 (notes test); js/history.js:65-80"
+   }
+  ],
+  "helper_fixes": [
+   "#996 step 1: replace 'FM.scene.layers.splice(FM.scene.layers.indexOf(L), 1)' with 'FM.scene.layers = FM.scene.layers.filter(x => x && x.id !== L.id)'. history.restore swaps in a parsed snapshot (js/history.js:80), so indexOf(L) is -1 after redo and splice(-1,1) deletes the last layer.",
+   "#996: tests.js line numbers changed in v17.24. The undo/redo test is now :13662, the notes test :42709, the home + test :42739, the 869 backup test :85362, q915aCleanup :1152-1163, and the sceneLeaks note is near :59888. Cite test titles, not lines.",
+   "#1000 step 2: replace 'compute _stale before it' with: move notePending(jobs) to just after writeScene() (same synchronous tick) and skip it when _writeFail === 'stale'. _stale is only set inside writeScene, so it is still false on the first stale save.",
+   "#1001 step 1: always reopen the previous project, using FM.projects.open(prev || null, { confirmed: true }) as restoreBackup does at storage.js:1958, rather than only 'when prev exists'. Also note that restoreBackup (:1951) currently leaves one empty card per failed entry, and the fix covers that too.",
+   "#1002 Reproduced paragraph: '_sanitizeLayers ... which is the every-open load path' is wrong. _sanitizeLayers is sanitizeImportedLayers (storage.js:1655: import, history restore, collab-bridge). The every-open load is storage.js:903, which calls sanitizeUnsafeValues directly.",
+   "#1002 Where: the host applies the op at collab-host.js:666 (not :661, which is a comment). invariantFix is :685-693, with inv.layer at :691."
+  ]
+ },
+ {
+  "id": "P8",
+  "overall": "fix",
+  "summary": "The bug diagnoses hold up. I traced all three lose-work bugs (#1004, #1005, #1006) in js/storage.js and each is reachable as described. The #1007 and #1008 code locations are also right. The fixes need corrections before anyone builds them. (1) #1004 says to copy the corrupt doc to `fm.proj.<id>.unreadable`. That name starts with the `fm.proj.` prefix, which five scanners treat as a project doc. The #1005 fix would then see the copy as an unreadable doc and stop the boot cleanup forever, even after he deletes the broken project, because remove() never deletes the copy. (2) #1004 step 2 says open() should return false once load() fails. Every caller reads false as \"he chose to stay, nothing was torn down\", but by then the previous project has already been closed. (3) #1007 only covers importFile, while Settings → Restore from a backup reads the whole file the same way, and backups are meant to be the big files. All five REQUESTS entries are JUMPED to ChatGPT (\"land it, don't rebuild it\"), so these plans are a checklist for reviewing ChatGPT's commits, not a build order. The container measurements (85 MB in 0.5 s, 13.1 ms at 250 groups) need a run I was not allowed to do.",
+  "claims": [
+   {
+    "claim": "#1004: load() binds the tab and zeroes the rev before parsing, returns false on unparseable text while the tab stays bound, open() still returns true with a blank scene, and the next flushSync writes the blank scene over the corrupt doc at rev 1.",
+    "verdict": "confirmed",
+    "evidence": "storage.js:875 sets boundId=curId(); _bound=true. :876 adoptRev(0) sets lastRev 0 and lastDoc null (:150). :880-881 returns false when the text does not parse. open() at :2537 builds FM.newScene().project when load fails and returns true at :2541. writeScene: revOf('garbage{') is 0 (:75-78), so dr is not greater than lastRev (:113), the raw text differs from the new body (:123), and setItem writes '{\"rev\":1,...' (:126-128). flushSync is :814. It is reachable at boot too: app.js:6847 load() returns false, Home opens, and the tab is still bound to the broken id, so any pagehide or visibility flush overwrites it. I did not run the repro; the code path matches it."
+   },
+   {
+    "claim": "#1004 fix: unbind the tab in load() and make open() return false with a toast when load fails for a project that has a card.",
+    "verdict": "partly",
+    "evidence": "Unbinding in load() is right and covers both boot and open(). writeScene treats no key as nothing to save (:110). Returning false from open() is wrong where the plan puts it. By the time load() runs, open() has already flushed and released the outgoing media (:2508, :2524), moved CUR_KEY (:2528) and emptied the scene (:2535). Every caller treats false as 'nothing was torn down': home.js:2311 and home.js:2457-2459 ('Nothing was torn down — put Home back as it was'), storage.js:3228 and :3468.",
+    "correction": "Check that fm.proj.<id> parses to a doc with .project inside open(), before any teardown (right after the vanished-card check at :2494-2497), and only there toast and return false. Keep the unbind in load() for the boot path."
+   },
+   {
+    "claim": "#1004/#1005: keep the corrupt text at fm.proj.<id>.unreadable.",
+    "verdict": "wrong",
+    "evidence": "Five places treat any key starting with 'fm.proj.' as a project doc: storage.js:2937 (collectKeep), :2876 (remove), medialib.js:393, and collab-media.js:145 and :245. Under the plan's own #1005 rule ('a non-empty fm.proj.* text that does not parse → skip every deletion'), the .unreadable copy is always unparseable, so the boot sweep would stop forever. remove(id) never deletes fm.proj.<id>.unreadable either, so deleting the broken project does not lift the stop. VERIFIED.md §1.5 proposes the same name, so the helper copied the flaw rather than introduced it.",
+    "correction": "Store the copy under a key outside the fm.proj. prefix (for example fm.unreadable.<id>), delete it in projects.remove(id), and make the #1005 check ignore it."
+   },
+   {
+    "claim": "#1005: collectKeep adds no layer ids for an unreadable doc, so pruneOrphans deletes that project's clips at boot, even after load() returned false.",
+    "verdict": "confirmed",
+    "evidence": "readJSON returns the default when parsing fails (storage.js:18). collectKeep only keeps ids `if (d && d.layers)` (:2939). Candidates are every key not kept (:2991), and :2996-2998 deletes them after keep2 (:2995). Boot calls pruneOrphans at app.js:6877 unconditionally inside the load() .then. The fail-closed fix (skip all deletions while any doc is unreadable) is right, and the risk note is honest. One caveat: 'not an object with a layers array' is stricter than load(), which accepts a doc with .project and no layers (:881, :892). Any such doc would stall the cleanup."
+   },
+   {
+    "claim": "#1006: migrate() ignores writeJSON's result, still adds the card, removes fm.scene and sets CUR_KEY, leaving a card with no doc.",
+    "verdict": "confirmed",
+    "evidence": "storage.js:2434 sets CUR_KEY before the write. :2436 discards writeJSON's result (writeJSON returns false on quota, :19). :2437 adds the card. :2438 removes SCENE_KEY unconditionally. :2442 saves the index. The fix (check the write, read it back, then remove fm.scene; on failure clear CUR_KEY and add no card) is complete. It is unreachable on his devices, as both reports say."
+   },
+   {
+    "claim": "#1007: importFile reads the whole file with no size check; warn above about 150 MB and never hard-cap, because real files embed media.",
+    "verdict": "partly",
+    "evidence": "Confirmed at storage.js:2022 (JSON.parse(await file.text()) with no file.size check), sceneFileProblem :1974-1981 (it checks only the layer count) and EMBED_LIMIT 6 MB at :944/:970. VERIFIED.md cites :2041, which is stale; the report's :2015-2030 is right. The plan misses the second whole-file read: settings.js:734 (Restore from a backup) does the same JSON.parse(await file.text()), and backups embed up to 96 MB per file (storage.js:1835), so that is where huge files actually turn up. The 150 MB threshold and the timings are a guess and a container measurement, not checked on a phone.",
+    "correction": "Apply the same size question at settings.js:734 before file.text(), using one shared helper."
+   },
+   {
+    "claim": "#1008: collectGroupUnits runs scene.layers.forEach once per unit group per frame; the function is at compositor.js:18354 on this tree; land #1041 first because it edits the same function.",
+    "verdict": "partly",
+    "evidence": "Confirmed: compositor.js:18354, with the per-group walk at :18369 (it recurses, so nested groups rescan again), byId rebuilt at :18394, and indexOf per drawable at :18376-18377. The scan only runs for groups that pass groupNeedsUnit (:18358), so it is per unit group, not per group. The 251-call and 13.1 ms figures need a timed run. The claim that #1041 replaces innerOf with childOwner refers to a ChatGPT branch: there is no childOwner on this tree (innerOf is at :18402), so I could not check it."
+   }
+  ],
+  "builder_items": [
+   {
+    "title": "A corrupt project doc gets overwritten with a blank scene",
+    "severity": "HIGH",
+    "what": "When a project doc does not parse, load() returns false but leaves the tab bound to that project with rev 0. open() then shows a blank scene and returns true, and the next flush (an app switch, pagehide or any edit) writes the blank scene over the corrupt text at rev 1. The same happens at boot when the current project is the corrupt one. The precondition is rare (only docs written via writeJSON can be corrupt this way), but the loss is permanent. When reviewing ChatGPT's fix: load() must unbind the tab on unparseable text, and open() must refuse BEFORE tearing anything down, because callers read false as 'nothing changed'.",
+    "where": "js/storage.js:875-881, :2528-2541, :109-130; js/app.js:6847-6861"
+   },
+   {
+    "title": "The boot cleanup deletes clips that belong to an unreadable project",
+    "severity": "HIGH",
+    "what": "pruneOrphans keeps only the layer ids of docs that parse. An unreadable doc protects none of its clips, and the sweep deletes them at boot even after load() failed on it. The fix should fail closed: no deletions in a boot where any project doc is unreadable.",
+    "where": "js/storage.js:18, :2937-2940, :2991-2998; js/app.js:6877"
+   },
+   {
+    "title": "Do not keep the corrupt-doc copy under the fm.proj. prefix",
+    "severity": "MEDIUM",
+    "what": "The proposed backup key fm.proj.<id>.unreadable (from VERIFIED.md and this plan) would be read as a project doc by every fm.proj.* scanner. Under the #1005 fail-closed rule it would stop the boot cleanup forever, and projects.remove() would never delete it. Use a key outside the prefix and remove it along with the project.",
+    "where": "js/storage.js:2937, :2876; js/medialib.js:393; js/collab-media.js:145, :245"
+   },
+   {
+    "title": "A failed migration still deletes fm.scene and leaves a card with no doc",
+    "severity": "MEDIUM",
+    "what": "migrate() ignores writeJSON's false (a full disk), then adds the card, removes the legacy fm.scene and leaves CUR_KEY pointing at a doc that does not exist. Only pre-v2.25 installs can hit it, so not his devices.",
+    "where": "js/storage.js:2434-2442"
+   },
+   {
+    "title": "No size check before reading an imported file or a backup",
+    "severity": "LOW",
+    "what": "Both file pickers read the whole file into memory and parse it with no look at file.size, so a several-hundred-MB file can crash a phone tab. Ask before reading large files on both paths; do not hard-cap.",
+    "where": "js/storage.js:2022; js/settings.js:734"
+   }
+  ],
+  "helper_fixes": [
+   "#1004 Build step 1 and its Test: rename the kept copy from fm.proj.<id>.unreadable to a key outside the fm.proj. prefix (e.g. fm.unreadable.<id>). Add: projects.remove(id) deletes it, and the #1005 unsafe check ignores it. State that the fm.proj. name came from VERIFIED.md §1.5 and is wrong for this reason (storage.js:2937, :2876, medialib.js:393, collab-media.js:145/245).",
+   "#1004 Build step 2: move the refusal to the start of open(), before any teardown (after the vanished-card check at storage.js:2494-2497): parse fm.proj.<id>, and if non-empty text has no .project, toast and return false. Say why: home.js:2311/2457 and storage.js:3228/3468 treat false as 'nothing was torn down', and after :2524-2535 that is no longer true.",
+   "#1004 Where: add that the boot path is exposed too (app.js:6847-6861: load() returns false, Home opens, the tab is still bound and a pagehide flush overwrites it), and that the unbind in load() is the half that covers it.",
+   "#1004 Risk: change 'low; it only changes a case that is already broken' to note the open() return-value contract above.",
+   "#1005 Build step 1: loosen the test to 'non-empty text that does not parse, or has no .project'. load() accepts a doc with .project and no layers (storage.js:881, :892), so requiring a layers array could stall the sweep on a valid doc.",
+   "#1007 Build: add settings.js:734 (Restore from a backup), which does the same JSON.parse(await file.text()) and handles the biggest files (backups embed up to 96 MB each, storage.js:1835). Put the size question in one shared helper used by both pickers.",
+   "#1007 Where: note that VERIFIED.md's :2041 is stale; the read is at storage.js:2022.",
+   "#1008 Where: say the scan runs once per group that passes groupNeedsUnit (compositor.js:18358) and again per nested group through the recursive walk (:18369). Mark the #1041 childOwner/innerOf conflict as unverified on this tree: there is no childOwner here, and innerOf is at :18402.",
+   "Which five: add that all five entries say 'land it, don't rebuild it' (REQUESTS.md:34858 etc.), so the plans are review checklists for ChatGPT's commits, and the corrections above are what to check those commits against."
+  ]
+ },
+ {
+  "id": "H20",
+  "overall": "fix",
+  "summary": "Fix 0 holds up in the code. makeThumb (js/storage.js:2133) and makeLayerThumb (:2210) draw the whole scene on a canvas the full size of the project, then shrink it. makeThumb runs on every import (importObject :2009 calls touchCurrent(true)). It also runs from every autosave, at most once every 12 s when nothing is playing (save :752 calls touchCurrent :2468). FX_MAX is cut at :1514 inside sanitizeEffects, which runs on every open (:903, :1779) and every undo (history.js:71), so lowering it would delete saved effects. Keeping 120 is right. Two parts of the plan are wrong and would cost a user their work if built as written. (1) It says that putting a cap in the sanitiser covers every open. It does not: an ordinary open runs only sanitizeMasks, sanitizeEffects and sanitizeUnsafeValues. sanitizeImportedLayers (keyframes, and wherever the text and path caps would go) runs on import, on templates, elements and friends' edits, and on EVERY UNDO. A keyframe or point cap there would therefore cut an existing project on the first undo of anything, and the autosave would then keep the cut version. That is the same data-loss shape as queue 680. (2) It says 'the sanitisers whitelist known keys' and proposes the Simple branch's smKeepUnknown rule for layers. Layers have no key whitelist today, so unknown top-level fields already survive. smKeepUnknown only applies inside `sm`. Using its limits (strings up to 200 characters, values up to 2 KB) on layers would start DROPPING plain fields that survive today, which breaks the very rule it quotes. Its 'futureField is kept' test would also pass on v17.23, so it cannot fail first. The pixel-parity claim for Fix 0 still needs a run: none of the scenes compared had a photo or video. Those are exactly what the halving loop was written for (the comment at :2130-2132 calls the old cards 'mushy'), and the compositor sets imageSmoothingQuality in only 2 places. The timing numbers (8.4 s vs 108 ms) and the 0.35-3.7 pixel differences were not re-run (not allowed here).",
+  "claims": [
+   {
+    "claim": "makeThumb renders the card thumbnail on a canvas the full size of the project, then halves it down to 360 px; makeLayerThumb does the same",
+    "verdict": "confirmed",
+    "evidence": "js/storage.js:2140 `src.width = P.width; src.height = P.height`, :2148 FM.renderScene(src...), halving loop :2151-2157; makeLayerThumb :2215-2225 identical pattern."
+   },
+   {
+    "claim": "makeThumb runs on import/open and again from autosave, at most every 12 s when not playing",
+    "verdict": "confirmed",
+    "evidence": "importObject :2009 touchCurrent(true) -> :2468 makeThumb; FM.storage.save :752 calls touchCurrent() on every save, and :2468 captures when now - thumbTimer > 12000 && !FM.playing. Also called from projects.open/create (:2509, :2548) and home.js:408. That it is 99% of import time (8.85 s) and causes the 'Editing lags' item is unverifiable here: settling it needs a CPU profile of a 10-glow 1080x1920 import and a timing of touchCurrent(true)."
+   },
+   {
+    "claim": "Rendering at card scale (Fix 0) works through the compositor's own scale fields and changes the picture by only 0.35-3.7 of 255",
+    "verdict": "partly",
+    "evidence": "The mechanism is sound: renderScene derives __fmRS = canvas.width / P.width whenever __fmCrop is not set (js/compositor.js:18745-18748), so a 360-px canvas renders at scale. The snippet's manual `c.__fmRS = s` is redundant because renderScene overwrites it. The pixel figures are unverifiable: the test scenes were shapes plus blur or glow, with no photo, video or thin text. The halving loop exists because a single big downscale makes 'mushy cards' (:2130-2132), and the compositor sets imageSmoothingQuality only twice. To settle it, compare old and new thumbnails of a scene that has a 4K photo, a video frame and small text.",
+    "correction": "Say the parity claim covers only scenes without media, and add a photo/video/text case to the comparison before showing him."
+   },
+   {
+    "claim": "FX_MAX stays 120; lowering it deletes saved effects",
+    "verdict": "confirmed",
+    "evidence": "js/storage.js:1371 FX_MAX = 120; :1514 `l.effects = l.effects.slice(0, FX_MAX)` inside sanitizeEffects, which runs on every ordinary open (:903, :1779), on import (:1645) and on every undo (history.js:71 -> _sanitizeLayers). Any project holding more than the new cap would be cut on open and autosaved."
+   },
+   {
+    "claim": "Put each cap in the sanitiser once and it covers a file, a backup, a template, an element, a friend's edit, undo and every open",
+    "verdict": "wrong",
+    "evidence": "An ordinary open runs only sanitizeMasks + sanitizeEffects + sanitizeUnsafeValues (:903, :1779; comments :895-899 and :1516-1530 say the other sanitisers are deliberately NOT run on load). sanitizeImportedLayers (:1638-1651, where sanitizeKeyframes is) runs on import (:1698), templates/elements (:2052, :2702), collab (collab-bridge.js:144) and EVERY undo/redo (history.js:71). So a keyframe or point cap placed there would NOT apply on open, and WOULD cut an existing over-cap project on the first undo of an unrelated edit, which the autosave then keeps. sanitizeTiming's comment (:1576-1580) records this exact failure (queue 680).",
+    "correction": "Caps must apply only at the trust boundary (importObject/applyScene, template/element insert, collab host), never in the shared sanitiser that history.restore calls. Otherwise make them load-time too, so open and undo agree, and say why existing projects are safe."
+   },
+   {
+    "claim": "Keyframe cap of 5000 is well above what the app's own generators write",
+    "verdict": "unverifiable",
+    "evidence": "audioReact.bake keeps keys with RDP at a 2% tolerance (js/audio-react.js:372-378) over an envelope sampled at the project's fps (:100). A noisy multi-minute track at 30-60 fps gives 10k-20k+ samples, and nothing bounds the keys it keeps. To settle it, run bake on a 5-minute beat-heavy track at 60 fps and count the keyframes."
+   },
+   {
+    "claim": "The sanitisers whitelist known keys; apply the Simple branch's smKeepUnknown/smPlain rule so a layer keeps futureField and drops a 3 KB value",
+    "verdict": "wrong",
+    "evidence": "Layers have no key whitelist: sanitizeImportedLayers (:1638-1651) and sanitizeUnsafeValues (:1531-1545) repair named keys only, so unknown top-level layer fields already survive. On ssh/980-p22-trayb2, smKeepUnknown (storage.js:1576-1581) is used only for sub-keys of `sm` (:1600, :1621). Using its limits on layers (strings up to 200 characters, 2 KB, 3 deep) would DROP plain fields that survive today, which breaks 'never drop an unknown plain field'. The proposed 'futureField kept' test passes on v17.23, so it cannot fail first. The rule as the app already applies it is sanitizeProjectFields' marker handling (:1037-1049): keep every plain field, refuse a shape the app chokes on.",
+    "correction": "Drop item 3.4 and the 'shape unknown field' test, or change them to a test that today's behaviour (unknown layer fields survive a round-trip and an undo) is kept."
+   },
+   {
+    "claim": "sceneFileProblem accepts project:'x' / [1,2] and non-object layer entries, and importObject creates the project before applyScene can fail",
+    "verdict": "confirmed",
+    "evidence": "sceneFileProblem :1977 only tests `!obj.project` (truthiness) and :1978 Array.isArray(layers); entries are not checked. importObject :1993-1998 creates the project before applyScene :2000. That a throw leaves an empty project is unverified (it needs a run)."
+   }
+  ],
+  "builder_items": [
+   {
+    "title": "Render the card thumbnail at card size, not full project size",
+    "severity": "MEDIUM",
+    "what": "makeThumb and makeLayerThumb build a canvas the full size of the project (1080x1920), render the whole scene on it, then shrink it. makeThumb runs on every import/open and from every autosave, at most once every 12 s when nothing is playing, so a heavy project's full render runs on the main thread repeatedly. Render straight onto a canvas of about 360 px: renderScene already scales by canvas.width / P.width. Before shipping, compare old and new cards for a project with a big photo, a video and small text, not only shapes, and show him the before and after.",
+    "where": "js/storage.js:2140-2161 and :2215-2229; call sites :2009, :2468 (via save :752)"
+   },
+   {
+    "title": "Do not put new caps in the sanitiser that undo runs",
+    "severity": "HIGH",
+    "what": "history.restore runs FM.storage._sanitizeLayers (sanitizeImportedLayers) over every layer on each undo/redo, but an ordinary open does not. A keyframe or path-point cap added there would cut an existing project's animation the first time he undoes anything, and autosave would keep the cut. Put import caps at the import door (applyScene/importObject, the template/element insert, the collab host), not in sanitizeImportedLayers/sanitizeKeyframes.",
+    "where": "js/history.js:71; js/storage.js:1638-1651, :903, :1779"
+   },
+   {
+    "title": "Keep FX_MAX at 120",
+    "severity": "MEDIUM",
+    "what": "sanitizeEffects cuts layer.effects to FX_MAX on every open and every undo, so lowering it would silently delete effects from saved projects.",
+    "where": "js/storage.js:1371, :1514"
+   },
+   {
+    "title": "Check the shape of project and layers before creating the project",
+    "severity": "MEDIUM",
+    "what": "sceneFileProblem only checks that project is truthy and layers is an array, so project:'x' or [1,2] and layer entries that are not objects pass, and importObject has already created the new project before applyScene runs. Require project to be a plain object and skip layer entries that are not plain objects, before projects.create.",
+    "where": "js/storage.js:1974-1981, :1993-2000"
+   },
+   {
+    "title": "An embedded font's css string is stored verbatim from the file",
+    "severity": "LOW",
+    "what": "applyEmbedded writes fd.css from the file straight into the font index. Write the app's own `family + ', sans-serif'` form instead of trusting the file.",
+    "where": "js/storage.js:3755"
+   }
+  ],
+  "helper_fixes": [
+   "Section 1, 'Put each cap in the sanitiser once ... every open': wrong. An ordinary open runs only sanitizeMasks/sanitizeEffects/sanitizeUnsafeValues (js/storage.js:903, :1779). sanitizeImportedLayers runs on import, templates/elements, collab and every undo (js/history.js:71). Rewrite it to say caps go at the import door, not in the shared sanitiser.",
+   "Section 2 keyframes/points rows: add that a cap placed in sanitizeImportedLayers would cut existing projects on the first undo (queue 680 shape, js/storage.js:1576-1580). Move the caps to applyScene/importObject, the template/element insert and the collab host.",
+   "Section 2 keyframes row: 'well above what audioReact.bake writes' is a guess. Bake keeps keys with RDP at 2% over an envelope sampled at project fps (js/audio-react.js:100, :372-378) and nothing bounds the count. Mark it Guess and add a measurement on a long track.",
+   "Section 3 item 4: delete 'The sanitisers whitelist known keys'. Layers have no key whitelist and unknown layer fields already survive. smKeepUnknown on 980-p22-trayb2 is used only for `sm` sub-keys (storage.js:1576-1622). Using its 200-character/2 KB limits on layers would DROP fields that survive today. Point to sanitizeProjectFields' marker handling (js/storage.js:1037-1049) as the existing model.",
+   "Section 5 'shape unknown field' test: it passes on v17.23 (it cannot fail first), and the part that drops a 3 KB value drops a plain field. Replace it with a test that unknown layer fields survive import, a reopen and an undo.",
+   "Fix 0 snippet: `c.__fmRS = s; c.__fmOX = 0; c.__fmOY = 0;` does nothing, because renderScene overwrites these from canvas.width / P.width when __fmCrop is not set (js/compositor.js:18745-18748). Say so or remove it.",
+   "Fix 0 parity table: the scenes had no photo, video or text. Add a case with a 4K photo, a video frame and small text before claiming 'visually the same'. The halving loop exists for exactly that ('mushy cards', js/storage.js:2130-2132).",
+   "Section 1: SCHEMA_REV is at js/collab-core.js:44, not :48.",
+   "Section 2 backup row: onProgress is called at js/storage.js:1947. :1941 is the confirmLeave refusal message."
+  ]
+ },
+ {
+  "id": "R3",
+  "overall": "fix",
+  "summary": "The skeleton is mostly right. The six touch points do exist roughly where the report says: FM.EFFECTS at compositor.js:50-1647, POSTFX at :3741, the three kernel tables at :5174, :10521 and :12534, CATEGORY_OF with a 'stylize' fallback at fx-registry.js:571/626, and the schema fingerprint at collab-core.js:243. Export does go through the same renderScene (exporter.js). But several load-bearing specs are wrong enough that building them as written would ship broken or duplicate effects.\n(1) The shared transition helper uses layer.start and layer.duration. On a flattened group those are fake: start is t-1 and duration is 2 (compositor.js:18519). So every auto In/Out transition on a group either does nothing or sticks part-way through.\n(2) Zoom, Whip pan and Spin are written as drawing A directly. The existing moving effects (Spin, Swing, Shake) draw through moverSource (compositor.js:12381-12392, #986 C27). Without it the edges show cut off on a clip scaled past the frame.\n(3) Colour wheels does nothing at its defaults, and the suite's test '482: every effect does something visible at its own defaults' (tests.js:75286/75343) fails any such effect, so ship.sh would refuse the release.\n(4) Some of the ten already exist in some form. Glitch cut is the existing Glitch (same Slices default of 14, an RGB tear, Re-roll) plus an envelope, so it should be a preset. Colour wheels overlaps the layer's existing Color Tune wheel and its lift/gamma/gain grade, plus Colour Balance's Affects ranges. 'Spin' is already an effect label. Text layers already have Fade in, Slide in, Spin in and Zoom in from big as Animate presets.\n(5) The Particles 'byte-identical' claim holds for pixels: absent stays absent in the sanitiser, and the old path is kept. But the colour hash it names already drives each particle's rotation. A heart as option 5 is clamped to Streak at :14359. And the collab fingerprint does not hash a segment's options list, so a new option on its own goes unnoticed between versions.\nSeveral line references have drifted: SCHEMA_REV is at :44, not :48, and the tests.js lines are about 170 further down.",
+  "claims": [
+   {
+    "claim": "The six touch points (FM.EFFECTS row, POSTFX, a kernel table, CATEGORY_OF, fx-thumbs OVERRIDES, SCHEMA_REV/SCHEMA_FP) are the shape every new effect takes",
+    "verdict": "partly",
+    "evidence": "All six exist: compositor.js:50/1647 (EFFECTS), :3741 (POSTFX), :5174/:10521/:12534 (PIXEL/WARP/CANVAS_FX), fx-registry.js:571/626 (stylize fallback), collab-core.js:44 (SCHEMA_REV=7, not :48) and :243 (SCHEMA_FP). The fingerprint hashes every registry param (collab-core.js:225-229), so a new type changes it. The export uses the same renderScene (exporter.js). Missing: moving effects must draw through moverSource (compositor.js:12381-12392). Search words come from fx-registry SEARCH_ALIASES (:545) or a def.tags array (:576), and beginner words like 'transition', 'intro' and 'outro' are not derived from the label. The default-visibility gate tests.js:75286 is a de-facto seventh touch point for PIXEL_FX.",
+    "correction": "Add moverSource for the transform-style kernels, tags/SEARCH_ALIASES for discoverability, and the 482 default-visibility test to the touch-point table. SCHEMA_REV is at collab-core.js:44."
+   },
+   {
+    "claim": "Auto In/Out progress computed from t, layer.start and layer.duration in one trProgress helper makes all five transitions work with no keyframes",
+    "verdict": "wrong",
+    "evidence": "A flattened group's proxy has tmp.start = t - 1 and tmp.duration = 2 (compositor.js:18519). Its real clock is _clipStart and _clipDuration (:18520-18521). Existing effects read those: motion blur at :3645-3648, and flashdark's fdLen at :7633, which also walks the splitOf lineage at :7635. With dur 0.5 on a group, pIn = clamp(1 - 1/0.5) = 0 and pOut = 0, so the transition never shows. With dur over 1 it sticks part-way. A split also copies effects, so an In and Out pair would fire at the cut unless lineage is handled.",
+    "correction": "trProgress must use start = layer._clipStart ?? layer.start and len = layer._clipDuration ?? layer.duration, and decide what a split half does (follow the splitOf lineage as flashdark does)."
+   },
+   {
+    "claim": "Preview equals export for the CANVAS_FX transitions (T1, T2, T5): pure functions of the clean layer A, params, t and ps",
+    "verdict": "partly",
+    "evidence": "Statelessness is credible: CANVAS_FX receives scene as a trailing argument (compositor.js:11828), and export renders through the same renderScene. But the existing moving effects (spin :14179, swing :14158, shake :14048) all draw from moverSource(A, W, H, ps, expand, layer, t, scene, mats) rather than A. Its comment (:12381-12391) records that drawing A directly shows edges cut off by the frame. A whip pan or spin drawn from A repeats that bug.",
+    "correction": "T1, T2 and T5 kernels must call moverSource with their transform matrices, as spin and swing do."
+   },
+   {
+    "claim": "None of the ten duplicates an existing effect (implicit). Flash (white) pairs with flashdark, and Colour wheels only needs comparing with colorbalance and highlightsshadows",
+    "verdict": "partly",
+    "evidence": "Glitch cut: the existing 'glitch' (compositor.js:304-318) already has Amount, Slices (default 14, the same as T4), RGB tear and Re-roll. EFFECT_PRESETS already wraps an effect in an envelope ('p-glitchpop', fx-presets.js:32). Colour wheels: media layers already have a colour wheel and a lift/gamma/gain grade (inspector.js:6483-6492, color-wheel.js:51). colorbalance has Darks/Mids/Lights ranges (compositor.js:613). 'Spin' is already an effect label (compositor.js:1127). Text layers already have Fade in, Slide in, Spin in and Zoom in from big as textAnim presets (inspector.js:5738-5739). flashdark is a repeating strobe in Hz (:681), not a one-shot.",
+    "correction": "Make Glitch cut an EFFECT_PRESETS entry on 'glitch' (or justify a new type). State how Colour wheels differs from layer.colorGrade and colorbalance's Affects, or extend colorGrade instead. Give T5 a distinct label such as 'Spin in/out'."
+   },
+   {
+    "claim": "Confetti palette on Particles is byte-identical when absent (absent reads as 0, today's path untouched), and uses pHash(i*4+3) for the colour",
+    "verdict": "partly",
+    "evidence": "Pixel identity is credible: the sanitiser keeps an absent param absent (storage.js:1493), and an `if (!palette)` early branch keeps the old maths. But pHash(i*4+3) already sets each particle's rotation phase (compositor.js:14423), so colour would be tied to rotation. Slots 0-3 are all in use (:14388, :14396, :14397, :14423). The shape is clamped with Math.round(rd('shape', 0, 0, 4)) (:14359), so an appended heart (5) would render as Streak. Adding a param changes SCHEMA_FP, so a REV bump is required. The fingerprint hashes key, type, default, legacy, min, max and keyframable but NOT a segment's options list (collab-core.js:226-228).",
+    "correction": "Use a new hash stream for colour (for example pHash((i * 4 + 3) ^ 0x5bd1e995) or a separate stride), widen the shape clamp to 5, and list the SCHEMA_REV bump and FP re-pin under T8's tests."
+   },
+   {
+    "claim": "Colour wheels returns before touching a pixel at all-zero default amounts, so adding it changes nothing until he moves a wheel",
+    "verdict": "wrong",
+    "evidence": "tests.js:75286 '482: every effect does something visible at its own defaults' sweeps every PIXEL_FX registry entry at its makeInstance defaults (:75332-75343). An effect with touched < 20 or p95 < 4 fails, and KNOWN_THIN exempts only touchup (:75325-75329). A no-op default turns the suite red, so ship.sh refuses. The report's own gate 2 ('the effect still does something') contradicts this design.",
+    "correction": "Give T7 a visible starter look as its default (for example a gentle teal-shadow/warm-highlight split), or justify a KNOWN_THIN entry."
+   },
+   {
+    "claim": "T6 Shape wipe: use the same maxR helper radialwipe uses at :7728",
+    "verdict": "wrong",
+    "evidence": "radialwipe (compositor.js:711, kernel :7728) is an angular clock wipe and computes no maxR. The radius helpers are wR and maxR in the warp section (compositor.js:9160-9162).",
+    "correction": "Compute maxR = hypot(cx, cy) as in :5208, or reuse wR (:9162)."
+   },
+   {
+    "claim": "FM.layerPresets has no built-ins, so Ken Burns needs a builtins list with make(layer)",
+    "verdict": "confirmed",
+    "evidence": "inspector.js:561-588 stores only user presets in localStorage, with keyframes saved relative to the clip through shiftKf (:529). A separate FM.fxPresets (:367-371) already has an empty builtins:[] pattern. easeInOut is at scene.js:33. No speed presets exist (no Montage, Bullet or SPEED_PRESETS anywhere in js/)."
+   }
+  ],
+  "builder_items": [
+   {
+    "title": "Auto transitions must read the group/split clock, not layer.start/duration",
+    "severity": "MEDIUM",
+    "what": "If trProgress is built as specified, every auto In/Out transition on a group is dead or stuck part-way. The group proxy's start is t-1 and its duration is 2. Use _clipStart and _clipDuration, falling back to start and duration, and decide how split halves behave. flashdark follows the splitOf lineage.",
+    "where": "js/compositor.js:18519-18521 (proxy), :3645-3648 and :7633-7638 (precedent)"
+   },
+   {
+    "title": "Transform-style transitions must draw through moverSource",
+    "severity": "MEDIUM",
+    "what": "Zoom, Whip pan and Spin move the layer, so they must take their source from moverSource with their matrices, as spin, swing and shake do. Otherwise a clip scaled past the frame shows cut-off edges (the #986 C27 bug).",
+    "where": "js/compositor.js:12381-12392, :14172, :14190"
+   },
+   {
+    "title": "Colour wheels with no-op defaults fails the 482 default-visibility test",
+    "severity": "MEDIUM",
+    "what": "Every PIXEL_FX effect must change pixels visibly at its defaults. All-zero wheel amounts would turn the suite red and block the ship. Ship a visible default look.",
+    "where": "tests/tests.js:75286, :75332-75343"
+   },
+   {
+    "title": "Particles palette: use a fresh hash slot and widen the shape clamp",
+    "severity": "LOW",
+    "what": "pHash(i*4+3) already drives each particle's rotation phase, so colour would correlate with rotation. Shape is clamped to 0..4, so an appended heart (5) would draw as a Streak.",
+    "where": "js/compositor.js:14359, :14423"
+   },
+   {
+    "title": "Collab fingerprint ignores a segment's options list",
+    "severity": "MEDIUM",
+    "what": "SCHEMA_FP hashes key, type, default, legacy, min, max and keyframable, but not options. The sanitiser drops any segment value not in the options list. So two builds differing only by an appended option (such as a heart shape) would join one session, and the older one would strip the newer one's choice. Add the options to the hashed tuple, or bump REV by hand whenever an option is appended.",
+    "where": "js/collab-core.js:226-228; js/storage.js:1392-1397"
+   },
+   {
+    "title": "Glitch cut duplicates the existing Glitch",
+    "severity": "LOW",
+    "what": "The existing Glitch already has Slices (default 14), an RGB tear, Amount and Re-roll. A short envelope as an EFFECT_PRESETS entry (like 'Glitch Pop') gives the same thing without a new type and without a fingerprint bump.",
+    "where": "js/compositor.js:304-318; js/fx-presets.js:32"
+   }
+  ],
+  "helper_fixes": [
+   "Touch point 6: SCHEMA_REV is at js/collab-core.js:44, not :48.",
+   "Touch-point table: add moverSource (js/compositor.js:12381-12392) as required for any kernel that moves, rotates or scales the layer.",
+   "Touch-point table: add search words through a def.tags array or SEARCH_ALIASES (js/fx-registry.js:545, :576), for example 'transition', 'intro', 'outro'.",
+   "Touch-point table: add the default-visibility gate tests/tests.js:75286 ('482: every effect does something visible at its own defaults').",
+   "Shared transition helper: replace layer.start/layer.duration with (layer._clipStart ?? layer.start) and (layer._clipDuration ?? layer.duration), citing compositor.js:18519-18521 and :7633, and say what a split half does (splitOf lineage, :7635).",
+   "T1/T2/T5 kernels: draw from moverSource(A, W, H, ps, expand, layer, t, scene, [matrix]) instead of A, as spin (:14190) and swing (:14172) do.",
+   "T3: flashdark is a repeating strobe (Speed in Hz, compositor.js:681), not a one-shot darken; do not call Flash (white) its twin.",
+   "T4: note the existing Glitch (compositor.js:304-318, same Slices default of 14, an RGB tear, Re-roll) and propose Glitch cut as an EFFECT_PRESETS entry on 'glitch' unless an in/out mode is truly needed.",
+   "T4: pHash is a closure inside the particles kernel (:14343), not a shared helper; say it must be hoisted.",
+   "T5: the label 'Spin' collides with the existing Spin effect (compositor.js:1127); use 'Spin in/out'.",
+   "T1/T2/T5: mention that text layers already have Fade in, Slide in, Spin in and Zoom in from big as Animate presets (js/inspector.js:5738-5739), so the gap is non-text layers.",
+   "T6: radialwipe is an angular clock wipe with no maxR; use hypot(cx, cy) or wR (js/compositor.js:9162).",
+   "T7: a no-op default fails tests/tests.js:75286; give it a visible default look. Also compare it with layer.colorGrade (the colour wheel plus lift/gamma/gain, js/inspector.js:6483-6492) and colorbalance's Affects ranges (compositor.js:613).",
+   "T8: pHash(i*4+3) already sets the rotation phase (compositor.js:14423); use a separate hash stream for colour.",
+   "T8: appending heart as option 5 also requires widening Math.round(rd('shape', 0, 0, 4)) at compositor.js:14359 to 5.",
+   "T8: add 'bump SCHEMA_REV and re-pin SCHEMA_FP' to its tests, and note that the fingerprint does not hash the options list (collab-core.js:226-228).",
+   "Test line references have drifted: warp scale test is tests.js:25845, the SCHEMA_FP gate is near :30460, and the category-icon test is :48104."
+  ]
+ }
+]

@@ -543,6 +543,18 @@ def main():
                     # TOUCH THAT CANNOT BE EMULATED IS NOT SENT AT ALL (6 Oct, the port review's MAJOR): not one step of the
                     # batch, so no half-gesture is left behind; the answer starts "NOTRUN: " and the test says NOT RUN HERE.
                     _touch = any(str(st.get("t", "")).startswith("touch") for st in q["steps"])
+                    # ONE FINGER TEST PER PAGE on Linux (#1097, tests/_platform.py TOUCH_PAGE): the first emulation OFF took this
+                    # page's mouse, so a second finger test here would run its (hover: hover) code without one — it is refused,
+                    # by name, as NOT RUN rather than allowed to report a verdict it did not earn.
+                    if _touch and _platform.TOUCH_PAGE:
+                        _nm = q.get("name") or track["name"]
+                        if inp.get("touch_test") not in (None, _nm):
+                            err = ("NOTRUN: this page already ran a finger test ('%s') and has had no mouse since — one finger test per "
+                                   "page (tests/_touch_pass.py runs each in a browser of its own)" % str(inp["touch_test"])[:120])
+                            q["steps"] = []
+                            _touch = False
+                        else:
+                            inp["touch_test"] = _nm
                     if _touch and not _platform.REAL_TOUCH_VIA_EMULATION:
                         err = "NOTRUN: needs real touch emulation (the phone's media state during a finger) — " + _platform.REAL_TOUCH_WHY
                         q["steps"] = []
@@ -618,12 +630,13 @@ def main():
                             except Exception:
                                 pass
                             inp["touch_emu"] = False
-                        if not inp["touch_emu"]:
-                            # the page must have its mouse back before the next test (the gate above the input channel)
+                        if not inp["touch_emu"] and not inp.get("touch_test"):
+                            # the page must have its mouse back before the next test (the gate above the input channel) — except in a
+                            # one-finger-test page (TOUCH_PAGE), where it never will and nothing after its finger test may use it
                             mouse.update(check=True, no=0, after="after the real-input batch of '%s'" % (q.get("name") or track["name"]))
                     # …and the mouse is CONFIRMED before the test hears its batch is done (6 Oct, the review): otherwise the
                     # test carries on, and can finish and report, inside the second the loop's own check needs to notice.
-                    if not inp["touch_emu"] and not _confirm_mouse(cdp):
+                    if not inp["touch_emu"] and not inp.get("touch_test") and not _confirm_mouse(cdp):
                         return _did_not_run("This browser reports NO MOUSE after the real-input batch of '%s' — (hover: hover) "
                                             "and (pointer: fine) did not come back within 3 s, so the test that sent it, and "
                                             "every mouse-gated test after it, would pass or fail for the wrong reason "
