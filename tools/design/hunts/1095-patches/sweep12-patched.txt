@@ -1,0 +1,20 @@
+fresh page                                   {"n": 3, "MB": 1, "bigCanvases": 0, "top": ["192x192 x1", "367x653 x1", "300x150 x1"]}
+fx browser just opened                       {"n": 29, "MB": 4, "bigCanvases": 0, "top": ["192x192 x24", "96x96 x2", "292x518 x1", "300x150 x1", "32x32 x1"]}
+after category 0 (color), picks=43           {"n": 197, "MB": 77, "bigCanvases": 0, "top": ["192x192 x106", "367x653 x67", "96x96 x9", "32x32 x4", "1x1 x3"]}
+after category 1 (blur), picks=62            {"n": 270, "MB": 791, "bigCanvases": 97, "top": ["192x192 x146", "1080x1920 x97", "96x96 x9", "32x32 x4", "1x1 x3"]}
+after category 2 (distort), picks=91         {"n": 366, "MB": 917, "bigCanvases": 106, "top": ["192x192 x176", "1080x1920 x99", "367x653 x56", "1080x1922 x7", "96x96 x4"]}
+after category 3 (proc), picks=111           {"n": 426, "MB": 956, "bigCanvases": 106, "top": ["192x192 x196", "1080x1920 x99", "367x653 x96", "1080x1922 x7", "96x96 x4"]}
+after category 4 (stylize), picks=130        {"n": 479, "MB": 989, "bigCanvases": 106, "top": ["192x192 x215", "367x653 x130", "1080x1920 x99", "1080x1922 x7", "96x96 x4"]}
+after category 5 (drawing), picks=146        {"n": 527, "MB": 1021, "bigCanvases": 106, "top": ["192x192 x231", "367x653 x162", "1080x1920 x99", "1080x1922 x7", "96x96 x4"]}
+after category 6 (move), picks=153           {"n": 550, "MB": 1036, "bigCanvases": 106, "top": ["192x192 x238", "367x652 x177", "1080x1920 x99", "1080x1919 x6", "96x96 x4"]}
+after category 7 (repeat), picks=159         {"n": 568, "MB": 1048, "bigCanvases": 106, "top": ["192x192 x244", "367x652 x189", "1080x1920 x99", "1080x1919 x6", "96x96 x4"]}
+after category 8 (matte), picks=171          {"n": 595, "MB": 1064, "bigCanvases": 106, "top": ["192x192 x255", "367x652 x205", "1080x1920 x99", "1080x1919 x6", "96x96 x4"]}
+after category 9 (opacity), picks=178        {"n": 616, "MB": 1078, "bigCanvases": 106, "top": ["192x192 x262", "367x652 x219", "1080x1920 x99", "1080x1919 x6", "96x96 x4"]}
+after category 10 (text), picks=188          {"n": 626, "MB": 1079, "bigCanvases": 106, "top": ["192x192 x272", "367x652 x219", "1080x1920 x99", "1080x1919 x6", "96x96 x4"]}
+after category 11 (threed), picks=206        {"n": 680, "MB": 1115, "bigCanvases": 106, "top": ["192x192 x290", "367x652 x255", "1080x1920 x99", "1080x1919 x6", "96x96 x4"]}
+close fn isFav,toggleFav,isOpen,layerId,_addEffect,_deadShortLabel,_cannotMove,_openCategory,init,open,close
+browser closed (Done), immediately           {"n": 680, "MB": 1115, "bigCanvases": 106, "top": ["192x192 x290", "367x652 x255", "1080x1920 x99", "1080x1919 x6", "96x96 x4"]}
++4 s idle                                    {"n": 680, "MB": 179, "bigCanvases": 14, "top": ["0x0 x320", "192x192 x290", "367x652 x27", "1080x1920 x9", "96x96 x4"]}
++9 s idle                                    {"n": 680, "MB": 179, "bigCanvases": 14, "top": ["0x0 x320", "192x192 x290", "367x652 x27", "1080x1920 x9", "96x96 x4"]}
++one render, +8 s                            {"n": 680, "MB": 179, "bigCanvases": 14, "top": ["0x0 x320", "192x192 x290", "367x652 x27", "1080x1920 x9", "96x96 x4"]}
+poolStats {"pf":{"n":2,"px":957136},"wp":{"n":2,"px":957136},"cf":{"n":2,"px":957136},"mg":{"n":0,"px":0},"exp":{"n":1,"px":18496}}

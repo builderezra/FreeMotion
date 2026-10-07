@@ -48,3 +48,44 @@ It takes about 8 s. (Re-run on both just now, ports 8791 / 8792.)
   frame-time effect and did not look for one. Before shipping: the full pass at both widths, and a look at an effects-heavy project playing back.
 - Not mutation-proved beyond the test failing on unpatched main.
 - 3 s window and floor of 2 are my numbers, not measured optima.
+
+---
+# H19b addendum: all 12 categories, what holds the ~255 per-pick 367x652 canvases, and the mutation proof
+
+Same container and method as above (live canvases by `Runtime.queryObjects` after two forced GCs; raw logs in `1095-patches/sweep12-unpatched.txt` and `sweep12-patched.txt`, script `canvcount.py` kept in my scratchpad). Heap snapshot: canvases marked with an expando, the query handle released first (else the DevTools handle is the shortest retainer), snapshot parsed with `1095-patches/holders.py` + `holders_parse2.py` (BFS shortest retainer path per marked canvas).
+
+## 1. Sweep of all 12 categories (206 picks), unpatched main b46b47d3 vs patched
+| | unpatched | patched |
+|---|---|---|
+| after category 11 (threed), 206 picks | 682 canvases, 1123 MB, 107 big | 680, 1115 MB, 106 big |
+| browser closed (Done), immediately | 683, **1131 MB**, 108 big | 680, 1115 MB, 106 big |
+| +4 s idle | 683, **1131 MB** | 680, **179 MB**, 14 big |
+| +9 s idle, and after one render +8 s | unchanged, 1131 MB | unchanged, 179 MB |
+The growth is not linear in picks: it is 97 canvases at 1080x1920 after category 1 (blur, 792 MB), about 100 from there on, then the **per-pick 367x652 canvases** climb to **255 by category 11** and the 192x192 tile canvases to 291. So on this box the fix takes 1131 MB to 179 MB. The Mac's 2.2 GB is still your number, not mine (**Guess**: bigger plates, more depth).
+Distort and proc are slow here (tens of seconds each, cold thumbnails); the sweep was run through, not skipped.
+
+## 2. What holds the 255 canvases of 367x652 (unpatched heap snapshot, shortest retainer path, **Measured**)
+All of them hang off module variables of `js/compositor.js` (path `FM -> _chromaKey closure context -> variable`). On b46b47d3 the declarations are on these lines (re-checked on origin/main 470ee20e: same variables, lines `:3507 :4286 :9135 :10165 :11581 :12249 :14521 :14675 :14923`, a few off from b46b47d3's):
+| holder | canvases of 367x652 | file:line (470ee20e) | note |
+|---|---|---|---|
+| `_cfPool` (A and B of 122 depth entries) | **244** (122 + 122) | `:11581`, created `:11775` | one pair per NESTING DEPTH; the browser's per-pick stack makes depth grow to ~122 |
+| `_dspPool` (C, M) | 4 | `:10165` | two entries; **not trimmed by the patch** |
+| `_mbPool` (acc, plate) | 2 | `:3507` | motion blur; not trimmed |
+| `_thA`, `_thB` | 2 | `:14675` | thumbnail scratch singletons; not trimmed |
+| `_psA`, `_psB` | 2 | `:14521` | not trimmed |
+| `_miPool` | 1 | `:14923` | not trimmed |
+So **244 of the 255 are `_cfPool` and the other 11 are small fixed pools.** That is the answer to "one per pick": `_cfPool` is indexed by nesting depth, the effects browser stacks one effect per pick (`previewStack`, `js/fx-browser.js:456`), so the 255 is 2 canvases x about 122 depths (the count of `_cfPool` entries that picks reach). `_cfPool` is one of the five pools the patch already trims; that is why patched leaves `367x652 x27` and not 255.
+In the same snapshot `_pfPool` held the 1080x1920 canvases (19 of them, array indexes up to 101) and `_mflow` held 2 (a per-layer cache entry `cv`). **A gap I cannot explain:** the live count says 101 canvases at 1080x1920 but the snapshot's marked set has 19 under `_pfPool` and the rest of the 361 marked canvases sit as "(concatenated string)" strings in the same pool arrays (37 + 36 under `_cfPool`) that the parser could not name; I did not chase them (**Guess**: pool entries whose canvas is reached through a second property the BFS reports as a string node). The 244 figure is the one retainer path I am sure of.
+
+## 3. What the patch leaves (patched: 14 big canvases, 27 of 367x652, 179 MB)
+`_dspPool` (`:10165`), `_mbPool` (`:3507`), `_miPool` (`:14923`), singletons `_thA/_thB`, `_psA/_psB`, `_rgbA/_rgbB`, `_tiA/B`, `_duA/B`, `_dnC`, `_mbcA/B`, `_mfMov`, and `_mflow` (`:12249`). The patched `poolStats` after trim: `pf 2, wp 2, cf 2` entries (957,136 px each, the floor of 2 on purpose), `mg 0`, `exp 1`. Extending the trim to `_dspPool/_mbPool/_miPool` would free about **14 big x 8.3 MB (about 116 MB)** plus about 27 x 0.96 MB (about 26 MB) at 367x652: **under 150 MB, about 8% of the 1131 MB**. I did not write that patch: the first 92% is the five pools, the rest has per-effect state (`_mflow`, motion-blur accumulators) that a trim could corrupt, and it is not worth the risk without an owner who knows those.
+
+## 4. Mutation proof (`1095-patches` applied in `wt-h19m`, port 8797; test `1095 the effect scratch pools shrink…`)
+| run | 1280 | 380 |
+|---|---|---|
+| A: main + test only (patch reverted) | **FAIL** (pool still holds 12 entries) | **FAIL** |
+| B: patched | pass | pass |
+| M1: mutation "`_cfPool` never trimmed" | **FAIL** | **FAIL** |
+| M2: mutation "trim timer never fires" | **FAIL** | **FAIL** |
+| C: mutation restored (control) | pass | pass |
+So the test catches both a missing pool and a dead timer, at both widths; reverted -> red, patch on -> green. **Not proved:** a mutation of the floor (`Math.max(2,_hw.x)`) or of the "refuse if any depth counter is non-zero" guard: the test does not exercise a trim mid-render, so a wrong guard would pass it (**Guess**: that is the one place the patch could cause a visible glitch, and the one thing left to test before shipping).
