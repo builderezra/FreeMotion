@@ -1,0 +1,102 @@
+[
+ {
+  "file": "01-first-video.md",
+  "title": "Make your first video",
+  "group": "Start"
+ },
+ {
+  "file": "02-trim-and-split.md",
+  "title": "Cut a clip down to the best part",
+  "group": "Start"
+ },
+ {
+  "file": "03-glow-and-shadow.md",
+  "title": "Add a glow and a shadow",
+  "group": "Look"
+ },
+ {
+  "file": "04-animate-with-keyframes.md",
+  "title": "Make a photo or title move across the screen",
+  "group": "Move"
+ },
+ {
+  "file": "05-add-a-title.md",
+  "title": "Add a title that shows for part of your video",
+  "group": "Start"
+ },
+ {
+  "file": "06-add-music.md",
+  "title": "Add music to your video",
+  "group": "Start"
+ },
+ {
+  "file": "07-add-an-effect-or-filter.md",
+  "title": "Add an effect or a filter, and adjust it",
+  "group": "Look"
+ },
+ {
+  "file": "08-speed-up-or-slow-down.md",
+  "title": "Speed a clip up or slow it down",
+  "group": "Move"
+ },
+ {
+  "file": "09-export-options.md",
+  "title": "Export your video: MP4, GIF, a still, or just the sound",
+  "group": "Start"
+ },
+ {
+  "file": "10-your-projects.md",
+  "title": "Your projects: find, rename, copy, delete, undo",
+  "group": "Share and manage"
+ },
+ {
+  "file": "11-text-styles-and-animations.md",
+  "title": "Style a title and make it animate",
+  "group": "Make"
+ },
+ {
+  "file": "12-captions.md",
+  "title": "Add captions and time them to speech",
+  "group": "Make"
+ },
+ {
+  "file": "13-sketching.md",
+  "title": "Draw on your video with Sketching",
+  "group": "Make"
+ },
+ {
+  "file": "14-custom-shape.md",
+  "title": "Draw your own shape with Custom shape",
+  "group": "Make"
+ },
+ {
+  "file": "15-camera.md",
+  "title": "Add a camera and pan across your scene",
+  "group": "Look"
+ },
+ {
+  "file": "16-adjustment-layer.md",
+  "title": "Colour-grade everything with an Adjustment layer",
+  "group": "Look"
+ },
+ {
+  "file": "17-work-with-friends.md",
+  "title": "Edit a project together with a friend",
+  "group": "Share and manage"
+ },
+ {
+  "file": "18-templates.md",
+  "title": "Start from a template, and save your own",
+  "group": "Share and manage"
+ },
+ {
+  "file": "19-elements.md",
+  "title": "Save a reusable element and drop it into any project",
+  "group": "Share and manage"
+ },
+ {
+  "file": "20-keyframe-easing.md",
+  "title": "Make a move speed up, slow down or bounce",
+  "group": "Move"
+ }
+]

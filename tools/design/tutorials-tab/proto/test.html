@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Tutorials renderer tests</title>
+<style>body{font:14px/1.4 system-ui,sans-serif;background:#0e1320;color:#eef2f8;padding:16px}.ok{color:#4cd497}.bad{color:#ff8a8a}pre{white-space:pre-wrap}</style></head><body>
+<h1>Tutorials renderer: every tutorial renders with no leftover markup</h1><pre id="out">running…</pre>
+<script src="md.js"></script>
+<script>
+(async function () {
+  'use strict';
+  var lines = [], fails = [], root = document.createElement('div');
+  window.alert = function () { window.__alerted = 1; };   // a real sink would run the hostile alert(1); a dialog would also hang a headless run
+  var ALLOWED = { H2: 1, P: 1, OL: 1, LI: 1, STRONG: 1, DIV: 1, SPAN: 1 };
+  function check(ok, msg) { if (!ok) { fails.push(msg); lines.push('FAIL ' + msg); } }
+  function walk(n, cb) { cb(n); for (var c = n.firstChild; c; c = c.nextSibling) walk(c, cb); }
+  function load(u) { return fetch(u).then(function (r) { if (!r.ok) throw new Error(u + ' ' + r.status); return r.text(); }); }
+  var LEFT = [['an HTML comment', /<!--|-->/], ['bold markers', /\*\*/], ['a heading marker', /^#|###/m], ['a table row', /\|\s*-{3}|^\s*\|/m],
+              ['a Verification block', /Verification|Confirmed/], ['a file:line citation', /\b(js\/[\w-]+\.js|index\.html|styles\.css|sw\.js):\d+/],
+              ['a numbered-list marker', /^\s*\d+\.\s/m]];
+  try {
+    var index = JSON.parse(await load('tutorials/index.json'));
+    check(index.length === 20, 'index.json lists ' + index.length + ' tutorials, expected 20');
+    var seen = {};
+    for (var k = 0; k < index.length; k++) {
+      var it = index[k], src = await load('tutorials/' + it.file), res = window.TutorialMd.render(src, root), txt = root.textContent, tag = it.file.slice(0, 2);
+      check(!seen[it.file], tag + ' is listed twice'); seen[it.file] = 1;
+      LEFT.forEach(function (l) { check(!l[1].test(txt), tag + ' shows ' + l[0] + ': ' + (txt.match(l[1]) || [''])[0]); });
+      var cleaned = window.TutorialMd.clean(src);
+      var srcSteps = (cleaned.match(/^\d+\.\s/gm) || []).length, srcBold = (cleaned.match(/\*\*[^*]+\*\*/g) || []).length;
+      check(root.querySelectorAll('ol > li').length === srcSteps && res.steps === srcSteps, tag + ' has ' + srcSteps + ' steps in the file and ' + root.querySelectorAll('ol > li').length + ' on the page');
+      check(root.querySelectorAll('strong').length === srcBold, tag + ' has ' + srcBold + ' bold phrases in the file and ' + root.querySelectorAll('strong').length + ' on the page');
+      check(res.title && res.title === it.title, tag + ' title is "' + res.title + '", index.json says "' + it.title + '"');
+      check(res.intro.length > 10, tag + ' has no intro line');
+      check(res.callouts >= 2, tag + ' shows ' + res.callouts + ' lead-in callouts (every file has Tip and If it doesn\'t work)');
+      walk(root, function (n) {
+        if (n === root || n.nodeType === 3) return;
+        check(ALLOWED[n.tagName], tag + ' made a <' + n.tagName.toLowerCase() + '>, not on the allow-list');
+        if (n.attributes) for (var a = 0; a < n.attributes.length; a++) check(n.attributes[a].name === 'class', tag + ' put attribute ' + n.attributes[a].name + ' on <' + n.tagName.toLowerCase() + '>');
+      });
+      lines.push((fails.length ? 'x ' : 'ok ') + tag + ' ' + it.title + ': ' + res.steps + ' steps, ' + root.querySelectorAll('strong').length + ' bold, ' + res.callouts + ' callouts, ' + txt.length + ' chars');
+    }
+    /* hostile and broken input: nothing may become an element, nothing may vanish silently */
+    var evil = '# <img src=x onerror=alert(1)>\n\nHello <scr' + 'ipt>alert(1)</scr' + 'ipt> **bold** and **unclosed\n\n1. Tap <b>this</b> <a href="javascript:alert(1)">link</a> ![x](y)\n\nTip: <iframe src=//evil></iframe> <!-- cited --> done <!-- never closed';
+    var r2 = window.TutorialMd.render(evil, root), t2 = root.textContent;
+    await new Promise(function (r) { setTimeout(r, 150); });
+    check(!window.__alerted, 'hostile input RAN script (alert was called)');
+    check(!root.querySelector('img,script,iframe,a,b'), 'hostile input made a real element: ' + root.innerHTML.slice(0, 160));
+    check(t2.indexOf('<scr' + 'ipt>alert(1)</scr' + 'ipt>') >= 0 && t2.indexOf('<img src=x onerror=alert(1)>') >= 0, 'hostile text was not shown as text');
+    check(t2.indexOf('**unclosed') >= 0, 'an unclosed ** was lost instead of shown');
+    check(t2.indexOf('cited') < 0 && t2.indexOf('never closed') < 0 && t2.indexOf('<!--') < 0, 'a comment (closed or not) leaked: ' + t2);
+    check(t2.indexOf('done') >= 0, 'text before an unclosed comment was lost');
+    check(r2.steps === 1 && r2.callouts === 1, 'hostile input: ' + r2.steps + ' steps / ' + r2.callouts + ' callouts, expected 1 / 1');
+    lines.push('ok hostile and broken input stays text');
+    /* the renderer's own source must not contain the HTML-string sinks */
+    var js = (await load('md.js')).replace(/\/\*[\s\S]*?\*\//g, '');
+    check(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/.test(js), 'md.js uses an HTML-string sink');
+    var n = (await load('md.js')).split('\n').length;
+    lines.push('md.js is ' + n + ' lines including its header comment');
+  } catch (e) { fails.push('threw: ' + e); lines.push('THREW ' + e); }
+  var summary = fails.length ? 'RED: ' + fails.length + ' failure(s)' : 'GREEN: all 20 tutorials render clean';
+  document.getElementById('out').innerHTML = '';
+  document.getElementById('out').textContent = summary + '\n\n' + lines.join('\n');
+  document.getElementById('out').className = fails.length ? 'bad' : 'ok';
+  document.title = summary; window.__result = { fails: fails, summary: summary };
+})();
+</script></body></html>
