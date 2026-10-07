@@ -110,7 +110,7 @@ window.FM = window.FM || {};
     let step = newStep();
     const undoStack = [], redoStack = [];
     let recording = true;
-    let preSnaps = null, preIdx = -1;
+    let preSnaps = null, preIdx = -1, preMetas = null;   // preMetas: Simple mode P2, history's {label, ed, arr} beside each snapshot
     let keepIds = null;                           // memoised reachable() answer
 
     /* ── frozen / busy (§8.9) ────────────────────────────────────────────────────────────────── */
@@ -1100,9 +1100,11 @@ window.FM = window.FM || {};
       for (let i = 0; i < res.orders.length; i++) step.orders.push(res.orders[i]);
     }
 
-    function closeStep() {
+    function closeStep(meta) {
       if (!step.ops.length) { step = newStep(); return; }
-      undoStack.push({ ops: step.ops, recs: step.recs, orders: step.orders });
+      const st = { ops: step.ops, recs: step.recs, orders: step.orders };
+      if (meta && meta.arr === true) st.arr = true;   // Simple mode P2: an arranging Simple step (§10.2 door 2); Full's steps carry none
+      undoStack.push(st);
       while (undoStack.length > LIM.UNDO_STEPS) undoStack.shift();
       redoStack.length = 0;
       step = newStep();
@@ -1115,11 +1117,14 @@ window.FM = window.FM || {};
       if (!preSnaps || preIdx <= 0) return null;
       const to = docOfSnapshot(preSnaps[preIdx]);
       const from = docOfSnapshot(preSnaps[preIdx - 1]);
+      const meta = preMetas ? preMetas[preIdx] : null;   // Simple mode P2
       preIdx--;
       if (!to || !from) return null;
       const res = D.diffDoc(from, to);
       res.recs.forEach(function (r, i) { if (res.ops[i].o === 's') r.after = clone(res.ops[i].v); });
-      return { ops: res.ops, recs: res.recs, orders: res.orders, pre: true };
+      const st = { ops: res.ops, recs: res.recs, orders: res.orders, pre: true };
+      if (meta && meta.arr === true) st.arr = true;
+      return st;
     }
     function docOfSnapshot(str) {
       try { const s = JSON.parse(str); return { project: viewOfProject(s.project), layers: s.layers }; }
@@ -1138,6 +1143,18 @@ window.FM = window.FM || {};
     }
 
     function runStep(st, intoRedo) {
+      /* SIMPLE MODE P2 — THE UNDO DOOR (DESIGN.md §10.2 door 2, his D14). Undoing or redoing a step that moved clips would send
+         a ripple while someone else can edit — exactly what the runner refuses. Put back unconsumed, as the backstop refusal
+         below does, before anything is applied or sent. Only steps Simple's runner tagged `arr` ever reach this. */
+      if (st.arr && window.FM && FM.spine && FM.spine.undoGate) {
+        const why = FM.spine.undoGate();
+        if (why) {
+          if (st.pre) preIdx++;
+          else (intoRedo ? undoStack : redoStack).push(st);
+          if (FM.spine.undoRefused) FM.spine.undoRefused(why);
+          return false;
+        }
+      }
       if (A.flushPendingCommit) { try { A.flushPendingCommit(); } catch (e) {} }
       pushLocal('hot');
       const keepOps = [], keepRecs = [];
@@ -1220,7 +1237,9 @@ window.FM = window.FM || {};
           if (S.online) flushOutstanding();
         }
         res.recs.forEach(function (r, i) { if (res.ops[i].o === 's') r.after = clone(res.ops[i].v); });
-        (intoRedo ? redoStack : undoStack).push({ ops: res.ops, recs: res.recs, orders: res.orders });
+        const inv = { ops: res.ops, recs: res.recs, orders: res.orders };
+        if (st.arr) inv.arr = true;   // Simple mode P2: redoing an arranging step is arranging too
+        (intoRedo ? redoStack : undoStack).push(inv);
         while (redoStack.length > LIM.UNDO_STEPS) redoStack.shift();
         while (undoStack.length > LIM.UNDO_STEPS) undoStack.shift();
       }
@@ -1245,7 +1264,7 @@ window.FM = window.FM || {};
     };
     S.canUndo = function () { return undoStack.length > 0 || (!!preSnaps && preIdx > 0); };
     S.canRedo = function () { return redoStack.length > 0; };
-    S.seedPreSession = function (snaps) { preSnaps = snaps || null; preIdx = preSnaps ? preSnaps.length - 1 : -1; };
+    S.seedPreSession = function (snaps, metas) { preSnaps = snaps || null; preMetas = metas || null; preIdx = preSnaps ? preSnaps.length - 1 : -1; };
     S._undoDepth = function () { return { undo: undoStack.length, redo: redoStack.length, open: step.ops.length, pre: preIdx }; };
 
     /* ═══ HOOKS THE APP CALLS (§4.2) ════════════════════════════════════════════════════════════ */
@@ -1261,7 +1280,7 @@ window.FM = window.FM || {};
       release();
       pushLocal('full');
     };
-    S.afterCommit = function () { closeStep(); };
+    S.afterCommit = function (meta) { closeStep(meta); };
     S.beforeFlush = function () { release(); pushLocal('full'); S.persist(); };
 
     /* The scheduled work of §9, in one call so the app has one timer and the suite has one entry. */
@@ -1807,7 +1826,7 @@ window.FM = window.FM || {};
     if (tidied && FM.history && FM.history.commit) FM.history.commit();
     /* §10.4: only he edited before the session, so his pre-session undo steps are exactly the snapshot
        stack, and attribution for them is exact. */
-    if (FM.history && FM.history._snapshotsUpTo) S.seedPreSession(FM.history._snapshotsUpTo());
+    if (FM.history && FM.history._snapshotsUpTo) S.seedPreSession(FM.history._snapshotsUpTo(), FM.history._metasUpTo ? FM.history._metasUpTo() : null);
     C.attach(S, o);
     return S;
   };
