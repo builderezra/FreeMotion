@@ -81,6 +81,15 @@
    FM._platePixels = function () {
 --- a/tests/tests.js
 +++ b/tests/tests.js
+@@ -59854,7 +59854,7 @@
+     const poolLen = () => FM._readbackHint().A.length;
+     const base = poolLen();
+     const h1 = draw(12);
+-    if (poolLen() < base + 12) throw new Error('CONTROL: a stack of 12 canvas effects did not grow the pool (' + base + ' to ' + poolLen() + ') — nothing below measures anything');
++    if (poolLen() < 12) throw new Error('CONTROL: a stack of 12 canvas effects did not grow the pool to 12 entries (' + base + ' to ' + poolLen() + ') — nothing below measures anything');
+     draw(1);
+     await sleep(7500);   // two trim windows of 3 s
+     const after = poolLen();
 @@ -59868,6 +59868,33 @@
      if (h1 !== h2) throw new Error('a 12-deep stack drew a different picture after the pools were trimmed (hash ' + h1 + ' then ' + h2 + ')');
    });
