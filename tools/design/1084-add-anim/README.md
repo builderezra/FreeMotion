@@ -46,3 +46,19 @@ Headless Chromium at 380 wide, frames paused at 0, 60, 120, 200 and 340 ms (a ho
 
 - **(a) at 260 ms** for the empty project: he said "fairly quick". 340 ms reads smoother but the bloom is mostly over by 150 ms either way, because the circle covers a phone-sized sheet fast.
 - **(b)** at 340 ms: it travels farther in both directions and the contents need the extra time to fade in.
+
+## GIFs for a phone (D5)
+
+`gifs/` holds the same three prototypes as short looping GIFs, each the **380 x 760 phone box only**, with the project "with layers" and the tap on the Add row, so all three start from the same screen:
+
+| file | what | size |
+|---|---|---|
+| `gifs/a-circle-reveal-260ms.gif` | (a) circle reveal, 260 ms | 0.66 MB |
+| `gifs/a-circle-reveal-340ms.gif` | (a) circle reveal, 340 ms (the page's default) | 0.89 MB |
+| `gifs/b-row-expands.gif` | (b) the Add row expands into the menu (340 ms) | 0.67 MB |
+| `gifs/c-slide-up-today.gif` | (c) what the app does today (360 ms hinge up, 220 ms slide down) | 0.69 MB |
+| `gifs/side-by-side.gif` | (a) 340 ms, (b) and (c) next to each other, in step, 1172 x 794 | 2.48 MB |
+
+**Real speed, measured, not eyeballed.** Each frame is the prototype paused with `__proto.seek(ms)` at exact 30 ms steps (not a screen recording, so no dropped frames and no cursor), and each frame is shown for 30 ms. One loop is **2.32 s**: 90 ms closed, the open (0 to 420 ms), 600 ms held open, the close (0 to 330 ms), a 420 ms rest closed, then 400 ms extra on the last frame so the loop does not strobe. The GIF writer merges identical neighbouring frames and adds their delays (the hold is one frame of about 720 ms); I checked each file's frame delays sum to 2320 ms. All five are under 4 MB.
+**What they cannot show:** 30 ms is the sampling step, so a 260 ms animation is 8 or 9 frames; a real phone draws 60 or 120 per second, so the real thing is smoother than any of these. Palette is 256 colours with dithering, so the dark gradients have faint banding that the page does not. The app's own extras are still not in these (see "What these do NOT show").
+`gifs/how/record-frames.py` is the script that makes the frames (it needs the scratch helper `d4shot.py`; the GIFs were assembled from its PNGs with Pillow).
