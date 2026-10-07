@@ -1,0 +1,198 @@
+field,tests_until_next_change_of_that_field,suite_index,test,was,now
+duration,999,1286,the phone move/extend buttons are not the same drawing (queue 338),4,3
+duration,287,501,"pulling back up cancels the faves gesture, and the cancel sticks",5,3
+duration,226,238,undo / redo grey out when there is nothing behind or ahead,0,5
+duration,156,1126,the dead-effect hint never costs you the eye button,10000,3
+duration,149,970,#617: a failed element edit must not strand a draft workspace,5,3
+duration,73,884,the MULTI-clip move and extend icons are not the same drawing (queue 338),4,3
+duration,37,843,a layer thumbnail never spills out of the track head on a phone (queue 211),5,3
+duration,23,808,"the phone bin is red, and it is the SAME red the PC uses",4,3
+duration,11,465,Edit Shape: nudging stroke width or colour keeps their keyframes,5,0
+duration,5,479,"paste style: every tile draws the inspector's own category icon, not a private copy",4,3
+duration,5,495,"freehand: the committed stroke is the width you drew, not double it",3,5
+duration,5,796,"the add sheet leaves no dead band under a full grid, and the cards get squarer",5,3
+duration,5,802,sharpening is dosed by how far the clip is actually stretched,3,4
+duration,5,964,"#625: keyframes land on the frame grid, so they cannot stack invisibly",3,5
+duration,4,959,921 S0 restore uses _afterExternalChange (629 rule intact),2,3
+duration,2,489,"onion skin has exactly one door, and it is the layer menu",5,2
+duration,2,492,"duplicate: the copy lands exactly on the original, animated paths included",2,3
+duration,2,791,"the home + catches taps well outside itself, without getting bigger",0,3
+duration,2,832,an undone delete still has its media — freeing must never beat undo,3,5
+duration,2,838,switching projects does not strand a deleted clip's media,3,0
+duration,2,881,a tilt keyframe cannot turn the rotate diamond into a delete button (queue 419),3,4
+duration,2,1283,"a trim grip needs a hold on touch, arms visibly, and is instant on mouse (queue 336)",3,4
+duration,1,487,desktop text editor: the Aa options do not cover the canvas you are typing on,6,5
+duration,1,789,a template does not carry its notes into a new project,3,0
+duration,1,794,the effects header x and search glyphs are centred in their circles,3,5
+duration,1,835,history actually RUNS the sweep when it discards a snapshot,5,0
+duration,1,841,Free crop keeps a keyframed crop animation,0,5
+duration,1,1122,"speed-to-playhead lands the clip START exactly, holding the end",3,5
+duration,1,1124,the speed range reaches the 1000x he asked for,5,10000
+duration,0,477,"timeline: a locked layer wears a red lock on its preview, an unlocked one does not",0,2
+duration,0,478,timeline: caption cues do not swallow the row — a touch drag over one still scrubs,2,4
+duration,0,485,"studio: one name field, in the inspector header, and it does both jobs",3,2
+duration,0,486,"captions: dragging a cue edge moves the chip during the drag, not on release",2,6
+duration,0,837,"916.4 a reversed clip with audio shorter than the clip plays its sound in step with the picture — export, preview and au",0,3
+duration,0,958,#629: undo that removes the selected layer selects nothing,3,2
+duration,0,1120,the volume control is a scrub ruler that reaches 1000%,3,4
+duration,0,1121,speed-to-playhead lands the clip END exactly on the playhead,4,3
+duration,0,2286,"H41 the runner charges a playhead left moved to the test that left it, with the value, and nothing is reset",5,3
+home,507,864,Shift+Home / Shift+End fling the Add marker to the top and bottom (queue 294 clause 12),True,False
+home,503,1783,"931 swiping the New effects strip pauses its auto-scroll well past the old 3 s, and it resumes from where he left it — r",True,False
+home,445,288,drawing: opening a project ends any sketch in progress,True,False
+home,213,1372,#648: a tap selects even when no click follows the pointerup,False,True
+home,175,1606,602: the Aa sheet does not cover the canvas on a phone,True,False
+home,129,734,921 S7 review: “Earlier versions…” opens from the project’s ⋯ on Home with no session — nothing is armed and no save poi,False,True
+home,128,113,576: the text editor options open BELOW the box showing what you typed,True,False
+home,45,242,"Select all on a non-project tab ticks THAT tab, never the projects",False,True
+home,9,1586,582: the canvases the effects read every frame are declared read-heavy,True,False
+home,9,1596,"617: element drafts take part in Select, and bulk delete actually removes them",False,True
+home,0,1782,"930 the Assistant and the Director never stack, and the API key is entered in Settings, reached from a button in each",False,True
+layers,942,791,"the home + catches taps well outside itself, without getting bigger",0,4
+layers,552,1734,"869: a backup carries every project, puts them back, never deletes, and NAMES anything it could not include",4,1
+layers,296,492,"duplicate: the copy lands exactly on the original, animated paths included",1,4
+layers,226,238,undo / redo grey out when there is nothing behind or ahead,0,1
+layers,13,478,timeline: caption cues do not swallow the row — a touch drag over one still scrubs,2,1
+layers,11,465,Edit Shape: nudging stroke width or colour keeps their keyframes,1,0
+layers,1,789,a template does not carry its notes into a new project,4,0
+layers,0,477,"timeline: a locked layer wears a red lock on its preview, an unlocked one does not",0,2
+pxPerSec,1874,412,"waveform: a trimmed clip draws the part it PLAYS, not the whole song",1.98,99.2
+pxPerSec,292,117,"572: the effects BROWSER warns before you spend the pick, not after",159.2,99.2
+pxPerSec,1,115,"574: two overlapping captions BOTH show, stacked",99.2,159.2
+pxPerSec,1,410,waveform: an aliasing song draws an even band end to end,99.2,1.98
+scene,1794,492,"duplicate: the copy lands exactly on the original, animated paths included",8,9
+scene,5,479,"paste style: every tile draws the inspector's own category icon, not a private copy",3,4
+scene,2,489,"onion skin has exactly one door, and it is the layer menu",7,8
+scene,1,487,desktop text editor: the Aa options do not cover the canvas you are typing on,6,7
+scene,0,477,"timeline: a locked layer wears a red lock on its preview, an unlocked one does not",1,2
+scene,0,478,timeline: caption cues do not swallow the row — a touch drag over one still scrubs,2,3
+scene,0,485,"studio: one name field, in the inspector header, and it does both jobs",4,5
+scene,0,486,"captions: dragging a cue edge moves the chip during the drag, not on release",5,6
+selected,997,1289,"an element opens for editing, and inserting is still available (queue 342)",layer_5u85y4w_lhcln,
+selected,287,506,a vertical swipe that starts ON a clip scrolls the timeline,layer_5u85y4w_lhcln,
+selected,259,843,a layer thumbnail never spills out of the track head on a phone (queue 211),layer_97km04j_bkdlh,
+selected,190,287,"drawing: a zoomed canvas survives picking up the pencil, and the overlay tracks it",layer_2hj3rw2_tvneq,
+selected,140,1133,effect walker: copying a keyframe from inside a filter pastes back into the same slot,"layer_9ggov00_lpixi,layer_9gvovcs_hq7au",
+selected,48,238,undo / redo grey out when there is nothing behind or ahead,,layer_2hj3rw2_tvneq
+selected,23,808,"the phone bin is red, and it is the SAME red the PC uses",layer_948l3j1_r74zg,
+selected,14,1105,"the add-menu drag handle sits outside the panel, clear of the project name, and hides until hover (queue 302)",layer_9fpopjs_n5hsu,
+selected,11,1277,"presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)",,layer_5u85y4w_lhcln
+selected,6,1126,the dead-effect hint never costs you the eye button,layer_9ggov00_lpixi,"layer_9ggov00_lpixi,layer_9gvovcs_hq7au"
+selected,5,479,"paste style: every tile draws the inspector's own category icon, not a private copy",layer_5tk5tbe_1cri6,layer_5tl5u3q_no53h
+selected,5,835,history actually RUNS the sweep when it discards a snapshot,layer_97clztz_6g4dv,
+selected,4,496,freehand: a drawing session is ONE layer holding every stroke,layer_5ua5yb4_b4lh6,layer_5ub5yc5_d4hi0
+selected,4,501,"pulling back up cancels the faves gesture, and the cancel sticks",layer_5ub5yc5_d4hi0,layer_5u85y4w_lhcln
+selected,4,795,the x reads red and the search reads blue,layer_940l139_6z6w8,layer_941l1bs_sib1l
+selected,3,800,Move & Transform hides the outline and shows the anchor instead,layer_941l1bs_sib1l,
+selected,3,804,"the clip menu names it for what it does, not improve-quality",,layer_948l3j1_r74zg
+selected,2,489,"onion skin has exactly one door, and it is the layer menu",layer_5u25wwn_m7yck,layer_5u35xt1_norqs
+selected,2,492,"duplicate: the copy lands exactly on the original, animated paths included",layer_5u35xt1_norqs,layer_5u95y7u_y5x39
+selected,2,832,an undone delete still has its media — freeing must never beat undo,,layer_97clztz_6g4dv
+selected,1,487,desktop text editor: the Aa options do not cover the canvas you are typing on,layer_5u15whu_fjrr6,layer_5u25wwn_m7yck
+selected,1,1103,"the phone top bar has a help button that opens the shortcuts, in both selection states",,layer_9fpopjs_n5hsu
+selected,1,1124,the speed range reaches the 1000x he asked for,layer_9gfoutt_ty671,layer_9ggov00_lpixi
+selected,1,1274,saving a preset updates the open Presets card by itself (queue 330),,layer_5u85y4w_lhcln
+selected,0,478,timeline: caption cues do not swallow the row — a touch drag over one still scrubs,,layer_5tk5tbe_1cri6
+selected,0,485,"studio: one name field, in the inspector header, and it does both jobs",layer_5tl5u3q_no53h,
+selected,0,486,"captions: dragging a cue edge moves the chip during the drag, not on release",,layer_5u15whu_fjrr6
+selected,0,495,"freehand: the committed stroke is the width you drew, not double it",layer_5u95y7u_y5x39,layer_5ua5yb4_b4lh6
+selected,0,794,the effects header x and search glyphs are centred in their circles,,layer_940l139_6z6w8
+selected,0,841,Free crop keeps a keyframed crop animation,,layer_97jm01p_rby4q
+selected,0,842,Free crop on a plain crop still writes plain numbers,layer_97jm01p_rby4q,layer_97km04j_bkdlh
+selected,0,1120,the volume control is a scrub ruler that reaches 1000%,,layer_9gaotwl_hd5oh
+selected,0,1121,speed-to-playhead lands the clip END exactly on the playhead,layer_9gaotwl_hd5oh,layer_9gbou5r_todjh
+selected,0,1122,"speed-to-playhead lands the clip START exactly, holding the end",layer_9gbou5r_todjh,layer_9gdoui3_slp5h
+selected,0,1123,speed-to-playhead refuses the cases where there is no answer,layer_9gdoui3_slp5h,layer_9gfoutt_ty671
+selected,0,1276,"917.16 the Presets save buttons are full buttons, flush with the card column, on a phone",layer_5u85y4w_lhcln,
+size,1104,1182,timeline: an auto-scrolling clip drag does not hold the preview in low-resolution motion mode,400x300,64x48
+size,370,791,"the home + catches taps well outside itself, without getting bigger",640x640,320x240
+size,299,489,"onion skin has exactly one door, and it is the layer menu",1080x1920,320x240
+size,17,1162,"play: the FIRST clip added moves the playhead to it, so play starts at its beginning",320x240,64x48
+size,9,477,"timeline: a locked layer wears a red lock on its preview, an unlocked one does not",1080x1920,320x240
+size,1,487,desktop text editor: the Aa options do not cover the canvas you are typing on,320x240,1080x1920
+size,1,789,a template does not carry its notes into a new project,320x240,640x640
+size,1,1180,"perf: a held frame is capped in size, and a cropped clip still shows the right part of it",64x48,400x300
+time,516,465,Edit Shape: nudging stroke width or colour keeps their keyframes,2,0
+time,296,1949,"690 with the phone storage full, a tap on the version label asks first — Stay keeps his unsaved work, Update anyway goes",2.1,0
+time,195,1338,"pressing play starts the audio report fresh, so it describes one play and not the session (queue 849)",3,0
+time,114,258,"deleting a clip releases its filmstrip bitmaps, and they can rebuild",1,0
+time,110,1572,"753: snapping a trim onto an off-frame clip edge shows no filled landing notch, while a frame-aligned edge does",3,0
+time,96,1687,791: Delete draft… names the right noun for all three draft kinds — a plain draft has no element to save back to,0.5,0
+time,91,373,"easing editor: the whole panel fits, and every rail button is really on screen",0,2
+time,74,1020,"on a finger, a swipe across a selected clip scrubs — only a hold slips its media (queue 822)",1.3,0
+time,65,1095,"the sheet previews the picked effects over the whole comp, and puts it all back (queue 277 + 390)",0,1
+time,40,1245,"the Add-layer + is centred in its circle, and is not a font glyph",1,0
+time,34,1289,"an element opens for editing, and inserting is still available (queue 342)",3,0
+time,32,1182,timeline: an auto-scrolling clip drag does not hold the preview in low-resolution motion mode,1.033,0
+time,29,1215,the onion-skin ghost plate is target-sized and is not reallocated every frame,0,1
+time,27,1543,"725: double-clicking a marker no longer opens a rename box, and no source still carries one",2,1.5
+time,24,1807,"690 with the phone storage full, leaving the project asks first — Stay (a real tap) keeps his work, Leave anyway (a real",3,0
+time,23,2262,690 Home project menu closes when a card opens the editor by keyboard,0.5,0
+time,20,1161,"play: holding the Play button plays, it does not silently toggle Loop instead",1,1.033
+time,19,986,the SECOND freehand stroke appears as soon as you lift the pen (queue 514),1,0
+time,15,1856,"690 ungrouping a group he moved, scaled or turned keeps its animated layers where the group put them, and names any it c",1,0
+time,15,1910,690 a project renamed on Home keeps its new name when he presses Undo inside it,0.5,0
+time,15,2246,"482 5.1 Adjustment layer - zoomed in, Highlights & Shadows with Local radius and Gradient Map Dither on an adjustment la",0,0.5
+time,14,1837,690 after one heavy stretch of playback the preview sharpens again once full resolution fits — and a scene where it does,2,0
+time,13,1324,scrubbing into the tail and pressing play does not leave the song muted or paused (queue 96),0,3
+time,13,1890,690 a look + animations preset carries the animation and not the size: applied to a fitted photo it keeps the photo at i,2,0
+time,11,1876,"690 the Move pad snaps a GROUP by where he sees it — its centre, not its offset — and a member of a moved group by where",2,0
+time,10,1006,a split keeps a Bounce-eased segment’s curve at the seam (queue 818),0,2
+time,9,1939,"690 on an iPhone a clip with Echo at 80 percent, or boosted to 200 percent, rings on after its end in the preview as it ",1.8,2.1
+time,6,1927,"690 Cmd+Z while drawing takes back the last stroke, Cmd+Shift+Z puts it back, and his next stroke does not bring an undo",1.5,1
+time,5,1904,"690 camera Motion Blur averages its slices — a pan keeps the picture at full brightness, and a transparent export stays ",0,0.5
+time,4,1796,"690 the View menu isolate stays out of the export — the video and the still hold every layer, in their own order",1,0
+time,4,1802,"690 after a 200 ms stall a 1x song keeps its pitch while it catches up, and ends back in step with the picture",1.133,3
+time,3,254,editor key shortcuts cannot reach the project under a full-screen overlay,0,1
+time,3,982,"921 S0 boxFor equals #select-box geometry (rotated, parented, group, skew, text wrap)",0,1
+time,3,1683,"786: a refused play() is named in the playback report, and the report is saved even though nothing played",0,0.5
+time,3,1792,"690 Escape closes the Export dialog, Canvas settings, Notes, its Before-you-export card, Settings and a right-click menu",0,1
+time,2,1017,a trim grip touched and released writes no undo entry (queue 823 c10a),2,1.3
+time,2,1286,the phone move/extend buttons are not the same drawing (queue 338),0,3
+time,2,1534,768: scrubbing the timeline writes a frame-time report that names what was selected,0,3
+time,2,1537,"719: Reset and Crop to canvas keep a keyframed crop's keyframes, keying the playhead, and still set a plain crop",3,1
+time,2,1540,"722: a preset applied from the browser anchors its keyframes at the playhead he parked, not the preview loop",1,2
+time,2,1934,"690 Save project file on another project from Home writes that project and leaves the open one alone — its undo, playhea",1,0
+time,1,1788,690 one real tap on a Position number (X / Y) opens its editor ON SCREEN with the focus in it,2,0
+time,1,1833,"690 the mask editor follows the playhead — after a scrub its outline is the frame on screen, and dragging a point there ",2,0
+time,1,1835,"690 an easing picked on the first keyframe diamond eases the move out of it, and the diamond says so",0,2
+time,1,1854,"690 linking a layer to a Controller, or unlinking it, with the link button or the Parent row leaves it where it is",2.5,1
+time,1,1874,690 Reset speed (1x) carries his animation with the clip — a fade at the end of a 2x clip still ends at its end,3,2
+time,1,1888,690 a colour keyframe is live while Colouring is open: on the phone a hold opens its menu and a hold-and-drag retimes it,0,2
+time,0,1571,"752: after the trim edge-scroll brake trips, leaving and re-entering the edge scrolls again",1.5,3
+time,0,1784,"690 a trembling hold on a keyframe diamond still opens its menu, and a drag moves the keyframe by the finger travel, not",0,2.5
+time,0,1785,690 a sideways swipe that starts on a keyframe diamond scrubs the timeline like the clip under it,2.5,3
+time,0,1786,"690 a flick of the layer list glides from a clip and from a layer name, not only from bare lane",3,1
+time,0,1787,690 a touch that catches a gliding timeline stops it without selecting or deselecting anything,1,2
+time,0,1790,690 leaving the effects browser by the X or by Add puts the playhead back where he parked it,0,2.5
+time,0,1791,"690 a real tap on an effect or opacity value box selects the number, so what he types replaces it",2.5,0
+time,0,1801,"690 on an iPhone, where el.volume cannot be set, a muted clip is silent in the preview and a 25 percent clip plays at 25",0,1.133
+time,0,1832,"690 the Position keyframe diamond is one diamond — a hold-and-drag moves X and Y together, Delete keyframe removes both,",0,2
+time,0,1852,"690 a beat tapped on the playhead while the song plays is marked on the frame the finger touched, not when it lifted",0,0.5
+time,0,1853,"690 a scaled or turned group keeps its still layers still when another layer in it comes on screen, moves, or is moved",0.5,2.5
+time,0,1872,690 letting go of a clip or a trim edge he carried to the screen edge leaves the timeline where he carried it — what he ,0,1
+time,0,1873,"690 trimming a speed-ramped clip with its handle keeps every kept frame still — the head of a ramp, the tail of a revers",1,3
+time,0,1926,"690 a number typed in a box lands when he then clicks his layer on the canvas or grabs its corner, and the keyboard come",0,1.5
+time,0,1937,"690 playing across a split, the second half is already running when the playhead reaches the cut, so the sound does not ",0,2
+time,0,1938,"690 a cut where the other half is muted or hidden fades like any clip edge, in the preview and in the file, and is not s",2,1.8
+time,0,2286,"H41 the runner charges a playhead left moved to the test that left it, with the value, and nothing is reset",3.25,0
+tlStale,637,1373,#612: the hinged menu still clamps on screen when it is re-opened,-3.16,0
+tlStale,369,1002,dragging a layer NAME keeps scrolling when a rebuild lands mid-gesture (queue 815),4.84,0
+tlStale,254,489,"onion skin has exactly one door, and it is the layer menu",6.05,0
+tlStale,239,745,"921 S8 a refused delete or move puts the element back where it was on the device that tried — an effect on a held layer,",-3.16,0
+tlStale,214,2071,"973 on PC the selection corner lines are the accent blue, not white",2,0
+tlStale,210,276,isolate cycles three ways and never touches the scene,1.29,0
+tlStale,55,2014,"960 on PC Import media and Import audio are the same size, on one line, in the REAL panel — and the tabs keep their fitt",2,0
+tlStale,14,986,the SECOND freehand stroke appears as soon as you lift the pen (queue 514),3.23,0
+tlStale,12,261,every media teardown path hands back BOTH decoded caches,-5,0
+tlStale,2,258,"deleting a clip releases its filmstrip bitmaps, and they can rebuild",0,-5
+tlStale,2,2011,962 the eye has a round pupil in an even white ring — in the box it spawns and at the menu-icon size,0,2
+tlStale,1,487,desktop text editor: the Aa options do not cover the canvas you are typing on,0,6.05
+tlStale,0,274,dragging a rotated camera still moves the scene the way you drag,0,-5
+tlStale,0,275,"a phone hold moves an UNSELECTED clip, a quick drag still does not",-5,1.29
+tlStale,0,744,"921 S8 Settings → Labs → Test connection says plainly what works on this network — the relays, the address lookup and th",0,-3.16
+tlStale,0,985,"the drawing toolbar sits under the canvas on PC, and drawing gets the whole window (queue 513/535)",0,3.23
+tlStale,0,1001,a raised band is not re-pinned to nowhere while the panel is hidden (queue 814),0,4.84
+tlStale,0,1372,#648: a tap selects even when no click follows the pointerup,0,-3.16
+tlStale,0,2070,"973 the eye is his pick A: one wide white ring round the pupil and no catchlight, in the box it spawns and at the menu-i",0,2
+tlStale,0,2286,"H41 the runner charges a playhead left moved to the test that left it, with the value, and nothing is reset",-2,0

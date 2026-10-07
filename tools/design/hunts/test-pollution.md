@@ -62,3 +62,121 @@ Other `#tl-inner` polluters (value left, tests that inherit it): `#254 editor ke
 ## How to repeat
 - Census: `scripts/h41_patch.py <worktree>` (scratch hook), `scripts/h41_run.sh <width> <port> <debug-port>`, `scripts/h41_an.py <width>`; slices: `scripts/h41_pairs.py <width> swipe tlw presets sheet`.
 - One slice by hand: `python3 tests/_cdp.py --width 1280 --url 'http://localhost:PORT/tests/run.html?only=<polluter name>%0A<victim name>'` (a newline-separated list of name fragments; the tests run in suite order with nothing between).
+
+## H42: the whole suite with the stateLeaks patch applied (1280 and 380, main 2e3fd7a9)
+
+**No new reds.** Both widths, full suite, `state-leaks-report.patch` applied in a scratch copy (plus the same skip of the three tests that hang this container, as in the census). Against the census run on unpatched main (same skip, same container):
+
+| width | main | with the patch |
+|---|---|---|
+| 1280 | `2134/2285`, 94 NOT RUN HERE | `2134/2287`, 93 NOT RUN HERE (the two extra tests are the two H41 fixtures, both green) |
+| 380 | `2134/2285`, 92 NOT RUN HERE | `2136/2287`, 92 NOT RUN HERE |
+
+The red lists differ by three names at 1280 and two at 380. Each is an order-independent or flaky test, not an effect of the patch (re-run alone, three times each, on both trees at 1280):
+- `an effect that changes nothing on this layer is detected… (queue 477)` (Channel Remap): **red 3 of 3 alone on main and 3 of 3 alone on the patched tree**; it is red on main by itself and was simply green in one of the two full runs. Appears in the "with patch only" column at both widths for that reason.
+- `947 review: a real press in the middle of the ripple…`: red 1 of 3 alone on main, 1 of 3 on the patched tree. Flaky.
+- `#668: replacing a clip's media survives a save…` (1280, patched run only): green 3 of 3 alone on both trees. A timing red inside the full run.
+- `preset previews: the CACHE follows the layer…` (380): red on main only in the census run; not on the patched run. Flaky.
+Nothing the patch adds (a read of ~14 values after each test) changed any verdict that I could find.
+
+**The report itself:** 199 entries at 1280 and 197 at 380 (`h42-stateleaks-1280.csv`, `-380.csv`, columns: field, number of later tests until that field is changed again, suite index, test, found, left), from 148 and 145 distinct tests. They match the census: only 5 (field, test) pairs appear at 1280 and not at 380, and 3 the other way. `sceneLeaks` (the old list) printed 3 entries at each width, so **the new list finds 60 times what the old one did**. **`open` (sheets and panels) has 0 entries: no test leaves an add sheet, effects browser, context menu, export overlay or inspector panel open**, the census said the same.
+
+### Grouped by kind, ranked by how many later tests start with what was left (only values that are not the run's normal one; "left = normal" rows are tests that put things right, listed in the CSV)
+
+### time: 64 tests change it, 40 leave a non-normal value
+
+| later tests that start with it | suite # | test | found | left |
+|---|---|---|---|---|
+| 91 | 373 | `easing editor: the whole panel fits, and every rail button is really o` | 0 | 2 |
+| 65 | 1095 | `the sheet previews the picked effects over the whole comp, and puts it` | 0 | 1 |
+| 29 | 1215 | `the onion-skin ghost plate is target-sized and is not reallocated ever` | 0 | 1 |
+| 27 | 1543 | `725: double-clicking a marker no longer opens a rename box, and no sou` | 2 | 1.5 |
+| 20 | 1161 | `play: holding the Play button plays, it does not silently toggle Loop ` | 1 | 1.033 |
+| 15 | 2246 | `482 5.1 Adjustment layer - zoomed in, Highlights & Shadows with Local ` | 0 | 0.5 |
+
+### pxPerSec: 4 tests change it, 2 leave a non-normal value
+
+| later tests that start with it | suite # | test | found | left |
+|---|---|---|---|---|
+| 1 | 115 | `574: two overlapping captions BOTH show, stacked` | 99.2 | 159.2 |
+| 1 | 410 | `waveform: an aliasing song draws an even band end to end` | 99.2 | 1.98 |
+
+### duration: 38 tests change it, 23 leave a non-normal value
+
+| later tests that start with it | suite # | test | found | left |
+|---|---|---|---|---|
+| 226 | 238 | `undo / redo grey out when there is nothing behind or ahead` | 0 | 5 |
+| 11 | 465 | `Edit Shape: nudging stroke width or colour keeps their keyframes` | 5 | 0 |
+| 5 | 495 | `freehand: the committed stroke is the width you drew, not double it` | 3 | 5 |
+| 5 | 802 | `sharpening is dosed by how far the clip is actually stretched` | 3 | 4 |
+| 5 | 964 | `#625: keyframes land on the frame grid, so they cannot stack invisibly` | 3 | 5 |
+| 2 | 489 | `onion skin has exactly one door, and it is the layer menu` | 5 | 2 |
+
+### selected: 36 tests change it, 25 leave a non-normal value
+
+| later tests that start with it | suite # | test | found | left |
+|---|---|---|---|---|
+| 48 | 238 | `undo / redo grey out when there is nothing behind or ahead` | none | layer_2hj3rxg_pup0u |
+| 11 | 1277 | `presets can be searched, tagged, grouped and renamed (queue 331 clause` | none | layer_5u85xcp_22jlf |
+| 6 | 1126 | `the dead-effect hint never costs you the eye button` | layer_9giow0b_nqv55 | layer_9giow0b_nqv55,layer_9gxo |
+| 5 | 479 | `paste style: every tile draws the inspector's own category icon, not a` | layer_5tk5sia_isshr | layer_5tl5t9z_7sg9z |
+| 4 | 496 | `freehand: a drawing session is ONE layer holding every stroke` | layer_5ua5xjg_3wshc | layer_5ub5xkg_m1gcj |
+| 4 | 501 | `pulling back up cancels the faves gesture, and the cancel sticks` | layer_5ub5xkg_m1gcj | layer_5u85xcp_22jlf |
+
+### open: 0 tests change it, 0 leave a non-normal value
+
+
+### home: 11 tests change it, 5 leave a non-normal value
+
+| later tests that start with it | suite # | test | found | left |
+|---|---|---|---|---|
+| 213 | 1372 | `#648: a tap selects even when no click follows the pointerup` | False | True |
+| 129 | 734 | `921 S7 review: “Earlier versions…” opens from the project’s ⋯ on Home ` | False | True |
+| 45 | 242 | `Select all on a non-project tab ticks THAT tab, never the projects` | False | True |
+| 9 | 1596 | `617: element drafts take part in Select, and bulk delete actually remo` | False | True |
+| 0 | 1782 | `930 the Assistant and the Director never stack, and the API key is ent` | False | True |
+
+### tlStale: 22 tests change it, 11 leave a non-normal value
+
+| later tests that start with it | suite # | test | found | left |
+|---|---|---|---|---|
+| 3 | 1314 | `the skip arrows sit nearer the play pill than the undo/redo group` | 0 | -2.35 |
+| 2 | 258 | `deleting a clip releases its filmstrip bitmaps, and they can rebuild` | 0 | -5 |
+| 2 | 2011 | `962 the eye has a round pupil in an even white ring — in the box it sp` | 0 | 2 |
+| 1 | 487 | `desktop text editor: the Aa options do not cover the canvas you are ty` | 0 | 6.05 |
+| 0 | 274 | `dragging a rotated camera still moves the scene the way you drag` | 0 | -5 |
+| 0 | 275 | `a phone hold moves an UNSELECTED clip, a quick drag still does not` | -5 | 1.29 |
+
+### size: 8 tests change it, 6 leave a non-normal value
+
+| later tests that start with it | suite # | test | found | left |
+|---|---|---|---|---|
+| 370 | 791 | `the home + catches taps well outside itself, without getting bigger` | 640x640 | 320x240 |
+| 299 | 489 | `onion skin has exactly one door, and it is the layer menu` | 1080x1920 | 320x240 |
+| 9 | 477 | `timeline: a locked layer wears a red lock on its preview, an unlocked ` | 1080x1920 | 320x240 |
+| 1 | 487 | `desktop text editor: the Aa options do not cover the canvas you are ty` | 320x240 | 1080x1920 |
+| 1 | 789 | `a template does not carry its notes into a new project` | 320x240 | 640x640 |
+| 1 | 1180 | `perf: a held frame is capped in size, and a cropped clip still shows t` | 64x48 | 400x300 |
+
+### layers: 8 tests change it, 6 leave a non-normal value
+
+| later tests that start with it | suite # | test | found | left |
+|---|---|---|---|---|
+| 552 | 1734 | `869: a backup carries every project, puts them back, never deletes, an` | 4 | 1 |
+| 226 | 238 | `undo / redo grey out when there is nothing behind or ahead` | 0 | 1 |
+| 13 | 478 | `timeline: caption cues do not swallow the row — a touch drag over one ` | 2 | 1 |
+| 11 | 465 | `Edit Shape: nudging stroke width or colour keeps their keyframes` | 1 | 0 |
+| 1 | 789 | `a template does not carry its notes into a new project` | 4 | 0 |
+| 0 | 477 | `timeline: a locked layer wears a red lock on its preview, an unlocked ` | 0 | 2 |
+
+### scene: 8 tests change it, 8 leave a non-normal value
+
+| later tests that start with it | suite # | test | found | left |
+|---|---|---|---|---|
+| 1794 | 492 | `duplicate: the copy lands exactly on the original, animated paths incl` | 8 | 9 |
+| 5 | 479 | `paste style: every tile draws the inspector's own category icon, not a` | 3 | 4 |
+| 2 | 489 | `onion skin has exactly one door, and it is the layer menu` | 7 | 8 |
+| 1 | 487 | `desktop text editor: the Aa options do not cover the canvas you are ty` | 6 | 7 |
+| 0 | 477 | `timeline: a locked layer wears a red lock on its preview, an unlocked ` | 1 | 2 |
+| 0 | 478 | `timeline: caption cues do not swallow the row — a touch drag over one ` | 2 | 3 |
+Notes: `time` is the playhead in seconds; `pxPerSec` is zoom times lane width (99.2 at 380 px with zoom 1; 159.2 and 1.98 come from #115's caption test and #410's waveform test); `duration` is the project's; `tlStale` is `#tl-inner` against a fresh rebuild in seconds of project (0 = fresh); a count is the number of consecutive later tests that start with the value left, a lower bound. Whether those later tests were *affected* (read it) is the H41 victim question; the pairs there (`#254`, `#373`, `#276`, `#487` on `tlStale`; `#789` on size) are the ones I could show red.
