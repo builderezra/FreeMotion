@@ -29,8 +29,8 @@ saved. No further runs were made. Do not treat it as a full pre-check.
   real-finger tests ran**, and no release gate can see them on Linux.
 - 13: no Linux pictures baseline recorded (`tools/record-baselines.sh` has to be run on Linux).
 - 3: the scratch MP4 patch above.
-- 2: no AAC encoder in this Chromium.
-- 9 more fall in the same two reasons' tail; the full list is in the saved JSON, not reproduced here.
+- 2: no AAC encoder in this Chromium (slice 4; slices 2 and 3 each also report 2 NOT RUN, reason not looked at).
+- 9 others: reasons not tallied (88+13+3+2 = 106 of 115); the list is in the saved JSON, which is not in the repo.
 
 ## Reds that are container limits (Measured cause in the error text)
 - No H.264 / MP4 decode or encode: every `NO_VIDEO_CODEC`, `Could not load video`, `splash.mp4 did not decode`, `VideoEncoder ... closed codec`
