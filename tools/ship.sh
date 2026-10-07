@@ -696,7 +696,7 @@ fi
 # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
 # EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
 # that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
-if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tools/record-baselines.sh 2>/dev/null)" ]; then
+if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
   echo "→ the port's gates or the driver changed — proving them before shipping"
   if ! ./tools/test-port.sh; then
     echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."
@@ -920,6 +920,32 @@ font_report "$OUT" desktop   # a different font than the Mac's is said, never re
 echo "✅ $SUM  (${_suite_secs}s)  $(printf "%s" "$OUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"   # which browser ran (the PM review)
 suite_seconds_record "$_suite_secs"   # this machine's line; the other machines' lines are kept (tools/_testfloor.sh)
 
+# ── REAL FINGERS ON LINUX, ONE BROWSER EACH (7 Oct, #1097) ─────────────────────────────────────────────────────────────────
+# Off the Mac a full pass cannot give its ~90 real-finger tests the phone's media state: the first touch-emulation OFF takes the
+# page's mouse for good, so they say NOT RUN HERE, and while one does the feature gate refuses every shipped-source change
+# (the 6 Oct port audit) — no Simple-mode release could leave this laptop. tests/_touch_pass.py runs each of them alone in a
+# browser of its own, with real emulation (FM_TOUCH_PAGE=1), the way the Mac runs them: a red one refuses the release here like
+# any red test, a green one leaves the NOT RUN list (it RAN), anything else stays on it with its reason. Run when shipped source
+# changed — the phone pass's own test — because that is when the gate needs them; a tools-only release lists them as before.
+_TOUCH_SRC="$(git diff --cached --name-only; git diff --name-only)"
+touch_pass() {   # $1 = width, $2 = the pass's saved driver output, $3 = a name for its files; sets NOTRUN_PASS
+  NOTRUN_PASS="$(notrun_list "$(cat "$2")")"
+  [ "$(fm_os)" = Darwin ] && return 0
+  grep -q "$(printf '\t')needs real touch emulation" <<<"$NOTRUN_PASS" || return 0
+  grep -qE '^(styles\.css|index\.html|js/)' <<<"$_TOUCH_SRC" || { echo "· finger tests stay NOT RUN at ${1}px — no shipped source changed"; return 0; }
+  ship_phase "touch-$3"
+  echo "→ the finger tests the ${1}px pass could not run, each in a browser of its own…"
+  python3 tests/_touch_pass.py --port 8777 --width "$1" --from "$2" --out ".claude/ship/touch-$3.json" --remaining ".claude/ship/notrun-$3.tsv"
+  local rc=$?
+  if [ "$rc" != 0 ]; then
+    echo "❌ A REAL-FINGER TEST IS RED at ${1}px (run alone, in its own browser) — not committing, not pushing. The red ones are above."
+    return 1
+  fi
+  NOTRUN_PASS="$(cat ".claude/ship/notrun-$3.tsv")"
+}
+touch_pass 1280 .claude/ship/suite-desktop.out desktop || { _WHY="a real-finger test was red at 1280px"; exit 1; }
+NOTRUN_ALL="$NOTRUN_PASS"
+
 # ── THE PHONE PASS (queue 353 clause 3, added 22 Aug) ────────────────────────────────────────────
 # "make sure everything is quality tested as good as possible" — and this app is MOBILE-FIRST, while
 # every gate here had only ever run the suite at 1280px. `tests/_cdp.py --width 380` has been in the
@@ -964,7 +990,8 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
   fi
   test_floor_check "$POUT" || { echo "   Not committing, not pushing."; exit 1; }
   notrun_report "$POUT" phone || { _WHY="a test is NOT RUN HERE on the Mac"; exit 1; }
-  NOTRUN_ALL="$(printf '%s\n%s\n' "$NOTRUN_ALL" "$(notrun_list "$POUT")" | sed '/^$/d' | sort -u)"
+  touch_pass 380 .claude/ship/suite-phone.out phone || { _WHY="a real-finger test was red at 380px"; exit 1; }
+  NOTRUN_ALL="$(printf '%s\n%s\n' "$NOTRUN_ALL" "$NOTRUN_PASS" | sed '/^$/d' | sort -u)"
   font_report "$POUT" phone
   echo "✅ phone $PSUM  $(printf "%s" "$POUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"
 else
