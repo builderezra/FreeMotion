@@ -1,0 +1,74 @@
+{
+ "photoSize": "4000x3000",
+ "photo": {
+  "w": 360,
+  "h": 270,
+  "oldMs": [
+   250,
+   347
+  ],
+  "newMs": [
+   18,
+   6
+  ],
+  "diff": {
+   "mean": 1.96,
+   "max": 55
+  }
+ },
+ "videoDur": 0.105117,
+ "projAfter": "1280x720",
+ "videoTry": 3,
+ "videoReady": "4/0.105117",
+ "videoSize": "1280x720",
+ "videoDrawn": true,
+ "video": {
+  "w": 360,
+  "h": 203,
+  "oldMs": [
+   51,
+   57
+  ],
+  "newMs": [
+   2,
+   3
+  ],
+  "diff": {
+   "mean": 1.44,
+   "max": 93
+  }
+ },
+ "textKeys": "id,type,name,visible,locked,blendMode,start,duration,trimStart,reversed,effects,clipColor,volume,fadeIn,fadeOut,speed,frameBlend,wiggle,parent,parentMode,parentWeight,transform,text,fontSize,color,fontFamily,align,bold,italic,letterSpacing,lineHeight,wrapWidth,stroke,textAnim,fill",
+ "text": {
+  "w": 203,
+  "h": 360,
+  "oldMs": [
+   75,
+   103
+  ],
+  "newMs": [
+   5,
+   3
+  ],
+  "diff": {
+   "mean": 0.47,
+   "max": 139
+  }
+ },
+ "glow10": {
+  "w": 203,
+  "h": 360,
+  "oldMs": [
+   11883,
+   11626
+  ],
+  "newMs": [
+   142,
+   139
+  ],
+  "diff": {
+   "mean": 3.21,
+   "max": 75
+  }
+ }
+}
