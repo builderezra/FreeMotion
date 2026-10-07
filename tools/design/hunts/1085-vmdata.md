@@ -6,14 +6,14 @@ Against `origin/main` b46b47d3 (v17.23). Nothing in the app, the tests or the to
 
 **Question:** does one renderer of the test page reach the 8 GiB VmData limit that Linux Chrome enforces, and which tests are responsible?
 
-**Answer, measured:** in one continuous run of the whole suite the app's renderer went from **915 MB to a peak of 6125 MB VmData** (the floor after a forced garbage collection went 826 to 5782 MB, and it was still climbing at the end). **That is 2067 MiB (25%) under 8 GiB (8192 MiB; the sampler reports kB divided by 1024).** Resident memory (RSS) peaked at only **1627 MB** (floor 266 to 670 MB), so the pressure is address space the allocator keeps, not memory in use. Five steps account for 3411 of the 5210 MB of growth, and two of them are tests that really allocate (Reverb, 1080x1920 kernel plates) while the biggest is a threshold a warm process crosses.
+**Answer, measured:** in one continuous run of the whole suite the app's renderer went from **915 MB to a peak of 6125 MB VmData** (the floor after a forced garbage collection went 826 to 5782 MB, and it was still climbing at the end). **That is 2067 MiB (25%) under 8 GiB (8192 MiB; the sampler reports kB divided by 1024).** Resident memory (RSS) peaked at only **1627 MB** (floor 266 to 670 MB), so the pressure is address space the allocator keeps, not memory in use. Five steps account for 3411 of the 4956 MB growth of the post-GC floor (826 to 5782; 5210 is peak minus start and does not compare like for like). Two of them are tests that look like real allocators (Reverb, kernel plates); the biggest, Squish, did not reproduce cold, which suggests (Guess, see the trust note below) a threshold a warm process crosses.
 
 This corrects my earlier H1 ("could not reproduce 8.7 GB"), which sampled RSS and a partial run. See the corrections block in `hunt/1085-suite-memory`.
 
 ## What was run (Verified)
 
 - **Pass F, the continuous run:** every test in suite order in one page, 2288 test starts, 3312 s, with the 0.25 s sampler reading `VmData`, `VmRSS` and `VmSize` from `/proc/<pid>/status` for every renderer, and a forced `HeapProfiler.collectGarbage` every 25 test transitions (53 samples). Test starts are exact: the driver installs a setter on `window.__fmLastTest`, which `tests/tests.js:59576` writes at every test start, and logs the epoch time of each write.
-- **Three tests were patched to return immediately in a scratch copy of the tests** (`:97997`, `:98071`, `:98167`). They run a real MP4 export through WebCodecs and hang the page in my container for 10 minutes. On a machine with working H.264 they will run and add some memory I could not measure.
+- **Three tests were patched to return immediately in a scratch copy of the tests** (`:97997`, `:98071`, `:98167` on v17.23). They run a real MP4 export through WebCodecs and hang the page in my container for 10 minutes. On a machine with working H.264 they will run and add some memory I could not measure.
 - The sampler follows the renderer with the largest VmData. The collab tests also start frames on `h.`/`a.`/`b.localhost`; those get their own renderers, which sat at about 590 MB each and never grew (each has its own limit).
 - Supporting runs: pass A (tests 1 to 1926) and pass C (1928 to 2287, started in a fresh Chrome), and cold isolation slices of single tests.
 
@@ -27,7 +27,7 @@ VmData of the app renderer after a forced GC, with the tests that ran between th
 | 90 to 125 | 953 to 1303 | 297 to 314 | +350 | `:7341` to `:11475` |
 | 178 to 220 | 1472 to 2841 | 354 to 396 | **+1369** | `:22755` to `:26665`, the Squish sweep at `:25574` |
 | 950 to 976 | 3275 to 4222 | 438 to 571 | **+947** | `:46598` to `:49896`, Reverb at `:47436` |
-| 1623 to 1658 | 4687 to 5079 | 539 to 603 | +392 | `:80547` to `:83259`, kernel plates (`:82443`, `:82649`, `:83769`) |
+| 1623 to 1658 | 4687 to 5079 | 539 to 603 | +392 | `:80547` to `:83259`, kernel plates (`:82443`, `:82649`; `:83717` and `:83769` run after this window ends and are the rows 4 below) |
 | 3161 to 3242 | 5392 to 5745 | 667 | +353 | `:113313` to `:116782`, the 482 panel-fit tests |
 | 3291 | 5782 | 670 | | last forced GC |
 
@@ -47,7 +47,7 @@ Read from `/proc/<pid>/maps` of the renderer from the first, stalled run: 4319 M
 | 20 x 1080x1920 `Uint8ClampedArray`, dropped | **+128 MB kept** | -119 MB |
 | 20 x 1080x1920 canvases, dropped | +0 MB | +0 MB |
 
-The WebGL line matters: I expected software GL to be the big one and it is not (**refuted**). Audio rendering and big typed arrays are.
+The WebGL line matters: I expected software GL to be the big one and it is not a VmData driver **under headless software GL with `--no-sandbox`; untested on a GPU** (**refuted here, for that setup**). Audio rendering and big typed arrays are.
 
 ## The 20 tests that keep the most VmData (from pass F)
 
@@ -58,9 +58,9 @@ The WebGL line matters: I expected software GL to be the big one and it is not (
 | 1 | 1294 | 1568 | `tests/tests.js:25574` | effects: Squish is continuous — a layer swept across a wall one pixel at a time neve | 0 to +15 (9-test Squish group) | 20 wall/inset sweeps (`:25579-25596`) each render the layer one pixel at a time; every step is `sq480()` (`:25432-25440`), a 480x480 render plus `getImageData(0,0,480,480)`, 0.92 MB of ImageData per step, thousands of steps. Same churn pattern as my 20 x 8.3 MB ImageData micro-test (+128 MB VmData kept while RSS fell back). Cold it does NOT reproduce, so this one is a threshold that a warm process crosses. |
 | 2 | 914 | 890 | `tests/tests.js:47436` | audio: a keyframed Reverb sweeps the room, and only builds one where the move actual | +268 | Renders animated Reverb through `OfflineAudioContext` (4 to 12 s at 48 kHz, `:47440-47470`); an animated room builds up to 6 rooms (`js/audio-fx.js:640-662`, `impulse()` buffers cached in `_irCache`, `:126-138`). Micro-test: about 61-68 MB VmData per OfflineAudioContext render, kept. |
 | 3 | 138 | 304 | `tests/tests.js:119625` | 482 6.5 to 6.7 the new Lens Flare, Streaks and Glow Scan rows fit the effect panel a | +30 (kept +14) | 482 panel-fit test: opens the effect panel at 390 and 1280 px (`atPhoneWidth` `:45`, `atWideWidth` `:70`). Cold it adds only about 30 MB. |
-| 4 | 108 | 1784 | `tests/tests.js:83769` | 692: every crop-admitted bounded kernel renders identically with the cropped readbac | +218 then falls back | Crop-admitted kernel sweep: renders every bounded kernel cropped and whole on 1080x1920 plates. Reproduces cold (+218 peak). |
-| 5 | 105 | 105 | `tests/tests.js:82443` | effects: Tilt Shift and Matte Choker bound to the layer without changing it | +105 | Builds dirty `mk()` fixtures as `Uint8ClampedArray(W*H*4)` and runs Tilt Shift and Matte Choker on them. Reproduces cold (+105). |
-| 6 | 101 | 90 | `tests/tests.js:82649` | effects: every bounded kernel is safe on the box the RENDERER actually computes | +10 | Bounded-kernel safety sweep (loops of 80 and 90 renders). Cold +10: the rest is what the process already held. |
+| 4 | 108 | 1784 | `tests/tests.js:83769` | 692: every crop-admitted bounded kernel renders identically with the cropped readbac | +218 then falls back | Crop-admitted kernel sweep on a **640x520** comp (`P`, `:83774`): for every crop-admitted kernel, 2 shots (cropped and whole) x 5 positions x 2 param sets (defaults and max), each shot with a full `getImageData(0, 0, 640, 520)` (the `shot` helper). Reproduces cold (+218 peak). The 1080x1920 sweep is the **neighbouring** test `692: every crop-admitted kernel draws the same picture cropped…` (`:83717`: 30 or more kernels x `mk(450, 900, 180, 150, 1080, 1920)`, `:83736`), which is not in this table. |
+| 5 | 105 | 105 | `tests/tests.js:82443` | effects: Tilt Shift and Matte Choker bound to the layer without changing it | +105 | Builds dirty `mk()` fixtures as `Uint8ClampedArray(W*H*4)` at **200x260** and runs Tilt Shift and Matte Choker on them. Reproduces cold (+105). |
+| 6 | 101 | 90 | `tests/tests.js:82649` | effects: every bounded kernel is safe on the box the RENDERER actually computes | +10 | Bounded-kernel safety sweep on **420x320** fixtures (`:82676`) plus one 1080x1920 array in the fxBounds timing at its end (`:82773-82777`); loops of 80 and 90 renders. Cold +10: the rest is what the process already held. |
 | 7 | 85 | 85 | `tests/tests.js:8432` | 539: a layer squashed into a CORNER actually flattens, and one with room to bulge is | 0 | Squash-in-corner render sweep. Does not reproduce cold: a trigger, not a cause. |
 | 8 | 63 | 180 | `tests/tests.js:115176` | 482 2.5 Speed Lines - Clear zone shape is greyed out while Clear zone is 0, where it | +18 | 482 panel-fit test, same family as 119625. Cold +18. |
 | 9 | 61 | 77 | `tests/tests.js:61605` | the Add-layer + is centred in its circle, and is not a font glyph | 0 | Add-layer + glyph test. Cold 0. |
@@ -76,7 +76,12 @@ The WebGL line matters: I expected software GL to be the big one and it is not (
 | 19 | 22 | 40 | `tests/tests.js:114772` | 482 2.1 Wiggle - Pattern gives every value its own motion: Patterns 25 apart do not  | not run alone | Not read. A small step: treat the attribution as plus or minus one test. |
 | 20 | 16 | 67 | `tests/tests.js:117278` | 482 5.2 Highlights & Shadows - Local radius keeps pure black black under +50 Shadows | not run alone | Not read. A small step: treat the attribution as plus or minus one test. |
 
-**How far to trust the ranking.** A step is attributed to the test that was running when VmData jumped, which is exact to the test, but a process that is already near a threshold will show the jump in whichever test is running. The cold column is the check: **rows with cold 0 are triggers, not causes** (the Squish sweep, squash-in-corner, clipboard paste). The real allocators are the Reverb tests, the 1080x1920 kernel-plate tests, and the OfflineAudioContext family generally. Below the first five rows the steps are 60 MB or less and the order within the table is not reliable.
+**How far to trust the ranking.** A step is attributed to the test that was running when VmData jumped, which is exact to the test, but a process that is already near a threshold will show the jump in whichever test is running. The cold column is a hint, not a proof: **Guess: rows with cold 0 (the Squish sweep, squash-in-corner, clipboard paste) are triggers and not causes.** One cold run each does not separate a trigger from a heavy churner whose cost only shows warm. **Guess: the allocators are the Reverb tests, the kernel-plate tests, and the OfflineAudioContext family generally** (Reverb reproduces cold at +268 and the micro-test above agrees, which is why I rate that one higher). Below the first five rows the steps are 60 MB or less and the order within the table is not reliable.
+
+## The Mac's #1095 suspect: the queue 333 effects-browser sweep (v17.23 `:63595`) (Measured, pass F)
+`every tile in the browser picks instead of applying, and Done adds what you picked (queue 333)` **passed in pass F** (it is not in the failure list) and was the slowest test of the run, **317 s** (budget 420 s). VmData of the app renderer across it:
+just before 4330 MB (last forced-GC floor 4327); during 4327 to 4626 MB; first forced-GC floor after it 4505 MB. So the sweep **kept about 178 MB of floor** and peaked about 300 MB above its start in this container; RSS peaked at 812 MB (it was 482 before).
+That is nowhere near the Mac's 2.2 GB. Two cautions: (1) my canvas micro-test above **dropped** its 1080x1920 canvases (+0 MB), so it says only that unreferenced canvases are freed; it cannot speak to "detached but retained", which is what #1095 describes. H19 (`hunt/1095-fx-browser-leak`) measured the retained case directly: the compositor's scratch pools keep ~100 plate-sized canvases alive after the browser closes. (2) VmData is address space; the live-canvas count is the better instrument for this suspect.
 
 ## What this means for Ezra's Linux laptop (Guess, and said as one)
 
@@ -85,7 +90,7 @@ The WebGL line matters: I expected software GL to be the big one and it is not (
 
 ## Options, cheapest first (not done; these are builder's calls)
 
-1. **Split the run into two Chromes** at a seam such as `?upto=`/`?after=` around `:47436`. Each renderer would then see about half the staircase (about 4.2 GB at the Reverb step, then a fresh 0.8 GB start). The runner already supports slices (`tests/tests.js:59551-59558`). Cost: a tool change and one more Chrome launch.
+1. **Split the run into two Chromes** at a seam such as `?upto=`/`?after=` around `:47436`. A seam there moves the queue 333 sweep (`:63595`) into the second Chrome, and that test's own comment says it runs for minutes on a cold thumbnail cache (budget 420 s), so the second Chrome starts with that cost cold, not warmed by earlier tests. Each renderer would then see about half the staircase (about 4.2 GB at the Reverb step, then a fresh 0.8 GB start). The runner already supports slices (`tests/tests.js:59551-59558`). Cost: a tool change and one more Chrome launch.
 2. **Make the audio tests cheaper in address space** (shorter renders or one shared `OfflineAudioContext` factory that drops its reference). I have NOT shown this weakens nothing: the Reverb tail probe needs a long enough render to see the decay, so check that with a mutation before changing it.
 3. **Add the sampler to the runner** (read `/proc/self` is not possible from the page, so the driver would do it): print VmData at every forced-GC point and fail the run past 7 GiB, so a growing suite is caught before it is refused. This is a guard, not a fix.
 
