@@ -1,0 +1,143 @@
+[
+ {
+  "victim": "swipe",
+  "polluter": 276,
+  "red": false,
+  "msg": "",
+  "stateLeaks": [
+   [
+    "isolate cycles three ways and never touches the sc",
+    "tlStale",
+    0,
+    5
+   ],
+   [
+    "a vertical swipe that starts ON a clip scrolls the",
+    "tlStale",
+    5,
+    0
+   ]
+  ]
+ },
+ {
+  "victim": "swipe",
+  "polluter": 117,
+  "red": false,
+  "msg": "",
+  "stateLeaks": [
+   [
+    "572: the effects BROWSER warns before you spend th",
+    "home",
+    true,
+    false
+   ]
+  ]
+ },
+ {
+  "victim": "swipe",
+  "polluter": 113,
+  "red": true,
+  "msg": "FAILa vertical swipe that starts ON a clip scrolls the timeline \u2014 a horizontal drag on a clip no longer scrubs \u2014 the axis lock ate the primary gesture",
+  "stateLeaks": [
+   [
+    "576: the text editor options open BELOW the box sh",
+    "home",
+    true,
+    false
+   ]
+  ]
+ },
+ {
+  "victim": "tlw",
+  "polluter": 254,
+  "red": true,
+  "msg": "FAILthe timeline sizes its scroll range from itself, not from the window \u2014 the scroll range pads by 1096px where the timeline is only 600px wide \u2014 a 496px difference",
+  "stateLeaks": [
+   [
+    "editor key shortcuts cannot reach the project unde",
+    "time",
+    0,
+    1
+   ],
+   [
+    "editor key shortcuts cannot reach the project unde",
+    "tlStale",
+    0,
+    5
+   ]
+  ]
+ },
+ {
+  "victim": "tlw",
+  "polluter": 373,
+  "red": true,
+  "msg": "FAILthe timeline sizes its scroll range from itself, not from the window \u2014 the scroll range pads by 1096px where the timeline is only 600px wide \u2014 a 496px difference",
+  "stateLeaks": [
+   [
+    "easing editor: the whole panel fits, and every rai",
+    "time",
+    0,
+    2
+   ],
+   [
+    "easing editor: the whole panel fits, and every rai",
+    "tlStale",
+    0,
+    5
+   ]
+  ]
+ },
+ {
+  "victim": "tlw",
+  "polluter": 276,
+  "red": true,
+  "msg": "FAILthe timeline sizes its scroll range from itself, not from the window \u2014 the scroll range pads by 1096px where the timeline is only 600px wide \u2014 a 496px difference",
+  "stateLeaks": [
+   [
+    "isolate cycles three ways and never touches the sc",
+    "tlStale",
+    0,
+    5
+   ]
+  ]
+ },
+ {
+  "victim": "tlw",
+  "polluter": 487,
+  "red": true,
+  "msg": "FAILthe timeline sizes its scroll range from itself, not from the window \u2014 the scroll range pads by 1200px where the timeline is only 600px wide \u2014 a 600px difference",
+  "stateLeaks": [
+   [
+    "desktop text editor: the Aa options do not cover t",
+    "scene",
+    1,
+    2
+   ],
+   [
+    "desktop text editor: the Aa options do not cover t",
+    "duration",
+    0,
+    5
+   ],
+   [
+    "desktop text editor: the Aa options do not cover t",
+    "selected",
+    "",
+    "layer_1wf_q2wwz"
+   ],
+   [
+    "desktop text editor: the Aa options do not cover t",
+    "tlStale",
+    0,
+    6.05
+   ]
+  ]
+ },
+ {
+  "victim": "presets",
+  "polluter": 789,
+  "red": true,
+  "msg": "FAILthe Presets card renders a live tile per applicable preset, and none for a broken one \u2014 the Presets card rendered no rows at all",
+  "stateLeaks": []
+ }
+]

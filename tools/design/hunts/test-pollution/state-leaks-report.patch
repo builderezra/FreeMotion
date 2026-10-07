@@ -1,0 +1,127 @@
+diff --git a/tests/_cdp.py b/tests/_cdp.py
+index be97ecb8..65ed62d7 100644
+--- a/tests/_cdp.py
++++ b/tests/_cdp.py
+@@ -720,6 +720,13 @@ def main():
+             data["sceneLeaks"] = json.loads(leaks or "[]")
+         except Exception:
+             pass
++        # H41: what each test left in the AMBIENT state (playhead, zoom, duration, selection, open sheets, Home, #tl-inner); report only
++        try:
++            st = cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
++                          "return JSON.stringify((w&&w.__fmStateLeaks)||[]);})()")
++            data["stateLeaks"] = json.loads(st or "[]")
++        except Exception:
++            pass
+         try:
+             data["slowest"] = cdp.eval("(function(){var f=document.querySelector('iframe');"
+                                        "return (f&&f.contentWindow&&f.contentWindow.__fmSlow)||[];})()") or []
+@@ -771,7 +778,7 @@ def main():
+                       "not the Mac's or his iPhone's" % (font.get("resolved"), font.get("width") or 0, font["mac"].get("resolved"), font["mac"].get("width")))
+         else:
+             out = {"ok": green, "summary": data["sum"], "failures": data["fails"], "notRun": not_run, "browser": _browser(),
+-                   "fontParity": font, "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
++                   "fontParity": font, "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", []), "stateLeaks": data.get("stateLeaks", [])}
+             if a.names:
+                 out["ran"] = ran          # null when the runner page published no list — a reader must then say so, not guess
+             print(json.dumps(out, indent=1, ensure_ascii=False))
+diff --git a/tests/tests.js b/tests/tests.js
+index 1900efa6..61f567bb 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -59863,6 +59863,30 @@
+       catch (e) { BASELINES = {}; }
+     }
+     var undoFakes = applyFakes();   // ?fmfake= (a proof run only) — put back after the last test
++    /* What a test can leave behind that is not a layer (H41). Everything here is READ, never set. `tlStale` is the width of #tl-inner
++       measured against what a fresh rebuild would give (timeline.js applyInnerWidth: scrollport + duration x pxPerSec), in seconds of
++       project: 0 = sized for this project, anything else = sized for another one. */
++    var _sceneIds = new WeakMap(), _sceneN = 0;
++    function stateNow() {
++      var s = {}, sc = FM.scene;
++      if (sc && !_sceneIds.has(sc)) _sceneIds.set(sc, ++_sceneN);
++      s.scene = sc ? _sceneIds.get(sc) : 0;
++      s.time = +(+FM.time).toFixed(3);
++      s.playing = !!FM.playing;
++      s.pxPerSec = FM._tlPxPerSec ? +FM._tlPxPerSec().toFixed(2) : null;   // zoom x the lane width
++      s.duration = sc && sc.project ? sc.project.duration : null;
++      s.size = sc && sc.project ? sc.project.width + 'x' + sc.project.height : null;   // a test that swaps the project size leaves it for the next
++      s.layers = sc && sc.layers ? sc.layers.length : null;                                // count, not ids: sceneLeaks names what was ADDED; this also catches what was taken away
++      s.selected = sc ? [sc.selectedId].concat(sc.selectedIds || []).filter(function (v, i, a) { return v && a.indexOf(v) === i; }).join(',') : '';
++      var ui = [], shown = function (e) { if (!e) return false; var r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !e.classList.contains('hidden') && getComputedStyle(e).visibility !== 'hidden'; };
++      ['add-sheet', 'fx-browser', 'afx-browser', 'ctx-menu', 'export-overlay', 'export-ready', 'cv-dialog', 'fm-ask'].forEach(function (id) { if (shown(document.getElementById(id))) ui.push('#' + id); });
++      var po = document.querySelector('.panel.open'); if (shown(po)) ui.push('.panel.open');
++      s.open = ui.join(' ');
++      s.home = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
++      var ti = document.getElementById('tl-inner'), tl = document.getElementById('timeline'), w = ti ? parseFloat(ti.style.width) : NaN, pps = FM._tlPxPerSec ? FM._tlPxPerSec() : 0;
++      s.tlStale = (isFinite(w) && pps > 0 && tl && s.duration != null) ? +(((w - tl.clientWidth) / pps) - s.duration).toFixed(2) : null;
++      return s;
++    }
+     for (var i = 0; i < LIST.length; i++) {
+       var t = LIST[i], ok = true, err = null, notRun = '';
+       window.__fmCurPinned = !!t.pinned;   // pinned() refuses in a test that did not declare { pinned: true } (see there)
+@@ -59888,6 +59912,7 @@
+        * driver prints the list after each run (sceneLeaks); nothing turns red for it until the list is understood. */
+       var _lk0 = null;
+       try { _lk0 = { scene: FM.scene, ids: (FM.scene && FM.scene.layers || []).map(function (l) { return l.id; }), pv: FM._fxPreview || null, iso: FM.isolate || null }; } catch (e) {}
++      var _st0 = null; try { _st0 = stateNow(); } catch (e) {}
+       var _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+       /* A HUNG TEST IS A NAMED FAILURE, NOT A SILENT STALL (2 Sep). A throw inside a callback a test does not
+        * await — a timer, a rAF, a dropped promise — used to leave its outer promise pending for ever; the
+@@ -59943,6 +59968,20 @@
+           }
+         }
+       } catch (e) {}
++      /* …AND THE AMBIENT STATE THE SCENE LIST CANNOT SEE (H41). sceneLeaks above lists layers, a sheet preview and an isolate.
++       * Tonight's three refused ships were none of those: FM.time left past the clips, #tl-inner left sized for an old scene,
++       * shapes left behind — each inherited by a later test that went red for it, each ~2 h to find. Same rule as above:
++       * REPORT ONLY, charged to the test that left it, never reset (some tests carry state over on purpose). The driver prints it
++       * as stateLeaks. A field is listed when the value after the test differs from the value before it. */
++      try {
++        var _st1 = stateNow();
++        if (_st0) {
++          var Ls = window.__fmStateLeaks = window.__fmStateLeaks || [];
++          Object.keys(_st1).forEach(function (k) {
++            if (JSON.stringify(_st0[k]) !== JSON.stringify(_st1[k]) && Ls.length < 600) Ls.push({ test: t.name.slice(0, 120), field: k, was: _st0[k], now: _st1[k] });
++          });
++        }
++      } catch (e) {}
+       results.push({ name: t.name, item: t.item, pending: t.pending, ok: ok, error: err, notRun: notRun });   // a NOT RUN that leaked state above is a FAIL, not a NOT RUN
+     }
+     undoFakes();
+@@ -120175,4 +120214,35 @@
+   });
+ 
+ 
++
++  /* H41: THE RUNNER NAMES THE TEST THAT LEAVES THE PLAYHEAD, THE DURATION, THE SELECTION, A SHEET OR HOME DIFFERENT (report only).
++     Two tests in a row. The first is a deliberate polluter: it moves the playhead past where it found it and opens nothing else.
++     The second asserts the runner charged exactly that to the first, by field, with the value it left, and puts the playhead back so
++     nothing after it inherits it. The polluter is listed in stateLeaks by design; that entry is the proof. */
++  test('H41 fixture: moves the playhead and leaves it there (deliberate; the next test checks the runner said so)', { item: 'H41' }, function () {
++    window.__fmH41Was = FM.time;
++    window.__fmH41Dur = FM.scene.project.duration;
++    FM.scene.project.duration = (FM.scene.project.duration || 0) + 2;   // the timeline is NOT rebuilt, so #tl-inner stays sized for the old duration
++    FM.time = (FM.time || 0) + 3.25;   // assigned, not setTime: setTime clamps to the project's duration, which is 0 on a fresh suite
++  });
++  test('H41 the runner charges a playhead left moved to the test that left it, with the value, and nothing is reset', { item: 'H41' }, function () {
++    const was = window.__fmH41Was; delete window.__fmH41Was;
++    const dur0 = window.__fmH41Dur; delete window.__fmH41Dur;
++    const left = FM.time;
++    try {
++      if (typeof was !== 'number') throw new Error('the fixture before this one did not run (filter with ?only=H41 to run both)');
++      if (Math.abs(left - (was + 3.25)) > 1e-6) throw new Error('the runner RESET the playhead between tests: it is ' + left + ', the fixture left ' + (was + 3.25) + '. This hook is report-only; some tests carry state over on purpose.');
++      const L = (window.__fmStateLeaks || []).filter(l => /^H41 fixture/.test(l.test) && l.field === 'time');
++      if (L.length !== 1) throw new Error('expected exactly one stateLeaks entry for the fixture\'s playhead, found ' + L.length + ' (' + JSON.stringify((window.__fmStateLeaks || []).slice(-4)) + ')');
++      if (Math.abs(L[0].was - was) > 1e-3 || Math.abs(L[0].now - (was + 3.25)) > 1e-3) throw new Error('the entry says ' + L[0].was + ' -> ' + L[0].now + ', the fixture moved it ' + was + ' -> ' + (was + 3.25));
++      const Ld = (window.__fmStateLeaks || []).filter(l => /^H41 fixture/.test(l.test) && l.field === 'duration');
++      if (Ld.length !== 1 || Ld[0].was !== dur0 || Ld[0].now !== dur0 + 2) throw new Error('expected one duration entry ' + dur0 + ' -> ' + (dur0 + 2) + ', got ' + JSON.stringify(Ld));
++      const Lt = (window.__fmStateLeaks || []).filter(l => /^H41 fixture/.test(l.test) && l.field === 'tlStale');
++      if (Lt.length !== 1 || !(Math.abs(Lt[0].now + 2) < 0.05)) throw new Error('#tl-inner was left sized for a project 2 s shorter than this one; expected one tlStale entry of about -2, got ' + JSON.stringify(Lt));
++      /* CONTROL: a test that leaves everything as it found it adds no entry — the fixture above is the only one for time, so a hook
++         that listed every test would have failed the length check; this checks the other half, the field filter. */
++      if ((window.__fmStateLeaks || []).some(l => /^H41 the runner charges/.test(l.test))) throw new Error('this test has not finished yet, so the runner cannot have listed it');
++    } finally { FM.time = typeof was === 'number' ? was : 0; if (typeof dur0 === 'number') FM.scene.project.duration = dur0; window.__fmStateLeaks = (window.__fmStateLeaks || []).filter(l => !/^H41 fixture/.test(l.test)); }
++  });
++
+ })();

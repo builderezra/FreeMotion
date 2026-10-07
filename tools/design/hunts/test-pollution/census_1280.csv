@@ -1,0 +1,221 @@
+field,later_tests_that_inherit_it,suite_index,test,found,left
+pps,1872,412,"waveform: a trimmed clip draws the part it PLAYS, not the whole song",1.98,99.2
+scene,1792,492,"duplicate: the copy lands exactly on the original, animated paths included",8,9
+proj,1102,1182,timeline: an auto-scrolling clip drag does not hold the preview in low-resolution motion mode,400x300,64x48
+tlstale,1009,1002,dragging a layer NAME keeps scrolling when a rebuild lands mid-gesture (queue 815),4.84,0
+projDur,998,1286,the phone move/extend buttons are not the same drawing (queue 338),4,3
+sel,995,1289,"an element opens for editing, and inserting is still available (queue 342)","layer_5ua52hq_4j635,layer_5ua52hq_4j635",
+layers,943,791,"the home + catches taps well outside itself, without getting bigger",0,4
+layers,550,1734,"869: a backup carries every project, puts them back, never deletes, and NAMES anything it could not include",4,1
+time,517,465,Edit Shape: nudging stroke width or colour keeps their keyframes,2,0
+ui,508,864,Shift+Home / Shift+End fling the Add marker to the top and bottom (queue 294 clause 12),home,
+body,501,1783,"931 swiping the New effects strip pauses its auto-scroll well past the old 3 s, and it resumes from where he left it — real touch and a real wheel",white-chrome home-open,white-chrome
+ui,501,1783,"931 swiping the New effects strip pauses its auto-scroll well past the old 3 s, and it resumes from where he left it — real touch and a real wheel",home,
+ui,446,288,drawing: opening a project ends any sketch in progress,home,
+proj,371,791,"the home + catches taps well outside itself, without getting bigger",640x640,320x240
+body,352,382,phone 390x844: the ⋯ removal costs the phone nothing — every action still has a control,white-chrome cv-up cv-anchored,white-chrome
+body,347,1025,915.2 a refused pack write keeps the element draft and never reports saved,white-chrome hm-selecting,white-chrome
+proj,300,489,"onion skin has exactly one door, and it is the layer menu",1080x1920,320x240
+layers,297,492,"duplicate: the copy lands exactly on the original, animated paths included",1,4
+time,297,1949,"690 with the phone storage full, a tap on the version label asks first — Stay keeps his unsaved work, Update anyway goes on",2.1,0
+pps,293,117,"572: the effects BROWSER warns before you spend the pick, not after",159.2,99.2
+projDur,288,501,"pulling back up cancels the faves gesture, and the cancel sticks",5,3
+sel,288,506,a vertical swipe that starts ON a clip scrolls the timeline,"layer_5ua52hq_4j635,layer_5ua52hq_4j635",
+sel,260,843,a layer thumbnail never spills out of the track head on a phone (queue 211),layer_97kkbv0_6uji9,
+tlstale,255,489,"onion skin has exactly one door, and it is the layer menu",6.05,0
+tlstale,240,745,"921 S8 a refused delete or move puts the element back where it was on the device that tried — an effect on a held layer, and a reply undone just as it",-3.16,0
+layers,227,238,undo / redo grey out when there is nothing behind or ahead,0,1
+projDur,227,238,undo / redo grey out when there is nothing behind or ahead,0,5
+ui,214,1372,#648: a tap selects even when no click follows the pointerup,,home
+tlstale,213,2071,"973 on PC the selection corner lines are the accent blue, not white",2,0
+tlstale,211,276,isolate cycles three ways and never touches the scene,1.31,0
+time,196,1338,"pressing play starts the audio report fresh, so it describes one play and not the session (queue 849)",3,0
+sel,191,287,"drawing: a zoomed canvas survives picking up the pencil, and the overlay tracks it","layer_2hj3ana_nxlv6,layer_2hj3ana_nxlv6",
+ui,176,1606,602: the Aa sheet does not cover the canvas on a phone,home,
+body,159,864,Shift+Home / Shift+End fling the Add marker to the top and bottom (queue 294 clause 12),white-chrome home-open,white-chrome
+projDur,157,1126,the dead-effect hint never costs you the eye button,10000,3
+projDur,150,970,#617: a failed element edit must not strand a draft workspace,5,3
+body,144,1606,602: the Aa sheet does not cover the canvas on a phone,white-chrome home-open,white-chrome
+sel,141,1133,effect walker: copying a keyframe from inside a filter pastes back into the same slot,"layer_9gimxhx_5jwf8,layer_9gxmxtr_tb4ty",
+ui,130,734,921 S7 review: “Earlier versions…” opens from the project’s ⋯ on Home with no session — nothing is armed and no save point is written — and a restore ,,home
+ui,129,113,576: the text editor options open BELOW the box showing what you typed,home,
+body,125,117,"572: the effects BROWSER warns before you spend the pick, not after",white-chrome text-editing,white-chrome
+time,115,258,"deleting a clip releases its filmstrip bitmaps, and they can rebuild",1,0
+time,111,1572,"753: snapping a trim onto an off-frame clip edge shows no filled landing notch, while a frame-aligned edge does",3,0
+time,97,1687,791: Delete draft… names the right noun for all three draft kinds — a plain draft has no element to save back to,0.5,0
+body,92,288,drawing: opening a project ends any sketch in progress,white-chrome home-open,white-chrome
+time,92,373,"easing editor: the whole panel fits, and every rail button is really on screen",0,2
+body,84,780,the version number appears exactly once on a phone,white-chrome fm-popping home-open,white-chrome home-open
+body,75,1511,498: the pinned Cancel/Apply row never covers the last setting above it,white-chrome cv-up cv-anchored home-open,white-chrome home-open
+time,75,1020,"on a finger, a swipe across a selected clip scrubs — only a hold slips its media (queue 822)",1.3,0
+projDur,74,884,the MULTI-clip move and extend icons are not the same drawing (queue 338),4,3
+time,66,1095,"the sheet previews the picked effects over the whole comp, and puts it all back (queue 277 + 390)",0,1
+tlstale,56,2014,"960 on PC Import media and Import audio are the same size, on one line, in the REAL panel — and the tabs keep their fitted layout",2,0
+body,53,1376,"915.9 the New project dialog suggests a name he does not already have, counting only his projects",white-chrome home-open hm-selecting,white-chrome home-open
+body,51,1453,"480: dropping a layer on the add row puts the marker BELOW it, with a collapsed group on the timeline",white-chrome home-open cv-up cv-anchored,white-chrome cv-up cv-anchored home-open
+sel,49,238,undo / redo grey out when there is nothing behind or ahead,,"layer_2hj3ana_nxlv6,layer_2hj3ana_nxlv6"
+body,46,242,"Select all on a non-project tab ticks THAT tab, never the projects",white-chrome,white-chrome home-open
+ui,46,242,"Select all on a non-project tab ticks THAT tab, never the projects",,home
+time,41,1245,"the Add-layer + is centred in its circle, and is not a font glyph",1,0
+projDur,38,843,a layer thumbnail never spills out of the track head on a phone (queue 211),5,3
+body,35,734,921 S7 review: “Earlier versions…” opens from the project’s ⋯ on Home with no session — nothing is armed and no save point is written — and a restore ,white-chrome,white-chrome home-open
+time,35,1289,"an element opens for editing, and inserting is still available (queue 342)",3,0
+time,33,1182,timeline: an auto-scrolling clip drag does not hold the preview in low-resolution motion mode,1.033,0
+body,31,1750,"898: a template being edited stays ticked on the Templates tab, so Select all and Delete include it",white-chrome,white-chrome hm-selecting
+time,30,1215,the onion-skin ghost plate is target-sized and is not reallocated every frame,0,1
+time,28,1543,"725: double-clicking a marker no longer opens a rename box, and no source still carries one",2,1.5
+time,25,1807,"690 with the phone storage full, leaving the project asks first — Stay (a real tap) keeps his work, Leave anyway (a real click) goes",3,0
+body,24,1429,"a project bigger than the app would ever build says so, once, and offers the repair (queue 202)",white-chrome home-open,white-chrome home-open cv-up cv-anchored
+projDur,24,808,"the phone bin is red, and it is the SAME red the PC uses",4,3
+sel,24,808,"the phone bin is red, and it is the SAME red the PC uses","layer_948jlaa_qow95,layer_948jlaa_qow95",
+time,22,2262,690 Home project menu closes when a card opens the editor by keyboard,0.5,0
+time,21,1161,"play: holding the Play button plays, it does not silently toggle Loop instead",1,1.033
+time,20,986,the SECOND freehand stroke appears as soon as you lift the pen (queue 514),1,0
+proj,18,1162,"play: the FIRST clip added moves the playhead to it, so play starts at its beginning",320x240,64x48
+time,16,1856,"690 ungrouping a group he moved, scaled or turned keeps its animated layers where the group put them, and names any it cannot",1,0
+time,16,1910,690 a project renamed on Home keeps its new name when he presses Undo inside it,0.5,0
+time,16,2246,"482 5.1 Adjustment layer - zoomed in, Highlights & Shadows with Local radius and Gradient Map Dither on an adjustment layer are graded on the whole fr",0,0.5
+sel,15,1105,"the add-menu drag handle sits outside the panel, clear of the project name, and hides until hover (queue 302)","layer_9frms6c_jeya4,layer_9frms6c_jeya4",
+time,15,1837,690 after one heavy stretch of playback the preview sharpens again once full resolution fits — and a scene where it does not fit is not pumped,2,0
+tlstale,15,986,the SECOND freehand stroke appears as soon as you lift the pen (queue 514),3.23,0
+layers,14,478,timeline: caption cues do not swallow the row — a touch drag over one still scrubs,2,1
+time,14,1324,scrubbing into the tail and pressing play does not leave the song muted or paused (queue 96),0,3
+time,14,1890,"690 a look + animations preset carries the animation and not the size: applied to a fitted photo it keeps the photo at its own size, and a pop-in pops",2,0
+tlstale,13,261,every media teardown path hands back BOTH decoded caches,-5,0
+layers,12,465,Edit Shape: nudging stroke width or colour keeps their keyframes,1,0
+projDur,12,465,Edit Shape: nudging stroke width or colour keeps their keyframes,5,0
+sel,12,1277,"presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)",,"layer_5ua52hq_4j635,layer_5ua52hq_4j635"
+time,12,1876,"690 the Move pad snaps a GROUP by where he sees it — its centre, not its offset — and a member of a moved group by where he sees it too",2,0
+body,11,769,"921 S8r a phone receiving the shared media holds the screen awake until it lands, and the card says to keep it on",white-chrome home-open,white-chrome fm-popping home-open
+time,11,1006,a split keeps a Bounce-eased segment’s curve at the seam (queue 818),0,2
+body,10,1586,582: the canvases the effects read every frame are declared read-heavy,white-chrome home-open,white-chrome
+body,10,1596,"617: element drafts take part in Select, and bulk delete actually removes them",white-chrome,white-chrome home-open
+proj,10,477,"timeline: a locked layer wears a red lock on its preview, an unlocked one does not",1080x1920,320x240
+time,10,1939,"690 on an iPhone a clip with Echo at 80 percent, or boosted to 200 percent, rings on after its end in the preview as it does in the export",1.8,2.1
+ui,10,1586,582: the canvases the effects read every frame are declared read-heavy,home,
+ui,10,1596,"617: element drafts take part in Select, and bulk delete actually removes them",,home
+sel,7,1126,the dead-effect hint never costs you the eye button,"layer_9gimxhx_5jwf8,layer_9gimxhx_5jwf8","layer_9gimxhx_5jwf8,layer_9gxmxtr_tb4ty"
+time,7,1927,"690 Cmd+Z while drawing takes back the last stroke, Cmd+Shift+Z puts it back, and his next stroke does not bring an undone one back",1.467,1
+body,6,1505,903: the home screen paints no heavy colour wash behind its own top controls,white-chrome cv-up cv-anchored fm-popping home-open,white-chrome cv-up cv-anchored home-open
+projDur,6,479,"paste style: every tile draws the inspector's own category icon, not a private copy",4,3
+projDur,6,495,"freehand: the committed stroke is the width you drew, not double it",3,5
+projDur,6,796,"the add sheet leaves no dead band under a full grid, and the cards get squarer",5,3
+projDur,6,802,sharpening is dosed by how far the clip is actually stretched,3,4
+projDur,6,964,"#625: keyframes land on the frame grid, so they cannot stack invisibly",3,5
+scene,6,479,"paste style: every tile draws the inspector's own category icon, not a private copy",3,4
+sel,6,479,"paste style: every tile draws the inspector's own category icon, not a private copy","layer_5tm4xvh_1c2wq,layer_5tm4xvh_1c2wq","layer_5tn4ylp_fiw25,layer_5tn4ylp_fiw25"
+sel,6,835,history actually RUNS the sweep when it discards a snapshot,layer_97ckbmu_chcha,
+time,6,1904,"690 camera Motion Blur averages its slices — a pan keeps the picture at full brightness, and a transparent export stays solid",0,0.5
+projDur,5,959,921 S0 restore uses _afterExternalChange (629 rule intact),2,3
+sel,5,496,freehand: a drawing session is ONE layer holding every stroke,"layer_5uc52ne_5izcz,layer_5uc52ne_5izcz","layer_5ud52o2_ncjq8,layer_5ud52o2_ncjq8"
+sel,5,501,"pulling back up cancels the faves gesture, and the cancel sticks","layer_5ud52o2_ncjq8,layer_5ud52o2_ncjq8","layer_5ua52hq_4j635,layer_5ua52hq_4j635"
+sel,5,795,the x reads red and the search reads blue,"layer_940jiwb_oag90,layer_940jiwb_oag90","layer_941jj3z_9b49e,layer_941jj3z_9b49e"
+time,5,1796,"690 the View menu isolate stays out of the export — the video and the still hold every layer, in their own order",1,0
+time,5,1802,"690 after a 200 ms stall a 1x song keeps its pitch while it catches up, and ends back in step with the picture",1.133,3
+body,4,1372,#648: a tap selects even when no click follows the pointerup,white-chrome,white-chrome home-open hm-selecting
+sel,4,800,Move & Transform hides the outline and shows the anchor instead,"layer_941jj3z_9b49e,layer_941jj3z_9b49e",
+sel,4,804,"the clip menu names it for what it does, not improve-quality",,"layer_948jlaa_qow95,layer_948jlaa_qow95"
+time,4,254,editor key shortcuts cannot reach the project under a full-screen overlay,0,1
+time,4,982,"921 S0 boxFor equals #select-box geometry (rotated, parented, group, skew, text wrap)",0,1
+time,4,1683,"786: a refused play() is named in the playback report, and the report is saved even though nothing played",0,0.5
+time,4,1792,"690 Escape closes the Export dialog, Canvas settings, Notes, its Before-you-export card, Settings and a right-click menu — and never deselects the lay",0,1
+projDur,3,489,"onion skin has exactly one door, and it is the layer menu",5,2
+projDur,3,492,"duplicate: the copy lands exactly on the original, animated paths included",2,3
+projDur,3,791,"the home + catches taps well outside itself, without getting bigger",0,3
+projDur,3,832,an undone delete still has its media — freeing must never beat undo,3,5
+projDur,3,838,switching projects does not strand a deleted clip's media,3,0
+projDur,3,881,a tilt keyframe cannot turn the rotate diamond into a delete button (queue 419),3,4
+projDur,3,1283,"a trim grip needs a hold on touch, arms visibly, and is instant on mouse (queue 336)",3,4
+scene,3,489,"onion skin has exactly one door, and it is the layer menu",7,8
+sel,3,489,"onion skin has exactly one door, and it is the layer menu","layer_5u451bv_9cre3,layer_5u451bv_9cre3","layer_5u5527c_l5wg2,layer_5u5527c_l5wg2"
+sel,3,492,"duplicate: the copy lands exactly on the original, animated paths included","layer_5u5527c_l5wg2,layer_5u5527c_l5wg2","layer_5ub52k5_liilr,layer_5ub52k5_liilr"
+sel,3,832,an undone delete still has its media — freeing must never beat undo,,layer_97ckbmu_chcha
+time,3,1017,a trim grip touched and released writes no undo entry (queue 823 c10a),2,1.3
+time,3,1286,the phone move/extend buttons are not the same drawing (queue 338),0,3
+time,3,1534,768: scrubbing the timeline writes a frame-time report that names what was selected,0,3
+time,3,1537,"719: Reset and Crop to canvas keep a keyframed crop's keyframes, keying the playhead, and still set a plain crop",3,1
+time,3,1540,"722: a preset applied from the browser anchors its keyframes at the playhead he parked, not the preview loop",1,2
+time,3,1934,"690 Save project file on another project from Home writes that project and leaves the open one alone — its undo, playhead, selection, and the other ca",1,0
+tlstale,3,258,"deleting a clip releases its filmstrip bitmaps, and they can rebuild",0,-5
+tlstale,3,2011,962 the eye has a round pupil in an even white ring — in the box it spawns and at the menu-icon size,0,2
+body,2,115,"574: two overlapping captions BOTH show, stacked",white-chrome text-editing te-cap-dock,white-chrome text-editing
+body,2,380,"the project ⋯ is gone from the top bar, and every action it held still works",white-chrome,white-chrome cv-up cv-anchored
+body,2,1023,a search on the Elements tab cannot leave invisible items ticked for Delete (queue 828),white-chrome,white-chrome hm-selecting
+layers,2,789,a template does not carry its notes into a new project,4,0
+pps,2,115,"574: two overlapping captions BOTH show, stacked",99.2,159.2
+pps,2,410,waveform: an aliasing song draws an even band end to end,99.2,1.98
+proj,2,487,desktop text editor: the Aa options do not cover the canvas you are typing on,320x240,1080x1920
+proj,2,789,a template does not carry its notes into a new project,320x240,640x640
+proj,2,1180,"perf: a held frame is capped in size, and a cropped clip still shows the right part of it",64x48,400x300
+projDur,2,487,desktop text editor: the Aa options do not cover the canvas you are typing on,6,5
+projDur,2,789,a template does not carry its notes into a new project,3,0
+projDur,2,794,the effects header x and search glyphs are centred in their circles,3,5
+projDur,2,835,history actually RUNS the sweep when it discards a snapshot,5,0
+projDur,2,841,Free crop keeps a keyframed crop animation,0,5
+projDur,2,1122,"speed-to-playhead lands the clip START exactly, holding the end",3,5
+projDur,2,1124,the speed range reaches the 1000x he asked for,5,10000
+scene,2,487,desktop text editor: the Aa options do not cover the canvas you are typing on,6,7
+sel,2,487,desktop text editor: the Aa options do not cover the canvas you are typing on,"layer_5u350xl_6vk8g,layer_5u350xl_6vk8g","layer_5u451bv_9cre3,layer_5u451bv_9cre3"
+sel,2,1103,"the phone top bar has a help button that opens the shortcuts, in both selection states",,"layer_9frms6c_jeya4,layer_9frms6c_jeya4"
+sel,2,1124,the speed range reaches the 1000x he asked for,"layer_9ghmxc9_2z1wh,layer_9ghmxc9_2z1wh","layer_9gimxhx_5jwf8,layer_9gimxhx_5jwf8"
+sel,2,1274,saving a preset updates the open Presets card by itself (queue 330),,"layer_5ua52hq_4j635,layer_5ua52hq_4j635"
+time,2,1788,690 one real tap on a Position number (X / Y) opens its editor ON SCREEN with the focus in it,2,0
+time,2,1833,"690 the mask editor follows the playhead — after a scrub its outline is the frame on screen, and dragging a point there keeps the rest of that frame",2,0
+time,2,1835,"690 an easing picked on the first keyframe diamond eases the move out of it, and the diamond says so",0,2
+time,2,1854,"690 linking a layer to a Controller, or unlinking it, with the link button or the Parent row leaves it where it is",2.5,1
+time,2,1874,690 Reset speed (1x) carries his animation with the clip — a fade at the end of a 2x clip still ends at its end,3,2
+time,2,1888,"690 a colour keyframe is live while Colouring is open: on the phone a hold opens its menu and a hold-and-drag retimes it, not the clip; Outline, Eleme",0,2
+tlstale,2,487,desktop text editor: the Aa options do not cover the canvas you are typing on,0,6.05
+body,1,113,576: the text editor options open BELOW the box showing what you typed,white-chrome home-open,white-chrome
+body,1,114,575: a caption cue can be DRAGGED longer,white-chrome,white-chrome text-editing te-cap-dock
+body,1,1504,"920 the status bar takes each screen top colour from the page background-color — light Home, dark Home and a project",white-chrome cv-up cv-anchored home-open,white-chrome cv-up cv-anchored fm-popping home-open
+body,1,1781,"920 an install from before the status-bar fix tells him once, on Home, how to get rid of the blur — and a fresh install never does",white-chrome hm-selecting,white-chrome
+body,1,1782,"930 the Assistant and the Director never stack, and the API key is entered in Settings, reached from a button in each",white-chrome,white-chrome home-open
+layers,1,477,"timeline: a locked layer wears a red lock on its preview, an unlocked one does not",0,2
+projDur,1,477,"timeline: a locked layer wears a red lock on its preview, an unlocked one does not",0,2
+projDur,1,478,timeline: caption cues do not swallow the row — a touch drag over one still scrubs,2,4
+projDur,1,485,"studio: one name field, in the inspector header, and it does both jobs",3,2
+projDur,1,486,"captions: dragging a cue edge moves the chip during the drag, not on release",2,6
+projDur,1,837,"916.4 a reversed clip with audio shorter than the clip plays its sound in step with the picture — export, preview and audio-react",0,3
+projDur,1,958,#629: undo that removes the selected layer selects nothing,3,2
+projDur,1,1120,the volume control is a scrub ruler that reaches 1000%,3,4
+projDur,1,1121,speed-to-playhead lands the clip END exactly on the playhead,4,3
+scene,1,477,"timeline: a locked layer wears a red lock on its preview, an unlocked one does not",1,2
+scene,1,478,timeline: caption cues do not swallow the row — a touch drag over one still scrubs,2,3
+scene,1,485,"studio: one name field, in the inspector header, and it does both jobs",4,5
+scene,1,486,"captions: dragging a cue edge moves the chip during the drag, not on release",5,6
+sel,1,478,timeline: caption cues do not swallow the row — a touch drag over one still scrubs,,"layer_5tm4xvh_1c2wq,layer_5tm4xvh_1c2wq"
+sel,1,485,"studio: one name field, in the inspector header, and it does both jobs","layer_5tn4ylp_fiw25,layer_5tn4ylp_fiw25",
+sel,1,486,"captions: dragging a cue edge moves the chip during the drag, not on release",,"layer_5u350xl_6vk8g,layer_5u350xl_6vk8g"
+sel,1,495,"freehand: the committed stroke is the width you drew, not double it","layer_5ub52k5_liilr,layer_5ub52k5_liilr","layer_5uc52ne_5izcz,layer_5uc52ne_5izcz"
+sel,1,794,the effects header x and search glyphs are centred in their circles,,"layer_940jiwb_oag90,layer_940jiwb_oag90"
+sel,1,841,Free crop keeps a keyframed crop animation,,layer_97jkbsp_d54cc
+sel,1,842,Free crop on a plain crop still writes plain numbers,layer_97jkbsp_d54cc,layer_97kkbv0_6uji9
+sel,1,1120,the volume control is a scrub ruler that reaches 1000%,,"layer_9gcmwh2_im8l2,layer_9gcmwh2_im8l2"
+sel,1,1121,speed-to-playhead lands the clip END exactly on the playhead,"layer_9gcmwh2_im8l2,layer_9gcmwh2_im8l2","layer_9gdmwpz_irz67,layer_9gdmwpz_irz67"
+sel,1,1122,"speed-to-playhead lands the clip START exactly, holding the end","layer_9gdmwpz_irz67,layer_9gdmwpz_irz67","layer_9gfmx1c_z1knw,layer_9gfmx1c_z1knw"
+sel,1,1123,speed-to-playhead refuses the cases where there is no answer,"layer_9gfmx1c_z1knw,layer_9gfmx1c_z1knw","layer_9ghmxc9_2z1wh,layer_9ghmxc9_2z1wh"
+sel,1,1276,"917.16 the Presets save buttons are full buttons, flush with the card column, on a phone","layer_5ua52hq_4j635,layer_5ua52hq_4j635",
+time,1,1571,"752: after the trim edge-scroll brake trips, leaving and re-entering the edge scrolls again",1.5,3
+time,1,1784,"690 a trembling hold on a keyframe diamond still opens its menu, and a drag moves the keyframe by the finger travel, not to the finger",0,2.5
+time,1,1785,690 a sideways swipe that starts on a keyframe diamond scrubs the timeline like the clip under it,2.5,3
+time,1,1786,"690 a flick of the layer list glides from a clip and from a layer name, not only from bare lane",3,1
+time,1,1787,690 a touch that catches a gliding timeline stops it without selecting or deselecting anything,1,2
+time,1,1790,690 leaving the effects browser by the X or by Add puts the playhead back where he parked it,0,2.5
+time,1,1791,"690 a real tap on an effect or opacity value box selects the number, so what he types replaces it",2.5,0
+time,1,1801,"690 on an iPhone, where el.volume cannot be set, a muted clip is silent in the preview and a 25 percent clip plays at 25 percent",0,1.133
+time,1,1832,"690 the Position keyframe diamond is one diamond — a hold-and-drag moves X and Y together, Delete keyframe removes both, and a picked X still moves al",0,2
+time,1,1852,"690 a beat tapped on the playhead while the song plays is marked on the frame the finger touched, not when it lifted",0,0.467
+time,1,1853,"690 a scaled or turned group keeps its still layers still when another layer in it comes on screen, moves, or is moved",0.467,2.5
+time,1,1872,690 letting go of a clip or a trim edge he carried to the screen edge leaves the timeline where he carried it — what he just placed stays on screen,0,1
+time,1,1873,"690 trimming a speed-ramped clip with its handle keeps every kept frame still — the head of a ramp, the tail of a reversed ramp",1,3
+time,1,1926,"690 a number typed in a box lands when he then clicks his layer on the canvas or grabs its corner, and the keyboard comes back to the editor",0,1.467
+time,1,1937,"690 playing across a split, the second half is already running when the playhead reaches the cut, so the sound does not drop out",0,2
+time,1,1938,"690 a cut where the other half is muted or hidden fades like any clip edge, in the preview and in the file, and is not started early",2,1.8
+tlstale,1,274,dragging a rotated camera still moves the scene the way you drag,0,-5
+tlstale,1,275,"a phone hold moves an UNSELECTED clip, a quick drag still does not",-5,1.31
+tlstale,1,744,"921 S8 Settings → Labs → Test connection says plainly what works on this network — the relays, the address lookup and this device’s own connections — ",0,-3.16
+tlstale,1,985,"the drawing toolbar sits under the canvas on PC, and drawing gets the whole window (queue 513/535)",0,3.23
+tlstale,1,1001,a raised band is not re-pinned to nowhere while the panel is hidden (queue 814),0,4.84
+tlstale,1,2070,"973 the eye is his pick A: one wide white ring round the pupil and no catchlight, in the box it spawns and at the menu-icon size",0,2
+ui,1,1782,"930 the Assistant and the Director never stack, and the API key is entered in Settings, reached from a button in each",,home
