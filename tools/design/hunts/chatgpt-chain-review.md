@@ -14,9 +14,11 @@ The chain is seven linear commits on v17.23 (b46b47d3), no app file touched by m
 | `a22dbc46` | #1041 nested styled groups | 1/1 at 1280 and 380 | 0/1 at both | **land** |
 | `13e5b1ea` | #1059 detect speech | 1/1 at 1280 and 380 | 0/1 at both | **land** |
 
-- **The chain merges cleanly onto `release/v17.24`** (`git merge-tree` reported no conflicts, so the order in which the laptop lands them does not matter for text conflicts). I did not run the full suite on the merged result.
+- **The chain merges cleanly onto main at v17.24 (05d06c53)** (checked then as `release/v17.24`; app code on main is unchanged since) (`git merge-tree` reported no conflicts, so the order in which the laptop lands them does not matter for text conflicts). I did not run the full suite on the merged result.
+- **None of the 7 commits bumps the `?v=` cache-busters in `index.html`** for the 7 changed js files (`app.js`, `captions.js`, `collab-session.js`, `compositor.js`, `exporter.js`, `inspector.js`, `storage.js`) or `styles.css` (`git diff` of `index.html` across the chain is empty), and `tools/ship.sh` refuses a changed `js/*.js` or `styles.css` without its bump, so **whoever lands the chain must bump them**.
+- **#1013 must ship from the Mac:** the release touches `js/exporter.js`, and the feature gate (`tools/ship.sh:974-990`, map in `tools/_shipgates.py`) refuses a release that changes the export-audio code unless the AAC tests ran and passed on the machine shipping it. Linux has no AAC encoder.
 - Each commit also adds a note under `outside/chatgpt/fixes/` (a markdown file, not code). Whether those belong on main is the builder's call.
-- **Why #1015 and #1016 "never passed": it is not the tests and not the fixes.** Both pass and both fail-when-reverted here, at two widths, in isolation, on the unmodified commits. Their notes (`outside/chatgpt/fixes/1015-...md`, `1016-...md`) describe `FM` being missing and `Cannot set properties of undefined (setting 'innerHTML')` on "muted Chromium on port 8894", which is what a half-loaded app frame looks like. `tools/serve.sh` documents exactly that failure when the dev server is plain `python3 -m http.server` (its accept queue is 5, so scripts are refused). **That is a guess about the cause** (I tried four runs against a plain `http.server` and could not make it fail, so I cannot show it); what I can show is that the same tests pass with the project's server, so the gate had a broken instrument, not broken code.
+- **Why #1015 and #1016 "never passed": my runs show the tests and fixes behave correctly here.** Both pass and both fail-when-reverted here, at two widths, in isolation, on the unmodified commits. Their notes (`outside/chatgpt/fixes/1015-...md`, `1016-...md`) describe `FM` being missing and `Cannot set properties of undefined (setting 'innerHTML')` on "muted Chromium on port 8894", which is what a half-loaded app frame looks like. `tools/serve.sh` documents exactly that failure when the dev server is plain `python3 -m http.server` (its accept queue is 5, so scripts are refused). **That is a guess about the cause** (I tried four runs against a plain `http.server` and could not make it fail, so I cannot show it); what I can show is that the same tests pass with the project's server, so the gate had a broken instrument, not broken code. ChatGPT's own 1013 note (`outside/chatgpt/fixes/1013-empty-aac-v1723.md` line 7) says the same port-8894 setup also produced "one incomplete app-frame bootstrap", so the failure was intermittent, which fits a half-loaded frame and not a deterministic test fault.
 
 ## #1013 empty AAC track (`2ea47a00`)
 
@@ -28,16 +30,18 @@ The chain is seven linear commits on v17.23 (b46b47d3), no app file touched by m
 - **Not verified:** the healthy half (a real AAC encode counted, about 15 frames for 0.3 s, a decoded peak above 0.1). It must be run on a machine with AAC.
 
 **Skeptic findings**
-1. `decodedAACPeak` (`js/exporter.js`, new) decodes the entire soundtrack through `AudioDecoder` after every export that has sound and awaits `dec.flush()` with **no timeout**. A decoder that is present but never settles (a risk on newer WebKit builds, which I cannot test) would hang the export after the video has rendered, on the path where Ezra's real "no sound" bug lives. Every other failure is caught and reported as "decoded peak unavailable"; only a hang is not.
+1. `decodedAACPeak` (`js/exporter.js`, new) decodes the entire soundtrack through `AudioDecoder` after every export that has sound and awaits `dec.flush()` with **no timeout**. A decoder that is present but never settles (a risk on newer WebKit builds, which I cannot test) would hang the export at the audio stage, before the muxer is built and before any video frame is encoded (branch `js/exporter.js:1401-1437`: the call is at :1416, the muxer at :1434), and Cancel is not checked until after it (`if (FM._exportCancel) throw` at :1437), on the path where Ezra's real "no sound" bug lives. Every other failure there is caught and reported as "decoded peak unavailable". Not new in kind: `encodeAudio`'s own `await enc.flush()` (`js/exporter.js:991`) is already uncapped, so the new code adds a second uncapped wait rather than introducing the risk.
 2. Side effect that is by design: `hasAudio` on the ready card is now `audioFramesWritten > 0` instead of `!!mix`.
 
 **Exact fix (precaution, Guess that it is needed):** in `decodedAACPeak`, replace
 `await dec.flush();`
 with
 `await Promise.race([dec.flush(), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('decoded peak timed out')); }, 8000); })]);`
-The existing `catch` turns the rejection into `null`, which the report already prints as "decoded peak unavailable".
+The existing `catch` turns the rejection into `null`, which the report already prints as "decoded peak unavailable". Also clear the timer once `flush` settles. 8 s may cut a very long soundtrack's decode on a slow phone, which then only prints "unavailable".
 
-**Run on the laptop (it has H.264 and AAC):** `python3 tests/_cdp.py --port 8791 --url 'http://localhost:8791/tests/run.html?only=a%20zero-chunk%20AAC%20encode'` against the chain, then again with `git apply -R` of the commit's `js/` part; expect pass and fail.
+**Add `await needsAac();` as the first line of the commit's test** (the v17.24 convention, `tests/tests.js:193-205`; the chain predates it and has none: `grep -c needsAac` on the chain's tests.js is 0). Without it the test is red on Linux, at `NO_VIDEO_CODEC`, instead of NOT RUN HERE.
+
+**Run on the Mac, not the laptop** (Linux Chrome has no AAC encoder, `tests/tests.js:193-205`): `python3 tests/_cdp.py --port 8791 --url 'http://localhost:8791/tests/run.html?only=a%20zero-chunk%20AAC%20encode'` against the chain, then again with `git apply -R` of the commit's `js/` part; expect pass and fail.
 
 ## #1014 panorama canvas (`9cec73a1`)
 
