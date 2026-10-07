@@ -2,7 +2,7 @@
 
 You'll be able to begin a new project from a ready-made one, and turn your own project into a template.
 
-1. On Home, tap the **Templates** tab, the second one along.
+1. On Home, tap the **Templates** tab, the second one along. On a fresh install it is empty (it says **No templates yet**), so do step 5 first to save a template of your own.
 2. On a template's card, tap the small three-dots button at the right and choose **New project from template**.
 3. A screen called **Insert your Media** opens. It says **Tap a slot to make it yours**. Tap a slot, then choose **Replace Media** for a photo or video, or type under **Your words** for a title.
 4. Tap **Done**. Your new project opens.
@@ -10,7 +10,7 @@ You'll be able to begin a new project from a ready-made one, and turn your own p
 6. To drop a template into a project you are already editing, tap the add row, open the **Template** tab and tap the template.
 7. To get rid of one, open its three dots, choose **Delete template…** and tap **Delete**.
 
-On a computer: the same. Click instead of tap.
+On a computer: the same. Click instead of tap. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: **Save template file…** in the same menu makes a file you can send to anyone.
 

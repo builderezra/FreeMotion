@@ -8,10 +8,10 @@ You'll be able to make a video clip play faster or slower, and see its new lengt
 4. Tap the number and type **200**, then press Return or tap away. The clip plays twice as fast, and its bar on the timeline gets half as long. You can also drag the ruler left to raise the speed.
 5. Type **50** to go the other way. The clip plays at half speed, and its bar grows to twice its original length (four times what it was at 200).
 6. Tap the time counter once to watch it. Don't hold it: that turns looping on.
-7. For smoother slow motion, tick **Smooth slow-motion (frame blend)**.
-8. To play the clip backwards, tick **Reverse (video + audio)**.
+7. For smoother slow motion, scroll the panel down and tick **Smooth slow-motion (frame blend)**.
+8. To play the clip backwards, scroll the panel down and tick **Reverse (video + audio)**.
 
-On a computer: the same steps. Click the clip first. The panel is at the bottom left. Press Space to play.
+On a computer: the same steps. Click the clip first. The panel is at the bottom left. Press Space to play. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: For a speed ramp, tap the diamond on the left of the Speed panel, move the playhead, then type a new speed. That adds a second diamond, and the speed changes between the two. While the speed has diamonds, the clip's length stays fixed. Tap a diamond again to remove it.
 

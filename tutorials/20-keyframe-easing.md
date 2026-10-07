@@ -11,7 +11,7 @@ You'll be able to change how a move feels, from steady to eased or bouncy.
 7. Slide the timeline back before the move and quick-tap the time counter to watch it.
 8. To close the graph, tap **‹ Position / Scale** at the top of the panel. (Not the back arrow at the top left: on a phone that deselects the clip, and on a computer it goes Home.)
 
-On a computer: the same. The graph opens in the panel at the bottom left, and you drag the handles with the mouse.
+On a computer: the same. The graph opens in the panel at the bottom left, and you drag the handles with the mouse. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: The loop button beside the graph repeats the move. The two small buttons next to it copy a graph and paste it onto another property.
 

@@ -11,7 +11,7 @@ You'll be able to place points to make a filled shape, then smooth or bend it.
 7. Tap a point to select it. Your points start sharp, so there are no handles yet.
 8. On the left edge, the three icon buttons under the diamond make the selected point smooth (Curve), sharp (Corner), or delete it (the bin). After **Curve**, drag the point's handles to bend the line. Tap a hollow ring to add a point; double-tap a point to delete it.
 
-On a computer: click an empty spot in the timeline so nothing is selected. The Add panel is at the bottom left. Click to place points.
+On a computer: click an empty spot in the timeline so nothing is selected. The Add panel is at the bottom left. Click to place points. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: **Cancel** on the bar throws away the points you placed, because nothing is a layer until you tap **Done**.
 

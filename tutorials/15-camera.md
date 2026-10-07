@@ -11,7 +11,7 @@ You'll be able to move the whole scene as if a camera were filming it.
 7. Slide back to the start and quick-tap the time counter. The whole scene pans.
 8. Open **Camera Options** for more. Its tabs are small icons. On the blur tab, tick **Motion blur** to smear the scene while the camera moves.
 
-On a computer: the same. Click an empty spot in the timeline first so the Add panel shows at the bottom left.
+On a computer: the same. Click an empty spot in the timeline first so the Add panel shows at the bottom left. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: Field of view and Distance only matter when layers sit at different depths. Give a layer a Z value in Position / Scale first.
 

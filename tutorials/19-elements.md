@@ -10,7 +10,7 @@ You'll be able to save a title or logo once and add it to any project.
 6. To change the saved element itself, go Home and open the **Elements** tab. Tap its card. A message says **Editing** and its name. Your changes save back when you go Home. Projects you already added it to keep their own copy.
 7. To delete one, press and hold it in the browser from step 4, or open the three dots on its card on Home and choose **Delete element…**.
 
-On a computer: the same. Right-click an element in the browser to delete it.
+On a computer: the same. Right-click an element in the browser to delete it. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: On the **Elements** tab on Home, the three dots also offer **Add to the open project**.
 

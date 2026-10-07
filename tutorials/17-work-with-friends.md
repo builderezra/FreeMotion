@@ -6,13 +6,13 @@ You'll be able to share a project live, so a friend can edit it with you on thei
 2. A card called **Work with friends** says **Off**. At its foot, turn on the **Work with friends** switch.
 3. The card now says **Share "your project name" live**. Tap **Start sharing**. The first time, a box asks **What should others see?** Type your name, pick a colour and tap **Continue**.
 4. You now have a link and a short code. The short code is blurred until you tap it, and **QR** shows a code your friend can scan. Tap **Copy link** and paste it into a message to your friend. On most phones **Share…** is next to it.
-5. Your friend opens the link. The first time, FreeMotion asks them to turn on Work with friends (they tap **Turn on**) and to pick a name and colour (they tap **Continue**). On an iPhone it may first offer to open the link in the FreeMotion app instead of Safari; they follow its steps. Then a sheet called **Join a friend's project** appears, and they tap **Join**.
-6. A card says your friend wants to join. Tap **Let in**. Answer within 2 minutes, or it turns them away and they have to try again.
-7. You are both editing the same project. When you are done, tap the round button again (it now shows your friend's initials) and tap **Stop sharing**.
+5. Your friend opens the link. The first time, FreeMotion asks them to turn on Work with friends (they tap **Turn on**) and to pick a name and colour (they tap **Continue**). On an iPhone it may first offer to open the link in the FreeMotion app instead of Safari; they follow its steps. Then a sheet called **Join a friend's project** appears, and they tap **Join**. <!-- not walked: needs a second device on a real network; the container has no network -->
+6. A card says your friend wants to join. Tap **Let in**. Answer within 2 minutes, or it turns them away and they have to try again. <!-- not walked: needs a second device on a real network; the container has no network -->
+7. You are both editing the same project. When you are done, tap the round button again (it now shows your friend's initials) and tap **Stop sharing**. A box asks you to confirm: tap **Stop sharing** again.
 
 No link? Your friend can type the short code instead (it stops working 30 minutes after you close the sharing card). On Home they tap the person icon at the top, then **Join a friend's project…**, type the code and tap **Join**.
 
-On a computer: the round button is hidden on wide screens. Click the cog (Canvas settings) at the top and open **Friends**. The same buttons are there.
+On a computer: the round button is hidden on wide screens. Click the cog (Canvas settings) at the top and open **Friends**. The same buttons are there. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: Nothing is shared until you tap **Start sharing**. The switch is labelled "still being tested" in Settings, so keep a copy of anything important.
 

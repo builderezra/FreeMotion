@@ -10,9 +10,9 @@ You'll be able to pick a format, a size and a frame rate, and save the result.
 6. For MP4 only, **Quality** is High, Medium or Low.
 7. **Range** is Whole project or Loop region (if set). **Selected clip only** stays greyed out on a phone, because the Export button only shows when nothing is selected. To export one layer by itself, tap **Export just this layer** and pick it. (On a computer, select the clip first and the option works.)
 8. The big button changes with your choice: **Export MP4**, **Export GIF**, **Export frames**, **Save frame** or **Export audio**. Tap it.
-9. For MP4 a card says **Export ready**. Tap **Save** and your phone's share sheet opens so you can pick where it goes (if it can't open, the file goes to Downloads). The other formats skip the card and download straight to your Downloads.
+9. For MP4 a card says **Export ready**. Tap **Save** and your phone's share sheet opens so you can pick where it goes (if it can't open, the file goes to Downloads). The other formats skip the card and download straight to your Downloads. <!-- not walked: MP4 export freezes the tab in this container (no H.264 encoder) -->
 
-On a computer: Export is the up-arrow third from the right end of the row with the time counter. The back arrow there leaves the project, so don't use it to deselect. Click an empty spot in the timeline instead.
+On a computer: Export is the up-arrow third from the right end of the row with the time counter. The back arrow there leaves the project, so don't use it to deselect. Click an empty spot in the timeline instead. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: **This frame (PNG)** saves the picture at the playhead, so slide to the frame you want first.
 

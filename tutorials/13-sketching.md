@@ -6,11 +6,11 @@ You'll be able to draw freehand strokes and rub them out.
 2. Tap the **Elements** tab, then **Sketching** (the pencil). If you can't see it, swipe the tiles sideways.
 3. A small bar appears at the bottom of the screen (on a computer, just under the picture). Press and drag on the picture to draw. Lift your finger and the stroke stays.
 4. Tap the colour swatch to pick a colour. Drag the width slider to make the brush thicker or thinner.
-5. Tap the eraser icon, then touch or drag over a stroke. The whole stroke disappears; it can't rub out just part of one. Tap the eraser again to go back to drawing. If the wrong stroke goes, tap the undo arrow.
+5. Tap the eraser icon, then drag over the part of a stroke you want to remove. It rubs out only what your finger passes over: a swipe along a whole stroke removes all of it, and a swipe across a stroke cuts it in two. Tap the eraser again to go back to drawing. If you rub out too much, tap the undo arrow.
 6. The two curved arrows on the bar are undo and redo for your strokes.
 7. Tap **Done** when you finish. Everything you drew is one layer on the timeline.
 
-On a computer: click an empty spot in the timeline so nothing is selected. The Add panel is at the bottom left. Drag with the mouse to draw.
+On a computer: click an empty spot in the timeline so nothing is selected. The Add panel is at the bottom left. Drag with the mouse to draw. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: On a computer, the bar counts your strokes ("3 strokes"). On a phone there isn't room, so the count is hidden.
 

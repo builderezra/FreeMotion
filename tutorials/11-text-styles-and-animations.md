@@ -11,7 +11,7 @@ You'll be able to make a title bold, spaced or curved, and have it pop in.
 7. New rows appear. **By** picks **Character**, **Word** or **Line**. **Duration in (s)** is how long it takes. **Stagger (s)** is the gap between pieces. **Fade out (s)** fades it away at the end.
 8. Tap the tick at the far right of the bar. Slide the timeline back to the very start of the title, then quick-tap the time counter to watch.
 
-On a computer: the same. The text controls sit on a card at the bottom of the picture.
+On a computer: the same. The text controls sit on a card at the bottom of the picture. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: **Wave (keeps moving)** and **Jitter (keeps moving)** never settle. Use the others for an entrance.
 

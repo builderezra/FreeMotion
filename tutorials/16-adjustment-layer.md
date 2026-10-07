@@ -11,7 +11,7 @@ You'll be able to change the look of your whole video with one layer.
 7. To grade only part of the video, shorten the adjustment's bar on the timeline, like any clip (tutorial 02).
 8. To remove it, select it and tap the bin in the top bar.
 
-On a computer: click an empty spot in the timeline so nothing is selected. The Add panel is at the bottom left. Press Delete to remove the layer.
+On a computer: click an empty spot in the timeline so nothing is selected. The Add panel is at the bottom left. Press Delete to remove the layer. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: Only layers **below** the adjustment are changed. A title above it stays untouched.
 

@@ -11,7 +11,7 @@ You'll be able to manage your projects on Home, and undo or redo while you edit.
 7. To get back to Home from a project, tap the back arrow at the top left. If a clip is selected, the first tap only closes its options, so tap again.
 8. While editing, look at the right half of the row with the time counter. There are two curved arrows side by side. The left one undoes your last change. The right one redoes it.
 
-On a computer: the back arrow, at the left end of the row with the time counter, goes straight to Home. Undo is **Ctrl+Z** (**Cmd+Z** on a Mac). Redo is **Ctrl+Shift+Z** (**Cmd+Shift+Z**).
+On a computer: the back arrow, at the left end of the row with the time counter, goes straight to Home. Undo is **Ctrl+Z** (**Cmd+Z** on a Mac). Redo is **Ctrl+Shift+Z** (**Cmd+Shift+Z**). <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: Duplicate a project before you try something risky. Delete cannot be undone, but undo does work inside a project.
 

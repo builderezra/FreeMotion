@@ -12,7 +12,7 @@ You'll be able to find an effect, set how strong it is, change the order, remove
 8. To switch an effect off without losing it, tap the eye at the right of its row. To remove it, open the row and tap the bin at the right, or swipe the row left.
 9. For a ready-made look, tap **Filters** at the top. Tap one or more pictures, then **Add 1 filter**. You are taken back to **Visual** with the filter already open. **Strength** starts at 1. Drag its ruler right to fade the look toward 0.
 
-On a computer: the same. Click the clip first. The panel is at the bottom left. Drag the grip to reorder, and click the bin to delete.
+On a computer: the same. Click the clip first. The panel is at the bottom left. Drag the grip to reorder, and click the bin to delete. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: A filter is just a group of ordinary effects. Open it to retune any of them, or tap **+ Add effect to this filter**.
 
