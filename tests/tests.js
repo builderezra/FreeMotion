@@ -60126,6 +60126,128 @@
     }
   });
 
+  /* ═══ #1011 — a failed export closed its VideoFrame only on success and never closed the encoder (js/exporter.js run, encodeAudio,
+     aacPriming). A throwing encode() skipped frame.close(); any throw from the frame loop skipped encoder.close() because the
+     encoder was a const inside the try and the finally could not see it. Stubs stand in for the encoders (this container has no
+     H.264 or AAC), so the test runs everywhere; the counting is on the REAL VideoFrame and AudioData classes. */
+  test('1011 an export that fails closes every VideoFrame and its VideoEncoder', { item: '1011', budgetMs: 60000 }, async function () {
+    const RealVE = window.VideoEncoder, RealVF = window.VideoFrame, RealAE = window.AudioEncoder, RealAD = window.AudioData;
+    if (!RealVF || !RealAD) throw new Error('this browser has no VideoFrame / AudioData, so there is nothing to count');
+    const realRender = FM.renderScene, saved = FM.scene;
+    const videoRun = async function (failWhere) {
+      let frames = 0, closed = 0; const encs = []; let n = 0;
+      class StubEnc {
+        constructor() { this.state = 'unconfigured'; this.encodeQueueSize = 0; this.calls = 0; encs.push(this); }
+        configure() { this.state = 'configured'; }
+        encode() { this.calls++; if (failWhere === 'encode' && this.calls === 3) throw new Error('boom: encode on frame 3'); }
+        async flush() {}
+        close() { this.state = 'closed'; }
+        static async isConfigSupported(c) { return { supported: true, config: c }; }
+      }
+      const rc = RealVF.prototype.close;
+      window.VideoEncoder = StubEnc;
+      RealVF.prototype.close = function () { closed++; return rc.call(this); };
+      window.VideoFrame = class extends RealVF { constructor() { super(...arguments); frames++; } };
+      if (failWhere === 'render') FM.renderScene = function () { n++; if (n === 3) throw new Error('boom: render on frame 3'); return realRender.apply(this, arguments); };
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 32, y: 32, shapeW: 40, shapeH: 40, fill: '#f44', start: 0, duration: 1 });
+      FM.scene = { project: { width: 64, height: 64, fps: 10, duration: 1, background: '#000' }, layers: [L], selectedId: null, selectedIds: [] };
+      let err = null;
+      try { await FM.exporter.run({ scale: 1, fps: 10, bitrate: 300000, name: 'x1011', from: 0, to: 1, outW: 64, outH: 64, onReady: function () {} }); } catch (e) { err = String(e && e.message || e); }
+      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; RealVF.prototype.close = rc; FM.renderScene = realRender; FM.scene = saved;
+      return { err: err, frames: frames, closed: closed, states: encs.map(e => e.state), encs: encs.length };
+    };
+    const audioRun = async function () {
+      let made = 0, closed = 0; const encs = [];
+      class StubAE {
+        constructor() { this.state = 'unconfigured'; this.calls = 0; encs.push(this); }
+        configure() { this.state = 'configured'; }
+        encode() { this.calls++; if (this.calls === 3) throw new Error('boom: audio encode 3'); }
+        async flush() {}
+        close() { this.state = 'closed'; }
+        static async isConfigSupported(c) { return { supported: true, config: c }; }
+      }
+      const rc = RealAD.prototype.close;
+      window.AudioEncoder = StubAE;
+      RealAD.prototype.close = function () { closed++; return rc.call(this); };
+      window.AudioData = class extends RealAD { constructor() { super(...arguments); made++; } };
+      const total = 1024 * 8, ch = new Float32Array(total);
+      const mix = { audioBuffer: { length: total, numberOfChannels: 1, getChannelData: () => ch }, sampleRate: 48000, channels: 1 };
+      let err = null;
+      try { await FM._encodeAudio(function () {}, mix); } catch (e) { err = String(e && e.message || e); }
+      window.AudioEncoder = RealAE; window.AudioData = RealAD; RealAD.prototype.close = rc;
+      return { err: err, made: made, closed: closed, states: encs.map(e => e.state) };
+    };
+    try {
+      const ctl = await videoRun(null);
+      if (ctl.frames < 5 || ctl.frames !== ctl.closed) throw new Error('CONTROL: a run with no failure made ' + ctl.frames + ' VideoFrames and closed ' + ctl.closed);
+      for (const where of ['encode', 'render']) {
+        const r = await videoRun(where);
+        if (!r.err || r.err.indexOf('boom') < 0) throw new Error('CONTROL: the ' + where + ' failure never reached the export (got ' + r.err + ')');
+        if (r.frames !== r.closed) throw new Error('a failed export (' + where + ' throws on frame 3) made ' + r.frames + ' VideoFrames and closed ' + r.closed + ': ' + (r.frames - r.closed) + ' leaked');
+        if (r.encs !== 1 || r.states[0] !== 'closed') throw new Error('a failed export (' + where + ' throws on frame 3) left its VideoEncoder ' + JSON.stringify(r.states));
+      }
+    } finally {
+      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; window.AudioEncoder = RealAE; window.AudioData = RealAD; FM.renderScene = realRender; FM.scene = saved;
+    }
+  });
+
+  test('1011 an audio encode that fails closes every AudioData and AudioEncoder it opened', { item: '1011', budgetMs: 60000 }, async function () {
+    const RealVE = window.VideoEncoder, RealVF = window.VideoFrame, RealAE = window.AudioEncoder, RealAD = window.AudioData;
+    if (!RealVF || !RealAD) throw new Error('this browser has no VideoFrame / AudioData, so there is nothing to count');
+    const realRender = FM.renderScene, saved = FM.scene;
+    const videoRun = async function (failWhere) {
+      let frames = 0, closed = 0; const encs = []; let n = 0;
+      class StubEnc {
+        constructor() { this.state = 'unconfigured'; this.encodeQueueSize = 0; this.calls = 0; encs.push(this); }
+        configure() { this.state = 'configured'; }
+        encode() { this.calls++; if (failWhere === 'encode' && this.calls === 3) throw new Error('boom: encode on frame 3'); }
+        async flush() {}
+        close() { this.state = 'closed'; }
+        static async isConfigSupported(c) { return { supported: true, config: c }; }
+      }
+      const rc = RealVF.prototype.close;
+      window.VideoEncoder = StubEnc;
+      RealVF.prototype.close = function () { closed++; return rc.call(this); };
+      window.VideoFrame = class extends RealVF { constructor() { super(...arguments); frames++; } };
+      if (failWhere === 'render') FM.renderScene = function () { n++; if (n === 3) throw new Error('boom: render on frame 3'); return realRender.apply(this, arguments); };
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 32, y: 32, shapeW: 40, shapeH: 40, fill: '#f44', start: 0, duration: 1 });
+      FM.scene = { project: { width: 64, height: 64, fps: 10, duration: 1, background: '#000' }, layers: [L], selectedId: null, selectedIds: [] };
+      let err = null;
+      try { await FM.exporter.run({ scale: 1, fps: 10, bitrate: 300000, name: 'x1011', from: 0, to: 1, outW: 64, outH: 64, onReady: function () {} }); } catch (e) { err = String(e && e.message || e); }
+      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; RealVF.prototype.close = rc; FM.renderScene = realRender; FM.scene = saved;
+      return { err: err, frames: frames, closed: closed, states: encs.map(e => e.state), encs: encs.length };
+    };
+    const audioRun = async function () {
+      let made = 0, closed = 0; const encs = [];
+      class StubAE {
+        constructor() { this.state = 'unconfigured'; this.calls = 0; encs.push(this); }
+        configure() { this.state = 'configured'; }
+        encode() { this.calls++; if (this.calls === 3) throw new Error('boom: audio encode 3'); }
+        async flush() {}
+        close() { this.state = 'closed'; }
+        static async isConfigSupported(c) { return { supported: true, config: c }; }
+      }
+      const rc = RealAD.prototype.close;
+      window.AudioEncoder = StubAE;
+      RealAD.prototype.close = function () { closed++; return rc.call(this); };
+      window.AudioData = class extends RealAD { constructor() { super(...arguments); made++; } };
+      const total = 1024 * 8, ch = new Float32Array(total);
+      const mix = { audioBuffer: { length: total, numberOfChannels: 1, getChannelData: () => ch }, sampleRate: 48000, channels: 1 };
+      let err = null;
+      try { await FM._encodeAudio(function () {}, mix); } catch (e) { err = String(e && e.message || e); }
+      window.AudioEncoder = RealAE; window.AudioData = RealAD; RealAD.prototype.close = rc;
+      return { err: err, made: made, closed: closed, states: encs.map(e => e.state) };
+    };
+    try {
+      const a = await audioRun();
+      if (!a.err || a.err.indexOf('boom') < 0) throw new Error('CONTROL: the audio failure never reached encodeAudio (got ' + a.err + ')');
+      if (a.made !== a.closed) throw new Error('a failed audio encode made ' + a.made + ' AudioData and closed ' + a.closed);
+      if (a.states.some(st => st !== 'closed')) throw new Error('a failed audio encode left an AudioEncoder ' + JSON.stringify(a.states) + ' (aacPriming and encodeAudio each open one)');
+    } finally {
+      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; window.AudioEncoder = RealAE; window.AudioData = RealAD; FM.renderScene = realRender; FM.scene = saved;
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

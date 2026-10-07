@@ -880,18 +880,19 @@ window.FM = window.FM || {};
     const key = sampleRate + '/' + channels;
     const known = _primingByEncoder.get(Enc);
     if (known && known[key] != null) return known[key];
+    let enc = null;   // queue 1011: hoisted so the finally can close an encoder the catch walked away from
     try {
       const F = AAC_FRAME, N = 12 * F, WIN = 4 * F;
       const AT = [1500, 1500 + 5 * F + 517];   // two clicks, neither on a frame boundary, further apart than WIN
       const sig = new Float32Array(N); AT.forEach(a => { sig[a] = 0.9; });
       const chunks = []; let cfg = null, err = null;
-      const enc = new Enc({ output: (c, m) => { chunks.push(c); if (!cfg && m && m.decoderConfig) cfg = m.decoderConfig; }, error: e => { err = e; } });
+      enc = new Enc({ output: (c, m) => { chunks.push(c); if (!cfg && m && m.decoderConfig) cfg = m.decoderConfig; }, error: e => { err = e; } });
       enc.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 160000 });
       for (let off = 0; off < N; off += F) {   // framed exactly as encodeAudio frames the mix
         const planar = new Float32Array(F * channels);
         for (let c = 0; c < channels; c++) planar.set(sig.subarray(off, off + F), c * F);
         const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: F, numberOfChannels: channels, timestamp: Math.round(off / sampleRate * 1e6), data: planar });
-        enc.encode(ad); ad.close();
+        try { enc.encode(ad); } finally { ad.close(); }
       }
       await enc.flush(); enc.close();
       if (err || !cfg || !chunks.length) return 0;
@@ -912,6 +913,7 @@ window.FM = window.FM || {};
       const k = known || {}; k[key] = lands[0]; _primingByEncoder.set(Enc, k);
       return lands[0];
     } catch (e) { return 0; }
+    finally { if (enc && enc.state !== 'closed') { try { enc.close(); } catch (e) {} } }
   }
   /* Drops the `skip` warm-up frames, re-times what is left from 0, keeps only the frames the mix fills,
      and cuts the last one's duration to the mix's own end. The decoder description rides the first frame
@@ -960,17 +962,18 @@ window.FM = window.FM || {};
     }
     const frameSize = 1024, fed = lead + total;
     let ts = 0;
-    for (let off = 0; off < fed; off += frameSize) {
-      const n = Math.min(frameSize, fed - off);
-      const planar = new Float32Array(n * channels);   // starts as zeros — which is what the lead is
-      const a = Math.max(off, lead);                     // the part of this frame the mix itself fills
-      if (off + n > a) for (let c = 0; c < channels; c++) planar.set(chData[c].subarray(a - lead, off + n - lead), c * n + (a - off));
-      const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round(ts), data: planar });
-      enc.encode(ad); ad.close();
-      ts += (n / sampleRate) * 1e6;
-    }
-    await enc.flush();
-    enc.close();
+    try {   // queue 1011: a throw from encode or flush used to leave the AudioData and the AudioEncoder open
+      for (let off = 0; off < fed; off += frameSize) {
+        const n = Math.min(frameSize, fed - off);
+        const planar = new Float32Array(n * channels);   // starts as zeros — which is what the lead is
+        const a = Math.max(off, lead);                     // the part of this frame the mix itself fills
+        if (off + n > a) for (let c = 0; c < channels; c++) planar.set(chData[c].subarray(a - lead, off + n - lead), c * n + (a - off));
+        const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round(ts), data: planar });
+        try { enc.encode(ad); } finally { ad.close(); }
+        ts += (n / sampleRate) * 1e6;
+      }
+      await enc.flush();
+    } finally { if (enc.state !== 'closed') { try { enc.close(); } catch (e) {} } }
     if (encErr) throw encErr;
     if (skip) {
       let kept = null;
@@ -1261,7 +1264,7 @@ window.FM = window.FM || {};
 
       FM._exporting = true;   // tells the compositor to skip the preview-only hold-frame capture/substitution (#13,#22)
       // Hoisted out of the try so the finally can shut the recorder down before deciding what to keep.
-      let delivered = false, recorder = null, poster = null, releaseVideos = null;
+      let delivered = false, recorder = null, poster = null, releaseVideos = null, encoder = null;   // encoder: hoisted so the finally can close it (queue 1011)
       try {
       /* CANCEL DURING "Decoding frames…" STOPS HERE (queue 916, clause 3). prepareCaches breaks out of its
        * loop on the flag, and its own comment says that stops the export going on into "the audio mix,
@@ -1450,7 +1453,7 @@ window.FM = window.FM || {};
        * `if (encErr) throw encErr` after its flush. Same shape, and the asymmetry was the whole of the
        * QA report's point. Thrown after flush() so the encoder is drained first. */
       let vidErr = null;
-      const encoder = new VideoEncoder({
+      encoder = new VideoEncoder({
         output: (chunk, meta) => { muxer.addVideoChunk(chunk, meta); if (recorder) recorder.add(chunk, meta); },
         error: e => { vidErr = e; console.error('video encode', e); },
       });
@@ -1505,8 +1508,8 @@ window.FM = window.FM || {};
         const frame = new VideoFrame(outCanvas, { timestamp: Math.round(f * frameDurUs), duration: Math.round(frameDurUs) });
         // `f === resumeFrom` forces the seam to be an IDR. A fresh encoder would almost certainly open
         // with one anyway, but "almost certainly" is not a thing to hang a file's decodability on.
-        encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 || f === resumeFrom });
-        frame.close();
+        try { encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 || f === resumeFrom }); }
+        finally { frame.close(); }   // queue 1011: a throwing encode (an encoder that already errored) must not strand the frame
         while (encoder.encodeQueueSize > 8) await nextTick();
         // ONE unconditional yield per frame. Without it this loop only ever returned to the event
         // loop when the encoder fell behind — so on a machine whose encoder keeps up, the whole
@@ -1642,6 +1645,8 @@ window.FM = window.FM || {};
         // a heavy reversed/slow clip doesn't keep multiple GB resident and OOM mobile Safari. Preview
         // re-decodes a lightweight downscaled cache on the next scrub/play. (#3)
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
+        // queue 1011: every exit that did not reach the success close below (a throw from render or encode) left the hardware encoder open
+        if (encoder && encoder.state !== 'closed') { try { encoder.close(); } catch (e) {} }
         if (releaseVideos) releaseVideos();   // queue 690 — any strip that waited on the export is drawn now
         FM._exporting = false;
         if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();   // H40: the plates are export-sized; the start of an export clears them, its end must too
