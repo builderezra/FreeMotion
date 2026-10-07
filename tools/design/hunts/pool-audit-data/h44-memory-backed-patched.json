@@ -1,0 +1,112 @@
+[
+ {
+  "tag": "memweak boot",
+  "heapMB": 3.1,
+  "rss": {
+   "browser": 188.3,
+   "renderer": 363.5,
+   "other": 374.5,
+   "total": 926.2
+  },
+  "prevFiles": "{\"layers\":0,\"files\":0,\"mb\":0}"
+ },
+ {
+  "tag": "memweak 20 clips imported",
+  "heapMB": 4.0,
+  "rss": {
+   "browser": 400.1,
+   "renderer": 699.4,
+   "other": 456.0,
+   "total": 1555.5
+  },
+  "prevFiles": "{\"layers\":0,\"files\":0,\"mb\":0}"
+ },
+ {
+  "tag": "memweak 30 replaces",
+  "heapMB": 4.3,
+  "rss": {
+   "browser": 404.2,
+   "renderer": 952.4,
+   "other": 447.5,
+   "total": 1804.1
+  },
+  "prevFiles": "{\"layers\":20,\"files\":30,\"mb\":0}"
+ },
+ {
+  "tag": "memweak undo/redo x6",
+  "heapMB": 4.4,
+  "rss": {
+   "browser": 344.2,
+   "renderer": 1021.9,
+   "other": 447.6,
+   "total": 1813.7
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":61.6}"
+ },
+ {
+  "tag": "memweak switch 1",
+  "heapMB": 4.0,
+  "rss": {
+   "browser": 195.3,
+   "renderer": 843.1,
+   "other": 454.2,
+   "total": 1492.6
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":0}"
+ },
+ {
+  "tag": "memweak switch 2",
+  "heapMB": 4.1,
+  "rss": {
+   "browser": 195.8,
+   "renderer": 1029.0,
+   "other": 456.4,
+   "total": 1681.2
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":0}"
+ },
+ {
+  "tag": "memweak switch 3",
+  "heapMB": 4.1,
+  "rss": {
+   "browser": 195.8,
+   "renderer": 878.4,
+   "other": 456.8,
+   "total": 1531.0
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":0}"
+ },
+ {
+  "tag": "memweak switch 4",
+  "heapMB": 4.2,
+  "rss": {
+   "browser": 193.8,
+   "renderer": 1027.3,
+   "other": 457.6,
+   "total": 1678.6
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":0}"
+ },
+ {
+  "tag": "memweak switch 5",
+  "heapMB": 4.2,
+  "rss": {
+   "browser": 193.8,
+   "renderer": 881.9,
+   "other": 456.6,
+   "total": 1532.3
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":0}"
+ },
+ {
+  "tag": "memweak CONTROL _prevFiles cleared",
+  "heapMB": 4.2,
+  "rss": {
+   "browser": 193.8,
+   "renderer": 871.7,
+   "other": 449.4,
+   "total": 1514.9
+  },
+  "prevFiles": "{\"layers\":0,\"files\":0,\"mb\":0}"
+ }
+]

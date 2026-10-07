@@ -68,3 +68,77 @@ All five patches (and H19's two) on one tree against main, the same name filter 
 | motion-flow plates | 8.3 MB per layer per export | 1 to 3 exports x 1 to 4 such layers | 8 to 100 MB |
 | decoded sound | 88 MB per four-minute stereo song | 1 to 3 exports x 1 to 3 songs | 88 to 264 MB (the same songs are decoded once per record, so it does not multiply by exports) |
 | kept undo files | not measured | rare | unknown |
+
+---
+
+# H43: the 11 scratch pools H40 patch 2 does not cover (7 Oct, main 2e3fd7a9, instrumented copy, Chromium in this container)
+
+Pools: `_pmPool` (compositor.js:3355), `_mbPool` (:3507), `_fcPool` (:4492), `_sqPool` (:9574), `_t3Pool` (:11859), `_dfPool` (:14605), `_miPool` (:14923), `_pxPool` (:15007), `_fbPool` (:16680), `_olPool` (:17089), `_adjFcPool` (:17947). Size is the canvas pixels each pool holds (width x height x 4, read from the canvases themselves through the `FM.__audit` getters of H40; units are MB = 10^6 bytes, a 1080 x 1920 canvas is 8.3 MB).
+
+## The session (Measured)
+Scripts: `pool-audit-scripts/h43_session.js`, `h43_trig.js` (driven through the walk harness at 380 x 760, DPR 1, project 1080 x 1920). Three stages, bytes read after each:
+- **A, browsing:** all 205 effects, one at a time on an image layer, each drawn at five playhead times in the preview (the effects browser's own thumbnails are `_ckCanvases`/`_lkCanvases`, a flat 8.6 MB here, H40's).
+- **B, editing:** the seven things that reach the other pools put on screen together: a pen mask, Motion Blur (Object) on a moving layer, Backfill on a layer smaller than the frame, a Filter box at 50% strength, 3D tilt, an outline on a layer at 60% opacity, an Adjustment layer carrying a Filter box; eight frames drawn.
+- **C, one export:** a 0.6 s GIF at 1080 x 1920 with all of that in the scene, then 40 s idle (**identical to the byte**: nothing in these pools ever shrinks by itself).
+This is about four minutes of scripted use, not ten of wall clock. I did not run it longer because these pools are bounded by canvas size and nesting depth, not by time: the 40 s idle and a second pass change nothing (Measured). The preview is the 380 px stage at DPR 1; a phone at DPR 3 draws larger preview plates, **not measured**.
+
+| pool | what fills it | A browsing | B editing | C after export (and 40 s idle) |
+|---|---|---|---|---|
+| `_adjFcPool` | Adjustment layer with a Filter box at strength between 0 and 1: 2 canvases per nesting level | 2.0 MB | 2.4 MB | **33.2 MB** (2 levels x 2 x 8.3) |
+| `_fcPool` | Filter box at strength between 0 and 1 on a layer: 3 canvases per level | 1.5 MB | 1.8 MB | **24.9 MB** (3 x 8.3) |
+| `_mbPool` | Motion Blur (Object): a plate padded by the travel + the accumulator | 1.0 MB | 1.0 MB | 17.9 MB with a fast mover (plate 1184 x 2024 + 1080 x 1920); 1.0 MB with the slow mover of the main session (re-run on its own) |
+| `_pmPool` | a mask or matte: plate + stencil at the **project's** size, even in the preview | 0 | 16.6 MB | 16.6 MB |
+| `_t3Pool` | 3D tilt: 2 canvases at the plate size | 0 | 1.2 MB | 16.6 MB |
+| `_fbPool` | Backfill: 3 canvases (A full size, B and C reduced) | 0.7 MB | 0.7 MB | 9.6 MB |
+| `_pxPool` | Pixelate A + small S | 8.4 MB | 8.4 MB | 8.4 MB |
+| `_olPool` | outline/pill unit at opacity below 1 | 0.5 MB | 0.6 MB | 8.3 MB |
+| `_sqPool` | Squish | 0.8 MB | 0.8 MB | 0.8 MB |
+| `_miPool` | Mirror | 0.6 MB | 0.6 MB | 0.6 MB |
+| `_dfPool` | Defocus **without** `ctx.filter` | 0 | 0 | 0 (see below) |
+| **11 pools together** | | **15.5 MB** | **34.1 MB** | **136.8 MB** (with the fast mover; 120.0 without) |
+
+(Arithmetic for the sums and the 24.2 MB below done in Python, not by hand.)
+
+**Reading it.** Everything is back to one frame's worth of canvases the moment the next preview frame resizes each used entry, and nothing is held when a pool is not entered; but a pool entry that nothing uses again stays at export size for the rest of the session. That is the same shape as the five pools H40 patch 2 trims. Over the 20 MB bar: **`_adjFcPool` (33.2 MB) and `_fcPool` (24.9 MB)**. Not over, listed: `_mbPool` 17.9 MB measured (**arithmetic: 24.2 MB per nesting level at the travel cap of a quarter of the frame**, so a very fast mover would cross the bar; I did not patch it because I could not reach that size), `_pmPool` 16.6 MB, `_t3Pool` 16.6 MB, the rest under 10 MB. `_dfPool` (**Read**: compositor.js:14628, :17354) is entered only where `ctx.filter` does not work, which this Chromium never does, so it measured 0; on such a device it is one full-size canvas per nesting level up to 7 deep (**arithmetic: 8.3 MB each, 55 MB at the cap**) and the 1095 trim would need to learn it too. I did not force the path (`FM._forceNoCtxFilter`) to measure it, so that line is a Guess about a device I cannot run.
+
+**Two things I did not expect.** (1) `_pmPool` is project-size in the preview too (16.6 MB the moment a masked layer is on screen), because the stencil is built at W x H of the project (compositor.js:3403, :3487); every other pool follows the preview scale. It is a candidate for the same plate-scale fix those pools got, but it is 16.6 MB, under the bar, so I left it. (2) The effects loop (A) does not grow these pools at all past 15.5 MB, so "browsing effects" is not what holds the memory here; the one export is.
+
+## The patch for the two over the bar: `pool-audit-patches/6-filter-container-plates.patch` (applies on top of H19's two patches and H40 patch 2) + `6-test.patch`
+- Cause (**Verified**): `_trimScratch` (compositor.js ~18560, H19 + patch 2) names `_pfPool`, `_wpPool`, `_cfPool`, `_mgPool`, `_expPool`, `_dspPool`; `_fcPool` and `_adjFcPool` are not in it. Acquire sites traced: `_fcPool` is read and written only in `drawFilterContainer` (:4521, :4532); `_adjFcPool` only in `adjFilterPlate` (:17990, and its two recursive calls :18006, :18007), and both already resize on use (`if (P[k].width !== W ...)`), which is what makes releasing an entry safe.
+- Change: `_hw` gets `fc` and `adj` (the deepest level used since the last trim, set at the two acquire lines), `_trimScratch` calls the existing `_trimPool` on both, `_fcDepth` joins the "never mid-render" guard, `_poolStats` reports both, and the re-arm line in `_scheduleTrim` knows them. 8 lines of code, no new mechanism.
+- Test: `H43 the Filter-container plates are released when nothing uses them, after a full-size frame`: draws a Filter box and an Adjustment layer with one at 1080 x 1920, CONTROL that both pools filled (3 and 2 plates of 1080 x 1920), draws a thumbnail-size frame without any, waits two trim windows, asks the pixels left, and finally draws again at 540 x 960 to prove the plates come back. **Red on the code without the trim (only the stats seam added): "the Filter-container pool still holds 6220800 pixels (24 MB): the trim does not reach it"; green with it, at 1280 and 380.**
+- Cost: a Filter box redrawn after 6 s of nothing re-creates its plates once (one `width =` per canvas); a box that is used every window keeps its plates.
+- Neighbours: the tests whose names hold `container`, `filter box` or `adjustment` (16, the Filter box and Adjustment layer render tests) are **16/16 at 1280 and at 380** with H19 + patch 2 + this patch (**Measured**); the 1095, H40 and H43 tests are 3/3 at both widths.
+
+# H44: what `_prevFiles` costs in RAM (7 Oct, same instrumented copy)
+
+`_prevFiles` is `storage.js:683`; `stashPrevMedia` (:703) fills it, from `app.js:4648`, `:4753` (Replace media) and `collab-media.js:559`; `takePrevMedia` (:728) also puts what it read back. H40 patch 5 empties it for clips that left the scene and every snapshot; it does nothing for a clip that is still in the project.
+
+## Method (Measured)
+Scripts `pool-audit-scripts/h44_page.js`, `h44_run.py`, `h44_lib.py`; raw numbers `pool-audit-data/h44-*.json`. A 380 x 760 touch page, project 1080 x 1920. **20 clips of 10.3 MB** (a real 768 KB WebM padded with random bytes: the app reads the first segment; the padding makes it phone-size), imported with `FM.loadVideoFile` + `FM.addMediaLayer` and saved; **30 replaces** through the app's own sequence (`stashPrevMedia`, `replaceMediaWith`, `mediaRev`, `history.commit`, save, library entry, copied from app.js:4750-4780); **6 undos and 6 redos**; a second project; **5 project switches**; then the **control: `_prevFiles.clear()`** and 4 s. Every number is JS heap after a forced collection, and resident memory (RSS) of the browser process and the page process, summed from `ps` for that browser only. Every Replace and import makes a brand new File and nothing else keeps a reference to it, so what the control frees is exactly what `_prevFiles` was keeping alive.
+
+Two kinds of File, because they cost differently and the phone makes both:
+- **Memory-backed** (`new File([bytes])`: what a camera or recorder blob, a song's WAV from `audioFromVideo`, or media a peer sent is).
+- **Disk-backed** (an OPFS file handle's `getFile()`, which behaves like a picker file: the bytes live on disk and the File is a handle).
+
+## Result
+`_prevFiles` after the run: **20 layers, 36 files, 369.7 MB of file size** (30 replaces + 6 from undo and redo), unchanged by the five project switches (it is keyed by layer id and nothing leaves it).
+
+| | JS heap | browser process | page process | total, all processes |
+|---|---|---|---|---|
+| memory-backed, after the 5 switches | 4.1 MB | **446.4 MB** | 890.4 MB | 1790.7 MB |
+| memory-backed, after `_prevFiles.clear()` | 4.1 MB | **192.6 MB** | 875.7 MB | 1510.8 MB |
+| **memory-backed cost of `_prevFiles`** | 0 | **253.8 MB** (0.69 of the 369.7 MB it names) | 15 MB (noise) | **about 280 MB** |
+| disk-backed, after the 5 switches | 4.1 MB | 196.1 MB | 886.5 MB | 1538.7 MB |
+| disk-backed, after `.clear()` | 4.1 MB | 196.2 MB | 873.1 MB | 1515.3 MB |
+| **disk-backed cost of `_prevFiles`** | 0 | **0.1 MB** | 13 MB (inside the page's own +-90 MB wobble between switches) | **about 0** |
+
+(For scale: the page process is 354 MB at boot and 700 to 1000 MB with 20 video clips loaded; that is the media registry's video elements, not `_prevFiles`, and is a different item.)
+
+## Does it need a cap? No cap, but yes a fix: hold the File weakly
+- **Read (storage.js:703-740)**: nothing ever reads a File back out of the map. The two questions put to it are "is a file kept at this revision" (`hasPrevMedia`, :740, only the key) and "is this the very object already kept" (`stashPrevMedia`, :707, an identity check that saves a second write); `takePrevMedia` reads the disk record. So the strong reference buys nothing and costs the whole file when it was built in memory.
+- **A count cap would be the wrong fix.** It would evict revisions the undo still needs the key for, and it would not shrink a single 200 MB clip. The cost is RAM for memory-backed files only (about 0.7 of their size here), and zero for picker files, so on an iPhone's normal path (pick from Photos or Files) it is already free; it bites for recorded, converted, generated and received media.
+- **The fix** (`pool-audit-patches/7-prevfiles-weak.patch`, 3 lines + a `weakFile` helper, with a fallback to a strong reference where `WeakRef` does not exist): the map holds `WeakRef`s. `hasPrevMedia` is unchanged; the identity check becomes `held.deref() === rec.file`, which is still true for as long as anything holds the file (the clip it restores, the registry), exactly when the check can matter.
+- **Test** (`7-test.patch`): `H44 the file kept for undo of a replaced clip is not held alive by the record that it is kept`: stash a 2 MB File, drop it, ask the driver for a real collection (the `__fmWantGc` seam), assert the `WeakRef` is cleared and `hasPrevMedia` still says the revision is kept; CONTROL: right after the stash the file is alive and kept. **Red on main ("the 2 MB file put away for undo is still alive after a collection: the keeping record holds it"), green patched.** Under `tests/_cdp.py` only (the same limit as the other collection tests).
+- **The saving, Measured on the patched copy** (`pool-audit-data/h44-memory-backed-patched.json`; same 20-clip, 30-replace, 6 undo/redo, 5-switch run, the patch applied by hand to the instrumented copy): the 36 keys are still there, **0 MB of files are alive** after the first project switch, and the browser process sits at **193.8 MB after the five switches against 446.4 MB unpatched** (total of all processes 1532.3 MB against 1790.7 MB: **259 MB saved**). The unpatched run reproduced: a second repeat gave 448.0 MB before and 193.5 MB after `.clear()`.
+- Neighbours: the 139 tests whose names hold `H44`, `stash`, `replace` or `prev` are **130/139 at 1280 and 130/139 at 380** with the patch, and 128/138 and 129/138 on the same tree without it; the red names are the same on both trees (this container has no H.264 or AAC, so `NO_VIDEO_CODEC` and a closed `VideoEncoder` account for most; plus `a zoomed preview re-measures…` and `482 2.6 Motion Blur (Object)…`), and the one extra red on the unpatched 1280 run (`preset previews: the CACHE follows the layer…`) is the flaky one H42 found. **Measured.**

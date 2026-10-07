@@ -1,0 +1,112 @@
+[
+ {
+  "tag": "mem boot",
+  "heapMB": 3.1,
+  "rss": {
+   "browser": 187.8,
+   "renderer": 366.7,
+   "other": 376.3,
+   "total": 930.8
+  },
+  "prevFiles": "{\"layers\":0,\"files\":0,\"mb\":0}"
+ },
+ {
+  "tag": "mem 20 clips imported",
+  "heapMB": 4.0,
+  "rss": {
+   "browser": 397.7,
+   "renderer": 657.7,
+   "other": 448.6,
+   "total": 1504.1
+  },
+  "prevFiles": "{\"layers\":0,\"files\":0,\"mb\":0}"
+ },
+ {
+  "tag": "mem 30 replaces",
+  "heapMB": 4.3,
+  "rss": {
+   "browser": 705.6,
+   "renderer": 976.8,
+   "other": 442.8,
+   "total": 2125.2
+  },
+  "prevFiles": "{\"layers\":20,\"files\":30,\"mb\":308.1}"
+ },
+ {
+  "tag": "mem undo/redo x6",
+  "heapMB": 4.4,
+  "rss": {
+   "browser": 585.4,
+   "renderer": 1057.7,
+   "other": 443.0,
+   "total": 2086.1
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":369.7}"
+ },
+ {
+  "tag": "mem switch 1",
+  "heapMB": 4.0,
+  "rss": {
+   "browser": 446.2,
+   "renderer": 882.3,
+   "other": 449.8,
+   "total": 1778.4
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":369.7}"
+ },
+ {
+  "tag": "mem switch 2",
+  "heapMB": 4.1,
+  "rss": {
+   "browser": 446.3,
+   "renderer": 1063.0,
+   "other": 449.0,
+   "total": 1958.3
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":369.7}"
+ },
+ {
+  "tag": "mem switch 3",
+  "heapMB": 4.1,
+  "rss": {
+   "browser": 446.3,
+   "renderer": 888.7,
+   "other": 451.8,
+   "total": 1786.9
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":369.7}"
+ },
+ {
+  "tag": "mem switch 4",
+  "heapMB": 4.2,
+  "rss": {
+   "browser": 446.4,
+   "renderer": 1063.2,
+   "other": 452.5,
+   "total": 1962.1
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":369.7}"
+ },
+ {
+  "tag": "mem switch 5",
+  "heapMB": 4.1,
+  "rss": {
+   "browser": 446.4,
+   "renderer": 890.4,
+   "other": 453.8,
+   "total": 1790.7
+  },
+  "prevFiles": "{\"layers\":20,\"files\":36,\"mb\":369.7}"
+ },
+ {
+  "tag": "mem CONTROL _prevFiles cleared",
+  "heapMB": 4.1,
+  "rss": {
+   "browser": 192.6,
+   "renderer": 875.7,
+   "other": 442.6,
+   "total": 1510.8
+  },
+  "prevFiles": "{\"layers\":0,\"files\":0,\"mb\":0}"
+ }
+]
