@@ -28,4 +28,3 @@ Each of these now carries `<!-- not walked: why -->` on its line:
 ## Honest caveats
 - 03 step 9 still says "your phone's own colour picker opens". I could not open it here, so that sentence is untested; only the hex box was.
 - 06 step 4 says the song appears "below the add row". With a layer selected the add row is hidden, so this was only checked as "orange bar, named, selected".
-- 13 step 5: the old wording was also repeated by nothing else in the file, so no other line needed to change.
