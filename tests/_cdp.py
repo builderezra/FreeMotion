@@ -469,6 +469,7 @@ def main():
         payload = None
         last_seen = ""
         cpu = [1]
+        media = [False]   # reduced motion emulated (a test asked through __fmWantMedia)
         inp = {"touch_emu": False, "touch_down": False, "mouse_down": False, "touch_base": False}   # the real-input channel's state across requests (queue 924)
         # WHERE THE TIME GOES, WHILE IT GOES (30 Sep, v17.18). A timeout used to read lastTest ONCE, at the end — and when the
         # page had stopped answering by then it printed `"lastTest": ""`, which says nothing about an hour of suite. So the
@@ -536,6 +537,25 @@ def main():
                 cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
                          "if(w){w.__fmCpuRate=%s;w.__fmDriverCaps=%s;}})()" % (json.dumps(cpu[0]), json.dumps(
                              {"touchEmulation": bool(_platform.REAL_TOUCH_VIA_EMULATION), "why": _platform.REAL_TOUCH_WHY})))
+            except Exception:
+                pass
+            # A TEST MAY ASK FOR REDUCED MOTION, AND ONLY THIS DRIVER CAN GIVE IT TO THE STYLESHEET (#980, 5 Oct). A test
+            # that stubs window.matchMedia changes what SCRIPT sees and nothing CSS sees: the first Simple-mode cog test did
+            # exactly that and passed alone while the stylesheet's own reduced-motion rule was losing the cascade to the
+            # shake it was meant to stop. `Emulation.setEmulatedMedia` is a DevTools call, so a test writes
+            # `window.__fmWantMedia = {reduce: true, until}` in the app frame and waits for `__fmMediaReduce === true`.
+            # `until` works as it does for the CPU throttle: a test that dies mid-check cannot leave the rest of the suite
+            # running with motion off, which would quietly skip every animation assertion after it.
+            try:
+                want_m = cdp.eval("(function(){var f=document.getElementById('app');"
+                                  "var w=f&&f.contentWindow;var q=w&&w.__fmWantMedia;"
+                                  "return !!(q&&q.reduce===true&&q.until>Date.now());})()")
+                want_m = want_m is True
+                if want_m != media[0]:
+                    cdp.send("Emulation.setEmulatedMedia", features=[{"name": "prefers-reduced-motion", "value": "reduce" if want_m else ""}])
+                    media[0] = want_m
+                cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                         "if(w) w.__fmMediaReduce=%s;})()" % json.dumps(media[0]))
             except Exception:
                 pass
             # A TEST MAY ASK FOR REAL INPUT, AND ONLY THIS DRIVER CAN GIVE IT (queue 924). A synthetic pointer event

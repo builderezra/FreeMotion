@@ -14,6 +14,7 @@ window.FM = window.FM || {};
   let active = null;              // { layerId, fx, snap }
   let overlay = null, bar = null, raf = 0;
   let box = null;                 // region in comp PERCENT { x, y, w, h }
+  let box0 = null;                // the box the tool opened with (after any seed) — changed() reads it (Simple mode P1, DESIGN §6.4)
   let drag = null;                // { mode, startPt, startBox }
   let lastSig = '';               // repaint only when the box or overlay size changed
 
@@ -157,6 +158,8 @@ window.FM = window.FM || {};
 
   FM.touchupTool = {
     isOpen() { return !!active; },
+    /* Simple mode P1 (DESIGN §6.4): has the box moved since the tool opened? Read-only. */
+    changed() { return !!(active && box && box0) && ['x', 'y', 'w', 'h'].some(k => Math.abs(box[k] - box0[k]) > 1e-6); },
     layerId() { return active ? active.layerId : null; },   // queue 921 S0: for FM.cancelGesturesOn
     open(layerId, fxRef) {
       if (FM.viewport && !FM.viewport.isDefault()) FM.viewport.reset();   // overlay lays out in screen px — a zoomed viewport double-scales it
@@ -169,6 +172,7 @@ window.FM = window.FM || {};
       box = readBox();   // animated region shows its value at the playhead
       const seeded = box.w < MIN || box.h < MIN;
       if (seeded) box = { x: 35, y: 35, w: 30, h: 30 };   // degenerate params → seed a visible centre box
+      box0 = { x: box.x, y: box.y, w: box.w, h: box.h };
       const wrap = document.getElementById('canvas-wrap');
       overlay = document.createElement('canvas'); overlay.id = 'touchup-overlay';
       wrap.appendChild(overlay);

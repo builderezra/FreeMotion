@@ -30628,6 +30628,7 @@
       'path', 'diff', 'Host', 'Session', 'bridge', 'link', 'DENY', '_viewOfProject',
       'session', 'attach', 'detach', 'share', 'join', 'leave', 'end', 'reopen', 'sameDeviceCopy', 'testMode',
       'beforeSnap', 'afterCommit', 'beforeFlush', 'undoActive', 'undo', 'redo', 'canUndo', 'canRedo',
+      'redoDepth',   // #980 Phase 1 review R3: read-only, the editor switch's redo line counts the steps a session's own redo holds
       'onReset', 'reachable', 'isGuest', 'deferReload', '_pendingReload', '_undoHandover', '_reload', '_agentTag', 'lastError',
       /* S3 (queue 921): the codes-only half of the signalling, and the UI. Both are libraries at load —
          `signal` defines functions and `ui` defines an object that builds nothing at all until
@@ -120789,4 +120790,898 @@
     if (C.schemaFingerprint() !== got) throw new Error('CONTROL: the fingerprint did not come back after SM_V was restored');
     if (moved === got) throw new Error('a build with a different SM_V has the same fingerprint — SM_V must only change with SCHEMA_REV, and the gate cannot tell');
   });
+
+  /* ═══ SIMPLE MODE, PHASE 1 STEP 1.3 — THE VIEW HE HOLDS: the switch (through the cog's one door), the read-only Simple timeline ═══
+     1 Oct: re-anchored to the cog and the guard; NOT RE-RUN. The cog block's own tests are §5.6b. */
+
+  /* A project on screen with three clips (real media records), a title and a song; everything put back.
+     `fn(ctx)` gets the layers and a commit counter. History commits are COUNTED, not stubbed away, so "no undo step" is real. */
+  async function smView(fn, opts) {
+    opts = opts || {};
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (wasHome) FM.home.close();
+    const saved = { scene: FM.scene, time: FM.time, commit: FM.history.commit, save: FM.storage.save, zoom: FM.timeline.getZoom() };   // 1 Oct: no Settings preview (D22 A); under D22 B also save and set 'simpleEditor' here
+    /* The switch remembers the editor on THIS device's card for the open project (FM.editor.set → the index entry's
+       `editor`). The suite's own project is that project, so the card is put back exactly as found, or the next test
+       would open in Simple. */
+    const pid0 = FM.storage.openProjectId ? FM.storage.openProjectId() : null;
+    const card0 = (FM.projects.list() || []).find(p => p.id === pid0);
+    const ed0 = card0 ? card0.editor : undefined;
+    /* the switch also writes this device's fm.editor.last and, on a first arrival in Simple, fm.editor.hint: put both back */
+    const ls0 = {}; ['fm.editor.last', 'fm.editor.hint'].forEach(k => { try { ls0[k] = localStorage.getItem(k); } catch (e) {} });
+    let commits = 0;
+    FM.history.commit = function () { commits++; };
+    FM.storage.save = function () {};
+    const g = smRig(1080, 1920);
+    const c1 = g.clip('smv1', 0, 4, { nw: 1080, nh: 1920 }), c2 = g.clip('smv2', 4, 3, { nw: 1080, nh: 1920 }), c3 = g.clip('smv3', 8, 4, { nw: 1080, nh: 1920 });
+    const title = g.text('smvT', 1, 2, 'Beach day');
+    const song = g.clip('smvS', 0, 12, { nw: 0, audioOnly: true });
+    FM.scene = g.scene([title, c3, c2, c1, song]);
+    FM.scene.project.duration = 12;
+    FM.time = 2;
+    try {
+      FM.refreshAll(); await sleep(60);
+      return await fn({ c1: c1, c2: c2, c3: c3, title: title, song: song, commits: () => commits, sleep: sleep });
+    } finally {
+      try { if (FM.editor) FM.editor.apply('full', { force: true }); } catch (e) {}
+      try {
+        const idx = FM.projects.list() || [], c = idx.find(p => p.id === pid0);
+        if (c && c.editor !== ed0) { if (ed0 === undefined) delete c.editor; else c.editor = ed0; FM.projects.saveIndex(idx); }
+      } catch (e) {}
+      Object.keys(ls0).forEach(k => { try { if (ls0[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, ls0[k]); } catch (e) {} });
+      FM.history.commit = saved.commit; FM.storage.save = saved.save;
+      FM.scene = saved.scene; FM.time = saved.time;
+      g.done();
+      try { FM.timeline.setZoom(saved.zoom); FM.refreshAll(); } catch (e) {}
+      if (wasHome && !FM.home.isOpen()) FM.home.open();
+      await sleep(30);
+    }
+  }
+  function smVis(el) { return !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'; }
+  function smNeedEditor() { if (!FM.editor || !FM.simpleTimeline) throw new Error('FM.editor / FM.simpleTimeline are missing — js/editor-mode.js or js/simple-timeline.js did not load'); }
+
+  /* D22 B ONLY: build this test only if he picks a Settings gate. Under D22 A (recommended) there is no row, and cog T7–T9
+     (§5.6b) test the block instead. */
+  /* (the Settings-row test is D22 B only — under his D22 A there is no Settings row; BUILD-PLAN §5.2 1.3.7–1.3.9) */
+
+  test('simple P1 · T8 the switch writes nothing, keeps time, selection and zoom, and every clip keeps its x', { item: '980' }, async function () {
+    smNeedEditor();
+    /* 1 Oct, RE-ANCHORED, NOT RE-RUN: through FM.editor.request (the cog's one door); no ⇄, no E, no preview flip. */
+    await atWideWidth(async function () {
+      await smView(async function (v) {
+        FM.selectLayer(v.c2.id);
+        /* the DOCUMENT only: this test itself moves the selection between the two reads (selectLayer(null) to measure x),
+           and FM.scene carries selectedId / selectedIds, so a whole-scene compare failed on the test's own tap */
+        const docOf = () => JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers });
+        const doc0 = docOf(), hist0 = JSON.stringify(FM.history._steps()), z0 = FM.timeline.getZoom(), t0 = FM.time, commits0 = v.commits();
+        FM.selectLayer(null);
+        const fullX = {};
+        [v.c1, v.c2, v.c3].forEach(c => { const e = document.querySelector('#tl-tracks .clip[data-id="' + c.id + '"]'); fullX[c.id] = e ? e.getBoundingClientRect().left : NaN; });
+        FM.selectLayer(v.c2.id);
+        if (!(await FM.editor.request('simple'))) throw new Error('the switch refused with nothing live');
+        await v.sleep(40);
+        if (!document.body.classList.contains('ed-simple') || !smVis(document.getElementById('sm-timeline'))) throw new Error('Simple is not on screen after the switch');
+        if (docOf() !== doc0) throw new Error('the switch wrote to the document');
+        if (v.commits() !== commits0 || JSON.stringify(FM.history._steps()) !== hist0) throw new Error('the switch took an undo step');
+        if (FM.time !== t0 || FM.timeline.getZoom() !== z0 || FM.scene.selectedId !== v.c2.id) throw new Error('the switch lost the time, zoom or selection');
+        if (document.body.classList.contains('m-editing') || document.body.classList.contains('sel-mode')) throw new Error('Full’s selection classes are on in Simple');
+        FM.selectLayer(null); await v.sleep(20);
+        const off = [];
+        [v.c1, v.c2, v.c3].forEach(c => {
+          const e = document.querySelector('#sm-main .sm-item[data-id="' + c.id + '"]');
+          const x = e ? e.getBoundingClientRect().left : NaN;
+          if (!(Math.abs(x - fullX[c.id]) <= 1)) off.push(c.id + ': Full ' + Math.round(fullX[c.id]) + ' vs Simple ' + Math.round(x));
+        });
+        if (off.length) throw new Error('clips moved across the switch: ' + off.join(' · '));
+        if (document.activeElement === document.body) throw new Error('focus fell to <body> after the switch');
+        /* back to Full through the same door: still nothing written; the switch's own words are cog T7/T10's (§5.6b) */
+        if ((await FM.editor.request('full')) !== true || document.body.classList.contains('ed-simple')) throw new Error('the switch did not go back to Full');
+        if (docOf() !== doc0 || v.commits() !== commits0) throw new Error('switching back wrote to the document or took a step');
+        /* during an export the one door refuses (its line shows inside the cog block, cog T13) */
+        FM._exporting = true;
+        try { if ((await FM.editor.request('simple')) !== false || document.body.classList.contains('ed-simple')) throw new Error('the switch went through during an export'); }
+        finally { FM._exporting = false; }
+        /* NO E (DESIGN §0.4 B14): the key does nothing new in Full */
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', bubbles: true }));
+        await v.sleep(20);
+        if (document.body.classList.contains('ed-simple')) throw new Error('E switched editor — Full must gain no key'); 
+      });
+    }, 1280);
+  });
+
+  test('simple P1 · T19 on a phone at 380 the Simple row reads ⋯ ✂ (gap) |◀ with |◀ where Full has it, the clip row is hit-testable, and ✎ hides by visibility', { item: '980' }, async function () {
+    smNeedEditor();
+    /* 1 Oct, RE-ANCHORED, NOT RE-RUN: no ⇄ on the play bar (D18 rewritten); ◐ keeps slot 3 invisible. */
+    await atPhoneWidth(async function () {
+      await smView(async function (v) {
+        /* Full's own left group first: its four buttons sit flush, and at the narrowest widths they already overlap by a
+           sub-pixel or so. Simple's row may overlap no more than Full's does at the same width (the control). */
+        const fids = ['btn-opts', 'btn-layermenu', 'btn-addside', 'btn-tostart'];
+        const fr = fids.map(id => document.getElementById(id).getBoundingClientRect());
+        let fullOver = 0; for (let i = 1; i < fr.length; i++) fullOver = Math.max(fullOver, fr[i - 1].right - fr[i].left);
+        FM.editor.set('simple'); await v.sleep(60);
+        /* A shake (a refused switch in an earlier test) or the crossfade is a TRANSFORM, which getBoundingClientRect includes — finish
+           every running animation so this measures the layout, not a frame of one. */
+        document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
+        const ids = ['btn-opts', 'btn-sm-split', 'btn-addside', 'btn-tostart'];   // ◐ (#btn-addside) holds slot 3, invisible (D18 A)
+        const xs = ids.map(id => { const e = document.getElementById(id); return e && e.getClientRects().length ? e.getBoundingClientRect().left : NaN; });
+        if (xs.some(isNaN) || !(xs[0] < xs[1] && xs[1] < xs[2] && xs[2] < xs[3])) throw new Error('the left group is not ⋯ ✂ (gap) |◀ in order: ' + ids.map((id, i) => id + '@' + Math.round(xs[i])).join(' '));
+        ['btn-layermenu', 'btn-addside'].forEach(id => { if (smVis(document.getElementById(id))) throw new Error('#' + id + ' (Full’s) is visible in Simple'); });
+        if (Math.abs(document.getElementById('btn-tostart').getBoundingClientRect().left - fr[3].left) > 1) throw new Error('|◀ moved between Full and Simple — D18 A keeps it in its slot');
+        const r = ids.map(id => document.getElementById(id).getBoundingClientRect());
+        for (let i = 1; i < r.length; i++) if (r[i - 1].right - r[i].left > fullOver + 0.5) throw new Error(ids[i] + ' overlaps ' + ids[i - 1] + ' by ' + (r[i - 1].right - r[i].left).toFixed(2) + ' px, more than Full’s own row does (' + fullOver.toFixed(2) + ' px)');
+        const sp = document.getElementById('btn-sm-split');
+        if (sp.getAttribute('aria-disabled') !== 'true' || !(parseFloat(getComputedStyle(sp).opacity) < 0.6)) throw new Error('✂ is not dimmed and aria-disabled in Phase 1');
+        const clip = document.querySelector('#sm-main .sm-item[data-id="' + v.c2.id + '"]');
+        if (!clip) throw new Error('clip 2 is not drawn in the Simple clip row');
+        const cr = clip.getBoundingClientRect(), hit = document.elementFromPoint(Math.min(cr.left + 20, window.innerWidth - 10), cr.top + cr.height / 2);
+        if (!hit || !hit.closest || !hit.closest('#sm-timeline')) throw new Error('a tap on the clip row lands on ' + (hit && (hit.id || hit.className)) + ', not the Simple timeline');
+        const say = document.getElementById('sm-say'), sr = say.getBoundingClientRect();
+        if (Math.round(sr.height) !== 52 || sr.bottom > window.innerHeight + 0.5) throw new Error('#sm-say is not a 52 px row on screen: ' + Math.round(sr.height) + ' px, bottom ' + Math.round(sr.bottom) + ' of ' + window.innerHeight);
+        const song = document.querySelector('#sm-sound .sm-item[data-id="' + v.song.id + '"]');
+        if (!song || !smVis(song)) throw new Error('the song is not in the Sound row');
+        const title = document.querySelector('#sm-sections .sm-item[data-id="' + v.title.id + '"]');
+        if (!title) throw new Error('the title is not in a section above the clips');
+        if (!(title.getBoundingClientRect().bottom <= cr.top + 0.5)) throw new Error('the title is not ABOVE the clip row (higher on screen = in front)');
+        /* NOTHING MOVES ON SELECT, AND THE PANEL DOCKS UNDER THE SIMPLE TIMELINE (DESIGN T19, Phase 1 clauses): the clip row, the
+           sound row and #sm-say keep their y to the pixel, and today's panel starts below #sm-say with room to use. */
+        const tops0 = ['sm-main', 'sm-sound', 'sm-say'].map(id => document.getElementById(id).getBoundingClientRect().top);
+        FM.selectLayer(v.c2.id); await v.sleep(120);
+        document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });   // the panel RISES into place (a transition): measure where it lands
+        const tops1 = ['sm-main', 'sm-sound', 'sm-say'].map(id => document.getElementById(id).getBoundingClientRect().top);
+        if (tops0.some((t, i) => Math.abs(t - tops1[i]) > 0.5)) throw new Error('selecting a clip moved the Simple rows (clip row, sound, #sm-say tops ' + tops0.map(Math.round) + ' → ' + tops1.map(Math.round) + ')');
+        const insp = document.getElementById('inspector-panel'), ir = insp && insp.getBoundingClientRect(), sayB = document.getElementById('sm-say').getBoundingClientRect().bottom;
+        if (!ir || ir.height < 1) throw new Error('selecting a clip opened no panel');
+        if (ir.top < sayB - 0.5) throw new Error('the docked panel (top ' + Math.round(ir.top) + ') covers the Simple timeline or #sm-say (bottom ' + Math.round(sayB) + ')');
+        if (window.innerHeight - ir.top < 150) throw new Error('the docked panel has only ' + Math.round(window.innerHeight - ir.top) + ' px (under 150) — the stage clamp did not leave it room (panel top ' + Math.round(ir.top) + ', #sm-say bottom ' + Math.round(sayB) + ')');
+        if (document.body.classList.contains('m-editing')) throw new Error('m-editing is on in Simple');
+        const notes = document.getElementById('m-notes');
+        if (notes && getComputedStyle(notes).visibility !== 'hidden') throw new Error('✎ still shows with something selected in Simple (#171)');
+        if (notes && getComputedStyle(notes).display === 'none') throw new Error('✎ was hidden with display:none — the bar would slide');
+        const c2b = document.querySelector('#sm-main .sm-item[data-id="' + v.c2.id + '"]');
+        if (!c2b || !c2b.classList.contains('sel')) throw new Error('the selected clip is not marked in the Simple row');
+      });
+    }, 380);
+  });
+
+  test('simple P1 · the Phase 1 lines: Delete on a main clip, ✂, S and a seam chip each say their line with Open in Full and change nothing', { item: '980' }, async function () {
+    smNeedEditor();
+    await smView(async function (v) {
+      FM.editor.set('simple'); await v.sleep(40);
+      const say = document.getElementById('sm-say');
+      const n0 = FM.scene.layers.length;
+      FM.selectLayer(v.c1.id);
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Backspace', key: 'Backspace', bubbles: true }));
+      await v.sleep(10);
+      if (FM.scene.layers.length !== n0) throw new Error('Delete on a main clip deleted it in Phase 1 (' + n0 + ' → ' + FM.scene.layers.length + ')');
+      if (!/Deleting clips comes next/.test(say.textContent)) throw new Error('Delete on a main clip said nothing in #sm-say: "' + say.textContent + '"');
+      const b = say.querySelector('button');
+      if (!b || b.textContent !== 'Open in Full') throw new Error('the line has no Open in Full button');
+      const br = b.getBoundingClientRect();
+      if (br.width < 44 || br.height < 32) throw new Error('Open in Full is ' + Math.round(br.width) + '×' + Math.round(br.height) + ', under 44×32');
+      /* CONTROL: Delete on something that is NOT a main clip is today's delete */
+      FM.selectLayer(v.title.id);
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Backspace', key: 'Backspace', bubbles: true }));
+      await v.sleep(10);
+      if (FM.scene.layers.some(l => l.id === v.title.id)) throw new Error('CONTROL: Delete on a title did not delete it — the key is being swallowed for everything');
+      FM.selectLayer(v.c1.id); FM.time = 1;
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS', key: 's', bubbles: true }));
+      await v.sleep(10);
+      if (FM.scene.layers.filter(l => l.type === 'video').length !== 4) throw new Error('S split a clip in Phase 1');
+      if (!/Splitting comes in the next update/.test(say.textContent)) throw new Error('S said nothing: "' + say.textContent + '"');
+      say.textContent = '';
+      document.getElementById('btn-sm-split').click();
+      if (!/Splitting comes in the next update/.test(say.textContent)) throw new Error('✂ said nothing: "' + say.textContent + '"');
+      const chip = document.querySelector('#sm-main .sm-chip-gap');
+      if (!chip) throw new Error('the 1 s gap between clips 2 and 3 has no seam chip');
+      const cr = chip.getBoundingClientRect();
+      if (cr.width < 32 || cr.height < 32) throw new Error('the seam chip is ' + Math.round(cr.width) + '×' + Math.round(cr.height) + ', under 32×32');
+      if (!/second gap/.test(chip.getAttribute('aria-label') || '')) throw new Error('the seam chip has no accessible name: ' + chip.getAttribute('aria-label'));
+      chip.click();
+      if (!/Closing gaps comes in the next update/.test(say.textContent)) throw new Error('the seam chip said nothing: "' + say.textContent + '"');
+      say.querySelector('button').click(); await v.sleep(20);
+      if (document.body.classList.contains('ed-simple')) throw new Error('Open in Full did not switch to Full');
+      if (v.commits() !== 1) throw new Error('only the title delete should have committed, got ' + v.commits() + ' commits');
+    });
+  });
+
+
+  /* T21 (DESIGN §8.8): the Full doors that edit the layer stack Simple does not show. One helper, two tests (one per width), so a
+     width change inside one test cannot leave the transport half-rebuilt for the other. */
+  async function smT21(w, ids, phone) {
+    smNeedEditor();
+    /* `rendered`: it has a box on screen (so a button inside a hidden group counts as hidden). The two view-menu items live in a
+       menu that is closed in both editors, so for them (marked *) the item's OWN display is what Simple must turn off. */
+    const shown = key => {
+      const own = key.charAt(key.length - 1) === '*', e = document.getElementById(own ? key.slice(0, -1) : key);
+      if (!e) return false;
+      return own ? getComputedStyle(e).display !== 'none' : (e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden');
+    };
+    await (phone ? atPhoneWidth : atWideWidth)(async function () {
+      await smView(async function (v) {
+        FM.selectLayer(v.c2.id); FM.refreshAll(); await v.sleep(60);
+        // CONTROL: in Full these doors exist and are displayed (on the phone, with a clip selected)
+        const inFull = ids.filter(id => !shown(id));
+        if (inFull.length) throw new Error('CONTROL at ' + w + ': in Full these are not displayed, so their absence in Simple would prove nothing: ' + inFull.join(', '));
+        FM.editor.set('simple'); await v.sleep(60);
+        FM.selectLayer(v.c2.id); await v.sleep(40);
+        const leak = ids.filter(shown);
+        if (leak.length) throw new Error('at ' + w + ' px these Full doors show in Simple: ' + leak.join(', ') + ' — each one edits the layer stack Simple does not show');
+      });
+    }, w);
+  }
+  test('simple P1 · T21 at 380 in Simple none of Full’s layer doors show — ⧉, ◐, Layers, Add camera, the phone’s copy and delete — with one clip selected', { item: '980' }, async function () {
+    await smT21(380, ['btn-layermenu', 'btn-addside', 'vb-layers*', 'vb-camera*', 'm-dup', 'm-del'], true);
+  });
+  test('simple P1 · T21 at 1280 in Simple the PC layer-action group (delete, parent, more) does not show with one clip selected', { item: '980' }, async function () {
+    await smT21(1280, ['btn-del-layer', 'btn-parent', 'btn-more-layer'], false);
+  });
+
+  /* 1 Oct: the D2-B test (Full's ⋯ strip carries a Simple editor item) is WITHDRAWN with the item (DESIGN.md §0.4 V1).
+     Its opposite now holds: FU1 checks that Full's ⋯ strip is HEAD's, element for element and pixel for pixel. */
+
+  test('simple P1 · off means off: a project this device never switched opens in Full and runs nothing of the switch — no text-editor flush', { item: '980' }, function () {
+    smNeedEditor();
+    /* 1 Oct, RE-ANCHORED, NOT RE-RUN. "Off" is now "this device never chose Simple for the project" (DESIGN.md §7.2), and the
+       control seeds the project's index card with editor 'simple' instead of project.sm.home, which homeFor no longer reads
+       (DESIGN.md §0.4 B27). syncProject() runs inside EVERY timeline rebuild and a new project id reaches it on every open; the
+       switch's apply() commits the text editor before it swaps. Spied, not stubbed away: the spy counts, and the control proves
+       the same path does run when this device chose Simple. */
+    const te = FM.textEdit, pid0 = FM.storage.openProjectId, list0 = FM.projects.list, P = FM.scene.project, had = 'sm' in P, sm0 = P.sm;
+    const act0 = te && te.isActive, stop0 = te && te.stop;
+    if (!te) throw new Error('setup: FM.textEdit is missing');
+    let stops = 0, n = 0;
+    try {
+      te.isActive = function () { return true; }; te.stop = function () { stops++; };
+      FM.storage.openProjectId = function () { return 'sm_offmeansoff_' + n; };
+      FM.projects.list = function () { return [{ id: 'sm_offmeansoff_1' }, { id: 'sm_offmeansoff_2', editor: 'simple' }]; };
+      P.sm = { home: 'simple' };   // a Simple-made file: it must NOT put a device that never chose Simple into Simple
+      n = 1; FM.timeline.rebuild();
+      if (stops) throw new Error('a project this device never switched flushed the text editor ' + stops + ' time(s) on open — the switch ran in Full');
+      if (FM.editor.mode() !== 'full' || document.body.classList.contains('ed-simple')) throw new Error('project.sm.home "simple" put a device that never chose Simple into Simple (DESIGN §0.4 B27)');
+      /* CONTROL: this device chose Simple for project 2 — the same open DOES switch, committing the text editor first */
+      n = 2; FM.timeline.rebuild();
+      if (FM.editor.mode() !== 'simple' || !stops) throw new Error('CONTROL: a project whose card says Simple opened in ' + FM.editor.mode() + ' with ' + stops + ' flush(es) — the spy is not on the path');
+    } finally {
+      te.isActive = act0; te.stop = stop0; FM.storage.openProjectId = pid0; FM.projects.list = list0;
+      if (had) P.sm = sm0; else delete P.sm;
+      try { FM.editor.apply('full', { force: true, quiet: true }); } catch (e) {}
+      try { FM.timeline.rebuild(); } catch (e) {}
+    }
+  });
+
+  /* ═══ SIMPLE MODE P1 — THE ⚙ COG'S THIRD BLOCK (BUILD-PLAN §5.6b, COG-DESIGN §10). His rule, 1 Oct: "the option to switch
+     between the two editors should be in the settings cog, making a third section in there … it stays small unless you want the
+     explanation." Each test opens the real cog, leaves the editor, fm.cvPair and fm.editor.last as it found them, and runs at
+     1280 and 380. ═══ */
+  async function smCog(fn) {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const dlg = document.getElementById('canvas-dialog');
+    const ls = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+    const put = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} };
+    const pair0 = ls('fm.cvPair'), last0 = ls('fm.editor.last'), mode0 = FM.editor.mode();
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const land = async () => { try { dlg.getAnimations({ subtree: true }).forEach(a => { try { a.finish(); } catch (e) {} }); } catch (e) {} await sleep(60); };
+    const open = async o => { FM.openCanvasDialog(o || {}); await sleep(240); await land(); };
+    const big = () => dlg.classList.contains('cv-ed-big') ? 'editor' : dlg.classList.contains('cv-fr-big') ? 'friends' : 'canvas';
+    try {
+      if (wasHome) { FM.home.close(); await sleep(150); }
+      if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
+      await open();
+      if (!document.getElementById('cv-editor')) throw new Error('the cog has no third block (#cv-editor) — BUILD-PLAN 1.3.18');
+      await fn({ dlg: dlg, sleep: sleep, land: land, open: open, big: big });
+    } finally {
+      try { if (!dlg.classList.contains('hidden')) FM.closeCanvasDialog(); } catch (e) {}
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      put('fm.cvPair', pair0); put('fm.editor.last', last0);
+      try { if (wasHome) FM.home.open(); } catch (e) {}
+      await sleep(120);
+    }
+  }
+
+  test('980 cog T9 all six swaps between Canvas, Friends and the Editor block land the right big block and tell a screen reader, Canvas and Friends are remembered and the Editor never is', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      const tap = { canvas: 'cv-mini', friends: 'cv-fr-bar', editor: 'cv-ed-what' };
+      /* every directed swap once (an Euler circuit of the three), then once more onto Friends so "last" is not the default */
+      const path = ['canvas', 'friends', 'editor', 'canvas', 'editor', 'friends', 'canvas', 'friends'];
+      for (let i = 1; i < path.length; i++) {
+        const from = path[i - 1], to = path[i];
+        if (c.big() !== from) throw new Error('setup: ' + from + ' should be big before the swap to ' + to + ', ' + c.big() + ' is');
+        const el = document.getElementById(tap[to]);
+        if (!el) throw new Error('no control to open ' + to + ' (#' + tap[to] + ')');
+        el.click(); await c.sleep(520); await c.land();
+        if (c.big() !== to) throw new Error('tapping ' + to + ' from ' + from + ' left ' + c.big() + ' big');
+        if (c.dlg.classList.contains('cv-flying')) throw new Error('the flight from ' + from + ' to ' + to + ' never landed');
+        const exp = { 'cv-ed-what': 'editor', 'cv-fr-exp': 'friends', 'cv-mini-exp': 'canvas' };
+        Object.keys(exp).forEach(function (id) {
+          const b = document.getElementById(id);
+          if (b && b.getAttribute('aria-expanded') !== String(exp[id] === to)) throw new Error('#' + id + ' says aria-expanded=' + b.getAttribute('aria-expanded') + ' with ' + to + ' big');
+        });
+        const pair = localStorage.getItem('fm.cvPair');
+        if (to === 'editor' && pair === 'editor') throw new Error('the Editor block was remembered as the last block (DESIGN §21 F7: never)');
+        if (to !== 'editor' && pair !== to) throw new Error('opening ' + to + ' was not remembered (fm.cvPair = ' + pair + ')');
+      }
+      document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
+      if (c.big() !== 'editor') throw new Error('setup: the Editor block did not open from Friends');
+      FM.closeCanvasDialog(); await c.sleep(150);
+      await c.open({ block: 'last' });
+      if (c.big() !== 'friends') throw new Error('closed on the Editor block, the cog reopened on ' + c.big() + ' — it should reopen on the last of Canvas / Friends, which was Friends');
+    });
+  });
+
+  test('980 cog T10 a tap on the switch switches and never opens the explanation, the switch says what it will do, and the bar or What should you use? opens it', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      const sw = document.querySelector('#cv-ed-bar .ed-sw');
+      if (!sw) throw new Error('the small block has no switch (#cv-ed-bar .ed-sw)');
+      if (!/Switch to Simple/.test(sw.getAttribute('aria-label') || '')) throw new Error('in Full the switch is labelled "' + sw.getAttribute('aria-label') + '" — it should name what it does (Switch to Simple editor)');
+      const seen = []; const onRefuse = e => seen.push('refused: ' + (e.detail && e.detail.kind)); window.addEventListener('fm-editor-refuse', onRefuse);
+      const ask0 = FM.ask; FM.ask = function (o) { seen.push('asked: ' + (o && o.title) + ' / ' + (o && o.message)); return Promise.resolve(false); };
+      seen.push('before: lastPid ' + String(FM.editor._state().lastPid) + ', open ' + String(FM.storage.openProjectId && FM.storage.openProjectId()));
+      const modes = []; FM.editor.onChange(m => modes.push(m));
+      try { sw.click(); await c.sleep(120); seen.push('modes ' + modes.join('>')); } finally { FM.ask = ask0; window.removeEventListener('fm-editor-refuse', onRefuse); }
+      if (c.dlg.classList.contains('cv-ed-big')) throw new Error('tapping the switch opened the explanation — a tap on the switch only switches');
+      if (FM.editor.mode() !== 'simple') throw new Error('tapping the switch did not switch (mode ' + FM.editor.mode() + (seen.length ? '; ' + seen.join('; ') : '; no refusal, no question') + ')');
+      await c.sleep(400);
+      if (c.dlg.classList.contains('hidden')) await c.open();
+      const sw2 = document.querySelector('#cv-ed-bar .ed-sw');
+      if (!/Switch to Full/.test(sw2.getAttribute('aria-label') || '')) throw new Error('in Simple the switch is labelled "' + sw2.getAttribute('aria-label') + '" — it should say Switch to Full editor');
+      document.querySelector('#cv-ed-bar .ed-head').click(); await c.sleep(520); await c.land();
+      if (c.big() !== 'editor') throw new Error('a tap on the block’s bar did not open the explanation');
+      document.getElementById('cv-mini').click(); await c.sleep(520); await c.land();
+      document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
+      if (c.big() !== 'editor') throw new Error('What should you use? did not open the explanation');
+    });
+  });
+
+  test('980 cog T10b the first switch after a project opens holds — a rebuild that has not yet seen the open project does not put the old editor back', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      /* The condition every app start produces: the project is open, but no rebuild has run since its id was set, so the editor
+         has not recorded it. A fresh id with no card stands in for it (the card would say Full, as a new project's does). */
+      const st = FM.storage, open0 = st.openProjectId;
+      st.openProjectId = function () { return 'p_cogT10b_fresh'; };
+      const modes = []; FM.editor.onChange(m => modes.push(m));
+      try {
+        if (FM.editor._state().lastPid === 'p_cogT10b_fresh') throw new Error('the set-up failed: the editor already knows this project');
+        const ok = await FM.editor.request('simple', { from: 'cog' });
+        await c.sleep(60);
+        if (!ok || FM.editor.mode() !== 'simple') throw new Error('the first switch after a project opened did not hold (request ' + ok + ', now ' + FM.editor.mode() + ', modes ' + modes.join('>') + ') — the rebuild put the card’s editor back');
+        FM.timeline.rebuild(); await c.sleep(30);
+        if (FM.editor.mode() !== 'simple') throw new Error('a later rebuild put Full back after the switch');
+      } finally {
+        st.openProjectId = open0;
+        try { const idx = FM.projects.list(); if (idx.some(p => p.id === 'p_cogT10b_fresh')) FM.projects.saveIndex(idx.filter(p => p.id !== 'p_cogT10b_fresh')); } catch (e) {}
+      }
+    });
+  });
+
+  test('980 cog T11 after a switch the cog closes, but not over an unapplied aspect pick, an unapplied background pick alone, or Friends open — and the pick or the Friends block is still there', { item: '980', budgetMs: 90000 }, async function () {
+    await smCog(async function (c) {
+      const sw = () => document.querySelector('#cv-ed-bar .ed-sw');
+      sw().click(); await c.sleep(600);
+      if (!c.dlg.classList.contains('hidden')) throw new Error('after a switch with nothing pending the cog stayed open (D23 A: it closes)');
+      await c.open();
+      /* an aspect pick he has not applied */
+      const P = FM.scene.project, cur = P.width > P.height ? '16:9' : '9:16', other = cur === '16:9' ? '1:1' : '16:9';
+      const chip = c.dlg.querySelector('.aspect-chip[data-aspect="' + other + '"]');
+      if (!chip) throw new Error('setup: no aspect chip ' + other + ' in the Canvas card');
+      chip.click(); await c.sleep(80);
+      sw().click(); await c.sleep(600);
+      if (c.dlg.classList.contains('hidden')) throw new Error('a switch closed the cog over an unapplied aspect pick (' + other + ') — the pick would be lost');
+      if (!chip.classList.contains('active') && !chip.classList.contains('on') && !chip.classList.contains('sel')) {
+        const on = c.dlg.querySelector('.aspect-chip.active, .aspect-chip.on, .aspect-chip.sel');
+        if (on && on.dataset.aspect !== other) throw new Error('after the switch the aspect pick went back to ' + on.dataset.aspect);
+      }
+      FM.closeCanvasDialog(); await c.sleep(120);
+      /* a background pick ALONE (DESIGN §21 F3: the summary leaves the background out) */
+      await c.open();
+      const bgNow = String(FM.scene.project.background || '').toLowerCase();
+      const swb = Array.prototype.find.call(c.dlg.querySelectorAll('.cv-bg-sw'), b => String(b.dataset.bg).toLowerCase() !== bgNow);
+      if (!swb) throw new Error('setup: no other background swatch in the Canvas card');
+      swb.click(); await c.sleep(80);
+      sw().click(); await c.sleep(600);
+      if (c.dlg.classList.contains('hidden')) throw new Error('a switch closed the cog over an unapplied background pick — the pick would be lost (the summary-based check missed it)');
+      FM.closeCanvasDialog(); await c.sleep(120);
+      /* Friends open */
+      await c.open();
+      document.getElementById('cv-fr-bar').click(); await c.sleep(520); await c.land();
+      if (c.big() !== 'friends') throw new Error('setup: Friends did not open');
+      sw().click(); await c.sleep(600);
+      if (c.dlg.classList.contains('hidden')) throw new Error('a switch closed the cog while Friends was the big block');
+      if (c.big() !== 'friends') throw new Error('after the switch the Friends block is no longer the big one (' + c.big() + ')');
+    });
+  });
+
+  test('980 cog T13 an export running refuses the switch with its line INSIDE the block, where it can be seen, never as a toast under the dialog', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      const was = FM._exporting;
+      try {
+        FM._exporting = true;
+        document.querySelector('#cv-ed-bar .ed-sw').click(); await c.sleep(150);
+        if (FM.editor.mode() !== 'full') throw new Error('the switch went through while an export was running');
+        const why = document.getElementById('cv-ed-why');
+        if (!why || !/export/i.test(why.textContent)) throw new Error('the refusal is not in the block (#cv-ed-why reads "' + (why && why.textContent) + '")');
+        /* it must be where he can see it: open the explanation and hit-test the line */
+        document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
+        const r = why.getBoundingClientRect();
+        const hit = r.width > 0 ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+        if (!hit || !(hit === why || why.contains(hit))) throw new Error('the refusal line is covered or off screen (the point hits ' + (hit ? hit.tagName + '#' + hit.id : 'nothing') + ')');
+      } finally { FM._exporting = was; }
+    });
+  });
+
+  /* Reduced motion, asked of the DRIVER (tests/_cdp.py polls `__fmWantMedia` and answers `__fmMediaReduce`). A matchMedia stub
+     only changes what script sees; the stylesheet's own @media rules need the real thing, and the first version of T15 stubbed
+     it and so could not see the shake's reduced-motion rule losing the cascade. Returns true once the emulation is on. */
+  async function smReduceMotion(on, ms) {
+    window.__fmWantMedia = on ? { reduce: true, until: Date.now() + (ms || 30000) } : null;
+    for (let i = 0; i < 160; i++) {
+      if (window.__fmMediaReduce === !!on) return true;
+      await new Promise(function (r) { setTimeout(r, 50); });
+    }
+    return false;
+  }
+  function smCogRunning(dlg) {
+    return dlg.getAnimations({ subtree: true }).filter(a => a.playState === 'running' && a.effect && a.effect.getComputedTiming().duration > 0 && isFinite(a.effect.getComputedTiming().endTime) && (a.effect.target && a.effect.target.closest && a.effect.target.closest('#cv-editor, #cv-friends, .export-card')));
+  }
+  function smAnimNames(list) {
+    return list.slice(0, 4).map(a => { const t = a.effect.target; return (a.constructor && a.constructor.name) + ' ' + (a.animationName || a.transitionProperty || a.id || '?') + ' on ' + (t.id ? '#' + t.id : t.tagName.toLowerCase() + (typeof t.className === 'string' && t.className.trim() ? '.' + t.className.trim().split(/\s+/).join('.') : '')); }).join(', ');
+  }
+
+  test('980 cog T15 with reduced motion the swap is instant — no flight, no animation left running in the cog, and a refused switch does not shake', { item: '980', budgetMs: 60000 }, async function () {
+    if (!(await smReduceMotion(true))) throw new Error('the driver did not turn reduced motion on (__fmMediaReduce never came back true) — run this test through tests/_cdp.py');
+    try {
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error('the driver says reduced motion is on but this frame does not see it');
+      await smCog(async function (c) {
+        document.getElementById('cv-ed-what').click(); await c.sleep(30);
+        if (c.big() !== 'editor') throw new Error('the swap to the Editor block did not happen at once under reduced motion');
+        if (c.dlg.classList.contains('cv-flying')) throw new Error('the swap flew under reduced motion');
+        let running = smCogRunning(c.dlg);
+        if (running.length) throw new Error(running.length + ' animation(s) still running in the cog under reduced motion after the swap: ' + smAnimNames(running));
+        /* a refused switch: the line says why, and nothing moves */
+        const was = FM._exporting;
+        try {
+          FM._exporting = true;
+          document.querySelector('#cv-editor .ed-sw').click(); await c.sleep(40);
+          if (FM.editor.mode() !== 'full') throw new Error('the switch went through while an export was running');
+          running = smCogRunning(c.dlg);
+          if (running.length) throw new Error('a refused switch still moved under reduced motion: ' + smAnimNames(running));
+        } finally { FM._exporting = was; }
+      });
+    } finally { await smReduceMotion(false); }
+  });
+
+  test('980 cog T13b a refused switch shakes once — closing and reopening the cog does not shake it again', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      const was = FM._exporting;
+      try {
+        FM._exporting = true;
+        document.querySelector('#cv-ed-bar .ed-sw').click(); await c.sleep(60);
+        if (FM.editor.mode() !== 'full') throw new Error('the switch went through while an export was running');
+        const sw = document.querySelector('#cv-ed-bar .ed-sw');
+        const shaking = sw.getAnimations().filter(a => a.animationName === 'ed-shake');
+        if (!shaking.length) throw new Error('a refused switch should shake once (no ed-shake animation on the switch)');
+      } finally { FM._exporting = was; }
+      await c.sleep(700);   // past the 360 ms shake
+      FM.closeCanvasDialog(); await c.sleep(150);
+      FM.openCanvasDialog({}); await c.sleep(60);   // not c.open(): it finishes every animation, which would hide a replayed shake
+      const sw2 = document.querySelector('#cv-ed-bar .ed-sw');
+      const again = sw2.getAnimations().filter(a => a.animationName === 'ed-shake' && a.playState === 'running');
+      if (again.length || sw2.classList.contains('ed-shake')) throw new Error('the switch shook again when the cog reopened (class ' + sw2.className + ') — the refusal shake must play once');
+    });
+  });
+
+  test('980 cog T1 ten switches both ways write nothing — the document, the undo history, every storage key and the remembered block stay as they were, apart from this device’s own editor memory', { item: '980', budgetMs: 60000 }, async function () {
+    await smCog(async function (c) {
+      FM.closeCanvasDialog(); await c.sleep(100);
+      const docOf = () => JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers });
+      const ALLOWED = { 'fm.editor.last': 1, 'fm.editor.hint': 1, 'fm.projects': 1 };   // the card's own `editor` is checked below
+      const snap = () => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!ALLOWED[k]) o[k] = localStorage.getItem(k); } return o; };
+      const cards = () => { try { return JSON.parse(localStorage.getItem('fm.projects') || '[]').map(p => { const q = Object.assign({}, p); delete q.editor; return q; }); } catch (e) { return null; } };
+      const doc0 = docOf(), hist0 = JSON.stringify(FM.history._steps()), ls0 = snap(), cards0 = JSON.stringify(cards()), pair0 = localStorage.getItem('fm.cvPair');
+      const setItem0 = Storage.prototype.setItem; const wrote = [];
+      Storage.prototype.setItem = function (k, v) { if (!ALLOWED[k]) wrote.push(k); return setItem0.call(this, k, v); };
+      try {
+        for (let i = 0; i < 10; i++) {
+          const to = FM.editor.mode() === 'simple' ? 'full' : 'simple';
+          if (!(await FM.editor.request(to, { from: 'cog' }))) throw new Error('switch ' + (i + 1) + ' to ' + to + ' was refused with nothing open');
+          await c.sleep(30);
+        }
+        await c.sleep(700);   // past the 600 ms autosave debounce, so a save the switch scheduled would have landed
+      } finally { Storage.prototype.setItem = setItem0; }
+      if (FM.editor.mode() !== 'full') throw new Error('ten switches from Full should end in Full, not ' + FM.editor.mode());
+      if (docOf() !== doc0) throw new Error('the switches changed the document (an sm key, a layer, the project)');
+      if (JSON.stringify(FM.history._steps()) !== hist0) throw new Error('the switches added undo steps: ' + hist0 + ' → ' + JSON.stringify(FM.history._steps()));
+      if (wrote.length) throw new Error('the switches wrote storage keys: ' + Array.from(new Set(wrote)).join(', '));
+      const ls1 = snap(); const changed = Object.keys(Object.assign({}, ls0, ls1)).filter(k => ls0[k] !== ls1[k]);
+      if (changed.length) throw new Error('storage keys changed across the switches: ' + changed.join(', '));
+      if (JSON.stringify(cards()) !== cards0) throw new Error('the project cards changed beyond their own editor field');
+      if (localStorage.getItem('fm.cvPair') !== pair0) throw new Error('the remembered cog block changed (fm.cvPair)');
+    });
+  });
+
+  test('980 cog T2 every canvas tool a live session leases is known to the switch (it holds, commits, closes quietly or stays), and the voice recorder is refused', { item: '980' }, async function () {
+    smNeedEditor();
+    const G = FM.editorGuardLists;
+    if (!G) throw new Error('FM.editorGuardLists is missing (js/editor-mode.js)');
+    /* the table is read from collab-presence's own source, so a tool added there later fails here until the switch knows it */
+    const src = await (await fetch('js/collab-presence.js', { cache: 'no-store' })).text();
+    const m = src.match(/const LEASED = \[([\s\S]*?)\n  \];/);
+    if (!m) throw new Error('setup: could not read the LEASED table out of js/collab-presence.js');
+    const leased = Array.from(m[1].matchAll(/\['(\w+)'/g)).map(x => x[1]);
+    if (leased.length < 9) throw new Error('setup: the LEASED table read as ' + JSON.stringify(leased) + ' — fewer tools than it holds');
+    const known = new Set([].concat(G.HOLDS, G.COMMITS, G.QUIET, G.STAYS));
+    const NAME = { motion: ['path'], track: ['tracker'], draw: ['pen', 'draw-freehand'] };   // presence's names → the guard's
+    const missing = leased.filter(id => !(NAME[id] || [id]).every(n => known.has(n)));
+    if (missing.length) throw new Error('the switch does not know these leased tools: ' + missing.join(', ') + ' (known: ' + Array.from(known).join(', ') + ')');
+    if ((G.REFUSED || []).indexOf('voice') < 0) throw new Error('the voice recorder is not in REFUSED — a switch could slide under an open take');
+  });
+
+  /* A picture layer with a crop (200x150 of a 400x300 frame), its media in memory only, and FM.ask replaced by a recorder that
+     answers with `answer` — the guard's warning is the app's own pop-up, which a test cannot tap. Everything put back after. */
+  async function smCropRig(fn) {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const P = FM.scene.project, ask0 = FM.ask, mode0 = FM.editor.mode(), last0 = localStorage.getItem('fm.editor.last');
+    const cv = document.createElement('canvas'); cv.width = 400; cv.height = 300;
+    const g = cv.getContext('2d'); g.fillStyle = '#3a8a6a'; g.fillRect(0, 0, 400, 300);
+    const L = FM.makeLayer('image', { name: 'SM_CROP', x: Math.round(P.width / 2), y: Math.round(P.height / 2), start: 0, duration: 4 });
+    FM.media.set(L.id, { kind: 'image', el: cv, width: 400, height: 300, duration: 0 });
+    L.crop = { x: 50, y: 40, w: 200, h: 150 };
+    FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit && FM.history.commit();
+    const asked = [];
+    let answer = false;
+    FM.ask = async function (o) { asked.push(o || {}); return answer; };
+    try {
+      if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
+      await fn({ L: L, sleep: sleep, asked: asked, answer: v => { answer = v; } });
+    } finally {
+      FM.ask = ask0;
+      try { if (FM.cropTool.isActive()) FM.cropTool.stop(); } catch (e) {}
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      try { FM.media.remove(L.id); } catch (e) {}
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(80);
+    }
+  }
+
+  test('980 cog T3 a crop box he has moved is never thrown away by a switch: the warning asks, Stay keeps the crop open as it was, and Apply crop and switch makes one undo step that undo takes back', { item: '980', budgetMs: 60000 }, async function () {
+    await smCropRig(async function (r) {
+      FM.cropTool.start(r.L.id); await r.sleep(60);
+      document.querySelector('#crop-bar .cb-reset').click(); await r.sleep(30);   // the box is now the whole frame: changed
+      if (!FM.cropTool.changed()) throw new Error('setup: Reset did not change the crop box (changed() is false)');
+      const hist0 = FM.history._steps();
+      r.answer(false);
+      const ok1 = await FM.editor.request('simple', { from: 'cog' });
+      if (!r.asked.length) throw new Error('a moved crop box was switched away with no warning — the silent discard (M14)');
+      if (!/crop/i.test(JSON.stringify(r.asked[0]))) throw new Error('the warning does not mention the crop: ' + JSON.stringify(r.asked[0]));
+      if (ok1 || FM.editor.mode() !== 'full') throw new Error('Stay switched the editor anyway');
+      if (!FM.cropTool.isActive() || !FM.cropTool.changed()) throw new Error('Stay did not leave the crop open with his moved box');
+      r.answer(true);
+      const ok2 = await FM.editor.request('simple', { from: 'cog' }); await r.sleep(60);
+      if (!ok2 || FM.editor.mode() !== 'simple') throw new Error('Apply crop and switch did not switch (mode ' + FM.editor.mode() + ')');
+      if (FM.cropTool.isActive()) throw new Error('the crop tool is still open after Apply crop and switch');
+      const c = FM.cropOf(r.L, 0);
+      if (!c.full) throw new Error('the moved box was not applied (crop ' + JSON.stringify(c) + ')');
+      const hist1 = FM.history._steps();
+      if (hist1.index !== hist0.index + 1) throw new Error('Apply crop and switch made ' + (hist1.index - hist0.index) + ' undo steps, not one');
+      FM.history.undo(); await r.sleep(60);
+      const back = FM.cropOf(FM.layerById(FM.scene, r.L.id) || r.L, 0);
+      if (back.full || Math.abs(back.w - 200) > 0.5) throw new Error('undo did not bring the old crop back (' + JSON.stringify(back) + ')');
+    });
+  });
+
+  test('980 cog T4 an untouched crop box never warns: the switch closes it, makes no undo step, and goes through', { item: '980', budgetMs: 60000 }, async function () {
+    await smCropRig(async function (r) {
+      FM.cropTool.start(r.L.id); await r.sleep(60);
+      if (FM.cropTool.changed()) throw new Error('setup: a crop box just opened reads as changed');
+      const hist0 = JSON.stringify(FM.history._steps());
+      r.answer(false);
+      const ok = await FM.editor.request('simple', { from: 'cog' }); await r.sleep(60);
+      if (r.asked.length) throw new Error('an untouched crop box warned: ' + JSON.stringify(r.asked[0]));
+      if (!ok || FM.editor.mode() !== 'simple') throw new Error('the switch did not go through over an untouched crop');
+      if (FM.cropTool.isActive()) throw new Error('the untouched crop tool was left open behind the switch');
+      if (JSON.stringify(FM.history._steps()) !== hist0) throw new Error('closing an untouched crop made an undo step');
+      const c = FM.cropOf(r.L, 0);
+      if (c.full || Math.abs(c.w - 200) > 0.5) throw new Error('the crop changed although he never moved it (' + JSON.stringify(c) + ')');
+    });
+  });
+
+  test('980 cog T12 on every phone size, upright and sideways, the switch and the open block are on screen, nothing scrolls sideways, and Apply is reachable — the cog is never covered by the Editor block, nothing spills out of it, and the knob sits behind the current word', { item: '980', budgetMs: 120000 }, async function () {
+    const frame = window.frameElement;
+    if (!frame) throw new Error('this test sizes its own frame and has no frameElement');
+    const w0 = frame.style.width, h0 = frame.style.height;
+    const SIZES = [[320, 568], [375, 553], [380, 667], [380, 800], [440, 956], [956, 440]];
+    const bad = [];
+    try {
+      for (const sz of SIZES) {
+        frame.style.width = sz[0] + 'px'; frame.style.height = sz[1] + 'px';
+        window.dispatchEvent(new Event('resize'));
+        await new Promise(r => setTimeout(r, 260));
+        await smCog(async function (c) {
+          const W = window.innerWidth, H = window.innerHeight, tag = sz[0] + 'x' + sz[1];
+          const onScreen = (el, what) => {
+            if (!el) { bad.push(tag + ': no ' + what); return; }
+            const r = el.getBoundingClientRect();
+            if (!(r.width > 0 && r.left >= -0.5 && r.top >= -0.5 && r.right <= W + 0.5 && r.bottom <= H + 0.5)) { bad.push(tag + ': ' + what + ' is off screen ' + JSON.stringify([Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)])); return; }
+            const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            if (!h || !(h === el || el.contains(h))) bad.push(tag + ': ' + what + ' is covered (the point hits ' + (h ? h.tagName.toLowerCase() + (h.id ? '#' + h.id : '') : 'nothing') + ')');
+          };
+          const sw = () => Array.prototype.find.call(document.querySelectorAll('#cv-editor .ed-sw'), b => b.getClientRects().length);
+          const box = el => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)]; };
+          const meets = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+          /* The cog he tapped (D24 B, measured 6 Oct: at 956x440 the two buttons spilled 110 px out of a 176 px box, over the cog) */
+          /* Only where the blocks HANG OFF the cog (cv-anchored: PC and a sideways phone). Upright on a phone they are a sheet over a
+             scrim that covers the play bar's cog by design — that cog is not the one he is looking at. */
+          const cog = document.body.classList.contains('cv-anchored') ? ['btn-settings', 'm-settings'].map(id => document.getElementById(id)).find(b => b && b.getBoundingClientRect().width > 0) : null;
+          const ownBlock = (what) => {
+            const ed = document.getElementById('cv-editor'), er = ed.getBoundingClientRect();
+            ed.querySelectorAll('button').forEach(b => {
+              if (!b.getClientRects().length) return;
+              const r = b.getBoundingClientRect(); if (!(r.width > 0)) return;
+              const name = (b.className || b.tagName).split(' ')[0] + ' “' + (b.textContent || '').trim().slice(0, 24) + '”';
+              if (r.left < er.left - 0.5 || r.right > er.right + 0.5 || r.top < er.top - 0.5 || r.bottom > er.bottom + 0.5) bad.push(tag + ': ' + name + ' spills out of the Editor block (' + what + ') ' + JSON.stringify(box(b)) + ' outside ' + JSON.stringify(box(ed)));
+              /* the WORDS, by a Range over the contents: scrollWidth would count the buttons' own invisible tap areas (::before) */
+              const rg = document.createRange(); rg.selectNodeContents(b); const tr = rg.getBoundingClientRect();
+              if (tr.width > 0 && (tr.left < r.left - 0.5 || tr.right > r.right + 0.5)) bad.push(tag + ': ' + name + '’s words run past its own edge (' + what + ') ' + JSON.stringify([Math.round(tr.left), Math.round(tr.right)]) + ' in ' + JSON.stringify([Math.round(r.left), Math.round(r.right)]));
+              if (cog && meets(r, cog.getBoundingClientRect())) bad.push(tag + ': ' + name + ' covers the cog (' + what + ') ' + JSON.stringify(box(b)) + ' on ' + JSON.stringify(box(cog)));
+            });
+          };
+          const knob = (what) => {
+            const b = sw(); if (!b) return;
+            const k = b.querySelector('.ed-k'), lit = b.querySelector(FM.editor.mode() === 'simple' ? '.ed-l-s' : '.ed-l-f');
+            const kr = k && k.getBoundingClientRect(), lr = lit.getBoundingClientRect();
+            if (!kr || !(kr.width > 0)) { bad.push(tag + ': the switch has no knob (' + what + ')'); return; }
+            const cx = kr.left + kr.width / 2;
+            if (!(cx > lr.left && cx < lr.right)) bad.push(tag + ': the knob is not behind the current word (' + what + ') knob ' + JSON.stringify(box(k)) + ', word ' + JSON.stringify(box(lit)));
+          };
+          /* S1: Canvas open — the switch and Apply */
+          onScreen(sw(), 'the switch (Canvas open)');
+          onScreen(document.getElementById('cv-ed-what'), 'What should you use? (Canvas open)');
+          ownBlock('Canvas open'); knob('Canvas open');
+          const card = c.dlg.querySelector('.export-card'), apply = c.dlg.querySelector('.export-card .dialog-actions .primary, .export-card .dialog-actions button:last-child');
+          if (card) card.scrollTop = card.scrollHeight;
+          await c.sleep(30);
+          onScreen(apply, 'Apply (Canvas open, scrolled to the end)');
+          if (document.documentElement.scrollWidth > W + 1) bad.push(tag + ': the page scrolls sideways (' + document.documentElement.scrollWidth + ' > ' + W + ')');
+          /* S3: the explanation open — the big switch and the two bars to get back */
+          document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
+          if (c.big() !== 'editor') { bad.push(tag + ': the explanation did not open'); return; }
+          onScreen(sw(), 'the switch (explanation open)');
+          ownBlock('explanation open'); knob('explanation open');
+          onScreen(document.getElementById('cv-mini'), 'the Canvas bar (explanation open)');
+          onScreen(document.getElementById('cv-fr-bar'), 'the Friends bar (explanation open)');
+        });
+      }
+    } finally {
+      frame.style.width = w0; frame.style.height = h0;
+      window.dispatchEvent(new Event('resize'));
+      await new Promise(r => setTimeout(r, 220));
+    }
+    if (bad.length) throw new Error(bad.length + ' problem(s): ' + bad.slice(0, 6).join(' · '));
+  });
+
+  test('980 cog T5 with steps waiting under redo, a switch that would commit open typing warns that redo goes, and with nothing open it never warns and redo still works after switching there and back', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const ask0 = FM.ask, mode0 = FM.editor.mode(), last0 = localStorage.getItem('fm.editor.last');
+    const P = FM.scene.project;
+    const L = FM.makeLayer('text', { name: 'SM_REDO', text: 'one', x: Math.round(P.width / 2), y: Math.round(P.height / 2) });
+    L.start = 0; L.duration = 3;
+    const asked = []; let answer = false;
+    FM.ask = async function (o) { asked.push(o || {}); return answer; };
+    try {
+      if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      FM.setProp(L.transform, 'x', (FM.evalProp(L.transform.x, 0) || 0) + 40, 0); FM.history.commit();
+      FM.history.undo(); await sleep(40);
+      if (!FM.history.canRedo()) throw new Error('setup: after an edit and an undo there is nothing to redo');
+      /* nothing open: no warning, there and back, and redo is still there */
+      if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('the switch to Simple was refused with nothing open');
+      if (!(await FM.editor.request('full', { from: 'cog' }))) throw new Error('the switch back to Full was refused with nothing open');
+      if (asked.length) throw new Error('a switch with nothing open warned: ' + JSON.stringify(asked[0]));
+      if (!FM.history.canRedo()) throw new Error('switching there and back ate the redo step');
+      /* typing open: the switch would commit it, and a commit with redo waiting cuts redo off — so it must ask */
+      FM.textEdit.start(L.id); await sleep(80);
+      if (!FM.textEdit.isActive()) throw new Error('setup: the text editor did not open on the text layer');
+      /* TYPE: an untouched text box commits an identical snapshot, which makes no step and cuts nothing (review R3) */
+      const ta = document.getElementById('te-input'); ta.value = 'one more'; ta.dispatchEvent(new Event('input', { bubbles: true })); await sleep(20);
+      answer = false;
+      const ok = await FM.editor.request('simple', { from: 'cog' }); await sleep(40);
+      if (!asked.length) throw new Error('with typing open and redo waiting, the switch went ahead without a word — the redo tail would be lost silently');
+      if (!/redo|undo|↷/i.test(JSON.stringify(asked[0]))) throw new Error('the warning does not say redo goes: ' + JSON.stringify(asked[0]));
+      if (ok || FM.editor.mode() !== 'full') throw new Error('Stay switched anyway');
+      if (!FM.textEdit.isActive()) throw new Error('Stay closed the text editor');
+      if (!FM.history.canRedo()) throw new Error('Stay lost the redo step');
+    } finally {
+      FM.ask = ask0;
+      try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      FM.selectLayer(null); FM.refreshAll();
+      await sleep(60);
+    }
+  });
+
+  /* ═══ #980 PHASE 1 REVIEW (6 Oct): three readers, each finding checked by a refuter — five real defects in the switch. ═══ */
+  test('980 review R1 Open in Full from a Simple line is a hop: it never changes how the project opens next time, asks before throwing away a moved crop box, and says a refusal in the line', { item: '980', budgetMs: 60000 }, async function () {
+    const pid = FM.storage.openProjectId ? FM.storage.openProjectId() : null;
+    const cardOf = () => (FM.projects.list() || []).find(c => c.id === pid);
+    const card0 = cardOf(), ed0 = card0 ? card0.editor : undefined;
+    const say = () => document.getElementById('sm-say');
+    const openFull = async () => { await new Promise(r => setTimeout(r, 450)); const b = say().querySelector('.sm-say-b');   // the LINE's button: from Phase 2 the tray's own buttons sit first in #sm-say
+      if (!b) throw new Error('the line has no Open in Full button: ' + say().textContent); b.click(); await new Promise(r => setTimeout(r, 60)); };   // 450 ms: a line's buttons arm after 400 ms from Phase 2 on
+    try {
+      await smCropRig(async function (r) {
+        if (!pid || !card0) throw new Error('setup: the suite project has no card, so the memory cannot be read');
+        /* he chose Simple for this project with the cog */
+        if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('setup: the switch to Simple was refused');
+        const last1 = localStorage.getItem('fm.editor.last');
+        if (cardOf().editor !== 'simple') throw new Error('setup: the cog switch did not remember Simple on the card');
+        /* (a) a plain hop: Full on screen, the memory untouched */
+        FM.spine.say('splitNext', { full: true }); await r.sleep(20);
+        await openFull();
+        if (FM.editor.mode() !== 'full') throw new Error('Open in Full did not open Full');
+        if (cardOf().editor !== 'simple') throw new Error('Open in Full saved the project as Full on this device (card editor ' + cardOf().editor + ') — one look in Full changed how it opens next time');
+        if (localStorage.getItem('fm.editor.last') !== last1) throw new Error('Open in Full rewrote fm.editor.last (' + localStorage.getItem('fm.editor.last') + ')');
+        /* (b) a moved crop box: the hop asks first, and Stay keeps everything */
+        if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('setup: back to Simple was refused');
+        FM.cropTool.start(r.L.id); await r.sleep(60);
+        document.querySelector('#crop-bar .cb-reset').click(); await r.sleep(30);
+        if (!FM.cropTool.changed()) throw new Error('setup: the crop box did not change');
+        r.answer(false); r.asked.length = 0;
+        FM.spine.say('splitNext', { full: true }); await r.sleep(20);
+        await openFull();
+        if (!r.asked.length) throw new Error('Open in Full with a moved crop box went ahead (or did nothing) without asking');
+        if (!/crop/i.test(JSON.stringify(r.asked[0]))) throw new Error('the question does not mention the crop: ' + JSON.stringify(r.asked[0]));
+        if (FM.editor.mode() !== 'simple' || !FM.cropTool.isActive() || !FM.cropTool.changed()) throw new Error('Stay did not leave Simple and the moved crop box as they were');
+        FM.cropTool.stop(); await r.sleep(30);
+        /* (c) a refusal while exporting is said in the line, not lost with the cog closed */
+        const was = FM._exporting;
+        try {
+          FM._exporting = true;
+          FM.spine.say('splitNext', { full: true }); await r.sleep(20);
+          await openFull();
+          if (FM.editor.mode() !== 'simple') throw new Error('Open in Full switched while an export was running');
+          const want = ((FM.spineWords && FM.spineWords.editor && FM.spineWords.editor.refuse) || {}).export || 'export';
+          if (!say().textContent || say().textContent.indexOf(want.slice(0, 12)) < 0) throw new Error('the refusal was not said in the line (#sm-say reads "' + say().textContent + '")');
+        } finally { FM._exporting = was; }
+      });
+    } finally {
+      try { const idx = FM.projects.list(), c = idx.find(x => x.id === pid); if (c && c.editor !== ed0) { if (ed0 === undefined) delete c.editor; else c.editor = ed0; FM.projects.saveIndex(idx); } } catch (e) {}
+    }
+  });
+
+  test('980 review R2 switching to Simple leaves Edit Group, so a clip added in Simple is never filed inside the group', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, mode0 = FM.editor.mode(), last0 = localStorage.getItem('fm.editor.last');
+    try {
+      if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
+      FM.scene.layers.length = 0; FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.groupContext = null;
+      const mk = name => { const l = FM.makeLayer('shape', { name: name, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#3a7bd5' }); l.start = 0; l.duration = 3; FM.insertLayer(l); return l; };
+      const A = mk('A'), B = mk('B');
+      FM.scene.selectedIds = [A.id, B.id]; FM.scene.selectedId = A.id; FM.groupSelection();
+      const G = FM.scene.layers.filter(l => l.type === 'group')[0];
+      if (!G) throw new Error('setup: grouping made no group');
+      FM.enterGroup(G.id); await sleep(40);
+      if (FM.groupContext !== G.id) throw new Error('setup: Edit Group did not open');
+      if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('the switch to Simple was refused');
+      if (FM.groupContext) throw new Error('Edit Group is still open in Simple (groupContext ' + FM.groupContext + ')');
+      const C = mk('C');
+      if (C.parent) throw new Error('a layer added in Simple went INSIDE the group (parent ' + C.parent + ')');
+    } finally {
+      FM.groupContext = null;
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = sel0;
+      FM.refreshAll(); await sleep(40);
+    }
+  });
+
+  test('980 review R3 the redo warning comes only when the switch really makes a step — not for an untouched text box or a pen under three points — and it counts the steps and the points', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const ask0 = FM.ask, mode0 = FM.editor.mode(), last0 = localStorage.getItem('fm.editor.last');
+    const P = FM.scene.project;
+    const L = FM.makeLayer('text', { name: 'SM_R3', text: 'one', x: Math.round(P.width / 2), y: Math.round(P.height / 2) });
+    L.start = 0; L.duration = 3;
+    const asked = []; let answer = false;
+    FM.ask = async function (o) { asked.push(o || {}); return answer; };
+    const back = async () => { if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true }); await sleep(30); };
+    try {
+      await back();
+      FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      for (let i = 1; i <= 3; i++) { FM.setProp(L.transform, 'x', (FM.evalProp(L.transform.x, 0) || 0) + 10, 0); FM.history.commit(); }
+      FM.history.undo(); FM.history.undo(); FM.history.undo(); await sleep(40);
+      if (!FM.history.canRedo()) throw new Error('setup: three undos left nothing to redo');
+      /* an untouched text box: closing it makes no step, so the switch goes through without a word and ↷ survives */
+      FM.textEdit.start(L.id); await sleep(80);
+      if (!FM.textEdit.isActive()) throw new Error('setup: the text editor did not open');
+      asked.length = 0;
+      if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('an untouched text box refused the switch');
+      if (asked.length) throw new Error('an untouched text box asked about redo: ' + JSON.stringify(asked[0]));
+      if (!FM.history.canRedo()) throw new Error('the switch ate the redo steps although it made no step');
+      await back();
+      /* typing: a real step — the warning must count all three undone steps */
+      FM.textEdit.start(L.id); await sleep(80);
+      const ta = document.getElementById('te-input'); ta.value = 'one two'; ta.dispatchEvent(new Event('input', { bubbles: true })); await sleep(20);
+      asked.length = 0; answer = false;
+      await FM.editor.request('simple', { from: 'cog' });
+      if (!asked.length) throw new Error('typing with redo waiting switched without a warning');
+      if (!/3 steps/.test(JSON.stringify(asked[0]))) throw new Error('the redo line does not count the 3 undone steps: ' + JSON.stringify(asked[0].message));
+      FM.textEdit.stop(); await sleep(40); FM.history.undo(); await sleep(30);
+      /* a pen with two points: thrown away, no step — only the pen line, it counts the points, and ↷ survives */
+      if (!FM.history.canRedo()) throw new Error('setup: nothing to redo before the pen case');
+      FM.selectLayer(null); FM.startDraw('vector'); await sleep(80);
+      FM.drawTool.points = [[0.3, 0.3], [0.7, 0.3]];
+      asked.length = 0; answer = true;
+      if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('Switch anyway on a two-point pen did not switch');
+      if (asked.length !== 1) throw new Error('a two-point pen should ask once, asked ' + asked.length);
+      const msg = String(asked[0].message || '');
+      if (!/2 points/.test(msg)) throw new Error('the pen line does not say 2 points: ' + msg);
+      if (/redo/i.test(msg)) throw new Error('a pen that is thrown away makes no step, but the warning says redo goes: ' + msg);
+      if (!FM.history.canRedo()) throw new Error('switching away a two-point pen ate the redo steps');
+      await back();
+      /* one point says one point */
+      FM.startDraw('vector'); await sleep(80); FM.drawTool.points = [[0.4, 0.4]];
+      asked.length = 0; answer = false;
+      await FM.editor.request('simple', { from: 'cog' });
+      if (!asked.length || !/only 1 point,/.test(String(asked[0].message))) throw new Error('a one-point pen does not say 1 point: ' + JSON.stringify(asked[0] && asked[0].message));
+    } finally {
+      FM.ask = ask0;
+      try { if (FM.drawTool && FM.drawTool.active) { FM.drawTool.points = []; FM.drawTools.stop(); } } catch (e) {}
+      document.body.classList.remove('drawing', 'draw-vector');
+      try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      FM.selectLayer(null); FM.refreshAll(); await sleep(60);
+    }
+  });
+
+  test('980 review R4 a lost drag (its pointer gone) does not hold the switch: it goes through, and the clip is put back where it started', { item: '980', budgetMs: 30000 }, async function () {
+    smNeedEditor();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.timeline._dragState || !FM._gestureIsStale) throw new Error('seams missing: timeline._dragState / _gestureIsStale');
+    const held = () => FM._heldPointers || new Set();
+    const saved = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, mode0 = FM.editor.mode(), last0 = localStorage.getItem('fm.editor.last');
+    const live = () => ((FM.timeline._dragState() || {}).live || []).indexOf('clipMove') >= 0;
+    const PID = 980;
+    try {
+      if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
+      held().clear();
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 40, shapeH: 30, fill: '#4080c0', start: 1, duration: 2 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.timeline.rebuild(); await sleep(80);
+      const clip = document.querySelector('.track-row .clip');
+      if (!clip) throw new Error('setup: no .clip in the timeline');
+      const r = clip.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const send = (type, dx, buttons) => clip.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: PID, pointerType: 'mouse', isPrimary: true, clientX: x + dx, clientY: y, buttons: buttons }));
+      send('pointerdown', 0, 1); send('pointermove', 30, 1); await sleep(30);
+      if (!live()) throw new Error('setup: the press did not start a clip drag');
+      /* the pointer is lost: the mouse moves with no button, and the stale window passes */
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: PID, pointerType: 'mouse', clientX: x + 31, clientY: y + 1, buttons: 0 }));
+      await sleep(1350);
+      if (!FM._gestureIsStale()) throw new Error('setup: the lost drag does not read as stale');
+      if (!(await FM.editor.request('simple', { from: 'cog' }))) throw new Error('a lost drag held the switch (refused as a drag in progress, with no line)');
+      if (live()) throw new Error('the switch went through but the lost drag is still live under Simple');
+      if (Math.abs(L.start - 1) > 1e-6) throw new Error('the lost drag was not put back where it started (start ' + L.start + ')');
+    } finally {
+      /* on DOCUMENT, which reaches window too: a pointerup sent only to window never reaches the document-level listeners (Simple's
+         finger tracker from Phase 2), and they would think a finger is still down for every test after this one */
+      try { document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: PID, pointerType: 'mouse', buttons: 0 })); } catch (e) {}
+      if (FM._recoverStuckGesture) FM._recoverStuckGesture();
+      held().clear();
+      try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
+      try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = sel0;
+      FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
 })();

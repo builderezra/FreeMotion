@@ -269,6 +269,13 @@ window.FM = window.FM || {};
        asked for: the sheet still docks in the same place and covers the same area, with more of the
        cards visible inside it. A stale row from a previous session is removed on sight. */
     function dockSheet() {
+      /* SIMPLE MODE P1 (§14.2): in Simple the sheet docks under #sm-say, the row below the Simple timeline, so the sections,
+         the clips, the sound and any line stay in view above it (Full docks under its one solo row, which Simple never shows). */
+      const smDock = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.simpleTimeline && document.body.classList.contains('sm-has-sel') && (FM.selectionIds ? FM.selectionIds().length === 1 : true));
+      if (isPhone() && smDock) {
+        const b = FM.simpleTimeline.dockBottom();
+        if (b > 0) { insp.style.top = Math.min(Math.round(b + 4), window.innerHeight - 120) + 'px'; insp.style.maxHeight = 'none'; return; }   // Simple's stage clamp leaves ≥ 200 px here on a screen ≥ 694 px tall; below that its 180 px floor wins (168 px at 380×667)
+      }
       if (!isPhone() || !document.body.classList.contains('m-editing')) { insp.style.top = ''; insp.style.maxHeight = ''; return; }
       const stale = document.getElementById('insp-done');   // queue 835: a row built before this change
       if (stale) stale.remove();

@@ -8620,6 +8620,151 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   body.cv-anchored #canvas-dialog.cv-pair > #cv-friends { animation: none; }
 }
 
+/* ═══ THE ⚙ COG'S THIRD BLOCK — the Simple ⇄ Full switch (Simple mode P1, BUILD-PLAN 1.3.18; COG-DESIGN.md §2–§6). His words,
+   1 Oct: "the option to switch between the two editors should be in the settings cog, making a third section in there … it
+   stays small unless you want the explanation". Every rule here is keyed on .cv-ed-on (the block exists) or #cv-editor, so with
+   the block absent Canvas and Friends are exactly as they were. Same pair rule as #945: one block big, the others bars.
+   ⚠️ Written from COG-DESIGN §6 while the machine was testing another release — the prototype that drew it was never committed;
+   checked against cog/*.jpg at 380 and 1280 before step 1.3 ships. */
+#cv-editor { display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.6); }
+#canvas-dialog.cv-pair.cv-ed-on > #cv-editor { display: flex; flex-direction: column; overflow: hidden; position: relative; flex: none; }
+#cv-ed-bar { display: none; }
+#cv-ed-body { display: none; flex-direction: column; gap: 12px; padding: 18px 18px 16px; overflow-y: auto; min-height: 0; }
+/* small: the bar — the head, the switch, "What should you use?" */
+#canvas-dialog.cv-pair.cv-ed-on:not(.cv-ed-big) > #cv-editor > #cv-ed-bar { display: flex; }
+#canvas-dialog.cv-pair.cv-ed-on:not(.cv-ed-big):not(.cv-flying) > #cv-editor > #cv-ed-body { display: none; }
+#canvas-dialog.cv-pair:not(.cv-ed-big) > #cv-editor { order: -2; }   /* the small blocks sit on top: Editor above Friends */
+/* big: the explanation; Canvas and Friends are both bars */
+#canvas-dialog.cv-pair.cv-ed-big > #cv-editor { order: 1; }
+#canvas-dialog.cv-pair.cv-ed-big > #cv-editor > #cv-ed-body { display: flex; }
+#canvas-dialog.cv-pair.cv-ed-big:not(.cv-flying) > #cv-editor > #cv-ed-bar { display: none; }
+#canvas-dialog.cv-pair.cv-ed-big:not(.cv-flying) > .export-card { padding: 0; }
+#canvas-dialog.cv-pair.cv-ed-big:not(.cv-flying) > .export-card > :not(.cv-mini) { display: none; }
+#canvas-dialog.cv-pair.cv-ed-big > .export-card > .cv-mini { display: flex; }
+/* the flight: like the pair's, both halves drawn for the 460 ms */
+#canvas-dialog.cv-pair.cv-flying > #cv-editor { overflow: hidden; }
+#canvas-dialog.cv-pair.cv-flying > #cv-editor > #cv-ed-bar { display: flex; position: absolute; left: 0; right: 0; top: 0; z-index: 2; }
+#canvas-dialog.cv-pair.cv-flying.cv-ed-big > #cv-editor > #cv-ed-body,
+#canvas-dialog.cv-pair.cv-flying > #cv-editor > #cv-ed-body { display: flex; }
+/* the bar's insides */
+#cv-ed-bar .ed-head { display: flex; align-items: center; gap: 10px; min-width: 0; flex: none; }
+#cv-ed-bar .ed-gap { flex: 1; }
+#cv-editor .ed-what { position: relative; flex: none; height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); font-size: 12.5px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+#cv-editor .ed-what::before { content: ''; position: absolute; inset: -8px -4px; }
+/* THE SWITCH: one button, both words, the current one lit (COG-DESIGN §3.2) */
+#cv-editor .ed-sw { position: relative; display: inline-flex; align-items: center; gap: 2px; height: 34px; padding: 0 3px; border-radius: 17px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text-dim); font-weight: 700; font-size: 13px; cursor: pointer; flex: none; }
+#cv-editor .ed-sw::before { content: ''; position: absolute; inset: -6px; }
+/* The KNOB (COG-DESIGN §3.2, the cog/*.jpg pictures): a filled pill behind the current word that slides to the other one. The
+   two words have one fixed width so CSS alone knows where the knob goes: past one word, the ⇄ and the two 2 px gaps. */
+#cv-editor .ed-sw .ed-l { position: relative; z-index: 1; width: 58px; text-align: center; transition: color .2s; }
+#cv-editor .ed-sw .ed-x { position: relative; z-index: 1; width: 16px; text-align: center; opacity: .55; font-weight: 400; }
+#cv-editor .ed-sw .ed-k { position: absolute; top: 3px; bottom: 3px; left: 3px; width: 58px; border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2)); transition: transform .2s cubic-bezier(.2, .8, .3, 1); }
+#cv-editor .ed-sw[data-mode="full"] .ed-k { transform: translateX(78px); }   /* 58 + 2 + 16 + 2 */
+#cv-editor .ed-sw[data-mode="full"] .ed-l-f, #cv-editor .ed-sw[data-mode="simple"] .ed-l-s { color: #06231d; }   /* the Apply button's ink on its fill */
+#cv-editor .ed-sw.big { height: 42px; padding: 0 4px; font-size: 15px; border-radius: 21px; }
+#cv-editor .ed-sw.big .ed-l, #cv-editor .ed-sw.big .ed-k { width: 88px; }
+#cv-editor .ed-sw.big .ed-k { top: 4px; bottom: 4px; left: 4px; }
+#cv-editor .ed-sw.big[data-mode="full"] .ed-k { transform: translateX(108px); }   /* 88 + 2 + 16 + 2 */
+/* On the phone's bar the explanation's door is two short lines, as drawn — on one line it ran past the block's edge */
+#canvas-dialog:not(.cv-side) #cv-ed-bar .ed-what { white-space: normal; height: auto; min-height: 30px; max-width: 112px; padding: 5px 12px;
+  border-radius: 12px; line-height: 1.2; text-align: center; }
+/* The smallest phones (320 wide): the icon gives its room to the door, and the two words narrow, so all of it stays in the block */
+@media (max-width: 359px) {
+  #canvas-dialog:not(.cv-side) #cv-ed-bar .cv-mini-ico { display: none; }
+  #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-sw:not(.big) .ed-l, #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-sw:not(.big) .ed-k { width: 52px; }
+  #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-sw:not(.big)[data-mode="full"] .ed-k { transform: translateX(72px); }   /* 52 + 2 + 16 + 2 */
+  #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-what { max-width: 100px; padding: 5px 9px; }
+}
+#cv-editor .ed-now { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+#cv-editor .ed-now-t { font-size: 13px; color: var(--text-dim); }
+#cv-editor .ed-opt { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); }
+#cv-editor .ed-opt.here { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+#cv-editor .ed-opt > svg { width: 64px; height: 34px; flex: none; color: var(--accent); margin-top: 2px; }
+#cv-editor .ed-opt b { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
+#cv-editor .ed-opt p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--text-dim); }
+#cv-editor .ed-here { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; color: #06231d;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2)); }
+#cv-editor .ed-note { margin: 0; font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+#cv-editor .ed-why { font-size: 12.5px; color: #ffb4a8; min-height: 0; }
+#cv-editor .ed-why:empty { display: none; }
+@media (max-width: 700px) {
+  #canvas-dialog.cv-pair > #cv-editor { width: min(420px, calc(100vw - 24px)); }
+  #cv-ed-bar .cv-mini-t { display: none; }   /* ONE markup for both widths (DESIGN §21 F11): the phone hides the title */
+  /* SAFE CENTRE (COG-DESIGN §6.1): Canvas and Friends keep their exact place — the column is centred in a box one bar (76 px)
+     shorter at the bottom, and where it does not fit it starts at the top reserve. Two growing spacers, not
+     `justify-content: safe center` (Safari). Each cancels the column gap it would add. */
+  #canvas-dialog.cv-pair.cv-ed-on { justify-content: flex-start; padding-bottom: calc(12px + 76px + env(safe-area-inset-bottom)); }
+  #canvas-dialog.cv-pair.cv-ed-on::before, #canvas-dialog.cv-pair.cv-ed-on::after { content: ''; flex: 1 1 0; min-height: 0; margin: -10px 0 0; }
+  #canvas-dialog.cv-pair.cv-ed-on::before { order: -10; }
+  #canvas-dialog.cv-pair.cv-ed-on::after { order: 10; }
+  /* the big block's cap: the top reserve 96, two bars 2 × (66 + 10), the bottom 12 */
+  #canvas-dialog.cv-pair.cv-ed-on > .export-card,
+  #canvas-dialog.cv-pair.cv-ed-on.cv-fr-big > #cv-friends,
+  #canvas-dialog.cv-pair.cv-ed-on.cv-ed-big > #cv-editor {
+    max-height: calc(100vh - 260px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100svh - 260px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+@media (min-width: 701px) {
+  #canvas-dialog.cv-pair > #cv-editor { width: 360px; }
+  body.cv-anchored #canvas-dialog.cv-pair > #cv-editor { animation: cv-grow 160ms cubic-bezier(.2, .8, .3, 1); transform-origin: top right; }
+  /* STACKED fall-back (§6.3): small blocks away from the cog, the big one next to it; each cap loses another bar */
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on:not(.cv-side):not(.cv-ed-big) > #cv-editor { order: 2; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { order: -3; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-big:not(.cv-side) > .export-card,
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-big:not(.cv-side) > #cv-friends { order: 1; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-pair.cv-ed-on:not(.cv-side) > .export-card,
+  body.cv-anchored.cv-up #canvas-dialog.cv-pair.cv-ed-on.cv-fr-big:not(.cv-side) > #cv-friends,
+  body.cv-anchored.cv-up #canvas-dialog.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px - 152px); }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on:not(.cv-side) > .export-card,
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on.cv-fr-big:not(.cv-side) > #cv-friends,
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px - 152px); }
+  /* SIDE BY SIDE with three blocks (§6.2): two columns, two rows — the small column holds both tiles, the one by the cog's
+     row where today's tile is, the Editor tile beside it. No extra width: side by side starts where it does today. */
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-on { grid-auto-flow: row; grid-template-rows: 1fr auto; row-gap: 10px;
+    grid-template-columns: 176px 360px; grid-template-areas: "ed cv" "fr cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-on { grid-template-rows: auto 1fr; grid-template-areas: "fr cv" "ed cv"; }
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-fr-big { grid-template-columns: 360px 176px; grid-template-areas: "fr ed" "fr cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-fr-big { grid-template-areas: "fr cv" "fr ed"; }
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-ed-big { grid-template-columns: 360px 176px; grid-template-areas: "ed fr" "ed cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-ed-big { grid-template-areas: "ed cv" "ed fr"; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on > .export-card { grid-area: cv; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on > #cv-friends { grid-area: fr; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on > #cv-editor { grid-area: ed; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on:not(.cv-ed-big) > #cv-editor,
+  #canvas-dialog.cv-pair.cv-side.cv-ed-big > .export-card,
+  #canvas-dialog.cv-pair.cv-side.cv-ed-big > #cv-friends { width: 176px; }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar { flex-direction: column; align-items: flex-start; height: auto; padding: 16px 14px 14px; gap: 10px; }
+  #canvas-dialog.cv-pair.cv-side #cv-ed-bar .ed-gap { display: none; }
+  #canvas-dialog.cv-pair.cv-side.cv-flying > #cv-editor > #cv-ed-bar { bottom: 0; height: auto; right: auto; width: 176px; }
+  #canvas-dialog.cv-pair.cv-side.cv-flying > #cv-editor > #cv-ed-body { width: 358px; }
+  /* ── D24 B (DESIGN §6.5): SHORT SCREENS. Not S3: the pair is exactly today's two-area grid, and the Editor's small form is a
+     pill of two controls on the cog's own row, 10 px left of the cog and centred on it — not a grid item, so nothing in the
+     pair moves and the swap leaves it where it is. */
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-short:not(.cv-ed-big) { grid-template-rows: auto; grid-template-columns: 176px 360px; grid-template-areas: "fr cv"; }
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-fr-big:not(.cv-ed-big) { grid-template-columns: 360px 176px; grid-template-areas: "fr cv"; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-on.cv-ed-short:not(.cv-ed-big) > #cv-editor { position: fixed; top: calc(var(--cv-cog-mid, 0px) - 18px); right: calc(var(--cv-cog-left, 0px) + 10px);
+    width: auto; background: none; border: 0; box-shadow: none; animation: none; overflow: visible; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) > #cv-editor > #cv-ed-bar { flex-direction: row; align-items: center; height: 36px; gap: 8px; padding: 0; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-head, #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-gap { display: none; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-sw, #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-what { height: 36px; background: var(--panel); box-shadow: none; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-sw::before { inset: -6px -4px; }
+  /* S3 on a short screen: the explanation takes the big column; Friends and Canvas wait as two 64 px bars by the cog */
+  body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto; grid-template-areas: "ed ." "ed fr" "ed cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big { grid-template-rows: auto auto 1fr; grid-template-areas: "ed cv" "ed fr" "ed ."; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-mini { flex-direction: row; align-items: center; height: 64px; padding: 11px 12px 11px 14px; }
+  #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-mini-s, #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-mini-app,
+  #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-fr-faces { display: none; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px); }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.cv-anchored #canvas-dialog.cv-pair > #cv-editor { animation: none; }
+}
+
 /* ---- Canvas presets (queue 183) --------------------------------------------------------------
    "This settings menu shall have an option that says save project as preset." Two surfaces: the row
    in Canvas settings that saves and lists them, and the chips on the New project dialog that spend
@@ -11529,3 +11674,94 @@ html[data-pb-cursor="ew"], html[data-pb-cursor="ew"] * { cursor: ew-resize !impo
 .fm-x:active .fm-x-disc { opacity: .7; }
 /* a DELETE ✕ still warns on hover, as its old glyph did */
 .np-del.fm-x:hover .fm-x-disc, .cap-del.fm-x:hover .fm-x-disc, .fxp-del.fm-x:hover .fm-x-disc { fill: #ff6b6b; }
+
+
+/* ═══ SIMPLE MODE, PHASE 1 — the Simple editor (DESIGN.md §6, §8.1–§8.2, §15.1; BUILD-PLAN.md step 1.3) ═════════════════
+   Everything below is scoped by `body.ed-simple` (Simple is showing) or by the cog's third block (`.cv-ed-on`, `#cv-editor`),
+   so in Full nothing here matches outside that block: Full's play bar, ⋯ strip and stage are HEAD's (DESIGN.md §0.4). */
+#btn-sm-split, #sm-timeline { display: none; }
+/* SIMPLE. No switch on the play bar in either editor (the ⚙ cog is the one door, DESIGN §6.1). The phone's left group is
+   ⋯ · ✂ · (gap) · |◀ (D18 A): ⧉ gives its slot to ✂, and ◐ keeps its slot INVISIBLE so |◀ sits where it sits in Full.
+   PC: ‹ ✂ |◀. Under D18 B, make the #btn-addside rule `display: none !important` at every width. */
+body.ed-simple #btn-layermenu, body.ed-simple #t-sel, body.ed-simple #key-rail { display: none !important; }
+body.ed-simple #btn-addside { visibility: hidden !important; pointer-events: none; }
+@media (min-width: 701px) { body.ed-simple #btn-addside { display: none !important; } }
+/* Full-only doors in the view options (§8.8, T21): the Layers panel and Add camera (a camera is Full-only, §5.2) */
+body.ed-simple #vb-layers, body.ed-simple #vb-camera { display: none !important; }
+body.ed-simple #btn-sm-split { display: inline-flex; }
+#btn-sm-split[aria-disabled="true"] { opacity: .38; }
+#cv-editor .ed-sw.ed-shake { animation: ed-shake .36s ease; }
+@keyframes ed-shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+/* AFTER the rule it stops: same specificity, so an earlier "none" loses the cascade and the shake ran under reduced motion (T15) */
+@media (prefers-reduced-motion: reduce) { #cv-editor .ed-sw.ed-shake { animation: none; } #cv-editor .ed-sw .ed-k, #cv-editor .ed-sw .ed-l { transition: none; } }
+/* ✎ hides while something is selected in Simple — by VISIBILITY, so ? never slides a slot (his #171) */
+body.ed-simple.sm-has-sel #m-notes { visibility: hidden; }
+/* the timeline: Full's stays laid out underneath (one pxPerSec), Simple's covers it exactly */
+body.ed-simple #timeline { visibility: hidden; pointer-events: none; }
+body.ed-simple #sm-timeline { display: flex; }
+#sm-timeline {
+  position: absolute; left: 0; right: 0; top: var(--tl-top, 40px); bottom: 0; z-index: 11;
+  flex-direction: column; background: var(--panel); min-height: 0;
+}
+#timeline-panel.ed-xfade #sm-timeline, #timeline-panel.ed-xfade #timeline { animation: ed-xfade .15s ease; }
+@keyframes ed-xfade { from { opacity: .25; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #timeline-panel.ed-xfade #sm-timeline, #timeline-panel.ed-xfade #timeline { animation: none; } }
+#sm-scroll { flex: 1 1 auto; min-height: 0; overflow-x: auto; overflow-y: hidden; touch-action: pan-x; overscroll-behavior: contain; scrollbar-width: none; }
+#sm-scroll::-webkit-scrollbar { display: none; }
+#sm-inner { position: relative; height: 100%; display: flex; flex-direction: column; }
+#sm-ruler { position: relative; flex: 0 0 18px; font-size: 9px; color: #8b97ab; border-bottom: 1px solid var(--line); }
+.sm-tick { position: absolute; top: 3px; transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
+#sm-sections { position: relative; flex: 0 0 auto; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; scrollbar-width: none; }
+#sm-sections::-webkit-scrollbar { display: none; }
+.sm-secstack { margin-top: auto; }
+.sm-sec { position: relative; }
+.sm-glyph { position: sticky; left: 0; z-index: 2; width: 26px; height: 16px; margin-bottom: -16px; font: 800 10px/16px system-ui, sans-serif; text-align: center; color: #0b0f16; border-radius: 0 6px 6px 0; }
+.sm-sec-captions .sm-glyph { background: #ffce4a; } .sm-sec-text .sm-glyph { background: #b79cff; }
+.sm-sec-overlay .sm-glyph { background: #5ac7ed; } .sm-sec-behind .sm-glyph { background: repeating-linear-gradient(135deg, #3a3350 0 4px, #2f2944 4px 8px); color: #cfc4f5; }
+.sm-lane { position: relative; height: 32px; }
+#sm-main { position: relative; flex: 0 0 56px; border-top: 1px solid var(--line); }
+#sm-sound { position: relative; flex: 0 0 32px; border-top: 1px solid var(--line); }
+.sm-item {
+  position: absolute; top: 1px; height: 30px; border-radius: 6px; overflow: hidden; cursor: pointer; box-sizing: border-box;
+  display: flex; align-items: center; gap: 4px; padding: 0 6px; font: 600 11px/1 system-ui, sans-serif; color: #0b0f16;
+  outline: none; -webkit-tap-highlight-color: transparent;
+}
+.sm-item .sm-name { position: relative; z-index: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sm-k-captions { background: #ffce4a; } .sm-k-text { background: #b79cff; } .sm-k-overlay, .sm-k-block { background: #5ac7ed; }
+.sm-k-effect { background: #9be38a; } .sm-k-background { background: repeating-linear-gradient(135deg, #3a3350 0 5px, #2f2944 5px 10px); color: #cfc4f5; }
+.sm-k-block { background: repeating-linear-gradient(135deg, #5ac7ed 0 5px, #4aa9cb 5px 10px); }
+.sm-clip { top: 2px; height: 52px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); border: 1px solid rgba(0,0,0,.35); }
+.sm-clip .sm-strip { position: absolute; left: 0; top: 0; height: 100%; pointer-events: none; }
+.sm-snd { background: #2fae7a; color: #fff; }
+.sm-item.sel { box-shadow: inset 0 0 0 2px #fff, 0 0 0 1px #000; z-index: 3; }
+.sm-item:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.sm-hidden { opacity: .45; }
+.sm-loading { background: repeating-linear-gradient(90deg, #26303f 0 12px, #2e3a4c 12px 24px) !important; color: #aeb8c8; }
+.sm-pro { position: relative; z-index: 1; margin-left: auto; flex: 0 0 auto; font-size: 9px; padding: 1px 4px; border-radius: 3px; background: rgba(155,135,245,.9); color: #120c2a; }
+.sm-nofoot { position: relative; z-index: 1; flex: 0 0 auto; font-size: 9px; padding: 1px 4px; border-radius: 3px; background: #2a1418; color: #ff8a8a; }
+.sm-slot { position: absolute; top: 2px; height: 52px; border: 1px dashed #5a667a; border-radius: 6px; box-sizing: border-box; pointer-events: none; }
+.sm-chip {
+  position: absolute; top: -4px; transform: translateX(-50%); z-index: 4; min-width: 32px; height: 32px; padding: 0 6px;
+  border-radius: 16px; font: 700 10px/1 system-ui, sans-serif; cursor: pointer;
+}
+.sm-chip-gap { background: #2a1f14; color: #ffb454; border: 1.5px solid #ffb454; }
+.sm-chip-overlap { background: #2a1418; color: #ff6b6b; border: 1.5px solid #ff6b6b; }
+.sm-add { position: absolute; top: 10px; width: 36px; height: 36px; border-radius: 10px; border: 1.5px dashed #8b97ab; background: transparent; color: #cfd6e2; font: 400 22px/1 system-ui, sans-serif; cursor: pointer; }
+.sm-more { position: sticky; left: calc(100% - 40px); top: 0; float: right; margin-top: 4px; min-width: 32px; height: 24px; border-radius: 12px; background: #1d2533; color: #cfd6e2; font: 700 10px/24px system-ui, sans-serif; text-align: center; }
+#sm-say { flex: 0 0 52px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-top: 1px solid var(--line); font: 600 12.5px/1.25 system-ui, sans-serif; color: #dfe6f0; box-sizing: border-box; }
+#sm-say .sm-say-t { flex: 1 1 auto; min-width: 0; }
+#sm-say .sm-say-b { flex: 0 0 auto; min-width: 44px; min-height: 32px; padding: 0 12px; border-radius: 9px; border: 0; background: var(--accent); color: #06231d; font: 700 12px/1 system-ui, sans-serif; cursor: pointer; }
+.sm-vh { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (min-width: 701px) { #sm-say { flex-basis: 40px; } }
+/* THE PHONE: FIXED ROWS, NOT A GROWING COLUMN (DESIGN §8.2, §15.1). Ruler 18 + sections 64 + clip row 56 + sound 32 = 170, then
+   #sm-say's 52 directly under them; a selection's panel docks under #sm-say (js/mobile.js), so a line is never hidden by it and
+   no row moves by a pixel when something is selected or cleared (T19). The stage is clamped in Simple so that panel keeps
+   ≥ 200 px: 514 = top bar 52 + play bar 40 + 170 + 52 + 200. Below 694 px of height the 180 px floor wins and the panel gets
+   less (measured 168 px at 380×667). Full keeps its 40svh stage. */
+@media (max-width: 700px) {
+  body.ed-simple { --stage-h: clamp(180px, calc(100svh - 514px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)), 40svh); }
+  #sm-scroll { flex: 0 0 170px; }
+  #sm-say { flex: 0 0 52px; border-bottom: 1px solid var(--line); }
+  body.ed-simple #tl-centerline { bottom: auto; height: 170px; }   /* the playhead line spans the clip rows only, not #sm-say or the docked panel */
+}
+@media (min-width: 701px) { body.ed-simple #tl-centerline { bottom: 40px; } }   /* …and stops above PC's #sm-say */

@@ -217,6 +217,11 @@ window.FM = window.FM || {};
        question is how many places undo can go back to. */
     _steps() { return { len: stack.length, index: index }; },
     canRedo() { return index < stack.length - 1; },
+    /* Simple mode (#980, Phase 1 review 6 Oct): READ-ONLY, for the editor switch's warning — how many steps ↷ holds, and
+       whether a commit right now would push one (an identical snapshot pushes nothing, so it cannot cut the redo tail; a
+       muted or suppressed commit returns early). Nothing in Full calls either. */
+    redoDepth() { return index < 0 ? 0 : stack.length - 1 - index; },
+    wouldStep() { if (suppress || muteDepth > 0) return false; return !(index >= 0 && stack[index] === snap()); },
     syncButtons: syncButtons,
     _afterExternalChange: afterExternalChange,   // queue 921 S0: restore's post-swap repairs, shared with collab
     /* queue 921 S0 (§10.4): the snapshots BEHIND the playhead of the stack, oldest first. A session that
