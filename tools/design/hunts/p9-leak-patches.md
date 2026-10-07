@@ -13,7 +13,7 @@ Against `origin/main` 2e3fd7a9 (v17.25; the P9 plan was written on 470ee20e, so 
 
 None of the four needs an app seam or a real H.264/AAC encoder (stubs for the encoders, the REAL `VideoFrame`/`AudioData` classes counted), so they run on this Linux box and on the Mac. The #1009 test needs the driver's GC (`window.__fmWantGc`, the same one the 690 tests use) and says so if run without it.
 Not shown red separately: the *render-throws* variant of #1011 (the test checks `encode` first and stops at the first failure; the variant is asserted, and green with the patch, but I did not mutate it alone). **Guess** that it is red on main, because my P9 reproduction measured it (2/2 frames, encoder left `configured`).
-Not run: the full suite (35 min). I ran the three new tests and nothing around them beyond what the background check below says.
+Not run: the full suite (35 min). I ran the three new tests.
 
 ## #1009 `js/compositor.js` `getFillImage` (+ one line in `js/storage.js` `FM.projects.open`)
 - **Callers traced (Read):** `getFillImage` is called by `FM.fillPanLimit`, `paintFillInPath` and the media-fill render branch. The cache is replaced wholesale only by `FM.projects.open` (teardown next to `resetMotionFlowCache`); `applyScene`/import/restore keep or reuse layer ids, `history.restore` keeps the same ids, and `makeLayerThumb` renders a mini scene whose layers are NOT in `FM.scene.layers`. So **liveness against `FM.scene.layers` is the wrong test** (50 fills in a template thumbnail would all look dead); the patch decides by **last use** (`rec.at`, stamped on every hit).
