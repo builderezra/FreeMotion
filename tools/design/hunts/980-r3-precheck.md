@@ -128,3 +128,33 @@ For every red I ran it **alone on the branch** and **alone on main 2e3fd7a9** (b
 | 6: after the screen-awake hang to the end | Regression 422/468 ✗ · NOT RUN HERE 30 | Regression 422/468 ✗ · NOT RUN HERE 31 |
 
 Slice times at 1280 (first three): 261 s, 802 s, 653 s; later slices were about 8 to 17 minutes each. Raw outputs are not committed (90 KB each); the red lists above are complete.
+## H37: do the two 690 hangs happen on main too? Yes, identically, so they are a container limit (no H.264 encoder), not a Simple regression
+
+**Answer (Measured):** both tests hang the same way on `origin/main` (2e3fd7a9, v17.25) and on `980-p22-r3` (a51b5e1d), at 1280 and at 380. 8 runs, each test ALONE, each on its own browser profile. Nothing in the Simple tip is involved. The laptop (which has an H.264 encoder) will not see this.
+
+| test (alone) | main 1280 | main 380 | r3 1280 | r3 380 |
+|---|---|---|---|---|
+| `690 swiping the share sheet away after Save keeps the Export ready card…` | hangs | hangs | hangs | hangs |
+| `690 an export holds the screen awake while it renders…` | hangs | hangs | hangs | hangs |
+
+Control (Measured): `690 a Spin added at the start of its clip…` run through the same harness on main at 1280 finished normally (exit 0), so the harness is not what hangs.
+
+**The step it stops on.** Neither test sets `window.__fmStep` itself, so the marker was added by me in scratch copies of the two worktrees (`tests/tests.js` markers plus a setter on `__fmStep` that logs each assignment to the console, which a second DevTools client reads even after the page stops answering; nothing of this is committed). In all 8 runs the last marker is reached within 2 to 8 s of the test starting:
+
+- test 1: `T1 waiting for the Export ready card` (the line `await huntbWait(() => !ready.classList.contains('hidden'), 60000, …)`, tests/tests.js:98398 on main, 98405 on r3, is entered right after `running = FM._runExport()` returns its promise).
+- test 2: `T2 calling _runExport mp4` (inside the `for (const fmt of ['mp4', 'gif'])` loop, tests/tests.js:98472 on main, 98479 on r3).
+
+**Why it never gets past that step.** Chrome's DevTools reported a `Page.javascriptDialogOpening` event in every run, type `alert`, with the message "This browser's video encoder does not support any of the H.264 settings FreeMotion can write, so an MP4 cannot be made here." The trail, the same on both trees (the exporter block is byte-identical, `diff` of exporter.js:970-992 is empty):
+1. `VideoEncoder.isConfigSupported` is asked about the four H.264 codecs `avc1.640034, 640028, 4d0028, 42e01e` and answers `supported:false` for all four (js/exporter.js:977, called from `pickVideoCodec`; seen as four `isConfigSupported -> false` lines per run).
+2. `pickVideoCodec` throws `NO_VIDEO_CODEC` (js/exporter.js:991).
+3. `runExport`'s catch turns it into `alert(...)` (js/app.js:6210 on main, 6243 on r3).
+4. A headless page that opens an `alert` is blocked until someone answers it. Nobody does, so the page answers no more DevTools calls (I tried `Runtime.evaluate` and `Debugger.pause`, both time out), `tests/_cdp.py`'s polling `eval` has no timeout, and the suite's own 45 s/120 s test budget cannot fire because it is a page timer. That is also why the earlier runs showed `"test": ""` and `elapsed_s: 0` in the progress file: the driver was stuck inside one call, not slow.
+
+**Why these two and not the others.** Both guard only `typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined'` (tests.js:98400 and the same line in test 2). Linux headless Chrome HAS a `VideoEncoder`, it just has no H.264 behind it, so the guard passes and the test runs a real MP4 export. Other tests that need a missing codec already say NOT RUN HERE: `notRunHere('needs an AAC audio encoder…')` at tests.js:204 is the pattern.
+
+**What it means for the laptop and for the suite on this container (Guess where marked).**
+- Real Simple regression: none from these two. On a machine with H.264 they take the normal path (an alert never opens); I could not run that path here (Measured: this container cannot), so whether they PASS on r3 is still unmeasured.
+- The cheap structural fix, for whoever owns tests.js: add a guard in both tests next to the existing one, modelled on tests.js:204: ask `VideoEncoder.isConfigSupported` for `avc1.42e01e` at a tiny size and `notRunHere('needs an H.264 video encoder (Linux Chrome has none; the Mac and his iPhone do)')` when it says false. That turns a hung container run into a named NOT RUN HERE. (Guess: any other test that calls `FM._runExport` with `mp4` unstubbed would hang the same way; none other did in the H33 slices, which ran to the end.) Not written as a patch because the PM asked only for the answer.
+- Run order matters here only for the container: after the first of these two, every later test in the same slice is lost, which is why slices 2 and 3 of H33 were stuck. Slicing the run so that each of these two is its own `?only=` run, and giving each a hard wall-clock limit, is enough.
+
+How to reproduce (container): `FM_CHROME=… python3 tests/_cdp.py --port P --width W --timeout 40 --url 'http://localhost:P/tests/run.html?only=690%20swiping%20the%20share%20sheet'`; it does not return until the outer `timeout` kills it.
