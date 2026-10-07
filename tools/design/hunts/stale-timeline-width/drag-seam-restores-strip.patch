@@ -1,0 +1,43 @@
+diff --git a/js/timeline.js b/js/timeline.js
+index 6d00b2ac..b766a307 100644
+--- a/js/timeline.js
++++ b/js/timeline.js
+@@ -4869,6 +4869,7 @@ window.FM = window.FM || {};
+         clipMove = null; hideSnap();
+         FM.scene.layers.forEach((l, i) => { l.start = saveStarts[i]; });
+         P.duration = saveDur;
++        applyInnerWidth();   // H47: the seam put the duration back and left the strip sized for the grown one: every test that used it polluted the next
+       }
+       return out;
+     },
+diff --git a/tests/tests.js b/tests/tests.js
+index 1900efa6..7d2a624b 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -59828,6 +59828,26 @@
+     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
+   });
+ 
++  /* H47: THE DRAG SEAM LEAVES THE STRIP SIZED FOR THE DURATION IT PUTS BACK. FM.timeline._dragTrace (timeline.js) grows the project the way a real drag does, and the
++     real drag's growth also widens #tl-inner by hand; the seam then restores the clip starts and the duration and not the strip, so every test that
++     used it left #tl-inner sized for a project that no longer exists (Measured: 1295.92 px left where 996.8 px was right). Not a user path: the real
++     drag is finished by pointerup's rebuild (Measured at 380 px). The next test to read the strip inherits it, which is what H41 listed. */
++  test('H47 the drag seam leaves #tl-inner the width it found, as the duration it restores needs', { item: 'H47' }, function () {
++    if (!FM.timeline || typeof FM.timeline._dragTrace !== 'function') throw new Error('FM.timeline._dragTrace is missing');
++    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, dur0 = FM.scene.project.duration;
++    try {
++      const L = FM.makeLayer('shape', { name: 'H47', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#4ad' }); L.start = 0; L.duration = 4;
++      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id); FM.scene.project.duration = 4; FM.timeline.rebuild();
++      const w0 = parseFloat(document.getElementById('tl-inner').style.width);
++      const tr = FM.timeline._dragTrace([0, 1.2, 2.4, 3.6, 4.8, 6], 4);
++      if (!tr || tr.length !== 6 || !(tr[5].dur > tr[0].dur + 1)) throw new Error('CONTROL: the driven drag did not grow the project, so the strip was never widened');
++      const w1 = parseFloat(document.getElementById('tl-inner').style.width);
++      if (Math.abs(w1 - w0) > 1) throw new Error('the seam put the duration back to 4 s but left #tl-inner at ' + w1 + ' px; it was ' + w0 + ' px before');
++    } finally {
++      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.scene.project.duration = dur0; FM.selectLayer(sel0); FM.timeline.rebuild();
++    }
++  });
++
+   async function run() {
+     var results = [];
+     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

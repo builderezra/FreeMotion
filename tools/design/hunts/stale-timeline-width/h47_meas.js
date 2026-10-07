@@ -1,0 +1,2 @@
+window.__tlm=function(){var tl=document.getElementById('timeline'),ti=document.getElementById('tl-inner');var pps=FM._tlPxPerSec();var w=parseFloat(ti.style.width);var exp=tl.clientWidth+FM.scene.project.duration*pps;return JSON.stringify({dur:+FM.scene.project.duration.toFixed(2),pps:+pps.toFixed(1),inner:Math.round(w),expected:Math.round(exp),diffPx:Math.round(w-exp),maxScroll:Math.round(tl.scrollWidth-tl.clientWidth)});};
+'ok'
