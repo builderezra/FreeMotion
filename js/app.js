@@ -3025,7 +3025,7 @@ window.FM = window.FM || {};
     return { w: evenDim(w * k), h: evenDim(h * k), capped: true };
   };
 
-  FM.addMediaLayer = function (rec) {
+  FM.addMediaLayer = function (rec, opts) {   // opts (Simple mode P1): { at: seconds, pick: {b, i} } — Simple's + lays a pick end to end
     // A just-added clip cannot draw until its decoder produces a frame — measured at ~0.5s here and far
     // longer on a phone — so say so rather than showing an empty canvas (queue 201).
     setTimeout(function () { if (FM.loadingDot) FM.loadingDot.check(); }, 0);
@@ -3052,13 +3052,21 @@ window.FM = window.FM || {};
     // in front of it: measured 12.828s of comp, playhead at 16.828s, new clip at 16.828s, comp end
     // 29.656s — four seconds of black the user never asked for, with the clip they just added
     // stranded behind it. Clamped to the comp end it butts straight onto the existing work instead.
-    const start = first ? 0 : Math.min(FM.time, P.duration || 0);
+    const at = (opts && typeof opts.at === 'number' && isFinite(opts.at)) ? Math.max(0, opts.at) : null;
+    const start = at != null ? at : (first ? 0 : Math.min(FM.time, P.duration || 0));   // an explicit `at` is where the clip goes, even past the end (the next one of a pick)
     const layer = FM.makeLayer(rec.kind, {
       name: rec.file ? rec.file.name.replace(/\.[^.]+$/, '') : rec.kind,
       x: P.width / 2, y: P.height / 2, start: start, duration: dur,
     });
     const fit = Math.min(P.width / rec.width, P.height / rec.height);
     layer.transform.scale = (isFinite(fit) && fit > 0) ? fit : 1;
+    /* SIMPLE MODE P1 (DESIGN.md §2.2): what the clip IS, written where it is known — its native size and the mediaRev that
+       size describes, so a device (or a guest) with no media record still knows a picture. A Replace bumps mediaRev, so a
+       stale size is never read (FM.spine checks srcRev). `audioOnly` is NOT written here in Phase 1: Full treats it as
+       final (timeline.js hasPicture, inspector isAudioOnly), so without DESIGN's matching write on every Replace route a
+       song replaced with a video would keep a waveform in Full. It lands in Phase 2 with those routes (BUILD-PLAN §11). */
+    if (rec.width > 0 && rec.height > 0 && rec.width <= 16384 && rec.height <= 16384) { layer.srcW = rec.width; layer.srcH = rec.height; layer.srcRev = layer.mediaRev || 0; }
+    if (opts && opts.pick && typeof opts.pick.b === 'string') layer.pick = { b: opts.pick.b.slice(0, 32), i: Math.max(0, Math.min(9999, opts.pick.i | 0)) };
     FM.media.set(layer.id, rec);
     if (rec.kind === 'video') {
       // Always re-render when a seek completes — including during playback, so reversed
@@ -3123,6 +3131,7 @@ window.FM = window.FM || {};
       if (FM.toast) FM.toast('No picture in “' + shortNm + '” — audio only', 6000);
       try { console.warn('FreeMotion: “' + nm + '” reported 0×0 — this browser can read the file but not decode its video track, so the layer has sound and no picture.'); } catch (e) {}
     }
+    return layer;   // Simple mode P1: the layer that landed — handleFiles' {at} advances by it; every other caller ignores it
   }
 
   FM.addTextLayer = function () {
@@ -4414,6 +4423,7 @@ window.FM = window.FM || {};
         if (l.karaokeOf && idMap[l.karaokeOf]) l.karaokeOf = idMap[l.karaokeOf];
       });
     }
+    if (FM.spine && FM.spine.onCopy) FM.spine.onCopy(inserts, 'duplicate');   // Simple mode P1: a copy is not a second main clip
     const idx = FM.scene.layers.findIndex(l => l.id === id);
     FM.scene.layers.splice(Math.max(0, idx), 0, ...inserts);
     FM.scene.selectedId = copy.id;
@@ -4515,6 +4525,7 @@ window.FM = window.FM || {};
       return { copy, entry };
     });
     FM.relinkSplitCopies(copies.map(c => ({ src: c.entry.snapshot, copy: c.copy })));   // queue 914.8
+    if (FM.spine && FM.spine.onCopy) FM.spine.onCopy(copies.map(c => c.copy), 'paste');   // Simple mode P1 (§12.2)
     // Paste at the PLAYHEAD (like AM) instead of back on the source clip's original time.
     // Anchor the earliest copied clip to the playhead and keep the relative offsets between
     // clips that were copied together. autoFitDuration (via refreshAll) grows the timeline if
@@ -5470,7 +5481,7 @@ window.FM = window.FM || {};
 
   // Seams for the suite (queue 448): the import decision and the extraction itself. Without them the
   // only way to test this is a real file picker, which no test can drive.
-  FM._handleFiles = function (files) { return handleFiles(files); };
+  FM._handleFiles = function (files, opts) { return handleFiles(files, opts); };
   FM._audioFromVideo = function (file) { return audioFromVideo(file); };
 
   /* ═══ A SLOW ADD LANDS IN THE PROJECT IT WAS STARTED IN, OR NOWHERE (queue 690, hunt 5) ════════════════
@@ -5486,13 +5497,19 @@ window.FM = window.FM || {};
   FM.startedIn = function () { return FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null; };
   FM.letGoMedia = function (rec) { if (rec && FM._releaseMediaRecord) { try { FM._releaseMediaRecord(rec); } catch (e) {} } };
 
-  async function handleFiles(files) {
+  async function handleFiles(files, opts) {
     // Consumed here, once, for THIS batch — see audioImport in js/addmenu.js.
     const wantAudio = !!FM._wantAudioOnly; FM._wantAudioOnly = false;
     const pickedIn = FM.startedIn(), notAdded = [];   // queue 690 (hunt 5): see FM.stillIn above
+    /* SIMPLE MODE P1 (DESIGN.md §15.1, §5.2 import stacks). Every layer of one pick carries `pick: {b, i}`, so the Simple
+       view can tell "four clips picked together" from a stacked take. With `opts.at` (Simple's +) the files are laid END
+       TO END from there, each at the end of the one before; without it nothing about placement changes. */
+    const pickB = 'pk' + Date.now().toString(36).slice(-6) + Math.floor(Math.random() * 1296).toString(36);
+    let pickI = 0, at = (opts && typeof opts.at === 'number' && isFinite(opts.at)) ? Math.max(0, opts.at) : null;
     const add = function (rec, file) {
       if (!FM.stillIn(pickedIn)) { FM.letGoMedia(rec); notAdded.push(file); return false; }
-      FM.addMediaLayer(rec);
+      const got = FM.addMediaLayer(rec, { at: at, pick: files.length > 1 ? { b: pickB, i: pickI++ } : null });
+      if (at != null && got) at = got.start + got.duration;
       return true;
     };
     for (const file of files) {

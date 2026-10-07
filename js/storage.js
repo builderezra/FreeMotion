@@ -1061,6 +1061,7 @@ window.FM = window.FM || {};
     if ('background' in p && p.background !== null && !(typeof p.background === 'string' && p.background.length <= 64)) p.background = null;   // null IS a value: transparent
     ['loopIn', 'loopOut'].forEach(k => { if (k in p && p[k] !== null && !(typeof p[k] === 'number' && isFinite(p[k]))) p[k] = null; });
     if ('thumbPinned' in p && typeof p.thumbPinned !== 'boolean') p.thumbPinned = false;
+    sanitizeSmProject(p);   // Simple mode P1 (§2.3): project.sm — v, adopted, home, muteClips, mrev, unknown plain keys kept
     if ('sizePicked' in p && typeof p.sizePicked !== 'boolean') delete p.sizePicked;   // queue 690 (HUNT-a): read by truthiness, and "false" is truthy
     if ('notes' in p) {
       if (!Array.isArray(p.notes)) p.notes = [];
@@ -1498,6 +1499,7 @@ window.FM = window.FM || {};
       // Transient UI state (fx._expanded) is dropped by the rebuild, which is what the leading
       // underscore means everywhere else in this file.
       const out = keepUid(f, { type: f.type, enabled: f.enabled !== false, params: params });
+      if (f.sm === 1) out.sm = 1;   // Simple mode P1: "added in Simple" (§8.5c) — kept only as exactly 1, top level and children alike
       if (container) {
         out.effects = f.effects.slice(0, FX_CHILD_MAX).map(c => sane(c, depth + 1)).filter(Boolean);
         // A library filter's own name. String-only and length-capped — it reaches the inspector row as
@@ -1542,8 +1544,86 @@ window.FM = window.FM || {};
       l.fillGradient.angle = Math.max(0, Math.min(360, +l.fillGradient.angle || 0));
       if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';
     }
+    sanitizeSmLayer(l);   // Simple mode P1: runs wherever this does — load, import, undo restore, the collab clone, export
   }
   FM.storage_sanitizeUnsafeValues = sanitizeUnsafeValues;   // seam: the suite drives the real function
+
+  /* ═══ THE SIMPLE EDITOR'S KEYS (Simple mode Phase 1, DESIGN.md §2.2–§2.3) ═══════════════════════════════════════
+   * `layer.sm` and `project.sm` are the only things the Simple editor stores, plus four plain layer fields. Each rule
+   * below is a past failure: whitelist drift dropped fields four times, so UNKNOWN plain sub-keys are KEPT (a newer
+   * build's `sm.row` survives this one); a sanitiser that consulted media records gave different answers on the owner
+   * and on a guest with no media, so this reads DOCUMENT FIELDS ONLY; and the output is canonical — sanitising a valid
+   * document changes nothing, byte for byte, or every redo and every host fix op would rewrite it. Key order is left
+   * as it came: only invalid keys are removed, so a second pass finds nothing to do.
+   * "Plain" is defined, not guessed: null, a boolean, a finite number, a string up to 200 characters, or an array /
+   * object of those, at most 3 deep, at most 24 keys per object, at most 2 KB serialised. Anything else is dropped
+   * WHOLE, never truncated. */
+  const SM_FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit'];
+  function smPlain(v, depth) {
+    if (v === null || typeof v === 'boolean') return true;
+    if (typeof v === 'number') return isFinite(v);
+    if (typeof v === 'string') return v.length <= 200;
+    if (typeof v !== 'object' || depth >= 3) return false;
+    const ks = Object.keys(v);
+    if (ks.length > 24) return false;
+    if (!Array.isArray(v) && Object.getPrototypeOf(v) !== Object.prototype) return false;
+    for (let i = 0; i < ks.length; i++) {
+      if (!Array.isArray(v) && (ks[i].charAt(0) === '_' || ks[i] in Object.prototype)) return false;
+      if (!smPlain(v[ks[i]], depth + 1)) return false;
+    }
+    return true;
+  }
+  function smKeepUnknown(o, k) {
+    if (k.charAt(0) === '_' || k in Object.prototype) return false;
+    const v = o[k];
+    if (!smPlain(v, 0)) return false;
+    try { return JSON.stringify(v).length <= 2048; } catch (e) { return false; }
+  }
+  function isPlainObj(o) { return !!o && typeof o === 'object' && !Array.isArray(o) && Object.getPrototypeOf(o) === Object.prototype; }
+  function sanitizeSmLayer(l) {
+    if (!l || typeof l !== 'object') return;
+    // the plain helper fields (§2.2): native size and the mediaRev it describes, and the pick a clip came from
+    ['srcW', 'srcH'].forEach(k => { if (k in l && !(typeof l[k] === 'number' && l[k] > 0 && l[k] <= 16384)) delete l[k]; });
+    if ('srcRev' in l && !(Number.isInteger(l.srcRev) && l.srcRev >= 0)) delete l.srcRev;
+    if ('pick' in l) {
+      const p = l.pick;
+      const ok = isPlainObj(p) && typeof p.b === 'string' && p.b.length > 0 && p.b.length <= 32 && Number.isInteger(p.i) && p.i >= 0 && p.i <= 9999;
+      if (!ok) delete l.pick;
+      else if (Object.keys(p).length !== 2) l.pick = { b: p.b, i: p.i };
+    }
+    if (!('sm' in l)) return;
+    const sm = l.sm;
+    if (!isPlainObj(sm)) { delete l.sm; return; }
+    Object.keys(sm).forEach(k => {
+      if (SM_FLAGS.indexOf(k) >= 0) { if (sm[k] !== true) delete sm[k]; }
+      else if (k === 'tailEnd') { if (!(typeof sm.tailEnd === 'number' && isFinite(sm.tailEnd) && sm.tailEnd >= 0)) delete sm.tailEnd; }
+      else if (!smKeepUnknown(sm, k)) delete sm[k];
+    });
+    // sm.main only on a member layer that DRAWS A PICTURE: never on audio-only, a caption track or a group (§2.3)
+    if (sm.main && (l.audioOnly === true || l.type === 'group' || (l.type === 'text' && Array.isArray(l.captions)))) delete sm.main;
+    if (sm.main) { delete sm.stay; delete sm.tail; delete sm.tailEnd; }   // main wins; a main clip is never a tail item
+    if (sm.tail && !sm.stay) sm.stay = true;                            // tail implies stay
+    if (!Object.keys(sm).length) delete l.sm;
+  }
+  function sanitizeSmProject(p) {
+    if (!p || !('sm' in p)) return;
+    const sm = p.sm;
+    if (!isPlainObj(sm)) { delete p.sm; return; }
+    Object.keys(sm).forEach(k => {
+      const v = sm[k];
+      if (k === 'v') {                         // clamped to [1, 1000] and NEVER to SM_V: the newer-file guard reads it (§2.3)
+        if (typeof v !== 'number' || !isFinite(v)) delete sm.v;
+        else { const n = Math.max(1, Math.min(1000, Math.round(v))); if (n !== v) sm.v = n; }
+      }
+      else if (k === 'adopted' || k === 'muteClips') { if (v !== true) delete sm[k]; }
+      else if (k === 'home') { if (!(typeof v === 'string' && v.length <= 32)) delete sm.home; }   // any string: an older build must not erase a newer value
+      else if (k === 'mrev') { if (!(Number.isInteger(v) && v >= 0)) delete sm.mrev; }
+      else if (!smKeepUnknown(sm, k)) delete sm[k];
+    });
+    if (!Object.keys(sm).length) delete p.sm;
+  }
+  FM.storage._sanitizeSm = sanitizeSmLayer;          // suite seams: the real rules, not a copy
+  FM.storage._sanitizeSmProject = sanitizeSmProject;
 
   /* A LAYER'S TIMING MUST BE A NUMBER (queue 467, found by a bug hunt).
    * The project's own width/height/fps/duration have been clamped since the OOM-brick fix above, but the
@@ -1653,6 +1733,9 @@ window.FM = window.FM || {};
   // re-implementation of it in the test (which would only ever agree with itself).
   FM.storage._sanitizeEffects = sanitizeEffects;
   FM.storage._sanitizeLayers = sanitizeImportedLayers;   // read by the suite, and by history.restore
+  /* Simple mode P1 (DESIGN.md §5.2 media state): is this project's media still being read back from the device? While
+     it is, a clip with no record is 'arriving' (drawn in place, never classified as sound), not 'missing'. */
+  FM.storage.hydrating = function () { return !!_hydrating; };
   FM.storage._reIdLayers = reIdLayers;
   /* queue 921 S2: the host runs the project clamp on a CLONE as one of its three invariants (§7.1 step
      8), and until now it could not reach this one — so S1's suite carried a hand-written copy of the
