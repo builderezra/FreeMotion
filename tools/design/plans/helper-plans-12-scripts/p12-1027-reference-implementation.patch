@@ -1,0 +1,30 @@
+diff --git a/js/app.js b/js/app.js
+index 0e2685ac..4e36d579 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -8935,6 +8935,25 @@ window.FM = window.FM || {};
+         } else if (e.code === 'ArrowRight') { e.preventDefault(); FM.pause(); FM.setTime(FM.time + 1 / (FM.scene.project.fps || 30)); }
+         else if (e.code === 'ArrowLeft') { e.preventDefault(); FM.pause(); FM.setTime(FM.time - 1 / (FM.scene.project.fps || 30)); }
+       }
++      /* REFERENCE ONLY (P12 #1027): Shift + , / . = previous / next keyframe of the selected layer; Alt + , / . = move the keyframe(s)
++         under the playhead one frame earlier / later, through the same dedup the drag uses (FM.dedupDraggedKfs, js/scene.js:644). */
++      else if ((e.code === 'Comma' || e.code === 'Period') && (e.shiftKey || e.altKey)) {
++        e.preventDefault();
++        const dir = e.code === 'Period' ? 1 : -1, L = FM.scene.selectedId && FM.layerById(FM.scene, FM.scene.selectedId), fps = FM.scene.project.fps || 30;
++        const props = L ? FM.animatedProps(L).filter(p => p && p.kf) : [];
++        if (e.altKey) {
++          if (!L || L.locked) return;
++          const hit = []; props.forEach(p => p.kf.forEach(k => { if (Math.abs(k.t - FM.time) < 0.5 / fps) hit.push(k); }));
++          if (!hit.length) return;
++          hit.forEach(k => { k.t = Math.max(0, +(k.t + dir / fps).toFixed(5)); });
++          FM.dedupDraggedKfs(L, hit); FM.setTime(hit[0].t);
++          FM.timeline.rebuild(); if (FM.inspector) FM.inspector.refresh(); FM.requestRender(); if (FM.history) FM.history.commit();
++        } else {
++          const ts = []; props.forEach(p => p.kf.forEach(k => ts.push(k.t)));
++          const pick = dir > 0 ? ts.filter(t => t > FM.time + 0.5 / fps).sort((x, y) => x - y)[0] : ts.filter(t => t < FM.time - 0.5 / fps).sort((x, y) => y - x)[0];
++          if (pick != null) { FM.pause(); FM.setTime(pick); }
++        }
++      }
+       else if (e.code === 'Comma') { e.preventDefault(); FM.pause(); FM.setTime(FM.time - 1 / (FM.scene.project.fps || 30)); }
+       else if (e.code === 'Period') { e.preventDefault(); FM.pause(); FM.setTime(FM.time + 1 / (FM.scene.project.fps || 30)); }
+       /* SHIFT+HOME / SHIFT+END send the Add marker to the top or the bottom (queue 294, clause 12):

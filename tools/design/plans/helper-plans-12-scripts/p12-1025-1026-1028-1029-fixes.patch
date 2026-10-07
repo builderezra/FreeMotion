@@ -1,0 +1,114 @@
+diff --git a/index.html b/index.html
+index a69d47e0..a0fa22c0 100644
+--- a/index.html
++++ b/index.html
+@@ -411,7 +411,7 @@
+     <div id="main">
+       <section id="stage">
+         <div id="canvas-wrap">
+-          <canvas id="preview"></canvas>
++          <canvas id="preview" role="img" aria-label="Video preview"></canvas>
+           <!-- The pause bloom (queue 538). Ezra: "make it have a nice pause animation and a little pause
+                button appears briefly before fading away". It is FEEDBACK, not a control: pointer-events
+                none so it can never eat the tap that caused it, aria-hidden so it is not announced, and it
+@@ -700,13 +700,13 @@
+       <div class="hm-search-hint">Vague is fine — “yesterday”, “last week”, “2 aug”, “august”, or part of a name.</div>
+     </div>
+     <div class="hm-tabs">
+-      <button class="hm-tab active" data-tab="projects"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10 12 3l8.5 7v10h-6v-6h-5v6h-6z"/></svg><span class="hm-tab-label">Projects</span></button>
+-      <button class="hm-tab" data-tab="templates"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.3"/><rect x="14" y="3" width="7" height="7" rx="1.3"/><rect x="3" y="14" width="7" height="7" rx="1.3"/><rect x="14" y="14" width="7" height="7" rx="1.3"/></svg><span class="hm-tab-label">Templates</span></button>
+-      <button class="hm-tab" data-tab="elements"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M7 3 3 10h8z"/><rect x="3" y="15" width="8" height="6" rx="1.2"/><circle cx="17.5" cy="17.5" r="3.5"/><path d="M15 3h6v6h-6z"/></svg><span class="hm-tab-label">Elements</span></button>
++      <button class="hm-tab active" data-tab="projects" aria-pressed="true"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10 12 3l8.5 7v10h-6v-6h-5v6h-6z"/></svg><span class="hm-tab-label">Projects</span></button>
++      <button class="hm-tab" data-tab="templates" aria-pressed="false"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.3"/><rect x="14" y="3" width="7" height="7" rx="1.3"/><rect x="3" y="14" width="7" height="7" rx="1.3"/><rect x="14" y="14" width="7" height="7" rx="1.3"/></svg><span class="hm-tab-label">Templates</span></button>
++      <button class="hm-tab" data-tab="elements" aria-pressed="false"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M7 3 3 10h8z"/><rect x="3" y="15" width="8" height="6" rx="1.2"/><circle cx="17.5" cy="17.5" r="3.5"/><path d="M15 3h6v6h-6z"/></svg><span class="hm-tab-label">Elements</span></button>
+       <!-- Tutorials is deliberately EMPTY for now (v5.50). Ezra: "don't make any tutorials yet, but
+            add a tab alongside elements projects etc that says tutorials, we will later make tutorials
+            and put them in there." The tab and its empty state exist so the content can drop in. -->
+-      <button class="hm-tab" data-tab="tutorials"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="m10 8 6 4-6 4z"/></svg><span class="hm-tab-label">Tutorials</span></button>
++      <button class="hm-tab" data-tab="tutorials" aria-pressed="false"><svg class="hm-tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="m10 8 6 4-6 4z"/></svg><span class="hm-tab-label">Tutorials</span></button>
+     </div>
+     <div class="hm-scroll"><div class="hm-grid"></div></div>
+     <!-- Geometry, not a font glyph. A text "+" sits wherever the device's resolved font puts its ink
+diff --git a/js/home.js b/js/home.js
+index 0bb5326a..70a3d8d3 100644
+--- a/js/home.js
++++ b/js/home.js
+@@ -1369,6 +1369,7 @@ window.FM = window.FM || {};
+     if (cx) th.appendChild(liveBadge(cx));
+     // The tick is selectify's now (v6.17) — appending one here as well would put TWO in the corner.
+     const name = el('div', 'hm-name', p.name || 'Untitled');
++    name.title = p.name || 'Untitled';
+     // duration lives on the thumb badge; the meta line carries the AM set: aspect · resolution · fps · layers
+     const meta = el('div', 'hm-meta');
+     const mi = txt => { if (txt) meta.appendChild(el('span', 'hm-mi', txt)); };
+@@ -1992,7 +1993,7 @@ window.FM = window.FM || {};
+     if (isPinned('templates', t.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
+     card.appendChild(th);
+     const body = el('div', 'hm-body');
+-    body.appendChild(el('div', 'hm-name', t.name || 'Template'));
++    { const nm = el('div', 'hm-name', t.name || 'Template'); nm.title = t.name || 'Template'; body.appendChild(nm); }
+     body.appendChild(el('div', 'hm-meta', aspectLabel(t.width, t.height)));
+     card.appendChild(body);
+     const more = moreBtn();
+@@ -2092,7 +2093,7 @@ window.FM = window.FM || {};
+     if (isPinned('elements', e.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
+     card.appendChild(th);
+     const body = el('div', 'hm-body');
+-    body.appendChild(el('div', 'hm-name', e.name || 'Element'));
++    { const nm = el('div', 'hm-name', e.name || 'Element'); nm.title = e.name || 'Element'; body.appendChild(nm); }
+     const n = e.count || 0;
+     body.appendChild(el('div', 'hm-meta', n + (n === 1 ? ' layer' : ' layers')));
+     card.appendChild(body);
+@@ -2201,7 +2202,7 @@ window.FM = window.FM || {};
+     }
+     card.appendChild(dthumb);
+     const body = el('div', 'hm-meta');
+-    body.appendChild(el('div', 'hm-name', p.name || 'Untitled'));
++    { const nm = el('div', 'hm-name', p.name || 'Untitled'); nm.title = p.name || 'Untitled'; body.appendChild(nm); }
+     /* SAY WHICH KIND OF DRAFT THIS IS (queue 525). Two very different things wear this card:
+        · `ofElement` set → a workspace that is EDITING an existing element (queue 505's one-workspace-
+          per-element route). Closing it writes back into that element. Worth naming, because deleting it
+@@ -2546,7 +2547,7 @@ window.FM = window.FM || {};
+     // is already on screen (a thumbnail grab, a migrate, a sort change) the clear is SOFT — arrowSoon() below holds the arrow
+     // and its redraw carries the draw on from where it was, instead of starting it again from the middle of it
+     if (FM.homeArrow) FM.homeArrow.clear({ soft: !root.classList.contains('hidden') });
+-    root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
++    root.querySelectorAll('.hm-tab').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+     // Keep the legacy programmatic Select control in sync; cards' menus are the visible entry.
+     const selBtn = document.getElementById('hm-select-btn');
+     if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.classList.toggle('on', selectMode); }
+diff --git a/styles.css b/styles.css
+index a1144169..8dbe3e81 100644
+--- a/styles.css
++++ b/styles.css
+@@ -5500,7 +5500,7 @@ body.hm-selecting .hm-pin { display: none; }
+   .hm-glint i, .am-glint i, .sfx-glint i, .vr-glint i { animation: none; background: rgba(150, 232, 255, .42); }
+ }
+ .hm-body { flex: 1; min-width: 0; }
+-.hm-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
++.hm-name { font-size: 14.5px; font-weight: 700; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+ /* AM-style meta chips: aspect · resolution · fps · layers — wraps to 2 lines on a phone */
+ .hm-meta { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
+ .hm-mi { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+diff --git a/theme-glass.css b/theme-glass.css
+index 41b0c5b1..f35a887e 100644
+--- a/theme-glass.css
++++ b/theme-glass.css
+@@ -34,7 +34,7 @@ html[data-theme="glass"] {
+   --line-soft: #122029;
+   --text: #e9f4f7;            /* specular-tinted white, not pure */
+   --text-dim: #93aeb9;
+-  --text-faint: #63808c;
++  --text-faint: #7496a4;
+   --accent: #5ac7ed;          /* hue 195° — the logo's vivid cyan, lifted for contrast */
+   --accent-2: #37a8d4;
+   --am-green: #5ce0c8;        /* the add/export green re-tuned toward the logo's mint */
+@@ -1122,7 +1122,7 @@ html[data-home="light"] body.home-open #shortcuts-overlay {
+   --line-soft: rgba(16, 30, 52, .08);
+   --text: #10151f;
+   --text-dim: #5a6478;
+-  --text-faint: #7d8798;
++  --text-faint: #66707f;
+   --glass-tint-strong: rgba(247, 249, 252, .96);
+   --glass-rim: rgba(255, 255, 255, .9);
+   --glass-rim-soft: rgba(16, 30, 52, .10);
