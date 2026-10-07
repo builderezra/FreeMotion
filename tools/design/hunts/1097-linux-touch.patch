@@ -1,0 +1,128 @@
+diff --git a/tests/_cdp.py b/tests/_cdp.py
+index 55c627e2..dc4271e4 100644
+--- a/tests/_cdp.py
++++ b/tests/_cdp.py
+@@ -516,7 +516,7 @@ def main():
+                 # touch: a browser that cannot emulate it reports the test NOT RUN HERE instead of a finger on the mouse layout)
+                 cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                          "if(w){w.__fmCpuRate=%s;w.__fmDriverCaps=%s;}})()" % (json.dumps(cpu[0]), json.dumps(
+-                             {"touchEmulation": bool(_platform.REAL_TOUCH_VIA_EMULATION), "why": _platform.REAL_TOUCH_WHY})))
++                             {"touchEmulation": bool(_platform.REAL_TOUCH_VIA_EMULATION) or _platform.TOUCH_MODE == "lead3", "why": _platform.REAL_TOUCH_WHY})))
+             except Exception:
+                 pass
+             # A TEST MAY ASK FOR REAL INPUT, AND ONLY THIS DRIVER CAN GIVE IT (queue 924). A synthetic pointer event
+@@ -543,7 +543,18 @@ def main():
+                     # TOUCH THAT CANNOT BE EMULATED IS NOT SENT AT ALL (6 Oct, the port review's MAJOR): not one step of the
+                     # batch, so no half-gesture is left behind; the answer starts "NOTRUN: " and the test says NOT RUN HERE.
+                     _touch = any(str(st.get("t", "")).startswith("touch") for st in q["steps"])
+-                    if _touch and not _platform.REAL_TOUCH_VIA_EMULATION:
++                    if _touch and _platform.TOUCH_MODE == "lead2":
++                        # ONE FINGER TEST PER PAGE: the first touch-emulation OFF takes this page's mouse for good (Linux), so a second
++                        # finger test here would run its mouse steps and its (hover: hover) code without one. tests/_touch_pass.py
++                        # starts a fresh browser for each; a page asked twice says NOT RUN instead of reporting a wrong result.
++                        _nm = q.get("name") or track["name"]
++                        if inp.get("touch_test") not in (None, _nm):
++                            err = "NOTRUN: this page already ran a finger test ('%s') and lost its mouse — one finger test per page (tests/_touch_pass.py)" % inp["touch_test"]
++                            q["steps"] = []
++                            _touch = False
++                        else:
++                            inp["touch_test"] = _nm
++                    if _touch and not _platform.REAL_TOUCH_VIA_EMULATION and _platform.TOUCH_MODE != "lead3":
+                         err = "NOTRUN: needs real touch emulation (the phone's media state during a finger) — " + _platform.REAL_TOUCH_WHY
+                         q["steps"] = []
+                     try:
+@@ -615,15 +626,18 @@ def main():
+                         if inp["touch_emu"] and not inp["touch_down"]:
+                             try:
+                                 cdp.send("Emulation.setTouchEmulationEnabled", enabled=False)
++                                if _platform.TOUCH_MODE == "lead1":
++                                    cdp.send("Emulation.setEmulatedMedia", features=[{"name": n, "value": v} for n, v in
++                                             (("hover", "hover"), ("any-hover", "hover"), ("pointer", "fine"), ("any-pointer", "fine"))])
+                             except Exception:
+                                 pass
+                             inp["touch_emu"] = False
+-                        if not inp["touch_emu"]:
++                        if not inp["touch_emu"] and _platform.TOUCH_MODE not in ("lead1", "lead2"):
+                             # the page must have its mouse back before the next test (the gate above the input channel)
+                             mouse.update(check=True, no=0, after="after the real-input batch of '%s'" % (q.get("name") or track["name"]))
+                     # …and the mouse is CONFIRMED before the test hears its batch is done (6 Oct, the review): otherwise the
+                     # test carries on, and can finish and report, inside the second the loop's own check needs to notice.
+-                    if not inp["touch_emu"] and not _confirm_mouse(cdp):
++                    if not inp["touch_emu"] and _platform.TOUCH_MODE not in ("lead1", "lead2") and not _confirm_mouse(cdp):
+                         return _did_not_run("This browser reports NO MOUSE after the real-input batch of '%s' — (hover: hover) "
+                                             "and (pointer: fine) did not come back within 3 s, so the test that sent it, and "
+                                             "every mouse-gated test after it, would pass or fail for the wrong reason "
+diff --git a/tests/_platform.py b/tests/_platform.py
+index 73e0191a..ec505890 100644
+--- a/tests/_platform.py
++++ b/tests/_platform.py
+@@ -189,7 +189,11 @@ def driver_pattern():
+ # MOUSE layout: a phone regression green here and red on his phone. So it is no longer sent: where touch cannot be
+ # emulated, the driver refuses every touch step and the test reports NOT RUN HERE (tests.js realInput924), by name.
+ # FM_FAKE_NO_TOUCH_EMULATION=1 makes the Mac answer the same way — only to prove that path; a NOT RUN refuses a Mac ship.
+-REAL_TOUCH_VIA_EMULATION = not IS_LINUX and os.environ.get("FM_FAKE_NO_TOUCH_EMULATION") != "1"
++# H17 EXPERIMENT (hunt/1097-linux-touch): FM_TOUCH_MODE picks how Linux sends a finger. "" = today (refuse); "lead1" = emulation ON for the
++# batch, OFF after, then setEmulatedMedia re-applied; "lead2" = real emulation, for a DISPOSABLE page (one finger test per browser);
++# "lead3" = Input.dispatchTouchEvent with NO emulation.
++TOUCH_MODE = os.environ.get("FM_TOUCH_MODE", "") if IS_LINUX else ""
++REAL_TOUCH_VIA_EMULATION = (not IS_LINUX or TOUCH_MODE in ("lead1", "lead2")) and os.environ.get("FM_FAKE_NO_TOUCH_EMULATION") != "1"
+ REAL_TOUCH_WHY = ("FM_FAKE_NO_TOUCH_EMULATION=1 (a proof run)" if os.environ.get("FM_FAKE_NO_TOUCH_EMULATION") == "1"
+                   else "Linux headless Chrome: turning touch emulation off leaves the page with no mouse" if IS_LINUX else "")
+ 
+diff --git a/tests/_touch_pass.py b/tests/_touch_pass.py
+new file mode 100644
+index 00000000..f02546b4
+--- /dev/null
++++ b/tests/_touch_pass.py
+@@ -0,0 +1,51 @@
++#!/usr/bin/env python3
++"""Run the real-finger tests that a Linux full pass reports NOT RUN HERE, each in a FRESH browser (hunt/1097-linux-touch, H17).
++
++Why a fresh browser per test: on Linux headless Chrome the first Emulation.setTouchEmulationEnabled(false) takes that PAGE's mouse
++for good (measured, Chrome 141: hover/pointer go to none, and setEmulatedMedia, setDeviceMetricsOverride and a reload do not
++bring them back; a NEW page in the same browser has its mouse, so the loss is per page). A finger test therefore gets a page of
++its own and the page is thrown away. tests/_cdp.py runs it with FM_TOUCH_MODE=lead2 (real emulation, phone media state, one
++finger test per page).
++
++    python3 tests/_cdp.py --port 8777 --names > full.json          # the full pass: touch tests report NOT RUN HERE
++    python3 tests/_touch_pass.py --port 8777 --from full.json [--width 380]
++
++Prints one line per test and a total; exit 1 if any is red. The names come from the NOT RUN list's touch reason.
++"""
++import argparse, json, os, subprocess, sys, time, urllib.parse
++
++HERE = os.path.dirname(os.path.abspath(__file__))
++REASON = "needs real touch emulation"
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument("--port", type=int, default=8777)
++    ap.add_argument("--width", default="1280")
++    ap.add_argument("--from", dest="src", required=True, help="JSON from a full `_cdp.py --names` run")
++    ap.add_argument("--timeout", default="400")
++    a = ap.parse_args()
++    raw = open(a.src).read()
++    d = json.loads(raw[raw.find("{"):])
++    names = [x["name"] for x in d.get("notRun", []) if x.get("reason", "").startswith(REASON)]
++    env = dict(os.environ, FM_TOUCH_MODE="lead2")
++    ok = red = 0
++    for n in names:
++        url = "http://localhost:%d/tests/run.html?only=%s" % (a.port, urllib.parse.quote(n))
++        t0 = time.time()
++        p = subprocess.run([sys.executable, os.path.join(HERE, "_cdp.py"), "--port", str(a.port), "--width", str(a.width), "--names",
++                            "--timeout", a.timeout, "--url", url], env=env, capture_output=True, text=True)
++        try:
++            r = json.loads(p.stdout[p.stdout.find("{"):])
++        except Exception:
++            r = {"ok": False, "summary": "no result", "failures": [p.stdout[-200:] + p.stderr[-200:]], "ran": []}
++        # exactly one test must have matched, or the substring caught nothing / several
++        good = bool(r.get("ok")) and len(r.get("ran", [])) == 1 and not r.get("notRun")
++        ok, red = ok + good, red + (not good)
++        print("%s %3ds %s%s" % ("pass" if good else "FAIL", time.time() - t0, n[:90], "" if good else " :: " + (r.get("failures") or [r.get("summary", "")])[0][:200]), flush=True)
++    print("finger tests: %d pass, %d red, of %d" % (ok, red, len(names)))
++    return 1 if red else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
