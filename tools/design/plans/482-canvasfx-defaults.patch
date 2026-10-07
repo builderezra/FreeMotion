@@ -1,0 +1,80 @@
+diff --git a/tests/tests.js b/tests/tests.js
+index 1900efa6..48950492 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -75398,6 +75398,75 @@
+     }
+   });
+ 
++  /* ═══ 482 ROUND 4 (H39): THE THIRD TABLE. `FM._pixelFx` (105) and `FM._warpFx` (21) are swept above; `CANVAS_FX` (41: the
++     MOVERS Wiggle, Shake, Swing, Spin, Pulse, Drift, Orbit and Particles; the repeaters; the 3D solids; Vignette, Halation,
++     Liquid Glass, Speed Lines, Snow & Rain …) was never visited, so a new mover whose default is a speed of 0 or an amount
++     of 0 ("on, and does nothing") would pass the sweep above. A canvas kernel cannot be called the way those two are: it
++     needs a canvas pair, the layer's bounding box, the time AND the layer (fn(A, B, W, H, bb, params, t, fxLocalTime, layer,
++     ps, expand, scene), js/compositor.js drawCanvasEffect), so this drives it through the real render path: one layer, its
++     effect at the settings it ships with, FM.renderScene at a spread of moments, against the same layer with no effect.
++     "VISIBLE" for a mover is: at SOME moment of its cycle the picture differs from the un-moved one. At t = 0 a Spin, a Drift
++     or a Pulse is exactly where it started, so t = 0 alone would call every mover dead; the moments below are not multiples
++     of any default period. A pixel counts when a channel differs by more than 24 (the bar the Spin test above uses).
++     Three effects are judged on what they need to act at all, said so here: Light Wrap wraps the layers UNDER the layer
++     (nothing under it is nothing to wrap), and Temporal Denoise, Frame Stutter and Motion Blur (Footage) work from the frames
++     before, on content that MOVES (a still picture is correctly left alone), so they get a moving subject and consecutive
++     frames in order. Halation needs a bright highlight (a mid-tone box is correctly untouched), so the first subject is white. */
++  test('482: every canvas effect (movers, repeaters, 3D solids) does something visible at its own defaults', { item: '482', budgetMs: 120000 }, async function () {
++    const R = FM.fxRegistry, T = FM._FX_TABLES || {}, CF = T.CANVAS_FX;
++    if (!R || !CF) throw new Error('the registry or FM._FX_TABLES.CANVAS_FX is missing');
++    const PROJ = { name: 'p', width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' };
++    const PWID = 270, PHGT = 480, FLOOR = 100;   // of 129,600 plate pixels; the weakest healthy one measured is 272
++    const plate = layers => {
++      const c = offscreen(PWID, PHGT), g = c.getContext('2d', { willReadFrequently: true });
++      c.__fmRS = 0.25; c.__fmOX = 0; c.__fmOY = 0; c.__fmCrop = true;
++      FM.renderScene(g, { project: PROJ, layers: layers.map(l => JSON.parse(JSON.stringify(l, FM.jsonReplacer))), selectedId: null, selectedIds: [] }, layers.t);
++      return g.getImageData(0, 0, PWID, PHGT).data;
++    };
++    const at = (layers, t) => { const l = layers.slice(); l.t = t; return plate(l); };
++    const rect = o => FM.makeLayer('shape', Object.assign({ name: 'subject', shape: 'rect', x: 540, y: 960, shapeW: 540, shapeH: 540, fill: '#ffffff', start: 0, duration: 6 }, o || {}));
++    const differ = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]), Math.abs(a[i + 3] - b[i + 3])) > 24) n++; return n; };
++    const TIMES = [0, 0.13, 0.29, 0.5, 0.71, 0.97, 1.3, 1.7, 2.1, 2.6, 3.1, 3.7, 4.3, 5.0];
++    const HISTORY = { temporaldenoise: 1, framestutter: 1, motionflow: 1 };
++    const BACKED = T.BG_SNAP_FX || { lightwrap: 1 };
++    // subject recipes: [what it is, layers the effect sits on top of (it goes FIRST: layers[0] is the top layer)]
++    const SUBJECTS = [
++      ['a white 540 px box', fx => [Object.assign(rect(), { effects: fx })]],
++      ['a full-frame light layer', fx => [Object.assign(rect({ shapeW: 1080, shapeH: 1920, fill: '#f0e8d8' }), { effects: fx })]]
++    ];
++    const BACKING = ['a dark box over a light backdrop', fx => [Object.assign(rect({ fill: '#202020' }), { effects: fx }), rect({ name: 'backdrop', shapeW: 1080, shapeH: 1920, fill: '#fff0b0' })]];
++    const swept = [], quiet = [];
++    for (const type of Object.keys(CF)) {
++      const label = (R.get(type) || {}).label || type;
++      const inst = R.makeInstance(type);
++      if (!inst) { quiet.push(label + ' (no registry entry, so it cannot be added at all)'); continue; }
++      swept.push(type);
++      let best = { n: 0, what: '', t: 0 };
++      const keep = (n, what, t) => { if (n > best.n) best = { n: n, what: what, t: t }; };
++      if (HISTORY[type]) {
++        if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
++        const mover = fx => { const l = Object.assign(rect(), { effects: fx }); l.transform.x = { kf: [{ t: 0, v: 250, e: 'linear' }, { t: 1, v: 830, e: 'linear' }] }; return [l]; };
++        // ONE layer object per side for the whole run: the previous-frame cache is keyed by layer id, so a fresh layer per frame has no history to use
++        const still = mover([]), moved = mover([inst]);
++        for (let f = 0; f < 24; f++) { const t = f / 30; keep(differ(at(still, t), at(moved, t)), 'a box moving across the frame, frames in order', t); }
++      } else {
++        const subs = BACKED[type] ? [BACKING] : SUBJECTS;
++        for (const s of subs) {
++          for (const t of TIMES) {
++            keep(differ(at(s[1]([]), t), at(s[1]([inst]), t)), s[0], t);
++            if (best.n >= FLOOR) break;
++          }
++          if (best.n >= FLOOR) break;
++        }
++      }
++      if (best.n < FLOOR) quiet.push(label + ' (best ' + best.n + ' px changed' + (best.what ? ', on ' + best.what + ' at ' + best.t + ' s' : '') + ')');
++    }
++    /* CONTROL: the whole table was walked (a loop over zero keys is green), and the eight movers are in it by name. */
++    if (swept.length < 35) throw new Error('only ' + swept.length + ' canvas effects swept of ' + Object.keys(CF).length + ' — the sweep is not reaching FM._FX_TABLES.CANVAS_FX, so a clean result proves nothing');
++    ['wiggle', 'shake', 'swing', 'spin', 'pulse', 'drift', 'orbit', 'particles'].forEach(m => { if (swept.indexOf(m) < 0) throw new Error('the mover ' + m + ' is not in the canvas table any more — the sweep above no longer names it, so say where it went'); });
++    if (quiet.length) throw new Error(quiet.length + ' canvas effect(s) do almost nothing at the settings they ship with: ' + quiet.join('; ') + '. He taps these in the browser and sees no change. A mover must differ from the un-moved picture at some moment of its cycle; if one is quiet for a good reason, say so here as the Light Wrap and Halation notes above do, do not widen the floor.');
++  });
++
+   /* ═══ 498: THE PINNED BUTTON ROW MUST NOT SIT ON TOP OF THE LAST SETTING.
+      Ezra, with a phone screenshot: "This section is a bit broken the bottom button is going off the
+      screen". Canvas settings, with "Scale the layers to fit" sliced in half by the App settings /
