@@ -41,7 +41,11 @@ window.FM = window.FM || {};
      a variant; Exposure gained Gamma and Work in.
      Bumped to 7 by #482 polish batch 6: Vignette, Light / Soft / Dark Glow, Drop Shadow, Stroke, Lens Flare, Linear and Spin
      Streaks and Glow Scan gained controls. */
-  C.SCHEMA_REV = 7;
+  /* Bumped to 8 by Simple mode Phase 1 (DESIGN.md §2.3, §14.2; the plan said 6 → 7, but #482 batch 6 took 7 first): the
+     sanitiser now puts `layer.sm`, `project.sm`, an effect's `sm` marker and the plain helper fields (srcW/srcH/srcRev, pick) in
+     canonical form. A rev-7 build keeps them untouched, so the two would normalise one project to two documents; the fixture
+     below carries each, and SM_V is hashed in. */
+  C.SCHEMA_REV = 8;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -161,11 +165,18 @@ window.FM = window.FM || {};
       text: 'Ab', transform: { x: 1, y: 2, scale: 1, rotation: 0, opacity: 1 },
       captions: [{ start: 0, end: 1, text: 'one' }],
       masks: [{ id: 'fpm', mode: 'add', path: [[0, 0], [8, 0], [8, 8]] }],
-      effects: [{ type: 'blur', enabled: true, params: { radius: 3 } }],
+      effects: [{ type: 'blur', enabled: true, params: { radius: 3 } }, { type: 'blur', enabled: true, sm: 1, params: { radius: 2 } }, { type: 'blur', enabled: true, sm: 'x', params: { radius: 1 } }],
       audioFx: [{ type: 'reverb', enabled: true, params: {} }],
       behaviors: [{ type: 'wiggle', prop: 'x', enabled: true, params: {} }],
-      speed: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 2, e: 'easeIn' }] }
+      speed: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 2, e: 'easeIn' }] },
+      // Simple mode (SCHEMA_REV 7): junk, a plain unknown sub-key and a newer build's object sub-key, side by side
+      sm: { main: 'yes', stay: true, row: 2, future: { a: 1 } }, srcW: 1920, srcH: -4, srcRev: 0, pick: { b: 'pk1', i: 2, x: 1 }
     }];
+  };
+  /* …and a project carrying Simple's project keys (SCHEMA_REV 7): `home` any string ≤ 32 is kept, `v` clamped, junk dropped. */
+  const SCHEMA_PROJECT_FIXTURE = function () {   // not on C: the S0 test pins FM.collab's exports
+    return { width: 320, height: 240, fps: 30, duration: 4, background: '#000000',
+             sm: { v: 1.4, home: 'nope', adopted: 'yes', mrev: -1, later: { a: [1, 2] } } };
   };
 
   /* ═══ THE DERIVED-WRITER TERM (§14.7, added in S2) ═════════════════════════════════════════════
@@ -222,6 +233,8 @@ window.FM = window.FM || {};
     if (der === null) return null;
     const L = C.SCHEMA_FIXTURE();
     FM.storage._sanitizeLayers(L);
+    const PJ = SCHEMA_PROJECT_FIXTURE();
+    if (FM.storage._clampProjectDims) FM.storage._clampProjectDims(PJ);
     const defs = (FM.fxRegistry.all() || []).map(function (e) {
       return [e.type, (e.params || []).map(function (p) {
         return [p.key, p.type, p.default, p.legacy, p.min, p.max, p.keyframable !== false ? 1 : 0];
@@ -235,12 +248,13 @@ window.FM = window.FM || {};
     const adefs = FM.audioFxRegistry ? (FM.audioFxRegistry.all() || []).map(function (e) {
       return [e.type, (e.params || []).map(function (p) { return [p.key, p.min, p.max, p.def, p.keyframable !== false ? 1 : 0]; })];
     }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }) : null;
-    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV);
+    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV +
+                    '|p' + P.canon(PJ) + '|smv' + (FM.SM_V || 0));   // SM_V moves only with a SCHEMA_REV bump (§2.3)
   };
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 1911166791531509;   // #482 polish batch 6 (SCHEMA_REV 7): eight glow/shadow/vignette/flare effects gained controls
+  C.SCHEMA_FP = 8673617696742561;   // Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate`, re-checked on step 1.2 alone
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *
