@@ -60028,6 +60028,29 @@
     if (again.fc.px < 3 * 540 * 960) throw new Error('a Filter box drawn after the trim did not get its plates back (' + again.fc.px + ' pixels)');
   });
 
+  /* H44: THE FILE KEPT FOR UNDO OF A REPLACED CLIP IS NOT KEPT ALIVE BY THE KEEPING. storage.js remembers which revisions of which layer have a
+     kept file, and (to skip a second write of the same object) which File it was. Holding that File strongly meant every file a replace
+     ever put away stayed in memory for the session: a File built in memory (camera or recorder blob, a song's WAV, media a peer sent) costs
+     its whole size there (measured 254 MB of browser memory for 36 clips of 10 MB), while a picker file costs ~0. The record on disk is what
+     undo reads, so the map only needs the key. Stash a 2 MB File, drop it, collect: it must be gone, and the revision must still be
+     reported as kept. CONTROL: right after the stash the file is alive and kept. */
+  test('H44 the file kept for undo of a replaced clip is not held alive by the record that it is kept', { item: 'H44', budgetMs: 40000 }, async function () {
+    if (!FM.storage || !FM.storage.stashPrevMedia || !FM.storage.hasPrevMedia) throw new Error('setup: the prev-media seams are gone');
+    const id = 'layer_h44_' + Date.now().toString(36);
+    let ref = null;
+    const put = async function () {
+      const f = new File([new Uint8Array(2 << 20)], 'h44.webm', { type: 'video/webm' });
+      ref = new WeakRef(f);
+      if (!(await FM.storage.stashPrevMedia(id, { file: f, kind: 'video' }, 4))) throw new Error('CONTROL: the file was not stashed');
+      if (!FM.storage.hasPrevMedia(id, 4)) throw new Error('CONTROL: the stashed revision is not reported as kept');
+      if (ref.deref() !== f) throw new Error('CONTROL: the file is not alive right after the stash');
+    };
+    await put();
+    await gc921('after dropping a stashed 2 MB file');
+    if (ref.deref()) throw new Error('the 2 MB file put away for undo is still alive after a collection: the keeping record holds it');
+    if (!FM.storage.hasPrevMedia(id, 4)) throw new Error('the revision stopped being reported as kept once the File was collected');
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
