@@ -176,6 +176,10 @@ window.FM = window.FM || {};
         if (merged.length >= 2) kf = merged;
       }
     }
+    /* SIMPLE 2.4 (DESIGN §0.4 B5): the boundary keys its riders insert carry `sb: 1` (a mark Full never writes), so a pair built at a cut nobody
+       made does not make Bounce ring there. Only when at least two UNMARKED keys remain (the guard the lineage path has above); a Full-made
+       document has no `sb`, takes neither line, and renders bit for bit as before. */
+    if (kf.some(k => k && k.sb)) { const un = kf.filter(k => k && !k.sb); if (un.length >= 2) kf = un; }
     let i = -1;
     for (let j = 0; j < kf.length; j++) { if (kf[j].t <= t) i = j; else break; }
     if (i <= 0) return 0;                       // before the first move, or no prior keyframe to jump from
