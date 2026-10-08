@@ -1,0 +1,72 @@
+{
+ "ok": true,
+ "summary": "Regression 5/5 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   519,
+   "P15 #1042 embedded-font import keeps a font imported meanwhile, and leaves no orphan font file when the index write is refused"
+  ],
+  [
+   469,
+   "P15 #1043 picking three files at once is one undo step, and a single file is still one"
+  ],
+  [
+   339,
+   "P15 #1044 project and template download names keep Cyrillic, CJK, Arabic, accents and emoji"
+  ],
+  [
+   35,
+   "P15 #1045 saving a preset into full storage says so, does not say saved, and does not list it"
+  ],
+  [
+   13,
+   "P15 #1041 three and four nested styled groups draw each fade once (equal fades, mixed fades, and a plain group in between)"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "P15 #1041 three and four nested styled groups draw each fade once (equal fades, mixed fades, and a plain group in between)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1042 embedded-font import keeps a font imported meanwhile, and leaves no orphan font file when the index write is refused",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1043 picking three files at once is one undo step, and a single file is still one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1044 project and template download names keep Cyrillic, CJK, Arabic, accents and emoji",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1045 saving a preset into full storage says so, does not say saved, and does not list it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

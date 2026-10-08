@@ -1,0 +1,1290 @@
+{
+ "ok": false,
+ "summary": "Regression 189/199 ✗ · NOT RUN HERE 5 Pending 0/0 built",
+ "failures": [
+  "FAILthe group crumb is gone and back still leaves the group — back left the PROJECT instead of the group — one press should step out of the group and leave you where you were",
+  "FAILsaving a preset updates the open Presets card by itself (queue 330) — no layer to work from",
+  "FAILthe Presets card leads with its save button and its ✕ is drawn, not typed (queue 331) — no layer to work from",
+  "FAILpresets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9) — no layer to work from",
+  "FAILthe per-effect preset list says WHICH presets it means — the message does not name the effect it is about: [No recent effects yet]"
+ ],
+ "notRun": [
+  {
+   "name": "690 a preset row tapped while he has numbered picks adds his picks and then the preset, in one go",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 the Move pad snaps a GROUP by where he sees it — its centre, not its offset — and a member of a moved group by where he sees it too",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 dragging a gradient on the canvas follows the finger on a flipped layer, and its ring sits on the gradient inside a moved group and under a camera",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 an Animate preset plays on EVERY caption of a caption track, not only the first",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 gradient text keeps its gradient when an Animate preset is picked",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  }
+ ],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   12695,
+   "690 undo keeps the layer he is on — undoing a nudge or a delete of Red never selects Blue, by Cmd+Z or the undo button"
+  ],
+  [
+   10485,
+   "690 a file dropped on the timeline or the Add menu is imported like one dropped on the canvas — and nowhere is the drop left to the browser"
+  ],
+  [
+   9164,
+   "984 a sheet opened in the PC captions box covers the rest of the box edge to edge — Aa, font, size and colour, at 1280 and 900, with nothing of the box showing round it"
+  ],
+  [
+   9143,
+   "921 S2 tier 3: three real instances converge, a delete lands on a layer someone else has selected, and undo is per person"
+  ],
+  [
+   7035,
+   "undo returns EXACTLY to the start over a long chain, and degrades cleanly past the cap"
+  ],
+  [
+   6898,
+   "690 Cmd+Z while drawing takes back the last stroke, Cmd+Shift+Z puts it back, and his next stroke does not bring an undone one back"
+  ],
+  [
+   6687,
+   "690 Save project file on another project from Home writes that project and leaves the open one alone — its undo, playhead, selection, and the other card picture"
+  ],
+  [
+   5736,
+   "690 on Insert your Media the text and shape slots of a phone-shaped template show their layer, even in the lower half"
+  ]
+ ],
+ "sceneLeaks": [
+  {
+   "test": "undo / redo grey out when there is nothing behind or ahead",
+   "added": [
+    "shape “Shape”"
+   ],
+   "more": 0,
+   "preview": false,
+   "isolate": false
+  }
+ ],
+ "ran": [
+  {
+   "name": "import: a file with no MIME type is classified by extension",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "transport: undo/redo and copy/paste are swapped, and the add-row switch tracks the row",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "templates and elements can be duplicated, and the copy survives deleting the original",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.5A nothing deletes a shared copy: the sweep, a tile, Clear media history, deleting a project, a template or an element",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.5B three reuses of a tile store ONE shared copy and three pointers, and his original import stays a whole copy",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.5Br a clip dropped in from an element or a template keeps that pack stored file while it is on screen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.5Br a tile tapped while its own import is still being saved waits for the save and adds it, never says it is no longer stored",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "holding a layer-edit card offers to reset just that group",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a blend group with one mode is a plain row you can tap, not a dropdown",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "inspector: the Presets icon is a bookmark, in the same colours, and the favourite star is untouched",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "grouping: two buttons in the TOP BAR, one function each, and none of it in the sheet",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "581: saving a FILTER as a preset keeps the effects inside it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "865: the switch still tracks the drag when there is NO ADD ROW on screen (Edit Group)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "ungrouping leaves the layers where the group put them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.4 grouping a layer that follows a Null keeps it exactly where it is on screen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.13 deleting a layer others follow (a Null) leaves them exactly where they are, and one undo puts it all back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a remote fill URL never survives a load — the value checks are not import-only",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undoing a delete brings the clip back WITH its picture, and the record is freed once it cannot",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "duplicate: a copied group is stacked the same way inside as the original",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "group: grouping a GROUP with another layer does not re-stack the picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S0 normalizeGroupOrder: null on every app-produced order (op fuzz), repairs a duplicated id",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "ungroup: the picture does not change — opacity and a hidden group come with it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "history: one edit then undo puts the document back exactly, for every kind of edit",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "PC: the layer actions sit on the right of the transport row, as one group you can see",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "templates: the Insert-your-Media screen lists the clips you can swap, in the order you watch them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undo / redo grey out when there is nothing behind or ahead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "grouping inside a group cannot build a parent cycle",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undo invalidates a live audio-effect chain",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "duplicating or importing a project keeps its effect layer references",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "easing: every parameterised preset lands exactly on its keyframes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "preset previews: the tile is a picture of the SELECTED layer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "preset previews: adding the preset changes the picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "preset previews: an edit to the layer changes its preview",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "preset previews: a layer with nothing on screen falls back to the sample",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "preset previews: rendering one never touches the layer document",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "preset previews: the CACHE follows the layer, not just the preset",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "preset previews: the art-decode re-mount keeps the preset",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "groups: a group nested inside another group keeps its own opacity",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: a Fill Behind inside a group stays inside that group",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: a video layer whose media has no dimensions paints nothing at all",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: a VIDEO file that yields no picture says so",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: an AUDIO file with no picture stays silent — it is not a fault",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: the preview repaints when a clip’s first frame finally decodes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: a clip added with the playhead past the end butts onto the end, not into a void",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: with the playhead inside the comp, a clip still starts exactly at the playhead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "voice: a recording becomes an ordinary audio layer, on the import path",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "PC: the Group button appears in the top bar at 2+ selected layers",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "groups: a layer added inside Edit Group joins that group",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "groups: deleting the group you are inside leaves the group view",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "replace media: the swap is a real undo step and the old file survives",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the group crumb is gone and back still leaves the group",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "grouping puts the layers inside the group, and the head does not shift",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.9 Extract Audio is one undo step, and that undo puts back the single clip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S1 an anchor is resolved against the base the op actually lands on: a two-layer paste and an undo of a delete keep their order",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a structural step is all-or-nothing, and a pre-session step still undoes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 tier 3: three real instances converge, a delete lands on a layer someone else has selected, and undo is per person",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 undo still works after Stop sharing — the hand-over points at the session that ended",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 the manifest groups one file for every layer that uses it, so a split and a duplicate transfer zero extra bytes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 replacing a clip keeps the one it replaced, and undoing the replace puts it back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a font crosses with the document and is applied on the far side, byte for byte",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a clip that arrives late never overwrites the one he imported while it was downloading",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a 90 MB “font” is refused before a byte of it moves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: undoing a comment delete brings back the right authors — Sam’s reply stays Sam’s, an Editor’s undo of Sam’s comment gives it back to Sam — and a Commenter cannot bring back somebody else’s",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a guest’s Undo runs the same backstop as an edit — an Editor made a Viewer sends nothing when he presses Undo, a reload finds nothing to send, and a Commenter can undo her own Resolve",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8 a refused delete or move puts the element back where it was on the device that tried — an effect on a held layer, and a reply undone just as its author is made a Viewer — with no resync",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r fonts from a session are capped, and the ones it installed that nothing uses any more leave the font index when it ends",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r Home says what is shared: LIVE on the project he is hosting (whose ⋯ offers Stop sharing, #967), SHARED on somebody else’s copy with their name — and a copy’s ⋯ offers keep or leave, never Duplicate, template or element",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r “Not now” on the big-download question defers the media: the clip is marked missing, the card offers Download now, and an export asks first",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "foreign layers are sanitised however they arrive, not just on import",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template does not carry its notes into a new project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an undone delete still has its media — freeing must never beat undo",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip no undo or redo can reach is released (media leak)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "with no groups the head reclaims the chevron column (queue 295)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the moment a group exists the column comes back, so rows still line up (queue 295)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template tile shows the template's own picture, untinted (queue 268)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.6 paste inside Edit Group puts the layer IN the group, where its row can be seen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "storage: a template that could not be indexed reports failure and strands nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: keyframes from a file are ordered and complete, and a good project is untouched (queue 468)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: a layer's timing is always a number, and a good project is untouched (queue 467)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a group carries its children — translate, scale and rotate compose through nesting",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#630: a group pivots on its anchor, not on the project origin",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#630: the selection box stays on a group that is scaled",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#630: a group shows its anchor on the canvas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#629: undo that removes the selected layer selects nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S0 nothing leaves the device, and solo undo still restores byte-for-byte",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#628: moving a group anchor does not move the group",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#626: a group follows its contents when they are re-timed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on PC the font list fills the space below and scrolls down, not sideways (queue 520)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S0 boxFor equals #select-box geometry (rotated, parented, group, skew, text wrap)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the selection button group is no dark slab, and the bin is calm at rest (queue 516)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip inside a HIDDEN group is silent in preview, as it is in the export (queue 821)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "arrow-nudging a group and its own members moves them once, not twice (queue 823 c4)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a trim grip touched and released writes no undo entry (queue 823 c10a)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "splitting several clips at once costs one undo, not one each (queue 823 c10b)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.11 the phone’s “Split all at playhead” is one undo step for the whole selection",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a member of a scaled group is drawn where it actually is (queue 832)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "replacing a clip’s file keeps the original, and undo brings it back (queue 829)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "one rub of the eraser is one undo step, not one per frame (queue 834 u0)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a saved preset keeps the easing you authored (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the darkened bin group is vertically centred on the transport row (queue 278)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the selection cluster reads as one group by its corner lines, and its glyphs are centred",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect walker: importing re-points a layer ref held inside a filter",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter survives: saved as an effect preset and read back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: a clip that never produces a frame says so instead of sitting there blank",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1041 three and four nested styled groups draw each fade once (equal fades, mixed fades, and a plain group in between)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1042 embedded-font import keeps a font imported meanwhile, and leaves no orphan font file when the index write is refused",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1043 picking three files at once is one undo step, and a single file is still one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1044 project and template download names keep Cyrillic, CJK, Arabic, accents and emoji",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1045 saving a preset into full storage says so, does not say saved, and does not list it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undo inside the pen-mask editor is not silently thrown away by the next drag",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a flattened group is rasterised at the size the target is, not the size the project is",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "shrinking the group plate does not move or lose what the group draws",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the first import cannot create a project bigger than the biggest preset",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "importing a phone photo into an empty project goes through the cap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a preset preview runs the same code the Apply button runs",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Presets card renders a live tile per applicable preset, and none for a broken one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip at t=0 is drawn under the playhead line, with a group and without",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an easing preset does not reach back into a channel whose animation already ended",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a preset keeps a looping animation looping",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "updating a template edits it in place instead of forking it (queue 505 clause 4)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Add-layer + is centred in its circle, and is not a font glyph",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the recent-clips grid opens at three rows and every import is still reachable",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a group context whose group is gone cannot hide the Add-layer row (queue 307 clause 1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the two preset save buttons say what each one keeps (queue 329)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "saving a preset updates the open Presets card by itself (queue 330)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Presets card leads with its save button and its ✕ is drawn, not typed (queue 331)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "917.16 the Presets save buttons are full buttons, flush with the card column, on a phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the three preset savers capture three different things",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the per-effect preset list says WHICH presets it means",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "applying a preset remembers it, and the layer can be written back over it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template can be opened, edited, and written back over itself",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the group tile says New group everywhere it is named",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the skip arrows sit nearer the play pill than the undo/redo group",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#632: inside a group the layer heads do not waste the left column",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template saves as a shareable file the importer can actually read (queue 343)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the undo and redo arrowheads are big enough to read, and mirror each other (queue 479)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undo returns EXACTLY to the start over a long chain, and degrades cleanly past the cap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "480: dropping a layer on the add row puts the marker BELOW it, with a collapsed group on the timeline",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "483: the undo and redo rings keep a wide gap between their two ends",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Number Roll counts below zero, groups thousands and keeps $ / % / a label around the number",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "505: editing a template updates that template and leaves no project behind",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.6 after editing an element or a template its card shows the edit, not an older autosave picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "718: an animated Draw-from (trimStart) survives the timing sanitiser and one undo of an unrelated edit",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "721: a colour keyframe list survives saving a preset, and saving one preset does not delete an unparseable other",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "722: a preset applied from the browser anchors its keyframes at the playhead he parked, not the preview loop",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "739: ungrouping a group animated from rest warns about the motion, and about the group's own effects in the same breath",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "741: nudging a mask point on the precision pad commits history, so undo and redo see the nudge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "771: a template draft whose template no longer exists says so instead of promising to save back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "619: the template media-swap opens only with media, and never silently",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "651 — an empty Template panel explains what a template IS, instead of hiding it behind a tap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "655 — grouping does not shove the timeline sideways for one frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "680 — undo does not drag a clip that starts before zero forward to 0",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "682 — a keyframed effect colour survives a project load and an undo",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "685 — the template fill screen commits to the history that exists",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: the wrap handle sizes the column in the layer own units, not the group scale",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: an imported font arriving throws away the line breaks measured without it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "presets: the layer remembers which preset it came from AFTER a save",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: cancelling the Audio picker does not turn the next import into a soundtrack",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a parameterised easing survives being saved as a preset and being split (queue 701)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "796: recovering a stuck clip drag puts the clip (and its group) back on its original start",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "ai chat: one sentence is ONE undo step",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.8 a backup restores element and template drafts as drafts, not as projects",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "888: a project file names the clips too big to fit, warns again on import, and stays quiet when nothing was left out",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "898: a template being edited stays ticked on the Templates tab, so Select all and Delete include it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "932 an AI setProject never renames his project — not the Director, not a template, not any op",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a file dropped on the timeline or the Add menu is imported like one dropped on the canvas — and nowhere is the drop left to the browser",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 undo keeps the layer he is on — undoing a nudge or a delete of Red never selects Blue, by Cmd+Z or the undo button",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 replacing a clip twice then undoing twice brings his original back, on screen and on disk, and redo brings the last pick back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 undo past a replace still brings his original back after he went Home and came back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 an autosave that lands while undo is still fetching his original never files the wrong clip under it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a preset row tapped while he has numbered picks adds his picks and then the preset, in one go",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 an animated effect copied onto a clip that starts later animates from that clip start, by Copy and Paste and by a look + animations preset",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a scaled or turned group keeps its still layers still when another layer in it comes on screen, moves, or is moved",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 ungrouping a group he moved, scaled or turned keeps its animated layers where the group put them, and names any it cannot",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 on Insert your Media the text and shape slots of a phone-shaped template show their layer, even in the lower half",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 opening an element for editing leaves nothing to undo — one Undo cannot wipe it, and it never reopens empty",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 the Move pad snaps a GROUP by where he sees it — its centre, not its offset — and a member of a moved group by where he sees it too",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 dragging a gradient on the canvas follows the finger on a flipped layer, and its ring sits on the gradient inside a moved group and under a camera",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 an Animate preset plays on EVERY caption of a caption track, not only the first",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 gradient text keeps its gradient when an Animate preset is picked",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 under an Animate preset gradient text looks like the still text once settled — top to bottom, Angular with a moved centre, Radial, and on a Curve",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 the Colouring Opacity holds under an Animate preset and on a Curve, and leaves the Outline solid",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a look + animations preset carries the animation and not the size: applied to a fitted photo it keeps the photo at its own size, and a pop-in pops to it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a sketch lands under the finger inside a moved and scaled group, and Draw more keeps a turned, flipped, re-anchored drawing still",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 each stroke keeps its own brush through the eraser, undo and redo, Draw more and the timeline thumbnail",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 the camera sees past the project edge — a pan, zoom-out or turn over a big photo shows the photo, masked, grouped, blurred and fogged too",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 after sharing stops, undo takes back the change he just made, not one from the session — on his Mac and on the phone that was in it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 in a live session, undo with the text card open takes back the typing, blames nobody, and the new text can still be undone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 Cmd+Z while drawing takes back the last stroke, Cmd+Shift+Z puts it back, and his next stroke does not bring an undone one back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 Save project file on another project from Home writes that project and leaves the open one alone — its undo, playhead, selection, and the other card picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "959 on PC the layer-action group has no background and no outline — two corner lines, top-right and bottom-left, solid at the corner and fading out",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "984 the PC captions box works — typing shows in its row, its times and + Add cue edit the captions, it follows a dragged timeline, and after undo its rows edit the restored captions",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "984 a sheet opened in the PC captions box covers the rest of the box edge to edge — Aa, font, size and colour, at 1280 and 900, with nothing of the box showing round it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "986 C9 a filter saved as a preset is kept whole - the toast no longer sends him to the Effects browser, it is listed as his, lands named with its effects, and still knows which filter it is after a reload",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "994 the layer ⋯ and ⧉ menus carry no preset save, and the Presets card still saves the whole look",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "994 the unblock page no longer asks which preset save goes — the layer ⋯ row it named is gone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.3 Flash (darken) - Build-up ramps over the whole clip: split in two, trimmed at the start or on a group, its hits land where they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.6 Motion Blur (Object) - a moving group keeps blurring after its first 2 seconds",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

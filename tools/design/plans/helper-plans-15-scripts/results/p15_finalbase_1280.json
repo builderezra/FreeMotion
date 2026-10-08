@@ -1,0 +1,78 @@
+{
+ "ok": false,
+ "summary": "Regression 0/5 ✗Pending 0/0 built",
+ "failures": [
+  "FAILP15 #1041 three and four nested styled groups draw each fade once (equal fades, mixed fades, and a plain group in between) — 3 styled groups, fades 0.5/0.5/0.5 (outer first) render 80, expected 32",
+  "FAILP15 #1042 embedded-font import keeps a font imported meanwhile, and leaves no orphan font file when the index write is refused — (a) a font imported from the picker while an embedded import was running is gone from the index (2 listed, FMFfmuzscmx4w5a4y missing)",
+  "FAILP15 #1043 picking three files at once is one undo step, and a single file is still one — three files picked together made 3 undo steps (history 1 → 4), not 1",
+  "FAILP15 #1044 project and template download names keep Cyrillic, CJK, Arabic, accents and emoji — project named \"Привет\" downloads as \"project.fmotion.json\", expected \"Привет.fmotion.json\"",
+  "FAILP15 #1045 saving a preset into full storage says so, does not say saved, and does not list it — layer preset: storage refused the write and the last word was \"Preset saved — apply it from any layer’s Presets section\" (toasts: [\"Storage full — preset not saved\",\"Preset saved — apply it from any layer’s Presets section\"])"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   340,
+   "P15 #1043 picking three files at once is one undo step, and a single file is still one"
+  ],
+  [
+   297,
+   "P15 #1044 project and template download names keep Cyrillic, CJK, Arabic, accents and emoji"
+  ],
+  [
+   210,
+   "P15 #1042 embedded-font import keeps a font imported meanwhile, and leaves no orphan font file when the index write is refused"
+  ],
+  [
+   67,
+   "P15 #1045 saving a preset into full storage says so, does not say saved, and does not list it"
+  ],
+  [
+   9,
+   "P15 #1041 three and four nested styled groups draw each fade once (equal fades, mixed fades, and a plain group in between)"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "P15 #1041 three and four nested styled groups draw each fade once (equal fades, mixed fades, and a plain group in between)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1042 embedded-font import keeps a font imported meanwhile, and leaves no orphan font file when the index write is refused",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1043 picking three files at once is one undo step, and a single file is still one",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1044 project and template download names keep Cyrillic, CJK, Arabic, accents and emoji",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P15 #1045 saving a preset into full storage says so, does not say saved, and does not list it",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

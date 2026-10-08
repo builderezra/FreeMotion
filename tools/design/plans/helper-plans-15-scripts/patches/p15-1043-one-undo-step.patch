@@ -1,0 +1,37 @@
+diff --git a/js/app.js b/js/app.js
+index 0e2685ac..98c413dd 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -5490,9 +5490,14 @@ window.FM = window.FM || {};
+     // Consumed here, once, for THIS batch — see audioImport in js/addmenu.js.
+     const wantAudio = !!FM._wantAudioOnly; FM._wantAudioOnly = false;
+     const pickedIn = FM.startedIn(), notAdded = [];   // queue 690 (hunt 5): see FM.stillIn above
++    /* #1043: ONE PICK IS ONE UNDO STEP. Every file used to land through addMediaLayer, which commits history itself, so three photos
++       took three presses of Undo. The files are decoded one by one as before, but they are only QUEUED here; they all land together
++       below, inside one history mute, with one commit. Nothing lands while a slow decode is still running, so an edit he makes in
++       the meantime is its own step and cannot fold into the import. */
++    const queued = [];
+     const add = function (rec, file) {
+       if (!FM.stillIn(pickedIn)) { FM.letGoMedia(rec); notAdded.push(file); return false; }
+-      FM.addMediaLayer(rec);
++      queued.push({ rec: rec, file: file });
+       return true;
+     };
+     for (const file of files) {
+@@ -5523,6 +5528,16 @@ window.FM = window.FM || {};
+         else alert('Can’t use “' + file.name + '” — FreeMotion takes video, images and audio.');
+       } catch (e) { FM.reportError('importing “' + (file && file.name || 'a file') + '”', e, 'FreeMotion could not open “' + (file && file.name || 'that file') + '”.\n\nIf it plays elsewhere on this device it is usually the format — try exporting it as MP4 (video) or WAV/M4A (audio) and importing that.'); }
+     }
++    const hist = FM.history;
++    let landed = 0;
++    if (hist && hist.mute) hist.mute();
++    try {
++      for (const q of queued) {
++        if (!FM.stillIn(pickedIn)) { FM.letGoMedia(q.rec); notAdded.push(q.file); continue; }   // asked again at the moment of landing
++        FM.addMediaLayer(q.rec); landed++;
++      }
++    } finally { if (hist && hist.unmute) hist.unmute(); }
++    if (landed && hist && hist.commit) hist.commit();
+     if (notAdded.length && FM.toast) {
+       FM.toast(notAdded.length === 1
+         ? 'Not added — you switched projects while “' + (notAdded[0] && notAdded[0].name || 'that file') + '” was opening'

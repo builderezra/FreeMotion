@@ -1,0 +1,34 @@
+{
+ "ok": false,
+ "summary": "Regression 0/1 ✗Pending 0/0 built",
+ "failures": [
+  "FAILP15 #1043 picking three files at once is one undo step, and a single file is still one — three files picked together made 3 undo steps (history 1 → 4), not 1"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   479,
+   "P15 #1043 picking three files at once is one undo step, and a single file is still one"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "P15 #1043 picking three files at once is one undo step, and a single file is still one",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

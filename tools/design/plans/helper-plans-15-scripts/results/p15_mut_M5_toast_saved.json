@@ -1,0 +1,34 @@
+{
+ "ok": false,
+ "summary": "Regression 0/1 ✗Pending 0/0 built",
+ "failures": [
+  "FAILP15 #1045 saving a preset into full storage says so, does not say saved, and does not list it — layer preset: storage refused the write and the last word was \"Storage full — preset not saved\" (toasts: [\"Storage full — preset not saved\",\"Preset saved — apply it from any layer’s Presets section\",\"Storage full — preset not saved\"])"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   89,
+   "P15 #1045 saving a preset into full storage says so, does not say saved, and does not list it"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "P15 #1045 saving a preset into full storage says so, does not say saved, and does not list it",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

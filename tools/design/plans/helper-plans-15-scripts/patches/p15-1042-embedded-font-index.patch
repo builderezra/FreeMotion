@@ -1,0 +1,44 @@
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..efc151ce 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -3641,6 +3641,7 @@ window.FM = window.FM || {};
+   // A text layer references a font by its generated `css` token ('FMF<id>, sans-serif'); the token is
+   // machine-generated (alnum only), so splicing it straight into ctx.font carries no injection risk.
+   const FONT_INDEX = 'fm.fonts', FONT_EMBED_LIMIT = 4 * 1024 * 1024;
++  function fontBlobGone(id) { openDB().then(db => idbDel(db, 'font:' + id).then(() => db.close(), () => db.close())).catch(() => {}); }   // #1042: a font file with no index entry is an orphan
+   const _fontReg = new Set();   // ids already handed to document.fonts (keeps rehydrate idempotent)
+   function fontFileOk(file) {
+     if (!file) return false;
+@@ -3741,8 +3742,8 @@ window.FM = window.FM || {};
+     // Adds only fonts the library doesn't already have, keyed by their (stable) family token.
+     async applyEmbedded(fontsObj) {
+       if (!fontsObj) return;
+-      const idx = this.list();
+-      const haveFam = new Set(idx.map(f => f.family));
++      const haveFam = new Set(this.list().map(f => f.family));
++      const added = [];   // #1042: what THIS call stored; appended to a FRESH index at the end, never to a snapshot taken before the awaits
+       for (const key of Object.keys(fontsObj)) {
+         const fd = fontsObj[key];
+         if (!fd || !fd.family || haveFam.has(fd.family)) continue;
+@@ -3752,10 +3753,18 @@ window.FM = window.FM || {};
+         let put = false;   // queue 915 clause 2: registered for this session either way, but only a stored font is listed
+         try { const db = await openDB(); put = await idbPut(db, 'font:' + nid, { file: file }); db.close(); } catch (e) {}
+         if (!put) { _fontReg.delete(nid); continue; }
+-        idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
++        added.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
+         haveFam.add(fd.family);
+       }
+-      writeJSON(FONT_INDEX, idx);
++      if (!added.length) return;
++      /* #1042: read the index NOW, with no await between this read and the write. A font imported from the picker, or a second
++         embedded import, that landed while the loop above waited is in it, and the old code wrote its own stale list over it. */
++      const idx = this.list(), have = new Set(idx.map(f => f.family)), fresh = [];
++      added.forEach(r => { if (have.has(r.family)) { _fontReg.delete(r.id); fontBlobGone(r.id); } else { idx.push(r); fresh.push(r); } });
++      if (fresh.length && !writeJSON(FONT_INDEX, idx)) {   // a refused write used to be thrown away, leaving font files nothing lists
++        fresh.forEach(r => { _fontReg.delete(r.id); fontBlobGone(r.id); });
++        if (FM.toast) FM.toast('Storage is full — the fonts in this file could not be saved');
++      }
+     },
+   };
+ 

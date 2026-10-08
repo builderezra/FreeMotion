@@ -1,0 +1,34 @@
+{
+ "ok": false,
+ "summary": "Regression 0/1 ✗Pending 0/0 built",
+ "failures": [
+  "FAILP15 #1042 embedded-font import keeps a font imported meanwhile, and leaves no orphan font file when the index write is refused — (b) the index write was refused and 2 font file(s) stayed in storage with no index entry (they are orphans)"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   467,
+   "P15 #1042 embedded-font import keeps a font imported meanwhile, and leaves no orphan font file when the index write is refused"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "P15 #1042 embedded-font import keeps a font imported meanwhile, and leaves no orphan font file when the index write is refused",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

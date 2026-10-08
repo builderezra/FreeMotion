@@ -1,0 +1,89 @@
+{
+ "ok": false,
+ "summary": "Regression 0/6 ✗Pending 0/0 built",
+ "failures": [
+  "FAILtemplates and elements can be duplicated, and the copy survives deleting the original — templates: the probe pack carries no media, so the independence check below would prove nothing",
+  "FAILthe group crumb is gone and back still leaves the group — back left the PROJECT instead of the group — one press should step out of the group and leave you where you were",
+  "FAILsaving a preset updates the open Presets card by itself (queue 330) — no layer to work from",
+  "FAILthe Presets card leads with its save button and its ✕ is drawn, not typed (queue 331) — no layer to work from",
+  "FAILpresets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9) — no layer to work from",
+  "FAILthe per-effect preset list says WHICH presets it means — the message does not name the effect it is about: [No recent effects yet]"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   457,
+   "the per-effect preset list says WHICH presets it means"
+  ],
+  [
+   290,
+   "the group crumb is gone and back still leaves the group"
+  ],
+  [
+   165,
+   "templates and elements can be duplicated, and the copy survives deleting the original"
+  ],
+  [
+   14,
+   "saving a preset updates the open Presets card by itself (queue 330)"
+  ],
+  [
+   1,
+   "the Presets card leads with its save button and its ✕ is drawn, not typed (queue 331)"
+  ],
+  [
+   1,
+   "presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "templates and elements can be duplicated, and the copy survives deleting the original",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the group crumb is gone and back still leaves the group",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "saving a preset updates the open Presets card by itself (queue 330)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Presets card leads with its save button and its ✕ is drawn, not typed (queue 331)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the per-effect preset list says WHICH presets it means",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

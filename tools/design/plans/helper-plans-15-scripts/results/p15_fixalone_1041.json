@@ -1,0 +1,32 @@
+{
+ "ok": true,
+ "summary": "Regression 1/1 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   12,
+   "P15 #1041 three and four nested styled groups draw each fade once (equal fades, mixed fades, and a plain group in between)"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "P15 #1041 three and four nested styled groups draw each fade once (equal fades, mixed fades, and a plain group in between)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

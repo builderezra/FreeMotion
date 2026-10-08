@@ -1,0 +1,63 @@
+diff --git a/js/app.js b/js/app.js
+index 0e2685ac..aacb7433 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -4280,7 +4280,7 @@ window.FM = window.FM || {};
+     const g = c.getContext('2d');
+     g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+     g.drawImage(full, 0, 0, c.width, c.height);
+-    const base = (P.name || 'frame').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'frame';
++    const base = FM.fileNameSafe(P.name, 'frame');
+     c.toBlob(blob => {
+       if (!blob) return;
+       const url = URL.createObjectURL(blob);
+@@ -5996,7 +5996,7 @@ window.FM = window.FM || {};
+         : 'The M4A encode failed — exported as WAV instead', 5200);
+     }
+     FM._lastAudioExport = { ext: ext, fellBack: fellBack, bytes: blob.size };   // read by the suite
+-    const name = ((P.name || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
++    const name = FM.fileNameSafe(P.name, 'project');
+     const url = URL.createObjectURL(blob);
+     const a = document.createElement('a'); a.href = url; a.download = name + '.' + ext;
+     document.body.appendChild(a); a.click(); a.remove();
+@@ -6154,7 +6154,7 @@ window.FM = window.FM || {};
+     const tCb = document.getElementById('exp-transparent');
+     const transparent = !!(tCb && tCb.checked && (fmt === 'gif' || fmt === 'frames'));
+     try {
+-      const expName = (FM.scene.project.name || 'freemotion-export').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'freemotion-export';
++      const expName = FM.fileNameSafe(FM.scene.project.name, 'freemotion-export');
+       /* ⚠️ `verbatim` EXISTS BECAUSE THIS LINE HAS BEEN MANGLING WHOLE SENTENCES (queue 47, v14.34).
+          `what` carries two different kinds of thing and this treated them as one. Some are NOUNS to
+          slot in — 'video', 'audio + video', 'gif' — and some are complete sentences: prepareCaches
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..eefbe8cd 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -1791,8 +1791,17 @@ window.FM = window.FM || {};
+     } finally { try { if (db) db.close(); } catch (e) {} }
+     return true;
+   };
++  /* #1044: a file name keeps every letter he typed, in any script. Only what a file system cannot hold goes (the path and wildcard
++     characters, control characters, lone surrogates, dots at either end), and it is cut at 80 code points, never inside an emoji pair. */
++  FM.fileNameSafe = function (name, fallback) {
++    let s = String(name == null ? '' : name).replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, ' ');
++    s = Array.from(s).filter(c => c.length === 2 || !/[\ud800-\udfff]/.test(c)).join('');   // a lone surrogate iterates as one unit; no lookbehind (Safari before 16.4 cannot parse one, and a parse error takes the whole file down)
++    s = s.replace(/\s+/g, ' ').trim().replace(/^\.+|\.+$/g, '').trim();
++    const cp = Array.from(s); if (cp.length > 80) s = cp.slice(0, 80).join('').trim();
++    return s || fallback;
++  };
+   function saveProjectFile(obj) {
+-    const name = (((obj.project && obj.project.name) || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
++    const name = FM.fileNameSafe(obj.project && obj.project.name, 'project');
+     const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
+     const url = URL.createObjectURL(blob);
+     const a = document.createElement('a'); a.href = url; a.download = name + '.fmotion.json';
+@@ -3124,7 +3133,7 @@ window.FM = window.FM || {};
+       }
+       const project = Object.assign({}, pack.project, { name: meta.name || pack.project.name || 'Template' });
+       const obj = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) };
+-      const safe = String(project.name).replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'template';
++      const safe = FM.fileNameSafe(project.name, 'template');
+       const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
+       const url = URL.createObjectURL(blob);
+       const a = document.createElement('a'); a.href = url; a.download = safe + '.fmotion.json';
