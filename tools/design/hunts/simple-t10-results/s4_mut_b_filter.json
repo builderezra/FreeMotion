@@ -1,0 +1,34 @@
+{
+ "ok": false,
+ "summary": "Regression 0/1 ✗Pending 0/0 built",
+ "failures": [
+  "FAILS4b the ✦ badge: a plain effect earns none (as designed), a keyframed one does, and a keyframed effect made in Simple (sm = 1) does not — an effect made in Simple (sm = 1) keyframes and all earned the ✦ (look) - DESIGN §8.5c / §9.1: level none"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   209,
+   "S4b the ✦ badge: a plain effect earns none (as designed), a keyframed one does, and a keyframed effect made in Simple (sm = 1) does not"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "S4b the ✦ badge: a plain effect earns none (as designed), a keyframed one does, and a keyframed effect made in Simple (sm = 1) does not",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

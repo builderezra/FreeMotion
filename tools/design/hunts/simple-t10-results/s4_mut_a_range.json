@@ -1,0 +1,34 @@
+{
+ "ok": false,
+ "summary": "Regression 0/1 ✗Pending 0/0 built",
+ "failures": [
+  "FAILS4a Simple: typing 1 in Speed % cannot make a ten-minute clip - the box stops at 25 % and 400 %, and Full keeps its 1 to 1000 — in Simple, typing 1 gave speed 0.01 and a clip 300.0 s long"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   1185,
+   "S4a Simple: typing 1 in Speed % cannot make a ten-minute clip - the box stops at 25 % and 400 %, and Full keeps its 1 to 1000"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "S4a Simple: typing 1 in Speed % cannot make a ten-minute clip - the box stops at 25 % and 400 %, and Full keeps its 1 to 1000",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

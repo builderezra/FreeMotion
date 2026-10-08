@@ -1,0 +1,62 @@
+{
+ "ok": true,
+ "summary": "Regression 4/4 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   4730,
+   "S4d Simple: a slow swipe that starts on a More-panel card does not raise its Reset menu, a still hold does"
+  ],
+  [
+   1738,
+   "S4a Simple: typing 1 in Speed % cannot make a ten-minute clip - the box stops at 25 % and 400 %, and Full keeps its 1 to 1000"
+  ],
+  [
+   1203,
+   "S4c the phone ‹ in Simple says Projects with a clip selected (it goes Home), and in Full it still says Close clip options"
+  ],
+  [
+   157,
+   "S4b the ✦ badge: a plain effect earns none (as designed), a keyframed one does, and a keyframed effect made in Simple (sm = 1) does not"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "S4a Simple: typing 1 in Speed % cannot make a ten-minute clip - the box stops at 25 % and 400 %, and Full keeps its 1 to 1000",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "S4b the ✦ badge: a plain effect earns none (as designed), a keyframed one does, and a keyframed effect made in Simple (sm = 1) does not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "S4c the phone ‹ in Simple says Projects with a clip selected (it goes Home), and in Full it still says Close clip options",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "S4d Simple: a slow swipe that starts on a More-panel card does not raise its Reset menu, a still hold does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

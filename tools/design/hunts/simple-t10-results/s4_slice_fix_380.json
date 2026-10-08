@@ -1,0 +1,815 @@
+{
+ "ok": false,
+ "summary": "Regression 115/122 ✗ · NOT RUN HERE 5 Pending 0/0 built",
+ "failures": [
+  "FAILthe quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202) — the scene was only 33.2 ms a frame to begin with — it is not struggling, so there is nothing for the ladder to react to and this proves nothing",
+  "FAILsimple P2.2 · tray B at 1280×800, 1280×720 and 960×700 every tool is on show and nothing in the band above it is cut off — the title and Its tools are below show whole — and a band dragged under 232 px keeps one row with the project tools whole — 960×700: [5,4] duplicateClip lies outside the band (240–301 in 0–300) · delete lies outside the band (240–301 in 0–300) · the tray scrolls sideways (301 px in 299)"
+ ],
+ "notRun": [
+  {
+   "name": "921 S6 the Share panel hands out a link, a QR the camera reads back as that link, and a 9-character code; Reset makes new ones and the owner stops listening on the old",
+   "item": "921",
+   "reason": "needs a working BarcodeDetector (qr_code) — this browser has no BarcodeDetector; the rest of this test ran and passed, only reading the QR back as the link did not (the Mac and Android Chrome have one)"
+  },
+  {
+   "name": "690 trimming a speed-ramped clip with its handle keeps every kept frame still — the head of a ramp, the tail of a reversed ramp",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 Reset speed (1x) carries his animation with the clip — a fade at the end of a 2x clip still ends at its end",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "972 the short code starts frosted each time the Share card opens — its glyphs are not painted while Copy still copies it, the QR opened then is frosted too and one real tap on it shows both, a settings redraw and a trip to Sharing settings keep it shown, closing and reopening frosts it again, and Reset frosts the new one",
+   "item": "972",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "974 review: a real tap on the empty area, then straight away the back arrow - the add menu is never left open behind Home",
+   "item": "974",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  }
+ ],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   8605,
+   "simple P2.1 · T2 the §3.9 invariants hold for delete, both trims, split, close gap and duplicate over 12 seeded random main tracks"
+  ],
+  [
+   4766,
+   "S4d Simple: a slow swipe that starts on a More-panel card does not raise its Reset menu, a still hold does"
+  ],
+  [
+   4241,
+   "the quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202)"
+  ],
+  [
+   3786,
+   "simple P2.2 · review Close all gaps lands every hairline a frame falls into and every hairline it moves, so it never leaves or makes a black frame (§3.1, inv. 13)"
+  ],
+  [
+   3111,
+   "482 2.5 Speed Lines and 2.7 Glitch - the new rows fit the effect panel at 390 and 1280 px, and Angle is greyed out under Radial"
+  ],
+  [
+   2652,
+   "simple P2.2 · tray B at 1280×800, 1280×720 and 960×700 every tool is on show and nothing in the band above it is cut off — the title and Its tools are below show whole — and a band dragged under 232 px keeps one row with the project tools whole"
+  ],
+  [
+   2576,
+   "simple P2.1 · review Do it anyway keeps the lock on every piece it makes: both halves of a split, both pieces of a cut song, and a copy (D7)"
+  ],
+  [
+   2264,
+   "simple P2.2 · tray B on PC the band says “Its tools are below” only while the tools really lie on two rows — a band dragged to 192 px, a landscape phone at 844×390 and a title’s four tools keep one row and today’s “· More opens the rest”, and the words follow the rows when the drag flips them (checker finding 3)"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "source time: every clip maps project time into its own source window, whatever its speed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "maxDurForSource: no speed value can put a NaN duration into the scene",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed ramps: trimming or extending an edge does not move the surviving picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.2 trim-start-to-playhead (A key, rail, phone button) on a speed ramp keeps the surviving picture still",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Speed is live on every layer type, and never a dead control",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "layer options: Speed and Volume are CARDS on a video too — the icon strip is just trim/split/trim",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed: changing it stretches the layer's keyframes with the clip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed: the Speed panel is available on layers with no source",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 the Share panel hands out a link, a QR the camera reads back as that link, and a 9-character code; Reset makes new ones and the owner stops listening on the old",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs a working BarcodeDetector (qr_code) — this browser has no BarcodeDetector; the rest of this test ran and passed, only reading the QR back as the link did not (the Mac and Android Chrome have one)"
+  },
+  {
+   "name": "the speed ruler moves in 5% steps, not 10x jumps (queue 455)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed-to-playhead lands the clip END exactly on the playhead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed-to-playhead lands the clip START exactly, holding the end",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed-to-playhead refuses the cases where there is no answer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the speed range reaches the 1000x he asked for",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "S4a Simple: typing 1 in Speed % cannot make a ten-minute clip - the box stops at 25 % and 400 %, and Full keeps its 1 to 1000",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "S4d Simple: a slow swipe that starts on a More-panel card does not raise its Reset menu, a still hold does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the turbulent-displace lattice is actually COARSE at his own settings, or the speed is gone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "719: Reset and Crop to canvas keep a keyframed crop's keyframes, keying the playhead, and still set a plain crop",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed: solving so the clip STARTS at the playhead keeps the animation glued to the bar",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904 [B] Tilt Shift blur, Starfield twinkle speed and Voronoi wall thickness are controls, and saved projects are untouched",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "913.4 a keyframed speed, wind, boil or twinkle rate moves things by its integral, so a ramp never rewinds",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 trimming a speed-ramped clip with its handle keeps every kept frame still — the head of a ramp, the tail of a reversed ramp",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 Reset speed (1x) carries his animation with the clip — a fade at the end of a 2x clip still ends at its end",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "972 the short code starts frosted each time the Share card opens — its glyphs are not painted while Copy still copies it, the QR opened then is frosted too and one real tap on it shows both, a settings redraw and a trip to Sharing settings keep it shown, closing and reopening frosts it again, and Reset frosts the new one",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "974 review: a real tap on the empty area, then straight away the back arrow - the add menu is never left open behind Home",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "482 the unblock page names Gradient Overlay’s real default as Keep, a gentler number as Gentler, and no longer asks about speed sliders",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 1.1 Film Grain - Grain speed 0 holds the grain still, a keyframed speed never runs it backwards, Pattern gives a layer its own grain, Softness softens it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 1.2 Light Leak - Drift speed 0 holds it still, Wander, a Leak edge colour at the rim that follows Leak until set, a stateless Flicker and three blends",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.5 Speed Lines - Style, Angle, Clear zone shape and Boil are in the catalogue at defaults that draw the old lines byte for byte as on v17.18",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.5 Speed Lines - Boil redraws the lines on the layer clock, Parallel lays them along Angle, Clear zone shape makes an oval, and a small preview draws them where the export does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.5 Speed Lines and 2.7 Glitch - the new rows fit the effect panel at 390 and 1280 px, and Angle is greyed out under Radial",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.5 Speed Lines - Clear zone shape is greyed out while Clear zone is 0, where it has nothing to shape",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.3 Flash (darken) - at the default Speed a Double hit is two hits and a rest in a 30 fps export, not Steady at twice the Speed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.3 Flash (darken) - no rhythm runs faster than the frame rate can show: Build-up speeds up to its Speed without stalling into dark frames, and Steady 30 still flashes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.3 Flash (darken) - a keyframed Speed is integrated, so easing it down slows the strobe instead of running it backwards",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 6.6 Linear Streaks - One way with Only above 0 and a white Tint runs the v17.21 pixel loop letter for letter, chosen once before the pixels, so saved streaks draw at the old speed, while Both ways still smears both sides",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T15 FM.timedLists lists exactly the keyframe containers a generic walk finds (cue effects included)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T7 sanitiser: layer.sm and project.sm come out canonical, keep plain unknown keys, and a second pass changes nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T6 copy routes: duplicate, paste and the Assistant clone never make a second main clip or a second end watermark",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T1 classifier: a plain track, a picture-in-picture, native-size fitting, gaps, overlaps and a crossfade",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T1 classifier: stacked takes, a background still, an A-roll with cutaways and an import stack",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T1 classifier: what follows which clip — on a cut, long things, the sound rule, captions, hidden clips, camera",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T1 classifier: media still arriving is undecided, a missing clip with a known size is still a picture, and classify never reads FM.scene",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T1 classifier timing: 500 layers within budget, and 2,000 is not quadratic",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · Simple’s + lays four picked photos end to end from the end of the clip row, one pick",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T20 no company name in any word the Simple editor shows, and the scan catches one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · the collab fingerprint carries the sm rules — its fixture holds sm keys that come out canonical, and SM_V moves it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T8 the switch writes nothing, keeps time, selection and zoom, and every clip keeps its x",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T19 on a phone at 380 the Simple row reads ⋯ ✂ (gap) |◀ with |◀ where Full has it, the clip row is hit-testable, and ✎ hides by visibility",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T21 at 380 in Simple none of Full’s layer doors show — ⧉, ◐, Layers, Add camera, the phone’s copy and delete — with one clip selected",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · T21 at 1280 in Simple the PC layer-action group (delete, parent, more) does not show with one clip selected",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P1 · off means off: a project this device never switched opens in Full and runs nothing of the switch — no text-editor flush",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · Delete on a main clip closes the gap and takes what is on it (D5): one undo step, the join bit-exact, Full’s delete unchanged",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · D trims the tail and a title cut off slides back onto its clip (D6); A trims the head and the clip keeps its slot",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · S and ✂ split at the playhead with the clip’s sound twin; too near an edge says so and writes nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · tapping a gap chip closes it exactly and an overlap chip fixes it; what follows moves along",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · ⌘D duplicates a main clip right after itself with its keys; what follows moves along; one undo removes it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · a locked clip in the way stops the edit with Do it anyway, which waits for the finger and keeps the lock (D7)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · Delete cuts what runs on across the deleted clip (cases i–iii) and pins it; a title on the clip goes with it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · ⌘Z pressed while a command is still running waits and undoes exactly that command; in Full ⌘Z is immediate",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · with a friend who can edit in the session, moving clips waits (D14), a split still goes live, and undo cannot send a ripple",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · FM.trimClipEdge gives the numbers Full’s A and D give, flat and ramped, forward and reversed, and an extend keeps the surviving frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · a split pair Simple butted together over a jump in the footage gets its de-click back; an unmarked pair is today’s seam",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · the live-gate predicate: an Editor counts, a Viewer does not, a remembered Editor does, a guest always, a linked copy does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · T2 the §3.9 invariants hold for delete, both trims, split, close gap and duplicate over 12 seeded random main tracks",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · T2b a middle piece of a clip cut five times is deleted over 2,000 seeds at 24, 30 and 60 fps with no black frame; without the landing some seeds get one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · three commands tapped inside one await land as three steps in tap order, and a ⌘Z queued behind them undoes the last of them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review A and D on a main block (a clip grouped in Full with a group look) refuse with Open in Full and move nothing (DESIGN §9.1 main blocks)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review Delete that cuts a muted whole-video overlay keeps the end-with-the-video flag on its later piece, so the next trim still takes it to the end (§4.3)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review a trim never shortens a clip under twice the crossfade on its OTHER side, so a blend never turns into a red overlap (§3.1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review a clip duplicated in Simple has its footage on disk at once: locking the phone straight after cannot bring the copy back blank (queue 681)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review Do it anyway keeps the lock on every piece it makes: both halves of a split, both pieces of a cut song, and a copy (D7)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review an end card lands bit-exact on the new end of the clips after every command, so no 1-ulp black frame opens before it (§3.1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review deleting a clip that fades in over the one before cuts what runs on through the time that really went, so a voice-over stays in step (§3.6 Delete row)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review Delete never leaves a cut song’s speed ramp behind its sound: refused until 2.4 moves ramps (or kept in step)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review a tap on the line Simple is saying, on its row, or on the selected clip keeps the selection (§3.12 rule 2: a tap on the line does nothing)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review a line Simple says in its row is announced by ONE live region, not read twice (§3.12 rule 1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.1 · review the clips-and-length summary never shows :60 — the total is rounded before it is split into minutes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · at 380 a selected clip’s tools fill the tray row under the timeline, the project tools stay below it, nothing moves, More raises today’s panel",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · at 1280 the tray and the project tools sit at the bottom of the left band and a panel opens above them only from More (D20 A)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · Move later and Move earlier reorder a clip one slot with what is on it; the other seams keep their amounts; Alt+← moves it back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · Lift off makes a clip an overlay above what slides under it and its title stays with it; Into row puts it back at the nearest cut",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · Length: + and − change the clip by one frame and what follows moves; a typed length trims; Start trims the head",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · the + appends end to end BEFORE an end card, which moves along; Clips › After Clip 1 inserts at that cut",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · Text adds at the playhead held inside the video; Overlay lands above the clip, under titles",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · Simple’s ⋯ offers Close all gaps, which closes every gap and overlap in one step; Full’s ⋯ is untouched",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · the black band names what runs past the last clip: End with the video fits a title, a song is named and left (D17 B)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · a crossfade stops Move, Lift off and Clips › After Clip 1 with its own words and writes nothing; a clip off the fade still moves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · on an adopted project the + still takes a whole-video title and a watermark added in Full to the new end (§4.5, §3.6 Append row)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review Lift off on a main block (a clip grouped in Full with a group look) refuses with Open in Full and moves nothing (DESIGN §8.5 Block row, §9.1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review Lift off then Into row brings a clip’s sound twin back with it, karaoke-linked or extracted, so the voice never lands seconds late (§4.6)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review Close all gaps lands every hairline a frame falls into and every hairline it moves, so it never leaves or makes a black frame (§3.1, inv. 13)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review the + refuses (until 2.4) to move an end card out from under a keyed camera, and goes through when the camera is set to Stay put (§3.10 rule 3e)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review Clips › After a card and Into row after a card keep the new clip above the backdrop, just above the next clip, and the label names the card (§3.6.1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review Move earlier lands the hairline that closes up behind the moved clip, so no black frame opens where it was (§3.1 a)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review Stay put on seven selected lines pins all seven in ONE undo step and keeps the selection (§3.2 rule 2, §8.5b)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review a clip, an overlay or a song added in Simple has its file on disk at once: a hide flush straight after cannot bring it back blank (queue 681)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review the switch to Full waits while Simple is still reading the files an add picked, so a Simple ripple never lands after Full is on screen (§3.7)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review Clips › After Clip 1 at a gap keeps the gap after the new clip: B, its title, C and the end card all move by exactly the clip length (§3.6 Insert row)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review Into row is not offered on a card between clips, and the command refuses with Open in Full and moves nothing (DESIGN §3.6 slot form)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review Move earlier on the last clip takes the end card to the new end of the clips, after a gap and after an overlap (§3.6 Reorder row)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review Sound › Music with a picture video adds its sound only: it draws nothing and the clips stay the clip row (DESIGN §3.6.1, §8.5)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review the + on a project with no clips puts them under the words and above a full-canvas backdrop, an overlay goes under the words too, and Full’s Add row keeps its place (§3.6.1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review at 380 More raises the panel again after he closed it with the grab bar (the only way to every other setting)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review a typed Length commits when the field is left (the iPhone pad has no Return), Enter then leaving commits once, and the field is 16 px so iOS does not zoom",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review More is always in reach beside 🗑 at 1280 and 380 (the only way to every other setting), and a plain mouse wheel scrolls the tray to the rest (#976)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review on PC a second click where 🗑 was cannot press Do it anyway on a locked clip (§3.12 rule 5 at every width)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review a tap on the edge of Simple’s ⋯ or Sound list, between its choices, keeps the selection (the list is not empty background)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review keys in Simple’s ⋯ stay in the list: ↓ moves to the next choice, Backspace deletes nothing, Esc closes it, keeps the selection and gives focus back to ⋯",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review a tray tool keeps keyboard focus after a press that changes the clip, so Move later and +1 frame can be pressed again by Enter; a line with buttons takes focus and gives it back (§3.12 1a, 1b, §8.10 item 6)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review the lit ⋯ closes the Loop and preview speed strip it opened, as in Full",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review every tray and project tool’s accessible name contains the words on its face, so Voice Control can press Into row and +1 frame (WCAG 2.5.3)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · review an end card lands bit-exact on the new end of the clips after Lift off, Move earlier / later and Close all gaps too (§3.1, review finding 16 for the 2.2 commands)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · tray B at 1280 on PC a clip with every tool shows all nine on two rows — none outside the band, covered or scrolled to, More and Delete last — and the band grows by one row only while it holds two (his pick B)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · tray B at 1280 a line with a button keeps the two-row band, never lands where Delete was, and a second click there presses nothing — on a locked clip and after a delete takes the selection away (finding 23 with two rows)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · tray B at 1280×800, 1280×720 and 960×700 every tool is on show and nothing in the band above it is cut off — the title and Its tools are below show whole — and a band dragged under 232 px keeps one row with the project tools whole",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · tray B at 1280×720 More opens its panel with the room it always had — the tray goes back to one row with More and Delete pinned — and the second click of a double click on More presses nothing that moved under it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · tray B at 380 the phone keeps its one row with More and Delete pinned at the right end, and its words (control: the same before and after his pick B)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · tray B at 1280×720 a double click on Close gap closes that gap only — the second click comes down on the Fix that took its place under the same tool id, and presses nothing (checker finding 1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · tray B at 1280×720 after the window was once 500 px tall the band is left at 230 px, and its tools still lie on two rows there with the words above them whole — two rows need what the band’s parts measure, not a fixed 232 (checker finding 2)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "simple P2.2 · tray B on PC the band says “Its tools are below” only while the tools really lie on two rows — a band dragged to 192 px, a landscape phone at 844×390 and a title’s four tools keep one row and today’s “· More opens the rest”, and the words follow the rows when the drag flips them (checker finding 3)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}
