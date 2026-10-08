@@ -399,7 +399,9 @@ So there are two sessions with the SAME working tree open: a long-running one th
 whole job is to write down what he says. **The logging session appends his words to `INBOX.md` and stops there.** It
 does not edit REQUESTS.md, does not renumber, does not tick anything — two sessions editing a 30,000-line file is how a
 request gets clobbered by a stale write, and losing a request is the precise failure REQUESTS.md exists to prevent.
-INBOX.md is append-only and has one writer each way, which makes a conflict impossible rather than unlikely.
+INBOX.md is append-only for those who write to it. Drain with `tools/inbox.sh` (it fetches and pulls), move each block
+verbatim into REQUESTS.md, then run `tools/inbox.sh --done`. Never edit or clear INBOX.md by hand: the logging chat may be
+appending at the same moment.
 
 **Verbatim still applies to the inbox entry** — paste what he said, in full, before paraphrasing. The loop session moves
 it into REQUESTS.md with a number on its next tick, which is every minute.
@@ -412,10 +414,11 @@ His own idea was moving the repo into iCloud Drive. **Do not do that** — iClou
 non-atomically and leaves conflict-duplicate files inside them, which is a known way to corrupt a repo.
 The repo is already on GitHub, which solves the same problem properly.
 
-So: **he appends to `INBOX.md` from his phone; Claude is the only thing that empties it.** One writer
-each way means a conflict is impossible. `git pull` first, move anything found into REQUESTS.md with a
-number, clear the file, and carry on. Check it at the START of each loop item, not only when he speaks —
-the whole point is that he can add things without interrupting.
+So: **he (and the logging chat) append to `INBOX.md`; the loop is the only thing that drains it.** Drain with
+`tools/inbox.sh` (it fetches and pulls), move each block verbatim into REQUESTS.md with a number, then run
+`tools/inbox.sh --done`, which removes only the lines it was shown. Never edit or clear INBOX.md by hand: the logging
+chat may be appending at the same moment. Check it at the START of each loop item, not only when he speaks — the whole
+point is that he can add things without interrupting.
 
 ## ⚠️ Every request Ezra makes goes in REQUESTS.md — immediately
 

@@ -7,9 +7,10 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
 
 ## The rules
 
-1. **FIRST, ALWAYS: `./tools/next.sh`.** If it refuses because `INBOX.md` is non-empty, that is Ezra
-   talking. Log every line VERBATIM into `REQUESTS.md` with a number, clear below the `---` in
-   `INBOX.md`, answer him, and do nothing else that tick.
+1. **FIRST, ALWAYS: `./tools/tick.sh`** (it runs next.sh and says whether INBOX.md has lines). Lines in `INBOX.md` are
+   Ezra (or the logging chat) talking. Drain with `tools/inbox.sh` (it fetches and pulls), move each block VERBATIM into
+   `REQUESTS.md` with a number, then run `tools/inbox.sh --done` — never edit or clear INBOX.md by hand: the logging chat
+   may be appending at the same moment. Answer him, and do nothing else that tick.
 2. **Take the LOWEST-NUMBERED open item** (unnumbered first — they are oldest). Oldest-first is his
    rule, not a preference. Do not pick what looks interesting.
 3. **Read the file the entry names BEFORE building.** On 20 Aug three "open" entries turned out to be

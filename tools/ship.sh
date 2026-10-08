@@ -361,35 +361,10 @@ if [ -n "$NULBAD" ]; then
   exit 1
 fi
 
-# ⏱️ BATCH GATE — the biggest drain on his TIME, measured 27 Aug and hard to argue with: 99 commits in
-# 20 hours, 51 of them touching NO app code, 38 version releases. Every one ran the suite (~8-9 min for
-# a code change, which runs it twice; ~4 for docs). That is roughly TEN of those twenty hours spent
-# watching a progress bar instead of working.
-# His words: "you are barely using my usage up and seemingly doing updates very slow ... I leave you on
-# even more than I used to and the usage is less". He was right, and this is the reason.
-# LOOP.md rule 15 already said work 3-5 items then ship ONCE. Remembering it failed, so it is a gate:
-# a DOCS-ONLY ship within 12 minutes of the last commit is refused, forcing notes to accumulate into
-# one release rather than one suite run per sentence. CODE ships are never blocked -- a real fix must
-# always be able to go out. Override with BATCH=0 for a genuine one-off.
-if [ "${BATCH:-1}" = "1" ]; then
-  _changed="$(git status --porcelain | awk '{print $2}')"
-  if ! grep -qE '^(js/|styles[.]css|index[.]html|tests/)' <<<"$_changed"; then
-    _last=$(git log -1 --format=%ct 2>/dev/null || echo 0)
-    _age=$(( $(date +%s) - _last ))
-    if [ "$_age" -lt 720 ]; then
-      echo "⏱️  DOCS-ONLY SHIP REFUSED — last commit was $((_age/60))m ago, needs 12m."
-      echo "   Every ship runs the suite. On 27 Aug, 51 of 99 commits were docs-only: hours of waiting"
-      echo "   for nothing. Keep writing notes and let them ride out with the next real change."
-      echo "   Nothing is lost -- the working tree keeps them. (BATCH=0 tools/ship.sh ... to override.)"
-      # Tell .last-ship WHY, because "REFUSED" alone makes the next tick shout that the tree is a broken
-      # unshipped release when it is nothing of the kind — this gate is the repo working as intended and
-      # the right response is to carry on, not to investigate. An alarm that cries wolf gets ignored,
-      # which would cost the real refusals this file exists to surface.
-      _WHY="batched — docs-only, riding out with the next real change"
-      exit 1
-    fi
-  fi
-fi
+# (THE 12-MINUTE BATCH GATE IS GONE — 8 Oct, RULES-AUDIT B7. It refused a docs-only ship within 12 minutes of the last
+#  commit, because every ship ran the whole suite (27 Aug: 51 of 99 commits were docs-only, hours of waiting). It only ever
+#  POSTPONED that cost, and kept his words off GitHub meanwhile. A docs-only release now takes the fast path below the
+#  gates instead — no suite, minutes — so there is nothing left to batch.)
 
 # An edit that did not apply must not be able to ship. tools/apply.py leaves this marker when an
 # anchor fails to match, because edits chained with `;` fail INVISIBLY — v13.25 announced a
@@ -696,7 +671,7 @@ fi
 # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
 # EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
 # that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
-if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
+if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_docsonly.py tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
   echo "→ the port's gates or the driver changed — proving them before shipping"
   if ! ./tools/test-port.sh; then
     echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."
@@ -814,6 +789,53 @@ if [ -n "$REQ_GONE" ] && ! grep -q 'DROPS REQUEST:' <<<"$MSG"; then
   echo "   went. This is how #703 lost his own words: \"Dont stop looping… have a failsafe\"."
   echo "   If the removal is deliberate, say so: put \"DROPS REQUEST: <why>\" in the commit message."
   exit 1
+fi
+
+# ─── THE DOCS-ONLY FAST PATH (8 Oct — RULES-AUDIT B7, #1073) ──────────────────────────────────────────────────────────
+# A release whose EVERY changed path is his record or the process scripts that read it (tools/_docsonly.py: *.md,
+# tools/design/**, tools/unblock/**, the two logs, _classify.py, next/tick/inbox/status.sh) has passed every gate above —
+# DROPS REQUEST, DROPS TEST, the summary stamp, POLISH-LOG, NUL, the classifier and inbox self-tests — and ships an app
+# that is byte-identical. So it runs only the tests that NAME a changed file, stages EXACTLY those paths, and pushes:
+# minutes, not the two full passes (two hours on the laptop). One line of anything else takes the full suite below.
+mapfile -t _DP < <( { git diff --name-only --no-renames HEAD; git ls-files -o --exclude-standard; } | sort -u)
+if [ "${#_DP[@]}" -gt 0 ] && python3 tools/_docsonly.py paths "${_DP[@]}" >/dev/null; then
+  echo "→ DOCS-ONLY release (${#_DP[@]} path(s), no app file): the gates above, the tests that name them, then push"
+  ship_phase docs
+  mapfile -t _DT < <(python3 tools/_docsonly.py titles "${_DP[@]}")
+  if [ "${#_DT[@]}" -gt 0 ]; then
+    printf '%s\n' "${_DT[@]}" > .claude/ship/docs-titles.txt
+    _DQ="$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(open(sys.argv[1]).read().rstrip("\n"), safe=""))' .claude/ship/docs-titles.txt)"
+    _DPORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
+    ( exec tools/serve.sh "$_DPORT" ) >/dev/null 2>&1 & _DSRV=$!
+    for _ in $(seq 1 20); do curl -s -o /dev/null "http://127.0.0.1:$_DPORT/tests/run.html" && break; sleep 0.5; done
+    python3 tests/_cdp.py --port "$_DPORT" --width 1280 --names --timeout 900 --url "http://localhost:$_DPORT/tests/run.html?only=$_DQ" > .claude/ship/docs-slice.out 2>&1
+    python3 tools/_spotjudge.py .claude/ship/docs-slice.out .claude/ship/docs-titles.txt > .claude/ship/docs-slice.v
+    # a finger test runs in a touch page of its own, as everywhere else (tests/_touch_pass.py; a no-op on the Mac)
+    python3 tests/_touch_pass.py --port "$_DPORT" --width 1280 --from .claude/ship/docs-slice.out --out .claude/ship/docs-fingers.json >/dev/null 2>&1
+    python3 tools/_spotjudge.py --merge-touch .claude/ship/docs-slice.v .claude/ship/docs-fingers.json
+    kill "$_DSRV" 2>/dev/null
+    echo "   the ${#_DT[@]} test(s) that name them: $(grep -c '^PASS' .claude/ship/docs-slice.v) passed, $(grep -c '^FAIL' .claude/ship/docs-slice.v) red, $(grep -c '^NORUN' .claude/ship/docs-slice.v) not run here (listed, not refused: no app file changed)"
+    grep '^NORUN' .claude/ship/docs-slice.v | cut -f2,3 | sed 's/\t/ — /; s/^/      · /' | cut -c1-200
+    if grep -q '^FAIL' .claude/ship/docs-slice.v; then
+      echo "❌ A TEST THAT NAMES A CHANGED FILE IS RED — not committing, not pushing:"
+      grep '^FAIL' .claude/ship/docs-slice.v | cut -f2,3 | sed 's/\t/ — /; s/^/   /' | cut -c1-400
+      exit 1
+    fi
+  else
+    echo "   no test names any of them — the gates above are the whole check"
+  fi
+  ship_phase push
+  git add -A -- "${_DP[@]}"
+  # EXACTLY those paths: anything else already staged (an app file someone added by hand) is not riding out on a fast path
+  _EXTRA="$(git diff --cached --name-only | grep -vxF -f <(printf '%s\n' "${_DP[@]}"))"
+  [ -z "$_EXTRA" ] || { echo "❌ the docs-only path staged something that is not docs — refusing: $(tr '\n' ' ' <<<"$_EXTRA")"; exit 1; }
+  git commit -q -m "$MSG" || { echo "ship: nothing to commit"; exit 1; }
+  git push -q ssh main 2>&1 | tail -2
+  H="$(git rev-parse HEAD)"; R="$(git rev-parse ssh/main 2>/dev/null || echo none)"
+  if [ "$H" != "$R" ]; then echo "❌ PUSH DID NOT LAND — HEAD $H vs ssh/main $R"; exit 1; fi
+  SHIPPED=1   # (see the full path's push: set only after the push is verified)
+  echo "✅ pushed and verified: HEAD == ssh/main ($H) — docs-only, no suite"
+  exit 0
 fi
 
 ship_phase prove

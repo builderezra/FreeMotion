@@ -7,7 +7,7 @@
 # empty `touch`, so "is a ship running?" could only be answered by guessing. A KILL skips every trap, so the
 # lock and the verdict file are the only witnesses, and they have to say WHICH process they belong to.
 #
-#   .ship-in-progress   pid=<n> phase=<gates|prove|desktop|phone|push> since=<epoch the phase began>
+#   .ship-in-progress   pid=<n> phase=<gates|docs|prove|desktop|phone|push> since=<epoch the phase began>  (docs: the docs-only fast path)
 #   .last-ship          RUNNING <pid> <version> <epoch>   while a ship runs (written once, after the trap)
 #                       PUSHED <short hash>                when the push verified
 #                       REFUSED rc=<n> [why]               on every other way out that runs the trap

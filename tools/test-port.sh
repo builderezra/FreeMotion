@@ -56,6 +56,14 @@ out="$(PATH="$(shim_os Linux):$PATH" bash -c '. tools/_testfloor.sh; notrun_repo
 out="$(PATH="$(shim_os Darwin):$PATH" bash -c '. tools/_testfloor.sh; notrun_report "$1" desktop' _ '{"ok": true, "summary": "Regression 2/2 ✓", "failures": [], "notRun": []}')"; rc=$?
 [ "$rc" = 0 ] && [ -z "$out" ] && ok "control: none NOT RUN on the Mac → silent, 0" || bad "notrun_report none: rc=$rc $out"
 
+echo "── the docs-only fast path (8 Oct, RULES-AUDIT B7): his record and the queue scripts ship in minutes, nothing else does ──"
+v="$(python3 tools/_docsonly.py selftest 2>&1)"; rc=$?
+[ "$rc" = 0 ] && ok "tools/_docsonly.py selftest: $(printf '%s' "$v" | sed 's/^✅ _docsonly self-test: //')" || bad "_docsonly selftest: rc=$rc $v"
+awk '/_docsonly.py paths/{d=NR} /^ship_phase prove/{p=NR} END{exit !(d && p && d < p)}' tools/ship.sh \
+  && ok "ship.sh takes the fast path after every instant gate and before the proof and the suite" || bad "ship.sh does not branch to the docs-only path before 'ship_phase prove'"
+grep -q 'git add -A -- "${_DP\[@\]}"' tools/ship.sh && grep -q '_EXTRA=' tools/ship.sh \
+  && ok "…stages exactly the changed docs (an explicit pathspec) and refuses if anything else is staged" || bad "the fast path does not stage by explicit pathspec / check for extra staged files"
+grep -qE '^\s*if \[ "\$\{BATCH:-1\}" = "1" \]' tools/ship.sh && bad "the 12-minute BATCH gate is still in ship.sh (B7 replaces it)" || ok "the 12-minute BATCH gate is gone (the fast path replaces it)"
 echo "── a release that drops tests is told to lower the floor at the GATE, not after the pass (7 Oct, v17.26's 4th ship) ──"
 FR="$TMP/floor-repo"; mkdir -p "$FR/tests" "$FR/tools"; cp tools/_testfloor.sh "$FR/tools/"
 printf "  test('a', 1)\n  test('b', 1)\n  test('c', 1)\n" > "$FR/tests/tests.js"; echo 3 > "$FR/tools/.test-floor"
