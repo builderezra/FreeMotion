@@ -5,7 +5,7 @@ Same method as 2.3 (`BUILD-PLAN-PHASE2-2.3.md`). It was written and run on a scr
 not a release. The finished code and tests are on branch **`hunt/simple-2.4`** (two commits on top of 2.3: `f4ab412e` and its rename
 follow-up). This file is on `plans/simple-2.4`. Neither is merged into anything and neither touches `main`.
 
-The exact hunks are **not retyped here**: they are `scripts-2.4/2.4-js.patch` (787 lines of `git diff`, six files, applies with
+The exact hunks are **not retyped here**: they are `scripts-2.4/2.4-js.patch` (970 lines of `git diff`, six files, applies with
 `git apply` on the 2.3 tip, no conflicts there) and `scripts-2.4/2.4-tests.patch`. A hand-copied hunk is a place for a typo, so the patch
 is the source of truth and this file says what each piece is for and how to prove it. If the builder's tree is not the 2.3 tip, `git apply
 --3way` and read every rejected hunk against §3.
