@@ -1,8 +1,9 @@
-From 084b47b9e0e659c963847b2fd30e1698be523e16 Mon Sep 17 00:00:00 2001
+From 45fb84a212447cfa3953c2ddf187a8727bdf56ee Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:40:45 +0000
 Subject: [PATCH 03/14] stack: 1-fx-thumbs-stock-cap
 
+(cherry picked from commit 084b47b9e0e659c963847b2fd30e1698be523e16)
 ---
  js/fx-thumbs.js | 28 +++++++++++++++++++++++++---
  tests/tests.js  | 31 +++++++++++++++++++++++++++++++
@@ -76,10 +77,10 @@ index e39228ca..c85ecff8 100644
        if (raf) { cancelAnimationFrame(raf); raf = 0; deferred = 0; }
        queue.length = 0; pendingQ.clear(); jobs.clear();
 diff --git a/tests/tests.js b/tests/tests.js
-index eb91a0d6..ac6e4294 100644
+index 78b9c9a3..80fb2239 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -120215,4 +120215,35 @@
+@@ -120219,4 +120219,35 @@
    });
  
  

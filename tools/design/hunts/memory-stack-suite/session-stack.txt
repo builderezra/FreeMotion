@@ -1,0 +1,12 @@
+{"stage": "0 boot", "canvases": 3, "canvasMpx": 0.32, "big": 0, "jsHeapMB": 3.1, "rendererVmDataMB": 722.7, "rendererRSS_MB": 211.8, "browserRSS_MB": 186.9}
+project
+20 import s 2
+{"stage": "1 after 20 clips imported", "canvases": 63, "canvasMpx": 4.89, "big": 0, "jsHeapMB": 4.0, "rendererVmDataMB": 933.0, "rendererRSS_MB": 519.7, "browserRSS_MB": 190.4}
+{"stage": "2 after effects-browser sweeps (1 x 12 categories)", "canvases": 177, "canvasMpx": 13.57, "big": 3, "jsHeapMB": 4.4, "rendererVmDataMB": 1511.4, "rendererRSS_MB": 844.7, "browserRSS_MB": 200.2}
+{"tag":"stk","ops":38,"errs":[],"pid":"p_muze7c6oqffqz"}
+EXC {"exceptionId": 1, "text": "Uncaught (in promise) TypeError: Cannot read properties of undefined (reading 'id')", "lineNumber": 12, "columnNumber": 118, "scriptId": "102", "stackTrace": {"callFrames": replaced
+ur4
+{"stage": "3 after editing session (effects, undo/redo, replaces, containers)", "canvases": 163, "canvasMpx": 13.95, "big": 3, "jsHeapMB": 5.5, "rendererVmDataMB": 1388.2, "rendererRSS_MB": 525.7, "browserRSS_MB": 201.8}
+export: 1
+{"stage": "4 right after one GIF export", "canvases": 144, "canvasMpx": 63.32, "big": 29, "jsHeapMB": 5.5, "rendererVmDataMB": 1586.2, "rendererRSS_MB": 709.4, "browserRSS_MB": 204.6}
+{"stage": "5 after 45 s idle (trim windows)", "canvases": 127, "canvasMpx": 27.94, "big": 12, "jsHeapMB": 5.5, "rendererVmDataMB": 1459.5, "rendererRSS_MB": 570.6, "browserRSS_MB": 202.6}

@@ -1,8 +1,9 @@
-From c6c7089e633cc68c5ec05c420253e2eaea8284ab Mon Sep 17 00:00:00 2001
+From 6827f9be0e4794d46e9dfa7ea5607694faba3ed7 Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:41:19 +0000
 Subject: [PATCH 05/14] stack: 3-mflow-clear-after-export
 
+(cherry picked from commit c6c7089e633cc68c5ec05c420253e2eaea8284ab)
 ---
  js/compositor.js |  1 +
  js/exporter.js   |  3 +++
@@ -50,10 +51,10 @@ index b16cdd73..64a93b59 100644
      },
    };
 diff --git a/tests/tests.js b/tests/tests.js
-index 78167f3c..9965ab7e 100644
+index 87b6f381..71b68659 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -59895,6 +59895,42 @@
+@@ -59878,6 +59878,42 @@
      if (left > 8 * 180 * 320) throw new Error('after a full-size frame and a thumbnail-size one, the canvas-effect pool still holds ' + left + ' pixels (' + Math.round(left * 4 / 1048576) + ' MB): the entry the frames did not reach was kept at export size');
    });
  

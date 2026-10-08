@@ -1,8 +1,9 @@
-From f00ed1168a5358e5513271d1d7bca857c1bbe7ec Mon Sep 17 00:00:00 2001
+From 96c2c4bc037d8070972ebca28338ae3893b93cf6 Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:40:46 +0000
 Subject: [PATCH 04/14] stack: 2-pool-idle-release
 
+(cherry picked from commit f00ed1168a5358e5513271d1d7bca857c1bbe7ec)
 ---
  js/compositor.js | 42 +++++++++++++++++++++++++++---------------
  tests/tests.js   | 29 ++++++++++++++++++++++++++++-
@@ -92,10 +93,10 @@ index cbad1247..1ddd6b70 100644
    }
    FM._platePixels = function () {
 diff --git a/tests/tests.js b/tests/tests.js
-index ac6e4294..78167f3c 100644
+index 80fb2239..87b6f381 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -59854,7 +59854,7 @@
+@@ -59837,7 +59837,7 @@
      const poolLen = () => FM._readbackHint().A.length;
      const base = poolLen();
      const h1 = draw(12);
@@ -104,7 +105,7 @@ index ac6e4294..78167f3c 100644
      draw(1);
      await sleep(7500);   // two trim windows of 3 s
      const after = poolLen();
-@@ -59868,6 +59868,33 @@
+@@ -59851,6 +59851,33 @@
      if (h1 !== h2) throw new Error('a 12-deep stack drew a different picture after the pools were trimmed (hash ' + h1 + ' then ' + h2 + ')');
    });
  

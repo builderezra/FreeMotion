@@ -1,8 +1,9 @@
-From efc750f8b753d664eea6ece18d8a5c5037ac88ed Mon Sep 17 00:00:00 2001
+From c37363a1285007dfa18fd0abe5ed099e7f72698d Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:41:20 +0000
 Subject: [PATCH 06/14] stack: 4-audio-mix-frees-pcm
 
+(cherry picked from commit efc750f8b753d664eea6ece18d8a5c5037ac88ed)
 ---
  js/exporter.js | 17 ++++++++++++++---
  tests/tests.js | 31 +++++++++++++++++++++++++++++++
@@ -59,10 +60,10 @@ index 64a93b59..0fe1241c 100644
  
    /* ═══ THE ENCODER'S WARM-UP IS NOT PART OF THE SOUND (queue 690, audio hunt) ═══════════════════════
 diff --git a/tests/tests.js b/tests/tests.js
-index 9965ab7e..e87b68d2 100644
+index 71b68659..c4f84654 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -59931,6 +59931,37 @@
+@@ -59914,6 +59914,37 @@
      }
    });
  

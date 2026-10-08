@@ -1,8 +1,9 @@
-From 7e3ad2ae6eebf27cec467efa3a4178c72bca9a3a Mon Sep 17 00:00:00 2001
+From 60f58cf5ac2e71e74f55736c46a64c8e7acb6ebf Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:41:23 +0000
 Subject: [PATCH 10/14] stack: 7-prevfiles-weak
 
+(cherry picked from commit 7e3ad2ae6eebf27cec467efa3a4178c72bca9a3a)
 ---
  js/storage.js | 13 ++++++++++---
  1 file changed, 10 insertions(+), 3 deletions(-)

@@ -1,8 +1,9 @@
-From 1fed1f4346bb14f63da0bda7afd8a2d20faba99d Mon Sep 17 00:00:00 2001
+From 5e54c6120f243af2c0a69844eb983b0250224171 Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:40:42 +0000
 Subject: [PATCH 01/14] stack: 1095-scratch-pools
 
+(cherry picked from commit 1fed1f4346bb14f63da0bda7afd8a2d20faba99d)
 ---
  js/compositor.js | 58 +++++++++++++++++++++++++++++++++++++++++++-----
  1 file changed, 53 insertions(+), 5 deletions(-)

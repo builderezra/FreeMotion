@@ -1,17 +1,18 @@
-From 0f6003ba6a974129740ef725805efd459f76783d Mon Sep 17 00:00:00 2001
+From 4212920c66a68dea00e0e67a26d9aa40dfc12b8d Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:41:23 +0000
 Subject: [PATCH 09/14] stack: 6-test
 
+(cherry picked from commit 0f6003ba6a974129740ef725805efd459f76783d)
 ---
  tests/tests.js | 37 +++++++++++++++++++++++++++++++++++++
  1 file changed, 37 insertions(+)
 
 diff --git a/tests/tests.js b/tests/tests.js
-index df63030a..31687c5d 100644
+index 2c77e13c..a835df48 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -59991,6 +59991,43 @@
+@@ -59974,6 +59974,43 @@
      }
    });
  

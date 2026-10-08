@@ -1,8 +1,9 @@
-From 144afdb370e9a5ea5b79e9ed61ee076a35a9303a Mon Sep 17 00:00:00 2001
+From 1ba87af71c49cb925382aa2de1a0e6563839cf10 Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:41:21 +0000
 Subject: [PATCH 07/14] stack: 5-prevfiles-sweep
 
+(cherry picked from commit 144afdb370e9a5ea5b79e9ed61ee076a35a9303a)
 ---
  js/storage.js  | 14 +++++++++++++-
  tests/tests.js | 29 +++++++++++++++++++++++++++++
@@ -36,10 +37,10 @@ index 43f0df5b..7f42e7eb 100644
      ids.forEach(id => {
        if (live.has(id)) return;
 diff --git a/tests/tests.js b/tests/tests.js
-index e87b68d2..df63030a 100644
+index c4f84654..2c77e13c 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -59962,6 +59962,35 @@
+@@ -59945,6 +59945,35 @@
      }
    });
  

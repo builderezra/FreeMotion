@@ -1,8 +1,9 @@
-From 48996d2b268c9218ec3b7b45034eec7bb5d55d10 Mon Sep 17 00:00:00 2001
+From be9945aad7faa54b5701846b750995a22fa32f86 Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:41:40 +0000
 Subject: [PATCH 12/14] stack: p9-0001
 
+(cherry picked from commit 48996d2b268c9218ec3b7b45034eec7bb5d55d10)
 ---
  js/compositor.js | 27 ++++++++++++++++++++-------
  js/storage.js    |  1 +
@@ -71,10 +72,10 @@ index 8157de48..00e30eb4 100644
        if (FM.viewport) FM.viewport.reset();   // fresh project → fresh view (preview pan/zoom is never saved)
        FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.scene.layers = []; FM.time = 0;
 diff --git a/tests/tests.js b/tests/tests.js
-index 746f9b55..f352ed6f 100644
+index 5350649a..ae97062d 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -60051,6 +60051,43 @@
+@@ -60034,6 +60034,43 @@
      if (!FM.storage.hasPrevMedia(id, 4)) throw new Error('the revision stopped being reported as kept once the File was collected');
    });
  

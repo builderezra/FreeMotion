@@ -1,17 +1,18 @@
-From 1f557554ccb0b4c86ee1c4115c704017309340ad Mon Sep 17 00:00:00 2001
+From dae626d133415ef61bd34efae1fc9a2df1906c2a Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:41:24 +0000
 Subject: [PATCH 11/14] stack: 7-test
 
+(cherry picked from commit 1f557554ccb0b4c86ee1c4115c704017309340ad)
 ---
  tests/tests.js | 23 +++++++++++++++++++++++
  1 file changed, 23 insertions(+)
 
 diff --git a/tests/tests.js b/tests/tests.js
-index 31687c5d..746f9b55 100644
+index a835df48..5350649a 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -60028,6 +60028,29 @@
+@@ -60011,6 +60011,29 @@
      if (again.fc.px < 3 * 540 * 960) throw new Error('a Filter box drawn after the trim did not get its plates back (' + again.fc.px + ' pixels)');
    });
  

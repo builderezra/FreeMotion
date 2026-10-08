@@ -1,8 +1,9 @@
-From 41dd233730699fd33d1e39044d96b4abaa204f59 Mon Sep 17 00:00:00 2001
+From 81e725168cd125c05f59eb40437a1a6acb2adde1 Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:41:41 +0000
 Subject: [PATCH 13/14] stack: p9-0002
 
+(cherry picked from commit 41dd233730699fd33d1e39044d96b4abaa204f59)
 ---
  js/compositor.js | 10 +++++++++-
  tests/tests.js   | 38 ++++++++++++++++++++++++++++++++++++++
@@ -34,10 +35,10 @@ index c91f6b0d..7274a01f 100644
      const pass = (src, dst, r, horiz) => {
        const len = horiz ? W : H, lines = horiz ? H : W, step = horiz ? 4 : W * 4, inv = 1 / (2 * r + 1);
 diff --git a/tests/tests.js b/tests/tests.js
-index f352ed6f..97490b75 100644
+index ae97062d..af251180 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -60088,6 +60088,44 @@
+@@ -60071,6 +60071,44 @@
      }
    });
  

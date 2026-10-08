@@ -1,17 +1,18 @@
-From 196cde6e3a43c8c7d097dcb86df4e8d0552609f6 Mon Sep 17 00:00:00 2001
+From ccd78dd1ba482a1c794cba893f859c21c1ff191f Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:40:44 +0000
 Subject: [PATCH 02/14] stack: 1095-test
 
+(cherry picked from commit 196cde6e3a43c8c7d097dcb86df4e8d0552609f6)
 ---
  tests/tests.js | 40 ++++++++++++++++++++++++++++++++++++++++
  1 file changed, 40 insertions(+)
 
 diff --git a/tests/tests.js b/tests/tests.js
-index 1900efa6..eb91a0d6 100644
+index 1f37c730..78b9c9a3 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -59828,6 +59828,46 @@
+@@ -59811,6 +59811,46 @@
      if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
    });
  

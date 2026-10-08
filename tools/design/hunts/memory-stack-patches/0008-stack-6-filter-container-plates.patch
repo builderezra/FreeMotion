@@ -1,8 +1,9 @@
-From 4f3ca712ede135cc340c4fefff21ef78f0e37041 Mon Sep 17 00:00:00 2001
+From e2f488d210ffa5018da4d9421d05f9f34e070b32 Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:41:22 +0000
 Subject: [PATCH 08/14] stack: 6-filter-container-plates
 
+(cherry picked from commit 4f3ca712ede135cc340c4fefff21ef78f0e37041)
 ---
  js/compositor.js | 16 +++++++++-------
  1 file changed, 9 insertions(+), 7 deletions(-)

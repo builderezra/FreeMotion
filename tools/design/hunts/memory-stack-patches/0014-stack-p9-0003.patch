@@ -1,8 +1,9 @@
-From 401fdfd3fdb020b5b644bb7d93b9b691e30454d2 Mon Sep 17 00:00:00 2001
+From 3990d33667f332903de8ffa464b28bce5add18e2 Mon Sep 17 00:00:00 2001
 From: h <h@h>
 Date: Wed, 7 Oct 2026 22:41:42 +0000
 Subject: [PATCH 14/14] stack: p9-0003
 
+(cherry picked from commit 401fdfd3fdb020b5b644bb7d93b9b691e30454d2)
 ---
  js/exporter.js |  39 +++++++++-------
  tests/tests.js | 122 +++++++++++++++++++++++++++++++++++++++++++++++++
@@ -111,10 +112,10 @@ index 0fe1241c..9199cece 100644
          FM._exporting = false;
          if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();   // H40: the plates are export-sized; the start of an export clears them, its end must too
 diff --git a/tests/tests.js b/tests/tests.js
-index 97490b75..b8ae2607 100644
+index af251180..f57a0161 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -60126,6 +60126,128 @@
+@@ -60109,6 +60109,128 @@
      }
    });
  
