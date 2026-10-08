@@ -34527,15 +34527,14 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **6 Oct ~19:40 — the lock's second-review fixes are committed** (branch fu-lock-r4, 14 commits d518bc0e…a69d93be: the 16 changes, his phone and short screens, the stored records, every effect default, every key, the toast, script animations, pseudo-element hover, a friend's edits, the phone's other gestures, the exported sound) — the fixer then died on an API overload (529) before its final run. A finisher is doing the last gate item, the full lock run and the 60-release ordinary replay, then a re-check replays each finding.
       ⚠️ **Note for the build plan (30 Sep, v17.15; updated 1 Oct, v17.19):** the collab SCHEMA_REV is now **5** (the #482 polish batches 1–3 added effect and audio params) — BUILD-PLAN step 1.2's `SCHEMA_REV 3` must become **6** when it is built (one more than whatever `C.SCHEMA_REV` in js/collab-core.js says then). (It waited for his word to build; he gave it on 1 Oct — D15 A, Phase 1 from the revised plan, PLAN LANDED above.)
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **#980 Simple mode (merge day):** bump SCHEMA_REV one past whatever main has reached; re-pinning SCHEMA_FP alone makes 921 S1 green while two builds both say rev 8 (join compatibility reads only PROTO and SCHEMA_REV, js/collab-signal.js:1559-1560). Fix the stale "(SCHEMA_REV 7)" comments (980-p22-trayb2 js/collab-core.js:172/176). #sm-bar stays in Full's inspector panel after a Simple visit on PC (simple-tools.js:71-77, :83, :367-369): move it back or only place() while in Simple. Two Simple controls are under 44 px: .sm-len-v is 36 px tall (styles.css:11804), .sm-band can be 40 px wide (simple-timeline.js:301). fu-lock-r5's ship.sh hunk is against v17.23 and needs a manual merge with v17.24's rewrite.
-      JUMPED: (7 Oct, the laptop builder) #1065 shipped ahead of this entry in v17.26. This entry's next release is the lock,
-      and the lock cannot run on the laptop until numpy is installed (its picture comparer needs it; asked 7 Oct, ~18:35 —
-      say yes and it goes in, no password needed). #1065 was built and proven while that waits. THIS LINE COMES OFF as soon
-      as the lock runs, so #980 holds the queue again.
       📍 **8 Oct (the laptop builder):** the lock's first laptop run (7 Oct 18:10, worktree fu-lock-r7) did NOT PASS for a
       MACHINE reason, not a Full-mode difference: tools/_fu_compare.py needs numpy and the laptop has none, so it measured for
       22 min and died at the compare. full-unchanged.sh now runs `_fu_compare.py selftest` BEFORE any Chrome (refuses in 4 s;
-      in fu-lock-r7, uncommitted). ❓ASK (7 Oct ~18:35): may I install Ubuntu's numpy (`apt-get install python3-numpy` as WSL
-      root, ~5 MB, no password)? The lock — and so every Simple step — waits on that yes.
+      in fu-lock-r7, uncommitted). ✅ ~~ASK (7 Oct ~18:35): may I install Ubuntu's numpy (`apt-get install python3-numpy` as WSL
+      root, ~5 MB, no password)? The lock — and so every Simple step — waits on that yes.~~
+      ✅ **HE ANSWERED 8 Oct (~18:05, in the PM chat): yes numpy** — the PM installed python3-numpy 2.3.5 as WSL root;
+      `import numpy` works as ezra. The JUMPED line is gone: #980 heads the queue again. The lock is rebuilt on v17.29
+      (fu-lock-r8 59c17af7) and the chain on it (980-s12-r4 → phase1-r4 → p21-r4 → p22-r4, all clean).
       H31 (helper, hunt/980-rebase-check; not PM-verified): the r2 rebase of the Simple chain onto v17.24 is faithful — 0 hunks
       dropped/duplicated/changed in steps 2–5 (210 each way), step 1 differs only by the _fu_gate prove-regex fix and the
       ship_phase move, 2392 tests with no duplicates, the fingerprint gate passes on the tip. It checked r2, not r3.
@@ -35913,3 +35912,46 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
 
       📥 **The INBOX item, verbatim:** **(hunt LOW) An embedded font's `css` string is stored verbatim from the file.** applyEmbedded writes `fd.css` from an opened file straight into the font index (js/storage.js:3755). Write the app's own `family + ', sans-serif'` form instead. Test: a file whose font css carries extra declarations is stored in the app's form.
+
+- [ ] **1103 — A working Glow Scan that pauses between sweeps is told it "changes nothing" (hunt MEDIUM #1)** (8 Oct, ~15:40 AWST, via INBOX — the helper's H52 census, filed by the logger; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole:
+      ### 08 Oct 2026, ~15:40 AWST — A working Glow Scan that pauses between sweeps is told it "changes nothing" (hunt MEDIUM #1)
+      **His words (verbatim):** none — a finding from the helper's intermittent census (H52), NOT his words.
+      **Logger's plan (not his words):**
+      - **What happens.** A Glow Scan with `{"pause":5}` on a 10 s clip is measured as `unknown`: every moment the does-nothing check samples lands in the pause. The panel then tells him a working effect changes nothing.
+      - **Where seen.** Red in the census's NORMAL 380 pass and its background-load 1280 pass (tree 5fe2deb0, branch `hunt/intermittent-census`, files `h52_pass_N380_s3.txt` and `h52_pass_L1280_s3.txt`). Green on the laptop, so it depends on timing.
+      - **Exact message.** "482 6.7 Glow Scan … a Glow Scan with {"pause":5} on a 10 s clip is measured as unknown - its sweep falls between the moments the check looks at, so the panel tells him a working effect changes nothing".
+      - **Where to look (the builder's read, 15:35).** `noopTimes` in js/fx-thumbs.js (`NOOP_SPREAD` plus `FM.fxNoopMoments`).
+        - Check whether the sampled moments can all fall inside Glow Scan's pause window at pause 5 on a 10 s clip.
+        - Fix options: Glow Scan supplies its own sweep moments through `FM.fxNoopMoments`; or an effect whose output depends on time with a pause reports `unknown` and never a no-op verdict.
+      - **Test.** The existing "482 6.7 Glow Scan" test must go red with the fix reverted under a slow clock or an offset first sample, which would make it deterministic, not dependent on timing. It must also still call Strength 0 a no-op.
+
+- [ ] **1104 — Under load the "changes nothing" hint goes silent, so its CONTROL tests go red (hunt LOW #3)** (8 Oct, ~15:40 AWST, via INBOX — the helper's H52 census, filed by the logger; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole:
+      ### 08 Oct 2026, ~15:40 AWST — Under load the "changes nothing" hint goes silent, so its CONTROL tests go red (hunt LOW #3)
+      **His words (verbatim):** none — H52 census finding, NOT his words.
+      **Logger's plan (not his words):**
+      - **What happens.** Under 2x CPU throttle (T1280, T380) and background load (L1280), the does-nothing check gives no verdict even on effects that truly do nothing.
+        - "690 a Spin added at the start of its clip…": "CONTROL: a Spin at speed 0 … got no changes-nothing line after 1.3 s — the check is not running here".
+        - "482 6.7 Glow Scan": "CONTROL: a Glow Scan at Strength 0 is not measured as doing nothing".
+        - "an effect that changes nothing on this layer is detected (queue 477)" and "794: the does-nothing-here probe…": "Channel Remap … the check said null (three times)".
+      - **Root cause (the builder's read, 15:35).** By design, `noopAt` in js/fx-thumbs.js drops any probe render over `NOOP_BUDGET_MS = 45` and returns null: "a hint that is absent on the heaviest effects is a fair price; a stutter is not". So on a slow phone the hint simply does not appear, which is the intended behaviour. v17.26's 477 fix (ask again while null) helps a cold first render but not a throttled machine, where every try is over budget.
+      - **Fix (test side, plus one tiny seam).** Add `FM.fxThumbs._noopBudget(ms)`, restored in `finally`. The four CONTROL tests lift the budget while they check the VERDICT, because they test correctness, not speed. Mutation-prove it. App behaviour is unchanged.
+
+- [ ] **1105 — A mouse flick that stalls just before release does not glide (hunt MEDIUM #2)** (8 Oct, ~15:40 AWST, via INBOX — the helper's H52 census, filed by the logger; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole:
+      ### 08 Oct 2026, ~15:40 AWST — A mouse flick that stalls just before release does not glide (hunt MEDIUM #2)
+      **His words (verbatim):** none — H52 census finding, NOT his words. It may be his own "not always" on glide (#715).
+      **Logger's plan (not his words):**
+      - **What happens.** Under 2x CPU throttle (T1280 and T380, `h52_pass_T*_s0.txt`), "glide (#715): a mouse flick glides…" fails with: "A: a mouse flick that stalled for two samples before the click released did NOT glide ({"radius":30.5} stayed) — the release velocity is still the last sample, not the last 100ms; this is the "not always"".
+      - **Cause.** The release velocity comes from the last pointer sample rather than the last ~100 ms. When the pointer event rate drops (a slow or busy machine), a real flick reads as a stop.
+      - **Fix.** Compute the release velocity over a time window, about the last 100 ms of samples, ignoring a final zero-movement sample. Keep "a parked pointer does not fling" and "fine mode never glides" true.
+      - **Test.** The existing #715 test's stalled-release case, run under a throttle or with a synthetic 2-sample stall, must be red with the fix reverted.
+
+      (Also seen once each in the throttled 380 pass, not logged as items:
+      - the sheet preview: "a previewed Invert changed nothing on the canvas (217,39,38) — the preview stack is not reaching the frame". Watch for a repeat.
+      - fxBounds 29.2 ms on 1080x1920 against its 3.2 ms budget, which is the throttle.
+      - 921 S3 Stop sharing is red in 4 of 5 container passes but green on the laptop, so the container is the cause.)

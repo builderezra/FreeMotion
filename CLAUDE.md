@@ -12,8 +12,10 @@ and it is the same three steps each time.** Unless his first message is plainly 
    one already armed: on 24 Sep two identical every-minute loops were found running side by side after a restart, and
    every tick arrived twice. Create one only if none is listed. `CronCreate` with `*/1 * * * *`,
    `recurring: true`, and this prompt:
-   *"Continue the FreeMotion loop — read LOOP.md first, then run ./tools/next.sh and work the oldest
-   actionable item."*
+   *"Continue the FreeMotion loop — run ./tools/tick.sh, follow the rules at the top of LOOP.md,
+   then work the oldest actionable item."*
+   (RULES-AUDIT B8, 8 Oct: tick.sh computes what LOOP.md's top rules need. Re-arm in this order — CronCreate the new
+   one, CronDelete the old one, then CronList and confirm exactly one is armed.)
    The cadence is HIS, confirmed 20 Sep when asked directly whether to slow it down: *"That was on
    chatgpt, u dont do that. so its fine."* Do not re-litigate it and do not quietly run slower.
 3. **Check for an unshipped release.** Read tick.sh's `UNSHIPPED RELEASE:` line. If it says yes, ship that first. A dirty tree on its own is normal: INBOX.md, tools/design/pm/ and tools/design/plans/ belong to the logging chat, and uncommitted code with no version bump is the previous batch in progress, so continue it.

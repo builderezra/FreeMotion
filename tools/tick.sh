@@ -44,8 +44,17 @@ ship_status_lines
 hr "INBOX — Ezra writes here from his phone; if anything is listed, log it VERBATIM into REQUESTS.md first and do nothing else this tick"
 ./tools/inbox.sh 2>&1 | tail -20
 
+# WHILE A SHIP RUNS, THE REST IS NOISE (8 Oct — RULES-AUDIT B8): nothing in this tree may be edited or measured, so the
+# queue, the proof debt and the reminders cannot be acted on — a tick during a ship prints what is in flight and the inbox.
+if [ -f .ship-in-progress ] && _SP="$(ship_lock_pid .ship-in-progress)" && [ -n "$_SP" ] && kill -0 "$_SP" 2>/dev/null; then
+  echo
+  echo "⛔ A SHIP IS RUNNING (pid $_SP, phase $(ship_lock_field phase .ship-in-progress)) — the queue and the rest wait for its verdict"
+  echo "   (.claude/ship/ship.log). Build in a worktree meanwhile; no browser runs beside it."
+  exit 0
+fi
+
 hr "REMOTE"
-git fetch ssh --prune -q 2>/dev/null
+# (no fetch here: tools/inbox.sh just fetched — RULES-AUDIT B8 dropped the duplicate)
 # "Did the release land" is a question about main. On another branch (the WSL laptop's port branch, a Mac work branch)
 # HEAD != ssh/main is normal, and "pull first" would invite pulling main INTO that branch — so say which branch this is.
 # On main, HEAD == ssh/main alone proves nothing (it is also true when a ship refused and moved nothing) — the UNSHIPPED
@@ -80,7 +89,13 @@ else
 fi
 
 hr "PROOF DEBT — releases that changed source and have never been spot-checked (tools/spotcheck.sh <hash>); oldest first"
-python3 - <<'PY'
+# CACHED BY HEAD AND THE LOG (8 Oct — RULES-AUDIT B8): sixty `git diff-tree` calls every minute for an answer that changes
+# only when a commit lands or the spotcheck log grows. .claude/ is gitignored.
+mkdir -p .claude/tick
+_PDK=".claude/tick/proofdebt-$(git rev-parse --short HEAD)-$( (cat tools/.spotcheck.log 2>/dev/null || true) | fm_sha1 | cut -c1-12)"
+if [ -s "$_PDK" ]; then cat "$_PDK"; else
+find .claude/tick -name 'proofdebt-*' -mmin +1440 -delete 2>/dev/null
+python3 - <<'PY' | tee "$_PDK"
 import subprocess, re
 log = subprocess.run(['git','log','--format=%h %s','-60'], capture_output=True, text=True).stdout.splitlines()
 checked = set(); latest = {}
@@ -109,6 +124,7 @@ if len(debt) > 8: print(f"  … and {len(debt)-8} more")
 bad = [v for v in latest.values() if ('NOT-PROVEN' in v or 'NO-TEST' in v) and 'pre-filter' not in v and 'superseded' not in v]   # pre-filter = the tool cannot isolate that commit's tests; superseded = fixed by a later release
 if bad: print("❌ releases whose LATEST proof FAILED — each is an open defect in a test or a fix (re-run supersedes):"); [print("  " + b) for b in bad[-10:]]
 PY
+fi
 
 # WEAK PROOFS STILL OWED (queue 901). prove.sh logs a test whose only catch was a missing seam; it stays listed
 # here until a RESOLVED line for the same title records the mutation that proved the behaviour itself.
@@ -127,7 +143,14 @@ PYW
 fi
 
 hr "SAY IN EVERY REPLY UNTIL HE ANSWERS (from LOOP.md)"
-awk '/SAY THESE IN EVERY REPLY/{f=1; next} f && /^\*\*▶️|^\*\*📌|^## /{exit} f && /^- \*\*#/{print}' LOOP.md | cut -c1-200
+_SAY="$(awk '/SAY THESE IN EVERY REPLY/{f=1; next} f && /^\*\*▶️|^\*\*📌|^## /{exit} f && /^- \*\*#/{print}' LOOP.md)"
+[ -n "$_SAY" ] && cut -c1-200 <<<"$_SAY" || echo "(none open)"
+# A SAY LINE WHOSE ITEM IS CLOSED IS STALE (8 Oct — RULES-AUDIT B8: #406 sat there for five weeks after it closed)
+while read -r _n; do
+  [ -n "$_n" ] && grep -q "^- \[x\] \*\*$_n — " REQUESTS.md && echo "#$_n closed — delete it from LOOP.md's SAY list"
+done < <(grep -o '^- \*\*#[0-9]*' <<<"$_SAY" | grep -o '[0-9]*')
+# LOOP.md HOLDS RULES, NOT NARRATIVE (8 Oct — RULES-AUDIT B8: it was 1,871 lines, read every tick)
+_LL=$(wc -l < LOOP.md | tr -d ' '); [ "$_LL" -gt 400 ] && echo "⚠️ LOOP.md is $_LL lines (over 400) — move the narrative to LOOP-HISTORY.md"
 echo
 echo "If the app is broken and needs undoing:  tools/rollback.sh  (no args = list releases; tools/rollback.sh v16.12 = put it back and push)"
 echo

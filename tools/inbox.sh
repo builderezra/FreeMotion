@@ -31,8 +31,17 @@ fi
 git fetch ssh --prune -q
 if [ "$ON_MAIN" = 1 ]; then
   if [ -n "$(git log --oneline HEAD..ssh/main)" ]; then
-    git pull --rebase ssh main -q
-    echo "↓ pulled $(git log --oneline HEAD@{1}..HEAD 2>/dev/null | wc -l | tr -d ' ') new commit(s)"
+    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+      # A DIRTY TREE DEFERS THE PULL, IT DOES NOT HIDE THE REMOTE'S INBOX (8 Oct — RULES-AUDIT B8): `git pull --rebase` on a
+      # dirty tree refuses, and the lines he added on the remote went unseen until the next clean tick.
+      echo "↷ pull deferred: ssh/main is $(git log --oneline HEAD..ssh/main | wc -l | tr -d ' ') commit(s) ahead and this tree has uncommitted changes."
+      _RIN="$(git diff HEAD ssh/main -- INBOX.md | sed -n 's/^+\([^+]\)/\1/p; s/^+$//p' | sed '/^[[:space:]]*$/d')"
+      if [ -n "$_RIN" ]; then echo "   INBOX lines the remote ADDS (log them; they drain here after the next pull):"; printf '%s\n' "$_RIN" | sed 's/^/   + /' | head -40
+      else echo "   (the remote adds no INBOX lines)"; fi
+    else
+      git pull --rebase ssh main -q
+      echo "↓ pulled $(git log --oneline HEAD@{1}..HEAD 2>/dev/null | wc -l | tr -d ' ') new commit(s)"
+    fi
   fi
   INBOX_NAME="INBOX.md"
 else
