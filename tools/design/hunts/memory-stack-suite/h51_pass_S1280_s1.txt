@@ -1,0 +1,3501 @@
+{
+ "ok": false,
+ "summary": "Regression 564/571 ✗ · NOT RUN HERE 3 Pending 0/0 built",
+ "failures": [
+  "FAIL921 S3 Stop sharing revokes the code that was handed out — the offer is closed, and the next share mints a different one — the module is not holding the offer whose code is on screen, so this test cannot see whether it is revoked",
+  "FAIL921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders — the video has no decoded element in the registry after arriving, so nothing could ever draw it",
+  "FAIL921 S6 a shared copy finds its owner by itself: a here from the owner makes it offer again at once, its token lets it in, and a dropped link comes back with the banner saying so — the re-offer came 3026 ms after `here` — §13.5 says retry IMMEDIATELY on the owner’s announce",
+  "FAILan export survives the tab being backgrounded (queue 47) — NO_VIDEO_CODEC"
+ ],
+ "notRun": [
+  {
+   "name": "921 S6 the Share panel hands out a link, a QR the camera reads back as that link, and a 9-character code; Reset makes new ones and the owner stops listening on the old",
+   "item": "921",
+   "reason": "needs a working BarcodeDetector (qr_code) — this browser has no BarcodeDetector; the rest of this test ran and passed, only reading the QR back as the link did not (the Mac and Android Chrome have one)"
+  },
+  {
+   "name": "921 S8 a 500-layer project under a 4× CPU throttle: the commit-hook diff stays within 30 ms and the hot tick within 8 ms, measured",
+   "item": "921",
+   "reason": "this machine is too slow to stand in for the phone these budgets mean: its speed benchmark took 14.10 ms against the Mac's 3.6, so the Mac's 4× would be a throttle of 1.02× here — too little to show the throttle reached the page"
+  },
+  {
+   "name": "921 S8 [Scan QR] reads the app’s own invite code off the camera into the Join field and waits for a tap — jsQR is fetched only when the scanner opens on a browser with no BarcodeDetector, and the camera always goes off",
+   "item": "921",
+   "reason": "needs a working BarcodeDetector (qr_code) — this browser has no BarcodeDetector; the Join sheet ran and passed on a stand-in reader, only the real decode (the browser reader, and reading back the frame handed to jsQR) did not (the Mac and Android Chrome have one)"
+  }
+ ],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   121034,
+   "921 S3 when a link says it is open, every channel is open — a bulk send straight after ready arrives, forty pairings in a row"
+  ],
+  [
+   64152,
+   "921 S8 adversarial peer fuzz: a minute of malformed, oversized, out-of-order and hostile messages on every channel — the host never throws, takes nothing it must refuse, and keeps answering"
+  ],
+  [
+   28608,
+   "921 S6 the knock lets in, turns away, and declines by itself; a member’s token skips it next time; a removed member is refused by name"
+  ],
+  [
+   26120,
+   "921 S8 an accelerated one-hour soak: the ring, lastBy, pending, the ack cache and the presence pools stay within their caps, and nothing keeps a member who has left"
+  ],
+  [
+   23063,
+   "921 S6 review: Remove changes the link and the code — the old link reaches nobody, even from another browser with “Let them in” on — while a member still in comes back through the hub, whose envelopes the link cannot open"
+  ],
+  [
+   21726,
+   "921 S6 with any one relay dead a real join still works, and an offer the three relays all deliver is acted on once"
+  ],
+  [
+   19164,
+   "921 S6 review: only a refusal the owner SIGNED ends a shared copy — a link holder answering first, an unsigned “removed” and the owner’s own handshake timeout (“auth”) are all asked again"
+  ],
+  [
+   19009,
+   "921 S6 review: four knocks waiting on the short code do not stop a member coming back, and a queued knock whose joiner leaves goes with them"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "921 S2 a viewer cannot write: the refusal comes back with the host value and the local change is reverted (an editor sticks)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 a hash mismatch resyncs, writes a report, and escalates after three",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 a gap in the batch sequence is noticed when it lands, not ten seconds later by the hash",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 being told the wire is cut really marks the outbox, so work done away comes back as a CAS and not an overwrite",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 a persisted guest base answers for the WRITE, not for having asked for one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 a second Share stands the first session down instead of leaving an orphan ticking",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 a service-worker takeover mid-session is held until the session lets go",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 tier 3: a guest joins and gets the document, and not one byte of its own projects moves — on a 380px phone frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 tier 3: three real instances converge, a delete lands on a layer someone else has selected, and undo is per person",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 tier 3: the host reloads — a new epoch, a snapshot, and the guest's work made while it was gone is resent",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 tier 3: a partition counts the clashes, Save my version makes a real project, and a guest reload mid-offline is idempotent",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 tier 3: the same-device refusal, Replace and Keep-first, and leave-keep detaching with ids that cannot collide",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 the three channels open with the negotiated ids 0/1/2, presence is the lossy one, and a ctl round trip lands",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 a 300 KB control message is cut into frames no bigger than the SCTP limit and arrives byte-identical",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 when a link says it is open, every channel is open — a bulk send straight after ready arrives, forty pairings in a row",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 20 MB on the bulk channel never buffers more than 4 MiB plus one chunk, and arrives whole",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 the chunk size is read off the peer connection, never a constant",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 the connection code round trips a real description, and refuses a truncated or mistyped one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 auth binds the key AND both fingerprints: the right key passes, a wrong key is denied, a tampered fingerprint is denied",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 a name full of HTML is printed, never parsed — in the people list and in the knock card",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 the Share panel and the Join sheet fit a 380px phone with no sideways scroll, and a desktop transport rebuild puts no share button in the row",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 with the Labs switch off the only collab DOM is the two doors — one button each, no network, no listeners — and nothing in a solo session ever constructs a connection",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 arming writes a checkpoint of the project as it was, and keeps only the last ten",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 the profile refuses an empty name and a colour that is not one of the eight, and cleans the one it stores",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 Stop sharing revokes the code that was handed out — the offer is closed, and the next share mints a different one",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 the key rides in the code, so the fingerprint binding cannot stop a relay — the five letters can, and they differ on the two legs",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 the owner cannot admit anybody without confirming the five letters, and a refusal spends the code instead of leaving a dead one on the card",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 a peer that authenticated and never says hello cannot make the owner buffer without limit",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 an emoji that lands on a fragment boundary survives the wire — code units are not characters",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 the handshake really refuses when a fingerprint is missing, on the host side as well as the guest side",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 there is a Share button on a phone, in the bar a phone actually shows",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 the app is told when a session ends or the wire goes, and the offline line stops promising a re-send",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 a guest that has already given up is not admitted as a member nobody can see",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 a guest who already holds this project is offered the two answers C.join implements, instead of a dead end",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 a connection that never opens gives up and says so, and a code with no candidates is refused rather than handed out",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 a share button removed with Labs off does not come back when the window narrows",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 undo still works after Stop sharing — the hand-over points at the session that ended",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 demoting a guest reaches the guest, and the Leave dialog offers only what it has buttons for",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 turning Labs off as a guest detaches the linked copy instead of stranding it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 the manifest groups one file for every layer that uses it, so a split and a duplicate transfer zero extra bytes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a link that dies mid-file resumes from the bytes already kept, and what lands is byte-identical",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 the boot sweep never collects a half-arrived file, and neither does the media collector",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a device with no room says so and writes nothing beyond what fits",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a guest export waits for the media it still needs, and “Export anyway” goes ahead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 replacing a clip keeps the one it replaced, and undoing the replace puts it back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a font crosses with the document and is applied on the far side, byte for byte",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a manifest naming a layer id this device holds in ANOTHER project writes nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 tier 3: a clip a guest adds reaches the host and every other peer, and draws there",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 tier 3: the clips arrive into the guest’s own copy and not one byte of its own projects moves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a replace HE makes during a session keeps HIS footage in the stash, not the file that replaced it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a clip that arrives late never overwrites the one he imported while it was downloading",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: two peers uploading at once do not cross their files — a transfer is named by its peer as well as its xid",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a file that fails at the last step is asked for again, instead of being dropped for the whole session",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: ending a session collects the abandoned parts the rooms before it left behind",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a sender that restarts from zero cannot have its new part 0 deleted by the drop of the old one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: the progress card’s × dismisses it, and a failure he has not seen still gets through",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a device that runs out mid-transfer says “This device is full” instead of a bar frozen for ever",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a timeline rebuild does not lose the missing-clip markers",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a file whose bytes never match its declared size is asked for twice and then left alone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a 90 MB “font” is refused before a byte of it moves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a peer cannot register a face under a built-in family name",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: one file, one job per peer — a flood of wants does not open a transfer each",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: only the peer a file is sourced from can say it no longer has it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a “miss” answer frees the in-flight slot it was holding",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 a three-layer remote multi-select draws three outlines — one solid, two dashed — and rings the same three clips in that person’s colour, on the PC frame and the 380 frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 two seconds of a remote pointer moving never renders the scene — requestRender and renderScene both stay at zero while the pointer really moves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 a remote playhead sits at timeToX, and one off screen becomes a chip at the lane edge that takes you there",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 the people chip shows three faces and +N, the ones away or silent go grey, and alone it is an invite",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 follow tracks their playhead within 0.4 s, starts and stops with them, and ends on a local tap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 a text lease: while Sam types in a layer, opening it here is refused with a toast and the lock shows — a third person asking is told no — and it frees when he closes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 a viewer cannot take a lease, and nobody can lease a layer that does not exist",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 a text lease seen from a GUEST: the host’s lease-no closes the editor there and says who has it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 the pointer and selection switches hide their own overlays, and only their own",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 the people chip overlaps neither the view bar nor the canvas — 9:16 and 16:9 at 380×760, and at 1280×760",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 with no session there is no presence DOM, listener or timer, and ending a session takes all three away",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 the inspector says when someone else is on the layer you have open, and what they are adjusting",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 the eight person colours read on the dark canvas, are never mistaken for my selection, the keyframes or the playhead, and a clip dot carries a dark edge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 the Labs switch and the two display switches survive a reload",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 the guest panel lists who is here, printed as text, each with a Follow",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: the render hook reads every outline’s geometry before it writes any, a still frame writes nothing, and under a tool it computes nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: Follow never replays a frozen state — somebody who goes quiet mid-play is not seeked back to, and Follow ends, saying why, once they are offline",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: a guest whose session the owner ended keeps no presence — no timer, listener, chip, lock or Follow — and the roster it last heard no longer closes its own text editor",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: a guest whose link dropped obeys nothing from the last roster — its text editor stays open, no lock is painted, and Follow ends saying the link dropped",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: every PR frame fits in 1 KB — the owner with 64 layers selected, and a guest’s full-size pr relayed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: a remote pointer glides on a transform — never on left/top — and sits exactly where their pointer is",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: looking at a gradient’s Colour view or a drawn shape’s Element view locks nothing — the text editor still does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: a guest greys a host that has gone silent, and the owner’s own “away” leaves in the visibility handler rather than at the next tick",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: a Viewer who follows is told so in the banner, and gets the × to stop",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: the Share panel paints each person in the colour presence draws them in",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: at 1280×760 the inspector line takes no height from the band — the cards neither scroll nor move when somebody else selects the layer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: at 380 px the banner clears a four-person chip, and a long Follow name never pushes the × out",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: the people panels stay current while open, a Follow on somebody who has left says so and keeps the panel, and a Follow that ends by itself says why",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: a lease refusal names who holds the layer — on the owner, and on a guest",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: demoting an editor releases the layer they held, even with their text editor still open",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: the roster goes to a peer at most twice a second however fast a member flips its state — and the latest one still arrives",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: one person’s taps make at most one ring per 600 ms, and a ring lands inside the project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: a peer’s pn and af are looked up, never printed — prototype keys and free text show nothing, real ones read as the app names them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 the collaboration code can reach exactly the relays and STUN servers §14.4 names — no other host and no TURN — and the invite link points at the app itself",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 the envelope seals and opens; a flipped byte, a wrong key, an old timestamp and a reused nonce are all refused; and what a relay carries holds no fingerprint",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 an invite is read from the fragment only, and one that opened the app is stashed, taken off the address bar, and survives a ?fresh= reload",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 a room code folds I, L, O and dashes the way people read it, and its PBKDF2 key is the same on every device and every build",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 the MQTT client speaks 3.1.1 to a broker: CONNECT, SUBSCRIBE and PUBLISH byte by byte, and an offer and its answer cross it sealed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 the PeerJS client against a fake server: OPEN, an offer relayed with its source, EXPIRE for a host that is not there, and a taken id retried until it frees",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 with any one relay dead a real join still works, and an offer the three relays all deliver is acted on once",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 the knock lets in, turns away, and declines by itself; a member’s token skips it next time; a removed member is refused by name",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 a shared copy finds its owner by itself: a here from the owner makes it offer again at once, its token lets it in, and a dropped link comes back with the banner saying so",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 an owner who opens another project PAUSES the room — the copy stays linked and comes back by itself; only a real end ends it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 an invite that opened the app fills in the Join sheet and waits for one tap — nothing reaches a relay before it — then the owner lets it in, the editor opens on the copy, and the copy keeps the token and hub that bring it back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 the version gate speaks on both screens: a newer joiner is told the owner needs an update and the owner is offered one, an older joiner is told to update, the same version gets in",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 an invite opened in Safari on an iPhone offers the installed app first, and nowhere else does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 Codes only opens no WebSocket at all — sharing, a pasted link and a dropped copy all stay off the network — and turning it off opens them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 the Share panel hands out a link, a QR the camera reads back as that link, and a 9-character code; Reset makes new ones and the owner stops listening on the old",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs a working BarcodeDetector (qr_code) — this browser has no BarcodeDetector; the rest of this test ran and passed, only reading the QR back as the link did not (the Mac and Android Chrome have one)"
+  },
+  {
+   "name": "921 S6 six seconds with nothing from the owner takes the guest Offline — which starts the reconnect — while a guest that hears its pongs stays on; the link is kept, the first word from the owner brings it back, and only a silence as long as the grace closes it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 reopening a project he is sharing asks “Carry on sharing?” (#967 B3), and Share again starts sharing again on the same link, and a phone that hosts holds a wake lock until sharing stops",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: Remove changes the link and the code — the old link reaches nobody, even from another browser with “Let them in” on — while a member still in comes back through the hub, whose envelopes the link cannot open",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: only a refusal the owner SIGNED ends a shared copy — a link holder answering first, an unsigned “removed” and the owner’s own handshake timeout (“auth”) are all asked again",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: four knocks waiting on the short code do not stop a member coming back, and a queued knock whose joiner leaves goes with them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: a knock belongs to its session — opening another project answers it “paused” and takes the card away, and a joiner who gives up takes their knock and leaves a note",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: “Back in sync” waits for the owner’s welcome — a reconnect he turns away (full) never says it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: a link that dies while the joiner waits at the knock is said at once — not after two minutes, and not as the owner’s fault",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: [Update] on a join typed as a short code keeps the code, and the join is waiting, filled in, after the reload",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: while nobody answers, the Join sheet says “their device”, never “them’s”, and a short code is told to check the code",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: a reopened shared copy says it is reconnecting, and its Share button shows the guest panel with a working Leave — it never arms a room of its own",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: the iPhone landing card says how to reach Join in the app — straight to Home’s worded Join (#967 batch 2: always there, so no trip to Settings first)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: turning Labs off while sharing drops the room, so turning it on again does not re-share the project by itself",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: the Share panel says when every relay has dropped, and an MQTT socket that stops answering is found — by the next ping, and at once on a foreground",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: the short code lapses — once it has not been on screen for CODE_TTL the owner stops listening on its topic, and the panel shows a new one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: the room-wide offer cap is per door — thirty offers a minute through the link or the code cannot lock a member’s reconnect out",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: Settings → Labs names every third party the relay uses, like the Share panel does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: an invite pasted into the address bar of a tab that is already open is picked up, and taken off the address bar",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: a member who is offline is in the people list with a Remove, and removing them refuses their token, signed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 the host refuses whatever a role may not do, whatever the device claims — a Viewer’s forged edit, a Commenter on somebody else’s comment, an Editor rewriting who wrote one — and stamps every comment with its real author",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 an Editor changes the canvas only after “Change the canvas for everyone?” — Cancel changes nothing — a Viewer is told they can’t, and alone nobody is asked",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 a role change reaches the other device at once — the gating classes, the note above the inspector and the + follow it — and a Viewer’s stray edit is written back without a word on the wire",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 Remove sends “removed”, revokes the token and rotates the link and code — the old link reaches nobody — and an Editor allowed to invite is handed the NEW link, never the old",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 comments: add, reply and resolve on the card, a mark on the ruler at the comment’s time that opens it, the other device sees it — and an export with open comments goes straight to the export dialog",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 with “Viewers and commenters can export” off, a Viewer’s Export says so and opens nothing; on, it opens — and an Editor is never stopped",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 deleting a layer somebody holds is refused and put back where it was, and “Delete anyway” deletes it and frees the lease — on the owner and on a guest",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 save points: one when sharing starts, another only after ten minutes with a change, never more than ten — and “Earlier versions…” brings one back as a NEW project with its clips",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 the sharing settings menu has every switch in one place, each reaches only the people it applies to, and it fits a 380 px phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 a Viewer’s drag on the canvas and on a clip moves nothing, not even for a tick — their tap still selects — and an Editor’s same drag moves both",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 with Labs on, a phone’s top bar keeps the project name whole — Share is the round invite on the stage, which opens Canvas settings with Friends big and never starts sharing (queue 945), and a PC has none — the cog is its way in",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: an `ai` on a comment or reply that already exists is not an insert — a Commenter cannot overwrite anybody else’s, and an Editor’s changes only its words, never who wrote it, when, or its pin and replies",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a comment keyed `#u:` or naming another comment’s id is refused, so the id-keyed list can never go atomic — every comment keeps one id of its own",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: two whole-list sets in one tx cannot plant a comment in anybody’s name — the second becomes inserts stamped as the sender, capped at 500",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: the first comment posted at the same moment as somebody else’s is not lost — an Editor’s or a Commenter’s whole-list set against a list that now exists lands as their own comment, and nobody else’s is touched",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: undoing a comment delete brings back the right authors — Sam’s reply stays Sam’s, an Editor’s undo of Sam’s comment gives it back to Sam — and a Commenter cannot bring back somebody else’s",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a Commenter may take her own `resolved` away — the Undo of her own Resolve — and still not anybody else’s",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a guest’s Undo runs the same backstop as an edit — an Editor made a Viewer sends nothing when he presses Undo, a reload finds nothing to send, and a Commenter can undo her own Resolve",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a Viewer cannot put her own bytes on the owner’s clip through the media channel — only an Editor may offer media, and only for the rev the document names",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a new session never hands a newcomer somebody else’s comments by number — mids start past every author the document names",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a member who comes back through its token after the owner’s session restarts gets its own mid again, and a newcomer who arrives first does not get it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: “Editors can invite others” says what the link does — straight in with “Let them in”, nothing to pass on under Codes only — and the Editor’s own panel says the same",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: under “Connect with codes only”, Sharing settings does not print the relay privacy paragraph under “nothing but the devices themselves”",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a comment’s ⋯ opens ABOVE the comments card, so Edit and Delete can be tapped at 380 and at 1280 — and Edit keeps the comment’s line breaks",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: with the comments card open, a knock’s “Let in” and a toast are ABOVE it, and the 500-comment ceiling is said on the card",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: on a phone a Viewer is not offered the timeline’s +, the ⋯ of edits or the ≡ grips, and the add sheet will not open for them — and every change put back is said, not only the first in four seconds",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a Commenter who opens Canvas settings is told in the card, in words for a Commenter, that only an editor can change it — and Apply is off",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: the save point from when sharing started is never the one trimmed — twelve save points later it is still there — and reopening a shared project with nothing changed writes none",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: “Earlier versions…” opens from the project’s ⋯ on Home with no session — nothing is armed and no save point is written — and a restore says what happened in its own row, under a name whose date stays true",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a comment pinned at the playhead is not hidden under its head — the head wears it, and a tap where the mark is opens the comment instead of dropping a bookmark, at 380 and at 1280",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a Viewer’s Comments row does not offer to reply or leave a note — a Commenter’s does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: the composer’s “At 0:01” follows the playhead — after tapping another comment’s “at 0:03”, it says 0:03, and that is where Post puts it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: “Exporting is turned off” is a notice with one button, not a choice between two that do the same thing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8 a 500-layer project under a 4× CPU throttle: the commit-hook diff stays within 30 ms and the hot tick within 8 ms, measured",
+   "ok": false,
+   "pending": false,
+   "notRun": "this machine is too slow to stand in for the phone these budgets mean: its speed benchmark took 14.10 ms against the Mac's 3.6, so the Mac's 4× would be a throttle of 1.02× here — too little to show the throttle reached the page"
+  },
+  {
+   "name": "921 S8 adversarial peer fuzz: a minute of malformed, oversized, out-of-order and hostile messages on every channel — the host never throws, takes nothing it must refuse, and keeps answering",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8 eight devices converge: an owner and seven guests editing at once for 400 seeded rounds, with role changes, dropped links, leaves and rejoins — every copy ends identical",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8 an accelerated one-hour soak: the ring, lastBy, pending, the ack cache and the presence pools stay within their caps, and nothing keeps a member who has left",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8 [Scan QR] reads the app’s own invite code off the camera into the Join field and waits for a tap — jsQR is fetched only when the scanner opens on a browser with no BarcodeDetector, and the camera always goes off",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs a working BarcodeDetector (qr_code) — this browser has no BarcodeDetector; the Join sheet ran and passed on a stand-in reader, only the real decode (the browser reader, and reading back the frame handed to jsQR) did not (the Mac and Android Chrome have one)"
+  },
+  {
+   "name": "921 S8 Settings → Labs → Test connection says plainly what works on this network — the relays, the address lookup and this device’s own connections — tries nothing until it is tapped, cleans up after itself and keeps a report",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8 a refused delete or move puts the element back where it was on the device that tried — an effect on a held layer, and a reply undone just as its author is made a Viewer — with no resync",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a layer id from one of his OTHER projects, planted in the shared document, is never read, served, stashed over or written",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a refused tx is repaired within a budget: a Viewer naming every layer gets a bounded answer and a resync, not the whole document per message",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a removed member’s token gets its own door: one answer at a time, never a member’s slot, a few answers in all — and then its envelopes stop opening",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r an Editor’s malformed markers never reach the owner’s project — playback’s readout, the timeline and the marker controls keep working, and a file carrying them loads clean",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a comment’s text is a string and its resolved flag a boolean, for every role, and all of them together stay within a budget",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r fonts from a session are capped, and the ones it installed that nothing uses any more leave the font index when it ends",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a link waiting on the knock is quiet: its frames are dropped unread, and a flood closes it and takes the knock card away",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r the owner’s comments carry a mark nobody else can choose — a guest named “Ezra” in his colour does not look like him",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a relay floods no more decrypts than a room could honestly be spoken to: junk to the hub is dropped unopened past a budget, and an honest offer before it is still heard",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r Leave marks the copy first, waits for a pending update until the copy has settled, and says what happened — a copy that could not be kept never reconnects",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r one tab per room: a second tab does not arm a second host for a project another tab is sharing, and says why",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r an offline clash offers “Save my version as a copy” with the version kept before the flush, and a full outbox turns the guest read-only until it drains",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a toast raised from a collaboration card is painted above it, and a refused copy puts the text where it can be selected",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r after the owner stops sharing, the guest can join his next share straight away — the ended session is let go, not “already in a live session”",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a guest who LEAVES is forgotten by the owner’s room — no offline ghost, no second row on a rejoin — and an offline row can be forgotten without banning the device",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r at 380×667 the Join sheet keeps Cancel and Join on screen with the code step and the five letters showing, and the scanner never cuts off its own guide line",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r Home says what is shared: LIVE on the project he is hosting (whose ⋯ offers Stop sharing, #967), SHARED on somebody else’s copy with their name — and a copy’s ⋯ offers keep or leave, never Duplicate, template or element",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a copy that joined with a code says it cannot reconnect by itself, and never promises to send what it keeps",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r an old invite link that nobody answers names the reset as a reason — not only “their device isn’t answering”",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r “Most people at once” holds after the knock: two knocks that each saw one place left cannot both be let in",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r the short code on an open Share panel is the code that works — never replaced behind the screen — and its half hour starts when the panel closes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r Test connection’s ✓ and ✕ read on the light Settings panel, and its Copy says what it did where it can be seen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r “Not now” on the big-download question defers the media: the clip is marked missing, the card offers Download now, and an export asks first",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a phone receiving the shared media holds the screen awake until it lands, and the card says to keep it on",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: a param the file omits stays omitted, so old projects keep rendering as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: a keyframed parameter survives sanitising with its keyframes intact",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: prototype keys are not effects — the render tables refuse them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: every type-keyed render table is prototype-free, not just the ones we remembered",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects browser: junk ids in the saved recents list do not take the browser down",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: hasCopyBg says no to a junk effect type",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: a hand-shaped keyframe curve survives a reload",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: a text layer carrying a junk effect renders instead of throwing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: junk types are stripped on the way in, real ones are kept",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: with no registry loaded the stack is left alone, not gutted",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the version number appears exactly once on a phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a hidden effect looks hidden, the same way a hidden layer does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "foreign layers are sanitised however they arrive, not just on import",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a real layer still survives the trip intact",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the saved effect lists check values, not just names",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "choosing Audio only hides every control that cannot affect it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the WAV writer keeps both channels",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the audio export uses the same range and the same mixer as the video",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export: M4A is offered, produces a real MP4 audio file, and never saves an empty track",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template does not carry its notes into a new project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "notes stay with their own project, and travel in the saved file",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the home + catches taps well outside itself, without getting bigger",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the add menu gives each tab its own palette and the named buttons their named colour",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the rainbow and gradient cards survive the glass theme",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the effects header x and search glyphs are centred in their circles",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the x reads red and the search reads blue",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the add sheet leaves no dead band under a full grid, and the cards get squarer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "switching home tab restages the cards, top to bottom, with a capped stagger",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the pressed tab reacts, and re-tapping the same tab does not restage",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the cog animation restarts on every press, not just the first",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Move & Transform hides the outline and shows the anchor instead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the anchor follows the layer through rotation and scale",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "sharpening is dosed by how far the clip is actually stretched",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "pressing it twice removes the sharpening rather than stacking a second",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the clip menu names it for what it does, not improve-quality",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the perf verdict recognises a stutter the median cannot see",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a genuinely smooth run is still called healthy",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an oversized project is called out whatever the frame numbers did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the phone bin is red, and it is the SAME red the PC uses",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Elements icons are vivid while their backdrops stay faint",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Sound effects card has a white icon and a gradient ring",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a static point shape is untouched by the animated-points evaluator",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "animated points interpolate, and SNAP when a point is added or removed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the tracer draws an animated point set at the right time (queue 254)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an animated point shape renders differently as time moves (queue 254)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "converting to editable points reads the playhead, not frame 0 (queue 254)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Edit Points panel HAS a keyframe diamond, and dragging off-key makes a key (queue 254)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Halftone Lines still draws stripes when the preview is downscaled (queue 261)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Hot Colour survives its Low and High sliders crossing (queue 262)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Kaleidoscope keeps the layer visible wherever its Centre is parked (queue 263)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "no effect erases the layer at a single parameter extreme (queue 264)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every raised effect ceiling still moves the picture in its top half (queue 482)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "803: the clip keys sit in the band on the layer title line, bigger, with icons that change with the playhead, hide in the Effects view while the keys still work, and are gone on a phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "801: in the PC layout the far-right run never covers the selected layer toolbar, at 900 and at 760, and stays one row at 1280",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "800: a negative text curve is a downward arch that still reads left to right, and a positive one is unchanged",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "799: Electric Edges reads on a photograph at its defaults, and a saved instance without the new control keeps its faint render",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "798: Chromatic Aberration fringes toward the edges as its description says, nothing at the centre, and a saved instance without the new control keeps its uniform shift",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "797: the category number badges hide where there is no keyboard, and on a keyboard the key they advertise still opens the card",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482: Halation reads on a photograph at its defaults, and a saved instance without the new keys renders as it always did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482: eleven canvas and warp ceilings earned by the round-four probe are in the registry, and each top half still moves the picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every reachable keyframe ◆ actually animates its property (queue 265)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "no effect option button is unreachable on a phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an undone delete still has its media — freeing must never beat undo",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip no undo or redo can reach is released (media leak)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a PINNED clip survives the sweep even when nothing references it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "history actually RUNS the sweep when it discards a snapshot",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "exported audio reads backwards for a reversed clip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "916.4 a reversed clip with audio shorter than the clip plays its sound in step with the picture — export, preview and audio-react",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "switching projects does not strand a deleted clip's media",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a backfilled video is not mistaken for a song",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "backfill records the flag instead of leaving it to be inferred",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Free crop keeps a keyframed crop animation",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Free crop on a plain crop still writes plain numbers",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a layer thumbnail never spills out of the track head on a phone (queue 211)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Classic layout is not in the stylesheet at all (queue 293)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a shape thumbnail keeps the shape's aspect, it is not stretched to the box (queue 211)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a selection handle is a 44px touch target on a phone (queue 98d)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the slam shakes the home screen without scaling it off the viewport (queue 250)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "home's own paint overhangs its box, so the shake cannot uncover the editor (queue 250)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "with no groups the head reclaims the chevron column (queue 295)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the moment a group exists the column comes back, so rows still line up (queue 295)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1065 the phone top bar has no ? help button — the PC keeps its own, and it still opens the shortcuts",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the help glyph is centred in its own circle and drawn thin (queue 305)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the help glyph is centred in its button (queue 266)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the sound-effects icon is a WHITE gradient, not a pink one (queue 267)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template tile shows the template's own picture, untinted (queue 268)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Media and Audio pin their own buttons above the scrolling library (queue 269, 276)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Media Import icon is a white gradient on a still-grey plate (queue 270)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Elements colours are assigned by name, distinct, and the Controller stays red (queue 271)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "both notepad buttons carry the same subtle shading (queue 272)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the loading pill never reaches the + button (queue 273)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the shortcuts sheet has a legible Tutorials button that goes there (queue 274)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the phone timeline carries an Add layer instead of the + button (queue 294)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "what you add lands below the Add layer, wherever you have dragged it (queue 294)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Shift+Home / Shift+End fling the Add marker to the top and bottom (queue 294 clause 12)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on PC the Add marker is a thin line: click opens the menu, drag moves it (queue 294)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "paste lands where the Add layer is, not always on top (queue 294 clause 11)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.6 paste inside Edit Group puts the layer IN the group, where its row can be seen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Add layer can be dragged by its grip, and the grip does not steal the tap (queue 294)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the sound-effects sheet wears the SAME travelling edge-light as the project card (queue 291)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the voice-recorder sheet is styled for the same edge-light (queue 291)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "there is no Other effects category, and nothing fell out of the browser (queue 289)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "no effects-browser category title still carries an ampersand (queue 287/288)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the layer/add panel lights its card edges from the cursor, and stands down for playback (queue 286)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the layer buttons shrink with the timeline band so they all stay on screen (queue 285)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "timeline: every keyframe the timeline draws can be addressed by copy and delete (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.7 an animated point set (Edit Points ◆) travels with its clip, shows a diamond, and splits cleanly",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "mobile: the timeline visibility eye is not a 15px tap target (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "storage: a template that could not be indexed reports failure and strands nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "timeline: a keyframe copied from one effect never pastes into a different one (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a drawing's draw-on keyframes travel with its clip (queue 227)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a tilt keyframe cannot turn the rotate diamond into a delete button (queue 419)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a video or image Outline actually draws (queue 386)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "nothing on screen still calls a controller a 'null' (queue 363)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the MULTI-clip move and extend icons are not the same drawing (queue 338)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the rainbow add-menu card keeps its white edge on PC (queue 257 vs 286)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "two fingers pan and zoom while drawing, and leave no ink (queue 165.3)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "trimming shows the six numbers and the landing notch (queue 153)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a trimmed edge lands on a whole frame (queue 153)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the default shape colour reaches freehand and vector drawing too (queue 142)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a custom frame rate can be typed on the export dialog (queue 141)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the export dialog inherits from the project every open, and never carries a stale pick (queue 121)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Canvas settings never blanks the frame rate, and Apply never rewrites it (queue 118)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the export frame rate defaults to the project, not silently to 30fps (queue 471)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a project can never open at a size that cannot be opened (queue 470)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: keyframes from a file are ordered and complete, and a good project is untouched (queue 468)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: a layer's timing is always a number, and a good project is untouched (queue 467)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Text to Voice is gone, and the voiceover recorder that replaces it is not (queue 392)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a group carries its children — translate, scale and rotate compose through nesting",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip occupies exactly its own frames — no flicker at either edge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export: an animated Reverb reaches the real mix, anchored to the clip's own time",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "audio: a keyframed Reverb sweeps the room, and only builds one where the move actually is",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "audio: a keyframed Pitch Shift actually glides, and a static one costs nothing extra",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the stairs button is two — one chaining down, one chaining up (queue 465)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filters are toggle-then-Add, and nothing applies until you press it (queue 464)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a long filter section is one swipeable row, not two stacked ones (queue 463)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Faves control is a real gold button, not a notch (queue 462)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every effect category has its own distinct icon (queue 461)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "opening a project is two moves, not one — the list leaves before the project arrives (queue 459)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "no element id appears twice in the page (queue 458)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the export button is not a rainbow, and the + buttons still are (queue 457)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the speed ruler moves in 5% steps, not 10x jumps (queue 455)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "rotation and the two tilts keyframe independently (queue 419)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip cannot be dragged off past the end of the project (queue 394)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "timeline: dragging a multi-selection keeps the clips’ relative timing (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export: a transparent export never writes a null background into the saved project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "ai: addEffect never stores NaN for a param that has no min/max",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Spin can start at an angle and turn about an off-centre pivot",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Flip Layer can hinge off-centre and keep the original",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: border and the contour effects still render an un-upgraded instance exactly as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Border can inset, round its corners and let the picture through",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Contour Lines can smooth first and draw on clean paper",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the pattern effects still render an un-upgraded instance exactly as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Dissolve can sweep, soften and boil",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Mosaic can leave gaps and sample the centre pixel",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the remaining colour effects still render an un-upgraded instance exactly as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the colour effects do the specific things they could not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the matte tools still render an un-upgraded instance exactly as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Matte Choker can feather in the same pass, and re-harden after",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the Matte Fringe stops being a flat pasted-on band",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Smooth Edges can push the edge back out and soften its falloff",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the transform warps still map an un-upgraded instance to exactly the same points",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Bend peaks where you put it, and can bow the other way",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the Tunnel mouth can be resized and aimed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the colour grades still render an un-upgraded instance exactly as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Teal & Orange decides where the warm/cool split falls",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Bleach Bypass can keep the colour and still bleach the contrast",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Faded Film can be cool instead of warm, and milky without the rest",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the blur family still renders an un-upgraded instance exactly as it did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Inner Blur can stop dragging transparent black in from outside the shape",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Box Blur can smear on one axis and soften its boxy falloff",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Sharpen can skip flat areas and sharpen brightness only",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Stroke can be round, inside, centred and soft",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: an un-upgraded Stroke renders exactly as it did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: round 20 still maps and renders an un-upgraded instance exactly as it did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Glass distorts in facets now, not per pixel",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Fractal Warp can churn over time, and drop octaves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Channel Remap can be dialled in, and can keep the original brightness",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "boot: the theme is in the markup, so a refresh cannot flash the unthemed app (#306)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "storage: a tab holding an older scene cannot overwrite newer work (#306)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the atmosphere effects still render an un-upgraded instance exactly as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Starfield twinkle gives every star its own phase, not one global flicker",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Blink can flash briefly, dim instead of vanish, and alternate with another layer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Grunge has a grain size and a colour, Light Leak has a position",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#647: light-theme home text is dark ink, headings included",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#630: a group pivots on its anchor, not on the project origin",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#630: the selection box stays on a group that is scaled",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#630: a group shows its anchor on the canvas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#629: undo that removes the selected layer selects nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S0 restore uses _afterExternalChange (629 rule intact)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S0 nothing leaves the device, and solo undo still restores byte-for-byte",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#628: moving a group anchor does not move the group",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#627: a jump never lands on a blank frame when the one before it is not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#626: a group follows its contents when they are re-timed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#625: keyframes land on the frame grid, so they cannot stack invisibly",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#623: a copied graph reproduces its MODE, not just its numbers",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#622: every display of the preview rate follows the writer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#645: ctxFilterOK answers with a rendered pixel, not an API sniff",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#603: every mono filter actually renders grey",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#603: the saturate and brightness effects move the pixels they claim to",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#617: a failed element edit must not strand a draft workspace",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#602: the Aa sheet keeps Line height and Curve — no effect provides either",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Text Progress can reveal by word and line, from either end",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Timecode can start at an offset, count down, and read timeline time",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Text Spacing can add to the layer instead of replacing it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Text Spacing does word spacing and line height, and defaults to changing neither",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "word spacing and line height change the PICTURE, measured on drawn ink",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on PC the font list fills the space below and scrolls down, not sideways (queue 520)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "editing text hides the option cards on PC, and gives them back after (queue 519)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "918.5 — with the PC text editor open, a clip at 0s still starts under the playhead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the inspector panel fits its own contents for every layer type (queue 518)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an inspector card does not clip its own glow ring (queue 517)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S0 boxFor equals #select-box geometry (rotated, parented, group, skew, text wrap)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the selection button group is no dark slab, and the bin is calm at rest (queue 516)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "dragging across the eyes hides a whole run of layers in one gesture (queue 515)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the drawing toolbar sits under the canvas on PC, and drawing gets the whole window (queue 513/535)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the SECOND freehand stroke appears as soon as you lift the pen (queue 514)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a resizer whose pointer is lost stops resizing (queue 511 clause 2)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Director panel stops above the timeline instead of burying it (queue 511 clause 3)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a raised band stays raised when a layer is selected or the Effects browser opens, and keeps its handle (queue 804)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "with the Effects menu open, the band’s handle raises the band and the menu comes with it (queue 805)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the band’s floor is its real height, so a small drag DOWN leaves it docked with no gap (queue 808)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "clicking the timeline divider without moving it does not resize the band on the next load (queue 808)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "while the Effects menu is open the keyboard belongs to it: Tab, Space and Delete do not drive the project, and Escape leaves (queue 809)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Escape in the Effects search box clears the search, then leaves the menu (queue 809)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the AUDIO effects menu is a menu too: tapping away leaves it instead of stranding it over another layer (queue 810)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "dragging the TIMELINE’s divider carries the open Effects menu with it (queue 811)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "dragging the TIMELINE’s divider carries the open ⚙ options pop-up with it (queue 866)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "favouriting a FILTER row stars that filter, so it reaches the Filters tab (queue 812)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Comic Ink keeps the colour and draws the lines over it, and an edge with no Draw-as still replaces (queue 813)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "leaving the Filters tab asks the canvas to repaint, the way picking one does (queue 814)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a raised band is not re-pinned to nowhere while the panel is hidden (queue 814)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "dragging a layer NAME keeps scrolling when a rebuild lands mid-gesture (queue 815)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "A, S and D refuse a LOCKED clip, and say why (queue 816)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.1 the phone’s clip buttons refuse a locked clip and carry the captions and effect clock, like A/S/D",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "trimming a captioned clip with the A key leaves every caption where it was (queue 817)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a split keeps a Bounce-eased segment’s curve at the seam (queue 818)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a refused play() is recorded once, not sixty times a second (queue 820)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip inside a HIDDEN group is silent in preview, as it is in the export (queue 821)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on the phone the effects sheet lifts above the on-screen keyboard (queue 814)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a trim abandoned mid-drag puts the captions back with the clip (queue 817)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a keyframe on an effect INSIDE a filter goes live, so it can be dragged (queue 819)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip drag uses the same edge band as a trim, not a quarter of a phone screen (queue 823 c1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a second finger cannot drive or commit a drag it did not start (queue 823 c2)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "arrow-nudging a group and its own members moves them once, not twice (queue 823 c4)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a head trim carries the effect clock, so Drift and Spin do not jump (queue 823 c5)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "pressing play in a project made of pictures starts at once (queue 823 c7)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a trim grip touched and released writes no undo entry (queue 823 c10a)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "splitting several clips at once costs one undo, not one each (queue 823 c10b)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.11 the phone’s “Split all at playhead” is one undo step for the whole selection",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on a finger, a swipe across a selected clip scrubs — only a hold slips its media (queue 822)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "two overlapping batched actions cannot leave history muted for good (queue 826)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a keyframe before zero survives a save and a reload (queue 827)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a search on the Elements tab cannot leave invisible items ticked for Delete (queue 828)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a failed save keeps the element draft instead of writing the old version over it (queue 825)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.2 a refused pack write keeps the element draft and never reports saved",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a save writes the clips of the scene it was started for, even if the project changes mid-write (queue 830)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a member of a scaled group is drawn where it actually is (queue 832)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "“Draw more” on an animated sketch keeps its keyframes (queue 833)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "replacing a clip’s file keeps the original, and undo brings it back (queue 829)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "one rub of the eraser is one undo step, not one per frame (queue 834 u0)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "rubbing a named drawing out to nothing and drawing again brings the SAME layer back (queue 834 u1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "deleting the project you have open never drops you into a hidden workspace (queue 834 u7)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "opening a second project while the first is still loading loads the RIGHT clips (queue 834 u8)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "pulling the sound out of a huge video refuses instead of killing the tab (queue 834 u9)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Escape leaves the mask editor and the motion path, instead of deselecting underneath them (queue 834 u12, u13)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a right-click on a scale or rotate handle starts no drag (queue 834 u11)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a corner drag on a layer scaled to nothing is refused, instead of lifting every scale keyframe off zero (queue 834 u18)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.10 a two-finger pinch on a layer scaled to nothing is refused too, instead of lifting every scale keyframe off zero",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "dragging one motion-path dot moves that dot, not the whole path (queue 834 u10)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "bulk Duplicate skips drafts and says so, instead of reporting “Duplicating 1…” and doing nothing (queue 834 u14)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the + button’s “which project?” list is the projects grid’s own list and order, with no hidden drafts (queue 834 u15)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a caption cue’s own effects are re-pointed with the layer, so a copy does not matte off the original (queue 834 u3)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a raised inspector grows its option cards into the height it was given (queue 807)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a window that shrinks under a raised inspector pulls it down to the clamp (queue 807)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the inspector drags as high on its own as it does with the timeline (queue 512)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the timecode digits stay centred in their pill however wide it gets (queue 509)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a song whose element will not report its length still gets a real duration (queue 96)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an export survives the tab being backgrounded (queue 47)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on PC the Add menu stays inside the inspector panel on every tab (queue 542)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Template icon does not depend on matching the background (queue 546)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every Add-menu tile is a DRAWN icon, never an emoji (queue 543)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a reorder drag whose pointer is LOST cannot freeze the timeline (queue 541)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Text Spacing shows all four controls and does not run off a phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the wrap cache notices word spacing, or a wrapped layer keeps its old line breaks",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the repeat warps still map an un-upgraded instance to exactly the same points",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: mirroring Grid Repeat and Radial Repeat closes the hard seam",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Grid Repeat rows and stagger break up the square wall of clones",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Mirror Tile can move its seam and fold on one axis only",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the relief effects still render an un-upgraded instance exactly as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Find Edges can invert, gate the mush, and lay the lines back over the picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Emboss relights from any angle, and grey output has no colour fringing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Bump Map relief and ambient actually move the shading",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the print effects still render an un-upgraded instance exactly as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Halftone can turn its screen and change its dot shape",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Crosshatch ink density and stroke weight are controls now",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Pencil Sketch can clear the grey mud out of smooth areas, and give the paper tooth",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the pattern overlays still render an un-upgraded instance exactly as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Grid line weight is independent of spacing now",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Stripes can run across and down, not only diagonally",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: nothing in the featured carousel is an effect most layers cannot take",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Chroma Key softness ramps the edge, and survives the repaint cache",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Luma Key can remove the bright end, and its edge width is a control now",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Replace Colour can take the whole colour, not just its hue",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the radial blurs still render an un-upgraded instance exactly as they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Zoom Blur and Spin Blur spin around the centre you choose, not the frame centre",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Lens Blur bloom keeps a specular bright instead of averaging it away",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Lens Blur blades really cut the disc down to a polygon",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "turning Demo mode on blanks the phone Add sheet before it is shown again (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a saved preset keeps the easing you authored (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a track can never budget more frames than the device allows (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the motion tracker maps a cropped layer's pixels through the crop origin (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "trimming a REVERSED clip edits the end you grabbed (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a FORWARD clip still trims the way it always did (BUG-HUNT control)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.3 trim-end-to-playhead (D key, rail, phone button) on a REVERSED clip keeps every kept frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a zoomed preview re-measures when the stage changes size (BUG-HUNT)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the selection outline stays on its layer when the timeline is dragged (queue 284)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the home film grain runs fast and faint, and its two layers cannot fall into step (queue 282)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Custom elements card does not show how many you have (queue 281)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the layer-actions button stays lit with nothing selected (queue 280, overturned by queue 717)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the layer menu is painted with the same surface as the add menu (queue 279)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the darkened bin group is vertically centred on the transport row (queue 278)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the phone AUDIO effects browser is the same sheet as the visual one, not full screen (queue 300)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on PC the effects browser is the same sheet as the phone: full-bleed, under the canvas, taps SELECT (queue 303)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the phone effects browser is a sheet under the canvas and taps SELECT, in order (queue 277)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the sheet previews the picked effects over the whole comp, and puts it all back (queue 277 + 390)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the sheet's toggle decides whether picks land with the previewed values or naked (queue 277)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on a desktop width, picking effects and committing adds them all (queue 303 reversed 277's phone-only rule)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "nothing in the mobile add sheet scrolls vertically (queue 275)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "917.11 at 320px no tab or card label in the Add sheet is cut off",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "moving away from the strip slows the scrub, and never changes it on the strip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "fine mode lands on the real step, not the coarse notch",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the selection cluster reads as one group by its corner lines, and its glyphs are centred",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on PC the help button rides the transport row, not the top bar",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the add-menu drag handle sits outside the panel, clear of the project name, and hides until hover (queue 302)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the add menu drags up over the canvas without shrinking it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the add menu grows UPWARD only, and its handle rides its own top edge (queue 244 reopen)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "dragging the TIMELINE up into a raised add menu snaps them back together (queue 244)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the add menu cannot be dragged below the timeline, and its clamp is real",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "drift and orbit keep their content at a frame edge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a healthy 30fps playback is not judged late",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the quality ladder actually steps down when shedding pixels helps — and gives up when it does not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "playback feeds the ladder a frame interval at all",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the perf probe produces a report with the numbers that matter",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the perf probe always finishes, even if the frame loop never runs",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the what’s-slow row fits a phone and its report does not scroll sideways",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the perf probe refuses to run twice at once",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a layer at or below 100% is never routed into Web Audio",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a keyframed volume routes if it goes above unity ANYWHERE",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the volume control is a scrub ruler that reaches 1000%",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed-to-playhead lands the clip END exactly on the playhead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed-to-playhead lands the clip START exactly, holding the end",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed-to-playhead refuses the cases where there is no answer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the speed range reaches the 1000x he asked for",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a dead effect on white text is called out — and a live one is not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the dead-effect hint never costs you the eye button",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the dead-effect hint reads the stack under it, not the layer fill",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the dead-effect hint makes no claim it cannot prove",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect walker: with no filters in the stack it is exactly the old flat walk",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect walker: a filter visits itself and then its children, and never recurses",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect walker: a keyframe inside a filter draws a diamond and can be deleted",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect walker: the address grammar reads the old 2-part form and the new 3-part one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect walker: copying a keyframe from inside a filter pastes back into the same slot",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect walker: a save/load keeps a filter and its children, and refuses a filter inside one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect walker: a layer ref inside a filter follows the duplicate instead of the original",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect walker: importing re-points a layer ref held inside a filter",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter: at Strength 1 it renders exactly as its children would on their own",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter: at Strength 0 it is a true no-op, not a faint version of itself",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter: Strength half sits between the two ends rather than at one of them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter: a disabled child is skipped, and an empty filter changes nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter: effects before and after it in the stack still apply, in order",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter: the container is not offered as an effect in the browser",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter: Strength is validated on load like any other effect parameter",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}
