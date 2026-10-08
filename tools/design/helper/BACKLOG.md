@@ -142,3 +142,34 @@ ADDED 8 Oct 07:00 by the PM, at the builder's request. TOP PRIORITY: pause H51 a
   3. Every test that is red in ANY of those passes: run it alone 3 times on the same tree. Red in a pass but green alone = an INTERMITTENT. Record its message, which passes it went red in, and your best one-line guess at the assumption (time read after an await, a fixed settle wait, inherited state, same-instant input events, …).
   4. Mark which ones are probably container-only (software GL, no H.264, Chromium 141) versus timing assumptions any slower or faster machine would hit.
   → tools/design/hunts/intermittents.md (a table: test | width | passes red | alone 3/3 | message | likely assumption | container-only?), branch hunt/intermittents. Push partial results after each pass so the builder can start early.
+
+ADDED 8 Oct 17:45 by the PM. H52 was good work: the builder has its three findings logged. Same rules and QUALITY RULE. Keep your turn alive with short polls; if your weekly limit comes, push first. NEVER push to main. NEVER force-push. Your force-push to hunt/memory-stack was rightly blocked: when a branch needs replacing, push to a NEW name (e.g. hunt/memory-stack-2) and say so in DONE. Order after H51: S1, H53, H54, H55, then T10, P15, then H56.
+- S1  Simple mode release 2.3 (speed, sound and replacing), written in full. BUILD-PLAN-PHASE2.md §5 has anchors only. Write its full code hunks and tests in the same format as §3/§4 (releases 2.1/2.2), on a scratch branch off 980-p22-r3, the tip of the Simple chain.
+      Rehearse it:
+      - every new test fails before and passes after, at 1280 and 380;
+      - all existing Simple tests stay green;
+      - the Full editor is unchanged in look and behaviour (DESIGN §0.4, his rule).
+      List every point where §5 was ambiguous and what you chose.
+      This is the biggest lever on his Simple-mode date, because releases 2.3–2.6 are the only Simple code not yet written.
+      → tools/design/plans/simple-mode/BUILD-PLAN-PHASE2-2.3.md on branch plans/simple-2.3, plus the code on branch hunt/simple-2.3.
+- H53  Glow Scan's false "changes nothing". It reproduced ALONE in your container (H52).
+      - Find why `noopTimes` (js/fx-thumbs.js: NOOP_SPREAD plus FM.fxNoopMoments) misses a Glow Scan with {pause:5} on a 10 s clip.
+      - Write the fix: either Glow Scan supplies its sweep moments through FM.fxNoopMoments, or a time-dependent effect with a pause answers "unknown" and never gives a no-op verdict.
+      - Make the 482 6.7 test deterministic: it must fail with the fix reverted.
+      - Strength 0 must still be called a no-op.
+      → patch on hunt/glowscan-noop, notes in tools/design/hunts/glowscan-noop.md.
+- H54  glide #715. The release velocity is the last pointer sample, so under 2x throttle a flick that stalls just before release does not glide.
+      - Fix: take the velocity over the last ~100 ms, ignoring a trailing zero-movement sample.
+      - Keep "a parked pointer does not fling" and "fine mode never glides" true.
+      - The test must fail with the fix reverted at 1280, at 380 and under 2x throttle.
+      → hunt/glide-velocity.
+- H55  The four does-nothing CONTROL tests go red under 2x throttle (690 Spin, 482 6.7's Strength 0, 477, 794). `noopAt` gives up over NOOP_BUDGET_MS = 45, which is by design.
+      - Add a test seam `FM.fxThumbs._noopBudget(ms)`, restored in `finally`.
+      - Use it in those four tests only, while they check the verdict.
+      - Prove three things: green under 2x throttle with the seam; red under throttle without it; no change in app behaviour (with no seam call the budget stays 45 ms).
+      → hunt/noop-budget-seam.
+- H56  The five order-dependent reds from H52: home push, playhead rebuild, 981 x2 and 988. Each is red in every full pass and green alone.
+      - For each, find the earlier test that leaves state behind: pair [suspect predecessor, red] runs and bisect with ?after=&upto=.
+      - Name the leaked state.
+      - Say whether the laptop's suite could hit it too.
+      → tools/design/hunts/intermittent-census/order-deps.md on hunt/intermittent-census.
