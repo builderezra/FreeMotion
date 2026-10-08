@@ -1,0 +1,52 @@
+{
+ "ok": true,
+ "summary": "Regression 3/3 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   7713,
+   "1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture"
+  ],
+  [
+   7675,
+   "H43 the Filter-container plates are released when nothing uses them, after a full-size frame"
+  ],
+  [
+   7584,
+   "H40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H43 the Filter-container plates are released when nothing uses them, after a full-size frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

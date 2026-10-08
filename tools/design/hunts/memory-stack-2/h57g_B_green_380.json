@@ -1,0 +1,52 @@
+{
+ "ok": true,
+ "summary": "Regression 3/3 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   6584,
+   "H40 the effect sample tiles stay under their memory cap, and an evicted one is generated again on mount"
+  ],
+  [
+   2497,
+   "1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice"
+  ],
+  [
+   487,
+   "1010 the CPU blur reuses its scratch buffers, draws the same picture every time, and a plate past the cap still blurs"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1010 the CPU blur reuses its scratch buffers, draws the same picture every time, and a plate past the cap still blurs",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 the effect sample tiles stay under their memory cap, and an evicted one is generated again on mount",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

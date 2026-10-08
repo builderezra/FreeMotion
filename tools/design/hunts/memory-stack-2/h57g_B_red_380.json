@@ -1,0 +1,56 @@
+{
+ "ok": false,
+ "summary": "Regression 0/3 ✗Pending 0/0 built",
+ "failures": [
+  "FAIL1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice — 60 of the 63 fill pictures are still alive after the project that used them was left and a forced collection: getFillImage keeps them for the whole session",
+  "FAIL1010 the CPU blur reuses its scratch buffers, draws the same picture every time, and a plate past the cap still blurs — three blurs of the same 160x120 plate made 6 new big Float32Arrays (3.8 MB): the scratch pair is allocated per call",
+  "FAILH40 the effect sample tiles stay under their memory cap, and an evicted one is generated again on mount — FM.fxThumbs.cacheBytes (the suite seam that sums the cache) is missing"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   2556,
+   "1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice"
+  ],
+  [
+   91,
+   "1010 the CPU blur reuses its scratch buffers, draws the same picture every time, and a plate past the cap still blurs"
+  ],
+  [
+   0,
+   "H40 the effect sample tiles stay under their memory cap, and an evicted one is generated again on mount"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1010 the CPU blur reuses its scratch buffers, draws the same picture every time, and a plate past the cap still blurs",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 the effect sample tiles stay under their memory cap, and an evicted one is generated again on mount",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

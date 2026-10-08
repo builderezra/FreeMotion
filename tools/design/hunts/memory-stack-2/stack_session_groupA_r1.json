@@ -1,0 +1,62 @@
+[
+ {
+  "stage": "0 boot",
+  "canvases": 3,
+  "canvasMpx": 0.32,
+  "big": 0,
+  "jsHeapMB": 3.0,
+  "rendererVmDataMB": 719.6,
+  "rendererRSS_MB": 212.7,
+  "browserRSS_MB": 186.1
+ },
+ {
+  "stage": "1 after 20 clips imported",
+  "canvases": 63,
+  "canvasMpx": 4.89,
+  "big": 0,
+  "jsHeapMB": 4.0,
+  "rendererVmDataMB": 912.1,
+  "rendererRSS_MB": 488.3,
+  "browserRSS_MB": 189.9
+ },
+ {
+  "stage": "2 after effects-browser sweeps (1 x 12 categories)",
+  "canvases": 248,
+  "canvasMpx": 27.03,
+  "big": 9,
+  "jsHeapMB": 4.4,
+  "rendererVmDataMB": 1685.4,
+  "rendererRSS_MB": 1002.4,
+  "browserRSS_MB": 199.7
+ },
+ {
+  "stage": "3 after editing session (effects, undo/redo, replaces, containers)",
+  "canvases": 226,
+  "canvasMpx": 30.17,
+  "big": 9,
+  "jsHeapMB": 5.6,
+  "rendererVmDataMB": 1511.7,
+  "rendererRSS_MB": 697.5,
+  "browserRSS_MB": 201.3
+ },
+ {
+  "stage": "4 right after one GIF export",
+  "canvases": 207,
+  "canvasMpx": 79.53,
+  "big": 35,
+  "jsHeapMB": 5.5,
+  "rendererVmDataMB": 1709.8,
+  "rendererRSS_MB": 875.9,
+  "browserRSS_MB": 203.9
+ },
+ {
+  "stage": "5 after 45 s idle (trim windows)",
+  "canvases": 207,
+  "canvasMpx": 79.53,
+  "big": 35,
+  "jsHeapMB": 5.5,
+  "rendererVmDataMB": 1711.1,
+  "rendererRSS_MB": 868.0,
+  "browserRSS_MB": 202.1
+ }
+]

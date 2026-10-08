@@ -1,0 +1,126 @@
+{
+ "ok": true,
+ "summary": "Regression 12/12 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   7715,
+   "1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture"
+  ],
+  [
+   7657,
+   "H43 the Filter-container plates are released when nothing uses them, after a full-size frame"
+  ],
+  [
+   7570,
+   "H40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame"
+  ],
+  [
+   6594,
+   "H40 the effect sample tiles stay under their memory cap, and an evicted one is generated again on mount"
+  ],
+  [
+   2440,
+   "1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice"
+  ],
+  [
+   517,
+   "1010 the CPU blur reuses its scratch buffers, draws the same picture every time, and a plate past the cap still blurs"
+  ],
+  [
+   412,
+   "H40 an export leaves no temporal plates behind in the motion-flow cache"
+  ],
+  [
+   323,
+   "H44 the file kept for undo of a replaced clip is not held alive by the record that it is kept"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "H40 an export leaves no temporal plates behind in the motion-flow cache",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 an audio mix frees the PCM it decoded, and leaves a buffer that was already there",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 the file kept for undo of a replaced clip is dropped once the clip is unreachable, and kept while it is in the scene",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H44 the file kept for undo of a replaced clip is not held alive by the record that it is kept",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1011 an export that fails closes every VideoFrame and its VideoEncoder",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1011 an audio encode that fails closes every AudioData and AudioEncoder it opened",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1010 the CPU blur reuses its scratch buffers, draws the same picture every time, and a plate past the cap still blurs",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H43 the Filter-container plates are released when nothing uses them, after a full-size frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 the effect sample tiles stay under their memory cap, and an evicted one is generated again on mount",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

@@ -1,0 +1,56 @@
+{
+ "ok": false,
+ "summary": "Regression 0/3 ✗Pending 0/0 built",
+ "failures": [
+  "FAIL1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture — after a 12-deep stack and one shallow frame, the canvas-effect pool still holds 12 entries (0 before) — each entry is two plate-sized canvases kept for the life of the page",
+  "FAILH40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame — the pool seam FM._poolStats is gone (1095)",
+  "FAILH43 the Filter-container plates are released when nothing uses them, after a full-size frame — the pool seam FM._poolStats is gone (1095)"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   7614,
+   "1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture"
+  ],
+  [
+   15,
+   "H40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame"
+  ],
+  [
+   0,
+   "H43 the Filter-container plates are released when nothing uses them, after a full-size frame"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H43 the Filter-container plates are released when nothing uses them, after a full-size frame",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

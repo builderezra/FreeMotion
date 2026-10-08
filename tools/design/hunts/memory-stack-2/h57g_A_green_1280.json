@@ -1,0 +1,82 @@
+{
+ "ok": true,
+ "summary": "Regression 6/6 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   407,
+   "H40 an export leaves no temporal plates behind in the motion-flow cache"
+  ],
+  [
+   326,
+   "H44 the file kept for undo of a replaced clip is not held alive by the record that it is kept"
+  ],
+  [
+   132,
+   "H40 an audio mix frees the PCM it decoded, and leaves a buffer that was already there"
+  ],
+  [
+   28,
+   "1011 an export that fails closes every VideoFrame and its VideoEncoder"
+  ],
+  [
+   15,
+   "H40 the file kept for undo of a replaced clip is dropped once the clip is unreachable, and kept while it is in the scene"
+  ],
+  [
+   2,
+   "1011 an audio encode that fails closes every AudioData and AudioEncoder it opened"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "H40 an export leaves no temporal plates behind in the motion-flow cache",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 an audio mix frees the PCM it decoded, and leaves a buffer that was already there",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 the file kept for undo of a replaced clip is dropped once the clip is unreachable, and kept while it is in the scene",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H44 the file kept for undo of a replaced clip is not held alive by the record that it is kept",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1011 an export that fails closes every VideoFrame and its VideoEncoder",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1011 an audio encode that fails closes every AudioData and AudioEncoder it opened",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}
