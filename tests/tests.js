@@ -23872,6 +23872,73 @@
     }
   });
 
+  /* H54. The real-time glide test above can only be as honest as setTimeout: under a 2x CPU throttle inside a full pass its 8 ms samples
+   * stretch to tens of ms, the two stall samples fill the 100 ms window, and a flick that was fast reads as slow (red in 2 of 6 H52
+   * slices, never alone). This one stamps every event itself (Object.defineProperty on the instance's timeStamp, the only clock
+   * attachGlide reads), so the gaps are EXACT and the same at 1280, at 380 and under any throttle — no sleep between samples at all.
+   *   A  eight 10 px moves g ms apart, then two zero-movement samples g ms apart, then the release one g later: glides for
+   *      g = 8, 16, 24, 26, the stall (three gaps) always under the 80 ms rest cutoff (the old window read 0.1 to 0.2 px/ms at 24 and 26, under the 0.25 bar);
+   *   B  the same moves, then the pointer is STILL 90 ms (no events) before release: parked, does not glide;
+   *   B2 the same, but the stall is a stream of zero-movement samples across 90 ms: still parked (zero events must not keep it live). */
+  test('glide (#715) H54: a mouse flick whose stall samples are far apart still glides, a pointer parked 90 ms does not, zero-movement events do not keep it live', { item: 'glide-velocity-h54', budgetMs: 60000 }, async function () {
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var saved = FM.scene, savedSel = FM.scene.selectedId;
+    try {
+      var L = FM.makeLayer('shape', { name: 'G', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 });
+      var inst = FM.fxRegistry.makeInstance('blur'), def = FM.fxRegistry.get('blur');
+      if (!inst || !def) throw new Error('could not build a blur instance to scrub');
+      var centre = function () {
+        var P = FM.scene.layers[0].effects[0].params;
+        def.params.forEach(function (p) { if (typeof p.min === 'number' && typeof p.max === 'number') P[p.key] = (p.min + p.max) / 2; });
+      };
+      L.effects = [inst];
+      FM.scene = scene([L]); centre();
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(120);
+      var cat = [].slice.call(document.querySelectorAll('#inspector button')).filter(function (b) { return /Effects/.test(b.textContent); })[0];
+      if (cat) { cat.click(); await sleep(160); }
+      var strip = document.querySelector('#inspector .fx-scrub');
+      if (!strip) {
+        var head = document.querySelector('#inspector .fx-head');
+        if (head) { head.click(); await sleep(160); strip = document.querySelector('#inspector .fx-scrub'); }
+      }
+      if (!strip) throw new Error('no .fx-scrub on screen — nothing to test');
+      var read = function () { return JSON.stringify(FM.scene.layers[0].effects[0].params); };
+      var r = strip.getBoundingClientRect(), cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+      var ev = function (type, x, t, up) {
+        var e = new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 9, pointerType: 'mouse', isPrimary: true, clientX: x, clientY: cy, button: 0, buttons: up ? 0 : 1 });
+        Object.defineProperty(e, 'timeStamp', { value: t });
+        return e;
+      };
+      // steps: [dx, ms since the previous event]; the release comes upMs after the last step
+      var drive = async function (steps, upMs) {
+        centre();
+        var x = cx, t = 1000;
+        strip.dispatchEvent(ev('pointerdown', x, t));
+        steps.forEach(function (s) { t += s[1]; x += s[0]; strip.dispatchEvent(ev('pointermove', x, t)); });
+        var atUp = read();
+        strip.dispatchEvent(ev('pointerup', x, t + upMs, true));
+        await sleep(280);
+        return { moved: read() !== atUp, atUp: atUp, after: read() };
+      };
+      var flick = function (g) { var a = []; for (var i = 0; i < 8; i++) a.push([-10, g]); return a; };
+      var bad = [];
+      for (var g of [8, 16, 24, 26]) {
+        var A = await drive(flick(g).concat([[0, g], [0, g]]), g);
+        if (!A.moved) bad.push('A: a flick of eight 10 px moves ' + g + ' ms apart that stalled for two samples did not glide');
+      }
+      var B = await drive(flick(8), 90);
+      if (B.moved) bad.push('B: a pointer still for 90 ms before the release glided');
+      var z = []; for (var k = 0; k < 6; k++) z.push([0, 15]);
+      var B2 = await drive(flick(8).concat(z), 15);
+      if (B2.moved) bad.push('B2: a stream of zero-movement samples across 90 ms kept a parked pointer live and it glided');
+      if (bad.length) throw new Error(bad.join(' · '));
+    } finally {
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      await sleep(60);
+    }
+  });
+
   /* Queue 73 (v6.21). Ezra: "currently the names of layers follow and stay on screen, I want them to
    * just stay at the start of the layer and not move along with you." The label used to track the
    * clip's VISIBLE left edge, so it slid along the bar as you scrolled and never left the screen.

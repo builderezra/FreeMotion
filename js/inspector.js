@@ -805,16 +805,22 @@ window.FM = window.FM || {};
     node.addEventListener('pointermove', e => {
       if (!drag) return;
       const tr = drag.trail; tr.push({ x: e.clientX, t: e.timeStamp });
-      while (tr.length > 2 && tr[1].t <= e.timeStamp - GLIDE_WINDOW) tr.shift();   // keep one sample at or before the window's edge
+      while (tr.length > 2 && tr[1].t <= e.timeStamp - GLIDE_WINDOW - GLIDE_REST) tr.shift();   // keep one sample at or before the edge of the window as it stood at the last real movement (a stall of up to GLIDE_REST follows it)
     });
-    // Travel over the window, not the last sample. A pointer still for GLIDE_REST before the release
-    // was parked. Sparse samples (a slow mouse) fall back to the one sample before the window.
+    // Travel over the window, not the last sample, and not counting the sample or two of the hand stopping: a mouse button
+    // releases while the hand is stopping, and under load those stall samples are tens of ms apart, so they filled the whole
+    // window and the flick read as slow (H54). So the window ends at the last sample that MOVED. A pointer that has not moved
+    // for GLIDE_REST before the release was parked (counted from that same sample, so zero-movement events cannot keep a
+    // parked pointer "live"). Sparse samples (a slow mouse) fall back to the one sample before the window.
     const releaseV = (e) => {
-      const tr = drag.trail, last = tr[tr.length - 1];
+      const tr = drag.trail;
+      let m = tr.length - 1;
+      while (m > 0 && tr[m].x === tr[m - 1].x) m--;
+      const last = tr[m];
       if (e.timeStamp - last.t > GLIDE_REST) return 0;
-      let i = tr.length - 1;
+      let i = m;
       while (i > 0 && tr[i - 1].t >= last.t - GLIDE_WINDOW) i--;
-      if (i === tr.length - 1 && i > 0) i--;
+      if (i === m && i > 0) i--;
       const dt = last.t - tr[i].t;
       return dt >= 8 ? (last.x - tr[i].x) / dt : 0;
     };

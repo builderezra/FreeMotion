@@ -1,0 +1,32 @@
+{
+ "ok": true,
+ "summary": "Regression 1/1 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   2859,
+   "glide (#715): a mouse flick glides — a stall at release does not kill it, a parked pointer does not fling, fine mode never glides"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "glide (#715): a mouse flick glides — a stall at release does not kill it, a parked pointer does not fling, fine mode never glides",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}
