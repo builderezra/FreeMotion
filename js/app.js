@@ -3707,6 +3707,7 @@ window.FM = window.FM || {};
     const same = id => id === layerId;
     if (FM.canvasEdit && FM.canvasEdit.cancelDrag && FM.canvasEdit.cancelDrag(same)) hit = true;
     if (FM.timeline && FM.timeline.abortGestures && FM.timeline.abortGestures(same)) hit = true;
+    if (FM.simpleTimeline && FM.simpleTimeline.abortGestures && FM.simpleTimeline.abortGestures(same)) hit = true;   // 2.5: inert in Full (no gesture is ever live there)
     // The 629 rule: if the layer he was on has gone, select nothing rather than something he did not pick.
     if (FM.scene && FM.scene.selectedId === layerId && !FM.layerById(FM.scene, layerId)) {
       FM.scene.selectedId = null;
