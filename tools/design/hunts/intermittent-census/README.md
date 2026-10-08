@@ -9,13 +9,16 @@ Tree: `wip/v17.26-tree` 5fe2deb0 (v17.26 on 2e3fd7a9), headless Chromium 1194 in
 | N1280 | 4/4 slices: Regression 568/572 ✗Pending 0/0 built + Regression 564/571 ✗ · NOT RUN HERE 3 Pending 0/0 built + Regression 547/572 ✗ · NOT RUN HERE 2 Pending 0/0 built + Regression 454/569 ✗ · NOT RUN HERE 91 Pending 0/0 built | 55 |
 | N380 | 4/4 slices: Regression 568/572 ✗Pending 0/0 built + Regression 564/571 ✗ · NOT RUN HERE 3 Pending 0/0 built + Regression 547/572 ✗ · NOT RUN HERE 2 Pending 0/0 built + Regression 454/569 ✗ · NOT RUN HERE 90 Pending 0/0 built | 56 |
 | T1280 | 4/4 slices: Regression 567/572 ✗Pending 0/0 built + Regression 564/571 ✗ · NOT RUN HERE 3 Pending 0/0 built + Regression 545/572 ✗ · NOT RUN HERE 2 Pending 0/0 built + Regression 453/569 ✗ · NOT RUN HERE 90 Pending 0/0 built | 60 |
-| T380 | 1/4 slices: Regression 567/572 ✗Pending 0/0 built | 5 |
+| T380 | 2/4 slices: Regression 567/572 ✗Pending 0/0 built + Regression 564/571 ✗ · NOT RUN HERE 3 Pending 0/0 built | 9 |
 
 ## Red names by pass (a name red in some passes and green in others is the intermittent kind)
 
 | test | N1280 | N380 | T1280 | T380 |
 |---|---|---|---|---|
 | 915.5Br a reused VIDEO is stored as a pointer that says video, and reopens as a playing video, not blank | RED | RED | RED | RED |
+| 921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders | RED | RED | RED | RED |
+| 921 S6 a shared copy finds its owner by itself: a here from the owner makes it offer again at once, its token lets it in, and a dropped link comes bac | RED | RED | RED | RED |
+| an export survives the tab being backgrounded (queue 47) | RED | RED | RED | RED |
 | home push: the press answers the tap, survives the wait, and hands over without a pop | RED | RED | RED | RED |
 | playhead: a rebuild during the return-to-home pop keeps --tl-panel-left honest | RED | RED | RED | RED |
 | the VIDEO strip decode is capped too, not just the image one | RED | RED | RED | RED |
@@ -48,15 +51,12 @@ Tree: `wip/v17.26-tree` 5fe2deb0 (v17.26 on 2e3fd7a9), headless Chromium 1194 in
 | 783: the dark look's intro is never bright after the mark has animated, and the light look's still ends white | RED | RED | RED | . |
 | 893: an export with no soundtrack does not print the previous export’s mix peak in its report | RED | RED | RED | . |
 | 921 S3 Stop sharing revokes the code that was handed out | RED | RED | RED | . |
-| 921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders | RED | RED | RED | . |
-| 921 S6 a shared copy finds its owner by itself: a here from the owner makes it offer again at once, its token lets it in, and a dropped link comes bac | RED | RED | RED | . |
 | 957 the empty project clapper opens, slams shut on the board with lines out of the tip, and stops when it cannot be seen | RED | RED | RED | . |
 | 974 the clapper's three timings each play as drawn: A open then every 6 s, B one clap then shut, C non-stop | RED | RED | RED | . |
 | 981 review: a real double-tap on the empty area - the first tap opens the add menu at once, and a second tap that lands on the menu as it swings up pi | RED | RED | RED | . |
 | 981 review: with less motion the add menu arrives on its plain 220 ms slide, and its cards still take no tap for a double-tap window (300 ms) after th | RED | RED | RED | . |
 | 988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they w | RED | RED | RED | . |
 | a trim grip needs a hold on touch, arms visibly, and is instant on mouse (queue 336) | RED | RED | RED | . |
-| an export survives the tab being backgrounded (queue 47) | RED | RED | RED | . |
 | effect panels carry no explanation block, and motion blur cranks past one frame (queue 378/379) | RED | RED | RED | . |
 | every category card has its own gradient ring, out of step with the others (queue 339) | RED | RED | RED | . |
 | export: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215) | RED | RED | RED | . |
@@ -75,3 +75,4 @@ Tree: `wip/v17.26-tree` 5fe2deb0 (v17.26 on 2e3fd7a9), headless Chromium 1194 in
 | 690 a Spin added at the start of its clip is not told it changes nothing while the box turns | . | . | RED | . |
 | 794: the does-nothing-here probe stays quiet for Time Warp Scan and its ghost-gated siblings, and still calls a real no-op dead | . | . | RED | . |
 | an effect that changes nothing on this layer is detected | . | . | RED | . |
+| the sheet previews the picked effects over the whole comp, and puts it all back (queue 277 + 390) | . | . | . | RED |
