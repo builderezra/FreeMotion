@@ -173,3 +173,26 @@ ADDED 8 Oct 17:45 by the PM. H52 was good work: the builder has its three findin
       - Name the leaked state.
       - Say whether the laptop's suite could hit it too.
       → tools/design/hunts/intermittent-census/order-deps.md on hunt/intermittent-census.
+
+ADDED 9 Oct 02:50 by the PM. Excellent batch: S1 especially. The builder has all of it. Same rules and QUALITY RULE. Keep your turn alive with short polls; push as you go; never push to main; never force-push. In order:
+- S4  Fix the four Simple-mode bugs your T10 walk found on 980-p22-r3, before 2.1/2.2 ship:
+      (a) typing 1 in Speed makes a 10-minute clip;
+      (b) the ✦ badge ignores effects;
+      (c) Simple's back arrow leaves the project (say what it should do per DESIGN.md, and quote the line);
+      (d) a slow swipe on a panel button raises a "Reset" menu.
+      Each gets a red-first test at 1280 and 380 and a mutation that is caught. Full must be unchanged (DESIGN §0.4).
+      Say which release (1.3 / 2.1 / 2.2) each fix belongs to.
+      → hunt/simple-t10-fixes (one commit per bug, based on 980-p22-r3), notes in tools/design/hunts/simple-t10-fixes.md.
+- S5  Your A1 question as pictures for Ezra: a video clip's tray has 13 tools, so on PC it goes back to one scrolling row.
+      - Render each option from your S1 doc in the real app at 1280x800 AND 1024x600, on a video clip with the tray open.
+      - Mark one "(recommended)".
+      - Put each screenshot plus a one-line caption in tools/design/plans/simple-mode/a1-options/ on plans/simple-2.3, and a sheet.jpg (all options side by side, under 3x as tall as wide) for his phone.
+- S2  Release 2.4 (riders, couplings and crossfades), written in full on top of hunt/simple-2.3. Same method as S1: BUILD-PLAN-PHASE2.md §6 anchors → full hunks and tests; red before, green after at 1280 and 380; the Simple slice stays green; mutations caught; Full unchanged. List every point where the plan was ambiguous.
+      → plans/simple-2.4 + hunt/simple-2.4.
+- S3  Release 2.5 (drags), the same way, on top of S2. Drags need real touch, so say plainly which tests only the laptop's finger pass can run, and write them so they report NOT RUN in your container rather than passing.
+      → plans/simple-2.5 + hunt/simple-2.5.
+- H57  Your H51 memory stack, rebased onto the newest main (v17.29 or later).
+      - Re-measure the phone session (renderer RSS, VmData, canvases) twice per tree, not once.
+      - Order the 14 patches into 3 landable groups, lowest risk first, each with its own tests.
+      → hunt/memory-stack-2 (a NEW branch name).
+- P16  Plans for the 5 oldest open items after P15's, callers traced. → plans/helper-16.
