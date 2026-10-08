@@ -4017,6 +4017,14 @@ window.FM = window.FM || {};
           }, 480);
         });
         ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => card.addEventListener(ev, clear));
+        /* S4d: IN SIMPLE a finger that starts a swipe on a card and moves past a tap's slop is no longer holding it: the 480 ms timer was only
+           cleared on up, cancel and leave, so a slow swipe raised "Reset <group>". Full's identical code is left as it is (DESIGN §0.4). */
+        let holdAt = null;
+        card.addEventListener('pointerdown', ev => { holdAt = { x: ev.clientX, y: ev.clientY }; });
+        card.addEventListener('pointermove', ev => {
+          if (!holdAt || !(FM.editor && FM.editor.isSimple && FM.editor.isSimple())) return;
+          if (Math.hypot(ev.clientX - holdAt.x, ev.clientY - holdAt.y) > 10) clear();
+        });
       }
       card.addEventListener('click', (ev) => {
         if (card._heldReset) { card._heldReset = false; if (ev) { ev.preventDefault(); ev.stopPropagation(); } return; }
