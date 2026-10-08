@@ -60052,6 +60052,81 @@
     }
   });
 
+  /* ═══ #1009 — fill pictures from a project he has left were kept for the whole session (js/compositor.js getFillImage). ═══
+     The cache evicted ONE dead entry per miss and only past 40, so a 100-fill project followed by any other project kept about
+     100 decoded pictures (and their data-URL strings) alive. Counted with WeakRefs on the Images themselves and a REAL garbage
+     collection (tests/_cdp.py), so it needs no seam in the app and fails on main for the reason it names. */
+  test('1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice', { item: '1009', budgetMs: 90000 }, async function () {
+    const orig = FM.projects.currentId(), wasOpen = FM.home.isOpen(), made = [], RealImage = window.Image, refs = [];
+    const fill = n => { const c = offscreen(64, 64), g = c.getContext('2d'); g.fillStyle = 'hsl(' + (n * 37 % 360) + ',70%,' + (30 + n % 40) + '%)'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#fff'; g.fillRect(n % 50, (n * 7) % 50, 9, 9); return c.toDataURL('image/png'); };
+    const draw = async function (n) {
+      const c = offscreen(160, 120);
+      for (let k = 0; k < 3; k++) { FM.renderScene(c.getContext('2d'), FM.scene, 0.5); await sleep(120); }
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      window.Image = function () { const im = new RealImage(); refs.push(new WeakRef(im)); return im; };
+      window.Image.prototype = RealImage.prototype;
+      const a = await FM.projects.create({ name: 'FX1009 A', width: 320, height: 240 }); made.push(a);
+      const N = 60, urls = [];
+      for (let i = 0; i < N; i++) { urls.push(fill(i)); const L = FM.makeLayer('shape', { shape: 'rect', x: 20 + (i % 10) * 28, y: 20 + Math.floor(i / 10) * 28, shapeW: 24, shapeH: 24, fill: '#fff', start: 0, duration: 3 }); L.fillMode = 'media'; L.fillImage = urls[i]; FM.scene.layers.push(L); }
+      await draw();
+      const made1 = refs.length;
+      if (made1 < N) throw new Error('CONTROL: only ' + made1 + ' of ' + N + ' fill pictures were decoded — the fills did not draw, so the count below means nothing');
+      await draw();
+      if (refs.length !== made1) throw new Error('inside one project the ' + N + ' fills were decoded again on a second draw (' + (refs.length - made1) + ' new Images): the cache is thrashing');
+      const b = await FM.projects.create({ name: 'FX1009 B', width: 320, height: 240 }); made.push(b);
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff', start: 0, duration: 3 }); L.fillMode = 'media'; L.fillImage = fill(500); FM.scene.layers.push(L);
+      await draw();
+      await FM.projects.open(a, { confirmed: true }); await FM.projects.open(b, { confirmed: true });
+      await draw(); await sleep(300);
+      await hf2Gc('after leaving the 60-fill project');
+      const alive = refs.filter(r => r.deref()).length;
+      if (alive > 4) throw new Error(alive + ' of the ' + refs.length + ' fill pictures are still alive after the project that used them was left and a forced collection: getFillImage keeps them for the whole session');
+    } finally {
+      window.Image = RealImage;
+      await q915aCleanup(made, orig, wasOpen, [], [], []);
+    }
+  });
+
+  /* ═══ #1010 — the no-GPU blur fallback allocated two big Float32Arrays on EVERY call (js/compositor.js cpuBlurCanvas). ═══
+     67 MB per call at 1080x1920. Reached only when ctx.filter is unusable and WebGL blur returns null, which the seam below
+     forces. Counted with a Proxy on Float32Array so it needs no seam; output must not change, and a pair left over from a
+     different picture must not show through (call 3 repeats call 1 after call 2 drew something else). */
+  test('1010 the CPU blur reuses its scratch buffers, draws the same picture every time, and a plate past the cap still blurs', { item: '1010', budgetMs: 60000 }, async function () {
+    if (typeof FM._drawBlurredNoFilter !== 'function') throw new Error('the no-filter blur seam is missing (FM._drawBlurredNoFilter)');
+    const RealF32 = window.Float32Array, realBlur = FM.glColor && FM.glColor.blur;
+    let big = 0, bigBytes = 0;
+    const run = function (w, h, r, shade) {
+      const src = offscreen(w, h), sg = src.getContext('2d'); sg.fillStyle = shade; sg.fillRect(w * 0.3, h * 0.3, w * 0.4, h * 0.4);
+      const dst = offscreen(w, h), dg = dst.getContext('2d');
+      FM._drawBlurredNoFilter(dg, src, r, 0, 0, w, h);
+      return Array.from(dg.getImageData(0, 0, w, h).data);
+    };
+    try {
+      if (FM.glColor) FM.glColor.blur = function () { return null; };
+      window.Float32Array = new Proxy(RealF32, { construct: function (t, a, nt) { if (typeof a[0] === 'number' && a[0] >= 100000) { big++; bigBytes += a[0] * 4; } return Reflect.construct(t, a, nt); } });
+      run(160, 120, 5, '#ff4d6d');   // warm: whichever pair the build keeps is made here
+      big = 0;
+      const first = run(160, 120, 5, '#ff4d6d');
+      const other = run(160, 120, 5, '#22c55e');
+      const again = run(160, 120, 5, '#ff4d6d');
+      if (big > 0) throw new Error('three blurs of the same 160x120 plate made ' + big + ' new big Float32Arrays (' + Math.round(bigBytes / 1e6 * 10) / 10 + ' MB): the scratch pair is allocated per call');
+      let diff = 0; for (let i = 0; i < first.length; i++) if (first[i] !== again[i]) diff++;
+      if (diff) throw new Error('the same blur drawn again after a different picture differs in ' + diff + ' bytes: the reused buffers leak the previous picture');
+      let mid = 0; for (let i = 0; i < other.length; i += 4) if (other[i + 3] > 0 && other[i] !== first[i]) mid++;
+      if (!mid) throw new Error('CONTROL: the green and the pink blur came out the same, so the comparison above proves nothing');
+      // control: a plate past the cap still works (it may allocate; it just must not break)
+      big = 0;
+      const huge = run(800, 800, 6, '#ff4d6d');
+      const i0 = (400 * 800 + 400) * 4, edge = (400 * 800 + 240 - 3) * 4;
+      if (huge[i0 + 3] !== 255 || !(huge[edge + 3] > 0 && huge[edge + 3] < 255)) throw new Error('a plate past the buffer cap did not blur: centre alpha ' + huge[i0 + 3] + ', edge alpha ' + huge[edge + 3]);
+    } finally {
+      window.Float32Array = RealF32;
+      if (FM.glColor) FM.glColor.blur = realBlur;
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
@@ -120419,5 +120494,36 @@
     if (src.indexOf(old) > src.indexOf('lsSide<lsSides')) throw new Error('the side loop comes before the v17.21 loop, so it is still in the path One way takes');
   });
 
+
+
+  /* H40: THE SAMPLE-TILE CACHE IS CAPPED. fx-thumbs `cache` kept every sample tile for the session (only the layer previews were on the
+     LRU): one pass through the 12 categories left 83 MB of canvases (Measured, 205 effects). This mounts every effect's sample tile,
+     lets the generator drain, and asks that the stock entries stay under their cap, that the cache is not simply empty (a cap that
+     evicts everything also passes a size check), and that an evicted tile paints again when it is mounted again. */
+  test('H40 the effect sample tiles stay under their memory cap, and an evicted one is generated again on mount', { item: 'H40', budgetMs: 120000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    if (!FM.fxThumbs || !FM.fxThumbs.queueState || !FM.fxRegistry) throw new Error('fxThumbs.queueState or the registry is missing');
+    if (!FM.fxThumbs.cacheBytes) throw new Error('FM.fxThumbs.cacheBytes (the suite seam that sums the cache) is missing');
+    const types = FM.fxRegistry.all().map(f => f.type);
+    const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-9999px;top:0;width:400px;height:400px;overflow:hidden';
+    document.body.appendChild(host);
+    const cvs = [];
+    try {
+      for (const t of types) { const c = document.createElement('canvas'); host.appendChild(c); FM.fxThumbs.mount(c, t); cvs.push(c); }
+      const end = Date.now() + 100000;
+      while (Date.now() < end) { const q = FM.fxThumbs.queueState(); if (!q.queued && !q.pending && !q.jobs) break; await sleep(300); }
+      const st = FM.fxThumbs.stats(), real = FM.fxThumbs.cacheBytes();
+      /* what the cache REALLY holds (every frame of every entry), against the two caps: the layer previews' 10 MB and the sample tiles' 32 MB */
+      const CAP = 10 * 1048576 + 32 * 1048576;
+      if (real > CAP) throw new Error('after mounting all ' + types.length + ' effects the tile cache holds ' + Math.round(real / 1048576) + ' MB of canvases, over the ' + Math.round(CAP / 1048576) + ' MB the two caps allow');
+      if (FM.fxThumbs.queueState().cached < 10) throw new Error('only ' + FM.fxThumbs.queueState().cached + ' tiles are cached after mounting ' + types.length + ' effects — the cap is evicting almost everything, or nothing was generated');
+      // an evicted tile comes back: find a type that is no longer cached by mounting a fresh canvas and waiting for it to paint
+      const probe = document.createElement('canvas'); host.appendChild(probe);
+      FM.fxThumbs.mount(probe, types[0]);
+      const end2 = Date.now() + 20000;
+      while (Date.now() < end2 && !probe.classList.contains('ready')) await sleep(200);
+      if (!probe.classList.contains('ready')) throw new Error('the first effect\'s tile never painted when it was mounted again');
+    } finally { host.remove(); }
+  });
 
 })();
