@@ -60420,6 +60420,35 @@
      Its Canvas settings resolution list tops out at 2160p, and until v9.27 the first import set the
      project to the file's pixel dimensions verbatim — so a phone photo (3024x4032 is a stock iPhone
      still) made a 12.2-MEGAPIXEL composition. That is the project in his measurement in queue 202. */
+  test('a project file without a layer transform survives import, save and reopen', { item: '1040', budgetMs: 30000 }, async function () {
+    const prior = FM.projects.currentId(), wasHome = FM.home && FM.home.isOpen && FM.home.isOpen(), made = [];
+    try {
+      for (const mode of ['missing', 'null']) {
+        const layer = FM.makeLayer('shape', { name: 'Missing transform ' + mode, x: 90, y: 70 });
+        if (mode === 'missing') delete layer.transform; else layer.transform = null;
+        const file = { app: 'freemotion', project: { name: 'Transform repair ' + mode, width: 180, height: 140, duration: 2, fps: 30 }, layers: [layer], media: {} };
+        if (!(await FM.storage.importObject(file, null, { quiet: true, confirmed: true })))
+          throw new Error('the ' + mode + '-transform project was refused');
+        made.push(FM.projects.currentId());
+        const check = where => {
+          const got = FM.scene.layers.find(l => l.name === layer.name);
+          if (!got || !got.transform || typeof got.transform !== 'object' ||
+              !Number.isFinite(got.transform.scale) || !Number.isFinite(got.transform.anchorX))
+            throw new Error(where + ': the ' + mode + ' transform was not rebuilt');
+          FM.animatedProps(got); // the old timeline crash was Object.keys(layer.transform)
+          FM.refreshAll();
+        };
+        check('import');
+        await FM.storage.save();
+        if (FM.storage.settled) await FM.storage.settled();
+        if (!(await FM.storage.load())) throw new Error('the saved ' + mode + '-transform project did not reopen');
+        check('reopen');
+      }
+    } finally {
+      await hfCleanup(made, prior, wasHome);
+    }
+  });
+
   test('the first import cannot create a project bigger than the biggest preset', { item: 'proj-cap' }, function () {
     if (!FM.fitProjectSize) throw new Error('FM.fitProjectSize is missing');
     var f = FM.fitProjectSize;

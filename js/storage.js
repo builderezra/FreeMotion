@@ -1532,6 +1532,14 @@ window.FM = window.FM || {};
    * load path's comment already declines, and it is logged rather than smuggled in. */
   function sanitizeUnsafeValues(l) {
     if (!l) return;
+    // Every route through this cheap sanitizer (project load, file/template import, history and
+    // collaboration) needs a drawable transform. A missing/null/array value otherwise reaches
+    // animatedProps and makes the timeline and later project opens throw before Home appears.
+    const tr = l.transform;
+    if (!tr || typeof tr !== 'object' || Array.isArray(tr) ||
+        (Object.getPrototypeOf(tr) !== Object.prototype && Object.getPrototypeOf(tr) !== null)) {
+      l.transform = FM.makeLayer(typeof l.type === 'string' && l.type ? l.type : 'shape').transform;
+    }
     if (l.fillImage != null && !/^data:image\//i.test(String(l.fillImage))) delete l.fillImage;
     if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
     if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour
