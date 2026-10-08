@@ -278,7 +278,12 @@ that all said the same stale thing. The method that worked lived only in a memor
 
 **Never take a browser reading, or edit THIS tree, while `.mutation-in-progress` or `.ship-in-progress` exists.** The
 browser loads whatever is on disk (a reading taken during a mutation describes the MUTATION — that has happened), and
-ship.sh's phone pass and its `git add -A` both read the tree as it is at that moment.
+ship.sh's phone pass and its `git add -A` both read the tree as it is at that moment. (Since 8 Oct ship.sh REFUSES at the
+commit if the app or tests changed after its proof — RULES-AUDIT B6 — so a slip costs a re-ship, not a wrong release.)
+
+**Load spikes during a ship:** on the Mac they are often Spotlight (mds/mdworker) — check
+`ps -axo pcpu,command | grep -E '[m]ds|[m]dworker'` before blaming code. On the laptop it is usually HEAT after long suite
+stretches: bench first (the 921 S8 test alone; over ~9.6 ms = hot) and do code-only work until it cools.
 
 ### Run ONE test, or a slice, instead of the whole suite (2 Sep)
 

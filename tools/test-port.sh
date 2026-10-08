@@ -64,6 +64,48 @@ awk '/_docsonly.py paths/{d=NR} /^ship_phase prove/{p=NR} END{exit !(d && p && d
 grep -q 'git add -A -- "${_DP\[@\]}"' tools/ship.sh && grep -q '_EXTRA=' tools/ship.sh \
   && ok "…stages exactly the changed docs (an explicit pathspec) and refuses if anything else is staged" || bad "the fast path does not stage by explicit pathspec / check for extra staged files"
 grep -qE '^\s*if \[ "\$\{BATCH:-1\}" = "1" \]' tools/ship.sh && bad "the 12-minute BATCH gate is still in ship.sh (B7 replaces it)" || ok "the 12-minute BATCH gate is gone (the fast path replaces it)"
+echo "── every function ship.sh calls at top level is DEFINED ABOVE that call (8 Oct: v17.29's first ship called ship_tree_hash first) ──"
+python3 - tools/ship.sh <<'PY' && ok "no top-level call in ship.sh comes before its function's definition (bash would say 'command not found' and carry on)" || bad "ship.sh calls a function above its definition (see above)"
+import re, sys
+L = open(sys.argv[1], encoding='utf-8').read().split('\n')
+defs, body = {}, set()
+i = 0
+while i < len(L):
+    m = re.match(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{', L[i])
+    if m:
+        defs.setdefault(m.group(1), i)
+        if re.search(r'\}\s*(#.*)?$', L[i]) and L[i].count('{') <= L[i].count('}'):
+            body.add(i); i += 1; continue          # a one-line function
+        j = i
+        while j < len(L) and L[j] != '}':
+            body.add(j); j += 1
+        body.add(j); i = j + 1; continue
+    i += 1
+bad = []
+for name, d in defs.items():
+    pat = re.compile(r'(^|[\s;|&(`$!])' + re.escape(name) + r'(\s|$|;|\)|`)')
+    for k, l in enumerate(L):
+        if k in body or l.lstrip().startswith('#'): continue
+        code = l.split(' #')[0]
+        if pat.search(code):
+            if k < d: bad.append('%s called at line %d, defined at line %d' % (name, k + 1, d + 1))
+            break
+if bad: print('   ' + '; '.join(bad)); sys.exit(1)
+PY
+echo "── ship.sh's guards (8 Oct, RULES-AUDIT B6): the tree that ships is the one tested; a stall ends the pass; reds say if they pass alone ──"
+v="$(python3 tools/_redtitles.py selftest 2>&1)"; rc=$?
+[ "$rc" = 0 ] && ok "tools/_redtitles.py selftest (a failure row → the LONGEST real title it starts with)" || bad "_redtitles selftest: rc=$rc $v"
+awk '/^_PROVE_HASH="\$\(ship_tree_hash\)"/{h=NR} /^ship_phase prove/{p=NR} /ship_tree_hash\)" != "\$_PROVE_HASH"/{c=NR} /^git add -A$/{a=NR} END{exit !(h && p && c && a && h < p && p < c && c < a)}' tools/ship.sh \
+  && ok "the app/tests hash is taken before the proof and re-checked after the passes, just before git add -A" || bad "ship.sh's tree hash is not taken before prove and checked before git add -A"
+awk '/^ship_phase push/{p=NR} /\.mutation-in-progress \] && \{ echo "❌ a mutation is in progress/{m=NR} /^git add -A$/{a=NR} END{exit !(p && m && a && p < m && m < a)}' tools/ship.sh \
+  && ok "…and a mutation in progress refuses the commit" || bad "no .mutation-in-progress re-check between push and git add -A"
+grep -q "grep -q '^✅ prove:' .claude/ship/prove.out && _PROVEN=1" tools/ship.sh && grep -q 'PROVEN-at-ship' tools/ship.sh && grep -q 'PROVEN-at-ship' tools/tick.sh \
+  && ok "PROVEN-at-ship is logged only on prove's printed pass, and tick.sh's PROOF DEBT reads it by version" || bad "PROVEN-at-ship wiring missing (ship.sh / tick.sh)"
+[ "$(grep -c '^ *alone_diag \.claude/ship/suite-' tools/ship.sh)" = 2 ] && ok "a red desktop or phone pass prints PASSES ALONE / FAILS ALONE for its reds" || bad "alone_diag is not called after both red passes"
+[ "$(grep -c '"error": "STALLED' tools/ship.sh)" = 2 ] && grep -q 'STALL_TEST_S' tests/_cdp.py && grep -q '"STALLED: "' tests/_cdp.py \
+  && ok "tests/_cdp.py ends a stuck run as STALLED, and ship.sh says so at both passes" || bad "the STALLED verdict is not wired in _cdp.py and both passes"
+awk '/^  ship_phase phone/{p=NR} /while \[ "\$_lw" -lt 1200 \]/{w=NR} /running the suite again at PHONE/{r=NR} END{exit !(p && w && r && p < w && w < r)}' tools/ship.sh \
+  && ok "the phone pass waits up to 20 min for the load to settle, then runs regardless" || bad "no load wait before the phone pass"
 echo "── a release that drops tests is told to lower the floor at the GATE, not after the pass (7 Oct, v17.26's 4th ship) ──"
 FR="$TMP/floor-repo"; mkdir -p "$FR/tests" "$FR/tools"; cp tools/_testfloor.sh "$FR/tools/"
 printf "  test('a', 1)\n  test('b', 1)\n  test('c', 1)\n" > "$FR/tests/tests.js"; echo 3 > "$FR/tools/.test-floor"

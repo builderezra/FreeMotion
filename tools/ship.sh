@@ -671,7 +671,7 @@ fi
 # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
 # EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
 # that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
-if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_docsonly.py tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
+if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
   echo "→ the port's gates or the driver changed — proving them before shipping"
   if ! ./tools/test-port.sh; then
     echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."
@@ -838,9 +838,24 @@ if [ "${#_DP[@]}" -gt 0 ] && python3 tools/_docsonly.py paths "${_DP[@]}" >/dev/
   exit 0
 fi
 
+# THE TREE THAT SHIPS IS THE TREE THAT WAS TESTED (8 Oct — RULES-AUDIT B6). Defined HERE, above its first call: v17.29's
+# first ship had it further down beside _whyslow, bash said "command not found", the hash came out EMPTY, and the
+# commit check would have refused a clean tree two hours later (test-port.sh now checks every function's order). Taken before the proof, checked just before
+# `git add -A`: an app or test edit made while the ship ran — another session, a hand edit, a pull — would otherwise be swept
+# into a release none of its passes ever saw. The app's shipped files and tests/ only: notes may legitimately land meanwhile.
+ship_tree_hash() {
+  { git diff HEAD -- index.html styles.css theme-glass.css sw.js manifest.json js vendor tests
+    git ls-files -o --exclude-standard -- index.html styles.css theme-glass.css sw.js manifest.json js vendor tests \
+      | while IFS= read -r f; do printf '%s\n' "$f"; cat "$f"; done; } | fm_sha1
+}
+_PROVE_HASH="$(ship_tree_hash)"   # checked again just before `git add -A` (B6)
 ship_phase prove
 echo "→ proving the release (its changed tests must fail without the fix)…"
-tools/prove.sh || { echo "   Not committing, not pushing."; exit 1; }
+mkdir -p .claude/ship
+tools/prove.sh | tee .claude/ship/prove.out; _prc=${PIPESTATUS[0]}
+[ "$_prc" = 0 ] || { echo "   Not committing, not pushing."; exit 1; }
+# PROVEN-AT-SHIP (B6): only a proof prove.sh actually PRINTED — never its "nothing to prove" or UNPROVABLE way out
+_PROVEN=""; grep -q '^✅ prove:' .claude/ship/prove.out && _PROVEN=1
 
 # 2700, not 1800 (26 Sep): measured at v17.01 on an idle Mac (load ~2 on 6 cores) a green full pass took 1848 s — the suite
 # had simply outgrown 1800 (1971 tests; the tier-3 and real-input tests are the long ones). Two ships ran out of time with the
@@ -890,6 +905,32 @@ _whyslow() {
   fm_top_cpu 6
   fm_slow_hint | sed 's/^/      /'
 }
+# PASSES-ALONE / FAILS-ALONE (8 Oct — RULES-AUDIT B6). A red pass still refuses — this is DIAGNOSIS, printed under it: each
+# red test (up to 6, by its exact title — tools/_redtitles.py) runs alone in a fresh page. "PASSES ALONE" says the red
+# depends on what ran before it (the shapes in memory: laptop-flake-patterns — inherited state, same-instant input, a clock
+# read in the wrong place, a budget that says "unknown"); "FAILS ALONE" says look at the test or the code first. v17.26
+# took 13 ships, and every one of its reds had to be re-run by hand to learn which of the two it was.
+alone_diag() {   # $1 = the pass's saved driver output, $2 = width
+  local t q out v n=0
+  mapfile -t _RED < <(python3 tools/_redtitles.py "$1" 6 2>/dev/null)
+  [ "${#_RED[@]}" -gt 0 ] || return 0
+  echo "   ── each red test run ALONE at ${2}px (diagnosis only — the release is refused either way):"
+  for t in "${_RED[@]}"; do
+    n=$((n+1)); printf '%s\n' "$t" > ".claude/ship/alone-$n.t"
+    q="$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(open(sys.argv[1]).read().rstrip("\n"), safe=""))' ".claude/ship/alone-$n.t")"
+    python3 tests/_cdp.py --port 8777 --width "$2" --names --timeout 600 --url "http://localhost:8777/tests/run.html?only=$q" > ".claude/ship/alone-$n.out" 2>&1
+    v="$(python3 tools/_spotjudge.py ".claude/ship/alone-$n.out" ".claude/ship/alone-$n.t" | head -1)"
+    if grep -q "$(printf '^NORUN\t.*needs real touch emulation')" <<<"$v"; then   # a finger test: its own touch page, as everywhere
+      FM_TOUCH_PAGE=1 python3 tests/_cdp.py --port 8777 --width "$2" --names --timeout 600 --url "http://localhost:8777/tests/run.html?only=$q" > ".claude/ship/alone-$n.out" 2>&1
+      v="$(python3 tools/_spotjudge.py ".claude/ship/alone-$n.out" ".claude/ship/alone-$n.t" | head -1)"
+    fi
+    case "$v" in
+      PASS*)  echo "      PASSES ALONE  ${t:0:110}   ← depends on what ran before it" ;;
+      FAIL*)  echo "      FAILS ALONE   ${t:0:110}   ← $(cut -f3 <<<"$v" | cut -c1-140)" ;;
+      *)      echo "      ? alone       ${t:0:110}   ($(cut -f3 <<<"$v" | cut -c1-120))" ;;
+    esac
+  done
+}
 
 if [ "$_last_suite" -gt 0 ]; then echo "→ running the suite (the last green pass took $(( _last_suite / 60 )) minutes; cap ${SUITE_TIMEOUT}s)…"
 else echo "→ running the suite (cap ${SUITE_TIMEOUT}s)…"; fi
@@ -912,6 +953,13 @@ if grep -q 'did not finish within' <<<"$OUT"; then
   _whyslow
   exit 1
 fi
+if grep -q '"error": "STALLED' <<<"$OUT"; then   # tests/_cdp.py ended the pass where it stuck (B6), not at the cap
+  echo "⏸  THE SUITE STALLED — it did NOT fail. Nothing is committed or pushed. The driver said:"
+  printf '%s' "$OUT" | grep -oE '"(error|lastTest)": "[^"]*"' | head -2 | sed 's/^/   /'
+  echo "   One stall point → look at that test. A stall point that MOVES between runs → the machine (below)."
+  _whyslow
+  exit 1
+fi
 if ! grep -q '"ok": true' <<<"$OUT"; then
   # ⚠️ "not green" is not the same as "a test failed", and this branch used to assert the second.
   # It printed "SUITE IS RED" followed by the FAIL lines — and when the cause was anything OTHER than
@@ -921,6 +969,7 @@ if ! grep -q '"ok": true' <<<"$OUT"; then
   if grep -q 'FAIL' <<<"$OUT"; then
     echo "❌ SUITE IS RED — not committing, not pushing."
     printf '%s' "$OUT" | _fails
+    alone_diag .claude/ship/suite-desktop.out 1280
   elif [ -n "$SUM" ]; then
     # …and a run that FINISHED with the runner's own Error summary (the app frame reloaded, the page navigated, the run
     # itself threw) is not "did not run": it ran to the end and said why it stopped. That summary is the answer — print it.
@@ -990,6 +1039,14 @@ NOTRUN_ALL="$NOTRUN_PASS"
 PHONE_RELEVANT="$(git diff --cached --name-only; git diff --name-only)"
 if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
   ship_phase phone
+  # THE PHONE PASS WAITS FOR A SETTLED MACHINE, THEN GOES AHEAD REGARDLESS (8 Oct — RULES-AUDIT B6): up to 20 minutes for the
+  # 1-minute load to fall under the bar (fm_load_bar), printing what is busy — never a refusal after a green desktop pass.
+  _lw=0
+  while [ "$_lw" -lt 1200 ] && _L1="$(fm_load1)" && _LB="$(fm_load_bar)" && awk -v l="$_L1" -v b="$_LB" 'BEGIN{exit !(l > b)}'; do
+    if [ "$_lw" = 0 ]; then echo "· load $_L1 is over $_LB before the phone pass — waiting up to 20 minutes for it to fall, then going ahead regardless:"; _whyslow; fi
+    sleep 30; _lw=$((_lw + 30))
+  done
+  [ "$_lw" -gt 0 ] && echo "· waited ${_lw}s for the load (now $(fm_load1 2>/dev/null || echo ?))"
   echo "→ running the suite again at PHONE width (380px)…"
   POUT="$(python3 tests/_cdp.py --port 8777 --width 380 --timeout $SUITE_TIMEOUT --progress .claude/ship/progress-phone.json 2>&1)"
   printf '%s\n' "$POUT" > .claude/ship/suite-phone.out 2>/dev/null   # kept, as the desktop pass's is
@@ -997,6 +1054,12 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
   if grep -q 'did not finish within' <<<"$POUT"; then
     echo "⏱  THE PHONE PASS RAN OUT OF TIME after ${SUITE_TIMEOUT}s — it did NOT fail. Nothing committed or pushed."
     printf '%s' "$POUT" | grep -o '"lastTest": "[^"]*"' | head -1
+    _whyslow
+    exit 1
+  fi
+  if grep -q '"error": "STALLED' <<<"$POUT"; then
+    echo "⏸  THE PHONE PASS STALLED — it did NOT fail. Nothing is committed or pushed. The driver said:"
+    printf '%s' "$POUT" | grep -oE '"(error|lastTest)": "[^"]*"' | head -2 | sed 's/^/   /'
     _whyslow
     exit 1
   fi
@@ -1016,6 +1079,7 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
     echo "   It is GREEN at 1280px, so this is a layout that only breaks on a phone — which is the"
     echo "   one shape of bug this app can least afford, and exactly how queue 431 shipped."
     printf '%s' "$POUT" | _fails
+    alone_diag .claude/ship/suite-phone.out 380
     exit 1
   fi
   test_floor_check "$POUT" || { echo "   Not committing, not pushing."; exit 1; }
@@ -1047,6 +1111,15 @@ if [ -n "${NOTRUN_ALL:-}" ]; then
 fi
 
 ship_phase push
+# B6 (8 Oct): no mutation may be in the tree that ships, and the app/tests must be the ones the passes ran
+[ -f .mutation-in-progress ] && { echo "❌ a mutation is in progress (.mutation-in-progress) — the tree is not the code; not committing"; _WHY="a mutation was in progress at commit time"; exit 1; }
+if [ "$(ship_tree_hash)" != "$_PROVE_HASH" ]; then
+  echo "❌ THE APP OR ITS TESTS CHANGED WHILE THIS SHIP RAN — not committing, not pushing."
+  echo "   Every pass above tested the tree as it was at the proof; what is on disk now is different (git diff will show it)."
+  echo "   Ship again from the tree as it is — never sweep unseen edits into a release."
+  _WHY="the app or tests changed under the ship"; exit 1
+fi
+[ -n "$_PROVEN" ] && printf '%s %s PROVEN-at-ship\n' "$(date '+%Y-%m-%d %H:%M')" "$VER" >> tools/.spotcheck.log   # read by tick.sh
 git add -A
 git commit -q -m "$MSG" || { echo "ship: nothing to commit"; exit 1; }
 git push -q ssh main 2>&1 | tail -2

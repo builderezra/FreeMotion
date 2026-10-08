@@ -153,7 +153,9 @@ in-flight #382 that had already shipped. **Keep the STATE section below current 
       seam rather than on behaviour — accepted, but a behavioural assertion is better.
     · **`tools/spotcheck.sh <commit>`** — the same proof, after the fact, for any past release, in a throwaway
       worktree on its own port. It logs to `tools/.spotcheck.log`; **`tools/tick.sh` lists the releases never checked
-      (PROOF DEBT) and the ones whose proof FAILED.** An idle tick pays proof debt instead of inventing work.
+      (PROOF DEBT) and the ones whose proof FAILED.** An idle tick follows the #966 idle steer (rule 8b) instead of inventing work. (8 Oct, RULES-AUDIT B6: ship.sh now
+      logs PROVEN-at-ship for every release it proved, so PROOF DEBT lists only merges, commits made outside ship.sh and
+      declared UNPROVABLEs — paying it is no longer the idle default.)
       First run (5 Sep): 3 of the first 5 releases proven, 1 weak, **v15.53 NOT-PROVEN** — one of its two changed
       tests still passes with the fix reverted.
     · **`tools/tick.sh`** — the one command a tick runs first. It COMPUTES what a tick needs (mutation lock, live

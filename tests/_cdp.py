@@ -51,6 +51,10 @@ import _platform  # noqa: E402
 # The Chrome binary ($FM_CHROME, else the Mac app, else google-chrome… on PATH). Still a module attribute because probes
 # compare against it; None when there is none, and launch() then refuses, naming everything it tried.
 CHROME = _platform.find_chrome()
+# STALLED thresholds (RULES-AUDIT B6): a page silent this long, or one test current this long, ends the run as STALLED.
+# FM_STALL_TEST_S exists for tools/test-port.sh's stub check and nothing else; the suite's tests stay far under 900.
+STALL_SILENT_S = 600
+STALL_TEST_S = int(os.environ.get("FM_STALL_TEST_S") or 900)
 
 
 def free_port():
@@ -493,6 +497,18 @@ def main():
                                                  "elapsed_s": round(time.time() - (deadline - a.timeout))}) + "\n")
                     except Exception:
                         pass
+                # STALLED (8 Oct — RULES-AUDIT B6): a page that has not answered for 10 minutes, or ONE test that has been the
+                # current test for 15, is not "still running" — the largest declared test budget is 420 s. Ended here, as a run
+                # that says where it stuck, instead of waiting out the suite's whole cap (77 minutes on the laptop) to say the
+                # same thing. The stall point is the evidence: one test → look at it; a MOVING point across runs → the machine.
+                silent, on_it = time.time() - track["last_ok"], time.time() - track["since"]
+                if silent > STALL_SILENT_S or on_it > STALL_TEST_S:
+                    why = ("the page has not answered for %ds" % silent) if silent > STALL_SILENT_S else \
+                          ("one test has been the current test for %ds (the largest declared budget is 420 s)" % on_it)
+                    print(json.dumps({"ok": False, "error": "STALLED: " + why, "lastTest": track["name"],
+                                      "onItSeconds": round(on_it), "testsSeen": track["n"],
+                                      "pageSilentSeconds": round(silent), "browser": _browser()}))
+                    return 2
             # A TEST MAY ASK FOR A CPU THROTTLE, AND ONLY THIS DRIVER CAN GIVE ONE (queue 921 S8). The page cannot
             # slow itself down — `Emulation.setCPUThrottlingRate` is a DevTools call — and a performance budget
             # measured on a fast Mac says nothing about a phone. So a test writes `window.__fmWantCpu =

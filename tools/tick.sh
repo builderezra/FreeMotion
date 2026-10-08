@@ -98,6 +98,9 @@ for l in log:
     files = subprocess.run(['git','diff-tree','--no-commit-id','--name-only','-r',h], capture_output=True, text=True).stdout.split()
     if not any(re.match(r'^(index\.html|styles\.css|theme-glass\.css|js/[^/]+\.js)$', f) for f in files): continue
     if any(h.startswith(c) or c.startswith(h) for c in checked): continue
+    # …or by its VERSION: ship.sh writes "<date> <version> PROVEN-at-ship" before the commit exists (RULES-AUDIT B6), so a
+    # release ship.sh proved is not debt; what is left is merges, commits made outside ship.sh, and declared UNPROVABLEs
+    if re.match(r'v\d+\.\d+', s).group(0) in checked: continue
     debt.append(l)
 debt.reverse()
 print(f"{len(debt)} unchecked of the last 60 commits" + (":" if debt else "."))
