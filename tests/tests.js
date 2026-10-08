@@ -60388,6 +60388,59 @@
     }
   });
 
+  test('a panorama import keeps its canvas and centred photo when reopened (batch2 1b.2)', { item: '1014', budgetMs: 30000 }, async function () {
+    if (!FM.fitProjectSize || !FM.storage.load || !FM.storage.autosave || !FM.projectIsOversize || !FM.projects)
+      throw new Error('the import/storage size boundary is unavailable');
+    const prior = FM.projects.currentId(), wasHome = FM.home && FM.home.isOpen && FM.home.isOpen();
+    const addToLibrary = FM.mediaLib && FM.mediaLib.add, toast = FM.toast;
+    let testProject = null;
+    const made = [];
+    try {
+      FM.toast = () => {};
+      if (FM.mediaLib) FM.mediaLib.add = () => {}; // the test clip is not a user's library tile
+      testProject = await FM.projects.create({ name: 'Panorama reopen check', width: 320, height: 240 });
+      if (!testProject) throw new Error('a temporary project could not be created for the reopen check');
+      const file = await q915aPng('panorama-reopen', '#4285b4');
+      for (const d of [[16000, 4000], [9000, 2000]]) {
+        const fit = FM.fitProjectSize(d[0], d[1]);
+        if (!fit.capped || fit.w > 7680 || fit.h > 7680)
+          throw new Error(d.join('×') + ' made a canvas ' + fit.w + '×' + fit.h + ' that storage will reshape on reopen');
+        const P = FM.scene.project;
+        FM.scene.layers.length = 0; P.sizePicked = false;
+        FM.addMediaLayer({ kind: 'image', width: d[0], height: d[1], file });
+        const layer = FM.scene.layers[0];
+        if (!layer) throw new Error('the panorama did not import');
+        made.push(layer.id);
+        if (P.width !== fit.w || P.height !== fit.h) throw new Error('the import bypassed the fit: ' + P.width + '×' + P.height);
+        const before = { width: P.width, height: P.height, transform: JSON.stringify(layer.transform) };
+        FM.storage.autosave(); await sleep(750); await FM.storage.settled();
+        const disk = JSON.parse(localStorage.getItem('fm.proj.' + testProject) || 'null');
+        if (!disk || !disk.layers.some(l => l.id === layer.id)) throw new Error('the import was not autosaved before reopening');
+        if (!(await FM.storage.load())) throw new Error('the saved project did not reopen');
+        const opened = FM.scene.project, reopened = FM.scene.layers.find(l => l.id === layer.id);
+        if (opened.width !== before.width || opened.height !== before.height)
+          throw new Error('reopening changes ' + before.width + '×' + before.height + ' into ' + opened.width + '×' + opened.height);
+        if (!reopened || JSON.stringify(reopened.transform) !== before.transform)
+          throw new Error('the photo transform changed across save and reopen');
+        if (reopened.transform.x !== opened.width / 2 || reopened.transform.y !== opened.height / 2)
+          throw new Error('the photo is no longer centred after reopen: ' + reopened.transform.x + ',' + reopened.transform.y);
+        if (!(reopened.transform.scale > 0) || d[0] * reopened.transform.scale > opened.width + 1 || d[1] * reopened.transform.scale > opened.height + 1)
+          throw new Error('the panorama no longer fits the reopened canvas');
+      }
+      if (FM.projectIsOversize({ width: 7680, height: 1920 }))
+        throw new Error('the new maximum panorama is incorrectly warned as oversized');
+    } finally {
+      if (FM.mediaLib) FM.mediaLib.add = addToLibrary;
+      FM.toast = toast;
+      if (testProject) {
+        try { await FM.projects.open(prior || null, { confirmed: true }); } catch (e) {}
+        try { await FM.projects.remove(testProject); } catch (e) {}
+      }
+      for (const id of made) { FM.media.remove(id); await FM.storage.removeMedia(id); }
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   test('the onion-skin ghost plate is target-sized and is not reallocated every frame', { item: 'proj-cap' }, async function () {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 90); }); };
     var layers0 = FM.scene.layers.slice(), onion0 = FM.onionSkin;
