@@ -1,0 +1,3587 @@
+{
+ "ok": false,
+ "summary": "Regression 558/583 ✗ · NOT RUN HERE 2 Pending 0/0 built",
+ "failures": [
+  "FAILplay: holding the Play button plays, it does not silently toggle Loop instead — a slow press on Play did nothing at all — this is \"I pressed play and nothing happened\"",
+  "FAILsaving a preset updates the open Presets card by itself (queue 330) — no layer to work from",
+  "FAILthe Presets card leads with its save button and its ✕ is drawn, not typed (queue 331) — no layer to work from",
+  "FAILpresets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9) — no layer to work from",
+  "FAILa trim grip needs a hold on touch, arms visibly, and is instant on mouse (queue 336) — no layer to work from",
+  "FAILeffect panels carry no explanation block, and motion blur cranks past one frame (queue 378/379) — no layer to work from",
+  "FAILthe phone move/extend buttons are not the same drawing (queue 338) — no layer to work from",
+  "FAILevery category card has its own gradient ring, out of step with the others (queue 339) — no layer to work from",
+  "FAILthe benchmark line stops at the lanes, and the loading pill sits under the panels (queue 348/393) — no timeline ruler row / track head to compare",
+  "FAILexport: a soundtrack that cannot be built SAYS so instead of shipping a mute file (queue 47) — NO_VIDEO_CODEC",
+  "FAILexport: frames the video could not reach in time are counted, not passed off as real (queue 47) — NO_VIDEO_CODEC",
+  "FAILexport: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215) — NO_VIDEO_CODEC",
+  "FAIL#215: an audio warning survives the frame loop, and a verdict does not carry into the next export — NO_VIDEO_CODEC",
+  "FAIL#662: an export leaves a report that names the audio outcome — NO_VIDEO_CODEC",
+  "FAILthe hoisted curl / fractal-warp / tunnel kernels match their own reference bodies — twirl: 97 of 1170 points landed on a DIFFERENT source pixel after truncation (allowed 94)",
+  "FAILexport: a soundtrack that fails to ENCODE says so, so it is not mistaken for the muxer (queue 215) — NO_VIDEO_CODEC",
+  "FAIL486: the H.265 check agrees with a fully-specified codec probe, not a bare fourcc — this browser will not even claim H.264 support, so canPlayType is not answering and nothing below can be trusted",
+  "FAIL501: the add-row switch is white at rest and flashes accent when it moves the row — pressing the switch did not move the add row (still at 0), so the flash would be confirming nothing",
+  "FAIL776: the intro film plays through and is never faded out while the splash is still up — the dark intro never started playing (the film reached 0s) — this run cannot judge it, but that is also exactly what a broken intro looks like",
+  "FAIL783: the dark look's intro is never bright after the mark has animated, and the light look's still ends white — setup: only 0 frames of the dark intro were read — the frame is not rendering, so this run cannot judge it",
+  "FAIL47 — a resumed export says so, and the fact outlives the overlay — the export did not stop where this test stopped it — the rest of this measures nothing",
+  "FAIL658 — the thumbnail pin turns the playhead blue, and the yellow stops lying — parked on an ordinary benchmark the playhead is no longer marked yellow — that state is unchanged and must stay",
+  "FAIL671 — a browser with no usable H.264 profile is told so, not handed a codec that just failed — an ordinary export now fails: NO_VIDEO_CODEC"
+ ],
+ "notRun": [
+  {
+   "name": "export: a browser with no AAC encoder ships an honest silent file, not one promising a track (queue 215)",
+   "item": "215",
+   "reason": "needs an AAC audio encoder (AudioEncoder mp4a.40.2) — this browser has none (Linux Chrome; the Mac and his iPhone have one)"
+  },
+  {
+   "name": "export: a soundtrack that is entirely muted says so instead of shipping a silent file (queue 215)",
+   "item": "215",
+   "reason": "needs an AAC audio encoder (AudioEncoder mp4a.40.2) — this browser has none (Linux Chrome; the Mac and his iPhone have one)"
+  }
+ ],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   15804,
+   "effects: every bounded kernel is safe on the box the RENDERER actually computes"
+  ],
+  [
+   14890,
+   "692: every crop-admitted kernel draws the same picture cropped, a centre-based control does not, and the dispatcher takes the crop path"
+  ],
+  [
+   11687,
+   "250: the slam is reachable with a mouse wheel, and still fires only once"
+  ],
+  [
+   7748,
+   "1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture"
+  ],
+  [
+   7709,
+   "692: every crop-admitted bounded kernel renders identically with the cropped readback, a plate-relative control does not, and the dispatcher takes it"
+  ],
+  [
+   7666,
+   "H43 the Filter-container plates are released when nothing uses them, after a full-size frame"
+  ],
+  [
+   7592,
+   "H40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame"
+  ],
+  [
+   5840,
+   "the quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202)"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "the Filters tab has no explanation blocks, and the Empty filter row is one line (queue 301)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter row: Add Filter drops an empty filter into the stack, opened",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter row: its children render as rows inside it, below its Strength",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter row: deleting a child removes it from the filter, not from the layer stack",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter row: opening a child does not close the filter holding it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter row: a closed child does not wear its parent’s open chevron",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter row: the browser adds into the filter you asked it to, and refuses a filter inside one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filters tab: a third subsection sits beside Visual and Audio",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filters tab: it lists every filter, in its section, saying what each is made of",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filters tab: each tile previews its own look, not the same picture sixteen times",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filters tab: adding a filter returns you to the stack with it open",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter library: Colouring has a shortcut to filters, at the top",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter survives: copy the stack and paste it back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter survives: saved as an effect preset and read back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter: whether it applies to a layer is decided by what is inside it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "stack order: the nine CSS-filter effects render the same whichever way round they go",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "stack order: a row whose position cannot matter says so",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "play: holding the Play button plays, it does not silently toggle Loop instead",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "play: the FIRST clip added moves the playhead to it, so play starts at its beginning",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export: leaving the page mid-render is challenged, and at rest is not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "home: the film grain is on the background and the cards are smooth",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "add menu: the open tab wears the same travelling glint as the open project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: an effect can belong to one cue, and only shows while that cue does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.12 splitting a caption track gives each half its own copy of a cue’s effects",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: the detector has a door of its own, and only where it means anything",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: whole-project mode keeps speech that falls outside the caption clip, and re-bases it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "916.7 captions: detected speech lands where it is heard on a reversed or trimmed clip, and never before 0:00",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "audio: a clip fades its own edges instead of cutting the waveform dead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text editor (desktop): docked in the side column, it takes nothing from the canvas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export ready: the file is handed over on Save, not flung at you when the render ends",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export dialog: the controls line up in one column",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "918.12 — on PC the export dialog shows the project size and rate in full, and the layer picker has an arrow",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: a clip that never produces a frame says so instead of sitting there blank",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "home: leaving a project does not stop to take a photograph first",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "perf: a frame that overruns is counted even when our own JavaScript was fast",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "perf: the hold-frame is not re-copied when the video has not moved",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "perf: a held frame is capped in size, and a cropped clip still shows the right part of it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "perf: seeking a video to the time it is already at is skipped, not re-issued",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "timeline: an auto-scrolling clip drag does not hold the preview in low-resolution motion mode",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: the signature refuses to match anything that would change one output byte",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "916.9 export resume: a render saved by an older build of the app is not resumed by a newer one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: what was saved replays back byte-for-byte, in order, config on the first chunk only",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: the pick-up frame is read off the timestamps, not off a count of chunks",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: the join warms up the effects that need it, and only those",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the splash script does not claim the dark ending is withdrawn — it was put back in queue 783 (queue 840)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the intro test does not rule out the app as the cause of a film nobody can see (queue 841)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the 754 test’s name claims only what it asserts (queue 842)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: Time Warp Scan is warmed back to where its sweep began, not by a flat 25 frames (queue 839)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: a half-written part truncates the resume instead of corrupting it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: it stops saving at the size cap rather than filling the phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: a saved run that does not open on a keyframe is refused",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: a finished export leaves nothing behind, and a late write cannot resurrect it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: the boot clean-up does not eat the render it is meant to protect",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: an abandoned render is reaped instead of sitting on the device forever",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "motion blur: the two kinds read different motion, and between them cover both",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter library: every filter is made of effects this build actually has",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "778: ten filters for the thin sections exist, each on a preloaded subject no section-mate shares, and each moves its picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter library: CSS-filter effects are authored first, so the list matches the render order",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter library: adding one produces an ordinary filter that renders",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter library: a filter keeps its name through a save and load",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 an export leaves no temporal plates behind in the motion-flow cache",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 an audio mix frees the PCM it decoded, and leaves a buffer that was already there",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H40 the file kept for undo of a replaced clip is dropped once the clip is unreachable, and kept while it is in the scene",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H43 the Filter-container plates are released when nothing uses them, after a full-size frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "H44 the file kept for undo of a replaced clip is not held alive by the record that it is kept",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1009 fill pictures from a project he has left are freed, and the fills of the project he stays in are not decoded twice",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1010 the CPU blur reuses its scratch buffers, draws the same picture every time, and a plate past the cap still blurs",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1011 an export that fails closes every VideoFrame and its VideoEncoder",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "1011 an audio encode that fails closes every AudioData and AudioEncoder it opened",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a number scrub accumulates, so a snapping or rounding setter cannot eat the drag",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Move & Transform X box can be dragged off an align snap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "917.8 at 320px an off-canvas X value fits its box and the keyframe diamond clears the digits",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "917.12 the swipe pad hint sits inside the pad corner brackets on a phone, not against its edge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undo inside the pen-mask editor is not silently thrown away by the next drag",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the pen-mask editor re-seeds itself when the scene is replaced by any other route",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a flattened group is rasterised at the size the target is, not the size the project is",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a mask blend mode rasterises its plate at target size too",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "shrinking the group plate does not move or lose what the group draws",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the first import cannot create a project bigger than the biggest preset",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "importing a phone photo into an empty project goes through the cap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the onion-skin ghost plate is target-sized and is not reallocated every frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "resizing a project moves the work with the frame instead of scattering it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a resize maps keyframes, pen-mask points, shadows and pixel effect params",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a preset preview runs the same code the Apply button runs",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Presets card renders a live tile per applicable preset, and none for a broken one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip at t=0 is drawn under the playhead line, with a group and without",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "tracking yields to the browser instead of freezing the app for its whole run",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a track whose clip is deleted mid-run reports failure instead of claiming success",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip that vanishes during the DECODE is caught at the write, not just mid-walk",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "dragging an audio-drive source does not fire a full-clip envelope pass per frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the envelope cache is bounded, so a long gesture cannot strand megabytes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "cancelling an export stops the frame decode instead of running it to the end",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the rotate easing editor covers all three rotation channels, not just the flat spin",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an easing preset does not reach back into a channel whose animation already ended",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a frame-cache build captures the grid’s frames, not whatever the preview is seeking to",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the sample clip picks a container Safari can actually record",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a sample clip that fails does not strand a live AudioContext",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "pressing Play inside a clip’s overhang does not restart the source from the beginning",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the crop easing button cannot latch and hijack a later refresh",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a second tap during a vocal removal does not make a second instrumental",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "834: removing vocals does not keep the whole decoded song in memory, and reuses one that is already there",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a preset keeps a looping animation looping",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "replacing a clip’s media releases the file it displaces",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "camera movement smears the whole scene, and a still camera is untouched",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "“This frame (PNG)” honours the Resolution and the isolated layer (queue 705)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Inner Blur stops painting under transparency, and nothing on screen changes (queue 692)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the loading pill gives up instead of spinning forever (queue 704)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "updating a template edits it in place instead of forking it (queue 505 clause 4)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the camera shutter reaches 12, and every place that clamps it agrees (queue 695)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a soundtrack that fails to encode is reported, not swallowed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Add-layer + is centred in its circle, and is not a font glyph",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every effects sub-menu has a Done that closes the browser",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every way of adding a layer honours the Add-layer marker",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the recent-clips grid opens at three rows and every import is still reachable",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the service worker retries a dropped navigation before serving an old build (queue 306)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the stale-build warning says which build and how to escape it (queue 306)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a group context whose group is gone cannot hide the Add-layer row (queue 307 clause 1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the PC Add-layer row shows a hint on hover that you cannot grab (queue 307 clauses 2-3)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "dragging the Add-layer marker moves it instead of rebuilding the timeline (queue 307 clause 4)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the settings panel no longer repeats controls that live elsewhere (queue 308-310)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "sound effects can be starred, and the starred ones sit at the top (queue 311)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "clicking off a layer puts the timeline back where it was (queue 312)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Freehand Drawing is Sketching and Vector Drawing is Custom shape, everywhere (queue 314, 316)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Filters opens filters, from either full-screen browser (queue 317)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "nothing in the Featured row shares its name with a filter (queue 318)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "917.13 the effects browser NEW row runs to the edges of the sheet, first card still under its title",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "noise grain can be round instead of square, and the preview grain is finer (queue 319)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a lightning bolt forks, tapers, has a bright core, and is the same every render (queue 320)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Mask tile selects like every other tile instead of committing on tap (queue 321)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a selected mask point can be nudged on a precision pad, at the shared gain (queue 321)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the eraser takes the part under it, not the whole stroke (queue 322)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a drawing can be trimmed by length, across all its strokes, and it keyframes (queue 322)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a drawing can be re-opened and drawn on, without becoming a second layer (queue 322)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the three Audio React sliders each explain themselves (queue 325)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Squish binds on both walls at once in a corner (queue 323 clause 1)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Squish reacts to a layer moved by an EFFECT, not just by its transform (queue 323)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the two preset save buttons say what each one keeps (queue 329)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every filter demonstrates on a photograph that exists and is preloaded (queue 359)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a decoded photo re-mounts every tile, whatever class its canvas wears (queue 359)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "saving a preset updates the open Presets card by itself (queue 330)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Presets card leads with its save button and its ✕ is drawn, not typed (queue 331)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "917.16 the Presets save buttons are full buttons, flush with the card column, on a phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the shake section demonstrates on his cars, and no two neighbours share one (queue 332)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a project saved with the old motion-blur flag migrates to the effect, innermost (queue 335)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a camera keeps its own motion blur through the migration (queue 335)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Motion Blur (Object) is a real effect and can go inside a Filter (queue 335)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "motion blur smears movement an EFFECT makes, not just keyframed movement (queue 382)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a trim grip needs a hold on touch, arms visibly, and is instant on mouse (queue 336)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect panels carry no explanation block, and motion blur cranks past one frame (queue 378/379)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the timeline long-press no longer offers add-benchmark, but keeps the rest (queue 337)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the phone move/extend buttons are not the same drawing (queue 338)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every category card has its own gradient ring, out of step with the others (queue 339)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the home grain moves on the phone as well as desktop (queue 341, reversed)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an element opens for editing, and inserting is still available (queue 342)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a layer pivots about an anchor outside its own box (queue 345)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the benchmark line stops at the lanes, and the loading pill sits under the panels (queue 348/393)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the timeline sizes its scroll range from itself, not from the window",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on PC the effects browser sits in the inspector column, and on a phone it does not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the big + has moving colours, and they move slowly",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a video that decodes slowly is not written off forever",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the filter tiles raster at the screen's resolution, not a fixed 2x",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a tap away closes the effects menu and leaves the layer selected",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the play pill is the row's own white, never yellow, and still lights when playing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Lightning strikes the layer it is on, not the whole canvas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Lightning's new controls exist and default to the old look",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the editor fits at 320 / 360 / 390 / 430, not just at his 380",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the three preset savers capture three different things",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the per-effect preset list says WHICH presets it means",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "applying a preset remembers it, and the layer can be written back over it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template can be opened, edited, and written back over itself",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "both ends of the add-row switch land somewhere you can see and use",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "dragging the add row into the edge scrolls the timeline with it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the group tile says New group everywhere it is named",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every shape gets its own colour, and the palette is not one loudness",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "tapping a position number opens the editor on the FIRST tap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a vertical flick on the timeline keeps gliding, like a horizontal one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "while dragging a layer the switch wears its colour and throws it to the far end",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the add row splits at the same line every other row splits at",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the skip arrows sit nearer the play pill than the undo/redo group",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Sketching tile is yellow, and far enough from the amber beside it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the switch dot is centred on whole pixels, not on a half-pixel 50%",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the settings panel has no lit rim across its top edge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "closing the effects browser by the X applies your picks, it does not bin them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a flick still glides when the first frame is too small to move scrollTop (queue 472)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export: one clip whose audio will not decode no longer silences the whole soundtrack (queue 47)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export: a soundtrack that cannot be built SAYS so instead of shipping a mute file (queue 47)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export: frames the video could not reach in time are counted, not passed off as real (queue 47)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: a render that outgrew the save cap still resumes from what WAS saved (queue 47)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "scrubbing into the tail and pressing play does not leave the song muted or paused (queue 96)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "audio: pressing play does not pitch the sound up while the element spins up (queue 148)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "audio: real drift is still corrected once the element has warmed up (queue 148)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export: a browser with no AAC encoder ships an honest silent file, not one promising a track (queue 215)",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs an AAC audio encoder (AudioEncoder mp4a.40.2) — this browser has none (Linux Chrome; the Mac and his iPhone have one)"
+  },
+  {
+   "name": "export: a soundtrack that is entirely muted says so instead of shipping a silent file (queue 215)",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs an AAC audio encoder (AudioEncoder mp4a.40.2) — this browser has none (Linux Chrome; the Mac and his iPhone have one)"
+  },
+  {
+   "name": "export: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#604: overlapping sounds do not clip the exported mix",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "916.8 exporting a short range builds only that stretch of each clip’s audio — and the samples match the whole export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every ported warp draws the same picture on the GPU as on the CPU",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a run of stacked warps renders as one GPU chain, and draws the same picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a pixel effect between two warps stops the GPU chain collapsing across it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the audio watcher counts a sound that stopped advancing, and ignores one that did not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the audio report says what it measures: real played time, a denominator, the clock it ran on, and which clip (queue 849)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "pressing play starts the audio report fresh, so it describes one play and not the session (queue 849)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "leaving the app without pressing stop still saves the audio report",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip that never shows a picture records what the file was, where he can read it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an ordinary clip entry is not recorded as the sound cutting out",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "stopping playback writes an audio report he can copy out of Settings",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the playback tick reports every sounding clip to the audio watcher",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a warp falls back to the CPU loop whenever the GPU cannot take it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#96: an mp3 whose header lies about its length gets the clip the DECODER says",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#96: a decode that fails still cannot give a clip no length",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#148: a loop wrap fades the sound back in instead of cutting it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#129: the blank-clip facts line carries what the browser actually said",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#215: an export audio warning reaches a surface the export cannot cover",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#215: an audio warning survives the frame loop, and a verdict does not carry into the next export",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#215: the export-ready card says whether the file has sound",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#125: seeking feeds the quality ladder, not just the canvas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#661: a colour effect is never called dead on a coloured layer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#661: a keyframed glow colour does not kill every other effect on the layer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#661: the GPU colour path reproduces ctx.filter",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#661: the colour matrices are the CSS ones",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#661: colour effects still render when ctx.filter does not work",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a reorder drag that is recovered rather than released stops its auto-scroll loop (queue 838)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "opening Edit Points or Crop keeps the zoom and pan he set up (queue 837)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a Glow with no saved radius still glows on a device without ctx.filter, and does not take the layer’s other colour effects with it (queue 836)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#661: blur reproduces ctx.filter on the GPU path",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#661: glow renders on the GPU path",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#661: a stack the shader cannot express is not half-applied",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#649: the New project dialog is readable, whichever theme it is drawn in",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#664: Curve is an effect and reaches the renderer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#664: the new text effects change the string",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#666: nothing in the select bar hangs off a phone screen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "918.8 — on PC the select bar does not cut the + in half: it hides while selecting and comes back after",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#662: an export leaves a report that names the audio outcome",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#484: renaming effects did not move any stored key",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#657: a smooth sample says so when the smoothness came from a reduced raster",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#648: a tap selects even when no click follows the pointerup",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#612: the hinged menu still clamps on screen when it is re-opened",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "912 the Settings panel slides in when it opens (it was written and never played)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "912 the New project dialog opens with an animation, on the phone and on PC",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.9 the New project dialog suggests a name he does not already have, counting only his projects",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "912 the context menu pops on PC, down from the click or up when it was lifted above it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "912 Canvas settings swings open on the phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "917.5 the background swatches stay inside the New project and Canvas settings dialogs at 320 and 380",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "917.15 the Resolution and Frame rate dropdowns share one left edge in New project and Canvas settings",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "912 the Export dialog opens with an animation on the phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "912 the effects browser opens with an animation on PC",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "912 an inspector category drills in, back drills out, and a plain redraw does not replay either",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "912 a toast rises in instead of appearing in one frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "918.14 — in the PC editor a toast sits above the timeline band, not on its buttons",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "912 a text pop-over swings out of the button that opened it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "912 a canvas tool pill rises in, and rests exactly where it rested before",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#675: every added filter sits somewhere the existing set does not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#668: replacing a clip's media survives a save, without rewriting blobs every autosave",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#646: the light intro ground is armed before it is read",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#643: every brand glow mask is cut from the wordmark actually on screen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#642: the light intro fills the screen, leaving no bands to mismatch",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#642: the light intro removes the empty poster instead of leaving it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#635: a parameter keeps its own step unless the ruler would be unusable",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#634: Copy Background under a pixel effect is not miniaturised at preview scale",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#633: the add-layer row draws the same separator as every other row",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#632: inside a group the layer heads do not waste the left column",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#631: saving the frame at the end of the timeline gives the picture, not black",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#610: Outline & Shadows is a grid of preview tiles, not bare checkboxes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#621: rounded corners look the same whatever the layer size or rotation",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#484: Scatter Array draws scattered copies, identically every time",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#484: the effects he thinks are missing can be found by the name he would type",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#484: Wrap Shift wraps the frame instead of sliding it off the edge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#645: the device-cannot-run-filters warning stops once the shader can run them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#552: a drawing can be continued without entering point editing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template saves as a shareable file the importer can actually read (queue 343)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the ADD tabs keep their labels on Media and Audio, where the library competes for height (queue 431)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the media library shows three rows, and the third one does not overflow the sheet (queue 473)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "tilt shift: the fast box blur is byte-identical to the 17-tap one it replaced (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "spin streaks: the trig-free rewrite samples the same points as the polar original (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the shared effect scratch cannot leak between kernels (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "kernels that hold more than one frame copy are kept OFF the shared scratch (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the layer menu’s short last row lines up with the columns above it (queue 476)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the PC add cards carry a gradient in their own colour (queue 475)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the add-card gradient is not gated behind prefers-reduced-motion (queue 475)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an effect that changes nothing on this layer is detected — and a working one is not (queue 477)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the no-op hint is read from the effect, not recomputed on every panel refresh (queue 477)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the no-op check never runs while playing or exporting (queue 477)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a toast is only tappable when it is GIVEN something to do (queue 95)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the struggle offer needs a SPENT ladder, a real overrun and persistence — and fires once (queue 95)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the hoisted curl / fractal-warp / tunnel kernels match their own reference bodies",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the hoisted turbulent-displace noise matches its own reference kernel (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the turbulent-displace precompute runs ONCE A FRAME, not once a pixel (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the turbulent-displace lattice is actually COARSE at his own settings, or the speed is gone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "turbulent displace renders the same PICTURE through the lattice as through the exact maths",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the HEVC sniff reads the file’s own bytes, head AND tail (queue 129)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip is only called H.265 when the browser AND the bytes both say so (queue 129)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "adding text and resetting text agree on the size, at any project shape (queue 98)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a project bigger than the app would ever build says so, once, and offers the repair (queue 202)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the rate-write counter counts REAL writes to the element (queue 148)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the what-is-slow report carries the audio numbers, and reads them (queue 148)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the export dialog warns about a silent export BEFORE the render (queue 215)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "having sound to lose counts audio LAYERS, not layer types (queue 215)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an element saved from a selection gets a picture of THOSE layers (queue 342)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a raised add menu keeps its column when the window is resized (queue 478)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the undo and redo arrowheads are big enough to read, and mirror each other (queue 479)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a layer dropped on the add row ends up ABOVE it (queue 480)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the what-is-slow report measures playing and scrubbing separately (queue 387)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a finished measurement can be copied from the toast itself (queue 202)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a refused clipboard names the route that still works (queue 202)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "sustained bad frames reach the offer through the REAL cost path (queue 95)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "opening a project asks whether it is oversize (queue 202)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export: a soundtrack that fails to ENCODE says so, so it is not mistaken for the muxer (queue 215)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the hoisted wave warp is byte-identical to its own reference (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "cross process is byte-identical after the per-channel curves were memoized (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "lens flare matches its original six-ray implementation exactly (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every kernel on the shared scratch is unaffected by another kernel using it first (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a shared project file round-trips through the IMPORT path with nothing lost (queue 343)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undo returns EXACTLY to the start over a long chain, and degrades cleanly past the cap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "no user-supplied text is ever written through innerHTML",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the app makes network calls to exactly one host, and it is the AI endpoint",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "no effect loops to the shared scratch buffer length instead of the frame (queue 474)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "480: dropping a layer on the add row puts the marker BELOW it, with a collapsed group on the timeline",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "481: the PC effects browser fits its column — small featured cards, toggle in the header, labels that fit, no counts",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482: mode-gated sliders are live in their own mode and locked outside it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "483: the undo and redo rings keep a wide gap between their two ends",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "486: the H.265 check agrees with a fully-specified codec probe, not a bare fourcc",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "487: a restored oversize project warns on boot, not only when opened from Home",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "488: a saved element never becomes a black card",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "489: the report's audio numbers count only what happened during the sample",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "490: the oversize instruction lives inside the canvas dialog, not under it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "491: sync-error figures come from the sample, and collection never stops",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "492: the struggle count is consecutive, not a running total across pauses",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every ingredient in every filter recipe actually changes the picture (queue 858)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "tapping the canvas while editing text MOVES the text and keeps the edit open (queue 857)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the two side panels sit in the same band, and the pop-up stays clear of the row it rises from (queue 854)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the side panels are glued to the edge, thinner, evenly spaced, and they animate in and out (queue 853)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "both bars can be open at once without covering each other, and the phone one opens upwards (queue 852)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the controls that are not view options live in their own pop-up, opened from the transport row (queue 851)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a drift seek re-warms the sync controller, so it cannot learn its offset from the spin-up (queue 848)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "493: the recorded sync error has the latency bias removed, including right after a seek",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "494: the export dialog keeps its buttons reachable when the card overflows",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "495: the silent-export warning follows the chosen format",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "496: the tappable toast can be operated from the keyboard",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "889/890/899: Halftone Lines, Crosshatch and Dots draw the same picture on a reduced plate as in the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "902: Halftone Lines softness and Crosshatch weight still change the phone preview, and match the export tone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Long Shadow throws at any angle, Drop Shadow has an opacity, Unsharp Mask skips flat areas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Contour Lines draws in any colour on any paper, and Tile Grid explains Rows 0",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Scanlines Line weight never floods the frame, and Zoom Streaks Amount 0 turns it off",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Scramble Text matches case and digits, and Stroke softness never fades the stroke away",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Noise grain size scales to the preview plate, and a new Trail shows copies on a full-frame clip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "913.7 Honeycomb, Grid and Glow Scan are the same size on the phone preview plate as in the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Number Roll counts below zero, groups thousands and keeps $ / % / a label around the number",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Flicker, Breathe, Swing, Pulse and Orbit can be de-synced between layers",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Wipe and Radial Wipe have a soft edge, and 0 / 1 progress still show nothing / everything",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Chroma Key despill pulls the green rim off what survives the key",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Block Dissolve can reshuffle its blocks and sweep in a direction",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Directional Blur and Linear / Spin / Zoom Streaks smooth out with more Quality taps",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Tilt Shift focus band turns with its Angle",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Glitch tears up and down as well as sideways",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Lightning strikes from any direction",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Smooth Bevel light angle moves the highlight",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Turbulent Displace boil can be slowed, frozen and reshuffled",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Stretch Segment edges no longer tear when softened",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Shake Smear length stretches the trail",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Mirror Tile tiles can keep the frame shape instead of squashing it square",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Text Transform is labelled Change Case, and the old name still finds it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Palette Map snaps to colours you choose, and Colours 4 means four",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Colour Balance pushes just the shadows, mids or highlights",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Wave runs at any angle",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "859: every pixel effect draws the same picture on the preview plate as in the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "860: no icon on screen is missing its ink, in any state the suite can drive",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "920: the status bar sits above the page (no iOS fade), and its colour follows the screen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "920 the status bar takes each screen top colour from the page background-color — light Home, dark Home and a project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "903: the home screen paints no heavy colour wash behind its own top controls",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "896/900: no sketching-bar control is painted outside the bar, at 320/344/360/380px",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a still photo gets the never-moves badge that a shape already got (queue 863)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "897: the keyframe diamond is a 40px tap target and does not overlap the easing button",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "497: every element the suite reaches for actually exists",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482: every effect does something visible at its own defaults",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "498: the pinned Cancel/Apply row never covers the last setting above it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "499: long-pressing the ruler never offers to clear all markers",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "500: the select-mode header keeps its buttons together on the right",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "501: the add-row switch is white at rest and flashes accent when it moves the row",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "502: dragging a layer updates the picture live, without touching the scene",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "503: the play pill is clear with a white outline, and stays clear when lit",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "504: changing home tab restages the cards briefly, not the whole screen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "917.4 at 320px every home tab label is whole and the wordmark keeps clear of the search button",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "505: editing an element updates that element and leaves no project behind",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "505: editing a template updates that template and leaves no project behind",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.6 after editing an element or a template its card shows the edit, not an older autosave picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "561: the point editor draws its points on the shape when the canvas is zoomed and panned",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "508: opening a project from Home writes a frame-time report he can paste",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#883: the intro ground ramp is taken off with the intro, so a project is not left on a white canvas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "553: while a light home is up (parked push included) the page behind it is the home colour, and the editor gets its own back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "553: returning to the app (pageshow / visible) finishes a push left mid-flight",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "674: a clip name over a filmstrip is white, a clip name on a solid light bar is dark",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "688: one intro film serves both looks, the old film and its poster are gone, and neither look hides it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "706: the add sheet opens with one motion — the hinge owns transform and the slide transition is off while it does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "716: the home cursor wash covers the whole screen, not the project column",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "717: the copy/paste button is not greyed out with nothing selected, and its menu still greys the rows that need one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "762: tapping Notes or Settings again closes it instead of opening it again",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "764: the add row shows on top while it is being dragged",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "768: scrubbing the timeline writes a frame-time report that names what was selected",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "765: A / S / D cut, split or move the selected clip at the playhead, inside and outside",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "718: an animated Draw-from (trimStart) survives the timing sanitiser and one undo of an unrelated edit",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "719: Reset and Crop to canvas keep a keyframed crop's keyframes, keying the playhead, and still set a plain crop",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "720: a mask path evaluates to the hold / topology keyframe itself at that keyframe's time",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "721: a colour keyframe list survives saving a preset, and saving one preset does not delete an unparseable other",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "722: a preset applied from the browser anchors its keyframes at the playhead he parked, not the preview loop",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "723: setAnchor accepts an anchor outside the layer, clamped only to the boxes' −400…500% range",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "724: a keyframed colour arc on a clip that starts late is drawn from the clip start (0 / 50 / 100 %)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "725: double-clicking a marker no longer opens a rename box, and no source still carries one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "727: Duplicate on an audio effect copies its current settings and keyframes, not the defaults",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "773: closing the add sheet slides it down — tap-to-close animates, and a swipe release continues from the finger",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "728: swiping a mask row that sits inside the effect stack deletes the mask, and leaves the effects alone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "729: leaving the Filters view clears the filter preview, and the compositor ignores a preview during export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "730: a wiggling layer nowhere near an edge does not render an expanded plate, one on the edge does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "731: resizing the project scales the camera's focus distance, DOF width and fog planes like every layer's z",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "732: inserting an element with a camera into a scene that already has one does not add a second camera",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "733: the AI digest is generated from the registry gates, and the ops clamp to the panel and grow the project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "734: a chroma-key tolerance of 0 keys nothing, and 0.5 still keys (the control)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "735: a second luma-key pass at Softness 0 is a memo hit, and a changed softness is not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "736: the rotate dial honours a magnet toggled after the panel was built",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "737: Paste look → Border is offered for a layer whose only border feature is a trim path or a repeater",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "738: the changes-nothing hint is placed in the measured effect's own row body, never on an open mask row",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "739: ungrouping a group animated from rest warns about the motion, and about the group's own effects in the same breath",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "740: previewing a sound effect uses the shared AudioContext and builds none of its own",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "741: nudging a mask point on the precision pad commits history, so undo and redo see the nudge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "742: opening the mask editor no longer resets a zoomed canvas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "743: the sound-effect noise generator's pink is pink — between brown and white in spectral tilt",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "744: a 'nothing moves inside this layer' reason is badged 'layer never moves', not 'does nothing here'",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "745: the featured carousel is derived from batch order, so the newest effects lead it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "913.8 Snow & Rain, the newest effect, leads the Effects browser NEW row",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "746: cannotMove is false for a parented layer and for an animated anchor or depth",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "747: a featured effect that needs a setting shows exactly one 'Needs a setting' badge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "748: a project index that keeps failing on quota toasts 'Storage full' once, not every other autosave",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "749: the export pre-roll for echo trails is derived from the effect's persistence, not a fixed 25",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "751: recovering a stuck gesture also takes down its HUD, its snap line and the suppressed sheet",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "781: a pointer resting still on a clip past the stale window is not recovered as a dead gesture; a lost one still is",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "752: after the trim edge-scroll brake trips, leaving and re-entering the edge scrolls again",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "753: snapping a trim onto an off-frame clip edge shows no filled landing notch, while a frame-aligned edge does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "776: the intro film plays through and is never faded out while the splash is still up",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "783: the dark look's intro is never bright after the mark has animated, and the light look's still ends white",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "754: an off mask row shows the struck-through eye like an effect row, through the one shared renderer, and an open audio row keeps its grip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "755: an effect whose params lack a key renders at that key's default instead of at zero",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "756: glow, film grain and voronoi carry legacy values matching their kernels' absent-key fallbacks",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "757: fxBounds hands a dirty plate the whole frame instead of skipping the kernel, and still skips an empty one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "758: every warp reference is a different function from its live kernel, and every prepped kernel has one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "759: open-stroke is one definition, the no-op probe renders as a ghost, and the anchor hint matches its grid",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "780: a spiral and an open pen path get the Outline tile, it renders an under-stroke, and a rect keeps Position",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "770: the motion path's keyframe dot and the tracker's seed box land on the picture in a zoomed, cropped preview",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "771: a template draft whose template no longer exists says so instead of promising to save back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "250: the slam is reachable with a mouse wheel, and still fires only once",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "456: the home + and the in-project + are different colours, and both move",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "582: the canvases the effects read every frame are declared read-heavy",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "620: the magnet governs every snap in Position / Scale",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "619: the template media-swap opens only with media, and never silently",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "644: no text on the light home screen is unreadable",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "618: the draft card offers the action its own subtitle names",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "641: the home drift layers are light-themed but keep their overscan",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "618: an element draft shows its picture, not the diamond",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "639: the app icons are the new mark, opaque, and inside the maskable safe zone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "639: the splash’s light default matches the app’s",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "639: in the light look nothing in the header is invisible",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "617: element drafts take part in Select, and bulk delete actually removes them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "617: a draft can be deleted even when it is the project you have open",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "616: the add row has a press pulse, wired and full-width",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "613: the slim add-row + is a clip, the empty-state orb is still a circle",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "615: the white home screen is OFF by default and switchable",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "615: nothing on the white home screen is light-on-light",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "611: the HOME + orb carries the menu’s blue ring",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "609: a huge-range scrub ruler is windowed, and an ordinary one is not",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "582: Tiles never draws a copy that lands outside the frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "603: a dead effect tile says WHY, in words a phone can read",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "602: the Aa sheet does not cover the canvas on a phone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "582: no effect reads back a big chunk of a GPU-backed canvas per frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "650 — the card hover is gated so a finger can never latch it, and a press still beats it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "650 — the cursor ring is a colour the light home can actually show",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "650 — the home list tracks the cursor, and ignores a finger",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the perf report no longer tells him nine effects are dead when the GPU is running them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the perf report says whether the GPU work reached this device, and reports only THIS sample",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every report that tells him about the colour effects says the SAME thing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "47 — the export note lives INSIDE the overlay, where the stacking order cannot hide it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "47 — a resumed export says so, and the fact outlives the overlay",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "651 — an empty Template panel explains what a template IS, instead of hiding it behind a tap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "918.4 — on PC the empty Template panel starts at the top of its box and every line can be scrolled to",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "652 — the ⋯ is bare until you point at it, and the dots are three real things",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "652 — tapping the dots animates all three, and never leaves the button stuck",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "918.13 — a Home card ⋯ menu hangs under the ⋯ inside the card column, at every window width",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "652 — the hover ring is gated to a mouse, and lit from the cursor rather than by a static colour",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "653 — the audition plays without the transport, so a slider drag cannot kill it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "653 — it refuses the cases where auditioning would be a lie",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "916.2 starting an export stops an audio-effect audition, and an audition never runs under one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "916.10 the audition drives keyframed effect settings at the right timeline moment on a sped-up or ramped clip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "653 — the Hear button is on the expanded row, and it does not start by itself",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "654 — the button that closes the clip panel does not announce itself as Projects",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "655 — grouping does not shove the timeline sideways for one frame",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "656 — the search bar is a light field on the light home, and its hint can be read",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "658 — the thumbnail pin turns the playhead blue, and the yellow stops lying",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "659 — the Custom format says Auto adjusts, and it still fits the tile",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "663 — the audio watcher actually detects a cut-out, and stays quiet when nothing is wrong",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "669 — every export format actually produces a file",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "670 — export-only-this-layer clears the solos that were already on",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "671 — a browser with no usable H.264 profile is told so, not handed a codec that just failed",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "671 — a video encoder error stops the export instead of shipping a broken file",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "672 — the layer-panel labels never collapse to nothing, at any band height",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "918.3 — a PC category label shows whole lines only, and both lines of a wrapping one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "673 — a malformed project file makes no junk project, and says what was wrong",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "678 — the add row lands ON the gap it opened, not a row past it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "678 — a tap on the add-row grip is not treated as a drag",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "679 — a keyframed colour draws as a static arc along the clip, and a plain layer is untouched",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "674 — a failure tells him what to try, and keeps the technical detail where he can send it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "674 — no catch-all puts a raw error message on screen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "680 — undo does not drag a clip that starts before zero forward to 0",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "681 — splitting a clip writes the new half media immediately, like every other path that makes one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "682 — a keyframed effect colour survives a project load and an undo",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "683 — the keyframe diamond does what it says, at the same tolerance",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "684 — every freehand stroke reaches the app history, not just the first",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "685 — the template fill screen commits to the history that exists",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "686 — every effect dispatcher resolves a keyframed colour before the kernel sees it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: the selection box wraps the letters on left- and right-aligned text",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: the wrap handle sizes the column in the layer own units, not the group scale",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: an imported font arriving throws away the line breaks measured without it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: Copy Background cuts the backdrop to the string on screen, not the one typed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: the Spacing slider says so when this browser cannot space letters",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed: solving so the clip STARTS at the playhead keeps the animation glued to the bar",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "presets: the layer remembers which preset it came from AFTER a save",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "library: a video whose size could not be read is not filed as a song",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "timeline: Replace media repaints the clip bar, it does not keep the old picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: cancelling the Audio picker does not turn the next import into a soundtrack",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: press-hold to reorder is not stolen by the sheet-dismiss swipe",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "motion blur: a moving GROUP smears like any other moving layer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "settings: the light/dark choice survives a reload",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "paste look: every property a card edits is a property that card pastes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "paste look: the caption pill, trim path and repeater actually arrive",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: the Stroke Colour width slider works across its whole travel",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: no effect slider is completely inert",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: a pixel-sized setting means the same thing on a reduced preview plate",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Motion Blur (Object) is an ordinary effect you can find and adjust (queue 695)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: a canvas effect sized in pixels means the same thing on a reduced plate",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: no canvas effect has a pixel-sized setting it never scales to the plate",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "913.6 Liquid Glass frost and edge mean the same thing on a reduced preview plate as in the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Motion Blur (Footage) reaches further than it used to, and every bit of it pays",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "adjustment layers: RGB Split shifts by the same distance on a reduced plate",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Tilt Shift and Matte Choker bound to the layer without changing it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a parameterised easing survives being saved as a preset and being split (queue 701)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the AI knows every text animation the Text panel offers (queue 700)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: every bounded kernel is safe on the box the RENDERER actually computes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: bounding the box blur to the layer changes NOTHING about the picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "784: no effect is switched off by a missing param key — bare renders as something whenever the defaults do",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "785: the device reports are in Settings from the home screen, and a project's Settings opens with a row that jumps to them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "786: a refused play() is named in the playback report, and the report is saved even though nothing played",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "790: the tracker pick overlay follows a zoom change (Fit, +, − while picking), not only a window resize",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "919 FM.ask answers like prompt/confirm, prints names as text, and animates open",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "919 the pop-up is light over the light Home and dark in the editor, and no grey box is left on Home",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "791: Delete draft… names the right noun for all three draft kinds — a plain draft has no element to save back to",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "592: the add-layer row decoration ends on the last clip edge, not one pixel past it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "624: holding a layer head to multi-select shows 1 selected and no single-layer edit menu (rule 16 reading a); two selected still get the multi panel",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "793: every param shows in the inspector what an absent key renders — legacy where the kernel disagrees with the schema default",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "794: the does-nothing-here probe stays quiet for Time Warp Scan and its ghost-gated siblings, and still calls a real no-op dead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "795: a text layer with a text animator is not told it never moves; a static one still is",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "796: recovering a stuck clip drag puts the clip (and its group) back on its original start",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "129: the codec table asks with the profile strings Chromium answers, names H.265 by the working probe, and a real HEVC .mov refused at load still writes the blank-clip report",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "129: a decoder error after metadata writes A clip with no picture exactly once, and the row is in Settings from the home screen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "429: a finger on the timeline pins the stage height in px for the life of the gesture, and a selected clip no longer puts --stage-h back to vh",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "712: a cold stock effect strip is built across animation frames, not inside one, and its still shows before the strip is done",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "712: a queued tile whose canvas has left the page waits behind visible ones, the ticker rests when nothing queued is on the page, and a re-mount wakes it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "712: pressing Back in an effects category writes Your last Back — first yield, tiles queued, drained",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "484: Silk ribbon is a shape beside Banner and Flag — it has an outline, sits in the Add menu, spawns at the banner's aspect and renders ink",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "564: with Outline and Shadow both on, the Outline & Shadows card heads each feature's rows with its own label, in order",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "763: on PC the skip buttons sit clear of the play pill — at least as far from it as on the phone, never tucked into it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "674: an uncaught error and an unhandled rejection both land in Settings → Last error, silently",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "835: the docked clip panel has no CLIP OPTIONS / Done row — the options start at the panel top and the top-bar arrow is the way out",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "760: on PC the shape tiles are 46px or wider with 40px art, and every glyph is white on its own tinted plate",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "606: the add-layer row grip is centred on the same x as the layer rows handles, bare and unboxed, at 380 and at his 440",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "692: every crop-admitted kernel draws the same picture cropped, a centre-based control does not, and the dispatcher takes the crop path",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "692: every crop-admitted bounded kernel renders identically with the cropped readback, a plate-relative control does not, and the dispatcher takes it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "692: bounding zoomblur to what it can reach changes NOTHING about the picture, and a wrong bound is seen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "692: bounding spinblur to what it can reach changes NOTHING about the picture, and a wrong bound is seen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: bounding the drop shadow to the layer changes NOTHING about the picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: bounding the lens blur to the layer changes NOTHING about the picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "913.1 Lens Blur blurs at a fractional radius, and the bounded kernel matches the unbounded one there",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: bounding the hex tiles to the layer changes NOTHING about the picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "864: the project ⋯ menu is light on the light home screen, and the editor’s menus stay dark",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}
