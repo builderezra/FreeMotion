@@ -122648,7 +122648,7 @@
     });
   });
 
-  test('simple P2.1 · review Delete never leaves a cut song’s speed ramp behind its sound: refused until 2.4 moves ramps (or kept in step)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P2.1 · review Delete never leaves a cut song’s speed ramp behind its sound (2.4: the ramp rides the cut)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const fails = [];
     const srcAt = (name, t) => { const l = FM.scene.layers.find(x => x.name === name && t >= x.start - 1e-9 && t < x.start + x.duration); return l ? FM.layerLocalTime(l, t) : null; };
