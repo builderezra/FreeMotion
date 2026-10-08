@@ -56,6 +56,21 @@ out="$(PATH="$(shim_os Linux):$PATH" bash -c '. tools/_testfloor.sh; notrun_repo
 out="$(PATH="$(shim_os Darwin):$PATH" bash -c '. tools/_testfloor.sh; notrun_report "$1" desktop' _ '{"ok": true, "summary": "Regression 2/2 ✓", "failures": [], "notRun": []}')"; rc=$?
 [ "$rc" = 0 ] && [ -z "$out" ] && ok "control: none NOT RUN on the Mac → silent, 0" || bad "notrun_report none: rc=$rc $out"
 
+echo "── a release that drops tests is told to lower the floor at the GATE, not after the pass (7 Oct, v17.26's 4th ship) ──"
+FR="$TMP/floor-repo"; mkdir -p "$FR/tests" "$FR/tools"; cp tools/_testfloor.sh "$FR/tools/"
+printf "  test('a', 1)\n  test('b', 1)\n  test('c', 1)\n" > "$FR/tests/tests.js"; echo 3 > "$FR/tools/.test-floor"
+( cd "$FR" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm base ) >/dev/null 2>&1
+fac() { (cd "$FR" && bash -c '. tools/_testfloor.sh; floor_ahead_check'); }
+printf "  test('a', 1)\n  test('c', 1)\n" > "$FR/tests/tests.js"
+out="$(fac)"; rc=$?
+[ "$rc" = 1 ] && grep -q 'echo 2 > tools/.test-floor' <<<"$out" && ok "one test dropped, floor still HEAD's → refuses at once, naming the number to write (2)" || bad "floor ahead: rc=$rc — $out"
+echo 2 > "$FR/tools/.test-floor"; out="$(fac)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "…the floor lowered → passes silently" || bad "floor lowered: rc=$rc — $out"
+echo 3 > "$FR/tools/.test-floor"; printf "  test('a', 1)\n  test('b', 1)\n  test('c', 1)\n  test('d', 1)\n" > "$FR/tests/tests.js"; out="$(fac)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "control: a test ADDED with the floor unchanged → passes (the floor rises by itself)" || bad "floor added: rc=$rc — $out"
+awk '/DROPS TEST: <why>/{d=NR} /^floor_ahead_check/{f=NR} /running the suite/{s=NR} END{exit !(d && f && s && d < f && f < s)}' tools/ship.sh \
+  && ok "ship.sh asks for it right after the DROPS TEST gate, before the suite runs" || bad "ship.sh does not call floor_ahead_check between the DROPS TEST gate and the suite"
+
 echo "── ship.sh's double-quote title gate matches a test DECLARATION, not a .test('…\"…') call (review minor) ──"
 # ship.sh's own _DQ line, evaluated in a fixture — so this tests what ship.sh does, whatever it does
 DQLINE="$(grep -m1 '^_DQ=' tools/ship.sh)"

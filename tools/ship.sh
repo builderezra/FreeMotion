@@ -774,6 +774,8 @@ if [ -n "$GONE" ] && ! grep -q 'DROPS TEST:' <<<"$MSG"; then
   echo "   If the deletion is deliberate, say so: put \"DROPS TEST: <why>\" in the commit message."
   exit 1
 fi
+# …and a declared drop must also lower the floor, said HERE rather than after the full desktop pass (tools/_testfloor.sh)
+floor_ahead_check || { echo "   Not committing, not pushing."; exit 1; }
 
 # ─── NO REQUEST MAY VANISH WITHOUT SAYING SO (2 Sep) ────────────────────────────────────────────
 # The twin of the gate above, and it exists because the thing it prevents ALREADY HAPPENED. On 1 Sep,

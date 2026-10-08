@@ -38246,6 +38246,18 @@
         }
       });
     });
+    /* #996: SAID HERE, NOT 400 TESTS LATER. This test's linked copy ("Shared A" / "Shared B") was left in the shared scene on
+       5 Oct and again on 7 Oct (the leak list named it both times), and each time the first sign was a sheet preview hundreds of
+       tests away drawing the wrong colour. Still here after the cleanup → fail by name, with what the app was left on: that is
+       the evidence #996 waits for. (8 Oct: NOT an orig deleted under the app — planted, the cleanup's remove() still moves the
+       app off the copy and nothing is left; so a late message writing the copy's layers back is the suspect left.) */
+    const left996 = FM.scene.layers.filter(function (L) { return /^Shared [AB]$/.test(L.name); }).map(function (L) { return L.name; });
+    if (left996.length) {
+      const cur = FM.projects.currentId(), listed = FM.projects.list().some(function (p) { return p.id === cur; });
+      throw new Error('#996: this test left ' + left996.join(' + ') + ' in the shared scene, on project ' + cur + ' (' +
+        (listed ? 'a project still listed' : 'NOT listed — removed while it was the one open') + ', collab session ' +
+        (FM.collab && FM.collab.session ? 'still up' : 'gone') + ')');
+    }
   });
 
   test('921 S6 review: a link that dies while the joiner waits at the knock is said at once — not after two minutes, and not as the owner’s fault', { item: '921', budgetMs: 120000 }, async function () {

@@ -29,7 +29,7 @@ args = sys.argv[1:]
 def opt(n, d=None):
     return args[args.index(n) + 1] if n in args else d
 url, timeout, names, width = opt('--url', ''), opt('--timeout', '?'), '--names' in args, opt('--width', '?')
-open('stub-calls', 'a').write('timeout=%s width=%s url=%s\n' % (timeout, width, url))
+open('stub-calls', 'a').write('timeout=%s width=%s touch=%s url=%s\n' % (timeout, width, os.environ.get('FM_TOUCH_PAGE') or '-', url))
 mode = open('stub-mode').read().strip() if os.path.exists('stub-mode') else 'normal'
 mutated = 'MUTATED' in open('js/a.js').read()
 # a file the suite loads that is NOT one of the five the old cache key hashed (the real tests.js fetches sw.js)
@@ -53,6 +53,11 @@ for t in tests:
     if mode == 'notrun-mutated' and mutated and t.startswith('t-catches'):
         notrun.append({"name": t, "item": "", "reason": "needs an AAC audio encoder - this browser has none"})
         ran.append({"name": t, "ok": False, "pending": False, "notRun": "needs an AAC audio encoder"})
+        continue
+    # a FINGER test (7 Oct): NOT RUN in a shared page on Linux, runs in a touch page of its own (FM_TOUCH_PAGE=1)
+    if mode == 'finger' and t.startswith('t-catches') and os.environ.get('FM_TOUCH_PAGE') != '1':
+        r = "needs real touch emulation (a finger with the phone's media state) - the stub's shared page"
+        notrun.append({"name": t, "item": "", "reason": r}); ran.append({"name": t, "ok": False, "pending": False, "notRun": r})
         continue
     bad = (t.startswith('t-catches') and (mutated or swbroken)) or (mode == 'red' and t.startswith('t-catches'))
     narrow = t == 't-other' and width == '380' and os.path.exists('stub-narrow-red')   # red at phone width only
@@ -216,6 +221,17 @@ log="$(full js/a.js 'return 1;' 'return 1; /*MUTATED*/' 't-catches')"; rc=$?
 [ "$rc" = 8 ] && ! printf '%s' "$log" | grep -q 'SURVIVED' && printf '%s' "$log" | grep -q 'did NOT RUN HERE' && restored && ok "full mode: the catching test NOT RUN HERE on the mutated tree → exit 8, never SURVIVED" || bad "notrun full: rc=$rc — $log"
 out="$(tools/mutate.sh --only 't-catches' js/a.js 'return 1;' 'return 1; /*MUTATED*/' 't-catches' 2>&1)"; rc=$?
 [ "$rc" = 9 ] && printf '%s' "$out" | grep -q 'NOT RUN HERE' && restored && ok "--only: a named title NOT RUN HERE → exit 9 (a named title did not run), never SURVIVED or CAUGHT" || bad "notrun only: rc=$rc — $out"
+echo "── a lone FINGER title runs in a touch page of its own (7 Oct: on Linux it read NOT RUN in a shared page → exit 9) ──"
+echo finger > stub-mode; : > stub-calls
+out="$(tools/mutate.sh --only 't-catches the defect' js/a.js 'return 1;' 'return 1; /*MUTATED*/' 't-catches the defect' 2>&1)"; rc=$?
+[ "$rc" = 0 ] && printf '%s' "$out" | grep -q 'CAUGHT' && restored && [ "$(grep -c 'touch=1 ' stub-calls)" = 2 ] \
+  && ok "--only: a lone finger title → the baseline and the mutated run each go again in a touch page (FM_TOUCH_PAGE=1): CAUGHT" || bad "finger: rc=$rc — $out — calls: $(cat stub-calls)"
+: > stub-calls
+out="$(tools/mutate.sh --only 't-catches the defect' js/a.js 'return 1;' 'return 1; /*NOT-SEEN*/' 't-catches the defect' 2>&1)"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$out" | grep -q 'cached' && restored && grep -q 'touch=1 ' stub-calls \
+  && ok "…with the baseline CACHED, the mutated run still finds its touch page: an unseen mutation SURVIVES (exit 1), never 'did not run'" || bad "finger cached: rc=$rc — $out — calls: $(cat stub-calls)"
+out="$(tools/mutate.sh --only "$(printf 't-catches\nt-other')" js/a.js 'return 1;' 'return 1; /*MUTATED*/' 't-catches' 2>&1)"; rc=$?
+[ "$rc" = 9 ] && restored && ok "…but two titles, one a finger test, cannot share one touch page: still exit 9" || bad "two titles with a finger: rc=$rc — $out"
 rm -f stub-mode
 mutate_by_hand() { perl -pi -e 's{return 1;}{return 1; /*MUTATED*/}' js/a.js; }   # perl: same on macOS and Linux
 cp js/a.js "$TMP/a.orig"; mutate_by_hand

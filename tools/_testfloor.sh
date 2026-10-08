@@ -13,6 +13,23 @@
 # run has to at least match it. Deleting a test on purpose is the one case that trips it, and the
 # message says so — a deliberate removal is one line of maintenance, which is the right price for
 # closing a hole that silently pushes a suite that never ran.
+#
+# …AND THAT ONE LINE IS ASKED FOR AT THE GATE, NOT AFTER THE PASS (7 Oct). v17.26 dropped two tests (DROPS TEST, declared) and
+# its fourth ship ran the whole 45-minute desktop pass GREEN before test_floor_check refused 2287 < 2288. The written count is
+# known before anything runs: tests/tests.js has N fewer `  test('` lines than HEAD and tools/.test-floor is still HEAD's →
+# floor_ahead_check refuses in a second, with the number to write. (A floor already lowered, or tests only added, passes.)
+floor_ahead_check() {
+  local h t fn fh d
+  h="$(git show HEAD:tests/tests.js 2>/dev/null | grep -c "^  test('")"
+  t="$(grep -c "^  test('" tests/tests.js 2>/dev/null)"
+  fn="$(cat tools/.test-floor 2>/dev/null)"; fh="$(git show HEAD:tools/.test-floor 2>/dev/null)"
+  [ -n "$h" ] && [ -n "$t" ] && [ -n "$fn" ] && [ "$fn" = "$fh" ] && [ "$t" -lt "$h" ] 2>/dev/null || return 0
+  d=$(( h - t ))
+  echo "❌ tests/tests.js has $d fewer test(s) than HEAD ($h → $t written), but tools/.test-floor is still $fn —"
+  echo "   the suite would run in full and THEN refuse for the count. If the removal is deliberate (DROPS TEST: …), lower it now:"
+  echo "     echo $(( fn - d )) > tools/.test-floor"
+  return 1
+}
 test_floor_check() {
   local out="$1" floor_file="tools/.test-floor" n floor
   n="$(printf '%s' "$out" | grep -o '"summary": "Regression [0-9]*/[0-9]*' | head -1 | sed 's|.*/||')"
