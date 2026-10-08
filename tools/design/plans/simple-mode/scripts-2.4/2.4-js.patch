@@ -1,0 +1,970 @@
+diff --git a/js/behaviors.js b/js/behaviors.js
+index 97a2c2f3..9ae055fd 100644
+--- a/js/behaviors.js
++++ b/js/behaviors.js
+@@ -176,6 +176,10 @@ window.FM = window.FM || {};
+         if (merged.length >= 2) kf = merged;
+       }
+     }
++    /* SIMPLE 2.4 (DESIGN §0.4 B5): the boundary keys its riders insert carry `sb: 1` (a mark Full never writes), so a pair built at a cut nobody
++       made does not make Bounce ring there. Only when at least two UNMARKED keys remain (the guard the lineage path has above); a Full-made
++       document has no `sb`, takes neither line, and renders bit for bit as before. */
++    if (kf.some(k => k && k.sb)) { const un = kf.filter(k => k && !k.sb); if (un.length >= 2) kf = un; }
+     let i = -1;
+     for (let j = 0; j < kf.length; j++) { if (kf[j].t <= t) i = j; else break; }
+     if (i <= 0) return 0;                       // before the first move, or no prior keyframe to jump from
+diff --git a/js/collab-comments.js b/js/collab-comments.js
+index 94ed2ee5..9b030ab8 100644
+--- a/js/collab-comments.js
++++ b/js/collab-comments.js
+@@ -124,6 +124,58 @@ window.FM = window.FM || {};
+   CM.count = function () { return list().filter(function (c) { return c && !c.resolved; }).length; };
+   CM.list = function () { return list().slice(); };
+ 
++  /* ═══ SIMPLE 2.4 (DESIGN §13 #24, §0.4 B25): COMMENT PINS STAY ON THEIR FOOTAGE. One anchor rule, applied ONLY while Simple is on screen (a comment
++     made in Full gets no anchor and stays absolute, exactly as today): the selected layer if it covers the playhead, else the main clip under it
++     (the read model's mainAtTime), else none (a gap or past the end: `t` alone, absolute by design). A video with a source records `ls`, source
++     seconds (so a split, a head trim in either editor and a speed change leave the pin on the same frame without a write); anything else records
++     `lo`, the clip clock (fxLocalTime, which carries fxTimeOffset). The host keeps either only with `lid`. `t` is never rewritten. */
++  const r3 = v => Math.round(v * 1000) / 1000;
++  function anchorPin(c) {
++    if (!(FM.editor && FM.editor.isSimple && FM.editor.isSimple()) || typeof c.t !== 'number') return;
++    const t = c.t, covers = l => l && t >= (+l.start || 0) - 1e-9 && t < (+l.start || 0) + (+l.duration || 0) - 1e-9;
++    let layer = c.lid ? FM.layerById(FM.scene, c.lid) : null;
++    if (!covers(layer)) {
++      layer = null;
++      try { const R = FM.spine.read(FM.scene), e = FM.spine.mainAtTime(R, t); if (e && !e.slot) layer = FM.layerById(FM.scene, e.id); } catch (e) { layer = null; }
++    }
++    delete c.lid; delete c.ls; delete c.lo;
++    if (!layer || !ID_RE.test(layer.id)) return;
++    c.lid = layer.id;
++    const m = FM.media && FM.media.get && FM.media.get(layer.id);
++    if (layer.type === 'video' && !layer.audioOnly && m && m.duration > 0) { const v = FM.layerLocalTime(layer, t); if (v != null && isFinite(v)) c.ls = r3(v); }
++    else if (FM.fxLocalTime) { const v = FM.fxLocalTime(layer, t); if (isFinite(v)) c.lo = r3(v); }
++  }
++  /* THE ONE RESOLVER. Candidates are the lid layer and every layer sharing its splitOf lineage; with `ls` the candidate whose source window holds it
++     (the t where layerLocalTime equals ls, bisected so a ramp and a reversed clip need no closed form), with `lo` the candidate whose clip-clock
++     window holds it; if none does (trimmed away) the nearest candidate edge; with no candidate left, c.t. Every reader (the ruler marks, the card
++     pin, the head test) goes through here. */
++  CM._anchorPin = anchorPin;
++  CM.pinTime = function (c) {
++    if (!c || typeof c.t !== 'number' || !isFinite(c.t)) return c && c.t;
++    if (!c.lid || (c.ls == null && c.lo == null)) return c.t;
++    const base = FM.layerById(FM.scene, c.lid); if (!base) return c.t;
++    const cands = [base].concat(base.splitOf ? FM.scene.layers.filter(function (l) { return l !== base && l.splitOf === base.splitOf; }) : []);
++    let best = null, bd = Infinity;
++    for (let i = 0; i < cands.length; i++) {
++      const l = cands[i], s = +l.start || 0, d = +l.duration || 0;
++      if (c.ls != null && l.type === 'video') {
++        const tot = FM.layerSourceAdvance ? FM.layerSourceAdvance(l, d) : d, lo = +l.trimStart || 0, hi = lo + tot;
++        if (c.ls >= lo - 1e-6 && c.ls <= hi + 1e-6) {
++          let a = s, b = s + d - 1e-6, fa = FM.layerLocalTime(l, a);
++          const inc = FM.layerLocalTime(l, b) >= fa;
++          for (let k = 0; k < 50; k++) { const mid = (a + b) / 2, v = FM.layerLocalTime(l, mid); if ((v < c.ls) === inc) a = mid; else b = mid; }
++          return r3((a + b) / 2);
++        }
++        const dist = c.ls < lo ? lo - c.ls : c.ls - hi; if (dist < bd) { bd = dist; best = c.ls < lo ? (l.reversed ? s + d : s) : (l.reversed ? s : s + d); }
++      } else if (c.lo != null) {
++        const off = parseFloat(l.fxTimeOffset); const o0 = isFinite(off) ? off : 0;
++        if (c.lo >= o0 - 1e-6 && c.lo < o0 + d) return s + c.lo - o0;
++        const dist = c.lo < o0 ? o0 - c.lo : c.lo - (o0 + d); if (dist < bd) { bd = dist; best = c.lo < o0 ? s : s + d; }
++      }
++    }
++    return best != null ? best : c.t;
++  };
++
+   /* opts: {pin:true} puts it at the playhead, and on the selected layer when there is one. */
+   CM.add = function (text, opts) {
+     const o = opts || {};
+@@ -139,6 +191,7 @@ window.FM = window.FM || {};
+       c.t = Math.round((+FM.time || 0) * 1000) / 1000;
+       const sel = FM.scene.selectedId;
+       if (typeof sel === 'string' && ID_RE.test(sel) && FM.layerById && FM.layerById(FM.scene, sel)) c.lid = sel;
++      anchorPin(c);
+     }
+     l.push(c);
+     see(c, null);                           // his own is never news to him (#967 B5)
+@@ -280,7 +333,7 @@ window.FM = window.FM || {};
+     let best = null, bd = HEAD_HALF;
+     list().forEach(function (c) {
+       if (!c || c.resolved || typeof c.t !== 'number' || !isFinite(c.t) || typeof c.id !== 'string') return;
+-      const d = Math.abs(FM.timeline.timeToX(c.t) - hx);
++      const d = Math.abs(FM.timeline.timeToX(CM.pinTime(c)) - hx);
+       if (d <= bd) { bd = d; best = c; }
+     });
+     return best ? best.id : null;
+@@ -321,10 +374,10 @@ window.FM = window.FM || {};
+       const m = el('button', 'tl-cmark');
+       m.type = 'button';
+       m.setAttribute('data-cid', c.id);
+-      m.style.left = (FM.timeline.timeToX(c.t) - off) + 'px';
++      m.style.left = (FM.timeline.timeToX(CM.pinTime(c)) - off) + 'px';
+       m.style.setProperty('--peer', cleanColor(c.by && c.by.color) || GREY);
+       const who = cleanName(c.by && c.by.name) || 'Someone';
+-      m.setAttribute('aria-label', 'Comment from ' + who + ' at ' + fmtTime(c.t));
++      m.setAttribute('aria-label', 'Comment from ' + who + ' at ' + fmtTime(CM.pinTime(c)));
+       m.title = who + ': ' + String(c.text || '').slice(0, 80);
+       m.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+       m.addEventListener('click', function (e) { e.stopPropagation(); CM.open({ at: c.id }); });
+@@ -509,8 +562,8 @@ window.FM = window.FM || {};
+       const ln = layerName(c.lid);
+       /* Tapping where it is pinned takes the playhead there — the one thing a comment about a moment asks
+          of whoever reads it. */
+-      d.appendChild(btn('cc-pin', (ln ? 'on “' + ln.slice(0, 32) + '” ' : '') + 'at ' + fmtTime(c.t), function () {
+-        if (FM.setTime) FM.setTime(c.t);
++      d.appendChild(btn('cc-pin', (ln ? 'on “' + ln.slice(0, 32) + '” ' : '') + 'at ' + fmtTime(CM.pinTime(c)), function () {
++        if (FM.setTime) FM.setTime(CM.pinTime(c));
+         if (ln && FM.selectLayer && FM.layerById(FM.scene, c.lid) && !C.readOnly()) FM.selectLayer(c.lid);
+         refreshPinLabel();
+       }));
+diff --git a/js/collab-host.js b/js/collab-host.js
+index e4dbb06b..630d250d 100644
+--- a/js/collab-host.js
++++ b/js/collab-host.js
+@@ -425,7 +425,7 @@ window.FM = window.FM || {};
+        them) and every device rendered them under his name. Nothing downstream would ever have caught
+        it: the sanitisers in storage.js are layer-shaped and never look at project.comments, so
+        whatever an `ai` carries is what the session stores, hashes and shows, forever (queue 921). */
+-    const COMMENT_KEYS = { id: 1, by: 1, at: 1, text: 1, lid: 1, t: 1, resolved: 1, replies: 1 };
++    const COMMENT_KEYS = { id: 1, by: 1, at: 1, text: 1, lid: 1, t: 1, resolved: 1, replies: 1, ls: 1, lo: 1 };   // 2.4: `ls` / `lo` anchor a pin to its footage; kept only with `lid` (below)
+     const REPLY_KEYS = { id: 1, by: 1, at: 1, text: 1 };
+     /* ⚠️ THE AUTHORS OF WHAT WAS DELETED (S7 review). An Undo of a comment delete arrives as an ordinary
+        `ai` carrying the whole thread — and stamping it as the sender re-authored the comment AND every
+@@ -528,6 +528,7 @@ window.FM = window.FM || {};
+       v.text = (typeof v.text === 'string') ? v.text.slice(0, LIM.COMMENT) : '';
+       if (typeof v.lid !== 'string' || !P.KEYVAL_RE.test(v.lid)) delete v.lid;
+       if (typeof v.t !== 'number' || !isFinite(v.t)) delete v.t;
++      ['ls', 'lo'].forEach(function (k) { if (!v.lid || typeof v[k] !== 'number' || !isFinite(v[k]) || v[k] < 0 || v[k] > 86400) delete v[k]; });   // 2.4: an anchor means nothing without its layer
+       if (v.resolved !== true) delete v.resolved;
+       v.by = authorOf(m);
+       v.at = now();
+diff --git a/js/spine-edit.js b/js/spine-edit.js
+index 66dbc773..400dfb5c 100644
+--- a/js/spine-edit.js
++++ b/js/spine-edit.js
+@@ -315,28 +315,6 @@ window.FM = window.FM || {};
+     R.tail.forEach(id => { const l = map.get(id); if (!l) return; if (Math.abs((+l.start || 0) - R.trackEnd) < 1e-9) addLand(p, id, newEnd); else addMove(p, id, d); });
+   }
+ 
+-  /* Release 2.1 does not move riders, camera keys or a cut item's keys yet (2.4): a command that would is refused. `from` is
+-     the earliest project time the command changes; a rider or the camera with anything at or after it would need a map. */
+-  function riderBlock(R, from, map) {
+-    for (let k = 0; k < R.riders.length; k++) {
+-      const l = map.get(R.riders[k]); if (!l) continue;
+-      const end = (+l.start || 0) + (+l.duration || 0);
+-      if (end > from + R.eps) return { kind: 'riders', name: S.itemWord(l, R) };
+-    }
+-    return cameraBlock(R, from, map);
+-  }
+-  /* The camera half alone: Append moves only the tail, so riders wholly after T stay a listed 2.4 gap, but a keyed camera
+-     over the end card is not — it refuses rather than let the zoom play over the new clips (§3.10 rule 3e; review finding 5) */
+-  function cameraBlock(R, from, map) {
+-    for (let k = 0; k < R.fullOnly.length; k++) {
+-      const l = map.get(R.fullOnly[k]); if (!l || l.type !== 'camera' || (l.sm && l.sm.stay)) continue;
+-      const keyed = (FM.timedLists ? FM.timedLists(l) : FM.animatedProps(l)).some(pp => pp.kf.some(kk => kk.t >= from - R.eps));
+-      const windowed = (+l.start || 0) > 0 && (+l.start || 0) + (+l.duration || 0) > from + R.eps;
+-      if (keyed || windowed) return { kind: 'camera' };
+-    }
+-    return null;
+-  }
+-
+   /* The displacement a layer gets from this plan (null = removed). A unit's members share its d. */
+   function dispOf(p, map) {
+     const out = new Map();
+@@ -373,11 +351,336 @@ window.FM = window.FM || {};
+           if (refs[k].via === 'twin') continue;   // a karaoke twin is a follower: it is removed with its clip
+           return { kind: 'attached', a: S.itemWord(x, R), b: S.itemWord(y, R) };
+         }
+-        if (Math.abs(dx - dy) > 1e-9 && timeVarying(y)) return { kind: 'slip', via: refs[k].via };
++        if (Math.abs(dx - dy) > 1e-9 && timeVarying(y)) { const v = refs[k].via; if (!(p.asks || []).some(a => a.kind === 'slip' && a.via === v)) p.asks = (p.asks || []).concat([{ kind: 'slip', via: v }]); }
+       }
+     }
++    return null;   // 2.4: a link whose two ends move by different amounts is an ASK now (plan.asks), never a refusal; deleting a referenced unit still refuses ('attached')
++  }
++
++  /* ═══════════════ RELEASE 2.4: riders, couplings and crossfades (DESIGN §3.5, §3.10, §3.1) ═══════════════
++     ONE TIME MAP PER COMMAND (§3.5). A map is a list of PIECES of the original time, each with the image it lands on: k = 1 shifts
++     (an offset), k = 0 collapses a cut span to one point, any other k scales (Speed). Every rider (a caption track's cues, its window
++     and its keys, the camera's keys and window, a cut item's keys, a crossfade's owned keys) goes through the SAME map, so a shift is
++     never applied twice and a cue that straddles an edit always has an answer. A START is mapped by the piece it lies in (R), an END
++     by the piece it ends in (L): that is what lets one cue straddle an Insert (it splits, the halves meet the inserted clips' edges)
++     or a Delete (its two outside parts join). Reorder and Sort are the stated exception, a piecewise TRANSLATION g (translation: true). */
++  const BIG = 1e9, TME = 1e-9, SEAMNUDGE = 1e-3;
++  const minCue = () => (FM.captions && FM.captions.MIN_CUE) || 0.10;
++  const clone = o => JSON.parse(JSON.stringify(o, FM.jsonReplacer));
++  function tmMake(pieces, translation) {
++    const P = pieces.filter(p => p.hi > p.lo + 1e-12);
++    const img = (p, t) => p.i0 + (t - p.lo) * p.k;
++    const find = (t, left) => {
++      for (let i = 0; i < P.length; i++) if (left ? (t > P[i].lo + TME && t <= P[i].hi + TME) : (t >= P[i].lo - TME && t < P[i].hi - TME)) return P[i];
++      return t <= P[0].lo ? P[0] : P[P.length - 1];
++    };
++    const m = { pieces: P, translation: !!translation, img: img, find: find };
++    m.R = t => img(find(t, false), t);
++    m.L = t => img(find(t, true), t);
++    m.holes = [];
++    for (let j = 0; j + 1 < P.length; j++) if (Math.abs(P[j + 1].i0 - img(P[j], P[j].hi)) > 1e-9) m.holes.push(P[j].hi);
++    m.splits = translation ? P.slice(0, -1).map(p => p.hi) : m.holes.slice();
++    m.cuts = P.filter(p => p.k === 0).map(p => [p.lo, p.hi]);
++    m.scales = P.filter(p => p.k !== 0 && Math.abs(p.k - 1) > 1e-9);
++    return m;
++  }
++  /* removals [a, b) and insertions {a, ins}, ascending in original time */
++  function tmOps(ops) {
++    const o = ops.slice().sort((x, y) => x.a - y.a), pieces = [];
++    let lo = 0, off = 0;
++    o.forEach(op => {
++      const len = op.b > op.a ? op.b - op.a : 0;
++      pieces.push({ lo: lo, hi: op.a, i0: lo + off, k: 1 });
++      if (len > 0) { pieces.push({ lo: op.a, hi: op.b, i0: op.a + off, k: 0 }); lo = op.b; off -= len; }
++      else { lo = op.a; off += (op.ins || 0); }
++    });
++    pieces.push({ lo: lo, hi: BIG, i0: lo + off, k: 1 });
++    return tmMake(pieces, false);
++  }
++  const tmShift = (at, D) => D >= 0 ? tmOps([{ a: at, ins: D }]) : tmOps([{ a: at + D, b: at }]);   // a tail or head trim, Insert, Append, Duplicate, Fix overlap
++  const tmCut = (a, b) => tmOps([{ a: a, b: b }]);                                                   // Delete, Make overlay, Close gap
++  function tmScale(a, oldLen, newLen) {                                                              // Speed: cue [3,5] on clip [0,4] at 2x -> [1.5, 3]
++    const k = newLen / oldLen;
++    return tmMake([{ lo: 0, hi: a, i0: 0, k: 1 }, { lo: a, hi: a + oldLen, i0: a, k: k }, { lo: a + oldLen, hi: BIG, i0: a + newLen, k: 1 }], false);
++  }
++  function tmPieces(list) {                                                                          // Reorder: [{ lo, hi, off }] covering [0, BIG)
++    return tmMake(list.map(p => ({ lo: p.lo, hi: p.hi, i0: p.lo + p.off, k: 1 })), true);
++  }
++  S.tm = { make: tmMake, ops: tmOps, shift: tmShift, cut: tmCut, scale: tmScale, pieces: tmPieces };
++
++  /* ═══ FM.spine.seamKey / divideSegment (§3.10 rule 3a): the boundary key, built the way FM.splitLayer builds its seam key. A COPY
++     of that block (js/app.js `EASE_AS_BEZ` … `splitBez`), so Full's split is not touched (§0.4 I9). The key carries `split: 1` (as the
++     split's does) and `sb: 1` (a mark Full never writes: Bounce skips it). */
++  const EASE_AS_BEZ = { easeIn: [1 / 3, 0, 2 / 3, 1 / 3], easeOut: [1 / 3, 2 / 3, 2 / 3, 1] };
++  function easeBezOf(b) {
++    if (b.ez && FM.easeApply && FM.easeApply(b.ez, 0.5) != null) return null;
++    if (Array.isArray(b.bez) && b.bez.length === 4 && b.bez.every(Number.isFinite)) return b.bez;
++    if (b.e && FM.EASES && Object.prototype.hasOwnProperty.call(FM.EASES, b.e)) return EASE_AS_BEZ[b.e] || null;
++    if (b.e && FM.EASE_PRESETS && Object.prototype.hasOwnProperty.call(FM.EASE_PRESETS, b.e)) return FM.EASE_PRESETS[b.e];
+     return null;
+   }
++  function splitBez(z, u) {
++    const bx = s => { const m = 1 - s; return 3 * m * m * s * z[0] + 3 * m * s * s * z[2] + s * s * s; };
++    let lo = 0, hi = 1, s = u;
++    for (let i = 0; i < 60; i++) { s = (lo + hi) / 2; if (bx(s) < u) lo = s; else hi = s; }
++    const Lr = (p, q) => [p[0] + (q[0] - p[0]) * s, p[1] + (q[1] - p[1]) * s];
++    const P0 = [0, 0], P1 = [z[0], z[1]], P2 = [z[2], z[3]], P3 = [1, 1];
++    const A = Lr(P0, P1), Bm = Lr(P1, P2), C = Lr(P2, P3), D = Lr(A, Bm), E = Lr(Bm, C), M = Lr(D, E);
++    const ok = n => Math.abs(n) > 1e-6;
++    const head = (ok(M[0]) && ok(M[1])) ? [A[0] / M[0], A[1] / M[1], D[0] / M[0], D[1] / M[1]] : null;
++    const tx = x => (x - M[0]) / (1 - M[0]), ty = y => (y - M[1]) / (1 - M[1]);
++    const tail = (ok(1 - M[0]) && ok(1 - M[1])) ? [tx(E[0]), ty(E[1]), tx(C[0]), ty(C[1])] : null;
++    const fin = q => q && q.every(Number.isFinite) ? q.map(n => Math.round(n * 1e9) / 1e9) : null;
++    return { head: fin(head), tail: fin(tail), my: M[1] };
++  }
++  const isArrKf = p => p.kf.some(k => Array.isArray(k.v));
++  /* the key at t with the HEAD of the divided curve, and the TAIL to write on the original key after t */
++  S.seamKey = function (p, t) {
++    const keys = p.kf.slice().sort((x, y) => x.t - y.t), arr = isArrKf(p);
++    const b = keys.find(k => k.t >= t - 1e-9), a = keys.slice().reverse().find(k => k.t < t - 1e-9);
++    const v = arr ? clone((keys.slice().reverse().find(k => k.t <= t + 1e-9) || keys[0]).v) : FM.evalProp(p, t);
++    const plain = x => typeof x === 'number' || typeof x === 'string';
++    const z = (a && b && !arr && plain(a.v) && plain(b.v) && b.t - a.t > 1e-9 && !Number.isFinite(a.to) && !Number.isFinite(b.ti)) ? easeBezOf(b) : null;
++    let cut = z ? splitBez(z, (t - a.t) / (b.t - a.t)) : null;
++    if (cut && typeof a.v === 'string' && !(cut.my >= -1e-9 && cut.my <= 1 + 1e-9)) cut = null;
++    const key = { t: t, v: v, e: (b && b.e) || 'linear', split: 1, sb: 1 };
++    if (b && b.bez) key.bez = b.bez.slice();
++    if (b && b.ez) key.ez = clone(b.ez);
++    if (cut && cut.head) key.bez = cut.head.slice();
++    return { key: key, nextBez: cut && cut.tail ? cut.tail.slice() : null, next: b || null };
++  };
++  /* A Cut whose a and b lie in ONE segment divides the ORIGINAL segment at both, before any key is inserted: evaluating seamKey(b) on a
++     list that already carries the a-key divides the wrong curve (§3.10 rule 3a) */
++  S.divideSegment = function (p, t1, t2) {
++    const keys = p.kf.slice().sort((x, y) => x.t - y.t), arr = isArrKf(p);
++    const k1 = keys.find(k => k.t >= t1 - 1e-9), k0 = keys.slice().reverse().find(k => k.t < t1 - 1e-9);
++    const same = k0 && k1 && t2 <= k1.t + 1e-9;
++    const first = S.seamKey(p, t1), second = S.seamKey(p, t2);
++    if (!same || arr || !k1) return { a: first, b: second };
++    const plain = x => typeof x === 'number' || typeof x === 'string';
++    const z = (plain(k0.v) && plain(k1.v) && k1.t - k0.t > 1e-9 && !Number.isFinite(k0.to) && !Number.isFinite(k1.ti)) ? easeBezOf(k1) : null;
++    if (!z) return { a: first, b: second };
++    const ca = splitBez(z, (t1 - k0.t) / (k1.t - k0.t)), cb = splitBez(z, (t2 - k0.t) / (k1.t - k0.t));
++    if (ca.head) first.key.bez = ca.head.slice();
++    first.nextBez = null;                                       // the a-key ends the head part: nothing is written after it
++    second.nextBez = cb.tail ? cb.tail.slice() : null;
++    second.next = k1;
++    return { a: first, b: second };
++  };
++
++  /* ═══ FM.spine.riderKeys(layer | props, map) (§3.10 rule 3): the keys of every keyframed list through one time map, boundary keys where the map
++     breaks the curve. (b) Cut(a, b): a seam key at a and at b (through divideSegment) when the property has keys on both sides; keys strictly
++     inside dropped. (c) Insert-form holes: the seam key before the hole and a copy with the same value after it, so the pose holds over the
++     new material and the move over the old clips keeps its timing. Piecewise translations: a pair at every boundary. (d) A looping prop is
++     left whole. Never `{kf: []}`. Boundary keys are dropped again when they change nothing (the neighbours are hold or linear and equal). */
++  function riderKeysProp(p, m, o) {
++    o = o || {};
++    if (!p || !Array.isArray(p.kf) || !p.kf.length) return;
++    if (p.loopMode && p.loopMode !== 'none' && p.kf.length >= 2) return;
++    const orig = p.kf.slice().sort((x, y) => x.t - y.t), first = orig[0].t, last = orig[orig.length - 1].t, P = m.pieces;
++    const seams = [];
++    P.forEach((pc, j) => {
++      if (pc.k === 0) {                                           // a collapsed span [a, b)
++        if (!(first < pc.hi - 1e-9 && last > pc.lo + 1e-9)) return;
++        const d = S.divideSegment({ kf: orig, loopMode: p.loopMode }, pc.lo, pc.hi);
++        if (!o.fromCut) seams.push({ t: pc.lo, at: pc.i0, s: d.a, side: 'head' });   // fromCut: the item STARTS inside the cut and lands at its edge, so nothing before it plays
++        seams.push({ t: pc.hi, at: pc.i0 + SEAMNUDGE, s: d.b, side: 'tail' });
++      }
++    });
++    m.holes.forEach(B => {
++      const left = P.find(pc => Math.abs(pc.hi - B) < 1e-9), right = P.find(pc => Math.abs(pc.lo - B) < 1e-9);
++      if (!left || !right || left.k === 0 || right.k === 0) return;
++      if (!(first < B - 1e-9 && last > B + 1e-9)) return;
++      const s = S.seamKey({ kf: orig }, B);
++      seams.push({ t: B, at: m.img(left, B), s: s, side: 'head' }, { t: B, at: right.i0, s: s, side: 'tail' });
++    });
++    if (m.translation) m.splits.forEach(B => {
++      if (m.holes.some(h => Math.abs(h - B) < 1e-9)) return;
++      const left = P.find(pc => Math.abs(pc.hi - B) < 1e-9), right = P.find(pc => Math.abs(pc.lo - B) < 1e-9);
++      if (!left || !right || Math.abs(m.img(left, B) - right.i0) < 1e-9) return;
++      if (!(first < B - 1e-9 && last > B + 1e-9)) return;
++      const s = S.seamKey({ kf: orig }, B);
++      seams.push({ t: B, at: m.img(left, B), s: s, side: 'head' }, { t: B, at: right.i0, s: s, side: 'tail' });
++    });
++    const out = [];
++    orig.forEach(k => {
++      const pc = m.find(k.t, false);
++      if (pc.k === 0 && k.t > pc.lo + (o.fromCut ? -1e-9 : 1e-9)) return;   // strictly inside a cut: dropped (fromCut: a key AT its start is cut away too)
++      k.t = pc.i0 + (k.t - pc.lo) * (pc.k === 0 ? 0 : pc.k);
++      out.push({ key: k, orig: true });
++    });
++    seams.forEach(sm => {
++      const k = Object.assign({}, sm.s.key); k.t = sm.at;
++      if (sm.side === 'tail') { k.v = Array.isArray(k.v) ? clone(k.v) : k.v; if (sm.s.nextBez && sm.s.next && !sm.s.next.__dropped) sm.s.next.bez = sm.s.nextBez.slice(); }
++      else if (Array.isArray(k.v)) k.v = clone(k.v);
++      out.push({ key: k, orig: false, side: sm.side });
++    });
++    out.sort((x, y) => x.key.t - y.key.t);
++    // two keys on one frame: the later ORIGINAL survives (two originals); a boundary pair keeps both, the later nudged by a millisecond
++    const res = [];
++    out.forEach(e => {
++      const prev = res[res.length - 1];
++      if (prev && Math.abs(prev.key.t - e.key.t) < 1e-6) {
++        if (prev.orig && e.orig) { res[res.length - 1] = e; return; }
++        if (!prev.orig && !e.orig && JSON.stringify(prev.key.v) === JSON.stringify(e.key.v) && prev.side === 'head' && e.side === 'tail' && Math.abs(e.key.t - prev.key.t) < 1e-9 && e.nudged !== true) { e.key.t = prev.key.t + SEAMNUDGE; res.push(e); return; }
++        if (!e.orig || !prev.orig) { e.key.t = Math.max(e.key.t, prev.key.t + SEAMNUDGE); }
++      }
++      res.push(e);
++    });
++    // a boundary key that changes nothing goes (never an original)
++    const keep = res.filter((e, i) => {
++      if (e.orig) return true;
++      const a = res[i - 1], b = res[i + 1]; if (!a || !b) return true;
++      const same = JSON.stringify(a.key.v) === JSON.stringify(e.key.v) && JSON.stringify(b.key.v) === JSON.stringify(e.key.v);
++      const flat = x => !x.key.e || x.key.e === 'linear' || x.key.e === 'hold';
++      return !(same && flat(e) && flat(b));
++    });
++    p.kf = keep.map(e => e.key);
++  }
++  S.riderKeys = function (what, m, o) {
++    const props = Array.isArray(what) ? what : (FM.timedLists ? FM.timedLists(what, { cues: false }) : FM.animatedProps(what));
++    props.forEach(p => riderKeysProp(p, m, o));
++  };
++  S._riderKeysProp = riderKeysProp;
++
++  /* ═══ THE CAPTION RIDER (§3.5): one pure computation per track, applied as one write ═══
++     Both ends of every visible cue go through the map (a cue that straddles a hole splits there, its halves carry no animFrom / animTo);
++     a visible cue under MIN_CUE after the map is dropped and counted; hidden cues move rigidly with the edge they hide past; the window
++     goes through the map with its ends snapped to the main track's (so Append and Delete of the last clip reach it); the track's own keys
++     and each cue's effect keys go through the same map (the cue effects move by their own cue's displacement, never twice). */
++  function captionRider(R, track, m) {
++    const MC = minCue(), st0 = +track.start || 0, d0 = +track.duration || 0, cues = FM.captions.cues(track).map(clone);
++    const mainStart = R.main.length ? R.main[0].start : 0;
++    const s0 = Math.abs(st0 - mainStart) <= R.eps ? mainStart : st0;
++    let e0 = st0 + d0; if (Math.abs(e0 - R.trackEnd) <= R.eps) e0 = R.trackEnd;
++    let nS, nE;
++    if (m.translation) {
++      let lo = Infinity, hi = -Infinity;
++      m.pieces.forEach(pc => { const a = Math.max(pc.lo, s0), b = Math.min(pc.hi, e0); if (b > a + 1e-9) { lo = Math.min(lo, pc.i0 + (a - pc.lo) * pc.k); hi = Math.max(hi, pc.i0 + (b - pc.lo) * pc.k); } });
++      nS = isFinite(lo) ? lo : m.R(s0); nE = isFinite(hi) ? hi : m.L(e0);
++    } else { nS = m.R(s0); nE = m.L(e0); }
++    nS = Math.max(0, nS); nE = Math.max(nS + MC, nE);
++    const parts = [], hiddenHead = nS - st0, hiddenTail = nE - (st0 + d0);
++    let dropped = 0;
++    cues.forEach(c => {
++      const visible = c.end > 1e-9 && c.start < d0 - 1e-9;
++      if (!visible) {                                               // hidden: rigid with the edge it hides past
++        const off = c.start >= d0 - 1e-9 ? hiddenTail : hiddenHead;
++        c.start += off; c.end += off; c.__abs = true; c.__hidden = true; parts.push(c); return;
++      }
++      const as = st0 + c.start, ae = st0 + c.end, cuts = m.splits.filter(B => B > as + 1e-6 && B < ae - 1e-6).sort((a, b) => a - b);
++      const bounds = [as].concat(cuts, [ae]);
++      for (let i = 0; i + 1 < bounds.length; i++) {
++        const ps = bounds[i], pe = bounds[i + 1], part = clone(c);
++        const ns = m.R(ps), ne = m.translation ? ns + (pe - ps) : m.L(pe);
++        if (cuts.length) { delete part.animFrom; delete part.animTo; }
++        if (ne - ns < MC - 1e-9) { dropped++; continue; }
++        // the cue's effect keys: its own displacement (an affine for a scale piece, the Cut treatment where it spans a cut)
++        const fxProps = Array.isArray(part.effects) && part.effects.length && FM.fxListAnimatedProps ? FM.fxListAnimatedProps(part.effects) : [];
++        const spansCut = m.cuts.some(cu => cu[1] > ps + 1e-9 && cu[0] < pe - 1e-9);
++        const inScale = m.scales.some(pc => ps >= pc.lo - 1e-9 && pe <= pc.hi + 1e-9);
++        fxProps.forEach(fp => {
++          if (!fp.kf) return;
++          if (spansCut || inScale) { if (spansCut) riderKeysProp(fp, m); else fp.kf.forEach(k => { k.t = m.R(k.t); }); }
++          else { const d = ns - ps; if (d) fp.kf.forEach(k => { k.t += d; }); }
++        });
++        part.start = ns; part.end = ne; part.__abs = true; parts.push(part);
++      }
++    });
++    // a cue left before the window's start (a paste): the window grows to it, the effect clock keeps its phase (the head-extend rule)
++    let nS2 = nS, extended = 0;
++    parts.forEach(c => { if (c.start < nS2 - 1e-9 && !c.__hidden) nS2 = c.start; });
++    if (nS2 < nS - 1e-9) { extended = nS - nS2; }
++    const out = parts.map(c => {
++      const o = Object.assign({}, c); const hid = c.__hidden;
++      delete o.__abs; delete o.__hidden;
++      // visible cues are absolute here; hidden cues were moved by the edge displacement while still LOCAL to the old start: rebase both to the new start
++      if (hid) { o.start = c.start; o.end = c.end; o.start += st0 - nS2; o.end += st0 - nS2; }
++      else { o.start = c.start - nS2; o.end = c.end - nS2; }
++      return o;
++    }).sort((a, b) => a.start - b.start);
++    return { start: nS2, duration: Math.max(MC, nE - nS2), cues: out, dropped: dropped, extended: extended };
++  }
++  const isCaptionTrack = l => !!l && l.type === 'text' && Array.isArray(l.captions);
++
++  /* the camera (§3.10 rule 3f/3g): its keys through the map and its window through it, skipped when its start is 0 (autoFitDuration re-spans it) */
++  function cameraRider(R, cam, m, anyway) {
++    const s = +cam.start || 0, d = +cam.duration || 0;
++    if (s === 0) return { ask: false, window: null };
++    let ns, ne;
++    if (m.translation) {
++      const inOne = m.pieces.find(pc => s >= pc.lo - 1e-9 && s + d <= pc.hi + 1e-9);
++      if (inOne) { ns = s + (inOne.i0 - inOne.lo); ne = ns + d; }
++      else {
++        if (!anyway) return { ask: true, window: null };
++        let lo = Infinity, hi = -Infinity;
++        m.pieces.forEach(pc => { const a = Math.max(pc.lo, s), b = Math.min(pc.hi, s + d); if (b > a + 1e-9) { lo = Math.min(lo, pc.i0 + (a - pc.lo)); hi = Math.max(hi, pc.i0 + (b - pc.lo)); } });
++        ns = lo; ne = hi;
++      }
++    } else { ns = m.R(s); ne = Math.max(ns + minCue(), m.L(s + d)); }
++    return { ask: false, window: { start: ns, duration: ne - ns } };
++  }
++
++  /* ═══ riderPlan: where riderBlock stood. It validates (a camera crossing a piecewise map asks; nothing else refuses any more), counts, and
++     hands back `attach(plan)`, which writes everything as part of the plan, in the same undo step. */
++  function riderPlan(R, map, m, o) {
++    o = o || {};
++    const caps = (R.riders || []).map(id => map.get(id)).filter(l => isCaptionTrack(l) && !(l.sm && l.sm.stay));
++    const cams = (R.fullOnly || []).map(id => map.get(id)).filter(l => l && l.type === 'camera' && !(l.sm && l.sm.stay));
++    const capJobs = caps.map(t => ({ t: t, r: captionRider(R, t, m) }));
++    const camJobs = [], asks = [];
++    cams.forEach(cm => { const r = cameraRider(R, cm, m, R.anyway); if (r.ask) asks.push('camera'); camJobs.push({ cam: cm, r: r }); });
++    const keyed = cams.some(cm => (FM.timedLists ? FM.timedLists(cm) : FM.animatedProps(cm)).some(pp => pp.kf.length));
++    const dropped = capJobs.reduce((a, j) => a + j.r.dropped, 0);
++    return {
++      asks: asks, dropped: dropped, moves: keyed,
++      attach(plan) {
++        loopRider(plan, m);
++        asks.forEach(a => { plan.asks = (plan.asks || []).concat([{ kind: 'camera' }]); });
++        if (dropped) plan.counts.cuesDropped = (plan.counts.cuesDropped || 0) + dropped;
++        if (keyed) plan.counts.camera = (plan.counts.camera || 0) + 1;
++        plan.writes.push(() => {
++          capJobs.forEach(j => {
++            const t = j.t, r = j.r;
++            S.riderKeys(t, m);
++            t.captions = r.cues; t.start = r.start; t.duration = r.duration;
++            if (r.extended && FM.shiftLayerFxClock) FM.shiftLayerFxClock(t, -r.extended);
++          });
++          camJobs.forEach(j => {
++            S.riderKeys(j.cam, m);
++            if (j.r.window) { j.cam.start = j.r.window.start; j.cam.duration = j.r.window.duration; }
++          });
++        });
++      }
++    };
++  }
++  S._riderPlan = riderPlan;
++  /* the loop region (§3.6.2) rides the same map: both ends through it, or cleared (with the line) when a piecewise map splits it */
++  function loopRider(plan, m) {
++    const P = FM.scene.project;
++    if (!(P.loopIn != null && P.loopOut != null)) return;
++    const a = P.loopIn, b = P.loopOut;
++    if (m.translation) {
++      const pa = m.find(a, false), pb = m.find(b, true);
++      if (pa !== pb) { plan.counts.loopCleared = 1; plan.writes.push(() => { P.loopIn = null; P.loopOut = null; }); return; }
++    }
++    const na = m.R(a), nb = Math.max(na + 0.01, m.L(b));
++    plan.writes.push(() => { P.loopIn = na; P.loopOut = nb; });
++  }
++
++  /* ═══ OWNED KEYS (§3.1): a blend's owner is its upper clip and the owned keys are its opacity keys in the overlap. They move with the SEAM,
++     not with their clip's footage (keys are absolute time). */
++  const opacityOf = l => l && l.transform && isAnim(l.transform.opacity) ? l.transform.opacity : null;
++  /* the static fallback (§12.1): the fade's keys go and the clip rests at its visible value, never `{kf: []}`. mode 'in' rests at the LAST
++     owned key (a fade-in ends visible), 'out' at the FIRST (a fade-out starts visible). */
++  function stripOwned(l, lo, hi, mode) {
++    const op = opacityOf(l); if (!op) return false;
++    const keys = op.kf.slice().sort((a, b) => a.t - b.t), own = keys.filter(k => k.t >= lo && k.t <= hi), rest = keys.filter(k => !(k.t >= lo && k.t <= hi));
++    if (!own.length) return false;
++    if (rest.length) op.kf = rest; else l.transform.opacity = (mode === 'in' ? own[own.length - 1] : own[0]).v;
++    return true;
++  }
++  S._stripOwned = stripOwned;
+ 
+   /* ───────────────────────────── the commands (§3.6) ───────────────────────────── */
+ 
+@@ -395,17 +698,27 @@ window.FM = window.FM || {};
+     if (p && c.seam && c.seam.kind === 'blend') {
+       const own = blendOwner(p, c, map);
+       if (own === L) { if (n) dt = p.end - n.start; plan.counts.fade = 1; }
+-      else return refusePlan('fadeOwned', { a: S.itemWord(map.get(p.id), R), b: S.itemWord(L, R) });
++      else {
++        /* 2.4: p owns the fade over c. The new p|n seam keeps `amt` only if it still classifies as a blend (p above n, amt within half
++           the shorter clip); otherwise n lands at p.end, p's owned keys take the static fallback and the line says so (§3.6 Delete row) */
++        const pl = map.get(p.id), nl = n ? map.get(n.id) : null, amt = c.seam.amt;
++        const stays = !!(nl && FM.scene.layers.indexOf(pl) < FM.scene.layers.indexOf(nl) && amt <= Math.min(+pl.duration || 0, +nl.duration || 0) / 2 + 1e-9);
++        if (!stays) {
++          if (n) dt = p.end - n.start;
++          plan.counts.xfade = 1;
++          plan.writes.push(() => { stripOwned(pl, c.start - R.eps, p.end + R.eps, 'out'); });
++        }
++      }
+     }
+-    const rb = riderBlock(R, a, map); if (rb) return refusePlan(rb.kind, rb);
+     const removes = [c.id].concat(R.followers[c.id] || []);
+     removes.forEach(x => { unitLayers(x, map).forEach(l => plan.removes.add(l.id)); plan.touched.add(x); });
+     plan.counts.followers = (R.followers[c.id] || []).filter(x => !S.isTwinOf(map.get(x), L, R.eps)).length;
+     /* (i)–(iii) long items cut through the delete map, keys refused until 2.4. The time that goes is [ca, b): when c's own
+        fade-in went with it, p still shows over [a, p.end) and n lands at p.end, so what played at b now plays at p.end — the
+        cut starts there and len = −dt, never b − a (a voice-over ran ahead of the picture by the fade; review finding 18) */
+-    const ca = (plan.counts.fade && n) ? p.end : a;
++    const ca = ((plan.counts.fade || plan.counts.xfade) && n) ? p.end : a;
+     const ml = MINLEN(), len = b - ca;
++    const rd = riderPlan(R, map, tmCut(ca, b)), mcut = tmCut(ca, b);   // 2.4: cues, camera, track keys and a cut item's keys all go through this one map
+     const cut = Object.keys(R.units).filter(uid => {
+       const u = R.units[uid], l = map.get(uid);
+       if (!l || !u.long || u.kind === 'captions' || u.kind === 'fullOnly' || u.kind === 'block' || u.kind === 'main') return false;
+@@ -417,22 +730,24 @@ window.FM = window.FM || {};
+       const l = map.get(cut[k]), s = +l.start || 0, e = s + (+l.duration || 0);
+       /* a speed ramp is absolute-time keys like any other (keyCount leaves it out for the tail fit's sake): cutting the item would
+          leave the ramp behind its footage, so it refuses with the rest until 2.4's riderKeys moves it (review finding 19) */
+-      if (S.keyCount(l) > 0 || (FM.isAnimated && FM.isAnimated(l.speed))) return refusePlan('cutKeys', { name: S.itemWord(l, R) });
++      const keyed = S.keyCount(l) > 0 || (FM.isAnimated && FM.isAnimated(l.speed));   // 2.4: its keys go through the delete map, once, from their original times
+       const media = l.type === 'video';
+       if (s >= ca - 1e-9) {                                  // (i) starts inside the deleted span
+         if (e - b < ml - SLACK) return refusePlan('cutShort', { name: S.itemWord(l, R) });
+         plan.keyless.add(l.id); addLand(plan, l.id, ca);
+         plan.writes.push(() => {
+-          if (media) { const r = FM.trimClipEdge(l, 'head', b - s, srcDurOf(l)); l.duration = r.duration; l.trimStart = r.trimStart; FM.shiftLayerFxClock(l, r.fxShift); }
++          const r = media ? FM.trimClipEdge(l, 'head', b - s, srcDurOf(l)) : null;   // the source advance integrates the ORIGINAL ramp: before its keys move
++          if (keyed) S.riderKeys(l, mcut, { fromCut: true });
++          if (media) { l.duration = r.duration; l.trimStart = r.trimStart; FM.shiftLayerFxClock(l, r.fxShift); }
+           else { l.duration = Math.max(ml, e - b); FM.shiftLayerFxClock(l, b - s); }
+         });
+       } else if (e <= b + 1e-9) {                             // (ii) ends inside it
+         if (ca - s < ml - SLACK) return refusePlan('cutShort', { name: S.itemWord(l, R) });
+         plan.touched.add(l.id);
+-        plan.writes.push(() => { l.duration = Math.max(ml, ca - s); });
++        plan.writes.push(() => { if (keyed) S.riderKeys(l, mcut); l.duration = Math.max(ml, ca - s); });
+       } else if (!media) {                                    // (iii) a middle cut of something with no source clock
+         plan.touched.add(l.id);
+-        plan.writes.push(() => { l.duration = Math.max(ml, l.duration - len); });
++        plan.writes.push(() => { if (keyed) S.riderKeys(l, mcut); l.duration = Math.max(ml, l.duration - len); });
+       } else {                                                // (iii) a middle cut of a video or sound: split, then trim B
+         if (ca - s < ml - SLACK || e - b < ml - SLACK) return refusePlan('cutShort', { name: S.itemWord(l, R) });
+         plan.touched.add(l.id);
+@@ -443,6 +758,7 @@ window.FM = window.FM || {};
+           if (!B) throw new Error('the cut item did not split');
+           const r = FM.trimClipEdge(B, 'head', len, srcDurOf(B));
+           B.duration = r.duration; B.trimStart = r.trimStart; FM.shiftLayerFxClock(B, r.fxShift);
++          if (keyed) S.riderKeys(B, mcut, { fromCut: true });   // B kept the keys from the cut on (the split divided them); the cut closes up over them
+           S.setFlag(B, 'stay', true); S.setFlag(l, 'stay', true);
+           plan.resized.add(B.id);   // the cut made this length, not he: a whole-video piece keeps sm.tail and the fit re-seats it (§4.3)
+         });
+@@ -451,12 +767,13 @@ window.FM = window.FM || {};
+       plan.counts.cut = (plan.counts.cut || 0) + 1;
+     }
+     const prevEnd = p ? p.end : null;
+-    const landFirst = !!(p && (isFloatJoin(R, i) || plan.counts.fade));
++    const landFirst = !!(p && (isFloatJoin(R, i) || plan.counts.fade || plan.counts.xfade));
+     const rp = ripple(plan, R, i + 1, dt, new Set([c.id]), prevEnd, landFirst);
+     /* the new main-track end: the last clip moved by the ripple, or (c last) the clip before it, or c's start when c was alone */
+     const lastClipIdx = (() => { for (let k = R.main.length - 1; k >= 0; k--) if (!R.main[k].slot && k !== i) return k; return -1; })();
+     const newEnd = lastClipIdx > i ? (rp.end != null ? rp.end : R.main[lastClipIdx].end + (rp.last == null ? dt : rp.last)) : (lastClipIdx >= 0 ? R.main[lastClipIdx].end : a);
+     tailMove(plan, R, newEnd, map);
++    rd.attach(plan);
+     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+     plan.time = n ? a : Math.max(0, newEnd);
+     plan.selectNone = true;
+@@ -465,6 +782,7 @@ window.FM = window.FM || {};
+     plan.live = nf ? null : line('deleted');
+     if (plan.counts.cut) plan.say = (plan.say || line('deleted')) + ' · ' + line('keptRunsOn', plan.counts.cut);
+     if (plan.counts.fade) plan.say = (plan.say || line('deleted')) + ' · ' + line('fadeWent');
++    if (plan.counts.xfade) plan.say = (plan.say || line('deleted')) + ' · ' + line('crossfadeRemoved');
+     plan.sayUndo = !!plan.say;
+     return plan;
+   };
+@@ -481,7 +799,6 @@ window.FM = window.FM || {};
+     if (newDur < ml - SLACK) return refusePlan(o.key ? 'trimEdge' : 'alreadyShort');
+     if (n && n.seam && n.seam.kind === 'blend') {
+       if (newDur < 2 * n.seam.amt - SLACK) return refusePlan('fadesNext');
+-      if (blendOwner(c, n, map) === L) return refusePlan('fadeOwned', { a: S.itemWord(L, R), b: S.itemWord(map.get(n.id), R) });
+     }
+     /* the blend with the clip BEFORE counts too (§3.1: "a trim of either clip stops at newDuration ≥ 2·amt"): its seam does
+        not move, but a shorter c lowers blendMax under amt and the crossfade would read as a red overlap */
+@@ -490,12 +807,15 @@ window.FM = window.FM || {};
+     if (o.typed && Math.abs(r.duration - newDur) > 1 / fps()) return refusePlan(newDur > d0 ? 'shortSource' : 'nothingMore');
+     const dt = r.duration - d0;
+     if (Math.abs(dt) < 1e-9) return refusePlan(newDur > d0 ? 'shortSource' : 'nothingMore');
+-    const rb = riderBlock(R, c.start + Math.min(d0, r.duration), map); if (rb) return refusePlan(rb.kind, rb);
++    const rd = riderPlan(R, map, tmShift(c.start + d0, dt));
+     const plan = newPlan('Trim clip'); plan.touched.add(c.id);
+     const twins = twinsOf(R, c, map), twinIds = new Set(twins.map(t => t.id));
+     plan.writes.push(() => {
+       [L].concat(twins).forEach(x => { x.duration = r.duration; if (x.type === 'video') x.trimStart = r.trimStart; });
+     });
++    /* 2.4 OWNED KEYS (§3.1): when c owns the blend with n (it fades out over n), its fade keys move with the SEAM: the Insert map at n.start
++       for dt > 0, the Delete map over [n.start + dt, n.start) for dt < 0, so the fade still ends at c's new end over the same amt */
++    if (n && n.seam && n.seam.kind === 'blend' && blendOwner(c, n, map) === L) plan.writes.push(() => { const op = opacityOf(L); if (op) riderKeysProp(op, tmShift(n.start - R.eps, dt)); });
+     twins.forEach(t => plan.touched.add(t.id));
+     const newEnd = c.start + r.duration;
+     (R.followers[c.id] || []).forEach(fid => {
+@@ -512,6 +832,7 @@ window.FM = window.FM || {};
+     });
+     const rp = ripple(plan, R, i + 1, dt, new Set([c.id].concat(twins.map(t => t.id))), newEnd, false);
+     tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);   // c last: its start + the new duration, bit for bit
++    rd.attach(plan);
+     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+     plan.live = line('trimmed', S.itemWord(L, R));
+     plan.pulse = [c.id];
+@@ -531,7 +852,6 @@ window.FM = window.FM || {};
+     if (d0 - h < ml - SLACK) return refusePlan(o.key ? 'trimEdge' : 'alreadyShort');
+     if (p && c.seam && c.seam.kind === 'blend') {
+       if (d0 - h < 2 * c.seam.amt - SLACK) return refusePlan('fadesBefore');
+-      if (blendOwner(p, c, map) === L) return refusePlan('fadeOwned', { a: S.itemWord(map.get(p.id), R), b: S.itemWord(L, R) });
+     }
+     /* …and the blend with the clip AFTER (§3.1, either clip): n slides back by the trim and keeps its overlap, so a c shorter
+        than 2·amt would turn the crossfade into a red overlap */
+@@ -541,14 +861,18 @@ window.FM = window.FM || {};
+     const Lnd = r.landed;
+     if (o.typed && Math.abs(Lnd - h) > 1 / fps()) return refusePlan(h < 0 ? 'videoStart' : 'nothingMore');
+     if (Math.abs(Lnd) < 1e-9) return refusePlan(h < 0 ? 'videoStart' : 'nothingMore');
+-    const rb = riderBlock(R, c.start, map); if (rb) return refusePlan(rb.kind, rb);
++    const rd = riderPlan(R, map, Lnd > 0 ? tmCut(c.start, c.start + Lnd) : tmShift(c.start, -Lnd));
+     const plan = newPlan('Trim clip'); plan.touched.add(c.id);
+     const twins = twinsOf(R, c, map), twinIds = new Set(twins.map(t => t.id));
++    /* 2.4 OWNED KEYS: when c owns the blend with p (it fades in over p) its fade keys (t <= p.end + eps) stay with the SEAM: exempt from the
++       -Lnd the footage keys take, so the fade stays over the overlap */
++    const ownedHead = (p && c.seam && c.seam.kind === 'blend' && blendOwner(p, c, map) === L && opacityOf(L)) ? opacityOf(L).kf.filter(k => k.t <= p.end + R.eps) : [];
+     plan.writes.push(() => {
+       [L].concat(twins).forEach(x => {
+         x.duration = r.duration; if (x.type === 'video') x.trimStart = r.trimStart;
+         FM.shiftLayerFxClock(x, r.fxShift); S.shiftKeys(x, -Lnd);
+       });
++      ownedHead.forEach(k => { k.t += Lnd; });
+     });
+     twins.forEach(t => plan.touched.add(t.id));
+     const newEnd = c.start + r.duration;
+@@ -562,6 +886,7 @@ window.FM = window.FM || {};
+     });
+     const rp = ripple(plan, R, i + 1, -Lnd, new Set([c.id].concat(twins.map(t => t.id))), newEnd, false);
+     tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);   // c last: its start never moves, so its end is start + the new duration
++    rd.attach(plan);
+     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+     plan.time = c.start;
+     plan.live = line('trimmed', S.itemWord(L, R));
+@@ -622,10 +947,11 @@ window.FM = window.FM || {};
+     if (!sm || (sm.kind !== 'gap' && sm.kind !== 'overlap') || sm.covered) return refusePlan('noSeam');
+     const dt = sm.kind === 'gap' ? -sm.amt : sm.amt;
+     const prevEnd = j > 0 ? R.main[j - 1].end : 0;
+-    const rb = riderBlock(R, Math.min(e.start, prevEnd), map); if (rb) return refusePlan(rb.kind, rb);
++    const rd = riderPlan(R, map, sm.kind === 'gap' ? tmCut(prevEnd, e.start) : tmShift(e.start, dt));
+     const plan = newPlan(sm.kind === 'gap' ? 'Close gap' : 'Fix overlap');
+     const rp = ripple(plan, R, j, dt, new Set(), prevEnd, true);
+     tailMove(plan, R, rp.end != null ? rp.end : R.trackEnd + (rp.last == null ? dt : rp.last), map);
++    rd.attach(plan);
+     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+     const t = FM.time || 0, lo = Math.min(prevEnd, e.start), hi = Math.max(prevEnd, e.start);
+     if (t > lo && t < hi) plan.time = prevEnd;
+@@ -640,11 +966,13 @@ window.FM = window.FM || {};
+     if (i < 0) return refusePlan('gone');
+     const c = R.main[i], p = R.main[i - 1] || null, n = R.main[i + 1] || null, L = map.get(c.id);
+     if (L.type === 'group') return refusePlan('splitBlock');
+-    if ((n && n.seam && n.seam.kind === 'blend' && blendOwner(c, n, map) === L) || (p && c.seam && c.seam.kind === 'blend' && blendOwner(p, c, map) === L))
+-      return refusePlan('fadeOwned', { a: S.itemWord(L, R), b: S.itemWord(map.get((n || p).id), R) });
+     const len = +L.duration || 0, target = (+L.start || 0) + len;
+-    const rb = riderBlock(R, target, map); if (rb) return refusePlan(rb.kind, rb);
++    const rd = riderPlan(R, map, tmShift(target, len));
+     const plan = newPlan('Duplicate clip'); plan.touched.add(c.id);
++    /* 2.4 OWNED KEYS (§3.6 Duplicate row): when c owns a blend its fade keys are stripped (the static fallback) from the COPY for a fade-in or from
++       the ORIGINAL for a fade-out, so the fade stays only at the outer seam and c|copy is a clean join */
++    const fadeInOwned = !!(p && c.seam && c.seam.kind === 'blend' && blendOwner(p, c, map) === L), fadeOutOwned = !!(n && n.seam && n.seam.kind === 'blend' && blendOwner(c, n, map) === L);
++    if (fadeOutOwned) plan.writes.push(() => { stripOwned(L, n.start - R.eps, c.end + R.eps, 'out'); });
+     const twins = twinsOf(R, c, map);
+     plan.pre.push(async () => {
+       const dupId = await FM.duplicateLayer(L.id, false, { noSave: true });
+@@ -653,6 +981,7 @@ window.FM = window.FM || {};
+       plan.mints = true; plan.copies.push([L.id, dupId]);
+       S.setFlag(dup, 'main', true);                         // put back after onCopy stripped it: the one route that does (§12.2)
+       const d = target - (+dup.start || 0); dup.start = target; S.shiftKeys(dup, d);
++      if (fadeInOwned) stripOwned(dup, c.start - R.eps + d, p.end + R.eps + d, 'in');
+       for (const t of twins) {
+         const tid = await FM.duplicateLayer(t.id, true, { noSave: true });
+         const td = tid && FM.layerById(FM.scene, tid);
+@@ -665,6 +994,7 @@ window.FM = window.FM || {};
+     });
+     const rp = ripple(plan, R, i + 1, len, new Set(), target + len, false);
+     tailMove(plan, R, rp.end != null ? rp.end : target + len, map);   // c last: the copy's end, start target + its duration
++    rd.attach(plan);
+     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+     plan.time = target;
+     plan.live = line('duplicated');
+@@ -788,6 +1118,42 @@ window.FM = window.FM || {};
+     S.lastRefusal = kind;
+     return false;
+   }
++  /* ═══ KEEP ON THE MUSIC (§4.1): lyrics timed to a song. plan.musicTimed = the moved text units (no caption track, no `sm` key, nothing linked)
++     that start within one frame of a benchmark, or belong to a run of three or more back-to-back texts (each starting within 0.1 s of the
++     previous one's end) that crosses a cut, AND have a stay-put non-twin sound under them. The line says "Moved 6 texts with their clips" and
++     offers Keep on the music, which undoes the step and runs the same command again with those units given sm.stay, as one step. An ordinary
++     title over a music bed never matches. */
++  function musicTimedOf(plan, R, map) {
++    const moved = id => (plan.moves.has(id) && Math.abs(plan.moves.get(id)) > 1e-9) || plan.lands.has(id);
++    const texts = Object.keys(R.units).map(id => map.get(id)).filter(l => l && l.type === 'text' && !isCaptionTrack(l) && R.units[l.id] && moved(l.id)
++      && !(l.sm && Object.keys(l.sm).length) && !l.parent && !(l.behaviors || []).length && !FM.scene.layers.some(x => refsOf(x).some(r => r.id === l.id)));
++    if (!texts.length) return [];
++    const sounds = Object.keys(R.units).map(id => map.get(id)).filter(l => l && R.units[l.id].kind === 'audio' && l.sm && l.sm.stay && !(l.sm.twin) && !S.isTwinOf(l, null, R.eps));
++    const under = t => sounds.some(a => (+a.start || 0) <= (+t.start || 0) + 1e-9 && (+a.start || 0) + (+a.duration || 0) > (+t.start || 0) + 1e-9);
++    const marks = (FM.scene.project.markers || []).map(m => m.t), half = 1 / fps();
++    const byStart = texts.slice().sort((a, b) => a.start - b.start), out = new Set();
++    byStart.forEach(t => { if (under(t) && marks.some(mt => Math.abs(mt - (+t.start || 0)) <= half)) out.add(t.id); });
++    // runs of three or more back-to-back texts crossing a cut (a boundary of the clip row strictly inside the run)
++    const cutAt = x => R.main.some(e => !e.slot && e.start > x.a + R.eps && e.start < x.b - R.eps);
++    const all = Object.keys(R.units).map(id => map.get(id)).filter(l => l && l.type === 'text' && !isCaptionTrack(l) && !(l.sm && Object.keys(l.sm).length)).sort((a, b) => a.start - b.start);
++    let run = [];
++    const flush = () => { if (run.length >= 3 && cutAt({ a: run[0].start, b: run[run.length - 1].start + run[run.length - 1].duration }) && run.every(t => under(t))) run.forEach(t => { if (texts.indexOf(t) >= 0) out.add(t.id); }); run = []; };
++    all.forEach(t => { const last = run[run.length - 1]; if (last && Math.abs((+t.start || 0) - ((+last.start || 0) + (+last.duration || 0))) <= 0.1) run.push(t); else { flush(); run = [t]; } });
++    flush();
++    return Array.from(out);
++  }
++  S._musicTimedOf = musicTimedOf;
++  /* THE PRE-FLIGHT ASK (§3.10 rule 4): a link whose two ends the plan moves by different amounts, or a camera window a piecewise map cannot keep, says so ONCE,
++     before anything is written: *"1 parent will slip"* + Do it anyway (the same command, one step, Undo reverses it) + Why? › (the whole sentence, never cut). */
++  function ask(asks, retry, R) {
++    const kinds = asks.map(a => a.kind === 'camera' ? 'camera' : a.via);
++    const uniq = kinds.filter((v, i) => kinds.indexOf(v) === i);
++    const text = uniq.map(v => line('slip', v)).join(' · ');
++    const why = uniq.map(v => line('slipWhy', v)).join(' ');
++    S.say(text, { buttons: [{ label: line('doAnyway'), fn: retry }, { label: line('whyMore'), fn: () => S.say(why, { buttons: [{ label: line('openFull'), fn: () => { if (FM.editor && FM.editor.request) FM.editor.request('full', { hop: true }); } }] }) }], refusal: 'ask' });
++    S.lastRefusal = 'ask';
++    return false;
++  }
+   S.nameWord = function (name) { const n = String(name || '').trim(); return n.length > 10 ? n.slice(0, 10) + '…' : (n || line('someone')); };
+   S._refuse = refuse;
+ 
+@@ -829,9 +1195,15 @@ window.FM = window.FM || {};
+       const ro = S.roReason(); if (ro) return refuse(ro);
+       if (S.newerSchema()) return refuse('newer');
+       const R = S.classify(FM.scene);                                    // uncached (§2.5)
++      R.anyway = !!opts.anyway;                                          // 2.4: a piecewise map's camera window is a hull only after Do it anyway
+       const plan = makePlan(R);
+       if (!plan) return false;
+       if (plan.refuse) return refuse(plan.refuse, plan.refuseOpts, R);
++      if (opts.stayIds && opts.stayIds.length) {   // Keep on the music: the same command again, those units left where they are and pinned
++        const stayMap = byIdMap();
++        opts.stayIds.forEach(id => { plan.moves.delete(id); plan.lands.delete(id); const l = stayMap.get(id); if (l) plan.writes.push(() => { S.setFlag(l, 'stay', true); }); });
++      } else if (plan.arranges && (plan.moves.size || plan.lands.size)) { plan.musicTimed = musicTimedOf(plan, R, byIdMap()); plan.rerun = () => S.edit(label, makePlan, Object.assign({}, opts, { stayIds: plan.musicTimed })); }
++      if (plan.asks && plan.asks.length && !opts.anyway) return ask(plan.asks, () => S.edit(label, makePlan, Object.assign({}, opts, { anyway: true })), R);
+       const gated = !!(plan.arranges || (plan.adopts && !R.adopted));
+       if (gated) { const g = S.arrangeGate(); if (g) return refuse(g, {}, R); }
+       if (gated && R.anomalies.some(a => a.kind === 'undecided')) return refuse('waiting', {}, R);
+@@ -906,7 +1278,17 @@ window.FM = window.FM || {};
+   }
+   function speakDone(plan, notes) {
+     let text = plan.say, live = plan.live;
++    const extra = [];   // 2.4: what the riders did, said in the same line
++    if (plan.counts.cuesDropped) extra.push(line('cuesShort', plan.counts.cuesDropped));
++    if (plan.counts.camera) extra.push(line('cameraMoves'));
++    if (plan.counts.loopCleared) extra.push(line('loopCleared'));
++    if (extra.length) { text = (text || live || '') + ' · ' + extra.join(' · '); }
+     if (notes && notes.length) text = (text || live || '') + ' · ' + notes.join(' · ');
++    if (plan.musicTimed && plan.musicTimed.length) {   // §4.1: titles timed to a song moved with their clips; one tap puts them back on the music
++      const n = plan.musicTimed.length, ids = plan.musicTimed.slice();
++      S.say((text || live || line('moved0')) + ' · ' + line('movedTexts', n), { buttons: [{ label: line('keepOnMusic'), fn: () => { FM.history.undo(); plan.rerun(); } }, { label: line('undo'), fn: () => FM.history.undo() }] });
++      return;
++    }
+     if (text) S.say(text, { buttons: plan.sayUndo ? [{ label: line('undo'), fn: () => FM.history.undo() }] : [] });
+     else if (live) S.say(live, { live: true, pulse: plan.pulse });
+   }
+@@ -1060,9 +1442,9 @@ window.FM = window.FM || {};
+     if (!clips.length && !picked.sounds.length) return refusePlan('nothingAdded');
+     const T = R.main.some(e => !e.slot) ? R.trackEnd : 0;
+     const sum = clips.reduce((a, c) => a + c.len, 0);
+-    for (const id of R.riders) { const l = map.get(id); if (l && (+l.start || 0) < T - R.eps && (+l.start || 0) + (+l.duration || 0) > T + R.eps) return refusePlan('riders'); }
+-    if (R.tail.length && clips.length) { const cm = cameraBlock(R, T, map); if (cm) return refusePlan(cm.kind, cm); }   // rule 3e: only when it moves the tail
++    const rd = clips.length ? riderPlan(R, map, tmShift(T, sum)) : null;   // §3.10 rule 3e: the camera and the track's keys ride the Append map whenever clips are added
+     const plan = newPlan(clips.length > 1 ? 'Add ' + clips.length + ' clips' : 'Add clip');
++    if (rd) rd.attach(plan);
+     /* §3.6 Append row: arranging (so gated, pinned and tail-fitted in this same step) when it moves an end card, when an
+        sm.tail item will be refitted to the new end, or when a whole-video picture added in Full after adoption carries no
+        flag yet (pinStrays tags it, the tail fit takes it to the new end). Otherwise not: a plain Append works live. */
+@@ -1099,8 +1481,8 @@ window.FM = window.FM || {};
+     const e = R.main[j];
+     if (e.seam && e.seam.kind === 'blend') return refusePlan('insertFade', { a: j, b: j + 1 });
+     const at = j === 0 ? R.main[0].start : R.main[j - 1].end;
+-    const rb = riderBlock(R, at, map); if (rb) return refusePlan(rb.kind, rb);
+     const sum = clips.reduce((a, c) => a + c.len, 0);
++    const rd = riderPlan(R, map, tmShift(at, sum));
+     /* the new clips' end exactly as addRecs writes it (each start = the last end, duration = its len), so the ripple lands
+        entry j there only when its seam was a join or a hairline — with the same correction carried to its followers, every
+        later clip and the tail. A gap stays a gap (§3.2 rule 1): a late land after the ripple moved j by sum − gap while
+@@ -1109,6 +1491,7 @@ window.FM = window.FM || {};
+     const plan = newPlan(clips.length > 1 ? 'Add ' + clips.length + ' clips' : 'Add clip');
+     const rp = ripple(plan, R, j, sum, new Set(), newEnd, true);
+     tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);
++    rd.attach(plan);
+     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+     const anchor = S.rowAnchor(R, j);
+     plan.pre.push(async () => {
+@@ -1139,8 +1522,6 @@ window.FM = window.FM || {};
+     if (fades(i) || fades(i + 1) || (j < R.main.length && fades(j))) return refusePlan('sortFade');
+     const len = n ? n.start - c.start : (+L.duration || 0);
+     const S0 = new Set([c.id].concat(R.followers[c.id] || []));
+-    const lo = Math.min(c.start, j < R.main.length ? R.main[j].start : R.trackEnd);
+-    const rb = riderBlock(R, lo, map); if (rb) return refusePlan(rb.kind, rb);
+     const plan = newPlan('Move clip');
+     /* new positions, walked in the NEW order: every entry keeps its own seam amount except at the two edit points */
+     const order = R.main.map((e, k) => k).filter(k => k !== i);
+@@ -1179,6 +1560,16 @@ window.FM = window.FM || {};
+        an end card waited after seconds of black, or slid under the clips (review finding 13). The last CLIP's end, never a
+        card's: trackEnd is always a clip's end. */
+     if (clipEnd != null) tailMove(plan, R, clipEnd, map);
++    /* 2.4 (§3.5 Reorder): ONE piecewise translation g, built from the same L the ripple used. Forward: P0 [0, c.start) fixed, Pc [c.start, c.start + L)
++       moves to c's new start, P1 [c.start + L, s) moves -L, P2 [s, ...) fixed. Backward: P0 [0, s) fixed, P1 [s, c.start) moves +L, Pc moves to c's new
++       start, P2 [c.start + L, ...) fixed. `s` is the destination cut's start (the track end when c goes last). */
++    {
++      const s0 = j < R.main.length ? R.main[j].start : R.trackEnd, cOff = cStart - c.start;
++      const g = j > i
++        ? tmPieces([{ lo: 0, hi: c.start, off: 0 }, { lo: c.start, hi: c.start + len, off: cOff }, { lo: c.start + len, hi: s0, off: -len }, { lo: s0, hi: BIG, off: 0 }])
++        : tmPieces([{ lo: 0, hi: s0, off: 0 }, { lo: s0, hi: c.start, off: len }, { lo: c.start, hi: c.start + len, off: cOff }, { lo: c.start + len, hi: BIG, off: 0 }]);
++      riderPlan(R, map, g).attach(plan);
++    }
+     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+     plan.time = cStart;
+     const newIndex = order.filter(k => !R.main[k].slot).indexOf(i) + 1;
+@@ -1203,7 +1594,7 @@ window.FM = window.FM || {};
+        clearing the group's flag left the block main while the clips after it slid under it (review finding 0) */
+     if (L.type === 'group') return refusePlan('liftBlock');
+     if ((n && n.seam && n.seam.kind === 'blend') || (p && c.seam && c.seam.kind === 'blend')) return refusePlan('sortFade');
+-    const rb = riderBlock(R, c.start, map); if (rb) return refusePlan(rb.kind, rb);
++    const rd = riderPlan(R, map, tmCut(c.start, n ? n.start : c.end));   // §3.5: the delete-form map (the camera follows the clip row, not the lifted clip)
+     const plan = newPlan('Lift off');
+     const fol = R.followers[c.id] || [];
+     const dt = n ? -(n.start - c.start) : 0;
+@@ -1212,6 +1603,7 @@ window.FM = window.FM || {};
+     if (n) tailMove(plan, R, rp.end != null ? rp.end : R.trackEnd + (rp.last == null ? dt : rp.last), map);   // the last clip's end as apply() writes it, never trackEnd + d (§3.1, finding 16)
+     else { const lastClip = R.main.filter(e => !e.slot && e.id !== c.id).pop(); tailMove(plan, R, lastClip ? lastClip.end : c.start, map); }
+     plan.touched.add(c.id);
++    rd.attach(plan);
+     plan.post.push(() => {
+       S.setFlag(L, 'main', false);
+       if (L.sm && L.sm.muteByMode) { S.setFlag(L, 'muteByMode', false); L.muted = false; }   // 2.3: an overlay is not part of Mute clip sound; it gets its sound back
+@@ -1245,8 +1637,9 @@ window.FM = window.FM || {};
+        reads as a follower of whatever slid under it, so the ripple would carry it len seconds away from its picture, or a
+        karaoke twin refused as a slip (review finding 1). o is not a main entry, so twinsOf (R.followers) cannot find them. */
+     const twins = FM.scene.layers.filter(t => S.isTwinOf(t, o, R.eps));
+-    const rb = riderBlock(R, seam, map); if (rb) return refusePlan(rb.kind, rb);
++    const rd = riderPlan(R, map, tmShift(seam, len));
+     const plan = newPlan('Put in the clip row');
++    rd.attach(plan);
+     const rp = ripple(plan, R, j, len, new Set([id].concat(twins.map(t => t.id))), seam + len, true);
+     tailMove(plan, R, rp.end != null ? rp.end : seam + len, map);   // o last: its end, landed at seam with its own duration
+     addLand(plan, id, seam);
+@@ -1293,9 +1686,9 @@ window.FM = window.FM || {};
+      one step. Blends, slots and covered gaps are left alone. */
+   S.planCloseAll = function (R) {
+     const map = byIdMap(), fps0 = fps();
+-    const rb = riderBlock(R, R.main.length ? R.main[0].start : 0, map); if (rb) return refusePlan(rb.kind, rb);
+     const plan = newPlan('Close all gaps');
+     let prevEnd = null, acc = 0, closed = 0;
++    const tmops = [];   // 2.4: the removals (a closed gap) and insertions (a fixed overlap) in ORIGINAL time, one map for every rider
+     R.main.forEach((e, k) => {
+       let d = acc, ns = e.start + acc;
+       const sm = e.seam, hair = !!(sm && sm.kind === 'hairline');
+@@ -1306,7 +1699,12 @@ window.FM = window.FM || {};
+       const frameIn = hair && Math.ceil(pEnd0 * fps0 - 1e-9) !== Math.ceil(e.start * fps0 - 1e-9);
+       const movedHair = hair && acc !== 0 && prevEnd != null;
+       const fix = sm && !sm.covered && (sm.kind === 'gap' || sm.kind === 'overlap' || frameIn || movedHair || (sm.kind === 'join' && Math.abs((k ? R.main[k - 1].end : e.start) - e.start) < 1e-9 && prevEnd != null));
+-      if (fix) { const target = prevEnd != null ? prevEnd : 0; if (sm.kind === 'gap' || sm.kind === 'overlap' || frameIn) closed++; acc += target - ns; d = acc; ns = target; }
++      if (fix) {
++        const target = prevEnd != null ? prevEnd : 0; if (sm.kind === 'gap' || sm.kind === 'overlap' || frameIn) closed++;
++        const delta = target - ns;
++        if (delta < -1e-9) tmops.push({ a: e.start + delta, b: e.start }); else if (delta > 1e-9) tmops.push({ a: e.start, ins: delta });
++        acc += delta; d = acc; ns = target;
++      }
+       if (e.slot) { e.members.forEach(m => { if (d) addMove(plan, m, d); }); prevEnd = e.end + d; return; }
+       if (fix) addLand(plan, e.id, ns); else if (d) addMove(plan, e.id, d);
+       (R.followers[e.id] || []).forEach(f => { if (d) addMove(plan, f, d); });
+@@ -1314,6 +1712,7 @@ window.FM = window.FM || {};
+     });
+     if (!closed) return refusePlan('noGaps');
+     tailMove(plan, R, prevEnd, map);
++    riderPlan(R, map, tmOps(tmops)).attach(plan);
+     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+     plan.live = line('gapsClosed', closed);
+     return plan;
+@@ -1479,9 +1878,8 @@ window.FM = window.FM || {};
+       if (blendOwner(R.main[i - 1], c, map) === L) return refusePlan('fadeOwned', { a: S.itemWord(map.get(R.main[i - 1].id), R), b: S.itemWord(L, R) });
+     }
+     const fol = R.followers[c.id] || [];
+-    if (fol.some(f => R.units[f] && R.units[f].kind === 'captions')) return refusePlan('riders');   // cues ride the speed (2.4)
+-    const rb = riderBlock(R, c.start + Math.min(d0, nd), map); if (rb) return refusePlan(rb.kind, rb);
+     const k = nd / d0, dt = nd - d0;
++    const rd = riderPlan(R, map, tmScale(c.start, d0, nd));
+     const plan = newPlan('Change speed'); plan.touched.add(c.id);
+     const twins = twinsOf(R, c, map), twinIds = new Set(twins.map(t => t.id));
+     twins.forEach(t => plan.touched.add(t.id));
+@@ -1492,6 +1890,10 @@ window.FM = window.FM || {};
+       const f = map.get(fid), u = R.units[fid]; if (!f) return;
+       const x = (+f.start || 0) - c.start, mv = x * (k - 1);
+       if (Math.abs(mv) > 1e-9) addMove(plan, fid, mv);
++      if (isCaptionTrack(f)) plan.writes.push(() => {   // 2.4: a caption track lying on the clip rides its speed: window and cues scale about the clip's start (cue times are local, so they scale by k)
++        f.duration = (+f.duration || 0) * k;
++        f.captions = FM.captions.cues(f).map(cu => { const o = clone(cu); o.start *= k; o.end *= k; if (Array.isArray(o.effects) && FM.fxListAnimatedProps) FM.fxListAnimatedProps(o.effects).forEach(pp => pp.kf.forEach(kk => { kk.t = c.start + (kk.t - c.start) * k; })); return o; });
++      });
+       const fd = +f.duration || 0, fe = c.start + x * k + fd;
+       if (u && u.kind === 'effect' && (+f.start || 0) + fd <= c.end + 1e-9 && fe > newEnd + 1e-9) {   // §4.3: an effect stays inside its clip
+         plan.touched.add(fid); plan.writes.push(() => { f.duration = Math.max(ml, newEnd - (c.start + x * k)); });
+@@ -1499,6 +1901,7 @@ window.FM = window.FM || {};
+     });
+     const rp = ripple(plan, R, i + 1, dt, new Set([c.id].concat(twins.map(t => t.id))), newEnd, false);
+     tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);
++    rd.attach(plan);
+     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+     const t = FM.time || 0;                                                       // §3.6.2: the same moment of the clip stays under the line
+     if (t >= c.start - 1e-9 && t < c.start + d0 - 1e-9) plan.time = c.start + (t - c.start) * k;
+@@ -1697,7 +2100,8 @@ window.FM = window.FM || {};
+           if (blendOwner(c, n, map) === L) return refusePlan('fadeOwned', { a: S.itemWord(L, R), b: S.itemWord(map.get(n.id), R) });
+         }
+         if (i > 0 && c.seam && c.seam.kind === 'blend' && nd < 2 * c.seam.amt - SLACK) return refusePlan('fadesBefore');
+-        const rb = riderBlock(R, c.start + nd, map); if (rb) return refusePlan(rb.kind, rb);
++        const rdR = riderPlan(R, map, tmShift(c.start + d0, dt));
++        rdR.attach(plan);
+         const newEnd = c.start + nd, twinIds = new Set(twins.map(t => t.id));
+         (R.followers[c.id] || []).forEach(fid => {   // the tail trim's follower rules: a title cut off slides back onto its clip (D6), an effect is clamped
+           if (twinIds.has(fid)) return;
+diff --git a/js/spine-words.js b/js/spine-words.js
+index 3d2e9ed5..af8edf9c 100644
+--- a/js/spine-words.js
++++ b/js/spine-words.js
+@@ -59,7 +59,13 @@ window.FM = window.FM || {};
+       waiting: 'Waiting for clips to arrive',
+       busy: (name, item) => name + ' is editing ' + (item || 'that clip') + ' · try again soon',
+       attached: (a, b) => a + ' is attached to ' + b,
+-      slip: via => '1 ' + ({ parent: 'parent', follow: 'follow', matte: 'matte', twin: 'sound' }[via] || 'link') + ' will slip',
++      slip: via => '1 ' + ({ parent: 'parent', follow: 'follow', matte: 'matte', twin: 'sound', camera: 'camera move' }[via] || 'link') + ' will slip',
++      slipWhy: via => 'This puts 1 ' + ({ parent: 'parent link', follow: 'Follow', matte: 'matte', twin: 'sound link', camera: 'camera move' }[via] || 'link') + ' out of step with its clip.',
++      whyMore: 'Why? ›',
++      keepOnMusic: 'Keep on the music', movedTexts: n => 'Moved ' + n + (n === 1 ? ' text' : ' texts') + ' with their clips', moved0: 'Done',
++      crossfadeRemoved: 'removed 1 crossfade',
++      cuesShort: n => 'and ' + n + (n === 1 ? ' caption' : ' captions') + ' too short to keep',
++      cameraMoves: 'and the camera moves', loopCleared: 'loop cleared',
+       ridersNext: 'Captions here move with clips in the next update',
+       cameraNext: 'The camera move here comes along in the next update',
+       cutKeysNext: name => name + ' has moves · trims around it come next',
