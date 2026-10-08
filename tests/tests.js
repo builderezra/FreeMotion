@@ -59834,6 +59834,111 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* ═══ S4: the four Simple-mode bugs the T10 tutorial walk found on 980-p22-r3 ═══ */
+  async function s4InSimple(fn) {
+    smNeedEditor();
+    return smView(async function (v) {
+      FM.editor.set('simple'); await v.sleep(80);
+      FM.selectLayer(v.c2.id); await v.sleep(60);
+      if (FM.simpleTools && FM.simpleTools.openPanel) FM.simpleTools.openPanel(v.c2.id);
+      await v.sleep(160);
+      document.getAnimations().forEach(function (a) { try { a.finish(); } catch (e) {} });
+      return await fn(v);
+    });
+  }
+  function s4Card(label) {
+    return [].slice.call(document.querySelectorAll('#inspector .cat-card')).filter(function (b) { return (b.textContent || '').replace(/\s+/g, ' ').trim().replace(/^\d+/, '') === label; })[0];
+  }
+  /* (a) DESIGN §"Speed is Simple's own thin panel": a slider from 0.25x to 4x. Until that panel exists the More panel reuses Full's row, whose box
+     takes 1 to 1000 %: typing 1 gave speed 0.01 and a 600 s clip (Measured, T10 walk). In Simple the row now stops at 25 and 400; Full's stays 1 to 1000. */
+  test('S4a Simple: typing 1 in Speed % cannot make a ten-minute clip - the box stops at 25 % and 400 %, and Full keeps its 1 to 1000', { item: 'S4a', budgetMs: 60000 }, async function () {
+    const type = async function (v) {
+      const row = [].slice.call(document.querySelectorAll('#inspector .prop-row--scrub')).filter(function (r) { const l = r.querySelector('label'); return l && l.textContent === 'Speed %'; })[0];
+      if (!row) throw new Error('no Speed % row on screen');
+      const box = row.querySelector('input.fx-scrub-val'); box.value = String(v); box.dispatchEvent(new Event('change', { bubbles: true })); await new Promise(function (r) { setTimeout(r, 60); });
+    };
+    const open = async function () {
+      const c = s4Card('Speed'); if (!c) throw new Error('the More panel has no Speed card: ' + [].map.call(document.querySelectorAll('#inspector .cat-card'), function (b) { return b.textContent.trim(); }).join(' | '));
+      c.click(); await new Promise(function (r) { setTimeout(r, 160); });
+    };
+    await atPhoneWidth(async function () {
+      await s4InSimple(async function (v) {
+        await open();
+        await type(1);
+        if (!(v.c2.speed >= 0.25 - 1e-9)) throw new Error('in Simple, typing 1 gave speed ' + v.c2.speed + ' and a clip ' + v.c2.duration.toFixed(1) + ' s long');
+        await type(100000);
+        if (!(v.c2.speed <= 4 + 1e-9)) throw new Error('in Simple, typing 100000 gave speed ' + v.c2.speed);
+        await type(200);
+        if (Math.abs(v.c2.speed - 2) > 1e-9) throw new Error('CONTROL: typing 200 in Simple did not give speed 2 (' + v.c2.speed + ')');
+      });
+      // CONTROL: Full is unchanged
+      await smView(async function (v) {
+        FM.selectLayer(v.c2.id); FM.refreshAll(); await v.sleep(80);
+        const c = s4Card('Speed'); if (!c) { return; }
+        c.click(); await v.sleep(160);
+        const row = [].slice.call(document.querySelectorAll('#inspector .prop-row--scrub')).filter(function (r) { const l = r.querySelector('label'); return l && l.textContent === 'Speed %'; })[0];
+        if (!row) throw new Error('CONTROL: no Speed % row in Full');
+        const box = row.querySelector('input.fx-scrub-val'); box.value = '1'; box.dispatchEvent(new Event('change', { bubbles: true })); await v.sleep(60);
+        if (!(Math.abs(v.c2.speed - 0.01) < 1e-9)) throw new Error('CONTROL: Full no longer takes 1 % (speed ' + v.c2.speed + ') - the change leaked into Full');
+      });
+    });
+  });
+  /* (b) DESIGN §9.1: a clip gets the ✦ when a property is keyframed (effect params included); an effect applied in Simple (inst.sm = 1) is level none, "keyframes
+     and all". A PLAIN effect never earns it, which is what the T10 walk saw and called a bug: it is the spec. What the code lacked is the sm exemption. */
+  test('S4b the ✦ badge: a plain effect earns none (as designed), a keyframed one does, and a keyframed effect made in Simple (sm = 1) does not', { item: 'S4b', budgetMs: 30000 }, async function () {
+    await smView(async function (v) {
+      const mk = function (kf, sm) { const e = FM.fxRegistry.makeInstance('vignette'); if (sm) e.sm = 1; if (kf) e.params.amount = { kf: [{ t: 0, v: 0.2, e: 'linear' }, { t: 2, v: 0.8, e: 'linear' }] }; return e; };
+      const pro = function () { return FM.spine.read(FM.scene).units[v.c2.id].pro; };
+      v.c2.effects = []; if (pro() !== 'none') throw new Error('CONTROL: a bare clip is ' + pro());
+      v.c2.effects = [mk(false, false)]; if (pro() !== 'none') throw new Error('a plain effect earns the ✦ (' + pro() + ') - DESIGN §9.1 says only keyframes, masks, behaviours and 3D do');
+      v.c2.effects = [mk(true, false)]; if (pro() !== 'look') throw new Error('CONTROL: a keyframed effect param made in Full does not earn the ✦ (' + pro() + ')');
+      v.c2.effects = [mk(true, true)]; if (pro() !== 'none') throw new Error('an effect made in Simple (sm = 1) keyframes and all earned the ✦ (' + pro() + ') - DESIGN §8.5c / §9.1: level none');
+      v.c2.effects = [mk(true, true), mk(true, false)]; if (pro() !== 'look') throw new Error('one Simple-made and one Full-made keyframed effect: the Full-made one must still earn the ✦ (' + pro() + ')');
+    });
+  });
+  /* (c) The phone's ‹ goes Home in Simple with a clip selected, as DESIGN §8.2 has it (the top bar is unchanged, Simple sets neither m-editing nor sel-mode, so the
+     tray owns the selection). What was wrong is what it SAID: "Close clip options". */
+  test('S4c the phone ‹ in Simple says Projects with a clip selected (it goes Home), and in Full it still says Close clip options', { item: 'S4c', budgetMs: 30000 }, async function () {
+    const lab = function () { const b = document.getElementById('m-back'); return b && b.getAttribute('aria-label'); };
+    await atPhoneWidth(async function () {
+      await smView(async function (v) {
+        FM.selectLayer(v.c2.id); FM.refreshAll(); FM.syncSelectionChrome(); await v.sleep(60);
+        if (lab() !== 'Close clip options') throw new Error('CONTROL: in Full with a clip selected the phone ‹ says "' + lab() + '"');
+        FM.editor.set('simple'); await v.sleep(80); FM.selectLayer(v.c2.id); FM.syncSelectionChrome(); await v.sleep(60);
+        if (lab() !== 'Projects') throw new Error('in Simple with a clip selected the phone ‹ says "' + lab() + '" but it leaves the project');
+      });
+    });
+    await atWideWidth(async function () {
+      await smView(async function (v) {
+        FM.editor.set('simple'); await v.sleep(80); FM.selectLayer(v.c2.id); FM.syncSelectionChrome(); await v.sleep(60);
+        if (lab() !== 'Projects') throw new Error('at desktop width the ‹ says "' + lab() + '" (not red-capable before the fix: phone is false here)');
+      });
+    });
+  });
+  /* (d) A card in the More panel raises "Reset <group>" after a 480 ms hold; the timer was cleared on up, cancel and leave, never on a move, so a finger that starts
+     a slow swipe on a card and takes over half a second to get going raised the menu. Fixed in Simple (Full's identical code is left alone, DESIGN §0.4). */
+  test('S4d Simple: a slow swipe that starts on a More-panel card does not raise its Reset menu, a still hold does', { item: 'S4d', budgetMs: 60000 }, async function () {
+    const menuOpen = function () { const m = document.getElementById('ctx-menu'); return !!(m && !m.classList.contains('hidden') && (m.textContent || '').indexOf('Reset') >= 0); };
+    const press = function (el, type, x, y, buttons) { el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: buttons })); };
+    for (const width of ['phone', 'wide']) {
+      await (width === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
+        await s4InSimple(async function (v) {
+          const card = s4Card('Speed'); if (!card) throw new Error('no Speed card at ' + width);
+          const r = card.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+          // CONTROL: a still hold of 700 ms does raise it, so the check can see the menu at all
+          press(card, 'pointerdown', x, y, 1); await v.sleep(700);
+          if (!menuOpen()) throw new Error('CONTROL at ' + width + ': a 700 ms still hold did not raise the Reset menu');
+          press(card, 'pointerup', x, y, 0); try { FM.contextMenu.hide(); } catch (e) {} card._heldReset = false; await v.sleep(80);
+          // the slow swipe: down, 120 ms, a 28 px move, then the finger keeps going for 700 ms
+          press(card, 'pointerdown', x, y, 1); await v.sleep(120); press(card, 'pointermove', x, y - 28, 1); await v.sleep(700);
+          const raised = menuOpen();
+          press(card, 'pointercancel', x, y - 60, 0); try { FM.contextMenu.hide(); } catch (e) {} card._heldReset = false;
+          if (raised) throw new Error('at ' + width + ' a slow swipe that started on the Speed card raised "Reset Speed" 480 ms after the touch');
+        });
+      });
+    }
+  });
+
   /* ═══ SIMPLE MODE, RELEASE 2.4: riders, couplings and crossfades (BUILD-PLAN-PHASE2.md §6; DESIGN §3.1, §3.5, §3.10, §4.1, §13 #24) ═══
      Each test fails on the 2.3 tree by what it does: 2.1 to 2.3 refuse these cases with a "comes along in the next update" line. */
   function smCap(name, start, dur, cues, W, H, o) {
