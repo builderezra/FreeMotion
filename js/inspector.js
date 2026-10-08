@@ -220,7 +220,7 @@ window.FM = window.FM || {};
     const wrap = el('div', 'prop-wrap');
     const row = el('div', 'prop-row prop-row--scrub');
     row.appendChild(el('label', null, label));
-    const val = el('input', 'fx-scrub-val'); val.type = 'text'; val.value = (+get()).toFixed(prec); typeInBox(val, min);
+    const val = el('input', 'fx-scrub-val'); val.type = 'text'; val.setAttribute('aria-label', label); val.value = (+get()).toFixed(prec); typeInBox(val, min);
     const strip = tickStrip({
       min: min, max: max, step: step, unit: '', dflt: null, q: qForce || 0, read: () => +get(),
       apply: (v) => { set(v); val.value = v.toFixed(prec); FM.requestRender(); },
@@ -1161,7 +1161,7 @@ window.FM = window.FM || {};
        the pill's INSET, not the pill: there is nothing to select until it has a value. Only where its neighbours are pills. */
     if (!nameEl.classList.contains('kf-selectable') && fx.params && fx.params[p.key] == null && layer && Object.keys(fx.params).some(k => kfInScope(layer, 'fx:' + k))) nameEl.classList.add('kf-inset');
     row.appendChild(nameEl);
-    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || ''); typeInBox(valBox, p.min);
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.setAttribute('aria-label', p.label || p.key); valBox.value = read().toFixed(prec) + (p.unit || ''); typeInBox(valBox, p.min);
     function apply(v, commit) {
       v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
       FM.setProp(fx.params, p.key, v, FM.time);
@@ -1348,7 +1348,7 @@ window.FM = window.FM || {};
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt); afterKf(); });
     row.appendChild(kfb);
     row.appendChild(el('span', 'fx-scrub-label', label));
-    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit; typeInBox(valBox, min);
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.setAttribute('aria-label', label); valBox.value = read().toFixed(prec) + unit; typeInBox(valBox, min);
     function apply(v, commit) {
       v = Math.max(min, Math.min(max, Math.round(v / step) * step));
       FM.setProp(container, key, v, FM.time);
@@ -1380,7 +1380,7 @@ window.FM = window.FM || {};
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt / disp); afterKf(); });
     row.appendChild(kfb);
     row.appendChild(el('span', 'fx-scrub-label', label));
-    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit; typeInBox(valBox, min);
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.setAttribute('aria-label', label); valBox.value = read().toFixed(prec) + unit; typeInBox(valBox, min);
     function apply(v, commit) {
       v = Math.max(min, Math.min(max, Math.round(v / step) * step));
       FM.setProp(container, key, v / disp, FM.time);
@@ -4385,6 +4385,11 @@ window.FM = window.FM || {};
     opts = opts || {}; const dp = opts.dp != null ? opts.dp : 1;
     const box = el('div', 'mt-vbox');
     const val = el('div', 'mt-vbox-val');
+    val.tabIndex = 0;
+    val.setAttribute('role', 'spinbutton');
+    val.setAttribute('aria-label', labelText);
+    if (Number.isFinite(opts.min)) val.setAttribute('aria-valuemin', String(opts.min));
+    if (Number.isFinite(opts.max)) val.setAttribute('aria-valuemax', String(opts.max));
     const lab = el('div', 'mt-vbox-lab', labelText);
     // Move mode's X / Y / Z boxes double as the pad's mode switch (v5.43, AM): the label under the
     // number is the target, NOT the number itself — tapping the number already opens the type-in
@@ -4446,7 +4451,11 @@ window.FM = window.FM || {};
       if (!(textW > 0) || !(inner > 0)) return;
       val.style.fontSize = Math.max(10, Math.floor(parseFloat(cs.fontSize) * inner / textW * 10) / 10) + 'px';
     };
-    const refresh = () => { if (!val.isContentEditable) { val.textContent = fmtS(); fitVal(); } };
+    const refresh = () => {
+      val.setAttribute('aria-valuenow', String(round(getVal(), dp)));
+      val.setAttribute('aria-valuetext', fmtS());
+      if (!val.isContentEditable) { val.textContent = fmtS(); fitVal(); }
+    };
     refresh(); box.appendChild(val); box.appendChild(lab);
     // Per-slider keyframe diamond (Ezra: "Every single Individual slider needs to have its own key
     // frames … moving the clip around and zooming in need to be seperate"). It keys ONLY opts.kfKey,
@@ -4542,9 +4551,24 @@ window.FM = window.FM || {};
       const r = document.createRange(); r.selectNodeContents(val); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
       const finish = commit => { val.removeEventListener('blur', onBlur); val.removeEventListener('keydown', onKey); val.contentEditable = 'false'; val.classList.remove('editing'); if (commit) { const n = parseFloat(val.textContent); if (!isNaN(n)) { setVal(clamp(n), true); commitH(); } } refresh(); FM.inspector.refresh(); };
       const onBlur = () => finish(true);
-      const onKey = e => { if (e.key === 'Enter') { e.preventDefault(); val.blur(); } else if (e.key === 'Escape') { e.preventDefault(); finish(false); } };
+      const onKey = e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } else if (e.key === 'Escape') { e.preventDefault(); finish(false); } };
       val.addEventListener('blur', onBlur); val.addEventListener('keydown', onKey);
     }
+    val.addEventListener('keydown', e => {
+      if (val.isContentEditable) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault(); e.stopPropagation();
+        if (opts.axis) FM._mtAxis = opts.axis;
+        startEdit();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault(); e.stopPropagation();
+        const step = Math.pow(10, -dp) * (e.shiftKey ? 10 : 1);
+        setVal(clamp(getVal() + (e.key === 'ArrowUp' ? step : -step)), true);
+        refresh();
+        if (opts.onScrub) opts.onScrub();
+        commitH();
+      }
+    });
     box._refresh = refresh; return box;
   }
 
