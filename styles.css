@@ -11849,3 +11849,16 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
 .sm-speed-r, .sm-vol-r { flex: 1 1 110px; min-width: 70px; align-self: center; margin: 0 6px; accent-color: var(--accent, #4da3ff); }
 .sm-speed-v, .sm-vol-v { flex: none; align-self: center; min-width: 46px; padding: 0 4px; font: 700 13px/1 system-ui, sans-serif; color: var(--text); font-variant-numeric: tabular-nums; text-align: center; }
 .sm-fade-l { flex: none; font-variant-numeric: tabular-nums; }
+
+/* ═══ Simple mode 2.5: drags (DESIGN §3.8). Every rule is keyed on a class only Simple makes, so Full matches none. ═══ */
+#sm-timeline .sm-item.sm-ghost { z-index: 20; opacity: .92; box-shadow: 0 6px 18px rgba(0,0,0,.45), inset 0 0 0 2px #fff; cursor: grabbing; pointer-events: none; }
+#sm-timeline .sm-clip { transition: transform .12s ease; }
+#sm-timeline .sm-clip.sm-ghost { transition: none; }
+#sm-timeline.sm-gliding .sm-clip, #sm-timeline.sm-gliding .sm-item { transition: transform .22s ease; }
+body.sm-dragging { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+#sm-timeline .sm-grip { position: absolute; top: 2px; height: 52px; z-index: 6; touch-action: none; cursor: ew-resize; }
+#sm-timeline .sm-grip::before { content: ''; position: absolute; top: 8px; bottom: 8px; width: 13px; background: #fff; border-radius: 4px; box-shadow: 0 0 0 1px rgba(0,0,0,.55); }
+#sm-timeline .sm-grip-head::before { left: 0; }
+#sm-timeline .sm-grip-tail::before { right: 0; }
+.sm-dragtip { position: fixed; z-index: 99990; transform: translateX(-50%); background: #111; color: #fff; font: 600 13px/1 system-ui, sans-serif; padding: 7px 10px; border-radius: 8px; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,.5); white-space: nowrap; }
+.sm-dragtip:empty { display: none; }
