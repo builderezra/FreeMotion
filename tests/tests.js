@@ -60152,6 +60152,7 @@
       await realInput924(smMS([['mouseMove', B.x, B.y], ['mouseDown', B.x, B.y, 60], ['mouseMove', B.x + 6, B.y, 40], ['mouseMove', B.x - 4, B.y, 40], ['mouseUp', B.x - 4, B.y, 40]]), 'a small wobble inside the slot');
       await v.idle();
       if (v.steps() !== n0 || smOrder() !== 'ABC') throw new Error('a wobble inside the slot wrote something: ' + smOrder() + ', ' + (v.steps() - n0) + ' steps, “' + v.say() + '”');
+      if (FM.scene.selectedId) throw new Error('the click a drag’s release makes selected ' + FM.scene.selectedId + ' (the release is over the same box, so the browser does fire it)');
       await realInput924(smMS([['mouseMove', B.x, B.y], ['mouseDown', B.x, B.y, 60], ['mouseUp', B.x, B.y, 40]]), 'a plain click');
       await v.sleep(80);
       if (FM.scene.selectedId !== v.L('B').id) throw new Error('a plain click no longer selects (selected: ' + FM.scene.selectedId + ')');
@@ -60210,14 +60211,18 @@
         if (v.doc() !== d0 || v.steps() !== n0) throw new Error('a Viewer’s drag wrote something');
         if (!(v.say() || '').length) throw new Error('no line said why');
       });
-      // gate shuts mid-drag
+      // gate shuts mid-drag: the release must not even TRY the command (the runner’s own check is the backstop, so a refusal alone proves nothing)
+      let tries = 0; const mv0 = FM.spine.cmd.moveTo; FM.spine.cmd.moveTo = function () { tries++; return mv0.apply(this, arguments); };
+      try {
       await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', tx, A.y, 60]]), 'a drag');
       if (!smG()) throw new Error('CONTROL: the drag did not start');
       await smWithRole('viewer', async function () {
         await realInput924(smMS([['mouseUp', tx, A.y, 40]]), 'letting go after the gate shut');
         await v.idle();
         if (v.doc() !== d0 || v.steps() !== n0) throw new Error('a release after the gate shut wrote something');
+        if (tries) throw new Error('the release ran the command after the gate had shut (' + tries + ' call): the gate is read again on release, before the runner');
       });
+      } finally { FM.spine.cmd.moveTo = mv0; }
       // a friend deletes the held clip
       await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', tx, A.y, 60]]), 'a second drag');
       const id = v.L('A').id;
