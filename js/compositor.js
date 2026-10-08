@@ -12251,6 +12251,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // inherit an echo trail from) frames the user merely previewed, making the first exported frame depend
   // on what was on screen beforehand. The exporter calls this right after setting FM._exporting.
   FM.resetMotionFlowCache = function () { for (const k in _mflow) delete _mflow[k]; };
+  FM._mflowSize = function () { return Object.keys(_mflow).length; };   // suite seam (H40): how many layers' temporal plates are held
   function _mfRec(id, W, H) {
     let r = _mflow[id];
     if (!r) {

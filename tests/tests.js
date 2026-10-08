@@ -59811,6 +59811,247 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+
+  /* H40: AN EXPORT LEAVES NO TEMPORAL PLATES BEHIND. Temporal Denoise, Frame Stutter, Time Warp Scan and Motion Blur (Footage) keep the
+     previous frame of every layer in `_mflow` (compositor.js), one full-plate canvas per layer, up to 12 layers. The cache is cleared when an
+     export STARTS (exporter.js: it must not blur against preview history) and never when one ENDS, so after an export of a 1080 x 1920
+     project the plates stay at export size (measured: 8.3 MB for one layer, up to 12 of them) until the next project open or export.
+     Run through FM._runExport (the entry the Export button calls) as a GIF, so it needs no H.264 encoder. CONTROL: the fixture really did
+     put a plate in the cache during the export. */
+  test('H40 an export leaves no temporal plates behind in the motion-flow cache', { item: 'H40', budgetMs: 90000 }, async function () {
+    if (!FM._runExport || !FM._setExportSoloId || !FM._mflowSize) throw new Error('setup: FM._runExport, FM._setExportSoloId or FM._mflowSize is missing');
+    const fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
+    if (!fmtEl || !rangeEl) throw new Error('setup: the export dialog is missing from this build');
+    const saved = FM.scene, fmt0 = fmtEl.value, range0 = rangeEl.value, rs0 = FM.renderScene;
+    const dl = hunt2dCatchDownloads();
+    let peak = 0;
+    try {
+      await atPhoneWidth(async function () {
+        if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        const S = FM.makeLayer('shape', { name: 'H40 mover', shape: 'rect', x: 20, y: 24, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 1 });
+        S.effects = [FM.fxRegistry.makeInstance('temporaldenoise')];
+        S.transform.x = { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 1, v: 54, e: 'linear' }] };
+        FM.scene = scene([S], { project: { width: 64, height: 48, fps: 10, duration: 1, background: '#000000' } });
+        FM.selectLayer(null); FM.refreshAll();
+        FM.renderScene = function () { const r = rs0.apply(this, arguments); if (FM._exporting) peak = Math.max(peak, FM._mflowSize()); return r; };
+        fmtEl.value = 'gif'; rangeEl.value = 'whole'; FM._setExportSoloId(null);
+        await FM._runExport();
+      });
+      if (!peak) throw new Error('CONTROL: during the export no temporal plate was ever held, so what is left afterwards says nothing');
+      if (FM._mflowSize() !== 0) throw new Error('the export finished and the motion-flow cache still holds ' + FM._mflowSize() + ' layer plate(s) at export size — they stay until the next project open or export');
+    } finally {
+      FM.renderScene = rs0; dl.stop();
+      fmtEl.value = fmt0; rangeEl.value = range0; if (FM._expPrefsSave) FM._expPrefsSave();
+      const ov = document.getElementById('export-overlay'); if (ov) ov.classList.add('hidden');
+      FM.scene = saved; try { FM.resetMotionFlowCache(); FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* H40: AN AUDIO MIX DOES NOT LEAVE EVERY CLIP'S DECODED SOUND ON ITS MEDIA RECORD. buildAudioMix decodes each clip it mixes to full float PCM
+     (~88 MB for four minutes of stereo at 48 kHz) and parks it on `rec.audioBuffer`, where nothing frees it until the layer is removed: a project with
+     three songs holds ~260 MB of PCM after the first export, for the rest of the session. A buffer the mix decoded ITSELF is put back to
+     "not decoded" when the mix is done (preview and reverse re-decode on demand, as they did the first time); one that was already there
+     (reverse playback, audio-react) is left alone. CONTROL: the mix is real, and the pre-decoded clip is still decoded. */
+  test('H40 an audio mix frees the PCM it decoded, and leaves a buffer that was already there', { item: 'H40' }, async function () {
+    if (!FM.exporter || !FM.exporter.buildAudioMix || !FM.decodeAudio || !FM.audioBufferToWav) throw new Error('setup: the mixer or the decoder is not reachable');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('no OfflineAudioContext');
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration, made = [];
+    try {
+      const oac = new OAC(2, 48000, 48000);
+      const buf = oac.createBuffer(2, 48000, 48000);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 20) * 0.5; }
+      const wav = () => new File([FM.audioBufferToWav(buf)], 'h40.wav', { type: 'audio/wav' });
+      const A = FM.makeLayer('video', { name: 'H40 fresh', start: 0, duration: 1 }), B = FM.makeLayer('video', { name: 'H40 kept', start: 0, duration: 1 });
+      FM.scene.layers.length = 0; FM.scene.layers.push(A, B); made.push(A.id, B.id);
+      FM.media.set(A.id, { kind: 'video', file: wav(), duration: 1, width: 2, height: 2 });                          // audioBuffer: undefined, the mix decodes it
+      FM.media.set(B.id, { kind: 'video', file: wav(), audioBuffer: buf, duration: 1, width: 2, height: 2 });       // already decoded by someone else
+      FM.scene.project.duration = 2;
+      FM._lastAudioDrops = null;
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 2);
+      if (!mix || !mix.audioBuffer) throw new Error('CONTROL: the mixer produced no mix, so what it left behind says nothing (dropped: ' + JSON.stringify(FM._lastAudioDrops) + ')');
+      if (FM.media.get(B.id).audioBuffer !== buf) throw new Error('the mixer replaced or dropped a buffer somebody else had already decoded (reverse playback and audio-react rely on it)');
+      if (FM.media.get(A.id).audioBuffer) throw new Error('the mix decoded "' + A.name + '" to full PCM (' + Math.round(FM.media.get(A.id).audioBuffer.length * FM.media.get(A.id).audioBuffer.numberOfChannels * 4 / 1024) + ' KB here, ~88 MB for a four-minute song) and left it on the media record');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.scene.project.duration = dur0;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+    }
+  });
+
+  /* H40: THE FILE KEPT FOR UNDO OF A REPLACED CLIP IS LET GO ONCE NOTHING CAN BRING THE CLIP BACK. `_prevFiles` (storage.js) kept a File per replaced
+     clip per revision for the whole session. Two ghosts: one layer that is not in the scene and not in any snapshot (must go), one that is in
+     the scene (must stay, or undo of a replace would lose the original). Run through FM.releaseUnreachableMedia, the call history makes
+     whenever it discards a snapshot. CONTROL: both are kept before the sweep. */
+  test('H40 the file kept for undo of a replaced clip is dropped once the clip is unreachable, and kept while it is in the scene', { item: 'H40' }, async function () {
+    if (!FM.storage || !FM.storage.stashPrevMedia || !FM.storage.hasPrevMedia || !FM.releaseUnreachableMedia) throw new Error('setup: the prev-media seams are gone');
+    const saved = FM.scene, gone = 'layer_h40_gone', here = 'layer_h40_here';
+    const rec = () => ({ file: new File([new Uint8Array(64)], 'a.png', { type: 'image/png' }), kind: 'image' });
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, start: 0, duration: 1 }); L.id = here;
+      FM.scene = scene([L]);
+      await FM.storage.stashPrevMedia(gone, rec(), 3);
+      await FM.storage.stashPrevMedia(here, rec(), 3);
+      if (!FM.storage.hasPrevMedia(gone, 3) || !FM.storage.hasPrevMedia(here, 3)) throw new Error('CONTROL: the two files were not kept before the sweep');
+      FM.releaseUnreachableMedia([]);
+      if (FM.storage.hasPrevMedia(gone, 3)) throw new Error('the file kept for a clip that is in no scene and no snapshot is still held after the sweep that frees its media');
+      if (!FM.storage.hasPrevMedia(here, 3)) throw new Error('the file kept for a clip that is IN the scene was let go: undo of its replace would lose the original');
+      FM.releaseUnreachableMedia(['{"layers":[{"id":"' + here + '"}]}']);   // …and a snapshot that names a clip keeps it too
+      FM.scene = scene([]);
+      FM.releaseUnreachableMedia(['{"layers":[{"id":"' + here + '"}]}']);
+      if (!FM.storage.hasPrevMedia(here, 3)) throw new Error('a clip still named by an undo snapshot lost its kept file');
+      FM.releaseUnreachableMedia([]);
+      if (FM.storage.hasPrevMedia(here, 3)) throw new Error('the last snapshot that named the clip is gone and its kept file is still held');
+    } finally {
+      FM.scene = saved;
+      for (const id of [gone, here]) { try { await FM.storage.removeMedia('prev:' + id + ':3'); } catch (e) {} }
+    }
+  });
+
+  /* H44: THE FILE KEPT FOR UNDO OF A REPLACED CLIP IS NOT KEPT ALIVE BY THE KEEPING. storage.js remembers which revisions of which layer have a
+     kept file, and (to skip a second write of the same object) which File it was. Holding that File strongly meant every file a replace
+     ever put away stayed in memory for the session: a File built in memory (camera or recorder blob, a song's WAV, media a peer sent) costs
+     its whole size there (measured 254 MB of browser memory for 36 clips of 10 MB), while a picker file costs ~0. The record on disk is what
+     undo reads, so the map only needs the key. Stash a 2 MB File, drop it, collect: it must be gone, and the revision must still be
+     reported as kept. CONTROL: right after the stash the file is alive and kept. */
+  test('H44 the file kept for undo of a replaced clip is not held alive by the record that it is kept', { item: 'H44', budgetMs: 40000 }, async function () {
+    if (!FM.storage || !FM.storage.stashPrevMedia || !FM.storage.hasPrevMedia) throw new Error('setup: the prev-media seams are gone');
+    const id = 'layer_h44_' + Date.now().toString(36);
+    let ref = null;
+    const put = async function () {
+      const f = new File([new Uint8Array(2 << 20)], 'h44.webm', { type: 'video/webm' });
+      ref = new WeakRef(f);
+      if (!(await FM.storage.stashPrevMedia(id, { file: f, kind: 'video' }, 4))) throw new Error('CONTROL: the file was not stashed');
+      if (!FM.storage.hasPrevMedia(id, 4)) throw new Error('CONTROL: the stashed revision is not reported as kept');
+      if (ref.deref() !== f) throw new Error('CONTROL: the file is not alive right after the stash');
+    };
+    await put();
+    await gc921('after dropping a stashed 2 MB file');
+    if (ref.deref()) throw new Error('the 2 MB file put away for undo is still alive after a collection: the keeping record holds it');
+    if (!FM.storage.hasPrevMedia(id, 4)) throw new Error('the revision stopped being reported as kept once the File was collected');
+  });
+
+  /* ═══ #1011 — a failed export closed its VideoFrame only on success and never closed the encoder (js/exporter.js run, encodeAudio,
+     aacPriming). A throwing encode() skipped frame.close(); any throw from the frame loop skipped encoder.close() because the
+     encoder was a const inside the try and the finally could not see it. Stubs stand in for the encoders (this container has no
+     H.264 or AAC), so the test runs everywhere; the counting is on the REAL VideoFrame and AudioData classes. */
+  test('1011 an export that fails closes every VideoFrame and its VideoEncoder', { item: '1011', budgetMs: 60000 }, async function () {
+    const RealVE = window.VideoEncoder, RealVF = window.VideoFrame, RealAE = window.AudioEncoder, RealAD = window.AudioData;
+    if (!RealVF || !RealAD) throw new Error('this browser has no VideoFrame / AudioData, so there is nothing to count');
+    const realRender = FM.renderScene, saved = FM.scene;
+    const videoRun = async function (failWhere) {
+      let frames = 0, closed = 0; const encs = []; let n = 0;
+      class StubEnc {
+        constructor() { this.state = 'unconfigured'; this.encodeQueueSize = 0; this.calls = 0; encs.push(this); }
+        configure() { this.state = 'configured'; }
+        encode() { this.calls++; if (failWhere === 'encode' && this.calls === 3) throw new Error('boom: encode on frame 3'); }
+        async flush() {}
+        close() { this.state = 'closed'; }
+        static async isConfigSupported(c) { return { supported: true, config: c }; }
+      }
+      const rc = RealVF.prototype.close;
+      window.VideoEncoder = StubEnc;
+      RealVF.prototype.close = function () { closed++; return rc.call(this); };
+      window.VideoFrame = class extends RealVF { constructor() { super(...arguments); frames++; } };
+      if (failWhere === 'render') FM.renderScene = function () { n++; if (n === 3) throw new Error('boom: render on frame 3'); return realRender.apply(this, arguments); };
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 32, y: 32, shapeW: 40, shapeH: 40, fill: '#f44', start: 0, duration: 1 });
+      FM.scene = { project: { width: 64, height: 64, fps: 10, duration: 1, background: '#000' }, layers: [L], selectedId: null, selectedIds: [] };
+      let err = null;
+      try { await FM.exporter.run({ scale: 1, fps: 10, bitrate: 300000, name: 'x1011', from: 0, to: 1, outW: 64, outH: 64, onReady: function () {} }); } catch (e) { err = String(e && e.message || e); }
+      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; RealVF.prototype.close = rc; FM.renderScene = realRender; FM.scene = saved;
+      return { err: err, frames: frames, closed: closed, states: encs.map(e => e.state), encs: encs.length };
+    };
+    const audioRun = async function () {
+      let made = 0, closed = 0; const encs = [];
+      class StubAE {
+        constructor() { this.state = 'unconfigured'; this.calls = 0; encs.push(this); }
+        configure() { this.state = 'configured'; }
+        encode() { this.calls++; if (this.calls === 3) throw new Error('boom: audio encode 3'); }
+        async flush() {}
+        close() { this.state = 'closed'; }
+        static async isConfigSupported(c) { return { supported: true, config: c }; }
+      }
+      const rc = RealAD.prototype.close;
+      window.AudioEncoder = StubAE;
+      RealAD.prototype.close = function () { closed++; return rc.call(this); };
+      window.AudioData = class extends RealAD { constructor() { super(...arguments); made++; } };
+      const total = 1024 * 8, ch = new Float32Array(total);
+      const mix = { audioBuffer: { length: total, numberOfChannels: 1, getChannelData: () => ch }, sampleRate: 48000, channels: 1 };
+      let err = null;
+      try { await FM._encodeAudio(function () {}, mix); } catch (e) { err = String(e && e.message || e); }
+      window.AudioEncoder = RealAE; window.AudioData = RealAD; RealAD.prototype.close = rc;
+      return { err: err, made: made, closed: closed, states: encs.map(e => e.state) };
+    };
+    try {
+      const ctl = await videoRun(null);
+      if (ctl.frames < 5 || ctl.frames !== ctl.closed) throw new Error('CONTROL: a run with no failure made ' + ctl.frames + ' VideoFrames and closed ' + ctl.closed);
+      for (const where of ['encode', 'render']) {
+        const r = await videoRun(where);
+        if (!r.err || r.err.indexOf('boom') < 0) throw new Error('CONTROL: the ' + where + ' failure never reached the export (got ' + r.err + ')');
+        if (r.frames !== r.closed) throw new Error('a failed export (' + where + ' throws on frame 3) made ' + r.frames + ' VideoFrames and closed ' + r.closed + ': ' + (r.frames - r.closed) + ' leaked');
+        if (r.encs !== 1 || r.states[0] !== 'closed') throw new Error('a failed export (' + where + ' throws on frame 3) left its VideoEncoder ' + JSON.stringify(r.states));
+      }
+    } finally {
+      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; window.AudioEncoder = RealAE; window.AudioData = RealAD; FM.renderScene = realRender; FM.scene = saved;
+    }
+  });
+
+  test('1011 an audio encode that fails closes every AudioData and AudioEncoder it opened', { item: '1011', budgetMs: 60000 }, async function () {
+    const RealVE = window.VideoEncoder, RealVF = window.VideoFrame, RealAE = window.AudioEncoder, RealAD = window.AudioData;
+    if (!RealVF || !RealAD) throw new Error('this browser has no VideoFrame / AudioData, so there is nothing to count');
+    const realRender = FM.renderScene, saved = FM.scene;
+    const videoRun = async function (failWhere) {
+      let frames = 0, closed = 0; const encs = []; let n = 0;
+      class StubEnc {
+        constructor() { this.state = 'unconfigured'; this.encodeQueueSize = 0; this.calls = 0; encs.push(this); }
+        configure() { this.state = 'configured'; }
+        encode() { this.calls++; if (failWhere === 'encode' && this.calls === 3) throw new Error('boom: encode on frame 3'); }
+        async flush() {}
+        close() { this.state = 'closed'; }
+        static async isConfigSupported(c) { return { supported: true, config: c }; }
+      }
+      const rc = RealVF.prototype.close;
+      window.VideoEncoder = StubEnc;
+      RealVF.prototype.close = function () { closed++; return rc.call(this); };
+      window.VideoFrame = class extends RealVF { constructor() { super(...arguments); frames++; } };
+      if (failWhere === 'render') FM.renderScene = function () { n++; if (n === 3) throw new Error('boom: render on frame 3'); return realRender.apply(this, arguments); };
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 32, y: 32, shapeW: 40, shapeH: 40, fill: '#f44', start: 0, duration: 1 });
+      FM.scene = { project: { width: 64, height: 64, fps: 10, duration: 1, background: '#000' }, layers: [L], selectedId: null, selectedIds: [] };
+      let err = null;
+      try { await FM.exporter.run({ scale: 1, fps: 10, bitrate: 300000, name: 'x1011', from: 0, to: 1, outW: 64, outH: 64, onReady: function () {} }); } catch (e) { err = String(e && e.message || e); }
+      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; RealVF.prototype.close = rc; FM.renderScene = realRender; FM.scene = saved;
+      return { err: err, frames: frames, closed: closed, states: encs.map(e => e.state), encs: encs.length };
+    };
+    const audioRun = async function () {
+      let made = 0, closed = 0; const encs = [];
+      class StubAE {
+        constructor() { this.state = 'unconfigured'; this.calls = 0; encs.push(this); }
+        configure() { this.state = 'configured'; }
+        encode() { this.calls++; if (this.calls === 3) throw new Error('boom: audio encode 3'); }
+        async flush() {}
+        close() { this.state = 'closed'; }
+        static async isConfigSupported(c) { return { supported: true, config: c }; }
+      }
+      const rc = RealAD.prototype.close;
+      window.AudioEncoder = StubAE;
+      RealAD.prototype.close = function () { closed++; return rc.call(this); };
+      window.AudioData = class extends RealAD { constructor() { super(...arguments); made++; } };
+      const total = 1024 * 8, ch = new Float32Array(total);
+      const mix = { audioBuffer: { length: total, numberOfChannels: 1, getChannelData: () => ch }, sampleRate: 48000, channels: 1 };
+      let err = null;
+      try { await FM._encodeAudio(function () {}, mix); } catch (e) { err = String(e && e.message || e); }
+      window.AudioEncoder = RealAE; window.AudioData = RealAD; RealAD.prototype.close = rc;
+      return { err: err, made: made, closed: closed, states: encs.map(e => e.state) };
+    };
+    try {
+      const a = await audioRun();
+      if (!a.err || a.err.indexOf('boom') < 0) throw new Error('CONTROL: the audio failure never reached encodeAudio (got ' + a.err + ')');
+      if (a.made !== a.closed) throw new Error('a failed audio encode made ' + a.made + ' AudioData and closed ' + a.closed);
+      if (a.states.some(st => st !== 'closed')) throw new Error('a failed audio encode left an AudioEncoder ' + JSON.stringify(a.states) + ' (aacPriming and encodeAudio each open one)');
+    } finally {
+      window.VideoEncoder = RealVE; window.VideoFrame = RealVF; window.AudioEncoder = RealAE; window.AudioData = RealAD; FM.renderScene = realRender; FM.scene = saved;
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
