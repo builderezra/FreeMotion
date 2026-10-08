@@ -60127,6 +60127,110 @@
     }
   });
 
+  /* #1095 — THE SCRATCH POOLS GAVE BACK NOTHING. Every canvas-effect pool is indexed by nesting depth and each entry is two plate-sized
+     canvases that were created the first time a stack reached that depth and then kept for the life of the page. So 20 stacked effects
+     left 40 canvases behind after the stack was gone (measured: through a forced garbage collection, in a headless Chromium); the
+     effects browser stacks one effect per pick in its preview, and a sweep of every tile measured ~335 plate-sized canvases (about
+     2.2 GB at 1080x1920 on the Mac). The fix trims each pool to the deepest stack drawn in the last 3 s window, so after a deep frame
+     and then shallow ones the pools are small within two windows (about 6 s). */
+  test('1095 the effect scratch pools shrink after a deep stack is gone, and a deep stack still draws the same picture', { item: '1095', budgetMs: 40000 }, async function () {
+    if (!FM._readbackHint) throw new Error('the pool seam FM._readbackHint is gone');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const mk = function (n) {
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'pool', x: 90, y: 160, shapeW: 120, shapeH: 120, fill: '#c05030' });
+      L.start = 0; L.duration = 3; L.effects = [];
+      for (let i = 0; i < n; i++) L.effects.push(FM.fxRegistry.makeInstance('wiggle'));
+      return { project: { width: 180, height: 320, fps: 30, duration: 3, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
+    };
+    const draw = function (n) {
+      const c = offscreen(180, 320); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, mk(n), 0.5);
+      const d = g.getImageData(0, 0, 180, 320).data; let h = 0;
+      for (let i = 0; i < d.length; i += 31) h = (h * 31 + d[i]) >>> 0;
+      return h;
+    };
+    const poolLen = () => FM._readbackHint().A.length;
+    const base = poolLen();
+    const h1 = draw(12);
+    if (poolLen() < 12) throw new Error('CONTROL: a stack of 12 canvas effects did not grow the pool to 12 entries (' + base + ' to ' + poolLen() + ') — nothing below measures anything');
+    draw(1);
+    await sleep(7500);   // two trim windows of 3 s
+    const after = poolLen();
+    if (after > base + 4) throw new Error('after a 12-deep stack and one shallow frame, the canvas-effect pool still holds ' + after + ' entries (' + base + ' before) — each entry is two plate-sized canvases kept for the life of the page');
+    if (FM._poolStats) {   // the seam the fix adds: the pixels, not just the count
+      const st = FM._poolStats().cf;
+      if (st.px > 8 * 180 * 320) throw new Error('the pool is down to ' + st.n + ' entries but still holds ' + st.px + ' pixels');
+    }
+    // …and a deep stack drawn again after the trim is the same picture (the entries are re-created exactly as the first time)
+    const h2 = draw(12);
+    if (h1 !== h2) throw new Error('a 12-deep stack drew a different picture after the pools were trimmed (hash ' + h1 + ' then ' + h2 + ')');
+  });
+
+  /* H40: THE ENTRIES THE POOL FLOOR KEEPS ARE RELEASED WHEN NOTHING USES THEM. The 1095 trim never drops a pool's first two entries, so after a
+     full-size frame (an export draws at the project's own size) the entry the next frames do not reach stays at that size: two plates
+     of 1080 x 1920 per pool, measured at 190 MB across the pools right after a 0.6 s GIF export. Draw a 2-deep stack at full size, then
+     only a 1-deep one at thumbnail size, wait out two trim windows, and ask for the pixels the canvas-effect pool still holds.
+     CONTROL: the full-size frame really did fill it. */
+  test('H40 a pool entry the floor keeps is released when nothing uses it, after a full-size frame', { item: 'H40', budgetMs: 40000 }, async function () {
+    if (!FM._poolStats) throw new Error('the pool seam FM._poolStats is gone (1095)');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const mk = function (n, w, h) {
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'pool', x: w / 2, y: h / 2, shapeW: w / 3, shapeH: w / 3, fill: '#c05030' });
+      L.start = 0; L.duration = 3; L.effects = [];
+      for (let i = 0; i < n; i++) L.effects.push(FM.fxRegistry.makeInstance('wiggle'));
+      return { project: { width: w, height: h, fps: 30, duration: 3, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
+    };
+    const draw = function (n, w, h) {
+      const c = offscreen(w, h); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      FM.renderScene(c.getContext('2d', { willReadFrequently: true }), mk(n, w, h), 0.5);
+    };
+    draw(2, 1080, 1920);
+    const big = FM._poolStats().cf.px;
+    if (big < 4 * 1080 * 1920) throw new Error('CONTROL: a 2-deep stack at 1080 x 1920 left only ' + big + ' pixels in the pool — nothing below measures anything');
+    draw(1, 180, 320);
+    await sleep(7500);   // two trim windows of 3 s
+    const left = FM._poolStats().cf.px;
+    if (left > 8 * 180 * 320) throw new Error('after a full-size frame and a thumbnail-size one, the canvas-effect pool still holds ' + left + ' pixels (' + Math.round(left * 4 / 1048576) + ' MB): the entry the frames did not reach was kept at export size');
+  });
+
+  /* H43: THE FILTER-CONTAINER PLATES ARE RELEASED WHEN NOTHING USES THEM. A Filter box at a strength between 0 and 1 draws its children
+     into three plate-sized canvases (_fcPool: A, B, M), and an Adjustment layer carrying one does the same into two per nesting level
+     (_adjFcPool). Neither was in the 1095 / H40 trim, so after a 1080 x 1920 export they sat at that size for the rest of the session:
+     measured 24.9 MB and 33.2 MB (a quiet editor holds under 2 MB of either). Draw both at full size, then only a plain thumbnail-size
+     frame, wait out two trim windows, and ask for the pixels they still hold. CONTROL: the full-size frame really filled them. */
+  test('H43 the Filter-container plates are released when nothing uses them, after a full-size frame', { item: 'H43', budgetMs: 40000 }, async function () {
+    if (!FM._poolStats) throw new Error('the pool seam FM._poolStats is gone (1095)');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const box = function () {
+      const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
+      b.effects = [FM.fxRegistry.makeInstance('pixelate')]; b.params = Object.assign({}, b.params, { strength: 0.5 });
+      return b;
+    };
+    const mk = function (w, h, withBoxes) {
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'pool', x: w / 2, y: h / 2, shapeW: w / 3, shapeH: w / 3, fill: '#c05030' });
+      L.start = 0; L.duration = 3; L.effects = withBoxes ? [box()] : [];
+      const layers = [L];
+      if (withBoxes) { const A = FM.makeLayer('adjustment', { start: 0, duration: 3 }); A.effects = [box()]; layers.unshift(A); }
+      return { project: { width: w, height: h, fps: 30, duration: 3, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] };
+    };
+    const draw = function (w, h, withBoxes) {
+      const c = offscreen(w, h); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0;
+      FM.renderScene(c.getContext('2d', { willReadFrequently: true }), mk(w, h, withBoxes), 0.5);
+    };
+    draw(1080, 1920, true);
+    const big = FM._poolStats();
+    if (big.fc.px < 3 * 1080 * 1920) throw new Error('CONTROL: a Filter box at full size left only ' + big.fc.px + ' pixels in its pool — nothing below measures anything');
+    if (big.adj.px < 2 * 1080 * 1920) throw new Error('CONTROL: an Adjustment layer with a Filter box at full size left only ' + big.adj.px + ' pixels in its pool — nothing below measures anything');
+    draw(180, 320, false);
+    await sleep(7500);   // two trim windows of 3 s
+    const left = FM._poolStats();
+    if (left.fc.px > 8 * 180 * 320) throw new Error('after a full-size frame and a thumbnail-size one, the Filter-container pool still holds ' + left.fc.px + ' pixels (' + Math.round(left.fc.px * 4 / 1048576) + ' MB): the trim does not reach it');
+    if (left.adj.px > 8 * 180 * 320) throw new Error('after a full-size frame and a thumbnail-size one, the Adjustment Filter-container pool still holds ' + left.adj.px + ' pixels (' + Math.round(left.adj.px * 4 / 1048576) + ' MB): the trim does not reach it');
+    const again = function () { const c = offscreen(540, 960); c.__fmRS = 1; c.__fmOX = 0; c.__fmOY = 0; FM.renderScene(c.getContext('2d', { willReadFrequently: true }), mk(540, 960, true), 0.5); return FM._poolStats(); }();
+    if (again.fc.px < 3 * 540 * 960) throw new Error('a Filter box drawn after the trim did not get its plates back (' + again.fc.px + ' pixels)');
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
