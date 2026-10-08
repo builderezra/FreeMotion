@@ -1314,6 +1314,7 @@ window.FM = window.FM || {};
    * (null) rather than freezing the panel. A hint that is absent on the heaviest effects is a fair price;
    * a stutter is not. */
   const NOOP_BUDGET_MS = 45;
+  let noopBudget = NOOP_BUDGET_MS;   // only the test seam FM.fxThumbs._noopBudget ever changes this
   let noopCv = null, noopCx = null;
   function sceneWithFxOff(target, idx) {
     const doc = JSON.parse(JSON.stringify(target, FM.jsonReplacer));
@@ -1377,7 +1378,7 @@ window.FM = window.FM || {};
       try {
         noopCx.setTransform(1, 0, 0, 1, 0, 0); noopCx.clearRect(0, 0, w, h);
         FM.renderScene(noopCx, sceneAsIs(layer), t);
-        if (performance.now() - t0 > NOOP_BUDGET_MS) return null;   // too dear to ask — stay quiet
+        if (performance.now() - t0 > noopBudget) return null;   // too dear to ask — stay quiet
         on = noopCx.getImageData(0, 0, w, h).data;
         noopCx.setTransform(1, 0, 0, 1, 0, 0); noopCx.clearRect(0, 0, w, h);
         FM.renderScene(noopCx, sceneWithFxOff(layer, idx), t);
@@ -1693,6 +1694,11 @@ window.FM = window.FM || {};
     effectDoesNothing: function (layer, idx, t) { return effectDoesNothing(layer, idx, t); },
     // queue 690 (sixth hunt): the moments of the clip the verdict is taken over — the inspector walks them one per slice.
     noopTimes: function (layer) { return noopTimes(layer); },
+    /* TEST SEAM (H55). The first render of a probe is timed against NOOP_BUDGET_MS and over it the answer is null, by design.
+       A test that checks the VERDICT (not the budget) on a slow or throttled machine needs the budget out of the way, and
+       must put it back: `const was = FM.fxThumbs._noopBudget(1e9); try { ... } finally { FM.fxThumbs._noopBudget(was); }`.
+       Returns the budget that was in force; no argument (or a non-number) restores the shipped one. Nothing in the app calls it. */
+    _noopBudget: function (ms) { const was = noopBudget; noopBudget = (typeof ms === 'number' && ms >= 0) ? ms : NOOP_BUDGET_MS; return was; },
     // queue 400: the tile raster follows the screen. Exposed so the rule can be checked without a 3×
     // display, and so the measured cost of changing it can be re-derived rather than taken on trust.
     _tileScaleFor: function (dpr) { return tileScaleFor(dpr); },

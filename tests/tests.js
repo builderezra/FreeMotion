@@ -70648,6 +70648,8 @@
   test('an effect that changes nothing on this layer is detected — and a working one is not (queue 477)', { item: '477' }, async function () {
     if (!FM.fxThumbs || typeof FM.fxThumbs.effectDoesNothing !== 'function') throw new Error('FM.fxThumbs.effectDoesNothing is not reachable');
     const saved = { layers: FM.scene.layers.slice(), w: FM.scene.project.width, h: FM.scene.project.height };
+    /* H55: this test checks the VERDICT, so the probe's 45 ms budget (null on a slow or throttled machine, by design) is lifted for it and put back below. */
+    const wasNoopBudget = FM.fxThumbs._noopBudget(1e9);
     try {
       FM.scene.project.width = 1080; FM.scene.project.height = 1920;
       const put = (fill, type) => {
@@ -70687,6 +70689,7 @@
       const d = put('#ff8a3d', 'vignette');
       if (d && FM.fxThumbs.effectDoesNothing(d.L, 0) === true) throw new Error('a vignette was reported as doing nothing — it only touches the edges of the layer, and calling that dead is exactly what the discarded threshold design would have done to every shadow effect');
     } finally {
+      FM.fxThumbs._noopBudget(wasNoopBudget);
       FM.scene.layers = saved.layers;
       FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
       FM.refreshAll(); FM.timeline.rebuild();
@@ -83541,6 +83544,8 @@
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (!FM.fxThumbs || typeof FM.fxThumbs.effectDoesNothing !== 'function') throw new Error('FM.fxThumbs.effectDoesNothing is not reachable');
     const saved = { layers: FM.scene.layers.slice(), w: FM.scene.project.width, h: FM.scene.project.height };
+    /* H55: this test checks the VERDICT, so the probe's 45 ms budget (null on a slow or throttled machine, by design) is lifted for it and put back below. */
+    const wasNoopBudget = FM.fxThumbs._noopBudget(1e9);
     try {
       FM.scene.project.width = 1080; FM.scene.project.height = 1920;
       const put = (fill, type) => {
@@ -83563,6 +83568,7 @@
       for (let k = 0; k < 3 && dead === null; k++) { if (k) await sleep(150); dead = FM.fxThumbs.effectDoesNothing(L794, 0); }
       if (dead !== true) throw new Error('control: Channel Remap on a flat #cc22cc fill must still be called dead (got ' + dead + ' three times) — the probe has gone quiet on everything');
     } finally {
+      FM.fxThumbs._noopBudget(wasNoopBudget);
       FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
       FM.scene.project.width = saved.w; FM.scene.project.height = saved.h;
       FM.refreshAll(); await sleep(60);
@@ -98032,6 +98038,8 @@
   test('690 a Spin added at the start of its clip is not told it changes nothing while the box turns', { item: '690', budgetMs: 120000 }, async function () {
     const saved = FM.scene, keep = hb2Keep(['fm.fx.recents', 'fm.fx.presetHint', 'fm.fx.tapHint']);
     const hint = () => { const h = document.querySelector('#inspector-panel .fx-row.fx-open .fx-noop-hint'); return h ? h.textContent.trim() : ''; };
+    /* H55: this test checks the VERDICT, so the probe's 45 ms budget (null on a slow or throttled machine, by design) is lifted for it and put back below. */
+    const wasNoopBudget = FM.fxThumbs._noopBudget(1e9);
     try {
       await atPhoneWidth(async function () {
         await onScreen924(async function () {
@@ -98088,6 +98096,7 @@
         });
       }, 380);
     } finally {
+      FM.fxThumbs._noopBudget(wasNoopBudget);
       try { FM.fxBrowser.close(); } catch (e) {}
       hb2Restore(keep);
       FM.scene = saved; try { FM.setTime(0); FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
@@ -120134,8 +120143,29 @@
      would tell him a working effect is broken — the line he has fought the app over (#460, #477, queue 690's Spin). The sweep's
      own middle (FM.fxNoopMoments) is offered as a moment to look at. CONTROLS: Strength 0 really does nothing and is still told
      so; the Once scan really is at rest 9.33 s in, where a looping scan would be right across the layer. */
+  /* H55. The seam the four verdict tests above use. It is checked here on the one thing a slow machine cannot change: a budget of 0
+     is over on every render, so a real no-op reads null (unknown), a lifted budget reads true, the call hands back the budget that
+     was in force, and no argument puts the shipped 45 ms back (NOOP_BUDGET_MS). Nothing in the app calls the seam. */
+  test('H55 the no-op probe budget seam: 0 makes every probe unknown, a lifted budget gives the verdict, and the shipped budget comes back', { item: 'H55' }, function () {
+    const T = FM.fxThumbs; if (!T || typeof T._noopBudget !== 'function') throw new Error('FM.fxThumbs._noopBudget is not reachable');
+    const saved = FM.scene.layers.slice(), t0 = FM.time, was = T._noopBudget(1e9);
+    try {
+      if (was !== 45) throw new Error('the shipped budget is ' + was + ' ms, not 45 (a test left the seam lifted, or NOOP_BUDGET_MS changed and this should say so)');
+      const L = FM.makeLayer('shape', { name: 'h55', shape: 'rect', x: FM.scene.project.width / 2, y: FM.scene.project.height / 2, shapeW: 200, shapeH: 100, fill: '#405060', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance('glowscan'); e.params.amount = 0; L.effects = [e];
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.time = 0;
+      if (T.effectDoesNothing(L, 0) !== true) throw new Error('CONTROL: with the budget lifted a Strength 0 Glow Scan is not measured as doing nothing');
+      if (T._noopBudget(0) !== 1e9) throw new Error('the seam did not return the budget that was in force');
+      if (T.effectDoesNothing(L, 0) !== null) throw new Error('with a budget of 0 the probe still gave a verdict - the budget is not read from the seam');
+      if (T._noopBudget() !== 0) throw new Error('calling the seam with no argument did not return the budget in force');
+      if (T._noopBudget() !== 45) throw new Error('calling the seam with no argument did not put the shipped 45 ms back');
+    } finally { T._noopBudget(was); FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.time = t0; }
+  });
+
   test('482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is', { item: '482', budgetMs: 60000 }, function () {
     const saved = FM.scene.layers.slice(), t0 = FM.time;
+    /* H55: this test checks the VERDICT, so the probe's 45 ms budget (null on a slow or throttled machine, by design) is lifted for it and put back below. */
+    const wasNoopBudget = FM.fxThumbs._noopBudget(1e9);
     try {
       const L = FM.makeLayer('shape', { name: '4826 scan', shape: 'rect', x: FM.scene.project.width / 2, y: FM.scene.project.height / 2, shapeW: 300, shapeH: 160, fill: '#405060', start: 1, duration: 10 });
       L.start = 1; L.duration = 10;
@@ -120151,7 +120181,7 @@
         const v = say(set);
         if (v !== false) throw new Error('a Glow Scan with ' + JSON.stringify(set) + ' on a 10 s clip is measured as ' + (v === true ? 'doing nothing' : 'unknown') + ' - its sweep falls between the moments the check looks at, so the panel tells him a working effect changes nothing');
       });
-    } finally { FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.time = t0; }
+    } finally { FM.fxThumbs._noopBudget(wasNoopBudget); FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.time = t0; }
   });
 
 

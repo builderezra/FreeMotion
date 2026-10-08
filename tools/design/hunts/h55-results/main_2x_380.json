@@ -1,0 +1,67 @@
+{
+ "ok": false,
+ "summary": "Regression 0/4 ✗Pending 0/0 built",
+ "failures": [
+  "FAILan effect that changes nothing on this layer is detected — and a working one is not (queue 477) — Channel Remap changes nothing on a flat #cc22cc fill (both red and blue are 204) and the check said null — which is the whole of his complaint",
+  "FAIL794: the does-nothing-here probe stays quiet for Time Warp Scan and its ghost-gated siblings, and still calls a real no-op dead — control: Channel Remap on a flat #cc22cc fill must still be called dead (got null three times) — the probe has gone quiet on everything",
+  "FAIL690 a Spin added at the start of its clip is not told it changes nothing while the box turns — CONTROL: a Spin at speed 0, which truly changes nothing, got no changes-nothing line after 1.3 s (no hint) — the check is not running here, so a missing line below would prove nothing",
+  "FAIL482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is — CONTROL: a Glow Scan at Strength 0 is not measured as doing nothing - the check is not running"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   3150,
+   "690 a Spin added at the start of its clip is not told it changes nothing while the box turns"
+  ],
+  [
+   1241,
+   "an effect that changes nothing on this layer is detected — and a working one is not (queue 477)"
+  ],
+  [
+   1011,
+   "794: the does-nothing-here probe stays quiet for Time Warp Scan and its ghost-gated siblings, and still calls a real no-op dead"
+  ],
+  [
+   65,
+   "482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "an effect that changes nothing on this layer is detected — and a working one is not (queue 477)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "794: the does-nothing-here probe stays quiet for Time Warp Scan and its ghost-gated siblings, and still calls a real no-op dead",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a Spin added at the start of its clip is not told it changes nothing while the box turns",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

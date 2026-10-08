@@ -1,0 +1,78 @@
+{
+ "ok": true,
+ "summary": "Regression 4/5 ✓ · NOT RUN HERE 1 Pending 0/0 built",
+ "failures": [],
+ "notRun": [
+  {
+   "name": "690 a Spin added at the start of its clip is not told it changes nothing while the box turns",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  }
+ ],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   6438,
+   "690 a Spin added at the start of its clip is not told it changes nothing while the box turns"
+  ],
+  [
+   5932,
+   "482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is"
+  ],
+  [
+   2018,
+   "an effect that changes nothing on this layer is detected — and a working one is not (queue 477)"
+  ],
+  [
+   1811,
+   "794: the does-nothing-here probe stays quiet for Time Warp Scan and its ghost-gated siblings, and still calls a real no-op dead"
+  ],
+  [
+   1134,
+   "H55 the no-op probe budget seam: 0 makes every probe unknown, a lifted budget gives the verdict, and the shipped budget comes back"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "an effect that changes nothing on this layer is detected — and a working one is not (queue 477)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "794: the does-nothing-here probe stays quiet for Time Warp Scan and its ghost-gated siblings, and still calls a real no-op dead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a Spin added at the start of its clip is not told it changes nothing while the box turns",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "H55 the no-op probe budget seam: 0 makes every probe unknown, a lifted budget gives the verdict, and the shipped budget comes back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}
