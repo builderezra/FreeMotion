@@ -161,6 +161,15 @@ def ws_url(port, timeout=25, proc=None):
     raise RuntimeError("Chrome's DevTools endpoint never came up")
 
 
+def _dump_open(path):
+    """queue 980: where --dump writes. A path ending .gz is written gzipped — a full probe record is ~10 MB of JSON, and the
+    lock writes a dozen of them on a disk that ran out mid-run on 1 Oct."""
+    if path.endswith(".gz"):
+        import gzip
+        return gzip.open(path, "wt", encoding="utf-8")
+    return open(path, "w", encoding="utf-8")
+
+
 class CDP:
     def __init__(self, url):
         self.ws = websocket.create_connection(url, timeout=600)
@@ -309,6 +318,13 @@ def main():
     # PER-OS BASELINES (6 Oct, #1071): tools/record-baselines.sh runs ?pinned=1&fmrecord=1 and needs what the page captured
     # (tests.js window.__fmBaselineRecord). Written to FILE; a run that published none writes null, and the recorder refuses.
     ap.add_argument("--record-baselines", default=None, metavar="FILE", help="write the page's baseline recording here")
+    # queue 980 (the "Full unchanged" lock, tools/full-unchanged.sh). Both are OPT-IN and change nothing for the suite:
+    # without them this file behaves exactly as before. --dump writes the TOP page's `window.__fmDump` (JSON) to a file
+    # when the page reports done; --shots answers the top page's `window.__fmWantShot = {seq, name, x, y, w, h}` with a
+    # PNG of that clip written to DIR/<name>.png, and sizes the viewport to exactly --width x --height (headless Chrome
+    # will not make a window narrower than 500 px, so a 380 px screenshot needs the metrics override).
+    ap.add_argument("--dump", default=None, help="write the page's window.__fmDump (JSON) here when it finishes")
+    ap.add_argument("--shots", default=None, help="directory: answer window.__fmWantShot requests with PNG files")
     a = ap.parse_args()
 
     url = a.url or f"http://localhost:{a.port}/tests/run.html"
@@ -437,6 +453,9 @@ def main():
             cdp.send("Inspector.enable")   # for Inspector.targetCrashed — see CDP.crashed
         except Exception:
             pass
+        if a.shots:
+            os.makedirs(a.shots, exist_ok=True)
+            cdp.send("Emulation.setDeviceMetricsOverride", width=a.width, height=a.height, deviceScaleFactor=1, mobile=False)
         cdp.send("Page.navigate", url=url)
         # THE SUITE IS WRITTEN FOR A BROWSER WITH A MOUSE, AND THAT IS NOW CHECKED, NOT ASSUMED (6 Oct, the WSL port). The
         # Mac's headless Chrome reports (hover: hover) and (pointer: fine): test 991's PC case throws without it, the 976
@@ -454,7 +473,7 @@ def main():
         payload = None
         last_seen = ""
         cpu = [1]
-        inp = {"touch_emu": False, "touch_down": False, "mouse_down": False}   # the real-input channel's state across requests (queue 924)
+        inp = {"touch_emu": False, "touch_down": False, "mouse_down": False, "touch_base": False}   # the real-input channel's state across requests (queue 924)
         # WHERE THE TIME GOES, WHILE IT GOES (30 Sep, v17.18). A timeout used to read lastTest ONCE, at the end — and when the
         # page had stopped answering by then it printed `"lastTest": ""`, which says nothing about an hour of suite. So the
         # running test is sampled every ~5 s: the timeout names the last test the page reported and how long it sat on it,
@@ -562,7 +581,10 @@ def main():
                     # ONE FINGER TEST PER PAGE on Linux (#1097, tests/_platform.py TOUCH_PAGE): the first emulation OFF took this
                     # page's mouse, so a second finger test here would run its (hover: hover) code without one — it is refused,
                     # by name, as NOT RUN rather than allowed to report a verdict it did not earn.
-                    if _touch and _platform.TOUCH_PAGE:
+                    # A PHONE PAGE (the lock's setup, `touch_base`) has had touch emulation ON since before the app booted and never
+                    # turns it off, so it never loses a mouse it does not have: its fingers are genuine on Linux too, and the one-
+                    # finger-test rule below is for pages that DO switch back to a mouse (#1097 + #980, 7 Oct).
+                    if _touch and _platform.TOUCH_PAGE and not inp["touch_base"]:
                         _nm = q.get("name") or track["name"]
                         if inp.get("touch_test") not in (None, _nm):
                             err = ("NOTRUN: this page already ran a finger test ('%s') and has had no mouse since — one finger test per "
@@ -571,7 +593,7 @@ def main():
                             _touch = False
                         else:
                             inp["touch_test"] = _nm
-                    if _touch and not _platform.REAL_TOUCH_VIA_EMULATION:
+                    if _touch and not _platform.REAL_TOUCH_VIA_EMULATION and not inp["touch_base"]:
                         err = "NOTRUN: needs real touch emulation (the phone's media state during a finger) — " + _platform.REAL_TOUCH_WHY
                         q["steps"] = []
                     try:
@@ -585,6 +607,10 @@ def main():
                                     inp["touch_emu"] = True
                                 typ = {"touchStart": "touchStart", "touchMove": "touchMove", "touchEnd": "touchEnd", "touchCancel": "touchCancel"}[t]
                                 pts = [] if typ in ("touchEnd", "touchCancel") else [{"x": x, "y": y, "id": 1}]
+                                # queue 980 (the second review): `pts` is several fingers at once — the probe's pinch
+                                if isinstance(st.get("pts"), list) and typ not in ("touchEnd", "touchCancel"):
+                                    pts = [{"x": float(p.get("x", 0)) + q["ox"], "y": float(p.get("y", 0)) + q["oy"], "id": i + 1}
+                                           for i, p in enumerate(st["pts"])]
                                 cdp.send("Input.dispatchTouchEvent", type=typ, touchPoints=pts)
                                 inp["touch_down"] = typ in ("touchStart", "touchMove")
                             elif t == "wheel":
@@ -640,7 +666,9 @@ def main():
                     finally:
                         # touch emulation stays on only while a finger is still down — a test may split one gesture across
                         # two requests (hold, act, then move and lift) — and goes off the moment none is
-                        if inp["touch_emu"] and not inp["touch_down"]:
+                        # …unless the page asked for a PHONE at setup (queue 980's probe): touch emulation is then the device
+                        # itself, on before the app loaded, and switching it off would turn the phone into a narrow PC
+                        if inp["touch_emu"] and not inp["touch_down"] and not inp["touch_base"]:
                             try:
                                 cdp.send("Emulation.setTouchEmulationEnabled", enabled=False)
                             except Exception:
@@ -688,6 +716,63 @@ def main():
                              "if(w){w.__fmGc=%s;w.__fmGcDone=%s;}})()" % (json.dumps(ans), json.dumps(want_gc)))
             except Exception:
                 pass
+            # THE "FULL UNCHANGED" PROBE'S TWO ASKS (queue 980, tests/full-unchanged.html). Asked by the TOP page, never by
+            # the suite, so a suite run never reaches either branch.
+            #  · `window.__fmWantSetup = {phone, reduce, init}` — answered ONCE with `__fmSetupDone` (1, or the error text), and the
+            #    probe waits for it before it loads the app frame, so the app boots already set up:
+            #      phone: a phone is a FINGER, not a narrow mouse — the app asks about the pointer (queue 797;
+            #             tools/shot.py does the same), so touch and (hover: none) go on;
+            #      init:  a script run in every NEW document before any of its own (Page.addScriptToEvaluateOnNewDocument)
+            #             — the probe seeds Math.random in the app frame with it, so a boot-time draw (which drop-hint
+            #             variant, the first shape hue) is the same on two runs of the same build.
+            #  · `window.__fmWantShot = {seq, name, x, y, w, h}`: a PNG of that clip, written to --shots/<name>.png, answered
+            #    with `__fmShotDone = seq` (and `__fmShotErr`). Ignored without --shots, so a page cannot write anywhere.
+            try:
+                want_set = cdp.eval("(function(){var q=window.__fmWantSetup;return (q && !window.__fmSetupDone) ? JSON.stringify(q) : null;})()")
+                if want_set:
+                    q = json.loads(want_set)
+                    perr = ''
+                    try:
+                        if q.get("init"):
+                            cdp.send("Page.addScriptToEvaluateOnNewDocument", source=str(q["init"]))
+                        feats = []
+                        if q.get("phone"):
+                            cdp.send("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=5)
+                            inp["touch_emu"] = True
+                            inp["touch_base"] = True
+                            feats += [{"name": "hover", "value": "none"}, {"name": "any-hover", "value": "none"},
+                                      {"name": "pointer", "value": "coarse"}, {"name": "any-pointer", "value": "coarse"}]
+                        #  reduce: the OS asking for less motion (queue 980, the second review: Full's reduced-motion path was
+                        #          never measured) — one emulation call, with the phone's features when it is a phone too
+                        if q.get("reduce"):
+                            feats.append({"name": "prefers-reduced-motion", "value": "reduce"})
+                        if feats:
+                            cdp.send("Emulation.setEmulatedMedia", features=feats)
+                        if q.get("phone") and not cdp.eval("matchMedia('(hover: none)').matches"):
+                            perr = 'the phone emulation did not take: (hover: none) does not match'
+                        if q.get("reduce") and not cdp.eval("matchMedia('(prefers-reduced-motion: reduce)').matches"):
+                            perr = 'the reduced-motion emulation did not take: (prefers-reduced-motion: reduce) does not match'
+                    except Exception as ex:
+                        perr = str(ex)[:300]
+                    cdp.eval("window.__fmSetupDone = %s" % json.dumps(perr or 1))
+                want_shot = cdp.eval("(function(){var q=window.__fmWantShot;if(!q||typeof q.seq!=='number'||window.__fmShotDone===q.seq) return null;"
+                                     "return JSON.stringify(q);})()") if a.shots else None
+                if want_shot:
+                    q = json.loads(want_shot)
+                    serr = ''
+                    try:
+                        name = "".join(ch for ch in str(q.get("name", "shot")) if ch.isalnum() or ch in "-_.")[:120] or "shot"
+                        shot = cdp.send("Page.captureScreenshot", format="png",
+                                        clip={"x": float(q.get("x", 0)), "y": float(q.get("y", 0)),
+                                              "width": float(q.get("w", a.width)), "height": float(q.get("h", a.height)), "scale": 1})
+                        import base64
+                        with open(os.path.join(a.shots, name + ".png"), "wb") as fh:
+                            fh.write(base64.b64decode(shot["data"]))
+                    except Exception as ex:
+                        serr = str(ex)[:300]
+                    cdp.eval("window.__fmShotErr=%s;window.__fmShotDone=%s;" % (json.dumps(serr), json.dumps(q["seq"])))
+            except Exception:
+                pass
             try:
                 payload = cdp.eval("(function(){"
                                    "var s=document.getElementById('sum');"
@@ -722,6 +807,13 @@ def main():
             # was the only way to say which tests had grown
             if not last_seen and track["name"]:
                 last_seen = track["name"]
+            if a.dump:
+                # queue 980: how far the probe got, for the timeout message (its own __fmDump.step says where it was)
+                try:
+                    with _dump_open(a.dump) as fh:
+                        fh.write(cdp.eval("JSON.stringify({timedOut:true, partial: window.__fmDump || null})") or "null")
+                except Exception:
+                    pass
             print(json.dumps({"ok": False, "error": "suite did not finish within %ds" % a.timeout,
                               "lastTest": last_seen, "onItSeconds": round(time.time() - track["since"]),
                               "testsSeen": track["n"], "pageSilentSeconds": round(time.time() - track["last_ok"]),
@@ -729,6 +821,16 @@ def main():
             return 2
 
         data = json.loads(payload)
+        if a.dump:
+            # queue 980: the probe's records, written whatever the verdict — a probe that died half-way still says how far it got
+            try:
+                dumped = cdp.eval("(function(){try{return JSON.stringify(window.__fmDump===undefined?null:window.__fmDump);}"
+                                  "catch(e){return JSON.stringify({dumpError:String(e)});}})()")
+                with _dump_open(a.dump) as fh:
+                    fh.write(dumped or "null")
+            except Exception as ex:
+                with _dump_open(a.dump) as fh:
+                    fh.write(json.dumps({"dumpError": str(ex)[:300]}))
         # queue 996: what each test left in the shared scene (tests.js records it; report only)
         try:
             leaks = cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
@@ -809,6 +911,16 @@ def main():
 
 
 if __name__ == "__main__":
+    # A SIGTERM IS AN EXIT, SO THE `finally` RUNS (queue 980 review, 1 Oct). Python's default for SIGTERM is to die on the
+    # spot, which skips main()'s finally — Chrome is left running and its fm-cdp- profile (~50 MB) is left in $TMPDIR. A run
+    # in the background cannot be stopped with SIGINT either (a backgrounded child inherits it as ignored), so TERM is how
+    # tools/full-unchanged.sh, ship.sh and a timed-out Bash call stop this — and now it cleans up after itself.
+    import signal
+
+    def _on_term(signum, _frame):
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _on_term)
     # EXIT 1 MEANS "RAN AND WAS RED", AND NOTHING ELSE MAY SAY IT (6 Oct, the PM's port review). An uncaught exception —
     # Page.enable refused, a result that is not JSON — used to leave a traceback and exit 1, the red code, with nothing a
     # reader could act on. Whatever escapes main() is a run that did not reach a verdict: exit 2, with the error in the JSON.
