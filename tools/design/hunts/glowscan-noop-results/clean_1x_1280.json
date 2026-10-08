@@ -1,0 +1,33 @@
+(removed 1 profile folder(s) left behind by earlier runs)
+{
+ "ok": true,
+ "summary": "Regression 1/1 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   1796,
+   "482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}
