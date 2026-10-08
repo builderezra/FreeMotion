@@ -1,0 +1,34 @@
+{
+ "ok": false,
+ "summary": "Regression 0/1 ✗Pending 0/0 built",
+ "failures": [
+  "FAILS4c the phone ‹ in Simple says Projects with a clip selected (it goes Home), and in Full it still says Close clip options — in Simple with a clip selected the phone ‹ says \"Close clip options\" but it leaves the project"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   775,
+   "S4c the phone ‹ in Simple says Projects with a clip selected (it goes Home), and in Full it still says Close clip options"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "S4c the phone ‹ in Simple says Projects with a clip selected (it goes Home), and in Full it still says Close clip options",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

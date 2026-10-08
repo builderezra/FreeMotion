@@ -1,0 +1,240 @@
+{
+ "ok": false,
+ "summary": "Regression 25/30 ✗Pending 0/0 built",
+ "failures": [
+  "FAIL921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders — the video has no decoded element in the registry after arriving, so nothing could ever draw it",
+  "FAILS4a Simple: typing 1 in Speed % cannot make a ten-minute clip - the box stops at 25 % and 400 %, and Full keeps its 1 to 1000 — in Simple, typing 1 gave speed 0.01 and a clip 300.0 s long",
+  "FAILS4b the ✦ badge: a plain effect earns none (as designed), a keyframed one does, and a keyframed effect made in Simple (sm = 1) does not — an effect made in Simple (sm = 1) keyframes and all earned the ✦ (look) - DESIGN §8.5c / §9.1: level none",
+  "FAILS4c the phone ‹ in Simple says Projects with a clip selected (it goes Home), and in Full it still says Close clip options — in Simple with a clip selected the phone ‹ says \"Close clip options\" but it leaves the project",
+  "FAILS4d Simple: a slow swipe that starts on a More-panel card does not raise its Reset menu, a still hold does — at phone a slow swipe that started on the Speed card raised \"Reset Speed\" 480 ms after the touch"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   9866,
+   "921 S4 review: a file whose bytes never match its declared size is asked for twice and then left alone"
+  ],
+  [
+   6117,
+   "921 S4 tier 3: a clip a guest adds reaches the host and every other peer, and draws there"
+  ],
+  [
+   5838,
+   "921 S4 review: a device that runs out mid-transfer says “This device is full” instead of a bar frozen for ever"
+  ],
+  [
+   2349,
+   "S4d Simple: a slow swipe that starts on a More-panel card does not raise its Reset menu, a still hold does"
+  ],
+  [
+   2022,
+   "921 S4 the manifest groups one file for every layer that uses it, so a split and a duplicate transfer zero extra bytes"
+  ],
+  [
+   1836,
+   "921 S4 review: one file, one job per peer — a flood of wants does not open a transfer each"
+  ],
+  [
+   1690,
+   "921 S4 review: a sender that restarts from zero cannot have its new part 0 deleted by the drop of the old one"
+  ],
+  [
+   1428,
+   "921 S4 review: the progress card’s × dismisses it, and a failure he has not seen still gets through"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "921 S4 the manifest groups one file for every layer that uses it, so a split and a duplicate transfer zero extra bytes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a link that dies mid-file resumes from the bytes already kept, and what lands is byte-identical",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 the boot sweep never collects a half-arrived file, and neither does the media collector",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a device with no room says so and writes nothing beyond what fits",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a guest export waits for the media it still needs, and “Export anyway” goes ahead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 replacing a clip keeps the one it replaced, and undoing the replace puts it back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a font crosses with the document and is applied on the far side, byte for byte",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a manifest naming a layer id this device holds in ANOTHER project writes nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 tier 3: a clip a guest adds reaches the host and every other peer, and draws there",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 tier 3: the clips arrive into the guest’s own copy and not one byte of its own projects moves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a replace HE makes during a session keeps HIS footage in the stash, not the file that replaced it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a clip that arrives late never overwrites the one he imported while it was downloading",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: two peers uploading at once do not cross their files — a transfer is named by its peer as well as its xid",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a file that fails at the last step is asked for again, instead of being dropped for the whole session",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: ending a session collects the abandoned parts the rooms before it left behind",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a sender that restarts from zero cannot have its new part 0 deleted by the drop of the old one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: the progress card’s × dismisses it, and a failure he has not seen still gets through",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a device that runs out mid-transfer says “This device is full” instead of a bar frozen for ever",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a timeline rebuild does not lose the missing-clip markers",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a file whose bytes never match its declared size is asked for twice and then left alone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a 90 MB “font” is refused before a byte of it moves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a peer cannot register a face under a built-in family name",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: one file, one job per peer — a flood of wants does not open a transfer each",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: only the peer a file is sourced from can say it no longer has it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a “miss” answer frees the in-flight slot it was holding",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "S4a Simple: typing 1 in Speed % cannot make a ten-minute clip - the box stops at 25 % and 400 %, and Full keeps its 1 to 1000",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "S4b the ✦ badge: a plain effect earns none (as designed), a keyframed one does, and a keyframed effect made in Simple (sm = 1) does not",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "S4c the phone ‹ in Simple says Projects with a clip selected (it goes Home), and in Full it still says Close clip options",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "S4d Simple: a slow swipe that starts on a More-panel card does not raise its Reset menu, a still hold does",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}
