@@ -23,7 +23,7 @@
 
 Files touched: `js/compositor.js` (patches 1, 4, 5, 8, 12, 13), `js/exporter.js` (5, 6, 14), `js/storage.js` (7, 10, 12), `js/fx-thumbs.js` (3), `tests/tests.js` (all test hunks). **Conflicts:** none in `js/` at any step (every `cherry-pick` and `git am` clean, also against v17.27). The test hunks all want the same append point in `tests/tests.js`, so the format-patch set was built by committing each test block just before `async function run()`; they apply with plain `git am`. Each code file passes `node --check` after the last patch. Patches 1 and 8 both change compositor plate pools but in different pools, 4 and 5 both touch the compositor idle path in different functions; the suite and the 14 added tests are the evidence they do not interfere.
 
-**Order matters only mildly:** 2 needs 1, 9 needs 8, 11 needs 10, and 14 changes `exporter.js` after 5 and 6 did. Any other order I tried applied too, but I only ran the tested order.
+**Order matters only mildly:** 2 needs 1, 9 needs 8, 11 needs 10, and 14 changes `exporter.js` after 5 and 6 did. I only applied and tested this order; other orders are untried (Guess: the independent ones commute).
 
 ## The full suite, stack versus baseline (Measured)
 
@@ -51,7 +51,7 @@ Same script on a clean main tree (served from a worktree) and on the stack tree:
 
 Reading it: the saving appears where the patches act. Nothing changes at boot or after the import (+2 to -4 MB VmData is noise). After the effects sweep the stack holds 69 fewer canvases and 161 MB less RSS (the fx-thumbs cap and the pool trims), through editing 169 MB less, and after the export 167 MB less. The last row is the one that matters on a phone: 45 s after the export the stack has let go of its export plates and idle pools (127 canvases and 28 Mpx against 207 and 80 Mpx), **RSS 571 MB against 830 MB**. The JS heap is 5.5 MB in both, so everything saved is canvas and native memory, which is what these patches target.
 
-Caveats, honestly: one run per tree (no repeat; run-to-run noise on RSS here is about 30 MB from the H40 repeats), a 4-core Linux container and not an iPhone, hardware GL off, VP8 clips because this Chromium has no H.264, and a lighter effects sweep than a real ten minutes. Treat the 31% as the right order of magnitude for this session, not a promise for a device.
+Caveats, honestly: one run per tree (no repeat, so I cannot give a noise band; stage 1 RSS is +10 MB on the stack with no patch acting yet, which is the only hint), a 4-core Linux container and not an iPhone, hardware GL off, VP8 clips because this Chromium has no H.264, and a lighter effects sweep than a real ten minutes. Treat the 31% as the right order of magnitude for this session, not a promise for a device.
 
 ## Reproduce
 
