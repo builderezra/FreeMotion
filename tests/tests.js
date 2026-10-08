@@ -60592,6 +60592,8 @@
       await realInput924([{ t: 'touchEnd', x: B.r.left + B.r.width * 0.8, y: A.y, ms: 0 }], 'lifting');
       await v.idle();
       if (smOrder() !== 'BAC' || v.steps() !== n0 + 1) throw new Error('the held drag did not reorder in one step: ' + smOrder());
+      await v.sleep(300);
+      if (FM.scene.selectedId) throw new Error('the click a finger’s release makes selected ' + FM.scene.selectedId + ' (js/simple-timeline.js swallows it; on a mouse Chromium sends that click to the row, so only a finger proves the swallow)');
       const s0 = document.getElementById('sm-scroll').scrollLeft, C = smCtr(smNode(v.L('C').id));
       await realInput924([{ t: 'touchStart', x: C.x, y: C.y, ms: 60 }, { t: 'touchMove', x: C.x - 40, y: C.y, ms: 60 }, { t: 'touchMove', x: C.x - 90, y: C.y, ms: 60 }, { t: 'touchEnd', x: C.x - 90, y: C.y, ms: 0 }], 'a swipe on a clip');
       if (smG()) throw new Error('a swipe armed a drag');
