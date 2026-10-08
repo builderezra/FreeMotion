@@ -2273,6 +2273,54 @@ window.FM = window.FM || {};
     plan.live = line(on ? 'rideVolOn' : 'rideVolOff');
     return plan;
   };
+  /* ═══════════════ RELEASE 2.5: what a drag needs from the engine (DESIGN §3.8, §3.6 Reorder / Lift / Into row) ═══════════════
+     A drag previews in the DOM only and commits through the same S.cmd as its button; these are the three things the buttons did not need. */
+  /* THE ARM GATE (§3.8): null, or the reason a hold or a grip must not start. Read when a gesture arms and again on release; the runner's own
+     checks stay as the backstop. 'view' / 'comment' / 'outbox' (the room), 'newer', 'offline' / 'live' (a friend who can edit), 'gone',
+     'locked', 'busy' (a friend holds it). */
+  S.canArrange = function (id) {
+    const ro = S.roReason(); if (ro) return ro;
+    if (S.newerSchema()) return 'newer';
+    const g = S.arrangeGate(); if (g) return g;
+    const map = byIdMap(); if (!map.get(id)) return 'gone';
+    if (unitLayers(id, map).some(l => l.locked)) return 'locked';
+    if (S.blockers({ touched: new Set([id]) })) return 'busy';
+    return null;
+  };
+  /* the line for a reason S.canArrange returned, through the same refuse() the runner uses. 'locked' is the one reason a gesture does NOT stop at
+     (the Simple timeline lets the drag run and the runner asks at the release, with its own Do it anyway, so the retry is one step). */
+  S.explain = function (kind, id) { return refuse(kind, { ids: [id] }, S.classify(FM.scene)); };
+  /* WHERE A DRAGGED CLIP LANDS: the index j that planReorder takes (before entry j; R.main.length is the end) for a clip whose CENTRE is at
+     time tc. The first other clip whose midpoint is after tc is the one it goes before. Pure, so the suite can drive it without a finger. */
+  S.moveTargetFor = function (R, id, tc) {
+    const i = mainIdx(R, id); if (i < 0) return -1;
+    for (let k = 0; k < R.main.length; k++) {
+      const e = R.main[k]; if (e.slot || k === i) continue;
+      if (tc < (e.start + e.end) / 2) return k;
+    }
+    return R.main.length;
+  };
+  /* AN ITEM IN TIME (§3.8 "moves an item in time"): a text, overlay or sound goes to `ns` (clamped at 0), its members with it. Nothing else moves. */
+  S.planMoveItem = function (R, id, ns) {
+    const map = byIdMap(), l = map.get(id), u = R.units[id];
+    if (!l || !u || R.isMain(id)) return refusePlan('gone');
+    ns = Math.max(0, +ns);
+    const d = ns - (+l.start || 0);
+    if (!(Math.abs(d) > 1e-6)) return refusePlan('noMove');
+    const plan = newPlan('Move item');
+    unitLayers(id, map).forEach(m => addMove(plan, m.id, d));
+    plan.touched.add(id);
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    plan.time = ns;
+    plan.live = line('itemMoved', S.itemWord(l, R), ns);
+    plan.pulse = [id];
+    return plan;
+  };
+  Object.assign(S.cmd, {
+    moveTo(id, j) { return S.edit('Move clip', R => S.planReorder(R, id, j)); },
+    moveItem(id, ns) { return S.edit('Move item', R => S.planMoveItem(R, id, ns)); }
+  });
+
   Object.assign(S.cmd, {
     sortByDate() { return S.edit('Sort by date', R => S.planSort(R)); },
     rideVol(id, on) { return S.edit(on ? 'Keep volume with the clips' : 'Leave volume where it is', R => S.planRideVol(R, id, on)); },

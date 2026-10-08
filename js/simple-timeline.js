@@ -42,6 +42,7 @@ window.FM = window.FM || {};
     scroller.addEventListener('scroll', () => {
       const sL = scroller.scrollLeft;
       if (Math.abs(sL - lastProg) < 1) return;   // our own write
+      if (G && G.phase === 'drag') { lastProg = sL; return; }   // 2.5: an edge scroll belongs to the drag; the time is adopted on release
       lastProg = sL; userScrollAt = performance.now();
       clearTimeout(settleT); settleT = setTimeout(() => { userScrollAt = 0; FM.simpleTimeline.updatePlayhead(); }, 160);
       const dur = (FM.scene.project && FM.scene.project.duration) || 0;
@@ -60,6 +61,12 @@ window.FM = window.FM || {};
         if (FM.selectLayer && FM.scene.selectedId) FM.selectLayer(null);
       }
     });
+    inner.addEventListener('pointerdown', onItemDown);
+    scroller.addEventListener('pointerdown', onTouchPtr, true); scroller.addEventListener('pointermove', onTouchPtr, true);
+    scroller.addEventListener('pointerup', onTouchPtr, true); scroller.addEventListener('pointercancel', onTouchPtr, true);
+    /* an armed drag owns the finger: the page must not scroll under it (iOS needs a non-passive touchmove for this) */
+    document.addEventListener('touchmove', e => { if (G && G.phase === 'drag' && e.cancelable) e.preventDefault(); }, { passive: false });
+    root.addEventListener('click', e => { if (nowMs() < swallowUntil) { swallowUntil = 0; e.stopPropagation(); e.preventDefault(); } }, true);   // the click a drag's release makes is not a tap
     wireSay();
     return true;
   }
@@ -205,9 +212,259 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ═══════════════ RELEASE 2.5: DRAGS (DESIGN §3.8, §8.2 Gestures) ═══════════════
+     Hold 350 ms (touch and pen; a mouse moves at once, as in Full) and drag a main clip to reorder it, up past the row to lift it; an
+     overlay, text or sound moves in time and an overlay dragged down onto the clip row goes into it; the selected clip's two grips trim
+     it with a length readout; two fingers zoom. NOTHING is written until release: the preview is boxes moving in the DOM, then one
+     FM.spine.cmd call, the same one its button makes, so every refusal, ask and Undo already exists. The arm gate (FM.spine.canArrange)
+     is read when the gesture arms and again on release. The edge auto-scroll below is a COPY of Full's clipEdgeScroll / trimEdgeScroll
+     with the same four brakes (§0.4 I9: Full's two loops are not touched). */
+  const HOLD_MS = 350, SLOP = 8, MOUSE_SLOP = 4, LIFT_PX = 24, LIFT_MS = 150, EDGE_MAX = 22, SCROLL_FRAMES_MAX = 1200, GRIP_HIT = 24, GRIP_CAP = 13, SNAP_PX = 7, STALE_MS = 4000;
+  let G = null, swallowUntil = 0, labelEl = null, pinch = null;
+  const touches = new Map();
+  const gateOf = id => (FM.spine && FM.spine.canArrange) ? FM.spine.canArrange(id) : null;
+  const hardGate = r => !!r && r !== 'locked';   // 'locked' does not stop a drag: the runner asks at the release, with its own Do it anyway
+  const nowMs = () => performance.now();
+  const clientToT = x => { const r = scroller.getBoundingClientRect(); return (x - r.left + scroller.scrollLeft - origin()) / pps(); };
+  const mainNodes = () => Array.from(mainEl.querySelectorAll('.sm-clip'));
+  const nodeOf = id => mainEl.querySelector('.sm-item[data-id="' + id + '"]');
+
+  function setLabel(text, x, y) {
+    if (!text) { if (labelEl) { labelEl.remove(); labelEl = null; } return; }
+    if (!labelEl) { labelEl = el('div', 'sm-dragtip'); labelEl.setAttribute('role', 'status'); document.body.appendChild(labelEl); }
+    labelEl.textContent = text;
+    labelEl.style.left = Math.max(8, Math.min(window.innerWidth - 8, x)) + 'px'; labelEl.style.top = Math.max(8, y - 34) + 'px';
+  }
+  function clearPreview() {
+    mainNodes().forEach(n => { n.style.transform = ''; n.classList.remove('sm-held', 'sm-ghost'); });
+    root.querySelectorAll('.sm-held').forEach(n => { n.style.transform = ''; n.classList.remove('sm-held', 'sm-ghost'); });
+    document.body.classList.remove('sm-dragging');
+    setLabel(null);
+  }
+  function stopLoop() { if (G && G.raf) { cancelAnimationFrame(G.raf); G.raf = 0; } }
+  function teardown() {
+    if (!G) return;
+    clearTimeout(G.timer); stopLoop();
+    window.removeEventListener('pointermove', onMove, true); window.removeEventListener('pointerup', onUp, true); window.removeEventListener('pointercancel', onCancel, true);
+    try { if (G.capEl && G.capEl.releasePointerCapture) G.capEl.releasePointerCapture(G.pid); } catch (e) {}
+    G = null;
+  }
+  /* the stale-gesture recovery (§3.8): the boxes glide back, nothing was written, and the line says why */
+  function abort(sayKind, id) {
+    if (!G) return false;
+    const was = G.phase === 'drag', dirty = G.dirty;
+    root.classList.add('sm-gliding'); setTimeout(() => root && root.classList.remove('sm-gliding'), 260);
+    clearPreview(); teardown();
+    if (was && dirty && FM.timeline) FM.timeline.rebuild();
+    else if (was) refreshNodes();
+    if (sayKind && FM.spine && FM.spine.explain) FM.spine.explain(sayKind, id);
+    return was;
+  }
+  function refreshNodes() { if (FM.editor && FM.editor.isSimple() && FM.timeline) FM.timeline.rebuild(); }
+
+  /* ── arming ── */
+  function onItemDown(e) {
+    if (e.button > 0 || G || pinch || !R) return;
+    swallowUntil = 0;   // a new press is a new gesture: the click only a drag's release makes is spent
+    const t = e.target && e.target.closest ? e.target.closest('.sm-item') : null;
+    if (!t || !t.dataset.id || t.closest('.sm-grip, .sm-chip, .sm-add, .sm-mute, .sm-band, .sm-more')) return;
+    if (t.classList.contains('sm-loading')) return;
+    const id = t.dataset.id, L = FM.layerById(FM.scene, id); if (!L) return;
+    const e0 = R.main.find(x => !x.slot && x.id === id);
+    G = { kind: 'move', phase: 'wait', id: id, pid: e.pointerId, ptype: e.pointerType || 'mouse', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
+          node: t, capEl: t, main: !!(R.isMain && R.isMain(id)), overlayish: !!(R.units[id] && (R.units[id].kind === 'overlay')), mode: (R.isMain && R.isMain(id)) ? 'reorder' : 'time', pend: null, pendAt: 0, j: -1, ns: null, scrollFrames: 0, edgeScrolled: false, raf: 0, timer: 0,
+          start0: +L.start || 0, dur0: +L.duration || 0, entry: e0 || null, projDur0: (FM.scene.project && FM.scene.project.duration) || 0, touchAt: nowMs(), dirty: false, moved: false };
+    window.addEventListener('pointermove', onMove, true); window.addEventListener('pointerup', onUp, true); window.addEventListener('pointercancel', onCancel, true);
+    if (G.ptype !== 'mouse') G.timer = setTimeout(arm, HOLD_MS);
+  }
+  function arm() {
+    if (!G || G.phase !== 'wait') return;
+    clearTimeout(G.timer);
+    const r = gateOf(G.id), id = G.id;
+    if (hardGate(r)) { clearPreview(); teardown(); FM.spine.explain(r, id); return; }   // no preview: the finger scrubs as in Full, and the line says why
+    G.phase = 'drag'; G.touchAt = nowMs(); G.armedAt = nowMs();
+    try { G.capEl.setPointerCapture(G.pid); } catch (e) {}
+    G.node.classList.add('sm-held', 'sm-ghost'); document.body.classList.add('sm-dragging');
+    if (G.ptype !== 'mouse' && navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
+    loop();
+  }
+  function onGripDown(e) {
+    if (e.button > 0 || G || pinch || !R) return;
+    const gp = e.currentTarget, id = gp.dataset.id, L = FM.layerById(FM.scene, id), e0 = R.main.find(x => !x.slot && x.id === id);
+    if (!L || !e0) return;
+    e.stopPropagation(); e.preventDefault();
+    const r = gateOf(id); if (hardGate(r)) { FM.spine.explain(r, id); return; }
+    G = { kind: 'trim', phase: 'drag', side: gp.dataset.side, id: id, pid: e.pointerId, ptype: e.pointerType || 'mouse', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, node: nodeOf(id), capEl: gp,
+          scrollFrames: 0, edgeScrolled: false, raf: 0, timer: 0, start0: +L.start || 0, dur0: +L.duration || 0, entry: e0, projDur0: (FM.scene.project && FM.scene.project.duration) || 0, touchAt: nowMs(), dirty: false, moved: false, edge: null };
+    try { gp.setPointerCapture(e.pointerId); } catch (er) {}
+    window.addEventListener('pointermove', onMove, true); window.addEventListener('pointerup', onUp, true); window.addEventListener('pointercancel', onCancel, true);
+    document.body.classList.add('sm-dragging');
+    loop(); render();
+  }
+
+  /* ── moving ── */
+  function onMove(e) {
+    if (!G || e.pointerId !== G.pid) return;
+    G.x = e.clientX; G.y = e.clientY; G.touchAt = nowMs();
+    if (G.phase === 'wait') {
+      const dist = Math.hypot(G.x - G.x0, G.y - G.y0);
+      if (G.ptype === 'mouse') { if (dist > MOUSE_SLOP) arm(); }
+      else if (dist > SLOP) { clearPreview(); teardown(); return; }   // a swipe before the hold fired: the finger scrubs, nothing arms
+      if (!G || G.phase !== 'drag') return;
+    }
+    if (e.cancelable) e.preventDefault();
+    G.moved = true;
+    render();
+  }
+  /* The pieces of the preview. Only boxes move; the scene is not touched. */
+  function render() {
+    if (!G || G.phase !== 'drag' || !mainEl) return;
+    const p = pps(), dx = G.x - G.x0, dy = G.y - G.y0, now = nowMs();
+    if (G.kind === 'trim') return renderTrim(p, dx);
+    const mainTop = mainEl.getBoundingClientRect().top;
+    const want = G.main ? (G.y < mainTop - LIFT_PX ? 'lift' : 'reorder') : (G.overlayish && G.y > mainTop + 6 ? 'drop' : 'time');
+    if (want !== G.mode) { if (G.pend !== want) { G.pend = want; G.pendAt = now; } else if (now - G.pendAt >= LIFT_MS) { G.mode = want; G.pend = null; } }
+    else G.pend = null;
+    G.node.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    const nodes = mainNodes(); nodes.forEach(n => { if (n !== G.node) n.style.transform = ''; });
+    if (G.main && G.entry) {
+      const i = R.main.findIndex(x => x.id === G.id), c = R.main[i], nx = R.main[i + 1];
+      const len = (nx ? nx.start - c.start : c.end - c.start) * p;
+      const slide = (from, to, by) => R.main.forEach((en, k) => { if (!en.slot && k >= from && k < to && en.id !== G.id) { const n = nodeOf(en.id); if (n) n.style.transform = 'translateX(' + by + 'px)'; } });
+      if (G.mode === 'lift') { slide(i + 1, R.main.length, -len); G.j = -1; setLabel((W().tools || {}).liftLabel || 'Make overlay', G.x, G.y); }
+      else {
+        const tc = (c.start + c.end) / 2 + dx / p, j = FM.spine.moveTargetFor(R, G.id, tc); G.j = j;
+        if (j > i + 1) slide(i + 1, j, -len); else if (j >= 0 && j < i) slide(j, i, len);
+        const num = (j > i ? j : j) , count = R.main.filter(x => !x.slot).length;
+        setLabel(j === i || j === i + 1 ? '' : ((W().lines || {}).moved ? W().lines.moved(FM.spine.itemWord(FM.layerById(FM.scene, G.id), R), R.main.slice(0, j > i ? j : j).filter(x => !x.slot && x.id !== G.id).length + 1, count) : ''), G.x, G.y);
+      }
+    } else if (G.mode === 'drop') { setLabel((W().tools || {}).dropLabel || 'Put in the clip row', G.x, G.y); }
+    else {
+      const raw = Math.max(0, G.start0 + dx / p), ns = snapStart(raw, G.dur0, p); G.ns = ns;
+      setLabel(ns.toFixed(1) + ' s', G.x, G.y);
+    }
+  }
+  /* BENCHMARK SNAP, within SNAP_PX screen pixels: the playhead, 0, markers, clip edges, other items' edges; start or end of the moved item */
+  function snapStart(raw, dur, p) {
+    const marks = ((FM.scene.project && FM.scene.project.markers) || []).map(m => m.t);
+    const pts = [0, FM.time || 0].concat(marks, R.main.filter(x => !x.slot).reduce((a, x) => a.concat([x.start, x.end]), []));
+    FM.scene.layers.forEach(l => { if (l.id !== G.id && l.type !== 'camera') { pts.push(+l.start || 0, (+l.start || 0) + (+l.duration || 0)); } });
+    let best = null, bd = SNAP_PX / p;
+    pts.forEach(t => { [[t, raw], [t - dur, raw]].forEach(c => { const d = Math.abs(c[1] - c[0]); if (d < bd) { bd = d; best = c[0]; } }); });
+    return best != null ? Math.max(0, best) : (FM.snapFrame ? FM.snapFrame(raw) : raw);
+  }
+  function renderTrim(p, dx) {
+    const e0 = G.entry, ml = (FM.spine && FM.spine.minLen) ? FM.spine.minLen((FM.scene.project && FM.scene.project.fps) || 30) : 0.1, node = G.node; if (!node) return;
+    const fr = t => (FM.snapFrame ? FM.snapFrame(t) : t);
+    let a = e0.start, b = e0.end;
+    if (G.side === 'tail') b = Math.max(a + ml, fr(e0.end + dx / p)); else a = Math.min(b - ml, fr(e0.start + dx / p));
+    G.edge = G.side === 'tail' ? b : a;
+    node.style.left = (origin() + a * p) + 'px'; node.style.width = Math.max(4, (b - a) * p) + 'px';
+    const grip = G.capEl; if (grip) grip.style.left = (G.side === 'tail' ? origin() + b * p - (GRIP_HIT - GRIP_CAP) : origin() + a * p - GRIP_CAP) + 'px';
+    setLabel((b - a).toFixed(1) + ' s', G.x, G.y);
+  }
+  /* ── the edge auto-scroll: Full's four brakes, copied (frame cap, far limit frozen at the start, stop at the ceiling, origin shift) ── */
+  function loop() { if (G && !G.raf) G.raf = requestAnimationFrame(tick); }
+  function tick() {
+    if (!G) return;
+    G.raf = 0;
+    if (G.phase !== 'drag') return;
+    G.touchAt = nowMs();   // an edge-hold IS a live gesture: the finger stops moving and this loop does the travelling
+    render();   // the hold for lift / drop mode is a clock, so a still finger still switches
+    const rect = scroller.getBoundingClientRect(), zone = Math.min(46, Math.max(12, Math.round(rect.width * 0.06)));
+    let v = 0;
+    if (G.x > rect.right - zone) v = Math.min(EDGE_MAX, ((G.x - (rect.right - zone)) / zone) * EDGE_MAX);
+    else if (G.x < rect.left + zone) v = -Math.min(EDGE_MAX, (((rect.left + zone) - G.x) / zone) * EDGE_MAX);
+    if (v !== 0 && ++G.scrollFrames <= SCROLL_FRAMES_MAX) {                                     // brake 2
+      const pinned = v > 0 && ((G.kind === 'move' && G.main && G.mode === 'reorder' && G.j >= R.main.length) || (G.kind === 'trim' && G.side === 'tail' && G.atCap));   // brake 4
+      if (!pinned) {
+        if (v > 0) {                                                                              // brake 3: the limit from where it STARTED, never from where it is
+          const far = Math.max(G.projDur0, G.start0 + G.dur0, R.trackEnd + G.dur0), limit = origin() + far * pps() + scroller.clientWidth;
+          const need = Math.min(limit, scroller.scrollLeft + scroller.clientWidth + v + 120);
+          if ((parseFloat(inner.style.width) || 0) < need) inner.style.width = need + 'px';
+        }
+        const before = scroller.scrollLeft;
+        scroller.scrollLeft = Math.max(0, before + v);
+        const moved = scroller.scrollLeft - before;
+        if (moved) { G.edgeScrolled = true; G.x0 -= moved; lastProg = scroller.scrollLeft; render(); }   // brake 1: nothing moved, nothing re-armed
+      }
+    }
+    G.raf = requestAnimationFrame(tick);
+  }
+
+  /* ── letting go ── */
+  function onUp(e) {
+    if (!G || e.pointerId !== G.pid) return;
+    const g = G;
+    if (g.phase === 'wait') { clearPreview(); teardown(); return; }   // a tap: the click selects, nothing was armed
+    G.x = e.clientX; G.y = e.clientY; render();
+    const id = g.id;
+    swallowUntil = nowMs() + 250;
+    const out = { mode: g.mode, j: g.j, ns: g.ns, edge: g.edge, kind: g.kind, side: g.side, id: id, edgeScrolled: g.edgeScrolled, main: g.main, start0: g.start0, dur0: g.dur0, entryI: R.main.findIndex(x => x.id === id) };
+    clearPreview(); teardown();
+    commit(out);
+  }
+  function onCancel(e) { if (G && e.pointerId === G.pid) abort(null); }
+  function commit(o) {
+    const id = o.id, L = FM.layerById(FM.scene, id);
+    const r = gateOf(id);
+    if (hardGate(r)) { refreshNodes(); FM.spine.explain(r, id); return; }                          // the gate is read AGAIN on release
+    const R2 = FM.spine.read(FM.scene);
+    if (!L || (o.kind === 'move' && !!R2.isMain(id) !== !!o.main) || (o.kind === 'trim' && ((+L.start || 0) !== o.start0 || (+L.duration || 0) !== o.dur0))) {
+      refreshNodes(); FM.spine.say(((W().lines || {}).changedWhileDragging) || 'Clips changed while you were dragging · try again'); return;
+    }
+    let ran;
+    if (o.kind === 'trim') ran = o.side === 'tail' ? FM.spine.cmd.trimTail(id, o.edge) : FM.spine.cmd.trimHead(id, o.edge);
+    else if (o.mode === 'lift') ran = FM.spine.cmd.lift(id);
+    else if (o.mode === 'drop') ran = FM.spine.cmd.intoRow(id);
+    else if (o.main) { const i = R2.main.findIndex(x => x.id === id); if (o.j < 0 || o.j === i || o.j === i + 1) { refreshNodes(); return; } ran = FM.spine.cmd.moveTo(id, o.j); }
+    else if (o.ns != null && Math.abs(o.ns - o.start0) > 1e-6) ran = FM.spine.cmd.moveItem(id, o.ns);
+    else { refreshNodes(); return; }
+    if (o.edgeScrolled && FM.scrubTime) { const t = Math.max(0, scroller.scrollLeft / pps()); FM.scrubTime(FM.snapFrame ? FM.snapFrame(t) : t); }   // queue 690's adopt rule: the view follows the edit, on release only
+    return ran;
+  }
+  /* a remote structural op, a lease refusal or the gate shutting ends the drag through the stale-gesture recovery (§3.8) */
+  function abortGestures(pred) {
+    if (!G) return false;
+    if (typeof pred === 'function' && !pred(G.id)) return false;
+    const id = G.id; return abort('gone', id);
+  }
+  /* ── pinch: two fingers zoom, a pinch is the same zoom as the wheel's (FM.timeline.zoomBy) ── */
+  function pinchDist() { const a = Array.from(touches.values()); return a.length < 2 ? 0 : Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); }
+  function onTouchPtr(e) {
+    if (e.pointerType !== 'touch') return;
+    if (e.type === 'pointerdown') {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2) { if (G) abort(null); pinch = { last: pinchDist() }; if (FM.playing && FM.pause) FM.pause(); }
+    } else if (e.type === 'pointermove' && touches.has(e.pointerId)) {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && touches.size >= 2) { const d = pinchDist(); if (pinch.last > 0 && d > 0) { const f = d / pinch.last; if (Math.abs(f - 1) > 0.002 && FM.timeline && FM.timeline.zoomBy) FM.timeline.zoomBy(f); } pinch.last = d; if (e.cancelable) e.preventDefault(); }
+    } else if (e.type === 'pointerup' || e.type === 'pointercancel') {
+      touches.delete(e.pointerId); if (touches.size < 2) pinch = null;
+    }
+  }
+  /* ── the selected clip's grips: 13 px caps OUTSIDE the edges, each hit ≥ 24 px; not drawn when the gate is shut or the clip is under 24 px ── */
+  function drawGrips(byId, sel, xOf, p) {
+    root.querySelectorAll('.sm-grip').forEach(g => g.remove());
+    if (sel.size !== 1) return;
+    const id = Array.from(sel)[0], e = R.main.find(x => !x.slot && x.id === id), L = byId.get(id);
+    if (!e || !L || L.type === 'group') return;
+    if (hardGate(gateOf(id))) return;
+    const w = (e.end - e.start) * p; if (w < GRIP_HIT) return;
+    [['head', xOf(e.start) - GRIP_CAP, (W().tools || {}).trimStart || 'Trim the start'], ['tail', xOf(e.end) - (GRIP_HIT - GRIP_CAP), (W().tools || {}).trimEnd || 'Trim the end']].forEach(a => {
+      const g = el('div', 'sm-grip sm-grip-' + a[0]); g.dataset.id = id; g.dataset.side = a[0]; g.style.left = a[1] + 'px'; g.style.width = GRIP_HIT + 'px';
+      g.setAttribute('aria-label', a[2]); g.title = a[2]; g.setAttribute('role', 'button');
+      g.addEventListener('pointerdown', onGripDown);
+      mainEl.appendChild(g);
+    });
+  }
+
   FM.simpleTimeline = {
     rebuild() {
       if (!ensureDom() || !FM.spine || !FM.scene) return;
+      /* 2.5: no redraw under a live drag (Full's rule). A rebuild that arrives while the finger is down waits; one that arrives long after the last event means the
+         release was lost, and the gesture is put back (§3.8 stale-gesture recovery) */
+      if (G && G.phase === 'drag') { if (nowMs() - G.touchAt > STALE_MS) abort(null); else { G.dirty = true; return; } }
       const scene = FM.scene, layers = scene.layers, byId = new Map(layers.map(l => [l.id, l]));
       R = FM.spine.read(scene);
       const p = pps(), X = origin(), dur = Math.max(0, scene.project.duration || 0);
@@ -299,6 +556,7 @@ window.FM = window.FM || {};
         chip.addEventListener('click', ev => { ev.stopPropagation(); if (FM.spine.cmd) FM.spine.cmd.closeSeam(e.id); });   // Phase 2: Close gap / Fix
         mainEl.appendChild(chip);
       });
+      drawGrips(byId, sel, xOf, p);   // 2.5: the selected clip's two trim grips
       // + at the end of the clip row: pick files, laid END TO END from the end of the main track (§15.1)
       const add = el('button', 'sm-add', '+');
       add.type = 'button';
@@ -393,6 +651,10 @@ window.FM = window.FM || {};
       rate(sp);
     },
     read: () => R,
+    abortGestures: abortGestures,
+    /* presence's feed (§3.8): which arrange gesture is live, for the stale-gesture recovery now and `act: 'arrange'` from Phase 4 */
+    gesture() { return G && G.phase === 'drag' ? { k: G.kind === 'trim' ? 'trim' : 'move', ids: [G.id] } : null; },
+    _tick: tick, _g() { return G; },
     clearSay: clearSay,   // Phase 2.2: a selection change dismisses a line (§3.12 rule 1b)
     _say: sayLine
   };
