@@ -1,0 +1,92 @@
+{
+ "ok": true,
+ "summary": "Regression 7/7 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   7027,
+   "P16 #1047 Mask picked before another effect is added in ONE undo step (Blur then Mask always was)"
+  ],
+  [
+   414,
+   "P16 #1048 a long unbroken run wraps in the same lines as before and measures a bounded number of characters"
+  ],
+  [
+   263,
+   "P16 #1046 an AI batch that deletes a layer is ONE undo step, and one Undo restores the whole scene"
+  ],
+  [
+   56,
+   "P16 #1049 a template, element or font index that cannot be read keeps every pack at the boot sweep (a valid empty index still collects them)"
+  ],
+  [
+   18,
+   "P16 #1049 a save point whose read fails keeps the media only it points at (the boot sweep stands down)"
+  ],
+  [
+   16,
+   "P16 #1049 deleting a project keeps a blob that another document, unreadable, may still use; and an index the app is about to overwrite is copied first"
+  ],
+  [
+   2,
+   "P16 #1050 a colour picked here keeps the recent colours another window stored, and a popover built afterwards shows them"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "P16 #1046 an AI batch that deletes a layer is ONE undo step, and one Undo restores the whole scene",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1047 Mask picked before another effect is added in ONE undo step (Blur then Mask always was)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1048 a long unbroken run wraps in the same lines as before and measures a bounded number of characters",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1049 a template, element or font index that cannot be read keeps every pack at the boot sweep (a valid empty index still collects them)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1049 a save point whose read fails keeps the media only it points at (the boot sweep stands down)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1049 deleting a project keeps a blob that another document, unreadable, may still use; and an index the app is about to overwrite is copied first",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1050 a colour picked here keeps the recent colours another window stored, and a popover built afterwards shows them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+diff --git a/js/fx-browser.js b/js/fx-browser.js
+index 4054cd25..f2712f7f 100644
+--- a/js/fx-browser.js
++++ b/js/fx-browser.js
+@@ -572,7 +572,7 @@ window.FM = window.FM || {};
+     if (!quiet) FM.fxBrowser.close();
+     if (FM.inspector) FM.inspector.refresh();
+     if (FM.timeline) FM.timeline.rebuild();
+-    if (FM.history) FM.history.commit();
++    if (FM.history && !quiet) FM.history.commit();   // #1047: the batch path (commitPicks) commits ONCE at its own end; a quiet pick used to commit here too, so Mask + another effect made 2 undo steps
+     /* The mask EDITOR only opens on the single-tap path. In a batch it would land on top of whatever
+        else was picked, and you would be drawing a mask before seeing the rest of what you added. */
+     if (!quiet && FM.maskTool && FM.maskTool.open) FM.maskTool.open(layer.id, m.id);

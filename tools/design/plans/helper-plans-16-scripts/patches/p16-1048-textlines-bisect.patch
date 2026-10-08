@@ -1,0 +1,31 @@
+diff --git a/js/compositor.js b/js/compositor.js
+index 944ab78b..5817230e 100644
+--- a/js/compositor.js
++++ b/js/compositor.js
+@@ -19074,13 +19074,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
+     // This has to be reachable for a word that STARTS a line as well as one that lands mid-line —
+     // handling it only in the "does not fit after the current line" branch leaves a paragraph whose
+     // very first word is over-long running straight off the frame.
++    /* #1048: THE LONGEST FITTING PREFIX BY DOUBLING AND BISECTING, not by measuring the whole remainder once per line and then walking one character at a
++       time. That was quadratic: 30,000 characters with no spaces took 2.3 s and 60,000 took 9.4 s on a desktop, and the layout is redone after every edit.
++       The cut points are the same wherever a longer prefix never fits when a shorter one does not (every width the suite checks; a font whose prefix width
++       is not monotone, through a ligature or a combining mark, could cut one character differently). Never more than about two lines of text is measured at once. */
+     const chop = s => {
+-      while (trim(s).length > 1 && !fits(trim(s))) {
++      for (;;) {
+         const solid = trim(s);
+-        let cut = 1;
+-        while (cut < solid.length && fits(solid.slice(0, cut + 1))) cut++;
+-        out.push(solid.slice(0, cut));
+-        s = solid.slice(cut) + s.slice(solid.length);
++        if (solid.length <= 1) break;
++        let hi = 2;
++        while (hi < solid.length && fits(solid.slice(0, hi))) hi *= 2;
++        if (hi >= solid.length) { if (fits(solid)) break; hi = solid.length; }
++        let lo = 1;   // one character always goes on a line, even when it is wider than the column
++        while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (fits(solid.slice(0, mid))) lo = mid; else hi = mid; }
++        out.push(solid.slice(0, lo));
++        s = solid.slice(lo) + s.slice(solid.length);
+       }
+       return s;
+     };

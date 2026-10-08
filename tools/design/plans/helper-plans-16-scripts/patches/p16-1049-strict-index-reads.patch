@@ -1,0 +1,130 @@
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..25ee61f7 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -16,7 +16,32 @@ window.FM = window.FM || {};
+   let _dirty = false;   // a REAL edit happened since the last modified-stamp — merely viewing a project must not bump it to the top of the home list (Ezra)
+   function newId(prefix) { return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+   function readJSON(key, def) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : def; } catch (e) { return def; } }
+-  function writeJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { warnQuota(e); return false; } }
++  /* ═══ #1049: A READ THAT KNOWS "NOTHING THERE" FROM "THERE, BUT I CANNOT READ IT" ══════════════════════════
++     readJSON answers the default for both, so a template, element or font index (or a project doc) whose JSON was damaged read as `[]` / null: the boot sweep
++     then called every stored pack an orphan and deleted it, a project delete took the blobs another (unreadable) document still pointed at, and the next
++     remove or save wrote `[]` over the damaged bytes. readStrict says which it is ({ ok:false } for damage, or for a value of the wrong shape), the sweep and the
++     delete stand down on `ok:false`, and writeJSON keeps one copy of an index it is about to overwrite while it is unreadable. */
++  function readStrict(key, kind) {
++    let raw = null;
++    try { raw = localStorage.getItem(key); } catch (e) { return { ok: false, val: null }; }
++    if (raw == null || raw === '') return { ok: true, val: null };
++    try {
++      const v = JSON.parse(raw);
++      if (kind === 'array' && !Array.isArray(v)) return { ok: false, val: null };
++      if (kind === 'doc' && !(v && typeof v === 'object')) return { ok: false, val: null };
++      return { ok: true, val: v };
++    } catch (e) { return { ok: false, val: null }; }
++  }
++  const INDEX_KEYS = ['fm.projects', 'fm.templates', 'fm.elements', 'fm.fonts'];
++  function preserveUnreadable(key) {
++    if (INDEX_KEYS.indexOf(key) < 0) return;
++    try {
++      if (readStrict(key, 'array').ok) return;
++      const raw = localStorage.getItem(key);
++      if (raw && localStorage.getItem(key + '.unreadable') == null) localStorage.setItem(key + '.unreadable', raw);
++    } catch (e) {}
++  }
++  function writeJSON(key, val) { preserveUnreadable(key); try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { warnQuota(e); return false; } }
+   function curId() {
+     let id = null;
+     try { id = localStorage.getItem(CUR_KEY); } catch (e) {}
+@@ -172,6 +197,7 @@ window.FM = window.FM || {};
+       r.onerror = () => rej(r.error);
+     });
+   }
++  function idbGetStrict(db, key) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).get(key); rq.onsuccess = () => res({ ok: true, val: rq.result }); rq.onerror = () => res({ ok: false, val: null }); } catch (e) { res({ ok: false, val: null }); } }); }   // #1049: a failed read is not an empty one
+   function idbGet(db, key) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).get(key); rq.onsuccess = () => res(rq.result); rq.onerror = () => res(null); } catch (e) { res(null); } }); }
+ 
+   /* ═══ THE POINTER READER (queue 915 clause 5, PHASE A) ════════════════════════════════════════════
+@@ -2871,20 +2897,24 @@ window.FM = window.FM || {};
+          * Checkpoints count too: `collab:ckpt:*` is the save point a session can be rolled back to, so a
+          * record it names is still reachable — and the ones belonging to THIS project are going below. */
+         const elsewhere = new Set();
++        let unsafeRemove = false;   // #1049: a document or save point that cannot be read might still point at a blob, so nothing is deleted on its say-so
+         for (let i = 0; i < localStorage.length; i++) {
+           const lk = localStorage.key(i);
+           if (!lk || lk.indexOf('fm.proj.') !== 0 || lk.slice(8) === id) continue;
+-          const d = readJSON(lk, null);
+-          if (d && Array.isArray(d.layers)) d.layers.forEach(l => { if (l && l.id) elsewhere.add(l.id); });
++          const d = readStrict(lk, 'doc');
++          if (!d.ok) { unsafeRemove = true; continue; }
++          if (d.val && Array.isArray(d.val.layers)) d.val.layers.forEach(l => { if (l && l.id) elsewhere.add(l.id); });
+         }
+         if (id !== curId()) ((FM.scene && FM.scene.layers) || []).forEach(l => { if (l && l.id) elsewhere.add(l.id); });
+         const ckptPrefix = 'collab:ckpt:' + id + ':';
+         const allKeys = await idbKeys(db);
+         for (const k of allKeys) {
+           if (typeof k !== 'string' || k.indexOf('collab:ckpt:') !== 0 || k.indexOf(ckptPrefix) === 0) continue;
+-          ckptLayerIds(await idbGet(db, k)).forEach(lid => elsewhere.add(lid));
++          const cr = await idbGetStrict(db, k);
++          if (!cr.ok) { unsafeRemove = true; continue; }
++          ckptLayerIds(cr.val).forEach(lid => elsewhere.add(lid));
+         }
+-        if (doc && Array.isArray(doc.layers)) for (const l of doc.layers) { if (!libKeys.has(l.id) && !elsewhere.has(l.id)) await idbDel(db, l.id); }
++        if (!unsafeRemove && doc && Array.isArray(doc.layers)) for (const l of doc.layers) { if (!libKeys.has(l.id) && !elsewhere.has(l.id)) await idbDel(db, l.id); }
+         // this project's own collab records go with it (spec §12.4): the checkpoints…
+         for (const k of allKeys) { if (typeof k === 'string' && k.indexOf(ckptPrefix) === 0) await idbDel(db, k); }
+         /* …and a guest's persisted base, which §12.4's own table collects on "copy detached or
+@@ -2929,6 +2959,7 @@ window.FM = window.FM || {};
+          * them at the first boot after a crash, which is the exact boot on which they are the point.
+          * They are exempted from the scan (see the prefix list) and reaped by their own rules instead. */
+         if (FM.exportResume && FM.exportResume.sweep) { try { await FM.exportResume.sweep(); } catch (e) {} }
++        let unsafe = false;   // #1049: something the sweep needs to read could not be read, so it deletes nothing this boot
+         const projIds = new Set();   // EVERY stored project doc — scanned from localStorage, not just the index (an unindexed doc's media must never be mass-deleted)
+         const collectKeep = () => {
+           const keep = new Set();
+@@ -2936,7 +2967,7 @@ window.FM = window.FM || {};
+             const lk = localStorage.key(i);
+             if (lk && lk.indexOf('fm.proj.') === 0) {
+               projIds.add(lk.slice(8));
+-              const d = readJSON(lk, null); if (d && d.layers) d.layers.forEach(l => keep.add(l.id));
++              const d = readStrict(lk, 'doc'); if (!d.ok) unsafe = true; else if (d.val && d.val.layers) d.val.layers.forEach(l => keep.add(l.id));
+             }
+           }
+           FM.scene.layers.forEach(l => keep.add(l.id));
+@@ -2955,9 +2986,9 @@ window.FM = window.FM || {};
+            pass re-collects and would otherwise have forgotten them again. */
+         const ckptKeep = new Set();
+         // the three index-backed prefixes, so an unreferenced pack can finally be collected
+-        const tplIds = new Set((FM.templates.list() || []).map(t => t.id));
+-        const elemIds = new Set((FM.elements.list() || []).map(e => e.id));
+-        const fontIds = new Set((FM.fonts && FM.fonts.list ? FM.fonts.list() : []).map(f => f.id));
++        const tplR = readStrict(TPL_INDEX, 'array'), elemR = readStrict(ELEM_INDEX, 'array'), fontR = readStrict('fm.fonts', 'array');   // #1049: an unreadable index keeps every pack of its kind
++        const idsOf = r => new Set((r.val || []).map(t => t && t.id));
++        const tplIds = idsOf(tplR), elemIds = idsOf(elemR), fontIds = idsOf(fontR);
+         const db = await openDB();
+         const candidates = [];
+         for (const k of await idbKeys(db)) {
+@@ -2979,19 +3010,19 @@ window.FM = window.FM || {};
+              and delete it at the next boot: the save point, the offline recovery point and a half-arrived
+              file. They are collected by their own rules (FM.collab.gc), with the knowledge to do it. */
+           if (typeof k === 'string' && k.indexOf('collab:') === 0) {
+-            if (k.indexOf('collab:ckpt:') === 0) ckptLayerIds(await idbGet(db, k)).forEach(id => ckptKeep.add(id));
++            if (k.indexOf('collab:ckpt:') === 0) { const cr = await idbGetStrict(db, k); if (!cr.ok) unsafe = true; else ckptLayerIds(cr.val).forEach(id => ckptKeep.add(id)); }
+             continue;
+           }
+-          if (typeof k === 'string' && k.indexOf('tpl:') === 0) { if (tplIds.has(k.slice(4))) continue; candidates.push(k); continue; }
+-          if (typeof k === 'string' && k.indexOf('elem:') === 0) { if (elemIds.has(k.slice(5))) continue; candidates.push(k); continue; }
+-          if (typeof k === 'string' && k.indexOf('font:') === 0) { if (fontIds.has(k.slice(5))) continue; candidates.push(k); continue; }
++          if (typeof k === 'string' && k.indexOf('tpl:') === 0) { if (!tplR.ok || tplIds.has(k.slice(4))) continue; candidates.push(k); continue; }
++          if (typeof k === 'string' && k.indexOf('elem:') === 0) { if (!elemR.ok || elemIds.has(k.slice(5))) continue; candidates.push(k); continue; }
++          if (typeof k === 'string' && k.indexOf('font:') === 0) { if (!fontR.ok || fontIds.has(k.slice(5))) continue; candidates.push(k); continue; }
+           // project-card thumbnails are keyed 'thumb:<projectId>' — they were being treated as
+           // orphans and wiped at EVERY boot; only a deleted project's thumb is really an orphan
+           if (typeof k === 'string' && k.indexOf('thumb:') === 0) { if (projIds.has(k.slice(6))) continue; candidates.push(k); continue; }
+           if (!keep.has(k)) candidates.push(k);
+         }
+         if (candidates.length) {
+-          if (FM._mediaBusy) { db.close(); return; }   // something started writing mid-scan
++          if (FM._mediaBusy || unsafe) { db.close(); return; }   // something started writing mid-scan, or something could not be read (#1049)
+           const keep2 = collectKeep();                  // fresh snapshot at delete time
+           for (const k of candidates) {
+             if (keep2.has(k) || ckptKeep.has(k) || FM.media.get(k)) continue;   // referenced since the scan / by a collab save point (queue 921 S0) / live in memory

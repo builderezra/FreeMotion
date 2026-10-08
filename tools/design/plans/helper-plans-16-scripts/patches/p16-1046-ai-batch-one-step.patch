@@ -1,0 +1,37 @@
+diff --git a/js/ai-ops.js b/js/ai-ops.js
+index 421c6de6..ab927af0 100644
+--- a/js/ai-ops.js
++++ b/js/ai-ops.js
+@@ -124,7 +124,17 @@ window.FM = window.FM || {};
+   // Returns { appliedCount, dropped:[{op,ref,reason}], results:[{op,ref,applied,reason}] }.
+   // opts.at: the time the model was LOOKING at (the frame it was shown); a setProp on an animated channel means "this value
+   // there" — see setNumericPath. Defaults to the playhead, which is what the Assistant is told it is looking at.
++  /* ⚠️ A BATCH IS ONE UNDO STEP, WHOEVER CALLS IT (#1046). The deleteLayer op below runs FM.deleteLayer, which commits history for itself, and
++     ai.js never muted around its five applyOps calls, so a Director build, a re-roll or a Refine that deleted a layer made 2+ undo steps (one
++     press left the scene half-undone). The mute lives HERE, in a finally, so no caller can forget it; the depth counter nests under ai-chat's own
++     mute. The callers still refreshAll() and commit() once after, as they always did. */
+   function applyOps(ops, refMap, opts) {
++    var hist = FM.history;
++    if (hist && hist.mute) hist.mute();
++    try { return applyOpsBody(ops, refMap, opts); }
++    finally { if (hist && hist.unmute) hist.unmute(); }
++  }
++  function applyOpsBody(ops, refMap, opts) {
+     var scene = FM.scene, P = scene.project;
+     refMap = refMap || {};
+     var at = (opts && typeof opts.at === 'number' && isFinite(opts.at)) ? opts.at : (FM.time || 0);
+diff --git a/js/ai.js b/js/ai.js
+index d08a8cee..efad71ed 100644
+--- a/js/ai.js
++++ b/js/ai.js
+@@ -288,7 +288,9 @@ window.FM = window.FM || {};
+         return { error: err, left: true };
+       }
+       // commit whatever applied so the user keeps it (cancel = keep)
+-      if (FM.scene.layers.length !== beforeLen) { FM.refreshAll(); if (FM.history) FM.history.commit(); }
++      /* #1046: not only when the layer COUNT changed — a build that deleted one layer and added one, or only edited, was left uncommitted by a cancel.
++         An identical snapshot is a no-op in history.commit, so committing always costs nothing. */
++      FM.refreshAll(); if (FM.history) FM.history.commit();
+       if (err && err.cancelled) { P.done({ cancelled: true, layersAdded: FM.scene.layers.length - beforeLen }); }
+       else { P.error((err && err.message) || 'Something went wrong'); }
+       return { error: err };

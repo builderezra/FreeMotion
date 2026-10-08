@@ -1,0 +1,100 @@
+{
+ "ok": false,
+ "summary": "Regression 0/7 ✗Pending 0/0 built",
+ "failures": [
+  "FAILP16 #1046 an AI batch that deletes a layer is ONE undo step, and one Undo restores the whole scene — one batch (edit A, delete B, edit C) made 2 undo steps, not 1 — the delete committed on its own",
+  "FAILP16 #1047 Mask picked before another effect is added in ONE undo step (Blur then Mask always was) — Mask then Blur, then Add, made 2 undo steps, not 1",
+  "FAILP16 #1048 a long unbroken run wraps in the same lines as before and measures a bounded number of characters — wrapping 30000 characters measured 15509505 characters (517 per character; the limit is 40) — it is still quadratic",
+  "FAILP16 #1049 a template, element or font index that cannot be read keeps every pack at the boot sweep (a valid empty index still collects them) — with the index unreadable the sweep deleted tpl:p16A, elem:p16A, font:p16A — every saved template, element and font gone at once",
+  "FAILP16 #1049 a save point whose read fails keeps the media only it points at (the boot sweep stands down) — with the save point unreadable the sweep deleted the blob only it points at",
+  "FAILP16 #1049 deleting a project keeps a blob that another document, unreadable, may still use; and an index the app is about to overwrite is copied first — deleting project A deleted the blob a truncated project B may still use",
+  "FAILP16 #1050 a colour picked here keeps the recent colours another window stored, and a popover built afterwards shows them — the stored list is #445566,#aaaaaa, not #445566,#112233 — this window overwrote the other one’s pick with its own memory"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   7055,
+   "P16 #1047 Mask picked before another effect is added in ONE undo step (Blur then Mask always was)"
+  ],
+  [
+   1997,
+   "P16 #1048 a long unbroken run wraps in the same lines as before and measures a bounded number of characters"
+  ],
+  [
+   132,
+   "P16 #1046 an AI batch that deletes a layer is ONE undo step, and one Undo restores the whole scene"
+  ],
+  [
+   64,
+   "P16 #1049 a template, element or font index that cannot be read keeps every pack at the boot sweep (a valid empty index still collects them)"
+  ],
+  [
+   21,
+   "P16 #1049 a save point whose read fails keeps the media only it points at (the boot sweep stands down)"
+  ],
+  [
+   13,
+   "P16 #1049 deleting a project keeps a blob that another document, unreadable, may still use; and an index the app is about to overwrite is copied first"
+  ],
+  [
+   1,
+   "P16 #1050 a colour picked here keeps the recent colours another window stored, and a popover built afterwards shows them"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "P16 #1046 an AI batch that deletes a layer is ONE undo step, and one Undo restores the whole scene",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1047 Mask picked before another effect is added in ONE undo step (Blur then Mask always was)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1048 a long unbroken run wraps in the same lines as before and measures a bounded number of characters",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1049 a template, element or font index that cannot be read keeps every pack at the boot sweep (a valid empty index still collects them)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1049 a save point whose read fails keeps the media only it points at (the boot sweep stands down)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1049 deleting a project keeps a blob that another document, unreadable, may still use; and an index the app is about to overwrite is copied first",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1050 a colour picked here keeps the recent colours another window stored, and a popover built afterwards shows them",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

@@ -1,0 +1,1192 @@
+{
+ "ok": false,
+ "summary": "Regression 171/180 ✗ · NOT RUN HERE 7 Pending 0/0 built",
+ "failures": [
+  "FAIL690 a shape made a Clipping Mask keeps the project background outside it, and a moving one leaves no trail in the export — NO_VIDEO_CODEC",
+  "FAIL482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is — a Glow Scan with {\"loop\":1,\"pause\":2,\"span\":1} on a 10 s clip is measured as unknown - its sweep falls between the moments the check looks at, so the panel tells him a working effect changes nothing"
+ ],
+ "notRun": [
+  {
+   "name": "690 the Position keyframe diamond is one diamond — a hold-and-drag moves X and Y together, Delete keyframe removes both, and a picked X still moves alone",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 the mask editor follows the playhead — after a scrub its outline is the frame on screen, and dragging a point there keeps the rest of that frame",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 a tap to select a point leaves it where it was, and a drag moves it by the finger travel — Customise Points, a mask point and a motion path dot",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 a project renamed on Home keeps its new name when he presses Undo inside it",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 Undo and Redo keep open the effect whose slider he just moved, on the phone and on the PC",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse) — its PC half ran first and passed (4 real mouse/wheel/key batches)"
+  },
+  {
+   "name": "690 after + in the caption strip, the Aa sheet lists the new caption and its cross removes the caption on its own row",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 an ordinary spoken sentence typed into a caption wraps inside a 9:16 frame",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  }
+ ],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   28850,
+   "921 S6 the knock lets in, turns away, and declines by itself; a member’s token skips it next time; a removed member is refused by name"
+  ],
+  [
+   19019,
+   "921 S6 review: only a refusal the owner SIGNED ends a shared copy — a link holder answering first, an unsigned “removed” and the owner’s own handshake timeout (“auth”) are all asked again"
+  ],
+  [
+   16984,
+   "921 S7 Remove sends “removed”, revokes the token and rotates the link and code — the old link reaches nobody — and an Editor allowed to invite is handed the NEW link, never the old"
+  ],
+  [
+   16180,
+   "930 the Assistant and the Director never stack, and the API key is entered in Settings, reached from a button in each"
+  ],
+  [
+   13062,
+   "690 undo keeps the layer he is on — undoing a nudge or a delete of Red never selects Blue, by Cmd+Z or the undo button"
+  ],
+  [
+   9167,
+   "984 a sheet opened in the PC captions box covers the rest of the box edge to edge — Aa, font, size and colour, at 1280 and 900, with nothing of the box showing round it"
+  ],
+  [
+   8274,
+   "921 S2 tier 3: three real instances converge, a delete lands on a layer someone else has selected, and undo is per person"
+  ],
+  [
+   8152,
+   "audio: a keyframed Reverb sweeps the room, and only builds one where the move actually is"
+  ]
+ ],
+ "sceneLeaks": [
+  {
+   "test": "undo / redo grey out when there is nothing behind or ahead",
+   "added": [
+    "shape “Shape”"
+   ],
+   "more": 0,
+   "preview": false,
+   "isolate": false
+  },
+  {
+   "test": "a template tile shows the template's own picture, untinted (queue 268)",
+   "added": [
+    "shape “Shape”"
+   ],
+   "more": 0,
+   "preview": false,
+   "isolate": false
+  }
+ ],
+ "ran": [
+  {
+   "name": "transport: undo/redo and copy/paste are swapped, and the add-row switch tracks the row",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "templates and elements can be duplicated, and the copy survives deleting the original",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.5A nothing deletes a shared copy: the sweep, a tile, Clear media history, deleting a project, a template or an element",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S0 projects.remove spares records another doc references",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.5Br a tile is shared only under its own file: not after Replace then Undo, and not onto another file already at its key",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.5Br a clip dropped in from an element or a template keeps that pack stored file while it is on screen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "masks: a mask row minimises, swipes away, and never writes its UI state to the project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "560: a project with no mask markers renders byte-identically to the day before masks joined the effect stack",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "560: a mask marker cuts the effects BELOW it and leaves the ones ABOVE it — and outermost it equals the legacy wrap exactly",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "560: the sanitiser keeps a valid mask marker in place, drops a dangling or duplicate one, refuses one inside a Filter, and the registry never learns the type",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "560: masks and effects are ONE list in render order, a mask dragged above an effect becomes a member of the stack, and a swiped marker takes its mask with it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "560: a mask is a row in the effects list, not a section of its own",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.13 deleting a layer others follow (a Null) leaves them exactly where they are, and one undo puts it all back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undoing a delete brings the clip back WITH its picture, and the record is freed once it cannot",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "audio: a keyframed Distortion/Bit Crush actually sweeps, and a static one costs nothing extra",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "history: one edit then undo puts the document back exactly, for every kind of edit",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "templates: the Insert-your-Media screen lists the clips you can swap, in the order you watch them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undo / redo grey out when there is nothing behind or ahead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undo invalidates a live audio-effect chain",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "freehand: Undo takes back ONE stroke, and Redo puts it back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: a wrap width breaks the lines, and the picture obeys it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: the wrap handles sit beside the text, never on it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: stacking two Mirrors does not resurrect what the first one removed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the layer half of the removed ⋯ is still one right-click away, for every row type",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "masks: a pen-masked layer keeps its OWN mask when the matte source is masked too",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "masks: every mask alpha the compositor builds is a buffer the caller owns",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "loop wrap re-origins the clock instead of pinning the playhead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "masks: a pen mask builds its stencil at the PREVIEW size, not the project size",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "AI ops: setProp cannot solo a layer (there is no UI to un-solo it)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "replace media: the swap is a real undo step and the old file survives",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.9 Extract Audio is one undo step, and that undo puts back the single clip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S1 an anchor is resolved against the base the op actually lands on: a two-layer paste and an undo of a delete keep their order",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S1 an op may not rewrite or delete the key that addresses it: no duplicate ids, no unaddressable orphans",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a structural step is all-or-nothing, and a pre-session step still undoes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 a second Share stands the first session down instead of leaving an orphan ticking",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 tier 3: three real instances converge, a delete lands on a layer someone else has selected, and undo is per person",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 a share button removed with Labs off does not come back when the window narrows",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 undo still works after Stop sharing — the hand-over points at the session that ended",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 the boot sweep never collects a half-arrived file, and neither does the media collector",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 replacing a clip keeps the one it replaced, and undoing the replace puts it back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 a font crosses with the document and is applied on the far side, byte for byte",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S4 review: a 90 MB “font” is refused before a byte of it moves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 the knock lets in, turns away, and declines by itself; a member’s token skips it next time; a removed member is refused by name",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: only a refusal the owner SIGNED ends a shared copy — a link holder answering first, an unsigned “removed” and the owner’s own handshake timeout (“auth”) are all asked again",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 Remove sends “removed”, revokes the token and rotates the link and code — the old link reaches nobody — and an Editor allowed to invite is handed the NEW link, never the old",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: undoing a comment delete brings back the right authors — Sam’s reply stays Sam’s, an Editor’s undo of Sam’s comment gives it back to Sam — and a Commenter cannot bring back somebody else’s",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a Commenter may take her own `resolved` away — the Undo of her own Resolve — and still not anybody else’s",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S7 review: a guest’s Undo runs the same backstop as an edit — an Editor made a Viewer sends nothing when he presses Undo, a reload finds nothing to send, and a Commenter can undo her own Resolve",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8 a refused delete or move puts the element back where it was on the device that tried — an effect on a held layer, and a reply undone just as its author is made a Viewer — with no resync",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a removed member’s token gets its own door: one answer at a time, never a member’s slot, a few answers in all — and then its envelopes stop opening",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r fonts from a session are capped, and the ones it installed that nothing uses any more leave the font index when it ends",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r Home says what is shared: LIVE on the project he is hosting (whose ⋯ offers Stop sharing, #967), SHARED on somebody else’s copy with their name — and a copy’s ⋯ offers keep or leave, never Duplicate, template or element",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects browser: junk ids in the saved recents list do not take the browser down",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template does not carry its notes into a new project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "pressing it twice removes the sharpening rather than stacking a second",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "animated points interpolate, and SNAP when a point is added or removed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an undone delete still has its media — freeing must never beat undo",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a clip no undo or redo can reach is released (media leak)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a PINNED clip survives the sweep even when nothing references it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "history actually RUNS the sweep when it discards a snapshot",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template tile shows the template's own picture, untinted (queue 268)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "storage: a template that could not be indexed reports failure and strands nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "audio: a keyframed Reverb sweeps the room, and only builds one where the move actually is",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Dissolve can sweep, soften and boil",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#629: undo that removes the selected layer selects nothing",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S0 nothing leaves the device, and solo undo still restores byte-for-byte",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "on PC the font list fills the space below and scrolls down, not sideways (queue 520)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S0 boxFor equals #select-box geometry (rotated, parented, group, skew, text wrap)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a trim grip touched and released writes no undo entry (queue 823 c10a)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "splitting several clips at once costs one undo, not one each (queue 823 c10b)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.11 the phone’s “Split all at playhead” is one undo step for the whole selection",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "replacing a clip’s file keeps the original, and undo brings it back (queue 829)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "one rub of the eraser is one undo step, not one per frame (queue 834 u0)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Escape leaves the mask editor and the motion path, instead of deselecting underneath them (queue 834 u12, u13)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the wrap cache notices word spacing, or a wrapped layer keeps its old line breaks",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Luma Key can remove the bright end, and its edge width is a control now",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "filter row: deleting a child removes it from the filter, not from the layer stack",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export resume: Time Warp Scan is warmed back to where its sweep began, not by a flat 25 frames (queue 839)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1046 an AI batch that deletes a layer is ONE undo step, and one Undo restores the whole scene",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1047 Mask picked before another effect is added in ONE undo step (Blur then Mask always was)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1048 a long unbroken run wraps in the same lines as before and measures a bounded number of characters",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1049 a template, element or font index that cannot be read keeps every pack at the boot sweep (a valid empty index still collects them)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1049 a save point whose read fails keeps the media only it points at (the boot sweep stands down)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P16 #1050 a colour picked here keeps the recent colours another window stored, and a popover built afterwards shows them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undo inside the pen-mask editor is not silently thrown away by the next drag",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the pen-mask editor re-seeds itself when the scene is replaced by any other route",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a mask blend mode rasterises its plate at target size too",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a resize maps keyframes, pen-mask points, shadows and pixel effect params",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "updating a template edits it in place instead of forking it (queue 505 clause 4)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Add-layer + is centred in its circle, and is not a font glyph",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the recent-clips grid opens at three rows and every import is still reachable",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the Mask tile selects like every other tile instead of committing on tap (queue 321)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a selected mask point can be nudged on a precision pad, at the shared gain (queue 321)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template can be opened, edited, and written back over itself",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the skip arrows sit nearer the play pill than the undo/redo group",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#148: a loop wrap fades the sound back in instead of cutting it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#643: every brand glow mask is cut from the wordmark actually on screen",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#642: the light intro removes the empty poster instead of leaving it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#484: Wrap Shift wraps the frame instead of sliding it off the edge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a template saves as a shareable file the importer can actually read (queue 343)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the undo and redo arrowheads are big enough to read, and mirror each other (queue 479)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "undo returns EXACTLY to the start over a long chain, and degrades cleanly past the cap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the app makes network calls to exactly one host, and it is the AI endpoint",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "483: the undo and redo rings keep a wide gap between their two ends",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "493: the recorded sync error has the latency bias removed, including right after a seek",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Long Shadow throws at any angle, Drop Shadow has an opacity, Unsharp Mask skips flat areas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904: Block Dissolve can reshuffle its blocks and sweep in a direction",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "505: editing a template updates that template and leaves no project behind",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.6 after editing an element or a template its card shows the edit, not an older autosave picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "718: an animated Draw-from (trimStart) survives the timing sanitiser and one undo of an unrelated edit",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "720: a mask path evaluates to the hold / topology keyframe itself at that keyframe's time",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "728: swiping a mask row that sits inside the effect stack deletes the mask, and leaves the effects alone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "733: the AI digest is generated from the registry gates, and the ops clamp to the panel and grow the project",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "738: the changes-nothing hint is placed in the measured effect's own row body, never on an open mask row",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "741: nudging a mask point on the precision pad commits history, so undo and redo see the nudge",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "742: opening the mask editor no longer resets a zoomed canvas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "754: an off mask row shows the struck-through eye like an effect row, through the one shared renderer, and an open audio row keeps its grip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "771: a template draft whose template no longer exists says so instead of promising to save back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "619: the template media-swap opens only with media, and never silently",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "639: the app icons are the new mark, opaque, and inside the maskable safe zone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "617: element drafts take part in Select, and bulk delete actually removes them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "651 — an empty Template panel explains what a template IS, instead of hiding it behind a tap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "918.3 — a PC category label shows whole lines only, and both lines of a wrapping one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "680 — undo does not drag a clip that starts before zero forward to 0",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "682 — a keyframed effect colour survives a project load and an undo",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "685 — the template fill screen commits to the history that exists",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: the selection box wraps the letters on left- and right-aligned text",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: the wrap handle sizes the column in the layer own units, not the group scale",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "text: an imported font arriving throws away the line breaks measured without it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the AI knows every text animation the Text panel offers (queue 700)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "ai chat: one sentence is ONE undo step",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "915.8 a backup restores element and template drafts as drafts, not as projects",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "898: a template being edited stays ticked on the Templates tab, so Select all and Delete include it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "913.2 a 3D solid wraps the layer itself, not a transparent border round it, and small solids still draw",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904 [B] Glow Scan can sweep up, right and left as well as down, and a saved scan is untouched",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "932 an AI setProject never renames his project — not the Director, not a template, not any op",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "930 the Assistant and the Director never stack, and the API key is entered in Settings, reached from a button in each",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 undo keeps the layer he is on — undoing a nudge or a delete of Red never selects Blue, by Cmd+Z or the undo button",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a mask added from Effects stays where he drew it while Motion Blur is on and the layer moves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 replacing a clip twice then undoing twice brings his original back, on screen and on disk, and redo brings the last pick back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 undo past a replace still brings his original back after he went Home and came back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 an autosave that lands while undo is still fetching his original never files the wrong clip under it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 the AI Director, a re-roll and the Assistant only ever change the project they were started in",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 on PC, Undo with the text card open takes back only the typing — the layer stays, the field follows, and Redo brings his words back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 the Position keyframe diamond is one diamond — a hold-and-drag moves X and Y together, Delete keyframe removes both, and a picked X still moves alone",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 the mask editor follows the playhead — after a scrub its outline is the frame on screen, and dragging a point there keeps the rest of that frame",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 a tap to select a point leaves it where it was, and a drag moves it by the finger travel — Customise Points, a mask point and a motion path dot",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 one failed Assistant reply does not break the Assistant — the next messages still reach Claude and still edit",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 asking the Assistant or Refine to make an animated title bigger keeps its pop-in, and a keyed fade survives a setProp",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a box or title the Assistant or the Director adds without a z goes on top, where he can see it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 on Insert your Media the text and shape slots of a phone-shaped template show their layer, even in the lower half",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 opening an element for editing leaves nothing to undo — one Undo cannot wipe it, and it never reopens empty",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a caption stacked under one already showing fades in on its own, and the one showing holds still — wrapped lines too",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a shape made a Clipping Mask keeps the project background outside it, and a moving one leaves no trail in the export",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 each stroke keeps its own brush through the eraser, undo and redo, Draw more and the timeline thumbnail",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 the camera sees past the project edge — a pan, zoom-out or turn over a big photo shows the photo, masked, grouped, blurred and fogged too",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a masked photo keeps its Outline and Shadow — the mask cuts the photo, not its border and shadow, with or without an Effects marker",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a project renamed on Home keeps its new name when he presses Undo inside it",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 after sharing stops, undo takes back the change he just made, not one from the session — on his Mac and on the phone that was in it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 in a live session, undo with the text card open takes back the typing, blames nobody, and the new text can still be undone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 Undo and Redo keep open the effect whose slider he just moved, on the phone and on the PC",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse) — its PC half ran first and passed (4 real mouse/wheel/key batches)"
+  },
+  {
+   "name": "690 Cmd+Z while drawing takes back the last stroke, Cmd+Shift+Z puts it back, and his next stroke does not bring an undone one back",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 Save project file on another project from Home writes that project and leaves the open one alone — its undo, playhead, selection, and the other card picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 after + in the caption strip, the Aa sheet lists the new caption and its cross removes the caption on its own row",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 a caption row’s cross removes the caption on that row, even when the list changed under it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 an ordinary spoken sentence typed into a caption wraps inside a 9:16 frame",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 every way a layer becomes a caption track wraps it inside the frame, and a column he set is left alone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "968 the per-project sizes are kept for the 40 projects written most recently, and a project with nothing big is not kept at all",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "974 option B, Rings and sparks: its rings sweep the WHOLE area out from the finger",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "984 the PC captions box works — typing shows in its row, its times and + Add cue edit the captions, it follows a dragged timeline, and after undo its rows edit the restored captions",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "984 a sheet opened in the PC captions box covers the rest of the box edge to edge — Aa, font, size and colour, at 1280 and 900, with nothing of the box showing round it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 polish 1 review the AI digest advertises Fade colour as a colour hex and no control as undefined",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "986 C24 batch 2 on a device without ctx.filter, the mask feather, Luma Matte feather, 3D shading, Temporal Denoise smoothing, Light Wrap, camera focus blur and an adjustment grade keep their look",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "986 C24 review a feathered pen mask keeps its feather on a device without ctx.filter",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "986 C16 Flanger feedback echoes land every tau, not tau plus a render quantum - at the bottom and top of the sweep, in the export and the preview",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "986 C17 Phaser feedback resonates where the phaser notches are, not on a fixed comb - held still and mid-sweep, in the export and the preview",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Home portrait stays local, persists, and can be removed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 6.6 Spin Streaks - Anticlockwise trails a dot the other way round the centre, Only above keeps a mid-grey block in place while white still sweeps, the bounded path matches the whole plate, and the half-size preview matches the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 6.7 Glow Scan - Sweeps across Layer puts the band on a 100 px title through the first half of the sweep, Angle sends it any way, Wait rests before and between sweeps, Once sweeps a single time on the clip clock, every frame is the same however it is reached, and the half-size preview matches the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}
