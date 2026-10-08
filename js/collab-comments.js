@@ -124,6 +124,58 @@ window.FM = window.FM || {};
   CM.count = function () { return list().filter(function (c) { return c && !c.resolved; }).length; };
   CM.list = function () { return list().slice(); };
 
+  /* ═══ SIMPLE 2.4 (DESIGN §13 #24, §0.4 B25): COMMENT PINS STAY ON THEIR FOOTAGE. One anchor rule, applied ONLY while Simple is on screen (a comment
+     made in Full gets no anchor and stays absolute, exactly as today): the selected layer if it covers the playhead, else the main clip under it
+     (the read model's mainAtTime), else none (a gap or past the end: `t` alone, absolute by design). A video with a source records `ls`, source
+     seconds (so a split, a head trim in either editor and a speed change leave the pin on the same frame without a write); anything else records
+     `lo`, the clip clock (fxLocalTime, which carries fxTimeOffset). The host keeps either only with `lid`. `t` is never rewritten. */
+  const r3 = v => Math.round(v * 1000) / 1000;
+  function anchorPin(c) {
+    if (!(FM.editor && FM.editor.isSimple && FM.editor.isSimple()) || typeof c.t !== 'number') return;
+    const t = c.t, covers = l => l && t >= (+l.start || 0) - 1e-9 && t < (+l.start || 0) + (+l.duration || 0) - 1e-9;
+    let layer = c.lid ? FM.layerById(FM.scene, c.lid) : null;
+    if (!covers(layer)) {
+      layer = null;
+      try { const R = FM.spine.read(FM.scene), e = FM.spine.mainAtTime(R, t); if (e && !e.slot) layer = FM.layerById(FM.scene, e.id); } catch (e) { layer = null; }
+    }
+    delete c.lid; delete c.ls; delete c.lo;
+    if (!layer || !ID_RE.test(layer.id)) return;
+    c.lid = layer.id;
+    const m = FM.media && FM.media.get && FM.media.get(layer.id);
+    if (layer.type === 'video' && !layer.audioOnly && m && m.duration > 0) { const v = FM.layerLocalTime(layer, t); if (v != null && isFinite(v)) c.ls = r3(v); }
+    else if (FM.fxLocalTime) { const v = FM.fxLocalTime(layer, t); if (isFinite(v)) c.lo = r3(v); }
+  }
+  /* THE ONE RESOLVER. Candidates are the lid layer and every layer sharing its splitOf lineage; with `ls` the candidate whose source window holds it
+     (the t where layerLocalTime equals ls, bisected so a ramp and a reversed clip need no closed form), with `lo` the candidate whose clip-clock
+     window holds it; if none does (trimmed away) the nearest candidate edge; with no candidate left, c.t. Every reader (the ruler marks, the card
+     pin, the head test) goes through here. */
+  CM._anchorPin = anchorPin;
+  CM.pinTime = function (c) {
+    if (!c || typeof c.t !== 'number' || !isFinite(c.t)) return c && c.t;
+    if (!c.lid || (c.ls == null && c.lo == null)) return c.t;
+    const base = FM.layerById(FM.scene, c.lid); if (!base) return c.t;
+    const cands = [base].concat(base.splitOf ? FM.scene.layers.filter(function (l) { return l !== base && l.splitOf === base.splitOf; }) : []);
+    let best = null, bd = Infinity;
+    for (let i = 0; i < cands.length; i++) {
+      const l = cands[i], s = +l.start || 0, d = +l.duration || 0;
+      if (c.ls != null && l.type === 'video') {
+        const tot = FM.layerSourceAdvance ? FM.layerSourceAdvance(l, d) : d, lo = +l.trimStart || 0, hi = lo + tot;
+        if (c.ls >= lo - 1e-6 && c.ls <= hi + 1e-6) {
+          let a = s, b = s + d - 1e-6, fa = FM.layerLocalTime(l, a);
+          const inc = FM.layerLocalTime(l, b) >= fa;
+          for (let k = 0; k < 50; k++) { const mid = (a + b) / 2, v = FM.layerLocalTime(l, mid); if ((v < c.ls) === inc) a = mid; else b = mid; }
+          return r3((a + b) / 2);
+        }
+        const dist = c.ls < lo ? lo - c.ls : c.ls - hi; if (dist < bd) { bd = dist; best = c.ls < lo ? (l.reversed ? s + d : s) : (l.reversed ? s : s + d); }
+      } else if (c.lo != null) {
+        const off = parseFloat(l.fxTimeOffset); const o0 = isFinite(off) ? off : 0;
+        if (c.lo >= o0 - 1e-6 && c.lo < o0 + d) return s + c.lo - o0;
+        const dist = c.lo < o0 ? o0 - c.lo : c.lo - (o0 + d); if (dist < bd) { bd = dist; best = c.lo < o0 ? s : s + d; }
+      }
+    }
+    return best != null ? best : c.t;
+  };
+
   /* opts: {pin:true} puts it at the playhead, and on the selected layer when there is one. */
   CM.add = function (text, opts) {
     const o = opts || {};
@@ -139,6 +191,7 @@ window.FM = window.FM || {};
       c.t = Math.round((+FM.time || 0) * 1000) / 1000;
       const sel = FM.scene.selectedId;
       if (typeof sel === 'string' && ID_RE.test(sel) && FM.layerById && FM.layerById(FM.scene, sel)) c.lid = sel;
+      anchorPin(c);
     }
     l.push(c);
     see(c, null);                           // his own is never news to him (#967 B5)
@@ -280,7 +333,7 @@ window.FM = window.FM || {};
     let best = null, bd = HEAD_HALF;
     list().forEach(function (c) {
       if (!c || c.resolved || typeof c.t !== 'number' || !isFinite(c.t) || typeof c.id !== 'string') return;
-      const d = Math.abs(FM.timeline.timeToX(c.t) - hx);
+      const d = Math.abs(FM.timeline.timeToX(CM.pinTime(c)) - hx);
       if (d <= bd) { bd = d; best = c; }
     });
     return best ? best.id : null;
@@ -321,10 +374,10 @@ window.FM = window.FM || {};
       const m = el('button', 'tl-cmark');
       m.type = 'button';
       m.setAttribute('data-cid', c.id);
-      m.style.left = (FM.timeline.timeToX(c.t) - off) + 'px';
+      m.style.left = (FM.timeline.timeToX(CM.pinTime(c)) - off) + 'px';
       m.style.setProperty('--peer', cleanColor(c.by && c.by.color) || GREY);
       const who = cleanName(c.by && c.by.name) || 'Someone';
-      m.setAttribute('aria-label', 'Comment from ' + who + ' at ' + fmtTime(c.t));
+      m.setAttribute('aria-label', 'Comment from ' + who + ' at ' + fmtTime(CM.pinTime(c)));
       m.title = who + ': ' + String(c.text || '').slice(0, 80);
       m.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
       m.addEventListener('click', function (e) { e.stopPropagation(); CM.open({ at: c.id }); });
@@ -509,8 +562,8 @@ window.FM = window.FM || {};
       const ln = layerName(c.lid);
       /* Tapping where it is pinned takes the playhead there — the one thing a comment about a moment asks
          of whoever reads it. */
-      d.appendChild(btn('cc-pin', (ln ? 'on “' + ln.slice(0, 32) + '” ' : '') + 'at ' + fmtTime(c.t), function () {
-        if (FM.setTime) FM.setTime(c.t);
+      d.appendChild(btn('cc-pin', (ln ? 'on “' + ln.slice(0, 32) + '” ' : '') + 'at ' + fmtTime(CM.pinTime(c)), function () {
+        if (FM.setTime) FM.setTime(CM.pinTime(c));
         if (ln && FM.selectLayer && FM.layerById(FM.scene, c.lid) && !C.readOnly()) FM.selectLayer(c.lid);
         refreshPinLabel();
       }));
