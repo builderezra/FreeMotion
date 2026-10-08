@@ -38,6 +38,11 @@ def sh(cmd):
 #     whole UI (styles.css's touch-only rules, the fine-pointer JS in app.js, timeline.js, home.js, settings.js, the collab
 #     files…) and a pinned picture is drawn by the whole render path. So while one of them is NOT RUN, ANY change to shipped
 #     source refuses. The gate used to know only AAC and QR, and off the Mac these were listed and the release went on.
+#   THE PHONE-SPEED BUDGETS (8 Oct, ship 11 of v17.26 — the PM's pick A): "921 S8 a 500-layer project under a 4× CPU throttle"
+#     says NOT RUN when this machine's code-free benchmark is too slow to stand in for the phone (heat, a busy host). It times
+#     the collab commit hook (collab-session beforeSnap/afterCommit → collab-diff), the hot tick (collab-session) and the full
+#     diff (collab-diff, over collab-bridge's view) — read 8 Oct: those paths call nothing outside js/collab-*.js — entered
+#     from history.commit (js/history.js). So a change THERE refuses until the test RUNS; a CSS edit is not that test's to stop.
 #   ANYTHING ELSE (reason None): a NOT RUN reason no entry above claims refuses any shipped source too. A renamed reason, or a
 #     new kind of NOT RUN test, can then only make the gate STRICTER, never wave a release past it unnoticed.
 SHIPPED = ["index.html", "styles.css", "theme-glass.css", "sw.js", "manifest.json", "js/*", "vendor/*"]
@@ -50,6 +55,8 @@ FEATURES = [
      "globs": SHIPPED, "lines": {}},
     {"name": "the pictures and sounds pinned to the Mac (a per-OS baseline)", "reason": r"no baseline recorded for |the \S+ baseline for ",
      "globs": SHIPPED, "lines": {}},
+    {"name": "the collab speed budgets at phone speed (921 S8)", "reason": r"this machine is too slow to stand in for the phone",
+     "globs": ["js/collab-*.js", "js/history.js"], "lines": {}},
     {"name": "the app (a NOT RUN reason this gate has no narrower map for)", "reason": None,
      "globs": SHIPPED, "lines": {}},
 ]
