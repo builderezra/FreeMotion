@@ -56,6 +56,21 @@ out="$(PATH="$(shim_os Linux):$PATH" bash -c '. tools/_testfloor.sh; notrun_repo
 out="$(PATH="$(shim_os Darwin):$PATH" bash -c '. tools/_testfloor.sh; notrun_report "$1" desktop' _ '{"ok": true, "summary": "Regression 2/2 ✓", "failures": [], "notRun": []}')"; rc=$?
 [ "$rc" = 0 ] && [ -z "$out" ] && ok "control: none NOT RUN on the Mac → silent, 0" || bad "notrun_report none: rc=$rc $out"
 
+echo "── a release that drops tests is told to lower the floor at the GATE, not after the pass (7 Oct, v17.26's 4th ship) ──"
+FR="$TMP/floor-repo"; mkdir -p "$FR/tests" "$FR/tools"; cp tools/_testfloor.sh "$FR/tools/"
+printf "  test('a', 1)\n  test('b', 1)\n  test('c', 1)\n" > "$FR/tests/tests.js"; echo 3 > "$FR/tools/.test-floor"
+( cd "$FR" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm base ) >/dev/null 2>&1
+fac() { (cd "$FR" && bash -c '. tools/_testfloor.sh; floor_ahead_check'); }
+printf "  test('a', 1)\n  test('c', 1)\n" > "$FR/tests/tests.js"
+out="$(fac)"; rc=$?
+[ "$rc" = 1 ] && grep -q 'echo 2 > tools/.test-floor' <<<"$out" && ok "one test dropped, floor still HEAD's → refuses at once, naming the number to write (2)" || bad "floor ahead: rc=$rc — $out"
+echo 2 > "$FR/tools/.test-floor"; out="$(fac)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "…the floor lowered → passes silently" || bad "floor lowered: rc=$rc — $out"
+echo 3 > "$FR/tools/.test-floor"; printf "  test('a', 1)\n  test('b', 1)\n  test('c', 1)\n  test('d', 1)\n" > "$FR/tests/tests.js"; out="$(fac)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "control: a test ADDED with the floor unchanged → passes (the floor rises by itself)" || bad "floor added: rc=$rc — $out"
+awk '/DROPS TEST: <why>/{d=NR} /^floor_ahead_check/{f=NR} /running the suite/{s=NR} END{exit !(d && f && s && d < f && f < s)}' tools/ship.sh \
+  && ok "ship.sh asks for it right after the DROPS TEST gate, before the suite runs" || bad "ship.sh does not call floor_ahead_check between the DROPS TEST gate and the suite"
+
 echo "── ship.sh's double-quote title gate matches a test DECLARATION, not a .test('…\"…') call (review minor) ──"
 # ship.sh's own _DQ line, evaluated in a fixture — so this tests what ship.sh does, whatever it does
 DQLINE="$(grep -m1 '^_DQ=' tools/ship.sh)"
@@ -343,6 +358,16 @@ for r in "$NOBASE" "$PART" "$NOCASE"; do v="$(fg js/effects.js "$TMP/empty.diff"
 [ -z "$_fgmiss" ] && ok "every baseline reason (none recorded, incomplete, a missing case) refuses a js/ change" || bad "a baseline NOT RUN let js/effects.js through:$_fgmiss"
 v="$(fg js/app.js "$TMP/empty.diff" '999 a test\tneeds a gamepad — this browser has none\n')"; rc=$?
 [ "$rc" = 1 ] && ok "a reason the gate has no map for refuses any shipped change (fail-safe: a renamed reason cannot slip past)" || bad "an unmapped NOT RUN reason passed the gate: rc=$rc $v"
+# THE PHONE-SPEED BUDGETS (8 Oct, v17.26's eleventh ship — green everywhere, then refused for a CSS edit because 921 S8's
+# "too slow to stand in for the phone" had no map): it times collab code only, so collab/history changes refuse and others do not
+SLOW='921 S8 a 500-layer project under a 4× CPU throttle\tthis machine is too slow to stand in for the phone these budgets mean: its speed benchmark took 9.90 ms against 3.6\n'
+_fgmiss=""
+for f in js/collab-session.js js/collab-diff.js js/collab-core.js js/collab-bridge.js js/history.js; do v="$(fg "$f" "$TMP/empty.diff" "$SLOW")"; [ $? = 1 ] || _fgmiss="$_fgmiss $f"; done
+[ -z "$_fgmiss" ] && ok "the S8 speed test NOT RUN refuses a change to the code it times (js/collab-*.js, js/history.js)" || bad "an S8 NOT RUN let these through:$_fgmiss"
+v="$(fg styles.css,js/timeline.js "$TMP/empty.diff" "$SLOW")"; rc=$?
+[ "$rc" = 0 ] && ok "…and does not refuse a change it cannot see (styles.css, js/timeline.js): listed, not refused" || bad "an S8 NOT RUN refused a CSS/timeline change: rc=$rc $v"
+v="$(fg styles.css,js/collab-core.js "$TMP/empty.diff" "$SLOW")"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$v" | grep -q 'collab-core' && ok "…but a collab file beside an unrelated one still refuses, naming it" || bad "collab beside CSS passed: rc=$rc $v"
 # A RELEASE'S OWN VERSION LABEL IS NOT CODE (7 Oct): every release bumps index.html's label and ?v= busters, so read literally
 # the touch and baseline NOT RUN lines — permanent on Linux — would refuse EVERY release from the laptop, v17.24 included.
 printf 'diff --git a/index.html b/index.html\n--- a/index.html\n+++ b/index.html\n@@ -1,2 +1,2 @@\n-<span class="ver" title="t">v17.23</span>\n+<span class="ver" title="t">v17.24</span>\n-<script src="js/app.js?v=468"></script>\n+<script src="js/app.js?v=469"></script>\n' > "$TMP/label.diff"
@@ -360,9 +385,11 @@ import sys, re
 sys.path.insert(0, sys.argv[1] + '/tools'); import _shipgates as G
 src = open(sys.argv[1] + '/tests/tests.js', encoding='utf-8').read(); drv = open(sys.argv[1] + '/tests/_cdp.py', encoding='utf-8').read()
 want = {"needs real touch emulation (a finger": "touch", "needs an AAC audio encoder (AudioEncoder": "AAC", "needs a working BarcodeDetector (qr_code)": "QR",
-        "no baseline recorded for linux (run": "baseline", "the linux baseline for \"x\" is incomplete": "baseline", "the linux baseline for \"x\" has no case": "baseline"}
+        "no baseline recorded for linux (run": "baseline", "the linux baseline for \"x\" is incomplete": "baseline", "the linux baseline for \"x\" has no case": "baseline",
+        "this machine is too slow to stand in for the phone these budgets mean": "speed"}
 lits = ["notRunHere('needs real touch emulation (a finger", "'needs an AAC audio encoder (AudioEncoder", "'needs a working BarcodeDetector (qr_code)",
-        "notRunHere('no baseline recorded for ' + FM_OS", "notRunHere('the ' + FM_OS + ' baseline for \"' + name + '\" is incomplete", "notRunHere('the ' + FM_OS + ' baseline for \"' + name + '\" has no case"]
+        "notRunHere('no baseline recorded for ' + FM_OS", "notRunHere('the ' + FM_OS + ' baseline for \"' + name + '\" is incomplete", "notRunHere('the ' + FM_OS + ' baseline for \"' + name + '\" has no case",
+        "notRunHere('this machine is too slow to stand in for the phone these budgets mean"]
 missing = [l for l in lits if l not in src] + ([] if '"NOTRUN: needs real touch emulation' in drv else ['_cdp.py NOTRUN: needs real touch emulation'])
 wrong = [(r, k, G.claimed_by(r)) for r, k in want.items() if k not in (G.claimed_by(r) or '')]
 if missing or wrong: print("   missing literals:", missing, "| claimed wrongly:", wrong); sys.exit(1)
@@ -533,6 +560,20 @@ echo '{"ok": true, "summary": "x", "failures": []}' > "$TPD/nolist.json"
 grep -q 'touch_pass 1280 .claude/ship/suite-desktop.out' tools/ship.sh && grep -q 'touch_pass 380 .claude/ship/suite-phone.out' tools/ship.sh \
   && ok "ship.sh runs it after the 1280 and the 380 pass" || bad "ship.sh does not run tests/_touch_pass.py after both passes"
 awk '/^touch_pass 1280/{t=NR} /_shipgates.py feature-gate/{f=NR} END{exit !(t && f && t < f)}' tools/ship.sh && ok "…before the feature gate reads the NOT RUN list" || bad "the touch pass runs after the feature gate — it cannot clear a finger test's NOT RUN"
+# prove.sh's finger NORUNs (7 Oct, v17.26 was refused for two finger tests that had passed with a real finger): the same pass
+# runs on both sides and tools/_spotjudge.py --merge-touch puts its verdicts in place of the NORUN lines
+printf 'NORUN\tfinger ok\tNOT RUN HERE: %s\nNORUN\tfinger red\tNOT RUN HERE: %s\nNORUN\tfinger aac\tNOT RUN HERE: %s\nNORUN\tan aac test\tNOT RUN HERE: needs an AAC audio encoder\nPASS\ta plain test\n' "$TR" "$TR" "$TR" > "$TPD/v"
+cp "$TPD/v" "$TPD/v0"
+python3 tools/_spotjudge.py --merge-touch "$TPD/v" "$TPD/o.json"
+v="$(cut -f1,2 "$TPD/v" | tr '\t\n' ':|')"
+[ "$v" = "PASS:finger ok|FAIL:finger red|NORUN:finger aac|NORUN:an aac test|PASS:a plain test|" ] \
+  && ok "prove.sh: a finger test's own-page verdict replaces its NORUN (pass → PASS, red → FAIL, NOT RUN there → NORUN); other lines untouched" \
+  || bad "merge-touch: $v"
+grep -q '^NORUN	finger aac	NOT RUN HERE: needs an AAC audio encoder$' "$TPD/v" && ok "…a finger test NOT RUN in its own page keeps THAT page's reason" || bad "merge-touch reason: $(grep 'finger aac' "$TPD/v")"
+cp "$TPD/v0" "$TPD/v1"; python3 tools/_spotjudge.py --merge-touch "$TPD/v1" "$TPD/no-such.json"
+cmp -s "$TPD/v0" "$TPD/v1" && ok "…and with no finger-pass result every line stays as it was (still NORUN, still refused)" || bad "merge-touch with no JSON changed the verdicts"
+[ "$(grep -c '^ *fingers "\$P1"' tools/prove.sh)" -ge 2 ] && [ "$(grep -c '^ *fingers "\$P2"' tools/prove.sh)" -ge 2 ] && grep -q -- '--merge-touch' tools/prove.sh \
+  && ok "prove.sh runs the finger pass on the tree AND the reverted side, at its width and in the 380 re-check" || bad "prove.sh does not hand its finger NORUNs to tests/_touch_pass.py on both sides"
 echo
 echo "── ship.sh runs THIS test whenever a file it proves changes (6 Oct, the port audit, minor) ──"
 # A release that edited only tools/_shipgates.py (the feature gate, and the sh() that makes a failed git a refusal) shipped

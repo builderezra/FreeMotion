@@ -5345,10 +5345,16 @@
 
         // One 60px swipe, dispatched on the element under test. The app listens for pointermove on the
         // window, so every move goes to both — the same way a real finger reaches both.
-        const swipe = (el, x, y, dx) => {
+        /* SPREAD OVER REAL TIME, as a finger is (8 Oct, v17.26's seventh ship, red at 380 only): the release glide starts
+           from a velocity read off the moves' timestamps, and eight moves dispatched in the same instant made that a coin
+           toss — whether they straddled a millisecond decided whether a trial glided at all, and the 320 ms reading below
+           lands mid-glide. Body and grip each glided or not on their own luck: 9.952 against 3.545, the "dead strip" red,
+           with nothing dead. ~8 ms apart, both trials release at the same finite speed, so the comparison is fair again. */
+        const swipe = async (el, x, y, dx) => {
           const o = { pointerId: 11, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 1 };
           el.dispatchEvent(new PointerEvent('pointerdown', o));
           for (let k = 1; k <= 8; k++) {
+            await sleep(8);
             const m = Object.assign({}, o, { clientX: x + dx * k / 8 });
             el.dispatchEvent(new PointerEvent('pointermove', m));
             window.dispatchEvent(new PointerEvent('pointermove', m));
@@ -5363,7 +5369,7 @@
           const x = ox != null ? r.left + ox : (r.left + r.right) / 2, y = (r.top + r.bottom) / 2;
           if (x < 2 || x > 378 || y < 2) throw new Error('sample point ' + x.toFixed(0) + ',' + y.toFixed(0) + ' is off a 380px screen — the measurement would be meaningless');
           const t0 = FM.time, s0 = tl.scrollLeft;
-          swipe(el, x, y, -60);
+          await swipe(el, x, y, -60);
           await sleep(320);
           return Math.abs(FM.time - t0) + Math.abs(tl.scrollLeft - s0) / 100;
         };
@@ -27926,9 +27932,14 @@
   test('a vertical swipe that starts ON a clip scrolls the timeline', { item: 'tl-vswipe' }, async function () {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
-    const savedScene = FM.scene;
+    const savedScene = FM.scene, savedTime = FM.time;
     try {
       FM.scene = scene([]);
+      /* THE PLAYHEAD IS SET HERE, NOT INHERITED (7 Oct, v17.26's second ship): a drag-scrub moves time OPPOSITE the finger, so
+         the leftward drag below asks for LATER time, and a playhead an earlier test left at or past these 4 s clips is clamped
+         — "a horizontal drag on a clip no longer scrubs", red in a full pass, green alone. Proven: FM.time = 999 planted here
+         gives exactly that red (mutate.sh --only). */
+      FM.time = 1;
       for (let i = 0; i < 12; i++) {   // enough rows that the list must overflow its scroller
         FM.scene.layers.push(FM.makeLayer('shape', { name: 'L' + i, shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 4 }));
       }
@@ -27970,7 +27981,7 @@
       if (Math.abs(FM.time - before) < 1e-6) throw new Error('a horizontal drag on a clip no longer scrubs — the axis lock ate the primary gesture');
       if (scrolled > 2) throw new Error('a horizontal drag scrolled the list by ' + scrolled.toFixed(1) + 'px');
     } finally {
-      FM.scene = savedScene;
+      FM.scene = savedScene; FM.time = savedTime;
       FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(60);
@@ -28203,47 +28214,35 @@
     try {
       frame.style.width = '390px'; frame.style.height = '844px';
       await sleep(220);   // let the layout settle at the new width before measuring anything
-      /* "?" JOINED THIS RUN IN v8.56 (queue 266 — "I need it to the right of the refresh button"), so
-         the run it spaces is chip → ? → notes → cog → Export. His RULE is unchanged and still decides
-         it; only the list of things it applies to has grown. Leaving m-help out would measure the
-         chip→notes gap straight THROUGH the ? button — 64px against 18 — and report a bar that is
-         actually even as badly broken. */
-      const run = [painted('ver-m'), inked('m-help'), inked('m-notes'), inked('m-settings'), painted('m-export')];
-      if (run.some(x => !x)) throw new Error('the phone bar is missing one of ver-m / m-help / m-notes / m-settings / m-export');
+      /* "?" JOINED THIS RUN IN v8.56 (queue 266) AND LEFT IT IN queue 1065 (2 Oct — "the question mark help button can be
+         removed from mobile versions"), so the run it spaces is chip → notes → cog → Export again. His RULE is unchanged and
+         still decides it. */
+      const run = [painted('ver-m'), inked('m-notes'), inked('m-settings'), painted('m-export')];
+      if (run.some(x => !x)) throw new Error('the phone bar is missing one of ver-m / m-notes / m-settings / m-export');
       if (!run.every(x => x.w > 0)) throw new Error('the phone bar did not render at 390px — this test cannot see what it is measuring');
+      if (document.getElementById('m-help')) throw new Error('the phone ? (#m-help) is back in the bar — queue 1065 took it out');
 
       const gaps = [];
       for (let i = 1; i < run.length; i++) gaps.push(run[i].left - run[i - 1].right);
-      /* THE RULE IS NOT "ALL THREE EQUAL" — that was the version before this, and he rejected it:
+      /* THE RULE IS NOT "ALL EQUAL" — that was the version before this, and he rejected it:
          "the space between the settings cog and notes pad is perfect but you've got them far away from
          the export button and refresh button". A gap bounded by a hard painted edge (the version chip,
          the filled Export button) reads WIDER than the same gap between two soft glyphs, because
          between two icons the eye counts part of the space as belonging to the icons. So the two
          edge-bounded gaps must be visibly smaller than the icon-to-icon one to look the same. */
-      const [chipToHelp, helpToNotes, notesToCog, cogToExport] = gaps;
-      const outerDiff = Math.abs(chipToHelp - cogToExport);
+      const [chipToNotes, notesToCog, cogToExport] = gaps;
+      const outerDiff = Math.abs(chipToNotes - cogToExport);
       if (outerDiff > 1.5) {
-        throw new Error('the two edge-bounded gaps are ' + chipToHelp.toFixed(1) + ' and ' + cogToExport.toFixed(1) +
+        throw new Error('the two edge-bounded gaps are ' + chipToNotes.toFixed(1) + ' and ' + cogToExport.toFixed(1) +
           'px — they sit either end of the icon run and must match');
       }
-      /* Both ICON-TO-ICON gaps have to clear the edge-bounded ones, for the reason in the note above. */
-      [['?→notes', helpToNotes], ['notes→cog', notesToCog]].forEach(([name, g]) => {
-        if (g <= Math.max(chipToHelp, cogToExport) + 2) {
-          throw new Error(name + ' is ' + g.toFixed(1) + 'px against outer gaps of ' + chipToHelp.toFixed(1) +
-            ' — an icon-to-icon gap has to be the LARGER one or it reads tighter than the two beside it');
-        }
-      });
-      /* And they have to match EACH OTHER, or the run is even at its ends and lumpy in the middle —
-         which is the shape of the complaint that started #189. 2px, because closing the last 1.8px
-         needs the two tap targets to overlap: the ink gap is the sum of each button's own padding
-         before any box gap at all, so an exact match is only reachable through the targets. */
-      const innerDiff = Math.abs(helpToNotes - notesToCog);
-      if (innerDiff > 2) {
-        throw new Error('the two icon-to-icon gaps are ' + helpToNotes.toFixed(1) + ' and ' + notesToCog.toFixed(1) +
-          'px — the middle of the run is uneven');
+      /* The ICON-TO-ICON gap (notes→cog, the one he called perfect) has to clear the edge-bounded ones, for the reason above. */
+      if (notesToCog <= Math.max(chipToNotes, cogToExport) + 2) {
+        throw new Error('notes→cog is ' + notesToCog.toFixed(1) + 'px against outer gaps of ' + chipToNotes.toFixed(1) +
+          ' — an icon-to-icon gap has to be the LARGER one or it reads tighter than the two beside it');
       }
       /* The tap targets must not overlap to achieve any of the above. */
-      const boxes = ['m-help', 'm-notes', 'm-settings'].map(id => document.getElementById(id).getBoundingClientRect());
+      const boxes = ['m-notes', 'm-settings'].map(id => document.getElementById(id).getBoundingClientRect());
       for (let i = 1; i < boxes.length; i++) {
         if (boxes[i].left - boxes[i - 1].right < -0.5) {
           throw new Error('two of the phone bar buttons overlap by ' + (boxes[i - 1].right - boxes[i].left).toFixed(1) +
@@ -34162,7 +34161,12 @@
       if (!mv || !mv.el) throw new Error('the video has no decoded element in the registry after arriving, so nothing could ever draw it');
       await until921('the received video to decode a frame', async function () { return mv.el.readyState >= 2 ? mv.el.readyState : null; }, 60000);
       try { mv.el.currentTime = 0.2; } catch (e) {}
-      await settle921(400);
+      /* THE SEEK HAS TO LAND BEFORE THE DRAW (8 Oct, v17.26's ninth ship, red at 380 only: "byte-identical and the frame drawn
+         from it is blank"). A fixed 400 ms settle assumed the seek to 0.2 s finished inside it; on a loaded phone pass it had
+         not, the element was still seeking with no frame for 0.2 s, and the compositor drew nothing. Wait for the element
+         itself to say the frame is there. */
+      await until921('the received video to finish seeking to 0.2 s', async function () { return !mv.el.seeking && mv.el.readyState >= 2 ? 1 : null; }, 20000);
+      await settle921(150);
       const inkVid = q921ink(0.2);
       if (inkVid.lit < blank.lit + inkVid.total * 0.01 || inkVid.colours < 5) throw new Error('splash.mp4 arrived byte-identical and the frame drawn from it is blank (' + inkVid.pct + '% lit against ' + blank.pct + '% empty, ' + inkVid.colours + ' colours) — the transfer is only finished when the picture is on the canvas');
     });
@@ -37438,7 +37442,10 @@
           if (!R1 || R1.mode !== 'live') throw new Error('the dropped link did not start a live reconnect (' + JSON.stringify(R1 && R1.mode) + ')');
           await until921S6('the copy to come back by itself', function () { const s = C.session; return s === s1 && s.online && host.admitted === 2; }, 20000);
           await until921S6('the banner to go', function () { return !document.getElementById('collab-banner'); }, 4000);
-          if (ui._recon()) throw new Error('the live reconnect kept running after it succeeded');
+          /* …and it stands down on the owner's WELCOME, one hop after `admitted` — the hop the first reconnect is given above.
+             This check had none, and a poll landed in it (v17.26's sixth ship, 8 Oct). Given that hop, and no more. */
+          try { await until921S6('the live reconnect to stand down once the owner has welcomed it', function () { return ui._recon() ? 0 : 1; }, 3000); }
+          catch (e) { throw new Error('the live reconnect kept running after it succeeded'); }
         } finally {
           host.stop();
           try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
@@ -38239,6 +38246,18 @@
         }
       });
     });
+    /* #996: SAID HERE, NOT 400 TESTS LATER. This test's linked copy ("Shared A" / "Shared B") was left in the shared scene on
+       5 Oct and again on 7 Oct (the leak list named it both times), and each time the first sign was a sheet preview hundreds of
+       tests away drawing the wrong colour. Still here after the cleanup → fail by name, with what the app was left on: that is
+       the evidence #996 waits for. (8 Oct: NOT an orig deleted under the app — planted, the cleanup's remove() still moves the
+       app off the copy and nothing is left; so a late message writing the copy's layers back is the suspect left.) */
+    const left996 = FM.scene.layers.filter(function (L) { return /^Shared [AB]$/.test(L.name); }).map(function (L) { return L.name; });
+    if (left996.length) {
+      const cur = FM.projects.currentId(), listed = FM.projects.list().some(function (p) { return p.id === cur; });
+      throw new Error('#996: this test left ' + left996.join(' + ') + ' in the shared scene, on project ' + cur + ' (' +
+        (listed ? 'a project still listed' : 'NOT listed — removed while it was the one open') + ', collab session ' +
+        (FM.collab && FM.collab.session ? 'still up' : 'gone') + ')');
+    }
   });
 
   test('921 S6 review: a link that dies while the joiner waits at the knock is said at once — not after two minutes, and not as the owner’s fault', { item: '921', budgetMs: 120000 }, async function () {
@@ -44963,22 +44982,28 @@
    * between the project-name field and the version chip, alone in the middle of the bar while the
    * other three icons clustered to its right. */
 
-  test('the phone help button sits to the RIGHT of the version chip (queue 266)', { item: 'help-pos' }, function () {
-    return atPhoneWidth(async function () {
+  test('1065 the phone top bar has no ? help button — the PC keeps its own, and it still opens the shortcuts', { item: '1065' }, async function () {
+    /* Queue 1065 (2 Oct — "the question mark help button can be removed from mobile versions"). The phone's way into the
+       sheet is Settings › Keyboard shortcuts, which opens the same sheet (js/shortcuts.js #912); the PC's ? is untouched. */
+    await atPhoneWidth(async function () {
       await new Promise(r => setTimeout(r, 60));
-      const help = document.getElementById('m-help'), ver = document.getElementById('ver-m');
-      if (!help || !ver) throw new Error('phone top bar is missing #m-help or #ver-m');
-      const h = help.getBoundingClientRect(), v = ver.getBoundingClientRect();
-      if (!(h.width > 0 && v.width > 0)) throw new Error('one of them is not rendered at phone width');
-      if (h.left < v.right) throw new Error('"?" starts at ' + Math.round(h.left) + ' but the version chip runs to ' + Math.round(v.right) + ' — it is still left of the chip');
-      /* And it must not have been dropped between notes and the cog, whose gap he signed off in #189. */
-      const notes = document.getElementById('m-notes'), cog = document.getElementById('m-settings');
-      if (notes && cog) {
-        const n = notes.getBoundingClientRect(), c = cog.getBoundingClientRect();
-        if (h.left > n.left && h.left < c.right && n.width > 0)
-          throw new Error('"?" was moved INTO the notes/cog pair, which #189 signed off as correct');
-      }
+      if (document.getElementById('m-help')) throw new Error('the phone top bar still has its ? (#m-help)');
+      const bar = ['ver-m', 'm-notes', 'm-settings', 'm-export'].map(id => document.getElementById(id));
+      if (bar.some(el => !el || !(el.getBoundingClientRect().width > 0))) throw new Error('CONTROL: the phone bar is not on screen at phone width (ver / notes / cog / Export) — nothing here was measured');
     }, 375);
+    /* BACK AT A PC WIDTH, THE PC ROW IS REBUILT BY THE APP'S NEXT REFRESH, NOT BY THE RESIZE (js/app.js pcTransportLayout runs
+       from refreshAll / syncSelectionChrome): the phone width gave #btn-help back to #topbar-extra, which is display:none,
+       and atPhoneWidth gives the way back only a resize. v17.26's first ship read that as "the PC ? is gone" in the full
+       pass (green alone) — and left the row torn down for the tests after it. So refresh as any click would, then judge. */
+    FM.refreshAll(); await new Promise(r => setTimeout(r, 60));
+    const pc = document.getElementById('btn-help');
+    if (!pc || !(pc.getBoundingClientRect().width > 0)) throw new Error('the PC ? (#btn-help) is gone too — queue 1065 was about the phone only');
+    if (FM.shortcuts && FM.shortcuts.isOpen()) FM.shortcuts.hide();
+    pc.click(); await new Promise(r => setTimeout(r, 200));
+    const open = !!(FM.shortcuts && FM.shortcuts.isOpen());
+    if (FM.shortcuts && FM.shortcuts.hide) FM.shortcuts.hide();
+    await new Promise(r => setTimeout(r, 200));
+    if (!open) throw new Error('the PC ? no longer opens the shortcuts');
   });
 
   /* ---------------- queue 305: the ? inside its own circle ---------------------------------------
@@ -44993,9 +45018,9 @@
    * one was off: ink box y 8.50–17.50 in a circle centred at 12, so 4.5 units of air above it and 2.5
    * below. Both tests stay. The old one still guards the thing it actually measures; this one asks his
    * question. */
-  test('the help glyph is centred in its own circle, at the same weight on both bars (queue 305)', { item: 'help-pos' }, function () {
+  test('the help glyph is centred in its own circle and drawn thin (queue 305)', { item: 'help-pos' }, function () {
     const seen = [];
-    ['btn-help', 'm-help'].forEach(function (id) {
+    ['btn-help'].forEach(function (id) {   // the phone's copy went with queue 1065
       const b = document.getElementById(id);
       if (!b) throw new Error('#' + id + ' is missing');
       const svg = b.querySelector('svg');
@@ -45026,11 +45051,7 @@
         seen.push({ id: id, d: path.getAttribute('d'), sw: sw });
       } finally { holder.remove(); }
     });
-    /* ONE GLYPH, TWO PLACES. They are two hand-written copies of the same path in index.html, which is
-       exactly the arrangement where one gets fixed and the other does not — and the phone one had
-       already drifted to a different stroke weight. Held equal so that cannot happen quietly. */
-    if (seen[0].d !== seen[1].d) throw new Error('the PC and phone "?" are drawn from different paths now — one of them has been fixed and the other left behind');
-    if (seen[0].sw !== seen[1].sw) throw new Error('the PC "?" is stroke ' + seen[0].sw + ' and the phone one ' + seen[1].sw + ' — the same glyph at two weights is how this drifted in the first place');
+    if (seen.length !== 1) throw new Error('CONTROL: the PC ? was not measured');
   });
 
   test('the help glyph is centred in its button (queue 266)', { item: 'help-pos' }, function () {
@@ -45038,16 +45059,16 @@
        was reporting — see the test above, which measures the question mark against its circle and
        found the 1-unit drop he had been describing since 266. Kept, because the thing it does measure
        is still worth holding. */
-    return atPhoneWidth(async function () {
+    return (async function () {   // the PC's ? since queue 1065 took the phone's away (the runner frame is the PC layout)
       await new Promise(r => setTimeout(r, 60));
-      const btn = document.getElementById('m-help');
+      const btn = document.getElementById('btn-help');
       const svg = btn && btn.querySelector('svg');
       if (!svg) throw new Error('no "?" icon to measure');
       const b = btn.getBoundingClientRect(), s2 = svg.getBoundingClientRect();
       const dx = Math.abs((s2.left + s2.width / 2) - (b.left + b.width / 2));
       const dy = Math.abs((s2.top + s2.height / 2) - (b.top + b.height / 2));
       if (dx > 1 || dy > 1) throw new Error('the "?" glyph sits ' + dx.toFixed(1) + 'px/' + dy.toFixed(1) + 'px off the centre of its button');
-    }, 375);
+    })();
   });
 
   /* ---------------- queue 267: the sound-effects icon was still red ----------------
@@ -56662,44 +56683,6 @@
    * the play button row along side everything else." Half already existed as #btn-help, desktop-only
    * and stranded in the top bar. */
 
-  test('the phone top bar has a help button that opens the shortcuts, in both selection states', { item: 'help-btn' }, async function () {
-    const frame = () => new Promise(r => setTimeout(r, 120));
-    return atPhoneWidth(async function () {
-      const b = document.getElementById('m-help');
-      if (!b) throw new Error('there is no "?" in the phone top bar');
-      const layers0 = FM.scene.layers.slice();
-      try {
-        // The notepad only appears with NOTHING selected, so a "?" pinned to it would come and go
-        // with the selection. It must be there either way — that is what this checks.
-        if (FM.selectLayer) FM.selectLayer(null);
-        if (FM.refreshAll) FM.refreshAll();
-        await frame();
-        const noSel = b.getBoundingClientRect();
-        if (!(noSel.width > 0)) throw new Error('the "?" is not visible with nothing selected');
-        const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#fff' });
-        L.start = 0; L.duration = 5;
-        FM.scene.layers.push(L); FM.selectLayer(L.id);
-        if (FM.refreshAll) FM.refreshAll();
-        await frame();
-        const withSel = b.getBoundingClientRect();
-        if (!(withSel.width > 0)) throw new Error('the "?" disappears when a layer is selected');
-        // It may shift a few px as the right-hand cluster changes width — the version chip beside it
-        // already does — but it must not jump slots.
-        if (Math.abs(withSel.left - noSel.left) > 12) {
-          throw new Error('the "?" moved ' + Math.round(Math.abs(withSel.left - noSel.left)) + 'px when the selection changed — it is shuffling position');
-        }
-        // and it must actually open the overlay
-        b.click(); await frame();
-        const ov = document.getElementById('shortcuts-overlay');
-        if (!ov) throw new Error('no shortcuts overlay');
-        if (ov.classList.contains('hidden')) throw new Error('pressing "?" did not open the shortcuts');
-        if (FM.shortcuts && FM.shortcuts.toggle) FM.shortcuts.toggle();
-      } finally {
-        FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
-        const ov = document.getElementById('shortcuts-overlay'); if (ov) ov.classList.add('hidden');
-      }
-    }, 380);
-  });
 
   test('on PC the help button rides the transport row, not the top bar', { item: 'help-btn' }, function () {
     /* "On pc it can go on the play button row along side everything else." btn-notes went missing in
@@ -64999,7 +64982,7 @@
     });
   });
 
-  test('the timeline sizes its scroll range from itself, not from the window', { item: 'tl-width-self' }, function () {
+  test('the timeline sizes its scroll range from itself, not from the window', { item: 'tl-width-self' }, async function () {
     /* Queue 396. Ezra: "An issue where the ui thinks it should be the size based on the timeline and not
        itself." The scroller padded its inner width by `window.innerWidth`, which is only the same number
        as its own scrollport when the timeline fills the window — true on a phone, false on a desktop where
@@ -65011,6 +64994,11 @@
        the two are equal and prove nothing on the layout that had the bug. */
     const inner = document.getElementById('tl-inner'), tl = document.getElementById('timeline');
     if (!inner || !tl) throw new Error('#tl-inner / #timeline missing');
+    /* MEASURED ON A TIMELINE BUILT FOR THIS SCENE (7 Oct, v17.26's fifth ship): #tl-inner's width is written by a rebuild, and
+       an earlier test that changed the duration or the zoom without one left it sized for the old scene — "pads by 287px
+       where the timeline is only 600px wide", red in a full pass, green alone. Rebuild first, as any refresh of the app does;
+       the bug this guards (sizing from the window) still shows after a rebuild. */
+    FM.timeline.rebuild(); await sleep(60);
     const port = tl.clientWidth;
     if (!(port > 200)) throw new Error('the timeline scrollport measured ' + port + 'px — nothing below this would mean anything');
     const innerW = parseFloat(inner.style.width) || inner.getBoundingClientRect().width;
@@ -71095,7 +71083,12 @@
       // HIS CASE: on a flat magenta fill, Channel Remap swaps two channels that are already equal.
       const a = put('#cc22cc', 'channelremap');
       if (!a) throw new Error('channelremap has no registry instance — this test cannot run');
-      const dead = FM.fxThumbs.effectDoesNothing(a.L, 0);
+      /* A SLOW RENDER IS "UNKNOWN", NOT A VERDICT (8 Oct, v17.26's tenth ship, red in the desktop pass: "the check said null").
+         The check abandons a render that alone takes over NOOP_BUDGET_MS (45 ms, js/fx-thumbs.js) and says null — on purpose,
+         so the panel never stutters — and a loaded full pass blew it once on this 1080x1920 frame. So it is asked again (up to
+         five times) while it says null; a real "changes something" (false) is an answer and is not asked again. */
+      let dead = null;
+      for (let k = 0; k < 5 && dead === null; k++) { if (k) await sleep(150); dead = FM.fxThumbs.effectDoesNothing(a.L, 0); }
       if (dead !== true) throw new Error('Channel Remap changes nothing on a flat #cc22cc fill (both red and blue are 204) and the check said ' + dead + ' — which is the whole of his complaint');
 
       /* CONTROL 1 — THE SAME EFFECT ON A SUBJECT IT CAN ACT ON. This is what stops the hint reading as
@@ -94839,13 +94832,14 @@
           await sleep(400);
           /* ── 1: tap-away over the bin deletes the layer ── */
           FM.selectLayer(L.id); FM.refreshAll(); await sleep(400);
-          const help = document.getElementById('m-help'), del = document.getElementById('m-del');
-          if (!help || !del) throw new Error('setup: #m-help or #m-del is missing from the phone bar');
-          const ph = huntfCenter(help), pd = huntfCenter(del);
-          if (!(ph.w > 0) || !(pd.w > 0)) throw new Error('setup: with a layer selected the phone bar does not show both ? and the bin (? ' + ph.w + ' px, bin ' + pd.w + ' px wide)');
-          await realInput924(huntfTap(ph), 'a tap on ? with a layer selected');
+          const del = document.getElementById('m-del');
+          if (!del) throw new Error('setup: #m-del is missing from the phone bar');
+          const pd = huntfCenter(del);
+          if (!(pd.w > 0)) throw new Error('setup: with a layer selected the phone bar does not show the bin (' + pd.w + ' px wide)');
+          /* the phone has no ? since queue 1065: the sheet is opened the way Settings › Keyboard shortcuts opens it */
+          FM.shortcuts.show();
           await sleep(450);
-          if (!FM.shortcuts.isOpen()) throw new Error('setup: a real tap on ? did not open the shortcuts sheet');
+          if (!FM.shortcuts.isOpen()) throw new Error('setup: FM.shortcuts.show() did not open the shortcuts sheet');
           const under = document.elementFromPoint(pd.x, pd.y);
           if (!under || under.id !== 'shortcuts-overlay') throw new Error('setup: the spot over the bin is not the sheet backdrop (it is ' + (under ? (under.id || under.className) : 'nothing') + '), so a tap there is not a tap outside the sheet');
           await realInput924(huntfTap(pd), 'a tap on the top bar outside the ? sheet, over the bin');
@@ -94858,8 +94852,7 @@
           FM.selectLayer(null); FM.refreshAll(); await sleep(400);
           /* ── 2: his #762 on the phone — a second tap on the button closes what it opened ── */
           const doors = [
-            { id: 'm-help', name: 'the ? button', up: () => FM.shortcuts.isOpen() },
-            { id: 'm-notes', name: 'the Notes button', up: () => FM.notepad.isOpen() },
+            { id: 'm-notes', name: 'the Notes button', up: () => FM.notepad.isOpen() },   // (the phone ? went with queue 1065)
             { id: 'm-settings', name: 'the cog (Canvas settings)', up: huntfCanvasUp },
           ];
           for (const d of doors) {
@@ -107561,10 +107554,11 @@
   function helpCard968() { const o = document.getElementById('shortcuts-overlay'); return o && !o.classList.contains('hidden') && !o.classList.contains('pb-closing') ? o.querySelector('.shortcuts-card') : null; }
   /* open a panel with a real tap on its phone button; answer whether it came up BIG */
   async function open968(which, where) {
-    await tap968(document.getElementById(which === 'notes' ? 'm-notes' : 'm-help'), where + ': a tap on the phone ' + (which === 'notes' ? 'Notes button' : '? (Help)'));
+    if (which === 'notes') await tap968(document.getElementById('m-notes'), where + ': a tap on the phone Notes button');
+    else FM.shortcuts.show();   // no phone ? since queue 1065: Help opens as Settings › Keyboard shortcuts opens it
     await sleep927(700);
     const card = which === 'notes' ? notesCard968() : helpCard968();
-    if (!card) throw new Error(where + ': a real tap on the phone ' + (which === 'notes' ? 'Notes button' : '? (Help)') + ' did not open it');
+    if (!card) throw new Error(where + ': ' + (which === 'notes' ? 'a real tap on the phone Notes button' : 'FM.shortcuts.show()') + ' did not open it');
     return card.classList.contains('pb-big');
   }
   /* close it the way he does — Done on the notes, Close on the help — and let a big one finish folding */
@@ -107745,9 +107739,7 @@
         await onScreen924(async function () {
           if (FM.home.isOpen()) { FM.home.close(); await sleep927(300); }
           await phone('phone, in a project', async function () {
-            const q = document.getElementById('m-help');
-            if (!q || !(q.getBoundingClientRect().width > 0)) throw new Error('setup: the phone bar has no ? (#m-help) on screen');
-            await tap(q, 'the phone bar’s ?');
+            FM.shortcuts.show();   // no phone ? since queue 1065 — the sheet's own size is what this measures
           });
           FM.home.open(); await sleep927(400);
           await phone('phone, over Home', async function () { FM.shortcuts.show(); });
@@ -111082,7 +111074,14 @@
                   throw new Error(at + ': CONTROL: three times the press landed after the ripple (last at ' + ms + ' ms, ripple ' + (d2.reveal || 'gone') + ') - it has to land WHILE the ripple runs, the only time a press went through; the machine is too loaded to measure this');
                 }
                 if (c.want === cancelBtn && !inside(d2, d2.cancel, 0)) throw new Error(at + ': setup: at ' + ms + ' ms the press (' + Math.round(d2.x) + ',' + Math.round(d2.y) + ') missed Cancel, which was at [' + [d2.cancel.left, d2.cancel.top, d2.cancel.right, d2.cancel.bottom].map(Math.round) + ']');
-                if (c.want === dlg && inside(d2, d2.card, 0)) throw new Error(at + ': setup: at ' + ms + ' ms the press landed on the card, not on the dim');
+                /* EARLY IS A SETUP MISS TOO, NOT A VERDICT (7 Oct, v17.26's third ship on the laptop): the card rises from 90 px low
+                   until ~450 ms of the 640 ms ripple, and this machine's CDP round trips are quicker than the 60-220 ms measured
+                   above — the press on the + landed at 301 ms, while the card still covered it. Tried again like a late press, 100 ms
+                   later each time (still well inside the ripple); a press that reaches the wrong thing is still a failure below. */
+                if (c.want === dlg && inside(d2, d2.card, 0)) {
+                  if (attempt < 3) { c.gap += 100; dlg.classList.add('hidden'); await sleep(400); continue; }
+                  throw new Error(at + ': setup: three times the press landed on the card, not on the dim (last at ' + ms + ' ms)');
+                }
                 const bad = [];
                 const reached = d2.target;
                 if (!(reached === c.want || (c.want !== dlg && c.want.contains(reached)))) bad.push('the press reached ' + nm(reached) + (dlg.contains(reached) ? '' : ' on Home') + ' instead of ' + (c.want === dlg ? 'the dim' : nm(c.want)));
@@ -111618,8 +111617,13 @@
         const q = card.getBoundingClientRect(), x = q.left + q.width / 2, y = q.top + q.height / 2;   // while it is up
         FM.mobile.closeAdd(); await c.sleep(450);
         c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height / 2);
-        c.row.click();
+        /* t0 BEFORE THE CLICK (8 Oct, v17.26's eighth ship, red at 380: "took a tap 289 ms after"). The guard's timer is set
+           inside the click (guardArrival), and the click goes on to build the menu's rim after it — so a t0 read when click()
+           returned came ~11 ms after the timer started on a loaded phone pass, and a guard that held its full 300 ms read 289.
+           Read before the click, t0 is never later than the timer's start, and "a timer never fires early" holds. (For him
+           the double-tap window starts at the first tap's lift, earlier still, so this is the conservative side.) */
         const t0 = performance.now();
+        c.row.click();
         if (!sheet.classList.contains('open')) throw new Error('the press and click on the empty area did not open the add menu at once (#981 clause 1)');
         // CONTROL: it is arriving on the slide, not the swing - this is the reduced-motion arrival
         const an = sheet.getAnimations();

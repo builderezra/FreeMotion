@@ -8,6 +8,30 @@ A failure row from the runner is "FAIL" + title + " — " + message, so a title 
 which cannot confuse two titles that share a substring.
 """
 import json, sys
+# --merge-touch <verdicts file> <tests/_touch_pass.py --out JSON> (7 Oct, the laptop): on Linux every real-finger test reads NORUN
+# in prove.sh's shared page (#1097), so prove.sh hands those to the finger pass — each alone, in a touch page of its own — and this
+# puts that pass's verdict in place of the NORUN line: pass → PASS, red → FAIL, NOT RUN there too → NORUN with ITS reason. Only a
+# NORUN whose title the pass ran is replaced; no JSON (a pass that could not run) leaves every line as it was, so it still refuses.
+if len(sys.argv) > 1 and sys.argv[1] == '--merge-touch':
+    vf, tj = sys.argv[2], sys.argv[3]
+    try:
+        res = json.load(open(tj, encoding='utf-8'))
+    except Exception:
+        sys.exit(0)
+    v = {}
+    for x in res.get('pass') or []:
+        v[x['name']] = 'PASS\t%s' % x['name']
+    for x in res.get('red') or []:
+        v[x['name']] = 'FAIL\t%s\t%s' % (x['name'], ('(a finger test, in a page of its own) ' + str(x.get('why', '')))[:300])
+    for x in res.get('notRun') or []:
+        v[x['name']] = 'NORUN\t%s\tNOT RUN HERE: %s' % (x['name'], str(x.get('why', ''))[:200])
+    rows = [l for l in open(vf, encoding='utf-8').read().split('\n') if l]
+    out = []
+    for l in rows:
+        p = l.split('\t')
+        out.append(v[p[1]] if len(p) > 1 and p[0] == 'NORUN' and p[1] in v else l)
+    open(vf, 'w', encoding='utf-8').write('\n'.join(out) + ('\n' if out else ''))
+    sys.exit(0)
 raw = open(sys.argv[1], encoding='utf-8').read()
 titles = [t for t in open(sys.argv[2], encoding='utf-8').read().split('\n') if t]
 i = raw.find('{')

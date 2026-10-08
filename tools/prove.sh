@@ -51,8 +51,20 @@ printf '%s\n' "$TITLES" | sed 's/^/    · /' | cut -c1-120
 P1="$(freeport)"; ( exec "$(dirname "$0")/serve.sh" "$P1" ) >/dev/null 2>&1 & SRV1=$!
 waitfor "$P1" || { echo "prove: could not serve the working tree"; exit 2; }
 run() { python3 tests/_cdp.py --url "http://127.0.0.1:$1/tests/run.html?only=$Q" --width "$2" --timeout 600 > "$3" 2>&1; }
+# FINGER TESTS GET A BROWSER EACH (7 Oct, the laptop). On Linux the first touch-emulation OFF takes a page's mouse for good
+# (#1097), so in this one shared page every real-finger test says NOT RUN HERE: prove read them NORUN and refused v17.26, whose
+# two finger tests (#690, #969) had passed with a real finger that same hour. ship.sh's finger pass (tests/_touch_pass.py) gives
+# each its own browser; the same runs here on BOTH sides, so a finger test is CAUGHT, DEAD or RED like any other. On the Mac a
+# finger test runs in the shared page, the pass finds nothing to do, and nothing changes.
+fingers() {   # fingers <port> <driver output> <verdicts file> <width> <side>
+  python3 tests/_touch_pass.py --port "$1" --width "$4" --from "$2" --out "$TMP/fingers-$5.json" > "$TMP/fingers-$5.log" 2>&1
+  local s; s="$(tail -1 "$TMP/fingers-$5.log")"
+  grep -q '^finger tests at' <<<"$s" && ! grep -q ' of 0 (' <<<"$s" && echo "    ($5 side — $s)"
+  python3 tools/_spotjudge.py --merge-touch "$3" "$TMP/fingers-$5.json"
+}
 run "$P1" "$WIDTH" "$TMP/ctrl"
 python3 tools/_spotjudge.py "$TMP/ctrl" "$TMP/titles" > "$TMP/ctrl.v"
+fingers "$P1" "$TMP/ctrl" "$TMP/ctrl.v" "$WIDTH" tree
 # REVERTED — HEAD's source with the working tree's tests
 git worktree add -q "$WT" HEAD || { echo "prove: could not create a worktree"; exit 2; }
 # …or the REVERTED side runs HEAD's tests, and every changed test reads DEAD or NORUN for the wrong reason (6 Oct: its
@@ -65,6 +77,7 @@ P2="$(freeport)"; ( exec "$(dirname "$0")/serve.sh" "$P2" "$WT" ) >/dev/null 2>&
 waitfor "$P2" || { echo "prove: could not serve the HEAD worktree"; exit 2; }
 run "$P2" "$WIDTH" "$TMP/rev"
 python3 tools/_spotjudge.py "$TMP/rev" "$TMP/titles" > "$TMP/rev.v"
+fingers "$P2" "$TMP/rev" "$TMP/rev.v" "$WIDTH" reverted
 
 BAD=0; CAUGHT=0; DEADN=0; RETRY=""
 while IFS=$'\t' read -r cv ct cr; do
@@ -94,7 +107,9 @@ if [ -n "$RETRY" ] && [ "$WIDTH" != "380" ]; then
   printf '%s' "$RETRY" > "$TMP/titles2"
   Q="$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(open(sys.argv[1]).read().rstrip("\n"), safe=""))' "$TMP/titles2")"
   run "$P1" 380 "$TMP/ctrl2"; python3 tools/_spotjudge.py "$TMP/ctrl2" "$TMP/titles2" > "$TMP/ctrl2.v"
+  fingers "$P1" "$TMP/ctrl2" "$TMP/ctrl2.v" 380 tree-380
   run "$P2" 380 "$TMP/rev2";  python3 tools/_spotjudge.py "$TMP/rev2"  "$TMP/titles2" > "$TMP/rev2.v"
+  fingers "$P2" "$TMP/rev2" "$TMP/rev2.v" 380 reverted-380
   while IFS=$'\t' read -r cv ct cr; do
     rv="$(grep -F "$(printf '\t%s' "$ct")" "$TMP/rev2.v" | head -1 | cut -f1)"
     if [ "$cv/$rv" = "PASS/FAIL" ]; then echo "    ✅ CAUGHT at 380px  ${ct:0:90}"; CAUGHT=$((CAUGHT+1)); DEADN=$((DEADN-1)); else echo "    ⚠️ still DEAD at 380px  ${ct:0:90}"; fi

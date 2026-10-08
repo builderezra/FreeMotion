@@ -254,7 +254,26 @@ write_lock ""   # …so a KILL leaves enough behind to stop this server too
 for _ in $(seq 1 20); do curl -s -o /dev/null "http://127.0.0.1:$P/tests/run.html" && break; sleep 0.5; done
 curl -sf -o /dev/null "http://127.0.0.1:$P/tests/run.html" || { echo "⚠️  could not serve $ROOT on port $P - nothing proven either way"; exit 8; }
 URL="http://localhost:$P/tests/run.html"
-cdp() { python3 "$TOOLS/../tests/_cdp.py" --url "$1" --width "$WIDTH" --timeout "$2" "${@:3}" > "$OUTF" 2>&1; cat "$OUTF"; }
+cdp() { FM_TOUCH_PAGE="${TOUCH_PAGE:-}" python3 "$TOOLS/../tests/_cdp.py" --url "$1" --width "$WIDTH" --timeout "$2" "${@:3}" > "$OUTF" 2>&1; cat "$OUTF"; }
+# A LONE FINGER TEST GETS A TOUCH PAGE OF ITS OWN (7 Oct, the laptop). On Linux the first touch-emulation OFF takes a page's mouse
+# for good (#1097), so a real-finger test reads NOT RUN in a shared page and --only refused it (exit 9): v17.26's fix to the 947
+# ripple test had to be proven by hand. ship.sh and prove.sh give each finger test its own browser (FM_TOUCH_PAGE=1); --only does
+# the same for ONE named finger title, in the baseline and against the mutation alike (so a cached baseline cannot lose it). Two
+# finger titles cannot share one touch page, so they still read NOT RUN and still refuse.
+TOUCH_PAGE=""
+only_slice() {   # only_slice <label>: run the named titles; sets V (tools/_spotjudge.py's verdict per title)
+  local out
+  out="$(cdp "$URL?only=$Q" "$SLICE_TIMEOUT" --names)"
+  no_verdict "$out" "$1"
+  V="$(python3 "$TOOLS/_spotjudge.py" "$OUTF" "$TF")"
+  if [ -z "$TOUCH_PAGE" ] && [ "$(grep -c . "$TF")" = 1 ] && grep -q "$(printf '^NORUN\t[^\t]*\tNOT RUN HERE: needs real touch emulation')" <<<"$V"; then
+    TOUCH_PAGE=1
+    echo "   (a finger test: run again in a touch page of its own, FM_TOUCH_PAGE=1, as ship.sh and prove.sh run them)"
+    out="$(cdp "$URL?only=$Q" "$SLICE_TIMEOUT" --names)"
+    no_verdict "$out" "$1"
+    V="$(python3 "$TOOLS/_spotjudge.py" "$OUTF" "$TF")"
+  fi
+}
 
 # ---- A RUN THAT DID NOT FINISH IS NOT A RESULT (6 Oct, RULES-AUDIT B4) ------------------------------------------------
 # Checked FIRST, before anything reads FAIL lines: a timed-out run has none, so it used to read as "SURVIVED — the
@@ -403,9 +422,7 @@ else
   else
     echo "→ baseline: the named test(s) must PASS on the unmutated tree, at ${WIDTH}px…"
     sed 's/^/    · /' "$TF" | cut -c1-120
-    BASE_OUT="$(cdp "$URL?only=$Q" "$SLICE_TIMEOUT" --names)"
-    no_verdict "$BASE_OUT" "the baseline slice"
-    V="$(python3 "$TOOLS/_spotjudge.py" "$OUTF" "$TF")"
+    only_slice "the baseline slice"
     if grep -q '^NORUN' <<<"$V"; then
       echo "❌ A NAMED TITLE DID NOT RUN — nothing it says before or after a mutation means anything:"
       printf '%s\n' "$V" | grep '^NORUN' | cut -f2,3 | sed 's/\t/ — /; s/^/   /' | cut -c1-240
@@ -476,9 +493,7 @@ if [ "$MODE" = full ]; then
        exit 8 ;;
   esac
 else
-  OUT="$(cdp "$URL?only=$Q" "$SLICE_TIMEOUT" --names)"
-  no_verdict "$OUT" "the mutated slice"
-  V="$(python3 "$TOOLS/_spotjudge.py" "$OUTF" "$TF")"
+  only_slice "the mutated slice"
   if grep -q '^NORUN' <<<"$V"; then
     echo "❌ A NAMED TITLE DID NOT RUN against the mutation — nothing proven either way:"
     printf '%s\n' "$V" | grep '^NORUN' | cut -f2,3 | sed 's/\t/ — /; s/^/   /' | cut -c1-240

@@ -7803,8 +7803,11 @@ body.fm-pushing #toast { z-index: 213; }
    that line for a reason, on a bar that also carries the delete bin. Zero box gap is the tightest
    honest setting: 1.6px of difference nobody can see, against a 2px strip where a tap belongs to
    whichever button paints last. Split across both buttons so neither margin passes −4. */
-#m-help { margin-right: -2.5px; }
-#m-notes { margin-left: -1.5px; margin-right: -4px; }
+/* "?" LEFT THE PHONE BAR (queue 1065), so the run is chip → notes → cog → Export again and chip→notes is an edge-bounded
+   gap once more, to match cog→Export. Measured at 390px with the ? gone and notes still at −1.5px (its half of the old
+   ?→notes pull): chip→notes 15.7, notes→cog 24.1, cog→Export 18. Notes' left margin gives back those 2.3px; the name field
+   pays for them out of its flex, and notes→cog (the one he called perfect) does not move. */
+#m-notes { margin-left: 0.8px; margin-right: -4px; }
 #m-export { margin-left: 3.1px; }
 .tb-notes-dot, .m-notes-dot {
   position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%;
