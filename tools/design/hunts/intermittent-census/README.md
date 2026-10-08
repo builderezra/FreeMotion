@@ -7,13 +7,17 @@ Tree: `wip/v17.26-tree` 5fe2deb0 (v17.26 on 2e3fd7a9), headless Chromium 1194 in
 | pass | summary | reds |
 |---|---|---|
 | N1280 | 4/4 slices: Regression 568/572 ✗Pending 0/0 built + Regression 564/571 ✗ · NOT RUN HERE 3 Pending 0/0 built + Regression 547/572 ✗ · NOT RUN HERE 2 Pending 0/0 built + Regression 454/569 ✗ · NOT RUN HERE 91 Pending 0/0 built | 55 |
-| N380 | 1/4 slices: Regression 568/572 ✗Pending 0/0 built | 4 |
+| N380 | 2/4 slices: Regression 568/572 ✗Pending 0/0 built + Regression 564/571 ✗ · NOT RUN HERE 3 Pending 0/0 built | 8 |
 
 ## Red names by pass (a name red in some passes and green in others is the intermittent kind)
 
 | test | N1280 | N380 |
 |---|---|---|
 | 915.5Br a reused VIDEO is stored as a pointer that says video, and reopens as a playing video, not blank | RED | RED |
+| 921 S3 Stop sharing revokes the code that was handed out | RED | RED |
+| 921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders | RED | RED |
+| 921 S6 a shared copy finds its owner by itself: a here from the owner makes it offer again at once, its token lets it in, and a dropped link comes bac | RED | RED |
+| an export survives the tab being backgrounded (queue 47) | RED | RED |
 | home push: the press answers the tap, survives the wait, and hands over without a pop | RED | RED |
 | playhead: a rebuild during the return-to-home pop keeps --tl-panel-left honest | RED | RED |
 | the VIDEO strip decode is capped too, not just the image one | RED | RED |
@@ -45,16 +49,12 @@ Tree: `wip/v17.26-tree` 5fe2deb0 (v17.26 on 2e3fd7a9), headless Chromium 1194 in
 | 776: the intro film plays through and is never faded out while the splash is still up | RED | . |
 | 783: the dark look's intro is never bright after the mark has animated, and the light look's still ends white | RED | . |
 | 893: an export with no soundtrack does not print the previous export’s mix peak in its report | RED | . |
-| 921 S3 Stop sharing revokes the code that was handed out | RED | . |
-| 921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders | RED | . |
-| 921 S6 a shared copy finds its owner by itself: a here from the owner makes it offer again at once, its token lets it in, and a dropped link comes bac | RED | . |
 | 957 the empty project clapper opens, slams shut on the board with lines out of the tip, and stops when it cannot be seen | RED | . |
 | 974 the clapper's three timings each play as drawn: A open then every 6 s, B one clap then shut, C non-stop | RED | . |
 | 981 review: a real double-tap on the empty area - the first tap opens the add menu at once, and a second tap that lands on the menu as it swings up pi | RED | . |
 | 981 review: with less motion the add menu arrives on its plain 220 ms slide, and its cards still take no tap for a double-tap window (300 ms) after th | RED | . |
 | 988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they w | RED | . |
 | a trim grip needs a hold on touch, arms visibly, and is instant on mouse (queue 336) | RED | . |
-| an export survives the tab being backgrounded (queue 47) | RED | . |
 | effect panels carry no explanation block, and motion blur cranks past one frame (queue 378/379) | RED | . |
 | every category card has its own gradient ring, out of step with the others (queue 339) | RED | . |
 | export: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215) | RED | . |
