@@ -261,8 +261,22 @@ window.FM = window.FM || {};
         const aria = (W().a11y && W().a11y.clip) ? W().a11y.clip(i + 1, clips.length, e.end - e.start, follow) : ('Clip ' + (i + 1));
         n.setAttribute('aria-label', aria);
         if (sel.has(e.id)) n.classList.add('sel');
+        /* 2.3 (§4.6): the sound taken out of this clip draws as a thin waveform band along its bottom edge, not as a row of its own */
+        if ((R.followers[e.id] || []).some(f => FM.spine.isTwinOf && FM.spine.isTwinOf(byId.get(f), l, R.eps))) { const b = el('span', 'sm-twinband'); b.setAttribute('aria-hidden', 'true'); n.appendChild(b); }
         mainEl.appendChild(n);
       });
+      /* 2.3: Mute clip sound — the 🔈 at the head of the clip row, its one home (§3.6). It reads the document's own key, never the clips. */
+      if (clips.length && FM.spine.muteMode) {
+        const off = FM.spine.muteMode(), mw = (W().tools || {});
+        const mb = el('button', 'sm-mute' + (off ? ' on' : '')); mb.type = 'button';
+        const ic = (FM.simpleTools && FM.simpleTools.ICON) || {};
+        mb.innerHTML = '<svg viewBox="0 0 24 24" class="sm-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (off ? ic.mute : ic.volume) + '</svg>';
+        const nm = off ? (mw.muteOff || 'Clip sound is off, tap to turn it on') : (mw.muteOn || 'Mute clip sound');
+        mb.setAttribute('aria-label', nm); mb.title = nm; mb.setAttribute('aria-pressed', off ? 'true' : 'false'); mb.dataset.tool = 'muteClips';
+        mb.style.left = Math.max(2, xOf(0) - 46) + 'px';
+        mb.addEventListener('click', ev => { ev.stopPropagation(); if (FM.spine.cmd) FM.spine.cmd.muteClips(!FM.spine.muteMode()); });
+        mainEl.appendChild(mb);
+      }
       R.main.filter(e => e.slot).forEach(e => {   // a filled slot: its members draw in their sections; the row marks the stretch
         const s = el('div', 'sm-slot'); s.style.left = xOf(e.start) + 'px'; s.style.width = ((e.end - e.start) * p) + 'px'; mainEl.appendChild(s);
       });
@@ -359,6 +373,25 @@ window.FM = window.FM || {};
       inp.click();
     },
     xOf(t) { return origin() + t * pps(); },   // #sm-inner coordinates, for the suite's x-invariance check
+    /* 2.3: THE SPEED SLIDER'S PREVIEW. While the thumb moves, only the clip row's boxes and the element's playback rate change — the
+       scene is untouched (the commit on release is the one history step). The clip's box stretches, everything after it slides by the
+       difference; `sp == null` puts every box back and the rate right. */
+    previewSpeed(id, sp) {
+      if (!mainEl) return;
+      const nodes = Array.from(mainEl.children), m = FM.media && FM.media.get(id), L = FM.layerById(FM.scene, id);
+      nodes.forEach(n => { if (n.dataset.l0 != null) { n.style.left = n.dataset.l0; n.style.width = n.dataset.w0; delete n.dataset.l0; delete n.dataset.w0; } });
+      const rate = v => { if (m && m.el) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, v || 1)); } catch (e) {} } };
+      if (sp == null || !L || !R) { if (L) rate(FM.speedAt(L, FM.time)); return; }
+      const k = FM.speedAt(L, +L.start || 0) / sp, dx = (+L.duration || 0) * (k - 1) * pps();   // a clip's length goes as old speed / new speed
+      const hit = mainEl.querySelector('.sm-item[data-id="' + id + '"]'); if (!hit) return;
+      const x0 = parseFloat(hit.style.left);
+      nodes.forEach(n => {
+        const l = parseFloat(n.style.left); if (!isFinite(l)) return;
+        if (n === hit) { n.dataset.l0 = n.style.left; n.dataset.w0 = n.style.width; n.style.width = Math.max(4, parseFloat(n.style.width) * k) + 'px'; }
+        else if (l > x0 + 1e-6 && !n.classList.contains('sm-mute')) { n.dataset.l0 = n.style.left; n.dataset.w0 = n.style.width; n.style.left = (l + dx) + 'px'; }
+      });
+      rate(sp);
+    },
     read: () => R,
     clearSay: clearSay,   // Phase 2.2: a selection change dismisses a line (§3.12 rule 1b)
     _say: sayLine

@@ -420,8 +420,11 @@ window.FM = window.FM || {};
     });
 
     // ── 11. LANES (§8.6): packed at read time, never stored; sound puts the longest first so a whole-video song wins ──
+    /* 2.3 (§4.6): a clip's sound twin draws as a band inside its clip (js/simple-timeline.js), so it leaves the Sound row. isTwinOf lives in
+       js/spine-edit.js (loaded after this file) and is read lazily; before it exists no layer is a twin. */
+    const twinOfMain = u => !!(S.isTwinOf && u.l.type === 'video' && main.some(e => !e.slot && byUid.get(e.id) && S.isTwinOf(u.l, byUid.get(e.id).l, eps)));
     Object.keys(R.lanes).forEach(sec => {
-      const items = units.filter(u => R.units[u.id].section === sec && sec !== 'main');
+      const items = units.filter(u => R.units[u.id].section === sec && sec !== 'main' && !(sec === 'audio' && twinOfMain(u)));
       items.sort(sec === 'audio' ? ((a, b) => (b.end - b.start) - (a.end - a.start) || a.start - b.start) : ((a, b) => a.start - b.start || a.z - b.z));
       const lanes = [];
       items.forEach(u => {

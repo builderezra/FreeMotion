@@ -121699,6 +121699,9 @@
   }
   function smT(name, start, dur, W, H, o) { const l = FM.makeLayer('text', { name: name, text: name, x: W / 2, y: H * 0.2, start: start, duration: dur }); return Object.assign(l, o || {}); }
   function smSong(name, start, dur, W, H, o) { const l = FM.makeLayer('video', { name: name, x: W / 2, y: H / 2, start: start, duration: dur }); l.audioOnly = true; return Object.assign(l, o || {}); }
+  /* 2.3: a PICTURE clip. A video clip's tray is 13 tools from 2.3 (Speed, Volume, Replace, Reverse, Take sound out), which no longer lie on two rows in
+     the PC band, so the tray-B tests that measure the two-row layout use a picture, whose tray is ten tools at most (Replace joined it). */
+  function smPic(name, start, dur, W, H, o) { return smV(name, start, dur, W, H, Object.assign({ type: 'image' }, o || {})); }
   const smKf = (pairs) => ({ kf: pairs.map(p => ({ t: p[0], v: p[1], e: 'linear' })) });
   function smNeedP2() { if (!FM.spine || !FM.spine.edit || !FM.spine.cmd) throw new Error('FM.spine.edit is missing — js/spine-edit.js did not load'); }
 
@@ -123148,7 +123151,7 @@
           if (width > 700) {
             tray.dispatchEvent(new WheelEvent('wheel', { deltaY: 600, bubbles: true, cancelable: true })); await v.sleep(30);
             if (tray.scrollWidth - tray.clientWidth > 1 && Math.abs(tray.scrollLeft - (tray.scrollWidth - tray.clientWidth)) > 1) throw new Error('1280 px: a mouse wheel does not scroll the tray (scrollLeft ' + tray.scrollLeft + ' of ' + (tray.scrollWidth - tray.clientWidth) + ')');
-            ['crop', 'duplicateClip', 'seam'].forEach(id => { if (hits(id)) throw new Error('1280 px: after the wheel, ' + id + ' still cannot be clicked — ' + hits(id)); });
+            ['replace', 'reverse', 'seam'].forEach(id => { if (hits(id)) throw new Error('1280 px: after the wheel, ' + id + ' still cannot be clicked — ' + hits(id)); });
           }
         });
       }, width);
@@ -123386,13 +123389,13 @@
     smNeedP2();
     await smTrayBAt(1280, 800, async function () {
       /* B has a 1 s gap after it, so Close gap joins its tray: the longest main-clip tray there is */
-      await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const say = document.getElementById('sm-say'), sayH = () => say.getBoundingClientRect().height;
         if (document.getElementById('sm-bar').parentNode !== document.getElementById('inspector-panel')) throw new Error('CONTROL: the tray is not in the PC band');
         const h1 = sayH();                                                    // nothing selected: the quiet line, one row
         if (h1 < 44 || h1 > 60) throw new Error('CONTROL: the quiet line’s row is ' + h1 + ' px');
         FM.selectLayer(v.L('B').id); await v.sleep(150);
-        const want = ['length', 'earlier', 'later', 'lift', 'duplicateClip', 'crop', 'seam', 'more', 'delete'];
+        const want = ['length', 'earlier', 'later', 'lift', 'duplicateClip', 'crop', 'replace', 'seam', 'more', 'delete'];
         const got = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
         if (got.join() !== want.join()) throw new Error('CONTROL: the tray is ' + got + ', want ' + want);
         const m = smTrayBMeasure();
@@ -123428,7 +123431,7 @@
   test('simple P2.2 · tray B at 1280 a line with a button keeps the two-row band, never lands where Delete was, and a second click there presses nothing — on a locked clip and after a delete takes the selection away (finding 23 with two rows)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 800, async function () {
-      await smP2((W, H) => [smT('On B', 3.5, 1, W, H), smV('C', 6, 3, W, H, { locked: true }), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smT('On B', 3.5, 1, W, H), smPic('C', 6, 3, W, H, { locked: true }), smPic('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const say = document.getElementById('sm-say'), bar = document.getElementById('sm-bar'), sayH = () => say.getBoundingClientRect().height;
         const h1 = sayH();
         /* 1 · Delete on a locked clip: the line says why with Do it anyway, the selection stays */
@@ -123475,11 +123478,11 @@
     const out = [];
     for (const [w, h] of [[1280, 800], [1280, 720], [960, 700]]) {
       await smTrayBAt(w, h, async function () {
-        await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        await smP2((W, H) => [smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
           FM.selectLayer(v.L('B').id); await v.sleep(150);
           const at = w + '×' + h + ': ', m = smTrayBMeasure();
           if (innerHeight !== h) throw new Error('CONTROL: ' + at + 'the window is ' + innerWidth + '×' + innerHeight);
-          if (m.order.length !== 9) throw new Error('CONTROL: ' + at + 'the tray is ' + m.order);
+          if (m.order.length !== 10) throw new Error('CONTROL: ' + at + 'the tray is ' + m.order);
           if (m.bad.length || m.rows.length !== 2) throw new Error(at + JSON.stringify(m.rows) + ' ' + m.bad.join(' · '));
           const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint');
           const title = document.querySelector('#inspector-panel .panel-title'), tb = title.getBoundingClientRect();
@@ -123510,12 +123513,13 @@
   test('simple P2.2 · tray B at 1280×720 More opens its panel with the room it always had — the tray goes back to one row with More and Delete pinned — and the second click of a double click on More presses nothing that moved under it', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 720, async function () {
-      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      /* 2.3: an OVERLAY picture (seven tools, so four columns and More in the third), not a main clip: a main clip's tray is nine tools or more now, five columns, and More already sits where the pinned More lands, so nothing moves under it (the hazard this test guards) */
+      await smP2((W, H) => [smPic('O', 1, 1.5, W, H), smPic('C', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
         const say = document.getElementById('sm-say'), insp = document.getElementById('inspector');
-        FM.selectLayer(v.L('B').id); await v.sleep(150);
+        FM.selectLayer(v.L('O').id); await v.sleep(150);
         const m = smTrayBMeasure();
-        if (m.order.length !== 8) throw new Error('CONTROL: the tray is ' + m.order);
-        if (m.rows.length !== 2) throw new Error('1280×720: before More the eight tools sit on ' + m.rows.length + ' row(s), want two');
+        if (m.order.length !== 7) throw new Error('CONTROL: the tray is ' + m.order);
+        if (m.rows.length !== 2) throw new Error('1280×720: before More the seven tools sit on ' + m.rows.length + ' row(s), want two');
         const h2 = say.getBoundingClientRect().height, more = smTool('more'), r = more.getBoundingClientRect();
         const x = r.left + 4, y = r.top + r.height / 2, doc0 = v.doc(), s0 = v.steps();
         const click = (el, n) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: x, clientY: y }));
@@ -123542,12 +123546,12 @@
   test('simple P2.2 · tray B at 380 the phone keeps its one row with More and Delete pinned at the right end, and its words (control: the same before and after his pick B)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
-      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const say = document.getElementById('sm-say'), tray = document.getElementById('sm-tray');
         const h1 = say.getBoundingClientRect().height;
         FM.selectLayer(v.L('B').id); await v.sleep(150);
         const bs = Array.from(tray.querySelectorAll('.sm-tool'));
-        if (bs.length !== 9) throw new Error('CONTROL: the tray is ' + bs.map(b => b.dataset.tool));
+        if (bs.length !== 10) throw new Error('CONTROL: the tray is ' + bs.map(b => b.dataset.tool));
         const tops = new Set(bs.map(b => Math.round(b.getBoundingClientRect().top)));
         if (tops.size !== 1) throw new Error('380: the tools sit on ' + tops.size + ' rows');
         if (Math.abs(say.getBoundingClientRect().height - h1) > 0.5) throw new Error('380: the row grew to ' + say.getBoundingClientRect().height + ' px');
@@ -123569,7 +123573,7 @@
     await smTrayBAt(1280, 720, async function () {
       /* C has a 1 s gap before it (B ends at 5) and a 0.5 s overlap after it (D starts at 9.5): its seam tool says Close gap,
          and once that gap is closed the same button, with the same data-tool, says Fix and means D's overlap */
-      await smP2((W, H) => [smV('E', 12, 2, W, H), smV('D', 9.5, 2.5, W, H), smV('C', 6, 4, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smV('E', 12, 2, W, H), smV('D', 9.5, 2.5, W, H), smPic('C', 6, 4, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         FM.selectLayer(v.L('C').id); await v.sleep(150);
         const seam = smTool('seam'), m = smTrayBMeasure();
         if (!seam || !/Close gap/.test(seam.textContent)) throw new Error('CONTROL: C’s tray has no Close gap (' + m.order + ')');
@@ -123606,7 +123610,7 @@
   test('simple P2.2 · tray B at 1280×720 after the window was once 500 px tall the band is left at 230 px, and its tools still lie on two rows there with the words above them whole — two rows need what the band’s parts measure, not a fixed 232 (checker finding 2)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 720, async function () {
-      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const fe = window.frameElement, root = document.documentElement, band = () => document.getElementById('inspector-panel').getBoundingClientRect();
         /* the window made short and tall again: js/app.js's resize re-clamp writes --tl-h 230 at 500 px, and it stays */
         fe.style.height = '500px'; window.dispatchEvent(new Event('resize')); await v.sleep(200);
@@ -123615,7 +123619,7 @@
         if (innerHeight !== 720 || !(tl < 232) || Math.abs(band().height - tl) > 1) throw new Error('CONTROL: the round trip did not leave a band under 232 px (window ' + innerHeight + ', --tl-h “' + root.style.getPropertyValue('--tl-h') + '”, band ' + band().height + ')');
         FM.selectLayer(v.L('B').id); await v.sleep(150);
         const m = smTrayBMeasure();
-        if (m.order.length !== 9) throw new Error('CONTROL: the tray is ' + m.order);
+        if (m.order.length !== 10) throw new Error('CONTROL: the tray is ' + m.order);
         if (m.bad.length || m.rows.length !== 2) throw new Error('a band left at ' + tl + ' px: the nine tools sit on ' + m.rows.length + ' row(s) ' + JSON.stringify(m.rows) + ' ' + m.bad.join(' · ') + ' — his pick B silently turned back into A');
         const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint'), tb = document.getElementById('sm-tools').getBoundingClientRect();
         if (!hint) throw new Error('CONTROL: the band shows no words');
@@ -123633,7 +123637,7 @@
     const words = () => { const h = document.querySelector('#inspector .sm-band-hint'); return h ? h.textContent : null; };
     const rowsNow = () => { const m = smTrayBMeasure(); return m.rows.length; };
     await smTrayBAt(1280, 720, async function () {
-      await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const root = document.documentElement;
         FM.selectLayer(v.L('B').id); await v.sleep(150);
         if (rowsNow() !== 2 || words() !== SHORT) throw new Error('CONTROL: 1280×720 at its own band: ' + rowsNow() + ' row(s), “' + words() + '”');
@@ -123654,7 +123658,7 @@
     }, 1280);
     /* a landscape phone is a PC layout (wider than 700) with a short band: one row, so today's words */
     await smTrayBAt(844, 390, async function () {
-      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         FM.selectLayer(v.L('B').id); await v.sleep(150);
         if (document.getElementById('sm-bar').parentNode !== document.getElementById('inspector-panel')) throw new Error('CONTROL: 844×390 is not the PC band');
         if (rowsNow() !== 1) throw new Error('CONTROL: 844×390 holds ' + rowsNow() + ' rows in a ' + document.getElementById('inspector-panel').getBoundingClientRect().height + ' px band');
@@ -123702,4 +123706,463 @@
       if (r.height < 44 || r.width < 44) throw new Error('the Length box is ' + r.width.toFixed(0) + 'x' + r.height.toFixed(0) + ' px — under the 44 px a finger needs');
     });
   });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* ═══ SIMPLE MODE RELEASE 2.3: speed, sound and replacing (BUILD-PLAN-PHASE2-2.3.md). Each test fails on the tree before 2.3 and passes after, at 1280 and 380. ═══ */
+  /* a media record that lets a clip be a real source: the file the sound twin is matched by, a duration for the clamps */
+  function smRec(dur, name, o) {
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 36;
+    const file = new File([new Uint8Array(64)], name || 'src.mp4', { type: 'video/mp4' }); file._dur = dur;   // _dur: how long a second decode of this very file reports (smFakeLoad)
+    return Object.assign({ kind: 'video', el: cv, file: file, width: 64, height: 36, duration: dur, hasAudio: true, waveform: null }, o || {});
+  }
+
+  /* this Chromium may have no decoder for the clip a test pretends to import, so loading a File makes a record of the right shape instead */
+  async function smFakeLoad(fn) {
+    const lv = FM.loadVideoFile;
+    FM.loadVideoFile = async function (f) { return smRec((f && f._dur) || 10, f && f.name, { file: f, width: 320, height: 240 }); };
+    try { return await fn(); } finally { FM.loadVideoFile = lv; }
+  }
+
+  test('simple P2.3 · T23 FM.shiftProp sets a keyed level WITHOUT adding a key: keys [1, 0.3, 1] set to 50% keep their count and times and scale by 0.5; an unkeyed level is written plainly; a level near 0 shifts; the range clamps', { item: '980', budgetMs: 30000 }, function () {
+    if (typeof FM.shiftProp !== 'function') throw new Error('FM.shiftProp is missing — js/scene.js 2.3 did not load');
+    const o = { volume: smKf([[0, 1], [1, 0.3], [2, 1]]) };
+    const wrote = FM.shiftProp(o, 'volume', 0.5, 0, { min: 0, max: 10 });
+    const v = o.volume.kf.map(k => +k.v.toFixed(6)).join(','), t = o.volume.kf.map(k => k.t).join(',');
+    if (o.volume.kf.length !== 3 || t !== '0,1,2') throw new Error('a keyed level changed its keys: ' + o.volume.kf.length + ' key(s) at ' + t + ' (a key at the playhead is exactly what setProp would add)');
+    if (v !== '0.5,0.15,0.5') throw new Error('the keys did not scale by 0.5 together: ' + v + ' (want 0.5,0.15,0.5)');
+    if (wrote !== 3) throw new Error('it should report the 3 keys it wrote, said ' + wrote);
+    const hi = { volume: smKf([[0, 1], [1, 4]]) };
+    FM.shiftProp(hi, 'volume', 8, 0, { min: 0, max: 10 });
+    if (hi.volume.kf.map(k => +k.v.toFixed(6)).join(',') !== '8,10') throw new Error('a ratio of 8 did not clamp at the ceiling: ' + hi.volume.kf.map(k => k.v));
+    const flat = { volume: 1 }; FM.shiftProp(flat, 'volume', 0.4, 0, { min: 0, max: 10 });
+    if (flat.volume !== 0.4) throw new Error('an unkeyed level was not written plainly: ' + JSON.stringify(flat.volume));
+    const zero = { volume: smKf([[0, 0], [1, 0.5], [2, 1]]) };
+    FM.shiftProp(zero, 'volume', 0.2, 0, { min: 0, max: 10 });
+    if (zero.volume.kf.map(k => +k.v.toFixed(6)).join(',') !== '0.2,0.7,1.2') throw new Error('a level at ~0 should shift by the difference, not explode a ratio: ' + zero.volume.kf.map(k => k.v));
+  });
+
+  test('simple P2.3 · FM.setClipSpeed is the Speed slider’s flat branch moved unchanged: it re-times a clip exactly as the pre-2.3 body did, keyframes, group refit, the source clamp and the project length included', { item: '980', budgetMs: 30000 }, function () {
+    /* the body as it stood in js/inspector.js before 2.3 (v17.24), frozen here: the FU2 "Full unchanged" check for the extraction */
+    function frozen(layer, sp) {
+      const durBefore = layer.duration, span = layer.duration * FM.speedAt(layer, layer.start);
+      layer.speed = sp; layer.duration = Math.max(0.1, span / sp);
+      const mm = FM.media.get(layer.id), srcDur = (mm && mm.duration) ? mm.duration : Infinity;
+      if (layer.type === 'video' && isFinite(srcDur)) layer.duration = Math.max(0.1, Math.min(layer.duration, (srcDur - (layer.trimStart || 0)) / sp));
+      if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);
+      if (FM.refitGroupsFor) FM.refitGroupsFor(layer);
+      const end = layer.start + layer.duration; if (end > FM.scene.project.duration) FM.scene.project.duration = end;
+    }
+    if (typeof FM.setClipSpeed !== 'function') throw new Error('FM.setClipSpeed is missing — js/inspector.js 2.3 did not load');
+    const saved = FM.scene, mk = id => { const l = FM.makeLayer('video', { name: id, start: 2, duration: 6, x: 160, y: 120 }); l.id = id; l.trimStart = 1; l.transform.opacity = smKf([[2, 0], [5, 1], [8, 0.5]]); l.clipColor = '#123456'; return l; };
+    try {
+      const out = [];
+      for (const [srcDur, sp] of [[Infinity, 2], [Infinity, 0.5], [9, 0.5], [3, 4], [20, 3.7]]) {
+        const a = mk('_ss_a'), b = mk('_ss_b');
+        FM.scene = scene([a]); FM.scene.project.duration = 8; if (srcDur !== Infinity) FM.media.set('_ss_a', { kind: 'video', duration: srcDur });
+        frozen(a, sp);
+        const ra = JSON.stringify({ l: a, d: FM.scene.project.duration }, FM.jsonReplacer);
+        FM.media.remove('_ss_a');
+        FM.scene = scene([b]); FM.scene.project.duration = 8; if (srcDur !== Infinity) FM.media.set('_ss_b', { kind: 'video', duration: srcDur });
+        FM.setClipSpeed(b, sp);
+        const rb = JSON.stringify({ l: b, d: FM.scene.project.duration }, FM.jsonReplacer);
+        FM.media.remove('_ss_b');
+        if (ra.replace(/_ss_a/g, 'x') !== rb.replace(/_ss_b/g, 'x')) throw new Error('FM.setClipSpeed(' + sp + ', source ' + srcDur + ') wrote a different clip than the slider’s own body did:\n' + ra + '\n' + rb);
+        out.push(sp + '×');
+      }
+    } finally { FM.scene = saved; try { FM.media.remove('_ss_a'); FM.media.remove('_ss_b'); } catch (e) {} }
+  });
+
+  test('simple P2.3 · T25 Speed on the middle of three clips: 2× closes up the clips after it, what starts on it keeps its length and moves with its place, its keys scale, the playhead stays on the same moment — ONE undo step, byte for byte back; 0.25 s at 3× is refused and writes nothing, 0.25 s at 2× commits', { item: '980', budgetMs: 90000 }, async function () {
+    await smP2((W, H) => [
+      smT('On B', 4, 1, W, H), smV('C', 9, 3, W, H), smV('B', 3, 6, W, H, { volume: smKf([[3, 1], [9, 0.2]]) }), smV('A', 0, 3, W, H)
+    ], async function (v) {
+      const A = v.L('A'), B = v.L('B'), C = v.L('C'), T = v.L('On B');
+      const doc0 = v.doc(), n0 = v.steps();
+      FM.selectLayer(B.id); FM.time = 6;
+      if (typeof FM.spine.cmd.speed !== 'function') throw new Error('FM.spine.cmd.speed is missing — js/spine-edit.js 2.3 did not load');
+      FM.spine.cmd.speed(B.id, 2); await v.idle();
+      if (Math.abs(B.duration - 3) > 1e-9 || Math.abs((B.speed || 1) - 2) > 1e-9) throw new Error('B did not become 3 s at 2×: ' + B.duration + ' s, speed ' + B.speed + ' (it said “' + v.say() + '”)');
+      if (C.start !== B.start + B.duration) throw new Error('C did not close up exactly onto B’s new end: ' + C.start + ' vs ' + (B.start + B.duration) + ' (it said “' + v.say() + '”)');
+      if (Math.abs(T.start - 3.5) > 1e-9 || Math.abs(T.duration - 1) > 1e-9) throw new Error('the title that started 1 s into B should start 0.5 s into it and keep its 1 s: ' + T.start + ' / ' + T.duration);
+      const ks = B.volume.kf.map(k => +k.t.toFixed(9)).join(',');
+      if (ks !== '3,6') throw new Error('B’s own keys did not scale with the clip: ' + ks + ' (want 3,6)');
+      if (Math.abs(FM.time - 4.5) > 1e-9) throw new Error('the playhead should stay on the same moment of B (6 → 4.5), it is ' + FM.time);
+      if (v.steps() !== n0 + 1) throw new Error('Speed took ' + (v.steps() - n0) + ' undo steps, not 1');
+      const m = FM.history._metaHere();
+      if (!m || m.ed !== 's' || m.arr !== true) throw new Error('Speed on a main clip should be a Simple ARRANGING step: ' + JSON.stringify(m));
+      FM.history.undo(); await v.sleep(30);
+      if (v.doc() !== doc0) throw new Error('one undo did not put the document back byte for byte');
+      /* T25's other half: too short refuses and writes nothing; just long enough commits */
+      const A1 = v.L('A');                                                    // an undo replaces the layer objects: take the live one
+      FM.selectLayer(A1.id);
+      FM.spine.cmd.trimTail(A1.id, 0.25, { typed: true }); await v.idle();
+      const d2 = v.doc(), n2 = v.steps();
+      FM.spine.cmd.speed(A1.id, 3); await v.idle();
+      if (!/Too short to speed up that much/.test(v.say())) throw new Error('0.25 s at 3× said “' + v.say() + '”');
+      if (v.doc() !== d2 || v.steps() !== n2) throw new Error('the refused speed changed the document or took a step');
+      FM.spine.cmd.speed(A1.id, 2); await v.idle();
+      if (Math.abs(v.L('A').duration - 0.125) > 1e-9 || v.steps() !== n2 + 1) throw new Error('0.25 s at 2× did not commit as one step: ' + v.L('A').duration + ', ' + (v.steps() - n2));
+    });
+  });
+
+  /* T24 + Take sound out / Put sound back: a clip's sound, taken out, is a twin that stays in step through every edit that touches the clip */
+  test('simple P2.3 · T24 Take sound out makes a sound twin that draws as a band in its clip and leaves the Sound row; the twin stays in step through a tail trim, a head trim, 2× speed, a split and Reverse; Put sound back removes it in ONE step and un-mutes the clip', { item: '980', budgetMs: 120000 }, async function () {
+    await smFakeLoad(() => smP2((W, H) => [smV('Z', 6, 3, W, H), smV('A', 0, 6, W, H, { muted: false })], async function (v) {
+      const S = FM.spine, sleep = v.sleep, A0 = v.L('A');
+      FM.selectLayer(A0.id);
+      const tw = () => FM.scene.layers.find(l => l.sm && l.sm.twin === true && l.audioOnly === true);
+      const inStep = (label) => { const t = tw(), cl = v.L('A'); if (!t || !cl) throw new Error(label + ': the twin or the clip is gone'); if (!S.isTwinOf(t, cl)) throw new Error(label + ': the twin fell out of step with its clip — twin ' + JSON.stringify([t.start, t.duration, t.trimStart, t.speed, !!t.reversed]) + ' clip ' + JSON.stringify([cl.start, cl.duration, cl.trimStart, cl.speed, !!cl.reversed]) + ' files ' + JSON.stringify([t, cl].map(x => { const m = FM.media.get(x.id); return m && m.file ? [m.file.name, m.file.size, m.file.type] : null; }))); };
+      const doc0 = v.doc(), n0 = v.steps();
+      if (typeof S.cmd.takeSoundOut !== 'function') throw new Error('FM.spine.cmd.takeSoundOut is missing — js/spine-edit.js 2.3 did not load');
+      S.cmd.takeSoundOut(A0.id); await v.idle();
+      if (!tw()) throw new Error('Take sound out made no twin (it said “' + v.say() + '”)');
+      if (!v.L('A').muted) throw new Error('the clip was not muted once its sound was taken out (the sound would play twice)');
+      if (v.steps() !== n0 + 1) throw new Error('Take sound out took ' + (v.steps() - n0) + ' undo steps, not 1');
+      inStep('right after Take sound out');
+      FM.refreshAll(); await sleep(40);
+      const R = S.read(FM.scene);
+      if ((R.lanes.audio || []).some(l => l.indexOf(tw().id) >= 0)) throw new Error('the twin still has a place in the Sound row (it belongs to its clip)');
+      if (!document.querySelector('#sm-main .sm-item[data-id="' + v.L('A').id + '"] .sm-twinband')) throw new Error('the clip does not draw the twin as a band along its bottom edge');
+      if (!document.querySelector('#sm-tray [data-tool="putSound"]') || document.querySelector('#sm-tray [data-tool="takeSound"]')) throw new Error('the tray should now offer Put sound back, not Take sound out');
+      /* a tail trim, then a head trim */
+      S.cmd.trimTail(v.L('A').id, 4, { key: true }); await v.idle(); inStep('after a tail trim to 4 s');
+      FM.selectLayer(v.L('A').id); S.cmd.trimHead(v.L('A').id, 1, { key: true }); await v.idle(); inStep('after a head trim to 1 s');
+      /* 2× */
+      S.cmd.speed(v.L('A').id, 2); await v.idle(); inStep('after 2× speed');
+      if (Math.abs((tw().speed || 1) - 2) > 1e-9) throw new Error('the twin did not take the speed: ' + tw().speed);
+      /* a split in the middle: two halves of the clip, two halves of the twin, each pair in step */
+      const A1 = v.L('A'); S.cmd.split(A1.id, A1.start + A1.duration / 2); await v.idle();
+      const halves = FM.scene.layers.filter(l => l.splitOf && l.splitOf === v.L('A').splitOf);
+      const twins = FM.scene.layers.filter(l => l.audioOnly === true && l.sm && l.sm.twin === true);
+      if (halves.length < 2 || twins.length !== 2) throw new Error('a split should make two clip halves and two twin halves: ' + halves.length + ' / ' + twins.length);
+      halves.forEach(h => { if (!twins.some(t => S.isTwinOf(t, h))) throw new Error('a split half of the clip has no twin half in step with it: ' + h.name); });
+      /* undo the split, then Reverse */
+      FM.history.undo(); await sleep(40);
+      S.cmd.reverse(v.L('A').id); await v.idle(); inStep('after Reverse');
+      if (!tw().reversed || !v.L('A').reversed) throw new Error('Reverse did not flip the clip and its twin together');
+      /* Put sound back: one step, the twin gone, the clip heard again */
+      const n1 = v.steps();
+      S.cmd.putSoundBack(v.L('A').id); await v.idle();
+      if (tw()) throw new Error('Put sound back left the twin (it said “' + v.say() + '”)');
+      if (v.L('A').muted) throw new Error('Put sound back left the clip muted');
+      if (v.steps() !== n1 + 1) throw new Error('Put sound back took ' + (v.steps() - n1) + ' undo steps, not 1');
+      FM.history.undo(); await sleep(40);
+      if (!tw() || !v.L('A').muted) throw new Error('one undo did not bring the twin and the mute back');
+      /* Mute clip sound OFF never un-mutes a clip whose sound was taken out, even with the mode's mark on it (it would play twice) */
+      S.cmd.muteClips(true); await v.idle();
+      v.L('A').sm = Object.assign({}, v.L('A').sm, { muteByMode: true });
+      S.cmd.muteClips(false); await v.idle();
+      if (!v.L('A').muted) throw new Error('Mute clip sound OFF un-muted a clip whose sound was taken out: the sound would play twice');
+      if (v.L('A').sm && v.L('A').sm.muteByMode) throw new Error('Off left the mark on the clip');
+    }, { media: [{ name: 'A', rec: smRec(10, 'a.mp4', { width: 320, height: 240 }) }] }));
+  });
+
+  test('simple P2.3 · Mute clip sound: the 🔈 at the head of the clip row mutes every clip and marks only the ones IT muted; off un-mutes only those, never a clip he muted himself and never one whose sound was taken out; a clip appended while it is on arrives muted', { item: '980', budgetMs: 120000 }, async function () {
+    await smP2((W, H) => [smV('C', 6, 3, W, H, { muted: false }), smV('B', 3, 3, W, H, { muted: true }), smV('A', 0, 3, W, H, { muted: false })], async function (v) {
+      const S = FM.spine, A = v.L('A'), B = v.L('B'), C = v.L('C');
+      FM.refreshAll(); await v.sleep(60);
+      const btn = () => document.querySelector('#sm-main .sm-mute');
+      if (!btn()) throw new Error('no 🔈 at the head of the clip row');
+      if (btn().getAttribute('aria-pressed') !== 'false') throw new Error('the 🔈 should start un-pressed');
+      const n0 = v.steps(), doc0 = v.doc();
+      btn().click(); await v.idle();
+      if (!(S.muteMode() && FM.scene.project.sm && FM.scene.project.sm.muteClips === true)) throw new Error('the mode is not on the document (project.sm.muteClips)');
+      if (!v.L('A').muted || !v.L('C').muted) throw new Error('Mute clip sound left a clip playing');
+      if (!(v.L('A').sm && v.L('A').sm.muteByMode) || !(v.L('C').sm && v.L('C').sm.muteByMode)) throw new Error('the clips it muted carry no mark');
+      if (v.L('B').sm && v.L('B').sm.muteByMode) throw new Error('a clip he had muted himself was marked as the mode’s');
+      if (v.steps() !== n0 + 1) throw new Error('the toggle took ' + (v.steps() - n0) + ' undo steps, not 1');
+      if (FM.history._metaHere().arr) throw new Error('the toggle is a look, not an arranging step: it must work with a friend in the session');
+      FM.refreshAll(); await v.sleep(60);
+      if (btn().getAttribute('aria-pressed') !== 'true') throw new Error('the 🔈 does not show the mode is on');
+      /* asking for what is already so changes nothing and says so */
+      const dd = v.doc(), nn = v.steps(); S.cmd.muteClips(true); await v.idle();
+      if (v.doc() !== dd || v.steps() !== nn || !/Nothing changed/.test(v.say())) throw new Error('turning an already-on mode on again wrote something or took a step (it said “' + v.say() + '”)');
+      /* a clip added while the mode is on arrives muted and marked */
+      /* an unmarked manual change leaves Off alone: he un-mutes A himself, then Off must not touch it again, and B stays muted */
+      v.L('A').muted = false;
+      btn().click(); await v.idle();
+      if (S.muteMode() || (FM.scene.project.sm && 'muteClips' in FM.scene.project.sm)) throw new Error('Off left the key on the document');
+      if (v.L('B').muted !== true) throw new Error('Off un-muted a clip he muted himself');
+      if (v.L('C').muted) throw new Error('Off left a clip the mode muted still muted');
+      if (v.L('A').muted) throw new Error('Off muted a clip he had un-muted himself');
+      if (v.L('A').sm || v.L('C').sm && v.L('C').sm.muteByMode) throw new Error('Off left marks behind: ' + JSON.stringify([v.L('A').sm, v.L('C').sm]));
+      FM.history.undo(); FM.history.undo(); await v.sleep(40);
+      if (v.doc() !== doc0) throw new Error('two undos did not restore the document byte for byte');
+    });
+  });
+
+  test('simple P2.3 · the Speed row: the tray opens a row like Length (Done, 0.5× 1× 1.5× 2× 3×, a slider); while the slider moves only the boxes and the playback rate change and the document is untouched, and releasing it commits ONE step; a preset commits too; a ramped clip offers Use one speed and keeps its length', { item: '980', budgetMs: 120000 }, async function () {
+    await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const B = v.L('B'), C = v.L('C');
+      FM.selectLayer(B.id); await v.sleep(100);
+      if (!smTool('speed')) throw new Error('the clip’s tray has no Speed (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+      smTool('speed').click(); await v.sleep(100);
+      const tray = document.getElementById('sm-tray');
+      ['rowBack', 'sp0.5', 'sp1', 'sp1.5', 'sp2', 'sp3'].forEach(id => { if (!smTool(id)) throw new Error('the Speed row has no ' + id + ': ' + Array.from(tray.querySelectorAll('button')).map(b => b.dataset.tool)); });
+      const rng = tray.querySelector('.sm-speed-r');
+      if (!rng) throw new Error('the Speed row has no slider');
+      if (smTool('sp1').getAttribute('aria-pressed') !== 'true') throw new Error('1× should show as the current speed');
+      const doc0 = v.doc(), n0 = v.steps(), w0 = document.querySelector('#sm-main .sm-item[data-id="' + B.id + '"]').getBoundingClientRect().width;
+      rng.value = '2'; rng.dispatchEvent(new Event('input', { bubbles: true })); await v.sleep(60);
+      if (v.doc() !== doc0 || v.steps() !== n0) throw new Error('moving the slider touched the document or took a step — it may only preview');
+      const w1 = document.querySelector('#sm-main .sm-item[data-id="' + B.id + '"]').getBoundingClientRect().width;
+      if (Math.abs(w1 - w0 / 2) > 1.5) throw new Error('the clip’s box did not halve while the slider sat at 2× (' + w0 + ' → ' + w1 + ')');
+      const cx = parseFloat(document.querySelector('#sm-main .sm-item[data-id="' + C.id + '"]').style.left);
+      rng.dispatchEvent(new Event('change', { bubbles: true })); await v.idle();
+      if (v.steps() !== n0 + 1) throw new Error('releasing the slider took ' + (v.steps() - n0) + ' undo steps, not 1');
+      if (Math.abs(v.L('B').duration - 1.5) > 1e-9 || v.L('C').start !== 4.5) throw new Error('the release did not commit 2×: B ' + v.L('B').duration + ' s, C at ' + v.L('C').start);
+      /* a preset */
+      await v.sleep(100);
+      smTool('sp3').click(); await v.idle();
+      if (Math.abs(v.L('B').duration - 1) > 1e-9 || v.steps() !== n0 + 2) throw new Error('the 3× preset did not commit one step: B ' + v.L('B').duration + ', steps ' + (v.steps() - n0));
+      /* a ramped clip: the row says so and offers the one way out, which keeps the length */
+      const Bl = v.L('B'); Bl.speed = smKf([[Bl.start, 1], [Bl.start + 1, 2]]); FM.refreshAll(); await v.sleep(100);
+      FM.selectLayer(null); FM.selectLayer(Bl.id); await v.sleep(100);
+      smTool('speed').click(); await v.sleep(100);
+      if (!smTool('oneSpeed') || tray.querySelector('.sm-speed-r')) throw new Error('a ramped clip’s Speed row should offer Use one speed and no slider');
+      const len0 = v.L('B').duration, n1 = v.steps();
+      smTool('oneSpeed').click(); await v.idle();
+      if (FM.isAnimated(v.L('B').speed) || Math.abs(v.L('B').duration - len0) > 1e-9 || v.steps() !== n1 + 1) throw new Error('Use one speed changed the length or took ' + (v.steps() - n1) + ' steps: ' + JSON.stringify(v.L('B').speed) + ' ' + v.L('B').duration);
+    });
+  });
+
+  test('simple P2.3 · Volume and Fade: Volume acts on the sound twin when there is one and on the clip when not; a keyed level keeps its keys (no key at the playhead); a volume above 0 un-mutes; Fade steps by half a second; each is ONE step that does not arrange', { item: '980', budgetMs: 120000 }, async function () {
+    await smFakeLoad(() => smP2((W, H) => [smV('B', 3, 3, W, H, { muted: false }), smV('A', 0, 3, W, H, { muted: false, volume: smKf([[0, 1], [1.5, 0.4], [3, 1]]) })], async function (v) {
+      const S = FM.spine;
+      FM.selectLayer(v.L('A').id); FM.time = 0; await v.sleep(100);
+      smTool('volume').click(); await v.sleep(100);
+      const rng = document.querySelector('#sm-tray .sm-vol-r');
+      if (!rng) throw new Error('the Volume row has no slider');
+      const n0 = v.steps();
+      rng.value = '50'; rng.dispatchEvent(new Event('input', { bubbles: true })); rng.dispatchEvent(new Event('change', { bubbles: true })); await v.idle();
+      const kf = v.L('A').volume.kf;
+      if (kf.length !== 3 || kf.map(k => k.t).join() !== '0,1.5,3') throw new Error('Volume added or moved a key: ' + JSON.stringify(kf.map(k => [k.t, k.v])));
+      if (kf.map(k => +k.v.toFixed(4)).join() !== '0.5,0.2,0.5') throw new Error('the keyed level did not scale to 50% at the playhead: ' + kf.map(k => k.v));
+      if (v.steps() !== n0 + 1) throw new Error('Volume took ' + (v.steps() - n0) + ' undo steps, not 1');
+      const m = FM.history._metaHere();
+      if (!m || m.ed !== 's' || m.arr) throw new Error('Volume is a look: a Simple step that does not arrange (a friend can be in the session): ' + JSON.stringify(m));
+      /* with a twin, Volume acts on the twin */
+      S.cmd.takeSoundOut(v.L('B').id); await v.idle();
+      const tw = FM.scene.layers.find(l => l.sm && l.sm.twin);
+      if (!tw) throw new Error('setup: Take sound out made no twin');
+      FM.selectLayer(v.L('B').id); await v.sleep(100);
+      S.cmd.volume(v.L('B').id, 0.3); await v.idle();
+      if (Math.abs(tw.volume - 0.3) > 1e-9 || v.L('B').volume !== 1) throw new Error('Volume should go to the twin (' + tw.volume + ') and leave the muted original alone (' + v.L('B').volume + ')');
+      /* a muted clip given a volume is un-muted */
+      const A = v.L('A'); A.muted = true; FM.selectLayer(A.id);
+      S.cmd.volume(A.id, 0.8); await v.idle();
+      if (v.L('A').muted) throw new Error('a volume above 0 left the clip muted');
+      /* Fade */
+      FM.selectLayer(A.id); await v.sleep(100);
+      const n1 = v.steps();
+      S.cmd.fade(A.id, 'in', 0.5); await v.idle(); S.cmd.fade(A.id, 'out', 1); await v.idle();
+      if (v.L('A').fadeIn !== 0.5 || v.L('A').fadeOut !== 1) throw new Error('Fade did not write in/out: ' + v.L('A').fadeIn + ' / ' + v.L('A').fadeOut);
+      if (v.steps() !== n1 + 2) throw new Error('two fades should be two steps, got ' + (v.steps() - n1));
+      S.cmd.fade(A.id, 'in', 99); await v.idle();
+      if (v.L('A').fadeIn > v.L('A').duration + 1e-9) throw new Error('a fade longer than the clip was kept: ' + v.L('A').fadeIn);
+    }, { media: [{ name: 'B', rec: smRec(10, 'b.mp4', { width: 320, height: 240 }) }] }));
+  });
+
+  test('simple P2.3 · Reverse flips the clip and changes nothing else (start, length, keys, followers keep their times), asks for the frame cache only AFTER its commit and never for a twin, and goes back with one more press', { item: '980', budgetMs: 90000 }, async function () {
+    await smP2((W, H) => [smT('On B', 4, 1, W, H), smV('C', 6, 3, W, H), smV('B', 3, 3, W, H, { volume: smKf([[3, 1], [6, 0.5]]) }), smV('A', 0, 3, W, H)], async function (v) {
+      const asked = [], real = FM.ensureReverseCache, cleared = [], realClr = FM.maybeClearCache;
+      FM.ensureReverseCache = async function (l) { asked.push([l.id, FM.history.isMuted()]); };
+      FM.maybeClearCache = function (l) { cleared.push(l.id); };
+      try {
+        const B = v.L('B'), doc0 = v.doc(), n0 = v.steps();
+        FM.selectLayer(B.id); await v.sleep(100);
+        smTool('reverse').click(); await v.idle();
+        const strip = JSON.stringify(FM.scene.layers.map(l => [l.name, l.start, l.duration, l.trimStart, l.volume && l.volume.kf && l.volume.kf.map(k => k.t)]));
+        if (!v.L('B').reversed) throw new Error('Reverse did not flip the clip (it said “' + v.say() + '”)');
+        if (v.steps() !== n0 + 1) throw new Error('Reverse took ' + (v.steps() - n0) + ' undo steps, not 1');
+        if (asked.length !== 1 || asked[0][0] !== B.id) throw new Error('the frame cache should be asked for once, for the clip: ' + JSON.stringify(asked));
+        if (asked[0][1]) throw new Error('the frame cache was asked for INSIDE the muted step — a decode can take seconds with history muted');
+        const before = JSON.parse(doc0).layers.map(l => [l.name, l.start, l.duration, l.trimStart, l.volume && l.volume.kf && l.volume.kf.map(k => k.t)]);
+        if (strip !== JSON.stringify(before)) throw new Error('Reverse moved or re-timed something:\n' + strip + '\n' + JSON.stringify(before));
+        if (FM.history._metaHere().arr) throw new Error('Reverse is not an arranging step');
+        smTool('reverse').click(); await v.idle();
+        if (v.L('B').reversed || cleared.length !== 1) throw new Error('a second press did not play it forwards and let the cache go: reversed ' + v.L('B').reversed + ', cleared ' + cleared.length);
+        const r = FM.spine.planReverse(FM.spine.read(FM.scene), 'nope');
+        if (!r || !r.refuse) throw new Error('Reverse on a missing clip should refuse');
+      } finally { FM.ensureReverseCache = real; FM.maybeClearCache = realClr; }
+    });
+  });
+
+  test('simple P2.3 · Replace with a SHORTER file keeps the slot and closes the gap in the same step (the tail trim’s rules: a title stays on its clip, the clips after move up), a sound twin gets the same file, a longer file changes nothing else, and Undo brings the old file back', { item: '980', budgetMs: 150000 }, async function () {
+    await smFakeLoad(() => smP2((W, H) => [smT('On B', 4, 1, W, H), smV('C', 9, 3, W, H), smV('B', 3, 6, W, H, { muted: false }), smV('A', 0, 3, W, H)], async function (v) {
+      const S = FM.spine, B0 = v.L('B');
+      FM.selectLayer(B0.id); await v.sleep(80);
+      S.cmd.takeSoundOut(B0.id); await v.idle();
+      const tw0 = FM.scene.layers.find(l => l.sm && l.sm.twin);
+      if (!tw0) throw new Error('setup: no twin');
+      const doc0 = v.doc(), n0 = v.steps(), rev0 = B0.mediaRev || 0;
+      const nrec = smRec(4, 'short.mp4', { width: 320, height: 240 });
+      if (typeof S.cmd.replace !== 'function') throw new Error('FM.spine.cmd.replace is missing — js/spine-edit.js 2.3 did not load');
+      S.cmd.replace(B0.id, nrec); await v.idle();
+      const B = v.L('B'), C = v.L('C'), T = v.L('On B'), tw = FM.scene.layers.find(l => l.sm && l.sm.twin);
+      if (FM.media.get(B.id) !== nrec) throw new Error('the new file is not in the slot (it said “' + v.say() + '”)');
+      if (Math.abs(B.duration - 4) > 1e-9 || B.start !== 3) throw new Error('the slot was not kept at the new file’s length: ' + B.start + ' / ' + B.duration);
+      if (C.start !== B.start + B.duration) throw new Error('the clip after did not close up onto the shorter one: C at ' + C.start + ' (B ends ' + (B.start + B.duration) + ')');
+      if (T.start !== 4) throw new Error('the title should stay where it was on the clip: ' + T.start);
+      if (v.steps() !== n0 + 1) throw new Error('Replace took ' + (v.steps() - n0) + ' undo steps, not 1');
+      if (!tw || Math.abs(tw.duration - 4) > 1e-9 || !FM.media.get(tw.id) || FM.media.get(tw.id).file.name !== 'short.mp4') throw new Error('the sound twin did not get the same file and length: ' + JSON.stringify(tw && [tw.duration, FM.media.get(tw.id) && FM.media.get(tw.id).file.name]));
+      if ((B.mediaRev || 0) !== rev0 + 1) throw new Error('mediaRev was not bumped, so the swap is not inside the undo snapshot: ' + B.mediaRev);
+      FM.history.undo(); await v.sleep(60);
+      for (let i = 0; i < 100 && (!FM.media.get(B.id) || FM.media.get(B.id).file.name !== 'src.mp4'); i++) await v.sleep(20);
+      if (v.doc() !== doc0) throw new Error('one undo did not put the document back byte for byte');
+      if (!FM.media.get(B.id) || FM.media.get(B.id).file.name !== 'src.mp4') throw new Error('Undo did not bring the old file back into the slot (now ' + (FM.media.get(B.id) && FM.media.get(B.id).file.name) + ')');
+      /* a LONGER file: nothing else moves, still one step */
+      FM.selectLayer(v.L('B').id);
+      const d1 = v.doc(), n1 = FM.history._steps().index;   // after an undo the stack keeps its length: the position is what counts
+      S.cmd.replace(v.L('B').id, smRec(30, 'long.mp4', { width: 320, height: 240 })); await v.idle();
+      if (FM.history._steps().index !== n1 + 1) throw new Error('a longer file took ' + (FM.history._steps().index - n1) + ' steps (it said “' + v.say() + '”)');
+      const strip = JSON.stringify(FM.scene.layers.map(l => [l.name, l.start, l.duration]));
+      const was = JSON.stringify(JSON.parse(d1).layers.map(l => [l.name, l.start, l.duration]));
+      if (strip !== was) throw new Error('a longer file moved or re-timed something:\n' + strip + '\n' + was);
+    }, { media: [{ name: 'B', rec: smRec(10, 'src.mp4', { width: 320, height: 240 }) }] }));
+  });
+
+  test('simple P2.3 · FM.pickReplacement ALWAYS settles — null when the picker is dismissed or the file will not load — and Full’s Replace media is unchanged: the same promise (true / false), the same swap, one history step', { item: '980', budgetMs: 90000 }, async function () {
+    await smP2((W, H) => [smPic('P', 0, 3, W, H)], async function (v) {
+      const P = v.L('P'), sleep = v.sleep;
+      const rec0 = await FM.loadImageFile(await (async () => { const c = offscreen(8, 8); c.getContext('2d').fillRect(0, 0, 8, 8); const b = await new Promise(r => c.toBlob(r)); return new File([b], 'old.png', { type: 'image/png' }); })());
+      FM.media.set(P.id, rec0); P.type = 'image';
+      const input = () => Array.from(document.querySelectorAll('body > input[type="file"]')).pop();
+      if (typeof FM.pickReplacement !== 'function' || typeof FM.swapInMedia !== 'function') throw new Error('FM.pickReplacement / FM.swapInMedia are missing — js/app.js 2.3 did not load');
+      /* dismissed */
+      const p1 = FM.pickReplacement(P.id); const i1 = input();
+      if (!i1) throw new Error('the picker was not opened'); i1.dispatchEvent(new Event('cancel'));
+      const r1 = await Promise.race([p1, sleep(1000).then(() => 'PENDING')]);
+      if (r1 !== null) throw new Error('a dismissed picker left the promise ' + (r1 === 'PENDING' ? 'unsettled' : 'at ' + r1) + ', it must settle with null');
+      if (input() === i1) throw new Error('the dismissed picker’s input was left in the page');
+      /* a file that will not load */
+      const p2 = FM.pickReplacement(P.id), i2 = input(), dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(4)], 'broken.png', { type: 'image/png' }));
+      i2.files = dt.files; i2.dispatchEvent(new Event('change'));
+      const r2 = await Promise.race([p2, sleep(3000).then(() => 'PENDING')]);
+      if (r2 !== null) throw new Error('a file that will not load should settle with null, got ' + (r2 === 'PENDING' ? 'nothing' : typeof r2));
+      /* Full's Replace media: a real picture picked */
+      const c = offscreen(16, 12), g = c.getContext('2d'); g.fillStyle = '#c00'; g.fillRect(0, 0, 16, 12);
+      const blob = await new Promise(r => c.toBlob(r)), good = new File([blob], 'new.png', { type: 'image/png' });
+      const n0 = v.steps(), rev0 = P.mediaRev || 0;
+      const p3 = FM.replaceMedia(P.id), i3 = input(), dt3 = new DataTransfer(); dt3.items.add(good);
+      i3.files = dt3.files; i3.dispatchEvent(new Event('change'));
+      const r3 = await Promise.race([p3, sleep(5000).then(() => 'PENDING')]);
+      if (r3 !== true) throw new Error('Full’s Replace media settled with ' + String(r3) + ', it has always resolved true once the swap landed');
+      if (!FM.media.get(P.id) || FM.media.get(P.id).file.name !== 'new.png') throw new Error('Full’s Replace media did not swap the file');
+      if ((FM.layerById(FM.scene, P.id).mediaRev || 0) !== rev0 + 1) throw new Error('Full’s Replace media did not bump mediaRev');
+      if (v.steps() !== n0 + 1) throw new Error('Full’s Replace media took ' + (v.steps() - n0) + ' history steps, not 1');
+      /* and dismissed through replaceMedia: false, as before */
+      const p4 = FM.replaceMedia(P.id); input().dispatchEvent(new Event('cancel'));
+      const r4 = await Promise.race([p4, sleep(1000).then(() => 'PENDING')]);
+      if (r4 !== false) throw new Error('Full’s dismissed Replace media settled with ' + String(r4) + ', it has always resolved false');
+    }, { full: true });
+  });
+
+  test('simple P2.3 · Replace on a song and on an overlay swaps the file in ONE step that does not arrange: a shorter file shortens only itself, a tail mark goes, the Stay put stays, a sound-only record is a sound in Simple’s eyes (sm.snd) and nothing else moves', { item: '980', budgetMs: 120000 }, async function () {
+    await smFakeLoad(() => smP2((W, H) => [smSong('Song', 0, 8, W, H, { sm: { stay: true, tail: true, tailEnd: 6 } }), smV('O', 1, 2, W, H, { muted: false }), smV('A', 0, 6, W, H)], async function (v) {
+      const S = FM.spine, strip = skip => JSON.stringify(FM.scene.layers.filter(l => l.name !== skip).map(l => [l.name, l.start, l.duration]));
+      const song = v.L('Song'), other0 = strip('Song'), n0 = v.steps();
+      S.cmd.replace(song.id, smRec(4, 'new.m4a', { width: 0, height: 0 })); await v.idle();
+      const s = v.L('Song');
+      if (Math.abs(s.duration - 4) > 1e-9) throw new Error('the song did not take the shorter file’s length: ' + s.duration + ' (it said “' + v.say() + '”)');
+      if (strip('Song') !== other0) throw new Error('replacing a song moved or re-timed something else');
+      if (s.sm && s.sm.tail) throw new Error('the song kept a tail mark though its end changed');
+      if (!(s.sm && s.sm.stay && s.sm.snd)) throw new Error('the song should keep Stay put and be marked a sound: ' + JSON.stringify(s.sm));
+      if (FM.media.get(s.id).file.name !== 'new.m4a') throw new Error('the new file is not in the slot');
+      if (v.steps() !== n0 + 1 || FM.history._metaHere().arr) throw new Error('one non-arranging step wanted: ' + (v.steps() - n0) + ' / ' + JSON.stringify(FM.history._metaHere()));
+      const o = v.L('O'), d1 = strip('O'), n1 = v.steps();
+      S.cmd.replace(o.id, smRec(9, 'longer.mp4', { width: 320, height: 240 })); await v.idle();
+      if (strip('O') !== d1 || v.L('O').duration !== 2 || v.steps() !== n1 + 1) throw new Error('a longer file for an overlay should change only the file, in one step: ' + v.L('O').duration + ' / ' + (v.steps() - n1));
+      const bad = S.planReplace(S.read(FM.scene), v.L('A').id, null);
+      if (!bad || !bad.refuse) throw new Error('replacing with nothing should refuse');
+    }, { media: [{ name: 'Song', rec: smRec(8, 'old.m4a', { width: 0, height: 0 }) }, { name: 'O', rec: smRec(5, 'o.mp4', { width: 320, height: 240 }) }] }));
+  });
+
+  test('simple P2.3 · Speed refuses with its own words and writes nothing: the owner of a crossfade, a clip that would fall under twice its fade, a ramped clip; the clip on the other side of the same fade changes speed and the fade keeps its length', { item: '980', budgetMs: 90000 }, async function () {
+    await smP2((W, H) => [
+      (() => { const b = smV('B', 4, 5, W, H); b.transform.opacity = smKf([[4, 0], [5, 1]]); return b; })(),
+      smV('D', 13, 2, W, H, { speed: smKf([[13, 1], [15, 2]]) }), smV('C', 9, 4, W, H), smV('A', 0, 5, W, H)
+    ], async function (v) {
+      const S = FM.spine, doc0 = v.doc(), n0 = v.steps();
+      const R0 = S.read(FM.scene), sb = R0.main[1] && R0.main[1].seam;
+      if (!sb || sb.kind !== 'blend') throw new Error('CONTROL: the fixture is not a crossfade between A and B: ' + JSON.stringify(sb));
+      S.cmd.speed(v.L('B').id, 2); await v.idle();
+      if (!/fade into each other/.test(v.say())) throw new Error('Speed on the clip that OWNS the fade said “' + v.say() + '”');
+      S.cmd.speed(v.L('A').id, 4); await v.idle();
+      if (!/fades into the next one/.test(v.say())) throw new Error('A clip that would fall under twice its fade said “' + v.say() + '”');
+      S.cmd.speed(v.L('D').id, 2); await v.idle();
+      if (!/speed changes over time/.test(v.say())) throw new Error('A ramped clip said “' + v.say() + '”');
+      if (v.doc() !== doc0 || v.steps() !== n0) throw new Error('a refused Speed wrote to the document or took a step');
+      /* CONTROL: A at 2× is 2.5 s, still over twice the 1 s fade; B (the owner) moves up with its keys and the overlap stays 1 s */
+      S.cmd.speed(v.L('A').id, 2); await v.idle();
+      const A = v.L('A'), B = v.L('B');
+      if (Math.abs(A.duration - 2.5) > 1e-9 || Math.abs(B.start - 1.5) > 1e-9) throw new Error('CONTROL: A at 2× did not give A 2.5 s and B at 1.5: ' + A.duration + ' / ' + B.start + ' (it said “' + v.say() + '”)');
+      if (Math.abs((A.start + A.duration - B.start) - 1) > 1e-9) throw new Error('the fade changed length: the overlap is ' + (A.start + A.duration - B.start));
+      if (B.transform.opacity.kf.map(k => +k.t.toFixed(6)).join() !== '1.5,2.5') throw new Error('B’s fade keys did not move with it: ' + B.transform.opacity.kf.map(k => k.t));
+    });
+  });
+
+  test('simple P2.3 · the tray: a video clip offers Speed, Volume, Replace, Reverse; a picture only Replace; an overlay video Volume and Speed; a song Volume, Fade and Speed — and a song’s Speed changes only itself (nothing ripples, a tail mark goes)', { item: '980', budgetMs: 120000 }, async function () {
+    await smP2((W, H) => [smSong('Song', 0, 8, W, H), smV('O', 1, 2, W, H, { muted: false }), smPic('P', 6, 3, W, H), smV('V', 0, 6, W, H, { muted: false })], async function (v) {
+      const tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
+      const has = (want, absent, who) => { const t = tools(); want.forEach(w => { if (t.indexOf(w) < 0) throw new Error(who + ': the tray is missing ' + w + ' (' + t + ')'); }); (absent || []).forEach(w => { if (t.indexOf(w) >= 0) throw new Error(who + ': the tray should not offer ' + w + ' (' + t + ')'); }); };
+      FM.selectLayer(v.L('V').id); await v.sleep(100); has(['speed', 'volume', 'replace', 'reverse'], [], 'a video clip');
+      FM.selectLayer(v.L('P').id); await v.sleep(100); has(['replace'], ['speed', 'volume', 'reverse', 'takeSound', 'putSound'], 'a picture clip');
+      FM.selectLayer(v.L('O').id); await v.sleep(100); has(['volume', 'speed'], ['reverse', 'takeSound'], 'an overlay video');
+      FM.selectLayer(v.L('Song').id); await v.sleep(100); has(['volume', 'fade', 'stay'], ['reverse', 'replace', 'takeSound'], 'a song');
+      /* a picture has no clock: Speed on it refuses and writes nothing */
+      const dpic = v.doc(), npic = v.steps(); FM.spine.cmd.speed(v.L('P').id, 2); await v.idle();
+      if (v.doc() !== dpic || v.steps() !== npic) throw new Error('Speed on a picture wrote something or took a step');
+      /* the song's Speed: a look. Nothing else moves; its end is its own, so a tail mark goes (the Stay put under it stays) */
+      const S = FM.spine, song = v.L('Song'); song.sm = { stay: true, tail: true, tailEnd: 6 };
+      const others = JSON.stringify(FM.scene.layers.filter(l => l.name !== 'Song').map(l => [l.name, l.start, l.duration])), n0 = v.steps();
+      S.cmd.speed(song.id, 2); await v.idle();
+      if (Math.abs(v.L('Song').duration - 4) > 1e-9) throw new Error('the song did not become 4 s at 2×: ' + v.L('Song').duration + ' (it said “' + v.say() + '”)');
+      if (JSON.stringify(FM.scene.layers.filter(l => l.name !== 'Song').map(l => [l.name, l.start, l.duration])) !== others) throw new Error('a song’s Speed moved or re-timed another item');
+      if (v.L('Song').sm && v.L('Song').sm.tail) throw new Error('the song kept a tail mark though its end is no longer the track end');
+      if (!(v.L('Song').sm && v.L('Song').sm.stay)) throw new Error('the song lost its Stay put');
+      if (v.steps() !== n0 + 1 || FM.history._metaHere().arr) throw new Error('a song’s Speed should be one step that does not arrange: ' + (v.steps() - n0) + ' / ' + JSON.stringify(FM.history._metaHere()));
+    });
+  });
+
+  test('simple P2.3 · Mute clip sound follows new clips and lets go on Lift off: a clip appended while it is on arrives muted and marked; Lift off hands the clip its sound back and drops the mark; a title is untouched', { item: '980', budgetMs: 120000 }, async function () {
+    await smFakeLoad(() => smP2((W, H) => [smT('Title', 0, 1, W, H), smV('B', 3, 3, W, H, { muted: false }), smV('A', 0, 3, W, H, { muted: false })], async function (v) {
+      const S = FM.spine;
+      S.cmd.muteClips(true); await v.idle();
+      if (!S.muteMode() || !v.L('A').muted) throw new Error('setup: the mode did not come on');
+      const vid = new File([new Uint8Array(32)], 'new.mp4', { type: 'video/mp4' });
+      await S.cmd.append([vid]); await v.idle();
+      const added = FM.scene.layers.find(l => l.name === 'new.mp4' || (l.sm && l.sm.main && l.name !== 'A' && l.name !== 'B'));
+      if (!added) throw new Error('setup: the appended clip is not in the scene (it said “' + v.say() + '”)');
+      if (!added.muted || !(added.sm && added.sm.muteByMode)) throw new Error('a clip appended while Mute clip sound is on should arrive muted and marked: ' + JSON.stringify([added.muted, added.sm]));
+      if (v.L('Title').muted || (v.L('Title').sm && v.L('Title').sm.muteByMode)) throw new Error('the mode touched a title');
+      FM.selectLayer(v.L('B').id); await v.sleep(100);
+      S.cmd.lift(v.L('B').id); await v.idle();
+      if (v.L('B').muted || (v.L('B').sm && v.L('B').sm.muteByMode)) throw new Error('Lift off left the overlay muted / marked: ' + JSON.stringify([v.L('B').muted, v.L('B').sm]));
+      if (!v.L('A').muted) throw new Error('Lift off un-muted a clip that stayed in the row');
+    }));
+  });
+
 })();

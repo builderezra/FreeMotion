@@ -4741,9 +4741,14 @@ window.FM = window.FM || {};
      timer fires while he is still choosing — so the slot kept the template's picture and the swap looked like
      it had done nothing. A picker that is dismissed in a browser without the `cancel` event never settles; a
      caller that waits on it simply never hears back, which is exactly what happened before. */
-  FM.replaceMedia = function (id) {
+  /* queue 980 (release 2.3, DESIGN §3.6 Replace): FM.replaceMedia is SPLIT at its decode so Simple can run the swap inside its
+     runner without ever waiting on a picker in there (a dismissed picker can leave a promise pending, and that would leave
+     FM.spine.running true and history muted for good). pickReplacement is the picker plus the decode, and it ALWAYS settles —
+     the loaded record, or null when he cancels or the file will not load. swapInMedia is everything after the decode. Full's
+     ⋯ Replace is exactly today's: replaceMedia = pickReplacement, then swapInMedia. */
+  FM.pickReplacement = function (id) {
     const layer = FM.layerById(FM.scene, id);
-    if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') return Promise.resolve(false);
+    if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') return Promise.resolve(null);
     /* ⚠️ queue 690 (HUNT-a): A SONG IS REPLACED BY A SONG. A song is a video layer with no picture, so the ⋯ menu offers
        it Replace media… like any clip (and a template's Insert your Media lists it as a slot) — but this picker asked
        for video/*,image/* only, which on his iPhone greys out every song in Files, and a song that reached it anyway
@@ -4754,23 +4759,39 @@ window.FM = window.FM || {};
     const cur = FM.media.get(id);
     const isSong = layer.type === 'video' && !!cur && !(cur.width > 0 && cur.height > 0);
     let settle = null;
-    const landed = new Promise(res => { settle = res; });
+    const picked = new Promise(res => { settle = res; });
     const input = document.createElement('input');
     input.type = 'file'; input.accept = (isSong && FM._audioAccept) ? FM._audioAccept() : 'video/*,image/*'; input.style.display = 'none';
-    const swap = async () => {
+    const load = async () => {
       const file = input.files && input.files[0]; input.remove();
-      if (!file) return false;
+      if (!file) return null;
       const kind = mediaKind(file);
       let nrec = null;
       try {
         if (isSong && kind === 'video') {
           const wav = await audioFromVideo(file);
-          if (!wav) { if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — the song is unchanged', 4200); return false; }
+          if (!wav) { if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — the song is unchanged', 4200); return null; }
           nrec = await FM.loadVideoFile(wav);
         } else if (kind === 'video' || kind === 'audio') nrec = await FM.loadVideoFile(file);
         else nrec = await FM.loadImageFile(file);   // an image, or a name nothing recognises (the old fall-through)
       } catch (e) { nrec = null; }
-      if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return false; }
+      if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return null; }
+      return nrec;
+    };
+    input.addEventListener('cancel', () => { input.remove(); settle(null); });
+    // a throw still surfaces as the unhandled rejection it always was — the caller just hears "nothing picked" first
+    input.addEventListener('change', () => { load().then(settle, e => { settle(null); throw e; }); });
+    document.body.appendChild(input);
+    input.click();
+    return picked;
+  };
+  /* The swap itself. `o.noSave` leaves the file write to the caller (Simple's runner saves after its commit), `o.noLib` keeps a
+     sound twin out of the Media library, `o.simple` writes Simple's own sound-only fact from the new record (§0.4 B8). */
+  FM.swapInMedia = async function (id, nrec, o) {
+    o = o || {};
+    const layer = FM.layerById(FM.scene, id);
+    if (!layer || !nrec) return false;
+    {
       /* queue 829: keep the outgoing file BEFORE anything replaces it. The next save writes the new blob
          over the same key, so without this the original is gone from the registry, from IndexedDB and
          from the media library at once — and undo cannot reach it, because history only swaps layer JSON. */
@@ -4797,24 +4818,26 @@ window.FM = window.FM || {};
        * deleteLayer already follows for exactly this reason. */
       layer.mediaRev = (layer.mediaRev || 0) + 1;
       { const r = FM.media.get(id); if (r) r.rev = layer.mediaRev; }   // queue 829: the record knows which rev it is, so undo can tell it is ahead
+      if (o.simple && FM.spine && FM.spine.setFlag) {   // §0.4 B8: a sound-only record is a sound in Simple's eyes; a picture one is not
+        const soundOnly = nrec.kind !== 'image' && !(nrec.width > 0 && nrec.height > 0);
+        if (soundOnly) FM.spine.setFlag(layer, 'snd', true); else if (layer.sm && layer.sm.snd) FM.spine.setFlag(layer, 'snd', false);
+        if (nrec.width > 0 && nrec.height > 0 && nrec.width <= 16384 && nrec.height <= 16384) { layer.srcW = nrec.width; layer.srcH = nrec.height; layer.srcRev = layer.mediaRev; }
+      }
       refreshAll(); FM.seekVideosToTime();
       if (FM.history) FM.history.commit();
-      if (FM.storage && FM.storage.save) FM.storage.save();
+      if (!o.noSave && FM.storage && FM.storage.save) FM.storage.save();
       // The blob under this key is a DIFFERENT file now. Any library tile still anchored here would
       // show the old name and hand back the new footage — forget it (that also clears its cached
       // thumbnail), then register the replacement so it gets an honest tile of its own.
-      if (FM.mediaLib) {
+      if (FM.mediaLib && !o.noLib) {
         FM.mediaLib.list().filter(e => e.key === id).forEach(e => FM.mediaLib.remove(e.mid));
         FM.mediaLib.add(nrec, id);
       }
       return true;
-    };
-    input.addEventListener('cancel', () => { input.remove(); settle(false); });
-    // a throw still surfaces as the unhandled rejection it always was — the caller just hears "no swap" first
-    input.addEventListener('change', () => { swap().then(settle, e => { settle(false); throw e; }); });
-    document.body.appendChild(input);
-    input.click();
-    return landed;
+    }
+  };
+  FM.replaceMedia = function (id) {
+    return FM.pickReplacement(id).then(nrec => nrec ? FM.swapInMedia(id, nrec) : false);
   };
 
   // ===== Playhead-is-outside-the-clip actions (Alight Motion parity) =====

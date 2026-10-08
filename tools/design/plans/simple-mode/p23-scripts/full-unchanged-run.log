@@ -1,0 +1,377 @@
+→ Full unchanged: the tree against HEAD (a51b5e1d), sources acf5a5f5ed16cd9a64f65092
+   one server on :8790 (its token checked) — 10 runs: 380 1280 440x956 320x568 956x440 1280x720 1024x600 1680x1050 env-380 env-1280
+   both sides measured in 3914s
+❌ THE INSTRUMENT IS BROKEN — the probe could not drive the reference here as it says, so a match would prove nothing:
+   · 380 FU2 "one multi-file pick: an image, a video and a song (the picker’s landing route)": Failed to execute 'encode' on 'VideoEncoder': Cannot call 'encode' on a closed codec.
+   · 380 FU2 "extract the audio of the video (the clip menu’s Extract Audio)": no video layer to extract from
+   · 380 FU2 "Reverse the video (the clip menu’s Reverse)": Cannot read properties of undefined (reading 'id')
+   · 380 FU2 "a Follow on a split target (Pick D follows Clip B’s first half: + Add behavior → Follow, its layer list), frames past the cut": no Pick D to follow with
+   · 380 FU2 "a luma matte on a split source (Pick D, matted by Clip B’s first half: Effects → + Add Effect → Luma Matte, its Matte layer list), frames past the cut": no Pick D to matte
+   · 380 FU2 "delete Pick D with the Delete key": Cannot read properties of undefined (reading 'id')
+   · 380 FU2 "export (Export → MP4, the loop region, the smallest size)": timed out waiting for the export’s ready card
+   · 380 FU4 "one multi-file pick: an image, a video and a song (the picker’s landing route)": Failed to execute 'encode' on 'VideoEncoder': Cannot call 'encode' on a closed codec.
+   · 380 FU4 "extract the audio of the video (the clip menu’s Extract Audio)": no video layer to extract from
+   · 380 FU4 "Reverse the video (the clip menu’s Reverse)": Cannot read properties of undefined (reading 'id')
+   · 380 FU4 "a Follow on a split target (Pick D follows Clip B’s first half: + Add behavior → Follow, its layer list), frames past the cut": no Pick D to follow with
+   · 380 FU4 "a luma matte on a split source (Pick D, matted by Clip B’s first half: Effects → + Add Effect → Luma Matte, its Matte layer list), frames past the cut": no Pick D to matte
+❌ DIFFERENT FROM HEAD — 359 difference(s); the first:
+   · 380 FU4.friend[0].doc.layers[8].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[0].doc.layers[12].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[0].doc.layers[13].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[0].doc.layers[14].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[0].doc.layers[15].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[0].doc.layers[16].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[1].doc.layers[8].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[1].doc.layers[12].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[1].doc.layers[13].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[1].doc.layers[14].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[1].doc.layers[15].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[1].doc.layers[16].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[2].doc.layers[8].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[2].doc.layers[12].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[2].doc.layers[13].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[2].doc.layers[14].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[2].doc.layers[15].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[2].doc.layers[16].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[3].doc.layers[8].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[3].doc.layers[11].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[3].doc.layers[12].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[3].doc.layers[13].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[3].doc.layers[14].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[3].doc.layers[15].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[4].doc.layers[8].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[4].doc.layers[11].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[4].doc.layers[12].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[4].doc.layers[13].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[4].doc.layers[14].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[4].doc.layers[15].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[5].doc.layers[8].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[5].doc.layers[11].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[5].doc.layers[12].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[5].doc.layers[13].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[5].doc.layers[14].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[5].doc.layers[15].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[6].doc.layers[8].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[6].doc.layers[11].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[6].doc.layers[12].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[6].doc.layers[13].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[6].doc.layers[14].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.friend[6].doc.layers[15].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.leave.doc.layers[8].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.leave.doc.layers[11].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.leave.doc.layers[12].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.leave.doc.layers[13].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.leave.doc.layers[14].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU4.leave.doc.layers[15].pick.b: pkzn1gjx52 → pkzncljc52
+   · 380 FU6: the tree has #cv-editor, and the price check (COG-DESIGN §6.4 ±1 px at 380×800 Friends, 380×667, 375×553, 320×568) is not built yet — step 1.3 must build it in tools/_fu_compare.py
+   · 380 FU7: the tree has a switch (FM.editor or #cv-editor) and the round trip through the cog is not wired in tests/full-unchanged.html yet — step 1.3 must wire it; FU7 cannot be skipped
+   · 380 picture fu1-add-sheet.png: 4 px differ by more than 24 levels (tolerance 3), within (190, 798, 191, 799)
+   · 380 picture fu1-opts-strip.png: 4 px differ by more than 24 levels (tolerance 3), within (190, 798, 191, 799)
+   · 380 picture fu4-friend-2nopv.png: 4 px differ by more than 24 levels (tolerance 3), within (182, 428, 199, 429)
+   · 380 picture fu4-friend-3nopv.png: 4 px differ by more than 24 levels (tolerance 3), within (182, 428, 199, 429)
+   · 380 picture fu4-friend-5nopv.png: 4 px differ by more than 24 levels (tolerance 3), within (182, 428, 199, 429)
+   · 380 picture fu4-friend-7nopv.png: 4 px differ by more than 24 levels (tolerance 3), within (182, 428, 199, 429)
+   · 1280 FU3 "sweep": the state each sweep pass starts from[0].doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep": the state each sweep pass starts from[0].doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep": the state each sweep pass starts from[0].doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep": the state each sweep pass starts from[1].doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep": the state each sweep pass starts from[1].doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep": the state each sweep pass starts from[1].doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+KeyM": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+KeyM": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+KeyM": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+KeyM": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+KeyM": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+KeyM": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit1": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit1": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit1": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit2": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit2": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit2": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit3": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit3": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit3": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit4": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit4": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit4": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit5": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit5": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Digit5": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Minus": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Minus": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Minus": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Minus": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Minus": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Minus": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Equal": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Equal": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Equal": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Equal": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Equal": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Equal": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+BracketLeft": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+BracketLeft": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+BracketLeft": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+BracketLeft": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+BracketLeft": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+BracketLeft": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+BracketRight": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+BracketRight": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+BracketRight": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+BracketRight": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+BracketRight": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+BracketRight": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Backslash": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Backslash": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Backslash": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Backslash": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Backslash": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Backslash": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Comma": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Comma": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Comma": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Comma": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Comma": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Comma": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Period": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Period": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Period": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Period": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Period": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Period": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Space": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Space": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+Space": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Space": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Space": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Space": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Tab": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Tab": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Tab": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Home": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Home": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+Home": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+End": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+End": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+End": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+ArrowLeft": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+ArrowLeft": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+ArrowLeft": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+ArrowRight": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+ArrowRight": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+ArrowRight": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+NumpadAdd": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+NumpadAdd": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+NumpadAdd": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+NumpadAdd": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+NumpadAdd": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+NumpadAdd": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+NumpadSubtract": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+NumpadSubtract": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · shift+NumpadSubtract": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+NumpadSubtract": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+NumpadSubtract": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · nothing selected · alt+NumpadSubtract": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyA": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyA": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyA": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyA": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyA": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyA": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyD": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyD": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyD": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyD": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyD": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyD": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyM": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyM": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyM": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyM": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyM": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyM": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyS": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyS": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyS": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+KeyS": key.state.doc.layers[7].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyS": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyS": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyS": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+KeyS": key.state.doc.layers[7].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit1": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit1": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit1": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit2": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit2": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit2": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit3": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit3": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit3": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit4": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit4": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit4": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit5": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit5": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit5": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit6": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit6": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit6": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit7": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit7": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit7": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit8": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit8": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Digit8": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Minus": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Minus": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Minus": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Minus": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Minus": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Minus": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Equal": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Equal": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Equal": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Equal": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Equal": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Equal": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+BracketLeft": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+BracketLeft": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+BracketLeft": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+BracketLeft": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+BracketLeft": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+BracketLeft": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+BracketRight": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+BracketRight": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+BracketRight": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+BracketRight": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+BracketRight": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+BracketRight": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Backslash": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Backslash": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Backslash": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Backslash": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Backslash": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Backslash": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Comma": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Comma": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Comma": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Comma": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Comma": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Comma": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Period": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Period": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Period": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Period": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Period": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Period": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Space": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Space": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Space": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Space": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Space": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Space": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Tab": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Tab": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Tab": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Escape": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Escape": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Escape": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Escape": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Escape": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Escape": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Backspace": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Backspace": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Backspace": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Backspace": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Delete": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+Delete": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Delete": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Delete": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Home": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Home": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+Home": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+End": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+End": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+End": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowLeft": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowLeft": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowLeft": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowRight": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowRight": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowRight": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowUp": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowUp": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowUp": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowDown": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowDown": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+ArrowDown": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+NumpadAdd": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+NumpadAdd": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+NumpadAdd": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+NumpadAdd": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+NumpadAdd": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+NumpadAdd": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+NumpadSubtract": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+NumpadSubtract": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · shift+NumpadSubtract": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+NumpadSubtract": key.state.doc.layers[4].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+NumpadSubtract": key.state.doc.layers[5].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU3 "sweep · clip selected · alt+NumpadSubtract": key.state.doc.layers[6].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[0].doc.layers[8].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[0].doc.layers[12].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[0].doc.layers[13].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[0].doc.layers[14].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[0].doc.layers[15].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[0].doc.layers[16].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[1].doc.layers[8].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[1].doc.layers[12].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[1].doc.layers[13].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[1].doc.layers[14].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[1].doc.layers[15].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[1].doc.layers[16].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[2].doc.layers[8].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[2].doc.layers[12].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[2].doc.layers[13].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[2].doc.layers[14].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[2].doc.layers[15].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[2].doc.layers[16].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[3].doc.layers[8].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[3].doc.layers[11].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[3].doc.layers[12].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[3].doc.layers[13].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[3].doc.layers[14].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[3].doc.layers[15].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[4].doc.layers[8].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[4].doc.layers[11].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[4].doc.layers[12].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[4].doc.layers[13].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[4].doc.layers[14].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[4].doc.layers[15].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[5].doc.layers[8].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[5].doc.layers[11].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[5].doc.layers[12].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[5].doc.layers[13].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[5].doc.layers[14].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[5].doc.layers[15].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[6].doc.layers[8].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[6].doc.layers[11].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[6].doc.layers[12].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[6].doc.layers[13].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[6].doc.layers[14].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.friend[6].doc.layers[15].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.leave.doc.layers[8].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.leave.doc.layers[11].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.leave.doc.layers[12].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.leave.doc.layers[13].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.leave.doc.layers[14].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU4.leave.doc.layers[15].pick.b: pkznnspkvv → pkzo22edvv
+   · 1280 FU6: the tree has #cv-editor, and the price check (COG-DESIGN §6.4 ±1 px at 380×800 Friends, 380×667, 375×553, 320×568) is not built yet — step 1.3 must build it in tools/_fu_compare.py
+   · 1280 FU7: the tree has a switch (FM.editor or #cv-editor) and the round trip through the cog is not wired in tests/full-unchanged.html yet — step 1.3 must wire it; FU7 cannot be skipped
+   · 440x956 fu1-opts-strip: what it animated[5]: ["A","div#vb-marks","sb-item-inL","0.2s","0.118s","cubic-bezier(0.34, 1.4, 0.64, 1)","1","… → ["A","div#vb-marks","sb-item-inL","0.2s","0.118s","cubic-bezier(0.34, 1.4, 0.64, 1)","1","…
+   · 320x568 fu1-editor-idle: what the preview drew 9roj1ibzp → 1tjbtzabskl
+   · 320x568 picture fu1-add-sheet.png: 30 px differ by more than 24 levels (tolerance 3), within (109, 566, 210, 567)
+   · 320x568 picture fu1-opts-strip.png: 30 px differ by more than 24 levels (tolerance 3), within (109, 566, 210, 567)
+   · 1280x720 fu1-opts-strip: what it animated[5]: ["A","div#vb-marks","sb-item-in","0.2s","0.118s","cubic-bezier(0.34, 1.4, 0.64, 1)","1","[… → ["A","div#vb-marks","sb-item-in","0.2s","0.118s","cubic-bezier(0.34, 1.4, 0.64, 1)","1",""…
+   · 1024x600 fu1-opts-strip: what it animated[5]: ["A","div#vb-marks","sb-item-in","0.2s","0.118s","cubic-bezier(0.34, 1.4, 0.64, 1)","1","[… → ["A","div#vb-marks","sb-item-in","0.2s","0.118s","cubic-bezier(0.34, 1.4, 0.64, 1)","1",""…
+NOT PASS — Full differs from HEAD (or could not be measured). Nothing is cached.
