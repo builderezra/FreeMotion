@@ -81,6 +81,7 @@ window.FM = window.FM || {};
       deleteOne: 'Delete one clip at a time', failed: 'That didn’t work, so nothing changed',
       added1: 'Added clip', addedN: n => 'Added ' + n + ' clips', nothingAdded: 'Nothing could be added',
       moved: (name, i, n) => name + ' moved to ' + i + ' of ' + n, noMove: 'That clip is already there',
+      itemMoved: (name, t) => name + ' now starts at ' + (t < 60 ? t.toFixed(1) + ' s' : Math.floor(t / 60) + ':' + String(Math.round(t % 60)).padStart(2, '0')),
       atStart: 'That’s the first clip', atEnd: 'That’s the last clip',
       lifted: 'Lifted off the clip row', intoRow: 'Put in the clip row', cannotMain: 'That can’t go in the clip row',
       stays: 'Stays put', follows: 'Follows its clip', forward: 'Moved forward', backward: 'Moved back',
