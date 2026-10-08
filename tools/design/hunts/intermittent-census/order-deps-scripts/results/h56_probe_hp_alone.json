@@ -1,0 +1,44 @@
+{
+ "ok": false,
+ "summary": "Regression 1/2 ✗Pending 0/0 built",
+ "failures": [
+  "FAILZZ H56 probe — STATE app.class= app.transform=none home.class= body.class=white-chrome home-open innerWidth=900 frame= nanims=11 anims=[cat-shine:running:addmenu-card addmenu-card--sof | fm-home-plus-drift:running:hm-new | hm-boil-a:running:hm-grain | hm-boil-b:running:hm-grain | hm-drift-a:running:home-screen | hm-drift:running:home-screen | hm-glint:running: | hm-glint:running: | hm-grain-a:running:hm-grain | hm-grain-b:running:hm-grain | orb-sheen:running:hm-new] inline.app=null inline.home=null P.cur=p_muzsfvw2hh65r homeScrollRoot=0"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   3616,
+   "home push: the press answers the tap, survives the wait, and hands over without a pop"
+  ],
+  [
+   15,
+   "ZZ H56 probe"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "ZZ H56 probe",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "home push: the press answers the tap, survives the wait, and hands over without a pop",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

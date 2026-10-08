@@ -1,0 +1,10 @@
+h56_bisect.py "988 the clapper on timing C rests between snaps" 1280 (30 candidate tests: names with clapper / 957 / 974 / 947 / 964 / 981 / empty area / empty project / variant)
+ALL 30 cands -> red test RED (ran 26)
+  half of 30: later 15 -> green (ran 12)
+  half of 30: earlier 15 -> RED (ran 15)
+  half of 15: later 8 -> green (ran 8)
+  half of 15: earlier 7 -> RED (ran 8)
+  half of 7: later 4 -> RED (ran 5)
+  half of 4: later 2 -> RED (ran 3)
+  half of 2: later 1 -> RED (ran 2)
+LEAKER CANDIDATE: ['957 the empty project clapper opens, slams shut on the board with lines out of the tip, and stops when it cannot be seen']

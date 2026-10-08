@@ -1,0 +1,91 @@
+{
+ "ok": false,
+ "summary": "Regression 3/6 ✗ · NOT RUN HERE 1 Pending 0/0 built",
+ "failures": [
+  "FAIL981 review: a real double-tap on the empty area - the first tap opens the add menu at once, and a second tap that lands on the menu as it swings up picks nothing from it, even one that lifts after the menu has arrived — the empty area under the Adjustment card is covered at 71,696 by svg in span.addmenu-ic in button.addmenu-card.addmenu-card--soft in div.addmenu-grid.addmenu-grid--fill in div.addmenu-page in div.addmenu-pager — a real press there would not reach it",
+  "FAIL981 review: with less motion the add menu arrives on its plain 220 ms slide, and its cards still take no tap for a double-tap window (300 ms) after the empty area opens it — CONTROL: the menu is not arriving on the 220 ms reduced-motion slide ()"
+ ],
+ "notRun": [
+  {
+   "name": "981 a real tap on the empty area opens the add menu at once - every colour, both outline starts - and the colour keeps playing under it",
+   "item": "981",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  }
+ ],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   3968,
+   "981 the glowing lines run round the add menu's own edges as it opens, meet at its top as it lands, then go - the + opens it without them"
+  ],
+  [
+   2086,
+   "981 review: a real double-tap on the empty area - the first tap opens the add menu at once, and a second tap that lands on the menu as it swings up picks nothing from it, even one that lifts after the menu has arrived"
+  ],
+  [
+   1560,
+   "981 review: Enter on the empty add row while the add menu is already open does not run the lights round it again - they are for the menu as it arrives"
+  ],
+  [
+   1531,
+   "981 review: with less motion the add menu arrives on its plain 220 ms slide, and its cards still take no tap for a double-tap window (300 ms) after the empty area opens it"
+  ],
+  [
+   1530,
+   "981 a real tap on the empty area opens the add menu at once - every colour, both outline starts - and the colour keeps playing under it"
+  ],
+  [
+   1511,
+   "981 asked for less motion: the empty area still opens the add menu at once, with no lights round it"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "981 a real tap on the empty area opens the add menu at once - every colour, both outline starts - and the colour keeps playing under it",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "981 the glowing lines run round the add menu's own edges as it opens, meet at its top as it lands, then go - the + opens it without them",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "981 asked for less motion: the empty area still opens the add menu at once, with no lights round it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "981 review: a real double-tap on the empty area - the first tap opens the add menu at once, and a second tap that lands on the menu as it swings up picks nothing from it, even one that lifts after the menu has arrived",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "981 review: with less motion the add menu arrives on its plain 220 ms slide, and its cards still take no tap for a double-tap window (300 ms) after the empty area opens it",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "981 review: Enter on the empty add row while the add menu is already open does not run the lights round it again - they are for the menu as it arrives",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

@@ -1,0 +1,46 @@
+diff --git a/tests/tests.js b/tests/tests.js
+index 1f37c730..b409c8c0 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -21082,6 +21082,7 @@
+       if (innerWidth > 700) throw new Error('narrowing the runner frame did not take: innerWidth is still ' + innerWidth);
+     }
+ 
++    var leaked = [];   // H56: script-paused CSSAnimations survive the removal of their class
+     try {
+       home.classList.remove('hidden');
+       await rAF();
+@@ -21129,6 +21130,7 @@
+         .filter(function (a) { return pushNames[a.animationName]; });
+       if (anims.length < 2) throw new Error('only ' + anims.length + ' push animation(s) are running (#home-screen and #app each need one) — this test would be asserting nothing');
+       anims.forEach(function (a) { a.pause(); a.currentTime = 0; });
++      leaked = anims;
+ 
+       /* ---- FRAME ZERO: home is still fully up, so NOTHING of the editor may be on screen ---- */
+       var a0 = app.getBoundingClientRect();
+@@ -21213,6 +21215,7 @@
+          a line for it. */
+       void fabDrift;
+     } finally {
++      leaked.forEach(function (a) { try { a.cancel(); } catch (e) {} });
+       document.body.classList.remove('fm-pushing');
+       home.classList.remove('fm-push-out');
+       app.classList.remove('fm-push-in');
+@@ -103908,6 +103911,8 @@
+       FM.scene.layers.length = 0; FM.refreshAll(); await sleep(80);
+       if (!claps().length) throw new Error('with the stage empty again the clap did not come back');
+     } finally {
++      // H56: seeking with pause()/currentTime/play() above makes these animations the script's; they outlive the hint's class and 988 then reads them
++      try { d.getAnimations({ subtree: true }).forEach(function (an) { if (/^dh-/.test(an.animationName || '')) an.cancel(); }); } catch (e) {}
+       if (FM.variant && FM.variant.force) { FM.variant.force('clapper.timing', null); FM.variant.force('clapper.lines', null); }
+       FM.scene.layers = layers0;
+       if (FM.selectLayer) FM.selectLayer(sel0 || null);
+@@ -111052,6 +111057,8 @@
+         FM.mobile.closeAdd();
+         [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
+         await c.sleep(450);
++        // H56: finish() above leaves the sheet's finished fm-hinge-up on it after its class is gone, and the next test reads that one
++        try { sheet.getAnimations().forEach(function (an) { an.cancel(); }); } catch (e) {}
+       }
+     });
+   });

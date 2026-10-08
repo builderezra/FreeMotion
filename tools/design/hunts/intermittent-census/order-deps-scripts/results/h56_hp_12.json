@@ -1,0 +1,42 @@
+{
+ "ok": true,
+ "summary": "Regression 2/2 ✓Pending 0/0 built",
+ "failures": [],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   3631,
+   "home push: the press answers the tap, survives the wait, and hands over without a pop"
+  ],
+  [
+   241,
+   "home push: the two screens slide without either being re-laid-out"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "home push: the two screens slide without either being re-laid-out",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "home push: the press answers the tap, survives the wait, and hands over without a pop",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

@@ -1,0 +1,11 @@
+start k=-1: RED (ran 426, 233s)
+k=212 (effects: a slider at 0 means zero, it does not quietly becom): RED (ran 213, 70s)
+k=318 (text: the wrap handles sit beside the text, never on it): RED (ran 107, 40s)
+k=371 (922 the audio effects browser docks in the inspector column ): RED (ran 54, 32s)
+k=398 (loop wrap re-origins the clock instead of pinning the playhe): green (ran 27, 14s)
+k=384 (masks: every mask alpha the compositor builds is a buffer th): green (ran 41, 24s)
+k=377 (settings cog: in a project the panel leads with the project,): green (ran 48, 31s)
+k=374 (home push: the two screens slide without either being re-lai): RED (ran 51, 31s)
+k=375 (home push: the editor’s body-level chrome travels with the e): green (ran 50, 35s)
+LAST RED START k=374 -> leaker is the test AFTER it, #375: home push: the editor’s body-level chrome travels with the editor, not with itself
+(test #374 is: home push: the two screens slide without either being re-laid-out)

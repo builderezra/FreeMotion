@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8"><title>CSSAnimation leak lab</title>
+<style>@keyframes k{from{opacity:0}to{opacity:1}} .t{animation:k 5s both} .d{display:none}</style>
+<pre id="out">running...</pre>
+<script>
+// For each way a script can touch a CSS animation: does the Animation object survive after its class is removed (or the element is display:none)?
+async function lab(){
+  const rows=[], raf=()=>new Promise(r=>setTimeout(r,70));   // a timer, not rAF: a hidden headless tab does not run rAF
+  const cases={
+    'untouched':a=>{},
+    'currentTime=':a=>{a.currentTime=500},
+    'pause()':a=>{a.pause()},
+    'pause() + currentTime=':a=>{a.pause();a.currentTime=500},
+    'pause() then play()':a=>{a.pause();a.play()},
+    'finish()':a=>{a.finish()},
+    'updatePlaybackRate()':a=>{a.updatePlaybackRate(2)}
+  };
+  for(const how of ['remove class','display:none']){
+    for(const [name,fn] of Object.entries(cases)){
+      const e=document.createElement('div'); e.className='t'; e.style.cssText='width:10px;height:10px;background:red'; document.body.append(e);
+      await raf();
+      const a=e.getAnimations().find(x=>x.animationName==='k'); fn(a); await raf();
+      if(how==='remove class') e.className=''; else e.classList.add('d');
+      await raf(); await raf();
+      rows.push([how,name,e.getAnimations().length,(e.getAnimations()[0]||{}).playState||'-']);
+      e.remove();
+    }
+  }
+  return rows;
+}
+lab().then(r=>{out.textContent=navigator.userAgent+'\n\nhow removed | what script did | animations left on the element | state\n'+r.map(x=>x.join(' | ')).join('\n'); window.__lab=r;}).catch(e=>{out.textContent='ERR '+e+' '+(e&&e.stack);window.__lab=['err']});
+</script>

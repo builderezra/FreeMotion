@@ -1,0 +1,44 @@
+{
+ "ok": false,
+ "summary": "Regression 1/2 ✗Pending 0/0 built",
+ "failures": [
+  "FAILZZ H56 probe — STATE hint.class=dh-t-b hintAnims=[none] allDh=0 homeOpen=true layers=0 variantKeys=last,force,log,KEY,PER_NAME"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   823,
+   "988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they were"
+  ],
+  [
+   14,
+   "ZZ H56 probe"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "ZZ H56 probe",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they were",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

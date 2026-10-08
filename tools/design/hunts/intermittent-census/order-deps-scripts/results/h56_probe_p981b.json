@@ -1,0 +1,50 @@
+{
+ "ok": false,
+ "summary": "Regression 0/2 ✗ · NOT RUN HERE 1 Pending 0/0 built",
+ "failures": [
+  "FAILZZ H56 probe — STATE sheet=add-sheet class= transform=none vis=visible sheetAnims=[none] docAnimsNonColor=11 body=white-chrome home-open elAt(71,696)=DIV.hm-scroll innerWidth=900 reduced=false"
+ ],
+ "notRun": [
+  {
+   "name": "981 review: a real double-tap on the empty area - the first tap opens the add menu at once, and a second tap that lands on the menu as it swings up picks nothing from it, even one that lifts after the menu has arrived",
+   "item": "981",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  }
+ ],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   2137,
+   "981 review: a real double-tap on the empty area - the first tap opens the add menu at once, and a second tap that lands on the menu as it swings up picks nothing from it, even one that lifts after the menu has arrived"
+  ],
+  [
+   14,
+   "ZZ H56 probe"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "ZZ H56 probe",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "981 review: a real double-tap on the empty area - the first tap opens the add menu at once, and a second tap that lands on the menu as it swings up picks nothing from it, even one that lifts after the menu has arrived",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  }
+ ]
+}

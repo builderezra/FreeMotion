@@ -1,0 +1,128 @@
+{
+ "ok": false,
+ "summary": "Regression 6/10 ✗ · NOT RUN HERE 2 Pending 0/0 built",
+ "failures": [
+  "FAIL974 the clapper's three timings each play as drawn: A open then every 6 s, B one clap then shut, C non-stop — with timing A the clapper keeps animating behind Home (5)",
+  "FAIL988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they were — at the end of its cycle timing C is -0.0 degrees open - the next lap would start shut, a seam: {'A':{'period':6000,'it':null,'hit':600,'still':4720,'seam':27.99896380736874},'B':{'period':1000,'it':1,'hit':600,'still':380,'seam':-0.0010361926312687216},'C':{'period':3600,'it':null,'hit':600,'still':2980,'seam':-0.0010361926312687216}}"
+ ],
+ "notRun": [
+  {
+   "name": "974 review: with #947 C the + turns into an x under the card - a real tap on that x closes the card, it does not open it again",
+   "item": "974",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "974 review: a real tap on the empty area, then straight away the back arrow - the add menu is never left open behind Home",
+   "item": "974",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  }
+ ],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   8529,
+   "974 the clapper's impact lines: cyan or grey, a new pick on every clap"
+  ],
+  [
+   1798,
+   "974 the empty area's tap colour: A Aurora, B Rings and sparks and C Key ripple each play when chosen, and 60 real presses play all three"
+  ],
+  [
+   1479,
+   "974 review: a real tap on the empty area, then straight away the back arrow - the add menu is never left open behind Home"
+  ],
+  [
+   933,
+   "974 review: with #947 C the + turns into an x under the card - a real tap on that x closes the card, it does not open it again"
+  ],
+  [
+   827,
+   "974 option C, Key ripple: its wave of keys lights the WHOLE area out from the finger"
+  ],
+  [
+   679,
+   "974 option B, Rings and sparks: its rings sweep the WHOLE area out from the finger"
+  ],
+  [
+   631,
+   "974 the outline's other start: from the edge nearest the finger, both ways round, meeting on the far side"
+  ],
+  [
+   626,
+   "988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they were"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "974 FM.variant picks at random on every play, remembers the last pick, logs it (50 per animation) and can be forced",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "974 the empty area's tap colour: A Aurora, B Rings and sparks and C Key ripple each play when chosen, and 60 real presses play all three",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "974 option B, Rings and sparks: its rings sweep the WHOLE area out from the finger",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "974 option C, Key ripple: its wave of keys lights the WHOLE area out from the finger",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "974 the outline's other start: from the edge nearest the finger, both ways round, meeting on the far side",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "974 the clapper's three timings each play as drawn: A open then every 6 s, B one clap then shut, C non-stop",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "974 the clapper's impact lines: cyan or grey, a new pick on every clap",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "974 review: with #947 C the + turns into an x under the card - a real tap on that x closes the card, it does not open it again",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "974 review: a real tap on the empty area, then straight away the back arrow - the add menu is never left open behind Home",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they were",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

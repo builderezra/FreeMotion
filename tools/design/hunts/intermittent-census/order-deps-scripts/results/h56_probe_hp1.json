@@ -1,0 +1,55 @@
+{
+ "ok": false,
+ "summary": "Regression 1/3 ✗Pending 0/0 built",
+ "failures": [
+  "FAILZZ H56 probe — STATE app.class= app.transform=none home.class= body.class=white-chrome home-open innerWidth=900 frame= anims=[background-color:running:btn-back | color:running:btn-back | background-color:running:btn-help | color:running:btn-help | background-color:running:btn-notes | border-bottom-color:running:btn-notes | border-left-color:running:btn-notes | border-right-color:running:btn-notes | border-top-color:running:btn-notes | background-color:running:btn-settings | color:running:btn-settings | background-color:running:btn-export | border-bottom-color:running:btn-export | border-left-color:running:btn-export | border-right-color:running:btn-export | border-top-color:running:btn-export | transform:running:ai-panel | transform:running:ai-chat | hm-glint:running: | cat-shine:running:addmenu-card addmenu-card--soft addmenu-card--multi | hm-drift-a:running:home-screen | hm-drift:running:home-screen | hm-grain-b:running:hm-grain | hm-boil-b:running:hm-grain | hm-grain-a:running:hm-grain | hm-boil-a:running:hm-grain | hm-glint:running: | fm-home-plus-drift:running:hm-new | orb-sheen:running:hm-new | fm-push-in:paused:app | fm-push-out:paused:home-screen] inline.app=null inline.home=null",
+  "FAILhome push: the press answers the tap, survives the wait, and hands over without a pop — the parked editor sits at x=40 in a 900px viewport (transform matrix(1, 0, 0, 1, 39.9424, 0), classes \"fm-push-wait\") — part of it is on screen, so the PREVIOUS project shows beside the leaving home screen. A leftover fm-pop-out is the way this breaks: it is an animation with fill-mode both, and a running animation beats the park's plain declaration."
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   219,
+   "home push: the editor’s body-level chrome travels with the editor, not with itself"
+  ],
+  [
+   42,
+   "home push: the press answers the tap, survives the wait, and hands over without a pop"
+  ],
+  [
+   15,
+   "ZZ H56 probe"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "home push: the editor’s body-level chrome travels with the editor, not with itself",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "ZZ H56 probe",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "home push: the press answers the tap, survives the wait, and hands over without a pop",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

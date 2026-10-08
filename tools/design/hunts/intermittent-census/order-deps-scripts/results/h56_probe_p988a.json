@@ -1,0 +1,56 @@
+{
+ "ok": false,
+ "summary": "Regression 0/3 ✗Pending 0/0 built",
+ "failures": [
+  "FAIL957 the empty project clapper opens, slams shut on the board with lines out of the tip, and stops when it cannot be seen — the clapper keeps animating behind Home (5 animations), repainting under a screen that covers it",
+  "FAILZZ H56 probe — STATE hint.class=dh-t-a hintAnims=[dh-whack:running:ct=1933:dur=6000:it=Infinity:[object SVGAnima | dh-whack:running:ct=1933:dur=6000:it=Infinity:[object SVGAnima | dh-whack:running:ct=1933:dur=6000:it=Infinity:[object SVGAnima | dh-jolt:running:ct=1933:dur=6000:it=Infinity:dh-body | dh-clap:running:ct=1933:dur=6000:it=Infinity:dh-stick] allDh=5 homeOpen=true layers=0 variantKeys=last,force,log,KEY,PER_NAME",
+  "FAIL988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they were — at the end of its cycle timing C is -0.0 degrees open - the next lap would start shut, a seam: {'A':{'period':6000,'it':null,'hit':600,'still':4720,'seam':27.99896380736874},'B':{'period':1000,'it':1,'hit':600,'still':380,'seam':-0.0010361926312687216},'C':{'period':3600,'it':null,'hit':600,'still':2980,'seam':-0.0010361926312687216}}"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   643,
+   "988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they were"
+  ],
+  [
+   583,
+   "957 the empty project clapper opens, slams shut on the board with lines out of the tip, and stops when it cannot be seen"
+  ],
+  [
+   22,
+   "ZZ H56 probe"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "957 the empty project clapper opens, slams shut on the board with lines out of the tip, and stops when it cannot be seen",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "ZZ H56 probe",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "988 the clapper on timing C rests between snaps - a clap every 3 s or more with the stick still and shut for 2 s between - while A and B are as they were",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

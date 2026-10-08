@@ -1,0 +1,55 @@
+{
+ "ok": false,
+ "summary": "Regression 1/3 ✗Pending 0/0 built",
+ "failures": [
+  "FAILZZ H56 probe — STATE0 fm-push-in:paused:ct=280:pend=false:tgt=app:tgtClass=[]:cs.anim=none | fm-push-out:paused:ct=280:pend=false:tgt=home-screen:tgtClass=[]:cs.anim=none || STATE400 fm-push-in:paused:ct=280:pend=false:tgt=app:tgtClass=[]:cs.anim=none | fm-push-out:paused:ct=280:pend=false:tgt=home-screen:tgtClass=[]:cs.anim=none",
+  "FAILhome push: the press answers the tap, survives the wait, and hands over without a pop — the parked editor sits at x=40 in a 900px viewport (transform matrix(1, 0, 0, 1, 39.9424, 0), classes \"fm-push-wait\") — part of it is on screen, so the PREVIOUS project shows beside the leaving home screen. A leftover fm-pop-out is the way this breaks: it is an animation with fill-mode both, and a running animation beats the park's plain declaration."
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   402,
+   "ZZ H56 probe"
+  ],
+  [
+   200,
+   "home push: the editor’s body-level chrome travels with the editor, not with itself"
+  ],
+  [
+   62,
+   "home push: the press answers the tap, survives the wait, and hands over without a pop"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "home push: the editor’s body-level chrome travels with the editor, not with itself",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "ZZ H56 probe",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "home push: the press answers the tap, survives the wait, and hands over without a pop",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

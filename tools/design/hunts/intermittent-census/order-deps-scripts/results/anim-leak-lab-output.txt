@@ -1,0 +1,17 @@
+Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36
+
+how removed | what script did | animations left on the element | state
+remove class | untouched | 0 | -
+remove class | currentTime= | 0 | -
+remove class | pause() | 1 | paused
+remove class | pause() + currentTime= | 1 | paused
+remove class | pause() then play() | 1 | running
+remove class | finish() | 0 | -
+remove class | updatePlaybackRate() | 0 | -
+display:none | untouched | 0 | -
+display:none | currentTime= | 0 | -
+display:none | pause() | 0 | -
+display:none | pause() + currentTime= | 0 | -
+display:none | pause() then play() | 0 | -
+display:none | finish() | 0 | -
+display:none | updatePlaybackRate() | 0 | -

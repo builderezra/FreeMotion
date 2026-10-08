@@ -1,0 +1,364 @@
+{
+ "ok": false,
+ "summary": "Regression 48/51 ✗Pending 0/0 built",
+ "failures": [
+  "FAILhome push: the press answers the tap, survives the wait, and hands over without a pop — the parked editor sits at x=40 in a 900px viewport (transform matrix(1, 0, 0, 1, 39.9424, 0), classes \"fm-push-wait\") — part of it is on screen, so the PREVIOUS project shows beside the leaving home screen. A leftover fm-pop-out is the way this breaks: it is an animation with fill-mode both, and a running animation beats the park's plain declaration.",
+  "FAILa comp that costs 200 ms a frame drops frames instead of seeking the audio — the transport lost 0.638 s against the wall clock while the compositor was busy",
+  "FAILplayhead: a rebuild during the return-to-home pop keeps --tl-panel-left honest — --tl-panel-left drifted 17.0px during the pop (truth -17.0) — the playhead will sit that far off for the rest of the session"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   3494,
+   "the project ⋯ is gone from the top bar, and every action it held still works"
+  ],
+  [
+   3222,
+   "home: a tick appears on the card you select, on every tab"
+  ],
+  [
+   2428,
+   "glide (#715): a mouse flick glides — a stall at release does not kill it, a parked pointer does not fling, fine mode never glides"
+  ],
+  [
+   2163,
+   "a comp that costs 200 ms a frame drops frames instead of seeking the audio"
+  ],
+  [
+   2153,
+   "phone 390x844: the ⋯ removal costs the phone nothing — every action still has a control"
+  ],
+  [
+   1847,
+   "loop wrap re-origins the clock instead of pinning the playhead"
+  ],
+  [
+   1743,
+   "timeline (#429): bookmark drop-lines stop at the head divider at any scroll"
+  ],
+  [
+   1737,
+   "an AudioContext that stops advancing must not freeze playback"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "home push: the editor’s body-level chrome travels with the editor, not with itself",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "home push: the press answers the tap, survives the wait, and hands over without a pop",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "settings cog: in a project the panel leads with the project, and its switches drive the real controls",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "phone top bar: a destructive control never shares the bar with the project’s own, and Export never moves",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "917.3 at 320px the phone top bar shows the whole project name and the whole layer name",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the project ⋯ is gone from the top bar, and every action it held still works",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the layer half of the removed ⋯ is still one right-click away, for every row type",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "phone 390x844: the ⋯ removal costs the phone nothing — every action still has a control",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "masks: a pen-masked layer keeps its OWN mask when the matte source is masked too",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "masks: every mask alpha the compositor builds is a buffer the caller owns",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: a video layer whose media has no dimensions paints nothing at all",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: a VIDEO file that yields no picture says so",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: an AUDIO file with no picture stays silent — it is not a fault",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: the preview repaints when a clip’s first frame finally decodes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: a clip added with the playhead past the end butts onto the end, not into a void",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "import: with the playhead inside the comp, a clip still starts exactly at the playhead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "drift resync: the correction is a rate nudge, and a hard seek is the last resort",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a comp that costs 200 ms a frame drops frames instead of seeking the audio",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the canvas is painted once per project frame, not once per screen refresh",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the playhead is derived from the audio clock, not from the frame loop",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a context that appears mid-play is picked up without moving the playhead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "an AudioContext that stops advancing must not freeze playback",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "with no AudioContext at all, playback runs and never creates one",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "loop wrap re-origins the clock instead of pinning the playhead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "changing the preview rate mid-play does not move the playhead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "moving the playhead during playback wins over the clock",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Edge Glow reads the LAYER, the MEDIA, or both — and each one only its own edges",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Edge Glow lights a flat shape and a line of text — the case luminance alone cannot see",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Edge Glow leaves the silhouette — a glow, not a rim painted inside the shape",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Edge Glow’s radius is a PROJECT length, so the reduced preview matches the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Edge Glow defaults to a white glow, on the layer and the media at once",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: a project saved before the Glow-on control still renders exactly as it did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "waveform: the peak scan looks at EVERY sample, so a decimating stride cannot read silence",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "waveform: peak resolution follows duration and stays bounded",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "waveform: a 5-minute clip is never broken into blocks, at any zoom or peak count",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "waveform: an aliasing song draws an even band end to end",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "waveform: a bar is the MAX of the peaks under it, not one sampled peak",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "waveform: a trimmed clip draws the part it PLAYS, not the whole song",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "waveform: a reversed clip draws its window mirrored",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "waveform: the cached strip is redrawn when the peaks change",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "fractal ridges: an instance saved before the rework renders byte-identical",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "fractal ridges: it actually moves, and every new control moves pixels",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "fractal ridges: the lattice is sized in project pixels, not plate pixels",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "media history: clearing songs leaves the photos and videos alone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "media history: the Settings row forgets the songs and keeps the panel open",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "home: a tick appears on the card you select, on every tab",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effect sliders: a vertical swipe scrolls, a horizontal one scrubs",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "timeline (#429): bookmark drop-lines stop at the head divider at any scroll",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "glide (#715): a mouse flick glides — a stall at release does not kill it, a parked pointer does not fling, fine mode never glides",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "timeline: a clip name stays at the clip start and scrolls away with it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "playhead: a rebuild during the return-to-home pop keeps --tl-panel-left honest",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}
