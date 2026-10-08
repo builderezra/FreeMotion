@@ -1024,7 +1024,7 @@ window.FM = window.FM || {};
     if (mb) {
       mb.setAttribute('aria-label',
         selOwns ? 'Done selecting'
-        : (phone && n === 1) ? 'Close clip options'
+        : (phone && n === 1 && !simple) ? 'Close clip options'   // S4c: Simple sets no m-editing, so ‹ goes Home there and must say so
         : 'Projects');
     }
     // JS supplies the NUMBER; the stylesheet decides whether the label is on screen.
