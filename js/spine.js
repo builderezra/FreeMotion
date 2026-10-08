@@ -105,6 +105,8 @@ window.FM = window.FM || {};
   const PIC_EXT = /\.(mp4|mov|m4v|jpg|jpeg|png|gif|heic|webp)( copy( \d+)?)?$/i;
   const KEYING = /^(chromakey|lumakey|removecolor|colorkey)$/i;
 
+  // the keyframe containers of the effects Simple itself added (inst.sm === 1): they never earn the ✦
+  function smFxProps(l) { const s = new Set(); if (FM.fxListAnimatedProps && Array.isArray(l.effects)) FM.fxListAnimatedProps(l.effects.filter(f => f && f.sm === 1)).forEach(p => s.add(p)); return s; }
   function isAnim(p) { return !!(p && typeof p === 'object' && Array.isArray(p.kf) && p.kf.length); }
   function evalP(p, t) { return FM.evalProp ? FM.evalProp(p, t) : (typeof p === 'number' ? p : 0); }
 
@@ -412,7 +414,7 @@ window.FM = window.FM || {};
       }
       // what Simple cannot edit renders as it is, with a ✦ (§9.1)
       if (k === 'block') rec.pro = 'block';
-      else if (FM.animatedProps && FM.animatedProps(u.l).length) rec.pro = 'look';
+      else if (FM.animatedProps && FM.animatedProps(u.l).filter(p => !smFxProps(u.l).has(p)).length) rec.pro = 'look';   // S4b: keyframes on an effect made in Simple (sm = 1) are level none (DESIGN §8.5c, §9.1)
       else if ((u.l.behaviors || []).some(b => b && b.enabled !== false)) rec.pro = 'look';
       if (states.get(u.id) === 'missing' && isMedia(u.l)) anomalies.push({ kind: 'missing', ids: [u.id] });
       if (k === 'undecided') anomalies.push({ kind: 'undecided', ids: [u.id] });
