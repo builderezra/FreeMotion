@@ -1,0 +1,3 @@
+380 Regression 2/2 ✓Pending 0/0 built
+   ok  P25 #1101 appending an option to a segment parameter changes the sync fingerprint, rewording a label
+   ok  P25 #1102 a font opened from a file is stored with the app’s own css, not the one in the file

@@ -1,0 +1,10 @@
+1280 Regression 1/1 ✓Pending 0/0 built
+   ok  H55 the no-op probe budget seam: 0 makes every probe unknown, a lifted budget gives the verdict, and
+1280 Regression 2/2 ✓Pending 0/0 built
+1280 Regression 3/3 ✓Pending 0/0 built
+1280 Regression 1/1 ✓Pending 0/0 built
+380 Regression 1/1 ✓Pending 0/0 built
+   ok  H55 the no-op probe budget seam: 0 makes every probe unknown, a lifted budget gives the verdict, and
+380 Regression 2/2 ✓Pending 0/0 built
+380 Regression 3/3 ✓Pending 0/0 built
+380 Regression 1/1 ✓Pending 0/0 built

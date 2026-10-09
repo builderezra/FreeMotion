@@ -1,0 +1,5 @@
+1280 Regression 0/2 ✗Pending 0/0 built
+   RED P25 #1101 appending an option to a segment parameter changes the sync fingerprint, rewording a label
+   RED P25 #1102 a font opened from a file is stored with the app’s own css, not the one in the file
+FAILP25 #1101 appending an option to a segment parameter changes the sync fingerprint, rewording a label does not — an appended option on vignette.mode did not change the fingerprint, so a build with it and a build without it would join one session and the older would strip the newer one’s choice
+FAILP25 #1102 a font opened from a file is stored with the app’s own css, not the one in the file — a font whose file carried extra css was stored with it: "x; } body { display:none } @import url(http://evil.example/a.css);"

@@ -1,0 +1,70 @@
+diff --git a/index.html b/index.html
+index 29ebc3bd..c63bc574 100644
+--- a/index.html
++++ b/index.html
+@@ -1047,7 +1047,7 @@
+   <script src="js/settings.js?v=51"></script>
+   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
+        rest of the collab modules are pure libraries and sit at the end of the list. -->
+-  <script src="js/collab-core.js?v=23"></script>
++  <script src="js/collab-core.js?v=24"></script>
+   <script src="js/statusbar.js?v=4"></script>
+   <script src="js/screen.js?v=1"></script>
+   <script src="js/scene.js?v=119"></script>
+@@ -1093,7 +1093,7 @@
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+   <script src="js/history.js?v=37"></script>
+-  <script src="js/storage.js?v=59"></script>
++  <script src="js/storage.js?v=60"></script>
+   <script src="js/export-resume.js?v=7"></script>
+   <script src="js/medialib.js?v=8"></script>
+   <script src="js/template-fill.js?v=4"></script>
+diff --git a/js/collab-core.js b/js/collab-core.js
+index 0ae36ff6..e3588b9c 100644
+--- a/js/collab-core.js
++++ b/js/collab-core.js
+@@ -45,7 +45,7 @@ window.FM = window.FM || {};
+      sanitiser now puts `layer.sm`, `project.sm`, an effect's `sm` marker and the plain helper fields (srcW/srcH/srcRev, pick) in
+      canonical form. A rev-7 build keeps them untouched, so the two would normalise one project to two documents; the fixture
+      below carries each, and SM_V is hashed in. */
+-  C.SCHEMA_REV = 8;
++  C.SCHEMA_REV = 9;
+ 
+   C.active = false;      // no session is running
+   C.role = 'owner';
+@@ -237,7 +237,11 @@ window.FM = window.FM || {};
+     if (FM.storage._clampProjectDims) FM.storage._clampProjectDims(PJ);
+     const defs = (FM.fxRegistry.all() || []).map(function (e) {
+       return [e.type, (e.params || []).map(function (p) {
+-        return [p.key, p.type, p.default, p.legacy, p.min, p.max, p.keyframable !== false ? 1 : 0];
++        /* #1101: the option VALUES a segment accepts are part of the schema: the sanitiser drops any segment value not in its list, so a build
++           that appended an option (a new Particles shape) and one that did not would join one session and the older would strip the newer's
++           choice. Values only, not labels: rewording a label changes nothing either side keeps or drops. */
++        return [p.key, p.type, p.default, p.legacy, p.min, p.max, p.keyframable !== false ? 1 : 0,
++          Array.isArray(p.options) ? p.options.map(function (o) { return Array.isArray(o) ? o[0] : (o && o.value !== undefined ? o.value : o); }) : null];
+       })];
+     }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+     /* …AND THE AUDIO EFFECTS' (#482 batch 3 review). Only FM.fxRegistry was hashed, and the fixture's one audio effect is
+@@ -254,7 +258,7 @@ window.FM = window.FM || {};
+ 
+   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
+      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
+-  C.SCHEMA_FP = 8673617696742561;   // Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate`, re-checked on step 1.2 alone
++  C.SCHEMA_FP = 4786117950381253;   // #1101 (SCHEMA_REV 9): a segment's option values are part of the schema; before: Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate`, re-checked on step 1.2 alone
+ 
+   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
+    *
+diff --git a/js/storage.js b/js/storage.js
+index a0272084..6987a14c 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -3835,7 +3835,7 @@ window.FM = window.FM || {};
+         let put = false;   // queue 915 clause 2: registered for this session either way, but only a stored font is listed
+         try { const db = await openDB(); put = await idbPut(db, 'font:' + nid, { file: file }); db.close(); } catch (e) {}
+         if (!put) { _fontReg.delete(nid); continue; }
+-        idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
++        idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.family + ', sans-serif' });   // #1102: the app's own form, never a string out of an opened file
+         haveFam.add(fd.family);
+       }
+       writeJSON(FONT_INDEX, idx);
