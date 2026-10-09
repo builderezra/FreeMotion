@@ -311,3 +311,15 @@ ADDED 10 Oct 01:50 by the PM. AU13–AU16 and P24 landed. The deep audit now cov
 - AU18 The app.js parts still unread after AU13: import, the export dialog, init wiring and clip keys. Also MEDIA layers (video, image, audio) through duplicate and paste, which your fuzz did not cover. → hunt/audit-app-5.
 - AU19 Deep audit of the timeline's media thumbnails and filmstrips (memory, cancel when he leaves a project, stale frames after replace media), using your container's WebM where H.264 is missing. → hunt/audit-filmstrip.
 - P25  Plans for the 5 oldest open items after P24's, callers traced. → plans/helper-25.
+
+ADDED 10 Oct 03:20 by the PM. AU17 (the 121st-preset deletion) and AU19 (wrong frames after undoing a replace) are real catches, and both are in the builder's inbox. Same proof rules. Keep your turn alive; push as you go; never push to main; never force-push. In order (if P25 is not done yet, finish it first):
+- PF2  Your PF1 cause 2: N glows build a CSS filter chain that costs ~N³.
+      - Prototype drawing stacked glows as separate draws, behind no flag.
+      - Prove it picture-identical, or within MEASURED jitter: the #482 pinned slice, the effects slice, and 1/4/8/16 glows on text, a shape and an image.
+      - Measure the speed at 1, 4, 8 and 16 glows.
+      - Where a case is not identical, list it and stop there; do not change a look.
+      → hunt/perf-glow.
+- PL1  The rename hazard your AU17-2 found: a renamed param key or effect type is DROPPED on load. Design a small alias table (old key → new key, old type → new type) applied in the sanitiser BEFORE unknown keys are dropped. Write it with tests (an old save with a renamed key keeps its value) and wire your AU17-2 guard so that renaming without an alias fails with a message saying "add an alias". → hunt/param-aliases.
+- AU20 The rest of js/fx-thumbs.js your AU17 did not read (~800 lines: subject tables, overrides, the layerStep tail), plus the inspector preset tag/rename UI. → hunt/audit-fx-3.
+- AU21 Collab media paths (a video, image or song sent between peers on the fake network: chunking, resume after a drop, a big file, a cancelled transfer, the receiver's own records) plus the boot-time touch wiring (by reading; finger repros report NOT RUN in your container). → hunt/audit-collab-media.
+- P26  Plans for the 5 oldest open items after P25's, callers traced. → plans/helper-26.
