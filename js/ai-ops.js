@@ -465,6 +465,7 @@ window.FM = window.FM || {};
             if (layer.type === 'group') { drop(o.op, ref, 'duplicating a group has to copy everything inside it — use the layer ⋯ menu'); break; }
             if (layer.type === 'camera') { drop(o.op, ref, 'a scene may only have one camera'); break; }
             var copy = FM.cloneLayer(layer);
+            if (FM.spine && FM.spine.onCopy) FM.spine.onCopy(copy, 'aiClone');   // Simple mode P1 (§12.2): never a second main clip
             FM.insertLayer(copy);
             P.duration = Math.max(P.duration || 0, (copy.start || 0) + (copy.duration || 0));
             if (o.newRef != null) refMap[o.newRef] = copy.id;

@@ -599,6 +599,26 @@ window.FM = window.FM || {};
     return out;
   };
 
+  /* ═══ EVERY TIMED KEYFRAME LIST ON A LAYER — animatedProps PLUS each caption cue's own effects (Simple mode
+   * Phase 1, DESIGN.md §10.4 "one collector", Q3). A cue's effect keyframes are evaluated at raw project time
+   * (compositor effectiveFx concatenates cue.effects and reads them with FM.evalProp(p, t)), so they are on the
+   * same absolute clock as every other key — but animatedProps never listed them.
+   * NOTHING IN FULL CALLS THIS (DESIGN.md §0.4 B2): Full's shiftLayerKeyframes / scaleLayerKeyframes stay on
+   * animatedProps exactly as before. Simple's own shift (FM.spine.shiftKeys, Phase 2) and the wire form read it.
+   * animatedProps itself is unchanged on purpose: its 18 callers (clip diamonds, the keyframe clipboard, loop
+   * modes, splitAnimated) address keys through grammars that have no form for a cue effect.
+   * `{cues: false}` gives animatedProps' lists only (the Phase 2 rider procedure needs that split). */
+  FM.timedLists = function (layer, opts) {
+    const out = FM.animatedProps(layer);
+    if (opts && opts.cues === false) return out;
+    const cues = (layer && Array.isArray(layer.captions)) ? layer.captions : [];
+    for (let i = 0; i < cues.length; i++) {
+      const c = cues[i];
+      if (c && Array.isArray(c.effects) && c.effects.length) FM.fxListAnimatedProps(c.effects).forEach(p => out.push(p));
+    }
+    return out;
+  };
+
   /* Generic versions of the above that target ANY container object + key (e.g. an effect's
    * params), so effect parameters / future props are keyframe-able just like transform. */
   FM.setProp = function (container, key, value, time) {
