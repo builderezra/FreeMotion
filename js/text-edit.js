@@ -1057,6 +1057,10 @@ window.FM = window.FM || {};
       if (!active) return false;
       const sel = arguments.length ? nextId : FM.scene.selectedId;
       if (sel === active.layerId) return false;
+      /* AU13-1: THE LAYER IS GONE (an undo took it away, or a collab peer deleted it): there is nothing to write and nothing to
+         commit. commit() pushed a history entry here, and a push after an undo throws away the redo stack — so Add text, Undo
+         lost the layer for good and left a spare entry that made the next Undo look like it did nothing. */
+      if (!layer()) { teardown(); FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); return true; }
       commit();
       return true;
     },

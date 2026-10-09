@@ -59811,6 +59811,36 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  test('AU13-1 Undo of a just-added text layer can be redone, and takes one Undo, not two', { item: 'AU13', budgetMs: 60000 }, function () {
+    const P = FM.scene.project, keep = FM.scene.layers.slice(), keepSel = [FM.scene.selectedId, FM.scene.selectedIds];
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    try {
+      FM.scene.layers.length = 0; FM.history.reset(); FM.selectLayer(null);
+      // CONTROL: a shape does the whole round trip (add, undo, redo), so a failure below is about the text editor
+      FM.addShapeLayer('rect'); FM.history.undo();
+      if (FM.scene.layers.length !== 0 || !FM.history.canRedo()) throw new Error('CONTROL: undo of an added shape did not leave a redo');
+      FM.history.redo(); if (FM.scene.layers.length !== 1) throw new Error('CONTROL: redo of an added shape did not bring it back');
+      FM.scene.layers.length = 0; FM.history.reset(); FM.selectLayer(null);
+      FM.addTextLayer();                                   // opens the text editor on the new layer
+      if (FM.scene.layers.length !== 1) throw new Error('setup: no text layer');
+      FM.history.undo();
+      if (FM.scene.layers.length !== 0) throw new Error('Undo did not remove the added text layer (' + FM.scene.layers.length + ' left)');
+      if (!FM.history.canRedo()) throw new Error('after Undo of an added text layer there is no Redo: the editor closing pushed a history entry and threw the redo away');
+      FM.history.redo();
+      if (FM.scene.layers.length !== 1 || FM.scene.layers[0].type !== 'text') throw new Error('Redo did not bring the text layer back (' + FM.scene.layers.length + ' layers)');
+      if (FM.textEdit.isActive()) FM.textEdit.stop();
+      FM.history.undo();
+      if (FM.history.canUndo() && FM.scene.layers.length === 0) {
+        FM.history.undo();
+        throw new Error('a second Undo was still available with nothing left to undo: a spare history entry was pushed');
+      }
+    } finally {
+      try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      FM.scene.layers.length = 0; for (const l of keep) FM.scene.layers.push(l); FM.scene.selectedId = keepSel[0]; FM.scene.selectedIds = keepSel[1];
+      FM.history.reset(); if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
