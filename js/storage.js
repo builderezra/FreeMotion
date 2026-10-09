@@ -2130,6 +2130,10 @@ window.FM = window.FM || {};
   // Poster frame of the current scene for home-screen cards. 360px longest side (2× the old 180 —
   // retina-crisp at the list-row thumb size), PROGRESSIVE halving on the way down (a single
   // 1080→180 drawImage skipped most source pixels = the old mushy cards), JPEG q0.8.
+  /* AU8-1: ONE LENGTH FOR A PROJECT'S NAME, AT THE DOOR. The loader cuts a name to 200 characters (sanitiseProject), but the
+     card's list entry took whatever was typed, so a pasted paragraph showed on Home at its full length until the project
+     was next opened and saved, when the card changed under him. Rename and Duplicate now cut it the same way (New project already ends at 200: the scene's name is cut on the way in). */
+  function cardName(n, dflt) { const t = String(n == null ? '' : n).trim().slice(0, 200); return t || dflt; }
   function makeThumb() {
     /* queue 915 clause 1: NO PICTURE BEATS A BLACK ONE. With the scene's media released (Home, queue
        385) a render is the project minus its photos and videos, and every caller already treats null as
@@ -2632,7 +2636,7 @@ window.FM = window.FM || {};
       doc = JSON.parse(JSON.stringify(doc));
       const src = (opts.srcIds || []).map(sid => this.list().find(p => p.id === sid)).filter(Boolean)[0] || {};
       const id = (opts.srcIds || [])[0] || null;   // the thumbnail's source, when there is one
-      const name = opts.name || ((src.name || (doc.project && doc.project.name) || 'Project') + ' copy');
+      const name = cardName(opts.name || ((src.name || (doc.project && doc.project.name) || 'Project') + ' copy'), 'Project copy');   // AU8-1
       const re = reIdLayers(doc.layers || []);
       const nid = newId('p');
       /* ⚠️ THE NAME GOES IN THE DOCUMENT TOO, NOT ONLY ON THE CARD (queue 690, HUNT-c). The copy's doc used to keep the
@@ -2773,6 +2777,7 @@ window.FM = window.FM || {};
     },
     rename(id, name) {
       const idx = this.list(); const e = idx.find(p => p.id === id); if (!e) return;
+      name = cardName(name, e.name || 'Untitled');   // AU8-1
       e.name = name; e.modified = Date.now(); this.saveIndex(idx);   // renaming is a real change → bumps list order
       const doc = readJSON('fm.proj.' + id, null);
       if (doc && doc.project) {
