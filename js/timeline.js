@@ -2130,8 +2130,14 @@ window.FM = window.FM || {};
              layer.mediaRev was already being incremented on every replace — it exists so the swap
              lands in the undo history — and it is the only value in scope that actually tracks WHICH
              FILE this is. Being part of the layer's saved state, it also means undo puts the old
-             strip back rather than leaving the new one behind. */
-          const sKey = stripW + '|' + (layer.trimStart || 0) + '|' + layer.duration + '|' + (m.stripFrames ? m.stripFrames.length : -1) + '|' + (layer.mediaRev || 0);
+             strip back rather than leaving the new one behind.
+             AU19-1: …BUT NOT THE LAYER'S ALONE. After an Undo of a replace the layer's JSON is back at the old revision while the
+             registry still holds the NEW file for a moment (restoreReplacedMedia lands after the history step), so the key named the old
+             file and the strip drawn in that gap was the NEW file's frames, cached under the OLD file's key. When the old file's own frames
+             arrived they hit that key and the bar kept showing the wrong clip, until the next change of width, trim or duration (Redo did the
+             same the other way round). The key now reads the revision of the RECORD the frames came from (`m.rev`, which a replace and a
+             restore both stamp), falling back to the layer's when a record has none, exactly as storage.js does. */
+          const sKey = stripW + '|' + (layer.trimStart || 0) + '|' + layer.duration + '|' + (m.stripFrames ? m.stripFrames.length : -1) + '|' + ((m.rev != null ? m.rev : layer.mediaRev) || 0);
           const hit = stripCache.get(layer.id);
           let strip = (hit && (hit.key === sKey || pinch)) ? hit.canvas : null;
           if (!strip) {

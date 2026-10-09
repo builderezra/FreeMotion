@@ -1,0 +1,3 @@
+380 Regression 0/1 ✗Pending 0/0 built
+   RED AU19-1 after Undo or Redo of a replaced video the timeline bar shows that clip’s frames, not the oth
+FAILAU19-1 after Undo or Redo of a replaced video the timeline bar shows that clip’s frames, not the other one’s — after Undo the clip is red but its timeline bar shows blue frames
