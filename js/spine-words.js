@@ -114,7 +114,7 @@ window.FM = window.FM || {};
       speedBlock: 'Open in Full to change this speed', replaceBlock: 'Open in Full to replace this',
       nothingChanged: 'Nothing changed', oneSpeed: 'One speed now, the same length',
       volumeSet: pct => 'Volume ' + pct + '%', fadeSet: (which, s) => 'Fade ' + which + ' ' + s.toFixed(1) + ' s',
-      trNone: 'No transition', noTransition: 'A transition needs two clips that meet, with nothing between them',
+      trTurned: 'Now a crossfade transition', trNone: 'No transition', noTransition: 'A transition needs two clips that meet, with nothing between them',
       trSet: (type, d) => ({ crossfade: 'Crossfade', dipblack: 'Dip to black', dipwhite: 'Dip to white' }[type] || 'Transition') + ' ' + d.toFixed(1) + ' s',
       trAll: n => 'Same transition on all ' + n + ' cuts', trDropped: n => n === 1 ? 'removed a transition' : 'removed ' + n + ' transitions',
       noReverse: 'Only a video can play backwards', reversed: 'Playing backwards', forwards: 'Playing forwards',
@@ -136,7 +136,7 @@ window.FM = window.FM || {};
       bandHintSelPc: 'Its tools are below',   // PC (his pick B): every tool is on show there, More with them
       /* release 2.3 */
       speed: 'Speed', volume: 'Volume', replace: 'Replace', reverse: 'Reverse', forwards: 'Play forwards', takeSound: 'Take sound out', putSound: 'Put sound back',
-      transition: 'Transition', trNone: 'None', trCrossfade: 'Crossfade', trDipBlack: 'Dip to black', trDipWhite: 'Dip to white', trLength: 'Length', trEvery: 'On every cut',
+      transition: 'Transition', turnTr: 'Turn into a transition', trNone: 'None', trCrossfade: 'Crossfade', trDipBlack: 'Dip to black', trDipWhite: 'Dip to white', trLength: 'Length', trEvery: 'On every cut',
       fade: 'Fade', fadeIn: 'In', fadeOut: 'Out', useOneSpeed: 'Use one speed', speedRamped: 'Speed changes over the clip',
       speedLabel: 'Speed', volumeLabel: 'Volume in percent', muteClips: 'Clip sound', muteOn: 'Mute clip sound', muteOff: 'Clip sound is off, tap to turn it on'
     },

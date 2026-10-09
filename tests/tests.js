@@ -60962,6 +60962,33 @@
     });
   });
 
+  test('simple P2.7 · T10 "Turn into a transition" on a blend seam: the clips meet in the middle of the overlap, nothing ripples, the fade keys go (never an empty list), a 1 s crossfade is set, one undo puts it all back; the tool shows only on a blend', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const seamOf = (name, v) => { const R = FM.spine.classify(FM.scene), e = R.main.find(x => x.id === v.L(name).id); return e && e.seam ? e.seam.kind + ' ' + (+e.seam.amt).toFixed(2) : 'none'; };
+    await smP2((W, H) => [(() => { const n = smV('N', 5, 6, W, H); n.transform.opacity = smKf([[5, 0], [6, 1]]); return n; })(), smV('C', 0, 6, W, H)], async function (v) {
+      if (seamOf('N', v) !== 'blend 1.00') throw new Error('CONTROL: C|N is not a 1 s crossfade: ' + seamOf('N', v));
+      FM.selectLayer(v.L('N').id); await v.sleep(150);
+      if (!smTool('turnTr')) throw new Error('a clip that fades in over the one before it has no Turn into a transition (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+      FM.selectLayer(v.L('C').id); await v.sleep(150);
+      if (smTool('turnTr')) throw new Error('the first clip offers Turn into a transition');
+      const doc0 = v.doc(), end0 = v.L('N').start + v.L('N').duration, dur0 = FM.scene.project.duration;
+      if (!(await FM.spine.cmd.turnTransition(v.L('N').id))) throw new Error('refused: ' + (await sm7s(v)));
+      await v.idle();
+      const C = v.L('C'), N = v.L('N');
+      if (Math.abs(C.duration - 5.5) > 1e-6 || Math.abs(N.start - 5.5) > 1e-6) throw new Error('they did not meet in the middle: C ' + C.start + '+' + C.duration + ', N starts ' + N.start);
+      if (Math.abs(N.start + N.duration - end0) > 1e-6) throw new Error('the end of the video moved: ' + (N.start + N.duration) + ' vs ' + end0);
+      if (FM.scene.project.duration !== dur0) throw new Error('the project length changed ' + dur0 + ' -> ' + FM.scene.project.duration);
+      if (seamOf('N', v) !== 'join 0.00') throw new Error('the seam is not a clean join now: ' + seamOf('N', v));
+      if (!N.trIn || N.trIn.type !== 'crossfade' || Math.abs(N.trIn.d - 1) > 1e-9) throw new Error('trIn is ' + JSON.stringify(N.trIn));
+      const op = N.transform.opacity;
+      if (op && typeof op === 'object' && Array.isArray(op.kf)) throw new Error('the fade keys are still there: ' + JSON.stringify(op));
+      if (op !== 1) throw new Error('the clip should rest at its visible value 1, not ' + JSON.stringify(op));
+      if (Math.abs((N.trimStart || 0) - 0.5) > 1e-6) throw new Error('N head trim: trimStart ' + N.trimStart);
+      FM.history.undo(); await v.sleep(80);
+      if (v.doc() !== doc0) throw new Error('one undo did not put the document back byte for byte');
+    });
+  });
+
   test('simple P2.6 · S10a the time readout follows the playhead after a command moves it (DESIGN §8.3: the pill is Full’s #time-readout, unchanged)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await smP2(smClips3, async function (v) {

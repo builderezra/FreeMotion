@@ -1355,7 +1355,8 @@ window.FM = window.FM || {};
     closeSeam(entryId) { return S.edit('Close gap', R => S.planSeam(R, entryId)); },
     duplicate(id) { return S.edit('Duplicate clip', R => S.planDuplicate(R, id)); },
     transition(id, type, d) { return S.edit('Transition', R => S.planTransition(R, id, type, d)); },
-    transitionAll(id) { return S.edit('Transition on every cut', R => S.planTransitionAll(R, id)); }
+    transitionAll(id) { return S.edit('Transition on every cut', R => S.planTransitionAll(R, id)); },
+    turnTransition(id) { return S.edit('Turn into a transition', R => S.planTurnIntoTransition(R, id)); }
   };
   /* ═══════════════════════ RELEASE 2.2: the rest of the commands the tray and the tools need ═══════════════════════ */
 
@@ -2365,6 +2366,40 @@ window.FM = window.FM || {};
       if (!pre.has(l.id) || !o || pre.get(l.id) !== o.id) { delete l.trIn; n++; }
     });
     return n;
+  };
+  /* TURN INTO A TRANSITION (§12.1) on a BLEND seam: the two clips meet at the middle of the overlap with no ripple (a's tail trimmed by amt/2,
+     b's head by amt/2, b keeps its end), b.trIn = a crossfade of length amt, and the opacity keys the blend counted are gone (the static value
+     comes back, never an empty key list). A follower of b that began inside the cut-away head slides forward onto b's new start (D6). */
+  S.planTurnIntoTransition = function (R, id) {
+    const map = byIdMap(), j = mainIdx(R, id);
+    if (j < 1) return refusePlan('noSeam');
+    const e = R.main[j], pe = R.main[j - 1], sm = e.seam;
+    if (!sm || sm.kind !== 'blend' || e.slot || pe.slot) return refusePlan('noSeam');
+    const La = map.get(pe.id), Lb = map.get(e.id), amt = sm.amt, half = amt / 2;
+    if (!La || !Lb || La.type === 'group' || Lb.type === 'group') return refusePlan('splitBlock');
+    if (FM.TR_TYPES.indexOf('crossfade') < 0 || !(amt >= FM.TR_MIN - 1e-9)) return refusePlan('noTransition');
+    const owner = blendOwner(pe, e, map), lo = e.start - R.eps, hi = pe.end + R.eps;
+    const rA = FM.trimClipEdge(La, 'tail', -half, srcDurOf(La)), rB = FM.trimClipEdge(Lb, 'head', half, srcDurOf(Lb));
+    if (Math.abs(rA.duration - (La.duration - half)) > 1e-6 || Math.abs(rB.landed - half) > 1e-6) return refusePlan('nothingMore');
+    const plan = newPlan('Turn into a transition'); plan.touched.add(pe.id); plan.touched.add(e.id);
+    const twA = twinsOf(R, pe, map), twB = twinsOf(R, e, map), twIds = new Set(twA.concat(twB).map(t => t.id));
+    const M = La.start + rA.duration, dB = Lb.start + Lb.duration - M;
+    plan.writes.push(() => {
+      stripOwned(owner, lo, hi, owner === Lb ? 'in' : 'out');
+      [La].concat(twA).forEach(x => { x.duration = rA.duration; if (x.type === 'video') x.trimStart = rA.trimStart; });
+      [Lb].concat(twB).forEach(x => { x.start = M; x.duration = dB; if (x.type === 'video') x.trimStart = rB.trimStart; FM.shiftLayerFxClock(x, rB.fxShift); });
+      Lb.trIn = { type: 'crossfade', d: Math.round(Math.min(FM.TR_MAX, Math.max(FM.TR_MIN, amt)) * 10) / 10 };
+      const P = FM.scene.project; if (P.sm && !(P.sm.v >= FM.SM_V)) P.sm.v = FM.SM_V;
+    });
+    twA.concat(twB).forEach(t => plan.touched.add(t.id));
+    (R.followers[e.id] || []).forEach(fid => {   // D6: its first frame was cut away, so it keeps its host
+      if (twIds.has(fid)) return;
+      const f = map.get(fid); if (!f) return;
+      if ((+f.start || 0) < M - R.eps) addLand(plan, fid, M);
+    });
+    plan.keepsTransitions = true;
+    plan.live = line('trTurned');
+    return plan;
   };
   S.undoRefused = function (why) {
     if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) refuse(why || 'live');
