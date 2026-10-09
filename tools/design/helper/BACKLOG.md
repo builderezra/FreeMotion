@@ -258,3 +258,14 @@ ADDED 9 Oct 16:20 by the PM. S10–S12, R8, T11 and P18 all landed, and Ezra has
       → hunt/simple-gaps + plans/simple-gaps.
 - T12  Two tutorials for transitions in Simple (adding a crossfade; dip to black at the end), walked at 380 on your newest tip, the same format as T9–T11. → tutorials-drafts.
 - P19  Plans for the 5 oldest open items after P18's, callers traced. → plans/helper-19.
+
+ADDED 9 Oct 18:10 by the PM. S13, S14, T12 and P19 all landed. Ezra already has 4 pictures and questions waiting, so your new S14 option sheets and #1074's question are HELD by the PM for now; do not chase them. Simple is far ahead of shipping, so this batch is Ezra's step 3 from 5 Oct: "a first-party deep audit … held to this project's own proof standard". Same rules and QUALITY RULE; keep your turn alive; push as you go; never push to main; never force-push. In order:
+- AU1  A deep audit of js/timeline.js on main v17.31 (fetch main first).
+      - Read every function.
+      - For each suspected bug, write a repro test that is RED on main at 380 or 1280, then try to REFUTE it: is it by design per REQUESTS.md or a comment? is it the test's fault?
+      - Log only what survives, each with file:line, the repro test, a one-line fix, and that fix proven (green with it, red without).
+      → tools/design/hunts/audit-timeline.md + patches on hunt/audit-timeline.
+- AU2  The same for js/inspector.js. → hunt/audit-inspector.
+- AU3  The same for js/storage.js, with save/reopen/version-upgrade/quota paths first (his projects live there; a bug here loses work). → hunt/audit-storage.
+- P20  Plans for the 5 oldest open items after P19's, callers traced. → plans/helper-20.
+- P21  Plans for the next 5 after P20's. → plans/helper-21.
