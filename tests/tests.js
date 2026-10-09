@@ -60883,6 +60883,41 @@
     });
   });
 
+  test('simple P2.7 · T7 the Transition tool is on every clip that follows a join and no other; its row sets, lengthens, clears and copies a transition, at desktop and phone width', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    for (const [w, h] of [[1280, 800], [380, 0]]) {
+      await (w <= 700 ? (fn => atPhoneWidth(fn, w)) : (fn => smTrayBAt(w, h, fn)))(async function () {
+        await smP2((W, H) => [smV('D', 8, 2, W, H), smV('C', 4, 2, W, H), smV('B', 2, 2, W, H), smV('A', 0, 2, W, H)], async function (v) {
+          const A = v.L('A'), B = v.L('B'), C = v.L('C'), D = v.L('D');
+          FM.selectLayer(A.id); await v.sleep(150);
+          if (smTool('transition')) throw new Error(w + ': the first clip has nothing before it, yet it offers Transition');
+          FM.selectLayer(D.id); await v.sleep(150);
+          if (smTool('transition')) throw new Error(w + ': a clip after a gap offers Transition (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+          FM.selectLayer(B.id); await v.sleep(150);
+          if (!smTool('transition')) throw new Error(w + ': a clip that follows a join has no Transition tool');
+          smTool('transition').click(); await v.sleep(150);
+          ['rowBack', 'tr-none', 'tr-crossfade', 'tr-dipblack', 'tr-dipwhite'].forEach(id => { if (!smTool(id)) throw new Error(w + ': the Transition row has no ' + id); });
+          if (smTool('tr-none').getAttribute('aria-pressed') !== 'true') throw new Error(w + ': None should show as current');
+          if (smTool('trMinus')) throw new Error(w + ': a length stepper shows before any transition is set');
+          smTool('tr-crossfade').click(); await v.idle(); await v.sleep(200);
+          if (!v.L('B').trIn || v.L('B').trIn.type !== 'crossfade') throw new Error(w + ': tapping Crossfade wrote ' + JSON.stringify(v.L('B').trIn));
+          if (smTool('tr-crossfade').getAttribute('aria-pressed') !== 'true') throw new Error(w + ': Crossfade should show as pressed after the tap');
+          smTool('trPlus').click(); await v.idle(); await v.sleep(200);
+          if (Math.abs(v.L('B').trIn.d - 0.6) > 1e-9) throw new Error(w + ': + gave ' + v.L('B').trIn.d);
+          smTool('tr-dipblack').click(); await v.idle(); await v.sleep(200);
+          if (v.L('B').trIn.type !== 'dipblack' || Math.abs(v.L('B').trIn.d - 0.6) > 1e-9) throw new Error(w + ': Dip to black should keep the length: ' + JSON.stringify(v.L('B').trIn));
+          smTool('trAll').click(); await v.idle(); await v.sleep(200);
+          if (!v.L('C').trIn || v.L('C').trIn.type !== 'dipblack') throw new Error(w + ': On every cut left C without it');
+          if (v.L('D').trIn || v.L('A').trIn) throw new Error(w + ': On every cut crossed a gap or hit the first clip');
+          smTool('tr-none').click(); await v.idle(); await v.sleep(200);
+          if (v.L('B').trIn) throw new Error(w + ': None left a transition');
+          const bar = document.getElementById('sm-tray').getBoundingClientRect();
+          if (bar.right > innerWidth + 1) throw new Error(w + ': the tray runs off the screen (' + bar.right + ' > ' + innerWidth + ')');
+        });
+      });
+    }
+  });
+
   test('simple P2.6 · S10a the time readout follows the playhead after a command moves it (DESIGN §8.3: the pill is Full’s #time-readout, unchanged)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await smP2(smClips3, async function (v) {

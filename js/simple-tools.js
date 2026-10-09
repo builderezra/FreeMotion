@@ -44,6 +44,7 @@ window.FM = window.FM || {};
     reverse: '<path d="M11 6l-7 6 7 6zM20 6l-7 6 7 6z"/>',
     soundout: '<path d="M9 5L4.5 8.5H2v7h2.5L9 19z"/><path d="M13 12h8M18 9l3 3-3 3"/>',
     soundback: '<path d="M9 5L4.5 8.5H2v7h2.5L9 19z"/><path d="M21 12h-8M16 9l-3 3 3 3"/>',
+    transition: '<rect x="3.5" y="6" width="10" height="12" rx="1.5"/><rect x="10.5" y="6" width="10" height="12" rx="1.5" stroke-dasharray="2.4 2"/>',
     fade: '<path d="M3.5 18.5L20.5 5.5M3.5 18.5V8M7 18.5v-5M10.5 18.5v-3M14 18.5v-1"/>',
     mute: '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 9.5l4.5 5M20.5 9.5l-4.5 5"/>'
   };
@@ -236,7 +237,8 @@ window.FM = window.FM || {};
         crop,
         ...(l.type === 'video' || l.type === 'image' ? [replaceT] : []),   // after Crop: a picture's first row on two rows stays exactly as it was
         ...(isVid ? [reverseT] : []),
-        ...(soundT ? [soundT] : [])
+        ...(soundT ? [soundT] : []),
+        ...(S.joinInto && S.joinInto(R, id) ? [{ id: 'transition', label: w.transition || 'Transition', icon: 'transition', pressed: !!l.trIn, run: () => FM.simpleTools.openRow('transition', id) }] : [])
       ];
       /* §8.2: a clip next to a gap or an overlap offers Close gap / Fix too (the seam chip's command) */
       /* its key names the seam it closes, so a double click never runs on into the next seam (the guard in tool()) */
@@ -338,7 +340,22 @@ window.FM = window.FM || {};
     });
     return out;
   }
-  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow };
+  /* 2.7: TRANSITION row (DESIGN §12.1): None / Crossfade / Dip to black / Dip to white, a length stepper, and one button that copies it to every cut. */
+  function transitionRow(R, id) {
+    const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), out = [rowBack()];
+    if (!l) return out;
+    const cur = () => { const L = FM.layerById(FM.scene, id); return L && L.trIn ? L.trIn : null; };
+    const types = [['none', w.trNone || 'None'], ['crossfade', w.trCrossfade || 'Crossfade'], ['dipblack', w.trDipBlack || 'Dip to black'], ['dipwhite', w.trDipWhite || 'Dip to white']];
+    types.forEach(t => out.push(tool({ id: 'tr-' + t[0], label: t[1], icon: null, pressed: (cur() ? cur().type : 'none') === t[0], run: () => S.cmd.transition(id, t[0]) })));
+    if (cur()) {
+      out.push(el('div', 'sm-quiet sm-fade-l', (w.trLength || 'Length') + ' ' + cur().d.toFixed(1) + ' s'));
+      out.push(tool({ id: 'trMinus', label: '−', icon: null, title: w.shorter || 'shorter', run: () => S.cmd.transition(id, cur().type, cur().d - 0.1) }));
+      out.push(tool({ id: 'trPlus', label: '+', icon: null, title: w.longer || 'longer', run: () => S.cmd.transition(id, cur().type, cur().d + 0.1) }));
+      out.push(tool({ id: 'trAll', label: w.trEvery || 'On every cut', icon: null, run: () => S.cmd.transitionAll(id) }));
+    }
+    return out;
+  }
+  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow, transition: transitionRow };
 
   function quietLine(R) {
     const clips = R.main.filter(e => !e.slot), sum = (FM.spineWords && FM.spineWords.summary) ? FM.spineWords.summary(clips.length, R.trackEnd || 0) : '';
@@ -468,7 +485,7 @@ window.FM = window.FM || {};
       roomy = !!one && roomForTwo();   // measured only for one item, the only tray that can take two rows
       const rowTarget = rowFor && FM.spine.soundTargetId ? FM.layerById(FM.scene, FM.spine.soundTargetId(R, rowFor.id)) : null;   // 2.3: a row redraws when what it shows changes
       const rowSig = rowFor ? [rowFor.kind, rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration].join('|') : ''].join('#') : '';
-      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
+      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), JSON.stringify(l.trIn || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
       if (sig === lastSig) return;
       lastSig = sig;
       /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the
