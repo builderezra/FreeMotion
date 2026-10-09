@@ -11793,6 +11793,7 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
   border: 0; background: transparent; color: var(--text); font: 600 10px/1.1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .sm-tool .sm-ico { width: 22px; height: 22px; flex: none; }
 .sm-tool .sm-tool-l { white-space: nowrap; }
+#sm-tray[data-row="audio"] .sm-tool { min-width: 44px; padding: 0 3px; }   /* S9: Done, Speed, Volume, Reverse and Take sound out are 317 px at 54 px / 6 px padding in a 307 px band; 44 / 3 px makes them 278, nothing cut, no scrolling at 1280 or 1024 */
 .sm-tool[aria-disabled="true"] { opacity: .38; }
 .sm-tool[aria-pressed="true"] { color: var(--accent); }
 .sm-tool.sm-pin { position: sticky; right: 0; margin-left: auto; padding-left: 16px; background: linear-gradient(90deg, rgba(0,0,0,0), var(--panel) 14px); }
