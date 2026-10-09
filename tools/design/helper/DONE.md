@@ -112,3 +112,4 @@ T11 | 2026-10-09 | tutorials-drafts | four Simple tutorials (09 speed and sound,
 H59 | 2026-10-09 | hunt/fu-plantcheck | tools/_fu_plantcheck.py self-tested anchor gate plus 3-line hook for full-unchanged.sh
 S13 | 2026-10-09 | hunt/simple-stack-landing-2 | six-lens review, findings in tools/design/hunts/simple-review.md, red-first fixes
 S14 | 2026-10-09 | hunt/simple-gaps + plans/simple-gaps | captions, find speech, look all, text animate built per DESIGN; rest documented; merged with 2.7 on hunt/simple-tip (5 files conflicted, suite slice green 1280 and 380)
+T12 | 2026-10-09 | tutorials-drafts | tutorials 13 crossfade and 14 dip to black walked at 380 on hunt/simple-tip; 14 states honestly that Simple has no fade-out at the end of the video
