@@ -17,7 +17,7 @@ Read: `js/spine-words.js:75` and `:84` only know a crossfade that already exists
 After Create the beginner sees the Full editor (9 toolbar icons, "Tap here to start creating"), at 380 and at 1280. The only road to Simple is the cog, then a small *Simple ⇄ Full* switch whose selected half is Full, with a *What should you use?* button beside it. Seen: `w380-03-created.jpg`, `w380-04-cog.jpg`, `w1280-03-created.jpg`. Read: `js/editor-mode.js:31` (a NEW project's editor comes from `fm.editor.last`, which a first-run device does not have, so it is Full). A first-time user has no reason to open the cog. (Guess: a decision, D3 A, not an oversight; it is the right place to look if the aim is that beginners meet Simple first.)
 
 ### 3. Music and title land at the playhead, and a long song stretches the film (high)
-The song went in at 4.7 s (where my earlier swipe had left the playhead) and ran to 34.7 s. **Measured: `project.duration` = 34.667 s**, not 30. No line said so, and a song has no *End with the video* button: `js/simple-timeline.js:622` offers it only when a **picture** runs past the end (`o.pictures.length`). The way out is to drag the music's right grip back 30 s (new in 2.5b) across a 7-second view, which needs a zoom-out first. Seen: `w380-28-music.jpg`. Same cause for the title: *Text* adds it at the playhead, so a title that should open the film opens at 4.7 s; at 1280 after a fourth clip it opened at 30 s (`w1280-08`, in my notes).
+The song went in at 4.7 s (where my earlier swipe had left the playhead) and ran to 34.7 s. **Measured: `project.duration` = 34.667 s**, not 30. No line said so, and a song has no *End with the video* button: `js/simple-timeline.js:622` offers it only when a **picture** runs past the end (`o.pictures.length`). The way out is to drag the music's right grip back 30 s (new in 2.5b) across a 7-second view, which needs a zoom-out first. Seen: `w380-28-music.jpg`. Same cause for the title: *Text* adds it at the playhead, so a title that should open the film opens at 4.7 s; at 1280 after a fourth clip it opened at 30 s (`w1280-08-text.jpg`).
 
 ### 4. At 1280, a clip's tray shows 6 of its 13 tools and cuts a word (known; option E fixes it)
 One scrolling row with no scrollbar: Length, Speed, Volume, "Move…" (cut), More, Delete; the other seven (Lift off, Duplicate, Crop, Replace, Reverse, Take sound out, Move later) are off to the right with nothing saying so. Seen: `w1280-07-three-clips.jpg`. `hunt/simple-a1-e` (S9) makes it 10 tools on two rows. At 380 the same tray scrolls (that is a phone's habit) but the title's tray cuts *Stay put* to *Stay p…* (`w380-26-text-done.jpg`).
@@ -44,7 +44,7 @@ Selecting the title chip (a 28 px lilac square above the clip row) gives Into ro
 DESIGN §12.1 and the surface table (`DESIGN.md:2899`, `:3623`) say Simple hides *Export just this layer* and *Selected clip only*. At 380 the sheet shows the first (`index.html:969`); I found no build plan that carries the change (`grep` for *Export just* in the BUILD-PLAN files returns nothing), so it has no owner. Seen: `w380-29-export.jpg`.
 
 ### 12. Small ones
-- At 1280 the *What should you use?* button runs to the very edge of its card (`w1280-04`, not kept).
+- At 1280 the *What should you use?* button runs to the very edge of its card (`w1280-04-cog.jpg`).
 - *Clips* tapped twice in a row opens the picker twice (the first tap lands while the "Simple editor" note is up).
 
 ## What I would do first (an opinion, change it)
