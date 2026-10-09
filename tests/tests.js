@@ -60949,8 +60949,67 @@
           await FM.spine.cmd.transition(v.L('B').id, 'none'); await v.idle(); await v.sleep(250);
           if (chips().some(c => c.classList.contains('sm-chip-tr-on'))) throw new Error(w + ': the ◇ stayed filled after None');
         });
+        /* a title that straddles a cut stays the thing a press lands on: the ◇ is painted under items */
+        await smP2((W, H) => smClips3(W, H).concat([smT('Title', 1.5, 1, W, H)]), async function (v) {
+          const tEl = document.querySelector('.sm-item[data-id="' + v.L('Title').id + '"]'), cEl = document.querySelector('.sm-chip-tr[data-tr="' + v.L('B').id + '"]');
+          if (!tEl || !cEl) throw new Error(w + ': CONTROL: no title or no ◇ drawn');
+          const a = tEl.getBoundingClientRect(), b = cEl.getBoundingClientRect();
+          const x0 = Math.max(a.left, b.left), x1 = Math.min(a.right, b.right), y0 = Math.max(a.top, b.top), y1 = Math.min(a.bottom, b.bottom);
+          if (!(x1 - x0 > 4 && y1 - y0 > 4)) throw new Error(w + ': CONTROL: the title and the ◇ do not overlap (' + [a.left, a.top, a.width, a.height].map(Math.round) + ' vs ' + [b.left, b.top, b.width, b.height].map(Math.round) + ')');
+          const hit = document.elementFromPoint((x0 + x1) / 2, (y0 + y1) / 2);
+          if (!hit || !hit.closest || hit.closest('.sm-chip-tr')) throw new Error(w + ': a press on the title lands on the ◇ (' + (hit && hit.className) + ')');
+        });
       });
     }
+  });
+
+  test('simple P2.7 · T9 a project that holds a transition is stamped as 2.7 (sm.v 2), so a 2.6 build opens it read-only; the sanitiser keeps a good trIn and drops a bad one; copy and paste never carry one', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      if (FM.SM_V !== 2) throw new Error('FM.SM_V is ' + FM.SM_V);
+      await FM.spine.cmd.transition(v.L('B').id, 'crossfade', 0.5);   // the first edit adopts the project
+      FM.scene.project.sm.v = 1;   // a project adopted under 2.6: adoption had stamped it 1
+      await FM.spine.cmd.transition(v.L('C').id, 'crossfade', 0.5);
+      if (FM.scene.project.sm.v !== 2) throw new Error('the stamp is ' + FM.scene.project.sm.v + ' after a transition was set on a 2.6 project');
+      const saved = JSON.parse(JSON.stringify(FM.scene.project.sm)); saved.v = 3;
+      const keep = FM.scene.project.sm; FM.scene.project.sm = saved;
+      try { if (!FM.spine.newerSchema()) throw new Error('a file stamped by a newer build is not refused'); } finally { FM.scene.project.sm = keep; }
+      const L = v.L('B'), copy = FM.cloneLayer ? FM.cloneLayer(L) : JSON.parse(JSON.stringify(L));
+      FM.spine.onCopy(copy, FM.spine.STRIP_ROUTES[0]);
+      if (copy.trIn) throw new Error('a copy carries trIn on route ' + FM.spine.STRIP_ROUTES[0]);
+    });
+  });
+
+  test('simple P2.7 · T10 "Turn into a transition" on a blend seam: the clips meet in the middle of the overlap, nothing ripples, the fade keys go (never an empty list), a 1 s crossfade is set, one undo puts it all back; the tool shows only on a blend', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const seamOf = (name, v) => { const R = FM.spine.classify(FM.scene), e = R.main.find(x => x.id === v.L(name).id); return e && e.seam ? e.seam.kind + ' ' + (+e.seam.amt).toFixed(2) : 'none'; };
+    await smP2((W, H) => [(() => { const n = smV('N', 5, 6, W, H); n.transform.opacity = smKf([[5, 0], [6, 1]]); return n; })(), smV('C', 0, 6, W, H)], async function (v) {
+      if (seamOf('N', v) !== 'blend 1.00') throw new Error('CONTROL: C|N is not a 1 s crossfade: ' + seamOf('N', v));
+      const bc = document.querySelector('.sm-chip-tr-blend[data-tr-blend="' + v.L('N').id + '"]');
+      if (!bc) throw new Error('a crossfade seam has no ◇');
+      FM.selectLayer(v.L('C').id); await v.sleep(100); bc.click(); await v.sleep(200);
+      if (FM.scene.selectedId !== v.L('N').id) throw new Error('the ◇ on a crossfade did not select the clip that fades in');
+      if (!smTool('turnTr')) throw new Error('a clip that fades in over the one before it has no Turn into a transition (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+      FM.selectLayer(v.L('C').id); await v.sleep(150);
+      if (smTool('turnTr')) throw new Error('the first clip offers Turn into a transition');
+      const doc0 = v.doc(), end0 = v.L('N').start + v.L('N').duration, dur0 = FM.scene.project.duration;
+      if (!(await FM.spine.cmd.turnTransition(v.L('N').id))) throw new Error('refused: ' + (await sm7s(v)));
+      await v.idle();
+      const C = v.L('C'), N = v.L('N');
+      if (Math.abs(C.duration - 5.5) > 1e-6 || Math.abs(N.start - 5.5) > 1e-6) throw new Error('they did not meet in the middle: C ' + C.start + '+' + C.duration + ', N starts ' + N.start);
+      if (Math.abs(N.start + N.duration - end0) > 1e-6) throw new Error('the end of the video moved: ' + (N.start + N.duration) + ' vs ' + end0);
+      if (FM.scene.project.duration !== dur0) throw new Error('the project length changed ' + dur0 + ' -> ' + FM.scene.project.duration);
+      if (seamOf('N', v) !== 'join 0.00') throw new Error('the seam is not a clean join now: ' + seamOf('N', v));
+      if (!N.trIn || N.trIn.type !== 'crossfade' || Math.abs(N.trIn.d - 1) > 1e-9) throw new Error('trIn is ' + JSON.stringify(N.trIn));
+      const op = N.transform.opacity;
+      if (op && typeof op === 'object' && Array.isArray(op.kf)) throw new Error('the fade keys are still there: ' + JSON.stringify(op));
+      if (op !== 1) throw new Error('the clip should rest at its visible value 1, not ' + JSON.stringify(op));
+      if (Math.abs((N.trimStart || 0) - 0.5) > 1e-6) throw new Error('N head trim: trimStart ' + N.trimStart);
+      if (document.querySelector('.sm-chip-tr-blend')) throw new Error('the crossfade ◇ is still drawn after the turn');
+      if (!document.querySelector('.sm-chip-tr-on[data-tr="' + v.L('N').id + '"]')) throw new Error('the new transition has no filled ◇');
+      FM.history.undo(); await v.sleep(80);
+      if (v.doc() !== doc0) throw new Error('one undo did not put the document back byte for byte');
+    });
   });
 
   test('simple P2.6 · S10a the time readout follows the playhead after a command moves it (DESIGN §8.3: the pill is Full’s #time-readout, unchanged)', { item: '980', budgetMs: 60000 }, async function () {
@@ -123088,7 +123147,7 @@
       ov.click(); await v.idle();
       if (C.start !== B.start + B.duration) throw new Error('the overlap chip did not land C on B’s end: ' + C.start + ' vs ' + (B.start + B.duration));
       FM.refreshAll(); await v.sleep(30);
-      if (document.querySelector('#sm-main .sm-chip')) throw new Error('a chip is still drawn after both were fixed');
+      if (document.querySelector('#sm-main .sm-chip:not(.sm-chip-tr)')) throw new Error('a chip is still drawn after both were fixed');
     });
   });
 
