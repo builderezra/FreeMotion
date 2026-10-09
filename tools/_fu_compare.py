@@ -136,22 +136,43 @@ def drop_keys(v, names):
             drop_keys(x, names)
 
 
+def wire_lists(v):
+    """Every list named `wire` anywhere under v (FU4's steps, its friends, its leave)."""
+    if isinstance(v, dict):
+        for k, x in v.items():
+            if k == 'wire' and isinstance(x, list):
+                yield x
+            else:
+                for w in wire_lists(x):
+                    yield w
+    elif isinstance(v, list):
+        for x in v:
+            for w in wire_lists(x):
+                yield w
+
+
 def apply_mask(rec, keys):
     lk = [k for k in keys if k.startswith('layer.')]
     for e in rec.get('fu2') or []:
         mask_docs(e.get('state'), lk)
+    # FU3: its per-key records AND its sweep's (the second review added the sweep — its passes and the state each pass
+    # starts from — and the mask never followed: step 1.2's first run, 9 Oct, read 492 srcW/srcH/srcRev/pick lines there)
     for e in rec.get('fu3') or []:
         mask_docs(e.get('state'), lk)
+    mask_docs(rec.get('fu3sweep'), lk)
+    mask_docs(rec.get('fu3sweepBase'), lk)
     f4 = rec.get('fu4')
     if isinstance(f4, dict):
-        mask_docs(f4.get('guestDoc'), lk)
+        # EVERY document and wire message in FU4 (DESIGN: "FU4's wire and its guest's document"). This used to name
+        # `guestDoc` and the steps' wire only, and FU4 later gained a friend's edits and a leave — their documents and
+        # their wire were never masked (step 1.2's first run, 9 Oct: 552 lines, all four FU_INVISIBLE layer keys).
+        mask_docs(f4, lk)
         pres = [k.split('.', 1)[1] for k in keys if k.startswith('presence.')]
         man = [k.split('.', 1)[1] for k in keys if k.startswith('manifest.')]
-        for s in f4.get('steps') or []:
-            for m in s.get('wire') or []:
+        for wl in wire_lists(f4):
+            for m in wl:
                 if not isinstance(m, dict):
                     continue
-                mask_docs(m.get('msg'), lk)
                 t = str(m.get('t') or '')
                 if m.get('ch') == 'pres' or t in ('pr', 'PR'):
                     drop_keys(m.get('msg'), pres)

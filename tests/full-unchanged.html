@@ -193,7 +193,16 @@
       try {
         var t = a.effect.getComputedTiming();
         if (isFinite(t.endTime)) { if (a.playState !== 'finished') a.finish(); }
-        else if (a.playState !== 'paused' || a.currentTime !== 0) { var was = a.playState; a.pause(); a.currentTime = 0; fr.push({ a: a, was: was }); }
+        else if (a.playState !== 'paused' || a.currentTime !== 0 || t.delay !== 0) {
+          /* …at the START OF ITS LOOP, not at time 0 (9 Oct, step 1.2's first run: every glint ring starts at a random point
+             of its orbit — FM.glintRing gives it a negative delay off Math.random() (#589) — so time 0 is a random place,
+             and the probe's seeded Math.random kept it the same only while both sides drew the same numbers; 1.2 draws more,
+             and the Add tab's glint was 109 px of difference in every FU4 friend picture). The delay is set to 0 for the
+             instant and put back by unfreeze. */
+          var was = a.playState, d0 = t.delay;
+          if (d0 !== 0) a.effect.updateTiming({ delay: 0 });
+          a.pause(); a.currentTime = 0; fr.push({ a: a, was: was, delay: d0 });
+        }
       } catch (e) {}
     });
     return fr;
@@ -221,7 +230,7 @@
     }
     return false;
   }
-  function unfreeze(fr) { fr.forEach(function (f) { try { if (f.was === 'running') f.a.play(); } catch (e) {} }); }
+  function unfreeze(fr) { fr.forEach(function (f) { try { if (f.delay) f.a.effect.updateTiming({ delay: f.delay }); if (f.was === 'running') f.a.play(); } catch (e) {} }); }
 
   /* ═══ MOTION: what each screen ANIMATED (review of v1: "durations and easing are invisible") ═══════════════════════
      Every transition and animation the app starts while a screen is being reached is written down when it starts — the
@@ -290,7 +299,9 @@
         var ef = a.effect, ct = ef.getComputedTiming();
         if (isFinite(ct.endTime) || !ef.target || !ef.target.getClientRects().length) return;
         var kf = JSON.stringify(ef.getKeyframes().map(function (k) { var o = {}; Object.keys(k).sort().forEach(function (x) { if (x !== 'computedOffset') o[x] = k[x]; }); return o; }));
-        out[JSON.stringify(['I', pathOf(ef.target) + (ef.pseudoElement || ''), a.animationName || a.transitionProperty || '', ct.duration, ct.delay, ct.easing, String(ct.iterations), kf.slice(0, 1500)])] = 1;
+        /* a NEGATIVE delay is a starting point in the loop, not a wait — and the glint rings draw theirs at random (#589),
+           so it is written as 'a phase' (9 Oct); a delay of 0 or more is a wait, and is compared */
+        out[JSON.stringify(['I', pathOf(ef.target) + (ef.pseudoElement || ''), a.animationName || a.transitionProperty || '', ct.duration, ct.delay < 0 ? 'a phase' : ct.delay, ct.easing, String(ct.iterations), kf.slice(0, 1500)])] = 1;
       } catch (e) {}
     });
     return Object.keys(out).sort();
@@ -421,6 +432,10 @@
   }
   function styleOf(cs, k) {
     var v = cs.getPropertyValue(k);
+    /* a NEGATIVE delay in an animation is a starting point in its loop, not a wait — the glint rings draw theirs at random
+       (#589) — so it is written as "a-phase" (9 Oct, step 1.2's rehearsal: the Add tab's glint read -3.356s on one side and
+       -1.006s on the other, its only difference). Durations and counts are never negative, so a negative time is a delay. */
+    if (k === 'animation' && v) v = v.replace(/(^|[\s,])-(\d*\.)?\d+m?s\b/g, '$1a-phase');
     return (k === 'background-image' || k === 'font-family' || k === 'filter' || k === 'backdrop-filter') ? short(v, 200) : v;
   }
   function layoutRecord(root, skip) {
@@ -567,11 +582,14 @@
     // (a toast measured at rest must be put away by its OWN timer: hidden here, its timer would fire again mid-measurement)
     if (!opts.keepToast && !opts.restToast && FM.hideToast) FM.hideToast();
     await settle(opts.wait);
-    var motion = motionTake().concat(infiniteNow());
+    var motion = motionTake();
     var quiet = await canvasesQuiet();
     var pvs = opts.noPreview ? {} : await previewState();
     var toastRec = opts.restToast ? { words: takeToasts(), first: takeToastFirst() } : null;
     if (opts.restToast) await toastAtRest();
+    /* what runs for ever is read the instant before the screen is frozen and recorded, not seconds earlier (9 Oct, step
+       1.2's first run at 380: Home's + went into its dock — .hm-in-fab, its drift off — between the two, on one side) */
+    motion = motion.concat(infiniteNow());
     var fr = freezeInfinite();
     try {
       await raf2();
@@ -679,8 +697,10 @@
     })(obj, 0);
     /* An id can travel with no key of its own: a live op's path addresses a list item as "#i:<id>" (a mask, measured
        6 Oct: `mask_250cq_…` on one run, `mask_252cn_…` on the next). By first appearance, like every other id. */
+    /* …and as "#u:<uid>" (an effect, 9 Oct: step 1.2 draws more random numbers, so the seeded uids stopped matching and
+       FU4's wire differed by uid alone — HEAD against itself had always drawn the same ones). */
     function idRef(x) {
-      var m = typeof x === 'string' ? /^#i:(.{4,})$/.exec(x) : null;
+      var m = typeof x === 'string' ? /^#[iu]:(.{4,})$/.exec(x) : null;
       if (m && !map[m[1]]) map[m[1]] = '@i' + (n++);
     }
     var ids = Object.keys(map).sort(function (a, b) { return b.length - a.length; });
@@ -1331,6 +1351,10 @@
   }
   async function hoverOne(rec, nm, t, hideSel, margin) {
     var r = t.getBoundingClientRect();
+    /* canvases quiet BEFORE the hover's motion window opens, not only after it (9 Oct at 1024×600, HEAD against itself: an
+       effects-browser thumbnail finished drawing during the hover on one side, and its canvas's .ready fade-in was written as
+       what the hover animated) */
+    await canvasesQuiet(2000);
     motionStart();
     await realInput([{ t: 'mouseMove', x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), ms: 60 }]);
     await settle(220);
@@ -2803,8 +2827,30 @@
     DUMP.fu5meta = { SCHEMA_REV: C.SCHEMA_REV, SCHEMA_FP: C.SCHEMA_FP };
     var pid = await freshCopy('FU5');
     var docs = [];
-    try { if (C.SCHEMA_FIXTURE) docs.push(['SCHEMA_FIXTURE', { project: { name: 'fp', width: 320, height: 240, fps: 30, duration: 4, background: '#000000' }, layers: C.SCHEMA_FIXTURE() }]); } catch (e) { DUMP.errors.push('FU5 SCHEMA_FIXTURE: ' + e.message); }
-    try { if (C.DERIVED_FIXTURE) docs.push(['DERIVED_FIXTURE', C.DERIVED_FIXTURE()]); } catch (e) { DUMP.errors.push('FU5 DERIVED_FIXTURE: ' + e.message); }
+    /* The two collab fixtures as v17.30 shipped them, FROZEN here — never read from the app (9 Oct, step 1.2's first run:
+       1.2 adds two effects to C.SCHEMA_FIXTURE on purpose (hunk 1.2.9), so each side fed the sanitiser its OWN fixture and
+       FU5 compared 1 effect with 3 — two different inputs, which says nothing about the sanitiser). I1 is "the same input,
+       byte for byte the same output"; a Simple release's new fixture is its own tests' business. */
+    docs.push(['SCHEMA_FIXTURE (v17.30’s, frozen)', { project: { name: 'fp', width: 320, height: 240, fps: 30, duration: 4, background: '#000000' }, layers: [{
+      id: 'fp_1', type: 'text', name: 'Fingerprint', start: 0, duration: 4,
+      text: 'Ab', transform: { x: 1, y: 2, scale: 1, rotation: 0, opacity: 1 },
+      captions: [{ start: 0, end: 1, text: 'one' }],
+      masks: [{ id: 'fpm', mode: 'add', path: [[0, 0], [8, 0], [8, 8]] }],
+      effects: [{ type: 'blur', enabled: true, params: { radius: 3 } }],
+      audioFx: [{ type: 'reverb', enabled: true, params: {} }],
+      behaviors: [{ type: 'wiggle', prop: 'x', enabled: true, params: {} }],
+      speed: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 2, e: 'easeIn' }] }
+    }] }]);
+    docs.push(['DERIVED_FIXTURE (v17.30’s, frozen)', {
+      project: { width: 320, height: 240, fps: 30, duration: 0, background: '#000000', loopIn: 1, loopOut: 99 },
+      layers: [
+        { id: 'd1', type: 'shape', name: 'One', start: 0, duration: 4, loopMode: 'loop',
+          transform: { x: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 9, e: 'linear' }] }, y: 0, scale: 1, rotation: 0, opacity: 1 },
+          effects: [{ uid: 'dfx00001', type: 'blur', enabled: true, params: {} }] },
+        { id: 'd2', type: 'camera', name: 'Cam', start: 0, duration: 1,
+          transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }
+      ]
+    }]);
     try { docs.push(['kitchen', kitchenDoc()]); } catch (e) { DUMP.errors.push('FU5 kitchen: ' + e.message); }
     try { for (var sd = 1; sd <= 6; sd++) docs.push(['kitchen921 seed ' + sd, kitchen921(sd)]); } catch (e) { DUMP.errors.push('FU5 kitchen921: ' + e.message); }
     try { docs.push(['the FU fixture', stripInv(JSON.parse(w.localStorage.getItem('fm.proj.' + FIXTURE_ID)))]); } catch (e) { DUMP.errors.push('FU5 fixture: ' + e.message); }

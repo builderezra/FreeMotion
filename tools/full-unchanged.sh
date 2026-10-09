@@ -120,9 +120,14 @@ FU_SMALLEST_REAL_PX=58      # the smallest real change at FU_CHAN: the #transpor
 FU_CHAN=24                  # a pixel counts as changed when any channel moved by more than this …
 FU_TOL_PX=3                 # … and a picture may have at most this many: just above the jitter (a 4 px line moved 1 px = 8)
 FU_FAINT_CHAN=8             # a pixel counts as FAINTLY changed when a channel moved by more than this …
-FU_FAINT_JITTER_PX=5        # … HEAD against itself at FU_FAINT_CHAN: 5 px measured 6 Oct (0 on the run before) …
-FU_FAINT_TOL_PX=12          # … and a picture may have at most this many: above the jitter, far under the smallest real
-                            #   change at this threshold (the margin, 105) and a 40 px panel's border recoloured 20 levels (156)
+FU_FAINT_JITTER_PX=17       # … HEAD against itself at FU_FAINT_CHAN: 5 px measured 6 Oct on the Mac; 17 px measured 9 Oct on
+                            #   the laptop (Linux headless Chrome, SwiftShader): fu1-editor-idle at 440x956 draws the top bar's
+                            #   notes and cog icons one of TWO ways at random — 17 px of their edges, nothing else on the
+                            #   screen, no transform or animation on them — 6 of 10 sides in 5 back-to-back runs of one tree,
+                            #   either side, any version (0 or 17, never between) …
+FU_FAINT_TOL_PX=24          # … and a picture may have at most this many: above that jitter, far under the smallest real
+                            #   change at this threshold (the margin, 105) and a 40 px panel's border recoloured 20 levels (156).
+                            #   Was 12 (from the Mac's 5); raised 9 Oct, declared LOOSENS THE LOCK in v17.31's line.
 FU_GRID_JITTER=0            # a decoded export cell, HEAD against itself: 0 levels measured 6 Oct, both widths
 FU_GRID_TOL=4               # … and the most a cell may move (the saturate plant moves cells by tens of levels)
 FU_AUDIO_JITTER=0           # the exported file's decoded sound, HEAD against itself: the most a 0.1 s window's RMS or peak
