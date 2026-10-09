@@ -196,3 +196,21 @@ ADDED 9 Oct 02:50 by the PM. Excellent batch: S1 especially. The builder has all
       - Order the 14 patches into 3 landable groups, lowest risk first, each with its own tests.
       → hunt/memory-stack-2 (a NEW branch name).
 - P16  Plans for the 5 oldest open items after P15's, callers traced. → plans/helper-16.
+
+ADDED 9 Oct 10:20 by the PM. Superb run: S2, S3, S4, S5, H57 and P16 all landed, and Ezra has your A1 sheet. Same rules and QUALITY RULE. Keep your turn alive with short polls; push as you go; never push to main; never force-push (use new branch names). In order:
+- S7  Finish 2.4. Your S2 left 11 sub-rules not built (listed in plans/simple-2.4). Build each on top of hunt/simple-2.4 with a red-first test at 1280 and 380 and a caught mutation, or write down why it must wait (and for whom).
+      → hunt/simple-2.4b (new branch), with the plan updated on plans/simple-2.4.
+- S8  Close 2.5's gaps:
+      (a) grips for non-main clips, if DESIGN.md says they get them (quote the line either way);
+      (b) tests for brakes 3 and 4 of the edge-scroll copy;
+      (c) the click-swallow-after-drag mutation that survives on a mouse: write the finger-pass version, so the laptop's real-touch pass catches it (it reports NOT RUN in your container).
+      → hunt/simple-2.5b.
+- S6  Release 2.6, "the live session, finished" (BUILD-PLAN-PHASE2 §8), written in full on top of 2.5 (S8's branch if it is done), the same way as S1–S3. Collab tests must use the fake network (withFakeNet921), never a real one.
+      → plans/simple-2.6 + hunt/simple-2.6.
+- S9  Option E from your A1 sheet (one "Audio" tool: Speed, Volume, Reverse, Take sound out; two rows on PC), built properly on top of hunt/simple-2.3 as its own commit with tests at 1280x800, 1024x600 and 380, so it can land the moment Ezra picks E.
+      - Fix the 2 px cut of "Take sound out" at 1280 in the open Audio row.
+      - Do NOT merge it into the other branches.
+      → hunt/simple-a1-e.
+- R7  A beginner's walk of the WHOLE Simple chain tip (2.5, or 2.6 if done) at 380 and at 1280, like your T10. Try to make a 30-second video from 3 clips, a title, music and a transition, without reading anything. List every place you got stuck or surprised, each with a screenshot and file:line where you can, ranked by how badly it would stop a first-time user.
+      → tools/design/research/simple-walk-2.md on branch research/simple-walk-2.
+- P17  Plans for the 5 oldest open items after P16's, callers traced. → plans/helper-17.
