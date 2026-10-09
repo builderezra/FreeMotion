@@ -1,0 +1,26 @@
+--- a/js/compositor.js
++++ b/js/compositor.js
+@@ -6366,12 +6366,13 @@
+     // ---- batch 5 ----
+     glitch: function glitchFx(d, W, H, p, t) {
+       const amt = clamp01(FM.evalProp(p.amount, t)); if (amt <= 0) return;
++      const gPs = arguments[5] > 0 ? arguments[5] : 1;   // AU12: plate scale, for the RGB fringe (project px) — off `arguments` so the arity stays 5
+       /* UP / DOWN (queue 904). The tear is the same algorithm on the picture turned on its side: transpose, glitch sideways, transpose
+          back — so the slices become columns, the shift runs vertically and the RGB fringe splits up/down. Sideways is untouched. */
+       if (p.dir != null && (Math.round(FM.evalProp(p.dir, t)) | 0) === 1) {
+         const T = new Uint8ClampedArray(d.length);
+         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = (y * W + x) * 4, b = (x * H + y) * 4; T[b] = d[a]; T[b + 1] = d[a + 1]; T[b + 2] = d[a + 2]; T[b + 3] = d[a + 3]; }
+-        glitchFx(T, H, W, Object.assign({}, p, { dir: 0 }), t);
++        glitchFx(T, H, W, Object.assign({}, p, { dir: 0 }), t, gPs);
+         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = (y * W + x) * 4, b = (x * H + y) * 4; d[a] = T[b]; d[a + 1] = T[b + 1]; d[a + 2] = T[b + 2]; d[a + 3] = T[b + 3]; }
+         return;
+       }
+@@ -6453,7 +6454,7 @@
+           }
+         }
+       }
+-      const cs = Math.round(amt * 9 * split);
++      const cs = Math.round(amt * 9 * split * gPs);
+       if (cs > 0) { const s2 = d.slice(); for (let y = 0; y < H; y++) { const row = y * W * 4; for (let x = 0; x < W; x++) { const i = row + x * 4; d[i] = s2[row + Math.min(W - 1, x + cs) * 4]; d[i + 2] = s2[row + Math.max(0, x - cs) * 4 + 2]; } } }
+     },
+     zoomblur: function (d, W, H, p, t) {
