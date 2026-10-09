@@ -31,13 +31,15 @@ window.FM = window.FM || {};
      never be undone by the next load. Returns whether the layer now carries the flag as asked. */
   /* Phase 2 adds `cut` (the de-click mark, §12.1) and `snd` (Simple's own sound-only fact, §0.4 B8). The sanitiser keeps both
      as plain unknown keys (`true` is plain), so its output does not change and no SCHEMA_REV bump is needed for them. */
-  const FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'cut', 'snd'];
+  /* 2.4b adds `rideVol` (the opt-in volume rider, §3.10 rule 3): a stay-put sound whose volume and opacity keys ride the clips' time map. Plain, so no SCHEMA_REV bump. */
+  const FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'cut', 'snd', 'rideVol'];
   S.setFlag = function (layer, key, on) {
     if (!layer || FLAGS.indexOf(key) < 0) return false;
     /* D17 B (his pick): a sound never ends with the video — music, a voice-over, a recording run on in black as in Full */
     if (on && key === 'tail' && (layer.audioOnly === true || (layer.sm && layer.sm.snd === true))) return false;
     if (on && key === 'main' && (layer.audioOnly === true || layer.type === 'group' || (layer.type === 'text' && Array.isArray(layer.captions)))) return false;
     if (on && key === 'unit' && layer.type !== 'group') return false;
+    if (on && key === 'rideVol' && !(layer.sm && layer.sm.stay)) return false;   // only a sound that stays put has a curve that could ride (a following one already moves with its clip)
     if (on) {
       if (!layer.sm || typeof layer.sm !== 'object') layer.sm = {};
       layer.sm[key] = true;
@@ -46,7 +48,7 @@ window.FM = window.FM || {};
       if (key === 'stay' && layer.sm.main) { delete layer.sm.stay; return false; }
     } else if (layer.sm) {
       delete layer.sm[key];
-      if (key === 'stay') { delete layer.sm.tail; delete layer.sm.tailEnd; }   // tail implies stay
+      if (key === 'stay') { delete layer.sm.tail; delete layer.sm.tailEnd; delete layer.sm.rideVol; }   // tail implies stay; the rider needs it
       if (!Object.keys(layer.sm).length) delete layer.sm;
     }
     return !!(layer.sm && layer.sm[key]) === !!on;
@@ -417,6 +419,77 @@ window.FM = window.FM || {};
       if (states.get(u.id) === 'missing' && isMedia(u.l)) anomalies.push({ kind: 'missing', ids: [u.id] });
       if (k === 'undecided') anomalies.push({ kind: 'undecided', ids: [u.id] });
       R.units[u.id] = rec;
+    });
+
+    /* ── 6b. COUPLINGS, THE LINK RULE AND RULE 1b (§3.10; release 2.4b) ──
+       R.couplings lists every time link between layers: transform parent (not a group: that is membership), Follow target, Audio Drive source, matte source.
+       The LINK RULE: a non-main unit that is parented to, Follow-targeting, or Audio-Drive-sourcing a layer takes THAT layer's host, so the pair moves together
+       (before the start rule's answer). A parent or an Audio Drive source is read through the split lineage with a HALF-OPEN lookup (R.lineageAt: the member with
+       start <= t < start + duration, else FM.clipAt); a Follow target and a matte source are read by their stored id, because that is what renders (§3.10, §0.4 B4).
+       RULE 1b: a hidden helper (visible === false, a transform parent or Follow target only: a hidden matte source is not drawn as a matte, measured, so it is
+       left to rule 4's ask) goes with its only user, when every user starts in the same clip. RULE 2: a null or controller that parents main clips is a MOVER
+       (rec.mover): it has no host and is never pinned, and the planner moves it by the one d its main-clip children share. */
+    const refsFn = S.refsOf || (() => []);
+    const unitIdOf = new Map(); units.forEach(u => { unitIdOf.set(u.id, u.id); (u.members || []).forEach(m => unitIdOf.set(m.id, u.id)); });
+    R.couplings = [];
+    L.forEach(x => {
+      if (!x || x.id == null) return;
+      refsFn(x).forEach(r => {
+        const y = byId.get(r.id); if (!y || y === x) return;
+        if (r.via === 'parent' && y.type === 'group') return;   // membership, not a link (§2.5)
+        if (r.via === 'twin') return;                           // a karaoke twin travels with its clip by the sound rule
+        R.couplings.push({ from: x.id, to: r.id, via: r.via, fromUnit: unitIdOf.get(x.id) || null, toUnit: unitIdOf.get(r.id) || null });
+      });
+    });
+    const lineageOf = id => { const v = byId.get(id); if (!v) return []; return v.splitOf ? L.filter(l => l && l.splitOf === v.splitOf) : [v]; };
+    R.lineageOf = lineageOf;
+    R.lineageAt = (refId, t) => {
+      const hit = lineageOf(refId).find(m => (+m.start || 0) <= t + 1e-9 && t < (+m.start || 0) + (+m.duration || 0) - 1e-9);
+      return hit || (FM.clipAt ? FM.clipAt(scene, refId, t) : byId.get(refId)) || null;
+    };
+    const resolve = (c, t) => (c.via === 'parent' || c.via === 'audio') ? R.lineageAt(c.to, t) : byId.get(c.to);
+    R.linkTarget = (c, t) => resolve(c, t);
+    const startHost = new Map(); Object.keys(R.units).forEach(id => startHost.set(id, R.units[id].host));
+    const linkable = (id, rec) => rec && rec.kind !== 'main' && rec.kind !== 'captions' && rec.kind !== 'undecided' && rec.kind !== 'background' && rec.kind !== 'fullOnly' &&
+      !rec.long && !(byUid.get(id) && byUid.get(id).l.sm && (byUid.get(id).l.sm.stay || byUid.get(id).l.sm.main || byUid.get(id).l.sm.twin)) && !(rec.host && String(rec.host).indexOf('slot:') === 0) && R.tail.indexOf(id) < 0;
+    const memo = new Map(), busy = new Set();
+    function finalHost(id) {
+      if (mainSet.has(id)) return id;
+      if (memo.has(id)) return memo.get(id);
+      if (busy.has(id)) return null;                               // a reference cycle never decides a host
+      busy.add(id);
+      const rec = R.units[id]; let h = rec ? rec.host : null, how = null;
+      if (rec && linkable(id, rec)) {
+        const u = byUid.get(id), mine = R.couplings.filter(c => c.fromUnit === id && c.via !== 'matte' && c.toUnit && c.toUnit !== id);
+        if (mine.length) {
+          const hs = mine.map(c => { const t = resolve(c, u.start); const tu = t && unitIdOf.get(t.id); return tu && tu !== id ? finalHost(tu) : null; });
+          if (hs.every(x => x && x === hs[0])) { h = hs[0]; how = 'link'; }
+        }
+        if (!how && rec.hidden) {                                  // rule 1b: a hidden helper goes with its only user
+          const users = R.couplings.filter(c => c.toUnit === id && (c.via === 'parent' || c.via === 'follow') && c.fromUnit && c.fromUnit !== id);
+          if (users.length) {
+            const hs = users.map(c => { const sh = startHost.get(c.fromUnit); return mainSet.has(c.fromUnit) ? c.fromUnit : (sh && String(sh).indexOf('slot:') !== 0 ? sh : null); });
+            if (hs.every(x => x && x === hs[0])) { h = hs[0]; how = 'helper'; }
+          }
+        }
+      }
+      busy.delete(id); memo.set(id, h);
+      if (how && rec) rec.linked = how;
+      return h;
+    }
+    Object.keys(R.units).forEach(id => {
+      if (mainSet.has(id)) return;                                   // a main clip is its own host and has none
+      const rec = R.units[id], h = finalHost(id);
+      if (h !== rec.host) {
+        if (rec.host && R.followers[rec.host]) R.followers[rec.host] = R.followers[rec.host].filter(x => x !== id);
+        rec.host = h; if (h && R.followers[h]) R.followers[h].push(id);
+      }
+    });
+    // rule 2: a null or controller that parents main clips
+    R.couplings.forEach(c => {
+      if (c.via !== 'parent' || !mainSet.has(c.fromUnit)) return;
+      const y = byId.get(c.to), rec = y && R.units[unitIdOf.get(y.id)];
+      if (rec && y.type === 'null' && !mainSet.has(y.id)) rec.mover = true;
     });
 
     // ── 11. LANES (§8.6): packed at read time, never stored; sound puts the longest first so a whole-video song wins ──

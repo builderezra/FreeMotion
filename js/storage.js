@@ -1585,6 +1585,7 @@ window.FM = window.FM || {};
     // the plain helper fields (§2.2): native size and the mediaRev it describes, and the pick a clip came from
     ['srcW', 'srcH'].forEach(k => { if (k in l && !(typeof l[k] === 'number' && l[k] > 0 && l[k] <= 16384)) delete l[k]; });
     if ('srcRev' in l && !(Number.isInteger(l.srcRev) && l.srcRev >= 0)) delete l.srcRev;
+    if ('taken' in l && !(typeof l.taken === 'number' && isFinite(l.taken) && l.taken >= 0 && l.taken <= 8.64e15)) delete l.taken;   // 2.4b (§2.2): the capture date Sort by date taken reads, ms since epoch; a plain layer field, not under sm
     if ('pick' in l) {
       const p = l.pick;
       const ok = isPlainObj(p) && typeof p.b === 'string' && p.b.length > 0 && p.b.length <= 32 && Number.isInteger(p.i) && p.i >= 0 && p.i <= 9999;
@@ -1784,6 +1785,7 @@ window.FM = window.FM || {};
     // "drop stale media" loop here actively deleted the other project's blobs). Fresh ids need
     // no clearing at all; embedded media is rehydrated under the new ids below.
     const re = reIdLayers(obj.layers);
+    if (FM.remapCommentPins) FM.remapCommentPins(obj.project, obj.layers, re.map);   // 2.4b: anchored comment pins follow their layers to the new ids
     /* A file exported from INSIDE an element or template workspace carries that session's pointers; imported
        later, Home would write the imported project back over the element/template (review, 2 Sep). Strip them. */
     ['ofTemplate', 'ofElement', 'returnTo'].forEach(k => { try { delete obj.project[k]; } catch (e) {} });
@@ -2724,7 +2726,9 @@ window.FM = window.FM || {};
          Home both cards read X — the copy he had just changed and the original, indistinguishable, which is exactly
          when the wrong one gets deleted. Every caller's name (Duplicate, bulk Duplicate, collab's "my version", a
          restored checkpoint, a detached linked copy) is the name the new project should carry everywhere. */
-      if (!writeJSON('fm.proj.' + nid, { project: Object.assign(JSON.parse(JSON.stringify(doc.project)), { name: name }), layers: re.layers, selectedId: null, selectedIds: [] })) return null;
+      const projCopy = Object.assign(JSON.parse(JSON.stringify(doc.project)), { name: name });
+      if (FM.remapCommentPins) FM.remapCommentPins(projCopy, doc.layers || [], re.map);   // 2.4b: anchored comment pins follow their layers
+      if (!writeJSON('fm.proj.' + nid, { project: projCopy, layers: re.layers, selectedId: null, selectedIds: [] })) return null;
       FM._mediaBusy = (FM._mediaBusy || 0) + 1;
       const done = (ok) => { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); return ok ? nid : null; };
       // index the copy BEFORE the (slow, awaited) media copies — killing the tab mid-copy used to
@@ -3289,6 +3293,7 @@ window.FM = window.FM || {};
       FM.scene.project = Object.assign(proj, extra || {});
       clampProjectDims(FM.scene.project);
       const re = reIdLayers(pack.layers);
+      if (FM.remapCommentPins) FM.remapCommentPins(FM.scene.project, pack.layers, re.map);   // 2.4b
       FM.scene.layers = re.layers;
       await hydratePack(re.layers, pack.media, re.map, packKey);
     },

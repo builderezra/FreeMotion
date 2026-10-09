@@ -150,11 +150,12 @@ window.FM = window.FM || {};
      window holds it; if none does (trimmed away) the nearest candidate edge; with no candidate left, c.t. Every reader (the ruler marks, the card
      pin, the head test) goes through here. */
   CM._anchorPin = anchorPin;
-  CM.pinTime = function (c) {
+  CM.pinTime = function (c, layers) {
     if (!c || typeof c.t !== 'number' || !isFinite(c.t)) return c && c.t;
     if (!c.lid || (c.ls == null && c.lo == null)) return c.t;
-    const base = FM.layerById(FM.scene, c.lid); if (!base) return c.t;
-    const cands = [base].concat(base.splitOf ? FM.scene.layers.filter(function (l) { return l !== base && l.splitOf === base.splitOf; }) : []);
+    const scn = Array.isArray(layers) ? { layers: layers } : FM.scene;   // 2.4b: `layers` lets FM.remapCommentPins ask the OLD document where a pin sat
+    const base = FM.layerById(scn, c.lid); if (!base) return c.t;
+    const cands = [base].concat(base.splitOf ? scn.layers.filter(function (l) { return l !== base && l.splitOf === base.splitOf; }) : []);
     let best = null, bd = Infinity;
     for (let i = 0; i < cands.length; i++) {
       const l = cands[i], s = +l.start || 0, d = +l.duration || 0;
@@ -174,6 +175,24 @@ window.FM = window.FM || {};
       }
     }
     return best != null ? best : c.t;
+  };
+
+  /* ═══ FM.remapCommentPins(project, oldLayers, map) (DESIGN §12.2, §0.4 B25): COMMENT PINS TRAVEL WITH THEIR CLIP ON EVERY RE-ID ROUTE. reIdLayers remaps parent, splitOf and
+     behaviour ids but not comments, and import, project duplicate and template use copy `project` raw, so an anchored pin kept pointing at the old id and fell back to
+     its absolute time. Run on ANCHORED pins only (those carrying ls / lo / cu: every other pin is untouched, which is what keeps a Full-made document bit for bit):
+     a mapped `lid` is replaced by its new id and the anchor stays; an unmapped one bakes `t` to where the pin sat in the OLD layers and loses lid / ls / lo / cu / co. */
+  FM.remapCommentPins = function (project, oldLayers, map) {
+    if (!project || !Array.isArray(project.comments)) return 0;
+    let n = 0;
+    project.comments.forEach(function (c) {
+      if (!c || typeof c !== 'object' || (c.ls == null && c.lo == null && c.cu == null)) return;
+      const nid = c.lid && map ? map[c.lid] : null;
+      if (typeof nid === 'string') { c.lid = nid; n++; return; }
+      const t = CM.pinTime(c, oldLayers);
+      if (typeof t === 'number' && isFinite(t)) c.t = t;
+      delete c.lid; delete c.ls; delete c.lo; delete c.cu; delete c.co; n++;
+    });
+    return n;
   };
 
   /* opts: {pin:true} puts it at the playhead, and on the selected layer when there is one. */
