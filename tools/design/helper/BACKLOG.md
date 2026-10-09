@@ -334,3 +334,22 @@ ADDED 10 Oct 05:30 by the PM. PF2, PL1, AU20, AU21 and P26 landed, and integrate
       → hunt/new-effects-1, sheet at tools/design/plans/new-effects-1/sheet.jpg.
 - P27  Plans for the 5 oldest open items after P26's, callers traced. → plans/helper-27.
 - P28  Plans for the next 5 after P27's. → plans/helper-28.
+
+ADDED 10 Oct 07:40 by the PM. E1, P27 and P28 landed, and the E1 sheet has gone to Ezra. Same proof rules. Keep your turn alive; push as you go; never push to main; never force-push. In order (finish INT1 first if it is not done yet):
+- FZ1  Your E1 finding: `921 S1 convergence fuzz` fails seeds 23, 28, 30, 32, 38, 39 and 43 ON MAIN.
+      - Find the root cause of each failure shape (the guest/host `layers/N/parent` mismatch; 21 owner layers against 20 in the host base).
+      - Say plainly whether two real devices could end up with different projects (a product bug) or whether it is the fixture.
+      - If it is a product bug, fix it: a test red on main and green with the fix, at 1280 and 380, mutation-caught, with all 43 seeds green.
+      → hunt/fuzz-seeds.
+- AU22 Audit the Simple editor's engine, which is on main since v17.33: js/spine.js (438 lines), js/spine-words.js, and the storage.js and scene.js additions.
+      - Read it against how Simple will use it (#980).
+      - Check for: lost edits, a Simple save that Full cannot open (or the reverse), undo crossing modes, collab, very long or empty projects, and phone-sized lists.
+      - Repros must be red on main v17.34. Do not touch the files the builder has open for step 1.3 (editor-mode.js, simple-timeline.js are not on main yet).
+      → hunt/audit-spine.
+- E2   Two looks for Ezra:
+      - Oil Paint: render your Kuwahara Oil Paint and ChatGPT B6's `3728d6f5` Oil Paint side by side, on the same photo, text and shape at 3 settings each, so he can pick ONE.
+      - Soften Skin: render it on the most face-like image already in the repo (no downloads) at its defaults and at 2 stronger settings, and propose a default Amount.
+      - Keep each sheet under 3x as tall as it is wide.
+      → hunt/new-effects-1 (new commits), sheets at tools/design/plans/new-effects-1/oil-compare.jpg and softskin.jpg.
+- P29  Plans for the 5 oldest open items after P28's, callers traced. → plans/helper-29.
+- P30  Plans for the next 5 after P29's. → plans/helper-30.
