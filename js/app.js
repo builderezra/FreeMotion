@@ -4887,10 +4887,7 @@ window.FM = window.FM || {};
       if (layer.start + delta < 0) delta = -layer.start;
       if (layer.duration - delta < 0.1) delta = layer.duration - 0.1;
       if (rev) {
-        if (isFinite(srcDur)) {                                // the head is the window END: only duration moves
-          const maxDur = (srcDur - (tr0 || 0)) / sp;
-          if (d0 - delta > maxDur) delta = d0 - maxDur;
-        }
+        if (isFinite(srcDur) && FM.revHeadGrowLimit) delta = FM.revHeadGrowLimit(layer, delta, srcDur, tr0);   // AU1-2: the cap solved on the speed curve (it used a flat 1x for any ramp)
         layer.start = layer.start + delta;
         layer.duration = layer.duration - delta;
       } else {

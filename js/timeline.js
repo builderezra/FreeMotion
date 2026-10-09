@@ -4373,12 +4373,11 @@ window.FM = window.FM || {};
         /* The HEAD is the window END, and the window end IS `trimStart + duration*sp` — so shortening
            from the head is purely a duration change and `trimStart` must not move. Growing it walks the
            window end up through the source, which is what has to be clamped. */
-        if (isFinite(trimDrag.srcDur)) {
-          const maxDur = (trimDrag.srcDur - trimDrag.trim) / sp;
-          if (trimDrag.dur - delta > maxDur) delta = trimDrag.dur - maxDur;
-        }
+        if (isFinite(trimDrag.srcDur)) delta = atGrab(() => FM.revHeadGrowLimit(L, delta, trimDrag.srcDur, trimDrag.trim));   // AU1-2: solved on the speed curve, not a flat 1x
         L.start = trimDrag.start + delta;
         L.duration = trimDrag.dur - delta;
+        /* AU1-1: the effect clock moves with the head on a REVERSED clip too (the forward branch below does it, and so do the A key and Extend). */
+        if (Math.abs(delta) > 1e-9) L.fxTimeOffset = (trimDrag.fx0 || 0) + delta;
       } else {
         /* THE SOURCE THE CUT CONSUMED, THROUGH THE RAMP'S INTEGRAL (queue 690, fourth hunt). This was
            `trim + delta × speedAt(new head)` — the instantaneous rate at the new head times the whole cut —
