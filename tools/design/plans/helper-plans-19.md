@@ -49,7 +49,7 @@ Against `origin/main` v17.31. Plans, tests and reference patches; nothing outsid
 - **Patch (B).** Skip the two selection lines when `first` and `matchMedia('(max-width: 700px)')`. Later imports and PCs unchanged.
 - **Test.** `P19 #1074` at 380: first import selects nothing and `#m-export` is on the bar; a second import still selects (CONTROL); on a PC (the 1280 pass) the first import still selects (CONTROL). **Mutations:** always select (N1), never select on phone (N2), PC also unselected (N3): all CAUGHT.
 - **Neighbouring slice (Measured):** `?only=import / add media / first clip / select` at 1280 and 380: 87 of 97 on main, **the same 9 reds on main and patched** (finger tests and a `VideoEncoder` one that need the Mac harness), nothing new with the patch.
-- **Cost of B you should know about.** A new user's first clip no longer shows its handles at once; the tutorials that say "tap the clip" after the first import (tutorial 02 for Full) are unchanged because they already tap it. **Needs his OK** (it is a first-run behaviour change and he gave the options as a question).
+- **Cost of B you should know about.** A new user's first clip no longer shows its handles at once; **Guess:** I did not check which tutorials or tests assume the first clip is already selected; the neighbouring slice below found none that went red. **Needs his OK** (it is a first-run behaviour change and he gave the options as a question).
 
 ## Neighbouring tests (Measured)
 `?only=motionflow / Motion Blur / rotate` at 1280, patched: 23 of 25, the two reds (`690 ... rotate knob stays on screen` and `482 2.6 Motion Blur (Object) ... 1 pictures differ from v17.18`) are **identical on main** (pinned picture and Mac-only), so nothing is new.
