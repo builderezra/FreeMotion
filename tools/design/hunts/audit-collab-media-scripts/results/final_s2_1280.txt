@@ -1,0 +1,34 @@
+1280 Regression 33/33 ✓Pending 0/0 built
+   ok  921 S2 detaching a linked copy copies the last edits, not the last autosave
+   ok  921 S2 the collab core is inert until a session is attached: no session, no listeners, no UI, no glo
+   ok  921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself co
+   ok  921 S2 one commit is exactly one tx, and a muted batch of five edits is still one
+   ok  921 S2 the derived writes never leak: a rebuild, a render and a second normalise send nothing
+   ok  921 S2 a remote change is applied IN PLACE: every object and array the UI is holding survives it
+   ok  921 S2 a slider under a finger never jumps, and the last person to let go wins — in both orders
+   ok  921 S2 a gesture that was rolled back adopts the value it was protected from
+   ok  921 S2 a remote change DEEPER than the held path is adopted at release, not dropped and then reverte
+   ok  921 S2 a held reorder parks the LAYER order only — every other order statement in the batch still re
+   ok  921 S2 a remote delete during a gesture wins: the gesture is cancelled and the selection is cleared
+   ok  921 S2 an export freezes the live apply while the host base keeps advancing, then drains
+   ok  921 S2 the busy barrier: a half-built paste is never sent, and it arrives as one tx when the job end
+   ok  921 S2 the settle release stands down behind the export/job barrier, and lands the moment it lifts
+   ok  921 S2 a tick that lands mid project switch sends nothing, instead of deleting every layer for every
+   ok  921 S2 switching project stands the session down BEFORE the scene is torn, not after the load
+   ok  921 S2 a history.reset() for the document the session is ALREADY on leaves it attached — only a docu
+   ok  921 S2 the host autosaves after a remote batch
+   ok  921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a struc
+   ok  921 S2 a viewer cannot write: the refusal comes back with the host value and the local change is rev
+   ok  921 S2 a hash mismatch resyncs, writes a report, and escalates after three
+   ok  921 S2 a gap in the batch sequence is noticed when it lands, not ten seconds later by the hash
+   ok  921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped
+   ok  921 S2 being told the wire is cut really marks the outbox, so work done away comes back as a CAS and
+   ok  921 S2 a persisted guest base answers for the WRITE, not for having asked for one
+   ok  921 S2 a second Share stands the first session down instead of leaving an orphan ticking
+   ok  921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project
+   ok  921 S2 a service-worker takeover mid-session is held until the session lets go
+   ok  921 S2 tier 3: a guest joins and gets the document, and not one byte of its own projects moves — on 
+   ok  921 S2 tier 3: three real instances converge, a delete lands on a layer someone else has selected, a
+   ok  921 S2 tier 3: the host reloads — a new epoch, a snapshot, and the guest's work made while it was go
+   ok  921 S2 tier 3: a partition counts the clashes, Save my version makes a real project, and a guest rel
+   ok  921 S2 tier 3: the same-device refusal, Replace and Keep-first, and leave-keep detaching with ids th
