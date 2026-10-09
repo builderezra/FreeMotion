@@ -1,0 +1,9 @@
+=== A2_rename_uncut
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU8-1 — Rename: a 300-character name is 300 characters on its card
+=== A3_duplicate_uncut
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU8-1 — Duplicate: the copy of a 200-character name is 205 characters on its card
+ALLDONE
