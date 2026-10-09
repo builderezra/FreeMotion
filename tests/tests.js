@@ -59811,6 +59811,58 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* ═══ PF2: stacked Glows are drawn as separate single-stage draws ═══ */
+  test('PF2 a stack of Glows never puts more than one drop-shadow in a filter list, draws the same picture as the one-list filter, and is faster', { item: 'PF2', budgetMs: 120000 }, async function () {
+    if (!FM.fxRegistry || !FM.addShapeLayer) throw new Error('setup: the app is not reachable');
+    const P = FM.scene.project, hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const keepLayers = FM.scene.layers.slice();
+    const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'filter');
+    let maxShadows = 0, counting = false;
+    try {
+      P.width = 1080; P.height = 1920; P.duration = 4;
+      if (!desc || !desc.set) throw new Error('setup: ctx.filter cannot be observed here');
+      Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', { configurable: true, enumerable: desc.enumerable, get: desc.get, set: function (v) { if (counting && typeof v === 'string') { const n = (v.match(/drop-shadow\(/g) || []).length; if (n > maxShadows) maxShadows = n; } return desc.set.call(this, v); } });
+      const CW = 302, CH = 537;   // a quarter-size frame: the pictures are compared, not timed, at this size
+      const render = () => { const c = document.createElement('canvas'); c.width = CW; c.height = CH; c.__fmRS = CW / 1080; c.__fmOX = 0; c.__fmOY = 0; const g = c.getContext('2d'); FM.renderScene(g, FM.scene, 0.2); return g.getImageData(0, 0, CW, CH).data; };
+      const build = (kind, edge, n, extra) => {
+        FM.scene.layers.length = 0; FM.history.reset();
+        if (kind === 'text') { FM.addTextLayer(); FM.textEdit && FM.textEdit.stop && FM.textEdit.stop(); } else FM.addShapeLayer('ellipse');
+        const l = FM.scene.layers[0]; l.start = 0; l.duration = 4;
+        if (kind === 'text') { l.text = 'GLOW'; l.fontSize = 300; l.color = '#ffcc33'; if (edge) l.transform.x = 300; } else { l.shapeW = edge === true ? 1080 : 400; l.shapeH = edge === true ? 1920 : 400; l.fillColor = '#33ccff'; if (edge === 'off') l.transform.x = 1300; if (edge === 'off2') l.transform.x = 1480; }   // 'off': wholly outside the frame, its light still reaches in
+        l.effects = []; for (let i = 0; i < n; i++) l.effects.push(FM.fxRegistry.makeInstance('glow'));
+        if (extra === 'after') { const e = FM.fxRegistry.makeInstance('hue'); e.params.deg = 90; l.effects.push(e); const q = FM.fxRegistry.makeInstance('blur'); q.params.radius = 8; l.effects.push(q); }   // CSS effects that come AFTER the glows
+        if (extra === 'before') { const q = FM.fxRegistry.makeInstance('blur'); q.params.radius = edge === 'off2' ? 200 : 40; l.effects.unshift(q); }                                                                                      // …and one before
+        if (extra === 'shadow') { l.shadow = { enabled: true, color: '#ff0000', alpha: 80, blur: 12, dx: 30, dy: 40 }; l.transform.opacity = 0.6; }                                                            // the layer's own Shadow and an opacity
+        return l;
+      };
+      const cases = [['text', false], ['text', true], ['shape', false], ['shape', true], ['shape', false, 'after'], ['shape', false, 'before'], ['shape', false, 'shadow'], ['text', true, 'shadow'], ['shape', 'off'], ['shape', 'off', 'shadow'], ['shape', true, 'before'], ['shape', 'off2', 'before']];   // 'off2': a gap the glows alone cannot cross, a Blur before them can
+      const bad = [];
+      for (const [kind, edge, extra] of cases) for (const n of [4, 8]) {
+        build(kind, edge, n, extra);
+        FM._glowSplitOff = true; const a = render();
+        FM._glowSplitOff = false; maxShadows = 0; counting = true; const b = render(); counting = false;
+        const tag = kind + (edge === 'off' || edge === 'off2' ? ' off the frame' : edge ? ' at the edge' : '') + (extra ? ' + ' + extra : '');
+        if (maxShadows > 1) bad.push(kind + (edge ? ' at the edge' : '') + ' x' + n + ': a filter list held ' + maxShadows + ' drop-shadows');
+        let mx = 0, cnt = 0; for (let i = 0; i < a.length; i += 4) { let m = 0; for (let k = 0; k < 4; k++) { const d = Math.abs(a[i + k] - b[i + k]); if (d > m) m = d; } if (m > mx) mx = m; if (m > 0) cnt++; }
+        /* MEASURED against the one-list filter on 24 combinations (perf-glow.md): 0 differing bytes everywhere except a shape that
+           touches the frame, where up to 9 of 255 on under 200 pixels. 16 levels and 0.1 % of the frame leave that jitter room (10 of 255 on under 150 pixels was the worst seen) and
+           would catch a missing pad (which measured 25 to 37 on thousands of pixels). */
+        if (mx > 16 || cnt > CW * CH * 0.001) bad.push(tag + ' x' + n + ': picture differs from the one-list filter, max ' + mx + ' on ' + cnt + ' px');
+      }
+      FM._glowSplitOff = false;
+      if (bad.length) throw new Error(bad.join(' | '));
+      // SPEED, as a ratio on the machine running it: 12 Glows on a shape, one-list filter against separate draws. Measured 3.4 s vs 0.4 s at 16 and 0.5 s vs 0.11 s at 8; the ratio, not the seconds, is what a slow machine keeps.
+      const timed = (off) => { build('shape', false, 12); FM._glowSplitOff = off; const t0 = performance.now(); render(); return performance.now() - t0; };
+      const chain = timed(true), split = timed(false);
+      FM._glowSplitOff = false;
+      if (split > chain * 0.6) throw new Error('12 stacked Glows took ' + Math.round(split) + ' ms as separate draws against ' + Math.round(chain) + ' ms as one filter list; expected well under 60 % (measured about 15 %)');
+    } finally {
+      counting = false; FM._glowSplitOff = false;
+      if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc);
+      FM.scene.layers.length = 0; keepLayers.forEach(l => FM.scene.layers.push(l));
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

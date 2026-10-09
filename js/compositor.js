@@ -9431,6 +9431,156 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return cur;
   }
 
+  /* ═══ STACKED GLOWS AS SEPARATE DRAWS (PF2) ═══
+   * N Glow passes are N `drop-shadow()` stages in ONE ctx.filter list, and Chrome's cost for that list grows like N cubed
+   * (measured: 4 stages 130 ms, 8 stages 605, 16 stages 4,940 on a 605 x 1075 plate). The same N stages as N single-filter
+   * draws are linear (64, 121, 351 ms). So a stack of two or more glow stages is drawn here: the layer once without its glows
+   * (the CSS effects before them still ride its own filter), each stage as its own draw plate to plate, then one blit that
+   * carries the CSS effects that came after, the Shadow, opacity and blend — in the order the one-list filter applied them.
+   * ⚠️ IT IS PICTURE-IDENTICAL ONLY WHILE NOTHING THE CHAIN WOULD HAVE SPILLED PAST THE PLATE COMES BACK: a chain keeps light
+   * that left the frame in one stage and lets a later stage pull it back in, a plate throws it away. So the plate is padded by
+   * exactly the reach the stack can spill past the content, on the sides where the content is closer to the edge than that, and
+   * the layer is drawn through the old one-list path (return false) in every case this does not cover: a vector mask, Copy
+   * Background, a colour grade with hue or saturation, a camera focus blur, or a plate that would be padded past a bound.
+   * `FM._glowSplitOff` is the suite's control, not a setting. */
+  const GLOW_SPLIT_MIN = 2;          // stages in the stack from which separate draws win (measured, perf-glow.md)
+  const GLOW_REACH = 3;              // a stage's light reaches this many of its own radii past the content (swept in perf-glow.md)
+  const GLOW_SPLIT_MAX_AREA = 9;     // the padded plate may be at most this many times the frame's area
+  function glowStages(layer, t) {
+    let n = 0;
+    const fx = layer.effects;
+    if (!fx || !fx.length) return 0;
+    for (const e of fx) {
+      if (!e || e.enabled === false || e.type !== 'glow') continue;
+      const p = e.params || {};
+      n += Math.max(1, Math.min(4, Math.round(p.passes == null ? 1 : FM.evalProp(p.passes, t))));
+    }
+    return n;
+  }
+  function drawGlowSplit(ctx, layer, t, scene, opacity) {
+    if (FM._glowSplitOff || !scene) return false;
+    if (layer.mask && layer.mask.enabled) return false;
+    if (FM.hasCopyBg(layer)) return false;
+    const cg = layer.colorGrade;
+    if (cg && (cg.hue || (cg.sat != null && Math.abs(cg.sat - 1) > 1e-3)) && !fillOwnsColor(layer)) return false;
+    if (_camLens) return false;   // a camera moves what the layer's own box says; those frames keep the one-list filter
+    const fx = layer.effects;
+    let first = -1, last = -1;
+    for (let i = 0; i < fx.length; i++) {
+      const e = fx[i];
+      if (e && e.enabled !== false && e.type === 'glow') { if (first < 0) first = i; last = i; }
+    }
+    if (first < 0) return false;
+    // the glows must be one run among the CSS effects: a Blur between two Glows is a different picture when split
+    const post = [];
+    for (let i = first; i <= last; i++) {
+      const e = fx[i];
+      if (e && e.enabled !== false && FM.CSS_FX[e.type] && e.type !== 'glow') return false;
+    }
+    for (let i = last + 1; i < fx.length; i++) { const e = fx[i]; if (e && e.enabled !== false && FM.CSS_FX[e.type]) post.push(e); }
+    /* THE PLATE IS THE TARGET'S OWN GRID, not nestedPlate's comp-sized one: that one is capped at scale 1, so on a supersampled
+       canvas (a small comp on a big screen, __fmRS 1.9) the layer would be drawn at half the resolution and blown back up. */
+    const ps = renderScale(ctx), ps0 = ps, OX = ctx.canvas.__fmOX || 0, OY = ctx.canvas.__fmOY || 0;
+    const W = ctx.canvas.width, H = ctx.canvas.height, PWp = W / ps, PHp = H / ps;
+    const stages = [];
+    let reach = 0, reach2 = 0;
+    for (let i = first; i <= last; i++) {
+      const e = fx[i];
+      if (!e || e.enabled === false || e.type !== 'glow') continue;
+      const f = effectFilter({ effects: [e] }, t, ps0);
+      const m = f && f !== 'none' ? f.match(/drop-shadow\((?:[^()]|\([^)]*\))*\)/g) : null;
+      if (m) for (const x of m) { stages.push(x); const r = /drop-shadow\(0 0 ([0-9.eE+-]+)px/.exec(x); const rv = r ? parseFloat(r[1]) : 0; reach2 += rv * rv; }
+    }
+    if (stages.length < GLOW_SPLIT_MIN || !isFinite(reach2)) return false;
+    // stacked blurs add in QUADRATURE (N stages of radius r spread like one of r x sqrt(N)), not N x r — measured against the one-list filter
+    reach = GLOW_REACH * Math.sqrt(reach2);
+    const sh = layer.shadow && layer.shadow.enabled ? layer.shadow : null;   // the Shadow is cast from what the stack drew, wherever it spilled
+    if (sh) reach += (Math.abs(FM.evalProp(sh.dx, t) || 0) + Math.abs(FM.evalProp(sh.dy, t) || 0) + GLOW_REACH * Math.max(0, FM.evalProp(sh.blur, t) || 0)) * ps;
+    const tail = post.length ? effectFilter({ effects: post }, t, ps0) : 'none';
+    if (!(W > 0) || !(H > 0)) return false;
+    const d = _wpDepth++;
+    try {
+      if (!_wpPool[d]) _wpPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas'), S: document.createElement('canvas') };
+      const wA = _wpPool[d].A, wB = _wpPool[d].B;
+      const dropped = new Set();
+      for (let i = first; i <= last; i++) { const e = fx[i]; if (e && e.type === 'glow') dropped.add(e); }
+      for (const e of post) dropped.add(e);
+      const tmp = Object.assign({}, layer, {
+        blendMode: 'normal', shadow: null,
+        effects: fx.filter(e => !dropped.has(e)),
+      });
+      // `pl/pt/pr/pb` = how far the stack can spill past each side of the frame AND COME BACK; the plate grows by that and no more
+      const drawInto = (cv, w, h, ox, oy) => {
+        if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+        cv.__fmRS = ps; cv.__fmOX = ox; cv.__fmOY = oy;
+        const c = cv.getContext('2d');
+        c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, w, h);
+        baseT(c);
+        c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.filter = 'none';
+        drawLayer(c, tmp, t, scene);
+        return c;
+      };
+      let src = wA, pl = 0, pt = 0, pr = 0, pb = 0;
+      drawInto(wA, W, H, OX, OY);
+      // WHERE IS THE CONTENT? One downscaled readback of the plate's alpha: a side whose content stays further than the stack's
+      // reach from the edge needs no padding at all (the common case), so the plate stays the size it was.
+      const CELL = 8, sw = Math.ceil(W / CELL), sh = Math.ceil(H / CELL);
+      const wS = _wpPool[d].S; if (wS.width !== sw || wS.height !== sh) { wS.width = sw; wS.height = sh; }
+      const sx = wS.getContext('2d');
+      sx.setTransform(1, 0, 0, 1, 0, 0); sx.globalAlpha = 1; sx.globalCompositeOperation = 'copy'; sx.filter = 'none';
+      sx.drawImage(wA, 0, 0, W, H, 0, 0, sw, sh);
+      const px = sx.getImageData(0, 0, sw, sh).data;
+      let x0 = sw, x1 = -1, y0 = sh, y1 = -1;
+      for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) if (px[(y * sw + x) * 4 + 3]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      const R = Math.ceil(reach);
+      // the layer's own box in plate pixels: content wholly or partly OUTSIDE the frame is invisible to the readback above but still
+      // casts light into it, so a side the box overhangs is padded by the overhang plus the reach
+      const bx = layerAABB(layer, t, scene);
+      let ol = 0, ot = 0, orr = 0, ob = 0, outside = false;
+      if (bx && isFinite(bx.x0 + bx.y0 + bx.x1 + bx.y1)) {
+        ol = Math.max(0, OX - bx.x0) * ps; ot = Math.max(0, OY - bx.y0) * ps;
+        orr = Math.max(0, bx.x1 - (OX + PWp)) * ps; ob = Math.max(0, bx.y1 - (OY + PHp)) * ps;
+        if (bx.x1 < OX - R / ps || bx.x0 > OX + PWp + R / ps || bx.y1 < OY - R / ps || bx.y0 > OY + PHp + R / ps) outside = true;
+      } else if (x1 < 0) return false;
+      if (x1 < 0) {
+        if (outside) return true;   // nothing in the frame and nothing close enough to spill into it
+        x0 = 0; x1 = -1;
+      }
+      const margin = (v) => (x1 < 0 ? 0 : v);
+      pl = Math.max(0, R - margin(Math.max(0, (x0 - 1) * CELL)), ol ? ol + R : 0); pt = Math.max(0, R - margin(Math.max(0, (y0 - 1) * CELL)), ot ? ot + R : 0);
+      pr = Math.max(0, R - margin(Math.max(0, W - (x1 + 2) * CELL)), orr ? orr + R : 0); pb = Math.max(0, R - margin(Math.max(0, H - (y1 + 2) * CELL)), ob ? ob + R : 0);
+      pl = Math.ceil(pl); pt = Math.ceil(pt); pr = Math.ceil(pr); pb = Math.ceil(pb);
+      if (pl || pt || pr || pb) {
+        const PW2 = W + pl + pr, PH2 = H + pt + pb;
+        if (PW2 * PH2 > GLOW_SPLIT_MAX_AREA * W * H) return false;   // too much to spill into: the one-list path, as before
+        drawInto(wA, PW2, PH2, OX - pl / ps, OY - pt / ps);
+      }
+      const PW = wA.width, PH = wA.height;
+      if (wB.width !== PW || wB.height !== PH) { wB.width = PW; wB.height = PH; }
+      const bctx = wB.getContext('2d');
+      src = wA; let dst = wB, dctx = bctx;
+      for (let k = 0; k < stages.length; k++) {
+        dctx.setTransform(1, 0, 0, 1, 0, 0); dctx.globalAlpha = 1; dctx.globalCompositeOperation = 'copy'; dctx.filter = 'none';
+        dctx.clearRect(0, 0, PW, PH);
+        dctx.globalCompositeOperation = 'source-over'; dctx.filter = stages[k];
+        dctx.drawImage(src, 0, 0);
+        dctx.filter = 'none';
+        const tc = src; src = dst; dst = tc;
+        dctx = dst.getContext('2d');
+      }
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = 1;   // the opacity is already in the plate: a one-list filter applies it BEFORE the filter, not after (measured)
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = tail;
+      applyShadow(ctx, layer, t, renderScale(ctx));
+      ctx.drawImage(src, 0, 0, PW, PH, OX - pl / ps, OY - pt / ps, PW / ps, PH / ps);   // the whole padded plate: the Shadow can pull spilled light back in
+      ctx.restore();
+      return true;
+    } catch (e) { return false; }
+    finally { _wpDepth--; }
+  }
+
   function drawCssFxOnGPU(ctx, layer, t, scene, ops) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return true;
@@ -17344,6 +17494,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const _ops = cssColorOps(layer, t);
       if (_ops && drawCssFxOnGPU(ctx, layer, t, scene, _ops)) return;
     }
+    if (scene && glowStages(layer, t) >= GLOW_SPLIT_MIN && drawGlowSplit(ctx, layer, t, scene, opacity)) return;   // PF2
     ctx.save();
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';

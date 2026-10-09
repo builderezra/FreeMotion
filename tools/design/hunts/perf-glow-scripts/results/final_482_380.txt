@@ -1,0 +1,119 @@
+380 Regression 112/115 ✗Pending 0/0 built
+   ok  every raised effect ceiling still moves the picture in its top half (queue 482)
+   ok  482: Halation reads on a photograph at its defaults, and a saved instance without the new keys rende
+   ok  482: eleven canvas and warp ceilings earned by the round-four probe are in the registry, and each to
+   ok  482: mode-gated sliders are live in their own mode and locked outside it
+   ok  482: every effect does something visible at its own defaults
+   ok  482 the unblock page names Gradient Overlay’s real default as Keep, a gentler number as Gentler, and
+   ok  482 polish 1 every new control is in the catalogue at a default that draws the old look - the 56 lib
+   ok  482 1.1 Film Grain - Grain speed 0 holds the grain still, a keyframed speed never runs it backwards,
+   ok  482 1.2 Light Leak - Drift speed 0 holds it still, Wander, a Leak edge colour at the rim that follow
+   ok  482 1.3 Glow - Strength is the halo colour alpha on PC and on a phone without ctx.filter, and at 100
+   ok  482 1.4 Letterbox - a 2.39 Shape on a 1080x1920 frame draws the cinema bars, 4:5 on 16:9 goes to the
+   ok  482 1.5 Faded Film - a blue Fade colour lifts the blacks blue, a grey one is the old look, Contrast 
+   ok  482 1.6 Colour Temperature - White balance leaves black black and warms white, and Affects confines 
+   ok  482 1.7 Colour Balance - Keep brightness holds a grey ramp at its own luma, and Range width widens o
+   ok  482 polish 1 the new controls fit the effect panel at 390 and at 1280 px, and say when another contr
+   ok  482 polish 1 review a softened Film Grain is as strong on the phone and half-size previews as in the
+   ok  482 polish 1 review Leak edge shows the new Leak colour the moment it is typed, and an edge with its
+   ok  482 polish 1 review the AI digest advertises Fade colour as a colour hex and no control as undefined
+   ok  482 polish 1 review a Light Leak held still sits on Source X and Y whatever Wander says, and Wander 
+   ok  482 2.0 Motion - every new Wiggle, Shake, Pulse, Swing, Orbit and Drift control is in the catalogue 
+   ok  482 2.1 Wiggle - Pattern gives two layers their own wiggle, Vertical amount follows Amount until it 
+   ok  482 2.1 Shake - Pattern gives a layer its own shake, and Hide edges keeps a frame-filling clip over 
+   ok  482 2.2 Pulse - Heartbeat only grows, Square snaps between two sizes, Triangle and Bounce keep their
+   ok  482 2.2 Swing - Damping lets a swing settle: at 3.25 s it turns less than 5 percent of what it turne
+   ok  482 2.2 Orbit - Ellipse squashes the path, Depth shrinks the layer on the far side, and Face directi
+   ok  482 2.2 Drift - Wrap around frame brings the layer back in at the far edge, like a ticker, and a tic
+   ok  482 2.0 Motion panel - the new controls fit the effect panel at 390 and 1280 px, and Vertical amount
+   ok  482 2.1 Shake - Hide edges is sized from the frame and the layer whole box: a caption keeps its size
+   ok  482 2.2 Drift - Wrap around frame scrolls a ticker longer than two frames whole, with no gap at its 
+   ok  482 2.2 Drift - Wrap around frame brings in a ticker parked off the frame: it scrolls in from its ow
+   ok  482 2.1 Wiggle - Pattern gives every value its own motion: Patterns 25 apart do not move together, a
+   ok  482 2.1 Wiggle panel - Vertical amount lines up with the other control names while it follows Amount
+   ok  482 2.5 Speed Lines - Style, Angle, Clear zone shape and Boil are in the catalogue at defaults that 
+   ok  482 2.7 Glitch - Uneven slices, Block damage, Pattern and Edges are in the catalogue at defaults tha
+   ok  482 2.5 Speed Lines - Boil redraws the lines on the layer clock, Parallel lays them along Angle, Cle
+   ok  482 2.7 Glitch - Uneven slices, Block damage, Pattern and Edges each change the tear sideways and up
+   ok  482 2.5 Speed Lines and 2.7 Glitch - the new rows fit the effect panel at 390 and 1280 px, and Angle
+   ok  482 2.7 Glitch - Uneven slices leaves 0 a row at a time, so a keyframe coming off 0 does not jump th
+   ok  482 2.5 Speed Lines - Clear zone shape is greyed out while Clear zone is 0, where it has nothing to 
+   ok  482 2.7 Glitch - Block damage at its first notch draws a block
+   ok  482 2.3 Flash (darken) - Steady, Double hit and Build-up put full-depth hits on the beat from the cl
+   ok  482 2.4 Frame Stutter - Trail strength sets the ghost, Phase moves the hold boundaries, Irregular ho
+   RED 482 2.6 Motion Blur (Object) - Shutter phase -100 trails behind only, +100 runs ahead, a layer that 
+   ok  482 2.3 Flash (darken) - Rhythm and Hold dark fit the effect panel at 390 and 1280 px, Hold dark gre
+   ok  482 2.4 Frame Stutter - Trail strength, Phase and Irregular holds fit the effect panel at 390 and 12
+   ok  482 2.6 Motion Blur (Object) - Shutter phase fits the effect panel at 390 and 1280 px and says which
+   ok  482 2.3 Flash (darken) - at the default Speed a Double hit is two hits and a rest in a 30 fps export
+   ok  482 2.3 Flash (darken) - no rhythm runs faster than the frame rate can show: Build-up speeds up to i
+   ok  482 2.3 Flash (darken) - a keyframed Speed is integrated, so easing it down slows the strobe instead
+   ok  482 2.3 Flash (darken) - Build-up ramps over the whole clip: split in two, trimmed at the start or o
+   ok  482 2.6 Motion Blur (Object) - Shutter phase keeps a layer that moves from its first frame to its la
+   ok  482 2.6 Motion Blur (Object) - at Shutter phase -100 a fast layer leaving the frame keeps its whole 
+   ok  482 2.6 Motion Blur (Object) - a moving group keeps blurring after its first 2 seconds
+   RED 482 3.0 Echo and Reverb - Tone, Low cut, Tape wobble, Pre-delay and Width are in the catalogue at de
+   ok  482 3.3 Echo - Tone darkens every repeat more than the one before and Low cut thins them, from the f
+   ok  482 3.3 Echo - Tape wobble swings each echo up to 2 ms early and late at 0.7 Hz on scene time, so an
+   ok  482 3.4 Reverb - Pre-delay holds the room back by its time, Tone and Low cut shape only the reverb, 
+   ok  482 3.4 Reverb - an animated room goes through the same Pre-delay, Tone, Low cut and Width as a stil
+   ok  482 3.3 and 3.4 Echo and Reverb panels - Tone, Low cut, Tape wobble, Pre-delay and Width fit the ope
+   ok  482 3.5 Echo and Reverb - moving Low cut off 20 Hz or back while the preview plays fades the filter 
+   ok  482 3.7 Compressor - Output turns the whole sound up or down, and a saved Compressor sounds exactly 
+   ok  482 3.7 Compressor - Mix blends the untouched sound back in, lined up with the squashed sound so it 
+   ok  482 3.7 Compressor - the open row shows how far it is turning the sound down while you hear it
+   ok  482 3.8 Limiter - Input gain pushes the sound into the ceiling, Release sets how fast it lets go, an
+   ok  482 3.1 Sound effects - the playing row shows a stop square, and goes back to a play triangle
+   ok  482 3.8 Limiter - Input gain never pushes the peaks past the ceiling or over full scale
+   ok  482 3.7 Compressor - the Turning down bar shows what you hear, so at Mix 0 it reads nothing
+   ok  482 3.5 Pitch Shift - Fine tune moves the pitch by the cents it says: +100 lands one semitone up, Se
+   ok  482 3.5 Pitch Shift - Semitones reaches two octaves each way: a 400 Hz tone comes out at 1600 Hz and
+   ok  482 3.5 Pitch Shift - the open effect shows Fine tune in cents and one line saying the shifted sound
+   ok  482 3.6 Bass & Treble - Bass at and Treble at move where the shelves start, keyframed too, the defau
+   ok  482 3.6 3-Band EQ - Low at, High at and Mid width move the bands, a wider Mid is wider, the defaults
+   ok  482 3.6 Bass & Treble and 3-Band EQ - Bass at, Treble at, Low at, High at and Mid width fit the open
+   ok  482 3.5 Pitch Shift - dragging Fine tune or stepping Semitones while the preview plays glides to the
+   ok  482 3.5 Pitch Shift - a few cents of Fine tune keep the clip at its own level, with no pump, in the 
+   ok  482 3.6 Bass & Treble and 3-Band EQ - Bass at, Treble at, Low at, High at, Mid width and Mid Freq sa
+   ok  482 3.6 Collab - the sync schema fingerprint sees the audio effects controls, so a build whose Pitch
+   ok  482 5.1 Adjustment layer - Teal & Orange, Exposure and 18 more colour effects grade everything below
+   ok  482 5.2 Highlights & Shadows - Whites, Blacks, Tonal width, Local radius and Colour boost are in the
+   ok  482 5.2 Highlights & Shadows - Local radius keeps pure black black under +50 Shadows and still opens
+   ok  482 5.2 Highlights & Shadows - Whites, Blacks, Tonal width, Local radius and Colour boost fit the ef
+   ok  482 5.1 Adjustment layer - stacked with Contrast, Saturation or Brightness, a colour grade runs afte
+   ok  482 5.1 Adjustment layer - zoomed in, Highlights & Shadows with Local radius and Gradient Map Dither
+   ok  482 5.2 Highlights & Shadows - Local radius does not ring an edge - bright ground beside a dark subj
+   ok  482 5.3 Teal & Orange, 5.4 Tint and 5.5 Duotone - every new control is in the catalogue at a default
+   ok  482 5.3 Teal & Orange - Splits by Hue keeps a shadowed skin pixel warm instead of teal, Protect skin
+   ok  482 5.4 Tint - Tint over keeps a red jacket red under a blue Tint where Colourise turns it blue, Ran
+   ok  482 5.5 Duotone - Colour keeps a grey ramp at its own brightness within one level, Soft light and Ov
+   ok  482 5.3 Teal & Orange, 5.4 Tint and 5.5 Duotone panels - the new rows fit the effect panel at 390 an
+   ok  482 5.0 Grading depth - every new Gradient Map, Cross Process and Exposure control is in the catalog
+   ok  482 5.6 Gradient Map - Reverse maps black to the Highlights colour, Three colours put Midtones at th
+   ok  482 5.7 Cross Process - Negative (pastel) flattens a ramp by at least 15 percent against Slide, lift
+   ok  482 5.8 Exposure - Linear light sends mid-grey 128 to 176 at +1 stop where sRGB sends it to 255, 0 s
+   ok  482 5.6 to 5.8 panels - Colours, Reverse, Blend, Film, Gamma and Work in fit the effect panel at 390
+   ok  482 6.0 Vignette and the three Glows - every new control is in the catalogue at a default that draws
+   ok  482 6.1 Vignette - Roundness 0 darkens the sides of a 9:16 frame as much as the top, on a shape and 
+   ok  482 6.2 Light, Soft and Dark Glow - Glow past the edges puts a halo 3 px outside white text and a da
+   ok  482 6.2 Light and Dark Glow - the halo past the edges at Smoothness 3 and the largest Radius is whol
+   ok  482 6.1 and 6.2 panels - the new Vignette and Glow rows fit the effect panel at 390 and 1280 px, the
+   ok  482 6.3 Drop Shadow - Spread, Smoothness and Shadow only are in the catalogue at defaults that draw 
+   ok  482 6.3 Drop Shadow - Spread grows a hard round shadow, Smoothness carries a softer edge further, Sh
+   ok  482 6.4 Stroke Colour - Offset puts a clear gap between the layer and its outline when Position is O
+   ok  482 6.3 and 6.4 panels - Spread, Smoothness, Shadow only and Offset fit the effect panel at 390 and 
+   ok  482 6.3 Drop Shadow - Spread grows every part of the layer at its own strength: a see-through card k
+   ok  482 6.3 Drop Shadow - Shadow only draws the shadow of a layer the frame cuts right up to the frame e
+   ok  482 6.3 Drop Shadow - a saved Distance or Softness eased past its old top still stops there as on v1
+   ok  482 6.3 Drop Shadow - below Spread 100 Smoothness always changes the shadow, and at Spread 100 (no b
+   ok  482 6.0 Lens Flare, Linear and Spin Streaks and Glow Scan - every new control is in the catalogue at
+   ok  482 6.5 Lens Flare - Rays 8 and 16 draw 8 and 16 rays, Rotation turns them, Core size shrinks and gr
+   ok  482 6.6 Linear Streaks - Both ways smears a bright dot to both sides, Only above keeps a mid-grey bl
+   ok  482 6.6 Spin Streaks - Anticlockwise trails a dot the other way round the centre, Only above keeps a
+   ok  482 6.7 Glow Scan - Sweeps across Layer puts the band on a 100 px title through the first half of th
+   ok  482 6.5 to 6.7 the new Lens Flare, Streaks and Glow Scan rows fit the effect panel at 390 and 1280 p
+   RED 482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it ch
+   ok  482 6.6 Linear Streaks - One way with Only above 0 and a white Tint runs the v17.21 pixel loop lette
+FAIL482 2.6 Motion Blur (Object) - Shutter phase -100 trails behind only, +100 runs ahead, a layer that has just stopped still smears behind, the preview matches the export, and the default draws the old picture — 1 pictures differ from v17.18 at the new defaults - a new control changed a look he already has: objectblur/image 4c5d02ef/6c54b3e8/37cd550f -> bf60f540/6c54b3e8/37cd550f
+FAIL482 3.0 Echo and Reverb - Tone, Low cut, Tape wobble, Pre-delay and Width are in the catalogue at defaults that are the old sound, and saved and new Echoes and Reverbs render sample for sample as on v17.19 — 4 Echo / Reverb cases sound different from v17.19 at the new defaults - a new control changed a sound he already has (if Chrome itself was just updated, re-capture these on v17.19 first): reverb new 33b67f92/c1a8b9e3 33b67f92/bbbe7881 c2b796d4/5d80715b 1f58affa/2f1ff740 -> 008c0e76/a6a386d5 008c0e76/9f590496 3884d854/c05a1b03 ab6ddff9/f3ced947; reverb saved 33b67f92/c1a8b9e3 33b67f92/b
+FAIL482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing, and one at Strength 0 still is — a Glow Scan with {"pause":5} on a 10 s clip is measured as unknown - its sweep falls between the moments the check looks at, so the panel tells him a working effect changes nothing
