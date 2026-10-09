@@ -106,12 +106,10 @@ disabled (caught by Reorder, loop not cleared). Script: `scripts-2.4/s2_mut.sh`.
 4. **A camera starting at 0 is stretched to the project end by the app** (`js/app.js:919-925`), so a hull `[0,10]` reads `[0,12]`. Existing behaviour, not mine; the test says so.
 5. **Make overlay cue form for spanning tracks** and **effect-key handling for cue effects**: left as the 2.3 behaviour.
 
-## 7. Written in §6 of the plan but NOT built here (deferred; each is small and listed so none is lost)
+## 7. What 2.4 left out, and where it went (UPDATED for 2.4b: see §9)
 
-Rule 1b hidden helper · rule 2 null-parent mover · lineage resolution (rules 1/4/5) · tail-fit `couplingsBroken` · the opt-in volume rider · the camera
-rest-pose hold pair · caption cue `cu`/`co` (needs Phase 4 uids) · `FM.remapCommentPins` · Sort by date · per-clip caption-follower window clamps on trims ·
-the Bounce unit / FU2 case · a `SCHEMA_REV` re-check of the comment keys (the fingerprint test is green, but I did not bump `SCHEMA_REV`).
-`FM.captions.splitAt` was not added: `captionRider` splits cues inline.
+The first cut of 2.4 left twelve things out. Ten are now built on **`hunt/simple-2.4b`** (§9), one is a finding that needs no build, and **one waits for Phase 4**:
+`cu` / `co` (a caption cue's identity in a comment pin) needs the **keyed cue uid of the 4a′ schema step**, and this tree has no cue uid at all (`grep uid js/captions.js` is empty, and no collab file reads one on a cue). It waits for **whoever builds Phase 4's 4a′** (the collab schema owner: the same step bumps `SCHEMA_REV` 4 to 5 and adds the cue uid); `CM.pinTime` already falls back from `cu` to `lo` to `t`, so nothing breaks until then, and a pin on a caption track keeps `lo` (the track clock) meanwhile.
 
 ## 8. How to re-run
 
@@ -121,3 +119,37 @@ cd /tmp/w24 && tools/serve.sh   # note its port
 FM_CHROME=<chromium> python3 tests/_cdp.py --port <port> --width 1280 --url 'http://localhost:<port>/tests/run.html?only=simple%20P2.4'
 ```
 `scripts-2.4/s2_run.sh` is the wrapper I used (it needs a throttle-capable driver copy; plain `tests/_cdp.py` works the same for these tests).
+
+## 9. Release 2.4b: the rules 2.4 did not build (branch `hunt/simple-2.4b`, one commit stack on `hunt/simple-2.4`; patches in `scripts-2.4b/`)
+
+`scripts-2.4b/2.4b-code.patch` (544 lines, six files plus the tray and the storage sanitiser) and `2.4b-tests.patch` (311 lines) apply with `git apply` to the 2.4 tip. Every item below has a test that is **red on the 2.4 tip** (or, for the four LOCKS, green on both on purpose), at 1280 and 380, and at least one mutation that the test catches (`scripts-2.4b/s7_mut.sh`: 21 mutations, **21 caught**; M9 first survived and its test was strengthened).
+
+| # | rule (DESIGN §) | what was built | test (`simple P2.4b · S7 …`) |
+|---|---|---|---|
+| 1 | per-clip caption follower window clamps on trims (§3.6 Trim rows, §4.3) | a caption track lying inside a clip is clamped to the clip's new end by a tail or head trim, like an effect segment (the window is cut; cues past it are hidden by the window rule in `js/captions.js`, none rewritten) | a caption track lying inside a clip… (tail and head) |
+| 2 | `FM.remapCommentPins` (§12.2, B25) | `js/collab-comments.js`; called from `applyScene`, `duplicateFrom` and `_adopt` (`js/storage.js`) before the project is installed; anchored pins only; mapped `lid` follows, an unmapped one bakes `t` through `CM.pinTime(c, oldLayers)`. `CM.pinTime` takes an optional layer list | FM.remapCommentPins (the pure function, import, duplicate) |
+| 3 | the camera's rest-pose hold pair (§3.10 rule 3g) | the hull's uncovered stretches get a boundary pair of hold keys at scale 1, rotation 0, x/y at the centre, so those frames read as camera-less. **Measured premise:** an identity camera renders pixel-identical to no camera (test below); a camera with a dolly (`transform.z`) is the one case it does not hold, so it refuses with *"Open in Full to move this with its camera"* (rule 3g's own fallback) | the camera's hull… ; an identity camera… (the premise) |
+| 4 | the opt-in volume rider (§3.10 rule 3) | `sm.rideVol` (a plain `sm` key: kept by the sanitiser, so **no SCHEMA_REV bump**), `S.cmd.rideVol`, a **Follow clips** tool on a stay-put sound that has a volume curve; the rider carries volume and opacity keys through the same time map; the song itself never moves | the volume rider; Follow clips |
+| 5 | the link rule and rule 1b (§3.10 rules 1, 1b) | `R.couplings`, `R.lineageAt` (half-open), `rec.linked`; a unit parented to / Follow-targeting / Audio-Drive-sourcing another takes that unit's host; a hidden helper goes with its only user; neither gets an `sm` key (`neverPinned`). **Measured premise for 1b:** a hidden *matte source* is not drawn as a matte (the layer is cut out whole), so 1b covers parents and Follow targets only and a hidden matte source keeps rule 4's ask | the LINK RULE; rule 1b |
+| 6 | rule 2: a Controller that parents main clips (§3.10 rule 2, §4.3) | `rec.mover`; `addNullMovers` (at the top of `couplingBlock`, so every command gets it) moves it, keys and all, by the one d its main-clip children share; never pinned | rule 2 |
+| 7 | lineage resolution in rules 4 and 5 (§3.10) | `refEnds`: a parent or an Audio Drive source is the set of lineage members covering the follower's span; deleting the half a follower is stored on repoints it at the surviving half that covers its start inside the same plan (a plain parent still refuses, *"X is attached to Y"*) | rules 1, 4 and 5 through the split lineage |
+| 8 | the tail fit counts: `couplingsBroken` (§3.10 rule 4, §4.5) | `S.fitTails(R2, plan, {anyway})` returns `notes.broken`; a tail unit that something is tied to and whose keys the fit would move makes the runner restore the document and ask once (*"1 parent will slip"*); Do it anyway fits it | the tail fit counts |
+| 9 | Sort by date taken (§3.6 Sort row, §2.2 `taken`) | `S.planSort` / `S.cmd.sortByDate`, in Simple's ⋯ only when two main clips carry `taken`; packed in date order from the first start, each keeping its length, gaps closed (and said), followers and cues ride the piecewise translation, one step; *"Already in date order"* writes nothing; a crossfade, slot or block refuses. The sanitiser keeps `taken` as a plain layer field (finite, ≥ 0). **Not built: reading `taken` out of a picked file (EXIF / `mvhd`, §7.3): it belongs to the picker work.** | Sort by date taken |
+| 10 | the Bounce unit / FU2 case (§0.4 B5) | LOCK: a layer Full splits rings across the cut exactly as before (no `sb` is ever written by Full), and the key sanitiser keeps `sb` / `split` on transform and volume keys | LOCK Bounce…; LOCK the key sanitiser… |
+| 11 | the schema fingerprint / `SCHEMA_REV` re-check of the comment keys (§14.7) | **No bump needed, and here is why:** `schemaFingerprint()` hashes the layer sanitiser, the effect parameter definitions, the op grammar and the derived writers: not the host's comment sanitiser, which is where `ls` / `lo` live. LOCK: the host keeps `ls` / `lo` only with `lid`, finite and within 0..86400, and the fingerprint is unmoved. `sm.rideVol` and `taken` do not enter the fingerprint's fixtures | LOCK the host keeps a comment pin's ls / lo… |
+| — | caption cue `cu` / `co` | **waits** (above) | — |
+
+### Findings worth the builder's eye
+- **Effect-parameter keys lose their `sb` / `split` marks on every sanitise** (`safeKfProp` rebuilds each key from the schema). Transform and volume keys keep them (the LOCK pins that). So a cut item's *effect* keys that `riderKeys` marked as boundary keys come back unmarked after a reload, Undo or host fix op: harmless for Bounce (it reads transform keys only) and for the later redundant-boundary clean-up (an unmarked boundary key is simply kept). Not fixed: widening `safeKfProp` would change what Full loads.
+- **`Bounce` on a layer Full splits** stops ringing at the cut when the second half has only the seam key (it has fewer than two keys, so `bounceDelta` returns 0 before the lineage path): a Full behaviour today, not touched.
+- **A hidden matte source cuts its layer out whole** (measured, §9 row 5). That is a Full behaviour too.
+
+### Regression (Measured, Chromium 1194)
+`?only=simple`: **127/127 at 1280 and at 380** (112 earlier Simple tests plus the 15 new). A wider slice (comment, duplicate, import, template, 921 S1 and S7, sanitis, orphan, volume, camera, sort, parent; 197 tests, 1280): **189/197 + 6 NOT RUN HERE**; the two reds (`effects: the Favourites browser sorts…`, `690 an MP4 of a project with a transparent background…`) are red on the 2.4 tip too. Not run: the Full-unchanged lock; a real device.
+
+### Ambiguous points added by 2.4b
+1. **Link rule scope:** it skips a unit that is Stay put, long, a tail item, in a slot, or a caption track; it does not read the matte source (rendered through the stored id, §3.10).
+2. **Rule 2 mover** is `type === 'null'` only (a Controller). A group is membership, not a mover.
+3. **A mover moving by d** can leave a Controller starting before 0 (a Controller that spans 0..end and moves back). Nothing clamps it.
+4. **Sort's gaps** after a clip travel with that clip's cues (a translation has no way to collapse a stretch); the plan's *"cues over closed gaps collapse as in Delete"* is not built.
+5. **The ask for a tail fit** restores the whole step and asks, so the tied unit's keys are never half-moved; the plan's *"without Do it anyway it gets only the duration change"* is the state it is in until the ask is answered.

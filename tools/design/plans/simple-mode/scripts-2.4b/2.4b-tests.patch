@@ -1,0 +1,311 @@
+diff --git a/tests/tests.js b/tests/tests.js
+index e4431f01..15fe397b 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -60085,6 +60085,306 @@
+     if (!(without < 1e-9)) throw new Error('CONTROL: without sb the boundary keys should mask the ring (they are what Full does today): ' + without);
+   });
+ 
++  /* ═══ SIMPLE 2.4b (S7): the sub-rules 2.4 left unbuilt. Each test fails on the 2.4 tip by what it does. ═══ */
++  test('simple P2.4b · S7 a caption track lying inside a clip is clamped to the clip’s new end by a tail or head trim, in one step, and Undo gives the window back', { item: '980', budgetMs: 90000 }, async function () {
++    smNeedP2();
++    for (const how of ['tail', 'head']) {
++      await smP2((W, H) => smThree(W, H, [smCap('Caps', 4.5, 3, [[0, 1.5], [1.5, 3]], W, H)]), async function (v) {
++        const T = v.L('Caps'), B = v.L('B'), n0 = v.steps(), d0 = v.doc();
++        if (FM.spine.read(FM.scene).units[T.id].host !== B.id) throw new Error('CONTROL: the track is not a follower of B');
++        if (how === 'tail') FM.spine.cmd.trimTail(B.id, 6); else FM.spine.cmd.trimHead(B.id, 6);
++        await v.idle();
++        if (v.steps() !== n0 + 1) throw new Error(how + ' trim made ' + (v.steps() - n0) + ' steps (“' + v.say() + '”)');
++        const end = T.start + T.duration, bEnd = B.start + B.duration;
++        if (Math.abs(bEnd - 6) > 1e-6 && how === 'tail') throw new Error('CONTROL: B ends at ' + bEnd);
++        if (end > bEnd + 1e-6) throw new Error('after the ' + how + ' trim the caption track still ends at ' + end + ', past its clip’s end ' + bEnd + ' (it would run over the next clip)');
++        if (FM.captions.cues(T).length !== 2) throw new Error('the cues were rewritten: ' + FM.captions.cues(T).length);
++        FM.history.undo(); await v.sleep(40);
++        if (v.doc() !== d0) throw new Error('Undo did not restore the document');
++      });
++    }
++  });
++
++  test('simple P2.4b · S7 LOCK the host keeps a comment pin’s ls / lo only with its layer, finite and within 0..86400, and nothing else gets through; the sync schema fingerprint is unmoved by them', { item: '980', budgetMs: 30000 }, function () {
++    const C = need921S7('the pin anchor keys');
++    const h = s7rHost(C, [{ id: 'c0', text: 'seed', replies: [] }]);
++    const put = (id, v) => { const a = h.tx('m3', [{ o: 'ai', p: ['P', 'comments'], k: '#i:' + id, a: null, v: v }]); if (a.rej.length) throw new Error('CONTROL: ' + id + ' was refused: ' + s7rRejs(a)); return h.c(id); };
++    const ok = put('c_ok', { text: 'x', lid: 'L1', t: 5, ls: 3.5, lo: 2.25, junk: 1 });
++    if (!ok || ok.ls !== 3.5 || ok.lo !== 2.25 || ok.lid !== 'L1') throw new Error('a valid anchor did not survive: ' + JSON.stringify(ok));
++    if ('junk' in ok) throw new Error('a key outside COMMENT_KEYS got through');
++    const bare = put('c_bare', { text: 'x', t: 5, ls: 3.5, lo: 2.25 });
++    if ('ls' in bare || 'lo' in bare) throw new Error('an anchor with no layer was kept: ' + JSON.stringify(bare));
++    ['neg', 'big', 'str'].forEach((k, i) => {
++      const v = [-1, 90000, '3'][i], c = put('c_' + k, { text: 'x', lid: 'L1', t: 5, ls: v, lo: v });
++      if ('ls' in c || 'lo' in c) throw new Error('a ' + k + ' anchor (' + v + ') was kept: ' + JSON.stringify(c));
++    });
++    if (C.schemaFingerprint() !== C.SCHEMA_FP) throw new Error('the schema fingerprint moved, so SCHEMA_REV would need a bump: ' + C.schemaFingerprint() + ' vs ' + C.SCHEMA_FP);
++  });
++  test('simple P2.4b · S7 LOCK Bounce on a layer Full splits rings across the cut exactly as before, and a layer with Full’s own split keys (no sb) is not filtered', { item: '980', budgetMs: 60000 }, async function () {
++    smNeedP2();
++    await smP2((W, H) => {
++      const l = FM.makeLayer('shape', { name: 'bn', shape: 'rect', x: 0, y: 0, shapeW: 40, shapeH: 40, fill: '#ff0000', start: 0, duration: 6 });
++      l.transform.x = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 100, e: 'linear' }, { t: 4, v: 50, e: 'linear' }] };
++      l.behaviors = [{ type: 'bounce', enabled: true, prop: 'x', params: { elastic: 0.5, freq: 3, decay: 4 } }];
++      return [l, smV('A', 0, 6, W, H)];
++    }, async function (v) {
++      const L = v.L('bn'), at = 2.4, ring = l => FM.behaviorValue(l, 'x', FM.evalProp(l.transform.x, at), at);
++      const before = ring(L);
++      if (!(Math.abs(before - FM.evalProp(L.transform.x, at)) > 1)) throw new Error('CONTROL: no ring at 2.4 s: ' + before);
++      FM.selectLayer(L.id); FM.time = 2.2; await FM.splitLayer(L.id); await v.sleep(80);
++      const halves = FM.scene.layers.filter(l => l.name === 'bn'), B = halves.filter(l => l.start > 1)[0];
++      if (!B) throw new Error('CONTROL: the split made no second half');
++      if (B.transform.x.kf.some(k => k.sb)) throw new Error('Full’s split wrote an sb key: Full must never write one');
++      const after = ring(B);
++      if (Math.abs(after - before) > 1e-6) throw new Error('the ring across a Full split changed: ' + before + ' unsplit, ' + after + ' on the second half');
++    });
++  });
++
++  test('simple P2.4b · S7 FM.remapCommentPins: an anchored pin follows its layer to the new id on import and on project duplicate; a pin whose layer did not travel is baked to where it sat; a plain pin is not touched', { item: '980', budgetMs: 90000 }, async function () {
++    smNeedP2();
++    if (!FM.remapCommentPins) throw new Error('FM.remapCommentPins does not exist');
++    const mkDoc = () => {
++      const a = FM.makeLayer('video', { name: 'PA', start: 10, duration: 4 }), b = FM.makeLayer('video', { name: 'PB', start: 0, duration: 4 });
++      a.srcW = 320; a.srcH = 240; b.srcW = 320; b.srcH = 240; a.trimStart = 0;
++      const project = { width: 320, height: 240, fps: 30, duration: 14, background: '#000000',
++        comments: [{ id: 'k1', text: 'anchored', t: 1, lid: a.id, lo: 2 }, { id: 'k2', text: 'plain', t: 3, lid: a.id }, { id: 'k3', text: 'bare', t: 4 }, { id: 'k4', text: 'orphan', t: 1, lid: b.id, lo: 1.5 }] };
++      return { a: a, b: b, project: project, layers: [a, b] };
++    };
++    // 1. the pure function
++    { const d = mkDoc(), map = Object.create(null); map[d.a.id] = 'NEWA';
++      const n = FM.remapCommentPins(d.project, d.layers, map), by = id => d.project.comments.filter(c => c.id === id)[0];
++      if (by('k1').lid !== 'NEWA' || by('k1').lo !== 2) throw new Error('the anchored pin did not follow its layer: ' + JSON.stringify(by('k1')));
++      if (by('k2').lid !== d.a.id || by('k3').lid !== undefined || by('k2').t !== 3) throw new Error('a plain pin was touched: ' + JSON.stringify([by('k2'), by('k3')]));
++      const k4 = by('k4'); if (k4.lid !== undefined || k4.lo !== undefined || Math.abs(k4.t - 1.5) > 1e-6) throw new Error('an anchored pin whose layer did not travel was not baked to where it sat (t 1.5): ' + JSON.stringify(k4));
++      if (n !== 2) throw new Error('remapped ' + n + ' pins, want the 2 anchored ones'); }
++    // 2. import (applyScene) re-ids every layer
++    { const d = mkDoc(); await FM.storage.applyScene({ project: d.project, layers: JSON.parse(JSON.stringify(d.layers, FM.jsonReplacer)), selectedId: null, selectedIds: [] });
++      const ids = FM.scene.layers.map(l => l.id), k1 = FM.scene.project.comments.filter(c => c.id === 'k1')[0];
++      if (!k1 || ids.indexOf(k1.lid) < 0 || k1.lid === d.a.id) throw new Error('after import the anchored pin points at ' + (k1 && k1.lid) + ', not a layer of the new document (' + ids.join() + ')'); }
++    // 3. project duplicate
++    { const d = mkDoc(); const nid = await FM.projects.duplicateFrom({ project: d.project, layers: JSON.parse(JSON.stringify(d.layers, FM.jsonReplacer)) }, { name: 'S7 remap copy' });
++      try {
++        const doc = JSON.parse(localStorage.getItem('fm.proj.' + nid)), ids = doc.layers.map(l => l.id), k1 = doc.project.comments.filter(c => c.id === 'k1')[0];
++        if (!k1 || ids.indexOf(k1.lid) < 0 || k1.lid === d.a.id) throw new Error('in a duplicated project the anchored pin points at ' + (k1 && k1.lid) + ', not at one of its layers');
++        if (doc.project.comments.filter(c => c.id === 'k2')[0].lid !== d.a.id) throw new Error('a plain pin was remapped');
++      } finally { try { await FM.projects.remove(nid); } catch (e) {} } }
++  });
++
++  test('simple P2.4b · S7 an identity camera (scale 1, rotation 0, x and y at the project centre) draws exactly what no camera draws, depth layers and a fractional position included (the rest-pose hold of §3.10 rule 3g rests on this)', { item: '980', budgetMs: 60000 }, function () {
++    const W = 160, H = 120;
++    const mk = withCam => {
++      const t = FM.makeLayer('text', { name: 'T', text: 'Rest pose', x: W / 2 + 0.37, y: H / 3 + 0.21, start: 0, duration: 4 });
++      const r = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 50.5, y: 70.25, shapeW: 45, shapeH: 33, fill: '#33aaff', start: 0, duration: 4 });
++      const d = FM.makeLayer('shape', { name: 'D', shape: 'rect', x: 100, y: 60, shapeW: 30, shapeH: 30, fill: '#ffaa00', start: 0, duration: 4 }); d.transform.z = 300;
++      const layers = [t, r, d];
++      if (withCam) { const c = FM.makeLayer('camera', { name: 'Cam' }); c.start = 0; c.duration = 4; c.transform.scale = 1; c.transform.rotation = 0; c.transform.x = W / 2; c.transform.y = H / 2; layers.unshift(c); }
++      const sc = scene(layers); sc.project = { width: W, height: H, fps: 30, duration: 4, background: '#101820' };
++      const cv = offscreen(W, H), cx = cv.getContext('2d', { willReadFrequently: true });
++      FM.renderScene(cx, sc, 1);
++      return cx.getImageData(0, 0, W, H).data;
++    };
++    const a = mk(false), b = mk(true);
++    let diff = 0, worst = 0; for (let i = 0; i < a.length; i++) { const e = Math.abs(a[i] - b[i]); if (e) diff++; if (e > worst) worst = e; }
++    if (diff) throw new Error('an identity camera changed ' + diff + ' channel values (worst ' + worst + '): the rest-pose hold would not read as camera-less');
++  });
++
++  test('simple P2.4b · S7 the camera’s hull after Do it anyway holds its REST pose over every stretch the old window did not cover, so those frames still render exactly as camera-less; a camera with a dolly refuses instead', { item: '980', budgetMs: 120000 }, async function () {
++    smNeedP2();
++    for (const dolly of [false, true]) {
++      await smP2((W, H) => smThree(W, H, [(() => { const c = smCam([[2, 1], [9, 2]], { start: 2, duration: 8 }); c.transform.x = 200; c.transform.rotation = 5; if (dolly) c.transform.z = 120; return c; })(), smT('Over', 0, 12, W, H, { sm: { stay: true } })]), async function (v) {
++        const cam = v.L('Cam'), d0 = v.doc(), n0 = v.steps();
++        FM.spine.cmd.move(v.L('A').id, 1); await v.idle();
++        if (v.doc() !== d0) throw new Error('CONTROL: the move went through without asking');
++        await smSayBtn(v, 'Do it anyway');
++        if (dolly) {
++          if (v.doc() !== d0 || v.steps() !== n0 || !/Open in Full to move this with its camera/.test(v.say())) throw new Error('a camera with a dolly was not refused with its line: “' + v.say() + '”, steps ' + (v.steps() - n0));
++          return;
++        }
++        if (v.steps() !== n0 + 1) throw new Error('Do it anyway took ' + (v.steps() - n0) + ' steps');
++        // the old window [2,10] covers, after the move, the images [0,4) (B), [6,8) (A's tail) and [8,10) (C's head): the stretch [4,6) is new
++        const P = FM.scene.project, ev = (k, t) => FM.evalProp(cam.transform[k], t);
++        const rest = { scale: 1, rotation: 0, x: P.width / 2, y: P.height / 2 };
++        Object.keys(rest).forEach(k => { if (Math.abs(ev(k, 5) - rest[k]) > 1e-6) throw new Error('over the new stretch (t 5 s) the camera’s ' + k + ' is ' + ev(k, 5) + ', not its rest ' + rest[k]); });
++        if (Math.abs(ev('x', 1) - 200) > 1e-6 || Math.abs(ev('x', 9) - 200) > 1e-6) throw new Error('outside the stretch the camera lost its own x: ' + ev('x', 1) + ', ' + ev('x', 9));
++        // …and the picture there is the camera-less picture, bit for bit
++        const render = sc => { const cv = offscreen(P.width, P.height), cx = cv.getContext('2d', { willReadFrequently: true }); FM.renderScene(cx, sc, 5); return cx.getImageData(0, 0, P.width, P.height).data; };
++        const withCam = render(FM.scene), without = render(Object.assign({}, FM.scene, { layers: FM.scene.layers.filter(l => l.type !== 'camera') }));
++        let diff = 0; for (let i = 0; i < withCam.length; i++) if (withCam[i] !== without[i]) diff++;
++        if (diff) throw new Error('at 5 s the picture with the camera differs from camera-less in ' + diff + ' channel values');
++        FM.history.undo(); await v.sleep(40);
++        if (v.doc() !== d0) throw new Error('Undo did not restore the document');
++      });
++    }
++  });
++
++  test('simple P2.4b · S7 LOCK the key sanitiser keeps the boundary marks Simple writes (sb, split) on transform and volume keys, so a reload, an Undo or a host fix op cannot turn a boundary pair back into authored keys', { item: '980', budgetMs: 20000 }, function () {
++    const l = FM.makeLayer('shape', { name: 'p', shape: 'rect', x: 1, y: 1, shapeW: 10, shapeH: 10, start: 0, duration: 4 });
++    l.transform.x = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 2, e: 'linear', sb: 1, split: 1 }, { t: 1, v: 3, e: 'linear', sb: 1, split: 1 }] };
++    l.volume = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 0.5, e: 'linear', sb: 1, split: 1 }] };
++    const o = JSON.parse(JSON.stringify(l)); FM.storage._sanitizeLayers([o]);
++    [['transform.x', o.transform.x], ['volume', o.volume]].forEach(a => { const marked = a[1].kf.filter(k => k.sb === 1 && k.split === 1).length; if (marked !== a[1].kf.length - 1) throw new Error(a[0] + ' keys came back with ' + marked + ' marked of ' + (a[1].kf.length - 1) + ': ' + JSON.stringify(a[1])); });
++  });
++
++  test('simple P2.4b · S7 the volume rider (opt-in): a stay-put song with “Keep volume changes with the clips” on carries its volume dip through Delete with the clip, the song itself never moves, and with it off nothing changes', { item: '980', budgetMs: 90000 }, async function () {
++    smNeedP2();
++    for (const on of [false, true]) {
++      await smP2((W, H) => smThree(W, H, [(() => { const s = smSong('Song', 0, 12, W, H, { sm: Object.assign({ stay: true }, on ? { rideVol: true } : {}) }); s.volume = smKf([[0, 1], [5, 1], [5.5, 0.3], [7, 0.3], [7.5, 1]]); return s; })()]), async function (v) {
++        const S = v.L('Song'), keys = () => S.volume.kf.map(k => +k.t.toFixed(6)).filter((t, i, a) => a.indexOf(t) === i).join(), n0 = v.steps();
++        FM.spine.cmd.del(v.L('A').id); await v.idle();
++        if (v.L('A') || v.steps() !== n0 + 1) throw new Error('CONTROL: Delete A did not go through in one step: “' + v.say() + '”');
++        if (S.start !== 0 || S.duration !== 12) throw new Error('the song moved or changed length: ' + S.start + ' + ' + S.duration);
++        const k = keys();
++        if (!on && k !== '0,5,5.5,7,7.5') throw new Error('with the rider off the volume keys moved: ' + k);
++        if (on) {
++          if (!/(^|,)1(,|$)/.test(k) || !/(^|,)1.5(,|$)/.test(k) || !/(^|,)3(,|$)/.test(k) || !/(^|,)3.5(,|$)/.test(k)) throw new Error('with the rider on the dip did not ride Delete A (−4 s): keys ' + k + ', want it at 1 to 3.5');
++          if (Math.abs(FM.evalProp(S.volume, 2) - 0.3) > 1e-6) throw new Error('the volume under the old clip B (now at 2 s) is ' + FM.evalProp(S.volume, 2) + ', not the dipped 0.3');
++        }
++        FM.history.undo(); await v.sleep(40);
++        if (v.L('Song').volume.kf.map(k => k.t).join() !== '0,5,5.5,7,7.5') throw new Error('Undo did not restore the volume keys: ' + v.L('Song').volume.kf.map(k => k.t).join());
++      });
++    }
++  });
++  test('simple P2.4b · S7 Follow clips (the rider’s switch): Sound tray offers it only on a stay-put sound with a volume curve, it is one look-step that Undo reverses, and it refuses a sound that does not stay put', { item: '980', budgetMs: 90000 }, async function () {
++    smNeedP2();
++    await smP2((W, H) => smThree(W, H, [(() => { const s = smSong('Song', 0, 12, W, H, { sm: { stay: true } }); s.volume = smKf([[0, 1], [6, 0.4]]); return s; })(), smSong('Plain', 0, 12, W, H, { sm: { stay: true } }), smSong('Loose', 0, 6, W, H)]), async function (v) {
++      const song = v.L('Song'), tools = async id => { FM.selectLayer(id); await v.sleep(80); return Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool); };
++      { const t = await tools(song.id); if (t.indexOf('rideVol') < 0) throw new Error('a stay-put song with a volume curve has no Follow clips tool: ' + t); }
++      if ((await tools(v.L('Plain').id)).indexOf('rideVol') >= 0) throw new Error('a song with no volume curve is offered Follow clips');
++      if ((await tools(v.L('Loose').id)).indexOf('rideVol') >= 0) throw new Error('a song that is not stay-put is offered Follow clips');
++      FM.selectLayer(null); const n0 = v.steps(), d0 = v.doc();
++      FM.spine.cmd.rideVol(song.id, true); await v.idle();
++      if (!v.L('Song').sm.rideVol || v.steps() !== n0 + 1) throw new Error('the switch did not turn on in one step (' + (v.steps() - n0) + ', “' + v.say() + '”)');
++      FM.history.undo(); await v.sleep(40);
++      if (v.doc() !== d0) throw new Error('Undo did not reverse the switch');
++      const loose = v.L('Loose'); FM.spine.cmd.rideVol(loose.id, true); await v.idle();
++      if (loose.sm && loose.sm.rideVol) throw new Error('a sound that is not stay-put took the rider');
++      if (FM.spine.setFlag(loose, 'rideVol', true) || (loose.sm && loose.sm.rideVol)) throw new Error('setFlag let the rider onto a sound that does not stay put');
++      const sg = v.L('Song'); FM.spine.setFlag(sg, 'rideVol', true); FM.spine.setFlag(sg, 'stay', false);
++      if (sg.sm && sg.sm.rideVol) throw new Error('turning Stay put off left the rider on');
++    });
++  });
++
++  const smS = (name, start, dur, W, H, o) => Object.assign(FM.makeLayer('shape', { name: name, shape: 'rect', x: W / 2, y: H / 2, shapeW: 40, shapeH: 30, fill: '#44aa88', start: start, duration: dur }), o || {});
++  test('simple P2.4b · S7 the LINK RULE: a unit parented to another takes THAT unit’s clip as its host (not the clip its own start falls in), so the pair moves together through a reorder; and it gets no sm key', { item: '980', budgetMs: 90000 }, async function () {
++    smNeedP2();
++    await smP2((W, H) => { const rock = smS('Rock', 1, 2, W, H), tag = smS('Tag', 5, 2, W, H); tag.parent = rock.id; return smThree(W, H, [tag, rock]); }, async function (v) {
++      const R = FM.spine.read(FM.scene), tag = v.L('Tag'), rock = v.L('Rock'), A = v.L('A'), off = tag.start - rock.start;
++      if (R.units[rock.id].host !== A.id) throw new Error('CONTROL: Rock is not hosted by A: ' + R.units[rock.id].host);
++      if (R.units[tag.id].host !== A.id) throw new Error('Tag (parented to Rock, which sits on A) has host ' + R.units[tag.id].host + ', want A: the link rule did not run');
++      FM.spine.cmd.move(A.id, 1); await v.idle();
++      if (Math.abs((v.L('Tag').start - v.L('Rock').start) - off) > 1e-9) throw new Error('the pair came apart in a reorder: offset ' + (v.L('Tag').start - v.L('Rock').start) + ', was ' + off + ' (it said “' + v.say() + '”)');
++      if (v.L('Tag').sm) throw new Error('a unit hosted through the link rule was given an sm key: ' + JSON.stringify(v.L('Tag').sm));
++    });
++  });
++  test('simple P2.4b · S7 rule 1b: a hidden helper goes with its only user (it follows that clip through a reorder), but a hidden MATTE source is left alone: a hidden source is not drawn as a matte, so it cuts the layer out whole', { item: '980', budgetMs: 90000 }, async function () {
++    smNeedP2();
++    await smP2((W, H) => { const help = smS('Helper', 9, 2, W, H, { visible: false }), pin = smS('Pin', 5, 2, W, H); pin.parent = help.id; return smThree(W, H, [pin, help]); }, async function (v) {
++      const R = FM.spine.read(FM.scene), B = v.L('B'), help = v.L('Helper');
++      if (R.units[help.id].host !== B.id) throw new Error('the hidden helper (used only by Pin on B) has host ' + R.units[help.id].host + ', want B (rule 1b)');
++      const h0 = help.start; FM.spine.cmd.move(B.id, -1); await v.idle();
++      if (Math.abs(v.L('Helper').start - (h0 - 4)) > 1e-9) throw new Error('the helper did not travel with B: it starts at ' + v.L('Helper').start + ', want ' + (h0 - 4) + ' (“' + v.say() + '”)');
++    });
++    // the premise for matte sources, measured: a hidden source cuts the layer out whole
++    const W = 120, H = 90, run = visible => {
++      const x = FM.makeLayer('shape', { name: 'X', shape: 'rect', x: 60, y: 45, shapeW: 100, shapeH: 80, fill: '#ff0000', start: 0, duration: 4 });
++      const m = FM.makeLayer('shape', { name: 'M', shape: 'rect', x: 30, y: 45, shapeW: 40, shapeH: 80, fill: '#ffffff', start: 0, duration: 4 }); m.visible = visible;
++      const fx = FM.fxRegistry.makeInstance('lumamatte'); fx.params = Object.assign({}, fx.params, { source: m.id }); x.effects = [fx];
++      const sc = scene([x, m]); sc.project = { width: W, height: H, fps: 30, duration: 4, background: '#000000' };
++      const cv = offscreen(W, H), cx = cv.getContext('2d', { willReadFrequently: true }); FM.renderScene(cx, sc, 1);
++      return Array.from(cx.getImageData(30, 45, 1, 1).data).join();
++    };
++    if (run(true) !== '255,0,0,255') throw new Error('CONTROL: a visible matte source did not let the layer through: ' + run(true));
++    if (run(false) !== '0,0,0,255') throw new Error('a hidden matte source now draws as a matte (' + run(false) + '): rule 1b’s premise changed, so matte sources would need the rule too');
++    await smP2((W2, H2) => { const m = smS('MatteSrc', 9, 2, W2, H2, { visible: false }), x = smS('Cut', 5, 2, W2, H2); const fx = FM.fxRegistry.makeInstance('lumamatte'); fx.params = Object.assign({}, fx.params, { source: m.id }); x.effects = [fx]; return smThree(W2, H2, [x, m]); }, async function (v) {
++      const R = FM.spine.read(FM.scene);
++      if (R.units[v.L('MatteSrc').id].host === v.L('B').id) throw new Error('a hidden matte source was given rule 1b’s host');
++    });
++  });
++  test('simple P2.4b · S7 rule 2: a Controller that parents main clips moves, keys and all, by the one d they all move by (an Insert at the front), is never pinned, and raises no ask', { item: '980', budgetMs: 90000 }, async function () {
++    smNeedP2();
++    const file = await smPng('#2255aa');
++    await smP2((W, H) => { const ctl = FM.makeLayer('null', { name: 'Ctl', start: 0, duration: 13 }); ctl.transform.x = smKf([[0, 0], [6, 100], [12, 200]]); const cl = smThree(W, H); cl.forEach(l => { l.parent = ctl.id; }); return [ctl].concat(cl); }, async function (v) {
++      const ctl = v.L('Ctl'), n0 = v.steps();
++      if (!FM.spine.read(FM.scene).units[ctl.id].mover) throw new Error('CONTROL: the Controller is not read as a mover');
++      await FM.spine.cmd.insert([file], 0); await v.idle();
++      const img = FM.scene.layers.find(l => l.type === 'image'); if (!img) throw new Error('the insert did not happen (steps ' + (v.steps() - n0) + ', “' + v.say() + '”)');
++      const C2 = v.L('Ctl'), D = img.duration;
++      if (Math.abs(C2.start - D) > 1e-9) throw new Error('the Controller starts at ' + C2.start + ', want ' + D + ' (it moves with its children)');
++      if (Math.abs(C2.transform.x.kf[1].t - (6 + D)) > 1e-9) throw new Error('its keys did not move with it: ' + C2.transform.x.kf.map(k => k.t));
++      if (C2.sm && (C2.sm.stay || C2.sm.tail)) throw new Error('the Controller was pinned: ' + JSON.stringify(C2.sm));
++      if (v.steps() !== n0 + 1) throw new Error('the insert took ' + (v.steps() - n0) + ' steps');
++    });
++  });
++  test('simple P2.4b · S7 rules 1, 4 and 5 through the split lineage: a parent is read through the half that covers the follower, a reorder of that half raises no ask, and deleting the half the follower is stored on repoints it instead of refusing (a plain parent still refuses)', { item: '980', budgetMs: 120000 }, async function () {
++    smNeedP2();
++    const lin = (W, H) => { const m1 = smV('M1', 0, 4, W, H), m2 = smV('M2', 4, 4, W, H), c = smV('C', 8, 4, W, H); m1.splitOf = m2.splitOf = 'lin_s7'; const tag = smS('Tag', 5, 2, W, H); tag.parent = m1.id; return [tag, c, m2, m1]; };
++    await smP2(lin, async function (v) {
++      const R = FM.spine.read(FM.scene);
++      if (R.units[v.L('Tag').id].host !== v.L('M2').id) throw new Error('Tag, stored on M1 but under M2, has host ' + R.units[v.L('Tag').id].host + ', want M2');
++      const n0 = v.steps(), t0 = v.L('Tag').start;
++      FM.spine.cmd.move(v.L('M2').id, -1); await v.idle();
++      if (v.steps() !== n0 + 1) throw new Error('moving M2 earlier did not go through in one step (“' + v.say() + '”): the lineage ask fired');
++      if (Math.abs(v.L('Tag').start - (t0 - 4)) > 1e-9) throw new Error('Tag did not travel with M2: ' + v.L('Tag').start);
++    });
++    await smP2(lin, async function (v) {
++      const m2 = v.L('M2').id, m1id = v.L('M1').id, n0 = v.steps();
++      FM.spine.cmd.del(v.L('M1').id); await v.idle();
++      if (v.L('M1') || v.steps() !== n0 + 1) throw new Error('deleting M1 was refused: “' + v.say() + '”');
++      if (v.L('Tag').parent !== m2) throw new Error('Tag points at ' + v.L('Tag').parent + ' (M1 was ' + m1id + ', M2 is ' + m2 + '), not at the surviving half M2');
++    });
++    await smP2((W, H) => { const a = smV('A', 0, 4, W, H), b = smV('B', 4, 4, W, H); const tag = smS('Tag', 5, 2, W, H, { sm: { stay: true } }); tag.parent = a.id; return [tag, b, a]; }, async function (v) {   // a pinned follower: the link rule leaves it where it is, so deleting its parent must refuse
++      const n0 = v.steps(); FM.spine.cmd.del(v.L('A').id); await v.idle();
++      if (v.steps() !== n0 || !/attached/.test(v.say())) throw new Error('CONTROL: deleting a plain parent did not refuse with its line: “' + v.say() + '”, ' + (v.steps() - n0) + ' steps');
++    });
++  });
++  test('simple P2.4b · S7 the tail fit counts (couplingsBroken): a Delete that would pull the keys of an end-with-the-video unit something else is tied to ASKS first; Do it anyway fits it, and an untied one is fitted without asking', { item: '980', budgetMs: 120000 }, async function () {
++    smNeedP2();
++    for (const tied of [true, false]) {
++      await smP2((W, H) => { const mark = smS('Mark', 0, 12, W, H, { sm: { stay: true, tail: true, tailEnd: 12 } }); mark.transform.x = smKf([[0, 0], [6, 100], [12, 200]]); const dot = smS('Dot', 2, 3, W, H); if (tied) dot.parent = mark.id; return smThree(W, H, [dot, mark]); }, async function (v) {
++        const n0 = v.steps(), d0 = v.doc();
++        FM.spine.cmd.del(v.L('C').id); await v.idle();
++        if (!tied) {
++          if (v.steps() !== n0 + 1 || Math.abs(v.L('Mark').duration - 8) > 1e-9) throw new Error('CONTROL: an untied tail unit was not fitted in one step: ' + v.L('Mark').duration + ', ' + (v.steps() - n0) + ' steps');
++          return;
++        }
++        if (v.steps() !== n0 || v.doc() !== d0 || !/1 parent will slip/.test(v.say())) throw new Error('the tail fit went through without asking about the tied unit (' + (v.steps() - n0) + ' steps): “' + v.say() + '”');
++        await smSayBtn(v, 'Do it anyway');
++        if (v.steps() !== n0 + 1 || Math.abs(v.L('Mark').duration - 8) > 1e-9) throw new Error('Do it anyway did not fit it in one step: ' + v.L('Mark').duration + ', ' + (v.steps() - n0));
++        if (Math.abs(v.L('Mark').transform.x.kf[2].t - 8) > 1e-6) throw new Error('its last key is at ' + v.L('Mark').transform.x.kf[2].t + ', want 8');
++      });
++    }
++  });
++
++  test('simple P2.4b · S7 Sort by date taken: the clips are packed in date order from the first start (each keeps its length, gaps close), what is on them and the cues ride, one step, Undo undoes it; already in order writes nothing; a crossfade refuses; ⋯ offers it only with two dated clips', { item: '980', budgetMs: 120000 }, async function () {
++    smNeedP2();
++    const menuHas = async v => { document.getElementById('btn-opts').click(); await v.sleep(60); const has = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).some(b => /Sort by date taken/.test(b.textContent)); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); const m = document.querySelector('.sm-menu'); if (m) m.remove(); return has; };
++    await smP2((W, H) => { const a = smV('A', 0, 4, W, H, { taken: 300 }), b = smV('B', 4, 4, W, H, { taken: 100 }), c = smV('C', 8.5, 4, W, H, { taken: 200 }); return [smCap('Caps', 0, 12.5, [[0.5, 3.5], [4.5, 7.5]], W, H), smT('Title', 5, 1, W, H), c, b, a]; }, async function (v) {
++      if (!(await menuHas(v))) throw new Error('⋯ does not offer Sort by date taken with three dated clips');
++      const n0 = v.steps(), d0 = v.doc();
++      FM.spine.cmd.sortByDate(); await v.idle();
++      const st = n => v.L(n).start;
++      if (v.steps() !== n0 + 1) throw new Error('Sort took ' + (v.steps() - n0) + ' steps (“' + v.say() + '”)');
++      if (Math.abs(st('B') - 0) > 1e-9 || Math.abs(st('C') - 4) > 1e-9 || Math.abs(st('A') - 8.5) > 1e-9 && Math.abs(st('A') - 8) > 1e-9) throw new Error('positions B ' + st('B') + ', C ' + st('C') + ', A ' + st('A') + ' (want B 0, C 4, A 8 packed)');
++      if (Math.abs(st('A') - 8) > 1e-9) throw new Error('A is at ' + st('A') + ': the 0.5 s gap before C was not closed (A should pack to 8)');
++      if (Math.abs(st('Title') - 1) > 1e-9) throw new Error('the title on B did not travel with it: ' + st('Title'));
++      const cues = smAbs(v.L('Caps'));
++      if (!smSame(cues.slice().sort((x, y) => x[0] - y[0]), [[0.5, 3.5], [8.5, 11.5]], 1e-6)) throw new Error('the cues are ' + JSON.stringify(cues) + ', want B’s at 0.5 to 3.5 and A’s at 8.5 to 11.5');
++      if (!/Sorted 3 clips by date taken/.test(v.say()) || !/Closed 1 gap/.test(v.say())) throw new Error('the line: “' + v.say() + '”');
++      FM.spine.cmd.sortByDate(); await v.idle();
++      if (!/Already in date order/.test(v.say()) || v.steps() !== n0 + 1) throw new Error('a second Sort should say it is already in order and write nothing: “' + v.say() + '”');
++      FM.history.undo(); await v.sleep(40);
++      if (v.doc() !== d0) throw new Error('Undo did not restore the document');
++    });
++    await smP2((W, H) => [smV('B', 3, 4, W, H, { taken: 2 }), smV('A', 0, 4, W, H, { taken: 1 })], async function (v) {
++      if (!(await menuHas(v))) throw new Error('CONTROL: ⋯ does not offer Sort with two dated clips');
++      FM.spine.cmd.sortByDate(); await v.idle();
++      if (!/fade into each other/.test(v.say()) || v.L('A').start !== 0) throw new Error('an overlap/fade seam was not refused with its line: “' + v.say() + '”');
++    }).catch(e => { if (!/overlap|fade/.test(e.message)) throw e; });
++    await smP2((W, H) => [smV('B', 4, 4, W, H, { taken: 2 }), smV('A', 0, 4, W, H)], async function (v) {
++      if (await menuHas(v)) throw new Error('⋯ offers Sort by date taken with only one dated clip');
++    });
++  });
++
+   async function run() {
+     var results = [];
+     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
