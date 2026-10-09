@@ -1,0 +1,53 @@
+diff --git a/js/storage.js b/js/storage.js
+index 0105cdd..fc3b5dc 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -997,8 +997,14 @@ window.FM = window.FM || {};
+     return fonts;
+   }
+ 
+-  /* #1051: a plain object is not null, a list or a primitive (a project file's `project` and each layer must be one). */
++  /* #1051 / #1053: two small readers the untrusted-file code shares. A plain object is not null, a list or a primitive; a finite number is a number
++     OR numeric text ("0.5", as effect parameters already take it), never "", " ", "abc" or "Infinity". */
+   function isPlainObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
++  function finiteNum(v) {
++    if (typeof v === 'number') return isFinite(v) ? v : null;
++    if (typeof v === 'string' && v.trim() !== '' && isFinite(+v)) return +v;
++    return null;
++  }
+   // Clamp untrusted project dimensions to sane bounds. An imported/AI/hand-crafted .fmotion.json with
+   // width/height 16000 allocates ~1GB per canvas (main + ghost + ~10 compositor buffers) → OOM-crashes
+   // mobile Safari on open, AND (being autosaved as current) crashes again on every relaunch = a brick.
+@@ -1178,7 +1184,8 @@ window.FM = window.FM || {};
+       const params = {};
+       FM.audioFxRegistry.paramsOf(f.type).forEach(pd => {
+         const v = f.params && typeof f.params === 'object' ? f.params[pd.key] : undefined;
+-        if (typeof v === 'number' && isFinite(v)) params[pd.key] = Math.max(pd.min, Math.min(pd.max, v));
++        const num = finiteNum(v);   // #1053: numeric text counts, as it does in effect parameters
++        if (num != null) params[pd.key] = Math.max(pd.min, Math.min(pd.max, num));
+         else {
+           const kfp = pd.keyframable !== false ? safeKfProp(v, pd.min, pd.max) : null;
+           params[pd.key] = kfp || pd.def;
+@@ -1192,7 +1199,8 @@ window.FM = window.FM || {};
+   // A number in [min,max], OR a validated animated prop, OR the default. Same untrusted-file discipline
+   // as sanitizeAudioFx: file values are only adopted after a range/keyframe check.
+   function numOrKf(v, min, max, def, keyframable) {
+-    if (typeof v === 'number' && isFinite(v)) return Math.max(min, Math.min(max, v));
++    const num = finiteNum(v);
++    if (num != null) return Math.max(min, Math.min(max, num));
+     if (keyframable) { const kfp = safeKfProp(v, min, max); if (kfp) return kfp; }
+     return def;
+   }
+@@ -1259,9 +1267,10 @@ window.FM = window.FM || {};
+           if (opts) params[pd.key] = (typeof v === 'string' && opts.indexOf(v) >= 0) ? v : pd.def;
+           else params[pd.key] = (typeof v === 'string' && v.length <= 64) ? v : pd.def;
+         } else {
+-          if (typeof v === 'number' && isFinite(v)) {
++          const num = finiteNum(v);
++          if (num != null) {
+             const min = isFinite(pd.min) ? pd.min : -Infinity, max = isFinite(pd.max) ? pd.max : Infinity;
+-            params[pd.key] = Math.max(min, Math.min(max, v));
++            params[pd.key] = Math.max(min, Math.min(max, num));
+           } else params[pd.key] = pd.def;
+         }
+       });

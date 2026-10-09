@@ -1,0 +1,43 @@
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5..885a434 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -997,12 +997,14 @@ window.FM = window.FM || {};
+     return fonts;
+   }
+ 
++  /* #1051: a plain object is not null, a list or a primitive (a project file's `project` and each layer must be one). */
++  function isPlainObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+   // Clamp untrusted project dimensions to sane bounds. An imported/AI/hand-crafted .fmotion.json with
+   // width/height 16000 allocates ~1GB per canvas (main + ghost + ~10 compositor buffers) → OOM-crashes
+   // mobile Safari on open, AND (being autosaved as current) crashes again on every relaunch = a brick.
+   // ai-ops already clamps AI-set dims to [16,7680]; the human-import path must too.
+   function clampProjectDims(p) {
+-    if (!p) return;
++    if (!p || typeof p !== 'object' || Array.isArray(p)) return;   // #1051: a project that is a plain value ("x", 5, true) or a list throws on the first write, or becomes a list-shaped project
+     const ev = n => Math.max(16, Math.min(7680, Math.round((+n || 0) / 2) * 2));
+     if (p.width != null) p.width = ev(p.width) || 1080;
+     if (p.height != null) p.height = ev(p.height) || 1920;
+@@ -1692,8 +1694,8 @@ window.FM = window.FM || {};
+     } catch (e) { return []; }
+   };
+   FM.storage.applyScene = async function (obj) {
+-    if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
+-    if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
++    if (!obj || !isPlainObj(obj.project) || !Array.isArray(obj.layers)) return false;
++    if (obj.layers.length > 2000 || !obj.layers.every(isPlainObj)) return false;   // #1051: the same checks as sceneFileProblem, because applyScene has its own guard   // absurd layer count = malicious/corrupt — refuse rather than hang the render
+     clampProjectDims(obj.project);
+     sanitizeImportedLayers(obj.layers);
+     // Re-id EVERY imported layer. An exported file carries the ids of the project it came from —
+@@ -1974,9 +1976,10 @@ window.FM = window.FM || {};
+   FM.storage.sceneFileProblem = function (obj) {
+     if (!obj || typeof obj !== 'object') return 'That file is not a FreeMotion project.';
+     if (obj.app !== 'freemotion') return 'That is not a FreeMotion project file.';
+-    if (!obj.project) return 'That project file is missing its canvas settings — it may be truncated or only half-downloaded.';
++    if (!isPlainObj(obj.project)) return 'That project file is missing its canvas settings — it may be truncated or only half-downloaded.';   // #1051: a plain value or a list is not a project
+     if (!Array.isArray(obj.layers)) return 'That project file has no layers list — it may be truncated or only half-downloaded.';
+     if (obj.layers.length > 2000) return 'That project has ' + obj.layers.length + ' layers, which is more than FreeMotion will open.';
++    if (!obj.layers.every(isPlainObj)) return 'That project file has a layer that cannot be read — it may be damaged.';   // #1051: null and plain values threw out of the re-id walk
+     return null;
+   };
+ 

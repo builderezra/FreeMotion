@@ -1,0 +1,42 @@
+diff --git a/js/shortcuts.js b/js/shortcuts.js
+index ae9523d..fc909a6 100644
+--- a/js/shortcuts.js
++++ b/js/shortcuts.js
+@@ -13,12 +13,12 @@ window.FM = window.FM || {};
+    * or rename of a tab or a tool cannot leave it behind. Capped at what that branch takes: 1–5 for the tabs
+    * (with nothing selected) and ⇧1–4 for the tools. The typed text is only a fallback for a build where
+    * addmenu.js is missing, and says what the keys do today. */
+-  const ADD_TABS_ROW = ['1 – 5', 'Add menu → Elements · Shape · Media · Audio · Template'];
++  const ADD_TABS_ROW = ['1 – 5', 'Nothing selected: Add menu → Elements · Shape · Media · Audio · Template'];
+   const ADD_INSTANT_ROW = ['⇧ 1 / 2 / 3 / 4', 'Add Text · Captions · Sketching · Custom shape'];
+   function addMenuRow(row) {
+     if (row === ADD_TABS_ROW) {
+       const labels = (FM._tabLabels ? FM._tabLabels() : []).slice(0, 5);
+-      return labels.length ? ['1 – ' + labels.length, 'Add menu → ' + labels.join(' · ')] : row;
++      return labels.length ? ['1 – ' + labels.length, 'Nothing selected: Add menu → ' + labels.join(' · ')] : row;
+     }
+     if (row === ADD_INSTANT_ROW) {
+       const labels = (FM._instantLabels ? FM._instantLabels() : []).slice(0, 4);
+@@ -30,6 +30,7 @@ window.FM = window.FM || {};
+     ['Space', 'Play / pause'],
+     ADD_TABS_ROW,      // 1 – 5 and ⇧ 1 – 4: written from the Add menu's own lists when the sheet is built — see addMenuRow()
+     ADD_INSTANT_ROW,
++    ['1 – 9', 'A layer selected: open that panel card (its number is on the card)'],   // js/app.js's Digit branch: with a layer selected the number keys open its cards, not the Add menu
+     ['← / →', 'Nudge selected layer  (Shift = 10px)'],
+     ['↑ / ↓', 'Nudge selected layer vertically'],
+     [', / .', 'Step one frame back / forward'],
+@@ -41,12 +42,13 @@ window.FM = window.FM || {};
+     ['A', 'Cut away the left of the clip at the playhead · off the clip: bring it left to the playhead'],
+     ['S', 'Split clip at playhead · off the clip: extend it to the playhead'],
+     ['D', 'Cut away the right of the clip at the playhead · off the clip: bring it right to the playhead'],
+-    ['Delete', 'Delete selected layer'],
++    ['Delete / Backspace', 'Delete selected layer'],
+     ['⌘/Ctrl + D', 'Duplicate selected layer'],
+     ['⌘/Ctrl + C / V', 'Copy / paste layer(s)'],
+     ['⌘/Ctrl + A', 'Select all layers'],
+     ['⌘/Ctrl + Z', 'Undo'],
+     ['⌘/Ctrl + ⇧ + Z', 'Redo'],
++    ['⌘/Ctrl + Y', 'Redo'],
+     ['Tab / ⇧Tab', 'Select next / previous layer'],
+     ['Esc', 'Go back a page (sub-menu → grid → deselect)'],
+     ['?', 'Show / hide this help'],

@@ -1,0 +1,27 @@
+diff --git a/js/storage.js b/js/storage.js
+index 885a434..0105cdd 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -1068,6 +1068,7 @@ window.FM = window.FM || {};
+       if (!Array.isArray(p.notes)) p.notes = [];
+       else {
+         const keep = p.notes.filter(n => n && typeof n === 'object' && !Array.isArray(n) && (n.text == null || typeof n.text === 'string')).slice(0, 500);
++        keep.forEach(n => { if ('remind' in n && typeof n.remind !== 'boolean') n.remind = false; });   // #1052: notepad.js reads `remind` by truthiness, and "false" is truthy
+         if (keep.length !== p.notes.length) p.notes = keep;
+       }
+     }
+@@ -1342,12 +1343,12 @@ window.FM = window.FM || {};
+     if (l.fov != null) { const f = +l.fov; if (isFinite(f) && f > 0.5 && f < 179) l.fov = f; else delete l.fov; }
+     if (l.focus) {
+       const f = l.focus;
+-      l.focus = { enabled: !!f.enabled, distance: num(f.distance, -100000, 100000, 0), dof: num(f.dof, 1, 100000, 200), blur: num(f.blur, 0, 2, 0.5) };
++      l.focus = { enabled: f.enabled === true, distance: num(f.distance, -100000, 100000, 0), dof: num(f.dof, 1, 100000, 200), blur: num(f.blur, 0, 2, 0.5) };
+     }
+     if (l.fog) {
+       const g = l.fog;
+       const near = num(g.near, -100000, 100000, 0), far = num(g.far, -100000, 200000, 2000);
+-      l.fog = { enabled: !!g.enabled, color: safeColor(g.color) ? g.color : '#ffffff', near: near, far: (far === near ? near + 1 : far) };
++      l.fog = { enabled: g.enabled === true, color: safeColor(g.color) ? g.color : '#ffffff', near: near, far: (far === near ? near + 1 : far) };
+     }
+   }
+   /* layer.effects — the last major layer sub-structure with no validation on the way in, and the one

@@ -1,0 +1,16 @@
+sl380 Regression 130/142 ✗ · NOT RUN HERE 9 Pending 0/0 built
+  RED 921 S6 the Share panel hands out a link, a QR the camera reads back as that link, and a 9- | needs a working BarcodeDetector (qr_code
+  RED 921 S8 [Scan QR] reads the app’s own invite code off the camera into the Join field and wa | needs a working BarcodeDetector (qr_code
+  RED the quality ladder sheds pixels under sustained load, and the frames actually speed up (qu
+  RED 926 the view menu: Layers is greyed with no single clip selected, and the Camera button an | needs real touch emulation (a finger wit
+  RED 690 CONTROL a Custom project still takes the size of the first clip, as its tile says Auto
+  RED 690 Replace media puts the new clip where the old one was at the same size, instead of blo
+  RED 690 with the camera zoomed in, the selection box sits on the layer, a tap on it keeps it s | needs real touch emulation (a finger wit
+  RED 690 on the phone a tap outside the ? sheet, Notes, Canvas settings or the Before you expor | needs real touch emulation (a finger wit
+  RED 690 dragging a gradient on the canvas follows the finger on a flipped layer, and its ring  | needs real touch emulation (a finger wit
+  RED 927 phone — a finger has no cursor: the grip is visible and big enough, a real drag takes  | needs real touch emulation (a finger wit
+  RED 968 Notes and the Help menu: made big in one project they stay big there, a new project ma | needs real touch emulation (a finger wit
+  RED 975 phone — with 20 notes, small Notes is a box (at most 60% of big's height and 30px narr | needs real touch emulation (a finger wit
+  F: FAILthe quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202) — the scene was only 33.8 ms a frame to begin with — it is not struggling, so there is nothing for the ladder to react to and this proves nothing
+  F: FAIL690 CONTROL a Custom project still takes the size of the first clip, as its tile says Auto adjusts — Failed to execute 'encode' on 'VideoEncoder': Cannot call 'encode' on a closed codec.
+  F: FAIL690 Replace media puts the new clip where the old one was at the same size, instead of blowing it up by its pixel count — Failed to execute 'encode' on 'VideoEncoder': Cannot call 'encode' on a closed codec.

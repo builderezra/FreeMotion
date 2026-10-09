@@ -1,0 +1,78 @@
+{
+ "ok": false,
+ "summary": "Regression 0/5 ✗Pending 0/0 built",
+ "failures": [
+  "FAILP17 #1051 a project file whose \"project\" (or a layer) is not an object is refused with the existing reason, makes no junk project, and does not throw — project \"x\" threw out of importObject: Cannot create property 'width' on string 'x'",
+  "FAILP17 #1052 camera focus / fog \"enabled\" and a note’s \"remind\" are read as booleans: the string \"false\" no longer switches depth of field, fog or a reminder on — focus.enabled \"false\" became true",
+  "FAILP17 #1053 numeric text such as \"0.5\" is read as the number in audio effects, behaviours, Trim Path, dashed stroke and Repeater, as it already is in effect parameters — setup: the probe value equals the default, so it proves nothing",
+  "FAILP17 #1054 the ? sheet names the condition on the 1 – 5 row, lists the 1 – 9 card keys, and mentions Backspace and Ctrl+Y — the 1 – 5 row does not say it needs nothing selected: “1 – 5”",
+  "FAILP17 #1055 Pixelate on an adjustment layer honours Block aspect and Edges (Soft), and a Pixelate on a clip draws exactly as before — Block aspect 25 / 100 / 400 render alike on an adjustment layer (0, 0, 0 bytes differ)"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   152,
+   "P17 #1054 the ? sheet names the condition on the 1 – 5 row, lists the 1 – 9 card keys, and mentions Backspace and Ctrl+Y"
+  ],
+  [
+   74,
+   "P17 #1051 a project file whose \"project\" (or a layer) is not an object is refused with the existing reason, makes no junk project, and does not throw"
+  ],
+  [
+   16,
+   "P17 #1055 Pixelate on an adjustment layer honours Block aspect and Edges (Soft), and a Pixelate on a clip draws exactly as before"
+  ],
+  [
+   1,
+   "P17 #1052 camera focus / fog \"enabled\" and a note’s \"remind\" are read as booleans: the string \"false\" no longer switches depth of field, fog or a reminder on"
+  ],
+  [
+   0,
+   "P17 #1053 numeric text such as \"0.5\" is read as the number in audio effects, behaviours, Trim Path, dashed stroke and Repeater, as it already is in effect parameters"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "P17 #1051 a project file whose \"project\" (or a layer) is not an object is refused with the existing reason, makes no junk project, and does not throw",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P17 #1052 camera focus / fog \"enabled\" and a note’s \"remind\" are read as booleans: the string \"false\" no longer switches depth of field, fog or a reminder on",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P17 #1053 numeric text such as \"0.5\" is read as the number in audio effects, behaviours, Trim Path, dashed stroke and Repeater, as it already is in effect parameters",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P17 #1054 the ? sheet names the condition on the 1 – 5 row, lists the 1 – 9 card keys, and mentions Backspace and Ctrl+Y",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P17 #1055 Pixelate on an adjustment layer honours Block aspect and Edges (Soft), and a Pixelate on a clip draws exactly as before",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

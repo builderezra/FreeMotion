@@ -1,0 +1,44 @@
+{
+ "ok": false,
+ "summary": "Regression 0/1 ✗Pending 0/0 built",
+ "failures": [
+  "FAILP17 PROBE 1051 — PROBE project \"x\": THREW Cannot create property 'width' on string 'x'; projects +1; said [] ## project 5: THREW Cannot create property 'width' on number '5'; projects +1; said [] ## project true: THREW Cannot create property 'width' on boolean 'true'; projects +1; said [] ## project []: returned true; projects +1; said [\"Project imported\"] ## layers [null]: THREW Cannot read properties of null (reading 'id'); projects +1; said [] ## layers [\"x\"]: THREW Cannot create property 'start' on string 'x'; projects +1; said [] ## layers [5]: THREW Cannot create property 'start' on number '5'; projects +1; said [] ## layers [[]]: THREW Cannot convert undefined or null to object; projects +1; said []"
+ ],
+ "notRun": [],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   589,
+   "P17 PROBE 1051"
+  ]
+ ],
+ "sceneLeaks": [
+  {
+   "test": "P17 PROBE 1051",
+   "added": [
+    "undefined"
+   ],
+   "more": 0,
+   "preview": false,
+   "isolate": false
+  }
+ ],
+ "ran": [
+  {
+   "name": "P17 PROBE 1051",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

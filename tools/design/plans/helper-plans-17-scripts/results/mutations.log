@@ -1,0 +1,77 @@
+=== A1_clamp_guard
+   baseline green ✅ (1 named title(s) ran and passed)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+=== A2_gate_project
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1051 — project "x" left 1 junk project(s) behind
+=== A3_gate_layers
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1051 — layers [null] left 1 junk project(s) behind
+=== A4_apply_guard
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1051 — applyScene(project "x") threw Cannot create property 'duration' on string 'x'
+=== B1_focus
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP17 #1052 — focus.enabled "false" became true
+=== B2_fog
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1052 — fog.enabled "false" became true
+=== B3_remind
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1052 — a note with remind "false" is a reminder ("false")
+=== C1_numOrKf
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP17 #1053 — trimPath.start is 0, want 0.2; trimPath.end is 1, want 0.5; trimPath.offset is 0, want 0.1; dash.length is 12, want 20; dash.gap is 8, want 10; dash.offset is 0, want 5; repeater.copies is 3, want 4; repeater.scale is 1, want 0.5; repeater.an
+=== C2_audiofx
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1053 — audioFx bassTreble.bass is 0, want -6.24
+=== C3_behaviors
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1053 — behaviours wiggle.amp is 20, want 35; behaviours wiggle.freq is 2, want 3
+=== C4_string_branch
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1053 — audioFx bassTreble.bass is 0, want -6.24; behaviours wiggle.amp is 20, want 35; behaviours wiggle.freq is 2, want 3; trimPath.start is 0, want 0.2; trimPath.end is 1, want 0.5; trimPath.offset is 0, want 0.1; dash.length is 12, want 20; dash.
+=== D1_condition
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP17 #1054 — the 1 – 5 row does not say it needs nothing selected: “1 – 5 · Add menu → Elements · Shape · Media · Audio · Template”
+=== D2_cards_row
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1054 — no row says that 1 – 9 open a selected layer’s cards
+=== D3_backspace
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1054 — Backspace is not listed beside Delete
+=== D4_ctrl_y
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1054 — Ctrl+Y is not listed as Redo
+=== E1_aspect_onframe
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP17 #1055 — Block aspect 25 / 100 / 400 render alike on an adjustment layer (0, 0, 0 bytes differ)
+=== E2_soft_onframe
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1055 — Edges: Soft renders like Blocks on an adjustment layer
+=== E3_grid_aspect
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1055 — Block aspect is ignored on a slice of the frame (the export-grid path)
+=== E4_grid_soft
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP17 #1055 — Edges: Soft is ignored on a slice of the frame (the export-grid path)
+ALLDONE
