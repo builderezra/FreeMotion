@@ -1,0 +1,29 @@
+=== A1_video_encoder_not_closed_in_finally
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU6-1 — an export that failed while drawing frame 6 left 1 video encoder(s) configured: it is only closed by the Cancel branches, so every failed export holds a hardware encoder until the page goes
+=== A2_frame_not_closed_on_throw
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU6-1 — 1 VideoFrame(s) were never closed after the encoder threw on the one it was handed
+=== B1_audio_encoder_not_closed
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU6-2 — CONTROL: the clean encode left 1 of 2 encoders open
+=== B2_audiodata_not_closed
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU6-2 — 1 AudioData object(s) were never closed after the encoder threw
+=== B3_priming_not_closed
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU6-2 — the warm-up probe threw and left 1 audio encoder(s) configured
+=== C1_limiter_block_edge
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU6-3 — limiter round 2: differs from the plain reference by 0.0002668802446166296 (a block edge?)
+=== C2_sink_patch_order
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU6-3 — sink round 2: byte 37 is 244, expected 39
+ALLDONE

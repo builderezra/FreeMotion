@@ -1,0 +1,13 @@
+1280 Regression 4/9 ✗ · NOT RUN HERE 2 Pending 0/0 built
+   RED export: a browser with no AAC encoder ships an honest silent file, not one promising a track (queue 
+   RED export: a soundtrack that is entirely muted says so instead of shipping a silent file (queue 215)
+   RED export: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215)
+   ok  #215: an export audio warning reaches a surface the export cannot cover
+   RED #215: an audio warning survives the frame loop, and a verdict does not carry into the next export
+   ok  #215: the export-ready card says whether the file has sound
+   ok  the export dialog warns about a silent export BEFORE the render (queue 215)
+   ok  having sound to lose counts audio LAYERS, not layer types (queue 215)
+   RED export: a soundtrack that fails to ENCODE says so, so it is not mistaken for the muxer (queue 215)
+FAILexport: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215) — NO_VIDEO_CODEC
+FAIL#215: an audio warning survives the frame loop, and a verdict does not carry into the next export — NO_VIDEO_CODEC
+FAILexport: a soundtrack that fails to ENCODE says so, so it is not mistaken for the muxer (queue 215) — NO_VIDEO_CODEC
