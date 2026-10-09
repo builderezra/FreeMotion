@@ -61371,6 +61371,123 @@
     }
   });
 
+  /* ════ S13 lens 2: UNDO AND REDO ACROSS EVERY SIMPLE COMMAND, BYTE FOR BYTE ════ */
+  function s13Diff(a, b) {   // the first path where two JSON texts differ
+    try {
+      const x = JSON.parse(a), y = JSON.parse(b);
+      const walk = (p, u, w) => {
+        if (JSON.stringify(u) === JSON.stringify(w)) return null;
+        if (u && w && typeof u === 'object' && typeof w === 'object') { const ks = Array.from(new Set(Object.keys(u).concat(Object.keys(w)))); for (const k of ks) { const r = walk(p + '.' + k, u[k], w[k]); if (r) return r; } }
+        return p + ': ' + JSON.stringify(u).slice(0, 60) + ' → ' + JSON.stringify(w).slice(0, 60);
+      };
+      return walk('doc', x, y) || 'equal as values';
+    } catch (e) { return 'unparsable'; }
+  }
+  test('simple P2.7 · S13L2 undo then redo then undo returns every Simple command’s document byte for byte', { item: '980', budgetMs: 240000 }, async function () {
+    smNeedP2();
+    const B = v => v.L('B').id, build = (W, H) => [smSong('Song', 0, 9, W, H, { sm: { stay: true } }), smT('Title', 1, 1, W, H), smV('C', 4, 2, W, H), smV('B', 2, 2, W, H), smV('A', 0, 2, W, H)];
+    const cases = [
+      ['del', v => FM.spine.cmd.del(B(v))], ['trimTail', v => FM.spine.cmd.trimTail(B(v), 3.5)], ['trimHead', v => FM.spine.cmd.trimHead(B(v), 2.5)],
+      ['split', v => FM.spine.cmd.split(B(v), 3)], ['duplicate', v => FM.spine.cmd.duplicate(B(v))], ['length', v => FM.spine.cmd.length(B(v), 1.5)],
+      ['trimStartBy', v => FM.spine.cmd.trimStartBy(B(v), 0.5)], ['move', v => FM.spine.cmd.move(B(v), 1)], ['moveTo', v => FM.spine.cmd.moveTo(B(v), 0)],
+      ['lift', v => FM.spine.cmd.lift(B(v))], ['stay', v => FM.spine.cmd.stay(B(v), true)], ['speed', v => FM.spine.cmd.speed(B(v), 2)],
+      ['volume', v => FM.spine.cmd.volume(B(v), 0.5)], ['fade (song)', v => FM.spine.cmd.fade(v.L('Song').id, 'in', 1)], ['reverse', v => FM.spine.cmd.reverse(B(v))],
+      ['muteClips', v => FM.spine.cmd.muteClips(true)], ['endWithVideo', v => FM.spine.cmd.endWithVideo()], ['addText', v => FM.spine.cmd.addText()],
+      ['trimItem (title tail)', v => FM.spine.cmd.trimItem(v.L('Title').id, 'tail', 1.5)], ['moveItem (title)', v => FM.spine.cmd.moveItem(v.L('Title').id, 2.5)],
+      ['z (title)', v => FM.spine.cmd.z(v.L('Title').id, 1)], ['closeAll', v => FM.spine.cmd.closeAll()], ['sortByDate', v => FM.spine.cmd.sortByDate()]
+    ];
+    const bad = [];
+    for (const [name, run] of cases) {
+      await smP2(build, async function (v) {
+        const doc0 = v.doc();
+        let ok; try { ok = await run(v); } catch (e) { bad.push(name + ': threw ' + e.message); return; }
+        await v.idle(); await v.sleep(60);
+        if (FM.textEdit && FM.textEdit.isActive()) { FM.textEdit.stop(); await v.idle(); await v.sleep(60); }   // addText opens the editor; it is a session of its own
+        const doc1 = v.doc();
+        if (doc1 === doc0) return;   // refused or a no-op: nothing to undo
+        FM.history.undo(); await v.idle(); await v.sleep(30);
+        if (v.doc() !== doc0) { bad.push(name + ' UNDO: ' + s13Diff(doc0, v.doc())); return; }
+        FM.history.redo(); await v.idle(); await v.sleep(30);
+        if (v.doc() !== doc1) { bad.push(name + ' REDO: ' + s13Diff(doc1, v.doc())); return; }
+        FM.history.undo(); await v.idle(); await v.sleep(30);
+        if (v.doc() !== doc0) bad.push(name + ' UNDO AGAIN: ' + s13Diff(doc0, v.doc()));
+      });
+    }
+    if (bad.length) throw new Error(bad.length + ' of ' + cases.length + ' commands do not round-trip: ' + bad.join(' || '));
+  });
+
+  /* ════ S13 lens 3: SAVE, CLOSE, REOPEN — what a project made in Simple looks like after it comes back, in Simple and in Full ════ */
+  test('simple P2.7 · S13L3 a project made with Simple’s commands reopens with the same document and the same clip row, in Simple and in Full', { item: '980', budgetMs: 240000 }, async function () {
+    smNeedP2();
+    const build = (W, H) => [smSong('Song', 0, 9, W, H, { sm: { stay: true } }), smT('Title', 1, 1, W, H), smV('C', 4, 2, W, H), smV('B', 2, 2, W, H), smV('A', 0, 2, W, H)];
+    await smP2(build, async function (v) {
+      const A = v.L('A').id, B = v.L('B').id;
+      for (const run of [() => FM.spine.cmd.speed(B, 2), () => FM.spine.cmd.volume(B, 0.5), () => FM.spine.cmd.split(A, 1), () => FM.spine.cmd.reverse(B), () => FM.spine.cmd.fade(v.L('Song').id, 'in', 1), () => FM.spine.cmd.stay(v.L('Title').id, true), () => FM.spine.cmd.moveTo(B, 0), () => FM.spine.cmd.muteClips(true), () => FM.spine.cmd.endWithVideo()]) { await run(); await v.idle(); }
+      if (FM.textEdit && FM.textEdit.isActive()) FM.textEdit.stop();
+      const id = FM.projects.currentId(), row = () => JSON.stringify(FM.spine.read(FM.scene).main.filter(e => !e.slot).map(e => [FM.layerById(FM.scene, e.id).name, +e.start.toFixed(4), +e.end.toFixed(4), e.seam && e.seam.kind]));
+      const doc0 = v.doc(), row0 = row();
+      FM.storage.markDirty(); await FM.storage.save();
+      const other = await FM.projects.create({ name: 'S13 other', width: 320, height: 240 });
+      try {
+        for (const ed of ['simple', 'full']) {
+          await FM.projects.open(id, { confirmed: true }); await v.sleep(300);
+          FM.editor.apply(ed, { force: true, quiet: true }); FM.refreshAll(); await v.sleep(200);
+          const doc1 = v.doc();
+          if (doc1 !== doc0) throw new Error('reopened in ' + ed + ', the document differs: ' + s13Diff(doc0, doc1));
+          if (row() !== row0) throw new Error('reopened in ' + ed + ', the clip row differs: ' + row0 + ' vs ' + row());
+          await FM.projects.open(other, { confirmed: true }); await v.sleep(200);
+        }
+      } finally { try { await FM.projects.open(id, { confirmed: true }); await FM.projects.remove(other); } catch (e) {} }
+    });
+  });
+
+  /* ════ S13 lens 5: THE INLINE ROWS (Speed, Volume, Fade, Length) on a 320, a 380, a 1024 and a 1280 screen: every button is a finger-sized target and shows whole ════ */
+  test('simple P2.7 · S13L5 the open Speed, Volume, Fade and Length rows: every button is at least 44 px tall (a 12 px target is a miss), a finger on it lands on it, and Done, the presets and both fades show whole without scrolling', { item: '980', budgetMs: 240000 }, async function () {
+    smNeedP2();
+    const build = (W, H) => [smSong('Song', 0, 9, W, H, { sm: { stay: true } }), smV('B', 2, 2, W, H), smV('A', 0, 2, W, H)];
+    const sizes = [[1280, 800], [1024, 600], [380, 0], [320, 0]], bad = [];
+    for (const [w, h] of sizes) {
+      await (w <= 700 ? (fn => atPhoneWidth(fn, w)) : (fn => smTrayBAt(w, h, fn)))(async function () {
+        await smP2(build, async function (v) {
+          const rows = [['speed', v.L('B').id], ['volume', v.L('B').id], ['fade', v.L('Song').id], ['length', v.L('B').id]];
+          for (const [kind, id] of rows) {
+            FM.simpleTools._reset(); FM.selectLayer(id); await v.sleep(120);
+            if (kind === 'length') FM.simpleTools.openLength(id); else FM.simpleTools.openRow(kind, id);
+            await v.sleep(250);
+            const tray = document.getElementById('sm-tray'), tr = tray.getBoundingClientRect();
+            Array.from(tray.querySelectorAll('.sm-tool')).forEach(b => {
+              const r = b.getBoundingClientRect(), name = w + ' ' + kind + ' ' + b.dataset.tool;
+              if (r.height < 43.5) bad.push(name + ' is ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' px');
+              const cx = r.left + r.width / 2, cy = r.top + r.height / 2, shown = r.left >= tr.left - 0.5 && r.right <= tr.right + 0.5;
+              if (!shown) bad.push(name + ' is cut off (' + Math.round(r.left) + '-' + Math.round(r.right) + ' in a band ' + Math.round(tr.left) + '-' + Math.round(tr.right) + ')');
+              else { const e = document.elementFromPoint(cx, cy); if (!(e && e.closest('.sm-tool') === b)) bad.push(name + ' is covered at its centre'); }
+            });
+          }
+        });
+      });
+    }
+    if (bad.length) throw new Error(bad.length + ' problems: ' + bad.join(' | '));
+  });
+
+  test('simple P2.7 · S13L5b the Fade row sets one fade at a time: In and Out choose, − and + step it by half a second, the value shows, and undo takes one step back', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smSong('Song', 0, 9, W, H, { sm: { stay: true } }), smV('A', 0, 2, W, H)], async function (v) {
+      const S = v.L('Song');
+      FM.selectLayer(S.id); await v.sleep(100); FM.simpleTools.openRow('fade', S.id); await v.sleep(200);
+      const click = async id => { const b = smTool(id); if (!b) throw new Error('no ' + id + ' in the Fade row: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(x => x.dataset.tool)); b.click(); await v.idle(); await v.sleep(150); };
+      await click('fadePlus'); await click('fadePlus');
+      if (v.L('Song').fadeIn !== 1 || v.L('Song').fadeOut) throw new Error('In +,+ gave in ' + v.L('Song').fadeIn + ' out ' + v.L('Song').fadeOut);
+      if (!/1\.0 s/.test(document.getElementById('sm-tray').textContent)) throw new Error('the row does not show 1.0 s: ' + document.getElementById('sm-tray').textContent);
+      await click('fadesideout'); await click('fadePlus');
+      if (v.L('Song').fadeOut !== 0.5 || v.L('Song').fadeIn !== 1) throw new Error('Out + gave in ' + v.L('Song').fadeIn + ' out ' + v.L('Song').fadeOut);
+      await click('fadeMinus'); await click('fadeMinus');
+      if (v.L('Song').fadeOut !== 0) throw new Error('Out − − left ' + v.L('Song').fadeOut);
+      if (smTool('fadesideout').getAttribute('aria-pressed') !== 'true') throw new Error('Out is not shown as chosen');
+      await click('fadesidein'); FM.history.undo(); await v.idle(); await v.sleep(100);
+      if (v.L('Song').fadeOut !== 0.5 || v.L('Song').fadeIn !== 1) throw new Error('one undo should take only the last step back (Out 0 to 0.5), it is in ' + v.L('Song').fadeIn + ' out ' + v.L('Song').fadeOut);
+    });
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

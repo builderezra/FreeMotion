@@ -325,15 +325,18 @@ window.FM = window.FM || {};
     out.push(rng, val);
     return out;
   }
+  /* S13 lens 5: ONE fade at a time. Both fades side by side were 434 px and the Out controls sat off the band on every phone and PC size; In | Out choose which one the
+     − value + steps. The choice is remembered for the open row only. */
+  let fadeSide = 'in';
   function fadeRow(R, id) {
     const S = FM.spine, w = W(), tid = S.soundTargetId(R, id), t = tid && FM.layerById(FM.scene, tid), out = [rowBack()];
     if (!t) return out;
-    [['in', 'fadeIn', w.fadeIn || 'In'], ['out', 'fadeOut', w.fadeOut || 'Out']].forEach(f => {
-      const cur = () => { const L = FM.layerById(FM.scene, tid); return L ? (+L[f[1]] || 0) : 0; };
-      out.push(el('div', 'sm-quiet sm-fade-l', f[2] + ' ' + cur().toFixed(1) + ' s'));
-      out.push(tool({ id: 'fade' + f[0] + 'Minus', label: '−', icon: null, title: f[2] + ': ' + (w.shorter || 'shorter'), run: () => S.cmd.fade(id, f[0], Math.max(0, cur() - 0.5)) }));
-      out.push(tool({ id: 'fade' + f[0] + 'Plus', label: '+', icon: null, title: f[2] + ': ' + (w.longer || 'longer'), run: () => S.cmd.fade(id, f[0], cur() + 0.5) }));
-    });
+    const key = fadeSide === 'out' ? 'fadeOut' : 'fadeIn', cur = () => { const L = FM.layerById(FM.scene, tid); return L ? (+L[key] || 0) : 0; };
+    [['in', w.fadeIn || 'In'], ['out', w.fadeOut || 'Out']].forEach(f => out.push(tool({ id: 'fadeside' + f[0], label: f[1] + ' ' + (+((FM.layerById(FM.scene, tid) || {})[f[0] === 'in' ? 'fadeIn' : 'fadeOut']) || 0).toFixed(1), icon: null, pressed: fadeSide === f[0],
+      run: () => { fadeSide = f[0]; lastSig = ''; FM.simpleTools.sync(); } })));
+    out.push(tool({ id: 'fadeMinus', label: '−', icon: null, title: (fadeSide === 'out' ? (w.fadeOut || 'Out') : (w.fadeIn || 'In')) + ': ' + (w.shorter || 'shorter'), run: () => S.cmd.fade(id, fadeSide, Math.max(0, cur() - 0.5)) }));
+    out.push(el('div', 'sm-quiet sm-fade-l', cur().toFixed(1) + ' s'));
+    out.push(tool({ id: 'fadePlus', label: '+', icon: null, title: (fadeSide === 'out' ? (w.fadeOut || 'Out') : (w.fadeIn || 'In')) + ': ' + (w.longer || 'longer'), run: () => S.cmd.fade(id, fadeSide, cur() + 0.5) }));
     return out;
   }
   /* OPTION E (S9, his A1 sheet): a video clip's four sound-and-time tools live in ONE row, opened by one tool, "Audio": Speed, Volume, Reverse, and Take sound out / Put sound back.
