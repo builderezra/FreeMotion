@@ -114,3 +114,4 @@ S13 | 2026-10-09 | hunt/simple-stack-landing-2 | six-lens review, findings in to
 S14 | 2026-10-09 | hunt/simple-gaps + plans/simple-gaps | captions, find speech, look all, text animate built per DESIGN; rest documented; merged with 2.7 on hunt/simple-tip (5 files conflicted, suite slice green 1280 and 380)
 T12 | 2026-10-09 | tutorials-drafts | tutorials 13 crossfade and 14 dip to black walked at 380 on hunt/simple-tip; 14 states honestly that Simple has no fade-out at the end of the video
 H59 | 2026-10-09 | hunt/fu-plantcheck | SUPERSEDED per PM (builder's lock round 3 checks plant anchors before measuring); my branch is pushed as is, do not land it
+P19 | 2026-10-09 | plans/helper-19 | #1062 #1063 #1064 #1066 #1074 planned: tests red on main and green patched at 1280 and 380, patches, mutations all caught; #1064 gate rewritten reference-driven (found a bump cascade), #1074 option A breaks queue-52 so B recommended (needs his OK); #1070 already shipped v17.24
