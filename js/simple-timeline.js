@@ -565,14 +565,18 @@ window.FM = window.FM || {};
         chip.addEventListener('click', ev => { ev.stopPropagation(); if (FM.spine.cmd) FM.spine.cmd.closeSeam(e.id); });   // Phase 2: Close gap / Fix
         mainEl.appendChild(chip);
       });
-      // 2.7: a ◇ at a cut that carries a transition (never at a gap or an overlap): tap it to select the incoming clip and open its Transition row
+      // 2.7 (DESIGN §8.2 "Transition ◇", Phase 6 "◇ at each cut"): a ◇ above every cut that is a clean join between two pictures, filled when the cut carries a
+      // transition. It sits ABOVE the clip row so it never covers a trim grip; tap it to select the incoming clip and open its Transition row.
       R.main.forEach((e, i) => {
         const l = byId.get(e.id);
-        if (e.slot || i < 1 || !l || !l.trIn || !e.seam || e.seam.kind !== 'join') return;
-        const chip = el('button', 'sm-chip sm-chip-tr', '◇');
+        if (e.slot || i < 1 || !l || !(FM.spine.joinInto && FM.spine.joinInto(R, e.id))) return;
+        const pl = byId.get(R.main[i - 1].id);
+        if (!pl || !(l.type === 'video' || l.type === 'image' || l.type === 'shape') || !(pl.type === 'video' || pl.type === 'image' || pl.type === 'shape')) return;
+        const chip = el('button', 'sm-chip sm-chip-tr' + (l.trIn ? ' sm-chip-tr-on' : ''), '◇');
         chip.type = 'button'; chip.dataset.tr = e.id;
         chip.style.left = xOf(e.start) + 'px';
-        const name = 'Transition: ' + ({ crossfade: 'crossfade', dipblack: 'dip to black', dipwhite: 'dip to white' }[l.trIn.type] || '') + ' ' + l.trIn.d.toFixed(1) + ' s';
+        const kind = l.trIn ? ({ crossfade: 'crossfade', dipblack: 'dip to black', dipwhite: 'dip to white' }[l.trIn.type] || '') + ' ' + l.trIn.d.toFixed(1) + ' s' : 'none';
+        const name = 'Transition: ' + kind;
         chip.setAttribute('aria-label', name); chip.title = name;
         chip.addEventListener('click', ev => { ev.stopPropagation(); FM.selectLayer(e.id); if (FM.simpleTools && FM.simpleTools.openRow) FM.simpleTools.openRow('transition', e.id); });
         mainEl.appendChild(chip);

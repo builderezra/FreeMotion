@@ -237,8 +237,7 @@ window.FM = window.FM || {};
         crop,
         ...(l.type === 'video' || l.type === 'image' ? [replaceT] : []),   // after Crop: a picture's first row on two rows stays exactly as it was
         ...(isVid ? [reverseT] : []),
-        ...(soundT ? [soundT] : []),
-        ...(S.joinInto && S.joinInto(R, id) ? [{ id: 'transition', label: w.transition || 'Transition', icon: 'transition', pressed: !!l.trIn, run: () => FM.simpleTools.openRow('transition', id) }] : [])
+        ...(soundT ? [soundT] : [])
       ];
       /* §8.2: a clip next to a gap or an overlap offers Close gap / Fix too (the seam chip's command) */
       /* its key names the seam it closes, so a double click never runs on into the next seam (the guard in tool()) */
