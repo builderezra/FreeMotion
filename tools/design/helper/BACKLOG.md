@@ -235,3 +235,26 @@ ADDED 9 Oct 13:10 by the PM. Huge run: S6–S9, R7 and P17. Your R7 walk is exac
 - T11  Four Simple tutorials for the new releases (speed and sound, crossfades, dragging clips, editing with a friend), walked at 380 on your newest Simple tip, same format as T9/T10.
       → tutorials-drafts.
 - P18  Plans for the 5 oldest open items after P17's, callers traced. → plans/helper-18.
+
+ADDED 9 Oct 16:20 by the PM. S10–S12, R8, T11 and P18 all landed, and Ezra has your transitions sheet. Your Simple code is now well ahead of what the builder can ship (it waits on the laptop's lock), so this batch is about QUALITY and LANDING COST rather than more features. Same rules and QUALITY RULE; keep your turn alive; push as you go; never push to main; never force-push. In order:
+- S13  An adversarial review of your whole hunt/simple-stack-landing, one lens at a time. Write each finding down, then try to REFUTE it before fixing.
+      Lenses:
+      (1) Full unchanged: any line that changes Full's look or behaviour, against DESIGN §0.4;
+      (2) undo/redo across every Simple command, byte for byte;
+      (3) save, close, reopen: a project made in Simple reopens identical in Simple AND in Full;
+      (4) collab: a Simple user and a Full user on the fake network;
+      (5) phone layout at 380 and 320x568, and PC at 1024x600;
+      (6) a project with 60 clips and a 10-minute song (speed of every command).
+      Fix each confirmed finding with a red-first test.
+      → hunt/simple-stack-landing-2 (new branch); findings in tools/design/hunts/simple-review.md.
+- H59  A seconds-fast gate for the Full-unchanged lock's plants. Write tools/_fu_plantcheck.py: for every plant in tools/full-unchanged-plants.json with an "old" anchor, the anchor must occur exactly once in its file in the tree, or it exits non-zero naming the plant.
+      - Include a self-test (a fake plants file with a missing anchor and a doubled anchor must both be caught).
+      - Show the 3-line hook for tools/full-unchanged.sh to run it first.
+      The laptop lost a whole 30-minute run to "could not plant sanitiser" today.
+      → hunt/fu-plantcheck.
+- S14  R8's 7 open CapCut gaps.
+      - For each one INSIDE what DESIGN.md already decided (quote the line), write it in full on top of S13's branch, with tests as before.
+      - For each one that is a NEW feature DESIGN never decided, do NOT build it. Write a one-page plan with 2–3 options drawn in the real app (one marked recommended), so Ezra can pick.
+      → hunt/simple-gaps + plans/simple-gaps.
+- T12  Two tutorials for transitions in Simple (adding a crossfade; dip to black at the end), walked at 380 on your newest tip, the same format as T9–T11. → tutorials-drafts.
+- P19  Plans for the 5 oldest open items after P18's, callers traced. → plans/helper-19.
