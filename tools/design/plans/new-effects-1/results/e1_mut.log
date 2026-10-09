@@ -1,0 +1,33 @@
+=== M1_hue_matrix_sign
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILE1 Colour Cycle — Speed 0 is 100 levels from the browser’s hue-rotate(90deg); the two matrices are the same maths, so more than 3 is a wrong constant
+=== M2_skin_mask_dropped
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILE1 Soften Skin — Skin tones softened a blue patch (11)
+=== M3_oil_transparent
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILE1 Oil Paint — a transparent pixel was recoloured at 3528
+=== M4_glitter_bar
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILE1 Glitter — 216 changed pixels lie far from the bright patch: stars are being drawn on the dark ground
+=== M5_censor_mask
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILE1 Censor — style 1: 4260 pixels outside the box changed
+=== M6_popart_same_hue
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILE1 Pop Art — style 0: cells 0 and 1 are the same colour (0 apart)
+=== M7_censor_ignores_scale
+   baseline green ✅ (1 named title(s) ran and passed)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+=== M8_glitter_ignores_scale
+→ baseline: these titles were proven green on this exact tree already (cached)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+ALLDONE

@@ -11793,7 +11793,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // rect bigger than the clip, and the tight Apple curve then barely cuts anything. Pay full price.
     else if (fx.type === 'roundcorners') { try { bbox = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
     // tiles spaces its copies BY this rectangle, so it needs the exact one for the same reason
-    else if (fx.type === 'tiles') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
+    /* …and so do Pop Art, Censor and Glitter (E1): they lay a grid, a box in per cent and a star lattice out from the layer's corner, and the fast scan's
+       ~12 px of slack is 12 PLATE pixels, so a half-size preview and the export would disagree about where that corner is (Measured: Pop Art, 5.8 levels
+       mean at half size with the fast box, 0.5 with the exact one). */
+    else if (fx.type === 'tiles' || fx.type === 'popart' || fx.type === 'censor' || fx.type === 'glitter') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
     else try { bbox = alphaBBoxFast(_cfA, W, H); if (bbox && SOLID_FX[fx.type]) bbox = alphaBBoxWithin(actx, bbox) || bbox; } catch (e) { bbox = null; }  // tainted-canvas guard
     // Tiles in "Whole clip" mode builds its OWN plate reaching past the frame and takes its rect from
     // THAT (the `whole && expand` branch in tiles() overwrites src/sx/sy/bw/bh/bx/by wholesale). But
@@ -17809,6 +17812,301 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * strided-scan bug shipped for four days: bounded and unbounded agreed on a perfect box and diverged
    * badly on the real one. A test must ask for the box the renderer would actually hand the kernel. */
   FM._fxBounds = fxBounds;
+  /* ═══ E1: SIX NEW EFFECTS BEGINNERS LOOK FOR (hunt/new-effects-1) ═══════════════════════════════════════════════════
+   * Colour Cycle, Soften Skin, Oil Paint (pixel kernels) and Glitter, Censor, Pop Art (canvas kernels). All six are NEW TYPES, so no
+   * existing project, preset, filter or look can change; every kernel is a pure function of its pixels, its parameters and the
+   * clip's own clock (`FM.fxLocalTime`), with no state and no `Math.random`, so a scrub, the preview and the export draw the same
+   * frame. Lengths in px are PROJECT px: the pixel kernels take them from `pxToPlate` (they declare five parameters on purpose, so
+   * the scaling stays on), the canvas kernels multiply by `ps` themselves. A pixel whose alpha is 0 is never read as colour and
+   * never written, so the outside of a cut-out is bit-for-bit what it was.
+   * Nothing here walks the whole frame more than a few times; Oil Paint, the dearest, works in 64-row strips so it never holds
+   * more than a few planes of the frame at once (the lesson of #1095). */
+  const E1_ROWS = [
+    { type: 'huecycle', label: 'Colour Cycle', desc: 'The colours of the picture turn round the colour wheel, smoothly or in flashing steps — the rainbow strobe.', params: [
+      { key: 'speed', label: 'Speed', min: 0, max: 720, step: 5, def: 90, unit: '°/s' },
+      { key: 'phase', label: 'Start colour', min: 0, max: 360, step: 1, def: 60, unit: '°' },
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Smooth'], [1, 'Stepped']] },
+      { key: 'steps', label: 'Steps per turn', min: 2, max: 12, step: 1, def: 6, overriddenBy: 'style', liveWhen: 1 },
+      { key: 'boost', label: 'Colour boost', min: 0, max: 1, step: 0.02, def: 0.2 },
+    ] },
+    { type: 'softskin', label: 'Soften Skin', desc: 'Smooths small blemishes and noise and keeps the edges sharp. It cannot find faces: on Everything it softens the whole picture, on Skin tones it follows skin-coloured pixels (and will also soften a wooden table).', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'radius', label: 'Smoothing size', min: 1, max: 20, step: 1, def: 6, unit: 'px' },
+      { key: 'keep', label: 'Keep detail', min: 0, max: 100, step: 1, def: 40, unit: '%' },
+      { key: 'only', label: 'Soften', def: 0, options: [[0, 'Everything'], [1, 'Skin tones']] },
+    ] },
+    { type: 'oilpaint', label: 'Oil Paint', desc: 'Turns the picture into a painting: flat daubs of colour with the edges kept hard.', params: [
+      { key: 'radius', label: 'Brush size', min: 1, max: 8, step: 1, def: 3, unit: 'px' },
+      { key: 'detail', label: 'Detail', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'punch', label: 'Richer colour', min: 0, max: 1, step: 0.02, def: 0.3 },
+    ] },
+    { type: 'glitter', label: 'Glitter', desc: 'Little stars that twinkle on the bright parts of the picture. On a dark shot, lower the Brightness bar.', params: [
+      { key: 'spacing', label: 'Spacing', min: 20, max: 200, step: 1, def: 60, unit: 'px' },
+      { key: 'size', label: 'Star size', min: 4, max: 60, step: 1, def: 14, unit: 'px' },
+      { key: 'threshold', label: 'Brightness bar', min: 0, max: 100, step: 1, def: 55, unit: '%' },
+      { key: 'speed', label: 'Twinkle speed', min: 0.2, max: 6, step: 0.1, def: 1.5, unit: 'Hz' },
+      { key: 'points', label: 'Points', def: 0, options: [[0, 'Four'], [1, 'Six'], [2, 'Eight']] },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
+    { type: 'censor', label: 'Censor', desc: 'Hides a face, a number plate or a name: pixelate, blur or black out one box or oval. Move it with X, Y, Width and Height (all can be keyframed to follow what you hide).', params: [
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Pixelate'], [1, 'Blur'], [2, 'Black bar']] },
+      { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Box'], [1, 'Oval']] },
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 40, unit: '%' },
+      { key: 'w', label: 'Width', min: 5, max: 100, step: 1, def: 40, unit: '%' },
+      { key: 'h', label: 'Height', min: 5, max: 100, step: 1, def: 25, unit: '%' },
+      { key: 'strength', label: 'Strength', min: 4, max: 80, step: 1, def: 18, unit: 'px' },
+      { key: 'feather', label: 'Soft edge', min: 0, max: 40, step: 1, def: 0, unit: 'px' },
+    ] },
+    { type: 'popart', label: 'Pop Art', desc: 'The picture four (or nine) times over in a grid, each square in different colours.', params: [
+      { key: 'layout', label: 'Grid', def: 0, options: [[0, 'Two by two'], [1, 'Three by three']] },
+      { key: 'style', label: 'Colours', def: 0, options: [[0, 'Hue shifts'], [1, 'Duotone pairs'], [2, 'Posterised colours']] },
+      { key: 'gap', label: 'Gap', min: 0, max: 30, step: 1, def: 0, unit: 'px' },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 1, step: 0.02, def: 0.5 },
+    ] },
+  ];
+  E1_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  const e1Smooth = (a, b, x) => { const u = x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a); return u * u * (3 - 2 * u); };
+  const e1Hash = (k) => { k = Math.imul(k ^ (k >>> 16), 0x85ebca6b); k = Math.imul(k ^ (k >>> 13), 0xc2b2ae35); return ((k ^ (k >>> 16)) >>> 0) / 4294967296; };   // a fixed integer hash: never Math.random
+  // the CSS hue-rotate matrix for `deg`, as nine numbers
+  const e1HueM = (deg) => { const a = Math.cos(deg * Math.PI / 180), b = Math.sin(deg * Math.PI / 180);
+    return [0.213 + 0.787 * a - 0.213 * b, 0.715 - 0.715 * a - 0.715 * b, 0.072 - 0.072 * a + 0.928 * b,
+            0.213 - 0.213 * a + 0.143 * b, 0.715 + 0.285 * a + 0.140 * b, 0.072 - 0.072 * a - 0.283 * b,
+            0.213 - 0.213 * a - 0.787 * b, 0.715 - 0.715 * a + 0.715 * b, 0.072 + 0.928 * a + 0.072 * b]; };
+
+  /* ---- Colour Cycle: the hue turns with the clip's clock; Stepped jumps `steps` times a turn ---- */
+  PIXEL_FX.huecycle = function (d, W, H, p, t) {
+    const lay = arguments[7], tl = lay ? FM.fxLocalTime(lay, t) : t;
+    const speed = Math.max(0, fparam(p, 'speed', 90, t)), phase = fparam(p, 'phase', 60, t);
+    const stepped = Math.round(fparam(p, 'style', 0, t)) === 1, steps = Math.max(2, Math.min(12, Math.round(fparam(p, 'steps', 6, t))));
+    const boost = clamp01(fparam(p, 'boost', 0.2, t));
+    let deg = phase + speed * (tl > 0 ? tl : 0);
+    if (stepped) { const q = 360 / steps; deg = Math.floor(deg / q + 1e-9) * q; }
+    deg = ((deg % 360) + 360) % 360;
+    const m = e1HueM(deg), s = 1 + boost;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      let R = m[0] * r + m[1] * g + m[2] * b, G = m[3] * r + m[4] * g + m[5] * b, B = m[6] * r + m[7] * g + m[8] * b;
+      if (boost > 0) { const L = 0.299 * R + 0.587 * G + 0.114 * B; R = L + (R - L) * s; G = L + (G - L) * s; B = L + (B - L) * s; }
+      d[i] = R; d[i + 1] = G; d[i + 2] = B;   // Uint8ClampedArray clamps and rounds
+    }
+  };
+
+  /* A box blur of an interleaved RGBA byte array (premultiplied by the caller), three passes, integer running sums: the same
+     three-box approximation of a Gaussian the CPU blur fallback uses (boxesForGauss). Returns a NEW array. */
+  function e1BoxBlur(src, W, H, sigma) {
+    let a = new Uint8ClampedArray(src), b = new Uint8ClampedArray(src.length);
+    const pass = (from, to, r, horiz) => {
+      const len = horiz ? W : H, lines = horiz ? H : W, step = horiz ? 4 : W * 4, w = 2 * r + 1;
+      for (let l = 0; l < lines; l++) {
+        const base = horiz ? l * W * 4 : l * 4;
+        for (let c = 0; c < 4; c++) {
+          let acc = 0;
+          for (let k = -r; k <= r; k++) acc += from[base + Math.min(len - 1, Math.max(0, k)) * step + c];   // edge pixels repeat
+          for (let x = 0; x < len; x++) {
+            to[base + x * step + c] = (acc + (w >> 1)) / w;
+            const add = Math.min(len - 1, x + r + 1), sub = Math.max(0, x - r);
+            acc += from[base + add * step + c] - from[base + sub * step + c];
+          }
+        }
+      }
+    };
+    boxesForGauss(Math.max(0.5, sigma)).forEach(r => { r = Math.round(r); if (r < 1) return; pass(a, b, r, true); pass(b, a, r, false); });
+    return a;
+  }
+
+  /* ---- Soften Skin: blur, then let the blur through only where the picture is nearly the same as its blur ---- */
+  PIXEL_FX.softskin = function (d, W, H, p, t) {
+    const amount = clamp01(fparam(p, 'amount', 0.6, t)); if (amount <= 0) return;
+    const radius = Math.max(0.5, Math.min(40, fparam(p, 'radius', 6, t)));
+    const keep = Math.max(0, Math.min(100, fparam(p, 'keep', 40, t))), skinOnly = Math.round(fparam(p, 'only', 0, t)) === 1;
+    const thr = 4 + keep * 0.9, N = W * H;
+    const pm = new Uint8ClampedArray(d.length);   // premultiplied copy: a transparent pixel adds nothing to its neighbours
+    for (let i = 0; i < d.length; i += 4) { const a = d[i + 3]; if (a === 0) continue; const f = a / 255; pm[i] = d[i] * f; pm[i + 1] = d[i + 1] * f; pm[i + 2] = d[i + 2] * f; pm[i + 3] = a; }
+    const bl = e1BoxBlur(pm, W, H, radius / 2);
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3]; if (a === 0) continue;
+      const ba = bl[i + 3]; if (ba < 1) continue;
+      const k = 255 / ba, br = Math.min(255, bl[i] * k), bg = Math.min(255, bl[i + 1] * k), bb2 = Math.min(255, bl[i + 2] * k);
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      const dl = Math.abs((0.299 * r + 0.587 * g + 0.114 * b) - (0.299 * br + 0.587 * bg + 0.114 * bb2));
+      let w = amount * (1 - e1Smooth(0, thr, dl));
+      if (skinOnly && w > 0) {
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        let sk = 0;
+        if (mx > 0 && mx > mn) {
+          const sat = (mx - mn) / mx; let h;
+          if (mx === r) h = 60 * ((g - b) / (mx - mn)); else if (mx === g) h = 60 * (2 + (b - r) / (mx - mn)); else h = 60 * (4 + (r - g) / (mx - mn));
+          if (h > 180) h -= 360;
+          sk = e1Smooth(-12, 2, h) * (1 - e1Smooth(38, 52, h)) * e1Smooth(0.1, 0.18, sat) * (1 - e1Smooth(0.6, 0.75, sat)) * e1Smooth(0.15, 0.3, mx / 255);
+        }
+        w *= sk;
+      }
+      if (w <= 0) continue;
+      d[i] = r + (br - r) * w; d[i + 1] = g + (bg - g) * w; d[i + 2] = b + (bb2 - b) * w;
+    }
+  };
+
+  /* ---- Oil Paint: Kuwahara. Each pixel takes the mean colour of whichever of its four (r+1)x(r+1) quadrants is flattest. ----
+     Separable running sums over 64-row strips with the image edge repeated: small exact numbers, never a whole-frame table. */
+  PIXEL_FX.oilpaint = function (d, W, H, p, t) {
+    const r = Math.max(1, Math.min(12, Math.round(fparam(p, 'radius', 3, t))));
+    const detail = clamp01(fparam(p, 'detail', 0, t)), punch = clamp01(fparam(p, 'punch', 0.3, t));
+    if (detail >= 1) return;
+    const out = new Uint8ClampedArray(d), STRIP = 64, PW = W + 2 * r, n = (r + 1) * (r + 1);   // a copy, so a transparent pixel keeps its own bytes
+    const src = d;
+    for (let ys = 0; ys < H; ys += STRIP) {
+      const ye = Math.min(H, ys + STRIP), hs = ye - ys, LH = hs + 2 * r;
+      const sums = [new Float32Array(PW * LH), new Float32Array(PW * LH), new Float32Array(PW * LH), new Float32Array(PW * LH), new Float32Array(PW * LH), new Float32Array(PW * LH)];   // R, G, B (alpha-weighted), alpha, luma, luma squared
+      for (let lr = 0; lr < LH; lr++) {
+        const sy = Math.min(H - 1, Math.max(0, ys - r + lr));
+        for (let xp = 0; xp < PW; xp++) {
+          const sx = Math.min(W - 1, Math.max(0, xp - r)), i = (sy * W + sx) * 4, a = src[i + 3] / 255, o = lr * PW + xp;
+          const R = src[i] * a, G = src[i + 1] * a, B = src[i + 2] * a, L = Math.round(0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]) * a;
+          sums[0][o] = R; sums[1][o] = G; sums[2][o] = B; sums[3][o] = a; sums[4][o] = L; sums[5][o] = L * L / (a || 1);
+        }
+      }
+      // horizontal window sums over [xp-r .. xp], then vertical over [lr-r .. lr]
+      for (let k = 0; k < 6; k++) {
+        const v = sums[k], hz = new Float32Array(PW * LH);
+        for (let lr = 0; lr < LH; lr++) {
+          let acc = 0; const row = lr * PW;
+          for (let xp = 0; xp < PW; xp++) { acc += v[row + xp]; if (xp - r - 1 >= 0) acc -= v[row + xp - r - 1]; hz[row + xp] = acc; }
+        }
+        for (let xp = 0; xp < PW; xp++) {
+          let acc = 0;
+          for (let lr = 0; lr < LH; lr++) { acc += hz[lr * PW + xp]; if (lr - r - 1 >= 0) acc -= hz[(lr - r - 1) * PW + xp]; v[lr * PW + xp] = acc; }
+        }
+      }
+      for (let y = ys; y < ye; y++) {
+        const ly = y - ys;
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, a0 = src[i + 3]; if (a0 === 0) continue;
+          let best = 1e30, bo = 0;
+          for (let q = 0; q < 4; q++) {
+            const o = (ly + r + (q >> 1) * r) * PW + (x + r + (q & 1) * r);   // NW, NE, SW, SE windows
+            const sa = sums[3][o]; if (sa < 0.5) continue;
+            const mL = sums[4][o] / n, vr = sums[5][o] / n - mL * mL;
+            if (vr < best) { best = vr; bo = o; }
+          }
+          const sa = sums[3][bo]; if (sa < 0.5) { out[i] = src[i]; out[i + 1] = src[i + 1]; out[i + 2] = src[i + 2]; out[i + 3] = a0; continue; }
+          let R = sums[0][bo] / sa, G = sums[1][bo] / sa, B = sums[2][bo] / sa;
+          if (punch > 0) { const L = 0.299 * R + 0.587 * G + 0.114 * B, s = 1 + punch * 0.8; R = L + (R - L) * s; G = L + (G - L) * s; B = L + (B - L) * s; }
+          if (detail > 0) { R += (src[i] - R) * detail; G += (src[i + 1] - G) * detail; B += (src[i + 2] - B) * detail; }
+          out[i] = R; out[i + 1] = G; out[i + 2] = B; out[i + 3] = a0;
+        }
+      }
+    }
+    d.set(out);
+  };
+
+  /* ---- Glitter: a fixed grid of candidate points, each twinkling on its own phase, drawn only where the picture is bright ---- */
+  CANVAS_FX.glitter = function (A, B, W, H, bb, p, t, tl) {
+    const ps = arguments[9] > 0 ? arguments[9] : 1;
+    const spacing = Math.max(8, fparam(p, 'spacing', 60, t)) * ps, size = Math.max(1, fparam(p, 'size', 14, t)) * ps;
+    const thr = clamp01(fparam(p, 'threshold', 55, t) / 100), speed = Math.max(0, fparam(p, 'speed', 1.5, t));
+    const points = [4, 6, 8][Math.max(0, Math.min(2, Math.round(fparam(p, 'points', 0, t))))];
+    const rgb = hexToRGB(p.color || '#ffffff'), time = tl == null ? t : tl;
+    B.drawImage(A, 0, 0);
+    let img; try { img = A.getContext('2d').getImageData(0, 0, W, H).data; } catch (e) { return; }
+    const x0 = Math.floor(bb.x / spacing) - 1, x1 = Math.ceil((bb.x + bb.w) / spacing) + 1, y0 = Math.floor(bb.y / spacing) - 1, y1 = Math.ceil((bb.y + bb.h) / spacing) + 1;
+    B.save(); B.globalCompositeOperation = 'lighter'; B.lineCap = 'round';
+    const col = (a) => 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + a + ')';
+    for (let iy = y0; iy <= y1; iy++) for (let ix = x0; ix <= x1; ix++) {
+      const k = Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663);
+      const px = (ix + e1Hash(k + 1)) * spacing, py = (iy + e1Hash(k + 2)) * spacing;
+      const xi = Math.round(px), yi = Math.round(py);
+      if (xi < 0 || yi < 0 || xi >= W || yi >= H) continue;
+      const o = (yi * W + xi) * 4; if (img[o + 3] < 40) continue;
+      if ((0.299 * img[o] + 0.587 * img[o + 1] + 0.114 * img[o + 2]) / 255 < thr) continue;
+      const tw = Math.sin(2 * Math.PI * (speed * time + e1Hash(k + 3)));
+      const br = tw > 0 ? tw * tw * tw : 0; if (br < 0.02) continue;
+      const R = size * (0.5 + 0.5 * e1Hash(k + 4)) * (0.35 + 0.65 * br);
+      const gr = B.createRadialGradient(px, py, 0, px, py, R * 0.5);
+      gr.addColorStop(0, col(Math.min(1, br))); gr.addColorStop(1, col(0));
+      B.fillStyle = gr; B.beginPath(); B.arc(px, py, R * 0.5, 0, Math.PI * 2); B.fill();
+      B.strokeStyle = col(Math.min(1, br * 0.9)); B.lineWidth = Math.max(1, R * 0.07);
+      B.beginPath();
+      for (let s = 0; s < points / 2; s++) { const ang = Math.PI * s / (points / 2) + (points === 6 ? Math.PI / 12 : 0), dx = Math.cos(ang) * R * (s % 2 ? 0.7 : 1), dy = Math.sin(ang) * R * (s % 2 ? 0.7 : 1); B.moveTo(px - dx, py - dy); B.lineTo(px + dx, py + dy); }
+      B.stroke();
+    }
+    B.restore();
+  };
+
+  /* ---- Censor: one box or oval of the layer pixelated, blurred or blacked out. Its pixel grid is anchored to the layer's box,
+     so the blocks do not shimmer when the clip moves. ---- */
+  let _e1Cs = null, _e1Cm = null;
+  CANVAS_FX.censor = function (A, B, W, H, bb, p, t) {
+    const ps = arguments[9] > 0 ? arguments[9] : 1;
+    const style = Math.max(0, Math.min(2, Math.round(fparam(p, 'style', 0, t)))), oval = Math.round(fparam(p, 'shape', 0, t)) === 1;
+    const cx = bb.x + bb.w * fparam(p, 'x', 50, t) / 100, cy = bb.y + bb.h * fparam(p, 'y', 40, t) / 100;
+    const rw = bb.w * Math.max(5, fparam(p, 'w', 40, t)) / 100, rh = bb.h * Math.max(5, fparam(p, 'h', 25, t)) / 100;
+    const strength = Math.max(1, fparam(p, 'strength', 18, t) * ps), feather = Math.max(0, fparam(p, 'feather', 0, t) * ps);
+    B.drawImage(A, 0, 0);
+    const rx = Math.max(0, Math.floor(cx - rw / 2)), ry = Math.max(0, Math.floor(cy - rh / 2));
+    const rr = Math.min(W, Math.ceil(cx + rw / 2)), rb = Math.min(H, Math.ceil(cy + rh / 2));
+    const w = rr - rx, h = rb - ry; if (w < 2 || h < 2) return;
+    const pad = style === 1 ? Math.ceil(strength * 1.5) : 0, fp = Math.ceil(feather * 1.5);
+    const sx = Math.max(0, rx - pad - fp), sy = Math.max(0, ry - pad - fp), sw = Math.min(W, rr + pad + fp) - sx, sh = Math.min(H, rb + pad + fp) - sy;
+    if (!_e1Cs) _e1Cs = document.createElement('canvas'); if (!_e1Cm) _e1Cm = document.createElement('canvas');
+    _e1Cs.width = sw; _e1Cs.height = sh; _e1Cm.width = sw; _e1Cm.height = sh;
+    const S = _e1Cs.getContext('2d', { willReadFrequently: true }), M = _e1Cm.getContext('2d', { willReadFrequently: true });
+    S.clearRect(0, 0, sw, sh); S.imageSmoothingEnabled = false;
+    if (style === 0) {                                    // blocks on a grid that starts at the layer's own corner
+      const gx0 = bb.x + Math.floor((sx - bb.x) / strength) * strength, gy0 = bb.y + Math.floor((sy - bb.y) / strength) * strength;
+      const cols = Math.ceil((sx + sw - gx0) / strength), rows = Math.ceil((sy + sh - gy0) / strength);
+      let img = null; const ax = Math.max(0, Math.floor(gx0)), ay = Math.max(0, Math.floor(gy0)), aw = Math.min(W, Math.ceil(gx0 + cols * strength)) - ax, ah = Math.min(H, Math.ceil(gy0 + rows * strength)) - ay;
+      try { img = A.getContext('2d').getImageData(ax, ay, aw, ah).data; } catch (e) { return; }
+      for (let by = 0; by < rows; by++) for (let bx = 0; bx < cols; bx++) {
+        const px0 = Math.max(ax, Math.floor(gx0 + bx * strength)), px1 = Math.min(ax + aw, Math.floor(gx0 + (bx + 1) * strength)), py0 = Math.max(ay, Math.floor(gy0 + by * strength)), py1 = Math.min(ay + ah, Math.floor(gy0 + (by + 1) * strength));
+        let R = 0, G = 0, Bl = 0, Al = 0, n = 0;
+        for (let yy = py0; yy < py1; yy++) for (let xx = px0; xx < px1; xx++) { const o = ((yy - ay) * aw + (xx - ax)) * 4, a = img[o + 3]; R += img[o] * a; G += img[o + 1] * a; Bl += img[o + 2] * a; Al += a; n++; }
+        if (!n || Al <= 0) continue;
+        S.fillStyle = 'rgba(' + Math.round(R / Al) + ',' + Math.round(G / Al) + ',' + Math.round(Bl / Al) + ',' + (Al / n / 255) + ')';
+        S.fillRect(gx0 + bx * strength - sx, gy0 + by * strength - sy, strength, strength);
+      }
+    } else if (style === 1) {                             // the region plus a margin, blurred
+      S.drawImage(A, sx, sy, sw, sh, 0, 0, sw, sh);
+      cpuBlurCanvas(_e1Cs, sw, sh, Math.max(0.6, strength / 2));
+    } else {                                              // a solid bar, only over what the layer has
+      S.fillStyle = '#000'; S.fillRect(0, 0, sw, sh); S.globalCompositeOperation = 'destination-in'; S.drawImage(A, sx, sy, sw, sh, 0, 0, sw, sh); S.globalCompositeOperation = 'source-over';
+    }
+    M.clearRect(0, 0, sw, sh); M.fillStyle = '#fff'; M.beginPath();
+    if (oval) M.ellipse(cx - sx, cy - sy, w / 2, h / 2, 0, 0, Math.PI * 2); else M.rect(rx - sx, ry - sy, w, h);
+    M.fill();
+    if (feather > 0.5) cpuBlurCanvas(_e1Cm, sw, sh, feather / 2);
+    S.globalCompositeOperation = 'destination-in'; S.drawImage(_e1Cm, 0, 0); S.globalCompositeOperation = 'source-over';
+    B.save(); B.globalCompositeOperation = 'source-atop'; B.drawImage(_e1Cs, sx, sy); B.restore();
+  };
+
+  /* ---- Pop Art: the layer in a grid, each cell recoloured. The recolour is done on the pixels, with alpha untouched, so a
+     cut-out stays a cut-out (a blend-mode tint would paint the whole cell). ---- */
+  const E1_DUO = [[[20, 10, 80], [255, 220, 40]], [[110, 0, 30], [60, 230, 230]], [[0, 70, 30], [255, 130, 170]], [[50, 0, 110], [190, 255, 90]], [[110, 20, 0], [255, 240, 150]], [[0, 50, 90], [255, 150, 50]], [[60, 0, 90], [255, 255, 255]], [[0, 80, 60], [255, 90, 90]], [[30, 30, 30], [255, 200, 220]]];
+  const E1_POST = [[[20, 20, 90], [230, 40, 60], [255, 220, 60]], [[10, 70, 50], [250, 120, 20], [255, 245, 190]], [[90, 10, 90], [40, 170, 230], [255, 255, 120]], [[20, 20, 20], [240, 50, 150], [120, 240, 230]], [[70, 10, 10], [40, 190, 90], [255, 230, 200]], [[10, 40, 120], [255, 160, 30], [250, 250, 250]], [[50, 0, 60], [250, 80, 80], [160, 255, 200]], [[0, 60, 70], [230, 200, 40], [255, 130, 200]], [[40, 40, 40], [60, 160, 255], [255, 255, 160]]];
+  CANVAS_FX.popart = function (A, B, W, H, bb, p, t) {
+    const ps = arguments[9] > 0 ? arguments[9] : 1;
+    const n = Math.round(fparam(p, 'layout', 0, t)) === 1 ? 3 : 2, style = Math.max(0, Math.min(2, Math.round(fparam(p, 'style', 0, t))));
+    const gap = Math.max(0, fparam(p, 'gap', 0, t)) * ps, con = clamp01(fparam(p, 'contrast', 0.5, t));
+    const cw = (bb.w - gap * (n - 1)) / n, ch = (bb.h - gap * (n - 1)) / n; if (cw < 2 || ch < 2) { B.drawImage(A, 0, 0); return; }
+    B.save(); B.imageSmoothingEnabled = true; B.imageSmoothingQuality = 'high';
+    for (let cy = 0; cy < n; cy++) for (let cx = 0; cx < n; cx++) {
+      const k = cy * n + cx, x = Math.round(bb.x + cx * (cw + gap)), y = Math.round(bb.y + cy * (ch + gap)), w = Math.round(cw), h = Math.round(ch);
+      B.drawImage(A, bb.x, bb.y, bb.w, bb.h, x, y, w, h);
+      let img; try { img = B.getImageData(x, y, w, h); } catch (e) { continue; }
+      const d = img.data, m = style === 0 ? e1HueM(k * 360 / (n * n)) : null, duo = E1_DUO[k % 9], post = E1_POST[k % 9], cf = 1 + con * 0.8;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] === 0) continue;
+        let r = (d[i] - 128) * cf + 128, g = (d[i + 1] - 128) * cf + 128, b = (d[i + 2] - 128) * cf + 128;
+        if (style === 0) { d[i] = m[0] * r + m[1] * g + m[2] * b; d[i + 1] = m[3] * r + m[4] * g + m[5] * b; d[i + 2] = m[6] * r + m[7] * g + m[8] * b; continue; }
+        let L = (0.299 * r + 0.587 * g + 0.114 * b) / 255; L = L < 0 ? 0 : L > 1 ? 1 : L;
+        if (style === 1) { d[i] = duo[0][0] + (duo[1][0] - duo[0][0]) * L; d[i + 1] = duo[0][1] + (duo[1][1] - duo[0][1]) * L; d[i + 2] = duo[0][2] + (duo[1][2] - duo[0][2]) * L; }
+        else { const c = post[L < 0.34 ? 0 : L < 0.67 ? 1 : 2]; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; }
+      }
+      B.putImageData(img, x, y);
+    }
+    B.restore();
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".

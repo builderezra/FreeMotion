@@ -1,0 +1,10 @@
+1280 Regression 9/9 ✓Pending 0/0 built
+   ok  AI ops: setProp cannot solo a layer (there is no UI to un-solo it)
+   ok  AI: Refine and re-roll check the spend cap and the live key
+   ok  the app makes network calls to exactly one host, and it is the AI endpoint
+   ok  733: the AI digest is generated from the registry gates, and the ops clamp to the panel and grow the
+   ok  the AI knows every text animation the Text panel offers (queue 700)
+   ok  932 an AI setProject never renames his project — not the Director, not a template, not any op
+   ok  690 the AI Director, a re-roll and the Assistant only ever change the project they were started in
+   ok  967 7c a peer connection that has FAILED is held, not closed — the owner is told “Sam’s connection d
+   ok  482 polish 1 review the AI digest advertises Fade colour as a colour hex and no control as undefined
