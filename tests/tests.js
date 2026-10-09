@@ -61606,6 +61606,36 @@
     }
   });
 
+  test('simple P2.7 · S14d a title’s tray gains Style and Animate (DESIGN §8.5): Animate opens a row of Full’s own animation presets, one tap sets it (the same default object Full makes), it shows as chosen, None clears it, and each is one undo step', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    for (const [w, h] of [[1280, 800], [380, 0]]) {
+      await (w <= 700 ? (fn => atPhoneWidth(fn, w)) : (fn => smTrayBAt(w, h, fn)))(async function () {
+        await smP2((W, H) => [smT('Title', 1, 2, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+          const T = v.L('Title');
+          FM.selectLayer(T.id); await v.sleep(200);
+          const ids = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(x => x.dataset.tool).join(',');
+          if (ids !== 'editwords,style,animate,stay,more,delete') throw new Error(w + ': the title’s tray is ' + ids);
+          delete v.L('Title').textAnim; FM.history.commit();   // a title from before Animate existed has none: the default object is made on the first tap, as Full makes it
+          const doc0 = v.doc();
+          smTool('animate').click(); await v.sleep(250);
+          const listed = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(x => x.dataset.tool).filter(x => /^anim-/.test(x)).map(x => x.slice(5)).join(',');
+          if (listed !== FM.spine.TEXT_ANIMS.join(',')) throw new Error(w + ': the presets are ' + listed);
+          if (smTool('anim-none').getAttribute('aria-pressed') !== 'true') throw new Error(w + ': None should show as chosen');
+          smTool('anim-pop').click(); await v.idle(); await v.sleep(200);
+          const a = v.L('Title').textAnim;
+          if (!a || a.preset !== 'pop' || a.unit !== 'char' || a.durIn !== 0.6 || a.durOut !== 0 || a.stagger !== 0.04) throw new Error(w + ': textAnim is ' + JSON.stringify(a));
+          if (smTool('anim-pop').getAttribute('aria-pressed') !== 'true') throw new Error(w + ': Pop is not shown as chosen');
+          smTool('anim-none').click(); await v.idle(); await v.sleep(150);
+          if (v.L('Title').textAnim.preset !== 'none') throw new Error(w + ': None did not clear it');
+          FM.history.undo(); await v.idle(); await v.sleep(100);
+          if (v.L('Title').textAnim.preset !== 'pop') throw new Error(w + ': one undo should bring Pop back');
+          FM.history.undo(); await v.idle(); await v.sleep(100);
+          if (v.doc() !== doc0) throw new Error(w + ': two undos did not restore the title: ' + s13Diff(doc0, v.doc()));
+        });
+      });
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
@@ -125163,7 +125193,7 @@
     smNeedP2();
     await smTrayBAt(1280, 800, async function () {
       /* B has a 1 s gap after it, so Close gap joins its tray: the longest main-clip tray there is */
-      await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smT('On B', 2, 1, W, H), smT('On A', 0.5, 1, W, H), smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const say = document.getElementById('sm-say'), sayH = () => say.getBoundingClientRect().height;
         if (document.getElementById('sm-bar').parentNode !== document.getElementById('inspector-panel')) throw new Error('CONTROL: the tray is not in the PC band');
         const h1 = sayH();                                                    // nothing selected: the quiet line, one row
@@ -125180,12 +125210,18 @@
         if (Math.abs(sayH() - 2 * h1) > 1.5) throw new Error('1280×800: the band holds two rows at ' + sayH() + ' px, want twice the one row’s ' + h1);
         const hint = document.querySelector('#inspector .sm-band-hint');
         if (!hint || hint.textContent !== 'Its tools are below' || FM.spineWords.tools.bandHintSelPc !== 'Its tools are below') throw new Error('1280×800: the band’s words are “' + (hint && hint.textContent) + '”, want “Its tools are below” from the words file');
-        /* five or fewer: a title's four tools sit on one row and the band is one row again */
+        /* S14: a title now has six (Edit words, Style, Animate, Stay put, More, Delete): two rows of three, More and Delete last, the band two rows tall */
         FM.selectLayer(v.L('On A').id); await v.sleep(150);
-        const t = smTrayBMeasure();
-        if (t.bad.length || t.rows.length !== 1) throw new Error('a title’s ' + t.order.length + ' tools: ' + JSON.stringify(t.rows) + ' ' + t.bad.join(' · '));
+        let t = smTrayBMeasure();
+        if (t.bad.length || t.rows.join() !== '3,3') throw new Error('a title’s ' + t.order.length + ' tools: ' + JSON.stringify(t.rows) + ' ' + t.bad.join(' · '));
         if (t.order.slice(-2).join() !== 'more,delete') throw new Error('a title: More and Delete are not last: ' + t.order);
-        if (Math.abs(sayH() - h1) > 0.5) throw new Error('a title’s one row left the band at ' + sayH() + ' px, want ' + h1);
+        if (Math.abs(sayH() - 2 * h1) > 1.5) throw new Error('a title’s two rows left the band at ' + sayH() + ' px, want ' + 2 * h1);
+        /* five or fewer: two titles selected offer Stay put and Delete on one row, and the band is one row again */
+        FM.scene.selectedIds = [v.L('On A').id, v.L('On B').id]; FM.scene.selectedId = v.L('On A').id; FM.refreshAll(); await v.sleep(200);
+        t = smTrayBMeasure();
+        if (t.bad.length || t.rows.length !== 1) throw new Error('two titles: ' + t.order.length + ' tools: ' + JSON.stringify(t.rows) + ' ' + t.bad.join(' · '));
+        if (Math.abs(sayH() - h1) > 0.5) throw new Error('two titles’ one row left the band at ' + sayH() + ' px, want ' + h1);
+        FM.selectLayer(v.L('On A').id); await v.sleep(150);
         /* a choice of several keeps one row */
         FM.scene.selectedIds = [v.L('A').id, v.L('C').id]; FM.scene.selectedId = v.L('A').id; FM.refreshAll(); await v.sleep(150);
         if (!smTool('delete') || smTrayBMeasure().rows.length !== 1 || Math.abs(sayH() - h1) > 0.5) throw new Error('two selected: the tray is not one row (' + sayH() + ' px)');
@@ -125411,7 +125447,7 @@
     const words = () => { const h = document.querySelector('#inspector .sm-band-hint'); return h ? h.textContent : null; };
     const rowsNow = () => { const m = smTrayBMeasure(); return m.rows.length; };
     await smTrayBAt(1280, 720, async function () {
-      await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smT('On B', 2, 1, W, H), smT('On A', 0.5, 1, W, H), smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const root = document.documentElement;
         FM.selectLayer(v.L('B').id); await v.sleep(150);
         if (rowsNow() !== 2 || words() !== SHORT) throw new Error('CONTROL: 1280×720 at its own band: ' + rowsNow() + ' row(s), “' + words() + '”');
@@ -125423,9 +125459,11 @@
         /* …and back: the drag flips the rows, and the words with them, with no new selection */
         root.style.removeProperty('--tl-h'); await v.sleep(150);
         if (rowsNow() !== 2 || words() !== SHORT) throw new Error('the band back at its own height: ' + rowsNow() + ' row(s), “' + words() + '”, want two rows and “' + SHORT + '”');
-        /* a title's four tools fit one row: nothing is off the edge, More is there, and the words are today's */
+        /* S14: a title's six tools lie on two rows and the band says so; two titles selected (Stay put, Delete) fit one row, and the words are today's */
         FM.selectLayer(v.L('On A').id); await v.sleep(150);
-        if (rowsNow() !== 1 || words() !== LONG) throw new Error('a title’s four tools on one row: the band says “' + words() + '”, want “' + LONG + '”');
+        if (rowsNow() !== 2 || words() !== SHORT) throw new Error('a title’s six tools: ' + rowsNow() + ' row(s), the band says “' + words() + '”, want two rows and “' + SHORT + '”');
+        FM.scene.selectedIds = [v.L('On A').id, v.L('On B').id]; FM.scene.selectedId = v.L('On A').id; FM.refreshAll(); await v.sleep(200);
+        if (rowsNow() !== 1 || words() !== LONG) throw new Error('two titles on one row: the band says “' + words() + '”, want “' + LONG + '”');
         FM.selectLayer(null); await v.sleep(150);
         if (words() !== (FM.spineWords.tools.bandHint || 'Tap a clip to see its tools')) throw new Error('nothing selected: the band says “' + words() + '”');
       });

@@ -1986,6 +1986,21 @@ window.FM = window.FM || {};
     plan.live = fid ? line('lookSet', def.name, layers.length) : line('lookNone');
     return plan;
   };
+
+  /* ANIMATE a title (DESIGN §8.5 Text tray: "Animate (In / Out, the existing `textAnim` presets)"): the same list Full's Animate menu holds (js/inspector.js, buildTextExtras), the same default
+     object when there is none yet. A look-class edit on the text alone: nothing moves, a friend can be in. */
+  const TEXT_ANIMS = ['none', 'fade', 'fade-up', 'typewriter', 'pop', 'slide', 'drop', 'spin', 'zoom-out', 'stretch', 'wave', 'jitter'];
+  S.TEXT_ANIMS = TEXT_ANIMS;
+  S.planTextAnim = function (R, id, preset) {
+    const L = byIdMap().get(id);
+    if (!L || L.type !== 'text' || Array.isArray(L.captions)) return refusePlan('gone');
+    if (TEXT_ANIMS.indexOf(preset) < 0) return refusePlan('gone');
+    if (((L.textAnim && L.textAnim.preset) || 'none') === preset) return refusePlan('nothingChanged');
+    const plan = newPlan('Animate'); plan.arranges = false; plan.adopts = false; plan.touched.add(id); plan.keepSel = true;
+    plan.writes.push(() => { if (!L.textAnim) L.textAnim = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 }; L.textAnim.preset = preset; });
+    plan.live = line(preset === 'none' ? 'animNone' : 'animSet');
+    return plan;
+  };
   S.planAddOverlay = function (R, picked) {
     const items = picked.clips;
     if (!items.length) return refusePlan('nothingAdded');
@@ -2483,6 +2498,7 @@ window.FM = window.FM || {};
     endWithVideo() { return S.edit('End with the video', R => S.planEndWithVideo(R)); },
     addText() { return S.edit('Add text', R => S.planAddText(R)); },
     addCaptions() { return S.edit('Add captions', R => S.planAddCaptions(R)); },
+    textAnim(id, preset) { return S.edit('Animate', R => S.planTextAnim(R, id, preset)); },
     lookAll(fid) { return S.edit(fid ? 'Look for all' : 'No look', R => S.planLookAll(R, fid)); },
     findSpeech(id) { return S.edit('Find speech', R => S.planFindSpeech(R, id)); },
     addOverlay(files) { return afterRead(files, picked => S.edit('Add overlay', R => S.planAddOverlay(R, picked))); },

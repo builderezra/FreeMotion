@@ -20,6 +20,7 @@ window.FM = window.FM || {};
     clips: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 5v14M16.5 5v14M3 9.7h4.5M3 14.3h4.5M16.5 9.7H21M16.5 14.3H21"/>',
     text: '<path d="M6.4 18.6L12 5.2l5.6 13.4"/><path d="M8.5 14.2h7"/>',
     captions: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 11h4M13 11h4M7 15h7"/>',
+    anim: '<path d="M4 18h4l4-12 4 12h4"/><path d="M16 5l2 2 3-3"/>',
     look: '<circle cx="9" cy="9" r="5"/><circle cx="15" cy="9" r="5"/><circle cx="12" cy="15" r="5"/>',
     music: '<path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/>',
     overlay: '<rect x="3" y="3" width="13" height="13" rx="2"/><rect x="8" y="8" width="13" height="13" rx="2" fill="currentColor" fill-opacity=".22"/>',
@@ -246,7 +247,10 @@ window.FM = window.FM || {};
       return out;
     }
     const k = u ? u.kind : '';
-    if (k === 'text') return [{ id: 'editwords', label: w.editWords || 'Edit words', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, { selectAll: true }); } }, stay, more, del];
+    if (k === 'text') return [{ id: 'editwords', label: w.editWords || 'Edit words', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, { selectAll: true }); } },
+      { id: 'style', label: w.style || 'Style', icon: 'text', run: () => FM.simpleTools.openPanel(id) },
+      { id: 'animate', label: w.animate || 'Animate', icon: 'anim', pressed: !!(l.textAnim && l.textAnim.preset && l.textAnim.preset !== 'none'), run: () => FM.simpleTools.openRow('anim', id) },
+      stay, more, del];
     if (k === 'captions') return [
       { id: 'editLines', label: w.editLines || 'Edit lines', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, {}); } },
       { id: 'findSpeech', label: w.findSpeech || 'Find speech', icon: 'music', run: () => S.cmd.findSpeech(id) },
@@ -372,7 +376,12 @@ window.FM = window.FM || {};
     ((FM.filters && FM.filters.all && FM.filters.all()) || []).forEach(f => out.push(tool({ id: 'look-' + f.id, label: f.name, icon: null, pressed: cur === f.id, run: () => S.cmd.lookAll(f.id) })));
     return out;
   }
-  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow, audio: audioRow };
+  function animRow(R, id) {
+    const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), out = [rowBack()], cur = (l && l.textAnim && l.textAnim.preset) || 'none';
+    (S.TEXT_ANIMS || []).forEach(k => out.push(tool({ id: 'anim-' + k, label: (w.anim || {})[k] || k, icon: null, pressed: cur === k, run: () => S.cmd.textAnim(id, k) })));
+    return out;
+  }
+  const ROWS = { anim: animRow, speed: speedRow, volume: volumeRow, fade: fadeRow, audio: audioRow };
 
   function quietLine(R) {
     const clips = R.main.filter(e => !e.slot), sum = (FM.spineWords && FM.spineWords.summary) ? FM.spineWords.summary(clips.length, R.trackEnd || 0) : '';
@@ -505,7 +514,7 @@ window.FM = window.FM || {};
       const one = ids.length === 1 ? ids[0] : null, l = one && FM.layerById(FM.scene, one);
       roomy = !!one && roomForTwo();   // measured only for one item, the only tray that can take two rows
       const rowTarget = rowFor && FM.spine.soundTargetId ? FM.layerById(FM.scene, FM.spine.soundTargetId(R, rowFor.id)) : null;   // 2.3: a row redraws when what it shows changes
-      const rowSig = rowFor ? [rowFor.kind, rowFor.from, rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration].join('|') : '', (l && rowFor.kind === 'audio') ? [l.reversed, l.muted, R.units[l.id] && (R.followers[l.id] || []).length].join('|') : ''].join('#') : '';
+      const rowSig = rowFor ? [rowFor.kind, rowFor.from, rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration].join('|') : '', (l && rowFor.kind === 'audio') ? [l.reversed, l.muted, R.units[l.id] && (R.followers[l.id] || []).length].join('|') : '', (l && rowFor.kind === 'anim') ? (l.textAnim && l.textAnim.preset) : ''].join('#') : '';
       if (lookOpen && ids.length) lookOpen = false;   // a selection takes the tray back
       const sig = [ids.join(','), one && R.units[one] && R.units[one].kind, lookOpen, FM.scene.project.sm && FM.scene.project.sm.look, lengthFor, lengthEdge, panelFor, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
       if (sig === lastSig) return;
