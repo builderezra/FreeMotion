@@ -61022,7 +61022,7 @@
     const A = mk('A', 0, 2, '#ff0000'), B = mk('B', 2, 2, '#00ff00'), C = mk('C', 4, 2, '#0000ff');
     if (types[0]) B.trIn = { type: types[0], d: o.d || 1 };
     if (types[1]) C.trIn = { type: types[1], d: o.d2 || 1 };
-    return scene([C, B, A], { project: { width: W, height: H, fps: 30, duration: 6, background: '#000000', sm: { adopted: true, v: FM.SM_V } } });
+    return scene(o.flip ? [A, B, C] : [C, B, A], { project: { width: W, height: H, fps: 30, duration: 6, background: '#000000', sm: { adopted: true, v: FM.SM_V } } });
   }
   function tr27Px(sc, t, x, y) { const c = offscreen(160, 120); FM.renderScene(c.getContext('2d'), sc, t); const d = c.getContext('2d').getImageData(x || 80, y || 60, 1, 1).data; return [d[0], d[1], d[2]]; }
   test('simple P2.7 · T1 FM.transitionAt: stored flags only, a window of d around the cut, d_eff caps at half the shorter clip, null on a gap, an overlap, an un-adopted project and a Full-made trIn without sm.main', { item: '980' }, function () {
@@ -61059,6 +61059,13 @@
     if (sc.layers.find(l => l.name === 'B').start !== 2 || sc.layers.find(l => l.name === 'A').duration !== 2 || sc.project.duration !== 6) throw new Error('the transition moved a clip or shortened the video (D13 A)');
     [0.5, 1.4, 2.6, 3.5, 4.2, 5.5].forEach(t => { const a = tr27Px(sc, t), b = tr27Px(plain, t); if (a.join() !== b.join() && !(t > 3.4 && t < 4.6)) throw new Error('the picture at ' + t + ' s differs from the project without a transition: ' + a + ' vs ' + b); });
     const plainPx = tr27Px(plain, 2.0); if (plainPx[1] < 250) throw new Error('CONTROL: without a transition the cut is hard (' + plainPx + ')');
+    /* the outgoing clip ABOVE the incoming one in the stack (a clip moved to the top of the list): the blend is the same, the alpha goes on the other layer */
+    const fl = tr27Scene(['crossfade', null], { flip: true }), f = t => tr27Px(fl, t);
+    const f1 = f(1.5), f2 = f(2.0), f3 = f(2.4999), f0 = f(2.25);
+    if (f1[0] < 250 || f1[1] > 20) throw new Error('flipped stack, window start: not still A (' + f1 + ')');
+    if (Math.abs(f2[0] - 128) > 12 || Math.abs(f2[1] - 128) > 12) throw new Error('flipped stack, at the cut: not half red, half green (' + f2 + ')');
+    if (f0[0] < 55 || f0[0] > 70 || f0[1] < 185 || f0[1] > 200) throw new Error('flipped stack, a quarter in after the cut: want about 64,191 (' + f0 + ')');
+    if (f3[1] < 235 || f3[0] > 20) throw new Error('flipped stack, window end: not B (' + f3 + ')');
   });
 
   test('simple P2.7 · T3 dip to black and dip to white: the outgoing clip goes to the colour in the first half and the incoming comes up from it in the second, and a layer above the pair (a title) is not dipped', { item: '980' }, function () {
