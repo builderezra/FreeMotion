@@ -75,6 +75,11 @@ window.FM = window.FM || {};
     const wasIds = FM.selectionIds ? FM.selectionIds() : (wasSelected ? [wasSelected] : []);
     const hadIds = new Set(FM.scene.layers.map(l => l.id));
     suppress = true;
+    /* AU4-1: held for the WHOLE restore, not only the swap. refreshAll below can reach commit() — the text editor
+       closes itself when its layer is gone and commits on the way out — and at that moment stack[index] still carries
+       the OLD selection, so that commit pushed a selection-only step and threw the redo tail away: Add text, ↶, and ↷
+       was greyed out for good. try/finally because a stuck flag would make commit a no-op forever. */
+    try {
     const outgoing = FM.scene.layers;
     FM.scene.project = s.project;
     FM.scene.layers = s.layers;
@@ -112,7 +117,6 @@ window.FM = window.FM || {};
       FM.scene.selectedId = null;   // the 629 rule in _afterExternalChange says the same; set here so no
       FM.scene.selectedIds = [];    // snapshot selection is ever installed, even for a moment
     }
-    suppress = false;
     /* The block that used to stand here — the 629 rule, restoreReplacedMedia, the groupContext exit, the
        mask resync and the time clamp — is now _afterExternalChange below, WORD FOR WORD. See it for why
        (queue 921 S0). `pause:true` is what restore has always done; nothing else moved. */
@@ -120,6 +124,7 @@ window.FM = window.FM || {};
     if (FM.resizeCanvas) FM.resizeCanvas();
     FM.refreshAll();
     if (FM.seekVideosToTime) FM.seekVideosToTime();
+    } finally { suppress = false; }
     /* The stack entry we are now standing on still names the OLD selection. commit() treats a snapshot
        identical to stack[index] as a no-op, and one that differs only by selection as a real step — so
        without this, the first no-op commit after an undo (a panel that commits on close, a slider let go

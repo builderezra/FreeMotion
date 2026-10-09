@@ -1,0 +1,17 @@
+=== A1_suppress_only_during_swap
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU4-1 — text: after undoing "Add text" with the editor open, Redo is gone: the editor closing pushed a selection-only step and threw the redo tail away
+=== B1_group_no_editor_close
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU4-2 — Add group with the text editor open made 2 history steps (the first one is a selection-only copy of the half-done add)
+=== C1_restore_skips_project
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU4-3 — round 0: 51 of 64 steps did not land on their snapshot: undo to 25, undo to 24, undo to 23, undo to 22, undo to 21, undo to 20
+=== C2_restore_skips_layers
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU4-3 — round 0: 62 of 64 steps did not land on their snapshot: undo to 31, undo to 30, undo to 29, undo to 28, undo to 27, undo to 26
+ALLDONE

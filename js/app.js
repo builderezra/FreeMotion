@@ -3808,6 +3808,10 @@ window.FM = window.FM || {};
     const g = FM.makeLayer('group', { name: 'Group', x: 0, y: 0, start: 0, duration: P.duration || 5 });
     // Same insert as everything else (queue 298) — it honours the Add-layer marker, and it does the
     // group-context parenting this line used to do by hand, so the two cannot disagree.
+    /* AU4-2: close the text editor BEFORE the group exists. selectLayer below closes it too, and its commit used to
+       run with the group already inserted and the old selection still on, so Add group with the card open made TWO
+       history steps and the first ↶ undid nothing visible (a selection-only step). The typing still gets its own step. */
+    if (FM.textEdit && FM.textEdit.syncToSelection) FM.textEdit.syncToSelection(g.id);
     FM.insertLayer(g);
     FM.selectLayer(g.id);
     // …and the toast says the same words as the tile that made it (queue 412).
