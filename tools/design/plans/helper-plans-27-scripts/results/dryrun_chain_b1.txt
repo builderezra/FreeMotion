@@ -1,0 +1,82 @@
+B2 90c78228 applied | Keep keyframed Chunk Noise speed continuous
+B2 c5849478 applied | Fix Electric Edges keyframed speed phase
+B2 91f77658 applied | Fix Orbit keyframed speed phase
+B2 28c79891 applied | Keep Orbit facing when reverse speed stops
+B2 96750bfb applied | Keep Fractal Ridges motion continuous across rate keyframes
+B2 1a780ccb applied | Keep Spin rotation continuous across speed keyframes
+B2 84799d50 applied | Keep VHS tracking band phase through speed keyframes
+B2 304f6370 applied | Keep Glow Scan phase through speed keyframes
+B2 53756221 applied | Preserve Breathe phase through speed keyframes
+B2 e9887e83 applied | Keep keyframed Noise speed from rewinding grain
+B2 a8003f1d applied | Fix keyframed Glitch Re-roll stopping
+B2 10040332 applied | Keep Dissolve boil in place when keyframed speed stops
+B2 c4f51b7f applied | Keep keyframed Clouds drift phase continuous
+B2 e0ff704d applied | Keep animated Iridescence drift phase continuous
+B2 dafb7efa applied | Keep Lightning bolt phase when keyframed Flicker stops
+B2 d0aa007a applied | Hold Scramble Text pattern when animated Speed stops
+B2 d0f948f9 applied | Keep Pulse beat continuous through animated Speed
+B2 eec3a0d6 applied | Fix Swing keyframed Speed phase continuity
+B2 5673c230 applied | Keep Flicker phase continuous through keyed Speed
+B2 2529c1d7 applied | Preserve Wiggle path through keyed Speed changes
+B2 ceb86cd6 SOURCE CONFLICT | Keep Shake phase and smear continuous through keyed Speed :: js/compositor.js
+B2 fea15508 applied | Keep Frame Stutter hold phase through keyed Rate
+B2 488ef6db applied | Preserve particle birth times across keyed rate changes
+B2 329c5401 applied | Preserve Voronoi motion through keyed Speed changes
+B2 702a8952 applied | Preserve Flash Random phase through keyed Speed changes
+B2 0a1fa664 applied | Preserve Scanlines Roll position through keyframes
+B2 8efc6234 SOURCE CONFLICT | Keep Laser Beam pulse phase through keyed rate :: js/compositor.js
+B2 8516f675 SOURCE CONFLICT | Preserve Radio Waves births across keyed Rate changes :: js/compositor.js
+B3 f3455117 applied | Keep Smooth Bevel depth distinct on reduced previews
+B3 5bb0638f applied | Use rendered scene frame rate for Shake smear
+B3 d4461144 applied | Use rendered scene for Backdrop Clone timecode footprint
+B3 ca35afb3 applied | Add colour protection to Unsharp Mask
+B3 dd2220fe applied | Reduce Unsharp Mask frame memory
+B3 a5d76ea7 SOURCE CONFLICT | Reuse glow luminance buffers across frames :: js/compositor.js
+B3 b1ddcfd9 SOURCE CONFLICT | Reuse Dark Glow luminance buffers across frames :: js/compositor.js
+B3 5dcfed17 SOURCE CONFLICT | Release cached glow frames after idle rendering :: js/compositor.js
+B3 1e36d1d9 SOURCE CONFLICT | Keep short Linear Streaks trails in reduced preview :: js/compositor.js
+B3 746d53a8 SOURCE CONFLICT | Scale Roughen Edges controls consistently on preview plates :: js/compositor.js
+B3 0f8ec39b applied | Keep RGB Split green and small shifts visible
+B3 ce7768ac applied | Fix hard wipe zero-progress visibility
+B4 746d53a8 SOURCE CONFLICT | Scale Roughen Edges controls consistently on preview plates :: js/compositor.js
+B4 901ee496 applied | Add optional smooth and averaged halftone dots
+B4 cee51dcb applied | Smooth rounded Border Frame edges
+B4 545389fa applied | Add C34 Lightning path and draw controls
+B4 b8ee3bf6 applied | Record integrated C34 check and refresh compositor tag
+B4 e15da085 SOURCE CONFLICT | Extend Wipes with layer fit and radial directions :: js/compositor.js
+B4 0f98b861 SOURCE CONFLICT | Add Border Frame styles and draw-on progress :: js/compositor.js
+B4 427d5af4 SOURCE CONFLICT | Add seeded evolving Roughen Edges field :: js/compositor.js
+B4 e81e0c0e applied | Add deterministic Seed to Voronoi Cells
+B4 dd5d4729 SOURCE CONFLICT | Add Roughen Edges detail and border erosion :: js/compositor.js
+B4 62c98f5e SOURCE CONFLICT | Bound Roughen Edges detail to variable alpha :: js/compositor.js
+B4 1c84e763 applied | Add Tilt Shift sharp band and smoother blur option
+B5 0876018f applied | Expose Radial Shadow quality and opacity
+B5 7a2ef677 SOURCE CONFLICT | Polish long shadow reach and angled edges :: js/compositor.js
+B5 1db725a6 applied | Add Directional Blur edge repeat and one-sided smear controls
+B5 0df427eb SOURCE CONFLICT | Add Gaussian Blur repeat-edge plate pass :: js/compositor.js
+B5 061581f0 SOURCE CONFLICT | Add one-axis Gaussian Blur options :: js/compositor.js
+B5 a0732c3d SOURCE CONFLICT | Add Gaussian Blur mix and blend controls :: js/compositor.js
+B5 b2ce43ae applied | Add edge and smooth sampling controls to geometric warps
+B5 b986fcc4 applied | Add Card Flip rotation and back options
+B5 cfa3859e applied | Add Ripple and Curl falloff controls
+B6 d7dc22d3 applied | Add Venetian Blinds matte effect
+B6 410a34d1 SOURCE CONFLICT | Add Radio Waves generative effect :: js/compositor.js js/fx-registry.js
+B6 1b80bf41 SOURCE CONFLICT | Keep Radio Waves anchored when preview is cropped :: js/compositor.js
+B6 21dcd7ee SOURCE CONFLICT | Add Lens Magnifier effect :: js/compositor.js js/fx-registry.js
+B6 84370498 SOURCE CONFLICT | Add Circle Array repeat effect :: js/compositor.js
+B6 b15ff479 SOURCE CONFLICT | Add Cartoon stylization effect :: js/compositor.js js/fx-registry.js
+B6 3728d6f5 SOURCE CONFLICT | Add Oil Paint stylize effect :: js/compositor.js js/fx-registry.js
+B6 44b15c57 SOURCE CONFLICT | Add generative Laser Beam effect :: js/compositor.js js/fx-registry.js
+B6 fcda7fd2 SOURCE CONFLICT | Add animated Fractal Noise effect :: js/compositor.js
+B6 3e591a41 SOURCE CONFLICT | Add map-driven Gradient Wipe effect :: js/compositor.js js/fx-registry.js
+B6 01d2f034 applied | Add ten visible-bounds Title Warp shapes
+B6 93dceac1 applied | Add mechanical odometer text effect
+B6 36039096 SOURCE CONFLICT | Add standalone spill suppressor effect :: js/compositor.js js/fx-registry.js
+B6 0cdc6732 SOURCE CONFLICT | Add temporal exposure deflicker effect :: js/compositor.js js/fx-registry.js
+B6 5a5c0391 SOURCE CONFLICT | Add temporally smoothed Auto Grade effect :: js/compositor.js js/fx-registry.js
+B6 8efc6234 SOURCE CONFLICT | Keep Laser Beam pulse phase through keyed rate :: js/compositor.js
+B6 8516f675 SOURCE CONFLICT | Preserve Radio Waves births across keyed Rate changes :: js/compositor.js
+B7 b72dfd54 applied | Add synthesized Drums sounds
+B7 30a75961 applied | Add configurable Explosion and Thunder sounds
+B7 05116900 applied | Add synthesized ambience sound pack
+B7 ae637420 applied | Add synthesized everyday Foley sounds

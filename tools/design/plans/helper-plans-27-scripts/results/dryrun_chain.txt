@@ -1,0 +1,7 @@
+2ea47a00 applied fix 1013: drop empty AAC tracks and report encoded sound
+9cec73a1 applied fix 1014: preserve panorama canvas size on reopen
+d8fa4fbb applied fix 1015: preserve clash checks during guest reconnect
+8c813c78 applied fix 1016: enable keyboard editing of inspector values
+ba154a37 applied fix 1040: restore missing layer transforms on import
+a22dbc46 applied fix 1041: composite nested styled groups once per level
+13e5b1ea applied (index/tests by rule) fix 1059: continue speech detection past silent clips

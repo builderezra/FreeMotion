@@ -1,0 +1,61 @@
+1280 Regression 51/57 ✗ · NOT RUN HERE 3 Pending 0/0 built
+   ok  audio: file input accepts audio/*
+   ok  585: every audio category has its own icon, in the visual browser's hand
+   ok  audio: a keyframed Distortion/Bit Crush actually sweeps, and a static one costs nothing extra
+   ok  audio fades: the gain envelope is finite, in range, and has one peak
+   ok  undo invalidates a live audio-effect chain
+   ok  export: a layer that contributes no audio is NAMED, not dropped in silence
+   ok  safe area: the audio-effect category bar clears the home indicator
+   ok  audio detection: “has audio” is a decoded track, not the word “video”
+   ok  922 the audio effects browser docks in the inspector column on PC, like the visual one, and stays a 
+   ok  Effects panel: the same Visual/Filters/Audio toggle, so an added audio effect still has an editor
+   RED a comp that costs 200 ms a frame drops frames instead of seeking the audio
+   ok  the playhead is derived from the audio clock, not from the frame loop
+   ok  voice: a recording becomes an ordinary audio layer, on the import path
+   ok  audio: a steady output latency does not turn into permanent playbackRate churn
+   ok  extracted audio is drawn as a waveform, not a filmstrip
+   ok  the audio export uses the same range and the same mixer as the video
+   ok  export: M4A is offered, produces a real MP4 audio file, and never saves an empty track
+   ok  exported audio reads backwards for a reversed clip
+   ok  916.4 a reversed clip with audio shorter than the clip plays its sound in step with the picture — ex
+   ok  audio: a keyframed Reverb sweeps the room, and only builds one where the move actually is
+   ok  audio: a keyframed Pitch Shift actually glides, and a static one costs nothing extra
+   ok  audio: a clip fades its own edges instead of cutting the waveform dead
+   ok  P27 #845 the live audio chain stops rewriting parameters nobody is moving: five effects at rest add 
+   ok  dragging an audio-drive source does not fire a full-clip envelope pass per frame
+   ok  export: one clip whose audio will not decode no longer silences the whole soundtrack (queue 47)
+   ok  audio: pressing play does not pitch the sound up while the element spins up (queue 148)
+   ok  audio: real drift is still corrected once the element has warmed up (queue 148)
+   ok  916.8 exporting a short range builds only that stretch of each clip’s audio — and the samples match 
+   ok  the audio watcher counts a sound that stopped advancing, and ignores one that did not
+   ok  the audio report says what it measures: real played time, a denominator, the clock it ran on, and wh
+   ok  pressing play starts the audio report fresh, so it describes one play and not the session (queue 849
+   ok  leaving the app without pressing stop still saves the audio report
+   ok  stopping playback writes an audio report he can copy out of Settings
+   ok  the playback tick reports every sounding clip to the audio watcher
+   ok  #215: an export audio warning reaches a surface the export cannot cover
+   RED #215: an audio warning survives the frame loop, and a verdict does not carry into the next export
+   RED #662: an export leaves a report that names the audio outcome
+   ok  the what-is-slow report carries the audio numbers, and reads them (queue 148)
+   ok  having sound to lose counts audio LAYERS, not layer types (queue 215)
+   ok  489: the report's audio numbers count only what happened during the sample
+   ok  727: Duplicate on an audio effect copies its current settings and keyframes, not the defaults
+   ok  754: an off mask row shows the struck-through eye like an effect row, through the one shared rendere
+   ok  916.2 starting an export stops an audio-effect audition, and an audition never runs under one
+   ok  663 — the audio watcher actually detects a cut-out, and stays quiet when nothing is wrong
+   ok  884: an audio-only export honours Export just this layer, still exports everything when nothing is p
+   ok  885: a boost-only clip keeps its live audio stage instead of rebuilding it on every sync
+   ok  690 the sound effect preview asks for the playback audio session, so an iPhone set to silent still p
+   ok  690 while the microphone is open the app leaves the audio session to WebKit, and asks for playback a
+   RED 690 an audio effect Hear preview stops when he backs out of the effect or deselects the clip — the s
+   RED 690 a colour keyframe is live while Colouring is open: on the phone a hold opens its menu and a hold
+   RED 690 the sound in an exported video and an exported M4A lines up with the picture, and the audio trac
+   ok  960 Import media and Import audio wear the same white-gradient arrow, and the Media tile says Import
+   ok  960 on PC Import media and Import audio are the same size, on one line, in the REAL panel — and the 
+   ok  977: the audio effects browser’s Featured row has ‹ › too — on a PC each row’s › sits on the middle 
+   ok  977: a real mouse clicking › until the New row stops, and ‹ until it is home, never reaches the card
+   ok  986 C13 audio-effect search finds what people call the sound - karaoke, robot voice, chipmunk, muffl
+   ok  482 3.6 Collab - the sync schema fingerprint sees the audio effects controls, so a build whose Pitch
+FAILa comp that costs 200 ms a frame drops frames instead of seeking the audio — the transport lost 0.419 s against the wall clock while the compositor was busy
+FAIL#215: an audio warning survives the frame loop, and a verdict does not carry into the next export — NO_VIDEO_CODEC
+FAIL#662: an export leaves a report that names the audio outcome — NO_VIDEO_CODEC

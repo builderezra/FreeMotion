@@ -1,0 +1,71 @@
+diff --git a/index.html b/index.html
+index 3afa2dba..42546fc3 100644
+--- a/index.html
++++ b/index.html
+@@ -1093,7 +1093,7 @@
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+   <script src="js/history.js?v=38"></script>
+-  <script src="js/storage.js?v=68"></script>
++  <script src="js/storage.js?v=60"></script>
+   <script src="js/export-resume.js?v=7"></script>
+   <script src="js/medialib.js?v=8"></script>
+   <script src="js/template-fill.js?v=4"></script>
+diff --git a/js/audio-tools.js b/js/audio-tools.js
+index b887079e..20a2082e 100644
+--- a/js/audio-tools.js
++++ b/js/audio-tools.js
+@@ -117,6 +117,8 @@ window.FM = window.FM || {};
+   function sameClock(a, b) { return a.every((v, i) => v === b[i]); }
+   FM.syncKaraokeTimingFrom = function (previousLayers) {
+     if (!FM.scene || !Array.isArray(previousLayers) || !Array.isArray(FM.scene.layers)) return 0;
++    // A split (or a duplicate or paste) adds a layer and shortens the source: the instrumental has to keep playing across the cut, so nothing is resynced.
++    if (FM.scene.layers.length !== previousLayers.length) return 0;
+     const before = new Map(previousLayers.filter(l => l && l.id).map(l => [l.id, l]));
+     const current = new Map(FM.scene.layers.filter(l => l && l.id).map(l => [l.id, l]));
+     let changed = 0;
+@@ -134,10 +136,14 @@ window.FM = window.FM || {};
+       const oldStart = twin.start || 0, oldDur = twin.duration || 0;
+       const newStart = source.start || 0;
+       const ratio = oldDur > 0 ? source.duration / oldDur : 1;
+-      if (FM.animatedProps && Number.isFinite(ratio) && ratio > 0) {
++      /* Its own keyframes sit at project times. A SPEED change stretches them with the clip; a plain MOVE (same length, same trim, same speed)
++         carries them by the same distance; a TRIM changes where the clip starts in the song, not when anything sounds, so they stay put. */
++      const speedChanged = JSON.stringify(source.speed == null ? 1 : source.speed) !== JSON.stringify(oldSource.speed == null ? 1 : oldSource.speed);
++      const pureMove = !speedChanged && source.duration === oldSource.duration && (source.trimStart || 0) === (oldSource.trimStart || 0) && !!source.reversed === !!oldSource.reversed;
++      if (FM.animatedProps && Number.isFinite(ratio) && ratio > 0 && (speedChanged || pureMove)) {
+         FM.animatedProps(twin).forEach(prop => {
+           if (prop === twin.speed) return;
+-          prop.kf.forEach(k => { k.t = newStart + (k.t - oldStart) * ratio; });
++          prop.kf.forEach(k => { k.t = speedChanged ? newStart + (k.t - oldStart) * ratio : k.t + (newStart - oldStart); });
+         });
+       }
+       twin.start = source.start;
+diff --git a/js/storage.js b/js/storage.js
+index b2a53ca5..7943331c 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -957,7 +957,11 @@ window.FM = window.FM || {};
+    * The skips are collected here rather than at the caller because this is the one place that knows
+    * WHICH file was dropped and how big it was, and `omitted` travels INSIDE the written file so the
+    * file can answer "is my video in here" a year later without the app's help. */
+-  FM.storage.serializeScene = function (scene) { return serializeWith(scene, function (layerId) { return FM.media.get(layerId); }); };
++  FM.storage.serializeScene = function (scene) {
++    // A clip that is stored but not resident (still loading, or its decode failed this session) is read from IndexedDB, as exportProjectFile does:
++    // without it the file leaves the footage out and, since B1, says it "is no longer stored" when it is.
++    return serializeWith(scene, async function (layerId) { return FM.media.get(layerId) || await FM.storage.readMedia(layerId); });
++  };
+   /* `mediaOf(layerId)` says where a layer's file comes from: the live FM.media for the open project, or IndexedDB for
+      one that is not open (exportProjectFile below, queue 690 seventh hunt). ONE loop for both, so the size limit and
+      the named omissions (queue 888) cannot drift apart between the two ways of saving a project file. */
+@@ -2045,8 +2049,8 @@ window.FM = window.FM || {};
+       /* The INDEX's name wins over the packed project's, for the same reason templates.exportFile
+          gives: the doc's own name can be stale ("Untitled 3") while the card he recognises is right. */
+       const project = Object.assign({}, pack.project, { name: p.name || pack.project.name || 'Untitled' });
+-      // Whole-library backups carry fonts of any size; the small sharing-file limit does not apply.
+-      const fontPack = await embedFonts(pack.layers, Infinity);
++      // A whole-library backup carries fonts up to the backup cap (96 MB), not the small sharing-file limit; each font is copied per project, so no cap at all is a phone memory risk.
++      const fontPack = await embedFonts(pack.layers, FM.storage._backupEmbedLimit);
+       fontPack.omitted.forEach(f => skippedFonts.push(Object.assign({ project: project.name }, f)));
+       const entry = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: fontPack.fonts, omittedFonts: fontPack.omitted };
+       /* ⚠️ queue 915 clause 8: SAY WHICH ONES ARE WORKSPACES. list() includes the hidden element and

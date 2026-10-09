@@ -1,0 +1,14 @@
+52843cc2 applied (index/tests by rule) Recover malformed project dimensions on load
+9cd5923c applied (index/tests by rule) Reject malformed canvas objects before project import
+a4de4183 applied (index/tests by rule) Reject malformed layers before project import
+e808c3c2 applied (index/tests by rule) Warn when embedded media fails to restore
+b48cb48f applied (index/tests by rule) Reject deeply nested project imports before creation
+f1ac5fa8 applied (index/tests by rule) Keep project import usable with corrupt embedded fonts
+e987e4f3 applied (index/tests by rule) Name omitted media in shared template files
+2e5e0cf0 applied (index/tests by rule) Warn when project files lack source media
+70797f4c applied (index/tests by rule) Warn about custom fonts omitted from shared files
+1fdd128b applied (index/tests by rule) Keep missing-content warnings visible after project import
+5e8337da applied (index/tests by rule) Cancel stale media replacements on project switch
+b69c5795 applied (index/tests by rule) Keep vocal-removed audio in sync with source timing
+5cf39d11 applied (index/tests by rule) Avoid retaining caption cue listeners after redraw
+d662aa35 applied Keep service worker alive for offline cache writes

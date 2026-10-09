@@ -1,0 +1,40 @@
+diff --git a/tests/tests.js b/tests/tests.js
+index 517a1677..d779ae79 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -59811,6 +59811,35 @@
+     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
+   });
+ 
++  test('P27 #845 the live audio chain stops rewriting parameters nobody is moving: six effects at rest, custom-setter ones included, add no new events after the first frame, a moved slider is still written once, a keyframed one every frame', { item: '845' }, function () {
++    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
++    if (!OAC || !FM.buildAudioFxChain || !FM.AUDIO_EFFECTS) throw new Error('the audio effect chain is not reachable');
++    const AP = window.AudioParam.prototype, orig = AP.setValueAtTime, calls = [];
++    AP.setValueAtTime = function (v) { calls.push(v); return orig.apply(this, arguments); };
++    try {
++      const mkInst = function (type, over) { const d = FM.AUDIO_EFFECTS.find(function (e) { return e.type === type; }); const pr = {}; d.params.forEach(function (q) { pr[q.key] = q.def; }); return { type: type, enabled: true, params: Object.assign(pr, over || {}) }; };
++      const build = function (list) { const oac = new OAC(2, 48000, 48000); const chain = FM.buildAudioFxChain(oac, { audioFx: list }, 0); if (!chain) throw new Error('no chain'); return chain; };
++      // 1. five plain effects at rest
++      const chain = build(['eq3', 'reverb', 'delay', 'chorus', 'flanger', 'pitch'].map(function (t) { return mkInst(t); }));
++      calls.length = 0; chain.applyAt(0); const first = calls.length; if (first < 20) throw new Error('the first frame wrote only ' + first + ' events: the chain is not being driven at all');
++      for (let i = 1; i < 60; i++) chain.applyAt(i / 60);
++      if (calls.length !== first) throw new Error('59 more frames with nothing moved wrote ' + (calls.length - first) + ' more events (first frame ' + first + '): every parameter is rewritten every frame');
++      // 2. a moved slider is written, once, with its new value
++      const g = mkInst('gain'), c2 = build([g]); c2.applyAt(0); c2.applyAt(1 / 60); calls.length = 0;
++      g.params.gain = 6; c2.applyAt(2 / 60); c2.applyAt(3 / 60); c2.applyAt(4 / 60);
++      if (calls.length !== 1 || Math.abs(calls[0] - Math.pow(10, 6 / 20)) > 1e-6) throw new Error('a slider moved 0 to 6 dB was written ' + calls.length + ' times, as ' + JSON.stringify(calls) + ' (want once, as 1.995)');
++      // 3. a keyframed one still glides every frame
++      const k = mkInst('gain', { gain: { kf: [{ t: 0, v: -6, e: 'linear' }, { t: 2, v: 6, e: 'linear' }] } }), c3 = build([k]); calls.length = 0;
++      for (let i = 0; i < 30; i++) c3.applyAt(i / 30);
++      if (calls.length < 30) throw new Error('a keyframed gain was written ' + calls.length + ' times in 30 frames: its glide would stair-step');
++      // 4. and a keyframed param on a custom-setter effect (Chorus) too
++      const ch = mkInst('chorus'), key = FM.AUDIO_EFFECTS.find(function (e) { return e.type === 'chorus'; }).params[0], lo = key.min, hi = key.max;
++      ch.params[key.key] = { kf: [{ t: 0, v: lo, e: 'linear' }, { t: 2, v: hi, e: 'linear' }] };
++      const c4 = build([ch]); c4.applyAt(0); calls.length = 0;
++      for (let i = 1; i < 31; i++) c4.applyAt(i / 15);
++      if (calls.length < 25) throw new Error('a keyframed Chorus ' + key.key + ' was written only ' + calls.length + ' times in 30 frames');
++    } finally { AP.setValueAtTime = orig; }
++  });
+   async function run() {
+     var results = [];
+     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

@@ -1,0 +1,579 @@
+diff --git a/tests/tests.js b/tests/tests.js
+index 517a1677..406dc43a 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -59811,6 +59811,507 @@
+     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
+   });
+ 
++  test('690 malformed project dimensions recover to a usable canvas', { item: '1069' }, function () {
++    const hostile = { toString: 0, valueOf: 0 };
++    const p = { width: 'not a width', height: hostile, fps: hostile, duration: hostile };
++    FM.storage._clampProjectDims(p);
++    if (p.width !== 1080 || p.height !== 1920 || p.fps !== 30 || p.duration !== 0)
++      throw new Error('Malformed project fields did not recover: ' + JSON.stringify(p));
++    const valid = { width: '1279', height: 720, fps: 48, duration: 12 };
++    FM.storage._clampProjectDims(valid);
++    if (valid.width !== 1280 || valid.height !== 720 || valid.fps !== 48 || valid.duration !== 12)
++      throw new Error('Valid project fields were damaged: ' + JSON.stringify(valid));
++  });
++
++  test('690 invalid project object is refused before import creates a project', { item: '1069' }, async function () {
++    const oldProjects = FM.projects, oldToast = FM.toast;
++    let created = 0;
++    try {
++      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
++      FM.toast = function () {};
++      for (const project of ['broken', []]) {
++        const file = { app: 'freemotion', project, layers: [] };
++        if (!FM.storage.sceneFileProblem(file) || await FM.storage.importObject(file) !== false)
++          throw new Error('Invalid canvas settings passed import validation');
++        if (await FM.storage.applyScene(file) !== false)
++          throw new Error('Direct scene import accepted invalid canvas settings');
++      }
++      if (created) throw new Error('Import created ' + created + ' junk projects');
++    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
++  });
++
++  test('690 invalid layer entry is refused before import creates a project', { item: '1069' }, async function () {
++    const oldProjects = FM.projects, oldToast = FM.toast;
++    let created = 0;
++    try {
++      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
++      FM.toast = function () {};
++      for (const layers of [[null], [42], [[]]]) {
++        const file = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers };
++        if (!FM.storage.sceneFileProblem(file) || await FM.storage.importObject(file) !== false)
++          throw new Error('Invalid layer passed import validation');
++        if (await FM.storage.applyScene(file) !== false)
++          throw new Error('Direct scene import accepted an invalid layer');
++      }
++      if (created) throw new Error('Import created ' + created + ' junk projects');
++    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
++  });
++
++  test('690 a corrupt embedded clip is named as missing on project import', { item: '1069' }, async function () {
++    const oldScene = FM.scene, oldToast = FM.toast, said = [];
++    try {
++      FM.scene = { project: Object.assign({}, oldScene.project), layers: [], selectedId: null, selectedIds: [] };
++      const layer = FM.makeLayer('image', { name: 'Broken holiday clip', start: 0, duration: 2 });
++      layer.name = 'Broken holiday clip';
++      FM.toast = function (message) { said.push(String(message)); };
++      const file = { project: Object.assign({}, FM.scene.project), layers: [layer], media: {} };
++      file.media[layer.id] = { kind: 'image', name: 'holiday.png', dataURL: 'not-an-embedded-file' };
++      if (await FM.storage.applyScene(file) !== true) throw new Error('Import failed before the missing-footage check');
++      if (!said.some(message => message.includes('Broken holiday clip') && message.includes('no footage')))
++        throw new Error('A present but corrupt media entry left a blank clip without a warning');
++    } finally {
++      FM.scene = oldScene; FM.toast = oldToast;
++      if (FM.refreshAll) FM.refreshAll();
++    }
++  });
++
++  test('690 deeply nested project files are rejected before creating a project', { item: '1069' }, async function () {
++    const oldProjects = FM.projects, oldToast = FM.toast;
++    let created = 0;
++    try {
++      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
++      FM.toast = function () {};
++      const layer = { id: 'old', type: 'shape' };
++      let tail = layer;
++      for (let i = 0; i < 80; i++) { tail.deep = {}; tail = tail.deep; }
++      const file = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers: [layer] };
++      if (!/nested too deeply/.test(FM.storage.sceneFileProblem(file) || ''))
++        throw new Error('Deeply nested layer passed validation');
++      if (await FM.storage.importObject(file) !== false || await FM.storage.applyScene(file) !== false || created)
++        throw new Error('Deeply nested layer reached project creation or scene application');
++      const ordinary = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers: [{ id: 'okay', type: 'shape', transform: { opacity: { kf: [{ t: 0, v: 1 }] } } }] };
++      if (FM.storage.sceneFileProblem(ordinary)) throw new Error('An ordinary animated layer was rejected');
++    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
++  });
++
++  test('690 corrupt embedded font does not abort project import silently', { item: '1069' }, async function () {
++    const oldScene = FM.scene, oldToast = FM.toast, said = [];
++    try {
++      FM.scene = { project: Object.assign({}, oldScene.project), layers: [], selectedId: null, selectedIds: [] };
++      FM.toast = function (message) { said.push(String(message)); };
++      const file = { project: Object.assign({}, FM.scene.project), layers: [], fonts: {
++        bad: { family: 'FMFcorruptImportTest', name: 'broken.ttf', dataURL: 'not-an-embedded-font' }
++      } };
++      if (await FM.storage.applyScene(file) !== true) throw new Error('A corrupt font aborted the whole project import');
++      if (!said.some(message => message.includes('embedded font') && message.includes('fallback')))
++        throw new Error('A corrupt font was skipped without explaining the text fallback');
++    } finally {
++      FM.scene = oldScene; FM.toast = oldToast;
++      if (FM.refreshAll) FM.refreshAll();
++    }
++  });
++
++  test('690 shared template file names clips that exceed the embed limit', { item: '1069' }, async function () {
++    const getPack = FM.templates.getPack, list = FM.templates.list;
++    const createURL = URL.createObjectURL, click = HTMLAnchorElement.prototype.click;
++    let saved;
++    try {
++      FM.templates.getPack = async () => ({
++        project: { name: 'Source', width: 320, height: 240, duration: 2 },
++        layers: [{ id: 'big', type: 'video', name: 'Main clip' }, { id: 'small', type: 'video', name: 'Intro' }],
++        media: {
++          big: { kind: 'video', file: { name: 'long.mp4', size: 6 * 1048576 + 1 } },
++          small: { kind: 'video', file: new File([new Uint8Array([1])], 'short.mp4', { type: 'video/mp4' }) }
++        }
++      });
++      FM.templates.list = () => [{ id: 'probe', name: 'Shareable' }];
++      URL.createObjectURL = blob => { saved = blob; return 'blob:template-test'; };
++      HTMLAnchorElement.prototype.click = function () {};
++      const result = await FM.templates.exportFile('probe');
++      const obj = JSON.parse(await saved.text());
++      if (!result || result.omitted.length !== 1 || result.omitted[0].file !== 'long.mp4')
++        throw new Error('Sender did not receive the missing clip name');
++      if (!obj.omitted || obj.omitted.length !== 1 || obj.omitted[0].file !== 'long.mp4')
++        throw new Error('Shared file did not record its omitted clip');
++      if (obj.media.big || !obj.media.small) throw new Error('Template embedded the wrong media');
++    } finally {
++      FM.templates.getPack = getPack; FM.templates.list = list;
++      URL.createObjectURL = createURL; HTMLAnchorElement.prototype.click = click;
++    }
++  });
++
++    function tinyFile(name) {
++      var canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
++      var bytes = atob(canvas.toDataURL('image/png').split(',')[1]);
++      return new File([Uint8Array.from(bytes, function (c) { return c.charCodeAt(0); })], name, { type: 'image/png' });
++    }
++  test('690 project file names a video whose source media is no longer stored', { item: '1069' }, async function () {
++    const before = FM.scene.layers.slice(), project = FM.scene.project, selected = FM.scene.selectedId;
++    const selectedIds = FM.scene.selectedIds, toast = FM.toast, said = [];
++    try {
++      const missing = FM.makeLayer('video', { start: 0, duration: 2 });
++      missing.name = 'Missing camera clip';
++      const shape = FM.makeLayer('shape', { start: 0, duration: 2 });
++      FM.scene.layers = [missing, shape];
++      if (FM.media.get(missing.id)) throw new Error('The fixture video already has media');
++      const obj = await FM.storage.serializeScene(FM.scene);
++      if (Object.keys(obj.media).length || obj.omitted.length !== 1 ||
++          obj.omitted[0].layer !== missing.name || obj.omitted[0].missing !== true)
++        throw new Error('A media-less video was not named as missing in the project file');
++      FM.toast = message => said.push(String(message));
++      await FM.storage.exportFile();
++      if (!said.some(message => message.includes(missing.name) && message.includes('not stored') && !message.includes('too big')))
++        throw new Error('Saving a project file still claims a clean save when its video source is gone: ' + said.join(' | '));
++      said.length = 0;
++      await FM.storage.applyScene(JSON.parse(JSON.stringify(obj)));
++      if (!said.some(message => message.includes(missing.name) && message.includes('not stored') && !message.includes('too big')))
++        throw new Error('Importing the same file fails to identify its missing source: ' + said.join(' | '));
++    } finally {
++      FM.toast = toast;
++      FM.scene.project = project; FM.scene.layers = before; FM.scene.selectedId = selected; FM.scene.selectedIds = selectedIds;
++      FM.refreshAll();
++    }
++  });
++
++  test('690 shared files name oversized fonts while whole backups keep them', { item: '1069' }, async function () {
++    const priorId = FM.projects.currentId(), list = FM.fonts.list, getFile = FM.fonts.getFile;
++    const toast = FM.toast, said = [];
++    let madeId = null;
++    try {
++      await FM.projects.create({ name: 'FX690 FONT SHARE', width: 320, height: 240 });
++      madeId = FM.projects.currentId();
++      const big = new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'large.ttf', { type: 'font/ttf' });
++      const small = new File([new Uint8Array(16)], 'small.ttf', { type: 'font/ttf' });
++      const records = [
++        { id: 'big690font', name: 'Large test', family: 'FMFbig690font', css: 'FMFbig690font, sans-serif' },
++        { id: 'small690font', name: 'Small test', family: 'FMFsmall690font', css: 'FMFsmall690font, sans-serif' }
++      ];
++      FM.fonts.list = () => records;
++      FM.fonts.getFile = async id => id === records[0].id ? big : small;
++      FM.toast = message => said.push(String(message));
++      const largeText = FM.makeLayer('text', { text: 'large font' }); largeText.fontFamily = records[0].css;
++      const smallText = FM.makeLayer('text', { text: 'small font' }); smallText.fontFamily = records[1].css;
++      FM.scene.layers = [largeText, smallText];
++      FM.storage.markDirty();
++      await FM.storage.save();
++      const shared = await FM.storage.serializeScene(FM.scene);
++      if (!shared.omittedFonts.some(f => f.name === 'Large test' && f.tooBig) ||
++          !shared.fonts.small690font || shared.fonts.big690font)
++        throw new Error('A shared file did not distinguish the oversized font from the embedded small font');
++      said.length = 0;
++      await FM.storage.exportFile();
++      if (!said.some(message => message.includes('Large test') && message.includes('custom font')))
++        throw new Error('The shared project file claimed a clean save without its large custom font');
++      said.length = 0;
++      await FM.storage.applyScene(JSON.parse(JSON.stringify(shared)));
++      if (!said.some(message => message.includes('Large test') && message.includes('fallback')))
++        throw new Error('Import did not identify the omitted font and possible fallback');
++      const backup = await FM.storage.buildBackup();
++      const entry = backup.projects.find(p => p.project.name === 'FX690 FONT SHARE');
++      if (!entry || !entry.fonts.big690font || !entry.fonts.small690font ||
++          (backup.notIncluded.fonts || []).some(f => f.project === 'FX690 FONT SHARE'))
++        throw new Error('The whole-library backup still applied the sharing-file font limit');
++    } finally {
++      FM.fonts.list = list; FM.fonts.getFile = getFile; FM.toast = toast;
++      if (madeId) { try { await FM.projects.remove(madeId); } catch (e) {} }
++      if (priorId && FM.projects.list().some(p => p.id === priorId)) { try { await FM.projects.open(priorId); } catch (e) {} }
++    }
++  });
++
++  test('690 the completed import keeps its missing-footage warning visible', { item: '1069' }, async function () {
++    const priorId = FM.projects.currentId(), oldToast = FM.toast, said = [], made = [];
++    try {
++      FM.toast = function (message) { said.push(String(message)); };
++      const clip = FM.makeLayer('video', { name: 'Unpacked holiday clip', start: 0, duration: 2 });
++      clip.name = 'Unpacked holiday clip';
++      const project = { name: 'FX690 MISSING IMPORT', width: 320, height: 240, duration: 2, fps: 30 };
++      if (await FM.storage.importObject({ app: 'freemotion', project, layers: [clip], media: {} }) !== true)
++        throw new Error('Valid media-less project did not import');
++      made.push(FM.projects.currentId());
++      const finalWarning = said[said.length - 1] || '';
++      if (!finalWarning.includes('Unpacked holiday clip') || !finalWarning.includes('no footage'))
++        throw new Error('Import success replaced the missing-footage warning: ' + finalWarning);
++      said.length = 0;
++      if (await FM.storage.importObject({ app: 'freemotion', project: Object.assign({}, project, { name: 'FX690 CLEAN IMPORT' }), layers: [] }) !== true)
++        throw new Error('Valid clean project did not import');
++      made.push(FM.projects.currentId());
++      if (said[said.length - 1] !== 'Project imported')
++        throw new Error('Clean import did not keep its ordinary success message: ' + said[said.length - 1]);
++    } finally {
++      FM.toast = oldToast;
++      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
++      if (priorId && FM.projects.list().some(p => p.id === priorId)) { try { await FM.projects.open(priorId); } catch (e) {} }
++    }
++  });
++
++  test('690 Replace media cancels a decoded file when its project was switched', { item: '1069', budgetMs: 60000 }, async function () {
++    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [], said = [];
++    const realLoad = FM.loadImageFile, realToast = FM.toast, realClick = HTMLInputElement.prototype.click;
++    let release = null, loaded = null, layerId = null;
++    const held = new Promise(resolve => { release = resolve; });
++    try {
++      if (wasOpen) FM.home.close();
++      const other = await FM.projects.create({ name: 'Replace switch B', width: 320, height: 240 }); made.push(other);
++      const mine = await FM.projects.create({ name: 'Replace switch A', width: 320, height: 240 }); made.push(mine);
++      const oldFile = await q915aPng('replace-switch-old', '#b24d4d');
++      const newFile = await q915aPng('replace-switch-new', '#4db2a0');
++      FM.addMediaLayer(await realLoad(oldFile));
++      layerId = FM.scene.selectedId;
++      await FM.storage.settled();
++      FM.toast = function (message) { said.push(String(message)); return realToast.apply(this, arguments); };
++      FM.loadImageFile = async function (file) { await held; loaded = await realLoad(file); return loaded; };
++      HTMLInputElement.prototype.click = function () {}; // only the OS picker sheet is stood in for
++      const pending = FM.replaceMedia(layerId);
++      HTMLInputElement.prototype.click = realClick;
++      const inp = Array.from(document.querySelectorAll('input[type=file]')).find(i => i.accept === 'video/*,image/*' && i.parentNode === document.body);
++      if (!inp) throw new Error('Replace media did not open its picker');
++      const dt = new DataTransfer(); dt.items.add(newFile); inp.files = dt.files;
++      inp.dispatchEvent(new Event('change'));
++      if ((await FM.projects.open(other, { confirmed: true })) !== true) throw new Error('Could not switch projects during decode');
++      release(); release = null;
++      const result = await pending;
++      if (result !== false) throw new Error('The obsolete Replace media operation claimed success');
++      if (FM.projects.currentId() !== other || FM.scene.layers.some(l => l.id === layerId)) throw new Error('The replacement landed in the other project');
++      const saved = await FM.storage.readMedia(layerId);
++      if (!saved || !saved.file || saved.file.name !== oldFile.name) throw new Error('The original project lost its original media');
++      if (!loaded || !loaded._released || FM.media.get(layerId)) throw new Error('The abandoned decoded media stayed in memory');
++      if (!said.some(m => /not replaced.*project changed/i.test(m))) throw new Error('The user was not told that the replacement was cancelled');
++    } finally {
++      if (release) release();
++      FM.loadImageFile = realLoad; FM.toast = realToast; HTMLInputElement.prototype.click = realClick;
++      if (layerId) hfDropTiles(layerId);
++      await hfCleanup(made, orig, wasOpen);
++    }
++  });
++
++  test('690 Remove Vocals instrumental follows source Speed while retaining one undo step and independent retimes', { item: '1069' }, function () {
++    var original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice();
++    var seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
++    try {
++      // The pair has the same clock that toggleKaraoke gives it; its volume curve
++      // is independent and must follow the new clip window rather than be erased.
++      var source = FM.makeLayer('video', { name: 'Song' });
++      source.start = 1; source.duration = 4; source.trimStart = 0.5; source.speed = 1;
++      var twin = FM.makeLayer('video', { name: 'Song (no vocals)' });
++      twin.karaokeOf = source.id; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
++      twin.volume = { kf: [{ t: 1, v: 0.2, e: 'linear' }, { t: 3, v: 0.8, e: 'linear' }] };
++      FM.scene.layers.push(source, twin);
++      FM.scene.selectedId = source.id; FM.scene.selectedIds = [source.id];
++      FM.seekVideosToTime = function () {};
++      if (FM.timeline) FM.timeline.rebuild = function () {};
++      FM.requestRender = function () {};
++      FM.history.reset();
++      var before = FM.history._steps();
++
++      // The Speed % control makes these two source writes and one history commit.
++      source.speed = 2; source.duration = 2;
++      FM.history.commit();
++      var after = FM.history._steps();
++      if (after.len !== before.len + 1) throw new Error('source and instrumental took more than one undo step');
++      if (twin.speed !== 2 || twin.duration !== 2 || twin.start !== 1 || twin.trimStart !== 0.5)
++        throw new Error('the muted picture re-timed to 2x but its instrumental stayed at the old mapping');
++      if (Math.abs(twin.volume.kf[1].t - 2) > 1e-6) throw new Error('the instrumental lost its own volume animation timing');
++
++      FM.history.undo();
++      var restored = FM.layerById(FM.scene, twin.id);
++      if (!restored || restored.speed !== 1 || restored.duration !== 4) throw new Error('one Undo did not restore both clocks');
++      FM.history.redo();
++      source = FM.layerById(FM.scene, source.id); twin = FM.layerById(FM.scene, twin.id);
++      if (source.speed !== 2 || twin.speed !== 2 || twin.duration !== 2) throw new Error('Redo lost the aligned instrumental');
++
++      source.speed = { kf: [{ t: 1, v: 2, e: 'linear' }, { t: 3, v: 4, e: 'linear' }] };
++      FM.history.commit();
++      if (JSON.stringify(twin.speed) !== JSON.stringify(source.speed) || twin.speed === source.speed)
++        throw new Error('a new source speed ramp was not copied independently to the instrumental');
++
++      // An intentional offset makes this track independent; subsequent source
++      // speed edits must not stamp over that user's timing choice.
++      twin.start += 0.5; FM.history.commit();
++      source.speed = 4; source.duration = 1; FM.history.commit();
++      if (twin.start !== 1.5 || !FM.isAnimated(twin.speed) || twin.duration !== 2)
++        throw new Error('a separately retimed instrumental was overwritten');
++    } finally {
++      FM.seekVideosToTime = seek;
++      if (FM.timeline) FM.timeline.rebuild = rebuild;
++      FM.requestRender = render;
++      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, original);
++      FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
++      FM.history.reset();
++    }
++  });
++
++  test('690 rebuilding a long caption list does not keep another document listener per cue', { item: '1069' }, function () {
++    if (!FM.captionsEditor || !FM.captionsEditor.mount) throw new Error('caption editor unavailable');
++    const host = document.createElement('div');
++    const layer = { id: 'caption-listener-probe', type: 'text', start: 0, duration: 20,
++      captions: Array.from({ length: 8 }, (_, i) => ({ start: i, end: i + 0.8, text: 'Cue ' + i })) };
++    const originalAdd = document.addEventListener;
++    const ownAdd = Object.getOwnPropertyDescriptor(document, 'addEventListener');
++    let added = 0;
++    document.addEventListener = function (type, listener, options) {
++      if (type === 'pointerdown' && options === true) added++;
++      return originalAdd.call(this, type, listener, options);
++    };
++    document.body.appendChild(host);
++    try {
++      for (let i = 0; i < 6; i++) FM.captionsEditor.mount(host, layer);
++      if (added > 1) throw new Error('six redraws of eight caption cues added ' + added +
++        ' document pointerdown listeners; discarded rows remain retained and every later tap walks them');
++
++      // The surviving capture listener must still start a drag on the newest row.
++      const grip = host.querySelector('.cap-grip');
++      const cue = layer.captions[0], before = cue.end;
++      const event = (type, x) => new PointerEvent(type, { bubbles: true, cancelable: true,
++        pointerId: 912, pointerType: 'mouse', clientX: x, clientY: 10, button: 0, buttons: 1 });
++      const down = event('pointerdown', 10);
++      grip.dispatchEvent(down);
++      grip.dispatchEvent(event('pointermove', 30));
++      if (!down.defaultPrevented || cue.end < before + 0.35)
++        throw new Error('delegated capture pointerdown no longer lets the current caption grip extend its cue');
++    } finally {
++      if (ownAdd) Object.defineProperty(document, 'addEventListener', ownAdd);
++      else delete document.addEventListener;
++      host.remove();
++    }
++  });
++
++
++  test('690 service worker keeps offline cache writes alive after network responses', { item: '1069' }, async function () {
++    const src = await fetch('../sw.js?probe=cache-lifetime').then(r => r.text());
++    async function probe(mode, path, body) {
++      const pending = [], handlers = {}, lifetimes = [];
++      const cache = {
++        match: () => Promise.resolve(undefined),
++        keys: () => Promise.resolve([]),
++        put: (key) => new Promise((resolve, reject) => pending.push({ kind:'put', key, resolve, reject })),
++        delete: (key) => new Promise((resolve, reject) => pending.push({ kind:'delete', key, resolve, reject })),
++      };
++      const scope = {
++        location: { origin: location.origin },
++        addEventListener: (type, handler) => { handlers[type] = handler; },
++      };
++      new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(scope,
++        { open: () => Promise.resolve(cache) },
++        () => Promise.resolve(new Response(body, { status: 200 })), Response, URL);
++      if (!handlers.fetch) throw new Error('Control: service worker has no fetch handler');
++      let answer;
++      handlers.fetch({
++        request: { method:'GET', url:location.origin + path, mode },
++        respondWith: promise => { answer = promise; },
++        waitUntil: promise => { lifetimes.push(promise); },
++      });
++      if (!answer || !(await answer).ok) throw new Error('Control: the good network response was not served');
++      await new Promise(resolve => setTimeout(resolve, 0)); // let any independent pruning finish
++      return { pending, lifetimes };
++    }
++    const nav = await probe('navigate', '/index.html', '<span class="ver">v17.22</span>');
++    if (nav.pending.length !== 2 || nav.lifetimes.length !== 1) throw new Error('Navigation did not track its fallback write and stale-note removal');
++    let navDone = false;
++    Promise.all(nav.lifetimes).then(() => { navDone = true; });
++    await new Promise(resolve => setTimeout(resolve, 0));
++    if (navDone) throw new Error('Navigation released the worker while the offline page and stale-note operations were still pending');
++    nav.pending.find(op => op.kind === 'put').resolve();
++    await new Promise(resolve => setTimeout(resolve, 0));
++    if (navDone) throw new Error('Navigation released the worker before the stale-note operation settled');
++    nav.pending.find(op => op.kind === 'delete').resolve();
++    await Promise.all(nav.lifetimes);
++
++    const asset = await probe('same-origin', '/js/app.js?v=999', 'window.FM = {};');
++    if (asset.pending.length !== 1 || asset.lifetimes.length !== 1) throw new Error('Versioned asset cache write did not extend the worker lifetime');
++    let assetDone = false;
++    Promise.all(asset.lifetimes).then(() => { assetDone = true; });
++    await new Promise(resolve => setTimeout(resolve, 0));
++    if (assetDone) throw new Error('The worker ended before the versioned asset was cached');
++    asset.pending[0].reject(new Error('storage full'));
++    await Promise.all(asset.lifetimes); // a failed cache write must not invalidate the good response
++  });
++  test('P27 #1069 fix 8: a clip that is stored on the device but not resident in memory is embedded in the project file, not reported as no longer stored', { item: '1069' }, async function () {
++    const png = await new Promise(function (res) { const c = document.createElement('canvas'); c.width = c.height = 2; c.toBlob(res, 'image/png'); });
++    const file = new File([png], 'stored.png', { type: 'image/png' });
++    const L = FM.makeLayer('image', { name: 'Stored clip', start: 0, duration: 2 });
++    const scene = { project: FM.scene.project, layers: [L], selectedId: null, selectedIds: [] };
++    try {
++      if (FM.media.get(L.id)) throw new Error('the fixture is wrong: the clip is already resident');
++      if (!(await FM.storage.writeMedia(L.id, { file: file, kind: 'image' }))) throw new Error('could not store the clip in IndexedDB');
++      const out = await FM.storage.serializeScene(scene);
++      if (!out.media || !out.media[L.id]) throw new Error('the stored clip was left out of the project file (omitted: ' + JSON.stringify(out.omitted) + ')');
++      if ((out.omitted || []).length) throw new Error('a clip that IS stored was reported as left out: ' + JSON.stringify(out.omitted));
++    } finally { await FM.storage.removeMedia(L.id); }
++  });
++  test('P27 #1069 fix 9: a whole-library backup honours its own font size cap (FM.storage._backupEmbedLimit), it does not embed any size', { item: '1069' }, async function () {
++    const priorId = FM.projects.currentId(), list = FM.fonts.list, getFile = FM.fonts.getFile, limit0 = FM.storage._backupEmbedLimit;
++    let madeId = null;
++    try {
++      await FM.projects.create({ name: 'P27 FONT CAP', width: 320, height: 240 });
++      madeId = FM.projects.currentId();
++      const rec = { id: 'p27cap', name: 'Cap test', family: 'FMFp27cap', css: 'FMFp27cap, sans-serif' };
++      FM.fonts.list = function () { return [rec]; };
++      FM.fonts.getFile = async function () { return new File([new Uint8Array(64)], 'cap.ttf', { type: 'font/ttf' }); };
++      const T = FM.makeLayer('text', { text: 'capped' }); T.fontFamily = rec.css;
++      FM.scene.layers = [T]; FM.storage.markDirty(); await FM.storage.save();
++      FM.storage._backupEmbedLimit = 8;   // any real font is now over the backup's own cap
++      const backup = await FM.storage.buildBackup();
++      const entry = backup.projects.find(function (p) { return p.project.name === 'P27 FONT CAP'; });
++      if (!entry) throw new Error('the project is not in the backup at all');
++      if (entry.fonts.p27cap) throw new Error('a font over _backupEmbedLimit was embedded anyway: the cap is ignored');
++      if (!(backup.notIncluded.fonts || []).some(function (f) { return f.project === 'P27 FONT CAP'; })) throw new Error('the font was left out but the backup does not say so');
++    } finally {
++      FM.storage._backupEmbedLimit = limit0; FM.fonts.list = list; FM.fonts.getFile = getFile;
++      if (madeId) { try { await FM.projects.remove(madeId); } catch (e) {} }
++      if (priorId && FM.projects.list().some(function (p) { return p.id === priorId; })) { try { await FM.projects.open(priorId); } catch (e) {} }
++    }
++  });
++  test('P27 #1069 fix 12a: splitting a clip that has a Remove Vocals track does not cut the instrumental off at the split', { item: '1069' }, async function () {
++    const original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), time = FM.time;
++    const seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
++    try {
++      const source = FM.makeLayer('video', { name: 'Song' });
++      source.start = 1; source.duration = 4; source.trimStart = 0.5; source.speed = 1;
++      const twin = FM.makeLayer('video', { name: 'Song (no vocals)' });
++      twin.karaokeOf = source.id; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
++      FM.scene.layers.push(source, twin);
++      FM.scene.selectedId = source.id; FM.scene.selectedIds = [source.id];
++      FM.seekVideosToTime = function () {}; if (FM.timeline) FM.timeline.rebuild = function () {}; FM.requestRender = function () {};
++      FM.history.reset();
++      FM.time = 3;
++      await FM.splitLayer(source.id);
++      if (source.duration !== 2) throw new Error('the split did not happen (the first half is ' + source.duration + ' s, want 2)');
++      if (twin.duration !== 4 || twin.start !== 1) throw new Error('the instrumental was cut to ' + twin.start + ' to ' + (twin.start + twin.duration) + ' s by a split at 3 s: the right half of the song has no sound');
++    } finally {
++      FM.seekVideosToTime = seek; if (FM.timeline) FM.timeline.rebuild = rebuild; FM.requestRender = render; FM.time = time;
++      FM.scene.layers.length = 0; original.forEach(function (l) { FM.scene.layers.push(l); });
++      FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
++    }
++  });
++  test('P27 #1069 fix 12b: trimming a clip that has a Remove Vocals track leaves the instrumental\u2019s own volume keyframes where they are, and moving it carries them along', { item: '1069' }, function () {
++    const original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice();
++    const seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
++    try {
++      const source = FM.makeLayer('video', { name: 'Song' });
++      source.start = 1; source.duration = 4; source.trimStart = 0.5; source.speed = 1;
++      const twin = FM.makeLayer('video', { name: 'Song (no vocals)' });
++      twin.karaokeOf = source.id; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
++      twin.volume = { kf: [{ t: 1, v: 0.2, e: 'linear' }, { t: 3, v: 0.8, e: 'linear' }] };
++      FM.scene.layers.push(source, twin);
++      FM.scene.selectedId = source.id; FM.scene.selectedIds = [source.id];
++      FM.seekVideosToTime = function () {}; if (FM.timeline) FM.timeline.rebuild = function () {}; FM.requestRender = function () {};
++      FM.history.reset();
++      // a head trim: the clip starts a second later and a second further into the song
++      source.start = 2; source.duration = 3; source.trimStart = 1.5;
++      FM.history.commit();
++      if (twin.start !== 2 || twin.duration !== 3 || twin.trimStart !== 1.5) throw new Error('the instrumental did not follow the trim: ' + [twin.start, twin.duration, twin.trimStart]);
++      const k = twin.volume.kf.map(function (x) { return Math.round(x.t * 1000) / 1000; });
++      if (k[0] !== 1 || k[1] !== 3) throw new Error('a trim moved the instrumental\u2019s volume keyframes to ' + JSON.stringify(k) + ' (they sit at 1 and 3 s of the project and a trim does not move sound)');
++      // a plain move: everything shifts by the same two seconds
++      source.start = 4; FM.history.commit();
++      const m2 = twin.volume.kf.map(function (x) { return Math.round(x.t * 1000) / 1000; });
++      if (twin.start !== 4 || m2[0] !== 3 || m2[1] !== 5) throw new Error('a move did not carry the keyframes by the same 2 s: ' + JSON.stringify(m2) + ' start ' + twin.start);
++    } finally {
++      FM.seekVideosToTime = seek; if (FM.timeline) FM.timeline.rebuild = rebuild; FM.requestRender = render;
++      FM.scene.layers.length = 0; original.forEach(function (l) { FM.scene.layers.push(l); });
++      FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
++    }
++  });
+   async function run() {
+     var results = [];
+     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
+@@ -85688,7 +86189,11 @@
+     var said = [], toast0 = FM.toast;
+     FM.toast = function (m) { said.push(String(m)); };
+     function bigFile(name) { return new File([new Blob([new Uint8Array(7 * 1024 * 1024)], { type: 'video/mp4' })], name, { type: 'video/mp4' }); }
+-    function tinyFile(name) { return new File([new Blob([new Uint8Array(64)], { type: 'image/png' })], name, { type: 'image/png' }); }
++    function tinyFile(name) {
++      var canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
++      var bytes = atob(canvas.toDataURL('image/png').split(',')[1]);
++      return new File([Uint8Array.from(bytes, function (c) { return c.charCodeAt(0); })], name, { type: 'image/png' });
++    }
+     try {
+       // ── a project holding one clip that fits and one that does not
+       FM.scene.layers.length = 0;
+@@ -118553,7 +119058,7 @@
+   });
+ 
+ 
+-  test('Home reference: centred header, profile Join, card Select and scrolling fade on a phone', { item: 'TBD' }, async function () {
++  test('Home reference: centred header, profile Join, card Select and scrolling fade on a phone', { item: '1069' }, async function () {
+     const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+     const wasOpen = FM.home.isOpen();
+     let made = null;
+@@ -118643,7 +119148,7 @@
+     }
+   });
+ 
+-  test('Home PC keeps the reference header and readable navigation in both looks', { item: 'TBD' }, async function () {
++  test('Home PC keeps the reference header and readable navigation in both looks', { item: '1069' }, async function () {
+     if (innerWidth <= 700) return;
+     const wasOpen = FM.home.isOpen(), html = document.documentElement, priorLook = html.getAttribute('data-home');
+     try {
+@@ -118675,7 +119180,7 @@
+     }
+   });
+ 
+-  test('Home portrait stays local, persists, and can be removed', { item: 'TBD' }, async function () {
++  test('Home portrait stays local, persists, and can be removed', { item: '1069' }, async function () {
+     const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+     const waitFor = async fn => { for (let i = 0; i < 30; i++) { if (fn()) return; await pause(100); } throw new Error('Home portrait did not update'); };
+     const dbOp = (mode, value) => new Promise((resolve, reject) => {
+@@ -118743,7 +119248,7 @@
+     }
+   });
+ 
+-  test('Home removing a portrait wins over a replacement still cropping', { item: 'TBD' }, async function () {
++  test('Home removing a portrait wins over a replacement still cropping', { item: '1069' }, async function () {
+     const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+     const waitFor = async fn => { for (let i = 0; i < 30; i++) { if (fn()) return; await pause(100); } throw new Error('Timed out waiting for the portrait operation'); };
+     const dbOp = (mode, value) => new Promise((resolve, reject) => {
+@@ -118799,7 +119304,7 @@
+     }
+   });
+ 
+-  test('690 Home project menu closes when a card opens the editor by keyboard', { item: 'TBD', budgetMs: 30000 }, async function () {
++  test('690 Home project menu closes when a card opens the editor by keyboard', { item: '1069', budgetMs: 30000 }, async function () {
+     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+     try {
+       const first = await FM.projects.create({ name: 'Menu keyboard A', width: 320, height: 240 }); made.push(first);
+@@ -118822,7 +119327,7 @@
+     }
+   });
+ 
+-  test('Home profile Join and project Select menus work from the keyboard', { item: 'TBD', budgetMs: 30000 }, async function () {
++  test('Home profile Join and project Select menus work from the keyboard', { item: '1069', budgetMs: 30000 }, async function () {
+     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+     const ui = FM.collab.ui, realJoin = ui.joinDoor;
+     const key = (target, name) => target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));

@@ -1,0 +1,20 @@
+690 malformed project dimensions recover to a usable canvas
+690 invalid project object is refused before import creates a project
+690 invalid layer entry is refused before import creates a project
+690 a corrupt embedded clip is named as missing on project import
+690 deeply nested project files are rejected before creating a project
+690 corrupt embedded font does not abort project import silently
+690 shared template file names clips that exceed the embed limit
+690 project file names a video whose source media is no longer stored
+690 shared files name oversized fonts while whole backups keep them
+690 the completed import keeps its missing-footage warning visible
+690 Replace media cancels a decoded file when its project was switched
+690 Remove Vocals instrumental follows source Speed while retaining one undo step and independent retimes
+690 rebuilding a long caption list does not keep another document listener per cue
+690 service worker keeps offline cache writes alive after network responses
+Home reference: centred header, profile Join, card Select and scrolling fade on a phone
+Home PC keeps the reference header and readable navigation in both looks
+Home portrait stays local, persists, and can be removed
+Home removing a portrait wins over a replacement still cropping
+690 Home project menu closes when a card opens the editor by keyboard
+Home profile Join and project Select menus work from the keyboard

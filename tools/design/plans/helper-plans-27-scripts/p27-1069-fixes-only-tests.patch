@@ -1,0 +1,98 @@
+diff --git a/tests/tests.js b/tests/tests.js
+index 1c3c6d9b..406dc43a 100644
+--- a/tests/tests.js
++++ b/tests/tests.js
+@@ -60225,6 +60225,93 @@
+     asset.pending[0].reject(new Error('storage full'));
+     await Promise.all(asset.lifetimes); // a failed cache write must not invalidate the good response
+   });
++  test('P27 #1069 fix 8: a clip that is stored on the device but not resident in memory is embedded in the project file, not reported as no longer stored', { item: '1069' }, async function () {
++    const png = await new Promise(function (res) { const c = document.createElement('canvas'); c.width = c.height = 2; c.toBlob(res, 'image/png'); });
++    const file = new File([png], 'stored.png', { type: 'image/png' });
++    const L = FM.makeLayer('image', { name: 'Stored clip', start: 0, duration: 2 });
++    const scene = { project: FM.scene.project, layers: [L], selectedId: null, selectedIds: [] };
++    try {
++      if (FM.media.get(L.id)) throw new Error('the fixture is wrong: the clip is already resident');
++      if (!(await FM.storage.writeMedia(L.id, { file: file, kind: 'image' }))) throw new Error('could not store the clip in IndexedDB');
++      const out = await FM.storage.serializeScene(scene);
++      if (!out.media || !out.media[L.id]) throw new Error('the stored clip was left out of the project file (omitted: ' + JSON.stringify(out.omitted) + ')');
++      if ((out.omitted || []).length) throw new Error('a clip that IS stored was reported as left out: ' + JSON.stringify(out.omitted));
++    } finally { await FM.storage.removeMedia(L.id); }
++  });
++  test('P27 #1069 fix 9: a whole-library backup honours its own font size cap (FM.storage._backupEmbedLimit), it does not embed any size', { item: '1069' }, async function () {
++    const priorId = FM.projects.currentId(), list = FM.fonts.list, getFile = FM.fonts.getFile, limit0 = FM.storage._backupEmbedLimit;
++    let madeId = null;
++    try {
++      await FM.projects.create({ name: 'P27 FONT CAP', width: 320, height: 240 });
++      madeId = FM.projects.currentId();
++      const rec = { id: 'p27cap', name: 'Cap test', family: 'FMFp27cap', css: 'FMFp27cap, sans-serif' };
++      FM.fonts.list = function () { return [rec]; };
++      FM.fonts.getFile = async function () { return new File([new Uint8Array(64)], 'cap.ttf', { type: 'font/ttf' }); };
++      const T = FM.makeLayer('text', { text: 'capped' }); T.fontFamily = rec.css;
++      FM.scene.layers = [T]; FM.storage.markDirty(); await FM.storage.save();
++      FM.storage._backupEmbedLimit = 8;   // any real font is now over the backup's own cap
++      const backup = await FM.storage.buildBackup();
++      const entry = backup.projects.find(function (p) { return p.project.name === 'P27 FONT CAP'; });
++      if (!entry) throw new Error('the project is not in the backup at all');
++      if (entry.fonts.p27cap) throw new Error('a font over _backupEmbedLimit was embedded anyway: the cap is ignored');
++      if (!(backup.notIncluded.fonts || []).some(function (f) { return f.project === 'P27 FONT CAP'; })) throw new Error('the font was left out but the backup does not say so');
++    } finally {
++      FM.storage._backupEmbedLimit = limit0; FM.fonts.list = list; FM.fonts.getFile = getFile;
++      if (madeId) { try { await FM.projects.remove(madeId); } catch (e) {} }
++      if (priorId && FM.projects.list().some(function (p) { return p.id === priorId; })) { try { await FM.projects.open(priorId); } catch (e) {} }
++    }
++  });
++  test('P27 #1069 fix 12a: splitting a clip that has a Remove Vocals track does not cut the instrumental off at the split', { item: '1069' }, async function () {
++    const original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), time = FM.time;
++    const seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
++    try {
++      const source = FM.makeLayer('video', { name: 'Song' });
++      source.start = 1; source.duration = 4; source.trimStart = 0.5; source.speed = 1;
++      const twin = FM.makeLayer('video', { name: 'Song (no vocals)' });
++      twin.karaokeOf = source.id; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
++      FM.scene.layers.push(source, twin);
++      FM.scene.selectedId = source.id; FM.scene.selectedIds = [source.id];
++      FM.seekVideosToTime = function () {}; if (FM.timeline) FM.timeline.rebuild = function () {}; FM.requestRender = function () {};
++      FM.history.reset();
++      FM.time = 3;
++      await FM.splitLayer(source.id);
++      if (source.duration !== 2) throw new Error('the split did not happen (the first half is ' + source.duration + ' s, want 2)');
++      if (twin.duration !== 4 || twin.start !== 1) throw new Error('the instrumental was cut to ' + twin.start + ' to ' + (twin.start + twin.duration) + ' s by a split at 3 s: the right half of the song has no sound');
++    } finally {
++      FM.seekVideosToTime = seek; if (FM.timeline) FM.timeline.rebuild = rebuild; FM.requestRender = render; FM.time = time;
++      FM.scene.layers.length = 0; original.forEach(function (l) { FM.scene.layers.push(l); });
++      FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
++    }
++  });
++  test('P27 #1069 fix 12b: trimming a clip that has a Remove Vocals track leaves the instrumental\u2019s own volume keyframes where they are, and moving it carries them along', { item: '1069' }, function () {
++    const original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice();
++    const seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
++    try {
++      const source = FM.makeLayer('video', { name: 'Song' });
++      source.start = 1; source.duration = 4; source.trimStart = 0.5; source.speed = 1;
++      const twin = FM.makeLayer('video', { name: 'Song (no vocals)' });
++      twin.karaokeOf = source.id; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
++      twin.volume = { kf: [{ t: 1, v: 0.2, e: 'linear' }, { t: 3, v: 0.8, e: 'linear' }] };
++      FM.scene.layers.push(source, twin);
++      FM.scene.selectedId = source.id; FM.scene.selectedIds = [source.id];
++      FM.seekVideosToTime = function () {}; if (FM.timeline) FM.timeline.rebuild = function () {}; FM.requestRender = function () {};
++      FM.history.reset();
++      // a head trim: the clip starts a second later and a second further into the song
++      source.start = 2; source.duration = 3; source.trimStart = 1.5;
++      FM.history.commit();
++      if (twin.start !== 2 || twin.duration !== 3 || twin.trimStart !== 1.5) throw new Error('the instrumental did not follow the trim: ' + [twin.start, twin.duration, twin.trimStart]);
++      const k = twin.volume.kf.map(function (x) { return Math.round(x.t * 1000) / 1000; });
++      if (k[0] !== 1 || k[1] !== 3) throw new Error('a trim moved the instrumental\u2019s volume keyframes to ' + JSON.stringify(k) + ' (they sit at 1 and 3 s of the project and a trim does not move sound)');
++      // a plain move: everything shifts by the same two seconds
++      source.start = 4; FM.history.commit();
++      const m2 = twin.volume.kf.map(function (x) { return Math.round(x.t * 1000) / 1000; });
++      if (twin.start !== 4 || m2[0] !== 3 || m2[1] !== 5) throw new Error('a move did not carry the keyframes by the same 2 s: ' + JSON.stringify(m2) + ' start ' + twin.start);
++    } finally {
++      FM.seekVideosToTime = seek; if (FM.timeline) FM.timeline.rebuild = rebuild; FM.requestRender = render;
++      FM.scene.layers.length = 0; original.forEach(function (l) { FM.scene.layers.push(l); });
++      FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
++    }
++  });
+   async function run() {
+     var results = [];
+     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

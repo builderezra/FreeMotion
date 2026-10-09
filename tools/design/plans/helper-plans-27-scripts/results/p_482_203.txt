@@ -1,0 +1,26 @@
+1280 Regression 23/24 ✗Pending 0/0 built
+   RED 482 3.0 Echo and Reverb - Tone, Low cut, Tape wobble, Pre-delay and Width are in the catalogue at de
+   ok  482 3.3 Echo - Tone darkens every repeat more than the one before and Low cut thins them, from the f
+   ok  482 3.3 Echo - Tape wobble swings each echo up to 2 ms early and late at 0.7 Hz on scene time, so an
+   ok  482 3.4 Reverb - Pre-delay holds the room back by its time, Tone and Low cut shape only the reverb, 
+   ok  482 3.4 Reverb - an animated room goes through the same Pre-delay, Tone, Low cut and Width as a stil
+   ok  482 3.3 and 3.4 Echo and Reverb panels - Tone, Low cut, Tape wobble, Pre-delay and Width fit the ope
+   ok  482 3.5 Echo and Reverb - moving Low cut off 20 Hz or back while the preview plays fades the filter 
+   ok  482 3.7 Compressor - Output turns the whole sound up or down, and a saved Compressor sounds exactly 
+   ok  482 3.7 Compressor - Mix blends the untouched sound back in, lined up with the squashed sound so it 
+   ok  482 3.7 Compressor - the open row shows how far it is turning the sound down while you hear it
+   ok  482 3.8 Limiter - Input gain pushes the sound into the ceiling, Release sets how fast it lets go, an
+   ok  482 3.1 Sound effects - the playing row shows a stop square, and goes back to a play triangle
+   ok  482 3.8 Limiter - Input gain never pushes the peaks past the ceiling or over full scale
+   ok  482 3.7 Compressor - the Turning down bar shows what you hear, so at Mix 0 it reads nothing
+   ok  482 3.5 Pitch Shift - Fine tune moves the pitch by the cents it says: +100 lands one semitone up, Se
+   ok  482 3.5 Pitch Shift - Semitones reaches two octaves each way: a 400 Hz tone comes out at 1600 Hz and
+   ok  482 3.5 Pitch Shift - the open effect shows Fine tune in cents and one line saying the shifted sound
+   ok  482 3.6 Bass & Treble - Bass at and Treble at move where the shelves start, keyframed too, the defau
+   ok  482 3.6 3-Band EQ - Low at, High at and Mid width move the bands, a wider Mid is wider, the defaults
+   ok  482 3.6 Bass & Treble and 3-Band EQ - Bass at, Treble at, Low at, High at and Mid width fit the open
+   ok  482 3.5 Pitch Shift - dragging Fine tune or stepping Semitones while the preview plays glides to the
+   ok  482 3.5 Pitch Shift - a few cents of Fine tune keep the clip at its own level, with no pump, in the 
+   ok  482 3.6 Bass & Treble and 3-Band EQ - Bass at, Treble at, Low at, High at, Mid width and Mid Freq sa
+   ok  482 3.6 Collab - the sync schema fingerprint sees the audio effects controls, so a build whose Pitch
+FAIL482 3.0 Echo and Reverb - Tone, Low cut, Tape wobble, Pre-delay and Width are in the catalogue at defaults that are the old sound, and saved and new Echoes and Reverbs render sample for sample as on v17.19 — 4 Echo / Reverb cases sound different from v17.19 at the new defaults - a new control changed a sound he already has (if Chrome itself was just updated, re-capture these on v17.19 first): reverb new 33b67f92/c1a8b9e3 33b67f92/bbbe7881 c2b796d4/5d80715b 1f58affa/2f1ff740 -> 008c0e76/a6a386d5 008c0e76/9f590496 3884d854/c05a1b03 ab6ddff9/f3ced947; reverb saved 33b67f92/c1a8b9e3 33b67f92/b

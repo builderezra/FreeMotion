@@ -1,0 +1,5 @@
+1280 Regression 4/4 ✓Pending 0/0 built
+   ok  boot: the theme is in the markup, so a refresh cannot flash the unthemed app (#306)
+   ok  storage: a tab holding an older scene cannot overwrite newer work (#306)
+   ok  the service worker retries a dropped navigation before serving an old build (queue 306)
+   ok  the stale-build warning says which build and how to escape it (queue 306)

@@ -1,0 +1,61 @@
+1280 Regression 43/53 ✗ · NOT RUN HERE 3 Pending 0/0 built
+   ok  709: every sound effect renders the same twice — the file promises it, and Glass break was a coin fl
+   ok  562: every sound effect actually makes a sound when previewed
+   ok  split: the cut does not duck the sound to silence in preview
+   ok  916.1 a sped-up clip sounds sped up in the preview — its media element does not preserve pitch
+   ok  the sound-effects menu has grown, and its sheet is warm (queue 290)
+   ok  every sound effect renders, at a deliberate level, and lands as a real clip
+   ok  play waits for the sound to start, but never waits forever
+   ok  916.4 a reversed clip with audio shorter than the clip plays its sound in step with the picture — ex
+   ok  the sound-effects icon is a WHITE gradient, not a pink one (queue 267)
+   ok  the sound-effects sheet wears the SAME travelling edge-light as the project card (queue 291)
+   ok  pulling the sound out of a huge video refuses instead of killing the tab (queue 834 u9)
+   ok  a soundtrack that fails to encode is reported, not swallowed
+   ok  sound effects can be starred, and the starred ones sit at the top (queue 311)
+   ok  export: one clip whose audio will not decode no longer silences the whole soundtrack (queue 47)
+   RED export: a soundtrack that cannot be built SAYS so instead of shipping a mute file (queue 47)
+   ok  audio: pressing play does not pitch the sound up while the element spins up (queue 148)
+   RED export: a soundtrack that is entirely muted says so instead of shipping a silent file (queue 215)
+   RED export: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215)
+   ok  #604: overlapping sounds do not clip the exported mix
+   ok  the audio watcher counts a sound that stopped advancing, and ignores one that did not
+   ok  an ordinary clip entry is not recorded as the sound cutting out
+   ok  the playback tick reports every sounding clip to the audio watcher
+   ok  #148: a loop wrap fades the sound back in instead of cutting it
+   ok  #215: the export-ready card says whether the file has sound
+   ok  having sound to lose counts audio LAYERS, not layer types (queue 215)
+   RED export: a soundtrack that fails to ENCODE says so, so it is not mistaken for the muxer (queue 215)
+   ok  740: previewing a sound effect uses the shared AudioContext and builds none of its own
+   ok  743: the sound-effect noise generator's pink is pink — between brown and white in spectral tilt
+   ok  import: cancelling the Audio picker does not turn the next import into a soundtrack
+   ok  891: resuming an interrupted export keeps the no-sound warning on screen instead of replacing it
+   RED 893: an export with no soundtrack does not print the previous export’s mix peak in its report
+   ok  894: dragging a fade on a playing reversed clip reshapes its sound instead of restarting it every st
+   RED 690 one short sound effect over a song turns down only the overlap in the exported file, not the who
+   ok  690 the sound effect preview asks for the playback audio session, so an iPhone set to silent still p
+   RED 690 pausing a clip with sound leaves the preview on the frame the playhead stopped on
+   RED 690 a clip with no sound track at all (a time-lapse) exports as no soundtrack, while a sound track t
+   ok  690 playing across a split, the second half is already running when the playhead reaches the cut, so
+   RED 690 the sound in an exported video and an exported M4A lines up with the picture, and the audio trac
+   ok  986 C2 the Limiter Ceiling is a ceiling - a full-scale sine lands near it and quieter sound keeps it
+   ok  986 C10 the sound-effect play button plays the very buffer Add puts on the timeline
+   ok  986 C12 hearing a second sound unlights the first row at once, and tapping the playing row stops it
+   ok  986 C12 a sound keeps its lit Stop row after its star is tapped, and one tap on either copy stops it
+   ok  986 C11 no two noise buffers in one sound are the same noise - every Fire crackle, every Ticking bui
+   ok  986 C13 audio-effect search finds what people call the sound - karaoke, robot voice, chipmunk, muffl
+   ok  986 C18 Bit Crush 11 to 16 bits quantise like the bits they say - 14, 15 and 16 are no longer the dr
+   RED 482 3.0 Echo and Reverb - Tone, Low cut, Tape wobble, Pre-delay and Width are in the catalogue at de
+   ok  482 3.7 Compressor - Output turns the whole sound up or down, and a saved Compressor sounds exactly 
+   ok  482 3.7 Compressor - Mix blends the untouched sound back in, lined up with the squashed sound so it 
+   ok  482 3.7 Compressor - the open row shows how far it is turning the sound down while you hear it
+   ok  482 3.8 Limiter - Input gain pushes the sound into the ceiling, Release sets how fast it lets go, an
+   ok  482 3.5 Pitch Shift - Semitones reaches two octaves each way: a 400 Hz tone comes out at 1600 Hz and
+   ok  482 3.5 Pitch Shift - the open effect shows Fine tune in cents and one line saying the shifted sound
+   ok  simple P1 · T1 classifier: what follows which clip — on a cut, long things, the sound rule, captions
+FAILexport: a soundtrack that cannot be built SAYS so instead of shipping a mute file (queue 47) — NO_VIDEO_CODEC
+FAILexport: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215) — NO_VIDEO_CODEC
+FAILexport: a soundtrack that fails to ENCODE says so, so it is not mistaken for the muxer (queue 215) — NO_VIDEO_CODEC
+FAIL893: an export with no soundtrack does not print the previous export’s mix peak in its report — NO_VIDEO_CODEC
+FAIL690 pausing a clip with sound leaves the preview on the frame the playhead stopped on — Failed to execute 'encode' on 'VideoEncoder': Cannot call 'encode' on a closed codec.
+FAIL690 a clip with no sound track at all (a time-lapse) exports as no soundtrack, while a sound track that will not decode is still reported — Failed to execute 'encode' on 'VideoEncoder': Cannot call 'encode' on a closed codec.
+FAIL482 3.0 Echo and Reverb - Tone, Low cut, Tape wobble, Pre-delay and Width are in the catalogue at defaults that are the old sound, and saved and new Echoes and Reverbs render sample for sample as on v17.19 — 4 Echo / Reverb cases sound different from v17.19 at the new defaults - a new control changed a sound he already has (if Chrome itself was just updated, re-capture these on v17.19 first): reverb new 33b67f92/c1a8b9e3 33b67f92/bbbe7881 c2b796d4/5d80715b 1f58affa/2f1ff740 -> 008c0e76/a6a386d5 008c0e76/9f590496 3884d854/c05a1b03 ab6ddff9/f3ced947; reverb saved 33b67f92/c1a8b9e3 33b67f92/b

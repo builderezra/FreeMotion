@@ -1,0 +1,35 @@
+diff --git a/index.html b/index.html
+index 29ebc3bd..78c6c71a 100644
+--- a/index.html
++++ b/index.html
+@@ -1088,7 +1088,7 @@
+   <script src="js/text-edit.js?v=26"></script>
+   <script src="js/tracker.js?v=10"></script>
+   <script src="js/frames.js?v=21"></script>
+-  <script src="js/audio-fx.js?v=16"></script>
++  <script src="js/audio-fx.js?v=17"></script>
+   <script src="js/audio-play.js?v=68"></script>
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+diff --git a/js/audio-fx.js b/js/audio-fx.js
+index 3fd52566..73afc663 100644
+--- a/js/audio-fx.js
++++ b/js/audio-fx.js
+@@ -1620,8 +1620,15 @@ window.FM = window.FM || {};
+         const when = ctx.currentTime;
+         if (!armed) arm(anchor !== null ? anchor : sceneTime - when);   // "the scene is at sceneTime NOW"
+         for (let i = 0; i < built.length; i++) {
+-          const b = built[i], ps = b.def.params;
+-          for (let j = 0; j < ps.length; j++) b.u.set(ps[j].key, valueAt(b.inst, ps[j], sceneTime), when, sceneTime);
++          const b = built[i], ps = b.def.params, last = b.last || (b.last = []);
++          for (let j = 0; j < ps.length; j++) {
++            const v = valueAt(b.inst, ps[j], sceneTime);
++            // Same value as the last write and not keyframed: the node already holds it, so no new event. (#845: five effects wrote
++            // about 1000 events a second at 60 fps for sliders nobody was moving; Reverb, Delay and Flanger alone about 800 each.)
++            if (last[j] === v && !FM.isAnimated(b.inst.params ? b.inst.params[ps[j].key] : undefined)) continue;
++            last[j] = v;
++            b.u.set(ps[j].key, v, when, sceneTime);
++          }
+         }
+       },
+       // Offline render: animated params sampled at 30 Hz across the window in ctx time (= scene − from),

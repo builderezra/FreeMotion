@@ -1,0 +1,44 @@
+1280 Regression 41/42 ✗Pending 0/0 built
+   ok  915.3 a project duplicate that could not be written says so and leaves no empty copy
+   ok  915.5A a clip stored as a pointer opens, duplicates, packs and backs up WITH its footage
+   ok  915.5A a pointer whose shared copy is gone opens blank like a missing file, and is never copied onwa
+   ok  915.5A nothing deletes a shared copy: the sweep, a tile, Clear media history, deleting a project, a 
+   ok  915.5B three reuses of a tile store ONE shared copy and three pointers, and his original import stay
+   ok  915.5B round trip: two reuses reopen and play, still play after the original is deleted, and back up
+   ok  915.5B a reused clip never lands in a project he did not tap in: leaving while it prepares gives up 
+   ok  915.5B the first reuse says Preparing while it copies, and a second tap on the same tile is ignored
+   ok  915.5B split, duplicate and paste of a reused clip store pointers, not the whole file again
+   ok  915.5B a stored file another copy still plays from is not deleted with its project, only once nothin
+   ok  915.5B a Replace media that lands while the first reuse is copying ends with the tapped clip, no wro
+   ok  915.5B tools/rollback.sh warns plainly, before it publishes, when the target is older than v16.80
+   ok  915.5Br a reused clip reopened later still splits, duplicates and pastes as pointers at its one shar
+   ok  915.5Br the clipboard alone keeps a stored file: copy, open another project, delete the first, then 
+   ok  915.5Br a pasted copy alone keeps the stored file it plays from, with the clipboard empty
+   ok  915.5Br a tile is shared only under its own file: not after Replace then Undo, and not onto another 
+   ok  915.5Br Preparing stays on screen for a first copy that takes longer than a toast lasts
+   ok  915.5Br two different tiles copying at once: Preparing stays until the last one is done
+   ok  915.5Br the project is captured at the tap: switching while the tile is still being read gives up wi
+   ok  915.5Br a tile with no fingerprint (the kind backfill made) is reused as a pointer and stays one til
+   ok  915.5Br tools/rollback.sh says an older build deletes shared copies at its first launch, and asks fo
+   ok  915.5Br a first reuse plays from the file read back out of its shared copy, never from his original 
+   ok  915.5Br a split half alone, and a duplicate alone, keep the stored file they play from
+   ok  915.5Br a pointer whose shared copy is gone is never saved as a pointer again, and Home never frees 
+   ok  915.5Br the project captured at the tap is this tab own: another tab opening a project neither drops
+   ok  915.5Br a clip dropped in from an element or a template keeps that pack stored file while it is on s
+   ok  915.5Br a tile whose stored file was put back to another file says so and adds nothing, never that f
+   ok  915.5Br the tile Replace media makes is never tied to the old file, even when tapped before the repl
+   ok  915.5Br a tap on the same tile in another project, while its first copy is still running, is added t
+   RED 915.5Br a reused VIDEO is stored as a pointer that says video, and reopens as a playing video, not b
+   ok  915.5Br a reuse stored the old way, with no shared copy, keeps his original record while it plays fr
+   ok  915.5Br a tap on the same tile in the project he moved to lands there with no Not added message, whi
+   ok  915.5Br a tile tapped while the file Replace media gave it is still queued to be saved waits for the
+   ok  915.5Br a tile tapped while its own import is still being saved waits for the save and adds it, neve
+   ok  915.5Br a tile is never dropped while another tap on it is still copying its file
+   ok  915.1 a photo project keeps its card picture when you leave Home for another project
+   ok  915.2 a refused pack write keeps the element draft and never reports saved
+   ok  915.9 the New project dialog suggests a name he does not already have, counting only his projects
+   ok  915.6 after editing an element or a template its card shows the edit, not an older autosave picture
+   ok  915.4 restoring from Home shows the restored projects and leaves him on his own
+   ok  915.8 a backup restores element and template drafts as drafts, not as projects
+   ok  915.5A a backup names every clip with no footage behind it, and Settings does not call it too big
+FAIL915.5Br a reused VIDEO is stored as a pointer that says video, and reopens as a playing video, not blank — Could not load video: q915br-clip-1791586371244.mp4

@@ -1,0 +1,5 @@
+1280 Regression 4/4 ✓Pending 0/0 built
+   ok  P27 #1069 fix 8: a clip that is stored on the device but not resident in memory is embedded in the p
+   ok  P27 #1069 fix 9: a whole-library backup honours its own font size cap (FM.storage._backupEmbedLimit)
+   ok  P27 #1069 fix 12a: splitting a clip that has a Remove Vocals track does not cut the instrumental off
+   ok  P27 #1069 fix 12b: trimming a clip that has a Remove Vocals track leaves the instrumental’s own volu

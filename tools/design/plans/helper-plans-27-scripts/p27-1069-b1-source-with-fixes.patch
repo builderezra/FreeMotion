@@ -1,0 +1,717 @@
+diff --git a/index.html b/index.html
+index 29ebc3bd..42546fc3 100644
+--- a/index.html
++++ b/index.html
+@@ -1044,7 +1044,7 @@
+   <script src="js/perf-probe.js?v=12"></script>
+   <script src="js/drawn-x.js?v=1"></script>
+   <script src="js/variant.js?v=2"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
+-  <script src="js/settings.js?v=51"></script>
++  <script src="js/settings.js?v=52"></script>
+   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
+        rest of the collab modules are pure libraries and sit at the end of the list. -->
+   <script src="js/collab-core.js?v=23"></script>
+@@ -1092,13 +1092,13 @@
+   <script src="js/audio-play.js?v=68"></script>
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+-  <script src="js/history.js?v=37"></script>
+-  <script src="js/storage.js?v=59"></script>
++  <script src="js/history.js?v=38"></script>
++  <script src="js/storage.js?v=60"></script>
+   <script src="js/export-resume.js?v=7"></script>
+   <script src="js/medialib.js?v=8"></script>
+   <script src="js/template-fill.js?v=4"></script>
+   <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
+-  <script src="js/home.js?v=201"></script>
++  <script src="js/home.js?v=202"></script>
+   <script src="js/graph-editor.js?v=18"></script>
+   <script src="js/gif-encode.js?v=1"></script>
+   <script src="js/zip-write.js?v=1"></script>
+@@ -1108,10 +1108,10 @@
+   <script src="js/ask.js?v=4"></script>
+   <script src="js/shortcuts.js?v=85"></script>
+   <script src="js/captions-vad.js?v=1"></script>
+-  <script src="js/captions.js?v=60"></script>
++  <script src="js/captions.js?v=61"></script>
+   <script src="js/audio-health.js?v=6"></script>
+-  <script src="js/app.js?v=469"></script>
+-  <script src="js/audio-tools.js?v=7"></script>
++  <script src="js/app.js?v=470"></script>
++  <script src="js/audio-tools.js?v=8"></script>
+   <script src="js/loading.js?v=3"></script>
+   <script src="js/sfx.js?v=19"></script>
+   <script src="js/voice-rec.js?v=9"></script>
+diff --git a/js/app.js b/js/app.js
+index e85ec949..bc7bdb10 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -4729,6 +4729,8 @@ window.FM = window.FM || {};
+   FM.replaceMedia = function (id) {
+     const layer = FM.layerById(FM.scene, id);
+     if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') return Promise.resolve(false);
++    const projectId = FM.projects && FM.projects.currentId ? FM.projects.currentId() : null;
++    const stillCurrent = () => (!FM.projects || FM.projects.currentId() === projectId) && FM.layerById(FM.scene, id) === layer;
+     /* ⚠️ queue 690 (HUNT-a): A SONG IS REPLACED BY A SONG. A song is a video layer with no picture, so the ⋯ menu offers
+        it Replace media… like any clip (and a template's Insert your Media lists it as a slot) — but this picker asked
+        for video/*,image/* only, which on his iPhone greys out every song in Files, and a song that reached it anyway
+@@ -4745,6 +4747,7 @@ window.FM = window.FM || {};
+     const swap = async () => {
+       const file = input.files && input.files[0]; input.remove();
+       if (!file) return false;
++      if (!stillCurrent()) { if (FM.toast) FM.toast('Media was not replaced — the project changed while the picker was open'); return false; }
+       const kind = mediaKind(file);
+       let nrec = null;
+       try {
+@@ -4756,6 +4759,10 @@ window.FM = window.FM || {};
+         else nrec = await FM.loadImageFile(file);   // an image, or a name nothing recognises (the old fall-through)
+       } catch (e) { nrec = null; }
+       if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return false; }
++      // Decoding a phone video or photo can outlive the project it was picked in.
++      // A stale replacement must not be applied to the project now on screen.
++      const stale = () => { if (FM._releaseMediaRecord) FM._releaseMediaRecord(nrec); if (FM.toast) FM.toast('Media was not replaced — the project changed while it was opening'); return false; };
++      if (!stillCurrent()) return stale();
+       /* queue 829: keep the outgoing file BEFORE anything replaces it. The next save writes the new blob
+          over the same key, so without this the original is gone from the registry, from IndexedDB and
+          from the media library at once — and undo cannot reach it, because history only swaps layer JSON. */
+@@ -4763,9 +4770,9 @@ window.FM = window.FM || {};
+       if (outgoing && outgoing.file && FM.storage && FM.storage.stashPrevMedia) {
+         try { await FM.storage.stashPrevMedia(id, outgoing, layer.mediaRev || 0); } catch (e) {}
+       }
+-      FM.replaceMediaWith(id, nrec);
++      if (!stillCurrent()) return stale();
++      if (!FM.replaceMediaWith(id, nrec)) return stale();
+       fitReplacedMedia(FM.layerById(FM.scene, id), outgoing, nrec);   // queue 690 (HUNT-a): same place, same size — before the commit, so undo puts the old scale back
+-      if (layer.reversed && FM.ensureReverseCache) { try { await FM.ensureReverseCache(layer); } catch (e) {} }
+       /* The outgoing blob is NOT deleted any more, and the layer gets a serialisable marker.
+        *
+        * A replace only changes out-of-history state — the media registry and the IDB blob. On an
+@@ -4792,6 +4799,9 @@ window.FM = window.FM || {};
+         FM.mediaLib.list().filter(e => e.key === id).forEach(e => FM.mediaLib.remove(e.mid));
+         FM.mediaLib.add(nrec, id);
+       }
++      // The swap is already saved before this potentially long frame build. A project switch
++      // during it can no longer leave the replacement half-committed.
++      if (layer.reversed && FM.ensureReverseCache && stillCurrent()) { try { await FM.ensureReverseCache(layer); } catch (e) {} }
+       return true;
+     };
+     input.addEventListener('cancel', () => { input.remove(); settle(false); });
+diff --git a/js/audio-tools.js b/js/audio-tools.js
+index cd71aedc..20a2082e 100644
+--- a/js/audio-tools.js
++++ b/js/audio-tools.js
+@@ -105,6 +105,57 @@ window.FM = window.FM || {};
+     return FM.karaokeTwinOf(layer) ? 'on' : 'off';
+   };
+ 
++  /* Keep an untouched Remove Vocals track on the same source clock as its original.
++   * The previous history snapshot supplies the clock BEFORE a Speed %, speed-ramp,
++   * reset, trim or move edit. A twin that was retimed separately, or changed in the
++   * same edit, is independent and must not be overwritten. This runs before the
++   * current edit is snapshotted, so source + twin remain one undo step. */
++  function karaokeClock(layer) {
++    return [layer.start || 0, layer.duration || 0, layer.trimStart || 0,
++      !!layer.reversed, JSON.stringify(layer.speed == null ? 1 : layer.speed)];
++  }
++  function sameClock(a, b) { return a.every((v, i) => v === b[i]); }
++  FM.syncKaraokeTimingFrom = function (previousLayers) {
++    if (!FM.scene || !Array.isArray(previousLayers) || !Array.isArray(FM.scene.layers)) return 0;
++    // A split (or a duplicate or paste) adds a layer and shortens the source: the instrumental has to keep playing across the cut, so nothing is resynced.
++    if (FM.scene.layers.length !== previousLayers.length) return 0;
++    const before = new Map(previousLayers.filter(l => l && l.id).map(l => [l.id, l]));
++    const current = new Map(FM.scene.layers.filter(l => l && l.id).map(l => [l.id, l]));
++    let changed = 0;
++    FM.scene.layers.forEach(twin => {
++      if (!twin || !twin.karaokeOf) return;
++      const source = current.get(twin.karaokeOf), oldSource = before.get(twin.karaokeOf), oldTwin = before.get(twin.id);
++      if (!source || source.type !== 'video' || twin.type !== 'video' || !oldSource || !oldTwin ||
++          !Number.isFinite(source.start) || !Number.isFinite(source.duration) || !(source.duration > 0)) return;
++      const oldClock = karaokeClock(oldSource);
++      if (sameClock(karaokeClock(source), oldClock) || !sameClock(karaokeClock(oldTwin), oldClock) ||
++          !sameClock(karaokeClock(twin), karaokeClock(oldTwin))) return;
++
++      // Map this track's independent volume/effect keyframes onto its new window.
++      // The speed track is replaced below with a CLONE of the source's new ramp.
++      const oldStart = twin.start || 0, oldDur = twin.duration || 0;
++      const newStart = source.start || 0;
++      const ratio = oldDur > 0 ? source.duration / oldDur : 1;
++      /* Its own keyframes sit at project times. A SPEED change stretches them with the clip; a plain MOVE (same length, same trim, same speed)
++         carries them by the same distance; a TRIM changes where the clip starts in the song, not when anything sounds, so they stay put. */
++      const speedChanged = JSON.stringify(source.speed == null ? 1 : source.speed) !== JSON.stringify(oldSource.speed == null ? 1 : oldSource.speed);
++      const pureMove = !speedChanged && source.duration === oldSource.duration && (source.trimStart || 0) === (oldSource.trimStart || 0) && !!source.reversed === !!oldSource.reversed;
++      if (FM.animatedProps && Number.isFinite(ratio) && ratio > 0 && (speedChanged || pureMove)) {
++        FM.animatedProps(twin).forEach(prop => {
++          if (prop === twin.speed) return;
++          prop.kf.forEach(k => { k.t = speedChanged ? newStart + (k.t - oldStart) * ratio : k.t + (newStart - oldStart); });
++        });
++      }
++      twin.start = source.start;
++      twin.duration = source.duration;
++      twin.trimStart = source.trimStart || 0;
++      twin.reversed = !!source.reversed;
++      twin.speed = JSON.parse(JSON.stringify(source.speed == null ? 1 : source.speed));
++      changed++;
++    });
++    return changed;
++  };
++
+   /* Karaoke TOGGLE — never permanent.
+    *   OFF → ON : add a vocals-removed track (tagged karaokeOf) and mute the source.
+    *   ON  → OFF: drop that track and unmute the source. Works pressed from EITHER layer. */
+diff --git a/js/captions.js b/js/captions.js
+index 8522f537..121ca6a0 100644
+--- a/js/captions.js
++++ b/js/captions.js
+@@ -333,6 +333,18 @@ window.FM = window.FM || {};
+     if (FM.textEdit && FM.textEdit.cuesChanged) FM.textEdit.cuesChanged();
+   }
+ 
++  // The inspector and Aa sheet rebuild cue rows often. Keep one capture-phase listener for all
++  // current grips; a listener closed over each row would retain every removed row after a redraw.
++  let gripDownListening = false;
++  function listenForGripDown() {
++    if (gripDownListening) return;
++    document.addEventListener('pointerdown', ev => {
++      const grip = ev.target && ev.target.closest && ev.target.closest('.cap-grip');
++      if (grip && grip._capPointerDown) grip._capPointerDown(ev);
++    }, true);
++    gripDownListening = true;
++  }
++
+   FM.captionsEditor = {
+     mount(container, layer) {
+       container.innerHTML = '';
+@@ -342,6 +354,7 @@ window.FM = window.FM || {};
+          when this no longer matches — js/text-edit.js capsStale. */
+       container._capDrawn = (layer && Array.isArray(layer.captions)) ? { layer: layer, cues: layer.captions.slice() } : null;
+       if (!layer || !Array.isArray(layer.captions)) return;
++      listenForGripDown();
+ 
+       // Detection FIRST. It is the reason to use captions at all, and the Aa sheet is a 46vh
+       // scroller — parked under a long cue list on a phone it sat below the fold, unfound.
+@@ -412,13 +425,11 @@ window.FM = window.FM || {};
+              it was meant to fix.
+              Capture on `document` runs before every ancestor, so it cannot be intercepted. The move/up
+              handlers stay on the grip because those DO arrive. */
+-          document.addEventListener('pointerdown', (ev) => {
+-            if (!ev.target || !ev.target.closest || !ev.target.closest('.cap-grip')) return;
+-            if (ev.target.closest('.cap-grip') !== grip) return;      // this row's grip, not a sibling's
++          grip._capPointerDown = (ev) => {
+             id = ev.pointerId; x0 = ev.clientX; end0 = c.end;
+             try { grip.setPointerCapture(id); } catch (_) {}
+             ev.preventDefault(); ev.stopPropagation();
+-          }, true);
++          };
+           grip.addEventListener('pointermove', (ev) => {
+             if (id === null || ev.pointerId !== id) return;
+             const dur = layer.duration > 0 ? layer.duration : Infinity;
+diff --git a/js/history.js b/js/history.js
+index 5cb21125..a474d59a 100644
+--- a/js/history.js
++++ b/js/history.js
+@@ -275,6 +275,18 @@ window.FM = window.FM || {};
+     commit() {
+       if (suppress) return;
+       if (muteDepth > 0) return;
++      // A Remove Vocals track copied its source clock when it was made. Reconcile
++      // an untouched twin against the previous snapshot before this edit becomes
++      // the next snapshot; no second commit or undo step is created.
++      if (index >= 0 && FM.syncKaraokeTimingFrom && FM.scene.layers.some(l => l && l.karaokeOf)) {
++        try {
++          if (FM.syncKaraokeTimingFrom(JSON.parse(stack[index]).layers)) {
++            if (FM.seekVideosToTime) FM.seekVideosToTime();
++            if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
++            if (FM.requestRender) FM.requestRender();
++          }
++        } catch (e) { console.warn('Could not synchronize vocal-removed track', e); }
++      }
+       /* ═══ THE TWO COLLAB SEAMS (queue 921 S0, spec §9) ════════════════════════════════════════════
+        * beforeSnap runs the derived-value normalisation and the diff, so the snapshot taken on the next
+        * line already contains everything the diff sent — otherwise an undo would restore a state the
+diff --git a/js/home.js b/js/home.js
+index 0bb5326a..f7a88bb6 100644
+--- a/js/home.js
++++ b/js/home.js
+@@ -2006,8 +2006,26 @@ window.FM = window.FM || {};
+         // the same .fmotion.json a project saves, so whoever you send it to can already open it.
+         { label: 'Save template file…', action: async () => {
+           if (FM.toast) FM.toast('Packing…', 1200);
+-          const ok = await FM.templates.exportFile(t.id);
+-          if (FM.toast) FM.toast(ok ? 'Template file saved — send it to anyone' : 'Could not save that template file');
++          const result = await FM.templates.exportFile(t.id);
++          if (FM.toast) {
++            const missing = result && result.omitted || [];
++            const fonts = result && result.omittedFonts || [];
++            const fontNote = fonts.length ? 'WITHOUT ' + fonts.length + (fonts.length === 1 ? ' custom font — ' : ' custom fonts — ') +
++              fonts.slice(0, 2).map(f => (f.name || 'Custom font') + (f.tooBig ? ' (too big)' : ' (not stored)')).join(', ') +
++              (fonts.length > 2 ? ' and more' : '') + '. Text may use a fallback on another device.' : '';
++            if (!result) FM.toast('Could not save that template file');
++            else if (missing.length) {
++              const absent = missing.filter(m => m.missing);
++              const names = absent.concat(missing.filter(m => !m.missing)).slice(0, 2).map(m =>
++                m.missing ? m.layer + ' (not stored)' : m.file + ' (' + m.mb + ' MB, too big)').join(', ');
++              FM.toast('Template file saved WITHOUT ' + missing.length +
++                (missing.length === 1 ? ' media file — ' : ' media files — ') + names +
++                (missing.length > 2 ? ' and more' : '') + '. ' +
++                (absent.length ? 'Re-import or replace missing source media. ' : '') +
++                (missing.length > absent.length ? 'Use a smaller clip for files that are too big.' : '') + (fontNote ? ' Also ' + fontNote : ''), 12000);
++            }
++            else FM.toast(fonts.length ? 'Template file saved ' + fontNote : 'Template file saved — send it to anyone', fonts.length ? 12000 : undefined);
++          }
+         } },
+         pinMenuItem('templates', t.id),
+         { label: 'Select…', action: () => enterSelect(t.id) },
+diff --git a/js/settings.js b/js/settings.js
+index c1ac6d14..1e686eb5 100644
+--- a/js/settings.js
++++ b/js/settings.js
+@@ -231,6 +231,7 @@ window.FM = window.FM || {};
+     /* ⚠️ SAY WHAT IS NOT IN IT, EVERY TIME. A backup that quietly leaves a clip out is worse
+        than no backup, because he would trust it and find out when it mattered. */
+     const miss = (r.notIncluded && r.notIncluded.media) || [];
++    const missingFonts = (r.notIncluded && r.notIncluded.fonts) || [];
+     const mb = Math.round((r.bytes || 0) / 1048576);
+     /* queue 915 clause 8: drafts are counted as what they are, not as projects he would go looking for */
+     const nd = r.drafts || 0, np = r.count - nd;
+@@ -246,8 +247,12 @@ window.FM = window.FM || {};
+       const names = gone.slice(0, 3).map(m => m.file + ' in ' + m.project).join(', ');
+       msg += ' ⚠️ ' + gone.length + (gone.length === 1 ? ' clip has' : ' clips have') + ' no footage stored on this device, so the file has none either: ' + names + (gone.length > 3 ? ' and more' : '') + '.';
+     }
+-    if (miss.length) msg += ' Everything else is in the file.';
+-    if (FM.toast) FM.toast(msg, miss.length ? 12000 : 6000);
++    if (missingFonts.length) {
++      const names = missingFonts.slice(0, 3).map(f => f.name + ' in ' + f.project).join(', ');
++      msg += ' ⚠️ ' + missingFonts.length + (missingFonts.length === 1 ? ' custom font is' : ' custom fonts are') + ' not in this backup: ' + names + (missingFonts.length > 3 ? ' and more' : '') + '. Text may use a fallback after restore.';
++    }
++    if (miss.length || missingFonts.length) msg += ' Everything else is in the file.';
++    if (FM.toast) FM.toast(msg, miss.length || missingFonts.length ? 12000 : 6000);
+     return r;
+   };
+   /* A LABS ROW OPENS ITS CARD ON TOP OF SETTINGS, AND CLOSING THE CARD COMES BACK HERE (queue 933). Ezra: "every time I
+diff --git a/js/storage.js b/js/storage.js
+index a0272084..7943331c 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -957,7 +957,11 @@ window.FM = window.FM || {};
+    * The skips are collected here rather than at the caller because this is the one place that knows
+    * WHICH file was dropped and how big it was, and `omitted` travels INSIDE the written file so the
+    * file can answer "is my video in here" a year later without the app's help. */
+-  FM.storage.serializeScene = function (scene) { return serializeWith(scene, function (layerId) { return FM.media.get(layerId); }); };
++  FM.storage.serializeScene = function (scene) {
++    // A clip that is stored but not resident (still loading, or its decode failed this session) is read from IndexedDB, as exportProjectFile does:
++    // without it the file leaves the footage out and, since B1, says it "is no longer stored" when it is.
++    return serializeWith(scene, async function (layerId) { return FM.media.get(layerId) || await FM.storage.readMedia(layerId); });
++  };
+   /* `mediaOf(layerId)` says where a layer's file comes from: the live FM.media for the open project, or IndexedDB for
+      one that is not open (exportProjectFile below, queue 690 seventh hunt). ONE loop for both, so the size limit and
+      the named omissions (queue 888) cannot drift apart between the two ways of saving a project file. */
+@@ -966,7 +970,15 @@ window.FM = window.FM || {};
+     for (const layer of scene.layers) {
+       if (!layer || layer.type === 'text' || layer.type === 'shape' || layer.type === 'null') continue;
+       const m = await mediaOf(layer.id);
+-      if (!m || !m.file) continue;                     // nothing loaded for this layer — not an omission
++      if (!m || !m.file) {
++        // A video/image layer still exists in the file, but its footage does not. The full backup
++        // names this case too; a single project or template file must not claim a clean save.
++        if (layer.type === 'video' || layer.type === 'image') {
++          const name = layer.name || (layer.type === 'video' ? 'a clip' : 'a photo');
++          omitted.push({ layer: name, file: name, mb: 0, missing: true });
++        }
++        continue;
++      }
+       if (m.file.size > EMBED_LIMIT) {
+         omitted.push({ layer: layer.name || layer.type || 'a layer', file: m.file.name || 'a clip', mb: Math.round(m.file.size / 1048576) });
+         continue;
+@@ -975,8 +987,8 @@ window.FM = window.FM || {};
+       if (dataURL) media[layer.id] = { kind: m.kind, name: m.file.name, dataURL: dataURL };
+       else omitted.push({ layer: layer.name || layer.type || 'a layer', file: m.file.name || 'a clip', mb: Math.round(m.file.size / 1048576) });
+     }
+-    const fonts = await embedFonts(scene.layers);
+-    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fonts, omitted: omitted };
++    const fontPack = await embedFonts(scene.layers);
++    return { app: 'freemotion', v: 1, project: scene.project, layers: scene.layers, selectedId: scene.selectedId, selectedIds: scene.selectedIds, media: media, fonts: fontPack.fonts, omitted: omitted, omittedFonts: fontPack.omitted };
+   }
+ 
+   /* Embed the custom fonts the text layers actually use, so the file still renders correctly when it is
+@@ -985,16 +997,32 @@ window.FM = window.FM || {};
+      these eight lines would have been the easy move and the wrong one: the two would drift, and the way
+      they would drift is that the newer path silently stops embedding fonts, which nobody notices until
+      someone else opens the file and the type is wrong. */
+-  async function embedFonts(layers) {
+-    const fonts = {};
+-    if (!FM.fonts) return fonts;
++  async function embedFonts(layers, limit = FONT_EMBED_LIMIT) {
++    const fonts = {}, omitted = [];
++    if (!FM.fonts) return { fonts, omitted };
+     const used = new Set((layers || []).filter(l => l.type === 'text' && l.fontFamily).map(l => l.fontFamily));
+     for (const f of FM.fonts.list()) {
++      if (!f || typeof f.css !== 'string') continue;
+       if (!used.has(f.css)) continue;
++      used.delete(f.css);
+       const file = await FM.fonts.getFile(f.id);
+-      if (file && file.size <= FONT_EMBED_LIMIT) { const durl = await fileToDataURL(file); if (durl) fonts[f.id] = { name: f.name, family: f.family, css: f.css, dataURL: durl }; }
++      if (!file) { omitted.push({ name: f.name, css: f.css, missing: true }); continue; }
++      if (file.size > limit) { omitted.push({ name: f.name, css: f.css, mb: Math.round(file.size / 1048576), tooBig: true }); continue; }
++      let durl = null;
++      try { durl = await fileToDataURL(file); } catch (e) {}
++      if (durl) fonts[f.id] = { name: f.name, family: f.family, css: f.css, dataURL: durl };
++      else omitted.push({ name: f.name, css: f.css, unreadable: true });
+     }
+-    return fonts;
++    // A saved layer can still name a custom font after its index entry was lost.
++    for (const css of used) if (/^FMF[a-z0-9]+(?:,|$)/i.test(css)) omitted.push({ name: css.split(',')[0], css, missing: true });
++    return { fonts, omitted };
++  }
++  function omittedFontSummary(fonts) {
++    const names = fonts.slice(0, 2).map(f =>
++      ((typeof f.name === 'string' ? f.name : typeof f.css === 'string' ? f.css : 'Custom font').slice(0, 80)) +
++      (f.tooBig ? ' (too big)' : f.missing ? ' (not stored)' : ' (could not be read)')).join(', ');
++    return fonts.length + (fonts.length === 1 ? ' custom font' : ' custom fonts') + ' — ' + names +
++      (fonts.length > 2 ? ' and more' : '');
+   }
+ 
+   // Clamp untrusted project dimensions to sane bounds. An imported/AI/hand-crafted .fmotion.json with
+@@ -1003,17 +1031,25 @@ window.FM = window.FM || {};
+   // ai-ops already clamps AI-set dims to [16,7680]; the human-import path must too.
+   function clampProjectDims(p) {
+     if (!p) return;
+-    const ev = n => Math.max(16, Math.min(7680, Math.round((+n || 0) / 2) * 2));
+-    if (p.width != null) p.width = ev(p.width) || 1080;
+-    if (p.height != null) p.height = ev(p.height) || 1920;
++    // A malformed file can carry objects or non-numeric strings here. Coercing them through
++    // `+n || 0` made a recoverable project 16px wide, and an object with unusable conversion
++    // methods could throw before the rest of the document was repaired.
++    const numeric = n => (typeof n === 'number' || (typeof n === 'string' && n.trim())) ? Number(n) : NaN;
++    const ev = (n, fallback) => {
++      const v = numeric(n);
++      return isFinite(v) && v > 0 ? Math.max(16, Math.min(7680, Math.round(v / 2) * 2)) : fallback;
++    };
++    if (p.width != null) p.width = ev(p.width, 1080);
++    if (p.height != null) p.height = ev(p.height, 1920);
+     if (!(p.width >= 16)) p.width = 1080;
+     if (!(p.height >= 16)) p.height = 1920;
+     // fps: an integer 1–120, the same range the editor's own Canvas settings and the New project
+     // dialog offer. (This used to be a 24/25/30/50/60 WHITELIST, which silently reset every other
+     // value to 30 — including 120, every Custom fps, and any 48fps project round-tripped through
+     // an export/import. The bound is what protects us; the whitelist was just lossy.)
+-    p.fps = Math.max(1, Math.min(120, Math.round(+p.fps) || 30));
+-    p.duration = Math.max(0, Math.min(3600, +p.duration || 0));
++    const fps = numeric(p.fps), duration = numeric(p.duration);
++    p.fps = Math.max(1, Math.min(120, Math.round(fps) || 30));
++    p.duration = Math.max(0, Math.min(3600, duration || 0));
+     sanitizeProjectFields(p);
+   }
+   /* ⚠️ THE REST OF THE PROJECT'S KEYS HAVE SHAPES THE APP ASSUMES (queue 921 S8 review). Only the four numbers
+@@ -1729,6 +1765,25 @@ window.FM = window.FM || {};
+       sanitizeKeyframes(l, 0);
+     });
+   }
++  function hasInvalidLayerEntries(layers) {
++    return layers.some(l => !l || typeof l !== 'object' || Array.isArray(l));
++  }
++  function hasUnsafeSceneNesting(project, layers) {
++    const pending = [[project, 0, false], [layers, 0, false]], active = new WeakSet();
++    while (pending.length) {
++      const [node, depth, leaving] = pending.pop();
++      if (!node || typeof node !== 'object') continue;
++      if (leaving) { active.delete(node); continue; }
++      if (depth > 64 || active.has(node)) return true;
++      active.add(node);
++      pending.push([node, depth, true]);
++      for (const key of Object.keys(node)) {
++        const child = node[key];
++        if (child && typeof child === 'object') pending.push([child, depth + 1, false]);
++      }
++    }
++    return false;
++  }
+   // Exposed for the suite: the byte-identity contract is asserted against the REAL function, not a
+   // re-implementation of it in the test (which would only ever agree with itself).
+   FM.storage._sanitizeEffects = sanitizeEffects;
+@@ -1774,9 +1829,10 @@ window.FM = window.FM || {};
+       return ks.filter(function (k) { return typeof k === 'string' && k.indexOf(p) === 0; }).sort();
+     } catch (e) { return []; }
+   };
+-  FM.storage.applyScene = async function (obj) {
+-    if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
++  FM.storage.applyScene = async function (obj, importWarnings) {
++    if (!obj || !obj.project || typeof obj.project !== 'object' || Array.isArray(obj.project) || !Array.isArray(obj.layers) || hasInvalidLayerEntries(obj.layers)) return false;
+     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
++    if (hasUnsafeSceneNesting(obj.project, obj.layers)) return false;
+     clampProjectDims(obj.project);
+     sanitizeImportedLayers(obj.layers);
+     // Re-id EVERY imported layer. An exported file carries the ids of the project it came from —
+@@ -1793,7 +1849,17 @@ window.FM = window.FM || {};
+     FM.scene.selectedId = (obj.selectedId && re.map[obj.selectedId]) || (re.layers[0] ? re.layers[0].id : null);
+     FM.scene.selectedIds = (Array.isArray(obj.selectedIds) ? obj.selectedIds : []).map(id => re.map[id]).filter(Boolean);
+     if (!FM.scene.selectedIds.length && FM.scene.selectedId) FM.scene.selectedIds = [FM.scene.selectedId];
+-    if (FM.fonts && obj.fonts) await FM.fonts.applyEmbedded(obj.fonts);   // register any fonts carried in the file
++    if (FM.fonts && obj.fonts) {
++      let missingFonts = 0;
++      try { missingFonts = await FM.fonts.applyEmbedded(obj.fonts); }
++      catch (e) { missingFonts = 1; }
++      if (missingFonts) {
++        const warning = missingFonts + (missingFonts === 1 ? ' embedded font could' : ' embedded fonts could') + ' not be restored — text may use a fallback font.';
++        if (Array.isArray(importWarnings)) importWarnings.push(warning);
++        else if (FM.toast) FM.toast(warning, 7000);
++      }
++    }
++    const hydratedMediaIds = new Set();
+     if (obj.media) {
+       for (const id of Object.keys(obj.media)) {
+         const md = obj.media[id], nid = re.map[id];
+@@ -1802,30 +1868,44 @@ window.FM = window.FM || {};
+           const file = await dataURLToFile(md.dataURL, md.name);
+           if (!file) continue;   // non-data: URL was rejected → layer loads media-less (relink via Replace media…)
+           const rec = md.kind === 'video' ? await FM.loadVideoFile(file) : await FM.loadImageFile(file);
+-          if (rec) { FM.media.set(nid, rec); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec); }
++          if (rec) { FM.media.set(nid, rec); hydratedMediaIds.add(id); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec); }
+         } catch (e) { /* a missing/corrupt embed → that layer loads media-less (relink via Replace media…) */ }
+       }
+     }
+-    /* ⚠️ AND SAY WHICH LAYERS CAME BACK EMPTY (queue 888). The loop above only ever walks obj.media,
+-     * so a video whose file was too big to embed is restored as a layer that is present, correctly
++    /* ⚠️ AND SAY WHICH LAYERS CAME BACK EMPTY (queue 888). An absent or corrupt embed
++     * restores a layer that is present, correctly
+      * timed, correctly keyframed and completely BLANK — and nothing anywhere said so. That silence is
+      * the dangerous half: the project LOOKS like it opened fine, which is exactly what someone checks
+-     * before deleting the original. A video or image layer with no media entry is unambiguous, so it
++     * before deleting the original. A video or image layer with no restored media is unambiguous, so it
+      * can be named. Read from the file's own `omitted` list when it has one (written since v16.33) and
+      * worked out from the layers otherwise, so files saved BEFORE this fix still get the warning. */
++    let missingMediaWarning = '';
+     try {
+       const want = (obj.layers || []).filter(l => l && (l.type === 'video' || l.type === 'image'));
+-      const blank = want.filter(l => !(obj.media && obj.media[l.id])).map(l => l.name || l.type);
++      const blank = want.filter(l => !hydratedMediaIds.has(l.id)).map(l => l.name || l.type);
+       if (blank.length) {
+         const om = obj.omitted || [];
+-        const named = om.slice(0, 2).map(o => o.file).join(', ');
+-        const omMany = om.length > 1;
+-        if (FM.toast) FM.toast(blank.length + (blank.length === 1 ? ' layer has' : ' layers have') + ' no footage in this file' +
+-          (named ? ' (' + named + (om.length > 2 ? ' and more' : '') + (omMany ? ' were' : ' was') + ' too big to embed)' : '') +
++        const absent = om.filter(o => o.missing);
++        const oversized = om.filter(o => !o.missing);
++        const details = [];
++        if (absent.length) details.push(absent.slice(0, 2).map(o => o.layer || o.file).join(', ') +
++          (absent.length > 2 ? ' and more' : '') + ' not stored when saved');
++        if (oversized.length) details.push(oversized.slice(0, 2).map(o => o.file).join(', ') +
++          (oversized.length > 2 ? ' and more' : '') + ' too big to embed');
++        missingMediaWarning = blank.length + (blank.length === 1 ? ' layer has' : ' layers have') + ' no footage in this file' +
++          (details.length ? ' (' + details.join('; ') + ')' : '') +
+           ' — ' + blank.slice(0, 3).join(', ') + (blank.length > 3 ? ' and more' : '') +
+-          '. Use Replace media… on ' + (blank.length === 1 ? 'it' : 'each') + ', or restore from a full backup.', 12000);
++          '. Use Replace media… on ' + (blank.length === 1 ? 'it' : 'each') + ', or restore from a full backup.';
+       }
+     } catch (e) {}                                    // a warning must never break an import
++    const missingFonts = Array.isArray(obj.omittedFonts) ? obj.omittedFonts.slice(0, 100).filter(f => f && typeof f === 'object') : [];
++    const missingContentWarning = missingMediaWarning +
++      (missingMediaWarning && missingFonts.length ? ' ' : '') +
++      (missingFonts.length ? 'This file is also missing ' + omittedFontSummary(missingFonts) + '. Text may use a fallback font.' : '');
++    if (missingContentWarning) {
++      if (Array.isArray(importWarnings)) importWarnings.push(missingContentWarning);
++      else if (FM.toast) FM.toast(missingContentWarning, 12000);
++    }
+ 
+     if (FM.resizeCanvas) FM.resizeCanvas();
+     if (FM.refreshAll) FM.refreshAll();
+@@ -1886,12 +1966,25 @@ window.FM = window.FM || {};
+        of nothing. Naming the clips is the whole fix: a file that says what it is missing can be
+        trusted, and one that does not cannot. */
+     const miss = obj.omitted || [];
+-    if (!miss.length) { if (FM.toast) FM.toast('Project file saved'); return; }
++    const fontMiss = Array.isArray(obj.omittedFonts) ? obj.omittedFonts : [];
++    const fontNote = fontMiss.length ? 'WITHOUT ' + omittedFontSummary(fontMiss) + '. Text may use a fallback on another device.' : '';
++    if (!miss.length) { if (FM.toast) FM.toast(fontMiss.length ? 'Project file saved ' + fontNote : 'Project file saved', fontMiss.length ? 12000 : undefined); return; }
++    const absent = miss.filter(m => m.missing);
++    if (absent.length) {
++      const names = absent.concat(miss.filter(m => !m.missing)).slice(0, 2).map(m =>
++        m.missing ? m.layer + ' (not stored)' : m.file + ' (' + m.mb + ' MB, too big)').join(', ');
++      const large = miss.length - absent.length;
++      if (FM.toast) FM.toast('Project file saved WITHOUT ' + miss.length + (miss.length === 1 ? ' media file — ' : ' media files — ') +
++        names + (miss.length > 2 ? ' and more' : '') + '. ' + absent.length +
++        (absent.length === 1 ? ' source file is' : ' source files are') + ' no longer stored on this device. Re-import or replace missing media before relying on this file.' +
++        (large ? ' Use Settings → Back up every project to keep oversized clips.' : '') + (fontNote ? ' Also ' + fontNote : ''), 12000);
++      return;
++    }
+     const names = miss.slice(0, 2).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
+     const many = miss.length > 1;
+     if (FM.toast) FM.toast('Project file saved WITHOUT ' + miss.length + (many ? ' clips — ' : ' clip — ') +
+       names + (miss.length > 2 ? ' and more' : '') + (many ? ' are' : ' is') +
+-      ' too big to fit in a project file. Use Settings → Back up every project to keep the footage.', 12000);
++      ' too big to fit in a project file. Use Settings → Back up every project to keep the footage.' + (fontNote ? ' Also ' + fontNote : ''), 12000);
+   }
+ 
+   /* ═══ BACK UP EVERY PROJECT TO ONE FILE (queue 869) ═══════════════════════════════════════════
+@@ -1919,7 +2012,7 @@ window.FM = window.FM || {};
+ 
+   FM.storage.buildBackup = async function (onProgress) {
+     const idx = (FM.projects && FM.projects.list()) || [];
+-    const projects = [], skippedProjects = [], skippedMedia = [];
++    const projects = [], skippedProjects = [], skippedMedia = [], skippedFonts = [];
+     let drafts = 0;
+     for (let i = 0; i < idx.length; i++) {
+       const p = idx[i];
+@@ -1956,7 +2049,10 @@ window.FM = window.FM || {};
+       /* The INDEX's name wins over the packed project's, for the same reason templates.exportFile
+          gives: the doc's own name can be stale ("Untitled 3") while the card he recognises is right. */
+       const project = Object.assign({}, pack.project, { name: p.name || pack.project.name || 'Untitled' });
+-      const entry = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) };
++      // A whole-library backup carries fonts up to the backup cap (96 MB), not the small sharing-file limit; each font is copied per project, so no cap at all is a phone memory risk.
++      const fontPack = await embedFonts(pack.layers, FM.storage._backupEmbedLimit);
++      fontPack.omitted.forEach(f => skippedFonts.push(Object.assign({ project: project.name }, f)));
++      const entry = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: fontPack.fonts, omittedFonts: fontPack.omitted };
+       /* ⚠️ queue 915 clause 8: SAY WHICH ONES ARE WORKSPACES. list() includes the hidden element and
+          template drafts, and restoring them through create() with no flag turned each into an ordinary
+          project — the Projects-list clutter queue 340 removed. Kept IN the file rather than skipped: a
+@@ -1973,7 +2069,7 @@ window.FM = window.FM || {};
+       projects: projects,
+       /* Written INTO the file, not only shown once in a toast he may not be looking at. A year from
+          now the file has to be able to answer "is my video in here" by itself. */
+-      notIncluded: { projects: skippedProjects, media: skippedMedia },
++      notIncluded: { projects: skippedProjects, media: skippedMedia, fonts: skippedFonts },
+       count: projects.length,
+       drafts: drafts,   // queue 915: of `count`, how many are element/template workspaces rather than projects
+     };
+@@ -2058,8 +2154,11 @@ window.FM = window.FM || {};
+     if (!obj || typeof obj !== 'object') return 'That file is not a FreeMotion project.';
+     if (obj.app !== 'freemotion') return 'That is not a FreeMotion project file.';
+     if (!obj.project) return 'That project file is missing its canvas settings — it may be truncated or only half-downloaded.';
++    if (typeof obj.project !== 'object' || Array.isArray(obj.project)) return 'That project file has invalid canvas settings — it may be corrupt or only half-downloaded.';
+     if (!Array.isArray(obj.layers)) return 'That project file has no layers list — it may be truncated or only half-downloaded.';
+     if (obj.layers.length > 2000) return 'That project has ' + obj.layers.length + ' layers, which is more than FreeMotion will open.';
++    if (hasInvalidLayerEntries(obj.layers)) return 'That project file has an invalid layer — it may be corrupt or only half-downloaded.';
++    if (hasUnsafeSceneNesting(obj.project, obj.layers)) return 'That project file is nested too deeply to open safely.';
+     return null;
+   };
+ 
+@@ -2080,7 +2179,8 @@ window.FM = window.FM || {};
+          file INTO whatever is open, so going on would put the import over the very work he just chose to keep. */
+       if (!pid) return false;
+     }
+-    const ok = await FM.storage.applyScene(obj);
++    const importWarnings = opts && opts.quiet ? null : [];
++    const ok = await FM.storage.applyScene(obj, importWarnings);
+     if (!ok) {
+       /* Belt and braces: sceneFileProblem should have caught everything applyScene refuses, but if the
+          two ever disagree the user must still be told rather than left in an empty project. */
+@@ -2090,7 +2190,7 @@ window.FM = window.FM || {};
+     if (FM.history) FM.history.reset();
+     FM.storage.markDirty(); FM.storage.save();
+     if (FM.projects) FM.projects.touchCurrent(true);
+-    if (FM.toast && !(opts && opts.quiet)) FM.toast('Project imported');
++    if (FM.toast && !(opts && opts.quiet)) FM.toast(importWarnings.length ? 'Project imported. ' + importWarnings.join(' ') : 'Project imported', importWarnings.length ? 12000 : undefined);
+     if (onDone) onDone();
+     return true;
+   };
+@@ -3197,23 +3297,17 @@ window.FM = window.FM || {};
+       const pack = await this.getPack(tid);
+       if (!pack || !pack.layers) return false;
+       const meta = this.list().find(t => t.id === tid) || {};
+-      const media = {};
+-      for (const lid in pack.media) {
+-        const rec = pack.media[lid];
+-        if (rec && rec.file && rec.file.size <= EMBED_LIMIT) {
+-          const durl = await fileToDataURL(rec.file);
+-          if (durl) media[lid] = { kind: rec.kind, name: rec.file.name, dataURL: durl };
+-        }
+-      }
+       const project = Object.assign({}, pack.project, { name: meta.name || pack.project.name || 'Template' });
+-      const obj = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: await embedFonts(pack.layers) };
++      // Share the project file's embedding and named-omission rules: a template with a
++      // large clip must tell its sender and recipient which footage is missing.
++      const obj = await serializeWith({ project: project, layers: pack.layers }, lid => pack.media && pack.media[lid]);
+       const safe = String(project.name).replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'template';
+       const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
+       const url = URL.createObjectURL(blob);
+       const a = document.createElement('a'); a.href = url; a.download = safe + '.fmotion.json';
+       document.body.appendChild(a); a.click(); a.remove();
+       setTimeout(() => URL.revokeObjectURL(url), 1000);
+-      return true;
++      return { omitted: obj.omitted, omittedFonts: obj.omittedFonts };
+     },
+     async remove(tid) {
+       writeJSON(TPL_INDEX, this.list().filter(t => t.id !== tid));
+@@ -3823,22 +3917,28 @@ window.FM = window.FM || {};
+     // Register fonts embedded in an imported .fmotion.json so its text renders on this device too.
+     // Adds only fonts the library doesn't already have, keyed by their (stable) family token.
+     async applyEmbedded(fontsObj) {
+-      if (!fontsObj) return;
++      if (!fontsObj) return 0;
++      if (typeof fontsObj !== 'object' || Array.isArray(fontsObj)) return 1;
+       const idx = this.list();
+       const haveFam = new Set(idx.map(f => f.family));
++      let failed = 0, added = 0;
+       for (const key of Object.keys(fontsObj)) {
+         const fd = fontsObj[key];
+-        if (!fd || !fd.family || haveFam.has(fd.family)) continue;
+-        const file = await dataURLToFile(fd.dataURL, fd.name || 'font');   // rejects non-data: URLs
+-        if (!file || !await registerFace(fd.family, file)) continue;
++        if (!fd || typeof fd.family !== 'string' || !fd.family) { failed++; continue; }
++        if (haveFam.has(fd.family)) continue;
++        let file = null;
++        try { file = await dataURLToFile(fd.dataURL, fd.name || 'font'); } catch (e) {}
++        if (!file || !await registerFace(fd.family, file)) { failed++; continue; }
+         const nid = newId('f'); _fontReg.add(nid);
+         let put = false;   // queue 915 clause 2: registered for this session either way, but only a stored font is listed
+         try { const db = await openDB(); put = await idbPut(db, 'font:' + nid, { file: file }); db.close(); } catch (e) {}
+-        if (!put) { _fontReg.delete(nid); continue; }
++        if (!put) { _fontReg.delete(nid); failed++; continue; }
+         idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
+         haveFam.add(fd.family);
++        added++;
+       }
+-      writeJSON(FONT_INDEX, idx);
++      if (added && !writeJSON(FONT_INDEX, idx)) failed += added;
++      return failed;
+     },
+   };
+ 
+diff --git a/sw.js b/sw.js
+index 1a1b4e09..65fc6f94 100644
+--- a/sw.js
++++ b/sw.js
+@@ -95,6 +95,13 @@ function isVersionedAsset(url) {
+   return url.origin === self.location.origin && url.searchParams.has('v');
+ }
+ 
++function keepCacheWorkAlive(e, tasks) {
++  // The response can finish before these writes do. Keep the worker alive until every task settles,
++  // even when Cache Storage rejects a write (for example because the phone is out of space).
++  const settled = Promise.allSettled(tasks);
++  if (e && typeof e.waitUntil === 'function') e.waitUntil(settled);
++}
++
+ self.addEventListener('fetch', (e) => {
+   const req = e.request;
+   if (req.method !== 'GET') return;                       // never cache a write
+@@ -150,15 +157,11 @@ self.addEventListener('fetch', (e) => {
+       }
+       // Only keep a good response; a 404 or an opaque error cached here would BE the offline page.
+       if (fresh && fresh.ok) {
+-        c.put('index-fallback', fresh.clone());
+-        c.delete(STALE_KEY);          // this load is current — nothing to warn about
+-        /* `waitUntil` where it exists, plain call where it does not. A real FetchEvent always has it —
+-           it keeps the worker alive while the prune finishes — but the suite drives this handler with a
+-           minimal mock event, and requiring the method turned a housekeeping nicety into a hard
+-           dependency that broke an existing queue 306 test. The prune is best-effort by nature: if the
+-           worker is torn down mid-sweep, the next navigation simply finishes the job. */
+-        const pruning = pruneSuperseded(fresh.clone(), c);
+-        if (e && typeof e.waitUntil === 'function') e.waitUntil(pruning);
++        keepCacheWorkAlive(e, [
++          c.put('index-fallback', fresh.clone()),
++          c.delete(STALE_KEY),         // this load is current — nothing to warn about
++          pruneSuperseded(fresh.clone(), c),
++        ]);
+         return fresh;
+       }
+       if (fresh) return fresh;        // a real error response is the server's answer, not ours to replace
+@@ -185,7 +188,7 @@ self.addEventListener('fetch', (e) => {
+     if (hit) return hit;
+     try {
+       const fresh = await fetch(req);
+-      if (fresh && fresh.ok) c.put(req, fresh.clone());
++      if (fresh && fresh.ok) keepCacheWorkAlive(e, [c.put(req, fresh.clone())]);
+       return fresh;
+     } catch (err) {
+       // Offline and never seen: nothing useful to give back, so fail honestly rather than

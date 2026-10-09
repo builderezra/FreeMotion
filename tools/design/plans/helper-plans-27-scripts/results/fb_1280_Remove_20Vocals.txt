@@ -1,0 +1,4 @@
+1280 Regression 3/3 ✓Pending 0/0 built
+   ok  690 Remove Vocals instrumental follows source Speed while retaining one undo step and independent re
+   ok  P27 #1069 fix 12a: splitting a clip that has a Remove Vocals track does not cut the instrumental off
+   ok  P27 #1069 fix 12b: trimming a clip that has a Remove Vocals track leaves the instrumental’s own volu

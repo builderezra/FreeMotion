@@ -1,0 +1,2 @@
+1280 Regression 1/1 ✓Pending 0/0 built
+   ok  986 C13 audio-effect search finds what people call the sound - karaoke, robot voice, chipmunk, muffl

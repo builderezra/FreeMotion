@@ -1,0 +1,2 @@
+1280 Regression 1/1 ✓Pending 0/0 built
+   ok  the editor fits at 320 / 360 / 390 / 430, not just at his 380

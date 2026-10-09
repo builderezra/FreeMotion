@@ -1,0 +1,7 @@
+export: a zero-chunk AAC encode cannot masquerade as a soundtrack (batch2 1a)
+a panorama import keeps its canvas and centred photo when reopened (batch2 1b.2)
+offline guest edits made during reconnect still use clash checks, including Undo (batch2 1b.3)
+keyboard can edit numeric Volume and Position values and effect inputs have names (batch2 1b.4)
+a project file without a layer transform survives import, save and reopen
+three and four styled group levels each draw once and keep every fade
+Detect speech skips silent B-roll and continues after a failed source
