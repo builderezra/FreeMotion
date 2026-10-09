@@ -269,3 +269,10 @@ ADDED 9 Oct 18:10 by the PM. S13, S14, T12 and P19 all landed. Ezra already has 
 - AU3  The same for js/storage.js, with save/reopen/version-upgrade/quota paths first (his projects live there; a bug here loses work). → hunt/audit-storage.
 - P20  Plans for the 5 oldest open items after P19's, callers traced. → plans/helper-20.
 - P21  Plans for the next 5 after P20's. → plans/helper-21.
+
+ADDED 9 Oct 20:50 by the PM. AU1–AU3 found real bugs (the storage ones especially), and they go to the builder tonight. The decisions you raised (the rollback/newer-effects choice, #1079, #1082) are HELD by the PM until Ezra clears his current 4 picks; do not chase them. Same rules and QUALITY RULE (repro red on main, refute before logging, each fix proven green-with/red-without at 1280 and 380). Keep your turn alive; push as you go; never push to main; never force-push. In order:
+- AU4  Deep audit of js/scene.js + js/history.js (the document model and undo/redo: every command must undo byte-for-byte). → hunt/audit-scene.
+- AU5  Deep audit of js/collab-core.js + js/collab-session.js on the fake network only (withFakeNet921), never a real one. Focus on lost edits, a stale copy overwriting a newer one, and a rejoin that duplicates layers. → hunt/audit-collab.
+- AU6  Deep audit of js/exporter.js. Your container has no H.264/AAC, so audit by reading plus the paths that DO run (WebM/Opus where the code allows, the frame loop, cancel, the report). Say plainly what you could not run. → hunt/audit-exporter.
+- AU7  Deep audit of js/mobile.js (phone gestures). Real touch is NOT RUN in your container, so write each repro as a finger test that reports NOT RUN HERE in your container (the laptop's finger pass runs it) plus a mouse-driven version where the code path allows. → hunt/audit-mobile.
+- P22  Plans for the 5 oldest open items after P21's, callers traced. → plans/helper-22.
