@@ -61488,6 +61488,46 @@
     });
   });
 
+  /* ════ S13 lens 4: A FULL USER EDITS A SIMPLE USER'S PROJECT LIVE (fake network): whatever the Full side does, the Simple side keeps drawing and reading it ════ */
+  test('simple P2.7 · S13L4 a Full guest’s edits (delete a clip, overlap two, a fade, a 0.05 s clip, a speed ramp, un-main a clip, a layer on top, a hide, a reorder) reach the Simple host, which re-reads, redraws and answers its commands without an error', { item: '980', budgetMs: 240000 }, async function () {
+    const errs = [], onerr = e => errs.push(String(e.message || e.reason || e));
+    window.addEventListener('error', onerr); window.addEventListener('unhandledrejection', onerr);
+    try {
+      const ops = [
+        ['delete B', d => { d.layers = d.layers.filter(l => l.name !== 'B'); }],
+        ['move C onto B', d => { d.layers.find(l => l.name === 'C').start = 2; }],
+        ['a fade on C over B', d => { const c = d.layers.find(l => l.name === 'C'); c.start = 2.5; c.transform.opacity = { kf: [{ t: 2.5, v: 0 }, { t: 3.5, v: 1 }] }; }],
+        ['B 0.05 s long', d => { d.layers.find(l => l.name === 'B').duration = 0.05; }],
+        ['B speed ramp', d => { d.layers.find(l => l.name === 'B').speed = { kf: [{ t: 3, v: 1 }, { t: 5, v: 3 }] }; }],
+        ['B un-main', d => { delete d.layers.find(l => l.name === 'B').sm; }],
+        ['a layer on top', d => { const n = JSON.parse(JSON.stringify(d.layers[0])); n.id = 'full_made_1'; n.name = 'Top'; delete n.sm; n.start = 1; n.duration = 4; d.layers.unshift(n); }],
+        ['hide A', d => { d.layers.find(l => l.name === 'A').visible = false; }],
+        ['reorder the array', d => { d.layers.reverse(); }],
+        ['A starts at 1 and is 9 s long', d => { const a = d.layers.find(l => l.name === 'A'); a.start = 1; a.duration = 9; }]
+      ];
+      const bad = [];
+      for (const [name, mut] of ops) {
+        await sm6Live(async function (c) {
+          const g = c.addGuest({ role: 'editor', name: 'Fay' });
+          mut(g.doc); g.G.tick('full'); g.G.afterCommit({}); g.loop.settle(); await new Promise(r => setTimeout(r, 120));
+          const n0 = errs.length;
+          if (name === 'delete B' && FM.scene.layers.some(l => l.name === 'B')) bad.push('CONTROL: the guest’s delete never reached the host');
+          if (name === 'hide A' && FM.scene.layers.find(l => l.name === 'A').visible !== false) bad.push('CONTROL: the guest’s hide never reached the host');
+          try {
+            FM.refreshAll(); const R = FM.spine.read(FM.scene); FM.spine.classify(FM.scene);
+            if (FM.simpleTimeline && FM.simpleTimeline.rebuild) FM.simpleTimeline.rebuild();
+            if (FM.inspector) FM.inspector.refresh();
+            const first = R.main.filter(e => !e.slot)[0];
+            if (first) { FM.selectLayer(first.id); FM.refreshAll(); await new Promise(r => setTimeout(r, 60)); }
+            await FM.spine.cmd.closeAll(); await FM.spine.cmd.volume(first ? first.id : 'x', 0.5);
+          } catch (e) { bad.push(name + ': ' + e.message); }
+          if (errs.length > n0) bad.push(name + ': an error went uncaught: ' + errs.slice(n0).join(' / '));
+        });
+      }
+      if (bad.length) throw new Error(bad.length + ' problems: ' + bad.join(' || '));
+    } finally { window.removeEventListener('error', onerr); window.removeEventListener('unhandledrejection', onerr); }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
