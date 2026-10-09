@@ -1387,7 +1387,7 @@ window.FM = window.FM || {};
       else if (plan.keepSel && sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = sels0.filter(x => FM.layerById(FM.scene, x)); }   // a tray action on 2+ keeps them (§8.5b)
       else if (sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = [sel0]; }
       FM.refreshAll();
-      if (plan.time != null && !FM.playing) { const P = FM.scene.project; FM.time = Math.max(0, Math.min(P.duration || 0, plan.time)); if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead(); }
+      if (plan.time != null && !FM.playing) { const P = FM.scene.project; FM.time = Math.max(0, Math.min(P.duration || 0, plan.time)); if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead(); if (FM.updateReadout) FM.updateReadout(); }   // S10a: the pill reads the playhead the command just moved (it kept the time of the last clip the picker laid down)
       FM.history.commit(adoptPaths ? { label: label, ed: 's', arr: gated, adopt: adoptPaths } : { label: label, ed: 's', arr: gated });   // 2.6 (§5.3): the paths adoption wrote, so a session's undo can leave them alone once anyone else has written
       /* a new media record (a duplicate's copy, an added clip, overlay or song) is written NOW, not on the 600 ms autosave: a hide flush cancels that and writes
          the document only, so the copy came back blank (queue 681). Saved after the commit, so the finished document is what
