@@ -1,0 +1,14 @@
+diff --git a/js/timeline.js b/js/timeline.js
+index 6d00b2ac..decf36ea 100644
+--- a/js/timeline.js
++++ b/js/timeline.js
+@@ -3963,7 +3963,8 @@ window.FM = window.FM || {};
+     /* AT ITS OWN INDEX (queue 294, clause 5). The row is drawn before the layer that currently sits at
+        FM.addAt, and FM.insertLayer splices new layers at that same number — so what you add appears
+        directly BELOW the row, exactly as he described, and the row stays where you left it. */
+-    if (addRowWanted() && !soloId) {
++    /* #1079: drawn in the solo view too. A clip is selected after every import and every Add, and on a phone that is the solo view, which used to have no add row: the one door to adding a title or a song was hidden exactly when a beginner needed it. */
++    if (addRowWanted()) {
+       const at = FM.clampAddAt ? FM.clampAddAt() : 0;
+       /* Counted against the rows ON SCREEN rather than scene.layers, because a collapsed group hides
+          members: the marker belongs beside what the eye can see. */

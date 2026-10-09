@@ -1,0 +1,25 @@
+=== A1_no_lift_class
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP20 #1075 — a touch hold picked the clip up (350 ms) and nothing on the clip body shows it: 0 lifted clips (Safari has no vibrate)
+=== A2_release_keeps_lift
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP20 #1075 — a selected clip stays lifted after the finger comes up (nothing rebuilds the row to put it down)
+=== B1_no_covers_tag
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP20 #1078 — a full-frame layer with Drop Shadow on Shadow only goes solid black and the effect row says nothing (the report: "reads as broken")
+=== B2_tag_ignores_shadowonly
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP20 #1078 — CONTROL: a tag appeared where nothing is wrong (half size: "", Shadow only off: "covers the picture")
+=== B3_tag_ignores_cover
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP20 #1078 — CONTROL: a tag appeared where nothing is wrong (half size: "covers the picture", Shadow only off: "")
+=== C1_solo_no_addrow
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP20 #1079 — a clip is selected (the solo view, what every import and every Add leaves behind) and the "Tap to add a layer" row is not drawn: a beginner cannot find how to add a title or a song
+ALLDONE

@@ -1,0 +1,7 @@
+1280 Regression 0/3 ✗Pending 0/0 built
+   RED P20 #1075 a clip picked up by a touch hold LIFTS (class clip-grab) and is put down again on release 
+   RED P20 #1078 Drop Shadow with Shadow only on a layer that fills the frame says why the picture is black
+   RED P20 #1079 phone: with a clip selected the "Tap to add a layer" row is still there, and a tap on it o
+FAILP20 #1075 a clip picked up by a touch hold LIFTS (class clip-grab) and is put down again on release and on abort — a touch hold picked the clip up (350 ms) and nothing on the clip body shows it: 0 lifted clips (Safari has no vibrate)
+FAILP20 #1078 Drop Shadow with Shadow only on a layer that fills the frame says why the picture is black (and says nothing at half size, or with Shadow only off) — a full-frame layer with Drop Shadow on Shadow only goes solid black and the effect row says nothing (the report: "reads as broken")
+FAILP20 #1079 phone: with a clip selected the "Tap to add a layer" row is still there, and a tap on it opens the Add sheet — a clip is selected (the solo view, what every import and every Add leaves behind) and the "Tap to add a layer" row is not drawn: a beginner cannot find how to add a title or a song

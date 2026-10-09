@@ -1,0 +1,45 @@
+diff --git a/js/timeline.js b/js/timeline.js
+index 6d00b2ac..2aee6924 100644
+--- a/js/timeline.js
++++ b/js/timeline.js
+@@ -329,6 +329,10 @@ window.FM = window.FM || {};
+   const KF_DRAG_SLOP = 6;
+   let trimDrag = null;
+   let clipMove = null;   // dragging a clip body to reposition it in time
++  /* #1075: THE GRAB SHOWS ON THE CLIP. A touch hold picks a clip up after 350 ms and the only sign was navigator.vibrate(10), which Safari does not have, so on an iPhone
++     nothing on the body said it had been grabbed (the edge grips turn teal, the body did not). The picked-up clip lifts (CSS .clip-grab). It is dropped by ONE function
++     from every place a clip move ends (release, abort, restore), so a clip can never be left looking lifted. */
++  function dropGrab() { try { const t = document.getElementById('tl-tracks'); if (t) t.querySelectorAll('.clip.clip-grab').forEach(c => c.classList.remove('clip-grab')); } catch (e) {} }
+ 
+   let slipDrag = null;   // SLIP: sliding the media inside a clip while its timeline position stays put
+   let cueDrag = null;    // moving / trimming one CAPTION CUE inside its track's clip
+@@ -2258,6 +2262,7 @@ window.FM = window.FM || {};
+                    panel up over the timeline you were dragging on. This flag says "a clip drag owns
+                    the screen"; the sheet consults it and stays down. Cleared on pointerup/cancel. */
+                 clipTap = null;
++                clip.classList.add('clip-grab');   // #1075: the visible sign of the grab (Safari has no vibrate)
+                 if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
+               } else {
+                 armHold();   // finger still moving → keep waiting for it to settle
+@@ -5516,7 +5521,7 @@ window.FM = window.FM || {};
+           return;
+         }
+         if (clipMove) {
+-          const cm = clipMove; clipMove = null; hideSnap();
++          const cm = clipMove; clipMove = null; hideSnap(); dropGrab();
+           /* THE GRAB IS OVER, SO THE SUPPRESSION IS OVER (queue 433 clause 2). The note where this is
+              stamped has always said "Cleared on pointerup/cancel" and nothing ever cleared it — the
+              sheet consumed it instead, and turned it into a latch that shut that layer's panel for the
+diff --git a/styles.css b/styles.css
+index 954cc5c3..0809aee9 100644
+--- a/styles.css
++++ b/styles.css
+@@ -3177,6 +3177,8 @@ body.white-chrome #time-readout:active {
+ }
+ .clip:active { cursor: grabbing; }
+ /* AM: a selected clip gets a WHITE bar/outline with grip caps + chevron arrows at each end. */
++/* #1075: a clip picked up by a touch hold lifts, so the grab is visible where Safari cannot vibrate */
++.clip.clip-grab { transform: translateY(-3px) scale(1.015); box-shadow: 0 10px 20px rgba(0,0,0,.6), 0 0 0 2px var(--accent, #2fd0b5); z-index: 7; transition: transform .12s ease, box-shadow .12s ease; }
+ .clip.sel { border-color: #fff; box-shadow: 0 0 0 2px #fff, 0 2px 10px rgba(0,0,0,.45); overflow: visible; }   /* let the grip caps sit OUTSIDE the clip */
+ .clip.under-playhead { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 2px 6px rgba(0,0,0,.3); }
+ .clip.sel.under-playhead { box-shadow: 0 0 0 2px #fff, inset 0 0 0 1px rgba(255,255,255,.5), 0 2px 8px rgba(0,0,0,.4); }

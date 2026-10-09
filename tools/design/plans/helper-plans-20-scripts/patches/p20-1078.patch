@@ -1,0 +1,19 @@
+diff --git a/js/inspector.js b/js/inspector.js
+index 263becd6..3a1d26ba 100644
+--- a/js/inspector.js
++++ b/js/inspector.js
+@@ -1772,8 +1772,14 @@ window.FM = window.FM || {};
+        takes the slot: "always first" is trivia about reordering, this is the answer to "why is nothing
+        happening", and if only one of them can be on screen it is not a close call. */
+     const deadWhy = FM.fxDeadOnLayer ? FM.fxDeadOnLayer(fx, layer, FM.time) : null;
++    /* #1078: Drop Shadow with Shadow only draws the shadow INSTEAD of the layer, and on a layer that fills the frame that shadow is the whole picture: solid black, which reads
++       as broken. The effect works; the sentence is what was missing. Same slot as the other tags (one tag, never two). */
++    const shadowFills = !deadWhy && fx.type === 'dropshadow' && fx.params && fx.params.shadowonly != null && Math.round(FM.evalProp(fx.params.shadowonly, FM.time)) === 1 &&
++      FM._fillBehindCovered && FM._fillBehindCovered(layer, FM.time, FM.scene);
+     if (deadWhy) {
+       const dt = el('span', 'fx-dead-tag', 'does nothing here'); dt.title = deadWhy; head.appendChild(dt);
++    } else if (shadowFills) {
++      const dt = el('span', 'fx-dead-tag', 'covers the picture'); dt.title = 'Shadow only hides the layer and shows just its shadow. This layer fills the whole frame, so the shadow is all you see: solid black. Shrink the layer first, or turn Shadow only off.'; head.appendChild(dt);
+     } else if (FM.CSS_FX && FM.CSS_FX[fx.type]) {
+       const tag = el('span', 'fx-first-tag', 'always first');
+       tag.title = 'Blur, brightness, contrast, saturation, hue, greyscale, sepia, invert and glow are applied together before everything else — moving them up or down does not change the picture.';

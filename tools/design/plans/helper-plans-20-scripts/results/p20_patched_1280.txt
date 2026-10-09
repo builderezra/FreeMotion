@@ -1,0 +1,4 @@
+1280 Regression 3/3 ✓Pending 0/0 built
+   ok  P20 #1075 a clip picked up by a touch hold LIFTS (class clip-grab) and is put down again on release 
+   ok  P20 #1078 Drop Shadow with Shadow only on a layer that fills the frame says why the picture is black
+   ok  P20 #1079 phone: with a clip selected the "Tap to add a layer" row is still there, and a tap on it o
