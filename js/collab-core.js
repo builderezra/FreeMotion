@@ -363,6 +363,7 @@ window.FM = window.FM || {};
   C.undoActive = function () { return undoHandover; };
   C.undo = function () { const s = US(); return s ? s.undo() : false; };
   C.redo = function () { const s = US(); return s ? s.redo() : false; };
+  C.lastStep = function () { const s = US(); return s && s.lastStep ? s.lastStep : null; };   // 2.6 (§11): {label, ed, arr, soft, who} of the step the last undo / redo ran
   C.canUndo = function () { const s = US(); return s ? s.canUndo() : false; };
   C.canRedo = function () { const s = US(); return s ? s.canRedo() : false; };
   C.redoDepth = function () { const s = US(); return s && s._undoDepth ? s._undoDepth().redo : 0; };   // #980: the switch's redo line counts steps
