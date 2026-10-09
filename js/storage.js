@@ -1469,6 +1469,9 @@ window.FM = window.FM || {};
     if (!FM.fxRegistry || typeof FM.fxRegistry.get !== 'function') return;   // no whitelist → touch nothing
     const sane = (f, depth) => {
       if (!f || typeof f !== 'object' || typeof f.type !== 'string') return null;
+      /* A RENAMED EFFECT OR PARAMETER (PL1): an old save is read under today's names BEFORE the unknown-name checks below drop it
+         (FM.fxAliases in fx-registry.js; an empty table returns the same object). */
+      if (FM.fxRegistry.migrate) f = FM.fxRegistry.migrate(f);
       // A filter container (queue 113) is a normal effect that happens to carry children. Recognised
       // by SHAPE here rather than by registry lookup, because the type is not registered until step 5
       // and this has to hold the structure together before then.
