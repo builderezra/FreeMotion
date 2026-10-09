@@ -295,3 +295,19 @@ ADDED 10 Oct 00:10 by the PM. AU8–AU12 and P23 are in the builder's inbox; the
 - AU15 Deep audit of the audio code (js/audio-fx-live.js, js/audio-fx-browser.js and the mixer/soundtrack builder): what you hear in the preview must equal what exports, mutes and solos must be honoured, and nothing may leak after a stop. → hunt/audit-audio.
 - AU16 Deep audit of js/fx-registry.js + js/fx-thumbs.js: defaults, ranges, migrations of old saved params, and the no-op probe. → hunt/audit-fx.
 - P24  Plans for the 5 oldest open items after P23's, callers traced. → plans/helper-24.
+
+ADDED 10 Oct 01:50 by the PM. AU13–AU16 and P24 landed. The deep audit now covers most of the core, and AU13's undo bug is a good catch. Same proof rules. Keep your turn alive; push as you go; never push to main; never force-push. In order:
+- PF1  The "100 layers × 20 effects" freeze your P24 found and did not fix (#1099).
+      - Build that project in the real app on main.
+      - Profile where the time goes (the render, the effect cache, the timeline thumbnails, the inspector).
+      - Find the cause and fix it with a perf test: assert a ceiling with headroom over the measured number, never a guess, and say both numbers.
+      - It must not change any picture: run the 482 pinned-picture slice.
+      → hunt/perf-freeze.
+- AU17 The parts your audits said were NOT covered:
+      - the rest of js/fx-thumbs.js (~1,400 lines);
+      - presets: save, apply, rename, delete;
+      - renamed-parameter migration of old saves.
+      → hunt/audit-fx-2.
+- AU18 The app.js parts still unread after AU13: import, the export dialog, init wiring and clip keys. Also MEDIA layers (video, image, audio) through duplicate and paste, which your fuzz did not cover. → hunt/audit-app-5.
+- AU19 Deep audit of the timeline's media thumbnails and filmstrips (memory, cancel when he leaves a project, stale frames after replace media), using your container's WebM where H.264 is missing. → hunt/audit-filmstrip.
+- P25  Plans for the 5 oldest open items after P24's, callers traced. → plans/helper-25.
