@@ -60877,6 +60877,68 @@
     });
   });
 
+
+  /* ═══ RELEASE 2.7 · TRANSITIONS (BUILD-PLAN-PHASE2-2.7.md; DESIGN §12.1, D13 A). ═══ */
+  function tr27Scene(types, o) {   // three full-frame pictures end to end (red, green, blue), a transition into the 2nd and the 3rd
+    o = o || {};
+    const W = 160, H = 120, mk = (n, s, d, col) => { const l = FM.makeLayer('shape', { name: n, shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, start: s, duration: d }); l.fill = col; l.sm = { main: true }; return l; };
+    const A = mk('A', 0, 2, '#ff0000'), B = mk('B', 2, 2, '#00ff00'), C = mk('C', 4, 2, '#0000ff');
+    if (types[0]) B.trIn = { type: types[0], d: o.d || 1 };
+    if (types[1]) C.trIn = { type: types[1], d: o.d2 || 1 };
+    return scene([C, B, A], { project: { width: W, height: H, fps: 30, duration: 6, background: '#000000', sm: { adopted: true, v: FM.SM_V } } });
+  }
+  function tr27Px(sc, t, x, y) { const c = offscreen(160, 120); FM.renderScene(c.getContext('2d'), sc, t); const d = c.getContext('2d').getImageData(x || 80, y || 60, 1, 1).data; return [d[0], d[1], d[2]]; }
+  test('simple P2.7 · T1 FM.transitionAt: stored flags only, a window of d around the cut, d_eff caps at half the shorter clip, null on a gap, an overlap, an un-adopted project and a Full-made trIn without sm.main', { item: '980' }, function () {
+    const sc = tr27Scene(['crossfade', null]);
+    if (FM.transitionAt(sc, 1.4)) throw new Error('a window opened before cut − d/2 (1.5)');
+    const a = FM.transitionAt(sc, 1.5);
+    if (!a || a.out.name !== 'A' || a.inc.name !== 'B' || Math.abs(a.p) > 1e-9 || a.type !== 'crossfade') throw new Error('at cut − d/2: ' + JSON.stringify(a && { o: a.out.name, i: a.inc.name, p: a.p }));
+    const m = FM.transitionAt(sc, 2.0);
+    if (!m || Math.abs(m.p - 0.5) > 1e-9) throw new Error('at the cut p is ' + (m && m.p));
+    if (FM.transitionAt(sc, 2.5)) throw new Error('the window did not close at cut + d/2 (half-open)');
+    if (FM.transitionAt(sc, 3.9)) throw new Error('a transition showed on a seam that has none');
+    const big = tr27Scene(['crossfade', null], { d: 3 });
+    const bg = FM.transitionAt(big, 2.0); if (!bg || Math.abs(bg.d - 1) > 1e-9) throw new Error('d_eff for d = 3 on two 2 s clips is ' + (bg && bg.d) + ', want 1 (half the shorter)');
+    const gap = tr27Scene(['crossfade', null]); gap.layers.find(l => l.name === 'B').start = 2.3;
+    if (FM.transitionAt(gap, 2.3)) throw new Error('a transition drew across a gap');
+    const ov = tr27Scene(['crossfade', null]); ov.layers.find(l => l.name === 'B').start = 1.7;
+    if (FM.transitionAt(ov, 1.7)) throw new Error('a transition drew across an overlap (a blend, not a join)');
+    const un = tr27Scene(['crossfade', null]); delete un.project.sm.adopted;
+    if (FM.transitionAt(un, 2.0)) throw new Error('a transition drew on an un-adopted project');
+    const nm = tr27Scene(['crossfade', null]); delete nm.layers.find(l => l.name === 'B').sm;
+    if (FM.transitionAt(nm, 2.0)) throw new Error('a layer without sm.main carried a transition');
+    const none = scene([FM.makeLayer('shape', { name: 'x' })]); if (FM.transitionAt(none, 0.5)) throw new Error('a project with no trIn answered');
+  });
+
+  test('simple P2.7 · T2 a crossfade blends the clips (red to green through the cut), the video keeps its length, clip times and pictures outside the window are untouched, and the transition pass changes nothing when there is none', { item: '980' }, function () {
+    const sc = tr27Scene(['crossfade', null]), plain = tr27Scene([null, null]);
+    const at = t => tr27Px(sc, t);
+    const c0 = at(1.4), c1 = at(1.5), c2 = at(2.0), c3 = at(2.4999), c4 = at(2.6);
+    if (c0[0] < 250 || c0[1] > 5) throw new Error('before the window the picture is not A (' + c0 + ')');
+    if (c1[0] < 250 || c1[1] > 20) throw new Error('at cut − d/2 the picture is not still A (' + c1 + ')');
+    if (Math.abs(c2[0] - 128) > 12 || Math.abs(c2[1] - 128) > 12) throw new Error('at the cut the picture is not half red, half green (' + c2 + ')');
+    if (c3[1] < 235 || c3[0] > 20) throw new Error('at the end of the window the picture is not B (' + c3 + ')');
+    if (c4[1] < 250 || c4[0] > 5) throw new Error('after the window the picture is not B (' + c4 + ')');
+    if (sc.layers.find(l => l.name === 'B').start !== 2 || sc.layers.find(l => l.name === 'A').duration !== 2 || sc.project.duration !== 6) throw new Error('the transition moved a clip or shortened the video (D13 A)');
+    [0.5, 1.4, 2.6, 3.5, 4.2, 5.5].forEach(t => { const a = tr27Px(sc, t), b = tr27Px(plain, t); if (a.join() !== b.join() && !(t > 3.4 && t < 4.6)) throw new Error('the picture at ' + t + ' s differs from the project without a transition: ' + a + ' vs ' + b); });
+    const plainPx = tr27Px(plain, 2.0); if (plainPx[1] < 250) throw new Error('CONTROL: without a transition the cut is hard (' + plainPx + ')');
+  });
+
+  test('simple P2.7 · T3 dip to black and dip to white: the outgoing clip goes to the colour in the first half and the incoming comes up from it in the second, and a layer above the pair (a title) is not dipped', { item: '980' }, function () {
+    ['dipblack', 'dipwhite'].forEach((ty, k) => {
+      const sc = tr27Scene([ty, null]), col = k ? 255 : 0;
+      const q1 = tr27Px(sc, 1.75), mid = tr27Px(sc, 2.0), q3 = tr27Px(sc, 2.25), e = tr27Px(sc, 2.4999);
+      const mix = (c, a) => c.map((v, ch) => Math.round(v * (1 - a) + col * a)), near = (a, b, tol) => a.every((v, i2) => Math.abs(v - b[i2]) <= tol);
+      if (!near(q1, mix([255, 0, 0], 0.5), 12)) throw new Error(ty + ' a quarter in: ' + q1 + ', want red halfway to the colour ' + mix([255, 0, 0], 0.5));
+      if (!near(mid, [col, col, col], 6)) throw new Error(ty + ' at the cut the frame is ' + mid + ', not the colour');
+      if (!near(q3, mix([0, 255, 0], 0.5), 12)) throw new Error(ty + ' three quarters in: ' + q3 + ', want green coming up ' + mix([0, 255, 0], 0.5));
+      if (!near(e, [0, 255, 0], 25)) throw new Error(ty + ' at the end the frame is ' + e + ', not green');
+    });
+    const sc = tr27Scene(['dipblack', null]);
+    const T = FM.makeLayer('shape', { name: 'T', shape: 'rect', x: 40, y: 30, shapeW: 30, shapeH: 20, start: 0, duration: 6 }); T.fill = '#ffff00'; sc.layers.unshift(T);
+    const p = tr27Px(sc, 2.0, 40, 30); if (p[0] < 250 || p[1] < 250) throw new Error('a layer above the pair was dipped with it: ' + p);
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

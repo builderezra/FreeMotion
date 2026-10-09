@@ -1591,6 +1591,11 @@ window.FM = window.FM || {};
       if (!ok) delete l.pick;
       else if (Object.keys(p).length !== 2) l.pick = { b: p.b, i: p.i };
     }
+    /* 2.7: the transition into this clip (DESIGN §12.1): { type, d } with a known type and a length of 0.1 to 3 s, and only on a picture layer; anything else goes */
+    if ('trIn' in l) {
+      const t = l.trIn, ok = isPlainObj(t) && (FM.TR_TYPES || ['crossfade', 'dipblack', 'dipwhite']).indexOf(t.type) >= 0 && typeof t.d === 'number' && isFinite(t.d) && t.d >= 0.1 && t.d <= 3 && (l.type === 'video' || l.type === 'image' || l.type === 'shape');
+      if (!ok) delete l.trIn; else if (Object.keys(t).length !== 2) l.trIn = { type: t.type, d: t.d };
+    }
     if (!('sm' in l)) return;
     const sm = l.sm;
     if (!isPlainObj(sm)) { delete l.sm; return; }

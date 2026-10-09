@@ -18900,6 +18900,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (L.type === 'group') return null;   // a group that is not a unit rasterises nothing of its own
       return FM.isLayerVisibleAt(L, t) ? L : null;
     });
+    const _tr = FM.transitionAt ? FM.transitionAt(scene, t) : null;   // 2.7: the one transition pass (js/transitions.js); null on every project without a trIn
     for (let i = scene.layers.length - 1; i >= 0; i--) {
       const L = scene.layers[i];
       if (soloActive && !L.solo) continue;
@@ -18921,7 +18922,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           L._bgSnap.__fmRS = target.canvas.__fmRS || 1; L._bgSnap.__fmOX = target.canvas.__fmOX || 0; L._bgSnap.__fmOY = target.canvas.__fmOY || 0;
           L._bgSnap.__fmCamExt = !!target.canvas.__fmCamExt;
         }
-        drawLayer(target, L, t, scene);
+        if (_tr && (L === _tr.out || L === _tr.inc)) {
+          /* a clip in a transition draws through its proxy (own window reaching t, blend alpha); a dip's other half is simply not drawn, and the dip colour
+             goes over the pair right after the one drawn on top, so layers above it (titles) are not dipped */
+          if ((L === _tr.out ? _tr.aOut : _tr.aInc) > 0) drawLayer(target, FM.transitionProxy(L, _tr, t), t, scene);
+          if (L === _tr.top && _tr.dip && _tr.dipA > 0) {
+            target.save(); baseT(target); target.globalAlpha = _tr.dipA; target.fillStyle = _tr.dip; target.fillRect(-4 * P.width, -4 * P.height, 9 * P.width, 9 * P.height); target.restore();
+          }
+        } else drawLayer(target, L, t, scene);
       }
     }
     // Isolate mode 2: the chosen layer goes on last, so it reads above everything without its real

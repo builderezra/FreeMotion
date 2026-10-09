@@ -269,6 +269,9 @@ window.FM = window.FM || {};
       const m = FM.media.get(layer.id);
       if (m) ps.push(seekVideo(m, local, layer.name || layer.type || layer.id));
     });
+    /* 2.7: a clip in a transition, outside its own window, is seeked for its picture (handles; a held edge frame past the source). The paused preview
+       reads the SAME list (FM.transitionSeeks), so the two cannot disagree. */
+    if (FM.transitionSeeks) FM.transitionSeeks(scene, t).forEach(s => { const m = FM.media.get(s.layer.id); if (m) ps.push(seekVideo(m, s.local, s.layer.name || s.layer.type || s.layer.id)); });
     await Promise.all(ps);
   }
 
@@ -1158,6 +1161,7 @@ window.FM = window.FM || {};
   }
 
   FM.exporter = {
+    seekAllVideos,   // suite seam (2.7): the frame path's own seek, so a test can run the exporter's frame path without encoding
     prepareCaches,
     buildAudioMix,
     encodeM4A,

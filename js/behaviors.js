@@ -285,6 +285,6 @@ window.FM = window.FM || {};
   // Opacity resolves through the same pipeline, clamped to [0,1]. Matches the old inline expression
   // clamp01(FM.evalProp(layer.transform.opacity, t)) exactly when the layer has no behaviors.
   FM.layerOpacity = function (layer, t) {
-    return clamp01(FM.behaviorValue(layer, 'opacity', FM.evalProp(layer.transform.opacity, t), t));
+    return clamp01(FM.behaviorValue(layer, 'opacity', FM.evalProp(layer.transform.opacity, t), t)) * (layer.__trA == null ? 1 : layer.__trA);   // 2.7: a layer drawn through a transition proxy carries its blend (js/transitions.js); absent on every other layer
   };
 })(window.FM);
