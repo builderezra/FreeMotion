@@ -60918,6 +60918,33 @@
     }
   });
 
+  test('simple P2.7 · T8 a ◇ sits on the cut that carries a transition (at least 32 px, on the cut), never on a plain join or a gap, and a tap opens that clip’s Transition row', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    for (const [w, h] of [[1280, 800], [380, 0]]) {
+      await (w <= 700 ? (fn => atPhoneWidth(fn, w)) : (fn => smTrayBAt(w, h, fn)))(async function () {
+        await smP2((W, H) => [smV('D', 8, 2, W, H), smV('C', 4, 2, W, H), smV('B', 2, 2, W, H), smV('A', 0, 2, W, H)], async function (v) {
+          const chips = () => Array.from(document.querySelectorAll('#sm-timeline .sm-chip-tr, .sm-chip-tr'));
+          if (chips().length) throw new Error(w + ': a ◇ shows with no transition set');
+          await FM.spine.cmd.transition(v.L('B').id, 'crossfade', 0.5); await v.idle(); await v.sleep(250);
+          const cs = chips();
+          if (cs.length !== 1) throw new Error(w + ': expected one ◇, found ' + cs.length);
+          const r = cs[0].getBoundingClientRect();
+          if (r.width < 31.5 || r.height < 31.5) throw new Error(w + ': the ◇ is ' + r.width + 'x' + r.height + ', under 32 px');
+          if (cs[0].dataset.tr !== v.L('B').id) throw new Error(w + ': the ◇ names the wrong clip');
+          const bEl = document.querySelector('.sm-clip[data-id="' + v.L('B').id + '"]');
+          const bl = bEl.getBoundingClientRect().left, mid = r.left + r.width / 2;
+          if (Math.abs(bl - mid) > 3) throw new Error(w + ': the ◇ is centred at ' + mid + ' but the cut is at ' + bl);
+          FM.selectLayer(v.L('A').id); await v.sleep(150);
+          chips()[0].click(); await v.sleep(250);
+          if (FM.scene.selectedId !== v.L('B').id) throw new Error(w + ': the tap did not select the incoming clip');
+          if (!smTool('tr-crossfade') || smTool('tr-crossfade').getAttribute('aria-pressed') !== 'true') throw new Error(w + ': the tap did not open the Transition row on Crossfade');
+          await FM.spine.cmd.transition(v.L('B').id, 'none'); await v.idle(); await v.sleep(250);
+          if (chips().length) throw new Error(w + ': the ◇ stayed after None');
+        });
+      });
+    }
+  });
+
   test('simple P2.6 · S10a the time readout follows the playhead after a command moves it (DESIGN §8.3: the pill is Full’s #time-readout, unchanged)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await smP2(smClips3, async function (v) {

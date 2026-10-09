@@ -565,6 +565,18 @@ window.FM = window.FM || {};
         chip.addEventListener('click', ev => { ev.stopPropagation(); if (FM.spine.cmd) FM.spine.cmd.closeSeam(e.id); });   // Phase 2: Close gap / Fix
         mainEl.appendChild(chip);
       });
+      // 2.7: a ◇ at a cut that carries a transition (never at a gap or an overlap): tap it to select the incoming clip and open its Transition row
+      R.main.forEach((e, i) => {
+        const l = byId.get(e.id);
+        if (e.slot || i < 1 || !l || !l.trIn || !e.seam || e.seam.kind !== 'join') return;
+        const chip = el('button', 'sm-chip sm-chip-tr', '◇');
+        chip.type = 'button'; chip.dataset.tr = e.id;
+        chip.style.left = xOf(e.start) + 'px';
+        const name = 'Transition: ' + ({ crossfade: 'crossfade', dipblack: 'dip to black', dipwhite: 'dip to white' }[l.trIn.type] || '') + ' ' + l.trIn.d.toFixed(1) + ' s';
+        chip.setAttribute('aria-label', name); chip.title = name;
+        chip.addEventListener('click', ev => { ev.stopPropagation(); FM.selectLayer(e.id); if (FM.simpleTools && FM.simpleTools.openRow) FM.simpleTools.openRow('transition', e.id); });
+        mainEl.appendChild(chip);
+      });
       // + at the end of the clip row: pick files, laid END TO END from the end of the main track (§15.1)
       const add = el('button', 'sm-add', '+');
       add.type = 'button';
