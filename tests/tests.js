@@ -61160,6 +61160,23 @@
     }
   });
 
+
+  test('simple P2.6 · S10c a song longer than the clips runs on in black and the black band says so, naming the song, with no End with the video (DESIGN §4.1 :1649-1650, §5.4 :1986: left whole, "as in Full")', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => smClips3(W, H).concat([smSong('Song', 0, 9, W, H, { sm: { stay: true } })]), async function (v) {
+      const R = FM.spine.read(FM.scene);
+      if (!(FM.scene.project.duration > R.trackEnd + 2)) throw new Error('CONTROL: the song does not run past the clips (duration ' + FM.scene.project.duration + ', clips end ' + R.trackEnd + ')');
+      const band = document.querySelector('#sm-main .sm-band');
+      if (!band) throw new Error('the video runs ' + (FM.scene.project.duration - R.trackEnd).toFixed(1) + ' s past the clips and there is no black band on the main row');
+      if (!/black/i.test(band.textContent)) throw new Error('the band reads “' + band.textContent + '”');
+      if (band.getBoundingClientRect().width < 44 - 0.5) throw new Error('the band is ' + band.getBoundingClientRect().width + ' px wide: not a finger target');
+      band.click(); await v.sleep(150);
+      const say = v.say(), btns = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).map(b => b.textContent);
+      if (!/runs .* past/i.test(say)) throw new Error('tapping the band says “' + say + '”, which does not name what runs past');
+      if (btns.indexOf('End with the video') >= 0) throw new Error('a song got an End with the video button (D17 B: a song is left running)');
+    });
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
