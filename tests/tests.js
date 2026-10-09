@@ -61528,6 +61528,84 @@
     } finally { window.removeEventListener('error', onerr); window.removeEventListener('unhandledrejection', onerr); }
   });
 
+  /* ════ S14: what DESIGN already decided and Simple did not have: the Captions tool, Look for all ════ */
+  test('simple P2.7 · S14a the Captions tool adds a caption track sized to the clips (not to the project length), opens the editor on its first line, and one undo takes it away; its tray is Edit lines, Find speech, Style, Stays with the sound, More, Delete', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    for (const [w, h] of [[1280, 800], [380, 0], [320, 0]]) {
+      await (w <= 700 ? (fn => atPhoneWidth(fn, w)) : (fn => smTrayBAt(w, h, fn)))(async function () {
+        await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+          FM.scene.project.duration = 20;   // longer than the clips: the track must follow the CLIPS (DESIGN §3.x), not P.duration
+          const b = smTool('captions'); if (!b) throw new Error(w + ': no Captions tool in the project row');
+          const doc0 = v.doc();
+          b.click(); await v.idle(); await v.sleep(250);
+          const cap = FM.scene.layers.find(l => Array.isArray(l.captions));
+          if (!cap) throw new Error(w + ': the tool made no caption track');
+          if (Math.abs(cap.start) > 1e-6 || Math.abs(cap.duration - 6) > 0.02) throw new Error(w + ': the track is ' + cap.start + '+' + cap.duration + ', the clips are 0+6');
+          if (!FM.textEdit.isActive() || FM.textEdit.layerId() !== cap.id) throw new Error(w + ': the editor did not open on the new captions');
+          FM.textEdit.stop(); await v.idle(); await v.sleep(120);
+          FM.selectLayer(cap.id); await v.sleep(200);
+          const ids = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(x => x.dataset.tool).join(',');
+          if (ids !== 'editLines,findSpeech,style,stay,more,delete') throw new Error(w + ': the caption tray is ' + ids);
+          FM.history.undo(); await v.idle(); await v.sleep(100);
+          if (FM.scene.layers.some(l => Array.isArray(l.captions))) throw new Error(w + ': undo left the caption track');
+        });
+      });
+    }
+  });
+
+  test('simple P2.7 · S14b Find speech on a caption track skips a clip with no sound, fills the track from the next one, says how many, and is one undo step', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('A', 0, 3, W, H), smV('B', 3, 3, W, H)], async function (v) {   // A is first in the layer list, so it is the first candidate
+      const realDec = FM.decodeAudio, realDet = FM.detectSpeech, decoded = [];
+      try {
+        v.L('A').muted = false; FM.media.set(v.L('A').id, Object.assign({}, FM.media.get(v.L('A').id) || { kind: 'video', width: 320, height: 240, duration: 3 }, { file: new File(['x'], 'A.mp4'), hasAudioTrack: false }));
+        FM.media.set(v.L('B').id, Object.assign({}, FM.media.get(v.L('B').id) || { kind: 'video', width: 320, height: 240, duration: 3 }, { file: new File(['x'], 'B.mp4') }));
+        FM.decodeAudio = async f => { decoded.push(f.name); return { sampleRate: 8000, duration: 3 }; };
+        FM.detectSpeech = async () => ({ segments: [{ start: 0.2, end: 1.0 }, { start: 1.5, end: 2.5 }], stats: {} });
+        await FM.spine.cmd.addCaptions(); await v.idle(); if (FM.textEdit.isActive()) FM.textEdit.stop(); await v.sleep(100);
+        const cap = FM.scene.layers.find(l => Array.isArray(l.captions)); FM.selectLayer(cap.id); await v.sleep(150);
+        const doc0 = v.doc();
+        smTool('findSpeech').click(); await v.idle(); await v.sleep(600);
+        if (decoded.indexOf('A.mp4') >= 0) throw new Error('a clip known to have no audio was decoded');
+        if (decoded.indexOf('B.mp4') < 0) throw new Error('CONTROL: the clip with sound was never tried: ' + decoded);
+        if (FM.scene.layers.find(l => l.id === cap.id).captions.length !== 2) throw new Error('the track holds ' + FM.scene.layers.find(l => l.id === cap.id).captions.length + ' cues, want 2');
+        if (!/2 captions found/.test(v.say() + (document.getElementById('sm-live') || {}).textContent)) throw new Error('the line says “' + v.say() + '”');
+        FM.history.undo(); await v.idle(); await v.sleep(100);
+        if (v.doc() !== doc0) throw new Error('one undo did not bring the track back');
+      } finally { FM.decodeAudio = realDec; FM.detectSpeech = realDet; }
+    });
+  });
+
+  test('simple P2.7 · S14c Look for all: the project row opens a row of looks; one tap puts the same filter on every clip, another swaps it (never two), None takes only that one off, a filter he put on himself stays, and each is one undo step', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    for (const [w, h] of [[1280, 800], [380, 0]]) {
+      await (w <= 700 ? (fn => atPhoneWidth(fn, w)) : (fn => smTrayBAt(w, h, fn)))(async function () {
+        await smP2((W, H) => [smV('C', 4, 2, W, H), smV('B', 2, 2, W, H), smV('A', 0, 2, W, H)], async function (v) {
+          const all = FM.filters.all(), f1 = all[0].id, f2 = all[1].id;
+          const mine = FM.filters.makeInstance(all[2].id); v.L('B').effects = (v.L('B').effects || []).concat([mine]); FM.history.commit();   // his own filter is part of the document history starts from
+          const boxes = (n, fid) => (v.L(n).effects || []).filter(e => e.type === FM.FX_CONTAINER && (!fid || e.fid === fid)).length;
+          smTool('look').click(); await v.sleep(250);
+          if (!smTool('look-none') || !smTool('look-' + f1) || !smTool('lookBack')) throw new Error(w + ': the Look row is not there');
+          if (smTool('look-none').getAttribute('aria-pressed') !== 'true') throw new Error(w + ': None should show as current');
+          const doc0 = v.doc();
+          smTool('look-' + f1).click(); await v.idle(); await v.sleep(200);
+          ['A', 'B', 'C'].forEach(n => { if (boxes(n, f1) !== 1) throw new Error(w + ': clip ' + n + ' has ' + boxes(n, f1) + ' of ' + f1); });
+          if (FM.scene.project.sm.look !== f1) throw new Error(w + ': the project does not remember the look');
+          if (boxes('B', all[2].id) !== 1) throw new Error(w + ': his own filter on B was touched');
+          smTool('look-' + f2).click(); await v.idle(); await v.sleep(200);
+          ['A', 'B', 'C'].forEach(n => { if (boxes(n, f1) !== 0 || boxes(n, f2) !== 1) throw new Error(w + ': clip ' + n + ' did not swap to the new look (old ' + boxes(n, f1) + ', new ' + boxes(n, f2) + ')'); });
+          smTool('look-none').click(); await v.idle(); await v.sleep(200);
+          ['A', 'B', 'C'].forEach(n => { if (boxes(n, f2) !== 0) throw new Error(w + ': None left the look on ' + n); });
+          if (boxes('B', all[2].id) !== 1) throw new Error(w + ': None took his own filter off B');
+          FM.history.undo(); await v.idle(); await v.sleep(100);
+          if (boxes('A', f2) !== 1) throw new Error(w + ': one undo should bring the look back');
+          FM.history.undo(); FM.history.undo(); await v.idle(); await v.sleep(100);
+          if (v.doc() !== doc0) throw new Error(w + ': three undos did not restore the document: ' + s13Diff(doc0, v.doc()));
+        });
+      });
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
@@ -124205,7 +124283,7 @@
         const got = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
         if (want.some(t => got.indexOf(t) < 0)) throw new Error(width + ' px: the main clip tray is ' + JSON.stringify(got) + ', want ' + JSON.stringify(want));
         const tools = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool).join(',');
-        if (tools !== 'clips,text,sound,overlay') throw new Error(width + ' px: the project tools are ' + tools);
+        if (tools !== 'clips,text,captions,sound,overlay,look') throw new Error(width + ' px: the project tools are ' + tools);   // S14: DESIGN §8.5's order, Captions and Look for all joined
         if (smTops(rows).some((y, i) => Math.abs(y - y0[i]) > 0.5)) throw new Error(width + ' px: selecting moved a row: ' + y0 + ' → ' + smTops(rows));
         const tray = document.getElementById('sm-tray').getBoundingClientRect(), tb = document.getElementById('sm-tools').getBoundingClientRect();
         if (tray.height < 44 || tb.height < 44) throw new Error(width + ' px: a row is under 44 px tall (tray ' + tray.height + ', tools ' + tb.height + ')');

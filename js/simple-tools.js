@@ -19,6 +19,8 @@ window.FM = window.FM || {};
   const ICON = {
     clips: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 5v14M16.5 5v14M3 9.7h4.5M3 14.3h4.5M16.5 9.7H21M16.5 14.3H21"/>',
     text: '<path d="M6.4 18.6L12 5.2l5.6 13.4"/><path d="M8.5 14.2h7"/>',
+    captions: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 11h4M13 11h4M7 15h7"/>',
+    look: '<circle cx="9" cy="9" r="5"/><circle cx="15" cy="9" r="5"/><circle cx="12" cy="15" r="5"/>',
     music: '<path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/>',
     overlay: '<rect x="3" y="3" width="13" height="13" rx="2"/><rect x="8" y="8" width="13" height="13" rx="2" fill="currentColor" fill-opacity=".22"/>',
     length: '<path d="M3.5 5v14M20.5 5v14M7 12h10M10 9l-3 3 3 3M14 9l3 3-3 3"/>',
@@ -200,8 +202,10 @@ window.FM = window.FM || {};
     tools.textContent = '';
     [{ id: 'clips', label: w.clips || 'Clips', icon: 'clips', run: clipsTool },
      { id: 'text', label: w.text || 'Text', icon: 'text', run: () => FM.spine.cmd.addText() },
+     { id: 'captions', label: w.captions || 'Captions', icon: 'captions', run: () => FM.spine.cmd.addCaptions() },
      { id: 'sound', label: w.sound || 'Sound', icon: 'music', run: soundTool },
-     { id: 'overlay', label: w.overlay || 'Overlay', icon: 'overlay', run: () => pick('video/*,image/*', true, f => FM.spine.cmd.addOverlay(f)) }
+     { id: 'overlay', label: w.overlay || 'Overlay', icon: 'overlay', run: () => pick('video/*,image/*', true, f => FM.spine.cmd.addOverlay(f)) },
+     { id: 'look', label: w.lookAll || 'Look for all', icon: 'look', pressed: !!(FM.scene && FM.scene.project && FM.scene.project.sm && FM.scene.project.sm.look), run: () => FM.simpleTools.openLook() }
     ].forEach(t => tools.appendChild(tool(t)));
   }
 
@@ -243,7 +247,12 @@ window.FM = window.FM || {};
     }
     const k = u ? u.kind : '';
     if (k === 'text') return [{ id: 'editwords', label: w.editWords || 'Edit words', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, { selectAll: true }); } }, stay, more, del];
-    if (k === 'captions') return [more, del];
+    if (k === 'captions') return [
+      { id: 'editLines', label: w.editLines || 'Edit lines', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, {}); } },
+      { id: 'findSpeech', label: w.findSpeech || 'Find speech', icon: 'music', run: () => S.cmd.findSpeech(id) },
+      { id: 'style', label: w.style || 'Style', icon: 'text', run: () => FM.simpleTools.openPanel(id) },
+      { id: 'stay', label: w.capStay || 'Stays with the sound', icon: 'pin', pressed: stayOn, run: () => S.cmd.stay(id, !stayOn) },
+      more, del];
     /* 2.4b: the opt-in volume rider (§3.10 rule 3), offered only on a sound that stays put AND has a volume curve to carry */
     const rideT = { id: 'rideVol', label: w.rideVol || 'Follow clips', icon: 'volume', title: w.rideVolTitle || 'Keep volume changes with the clips', pressed: !!(l.sm && l.sm.rideVol), run: () => S.cmd.rideVol(id, !(l.sm && l.sm.rideVol)) };
     const hasCurve = !!(FM.isAnimated && (FM.isAnimated(l.volume) || FM.isAnimated(l.transform && l.transform.opacity)));
@@ -355,6 +364,14 @@ window.FM = window.FM || {};
     else if (S.canTakeSound(R, id)) out.push(tool({ id: 'takeSound', label: w.takeSound || 'Take sound out', icon: 'soundout', run: () => again(S.cmd.takeSoundOut(id)) }));
     return out;
   }
+  /* LOOK FOR ALL: a project-level row (nothing needs to be selected), Done · None · every filter by name; a tap puts it on every clip, one undo step. */
+  let lookOpen = false;
+  function lookRow(R) {
+    const S = FM.spine, w = W(), P = FM.scene.project, cur = P.sm && P.sm.look || null, out = [tool({ id: 'lookBack', label: w.done || 'Done', icon: 'back', run: () => { lookOpen = false; lastSig = ''; FM.simpleTools.sync(); } })];
+    out.push(tool({ id: 'look-none', label: w.trNone || 'None', icon: null, pressed: !cur, run: () => S.cmd.lookAll(null) }));
+    ((FM.filters && FM.filters.all && FM.filters.all()) || []).forEach(f => out.push(tool({ id: 'look-' + f.id, label: f.name, icon: null, pressed: cur === f.id, run: () => S.cmd.lookAll(f.id) })));
+    return out;
+  }
   const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow, audio: audioRow };
 
   function quietLine(R) {
@@ -408,6 +425,7 @@ window.FM = window.FM || {};
   /* What the tray holds; true when it lies on two rows */
   function fillTray(R, ids, one, S) {
     if (rowFor && rowFor.kind === 'audio' && ROWS.audio) tray.setAttribute('data-row', 'audio'); else tray.removeAttribute('data-row');   // S9: the Audio row's five buttons are 317 px at their usual padding, 10 px over the 307 px band at 1280
+    if (lookOpen) { lookRow(R).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (rowFor && ROWS[rowFor.kind]) { ROWS[rowFor.kind](R, rowFor.id).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (!ids.length) { tray.appendChild(quietLine(R)); return false; }
@@ -488,7 +506,8 @@ window.FM = window.FM || {};
       roomy = !!one && roomForTwo();   // measured only for one item, the only tray that can take two rows
       const rowTarget = rowFor && FM.spine.soundTargetId ? FM.layerById(FM.scene, FM.spine.soundTargetId(R, rowFor.id)) : null;   // 2.3: a row redraws when what it shows changes
       const rowSig = rowFor ? [rowFor.kind, rowFor.from, rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration].join('|') : '', (l && rowFor.kind === 'audio') ? [l.reversed, l.muted, R.units[l.id] && (R.followers[l.id] || []).length].join('|') : ''].join('#') : '';
-      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
+      if (lookOpen && ids.length) lookOpen = false;   // a selection takes the tray back
+      const sig = [ids.join(','), one && R.units[one] && R.units[one].kind, lookOpen, FM.scene.project.sm && FM.scene.project.sm.look, lengthFor, lengthEdge, panelFor, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
       if (sig === lastSig) return;
       lastSig = sig;
       /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the
@@ -507,11 +526,12 @@ window.FM = window.FM || {};
     _fill(R, ids, one, S) {
       fills++;
       tray.textContent = '';
-      tray.classList.toggle('sm-tray-len', !!lengthFor || !!rowFor);
+      tray.classList.toggle('sm-tray-len', !!lengthFor || !!rowFor || lookOpen);
       let two = false;
       try { two = fillTray(R, ids, one, S); } finally { rows(two); }
     },
     /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
+    openLook() { lookOpen = true; lengthFor = null; rowFor = null; lastSig = ''; this.sync(); },
     openPanel(id) { panelFor = id; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },   // a closed sheet comes back (finding 20)
     closePanel() { if (!panelFor) return; panelFor = null; lastSig = ''; FM.refreshAll(); },
     openLength(id) { lengthFor = id; lengthEdge = 'end'; lastSig = ''; this.sync(); },
@@ -524,7 +544,7 @@ window.FM = window.FM || {};
     /* …and the words it shows there while idle: a selected item's say where its tools are, "· More opens the rest" unless
        every tool is on show on the tray's two rows */
     bandWords: bandWords,
-    _reset() { panelFor = null; lengthFor = null; rowFor = null; lastSig = ''; closeMenu(); },   // suite seam
+    _reset() { lookOpen = false; panelFor = null; lengthFor = null; rowFor = null; lastSig = ''; closeMenu(); },   // suite seam
     _menu: () => menu,
     ICON: ICON
   };

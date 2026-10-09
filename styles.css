@@ -11811,6 +11811,7 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
   font: 700 16px/1 system-ui, sans-serif; text-align: center; }   /* 16 px: iOS zooms the page into any field under 16 px (as #hm-search-input) */
 #sm-tools { display: flex; align-items: stretch; flex: 0 0 56px; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: content-box; }
 #sm-tools .sm-tool { flex: 1 1 0; min-width: 0; }
+#sm-tools .sm-tool .sm-tool-l { white-space: normal; text-align: center; line-height: 1.05; }   /* S14: six project tools; "Look for all" may take two lines in a 299 px band */
 .sm-menu { position: fixed; z-index: 120; min-width: 210px; padding: 6px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line);
   box-shadow: 0 16px 40px rgba(0,0,0,.5); display: flex; flex-direction: column; }
 .sm-menu-i { min-height: 44px; text-align: left; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: 600 14px/1 system-ui, sans-serif; cursor: pointer; }

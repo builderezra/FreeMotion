@@ -102,6 +102,9 @@ window.FM = window.FM || {};
       sortFade: 'Some clips fade into each other · move them by hand',
       gapsClosed: n => 'Closed ' + n + (n === 1 ? ' gap' : ' gaps'), noGaps: 'No gaps to close',
       fitted: n => n === 1 ? 'Now ends with the video' : n + ' things now end with the video', nothingToFit: 'Nothing to fit',
+      captionsAdded: 'Captions added · type the first line', noSpeechSource: 'There is no sound to listen to yet', speechSilent: 'None of these clips has any sound to listen to',
+      speechFound: n => n + (n === 1 ? ' caption found' : ' captions found') + ' · tap one to type', speechNone: 'No speech found',
+      lookSet: (name, n) => name + ' on all ' + n + (n === 1 ? ' clip' : ' clips'), lookNone: 'No look on the clips', lookNoClips: 'Add a clip first, then give them all a look',
       textAdded: 'Text added', overlayAdded: 'Overlay added', musicAdded: 'Music added · it stays where it is',
       blackBand: (s, n) => 'Black ' + s.toFixed(1) + 's' + (n > 1 ? ' · ' + n + ' things run past' : ''),
       runsPast: (name, s) => name + ' runs ' + s.toFixed(1) + ' s past the end',
@@ -125,7 +128,7 @@ window.FM = window.FM || {};
       replaced: name => name + ' replaced'
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
-      clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
+      clips: 'Clips', text: 'Text', captions: 'Captions', sound: 'Sound', overlay: 'Overlay', lookAll: 'Look for all', editLines: 'Edit lines', findSpeech: 'Find speech', style: 'Style', capStay: 'Stays with the sound',
       length: 'Length', earlier: 'Move earlier', later: 'Move later', lift: 'Lift off', liftTitle: 'Lift off the clip row (make it an overlay)',
       into: 'Into row', intoTitle: 'Put in the clip row', duplicate: 'Duplicate', crop: 'Crop', more: 'More', moreTitle: 'More settings for this',
       delete: 'Delete', stay: 'Stay put', editWords: 'Edit words', forward: 'Forward', backward: 'Back', openFull: 'Open in Full',

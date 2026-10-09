@@ -1914,6 +1914,78 @@ window.FM = window.FM || {};
     plan.live = line('textAdded');
     return plan;
   };
+
+  /* CAPTIONS (DESIGN §8.5 "Captions: Type captions · Find speech · Style"; §3.x "the Captions tool also sizes a NEW track to R.trackEnd − R.main[0].start from the read model when
+     the main track is not empty, never to P.duration"). A caption track is a text layer with `captions` cues; today's FM.addCaptionLayer seeds two placeholder cues, commits and
+     opens the editor. Here the layer is made by the plan (no commit of its own, no editor mid-step) and the editor opens in `after`, as Add text does. */
+  S.planAddCaptions = function (R) {
+    const plan = newPlan('Add captions'); plan.arranges = false; plan.adopts = false;
+    plan.pre.push(async () => {
+      const P = FM.scene.project, clips = R.main.filter(e => !e.slot);
+      const start = clips.length ? clips[0].start : 0, dur = clips.length ? Math.max(MINLEN(), R.trackEnd - clips[0].start) : (+P.duration > 0 ? +P.duration : 5);
+      const t = FM.makeLayer('text', { name: 'Captions', x: P.width / 2, y: Math.round(P.height * 0.82), fontSize: Math.round(P.height / 22), start: start, duration: dur });
+      const seg = Math.max(0.5, Math.min(2.5, dur / 2));
+      t.captions = [{ start: 0, end: Math.min(seg, dur), text: 'First caption' }];
+      if (dur > seg + 0.3) t.captions.push({ start: seg, end: Math.min(dur, seg * 2), text: 'Second caption' });
+      t.text = ''; t.captionBg = true;
+      if (FM.captions && FM.captions.giveWrap) FM.captions.giveWrap(t);
+      S.insertAt(t, 0);
+      plan.selectId = t.id; plan.typeInto = t.id;
+    });
+    plan.after = () => {
+      const id = plan.typeInto, L = id && FM.layerById(FM.scene, id);
+      if (!L || !FM.textEdit || !FM.textEdit.start) return;
+      const c0 = L.captions && L.captions[0];
+      if (c0 && FM.scrubTime) FM.scrubTime((L.start || 0) + c0.start + Math.min(0.05, (c0.end - c0.start) / 2));   // land ON the first cue so the editor binds to it
+      FM.textEdit.start(id, { selectAll: true });
+    };
+    plan.live = line('captionsAdded');
+    return plan;
+  };
+  /* FIND SPEECH on a caption track: the same detector Full's Detect speech runs, on the whole project's sound, clips with no sound skipped (a clip the file's tracks already say has none
+     is not decoded at all; one that turns out to have none is skipped too). One undo step; the cues it lays down are the track's own. */
+  S.planFindSpeech = function (R, id) {
+    const L = byIdMap().get(id), C = FM.captions;
+    if (!L || !C || !C.isTrack || !C.isTrack(L)) return refusePlan('gone');
+    const srcs = C.audioSources().filter(l => l.id !== L.id);
+    if (!srcs.length) return refusePlan('noSpeechSource');
+    const plan = newPlan('Find speech'); plan.arranges = false; plan.adopts = false; plan.touched.add(id); plan.keepSel = true;
+    plan.pre.push(async () => {
+      let r = null;
+      for (const cand of srcs) {
+        if (FM.hasAudioTrack && FM.hasAudioTrack(cand) === false) continue;
+        try { r = await C.detect(L, cand, null, 'project'); } catch (e) { if (/no decodable audio|no media file/.test(String(e && e.message))) continue; throw e; }
+        if (r.count) break;
+      }
+      plan.say = !r ? line('speechSilent') : r.count ? line('speechFound', r.count) : line('speechNone');
+    });
+    return plan;
+  };
+
+  /* LOOK FOR ALL (DESIGN §8.5 "the Look panel with Use on every clip on"): one filter on every main picture clip, one undo step. Filters are per layer, so this writes the same filter container onto each
+     clip's `effects`; the project remembers which one it put there (`project.sm.look`, a plain string every build keeps) so choosing another, or None, takes exactly that one back off. */
+  S.planLookAll = function (R, fid) {
+    const P = FM.scene.project, map = byIdMap(), def = fid ? (FM.filters && FM.filters.get(fid)) : null;
+    if (fid && !def) return refusePlan('gone');
+    const prev = (P.sm && typeof P.sm.look === 'string') ? P.sm.look : null;
+    if ((prev || null) === (fid || null)) return refusePlan('nothingChanged');
+    const layers = R.main.filter(e => !e.slot).map(e => map.get(e.id)).filter(l => l && (l.type === 'video' || l.type === 'image' || l.type === 'shape'));
+    if (!layers.length) return refusePlan('lookNoClips');
+    const plan = newPlan(fid ? 'Look for all' : 'No look'); plan.arranges = false; plan.adopts = true; plan.keepSel = true;
+    layers.forEach(l => plan.touched.add(l.id));
+    plan.writes.push(() => {
+      layers.forEach(l => {
+        const fx = (Array.isArray(l.effects) ? l.effects : []).filter(e => !(prev && e && e.type === FM.FX_CONTAINER && e.fid === prev));
+        if (def) { const box = FM.filters.makeInstance(fid); if (box) fx.push(box); }
+        l.effects = fx;
+      });
+      if (!P.sm) P.sm = {};
+      if (fid) P.sm.look = fid; else delete P.sm.look;
+      if (!(P.sm.v >= FM.SM_V)) P.sm.v = FM.SM_V;
+    });
+    plan.live = fid ? line('lookSet', def.name, layers.length) : line('lookNone');
+    return plan;
+  };
   S.planAddOverlay = function (R, picked) {
     const items = picked.clips;
     if (!items.length) return refusePlan('nothingAdded');
@@ -2410,6 +2482,9 @@ window.FM = window.FM || {};
     closeAll() { return S.edit('Close all gaps', R => S.planCloseAll(R)); },
     endWithVideo() { return S.edit('End with the video', R => S.planEndWithVideo(R)); },
     addText() { return S.edit('Add text', R => S.planAddText(R)); },
+    addCaptions() { return S.edit('Add captions', R => S.planAddCaptions(R)); },
+    lookAll(fid) { return S.edit(fid ? 'Look for all' : 'No look', R => S.planLookAll(R, fid)); },
+    findSpeech(id) { return S.edit('Find speech', R => S.planFindSpeech(R, id)); },
     addOverlay(files) { return afterRead(files, picked => S.edit('Add overlay', R => S.planAddOverlay(R, picked))); },
     addMusic(files) { return afterRead(files, picked => S.edit('Add music', R => S.planAddMusic(R, picked))); },
     length(id, newDur) { return S.edit('Trim clip', R => S.planTrimTail(R, id, newDur, { typed: true })); },
