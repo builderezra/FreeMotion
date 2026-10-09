@@ -1075,7 +1075,7 @@
   <script src="js/settings.js?v=51"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=24"></script>
+  <script src="js/collab-core.js?v=25"></script>
   <script src="js/statusbar.js?v=4"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=120"></script>
@@ -1084,7 +1084,7 @@
   <script src="js/spine-edit.js?v=6"></script>    <!-- Simple mode P2: FM.spine.edit, the runner and the commands — after spine.js -->
   <script src="js/eases.js?v=3"></script>
   <script src="js/masks.js?v=6"></script>
-  <script src="js/behaviors.js?v=6"></script>
+  <script src="js/behaviors.js?v=7"></script>
   <script src="js/media.js?v=54"></script>
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=4"></script>
@@ -1123,8 +1123,8 @@
   <script src="js/audio-play.js?v=68"></script>
   <script src="js/audio-fx-live.js?v=14"></script>
   <script src="js/audio-fx-browser.js?v=14"></script>
-  <script src="js/history.js?v=38"></script>
-  <script src="js/storage.js?v=59"></script>
+  <script src="js/history.js?v=39"></script>
+  <script src="js/storage.js?v=60"></script>
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=8"></script>
   <script src="js/template-fill.js?v=4"></script>
@@ -1162,16 +1162,16 @@
        host sequencer, in dependency order. All three are libraries: they define FM.collab.path /
        .diff / .Host and do nothing else, so with no session running they cost one parse each. -->
   <script src="js/collab-path.js?v=3"></script>
-  <script src="js/collab-diff.js?v=3"></script>
-  <script src="js/collab-host.js?v=5"></script>
+  <script src="js/collab-diff.js?v=4"></script>
+  <script src="js/collab-host.js?v=6"></script>
   <!-- queue 921 stage S2 — the engine. `link` is the transport interface plus its two offline
        implementations (in-page and postMessage; there is no network of any kind in S2), `session` is
        the per-device engine and `bridge` is the only file that knows both the engine and FM.scene.
        All three are inert until something hands a session a link, which in S2 only the test rig does. -->
   <script src="js/collab-signal.js?v=5"></script>
   <script src="js/collab-link.js?v=9"></script>
-  <script src="js/collab-session.js?v=13"></script>
-  <script src="js/collab-bridge.js?v=11"></script>
+  <script src="js/collab-session.js?v=14"></script>
+  <script src="js/collab-bridge.js?v=12"></script>
   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
        A library like the rest: it does nothing at all until a session installs a controller on it. -->
@@ -1184,15 +1184,15 @@
   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
   <script src="js/collab-qr.js?v=3"></script>
-  <script src="js/collab-ui.js?v=19"></script>
+  <script src="js/collab-ui.js?v=20"></script>
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->
-  <script src="js/collab-presence.js?v=6"></script>
+  <script src="js/collab-presence.js?v=7"></script>
   <!-- queue 921 stage S7 — comments: the paper card, replies, resolve, and a mark on the ruler at each
        comment's time. A library like the rest: collab-ui.js installs it only while Labs is on, and a
        comment never stops an export (only a note with a reminder does). -->
-  <script src="js/collab-comments.js?v=5"></script>
+  <script src="js/collab-comments.js?v=6"></script>
   <script>
     if ('serviceWorker' in navigator && !/(^|[?&])fmtest=collab(&|$)/.test(location.search)) {
       /* queue 921 S2 (§25.3): a Tier-3 instance must never be served a cached shell — three app frames
