@@ -60949,8 +60949,10 @@
     smNeedP2();
     await smP2(smClips3, async function (v) {
       if (FM.SM_V !== 2) throw new Error('FM.SM_V is ' + FM.SM_V);
-      await FM.spine.cmd.transition(v.L('B').id, 'crossfade', 0.5);
-      if (FM.scene.project.sm.v !== 2) throw new Error('the stamp is ' + FM.scene.project.sm.v);
+      await FM.spine.cmd.transition(v.L('B').id, 'crossfade', 0.5);   // the first edit adopts the project
+      FM.scene.project.sm.v = 1;   // a project adopted under 2.6: adoption had stamped it 1
+      await FM.spine.cmd.transition(v.L('C').id, 'crossfade', 0.5);
+      if (FM.scene.project.sm.v !== 2) throw new Error('the stamp is ' + FM.scene.project.sm.v + ' after a transition was set on a 2.6 project');
       const saved = JSON.parse(JSON.stringify(FM.scene.project.sm)); saved.v = 3;
       const keep = FM.scene.project.sm; FM.scene.project.sm = saved;
       try { if (!FM.spine.newerSchema()) throw new Error('a file stamped by a newer build is not refused'); } finally { FM.scene.project.sm = keep; }
