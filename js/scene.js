@@ -956,9 +956,21 @@ window.FM = window.FM || {};
       const SR = 120, n = Math.max(2, Math.ceil((layer.duration || 0) * SR) + 2);
       const tab = new Float32Array(n);
       let acc = 0, prev = Math.max(0.05, evalProp(sp, layer.start));
+      /* #1061: a keyframe that falls INSIDE a sample interval splits that trapezoid at the key — the left limit on the left part, the key's own
+         value on the right — so a hold step is integrated exactly instead of booking the average of the two speeds for the rest of the clip. */
+      const keyTs = sp.kf.map(k => k.t).filter(kt => isFinite(kt) && kt > layer.start && kt < layer.start + (layer.duration || 0)).sort((a, b) => a - b);
+      let ki = 0;
       for (let i = 1; i < n; i++) {
-        const v = Math.max(0.05, evalProp(sp, layer.start + i / SR));
-        acc += (prev + v) / (2 * SR);
+        const t0 = layer.start + (i - 1) / SR, t1 = layer.start + i / SR;
+        const v = Math.max(0.05, evalProp(sp, t1));
+        while (ki < keyTs.length && keyTs[ki] <= t0 + 1e-9) ki++;
+        let a = 0, lt = t0, lv = prev;
+        while (ki < keyTs.length && keyTs[ki] < t1 - 1e-9) {
+          const kt = keyTs[ki++], left = Math.max(0.05, evalProp(sp, kt - 1e-9)), right = Math.max(0.05, evalProp(sp, kt));
+          a += (lv + left) / 2 * (kt - lt); lt = kt; lv = right;
+        }
+        a += lt === t0 ? (prev + v) / (2 * SR) : (lv + v) / 2 * (t1 - lt);   // no key inside: the old expression, bit for bit
+        acc += a;
         tab[i] = acc; prev = v;
       }
       c = _spInt[layer.id] = { sig: sig, tab: tab, SR: SR };

@@ -1,0 +1,45 @@
+=== A1_flat_mean
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP18 #1056 — CONTROL: a fully transparent tile has alpha 255
+=== A2_alpha_sum
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP18 #1056 — CONTROL: the half-covered tile should be about half opaque, alpha 255
+=== B1_noaudio_rethrown
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP18 #1059 — the silent first clip ended the search: "Speech detection failed — the details are in Settings → Last error → Copy" (#1059)
+=== B2_known_silent_decoded
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP18 #1059 — a clip known to have no audio was decoded anyway: Silent.mp4
+=== B3_all_silent_line
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP18 #1059 — with no sound anywhere the line is "Speech detection failed — the details are in Settings → Last error → Copy"
+=== C1_sw_deletes_all
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP18 #1060 — the worker deleted caches that are not freemotion-*: listingkit-v3,other (#1060)
+=== C2_regs_all
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP18 #1060 — fmOwnRegs kept http://localhost:38175/,http://localhost:38175/ListingKit/,https://other.example/
+=== C3_caches_all
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP18 #1060 — fmOwnCaches kept freemotion-v1,listingkit-v3,workbox-x
+=== C4_chip_ignores_helper
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP18 #1060 — the version chip no longer filters its registrations and caches through fmOwnRegs / fmOwnCaches
+=== D1_no_split
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP18 #1061 — advance at 1.5 s is 51.4125, exact is 51.3300 (off by 0.0825 s, #1061)
+=== D2_no_left_limit
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP18 #1061 — advance at 1.5 s is 51.1650, exact is 51.3300 (off by -0.1650 s, #1061)
+ALLDONE

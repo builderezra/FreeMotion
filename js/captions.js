@@ -276,11 +276,11 @@ window.FM = window.FM || {};
     async detect(capLayer, srcLayer, onProgress, mode) {
       if (!FM.decodeAudio || !FM.detectSpeech) throw new Error('speech detection unavailable');
       const m = FM.media.get(srcLayer.id);
-      if (!m || !m.file) throw new Error('that clip has no media file');
+      if (!m || !m.file) { const e0 = new Error('that clip has no media file'); e0.noAudio = true; throw e0; }
       // 8 kHz: ample for voice activity, and ~6x smaller than a device-rate decode. Full-rate decoding
       // measured 439 MB for 20 minutes (js/media.js) and killed the tab.
       const buf = await FM.decodeAudio(m.file, { rate: 8000 });
-      if (!buf) throw new Error('no decodable audio in that clip');
+      if (!buf) { const e1 = new Error('no decodable audio in that clip'); e1.noAudio = true; throw e1; }   // #1059: the caller skips a clip with no sound and tries the next
       const res = await FM.detectSpeech(buf, { onProgress: onProgress });
 
       const dur = capLayer.duration > 0 ? capLayer.duration : Infinity;
@@ -524,17 +524,23 @@ window.FM = window.FM || {};
         const label = btn.textContent;
         btn.textContent = 'Decoding…';
         try {
-          let r = null, used = src, tried = 0;
+          let r = null, used = src, tried = 0, silent = 0;
           for (const cand of queue) {
             tried++;
             const tag = queue.length > 1 ? ' (' + tried + '/' + queue.length + ')' : '';
-            r = await C.detect(layer, cand, p => { btn.textContent = 'Listening…' + tag + ' ' + Math.round(p * 100) + '%'; }, mode);
+            /* #1059: a clip that has no sound is not the end of the search. FM.hasAudioTrack answers false for free when the file's
+               tracks are already known; the rest find out by decoding, and C.detect marks that failure `noAudio` so it is skipped too. */
+            if (FM.hasAudioTrack && FM.hasAudioTrack(cand) === false) { silent++; continue; }
+            try { r = await C.detect(layer, cand, p => { btn.textContent = 'Listening…' + tag + ' ' + Math.round(p * 100) + '%'; }, mode); }
+            catch (derr) { if (derr && derr.noAudio) { silent++; continue; } throw derr; }
             used = cand;
             if (r.count) break;
           }
           btn.textContent = label; btn.disabled = false;
           const src2 = used;
-          if (!r.count) {
+          if (!r) {   // every clip tried had no sound
+            if (FM.toast) FM.toast(queue.length > 1 ? 'None of these clips has any sound to listen to' : '“' + String(src.name || 'That clip').slice(0, 24) + '” has no sound to listen to', 4000);
+          } else if (!r.count) {
             /* WHY it found nothing, not just that it did (queue 152). Ezra: "im pretty sure the auto
                detect speaking and auto make the captions doesnt work… would be better to not add it
                then add a shit version." Measured against real synthesised speech (tests/_vadreal.html,

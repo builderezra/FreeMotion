@@ -1,0 +1,771 @@
+{
+ "ok": false,
+ "summary": "Regression 95/110 ✗ · NOT RUN HERE 10 Pending 0/0 built",
+ "failures": [
+  "FAILP18 #1056 Mosaic Average: the edge tile of a cutout keeps the cutout’s colour (the mean is weighted by alpha); an opaque plate is byte-identical to the flat mean; Centre pixel is untouched — the edge tile is 128,128,128 — the cutout is white, so the rim should be white too (it is pulled dark by the transparent pixels, #1056)",
+  "FAILP18 #1059 Detect speech: a clip with no sound is skipped and the next clip is tried (whole-project scope), instead of \"Speech detection failed\" — the silent first clip ended the search: \"Speech detection failed — the details are in Settings → Last error → Copy\" (#1059)",
+  "FAILP18 #1060 the service worker and the version chip only touch this app’s own caches and registrations (the origin is shared with Listing Kit) — the worker deleted caches that are not freemotion-*: listingkit-v3,other (#1060)",
+  "FAILP18 #1061 a hold speed key that drops sharply: the source advance is exact after the step, and a split does not change it — advance at 1.5 s is 51.4125, exact is 51.3300 (off by 0.0825 s, #1061)",
+  "FAIL690 a frame cache being built for a clip he has left stops at once, instead of seeking a video that will never load — splash.mp4 did not decode — this test cannot drive a real frame cache build, so it must not report green"
+ ],
+ "notRun": [
+  {
+   "name": "690 the caption editor keeps his words on the caption he is typing when a caption is deleted or re-timed in its own Aa sheet",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 the caption editor’s next button opens the very next caption when it opened between two captions",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 trimming a speed-ramped clip with its handle keeps every kept frame still — the head of a ramp, the tail of a reversed ramp",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse) — its PC half ran first and passed (4 real mouse/wheel/key batches)"
+  },
+  {
+   "name": "690 Reset speed (1x) carries his animation with the clip — a fade at the end of a 2x clip still ends at its end",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 an Animate preset plays on EVERY caption of a caption track, not only the first",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 a caption he trimmed off the clip stays off when he types into another caption, and comes back where it was said",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 after + in the caption strip, the Aa sheet lists the new caption and its cross removes the caption on its own row",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 an ordinary spoken sentence typed into a caption wraps inside a 9:16 frame",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 with Fade in on his captions, the caption he is typing shows on the canvas while he types it",
+   "item": "690",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "967 B5 1 on a phone comments have a door on the video — a speech bubble beside LIVE while he shares, counting what is new; “Sam commented” when one arrives from someone else (the name printed as text); tapping it opens them and clears the count; his own comment and one he watched arrive count nothing; after Stop sharing it stays while the project has comments, and goes when they do",
+   "item": "967",
+   "reason": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  }
+ ],
+ "browser": "/opt/pw-browsers/chromium-1194/chrome-linux/chrome Chrome/141.0.7390.37",
+ "fontParity": {
+  "stack": "-apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Segoe UI\", Inter, sans-serif",
+  "resolved": "sans-serif",
+  "width": 446.45,
+  "mac": {
+   "resolved": "system-ui",
+   "width": 450.9
+  },
+  "same": false
+ },
+ "slowest": [
+  [
+   13054,
+   "921 S8 an accelerated one-hour soak: the ring, lastBy, pending, the ack cache and the presence pools stay within their caps, and nothing keeps a member who has left"
+  ],
+  [
+   10099,
+   "690 trimming a speed-ramped clip with its handle keeps every kept frame still — the head of a ramp, the tail of a reversed ramp"
+  ],
+  [
+   10042,
+   "921 S8r a guest who LEAVES is forgotten by the owner’s room — no offline ghost, no second row on a rejoin — and an offline row can be forgotten without banning the device"
+  ],
+  [
+   9545,
+   "984 a sheet opened in the PC captions box covers the rest of the box edge to edge — Aa, font, size and colour, at 1280 and 900, with nothing of the box showing round it"
+  ],
+  [
+   8495,
+   "984 on a PC the captions menu opens in the Add menu’s box and leaves the timeline squished — at 1280 and 900, every captions control is reachable in it, the Aa sheet opens inside it, and plain text is unchanged"
+  ],
+  [
+   8167,
+   "921 S2 tier 3: a partition counts the clashes, Save my version makes a real project, and a guest reload mid-offline is idempotent"
+  ],
+  [
+   6478,
+   "921 S6 review: a member who is offline is in the people list with a Remove, and removing them refuses their token, signed"
+  ],
+  [
+   5599,
+   "the quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202)"
+  ]
+ ],
+ "sceneLeaks": [],
+ "ran": [
+  {
+   "name": "frame cache: the memory budget follows the device",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "575: a caption cue can be DRAGGED longer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "574: two overlapping captions BOTH show, stacked",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "441: a caption cue shows its drag arrows without a pointer, and a short one keeps a middle",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "source time: every clip maps project time into its own source window, whatever its speed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions keep their project times when the clip head is trimmed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "maxDurForSource: no speed value can put a NaN duration into the scene",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed ramps: trimming or extending an edge does not move the surviving picture",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.2 trim-start-to-playhead (A key, rail, phone button) on a speed ramp keeps the surviving picture still",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: EVERY way of moving a clip edge leaves the cues where they were",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "service worker: the page is revalidated, never taken from the browser HTTP cache",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "elements: the browser fills its width, and an empty one is a page rather than a caption",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "every media teardown path hands back BOTH decoded caches",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "Speed is live on every layer type, and never a dead control",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: the text editor writes the CUE at the playhead, not the dead layer.text",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: cue times are LAYER-LOCAL, so cues travel with the clip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: speech detection finds the bursts and ignores a steady tone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "layer options: Speed and Volume are CARDS on a video too — the icon strip is just trim/split/trim",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "waveform: the cached strip is redrawn when the peaks change",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: adding a caption track opens the text editor on the first cue",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed: changing it stretches the layer's keyframes with the clip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed: the Speed panel is available on layers with no source",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "export: a full-res cache request is not served the in-flight preview build",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "timeline: caption cues do not swallow the row — a touch drag over one still scrubs",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: speech detection finds real spoken sentences, and stays silent on music",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: dragging a cue edge moves the chip during the drag, not on release",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S2 tier 3: a partition counts the clashes, Save my version makes a real project, and a guest reload mid-offline is idempotent",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S3 the app is told when a session ends or the wire goes, and the offline line stops promising a re-send",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S5 review: Follow never replays a frozen state — somebody who goes quiet mid-play is not seeked back to, and Follow ends, saying why, once they are offline",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S6 review: a member who is offline is in the people list with a Remove, and removing them refuses their token, signed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8 an accelerated one-hour soak: the ring, lastBy, pending, the ack cache and the presence pools stay within their caps, and nothing keeps a member who has left",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r an offline clash offers “Save my version as a copy” with the version kept before the flush, and a full outbox turns the guest read-only until it drains",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "921 S8r a guest who LEAVES is forgotten by the owner’s room — no offline ghost, no second row on a rejoin — and an offline row can be forgotten without banning the device",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the speed ruler moves in 5% steps, not 10x jumps (queue 455)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Mosaic can leave gaps and sample the centre pixel",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.1 the phone’s clip buttons refuse a locked clip and carry the captions and effect clock, like A/S/D",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "trimming a captioned clip with the A key leaves every caption where it was (queue 817)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a trim abandoned mid-drag puts the captions back with the clip (queue 817)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a caption cue’s own effects are re-pointed with the layer, so a copy does not matte off the original (queue 834 u3)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the wrap cache notices word spacing, or a wrapped layer keeps its old line breaks",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "effects: Chroma Key softness ramps the edge, and survives the repaint cache",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed-to-playhead lands the clip END exactly on the playhead",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed-to-playhead lands the clip START exactly, holding the end",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed-to-playhead refuses the cases where there is no answer",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the speed range reaches the 1000x he asked for",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: an effect can belong to one cue, and only shows while that cue does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "914.12 splitting a caption track gives each half its own copy of a cue’s effects",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: the detector has a door of its own, and only where it means anything",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "captions: whole-project mode keeps speech that falls outside the caption clip, and re-bases it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "916.7 captions: detected speech lands where it is heard on a reversed or trimmed clip, and never before 0:00",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P18 #1056 Mosaic Average: the edge tile of a cutout keeps the cutout’s colour (the mean is weighted by alpha); an opaque plate is byte-identical to the flat mean; Centre pixel is untouched",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P18 #1059 Detect speech: a clip with no sound is skipped and the next clip is tried (whole-project scope), instead of \"Speech detection failed\"",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P18 #1060 the service worker and the version chip only touch this app’s own caches and registrations (the origin is shared with Listing Kit)",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "P18 #1061 a hold speed key that drops sharply: the source advance is exact after the step, and a split does not change it",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the envelope cache is bounded, so a long gesture cannot strand megabytes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "a frame-cache build captures the grid’s frames, not whatever the preview is seeking to",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the service worker retries a dropped navigation before serving an old build (queue 306)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202)",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "the turbulent-displace lattice is actually COARSE at his own settings, or the speed is gone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "#883: the intro ground ramp is taken off with the intro, so a project is not left on a white canvas",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "916.10 the audition drives keyframed effect settings at the right timeline moment on a sped-up or ramped clip",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "speed: solving so the clip STARTS at the playhead keeps the animation glued to the bar",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "paste look: the caption pill, trim path and repeater actually arrive",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904 [B] Tilt Shift blur, Starfield twinkle speed and Voronoi wall thickness are controls, and saved projects are untouched",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "904 [B] Letterbox takes a colour and can pillarbox, Remove Object Blur and Mosaic take a strength, saved projects untouched",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "913.4 a keyframed speed, wind, boil or twinkle rate moves things by its integral, so a ramp never rewinds",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 the caption editor keeps his words on the caption he is typing when a caption is deleted or re-timed in its own Aa sheet",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 the caption editor’s next button opens the very next caption when it opened between two captions",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 a frame cache being built for a clip he has left stops at once, instead of seeking a video that will never load",
+   "ok": false,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 trimming a speed-ramped clip with its handle keeps every kept frame still — the head of a ramp, the tail of a reversed ramp",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse) — its PC half ran first and passed (4 real mouse/wheel/key batches)"
+  },
+  {
+   "name": "690 Reset speed (1x) carries his animation with the clip — a fade at the end of a 2x clip still ends at its end",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 an Animate preset plays on EVERY caption of a caption track, not only the first",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 splitting an animated caption track keeps every caption’s own entrance and Fade out, and the cut stays invisible",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a caption stacked under one already showing fades in on its own, and the one showing holds still — wrapped lines too",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 an outlined title or shape is one picture — its Shadow sits behind the outline, and a fade, a blend or a caption pill never shows through",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 a caption he trimmed off the clip stays off when he types into another caption, and comes back where it was said",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 a Start or End he types past the end of a trimmed caption clip lands inside it, and the trimmed-off captions stay put",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 after + in the caption strip, the Aa sheet lists the new caption and its cross removes the caption on its own row",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 a caption row’s cross removes the caption on that row, even when the list changed under it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 an ordinary spoken sentence typed into a caption wraps inside a 9:16 frame",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 every way a layer becomes a caption track wraps it inside the frame, and a column he set is left alone",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 with Fade in on his captions, the caption he is typing shows on the canvas while he types it",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "690 opened with no signal, the app says it is offline (not that it looks old), and the version chip with no signal keeps the offline copy of the app",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "690 when the version chip cannot ask its full-phone question (the app broken), it still goes on to the update",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "967 9 on a phone the Ended, Removed and Offline banners keep their reassuring half, and an ended copy’s panel drops the role while Follow hides for somebody offline",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "967 B5 1 on a phone comments have a door on the video — a speech bubble beside LIVE while he shares, counting what is new; “Sam commented” when one arrives from someone else (the name printed as text); tapping it opens them and clears the count; his own comment and one he watched arrive count nothing; after Stop sharing it stays while the project has comments, and goes when they do",
+   "ok": false,
+   "pending": false,
+   "notRun": "needs real touch emulation (a finger with the phone's media state: pointer coarse, hover none, 5 touch points) — this browser's driver cannot switch it on and off without losing the mouse (Linux headless Chrome: turning touch emulation off leaves the page with no mouse)"
+  },
+  {
+   "name": "984 on a PC the captions menu opens in the Add menu’s box and leaves the timeline squished — at 1280 and 900, every captions control is reachable in it, the Aa sheet opens inside it, and plain text is unchanged",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "984 the PC captions box works — typing shows in its row, its times and + Add cue edit the captions, it follows a dragged timeline, and after undo its rows edit the restored captions",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "984 on a PC, Detect speech from a plain text’s Aa sheet moves the editor into the Add menu’s box as the captions menu — the timeline goes back to squished and typing reaches the caption",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "984 on the phone, Detect speech from a plain text’s Aa sheet turns the editor into the captions editor — the sheet shows the detected captions and typing reaches the caption",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "984 a sheet opened in the PC captions box covers the rest of the box edge to edge — Aa, font, size and colour, at 1280 and 900, with nothing of the box showing round it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 the unblock page names Gradient Overlay’s real default as Keep, a gentler number as Gentler, and no longer asks about speed sliders",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 1.1 Film Grain - Grain speed 0 holds the grain still, a keyframed speed never runs it backwards, Pattern gives a layer its own grain, Softness softens it",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 1.2 Light Leak - Drift speed 0 holds it still, Wander, a Leak edge colour at the rim that follows Leak until set, a stateless Flicker and three blends",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 1.7 Colour Balance - Keep brightness holds a grey ramp at its own luma, and Range width widens or narrows the tonal range",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "986 C60 review Find Edges and Emboss across a soft ramp on a reduced preview weigh what the export weighs - a gradient is not capped like a thin line",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.1 Shake - Hide edges is sized from the frame and the layer whole box: a caption keeps its size, a frame-filling clip gets one zoom sliding in or centred, and the phone plate matches the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.5 Speed Lines - Style, Angle, Clear zone shape and Boil are in the catalogue at defaults that draw the old lines byte for byte as on v17.18",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.5 Speed Lines - Boil redraws the lines on the layer clock, Parallel lays them along Angle, Clear zone shape makes an oval, and a small preview draws them where the export does",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.5 Speed Lines and 2.7 Glitch - the new rows fit the effect panel at 390 and 1280 px, and Angle is greyed out under Radial",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.5 Speed Lines - Clear zone shape is greyed out while Clear zone is 0, where it has nothing to shape",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.3 Flash (darken) - at the default Speed a Double hit is two hits and a rest in a 30 fps export, not Steady at twice the Speed",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.3 Flash (darken) - no rhythm runs faster than the frame rate can show: Build-up speeds up to its Speed without stalling into dark frames, and Steady 30 still flashes",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.3 Flash (darken) - a keyframed Speed is integrated, so easing it down slows the strobe instead of running it backwards",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 2.3 Flash (darken) - Build-up ramps over the whole clip: split in two, trimmed at the start or on a group, its hits land where they did",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 5.2 Highlights & Shadows - Local radius keeps pure black black under +50 Shadows and still opens a dark grey up, Tonal width spares the mid-tones without reversing a ramp, Whites and Blacks move only their own ends, Colour boost puts back the colour a lift washed out, and the preview matches the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 5.5 Duotone - Colour keeps a grey ramp at its own brightness within one level, Soft light and Overlay lay the colours over the picture, and the preview matches the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 5.7 Cross Process - Negative (pastel) flattens a ramp by at least 15 percent against Slide, lifts black blue-green, Colour cast 0 is a neutral flat grade, Curve 0 leaves only the cast, Curve 300 never inverts, and the preview matches the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 6.2 Light, Soft and Dark Glow - Glow past the edges puts a halo 3 px outside white text and a dark haze round dark text, Threshold softness takes the contour out of a ramp, Smoothness reaches further, Add, Soft light, Subtract and Colour from each change the glow, and the preview matches the export",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  },
+  {
+   "name": "482 6.6 Linear Streaks - One way with Only above 0 and a white Tint runs the v17.21 pixel loop letter for letter, chosen once before the pixels, so saved streaks draw at the old speed, while Both ways still smears both sides",
+   "ok": true,
+   "pending": false,
+   "notRun": ""
+  }
+ ]
+}

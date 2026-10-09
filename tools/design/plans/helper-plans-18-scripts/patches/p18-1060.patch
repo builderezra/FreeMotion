@@ -1,0 +1,42 @@
+diff --git a/index.html b/index.html
+index c39a9ed3..cddb330b 100644
+--- a/index.html
++++ b/index.html
+@@ -1196,6 +1196,11 @@
+        offline-launch toast used to send him to this exact tap. So the page is fetched first, the same request the
+        reload is about to make; no answer in 8 s counts as none. Kept self-contained on purpose (no FM needed):
+        this is the escape hatch for a build whose own scripts are broken. */
++    /* #1060: the origin builderezra.github.io is shared with his other apps, and a service-worker registration list and a cache list are ORIGIN-wide.
++       Force-latest unregisters only the worker whose scope is THIS app's folder and deletes only caches named freemotion-*. */
++    function fmOwnRegs(rs) { var own = new URL('./', location.href).href; return rs.filter(function (r) { return r && r.scope === own; }); }
++    function fmOwnCaches(ks) { return ks.filter(function (k) { return String(k).indexOf('freemotion-') === 0; }); }
++    window.fmOwnRegs = fmOwnRegs; window.fmOwnCaches = fmOwnCaches;
+     function fmCanFetchLatest() {
+       if (navigator.onLine === false) return Promise.resolve(false);
+       var url = location.href.split('?')[0].split('#')[0];
+@@ -1250,8 +1255,8 @@
+               // Navigate to a BRAND-NEW URL (cache-busted) rather than reload(): a reload can still be served by
+               // a stuck old service worker, but a never-seen URL forces a real network fetch of every asset.
+               var done = function () { var base = location.href.split('?')[0].split('#')[0]; location.replace(base + '?fresh=' + Date.now()); };
+-              (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve())
+-                .then(function () { return window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : null; })
++              (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(fmOwnRegs(rs).map(function (r) { return r.unregister(); })); }) : Promise.resolve())
++                .then(function () { return window.caches ? caches.keys().then(function (ks) { return Promise.all(fmOwnCaches(ks).map(function (k) { return caches.delete(k); })); }) : null; })
+                 .then(done, done);
+               });
+             });
+diff --git a/sw.js b/sw.js
+index 1a1b4e09..79205eab 100644
+--- a/sw.js
++++ b/sw.js
+@@ -44,7 +44,9 @@ self.addEventListener('install', (e) => {
+ self.addEventListener('activate', (e) => {
+   e.waitUntil((async () => {
+     const keys = await caches.keys();
+-    await Promise.all(keys.map(k => (k === CACHE ? null : caches.delete(k))));
++    /* #1060: only THIS app's superseded caches. Other apps on builderezra.github.io (Listing Kit) keep their own offline copies in the same
++       origin-wide cache storage, and `delete anything that is not mine` was deleting them. */
++    await Promise.all(keys.map(k => (k === CACHE || k.indexOf('freemotion-') !== 0 ? null : caches.delete(k))));
+     await self.clients.claim();
+   })());
+ });

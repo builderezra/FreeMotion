@@ -44,7 +44,9 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.map(k => (k === CACHE ? null : caches.delete(k))));
+    /* #1060: only THIS app's superseded caches. Other apps on builderezra.github.io (Listing Kit) keep their own offline copies in the same
+       origin-wide cache storage, and `delete anything that is not mine` was deleting them. */
+    await Promise.all(keys.map(k => (k === CACHE || k.indexOf('freemotion-') !== 0 ? null : caches.delete(k))));
     await self.clients.claim();
   })());
 });
