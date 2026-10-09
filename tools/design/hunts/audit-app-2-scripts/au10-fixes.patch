@@ -1,0 +1,61 @@
+diff --git a/index.html b/index.html
+index dae1109d..57c3d85e 100644
+--- a/index.html
++++ b/index.html
+@@ -1108,7 +1108,7 @@
+   <script src="js/captions-vad.js?v=1"></script>
+   <script src="js/captions.js?v=60"></script>
+   <script src="js/audio-health.js?v=6"></script>
+-  <script src="js/app.js?v=468"></script>
++  <script src="js/app.js?v=469"></script>
+   <script src="js/audio-tools.js?v=7"></script>
+   <script src="js/loading.js?v=3"></script>
+   <script src="js/sfx.js?v=19"></script>
+diff --git a/js/app.js b/js/app.js
+index 0e2685ac..668e98f5 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -3426,10 +3426,43 @@ window.FM = window.FM || {};
+     if (typeof layer.transform[axis] === 'number') layer.transform[axis] = val;
+     else FM.setTransform(layer, axis, val, FM.time);   // animated → drop a keyframe at the playhead
+   }
++  function alignByDrawnBox(layer, mode, P) {
++    const t = FM.time, tr = layer.transform || {};
++    const turned = ((FM.evalProp(tr.rotation, t) || 0) % 360) !== 0;
++    if (!layer.parent && !turned) return false;
++    // a group with no stored pivot turns about the middle of its members' box, so moving a member would move the pivot and
++    // everything with it; pinning the pivots above first (as ungrouping does) makes the move land where it was measured
++    if (layer.parent && FM.settleGroupPivotsAbove) FM.settleGroupPivotsAbove(layer.id);
++    const bb = FM._layerAABB && FM._layerAABB(layer, t, FM.scene);
++    if (!bb || !isFinite(bb.x0 + bb.x1 + bb.y0 + bb.y1)) return false;
++    let dx = 0, dy = 0;
++    if (mode === 'left') dx = -bb.x0; else if (mode === 'hcenter') dx = P.width / 2 - (bb.x0 + bb.x1) / 2; else if (mode === 'right') dx = P.width - bb.x1;
++    else if (mode === 'top') dy = -bb.y0; else if (mode === 'vcenter') dy = P.height / 2 - (bb.y0 + bb.y1) / 2; else if (mode === 'bottom') dy = P.height - bb.y1;
++    else return false;
++    let lx = dx, ly = dy;
++    if (layer.parent) {
++      const M = frameAt(layer.parent, t);
++      if (!M) return false;
++      const det = M.a * M.d - M.b * M.c;
++      if (!isFinite(det) || Math.abs(det) < 1e-9) return false;
++      lx = (M.d * dx - M.c * dy) / det; ly = (-M.b * dx + M.a * dy) / det;
++    }
++    const round2 = v => Math.round(v * 100) / 100;
++    if (Math.abs(lx) > 1e-9) setAxis(layer, 'x', round2((FM.evalProp(tr.x, t) || 0) + lx));
++    if (Math.abs(ly) > 1e-9) setAxis(layer, 'y', round2((FM.evalProp(tr.y, t) || 0) + ly));
++    return true;
++  }
+   FM.alignLayers = function (mode) {
+     const P = FM.scene.project, layers = alignTargets();
+     if (!layers.length) return;
+     layers.forEach(layer => {
++      /* AU10-1: A LAYER INSIDE A GROUP (OR TURNED) IS ALIGNED BY WHERE IT IS DRAWN. The arithmetic below treats transform.x
++         and .y as the centre in PROJECT pixels, which is only true for a layer with no parent and no rotation: a member
++         of a group that is offset or scaled ended up that far from the canvas edge (measured: Align left on a member of a
++         group moved 60 px right left it 60 px from the edge), and a turned layer's box was cut off by a couple of
++         pixels. Those layers are measured through the renderer's own box (FM._layerAABB, parents included) and moved by
++         the difference, turned back into the parent's own axes. Everything else keeps the exact old numbers. */
++      if (alignByDrawnBox(layer, mode, P)) return;
+       const sz = FM.layerSize(layer), sc = FM.evalProp(layer.transform.scale, FM.time) || 1;
+       const hw = sz.w * sc / 2, hh = sz.h * sc / 2;
+       if (mode === 'left') setAxis(layer, 'x', Math.round(hw));

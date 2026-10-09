@@ -1,0 +1,21 @@
+=== A1_never_by_drawn_box
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU10-1 — Align left on a layer turned 37 degrees: its drawn box is at -3.98, the canvas left is 0
+=== A2_pivot_not_pinned
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU10-1 — Align left on a member of an offset, scaled and turned group: its drawn box is at 15.07, the canvas left is 0
+=== A3_parent_axes_ignored
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU10-1 — Align left on a member of an offset, scaled and turned group: its drawn box is at -21.20, the canvas left is 0
+=== A4_right_edge_wrong
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU10-1 — Align right on a layer turned 37 degrees: its drawn box is at 387.96, the canvas right is 300
+=== A5_plain_layer_takes_new_path
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU10-1 — CONTROL: Align left on a plain 81-wide layer put x at 40.5, the old rule gives 41
+ALLDONE
