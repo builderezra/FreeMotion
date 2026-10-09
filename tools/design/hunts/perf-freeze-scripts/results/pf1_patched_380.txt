@@ -1,0 +1,2 @@
+380 Regression 1/1 ✓Pending 0/0 built
+   ok  PF1 importing a project with a heavy effect stack draws its card at the card’s size, no full-size re
