@@ -1,0 +1,58 @@
+diff --git a/index.html b/index.html
+index c39a9ed3..a821ac2d 100644
+--- a/index.html
++++ b/index.html
+@@ -1114,7 +1114,7 @@
+   <script src="js/sfx.js?v=19"></script>
+   <script src="js/voice-rec.js?v=9"></script>
+   <script src="js/audio-react.js?v=12"></script>
+-  <script src="js/mobile.js?v=46"></script>
++  <script src="js/mobile.js?v=47"></script>
+   <script src="js/ai-manifest.js?v=11"></script>
+   <script src="js/ai-ops.js?v=18"></script>
+   <script src="js/ai-key.js?v=1"></script>
+diff --git a/js/mobile.js b/js/mobile.js
+index 2ca23d5f..748b165b 100644
+--- a/js/mobile.js
++++ b/js/mobile.js
+@@ -94,10 +94,18 @@ window.FM = window.FM || {};
+ 
+     // Swipe a bottom sheet DOWN to dismiss it (follows the finger, then snaps closed past a threshold).
+     function makeSwipeDown(panel, grabEl, dismiss, getScrollEl) {
+-      var startY = 0, startX = 0, lastY = 0, lastT = 0, vy = 0, active = false, claimed = false, pid = null, h = 0, hadAnim = false;
++      var startY = 0, startX = 0, lastY = 0, lastT = 0, vy = 0, active = false, claimed = false, pid = null, h = 0, hadAnim = false, downT = 0;
+       function atTop() { if (!getScrollEl) return true; var s = getScrollEl(); return !s || s.scrollTop <= 0; }
+       function onDown(e) {
+-        if (active) return;   // a swipe is already in progress — ignore a 2nd finger (it would steal pid/startY and stall/misfire the gesture)
++        /* a swipe is already in progress — ignore a 2nd finger (it would steal pid/startY and stall/misfire the gesture).
++           AU7-2: …unless that swipe is a GHOST. A press that was never claimed and has been down for two seconds with no up and
++           no cancel (a system gesture or a call took the finger without telling the page) kept `active` true for the life of
++           the page: settle() ignores any other pointer, so every later swipe was ignored too and the sheet could only be closed
++           by its button. A claimed drag is never taken over. */
++        if (active) {
++          if (!claimed && e.pointerId !== pid && e.timeStamp - downT > 2000) active = false;
++          else return;
++        }
+         if (!isPhone() || !panel.classList.contains('open')) return;
+         if (e.pointerType === 'mouse' && e.button !== 0) return;
+         var onGrab = grabEl && (e.target === grabEl || grabEl.contains(e.target));
+@@ -117,7 +125,7 @@ window.FM = window.FM || {};
+         // — which the top row must, to clear an open editor — and the drop deselected the layer.
+         if (!onGrab && e.target.closest && e.target.closest('.mt-trackpad, .mt-dial-ring, .mt-scrub, .mt-vbox-val, .fx-scrub, .fx-grip, .es-canvas, .ge-canvas, .cw-canvas, input, textarea, select')) return;
+         active = true; claimed = false; pid = e.pointerId;
+-        startY = lastY = e.clientY; startX = e.clientX; lastT = e.timeStamp; vy = 0;
++        startY = lastY = e.clientY; startX = e.clientX; lastT = downT = e.timeStamp; vy = 0;
+         h = panel.getBoundingClientRect().height || 1; panel._swiped = false;
+       }
+       function onMove(e) {
+@@ -146,6 +154,10 @@ window.FM = window.FM || {};
+       function settle(e, aborted) {
+         if (!active || (e && e.pointerId !== pid)) return;
+         var wasClaimed = claimed; active = false; claimed = false;
++        /* AU7-1: a flick is a fast LAST move. vy is only updated by a move, so a quick drag followed by a rest and a lift kept
++           its speed and closed the sheet from a tenth of the way down; the speed counts only when the finger is still moving
++           as it leaves. */
++        if (e && e.timeStamp - lastT > 80) vy = 0;
+         try { panel.releasePointerCapture(pid); } catch (_) {}
+         panel.style.transition = '';
+         panel.style.transform = '';   // queue 773: hands transform back once the finger is off
