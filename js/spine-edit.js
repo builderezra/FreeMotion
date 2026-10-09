@@ -1364,11 +1364,13 @@ window.FM = window.FM || {};
          so a split's second half, a cut item's piece and a copy all came out unlocked (review finding 14) */
       const ids0 = new Set(FM.scene.layers.map(l => l.id)), relock = new Set();
       let ok = false, notes = [], adoptPaths = null;
+      const trPre = S.trPairs();
       try {
         if (opts.unlock) lk.forEach(id => unitLayers(id, map).forEach(l => { if (l.locked) { l.locked = false; relock.add(l.id); } }));
         if (!R.adopted && plan.adopts) adoptPaths = S.adopt(R);
         if (gated) S.pinStrays(R);
         await applyPlan(plan);
+        if (!plan.keepsTransitions) { const dropped = S.dropStaleTransitions(trPre); if (dropped) { plan.counts.trDropped = dropped; } }
         const R2 = S.classify(FM.scene);
         if (gated) { notes = S.fitTails(R2, plan, { anyway: !!opts.anyway }); pinTailsAfter(R2); refitTransparentGroups(R2); }
         markCuts(plan.touched);
@@ -1430,6 +1432,7 @@ window.FM = window.FM || {};
     if (plan.counts.cuesDropped) extra.push(line('cuesShort', plan.counts.cuesDropped));
     if (plan.counts.camera) extra.push(line('cameraMoves'));
     if (plan.counts.loopCleared) extra.push(line('loopCleared'));
+    if (plan.counts.trDropped) extra.push(line('trDropped', plan.counts.trDropped));
     if (extra.length) { text = (text || live || '') + ' · ' + extra.join(' · '); }
     if (notes && notes.length) text = (text || live || '') + ' · ' + notes.join(' · ');
     if (plan.musicTimed && plan.musicTimed.length) {   // §4.1: titles timed to a song moved with their clips; one tap puts them back on the music
@@ -1448,7 +1451,10 @@ window.FM = window.FM || {};
     trimHead(id, t, o) { t = t == null ? FM.time : t; return S.edit('Trim clip', R => { const L = FM.layerById(FM.scene, id); return L ? S.planTrimHead(R, id, t - (+L.start || 0), o || { key: true }) : refusePlan('gone'); }); },
     split(id, t) { t = t == null ? FM.time : t; return S.edit('Split', R => { const target = id || (S.mainAtTime(R, t) || {}).id; return target ? S.planSplit(R, target, t) : refusePlan('noClipHere'); }); },
     closeSeam(entryId) { return S.edit('Close gap', R => S.planSeam(R, entryId)); },
-    duplicate(id) { return S.edit('Duplicate clip', R => S.planDuplicate(R, id)); }
+    duplicate(id) { return S.edit('Duplicate clip', R => S.planDuplicate(R, id)); },
+    transition(id, type, d) { return S.edit('Transition', R => S.planTransition(R, id, type, d)); },
+    transitionAll(id) { return S.edit('Transition on every cut', R => S.planTransitionAll(R, id)); },
+    turnTransition(id) { return S.edit('Turn into a transition', R => S.planTurnIntoTransition(R, id)); }
   };
   /* ═══════════════════════ RELEASE 2.2: the rest of the commands the tray and the tools need ═══════════════════════ */
 
@@ -2544,6 +2550,92 @@ window.FM = window.FM || {};
       buttons: (ls.soft && ls.arr && kind === 'undo') ? [{ label: line('closeGaps'), fn: () => S.cmd.closeAll() }] : [] });
   };  /* runStep's refusal of an arranging step while someone else can edit (§10.2 door 2). In Simple it is the gate's line;
      in Full it is Full's existing undo-refusal toast, word for word (§0.4 N4): no new words in Full. */
+
+  /* TRANSITIONS (2.7, DESIGN §12.1): `trIn = {type, d}` on the incoming main clip of a JOIN seam. A look edit only: nothing moves, no
+     adoption, no ripple. A seam that is a gap, an overlap or a card refuses in one plain line. */
+  S.joinInto = function (R, id) {
+    const i = mainIdx(R, id);
+    if (i < 1) return null;
+    const e = R.main[i], prev = R.main[i - 1];
+    if (!e || e.slot || !prev || prev.slot || !e.seam || e.seam.kind !== 'join') return null;
+    return { inc: e.id, out: prev.id };
+  };
+  S.planTransition = function (R, id, type, d) {
+    const map = byIdMap(), L = map.get(id);
+    if (!L) return refusePlan('gone');
+    if (!S.joinInto(R, id)) return refusePlan('noTransition');
+    const none = type == null || type === 'none';
+    if (!none && FM.TR_TYPES.indexOf(type) < 0) return refusePlan('gone');
+    const cur = L.trIn || null;
+    d = none ? 0 : Math.round(Math.max(FM.TR_MIN, Math.min(FM.TR_MAX, d == null ? (cur ? cur.d : FM.TR_DEFAULT) : +d)) * 10) / 10;
+    if (none ? !cur : (cur && cur.type === type && Math.abs(cur.d - d) < 1e-9)) return refusePlan('nothingChanged');
+    const plan = newPlan(none ? 'No transition' : 'Transition'); plan.arranges = false; plan.adopts = true; plan.touched.add(id); plan.keepSel = true; plan.keepsTransitions = true;
+    plan.writes.push(() => { if (none) delete L.trIn; else { L.trIn = { type: type, d: d }; const P = FM.scene.project; if (P.sm && !(P.sm.v >= FM.SM_V)) P.sm.v = FM.SM_V; } });   // a file that holds a transition is stamped as this release's, so an older build opens it read-only instead of dropping the transitions
+    plan.live = none ? line('trNone') : line('trSet', type, d);
+    return plan;
+  };
+  S.planTransitionAll = function (R, id) {
+    const map = byIdMap(), L = map.get(id);
+    if (!L || !L.trIn) return refusePlan('gone');
+    const tr = { type: L.trIn.type, d: L.trIn.d }, ids = [];
+    R.main.forEach((e, i) => { if (i > 0 && !e.slot && e.id !== id && S.joinInto(R, e.id)) { const l = map.get(e.id); if (l && !(l.trIn && l.trIn.type === tr.type && l.trIn.d === tr.d)) ids.push(e.id); } });
+    if (!ids.length) return refusePlan('nothingChanged');
+    const plan = newPlan('Transition on every cut'); plan.arranges = false; plan.adopts = true; plan.keepSel = true; plan.keepsTransitions = true;
+    ids.forEach(x => plan.touched.add(x));
+    plan.writes.push(() => { ids.forEach(x => { const l = FM.layerById(FM.scene, x); if (l) l.trIn = { type: tr.type, d: tr.d }; }); });
+    plan.live = line('trAll', ids.length + 1);
+    return plan;
+  };
+  /* THE DROP RULE (all plans): a transition belongs to ONE cut. After any edit, a clip whose out-neighbour changed, or that is new (a copy,
+     a split half), or whose seam is no longer a join, loses its trIn, and the line says so. `pre` is the {incId: outId} map from before. */
+  S.trPairs = function () {
+    const m = new Map();
+    FM.scene.layers.forEach(l => { if (l.trIn) { const o = FM.transitionOutOf ? FM.transitionOutOf(FM.scene, l) : null; m.set(l.id, o ? o.id : null); } });
+    return m;
+  };
+  S.dropStaleTransitions = function (pre) {
+    let n = 0;
+    FM.scene.layers.forEach(l => {
+      if (!l.trIn) return;
+      const o = FM.transitionOutOf(FM.scene, l);
+      if (!pre.has(l.id) || !o || pre.get(l.id) !== o.id) { delete l.trIn; n++; }
+    });
+    return n;
+  };
+  /* TURN INTO A TRANSITION (§12.1) on a BLEND seam: the two clips meet at the middle of the overlap with no ripple (a's tail trimmed by amt/2,
+     b's head by amt/2, b keeps its end), b.trIn = a crossfade of length amt, and the opacity keys the blend counted are gone (the static value
+     comes back, never an empty key list). A follower of b that began inside the cut-away head slides forward onto b's new start (D6). */
+  S.planTurnIntoTransition = function (R, id) {
+    const map = byIdMap(), j = mainIdx(R, id);
+    if (j < 1) return refusePlan('noSeam');
+    const e = R.main[j], pe = R.main[j - 1], sm = e.seam;
+    if (!sm || sm.kind !== 'blend' || e.slot || pe.slot) return refusePlan('noSeam');
+    const La = map.get(pe.id), Lb = map.get(e.id), amt = sm.amt, half = amt / 2;
+    if (!La || !Lb || La.type === 'group' || Lb.type === 'group') return refusePlan('splitBlock');
+    if (FM.TR_TYPES.indexOf('crossfade') < 0 || !(amt >= FM.TR_MIN - 1e-9)) return refusePlan('noTransition');
+    const owner = blendOwner(pe, e, map), lo = e.start - R.eps, hi = pe.end + R.eps;
+    const rA = FM.trimClipEdge(La, 'tail', -half, srcDurOf(La)), rB = FM.trimClipEdge(Lb, 'head', half, srcDurOf(Lb));
+    if (Math.abs(rA.duration - (La.duration - half)) > 1e-6 || Math.abs(rB.landed - half) > 1e-6) return refusePlan('nothingMore');
+    const plan = newPlan('Turn into a transition'); plan.touched.add(pe.id); plan.touched.add(e.id);
+    const twA = twinsOf(R, pe, map), twB = twinsOf(R, e, map), twIds = new Set(twA.concat(twB).map(t => t.id));
+    const M = La.start + rA.duration, dB = Lb.start + Lb.duration - M;
+    plan.writes.push(() => {
+      stripOwned(owner, lo, hi, owner === Lb ? 'in' : 'out');
+      [La].concat(twA).forEach(x => { x.duration = rA.duration; if (x.type === 'video') x.trimStart = rA.trimStart; });
+      [Lb].concat(twB).forEach(x => { x.start = M; x.duration = dB; if (x.type === 'video') x.trimStart = rB.trimStart; FM.shiftLayerFxClock(x, rB.fxShift); });
+      Lb.trIn = { type: 'crossfade', d: Math.round(Math.min(FM.TR_MAX, Math.max(FM.TR_MIN, amt)) * 10) / 10 };
+      const P = FM.scene.project; if (P.sm && !(P.sm.v >= FM.SM_V)) P.sm.v = FM.SM_V;
+    });
+    twA.concat(twB).forEach(t => plan.touched.add(t.id));
+    (R.followers[e.id] || []).forEach(fid => {   // D6: its first frame was cut away, so it keeps its host
+      if (twIds.has(fid)) return;
+      const f = map.get(fid); if (!f) return;
+      if ((+f.start || 0) < M - R.eps) addLand(plan, fid, M);
+    });
+    plan.keepsTransitions = true;
+    plan.live = line('trTurned');
+    return plan;
+  };
   S.undoRefused = function (why) {
     if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) refuse(why || 'live');
     else if (FM.toast) FM.toast("Can't undo — it has changed since");

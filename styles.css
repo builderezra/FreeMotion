@@ -11746,6 +11746,12 @@ body.ed-simple #sm-timeline { display: flex; }
 }
 .sm-chip-gap { background: #2a1f14; color: #ffb454; border: 1.5px solid #ffb454; }
 .sm-chip-overlap { background: #2a1418; color: #ff6b6b; border: 1.5px solid #ff6b6b; }
+#sm-trlane { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+/* the ◇s sit UNDER the sections in paint order, so an item at a cut still wins the press; the sections' own empty boxes would otherwise cover them (a real press hit #sm-sections) — only the items in them take events */
+#sm-sections, #sm-sections .sm-secstack, #sm-sections .sm-sec, #sm-sections .sm-lane { pointer-events: none; }
+#sm-sections .sm-item, #sm-sections .sm-grip { pointer-events: auto; }
+.sm-chip-tr { z-index: auto; background: transparent; color: #7f8aa0; border: 1.5px dashed #5a667c; font-size: 14px; }
+.sm-chip-tr-on { background: #14202a; color: #7cc4ff; border: 1.5px solid #7cc4ff; }
 .sm-add { position: absolute; top: 10px; width: 36px; height: 36px; border-radius: 10px; border: 1.5px dashed #8b97ab; background: transparent; color: #cfd6e2; font: 400 22px/1 system-ui, sans-serif; cursor: pointer; }
 .sm-more { position: sticky; left: calc(100% - 40px); top: 0; float: right; margin-top: 4px; min-width: 32px; height: 24px; border-radius: 12px; background: #1d2533; color: #cfd6e2; font: 700 10px/24px system-ui, sans-serif; text-align: center; }
 #sm-say { flex: 0 0 52px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-top: 1px solid var(--line); font: 600 12.5px/1.25 system-ui, sans-serif; color: #dfe6f0; box-sizing: border-box; }
