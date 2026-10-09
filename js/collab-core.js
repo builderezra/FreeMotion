@@ -169,11 +169,11 @@ window.FM = window.FM || {};
       audioFx: [{ type: 'reverb', enabled: true, params: {} }],
       behaviors: [{ type: 'wiggle', prop: 'x', enabled: true, params: {} }],
       speed: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 2, e: 'easeIn' }] },
-      // Simple mode (SCHEMA_REV 7): junk, a plain unknown sub-key and a newer build's object sub-key, side by side
+      // Simple mode (SCHEMA_REV 8): junk, a plain unknown sub-key and a newer build's object sub-key, side by side
       sm: { main: 'yes', stay: true, row: 2, future: { a: 1 } }, srcW: 1920, srcH: -4, srcRev: 0, pick: { b: 'pk1', i: 2, x: 1 }
     }];
   };
-  /* …and a project carrying Simple's project keys (SCHEMA_REV 7): `home` any string ≤ 32 is kept, `v` clamped, junk dropped. */
+  /* …and a project carrying Simple's project keys (SCHEMA_REV 8): `home` any string ≤ 32 is kept, `v` clamped, junk dropped. */
   const SCHEMA_PROJECT_FIXTURE = function () {   // not on C: the S0 test pins FM.collab's exports
     return { width: 320, height: 240, fps: 30, duration: 4, background: '#000000',
              sm: { v: 1.4, home: 'nope', adopted: 'yes', mrev: -1, later: { a: [1, 2] } } };

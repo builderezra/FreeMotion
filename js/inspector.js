@@ -7101,6 +7101,19 @@ window.FM = window.FM || {};
       const panelEl = document.getElementById('inspector-panel');
       if (panelEl) panelEl.classList.remove('insp-ease');
       if (navChanged && root.scrollTop) root.scrollTop = 0;
+      /* SIMPLE MODE P2.2 (DESIGN.md §8.3, D10, his D20 A): in Simple the band shows a panel only when a tray tool asked for
+         one ("More"); otherwise it stays clear above the tray and the tools. bandIdle is false whenever Simple is not on
+         screen, so Full's Add menu and layer editor are exactly today's. */
+      if (FM.simpleTools && FM.simpleTools.bandIdle && FM.simpleTools.bandIdle(layer)) {
+        lastLayerId = null;
+        if (title) title.textContent = '';
+        /* the words come from FM.simpleTools: "Its tools are below" alone only while every tool is on show on the PC tray's two
+           rows (his pick B), otherwise today's words; data-sel lets the tray put them right when its rows change (finding 3) */
+        const hint = el('div', 'sm-band-hint', FM.simpleTools.bandWords(layer));
+        if (layer) hint.dataset.sel = '1';
+        root.appendChild(hint);
+        return;
+      }
       if (!layer) {
         // AM model: nothing selected → show the Add menu (same one the mobile + button opens).
         // Selecting a clip swaps this for the property editor (refresh() re-runs on select).

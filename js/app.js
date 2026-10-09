@@ -1009,6 +1009,7 @@ window.FM = window.FM || {};
     document.body.classList.toggle('sel-mode', !simple && selOwns);
     document.body.classList.toggle('m-editing', !simple && phone && n === 1 && !selOwns);
     document.body.classList.toggle('sm-has-sel', simple && n >= 1);
+    if (simple && FM.simpleTools && FM.simpleTools.sync) FM.simpleTools.sync();   // Simple mode P2.2: the tray shows the selection's tools
     /* ⚠️ AND THE BACK BUTTON MUST SAY WHAT IT ACTUALLY DOES (queue 654, v14.40). `#m-back` carries a
        fixed `aria-label="Projects / file"` in index.html — but js/mobile.js branches on these very
        classes and, in BOTH `sel-mode` and `m-editing`, that button does not go to Projects at all: it
@@ -3126,7 +3127,7 @@ window.FM = window.FM || {};
     refreshAll();
     FM.seekVideosToTime();
     if (FM.history) FM.history.commit();
-    if (FM.storage && FM.storage.save) FM.storage.save();   // write the new media blob to IDB now, not on the 600ms debounce → survives a quick tab background/close
+    if (FM.storage && FM.storage.save && !(opts && opts.noSave)) FM.storage.save();   // write the new media blob to IDB now, not on the 600ms debounce → survives a quick tab background/close (Simple mode P2: {noSave} — its runner's one commit saves)
     // Remember it in the Media library so it's one tap away next time — no picker, no Photos app.
     if (FM.mediaLib && rec.file) FM.mediaLib.add(rec, layer.id);
     // A clip the browser can OPEN but can't give a picture for (videoWidth/Height 0) renders as an
@@ -9235,7 +9236,9 @@ window.FM = window.FM || {};
         // Simple's timeline and the line it speaks in (980 Phase 2 review): a tap on the line's text "does nothing" (DESIGN
         // §3.12 rule 2), and pressing the selected clip must not deselect it before its own click. Simple clears the selection
         // itself on a tap of its empty timeline (#sm-inner's click). display:none outside Simple, so Full never matches it.
-        ' #sm-timeline';
+        // 2.2: Simple's tray and project tools wherever they sit (#sm-bar), and its ⋯ / Sound list (.sm-menu, on body: a tap on
+        // its padding between choices deselected the clip). Neither exists or shows outside Simple.
+        ' #sm-timeline, #sm-bar, .sm-menu';
       let dx = 0, dy = 0, keepAtDown = false, armed = false;
       document.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) { armed = false; return; }
