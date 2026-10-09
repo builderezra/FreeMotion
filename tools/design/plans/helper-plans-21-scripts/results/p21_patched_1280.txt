@@ -1,1 +1,4 @@
-1280 None
+1280 Regression 3/3 ✓Pending 0/0 built
+   ok  P21 #1080 a song added with the playhead at the END of the project starts at 0, under the video; mid
+   ok  P21 #1081 Save after an export downloads the file on a PC (mouse) and still opens the share sheet on
+   ok  P21 #1083 PC: a hidden "‹ Projects" pill in the stage corner appears when the mouse is over the corn
