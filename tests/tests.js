@@ -60258,6 +60258,9 @@
       if (v.doc() !== d0) throw new Error('Undo did not reverse the switch');
       const loose = v.L('Loose'); FM.spine.cmd.rideVol(loose.id, true); await v.idle();
       if (loose.sm && loose.sm.rideVol) throw new Error('a sound that is not stay-put took the rider');
+      if (FM.spine.setFlag(loose, 'rideVol', true) || (loose.sm && loose.sm.rideVol)) throw new Error('setFlag let the rider onto a sound that does not stay put');
+      const sg = v.L('Song'); FM.spine.setFlag(sg, 'rideVol', true); FM.spine.setFlag(sg, 'stay', false);
+      if (sg.sm && sg.sm.rideVol) throw new Error('turning Stay put off left the rider on');
     });
   });
 
