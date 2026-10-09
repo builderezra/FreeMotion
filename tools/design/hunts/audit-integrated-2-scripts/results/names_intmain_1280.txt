@@ -1,0 +1,79 @@
+   RED AU3-1 a stored project whose layers list holds a null (an undefined entry stringifies to null) still
+FAILAU3-1 a stored project whose layers list holds a null (an undefined entry stringifies to null) still OPENS, without the null — load() threw on a layers list holding one null: Cannot read properties of null (reading 'id') — the project cannot be opened,
+   RED AU3-1b importing a project file whose layers list holds a null imports the real layers instead of th
+FAILAU3-1b importing a project file whose layers list holds a null imports the real layers instead of throwing — applyScene threw on a layers list holding one null: Cannot read properties of null (reading 'id')
+   RED AU3-2 the boot sweep keeps the media a damaged project document still names (it used to read an unpa
+FAILAU3-2 the boot sweep keeps the media a damaged project document still names (it used to read an unparseable document as naming nothing and delete its clips) — the sweep deleted a clip that a damaged (unparseable) project document still names — the docu
+   RED AU3-2b deleting a project keeps a clip that a damaged sibling document still names
+FAILAU3-2b deleting a project keeps a clip that a damaged sibling document still names — deleting project X removed a clip that project Y (its document is damaged but still on the device) names
+   RED AU3-3 a stored project (and an imported file) whose layer lacks a transform, carries a non-object fi
+FAILAU3-3 a stored project (and an imported file) whose layer lacks a transform, carries a non-object fillGradient, or has a caption cue without times still opens — open (no transform): Cannot read properties of undefined (reading 'opacity'); import (no tran
+   RED AU3-4 deleting a stored media record whose transaction aborts at commit still finishes (removeMedia 
+FAILAU3-4 deleting a stored media record whose transaction aborts at commit still finishes (removeMedia used to wait for ever, so removing a project hung on it) — removeMedia never finished when the delete transaction aborted at commit: every caller that awa
+   RED AU1-1 dragging the LEFT grip of a REVERSED clip keeps its effect clock still (Drift, Spin, Orbit do 
+FAILAU1-1 dragging the LEFT grip of a REVERSED clip keeps its effect clock still (Drift, Spin, Orbit do not jump), as the forward grip and the A key do — trimming the head of a REVERSED clip moved its effect clock by 0.400 s at a fixed time: every Drift / Sp
+   RED AU1-2 growing the HEAD of a REVERSED clip with a speed ramp never reaches past the end of its source
+FAILAU1-2 growing the HEAD of a REVERSED clip with a speed ramp never reaches past the end of its source (grip, and the D/extend twin) — extend (D key) on the ramped 3x -> 0.5x reversed clip: the head frame reads source 29.50 s of a 20 s file AND left grip o
+   RED AU2-1 typing the number an effect slider is already showing leaves it alone (26 shipped defaults sit
+FAILAU2-1 typing the number an effect slider is already showing leaves it alone (26 shipped defaults sit between the step notches, and typing them moved them) — typing the value Scanline already shows (0.45) changed it from 0.45 to 0.46
+   RED AU2-2 Paste look → Effects fits a copied filter to the layer it lands on (a text-only child is dropp
+FAILAU2-2 Paste look → Effects fits a copied filter to the layer it lands on (a text-only child is dropped, as the effect Paste button does) — Paste look landed a text-only effect (counter) inside a filter on a SHAPE, where it can never run: counter,blur
+   RED AU2-3 the multi-select Align buttons (Start together, Chain, End together) leave a LOCKED clip where
+FAILAU2-3 the multi-select Align buttons (Start together, Chain, End together) leave a LOCKED clip where it is, as the A / S / D keys and the drag do — Start together moved the LOCKED clip from 3 s to 0 s; One after another, down moved the LOCKED clip from 3
+   RED AU2-4 the multi-select Align buttons move a selected GROUP together with what is inside it
+FAILAU2-4 the multi-select Align buttons move a selected GROUP together with what is inside it — the group bar moved to 0 s but the layer inside it stayed at 5 s, so the group no longer contains its own contents
+   RED AU4-1 undo right after Add text / Add captions (the editor still open) can be REDONE; the redo is no
+FAILAU4-1 undo right after Add text / Add captions (the editor still open) can be REDONE; the redo is not thrown away — text: after undoing "Add text" with the editor open, Redo is gone: the editor closing pushed a selection-only step and threw the redo tail
+   RED AU4-2 Add group while the text editor is open is ONE undo step, not two (the first undo used to do n
+FAILAU4-2 Add group while the text editor is open is ONE undo step, not two (the first undo used to do nothing visible) — Add group with the text editor open made 2 history steps (the first one is a selection-only copy of the half-done add)
+   ok  AU4-3 a random sequence of real commands: every undo and every redo lands byte for byte on the snaps
+   ok  AU5-1 lost edits, stale overwrites and duplicate layers: an owner and two real guests, cuts and heal
+   RED AU5-2 a guest that reloads with a base persisted BEFORE a layer arrived does not hand that layer bac
+FAILAU5-2 a guest that reloads with a base persisted BEFORE a layer arrived does not hand that layer back after the owner deleted it, and still sends its own offline layer — the owner deleted Y and the reloaded guest handed it back: the owner has Y again (th
+   RED AU6-1 an MP4 export that fails part-way (a layer that will not draw, an encoder that throws) closes 
+FAILAU6-1 an MP4 export that fails part-way (a layer that will not draw, an encoder that throws) closes its video encoder and every frame it made — an export that failed while drawing frame 6 left 1 video encoder(s) configured: it is only closed by the Cance
+   RED AU6-2 a soundtrack encode that throws part-way closes its audio encoder and the AudioData in hand
+FAILAU6-2 a soundtrack encode that throws part-way closes its audio encoder and the AudioData in hand — a soundtrack encode that threw left 1 audio encoder(s) configured (the export then drops its sound and carries on, holding the encoder)
+   ok  AU6-3 the pure export arithmetic: the mix limiter equals a plain reference across its block edges an
+1280 Regression 0/1 ✓ · NOT RUN HERE 1 Pending 0/0 built
+   RED AU7-1f a REAL finger: a quick drag that rests before the lift does not close the Add sheet
+   RED AU8-1 a project name is cut to 200 characters when it is given (Rename, Duplicate; New project alrea
+FAILAU8-1 a project name is cut to 200 characters when it is given (Rename, Duplicate; New project already is), so the card does not change under him later — Rename: a 300-character name is 300 characters on its card
+   RED AU9-1 setTime and scrubTime ignore a time that is not a number instead of making the playhead NaN
+FAILAU9-1 setTime and scrubTime ignore a time that is not a number instead of making the playhead NaN — setTime(NaN) left the playhead at NaN, not where it was (2)
+
+   RED AU11-1 an arrow key nudges a layer on the SCREEN, also for a member of a group that is turned or sca
+FAILAU11-1 an arrow key nudges a layer on the SCREEN, also for a member of a group that is turned or scaled — ArrowRight on a member of a group turned 90 degrees and scaled 1 moved it on screen by (0.50, 0.50), expected (1, 0)
+   RED AU12-1 Tilt-Shift blurs a half-scale preview as much as the export, not twice as much
+FAILAU12-1 Tilt-Shift blurs a half-scale preview as much as the export, not twice as much — Tilt-Shift blur 1x at render scale 0.5 is 10.01 MAD / 59.0 % of pixels off the export (limit 2.5 / 5): the preview blurs more than the export
+   RED AU17-1 saving a 121st effect preset is refused with a message, it does not delete the oldest one
+FAILAU17-1 saving a 121st effect preset is refused with a message, it does not delete the oldest one — the 121st preset was saved (and so one was dropped: p0 is gone)
+   ok  AU17-2 every effect type and parameter key a v17.32 project can hold still exists
+   RED AU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by 
+FAILAU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by an alias — FM.fxAliases is not reachable
+   RED AU19-1 after Undo or Redo of a replaced video the timeline bar shows that clip’s frames, not the oth
+FAILAU19-1 after Undo or Redo of a replaced video the timeline bar shows that clip’s frames, not the other one’s — after Undo the clip is red but its timeline bar shows blue frames
+   RED PF1 importing a project with a heavy effect stack draws its card at the card’s size, no full-size re
+FAILPF1 importing a project with a heavy effect stack draws its card at the card’s size, no full-size render, and the import stays within its time ceiling — opening the project rendered it at full size 1 time(s) (canvas widths 1080): the card only needs 36
+   RED PF2 a stack of Glows never puts more than one drop-shadow in a filter list, draws the same picture a
+FAILPF2 a stack of Glows never puts more than one drop-shadow in a filter list, draws the same picture as the one-list filter, and is faster — text x4: a filter list held 4 drop-shadows | text x8: a filter list held 8 drop-shadows | text at the edge x4: a fi
+   RED AU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by 
+FAILAU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by an alias — FM.fxAliases is not reachable
+   RED PL1 the guard demands an alias for a rename and accepts one that exists, and a bad table is refused
+FAILPL1 the guard demands an alias for a rename and accepts one that exists, and a bad table is refused — FM.fxAliases is not reachable
+   RED PL1 a saved effect whose parameter or type was renamed keeps its value, keyframes included
+FAILPL1 a saved effect whose parameter or type was renamed keeps its value, keyframes included — FM.fxAliases is not reachable
+   RED PL1 an effect preset saved under the old names still loads under the new ones
+FAILPL1 an effect preset saved under the old names still loads under the new ones — FM.fxAliases is not reachable
+   RED AU20 clearing the last tag while its chip is the filter does not leave the Presets card empty
+FAILAU20 clearing the last tag while its chip is the filter does not leave the Presets card empty — the card is empty after the last tag was cleared while it was the filter: rows [], chips [] (nothing on screen can turn the filter off)
+   RED AU20 renaming a layer preset keeps the Update button of layers that were applied from it
+FAILAU20 renaming a layer preset keeps the Update button of layers that were applied from it — the layer still says it came from “AU20 Look”, a preset that no longer exists
+   RED AU20 a long unbroken preset name wraps inside its row instead of running under the delete button or 
+FAILAU20 a long unbroken preset name wraps inside its row instead of running under the delete button or out of the panel — the name runs under the delete button: name ends at 762, the ✕ starts at 245
+   RED AU21 a guest that drops mid-upload and comes back finishes its clip on the host, from the bytes alre
+FAILAU21 a guest that drops mid-upload and comes back finishes its clip on the host, from the bytes already kept — the host still counts the clip as arriving (1 pending, 1 in flight) from a member that has left: the export question would say "still arriving"
+   RED AU21 a member who leaves does not leave send loops running behind it
+FAILAU21 a member who leaves does not leave send loops running behind it — 2 send job(s) still running for a member who left, each polling every 25 ms until the room ends
+   ok  AU21 files that end exactly on a chunk, a part and the send window arrive byte-identical, with no pa
+END

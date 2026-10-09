@@ -1,0 +1,14 @@
+js/app.js                    main 469     merged 469     final 470
+js/collab-media.js           main 5       merged 6       final 6
+js/collab-session.js         main 12      merged 13      final 13
+js/compositor.js             main 212     merged 213     final 213
+js/exporter.js               main 126     merged 127     final 127
+js/fx-presets.js             main 12      merged 13      final 13
+js/fx-registry.js            main 25.31   merged 25.32   final 25.32
+js/history.js                main 37      merged 38      final 38
+js/inspector.js              main 410     merged 411     final 411
+js/mobile.js                 main 46      merged 47      final 47
+js/scene.js                  main 119     merged 119     final 120
+js/storage.js                main 59      merged 60      final 60
+js/timeline.js               main 261     merged 262     final 262
+styles.css                   main 754     merged 755     final 755

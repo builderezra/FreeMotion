@@ -1,0 +1,45 @@
+380 Regression 43/44 ✓ · NOT RUN HERE 1 Pending 0/0 built
+   ok  import: an AUDIO file with no picture stays silent — it is not a fault
+   ok  921 S6 an owner who opens another project PAUSES the room — the copy stays linked and comes back by 
+   ok  the AUDIO effects menu is a menu too: tapping away leaves it instead of stranding it over another la
+   ok  the phone AUDIO effects browser is the same sheet as the visual one, not full screen (queue 300)
+   ok  AU3-1 a stored project whose layers list holds a null (an undefined entry stringifies to null) still
+   ok  AU3-1b importing a project file whose layers list holds a null imports the real layers instead of th
+   ok  AU3-2 the boot sweep keeps the media a damaged project document still names (it used to read an unpa
+   ok  AU3-2b deleting a project keeps a clip that a damaged sibling document still names
+   ok  AU3-3 a stored project (and an imported file) whose layer lacks a transform, carries a non-object fi
+   ok  AU3-4 deleting a stored media record whose transaction aborts at commit still finishes (removeMedia 
+   ok  AU1-1 dragging the LEFT grip of a REVERSED clip keeps its effect clock still (Drift, Spin, Orbit do 
+   ok  AU1-2 growing the HEAD of a REVERSED clip with a speed ramp never reaches past the end of its source
+   ok  AU2-1 typing the number an effect slider is already showing leaves it alone (26 shipped defaults sit
+   ok  AU2-2 Paste look → Effects fits a copied filter to the layer it lands on (a text-only child is dropp
+   ok  AU2-3 the multi-select Align buttons (Start together, Chain, End together) leave a LOCKED clip where
+   ok  AU2-4 the multi-select Align buttons move a selected GROUP together with what is inside it
+   ok  AU4-1 undo right after Add text / Add captions (the editor still open) can be REDONE; the redo is no
+   ok  AU4-2 Add group while the text editor is open is ONE undo step, not two (the first undo used to do n
+   ok  AU4-3 a random sequence of real commands: every undo and every redo lands byte for byte on the snaps
+   ok  AU5-1 lost edits, stale overwrites and duplicate layers: an owner and two real guests, cuts and heal
+   ok  AU5-2 a guest that reloads with a base persisted BEFORE a layer arrived does not hand that layer bac
+   ok  AU6-1 an MP4 export that fails part-way (a layer that will not draw, an encoder that throws) closes 
+   ok  AU6-2 a soundtrack encode that throws part-way closes its audio encoder and the AudioData in hand
+   ok  AU6-3 the pure export arithmetic: the mix limiter equals a plain reference across its block edges an
+   ok  AU7-1 touch: a quick drag that then rests before the lift does not close the sheet (the flick speed 
+   ok  AU7-2 touch: a press that never gets its lift (a taken finger) does not freeze every later swipe
+   ok  AU7-1 mouse: a quick drag that then rests before the lift does not close the sheet (the flick speed 
+   ok  AU7-2 mouse: a press that never gets its lift (a taken finger) does not freeze every later swipe
+   RED AU7-1f a REAL finger: a quick drag that rests before the lift does not close the Add sheet
+   ok  AU8-1 a project name is cut to 200 characters when it is given (Rename, Duplicate; New project alrea
+   ok  AU9-1 setTime and scrubTime ignore a time that is not a number instead of making the playhead NaN
+   ok  AU10-1 Align puts a layer's DRAWN box on the canvas edge or centre, also for a member of an offset /
+   ok  AU11-1 an arrow key nudges a layer on the SCREEN, also for a member of a group that is turned or sca
+   ok  AU12-1 Tilt-Shift blurs a half-scale preview as much as the export, not twice as much
+   ok  AU17-1 saving a 121st effect preset is refused with a message, it does not delete the oldest one
+   ok  AU17-2 every effect type and parameter key a v17.32 project can hold still exists
+   ok  AU19-1 after Undo or Redo of a replaced video the timeline bar shows that clip’s frames, not the oth
+   ok  AU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by 
+   ok  AU20 clearing the last tag while its chip is the filter does not leave the Presets card empty
+   ok  AU20 renaming a layer preset keeps the Update button of layers that were applied from it
+   ok  AU20 a long unbroken preset name wraps inside its row instead of running under the delete button or 
+   ok  AU21 a guest that drops mid-upload and comes back finishes its clip on the host, from the bytes alre
+   ok  AU21 a member who leaves does not leave send loops running behind it
+   ok  AU21 files that end exactly on a chunk, a part and the send window arrive byte-identical, with no pa

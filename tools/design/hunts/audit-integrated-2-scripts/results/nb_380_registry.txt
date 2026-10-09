@@ -1,0 +1,5 @@
+380 Regression 4/4 ✓Pending 0/0 built
+   ok  560: the sanitiser keeps a valid mask marker in place, drops a dangling or duplicate one, refuses on
+   ok  effects: with no registry loaded the stack is left alone, not gutted
+   ok  482: eleven canvas and warp ceilings earned by the round-four probe are in the registry, and each to
+   ok  733: the AI digest is generated from the registry gates, and the ops clamp to the panel and grow the

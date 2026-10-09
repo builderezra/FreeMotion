@@ -1,0 +1,14 @@
+380 Regression 9/11 ✗Pending 0/0 built
+   ok  442: the track head hugs the wall, and the saving does not come out of the thumbnail
+   ok  536: the pill holds for loop, the bookmark button holds for the thumbnail
+   ok  home: the OPEN badge says OPEN over any thumbnail
+   ok  effects browser: no thumbnail is a picture of the subject doing nothing
+   ok  a layer thumbnail never spills out of the track head on a phone (queue 211)
+   ok  a shape thumbnail keeps the shape's aspect, it is not stretched to the box (queue 211)
+   RED 658 — the thumbnail pin turns the playhead blue, and the yellow stops lying
+   ok  690 every clip that cannot be saved is warned about, however many warnings came before — and a thumb
+   RED 690 an export started while the timeline is still drawing a clip thumbnails has no black or misplace
+   ok  690 trying looks on the Filters tab and opening the effects browser gives back every thumbnail once 
+   ok  690 each stroke keeps its own brush through the eraser, undo and redo, Draw more and the timeline th
+FAIL658 — the thumbnail pin turns the playhead blue, and the yellow stops lying — parked on an ordinary benchmark the playhead is no longer marked yellow — that state is unchanged and must stay
+FAIL690 an export started while the timeline is still drawing a clip thumbnails has no black or misplaced frame — Failed to execute 'encode' on 'VideoEncoder': Cannot call 'encode' on a closed codec.

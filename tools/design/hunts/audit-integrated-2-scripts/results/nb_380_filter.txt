@@ -1,0 +1,89 @@
+380 Regression 86/88 ✓ · NOT RUN HERE 2 Pending 0/0 built
+   ok  594: Tuff is the second filter section, and none was lost moving it
+   ok  579: the mono filters all desaturate, and no two of them are the same look
+   ok  554: picking a filter previews it on the canvas, and leaves the project alone
+   ok  565: a filter row that scrolls says so, and one that fits says nothing
+   ok  444: a favourited filter rises to the top AND stays in its own category
+   ok  444: the Tuff section grew, and every new category arrived with filters in it
+   ok  filters: the Tuff section is real, validates, and every look carries the flash
+   ok  an overshooting ease cannot switch off every filter on a layer
+   ok  921 S1 the host role filter, exhaustively: role x op x path
+   ok  filters are toggle-then-Add, and nothing applies until you press it (queue 464)
+   ok  a long filter section is one swipeable row, not two stacked ones (queue 463)
+   ok  #603: every mono filter actually renders grey
+   ok  favouriting a FILTER row stars that filter, so it reaches the Filters tab (queue 812)
+   ok  a keyframe on an effect INSIDE a filter goes live, so it can be dragged (queue 819)
+   ok  effect walker: with no filters in the stack it is exactly the old flat walk
+   ok  effect walker: a filter visits itself and then its children, and never recurses
+   ok  effect walker: a keyframe inside a filter draws a diamond and can be deleted
+   ok  effect walker: copying a keyframe from inside a filter pastes back into the same slot
+   ok  effect walker: a save/load keeps a filter and its children, and refuses a filter inside one
+   ok  effect walker: a layer ref inside a filter follows the duplicate instead of the original
+   ok  effect walker: importing re-points a layer ref held inside a filter
+   ok  filter: at Strength 1 it renders exactly as its children would on their own
+   ok  filter: at Strength 0 it is a true no-op, not a faint version of itself
+   ok  filter: Strength half sits between the two ends rather than at one of them
+   ok  filter: a disabled child is skipped, and an empty filter changes nothing
+   ok  filter: effects before and after it in the stack still apply, in order
+   ok  filter: the container is not offered as an effect in the browser
+   ok  filter: Strength is validated on load like any other effect parameter
+   ok  the Filters tab has no explanation blocks, and the Empty filter row is one line (queue 301)
+   ok  filter row: Add Filter drops an empty filter into the stack, opened
+   ok  filter row: its children render as rows inside it, below its Strength
+   ok  filter row: deleting a child removes it from the filter, not from the layer stack
+   ok  filter row: opening a child does not close the filter holding it
+   ok  filter row: a closed child does not wear its parent’s open chevron
+   ok  filter row: the browser adds into the filter you asked it to, and refuses a filter inside one
+   ok  filters tab: a third subsection sits beside Visual and Audio
+   ok  filters tab: it lists every filter, in its section, saying what each is made of
+   ok  filters tab: each tile previews its own look, not the same picture sixteen times
+   ok  filters tab: adding a filter returns you to the stack with it open
+   ok  filter library: Colouring has a shortcut to filters, at the top
+   ok  filter survives: copy the stack and paste it back
+   ok  filter survives: saved as an effect preset and read back
+   ok  filter: whether it applies to a layer is decided by what is inside it
+   ok  stack order: the nine CSS-filter effects render the same whichever way round they go
+   ok  filter library: every filter is made of effects this build actually has
+   ok  778: ten filters for the thin sections exist, each on a preloaded subject no section-mate shares, an
+   ok  filter library: CSS-filter effects are authored first, so the list matches the render order
+   ok  filter library: adding one produces an ordinary filter that renders
+   ok  filter library: a filter keeps its name through a save and load
+   ok  AU2-2 Paste look → Effects fits a copied filter to the layer it lands on (a text-only child is dropp
+   ok  PF2 a stack of Glows never puts more than one drop-shadow in a filter list, draws the same picture a
+   ok  AU20 clearing the last tag while its chip is the filter does not leave the Presets card empty
+   ok  Filters opens filters, from either full-screen browser (queue 317)
+   ok  nothing in the Featured row shares its name with a filter (queue 318)
+   ok  every filter demonstrates on a photograph that exists and is preloaded (queue 359)
+   ok  the filter tiles raster at the screen's resolution, not a fixed 2x
+   ok  #661: the GPU colour path reproduces ctx.filter
+   ok  #661: colour effects still render when ctx.filter does not work
+   ok  a Glow with no saved radius still glows on a device without ctx.filter, and does not take the layer’
+   ok  #661: blur reproduces ctx.filter on the GPU path
+   ok  #675: every added filter sits somewhere the existing set does not
+   ok  #645: the device-cannot-run-filters warning stops once the shader can run them
+   ok  every ingredient in every filter recipe actually changes the picture (queue 858)
+   ok  729: leaving the Filters view clears the filter preview, and the compositor ignores a preview during
+   RED 690 after he opens an effect inside a filter, the next effect he opens still has keyframes he can dr
+   RED 690 the easing curve of an effect inside a filter changes that effect and no other
+   ok  976: on a mouse a filter row has no scrollbar — ‹ › at its ends page it, one page of whole tiles at 
+   ok  976: a real mouse over a filter row shows ›, clicking it pages, a sideways wheel still slides the ro
+   ok  976: a real mouse clicking › until a filter row stops, and ‹ until it is home, never picks the tile 
+   ok  976: a filter row draws one dot for each place › can take it — a row of exactly two pages has two do
+   ok  986 C1 a filter on an adjustment layer grades what is below it, and its Strength fades it
+   ok  986 C24 on a device without ctx.filter, Halation, Compound Blur, Backfill, Liquid Glass and Motion B
+   ok  986 C9 a filter saved as a preset is kept whole - the toast no longer sends him to the Effects brows
+   ok  482 polish 1 every new control is in the catalogue at a default that draws the old look - the 56 lib
+   ok  482 1.3 Glow - Strength is the halo colour alpha on PC and on a phone without ctx.filter, and at 100
+   ok  986 C52 a picked filter previews exactly what Add adds - on an adjustment layer it grades the canvas
+   ok  986 C24 batch 2 on a device without ctx.filter, the mask feather, Luma Matte feather, 3D shading, Te
+   ok  986 C24 review Glow after a colour effect keeps the grade on a device without ctx.filter - on an adj
+   ok  986 C24 review a feathered pen mask keeps its feather on a device without ctx.filter
+   ok  986 C24 review a defocused layer casts its drop shadow from the blurred layer on a device without ct
+   ok  986 C24 review a colour chain that passes 1 clamps between effects as ctx.filter does - in the shade
+   ok  482 3.5 Echo and Reverb - moving Low cut off 20 Hz or back while the preview plays fades the filter 
+   ok  482 5.2 Highlights & Shadows - Whites, Blacks, Tonal width, Local radius and Colour boost are in the
+   ok  482 5.1 Adjustment layer - stacked with Contrast, Saturation or Brightness, a colour grade runs afte
+   ok  482 5.3 Teal & Orange, 5.4 Tint and 5.5 Duotone - every new control is in the catalogue at a default
+   ok  482 6.0 Vignette and the three Glows - every new control is in the catalogue at a default that draws
+   ok  482 6.3 Drop Shadow - Spread, Smoothness and Shadow only are in the catalogue at defaults that draw 
+   ok  482 6.0 Lens Flare, Linear and Spin Streaks and Glow Scan - every new control is in the catalogue at
