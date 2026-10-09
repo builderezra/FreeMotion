@@ -1,0 +1,3 @@
+1280 Regression 2/2 ✓Pending 0/0 built
+   ok  AU5-1 lost edits, stale overwrites and duplicate layers: an owner and two real guests, cuts and heal
+   ok  AU5-2 a guest that reloads with a base persisted BEFORE a layer arrived does not hand that layer bac

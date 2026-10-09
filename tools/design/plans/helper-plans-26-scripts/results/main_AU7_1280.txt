@@ -1,0 +1,10 @@
+1280 Regression 0/5 ✗ · NOT RUN HERE 1 Pending 0/0 built
+   RED AU7-1 touch: a quick drag that then rests before the lift does not close the sheet (the flick speed 
+   RED AU7-2 touch: a press that never gets its lift (a taken finger) does not freeze every later swipe
+   RED AU7-1 mouse: a quick drag that then rests before the lift does not close the sheet (the flick speed 
+   RED AU7-2 mouse: a press that never gets its lift (a taken finger) does not freeze every later swipe
+   RED AU7-1f a REAL finger: a quick drag that rests before the lift does not close the Add sheet
+FAILAU7-1 touch: a quick drag that then rests before the lift does not close the sheet (the flick speed goes stale) — a 48px drag, 600 ms at rest, then the lift closed the sheet: the speed of the last move (4 px/ms) was read as a flick
+FAILAU7-2 touch: a press that never gets its lift (a taken finger) does not freeze every later swipe — 2.3 s after a press that never ended, a fresh swipe past a third did not close the sheet: the dead press still owns the handler
+FAILAU7-1 mouse: a quick drag that then rests before the lift does not close the sheet (the flick speed goes stale) — a 48px drag, 600 ms at rest, then the lift closed the sheet: the speed of the last move (4 px/ms) was read as a flick
+FAILAU7-2 mouse: a press that never gets its lift (a taken finger) does not freeze every later swipe — 2.3 s after a press that never ended, a fresh swipe past a third did not close the sheet: the dead press still owns the handler

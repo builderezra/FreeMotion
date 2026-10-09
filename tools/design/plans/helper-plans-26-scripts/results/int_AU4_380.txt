@@ -1,0 +1,4 @@
+380 Regression 3/3 ✓Pending 0/0 built
+   ok  AU4-1 undo right after Add text / Add captions (the editor still open) can be REDONE; the redo is no
+   ok  AU4-2 Add group while the text editor is open is ONE undo step, not two (the first undo used to do n
+   ok  AU4-3 a random sequence of real commands: every undo and every redo lands byte for byte on the snaps

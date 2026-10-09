@@ -1,0 +1,9 @@
+1280 Regression 0/4 ✗Pending 0/0 built
+   RED AU2-1 typing the number an effect slider is already showing leaves it alone (26 shipped defaults sit
+   RED AU2-2 Paste look → Effects fits a copied filter to the layer it lands on (a text-only child is dropp
+   RED AU2-3 the multi-select Align buttons (Start together, Chain, End together) leave a LOCKED clip where
+   RED AU2-4 the multi-select Align buttons move a selected GROUP together with what is inside it
+FAILAU2-1 typing the number an effect slider is already showing leaves it alone (26 shipped defaults sit between the step notches, and typing them moved them) — typing the value Scanline already shows (0.45) changed it from 0.45 to 0.46
+FAILAU2-2 Paste look → Effects fits a copied filter to the layer it lands on (a text-only child is dropped, as the effect Paste button does) — Paste look landed a text-only effect (counter) inside a filter on a SHAPE, where it can never run: counter,blur
+FAILAU2-3 the multi-select Align buttons (Start together, Chain, End together) leave a LOCKED clip where it is, as the A / S / D keys and the drag do — Start together moved the LOCKED clip from 3 s to 0 s; One after another, down moved the LOCKED clip from 3 s to 2 s; End together moved the LOCKED clip from 3 s to 6 s
+FAILAU2-4 the multi-select Align buttons move a selected GROUP together with what is inside it — the group bar moved to 0 s but the layer inside it stayed at 5 s, so the group no longer contains its own contents

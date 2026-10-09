@@ -1,0 +1,13 @@
+380 Regression 0/6 ✗Pending 0/0 built
+   RED AU3-1 a stored project whose layers list holds a null (an undefined entry stringifies to null) still
+   RED AU3-1b importing a project file whose layers list holds a null imports the real layers instead of th
+   RED AU3-2 the boot sweep keeps the media a damaged project document still names (it used to read an unpa
+   RED AU3-2b deleting a project keeps a clip that a damaged sibling document still names
+   RED AU3-3 a stored project (and an imported file) whose layer lacks a transform, carries a non-object fi
+   RED AU3-4 deleting a stored media record whose transaction aborts at commit still finishes (removeMedia 
+FAILAU3-1 a stored project whose layers list holds a null (an undefined entry stringifies to null) still OPENS, without the null — load() threw on a layers list holding one null: Cannot read properties of null (reading 'id') — the project cannot be opened, and neither can the others behind it (the boot .then never runs)
+FAILAU3-1b importing a project file whose layers list holds a null imports the real layers instead of throwing — applyScene threw on a layers list holding one null: Cannot read properties of null (reading 'id')
+FAILAU3-2 the boot sweep keeps the media a damaged project document still names (it used to read an unparseable document as naming nothing and delete its clips) — the sweep deleted a clip that a damaged (unparseable) project document still names — the document is on the device, the project is listed, and its media is gone for good
+FAILAU3-2b deleting a project keeps a clip that a damaged sibling document still names — deleting project X removed a clip that project Y (its document is damaged but still on the device) names
+FAILAU3-3 a stored project (and an imported file) whose layer lacks a transform, carries a non-object fillGradient, or has a caption cue without times still opens — open (no transform): Cannot read properties of undefined (reading 'opacity'); import (no transform): Cannot read properties of undefined (reading 'opacity'); open (transform null): Cannot read properties of null (reading 'opacity'); import (transform null): Cannot read properties of null (reading 'opacity'); open (fillGradient a string): Cannot create property 'angle' on string 'x'; import (fillGradient a string): Cannot create pro
+FAILAU3-4 deleting a stored media record whose transaction aborts at commit still finishes (removeMedia used to wait for ever, so removing a project hung on it) — removeMedia never finished when the delete transaction aborted at commit: every caller that awaits it (removing a project, the boot sweep) hangs behind it

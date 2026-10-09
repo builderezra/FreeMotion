@@ -1,0 +1,6 @@
+1280 Regression 1/3 ✗Pending 0/0 built
+   RED AU6-1 an MP4 export that fails part-way (a layer that will not draw, an encoder that throws) closes 
+   RED AU6-2 a soundtrack encode that throws part-way closes its audio encoder and the AudioData in hand
+   ok  AU6-3 the pure export arithmetic: the mix limiter equals a plain reference across its block edges an
+FAILAU6-1 an MP4 export that fails part-way (a layer that will not draw, an encoder that throws) closes its video encoder and every frame it made — an export that failed while drawing frame 6 left 1 video encoder(s) configured: it is only closed by the Cancel branches, so every failed export holds a hardware encoder until the page goes
+FAILAU6-2 a soundtrack encode that throws part-way closes its audio encoder and the AudioData in hand — a soundtrack encode that threw left 1 audio encoder(s) configured (the export then drops its sound and carries on, holding the encoder)

@@ -1,0 +1,4 @@
+1280 Regression 1/2 ✗Pending 0/0 built
+   ok  AU5-1 lost edits, stale overwrites and duplicate layers: an owner and two real guests, cuts and heal
+   RED AU5-2 a guest that reloads with a base persisted BEFORE a layer arrived does not hand that layer bac
+FAILAU5-2 a guest that reloads with a base persisted BEFORE a layer arrived does not hand that layer back after the owner deleted it, and still sends its own offline layer — the owner deleted Y and the reloaded guest handed it back: the owner has Y again (the guest owed 3 ops)

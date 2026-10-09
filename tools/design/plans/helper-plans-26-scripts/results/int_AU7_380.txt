@@ -1,0 +1,6 @@
+380 Regression 4/5 ✓ · NOT RUN HERE 1 Pending 0/0 built
+   ok  AU7-1 touch: a quick drag that then rests before the lift does not close the sheet (the flick speed 
+   ok  AU7-2 touch: a press that never gets its lift (a taken finger) does not freeze every later swipe
+   ok  AU7-1 mouse: a quick drag that then rests before the lift does not close the sheet (the flick speed 
+   ok  AU7-2 mouse: a press that never gets its lift (a taken finger) does not freeze every later swipe
+   RED AU7-1f a REAL finger: a quick drag that rests before the lift does not close the Add sheet

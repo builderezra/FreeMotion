@@ -1,0 +1,5 @@
+380 Regression 0/2 ✗Pending 0/0 built
+   RED AU1-1 dragging the LEFT grip of a REVERSED clip keeps its effect clock still (Drift, Spin, Orbit do 
+   RED AU1-2 growing the HEAD of a REVERSED clip with a speed ramp never reaches past the end of its source
+FAILAU1-1 dragging the LEFT grip of a REVERSED clip keeps its effect clock still (Drift, Spin, Orbit do not jump), as the forward grip and the A key do — trimming the head of a REVERSED clip moved its effect clock by 0.400 s at a fixed time: every Drift / Spin / Orbit on it jumps (the forward grip, the A key and Extend all carry the clock)
+FAILAU1-2 growing the HEAD of a REVERSED clip with a speed ramp never reaches past the end of its source (grip, and the D/extend twin) — extend (D key) on the ramped 3x -> 0.5x reversed clip: the head frame reads source 29.50 s of a 20 s file AND left grip on the ramped 3x -> 0.5x reversed clip: the head frame reads source 29.50 s of a 20 s file (start 0.00, duration 12.00)

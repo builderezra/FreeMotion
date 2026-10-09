@@ -1,0 +1,4 @@
+380 Regression 3/3 ✓Pending 0/0 built
+   ok  AU6-1 an MP4 export that fails part-way (a layer that will not draw, an encoder that throws) closes 
+   ok  AU6-2 a soundtrack encode that throws part-way closes its audio encoder and the AudioData in hand
+   ok  AU6-3 the pure export arithmetic: the mix limiter equals a plain reference across its block edges an

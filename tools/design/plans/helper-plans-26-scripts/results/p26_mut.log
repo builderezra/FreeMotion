@@ -1,0 +1,13 @@
+=== M1_window_8ms
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP26 #1105 — A: a mouse flick that stalled for two samples before the click released did NOT glide ({"radius":30.5} stayed) — the release velocity is still the last sample, not the last 8ms; this is the "not always"
+=== M2_rest_400
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP26 #1105 — the rest cutoff is 400ms — a parked pointer must not fling, and a real flick must not be read as parked
+=== M3_touch_bar_low
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP26 #1105 — the TOUCH flick bar dropped to 0.2 — a thumb's positioning drag will fling
+ALLDONE

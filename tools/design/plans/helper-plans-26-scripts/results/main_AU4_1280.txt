@@ -1,0 +1,6 @@
+1280 Regression 1/3 ✗Pending 0/0 built
+   RED AU4-1 undo right after Add text / Add captions (the editor still open) can be REDONE; the redo is no
+   RED AU4-2 Add group while the text editor is open is ONE undo step, not two (the first undo used to do n
+   ok  AU4-3 a random sequence of real commands: every undo and every redo lands byte for byte on the snaps
+FAILAU4-1 undo right after Add text / Add captions (the editor still open) can be REDONE; the redo is not thrown away — text: after undoing "Add text" with the editor open, Redo is gone: the editor closing pushed a selection-only step and threw the redo tail away
+FAILAU4-2 Add group while the text editor is open is ONE undo step, not two (the first undo used to do nothing visible) — Add group with the text editor open made 2 history steps (the first one is a selection-only copy of the half-done add)
