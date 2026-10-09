@@ -1,0 +1,3 @@
+1280 Regression 0/1 ✗Pending 0/0 built
+   RED PF1 importing a project with a heavy effect stack draws its card at the card’s size, no full-size re
+FAILPF1 importing a project with a heavy effect stack draws its card at the card’s size, no full-size render, and the import stays within its time ceiling — opening the project rendered it at full size 1 time(s) (canvas widths 1080): the card only needs 360 px, and a full-size render of this stack is about 3 s each
