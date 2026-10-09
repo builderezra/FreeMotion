@@ -18,7 +18,7 @@ window.FM = window.FM || {};
 
   /* The version of the `sm` rules this build writes. Changes ONLY with a collab SCHEMA_REV bump — collab-core.js hashes it
      into the schema fingerprint, so a build that moved one without the other cannot join a room (§2.3). */
-  FM.SM_V = 1;
+  FM.SM_V = 2;
   const S = FM.spine = FM.spine || {};
   S.SM_V = FM.SM_V;
   const words = () => FM.spineWords || {};

@@ -60945,6 +60945,21 @@
     }
   });
 
+  test('simple P2.7 · T9 a project that holds a transition is stamped as 2.7 (sm.v 2), so a 2.6 build opens it read-only; the sanitiser keeps a good trIn and drops a bad one; copy and paste never carry one', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      if (FM.SM_V !== 2) throw new Error('FM.SM_V is ' + FM.SM_V);
+      await FM.spine.cmd.transition(v.L('B').id, 'crossfade', 0.5);
+      if (FM.scene.project.sm.v !== 2) throw new Error('the stamp is ' + FM.scene.project.sm.v);
+      const saved = JSON.parse(JSON.stringify(FM.scene.project.sm)); saved.v = 3;
+      const keep = FM.scene.project.sm; FM.scene.project.sm = saved;
+      try { if (!FM.spine.newerSchema()) throw new Error('a file stamped by a newer build is not refused'); } finally { FM.scene.project.sm = keep; }
+      const L = v.L('B'), copy = FM.cloneLayer ? FM.cloneLayer(L) : JSON.parse(JSON.stringify(L));
+      FM.spine.onCopy(copy, FM.spine.STRIP_ROUTES[0]);
+      if (copy.trIn) throw new Error('a copy carries trIn on route ' + FM.spine.STRIP_ROUTES[0]);
+    });
+  });
+
   test('simple P2.6 · S10a the time readout follows the playhead after a command moves it (DESIGN §8.3: the pill is Full’s #time-readout, unchanged)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await smP2(smClips3, async function (v) {

@@ -2334,7 +2334,7 @@ window.FM = window.FM || {};
     d = none ? 0 : Math.round(Math.max(FM.TR_MIN, Math.min(FM.TR_MAX, d == null ? (cur ? cur.d : FM.TR_DEFAULT) : +d)) * 10) / 10;
     if (none ? !cur : (cur && cur.type === type && Math.abs(cur.d - d) < 1e-9)) return refusePlan('nothingChanged');
     const plan = newPlan(none ? 'No transition' : 'Transition'); plan.arranges = false; plan.adopts = true; plan.touched.add(id); plan.keepSel = true; plan.keepsTransitions = true;
-    plan.writes.push(() => { if (none) delete L.trIn; else L.trIn = { type: type, d: d }; });
+    plan.writes.push(() => { if (none) delete L.trIn; else { L.trIn = { type: type, d: d }; const P = FM.scene.project; if (P.sm && !(P.sm.v >= FM.SM_V)) P.sm.v = FM.SM_V; } });   // a file that holds a transition is stamped as this release's, so an older build opens it read-only instead of dropping the transitions
     plan.live = none ? line('trNone') : line('trSet', type, d);
     return plan;
   };
