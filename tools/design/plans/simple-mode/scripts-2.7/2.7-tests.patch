@@ -1,8 +1,8 @@
 diff --git a/tests/tests.js b/tests/tests.js
-index 32f81bf9..38b5017b 100644
+index 32f81bf9..8e438a11 100644
 --- a/tests/tests.js
 +++ b/tests/tests.js
-@@ -60825,6 +60825,193 @@
+@@ -60825,6 +60825,207 @@
  
    /* ═══ S10 · the bugs the R7 walk found on the 2.6 tip (tools/design/research/simple-walk-2.md). ═══ */
    const sm10Tc = t => { const f = FM.scene.project.fps || 30, tot = Math.round(t * f), s = Math.floor(tot / f), p = n => (n < 10 ? '0' : '') + n; return p(Math.floor(s / 60)) + ':' + p(s % 60) + ':' + p(tot % f); };
@@ -193,10 +193,24 @@ index 32f81bf9..38b5017b 100644
 +    });
 +  });
 +
++  test('simple P2.7 · T8b a REAL press on the ◇ (hit-tested through the page, not a synthetic click) lands on the ◇ and opens that clip’s Transition row, with nothing else above it', { item: '980', budgetMs: 120000 }, async function () {
++    smNeedP2();
++    await smDragEnv((W, H) => smClips3(W, H), async function (v) {
++      const c = document.querySelector('.sm-chip-tr[data-tr="' + v.L('B').id + '"]');
++      if (!c) throw new Error('CONTROL: no ◇ at the cut of B');
++      const p = smCtr(c), hit = document.elementFromPoint(p.x, p.y);
++      if (!hit || !hit.closest('.sm-chip-tr')) throw new Error('at the ◇’s centre (' + Math.round(p.x) + ',' + Math.round(p.y) + ') the page hit ' + (hit && (hit.id ? '#' + hit.id : hit.className || hit.tagName)) + ', not the ◇: a finger or a mouse never reaches it');
++      await realInput924(smMS([['mouseMove', p.x, p.y], ['mouseDown', p.x, p.y, 60], ['mouseUp', p.x, p.y, 40]]), 'a click on the ◇');
++      await v.idle(); await v.sleep(250);
++      if (FM.scene.selectedId !== v.L('B').id) throw new Error('the press did not select the incoming clip (selected: ' + FM.scene.selectedId + ')');
++      if (!smTool('tr-crossfade')) throw new Error('the press did not open the Transition row (tray holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
++    });
++  });
++
    test('simple P2.6 · S10a the time readout follows the playhead after a command moves it (DESIGN §8.3: the pill is Full’s #time-readout, unchanged)', { item: '980', budgetMs: 60000 }, async function () {
      smNeedP2();
      await smP2(smClips3, async function (v) {
-@@ -60877,6 +61064,114 @@
+@@ -60877,6 +61078,114 @@
      });
    });
  
@@ -311,7 +325,7 @@ index 32f81bf9..38b5017b 100644
    async function run() {
      var results = [];
      /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
-@@ -122852,7 +123147,7 @@
+@@ -122852,7 +123161,7 @@
        ov.click(); await v.idle();
        if (C.start !== B.start + B.duration) throw new Error('the overlap chip did not land C on B’s end: ' + C.start + ' vs ' + (B.start + B.duration));
        FM.refreshAll(); await v.sleep(30);

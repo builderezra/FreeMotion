@@ -1,5 +1,5 @@
 diff --git a/index.html b/index.html
-index 86339d85..eeb3d9a0 100644
+index 86339d85..59601a1e 100644
 --- a/index.html
 +++ b/index.html
 @@ -39,7 +39,7 @@
@@ -7,7 +7,7 @@ index 86339d85..eeb3d9a0 100644
       in styles.css takes over immediately after and lets classic/glass each set their own. -->
  <style>html,body{background:#060c0f}</style>
 -<link rel="stylesheet" href="styles.css?v=760">
-+<link rel="stylesheet" href="styles.css?v=764">
++<link rel="stylesheet" href="styles.css?v=766">
  <link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
  <link rel="manifest" href="manifest.json?v=2">
  <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -624,14 +624,17 @@ index 00000000..04c3340b
 +  };
 +})(window.FM);
 diff --git a/styles.css b/styles.css
-index d68c1c99..17946697 100644
+index d68c1c99..b7f725bd 100644
 --- a/styles.css
 +++ b/styles.css
-@@ -11746,6 +11746,9 @@ body.ed-simple #sm-timeline { display: flex; }
+@@ -11746,6 +11746,12 @@ body.ed-simple #sm-timeline { display: flex; }
  }
  .sm-chip-gap { background: #2a1f14; color: #ffb454; border: 1.5px solid #ffb454; }
  .sm-chip-overlap { background: #2a1418; color: #ff6b6b; border: 1.5px solid #ff6b6b; }
 +#sm-trlane { position: absolute; left: 0; top: 0; width: 0; height: 0; }
++/* the ◇s sit UNDER the sections in paint order, so an item at a cut still wins the press; the sections' own empty boxes would otherwise cover them (a real press hit #sm-sections) — only the items in them take events */
++#sm-sections, #sm-sections .sm-secstack, #sm-sections .sm-sec, #sm-sections .sm-lane { pointer-events: none; }
++#sm-sections .sm-item, #sm-sections .sm-grip { pointer-events: auto; }
 +.sm-chip-tr { z-index: auto; background: transparent; color: #7f8aa0; border: 1.5px dashed #5a667c; font-size: 14px; }
 +.sm-chip-tr-on { background: #14202a; color: #7cc4ff; border: 1.5px solid #7cc4ff; }
  .sm-add { position: absolute; top: 10px; width: 36px; height: 36px; border-radius: 10px; border: 1.5px dashed #8b97ab; background: transparent; color: #cfd6e2; font: 400 22px/1 system-ui, sans-serif; cursor: pointer; }
