@@ -1058,6 +1058,21 @@ window.FM = window.FM || {};
     return lo;
   };
 
+  /* AU1-2: HOW FAR CAN A REVERSED CLIP'S HEAD GROW BEFORE ITS WINDOW RUNS OFF THE END OF THE SOURCE? The head of a reversed clip is the
+   * window END (trimStart + the source the clip plays), so pulling the head earlier walks the end UP through the file. Both editors
+   * capped it with `(srcDur - trimStart) / sp`, and for a speed ramp `sp` was 1, so the cap ignored the curve: a 2x -> 0.5x clip in a
+   * 12 s file could be grown until its first frame read 18.5 s. Solved on the real curve, like FM.speedAdvanceSolve does for the tail.
+   * `delta` is negative (the head moves left); returns the delta that lands, closer to 0 when the source runs out. */
+  FM.revHeadGrowLimit = function (layer, delta, srcDur, trim) {
+    if (!(delta < 0) || !isFinite(srcDur)) return delta;
+    const avail = srcDur - ((trim || 0) + FM.layerSourceAdvance(layer, layer.duration));
+    if (!(avail > 0)) return 0;
+    if (FM.speedAdvanceOver(layer, delta, 0) <= avail + 1e-9) return delta;
+    let lo = delta, hi = 0;
+    for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (FM.speedAdvanceOver(layer, mid, 0) > avail) lo = mid; else hi = mid; }
+    return hi;
+  };
+
   /* The source consumed by moving a clip's HEAD by `delta` seconds — positive trims inward, negative
    * pulls it earlier and reveals source before the current window. Signed, so callers just add it. */
   FM.headSourceDelta = function (layer, delta) {
