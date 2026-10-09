@@ -1,0 +1,21 @@
+=== A1_parent_frame_ignored
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU11-1 — ArrowRight on a member of a group turned 90 degrees and scaled 1 moved it on screen by (0.00, 1.00), expected (1, 0)
+=== A2_pivot_not_pinned
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU11-1 — ArrowRight on a member of a group turned 90 degrees and scaled 1 moved it on screen by (0.50, -0.50), expected (1, 0)
+=== A3_rotation_sign
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU11-1 — ArrowRight on a member of a group turned 90 degrees and scaled 1 moved it on screen by (-1.00, 0.00), expected (1, 0)
+=== A4_scale_ignored
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU11-1 — ArrowRight on a member of a group turned 90 degrees and scaled 2 moved it on screen by (2.00, 0.00), expected (1, 0)
+=== A5_plain_goes_new_way
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU11-1 — CONTROL: Right on a member of an UNTOUCHED group at x 100.4 wrote 101.4, the old whole-pixel rule gives 101
+ALLDONE
