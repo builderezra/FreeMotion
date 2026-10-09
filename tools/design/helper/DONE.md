@@ -113,3 +113,4 @@ H59 | 2026-10-09 | hunt/fu-plantcheck | tools/_fu_plantcheck.py self-tested anch
 S13 | 2026-10-09 | hunt/simple-stack-landing-2 | six-lens review, findings in tools/design/hunts/simple-review.md, red-first fixes
 S14 | 2026-10-09 | hunt/simple-gaps + plans/simple-gaps | captions, find speech, look all, text animate built per DESIGN; rest documented; merged with 2.7 on hunt/simple-tip (5 files conflicted, suite slice green 1280 and 380)
 T12 | 2026-10-09 | tutorials-drafts | tutorials 13 crossfade and 14 dip to black walked at 380 on hunt/simple-tip; 14 states honestly that Simple has no fade-out at the end of the video
+H59 | 2026-10-09 | hunt/fu-plantcheck | SUPERSEDED per PM (builder's lock round 3 checks plant anchors before measuring); my branch is pushed as is, do not land it
