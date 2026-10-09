@@ -1966,9 +1966,19 @@ window.FM = window.FM || {};
       if (l === layer || l.splitOf !== layer.splitOf) continue;
       const touches = Math.abs((l.start || 0) - edgeT) < 1e-3                          // a sibling starts here
                    || Math.abs((l.start || 0) + (l.duration || 0) - edgeT) < 1e-3;     // …or ends here
-      if (touches && soundingAt(l, edgeT, ls)) return true;
+      if (touches && soundingAt(l, edgeT, ls) && simpleCutContinuous(layer, l)) return true;
     }
     return false;
+  }
+  /* SIMPLE MODE P2 (DESIGN.md §12.1, §0.4 B6). Simple's trims, deletes and reorders can butt two halves of one split together
+     where the footage JUMPS, which the seam rule above would leave un-ramped — a pop (#148). Simple's runner marks the later
+     half of such a pair `sm.cut`; only for a marked pair is continuity required (same media and rev, same direction, the
+     first half's source out-point equal to the second's in-point within one sample). Unmarked pairs — every pair Full ever
+     makes — keep today's rule exactly, so a Full-made project sounds as it does today. */
+  function simpleCutContinuous(a, b) {
+    const first = (a.start || 0) <= (b.start || 0) ? a : b, later = first === a ? b : a;
+    if (!(later.sm && later.sm.cut === true)) return true;
+    return !!(FM.spine && FM.spine.continuous && FM.spine.continuous(first, later));
   }
   function declickGain(layer, t, m, now) {
     let k = 1;
@@ -4383,7 +4393,7 @@ window.FM = window.FM || {};
     by.forEach(cs => { if (cs.length > 1) cs.forEach(c => { c.splitOf = cs[0].id; }); });
   };
 
-  FM.duplicateLayer = FM.jobWrapped('duplicateLayer', async function (id, inPlace) {   // queue 921 S0: a job — media reloads between the copy landing and it being whole
+  FM.duplicateLayer = FM.jobWrapped('duplicateLayer', async function (id, inPlace, opts) {   // opts.noSave (Simple mode P2): the runner's one commit saves   // queue 921 S0: a job — media reloads between the copy landing and it being whole
     /* queue 914.14: cleared FIRST, so a refused or failed duplicate cannot hand duplicateSelection the map left
        over from the last one — it used to be merged into the batch and re-pointed an OLD copy's links. */
     FM._lastDupMap = null;
@@ -4435,7 +4445,7 @@ window.FM = window.FM || {};
     FM.refreshAll();
     FM.seekVideosToTime();
     if (FM.history) FM.history.commit();
-    if (FM.storage && FM.storage.save) FM.storage.save();   // persist the duplicated layer's media blob immediately
+    if (FM.storage && FM.storage.save && !(opts && opts.noSave)) FM.storage.save();   // persist the duplicated layer's media blob immediately
     return copy.id;   // queue 914.14: what was MADE — undefined when refused, so a caller cannot count a refusal as a copy
   });
 
@@ -9220,7 +9230,11 @@ window.FM = window.FM || {};
         // This listener is on document in the CAPTURE phase, so the overlay's own stopPropagation()
         // cannot reach it; being named here is the only thing that spares a surface.
         ' #ed-overlay, #ed-bar, #crop-overlay, #crop-bar, #touchup-overlay, #touchup-bar, #fd-overlay,' +
-        ' #pe-overlay, #pe-bar';   // the shape point editor — the fifth tool to be missing from this list
+        ' #pe-overlay, #pe-bar,' +   // the shape point editor — the fifth tool to be missing from this list
+        // Simple's timeline and the line it speaks in (980 Phase 2 review): a tap on the line's text "does nothing" (DESIGN
+        // §3.12 rule 2), and pressing the selected clip must not deselect it before its own click. Simple clears the selection
+        // itself on a tap of its empty timeline (#sm-inner's click). display:none outside Simple, so Full never matches it.
+        ' #sm-timeline';
       let dx = 0, dy = 0, keepAtDown = false, armed = false;
       document.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) { armed = false; return; }
