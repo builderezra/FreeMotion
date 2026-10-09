@@ -30685,7 +30685,10 @@
       /* S8 review: `runPendingReload` is the deferred update's other half (C.detach held it back while Leave's copy
          ran), and `leaving` answers whether a Leave is still copying — both read state; neither does anything
          with no session. */
-      'runPendingReload', 'leaving'];
+      'runPendingReload', 'leaving',
+      /* Simple mode P2 (queue 980): the live gate's one predicate and the linked-copy test it uses — answers, not state;
+         with no session they read the project list only and change nothing. Full never calls them. */
+      'isLinkedCopy', 'othersCanEdit'];
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
     if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S7 is the engine, its hooks, the connection codes and the relay, the UI, media, presence, roles and comments, and anything beyond that list belongs to a later stage');
     if (C.readOnly && (C.readOnly() !== false || C.myRole() !== 'owner' || C.canExport() !== true)) throw new Error('with no session this device reads as read-only, or not the owner — a solo user would be locked out of his own project');
@@ -50341,7 +50344,7 @@
          simply never fires, which is exactly how it would reach him. */
       const hooks = [
         ['../js/history.js', /if \(cb\) FM\.collab\.beforeSnap\(\)/, 'history.commit → beforeSnap'],
-        ['../js/history.js', /if \(cb\) FM\.collab\.afterCommit\(\)/, 'history.commit → afterCommit'],
+        ['../js/history.js', /if \(cb\) FM\.collab\.afterCommit\((meta)?\)/, 'history.commit → afterCommit'],   // Simple mode P2: with the step's meta
         /* queue 690 (sixth hunt): the delegation now comes AFTER the open text card's flush — which is what makes ↶ with
            the card open take back the typing in a session too — and still returns before the snapshot stack is touched. */
         ['../js/history.js', /undo\(\) \{[^\n]*?if \(FM\.collab && FM\.collab\.undoActive && FM\.collab\.undoActive\(\)\) \{ const ok = FM\.collab\.undo\(\);[^\n]*?return ok; \}/, 'history.undo delegates'],
@@ -121190,7 +121193,7 @@
         const r = ids.map(id => document.getElementById(id).getBoundingClientRect());
         for (let i = 1; i < r.length; i++) if (r[i - 1].right - r[i].left > fullOver + 0.5) throw new Error(ids[i] + ' overlaps ' + ids[i - 1] + ' by ' + (r[i - 1].right - r[i].left).toFixed(2) + ' px, more than Full’s own row does (' + fullOver.toFixed(2) + ' px)');
         const sp = document.getElementById('btn-sm-split');
-        if (sp.getAttribute('aria-disabled') !== 'true' || !(parseFloat(getComputedStyle(sp).opacity) < 0.6)) throw new Error('✂ is not dimmed and aria-disabled in Phase 1');
+        if (sp.getAttribute('aria-disabled') === 'true' || !(parseFloat(getComputedStyle(sp).opacity) > 0.9)) throw new Error('✂ is still dimmed or aria-disabled — it splits from Phase 2.1');
         const clip = document.querySelector('#sm-main .sm-item[data-id="' + v.c2.id + '"]');
         if (!clip) throw new Error('clip 2 is not drawn in the Simple clip row');
         const cr = clip.getBoundingClientRect(), hit = document.elementFromPoint(Math.min(cr.left + 20, window.innerWidth - 10), cr.top + cr.height / 2);
@@ -121223,46 +121226,8 @@
     }, 380);
   });
 
-  test('simple P1 · the Phase 1 lines: Delete on a main clip, ✂, S and a seam chip each say their line with Open in Full and change nothing', { item: '980' }, async function () {
-    smNeedEditor();
-    await smView(async function (v) {
-      FM.editor.set('simple'); await v.sleep(40);
-      const say = document.getElementById('sm-say');
-      const n0 = FM.scene.layers.length;
-      FM.selectLayer(v.c1.id);
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Backspace', key: 'Backspace', bubbles: true }));
-      await v.sleep(10);
-      if (FM.scene.layers.length !== n0) throw new Error('Delete on a main clip deleted it in Phase 1 (' + n0 + ' → ' + FM.scene.layers.length + ')');
-      if (!/Deleting clips comes next/.test(say.textContent)) throw new Error('Delete on a main clip said nothing in #sm-say: "' + say.textContent + '"');
-      const b = say.querySelector('button');
-      if (!b || b.textContent !== 'Open in Full') throw new Error('the line has no Open in Full button');
-      const br = b.getBoundingClientRect();
-      if (br.width < 44 || br.height < 32) throw new Error('Open in Full is ' + Math.round(br.width) + '×' + Math.round(br.height) + ', under 44×32');
-      /* CONTROL: Delete on something that is NOT a main clip is today's delete */
-      FM.selectLayer(v.title.id);
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Backspace', key: 'Backspace', bubbles: true }));
-      await v.sleep(10);
-      if (FM.scene.layers.some(l => l.id === v.title.id)) throw new Error('CONTROL: Delete on a title did not delete it — the key is being swallowed for everything');
-      FM.selectLayer(v.c1.id); FM.time = 1;
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS', key: 's', bubbles: true }));
-      await v.sleep(10);
-      if (FM.scene.layers.filter(l => l.type === 'video').length !== 4) throw new Error('S split a clip in Phase 1');
-      if (!/Splitting comes in the next update/.test(say.textContent)) throw new Error('S said nothing: "' + say.textContent + '"');
-      say.textContent = '';
-      document.getElementById('btn-sm-split').click();
-      if (!/Splitting comes in the next update/.test(say.textContent)) throw new Error('✂ said nothing: "' + say.textContent + '"');
-      const chip = document.querySelector('#sm-main .sm-chip-gap');
-      if (!chip) throw new Error('the 1 s gap between clips 2 and 3 has no seam chip');
-      const cr = chip.getBoundingClientRect();
-      if (cr.width < 32 || cr.height < 32) throw new Error('the seam chip is ' + Math.round(cr.width) + '×' + Math.round(cr.height) + ', under 32×32');
-      if (!/second gap/.test(chip.getAttribute('aria-label') || '')) throw new Error('the seam chip has no accessible name: ' + chip.getAttribute('aria-label'));
-      chip.click();
-      if (!/Closing gaps comes in the next update/.test(say.textContent)) throw new Error('the seam chip said nothing: "' + say.textContent + '"');
-      say.querySelector('button').click(); await v.sleep(20);
-      if (document.body.classList.contains('ed-simple')) throw new Error('Open in Full did not switch to Full');
-      if (v.commits() !== 1) throw new Error('only the title delete should have committed, got ' + v.commits() + ' commits');
-    });
-  });
+  /* Phase 2.1 RETIRED "the Phase 1 lines" test: Delete, ✂, S and the seam chip now do their command; the P2.1 tests
+     (delete, split, gap chip) assert what each does, and that Full's own keys are unchanged. */
 
 
   /* T21 (DESIGN §8.8): the Full doors that edit the layer stack Simple does not show. One helper, two tests (one per width), so a
@@ -122031,4 +121996,838 @@
     }
   });
 
+
+  /* ═══ SIMPLE MODE, PHASE 2 RELEASE 2.1 — EDITING CLIP AFTER CLIP: the runner, delete, both trims, split, close gap,
+     duplicate, the live gate and the undo door (queue 980 (partial); BUILD-PLAN-PHASE2.md §3) ═══════════════════════════
+     Every test drives the REAL key, chip or button path in a THROWAWAY project (his own project is never written), with
+     the real undo history. Each fails on the tree before 2.1 by what it does, not by a missing name, where a UI path
+     exists: Phase 1 answers those keys with a "comes next" line and changes nothing. */
+
+  async function smP2(build, fn, opts) {
+    opts = opts || {};
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const orig = FM.projects.currentId(), wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()), made = [];
+    const W = opts.W || 320, H = opts.H || 240;
+    const ls0 = {}; ['fm.editor.last', 'fm.editor.hint'].forEach(k => { try { ls0[k] = localStorage.getItem(k); } catch (e) {} });
+    const saved = [];
+    try {
+      if (wasHome) FM.home.close();
+      made.push(await FM.projects.create({ name: 'FX980 P2', width: W, height: H }));
+      const proj = Object.assign({ name: 'FX980 P2', width: W, height: H, fps: opts.fps || 30, duration: 0, background: '#000000' }, opts.project || {});
+      await FM.storage.applyScene({ project: proj, layers: build(W, H), selectedId: null, selectedIds: [] });
+      FM.history.reset(); FM.selectLayer(null); FM.time = opts.time || 0;
+      const L = n => FM.scene.layers.find(l => l.name === n) || null;
+      (opts.media || []).forEach(m => { const l = L(m.name); if (l) { FM.media.set(l.id, m.rec); saved.push(l.id); } });
+      if (!opts.full && FM.editor) FM.editor.set('simple');
+      FM.refreshAll(); await sleep(40);
+      const idle = async () => { for (let i = 0; i < 400 && FM.spine && FM.spine.running; i++) await sleep(10); await sleep(30); };
+      const doc = () => JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers }, FM.jsonReplacer);
+      return await fn({ L: L, sleep: sleep, idle: idle, doc: doc, W: W, H: H,
+        steps: () => FM.history._steps().len,
+        say: () => smSayText(),
+        key: (code, k, mod) => window.dispatchEvent(new KeyboardEvent('keydown', { code: code, key: k || code, metaKey: !!mod, ctrlKey: false, bubbles: true }))
+      });
+    } finally {
+      saved.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { if (FM.editor) FM.editor.apply('full', { force: true, quiet: true }); } catch (e) {}
+      Object.keys(ls0).forEach(k => { try { if (ls0[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, ls0[k]); } catch (e) {} });
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+  }
+  /* What Simple is SAYING: from 2.2 the row also holds the tray, so the line is read from its own .sm-line when there is one */
+  function smSayText() { const s = document.getElementById('sm-say'), ln = s && s.querySelector('.sm-line'); return ((ln || s || {}).textContent) || ''; }
+  /* A full-frame clip with its native size stored (Phase 1 writes srcW at add), muted unless asked, named for lookup. */
+  function smV(name, start, dur, W, H, o) {
+    const l = FM.makeLayer('video', { name: name, x: W / 2, y: H / 2, start: start, duration: dur });
+    l.srcW = W; l.srcH = H; l.srcRev = 0; l.muted = true;
+    return Object.assign(l, o || {});
+  }
+  function smT(name, start, dur, W, H, o) { const l = FM.makeLayer('text', { name: name, text: name, x: W / 2, y: H * 0.2, start: start, duration: dur }); return Object.assign(l, o || {}); }
+  function smSong(name, start, dur, W, H, o) { const l = FM.makeLayer('video', { name: name, x: W / 2, y: H / 2, start: start, duration: dur }); l.audioOnly = true; return Object.assign(l, o || {}); }
+  const smKf = (pairs) => ({ kf: pairs.map(p => ({ t: p[0], v: p[1], e: 'linear' })) });
+  function smNeedP2() { if (!FM.spine || !FM.spine.edit || !FM.spine.cmd) throw new Error('FM.spine.edit is missing — js/spine-edit.js did not load'); }
+
+  test('simple P2.1 · Delete on a main clip closes the gap and takes what is on it (D5): one undo step, the join bit-exact, Full’s delete unchanged', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [
+      smT('On B', 4.5, 1, W, H), smT('On C', 8, 1, W, H, { transform: Object.assign(FM.makeLayer('text', {}).transform, { opacity: smKf([[8, 0], [8.5, 1]]) }) }),
+      smV('C', 7.2, 4.0104667, W, H), smV('B', 3.7, 3.5, W, H), smV('A', 0, 3.7, W, H)
+    ], async function (v) {
+      const A = v.L('A'), B = v.L('B'), C = v.L('C');
+      const doc0 = v.doc(), n0 = v.steps();
+      FM.selectLayer(B.id);
+      v.key('Backspace'); await v.idle();
+      if (v.L('B')) throw new Error('Backspace on main clip B in Simple left it in place (it said: “' + v.say() + '”)');
+      if (v.L('On B')) throw new Error('the title on B was not deleted with it (D5)');
+      if (C.start !== A.start + A.duration) throw new Error('C did not land exactly on A’s end: ' + C.start + ' vs ' + (A.start + A.duration) + ' (a 1-ulp gap exports a black frame, §3.1)');
+      const oc = v.L('On C');
+      if (Math.abs(oc.start - 4.5) > 1e-9) throw new Error('the title on C did not move with C: ' + oc.start + ' (want 4.5)');
+      const ks = oc.transform.opacity.kf.map(k => +k.t.toFixed(9)).join(',');
+      if (ks !== '4.5,5') throw new Error('the title’s keys did not move with it: ' + ks + ' (want 4.5,5)');
+      if (v.steps() !== n0 + 1) throw new Error('the delete took ' + (v.steps() - n0) + ' undo steps, not 1');
+      const m = FM.history._metaHere();
+      if (!m || m.ed !== 's' || m.arr !== true) throw new Error('the step is not tagged as a Simple arranging step: ' + JSON.stringify(m));
+      if (!(FM.scene.project.sm && FM.scene.project.sm.adopted === true)) throw new Error('the first arranging edit did not adopt the project (§5.3)');
+      if (!(A.sm && A.sm.main && C.sm && C.sm.main)) throw new Error('adoption did not flag the main clips');
+      if (!/Deleted clip and 1 thing on it/.test(v.say())) throw new Error('the line is wrong: “' + v.say() + '”');
+      FM.history.undo(); await v.sleep(30);
+      if (v.doc() !== doc0) throw new Error('one undo did not put the document back byte for byte (§3.9 invariant 5)');
+      /* CONTROL — FULL IS UNCHANGED: Full's own delete of the same clip leaves C where it was */
+      FM.editor.apply('full', { force: true, quiet: true });
+      FM.deleteLayer(v.L('B').id);
+      if (v.L('C').start !== 7.2) throw new Error('CONTROL: Full’s delete moved C to ' + v.L('C').start + ' — Full must never ripple');
+    });
+  });
+
+  test('simple P2.1 · D trims the tail and a title cut off slides back onto its clip (D6); A trims the head and the clip keeps its slot', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [
+      smT('T', 3, 1, W, H, { transform: Object.assign(FM.makeLayer('text', {}).transform, { scale: smKf([[3, 0.5], [3.2, 1]]) }) }),
+      smV('B', 5, 5, W, H), smV('A', 0, 5, W, H)
+    ], async function (v) {
+      const A = v.L('A'), B = v.L('B'), T = v.L('T');
+      const n0 = v.steps();
+      FM.selectLayer(A.id); FM.time = 2.5;
+      v.key('KeyD', 'd'); await v.idle();
+      if (Math.abs(A.duration - 2.5) > 1e-9) throw new Error('D did not trim A to the playhead: ' + A.duration + ' (it said “' + v.say() + '”)');
+      if (B.start !== A.start + A.duration) throw new Error('B did not close up onto A: ' + B.start);
+      if (Math.abs(T.start - 1.5) > 1e-9) throw new Error('the title whose first frame was cut away did not slide back onto A (D6): ' + T.start + ' (want 1.5)');
+      const ks = T.transform.scale.kf.map(k => +k.t.toFixed(9)).join(',');
+      if (ks !== '1.5,1.7') throw new Error('the slid title’s pop-in keys did not come with it: ' + ks);
+      if (Math.abs(FM.time - 2.5) > 1e-9) throw new Error('D moved the playhead: ' + FM.time);
+      /* A, 1 s into B: B keeps its start, loses a second of footage from the head, the effect clock carries on */
+      FM.selectLayer(B.id); FM.time = 3.5;
+      v.key('KeyA', 'a'); await v.idle();
+      if (B.start !== 2.5 || Math.abs(B.duration - 4) > 1e-9) throw new Error('A did not trim B’s head keeping its slot: ' + B.start + ' / ' + B.duration);
+      if (Math.abs((B.trimStart || 0) - 1) > 1e-9 || Math.abs((parseFloat(B.fxTimeOffset) || 0) - 1) > 1e-9) throw new Error('the head trim did not advance trimStart and the effect clock by 1: ' + B.trimStart + ' / ' + B.fxTimeOffset);
+      if (Math.abs(FM.time - 2.5) > 1e-9) throw new Error('A should land the playhead on B’s first kept frame, its start (§3.6.2): ' + FM.time);
+      if (v.steps() !== n0 + 2) throw new Error('two trims should be two undo steps, got ' + (v.steps() - n0));
+      /* CONTROL — FULL IS UNCHANGED: Full's D on the same clip (undone first) does not ripple */
+      FM.history.undo(); FM.history.undo(); await v.sleep(30);
+      FM.editor.apply('full', { force: true, quiet: true });
+      FM.selectLayer(v.L('A').id); FM.time = 2.5; FM.timeline.clipKey('d');
+      if (v.L('B').start !== 5 || v.L('T').start !== 3) throw new Error('CONTROL: Full’s D rippled or moved the title (B at ' + v.L('B').start + ', T at ' + v.L('T').start + ')');
+    });
+  });
+
+  test('simple P2.1 · S and ✂ split at the playhead with the clip’s sound twin; too near an edge says so and writes nothing', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [smSong('K', 0, 4, W, H), smV('A', 0, 4, W, H), smV('Z', 4, 2, W, H)], async function (v) {
+      const A = v.L('A'), K = v.L('K');
+      K.karaokeOf = A.id;   // a karaoke twin: the app's own link (js/audio-tools.js)
+      const n0 = v.steps(), count0 = FM.scene.layers.length;
+      FM.selectLayer(A.id); FM.time = 2;
+      v.key('KeyS', 's'); await v.idle();
+      if (FM.scene.layers.length !== count0 + 2) throw new Error('S did not split the clip and its twin: ' + (FM.scene.layers.length - count0) + ' new layer(s) (it said “' + v.say() + '”)');
+      const B = FM.scene.layers.find(l => l !== A && l.splitOf && l.splitOf === A.splitOf);
+      const KB = FM.scene.layers.find(l => l !== K && l.audioOnly && l.splitOf && l.splitOf === K.splitOf);
+      if (!B || Math.abs(B.start - 2) > 1e-9 || Math.abs(A.duration - 2) > 1e-9) throw new Error('the halves are wrong: A ' + A.duration + ', B at ' + (B && B.start));
+      if (!KB || KB.karaokeOf !== B.id) throw new Error('the twin’s second half does not point at the clip’s second half (karaokeOf ' + (KB && KB.karaokeOf) + ')');
+      if (v.steps() !== n0 + 1) throw new Error('a split with its twin should be one step, got ' + (v.steps() - n0));
+      if (FM.scene.project.sm && FM.scene.project.sm.adopted) throw new Error('a split is not arranging and must not adopt (§3.6)');
+      /* ✂ 0.05 s into a clip: refused, nothing written */
+      const d1 = v.doc(), n1 = v.steps();
+      FM.selectLayer(v.L('Z').id); FM.time = 4.05;
+      document.getElementById('btn-sm-split').click(); await v.idle();
+      if (!/Too close to the edge of the clip/.test(v.say())) throw new Error('✂ near an edge said “' + v.say() + '”');
+      if (v.doc() !== d1 || v.steps() !== n1) throw new Error('a refused split changed the document or took a step');
+      /* CONTROL: ✂ on Z at 5 does split it */
+      FM.time = 5; document.getElementById('btn-sm-split').click(); await v.idle();
+      if (v.steps() !== n1 + 1) throw new Error('CONTROL: ✂ in the middle of Z did not split it');
+    });
+  });
+
+  test('simple P2.1 · tapping a gap chip closes it exactly and an overlap chip fixes it; what follows moves along', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [smT('On B', 6, 1, W, H), smV('C', 8.6, 3.4, W, H), smV('B', 5.2, 3.8, W, H), smV('A', 0, 4, W, H)], async function (v) {
+      const A = v.L('A'), B = v.L('B'), C = v.L('C'), T = v.L('On B');
+      FM.time = 0; FM.refreshAll(); await v.sleep(30);
+      const gap = document.querySelector('#sm-main .sm-chip-gap');
+      if (!gap) throw new Error('no gap chip for the 1.2 s gap');
+      gap.click(); await v.idle();
+      if (B.start !== A.start + A.duration) throw new Error('the gap chip did not close the gap exactly: B at ' + B.start + ' (it said “' + v.say() + '”)');
+      if (Math.abs(T.start - 4.8) > 1e-9 || Math.abs(C.start - 7.4) > 1e-9) throw new Error('what follows did not move by the gap: title ' + T.start + ', C ' + C.start);
+      FM.refreshAll(); await v.sleep(30);
+      const ov = document.querySelector('#sm-main .sm-chip-overlap');
+      if (!ov) throw new Error('no overlap chip for B/C’s 0.4 s overlap');
+      ov.click(); await v.idle();
+      if (C.start !== B.start + B.duration) throw new Error('the overlap chip did not land C on B’s end: ' + C.start + ' vs ' + (B.start + B.duration));
+      FM.refreshAll(); await v.sleep(30);
+      if (document.querySelector('#sm-main .sm-chip')) throw new Error('a chip is still drawn after both were fixed');
+    });
+  });
+
+  test('simple P2.1 · ⌘D duplicates a main clip right after itself with its keys; what follows moves along; one undo removes it', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [smV('B', 3, 3, W, H), (() => { const a = smV('A', 0, 3, W, H); a.transform.x = smKf([[1, 160], [2, 170]]); return a; })()], async function (v) {
+      const A = v.L('A'), B = v.L('B'), doc0 = v.doc(), n0 = v.steps();
+      FM.selectLayer(A.id);
+      v.key('KeyD', 'd', true); await v.idle();
+      const copy = FM.scene.layers.find(l => l !== A && l.type === 'video' && l !== B);
+      if (!copy) throw new Error('⌘D on a main clip made no copy (it said “' + v.say() + '”)');
+      if (copy.start !== 3 || B.start !== 6) throw new Error('the copy is not right after A with B after it: copy ' + copy.start + ', B ' + B.start);
+      if (copy.transform.x.kf.map(k => k.t).join(',') !== '4,5') throw new Error('the copy’s keys did not move with it: ' + copy.transform.x.kf.map(k => k.t));
+      if (!(copy.sm && copy.sm.main)) throw new Error('the copy is not a main clip');
+      if (FM.scene.selectedId !== copy.id) throw new Error('the copy is not selected');
+      if (v.steps() !== n0 + 1) throw new Error('duplicate took ' + (v.steps() - n0) + ' steps');
+      FM.history.undo(); await v.sleep(30);
+      if (v.doc() !== doc0) throw new Error('one undo did not remove the copy and put B back exactly');
+    });
+  });
+
+  test('simple P2.1 · a locked clip in the way stops the edit with Do it anyway, which waits for the finger and keeps the lock (D7)', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [smV('C', 6, 3, W, H, { locked: true }), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      const C = v.L('C'), doc0 = v.doc(), n0 = v.steps();
+      FM.selectLayer(v.L('B').id);
+      v.key('Backspace'); await v.idle();
+      if (!/That clip is locked/.test(v.say())) throw new Error('the locked line is missing: “' + v.say() + '”');
+      if (v.doc() !== doc0 || v.steps() !== n0) throw new Error('a refused edit wrote something');
+      const btn = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).find(b => b.textContent === 'Do it anyway');
+      if (!btn) throw new Error('no Do it anyway button');
+      btn.click(); await v.idle();
+      if (!v.L('B')) throw new Error('§3.12 rule 5: Do it anyway fired before it was armed (a double tap would have deleted the clip)');
+      await v.sleep(450);
+      btn.click(); await v.idle();
+      if (v.L('B')) throw new Error('Do it anyway did not delete B');
+      if (C.start !== 3 || C.locked !== true) throw new Error('C should have moved to 3 and stayed locked: ' + C.start + ' / ' + C.locked);
+      if (v.steps() !== n0 + 1) throw new Error('unlock, delete and re-lock should be one step, got ' + (v.steps() - n0));
+    });
+  });
+
+  test('simple P2.1 · Delete cuts what runs on across the deleted clip (cases i–iii) and pins it; a title on the clip goes with it', { item: '980', budgetMs: 60000 }, async function () {
+    await smP2((W, H) => [
+      smT('Whole', 0, 14, W, H), smT('Starts on B', 6, 7, W, H), smT('Short on B', 5, 1, W, H), smSong('Song', 2, 8, W, H),
+      smV('D', 12, 2, W, H), smV('C', 8, 4, W, H), smV('B', 4, 4, W, H), smV('A', 0, 4, W, H)
+    ], async function (v) {
+      FM.selectLayer(v.L('B').id);
+      v.key('Backspace'); await v.idle();
+      if (v.L('B')) throw new Error('B was not deleted (it said “' + v.say() + '”)');
+      if (v.L('Short on B')) throw new Error('the short title on B was not deleted with it (D5)');
+      const W0 = v.L('Whole');
+      if (W0.start !== 0 || Math.abs(W0.duration - 10) > 1e-9) throw new Error('(iii) the whole-video title was not cut by 4 s: ' + W0.start + '..' + (W0.start + W0.duration));
+      const S1 = v.L('Starts on B');
+      if (Math.abs(S1.start - 4) > 1e-9 || Math.abs(S1.start + S1.duration - 9) > 1e-9) throw new Error('(i) the title starting on B did not land at 4 ending at 9: ' + S1.start + '..' + (S1.start + S1.duration));
+      const songs = FM.scene.layers.filter(l => l.audioOnly).sort((a, b) => a.start - b.start);
+      if (songs.length !== 2 || Math.abs(songs[0].start - 2) > 1e-9 || Math.abs(songs[0].duration - 2) > 1e-9 || Math.abs(songs[1].start - 4) > 1e-9 || Math.abs(songs[1].duration - 2) > 1e-9 || Math.abs((songs[1].trimStart || 0) - 6) > 1e-9)
+        throw new Error('(iii) the song was not split at 4 with its second half trimmed by 4 s: ' + JSON.stringify(songs.map(s => [s.start, s.duration, s.trimStart])));
+      [W0, S1].concat(songs).forEach(l => { if (!(l.sm && l.sm.stay)) throw new Error('a cut item was not pinned Stay put: ' + l.name); });
+      if (!(W0.sm.tail && Math.abs(W0.sm.tailEnd - 10) < 1e-9)) throw new Error('the whole-video title should end with the video at 10: ' + JSON.stringify(W0.sm));
+      if (songs.some(s => s.sm.tail)) throw new Error('a song carries sm.tail — D17 B: music never ends with the video');
+      if (!/kept 3 items that run on, trimmed to match/.test(v.say())) throw new Error('the line does not say what was cut: “' + v.say() + '”');
+    });
+  });
+
+  test('simple P2.1 · ⌘Z pressed while a command is still running waits and undoes exactly that command; in Full ⌘Z is immediate', { item: '980', budgetMs: 60000 }, async function () {
+    const png = await new Promise(res => { const c = offscreen(16, 16), x = c.getContext('2d'); x.fillStyle = '#0f0'; x.fillRect(0, 0, 16, 16); c.toBlob(b => res(new File([b], 'g.png', { type: 'image/png' })), 'image/png'); });
+    const img = await FM.loadImageFile(png);
+    await smP2((W, H) => [(() => { const l = FM.makeLayer('image', { name: 'P', x: W / 2, y: H / 2, start: 0, duration: 4 }); l.srcW = W; l.srcH = H; l.srcRev = 0; return l; })()], async function (v) {
+      const n0 = v.steps(), count0 = FM.scene.layers.length;
+      FM.selectLayer(v.L('P').id); FM.time = 2;
+      v.key('KeyS', 's');                                     // the split awaits the image reload…
+      const r = FM.history.undo();                            // …and ⌘Z lands inside that await
+      if (!FM.spine || !FM.spine.running) throw new Error('the split was not running when ⌘Z was pressed — nothing to queue (it said “' + v.say() + '”)');
+      if (r !== false) throw new Error('undo during the run returned ' + r + ' instead of waiting');
+      await v.idle(); await v.sleep(50);
+      if (FM.scene.layers.length !== count0) throw new Error('the queued undo did not undo the split: ' + FM.scene.layers.length + ' layers');
+      if (!FM.history.canRedo()) throw new Error('the split should be on the redo stack');
+      /* CONTROL — FULL: with no Simple command running, undo acts at once, exactly as today */
+      FM.editor.apply('full', { force: true, quiet: true });
+      FM.history.redo(); await v.sleep(30);
+      if (FM.scene.layers.length !== count0 + 1) throw new Error('CONTROL: redo did not bring the split back');
+      const r2 = FM.history.undo();
+      if (FM.scene.layers.length !== count0 || r2 === false) throw new Error('CONTROL: in Full undo did not act immediately');
+    }, { media: [{ name: 'P', rec: img }] });
+  });
+
+  test('simple P2.1 · with a friend who can edit in the session, moving clips waits (D14), a split still goes live, and undo cannot send a ripple', { item: '980', budgetMs: 90000 }, async function () {
+    const C = FM.collab;
+    if (!C || !C.share) throw new Error('setup: FM.collab is not loaded');
+    smNeedP2();
+    const full = (n, s, d) => layer921(n, { start: s, duration: d, shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, sm: { main: true } });
+    await withCollab921([full('A', 0, 3), full('B', 3, 3), full('C', 6, 3)], async function (c) {
+      FM.scene.project.sm = { adopted: true, v: 1 }; FM.history.commit();
+      const id = n => FM.scene.layers.find(l => l.name === n).id;
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      const sent = c.sentTo(g.loop), batches = () => sent.filter(m => m.t === 'b').length;
+      FM.editor.set('simple');
+      const d0 = JSON.stringify(FM.scene.layers);
+      const ok = await FM.spine.cmd.del(id('B'));
+      const say = smSayText();
+      if (ok !== false || JSON.stringify(FM.scene.layers) !== d0) throw new Error('a delete went through with an editor in the session');
+      if (!/^Sam can edit · clips stay put/.test(say)) throw new Error('the live line is wrong: “' + say + '”');
+      if (batches()) throw new Error('a refused delete sent ' + batches() + ' batch(es)');
+      FM.time = 1.5;
+      if (!(await FM.spine.cmd.split(id('A')))) throw new Error('a split (not arranging) was refused live: “' + smSayText() + '”');
+      if (batches() !== 1) throw new Error('a live split should send exactly one batch, sent ' + batches());
+      /* make Sam a Viewer: arranging opens up; one delete is one batch */
+      c.S.setPeerRole(g.mid, 'viewer'); sent.length = 0;
+      if (!(await FM.spine.cmd.del(id('B')))) throw new Error('with only a Viewer in, the delete was refused: “' + smSayText() + '”');
+      if (batches() !== 1) throw new Error('one Simple delete should be one batch, got ' + batches());
+      /* Sam can edit again: undoing that ripple must not be sent (§10.2 door 2) */
+      c.S.setPeerRole(g.mid, 'editor'); sent.length = 0;
+      const d1 = JSON.stringify(FM.scene.layers);
+      const u = FM.history.undo();
+      if (u !== false || JSON.stringify(FM.scene.layers) !== d1 || batches()) throw new Error('undoing an arranging step with an editor in went through (sent ' + batches() + ')');
+      if (!FM.collab.canUndo()) throw new Error('the refused undo used the step up — it should stay for later');
+      /* CONTROL — a Full-made step is never gated: rename a layer in Full and undo it with Sam still in */
+      FM.editor.apply('full', { force: true, quiet: true });
+      const A = FM.scene.layers.find(l => l.name === 'A'); A.name = 'A2'; FM.history.commit();
+      if (FM.history.undo() !== true || !FM.scene.layers.some(l => l.name === 'A')) throw new Error('CONTROL: a Full step’s undo was refused');
+    });
+  });
+
+  test('simple P2.1 · FM.trimClipEdge gives the numbers Full’s A and D give, flat and ramped, forward and reversed, and an extend keeps the surviving frame', { item: '980' }, function () {
+    smNeedP2();
+    const mk = (rev, ramp) => { const l = FM.makeLayer('video', { name: 't', start: 2, duration: 4 }); l.trimStart = 1.5; l.reversed = rev; if (ramp) l.speed = { kf: [{ t: 2, v: 0.5, e: 'linear' }, { t: 6, v: 2, e: 'linear' }] }; return l; };
+    const P0 = FM.scene; FM.scene = scene([], { project: { width: 320, height: 240, fps: 30, duration: 10, background: '#000' } });
+    const t0 = FM.time;
+    try {
+      [[false, false], [true, false], [false, true], [true, true]].forEach(cfg => {
+        const tag = (cfg[0] ? 'reversed' : 'forward') + (cfg[1] ? ' ramp' : ' flat');
+        /* head: Full's A at 3.25 */
+        const a = mk(cfg[0], cfg[1]), r = FM.trimClipEdge(a, 'head', 1.25, 20);
+        FM.scene.layers = [a]; FM.scene.selectedId = a.id; FM.scene.selectedIds = [a.id]; FM.time = 3.25; FM.timeline.clipKey('a');
+        if (Math.abs(r.duration - a.duration) > 1e-9 || Math.abs((r.trimStart || 0) - (a.trimStart || 0)) > 1e-6) throw new Error(tag + ' head: trimClipEdge ' + [r.duration, r.trimStart] + ' vs Full’s A ' + [a.duration, a.trimStart]);
+        /* tail: Full's D at 4.5 */
+        const d = mk(cfg[0], cfg[1]), rt = FM.trimClipEdge(d, 'tail', -1.5, 20);
+        FM.scene.layers = [d]; FM.scene.selectedId = d.id; FM.scene.selectedIds = [d.id]; FM.time = 4.5; FM.timeline.clipKey('d');
+        if (Math.abs(rt.duration - d.duration) > 1e-9 || Math.abs((rt.trimStart || 0) - (d.trimStart || 0)) > 1e-6) throw new Error(tag + ' tail: trimClipEdge ' + [rt.duration, rt.trimStart] + ' vs Full’s D ' + [d.duration, d.trimStart]);
+        /* an extend keeps the source frame at a surviving time (Simple keeps the start: the frame moves by `landed`) */
+        const e = mk(cfg[0], cfg[1]), src = FM.layerLocalTime(e, 4), re = FM.trimClipEdge(e, 'head', -0.5, 20);
+        const e2 = Object.assign(JSON.parse(JSON.stringify(e)), { start: re.start, duration: re.duration, trimStart: re.trimStart });
+        if (Math.abs(FM.layerLocalTime(e2, 4) - src) > 1e-3) throw new Error(tag + ' head extend moved the frame at t=4: ' + src + ' → ' + FM.layerLocalTime(e2, 4));
+      });
+      /* past the source: a forward head pulled back further than trimStart lands at the first frame, never before it */
+      const f = mk(false, false), rf = FM.trimClipEdge(f, 'head', -5, 20);
+      if (Math.abs(rf.trimStart) > 1e-9 || Math.abs(rf.landed + 1.5) > 1e-9) throw new Error('a head pulled back 5 s with 1.5 s of source before it landed ' + rf.landed + ' at trimStart ' + rf.trimStart);
+      const g = mk(false, false), rg = FM.trimClipEdge(g, 'tail', 50, 7);
+      if (Math.abs(rg.duration - 5.5) > 1e-9) throw new Error('a tail grown past the source should stop at 5.5 s, got ' + rg.duration);
+    } finally { FM.scene = P0; FM.time = t0; }
+  });
+
+  test('simple P2.1 · a split pair Simple butted together over a jump in the footage gets its de-click back; an unmarked pair is today’s seam', { item: '980' }, function () {
+    const mk = (s, d, tr, cut) => { const l = FM.makeLayer('video', { name: 'h', start: s, duration: d }); l.trimStart = tr; l.splitOf = 'lin1'; if (cut) l.sm = { cut: true }; return l; };
+    const a = mk(0, 2, 0), jump = mk(2, 2, 5, true), cont = mk(2, 2, 2, true), plain = mk(2, 2, 5, false);
+    const P0 = FM.scene;
+    try {
+      FM.scene = scene([a, plain]);
+      if (!FM.declickSeamAt(plain, 2, [a, plain])) throw new Error('CONTROL (Full unchanged): an unmarked touching pair should be exempt from the ramps, as today');
+      if (FM.declickSeamAt(jump, 2, [a, jump])) throw new Error('a marked pair whose footage jumps (2 → 5 s) is still exempt: it pops (#148)');
+      if (!FM.declickSeamAt(cont, 2, [a, cont])) throw new Error('a marked pair whose footage carries straight on lost its exemption');
+    } finally { FM.scene = P0; }
+  });
+
+  test('simple P2.1 · the live-gate predicate: an Editor counts, a Viewer does not, a remembered Editor does, a guest always, a linked copy does', { item: '980' }, function () {
+    const C = FM.collab;
+    if (!C || typeof C.othersCanEdit !== 'function') throw new Error('FM.collab.othersCanEdit is missing');
+    const s0 = C.session, a0 = C.active, ui0 = C.ui && C.ui.roomEditors, list0 = FM.projects.list;
+    const host = mem => ({ isOwner: true, active: true, host: { ownerMid: 'o', members: Object.assign({ o: { role: 'owner' } }, mem) } });
+    try {
+      C.active = true;
+      if (C.ui) C.ui.roomEditors = () => [];
+      C.session = host({ m1: { role: 'viewer' } });
+      if (C.othersCanEdit()) throw new Error('a Viewer turned the gate on');
+      C.session = host({ m1: { role: 'editor' } });
+      if (!C.othersCanEdit()) throw new Error('a connected Editor did not turn the gate on');
+      C.session = host({});
+      if (C.ui) C.ui.roomEditors = () => ['r1'];
+      if (!C.othersCanEdit()) throw new Error('an Editor still in the room’s member table (dropped, outbox alive) did not count');
+      C.session = { isOwner: false, active: true };
+      if (!C.othersCanEdit()) throw new Error('a guest can always be raced by the owner');
+      C.session = null; C.active = false;
+      FM.projects.list = () => [{ id: FM.storage.openProjectId(), collab: { v: 1 } }];
+      if (!C.othersCanEdit()) throw new Error('a linked copy opened with no session did not count');
+      FM.projects.list = () => [{ id: FM.storage.openProjectId(), collab: { v: 1, ended: 'left' } }];
+      if (C.othersCanEdit()) throw new Error('a copy he has left still counted');
+    } finally { C.session = s0; C.active = a0; if (C.ui) C.ui.roomEditors = ui0; FM.projects.list = list0; }
+  });
+
+  /* ═══ §3.9 INVARIANTS OVER SEEDED RANDOM MAIN TRACKS (T2). Off-grid lengths (11.21 s), float-noise joins, hairlines,
+     0.012 s and 0.3 s overlaps, gaps, titles with keys on the clips, a whole-video watermark and a stay-put song. Each
+     command runs through the REAL runner; after each: other seams unchanged, joins bit-exact, followers on their host at the
+     same offset with their keys moved by the same d, stay-put items still, no clip under MIN_LEN, no black frame at any
+     frame time that is not in a gap, and one undo restores the document byte for byte. The checker's own positive control
+     breaks one join by 1e-9 s and must see it. */
+  function smRand(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function smTrack(seed, W, H) {
+    const r = smRand(seed), n = 3 + Math.floor(r() * 4), out = [], lens = [11.21, 2.5, 0.8, 3.3333333, 1.04, 4.0104667];
+    let t = r() < 0.2 ? 0.6 : 0;
+    for (let i = 0; i < n; i++) {
+      const d = lens[Math.floor(r() * lens.length)] * (0.6 + r() * 0.8);
+      const c = smV('c' + i, t, d, W, H);
+      out.push(c);
+      if (r() < 0.6) out.push(smT('t' + i, t + d * r() * 0.6, Math.min(0.9, d * 0.3), W, H, { transform: Object.assign(FM.makeLayer('text', {}).transform, { opacity: smKf([[t + 0.05, 0], [t + 0.2, 1]]) }) }));
+      const k = r();
+      t = t + d + (k < 0.45 ? 0 : k < 0.6 ? 1e-12 : k < 0.7 ? 0.012 : k < 0.8 ? -0.012 : k < 0.9 ? 0.7 : -0.3);
+    }
+    const end = Math.max.apply(null, out.filter(l => l.type === 'video').map(l => l.start + l.duration));
+    out.push(FM.makeLayer('shape', { name: 'WM', shape: 'rect', x: 20, y: 20, shapeW: 12, shapeH: 8, fill: '#fff', start: out[0].start, duration: end - out[0].start }));
+    out.push(smSong('Song', 0, end + 3, W, H, { sm: { stay: true } }));
+    return out.reverse();
+  }
+  function smSnapshot(R) {
+    const by = new Map(FM.scene.layers.map(l => [l.id, l]));
+    const keys = l => (FM.timedLists(l)).map(p => p.kf.map(k => k.t));
+    return {
+      main: R.main.filter(e => !e.slot).map(e => ({ id: e.id, start: by.get(e.id).start, dur: by.get(e.id).duration })),
+      seams: R.main.filter(e => !e.slot).map((e, i, a) => i ? by.get(a[i - 1].id).start + by.get(a[i - 1].id).duration - by.get(e.id).start : null),
+      fol: Object.keys(R.units).filter(id => R.units[id].host && R.units[id].kind !== 'main' && by.has(R.units[id].host) && by.has(id)).map(id => ({ id: id, host: R.units[id].host, off: by.get(id).start - by.get(R.units[id].host).start, keys: keys(by.get(id)), start: by.get(id).start })),
+      pairs: (() => { const m = new Map(), c = R.main.filter(e => !e.slot); for (let i = 1; i < c.length; i++) { const a = by.get(c[i - 1].id), b = by.get(c[i].id); m.set(a.id + '|' + b.id, { diff: a.start + a.duration - b.start, as: a.start, bs: b.start }); } return m; })(),
+      stay: FM.scene.layers.filter(l => l.sm && l.sm.stay).map(l => ({ id: l.id, start: l.start }))
+    };
+  }
+  function smBlackFrames(R) {
+    const by = new Map(FM.scene.layers.map(l => [l.id, l])), fps = FM.scene.project.fps || 30, clips = R.main.filter(e => !e.slot);
+    if (!clips.length) return [];
+    const bad = [], gaps = R.main.filter(e => e.seam && e.seam.kind === 'gap');
+    for (let f = Math.ceil(clips[0].start * fps); f / fps < R.trackEnd; f++) {
+      const t = clips[0].start + 0 + (f / fps - clips[0].start);
+      if (gaps.some(e => { const i = R.main.indexOf(e); const lo = i ? R.main[i - 1].end : 0; return t >= lo - 1e-12 && t < e.start; })) continue;
+      if (!clips.some(e => FM.isLayerVisibleAt(by.get(e.id), t))) bad.push(+t.toFixed(6));
+    }
+    return bad;
+  }
+
+  test('simple P2.1 · T2 the §3.9 invariants hold for delete, both trims, split, close gap and duplicate over 12 seeded random main tracks', { item: '980', budgetMs: 240000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    let ran = 0, controlSeen = false;
+    for (let seed = 1; seed <= 12; seed++) {
+      await smP2((W, H) => smTrack(seed * 7919, W, H), async function (v) {
+        const r = smRand(seed);
+        const cmds = ['del', 'trimTail', 'trimHead', 'split', 'seam', 'dup'];
+        for (const cmd of cmds) {
+          const R = FM.spine.classify(FM.scene), clips = R.main.filter(e => !e.slot);
+          if (!clips.length) return;
+          const pick = clips[Math.floor(r() * clips.length)], L = FM.layerById(FM.scene, pick.id);
+          const before = smSnapshot(R), doc0 = v.doc(), black0 = smBlackFrames(R).length;
+          let ok, seamAt = null;
+          if (cmd === 'del') ok = await FM.spine.cmd.del(pick.id);
+          else if (cmd === 'trimTail') ok = await FM.spine.cmd.trimTail(pick.id, L.start + L.duration * (0.3 + r() * 0.5), { typed: false });
+          else if (cmd === 'trimHead') ok = await FM.spine.cmd.trimHead(pick.id, L.start + L.duration * (0.1 + r() * 0.4), { typed: false });
+          else if (cmd === 'split') ok = await FM.spine.cmd.split(pick.id, L.start + L.duration * (0.3 + r() * 0.4));
+          else if (cmd === 'seam') { const e = R.main.find(x => x.seam && (x.seam.kind === 'gap' || x.seam.kind === 'overlap') && !x.seam.covered); if (!e) continue; seamAt = e.id; ok = await FM.spine.cmd.closeSeam(e.id); }
+          else ok = await FM.spine.cmd.duplicate(pick.id);
+          if (!ok) continue;   // a refusal is legal (a blend, a short clip): it wrote nothing — checked below
+          ran++;
+          const R2 = FM.spine.classify(FM.scene), by = new Map(FM.scene.layers.map(l => [l.id, l]));
+          const tag = 'seed ' + seed + ' ' + cmd + ' on ' + L.name;
+          /* inv 4: nothing that had sm.stay before moved */
+          before.stay.forEach(s => { const l = by.get(s.id); if (l && l.start !== s.start) fails.push(tag + ': stay-put ' + l.name + ' moved ' + s.start + ' → ' + l.start); });
+          /* inv 1: a seam between two clips the command did not edit keeps its diff to 1e-9; one whose clips MOVED and that was a
+             float-noise join is now bit-exact; a seam the command created that reads as a join is bit-exact too */
+          const after = R2.main.filter(e => !e.slot);
+          for (let i = 1; i < after.length; i++) {
+            const a = by.get(after[i - 1].id), b = by.get(after[i].id), diff = a.start + a.duration - b.start;
+            const was = before.pairs.get(a.id + '|' + b.id), moved = !was || was.as !== a.start || was.bs !== b.start;
+            if (a.id === pick.id || b.id === pick.id || b.id === seamAt) { if (moved && Math.abs(diff) < 1e-9 && diff !== 0) fails.push(tag + ': a seam at the edit is ' + diff + ' s off bit-exact (' + a.name + '|' + b.name + ')'); continue; }
+            if (was && Math.abs(was.diff) >= 1e-9 && Math.abs(diff - was.diff) > 1e-9) fails.push(tag + ': the seam ' + a.name + '|' + b.name + ' changed ' + was.diff + ' → ' + diff);
+            if (moved && Math.abs(diff) < 1e-9 && diff !== 0) fails.push(tag + ': a moved join is ' + diff + ' s off bit-exact (' + a.name + '|' + b.name + ')');
+          }
+          /* inv 2 + 3: followers of untouched hosts kept host and offset; their keys moved with their start */
+          before.fol.forEach(f => {
+            const l = by.get(f.id), h = by.get(f.host); if (!l || !h || f.host === pick.id) return;
+            const off = l.start - h.start;
+            if (Math.abs(off - f.off) > 1e-9) fails.push(tag + ': ' + l.name + ' lost its offset on ' + h.name + ' (' + f.off + ' → ' + off + ')');
+            const d = l.start - f.start, ks = FM.timedLists(l).map(p => p.kf.map(k => k.t));
+            ks.forEach((list, i) => list.forEach((t, j) => { if (Math.abs(t - (f.keys[i][j] + d)) > 1e-9) fails.push(tag + ': a key of ' + l.name + ' moved by ' + (t - f.keys[i][j]) + ', not its d ' + d); }));
+          });
+          /* inv 7: no clip under MIN_LEN */
+          after.forEach(e => { const l = by.get(e.id); if (l.duration < FM.spine.minLen(30) - 1e-6 && !before.main.some(m => m.id === l.id && m.dur < FM.spine.minLen(30))) fails.push(tag + ': ' + l.name + ' is ' + l.duration + ' s, under MIN_LEN'); });
+          /* inv 13: no new black frame */
+          const black = smBlackFrames(R2);
+          if (black.length > black0) fails.push(tag + ': ' + (black.length - black0) + ' new black frame(s), first at ' + black[0]);
+          /* inv 5: one undo restores byte for byte */
+          FM.history.undo(); await v.sleep(5);
+          if (v.doc() !== doc0) fails.push(tag + ': one undo did not restore the document byte for byte');
+          FM.history.redo(); await v.sleep(5);
+        }
+        /* POSITIVE CONTROL for the checker: push one joined clip 1e-9 s late at a frame time — the black-frame check must see it */
+        if (!controlSeen) {
+          const R = FM.spine.classify(FM.scene), clips = R.main.filter(e => !e.slot);
+          for (let i = 1; i < clips.length && !controlSeen; i++) {
+            const a = FM.layerById(FM.scene, clips[i - 1].id), b = FM.layerById(FM.scene, clips[i].id);
+            if (a.start + a.duration !== b.start) continue;
+            const s0 = b.start, n0 = smBlackFrames(R).length, f = Math.ceil(b.start * 30) / 30;
+            b.start = f + 1e-9; a.duration = f - a.start;   // a 1e-9 s gap sitting on a frame time
+            const n1 = smBlackFrames(FM.spine.classify(FM.scene)).length;
+            b.start = s0; a.duration = s0 - a.start;
+            if (n1 > n0) controlSeen = true;
+          }
+        }
+      });
+    }
+    if (ran < 30) throw new Error('only ' + ran + ' commands ran over 12 tracks — the fixture is refusing too much to prove anything');
+    if (!controlSeen) throw new Error('CONTROL: the black-frame checker never saw a planted 1e-9 s gap on a frame time');
+    if (fails.length) throw new Error(fails.length + ' invariant failure(s): ' + fails.slice(0, 4).join(' · '));
+  });
+
+  test('simple P2.1 · T2b a middle piece of a clip cut five times is deleted over 2,000 seeds at 24, 30 and 60 fps with no black frame; without the landing some seeds get one', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    if (!FM.spine.planDelete || !FM.spine._applyPlan) throw new Error('FM.spine.planDelete / _applyPlan seams are missing');
+    const P0 = FM.scene, t0 = FM.time;
+    const run = async (fps, seed, noLand) => {
+      const r = smRand(seed), src = 11.21, cuts = [];
+      while (cuts.length < 5) { const t = Math.round((0.3 + r() * (src - 0.6)) * fps) / fps; if (cuts.every(c => Math.abs(c - t) > 0.2)) cuts.push(t); }
+      cuts.sort((a, b) => a - b);
+      const bounds = [0].concat(cuts, [src]), layers = [];
+      for (let i = 0; i + 1 < bounds.length; i++) {
+        const l = FM.makeLayer('video', { name: 'p' + i, x: 160, y: 120, start: 0, duration: 1 });
+        l.start = bounds[i]; l.duration = bounds[i + 1] - bounds[i]; l.srcW = 320; l.srcH = 240; l.srcRev = 0; l.muted = true; l.sm = { main: true };
+        layers.push(l);
+      }
+      FM.scene = scene(layers.slice().reverse(), { project: { width: 320, height: 240, fps: fps, duration: src, background: '#000', sm: { adopted: true, v: 1 } } });
+      const R = FM.spine.classify(FM.scene), mid = R.main[1 + Math.floor(r() * (R.main.length - 2))];
+      FM.spine._noLanding = !!noLand;
+      try { const plan = FM.spine.planDelete(R, mid.id); if (plan.refuse) return 'refused'; await FM.spine._applyPlan(plan); }
+      finally { FM.spine._noLanding = false; }
+      const R2 = FM.spine.classify(FM.scene), clips = R2.main.map(e => FM.layerById(FM.scene, e.id));
+      for (let f = 0; f / fps < R2.trackEnd - 1e-12; f++) if (!clips.some(l => FM.isLayerVisibleAt(l, f / fps))) return 'black at frame ' + f;
+      return '';
+    };
+    try {
+      let bad = [], ctl = 0, n = 0;
+      for (const fps of [24, 30, 60]) for (let seed = 1; seed <= 700; seed++) {
+        const a = await run(fps, seed * 31 + fps, false); n++;
+        if (a && a !== 'refused') bad.push(fps + 'fps seed ' + seed + ': ' + a);
+        if (seed <= 300 && (await run(fps, seed * 31 + fps, true))) ctl++;
+      }
+      if (bad.length) throw new Error(bad.length + ' of ' + n + ' deletes left a black frame: ' + bad.slice(0, 3).join(' · '));
+      if (!ctl) throw new Error('CONTROL: with the landing switched off not one of 900 seeds left a black frame — this fixture cannot tell the two apart');
+    } finally { FM.scene = P0; FM.time = t0; }
+  });
+
+  test('simple P2.1 · three commands tapped inside one await land as three steps in tap order, and a ⌘Z queued behind them undoes the last of them', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('B', 6, 3, W, H), smV('A', 0, 6, W, H)], async function (v) {
+      const n0 = v.steps(), A = v.L('A');
+      FM.spine.cmd.split(A.id, 2);                               // runs: its split awaits the media reload…
+      FM.spine.cmd.split(null, 4); FM.spine.cmd.del(v.L('B').id); // …so these two wait in the queue, in tap order
+      const r = FM.history.undo();                               // …and this ⌘Z waits behind them (DESIGN §3.7)
+      for (let i = 0; i < 8; i++) { await v.idle(); await v.sleep(80); }
+      if (r !== false) throw new Error('⌘Z pressed during the run did not wait: it returned ' + r);
+      const pieces = FM.scene.layers.filter(l => l.type === 'video' && (+l.start || 0) < 6 - 1e-9).length;
+      if (v.steps() !== n0 + 3) throw new Error('three tapped commands gave ' + (v.steps() - n0) + ' step(s), not 3 (it said “' + v.say() + '”)');
+      if (pieces !== 3) throw new Error('A should be in three pieces after two splits, it is in ' + pieces);
+      if (!v.L('B')) throw new Error('the queued ⌘Z did not undo the last command (the delete of B)');
+      if (!FM.history.canRedo()) throw new Error('the delete should be on the redo stack');
+    });
+  });
+
+  /* ═══ RELEASE 2.1 REVIEW FIXES (p2-confirmed findings that live in 2.1's code). Each test fails on the 2.1 tree by what
+     the command does, and each has a control that passes on both trees, so it cannot pass for the wrong reason. */
+
+  test('simple P2.1 · review A and D on a main block (a clip grouped in Full with a group look) refuse with Open in Full and move nothing (DESIGN §9.1 main blocks)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => {
+      const A = smV('A', 0, 4, W, H, { sm: { main: true } }), B = smV('B', 4, 4, W, H, { sm: { main: true } }), C = smV('C', 8, 4, W, H, { sm: { main: true } });
+      const G = FM.makeLayer('group', { name: 'G', x: 0, y: 0, start: 4, duration: 4 });
+      G.transform.opacity = 0.8;                       // a group fade in Full: the group composites as one piece, a block
+      B.parent = G.id;
+      return [C, G, B, A];
+    }, async function (v) {
+      const G = v.L('G'), B = v.L('B'), C = v.L('C');
+      if (!FM.spine.read(FM.scene).isMain(G.id)) throw new Error('CONTROL: the grouped clip is not a main block: ' + JSON.stringify(FM.spine.read(FM.scene).main.map(e => e.id)));
+      const doc0 = v.doc(), n0 = v.steps();
+      const okT = await FM.spine.cmd.trimTail(G.id, 6); await v.idle();
+      if (okT !== false || C.start !== 8 || v.doc() !== doc0)
+        throw new Error('D on a main block trimmed only the group row: group ' + G.start + '+' + G.duration + ', its clip still ' + B.start + '+' + B.duration + ', C moved to ' + C.start + ' (the clip now plays over C)');
+      if (!/Open in Full/.test(v.say()) || !Array.from(document.querySelectorAll('#sm-say .sm-say-b')).some(b => /Open in Full/.test(b.textContent)))
+        throw new Error('the refusal has no Open in Full: “' + v.say() + '”');
+      const okH = await FM.spine.cmd.trimHead(G.id, 5); await v.idle();
+      if (okH !== false || C.start !== 8 || v.doc() !== doc0 || v.steps() !== n0)
+        throw new Error('A on a main block wrote something: C at ' + C.start + ', ' + (v.steps() - n0) + ' step(s)');
+      /* CONTROL: a plain main clip before the block still trims, and the block moves as one piece with what follows */
+      const okA = await FM.spine.cmd.trimTail(v.L('A').id, 3); await v.idle();
+      if (!okA || G.start !== 3 || B.start !== 3 || C.start !== 7) throw new Error('CONTROL: D on clip A did not ripple the block as one piece: G ' + G.start + ', B ' + B.start + ', C ' + C.start + ' (it said “' + v.say() + '”)');
+    }, { project: { sm: { adopted: true, v: 1 } } });
+  });
+
+  test('simple P2.1 · review Delete that cuts a muted whole-video overlay keeps the end-with-the-video flag on its later piece, so the next trim still takes it to the end (§4.3)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [
+      smV('Leak', 0, 12, W, H),                         // a muted light-leak video over the whole film, added in Full after adoption: no flag yet
+      smV('C', 8, 4, W, H, { sm: { main: true } }), smV('B', 4, 4, W, H, { sm: { main: true } }), smV('A', 0, 4, W, H, { sm: { main: true } })
+    ], async function (v) {
+      FM.selectLayer(v.L('B').id);
+      v.key('Backspace'); await v.idle();
+      if (v.L('B')) throw new Error('B was not deleted (it said “' + v.say() + '”)');
+      const leaks = FM.scene.layers.filter(l => l.name === 'Leak').sort((a, b) => a.start - b.start);
+      if (leaks.length !== 2 || Math.abs(leaks[1].start - 4) > 1e-9 || Math.abs(leaks[1].start + leaks[1].duration - 8) > 1e-9)
+        throw new Error('CONTROL: the muted overlay was not cut at the deleted clip: ' + JSON.stringify(leaks.map(l => [l.start, l.duration])));
+      const L2 = leaks[1];
+      if (!(L2.sm && L2.sm.tail === true && Math.abs(L2.sm.tailEnd - 8) < 1e-9)) throw new Error('the later piece lost its end-with-the-video flag: ' + JSON.stringify(L2.sm));
+      if (/keeps the length you gave it/.test(v.say())) throw new Error('the line says a length he never set was kept: “' + v.say() + '”');
+      /* the next trim shortens the video: the piece must follow the new end, not run on in black */
+      FM.selectLayer(v.L('C').id); FM.time = 6;
+      v.key('KeyD', 'd'); await v.idle();
+      const C = v.L('C');
+      if (Math.abs(C.start + C.duration - 6) > 1e-9) throw new Error('CONTROL: D did not trim C to end at 6 (it said “' + v.say() + '”)');
+      if (Math.abs(L2.start + L2.duration - 6) > 1e-9) throw new Error('the muted overlay runs on past the new end: ' + L2.start + '..' + (L2.start + L2.duration) + ' with the video ending at 6');
+    }, { project: { sm: { adopted: true, v: 1 } } });
+  });
+
+  test('simple P2.1 · review a trim never shortens a clip under twice the crossfade on its OTHER side, so a blend never turns into a red overlap (§3.1)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const seamOf = (name, v) => { const R = FM.spine.classify(FM.scene), e = R.main.find(x => x.id === v.L(name).id); return e && e.seam ? e.seam.kind + ' ' + e.seam.amt : 'none'; };
+    /* (1) D on a clip that fades in over the one before it: the p|c blend is on the side the tail trim does not touch */
+    await smP2((W, H) => [(() => { const c = smV('C', 4, 6, W, H); c.transform.opacity = smKf([[4, 0], [5, 1]]); return c; })(), smV('P', 0, 5, W, H)], async function (v) {
+      if (seamOf('C', v) !== 'blend 1') throw new Error('CONTROL: P|C is not a 1 s crossfade: ' + seamOf('C', v));
+      const doc0 = v.doc(), n0 = v.steps();
+      const ok = await FM.spine.cmd.trimTail(v.L('C').id, 5.5); await v.idle();
+      if (ok !== false || v.doc() !== doc0 || v.steps() !== n0) throw new Error('D cut the fading clip to ' + v.L('C').duration + ' s under its 1 s crossfade: the seam is now ' + seamOf('C', v));
+      if (FM.spine.lastRefusal !== 'fadesBefore') throw new Error('refused with the wrong line: ' + FM.spine.lastRefusal + ' “' + v.say() + '”');
+      /* CONTROL: exactly 2 × the fade is allowed, and the crossfade survives */
+      if (!(await FM.spine.cmd.trimTail(v.L('C').id, 6))) throw new Error('CONTROL: D to twice the fade was refused: “' + v.say() + '”');
+      await v.idle();
+      if (seamOf('C', v) !== 'blend 1') throw new Error('CONTROL: the crossfade did not survive a trim to twice its length: ' + seamOf('C', v));
+    });
+    /* (2) A on a clip the NEXT one fades in over: the c|n blend is on the side the head trim does not check */
+    await smP2((W, H) => [(() => { const n = smV('N', 5, 6, W, H); n.transform.opacity = smKf([[5, 0], [6, 1]]); return n; })(), smV('C', 0, 6, W, H)], async function (v) {
+      if (seamOf('N', v) !== 'blend 1') throw new Error('CONTROL: C|N is not a 1 s crossfade: ' + seamOf('N', v));
+      const doc0 = v.doc(), n0 = v.steps();
+      const ok = await FM.spine.cmd.trimHead(v.L('C').id, 4.5); await v.idle();
+      if (ok !== false || v.doc() !== doc0 || v.steps() !== n0) throw new Error('A cut the clip to ' + v.L('C').duration + ' s under the 1 s crossfade after it: the seam is now ' + seamOf('N', v));
+      if (FM.spine.lastRefusal !== 'fadesNext') throw new Error('refused with the wrong line: ' + FM.spine.lastRefusal + ' “' + v.say() + '”');
+      if (!(await FM.spine.cmd.trimHead(v.L('C').id, 4))) throw new Error('CONTROL: A to twice the fade was refused: “' + v.say() + '”');
+      await v.idle();
+      if (seamOf('N', v) !== 'blend 1') throw new Error('CONTROL: the crossfade did not survive a head trim to twice its length: ' + seamOf('N', v));
+    });
+  });
+
+  test('simple P2.1 · review a clip duplicated in Simple has its footage on disk at once: locking the phone straight after cannot bring the copy back blank (queue 681)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const png = await new Promise(res => { const c = offscreen(320, 240), x = c.getContext('2d'); x.fillStyle = '#f0f'; x.fillRect(0, 0, 320, 240); c.toBlob(b => res(new File([b], 'dup.png', { type: 'image/png' })), 'image/png'); });
+    const img = await FM.loadImageFile(png);
+    await smP2((W, H) => [(() => { const l = FM.makeLayer('image', { name: 'P', x: W / 2, y: H / 2, start: 0, duration: 4 }); l.srcW = W; l.srcH = H; l.srcRev = 0; return l; })()], async function (v) {
+      await FM.storage.settled();
+      const P = v.L('P');
+      if (!(await FM.spine.cmd.duplicate(P.id))) throw new Error('the duplicate was refused: “' + v.say() + '”');
+      const dupId = FM.scene.selectedId;
+      if (!dupId || dupId === P.id || !FM.media.get(dupId)) throw new Error('CONTROL: no copy with footage was made');
+      FM.storage.flushSync();                          // what visibilitychange → hidden does: the document only, the pending save cancelled
+      await FM.storage.settled();
+      if (!(await FM.storage.readMedia(dupId))) throw new Error('the copy’s footage was never written: after a hide flush the project reopens with the copy blank');
+      /* CONTROL: Full's own duplicate, through the same flush, is on disk — so this check can see a saved file */
+      FM.editor.apply('full', { force: true, quiet: true });
+      const fullId = await FM.duplicateLayer(P.id);
+      FM.storage.flushSync(); await FM.storage.settled();
+      if (!fullId || !(await FM.storage.readMedia(fullId))) throw new Error('CONTROL: Full’s duplicate is not on disk either — the check cannot tell');
+    }, { media: [{ name: 'P', rec: img }] });
+  });
+
+  test('simple P2.1 · review Do it anyway keeps the lock on every piece it makes: both halves of a split, both pieces of a cut song, and a copy (D7)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [], part = async (fn) => { try { await fn(); } catch (e) { fails.push(e.message); } };
+    const anyway = async v => {
+      const btn = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).find(b => b.textContent === 'Do it anyway');
+      if (!btn) throw new Error('no Do it anyway button (it said “' + v.say() + '”)');
+      await v.sleep(450); btn.click(); await v.idle();
+    };
+    /* (1) ✂ / S on a locked clip */
+    await part(() => smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H, { locked: true })], async function (v) {
+      const A = v.L('A'), n0 = v.steps();
+      FM.selectLayer(A.id); FM.time = 1.5;
+      v.key('KeyS', 's'); await v.idle();
+      if (!/That clip is locked/.test(v.say())) throw new Error('(split) no locked line: “' + v.say() + '”');
+      await anyway(v);
+      const halves = FM.scene.layers.filter(l => l.splitOf && l.splitOf === A.splitOf);
+      if (halves.length !== 2) throw new Error('(split) CONTROL: Do it anyway did not split the clip: ' + halves.length + ' piece(s)');
+      if (halves.some(l => l.locked !== true)) throw new Error('(split) a half lost the lock: ' + JSON.stringify(halves.map(l => [l.start, l.locked])));
+      if (v.steps() !== n0 + 1) throw new Error('(split) unlock, split and re-lock should be one step, got ' + (v.steps() - n0));
+    }));
+    /* (2) Delete that cuts a locked song running across the deleted clip (case iii) */
+    await part(() => smP2((W, H) => [smSong('Song', 2, 8, W, H, { locked: true }), smV('D', 12, 2, W, H), smV('C', 8, 4, W, H), smV('B', 4, 4, W, H), smV('A', 0, 4, W, H)], async function (v) {
+      FM.selectLayer(v.L('B').id);
+      v.key('Backspace'); await v.idle();
+      if (!/locked/.test(v.say())) throw new Error('(cut) no locked line: “' + v.say() + '”');
+      await anyway(v);
+      if (v.L('B')) throw new Error('(cut) CONTROL: Do it anyway did not delete B');
+      const songs = FM.scene.layers.filter(l => l.name === 'Song');
+      if (songs.length !== 2) throw new Error('(cut) CONTROL: the song was not cut in two: ' + songs.length);
+      if (songs.some(l => l.locked !== true)) throw new Error('(cut) a piece of the locked song came out unlocked: ' + JSON.stringify(songs.map(l => [l.start, l.locked])));
+    }));
+    /* (3) ⌘D on a locked clip: the copy is locked, as Full's duplicate makes it */
+    await part(() => smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H, { locked: true })], async function (v) {
+      const A = v.L('A');
+      FM.selectLayer(A.id);
+      v.key('KeyD', 'd', true); await v.idle();
+      if (!/That clip is locked/.test(v.say())) throw new Error('(copy) no locked line: “' + v.say() + '”');
+      await anyway(v);
+      const copy = FM.scene.layers.find(l => l.type === 'video' && l !== A && l.name !== 'B');
+      if (!copy || copy.start !== 3) throw new Error('(copy) CONTROL: Do it anyway made no copy after A');
+      if (copy.locked !== true || A.locked !== true) throw new Error('(copy) the lock was lost: original ' + A.locked + ', copy ' + copy.locked + ' (Full’s duplicate keeps it)');
+    }));
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('simple P2.1 · review an end card lands bit-exact on the new end of the clips after every command, so no 1-ulp black frame opens before it (§3.1)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    /* (1) D on the last clip with the playhead on a frame: (0.8 + 3.3333333) + (nd − 3.3333333) is one ulp past 0.8 + nd */
+    await smP2((W, H) => [smT('Card', 0.8 + 3.3333333, 2, W, H), smV('B', 0.8, 3.3333333, W, H), smV('A', 0, 0.8, W, H)], async function (v) {
+      const B = v.L('B'), card = v.L('Card');
+      if (card.start !== B.start + B.duration) throw new Error('CONTROL: the card does not sit bit-exact on the clip end');
+      const t = 31 / 30;
+      if (!(await FM.spine.cmd.trimTail(B.id, t))) throw new Error('(D) refused: “' + v.say() + '”');
+      await v.idle();
+      if (card.start !== B.start + B.duration) fails.push('(D) the end card landed at ' + card.start + ' but the clip ends at ' + (B.start + B.duration));
+      if (!FM.isLayerVisibleAt(B, t) && !FM.isLayerVisibleAt(card, t)) fails.push('(D) frame ' + t + ' shows neither the clip nor the end card');
+    });
+    /* (2) A on the last clip: its start never moves, so its end is start + the new duration, not trackEnd − the trim */
+    await smP2((W, H) => [smT('Card', 0.8 + 3.3333333, 2, W, H), smV('B', 0.8, 3.3333333, W, H), smV('A', 0, 0.8, W, H)], async function (v) {
+      const B = v.L('B'), card = v.L('Card');
+      if (!(await FM.spine.cmd.trimHead(B.id, 26 / 30))) throw new Error('(A) refused: “' + v.say() + '”');
+      await v.idle();
+      if (card.start !== B.start + B.duration) fails.push('(A) the end card landed at ' + card.start + ' but the clip ends at ' + (B.start + B.duration));
+    });
+    /* (3) a seeded sweep of delete, both trims and close gap over off-grid tracks with an end card: the card must
+       start exactly where the last clip now ends */
+    const P0 = FM.scene, t0 = FM.time, miss = {}, ran = {};
+    try {
+      for (let seed = 1; seed <= 240; seed++) {
+        const r = smRand(seed * 97 + 13), n = 3 + Math.floor(r() * 3), layers = [];
+        let t = 0;
+        for (let i = 0; i < n; i++) {
+          const l = FM.makeLayer('video', { name: 'c' + i, x: 160, y: 120, start: 0, duration: 1 });
+          l.start = t; l.duration = 0.7 + Math.floor(r() * 1e6) / 1e6 * 3.1; l.srcW = 320; l.srcH = 240; l.srcRev = 0; l.muted = true;
+          layers.push(l);
+          t = l.start + l.duration + (i === 1 && r() < 0.5 ? 0.3 + r() : 0);     // sometimes a gap before the third clip
+        }
+        const last = layers[layers.length - 1];
+        const card = FM.makeLayer('text', { name: 'Card', text: 'End', x: 160, y: 60, start: last.start + last.duration, duration: 2 });
+        const cmd = ['del', 'tail', 'head', 'seam'][seed % 4];
+        FM.scene = scene([card].concat(layers.slice().reverse()), { project: { width: 320, height: 240, fps: 30, duration: 60, background: '#000' } });
+        const R = FM.spine.classify(FM.scene), clips = R.main.filter(e => !e.slot);
+        const pick = clips[Math.floor(r() * clips.length)], L = FM.layerById(FM.scene, pick.id);
+        const at = Math.round((L.start + L.duration * (0.3 + r() * 0.4)) * 30) / 30;      // a playhead on a frame, inside the clip
+        let plan = null;
+        if (cmd === 'del') plan = FM.spine.planDelete(R, pick.id);
+        else if (cmd === 'tail') plan = FM.spine.planTrimTail(R, pick.id, at - L.start, { key: true });
+        else if (cmd === 'head') plan = FM.spine.planTrimHead(R, pick.id, at - L.start, { key: true });
+        else if (cmd === 'seam') { const e = R.main.find(x => x.seam && x.seam.kind === 'gap'); if (!e) continue; plan = FM.spine.planSeam(R, e.id); }
+        if (!plan || plan.refuse) continue;
+        await FM.spine._applyPlan(plan);
+        ran[cmd] = (ran[cmd] || 0) + 1;
+        const R2 = FM.spine.classify(FM.scene);
+        if (card.start !== R2.trackEnd) miss[cmd] = (miss[cmd] || 0) + 1;
+      }
+    } finally { FM.scene = P0; FM.time = t0; }
+    ['del', 'tail', 'head', 'seam'].forEach(c => { if (!ran[c]) fails.push('CONTROL: the sweep never ran ' + c); });
+    const m = Object.keys(miss).map(c => c + ' ' + miss[c] + '/' + ran[c]);
+    if (m.length) fails.push('the end card missed the new end of the clips by float noise in: ' + m.join(', '));
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('simple P2.1 · review deleting a clip that fades in over the one before cuts what runs on through the time that really went, so a voice-over stays in step (§3.6 Delete row)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [
+      smSong('Voice', 2, 12, W, H), smT('Run', 2, 11, W, H),
+      smV('C', 10, 5, W, H), (() => { const b = smV('B', 4, 6, W, H); b.transform.opacity = smKf([[4, 0], [5, 1]]); return b; })(), smV('A', 0, 5, W, H)
+    ], async function (v) {
+      const R = FM.spine.read(FM.scene), eB = R.main.find(e => e.id === v.L('B').id);
+      if (!eB || !eB.seam || eB.seam.kind !== 'blend') throw new Error('CONTROL: A|B is not a crossfade B owns: ' + JSON.stringify(eB && eB.seam));
+      FM.selectLayer(v.L('B').id);
+      v.key('Backspace'); await v.idle();
+      if (v.L('B')) throw new Error('B was not deleted (it said “' + v.say() + '”)');
+      const C = v.L('C');
+      if (C.start !== 5) throw new Error('CONTROL: C did not land on A’s end (the fade went with B): ' + C.start);
+      /* what played at 10 (C's first frame) now plays at 5: the voice's source second 8 must be there too */
+      const vs = FM.scene.layers.filter(l => l.name === 'Voice').sort((a, b) => a.start - b.start).map(l => [l.start, l.duration, l.trimStart || 0]);
+      const want = [[2, 3, 0], [5, 4, 8]];
+      if (vs.length !== 2 || vs.some((x, k) => x.some((n, j) => Math.abs(n - want[k][j]) > 1e-9)))
+        throw new Error('the voice-over was cut through the wrong span — it now runs ' + (vs[1] ? (C.start - vs[1][0]) : '?') + ' s ahead of the picture: ' + JSON.stringify(vs) + ', want ' + JSON.stringify(want));
+      const run = v.L('Run');
+      if (Math.abs(run.start - 2) > 1e-9 || Math.abs(run.start + run.duration - 8) > 1e-9) throw new Error('the title that ran to 13 should now end at 8 (13 − the 5 s that went): ' + run.start + '..' + (run.start + run.duration));
+    });
+  });
+
+  test('simple P2.1 · review Delete never leaves a cut song’s speed ramp behind its sound: refused until 2.4 moves ramps (or kept in step)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    const srcAt = (name, t) => { const l = FM.scene.layers.find(x => x.name === name && t >= x.start - 1e-9 && t < x.start + x.duration); return l ? FM.layerLocalTime(l, t) : null; };
+    /* each case: the sound that played at `was` must play at `now` after the delete — or the delete is refused, unchanged */
+    const run = async (tag, song, was, now, wantRefused) => {
+      await smP2((W, H) => [song(W, H), smV('D', 12, 2, W, H), smV('C', 8, 4, W, H), smV('B', 4, 4, W, H), smV('A', 0, 4, W, H)], async function (v) {
+        const before = was.map(t => srcAt('Song', t)), d0 = v.doc(), n0 = v.steps();
+        if (before.some(x => x == null || !isFinite(x))) throw new Error('CONTROL ' + tag + ': no source time before the delete: ' + before);
+        FM.selectLayer(v.L('B').id);
+        v.key('Backspace'); await v.idle();
+        if (!v.L('B')) {                                 // it went through: the sound must still be in step
+          if (wantRefused) { fails.push(tag + ': the delete went through'); }
+          now.forEach((t, k) => { const x = srcAt('Song', t); if (!(x != null && Math.abs(x - before[k]) < 1e-3)) fails.push(tag + ': at ' + t + ' s the song plays source ' + x + ', but ' + before[k] + ' played there before the cut (the ramp stayed behind)'); });
+        } else if (v.doc() !== d0 || v.steps() !== n0) fails.push(tag + ': a refused delete changed the document (it said “' + v.say() + '”, ' + (v.steps() - n0) + ' step(s), layers ' + JSON.stringify(FM.scene.layers.map(l => [l.name, l.start, l.duration])) + ')');
+        else if (!/has moves/.test(v.say())) fails.push(tag + ': refused without the moves line: “' + v.say() + '”');
+      });
+    };
+    const ramp = (s, e) => ({ kf: [{ t: s, v: 0.5, e: 'linear' }, { t: e, v: 2, e: 'linear' }] });
+    /* CONTROL: a song with no ramp, starting inside B (case i), is cut and stays in step */
+    await run('flat (i)', (W, H) => smSong('Song', 5, 6, W, H, { trimStart: 0 }), [8.5, 9.5, 10.5], [4.5, 5.5, 6.5], false);
+    if (fails.length) throw new Error('CONTROL failed: ' + fails.join(' · '));
+    /* (i) a ramped song starting inside the deleted clip */
+    await run('ramp (i)', (W, H) => smSong('Song', 5, 6, W, H, { trimStart: 0, speed: ramp(5, 11) }), [8.5, 9.5, 10.5], [4.5, 5.5, 6.5]);
+    /* (iii) a ramped song running across the deleted clip: split, and its later piece trimmed */
+    await run('ramp (iii)', (W, H) => smSong('Song', 2, 8, W, H, { trimStart: 0, speed: ramp(2, 10) }), [8.5, 9.5], [4.5, 5.5]);
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('simple P2.1 · review a tap on the line Simple is saying, on its row, or on the selected clip keeps the selection (§3.12 rule 2: a tap on the line does nothing)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      /* a real finger's tap as the document sees it: the app's deselect-on-empty-tap listener is a capture listener on document */
+      const tap = el => { const r = el.getBoundingClientRect(), x = r.left + Math.min(r.width - 4, Math.max(4, r.width / 2)), y = r.top + r.height / 2;
+        ['pointerdown', 'pointerup'].forEach(t => el.dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0, pointerId: 9802, pointerType: 'touch', isPrimary: true }))); };
+      const A = v.L('A'), fails = [];
+      /* CONTROL: the same tap on the page's empty background does clear the selection, so these taps reach the listener */
+      FM.selectLayer(A.id); await v.sleep(40);
+      tap(document.body); await v.sleep(40);
+      if (FM.scene.selectedId) throw new Error('CONTROL: a tap on the empty background did not clear the selection — the synthetic tap is not seen');
+      /* the line's own text */
+      FM.selectLayer(A.id); await v.sleep(40);
+      FM.spine.say('That clip is locked', { buttons: [{ label: 'Do it anyway', fn() {} }] });
+      const txt = document.querySelector('#sm-say .sm-say-t');
+      if (!txt) throw new Error('CONTROL: no line text drawn');
+      tap(txt); await v.sleep(40);
+      if (FM.scene.selectedId !== A.id) fails.push('a tap on the line’s text deselected the clip');
+      if (!/That clip is locked/.test(v.say())) fails.push('a tap on the line’s text dismissed it');
+      /* the row itself, beside the line (its padding) */
+      FM.selectLayer(A.id); await v.sleep(40);
+      tap(document.getElementById('sm-say')); await v.sleep(40);
+      if (FM.scene.selectedId !== A.id) fails.push('a tap on the line’s row deselected the clip');
+      /* the selected clip itself: the app's pointerup must not deselect it before the clip's own click re-selects it */
+      FM.selectLayer(A.id); FM.refreshAll(); await v.sleep(40);
+      const item = document.querySelector('#sm-main .sm-item[data-id="' + A.id + '"]');
+      if (!item) throw new Error('CONTROL: clip A is not drawn in the clip row');
+      tap(item); await v.sleep(40);
+      if (FM.scene.selectedId !== A.id) fails.push('pressing the selected clip deselected it first (its panel closes and reopens; the click can land on a rebuilt row)');
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+
+  test('simple P2.1 · review a line Simple says in its row is announced by ONE live region, not read twice (§3.12 rule 1)', { item: '980', budgetMs: 30000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      /* the outermost live regions on the page whose text holds the line */
+      const live = '[aria-live="polite"],[aria-live="assertive"],[role="status"],[role="alert"]';
+      const regions = txt => Array.from(document.querySelectorAll(live))
+        .filter(r => r.getAttribute('aria-live') !== 'off' && !(r.parentElement && r.parentElement.closest(live)))
+        .filter(r => r.textContent.indexOf(txt) >= 0);
+      const row = 'Deleted clip and 1 thing on it zq1';
+      FM.spine.say(row, { buttons: [{ label: 'Undo', fn() {} }] });
+      if (!/zq1/.test(v.say())) throw new Error('CONTROL: the line did not take the row');
+      if (regions(row).length !== 1) throw new Error('a line with Undo sits in ' + regions(row).length + ' live regions (' + regions(row).map(r => r.id || r.className).join(', ') + '): a screen reader reads it twice');
+      const ref = 'Nothing more to trim zq2';
+      FM.spine.say(ref);
+      if (regions(ref).length !== 1) throw new Error('a refusal sits in ' + regions(ref).length + ' live regions (' + regions(ref).map(r => r.id || r.className).join(', ') + ')');
+      /* CONTROL: a live-only line still reaches #sm-live, exactly once, and leaves the row alone */
+      const mv = 'Trimmed Clip 2 zq3';
+      FM.spine.say(mv, { live: true });
+      if (document.getElementById('sm-live').textContent !== mv || regions(mv).length !== 1) throw new Error('CONTROL: the live-only line was not announced exactly once through #sm-live');
+      if (v.say().indexOf('zq3') >= 0) throw new Error('CONTROL: the live-only line took the row');
+    });
+  });
+
+  test('simple P2.1 · review the clips-and-length summary never shows :60 — the total is rounded before it is split into minutes', { item: '980' }, function () {
+    const f = FM.spineWords && FM.spineWords.summary;
+    if (typeof f !== 'function') throw new Error('FM.spineWords.summary is missing');
+    /* the first three carry into the next minute; the last three are CONTROLS that pass either way (format, not the carry) */
+    const cases = [[2, 59.6, '2 clips · 1:00'], [1, 119.5, '1 clip · 2:00'], [1, 59.99999999, '1 clip · 1:00'], [3, 59.4, '3 clips · 0:59'], [1, 0, '1 clip · 0:00'], [2, 65.2, '2 clips · 1:05']];
+    const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

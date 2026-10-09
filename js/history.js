@@ -8,6 +8,10 @@ window.FM = window.FM || {};
   'use strict';
 
   const stack = [];
+  /* Simple mode P2 (DESIGN.md §11): each step's {label, ed, arr} beside its snapshot, index for index. Full never passes one,
+     so a Full step's meta is null; only collab's undo gate reads `arr` (§10.2 door 2), and only Simple's runner writes it. */
+  const metas = [];
+  let commitSeq = 0;   // bumped on every real push: a tap Simple queued during a run is stamped with it (§3.7)
   let index = -1;
   let suppress = false;
   /* ⚠️ queue 826: MUTING IS A DEPTH, NOT A SWAPPED-OUT FUNCTION. Two callers used to batch a multi-layer
@@ -229,6 +233,11 @@ window.FM = window.FM || {};
        of that is this stack — collab reads it once, at arm, and diffs consecutive pairs lazily. A copy:
        the array itself must never leave this closure. */
     _snapshotsUpTo() { return stack.slice(0, index + 1); },
+    /* Simple mode P2: the metas beside those snapshots (collab's pre-session steps carry `arr`, §10.2 door 2), the meta of the
+       step the document stands on, and the push counter. Read-only. */
+    _metasUpTo() { return metas.slice(0, index + 1); },
+    _metaHere() { return index >= 0 ? metas[index] : null; },
+    _commitSeq() { return commitSeq; },
     /* ═══ A NAME GIVEN ON HOME IS NOT AN EDITOR EDIT (queue 690, hunt 5) ═══════════════════════════════════
      * ⋯ → Rename… on Home renames the open project with no history step — and going back into the SAME
      * project keeps this stack, every snapshot of which still carried the OLD name. So the first Undo he
@@ -263,7 +272,7 @@ window.FM = window.FM || {};
      * Safe at every caller: reset() runs either with the new project's layers and media already in
      * place (project open, import, template insert) or with both empty (boot). */
     reset() {
-      stack.length = 0; index = -1; this.commit();
+      stack.length = 0; metas.length = 0; index = -1; this.commit();
       if (FM.releaseUnreachableMedia) { try { FM.releaseUnreachableMedia(stack); } catch (e) {} }
       if (FM.storage && FM.storage.clearDirty) FM.storage.clearDirty();
       syncButtons();
@@ -277,7 +286,7 @@ window.FM = window.FM || {};
     mute() { muteDepth++; },
     unmute() { if (muteDepth > 0) muteDepth--; },
     isMuted() { return muteDepth > 0; },
-    commit() {
+    commit(meta) {
       if (suppress) return;
       if (muteDepth > 0) return;
       /* ═══ THE TWO COLLAB SEAMS (queue 921 S0, spec §9) ════════════════════════════════════════════
@@ -293,24 +302,25 @@ window.FM = window.FM || {};
       const cb = FM.collab && (FM.collab.active || !!(FM.collab.undoActive && FM.collab.undoActive()));
       if (cb) FM.collab.beforeSnap();
       const s = snap();
-      if (index >= 0 && stack[index] === s) { if (cb) FM.collab.afterCommit(); return; }   // identical to the current state → a no-op action can never add a stray undo step
+      if (index >= 0 && stack[index] === s) { if (cb) FM.collab.afterCommit(meta); return; }   // identical to the current state → a no-op action can never add a stray undo step
       // Discarding the redo tail can strand a clip just as an eviction can — a layer that only ever
       // existed "forward" of here is gone the moment the tail goes.
       let discarded = stack.length > index + 1;
       stack.splice(index + 1);          // drop redo tail
       stack.push(s);
+      metas.splice(index + 1); metas.push(meta && typeof meta === 'object' ? meta : null); commitSeq++;   // Simple mode P2
       index = stack.length - 1;
-      if (stack.length > 120) { stack.shift(); index--; discarded = true; }
+      if (stack.length > 120) { stack.shift(); metas.shift(); index--; discarded = true; }
       // Byte cap too: 120 snapshots of a multi-MB scene ≈ hundreds of MB of strings — an iOS Safari
       // jetsam risk. Trim the oldest until the stack fits (always keep a handful of steps).
       let bytes = 0; for (let i = 0; i < stack.length; i++) bytes += stack[i].length;
-      while (bytes > 48000000 && stack.length > 8) { bytes -= stack[0].length; stack.shift(); index--; discarded = true; }
+      while (bytes > 48000000 && stack.length > 8) { bytes -= stack[0].length; stack.shift(); metas.shift(); index--; discarded = true; }
       /* A DISCARDED SNAPSHOT IS THE ONLY MOMENT a deleted clip's media can stop being reachable, so
        * this is the one place the sweep needs to run. deleteLayer deliberately keeps the record (undo
        * restores JSON only, so freeing it there made an undone delete come back blank); the record is
        * released here instead, once no snapshot on the stack can bring the layer back. */
       if (discarded && FM.releaseUnreachableMedia) { try { FM.releaseUnreachableMedia(stack); } catch (e) {} }
-      if (cb) FM.collab.afterCommit();   // queue 921 S0: close this person's undo step (see beforeSnap above)
+      if (cb) FM.collab.afterCommit(meta);   // queue 921 S0: close this person's undo step (see beforeSnap above); Simple mode P2: with its meta
       if (FM.storage) FM.storage.autosave();
       syncButtons();   // a new edit drops the redo tail, so redo greys out here too
     },
@@ -327,7 +337,10 @@ window.FM = window.FM || {};
        no longer read Text and refused with "Can't undo — someone else changed it since" (nobody else had touched it),
        and that step was used up, so the text he added could never be undone. The flush now runs first either way, and
        the resync after either way (a session's undo also rewrites the layer under the open field). */
-    undo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.undo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
-    redo() { if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.redo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },
+    /* Simple mode P2 (§3.7, §0.4 B15): pressed while Simple's runner is mid-command, undo and redo wait in its queue and run
+       right after that command commits, never half-way through it. `FM.spine.running` is only ever true inside Simple's
+       runner, so in Full this line never fires. */
+    undo() { if (FM.spine && FM.spine.running && FM.spine.queueStep) return FM.spine.queueStep('undo'); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.undo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
+    redo() { if (FM.spine && FM.spine.running && FM.spine.queueStep) return FM.spine.queueStep('redo'); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.redo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },
   };
 })(window.FM);
