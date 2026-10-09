@@ -144,6 +144,9 @@ window.FM = window.FM || {};
     if (opts.from === 'cog') pendingFx = true; else if (!opts.quiet) crossfade();
     if (FM.syncSelectionChrome) FM.syncSelectionChrome();
     if (!opts.noRebuild && FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();   // syncProject runs INSIDE a rebuild: no second one
+    /* S10b: the band's own content follows the editor too. Nothing re-rendered #inspector at a switch, so Full's Add menu (nothing selected) stayed in the band
+       under Simple's tray, its second row drawn over the tools; and Simple's idle words stayed under Full. §8.3: the band shows Simple's tools and words. */
+    if (FM.inspector && FM.inspector.refresh) { try { FM.inspector.refresh(); } catch (e) {} }
     if (FM._dockSheet) requestAnimationFrame(FM._dockSheet);
     listeners.forEach(f => { try { f(mode); } catch (e) {} });
     /* focus never falls to <body> (§8.10 item 2): if what held it is gone from view, the cog it came from takes it */

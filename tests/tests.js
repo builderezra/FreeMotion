@@ -60837,6 +60837,29 @@
     });
   });
 
+
+  test('simple P2.6 · S10b switching from Full (Add menu showing, nothing selected) to Simple leaves no Full Add grid under the Simple tray, and Full gets its Add menu back (DESIGN §8.3 :2575-2579, :4050: the band shows the Simple tools and idle words)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    for (const [w, h] of [[1280, 800], [380, 0]]) {
+      await (w <= 700 ? (fn => atPhoneWidth(fn, w)) : (fn => smTrayBAt(w, h, fn)))(async function () {
+        await smP2(() => [], async function (v) {
+          FM.editor.apply('full', { force: true, quiet: true }); FM.refreshAll(); await v.sleep(400);
+          const insp = document.getElementById('inspector');
+          if (!insp.querySelector('.addmenu')) throw new Error('CONTROL (' + w + '): Full with nothing selected shows no Add menu');
+          FM.editor.set('simple'); await v.sleep(800);
+          if (insp.querySelector('.addmenu')) throw new Error(w + ': Full’s Add menu is still in the inspector under Simple');
+          if (w > 700) {
+            const bar = document.getElementById('sm-bar').getBoundingClientRect(), hits = [];
+            document.getElementById('inspector-panel').querySelectorAll('*').forEach(e => { if (e.closest('#sm-bar')) return; const r = e.getBoundingClientRect(); if (r.width > 4 && r.height > 4 && e.children.length === 0 && r.top < bar.bottom - 1 && r.bottom > bar.top + 1) hits.push((e.id || e.className || e.tagName) + '@' + Math.round(r.top)); });
+            if (hits.length) throw new Error(w + ': things sit under the Simple tray: ' + hits.slice(0, 6).join(', '));
+          }
+          FM.editor.set('full'); await v.sleep(600);
+          if (!insp.querySelector('.addmenu')) throw new Error(w + ': going back to Full did not bring its Add menu back');
+        });
+      });
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
