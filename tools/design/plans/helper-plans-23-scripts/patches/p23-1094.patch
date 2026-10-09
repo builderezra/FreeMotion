@@ -1,0 +1,89 @@
+diff --git a/tests/_platform.py b/tests/_platform.py
+index 8c0a81ec..76efa686 100644
+--- a/tests/_platform.py
++++ b/tests/_platform.py
+@@ -93,7 +93,7 @@ def gl_flags():
+ 
+ 
+ def chrome_extra_flags():
+-    """Flags that make THIS OS's headless Chrome answer like the Mac's. Empty on the Mac.
++    """Flags that make THIS OS's headless Chrome answer like the Mac's (plus --use-mock-keychain everywhere, below).
+ 
+     Linux (measured, Chrome 154 in WSL):
+       * a MOUSE. Headless Linux has no input devices: hover:none, pointer:none, so every (hover: hover) and
+@@ -113,12 +113,18 @@ def chrome_extra_flags():
+     (921 S6 Share panel, 921 S8 Scan QR) cannot measure here and stay red. --enable-features=BarcodeDetector was tried
+     (6 Oct): it EXPOSES the API with qr_code listed, but detect() rejects "Barcode Detection not implemented" — no Linux
+     backend — and the app, seeing the API, then skips its jsQR fallback: a third behaviour, neither the Mac's nor a real
+-    Linux user's. Absent is the honest state."""
++    Linux user's. Absent is the honest state.
++
++    EVERY OS (#1094): --use-mock-keychain. On macOS a fresh --user-data-dir reads "Chrome Safe Storage" from the login keychain through
++    secd, once per launch; this is Chrome's own switch for a test browser and changes nothing a test sees. It lives HERE so every launcher
++    that takes these flags (tests/_cdp.py, tests/_kbdevice.py, tests/_shot.sh through its shell twin, tools/shot.py through _cdp) gets it,
++    instead of one launcher remembering. Linux ignores it."""
++    flags = ["--use-mock-keychain"]
+     if IS_LINUX:
+-        return ["--hide-scrollbars",
+-                "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
+-                "--no-sandbox"]
+-    return []
++        flags += ["--hide-scrollbars",
++                  "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
++                  "--no-sandbox"]
++    return flags
+ 
+ 
+ def chrome_env(profile):
+diff --git a/tools/_platform.sh b/tools/_platform.sh
+index 202b5a1d..e285aad9 100644
+--- a/tools/_platform.sh
++++ b/tools/_platform.sh
+@@ -184,10 +184,11 @@ fm_chrome() {
+ }
+ 
+ # fm_chrome_extra_flags — the flags that make THIS OS's headless Chrome answer like the Mac's, one a line; nothing on the
+-# Mac. The twin of tests/_platform.py chrome_extra_flags() — same flags, same order, and that file says what each fixes
++# Mac except --use-mock-keychain, which goes everywhere. The twin of tests/_platform.py chrome_extra_flags() — same flags, same order, and that file says what each fixes
+ # (a mouse, 0-width scrollbars, no 8 GB renderer cap). For the shell tools that launch Chrome themselves (tests/_shot.sh):
+ # without them a Linux PC-width picture is the FINGER layout, (hover: none) and (pointer: none) — the PM's review.
+ fm_chrome_extra_flags() {
++  printf '%s\n' --use-mock-keychain      # #1094: every OS, the twin of chrome_extra_flags(): no login-keychain read per launch on a Mac
+   if [ "$(uname -s)" = Linux ]; then
+     printf '%s\n' --hide-scrollbars \
+       --blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2 \
+diff --git a/tools/ship.sh b/tools/ship.sh
+index 868217eb..96ae4fbc 100755
+--- a/tools/ship.sh
++++ b/tools/ship.sh
+@@ -671,7 +671,7 @@ fi
+ # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
+ # EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
+ # that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
+-if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
++if [ -n "$(git status --porcelain -- tests/_kbdevice.py tools/test-port.sh tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
+   echo "→ the port's gates or the driver changed — proving them before shipping"
+   if ! ./tools/test-port.sh; then
+     echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."
+diff --git a/tools/test-port.sh b/tools/test-port.sh
+index 477c6f66..fe01eb90 100755
+--- a/tools/test-port.sh
++++ b/tools/test-port.sh
+@@ -285,8 +285,17 @@ out="$(PATH="$(shim_os Linux):$PATH" ARGV_OUT="$TMP/argv.txt" FM_CHROME="$TMP/ar
+ if [ "$rc" = 0 ] && [ -f "$TMP/argv.txt" ]; then
+   grep -q '^--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2$' "$TMP/argv.txt" && ok "Linux: _shot.sh passes the mouse (blink settings), so a PC-width picture is the PC layout" || bad "Linux: _shot.sh launches Chrome WITHOUT the mouse flags — PC pictures are the finger layout: $(tr '\n' ' ' < "$TMP/argv.txt")"
+   grep -q '^--user-data-dir=' "$TMP/argv.txt" && ok "…on its own profile (removed after)" || bad "_shot.sh has no profile of its own"
++  grep -q '^--use-mock-keychain$' "$TMP/argv.txt" && ok "_shot.sh passes --use-mock-keychain (#1094: no login-keychain read per launch on a Mac)" || bad "_shot.sh does not pass --use-mock-keychain (#1094)"
+ else bad "_shot.sh did not run under the fake Chrome: rc=$rc $out"; fi
+ 
++echo "── every Chrome launcher that takes the extra flags gets --use-mock-keychain, on every OS (#1094) ──"
++for pos in linux darwin; do
++  python3 -c 'import sys; sys.path.insert(0, "tests"); import _platform as P
++P.IS_LINUX = (sys.argv[1] == "linux")
++sys.exit(0 if "--use-mock-keychain" in P.chrome_extra_flags() else 1)' "$pos" && ok "$pos: chrome_extra_flags() carries --use-mock-keychain" || bad "$pos: chrome_extra_flags() lacks --use-mock-keychain (#1094)"
++done
++for f in tests/_cdp.py tests/_kbdevice.py; do grep -q 'chrome_extra_flags()' "$f" && ok "$f takes chrome_extra_flags()" || bad "$f does not take chrome_extra_flags(), so it launches Chrome without the keychain flag (#1094)"; done
++
+ echo "── the load gate says when it passed blind: on WSL it sees the VM's load only (review minor) ──"
+ printf '5.15.153.1-microsoft-standard-WSL2\n' > "$TMP/osrelease-wsl"; printf '6.8.0-45-generic\n' > "$TMP/osrelease-linux"
+ printf 'MemTotal:       16000000 kB\nMemAvailable:    5242880 kB\n' > "$TMP/meminfo"

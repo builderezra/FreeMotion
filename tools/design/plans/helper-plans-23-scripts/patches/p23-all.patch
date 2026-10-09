@@ -1,0 +1,336 @@
+diff --git a/index.html b/index.html
+index dae1109d..733fd5f7 100644
+--- a/index.html
++++ b/index.html
+@@ -1047,7 +1047,7 @@
+   <script src="js/settings.js?v=51"></script>
+   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
+        rest of the collab modules are pure libraries and sit at the end of the list. -->
+-  <script src="js/collab-core.js?v=22"></script>
++  <script src="js/collab-core.js?v=23"></script>
+   <script src="js/statusbar.js?v=4"></script>
+   <script src="js/screen.js?v=1"></script>
+   <script src="js/scene.js?v=118"></script>
+@@ -1091,12 +1091,12 @@
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+   <script src="js/history.js?v=37"></script>
+-  <script src="js/storage.js?v=58"></script>
++  <script src="js/storage.js?v=59"></script>
+   <script src="js/export-resume.js?v=7"></script>
+   <script src="js/medialib.js?v=8"></script>
+   <script src="js/template-fill.js?v=4"></script>
+   <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
+-  <script src="js/home.js?v=201"></script>
++  <script src="js/home.js?v=202"></script>
+   <script src="js/graph-editor.js?v=18"></script>
+   <script src="js/gif-encode.js?v=1"></script>
+   <script src="js/zip-write.js?v=1"></script>
+@@ -1129,19 +1129,19 @@
+        .diff / .Host and do nothing else, so with no session running they cost one parse each. -->
+   <script src="js/collab-path.js?v=3"></script>
+   <script src="js/collab-diff.js?v=3"></script>
+-  <script src="js/collab-host.js?v=5"></script>
++  <script src="js/collab-host.js?v=6"></script>
+   <!-- queue 921 stage S2 — the engine. `link` is the transport interface plus its two offline
+        implementations (in-page and postMessage; there is no network of any kind in S2), `session` is
+        the per-device engine and `bridge` is the only file that knows both the engine and FM.scene.
+        All three are inert until something hands a session a link, which in S2 only the test rig does. -->
+   <script src="js/collab-signal.js?v=5"></script>
+   <script src="js/collab-link.js?v=9"></script>
+-  <script src="js/collab-session.js?v=12"></script>
++  <script src="js/collab-session.js?v=14"></script>
+   <script src="js/collab-bridge.js?v=11"></script>
+   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
+        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
+        A library like the rest: it does nothing at all until a session installs a controller on it. -->
+-  <script src="js/collab-media.js?v=5"></script>
++  <script src="js/collab-media.js?v=6"></script>
+   <!-- queue 921 stage S3 — the first real connection and the only collaboration UI there is. Both are
+        libraries too: `signal` is the minimal-SDP codec and the auth handshake (no rendezvous driver, no
+        invite link — those are S6), and `ui` builds nothing at all until Settings → Labs → Live
+@@ -1150,7 +1150,7 @@
+   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
+        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
+   <script src="js/collab-qr.js?v=3"></script>
+-  <script src="js/collab-ui.js?v=18"></script>
++  <script src="js/collab-ui.js?v=20"></script>
+   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
+        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
+        there is no presence DOM, no listener and no timer. -->
+diff --git a/js/collab-core.js b/js/collab-core.js
+index f4894a72..9d66c152 100644
+--- a/js/collab-core.js
++++ b/js/collab-core.js
+@@ -41,7 +41,7 @@ window.FM = window.FM || {};
+      a variant; Exposure gained Gamma and Work in.
+      Bumped to 7 by #482 polish batch 6: Vignette, Light / Soft / Dark Glow, Drop Shadow, Stroke, Lens Flare, Linear and Spin
+      Streaks and Glow Scan gained controls. */
+-  C.SCHEMA_REV = 7;
++  C.SCHEMA_REV = 8;
+ 
+   C.active = false;      // no session is running
+   C.role = 'owner';
+@@ -235,12 +235,12 @@ window.FM = window.FM || {};
+     const adefs = FM.audioFxRegistry ? (FM.audioFxRegistry.all() || []).map(function (e) {
+       return [e.type, (e.params || []).map(function (p) { return [p.key, p.min, p.max, p.def, p.keyframable !== false ? 1 : 0]; })];
+     }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }) : null;
+-    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV);
++    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + P.canon(C.DENY || []) + '|' + der + '|r' + C.SCHEMA_REV);
+   };
+ 
+   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
+      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
+-  C.SCHEMA_FP = 1911166791531509;   // #482 polish batch 6 (SCHEMA_REV 7): eight glow/shadow/vignette/flare effects gained controls
++  C.SCHEMA_FP = 5099630134268335;   // #1090 (SCHEMA_REV 8): the owner's private project keys (DENY, now with `notes`) are part of the schema; before: #482 polish batch 6 (SCHEMA_REV 7)
+ 
+   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
+    *
+diff --git a/js/collab-host.js b/js/collab-host.js
+index e4dbb06b..a05c0c30 100644
+--- a/js/collab-host.js
++++ b/js/collab-host.js
+@@ -204,6 +204,8 @@ window.FM = window.FM || {};
+          in the app is ambiguous after that (which of the two does `parent` mean?). Nothing the diff
+          emits is ever a bare root, so refusing them costs nothing and closes the hole. */
+       if (op.p.length < 2) return 'root';
++      /* #1090: a project key the owner keeps to himself is not writable by a guest either — a peer that still sends one is refused. */
++      if (op.p[0] === 'P' && C.DENY && C.DENY.indexOf(op.p[1]) >= 0) return 'private';
+       /* ⚠️ …AND THE BARE ROOT WAS NOT THE ONLY WAY IN. `s{p:['L',<id>]}` is one segment deeper and does
+          the same damage from the other end: `v:{id:'B'}` renames a layer to an id another layer already
+          has, and `v:{name:'x'}` deletes its `id` outright (patchObject drops what `v` omits), which
+diff --git a/js/collab-media.js b/js/collab-media.js
+index bca64d23..e2b13934 100644
+--- a/js/collab-media.js
++++ b/js/collab-media.js
+@@ -1112,6 +1112,15 @@ window.FM = window.FM || {};
+     for (let i = 0; i < jobs.length; i++) await applyFile(ctl, jobs[i].e, jobs[i].file);
+   }
+ 
++  const MAX_PIXELS = 50e6;
++  async function tooManyPixels(file) {
++    let rec = null;
++    try { rec = await FM.loadImageFile(file, { still: true }); } catch (x) { return false; }   // not decodable: writeRecord handles it as it always did
++    const n = (rec.width || 0) * (rec.height || 0);
++    try { if (rec.el) rec.el.src = ''; if (rec.url) URL.revokeObjectURL(rec.url); } catch (x) {}
++    return n > MAX_PIXELS;
++  }
++
+   async function applyFile(ctl, e, file) {
+     if (e.kind === 'font') {
+       let ok = false;
+@@ -1140,6 +1149,18 @@ window.FM = window.FM || {};
+       M.ui.sync(ctl);
+       return ok;
+     }
++    /* #1093: a picture a PEER sent is read for its size before anything is stored or decoded. The only gate until now was in BYTES
++       (ASK_ABOVE), and a solid-colour image of 50+ megapixels is a few KB — it would be written to this device and decoded on
++       every open. Over the limit it is named as skipped, exactly as a file over the byte cap is in planWants. */
++    if (e.kind === 'image' && await tooManyPixels(file)) {
++      await dropParts(ctl, e.fid);
++      delete ctl.wanted[e.fid];
++      ctl.bad[e.fid] = 1;
++      ctl.failed++;
++      ctl.dirty = true;
++      M.ui.sync(ctl);
++      return false;
++    }
+     const v = ctl.S.adapter.view();
+     const byId = Object.create(null);
+     ((v && v.layers) || []).forEach(function (l) { if (l && l.id) byId[l.id] = l; });
+diff --git a/js/collab-session.js b/js/collab-session.js
+index 4aaf3080..78c2722e 100644
+--- a/js/collab-session.js
++++ b/js/collab-session.js
+@@ -28,7 +28,8 @@ window.FM = window.FM || {};
+   /* §5.1: the owner's workspace pointers are his, not the document's. They must not travel, they must
+      not be diffed, and they must not reach the hash — a guest whose copy came from a template would
+      otherwise disagree with the host forever about a key it can never be told the value of. */
+-  const DENY = ['ofTemplate', 'ofTemplateRev', 'ofElement', 'returnTo', 'fromTemplate'];
++  /* #1090: `notes` is the owner's private Notes pad (text and reminders). It was synced to every guest, viewers included. */
++  const DENY = ['ofTemplate', 'ofTemplateRev', 'ofElement', 'returnTo', 'fromTemplate', 'notes'];
+ 
+   function viewOfProject(project) {
+     const out = {};
+@@ -857,6 +858,7 @@ window.FM = window.FM || {};
+           }
+           if (typeof x.owner === 'string') rs.owner = x.owner.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').slice(0, LIM.NAME);
+           S.roomSettings = rs;
++          if (S.gpid && FM.projects && FM.projects.patchCollab) { try { FM.projects.patchCollab(S.gpid, { roExport: rs.roExport }); } catch (e) {} }   // #1091: the card remembers it, for Home and for Leave
+           if (rs.owner) S.hostName = rs.owner;
+           if (A.onSettings) try { A.onSettings(rs); } catch (e) {}
+           return;
+@@ -1969,6 +1971,9 @@ window.FM = window.FM || {};
+        whose card carries no `collab` record is not a linked copy, whatever the session believes. */
+     const card = ((FM.projects && FM.projects.list()) || []).filter(function (p) { return p.id === gpid; })[0];
+     if (!card || !card.collab) { s.stop('left'); C.detach(); return Promise.resolve(null); }
++    /* #1091: a Viewer or Commenter whose owner turned exporting off may leave, but not with a copy. Refused here, not only in the panels, so
++       no door can hand him one; the session is left running, because nothing has been taken from him. */
++    if (o.keep !== false && FM.projects.canKeepLinked && !FM.projects.canKeepLinked(gpid)) return Promise.resolve(null);
+     /* ⚠️ S8 review: THE CARD IS MARKED LEFT FIRST, AND A WAITING APP UPDATE WAITS FOR THE COPY. `C.detach` runs a
+        deferred service-worker reload synchronously, so an update that had landed during the session reloaded
+        the page before `detachLinked` had copied a byte — and the linked card, untouched, reconnected on the
+diff --git a/js/collab-ui.js b/js/collab-ui.js
+index dc69c389..4c801914 100644
+--- a/js/collab-ui.js
++++ b/js/collab-ui.js
+@@ -1985,7 +1985,7 @@ window.FM = window.FM || {};
+     'Your project — every edit and every clip — goes straight between the devices, encrypted. The helpers below never see your project.',
+     'To find each other, the devices use free public services: PeerJS, EMQX and HiveMQ pass the first hello between them, and Google and Cloudflare tell each device its internet address.',
+     'Those services see your internet address and when a project is being shared — and so can anyone watching those services.',
+-    'Anyone with your link or short code can see the internet address of each device that joins.',
++    'Anyone with your link or short code can see your internet address when they try to join, even if you do not let them in.',
+     'Swap codes only skips them all: links and short codes stop working, and you swap codes with each person instead.'
+   ];
+   const CODES_ONLY_HINT = 'No online helpers — links and short codes stop working, and you swap codes with each person instead.';
+@@ -3186,6 +3186,16 @@ window.FM = window.FM || {};
+       const pend = C.media && C.media.pending ? C.media.pending(s) : null;
+       const blank = pend ? (pend.n || 0) + (pend.skipped || 0) : 0;
+       /* #967 B4 (J5-10c): the answer to "Leave?" is Leave — "Keep my own copy" read like a different choice. */
++      if (s.gpid && FM.projects.canKeepLinked && !FM.projects.canKeepLinked(s.gpid)) {
++        /* #1091: exporting is off for him, so there is no copy to keep — one honest choice, not two. */
++        return FM.ask({ title: 'Leave this project?', danger: true, ok: 'Leave & delete', cancel: 'Cancel',
++          message: 'You stop getting their changes. The owner turned off exporting for viewers and commenters, so this project is removed from this device when you leave.' })
++          .then(function (yes) {
++            if (!yes) return null;
++            if (host) closeAny(); else closeCard();
++            return C.leave({ keep: false }).then(function () { U.syncBanner(); if (FM.toast) FM.toast('You left — the project was removed from this device', 2600); return null; });
++          });
++      }
+       FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device — you can delete it from Home if you want.'
+         + (blank ? ' ' + (blank === 1 ? '1 clip has' : blank + ' clips have') + ' not arrived yet and will be blank in your copy.' : ''), ok: LEAVE_KEEP, cancel: 'Cancel' })
+         .then(function (yes) {
+diff --git a/js/home.js b/js/home.js
+index 0bb5326a..f48fbbb5 100644
+--- a/js/home.js
++++ b/js/home.js
+@@ -1398,7 +1398,7 @@ window.FM = window.FM || {};
+         /* §19.6: somebody else's shared copy is not his to duplicate, template or share — it can be kept as his
+            own (the same detach Leave does), exported, or left and deleted. */
+         ...(cx && cx.kind === 'shared' ? [
+-          { label: 'Keep as my own copy', action: async () => {
++          ...(FM.projects.canKeepLinked && !FM.projects.canKeepLinked(p.id) ? [] : [{ label: 'Keep as my own copy', action: async () => {
+             if (!await FM.ask({ title: 'Keep this as your own project?', message: 'It stops being a copy of ' + cx.host + '’s project and becomes yours — their changes stop arriving.', ok: 'Keep as mine' })) return;
+             const s = FM.collab.session;
+             if (s && !s.isOwner && s.gpid === p.id) { await FM.collab.leave({ keep: true }); }
+@@ -1408,7 +1408,7 @@ window.FM = window.FM || {};
+               if (!nid && FM.toast) FM.toast('Could not make it your own — the device may be full');
+             }
+             render();
+-          } },
++          } }]),
+           { label: 'Leave & delete', danger: true, action: async () => {
+             if (!await FM.ask({ title: 'Leave and delete this copy?', message: 'Your copy of ' + cx.host + '’s project is removed from this device. Their project is not touched.', ok: 'Leave & delete', danger: true })) return;
+             const s = FM.collab.session;
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..6f9f633d 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -2734,9 +2734,17 @@ window.FM = window.FM || {};
+       const idx = this.list();
+       const e = idx.find(p => p.id === id);
+       if (!e || !e.collab || !patch) return false;
+-      ['ended', 'seen'].forEach(k => { if (k in patch) e.collab[k] = patch[k]; });
++      ['ended', 'seen', 'roExport'].forEach(k => { if (k in patch) e.collab[k] = patch[k]; });
+       return this.saveIndex(idx);
+     },
++    /* #1091: may this linked copy become the guest's own? Not when he is a Viewer or Commenter and the owner has switched exporting
++       off for them: "can only watch" has to be true, and a copy he can edit and export is the opposite of it. `roExport` is the
++       owner's setting as this device last heard it (the session writes it onto the card); a card that never heard one is allowed. */
++    canKeepLinked(id) {
++      const e = this.list().find(p => p.id === id);
++      if (!e || !e.collab) return true;
++      return !((e.collab.role === 'viewer' || e.collab.role === 'commenter') && e.collab.roExport === false);
++    },
+     /* §12.3: the linked copy stops being linked and becomes HIS. New project id, NEW LAYER IDS (that is
+      * the whole point — the ids were the host's, and two projects on one device holding the same layer
+      * ids is what the same-device refusal in §12.2 exists to catch), media copied under them.
+diff --git a/tests/_platform.py b/tests/_platform.py
+index 8c0a81ec..76efa686 100644
+--- a/tests/_platform.py
++++ b/tests/_platform.py
+@@ -93,7 +93,7 @@ def gl_flags():
+ 
+ 
+ def chrome_extra_flags():
+-    """Flags that make THIS OS's headless Chrome answer like the Mac's. Empty on the Mac.
++    """Flags that make THIS OS's headless Chrome answer like the Mac's (plus --use-mock-keychain everywhere, below).
+ 
+     Linux (measured, Chrome 154 in WSL):
+       * a MOUSE. Headless Linux has no input devices: hover:none, pointer:none, so every (hover: hover) and
+@@ -113,12 +113,18 @@ def chrome_extra_flags():
+     (921 S6 Share panel, 921 S8 Scan QR) cannot measure here and stay red. --enable-features=BarcodeDetector was tried
+     (6 Oct): it EXPOSES the API with qr_code listed, but detect() rejects "Barcode Detection not implemented" — no Linux
+     backend — and the app, seeing the API, then skips its jsQR fallback: a third behaviour, neither the Mac's nor a real
+-    Linux user's. Absent is the honest state."""
++    Linux user's. Absent is the honest state.
++
++    EVERY OS (#1094): --use-mock-keychain. On macOS a fresh --user-data-dir reads "Chrome Safe Storage" from the login keychain through
++    secd, once per launch; this is Chrome's own switch for a test browser and changes nothing a test sees. It lives HERE so every launcher
++    that takes these flags (tests/_cdp.py, tests/_kbdevice.py, tests/_shot.sh through its shell twin, tools/shot.py through _cdp) gets it,
++    instead of one launcher remembering. Linux ignores it."""
++    flags = ["--use-mock-keychain"]
+     if IS_LINUX:
+-        return ["--hide-scrollbars",
+-                "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
+-                "--no-sandbox"]
+-    return []
++        flags += ["--hide-scrollbars",
++                  "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2",
++                  "--no-sandbox"]
++    return flags
+ 
+ 
+ def chrome_env(profile):
+diff --git a/tools/_platform.sh b/tools/_platform.sh
+index 202b5a1d..e285aad9 100644
+--- a/tools/_platform.sh
++++ b/tools/_platform.sh
+@@ -184,10 +184,11 @@ fm_chrome() {
+ }
+ 
+ # fm_chrome_extra_flags — the flags that make THIS OS's headless Chrome answer like the Mac's, one a line; nothing on the
+-# Mac. The twin of tests/_platform.py chrome_extra_flags() — same flags, same order, and that file says what each fixes
++# Mac except --use-mock-keychain, which goes everywhere. The twin of tests/_platform.py chrome_extra_flags() — same flags, same order, and that file says what each fixes
+ # (a mouse, 0-width scrollbars, no 8 GB renderer cap). For the shell tools that launch Chrome themselves (tests/_shot.sh):
+ # without them a Linux PC-width picture is the FINGER layout, (hover: none) and (pointer: none) — the PM's review.
+ fm_chrome_extra_flags() {
++  printf '%s\n' --use-mock-keychain      # #1094: every OS, the twin of chrome_extra_flags(): no login-keychain read per launch on a Mac
+   if [ "$(uname -s)" = Linux ]; then
+     printf '%s\n' --hide-scrollbars \
+       --blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2 \
+diff --git a/tools/ship.sh b/tools/ship.sh
+index 868217eb..96ae4fbc 100755
+--- a/tools/ship.sh
++++ b/tools/ship.sh
+@@ -671,7 +671,7 @@ fi
+ # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
+ # EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
+ # that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
+-if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
++if [ -n "$(git status --porcelain -- tests/_kbdevice.py tools/test-port.sh tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
+   echo "→ the port's gates or the driver changed — proving them before shipping"
+   if ! ./tools/test-port.sh; then
+     echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."
+diff --git a/tools/test-port.sh b/tools/test-port.sh
+index 477c6f66..fe01eb90 100755
+--- a/tools/test-port.sh
++++ b/tools/test-port.sh
+@@ -285,8 +285,17 @@ out="$(PATH="$(shim_os Linux):$PATH" ARGV_OUT="$TMP/argv.txt" FM_CHROME="$TMP/ar
+ if [ "$rc" = 0 ] && [ -f "$TMP/argv.txt" ]; then
+   grep -q '^--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2$' "$TMP/argv.txt" && ok "Linux: _shot.sh passes the mouse (blink settings), so a PC-width picture is the PC layout" || bad "Linux: _shot.sh launches Chrome WITHOUT the mouse flags — PC pictures are the finger layout: $(tr '\n' ' ' < "$TMP/argv.txt")"
+   grep -q '^--user-data-dir=' "$TMP/argv.txt" && ok "…on its own profile (removed after)" || bad "_shot.sh has no profile of its own"
++  grep -q '^--use-mock-keychain$' "$TMP/argv.txt" && ok "_shot.sh passes --use-mock-keychain (#1094: no login-keychain read per launch on a Mac)" || bad "_shot.sh does not pass --use-mock-keychain (#1094)"
+ else bad "_shot.sh did not run under the fake Chrome: rc=$rc $out"; fi
+ 
++echo "── every Chrome launcher that takes the extra flags gets --use-mock-keychain, on every OS (#1094) ──"
++for pos in linux darwin; do
++  python3 -c 'import sys; sys.path.insert(0, "tests"); import _platform as P
++P.IS_LINUX = (sys.argv[1] == "linux")
++sys.exit(0 if "--use-mock-keychain" in P.chrome_extra_flags() else 1)' "$pos" && ok "$pos: chrome_extra_flags() carries --use-mock-keychain" || bad "$pos: chrome_extra_flags() lacks --use-mock-keychain (#1094)"
++done
++for f in tests/_cdp.py tests/_kbdevice.py; do grep -q 'chrome_extra_flags()' "$f" && ok "$f takes chrome_extra_flags()" || bad "$f does not take chrome_extra_flags(), so it launches Chrome without the keychain flag (#1094)"; done
++
+ echo "── the load gate says when it passed blind: on WSL it sees the VM's load only (review minor) ──"
+ printf '5.15.153.1-microsoft-standard-WSL2\n' > "$TMP/osrelease-wsl"; printf '6.8.0-45-generic\n' > "$TMP/osrelease-linux"
+ printf 'MemTotal:       16000000 kB\nMemAvailable:    5242880 kB\n' > "$TMP/meminfo"

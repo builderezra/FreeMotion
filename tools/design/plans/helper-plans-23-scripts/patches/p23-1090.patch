@@ -1,0 +1,85 @@
+diff --git a/index.html b/index.html
+index dae1109d..bd2f7087 100644
+--- a/index.html
++++ b/index.html
+@@ -1047,7 +1047,7 @@
+   <script src="js/settings.js?v=51"></script>
+   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
+        rest of the collab modules are pure libraries and sit at the end of the list. -->
+-  <script src="js/collab-core.js?v=22"></script>
++  <script src="js/collab-core.js?v=23"></script>
+   <script src="js/statusbar.js?v=4"></script>
+   <script src="js/screen.js?v=1"></script>
+   <script src="js/scene.js?v=118"></script>
+@@ -1129,14 +1129,14 @@
+        .diff / .Host and do nothing else, so with no session running they cost one parse each. -->
+   <script src="js/collab-path.js?v=3"></script>
+   <script src="js/collab-diff.js?v=3"></script>
+-  <script src="js/collab-host.js?v=5"></script>
++  <script src="js/collab-host.js?v=6"></script>
+   <!-- queue 921 stage S2 — the engine. `link` is the transport interface plus its two offline
+        implementations (in-page and postMessage; there is no network of any kind in S2), `session` is
+        the per-device engine and `bridge` is the only file that knows both the engine and FM.scene.
+        All three are inert until something hands a session a link, which in S2 only the test rig does. -->
+   <script src="js/collab-signal.js?v=5"></script>
+   <script src="js/collab-link.js?v=9"></script>
+-  <script src="js/collab-session.js?v=12"></script>
++  <script src="js/collab-session.js?v=13"></script>
+   <script src="js/collab-bridge.js?v=11"></script>
+   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
+        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
+diff --git a/js/collab-core.js b/js/collab-core.js
+index f4894a72..9d66c152 100644
+--- a/js/collab-core.js
++++ b/js/collab-core.js
+@@ -41,7 +41,7 @@ window.FM = window.FM || {};
+      a variant; Exposure gained Gamma and Work in.
+      Bumped to 7 by #482 polish batch 6: Vignette, Light / Soft / Dark Glow, Drop Shadow, Stroke, Lens Flare, Linear and Spin
+      Streaks and Glow Scan gained controls. */
+-  C.SCHEMA_REV = 7;
++  C.SCHEMA_REV = 8;
+ 
+   C.active = false;      // no session is running
+   C.role = 'owner';
+@@ -235,12 +235,12 @@ window.FM = window.FM || {};
+     const adefs = FM.audioFxRegistry ? (FM.audioFxRegistry.all() || []).map(function (e) {
+       return [e.type, (e.params || []).map(function (p) { return [p.key, p.min, p.max, p.def, p.keyframable !== false ? 1 : 0]; })];
+     }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }) : null;
+-    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV);
++    return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + P.canon(C.DENY || []) + '|' + der + '|r' + C.SCHEMA_REV);
+   };
+ 
+   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
+      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
+-  C.SCHEMA_FP = 1911166791531509;   // #482 polish batch 6 (SCHEMA_REV 7): eight glow/shadow/vignette/flare effects gained controls
++  C.SCHEMA_FP = 5099630134268335;   // #1090 (SCHEMA_REV 8): the owner's private project keys (DENY, now with `notes`) are part of the schema; before: #482 polish batch 6 (SCHEMA_REV 7)
+ 
+   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
+    *
+diff --git a/js/collab-host.js b/js/collab-host.js
+index e4dbb06b..a05c0c30 100644
+--- a/js/collab-host.js
++++ b/js/collab-host.js
+@@ -204,6 +204,8 @@ window.FM = window.FM || {};
+          in the app is ambiguous after that (which of the two does `parent` mean?). Nothing the diff
+          emits is ever a bare root, so refusing them costs nothing and closes the hole. */
+       if (op.p.length < 2) return 'root';
++      /* #1090: a project key the owner keeps to himself is not writable by a guest either — a peer that still sends one is refused. */
++      if (op.p[0] === 'P' && C.DENY && C.DENY.indexOf(op.p[1]) >= 0) return 'private';
+       /* ⚠️ …AND THE BARE ROOT WAS NOT THE ONLY WAY IN. `s{p:['L',<id>]}` is one segment deeper and does
+          the same damage from the other end: `v:{id:'B'}` renames a layer to an id another layer already
+          has, and `v:{name:'x'}` deletes its `id` outright (patchObject drops what `v` omits), which
+diff --git a/js/collab-session.js b/js/collab-session.js
+index 4aaf3080..3182e947 100644
+--- a/js/collab-session.js
++++ b/js/collab-session.js
+@@ -28,7 +28,8 @@ window.FM = window.FM || {};
+   /* §5.1: the owner's workspace pointers are his, not the document's. They must not travel, they must
+      not be diffed, and they must not reach the hash — a guest whose copy came from a template would
+      otherwise disagree with the host forever about a key it can never be told the value of. */
+-  const DENY = ['ofTemplate', 'ofTemplateRev', 'ofElement', 'returnTo', 'fromTemplate'];
++  /* #1090: `notes` is the owner's private Notes pad (text and reminders). It was synced to every guest, viewers included. */
++  const DENY = ['ofTemplate', 'ofTemplateRev', 'ofElement', 'returnTo', 'fromTemplate', 'notes'];
+ 
+   function viewOfProject(project) {
+     const out = {};

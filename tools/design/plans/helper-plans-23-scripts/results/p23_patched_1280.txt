@@ -1,0 +1,5 @@
+1280 Regression 4/4 ✓Pending 0/0 built
+   ok  P23 #1093 a picture a peer sends over 50 megapixels is skipped and never stored, a normal one still 
+   ok  P23 #1092 the full privacy list says the OWNER’s internet address is seen by whoever tries to join, 
+   ok  P23 #1090 the Notes pad stays on the owner’s device: not in what a guest is sent, and a peer that se
+   ok  P23 #1091 a Viewer or Commenter whose owner turned exporting off cannot leave with a copy, and every

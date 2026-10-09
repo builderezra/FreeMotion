@@ -1,0 +1,257 @@
+1280 Regression 248/253 ✗ · NOT RUN HERE 2 Pending 0/0 built
+   ok  921 S0 duplicateFrom copies independently and rolls back on failure
+   ok  921 S2 detaching a linked copy copies the last edits, not the last autosave
+   ok  921 S0 pruneOrphans keeps collab: keys and checkpoint layer ids
+   ok  921 S0 projects.remove spares records another doc references
+   ok  921 S0 normalizeGroupOrder: null on every app-produced order (op fuzz), repairs a duplicated id
+   ok  921 S0 job brackets: depth returns to 0 even when the job throws; watchdog reports
+   ok  921 S0 the job watchdog budgets silence, not the length of the batch
+   ok  921 S0 cancelGesturesOn stops tools and restores an in-flight clip drag
+   ok  921 S0 inheritLoopModes/timeToX/onRebuilt: rebuild output unchanged, onRebuilt fires once
+   ok  921 S0 sanitizers keep a valid uid, drop an invalid one, uid-less output byte-identical
+   ok  921 S1 paths: escape round trip, and __proto__ / _x / a numeric segment are refused
+   ok  921 S1 a key no path can name is dropped by canon and clone too, not just by the diff
+   ok  921 S1 canon and eq speak JSON, not JavaScript: NaN, -0, undefined, key order
+   ok  921 S1 clone() is a copy all the way down: past the depth ceiling it cannot alias the original
+   ok  921 S1 diff then apply reproduces the target exactly, and the step inverse gets back, over 200 seede
+   ok  921 S1 the diff stops at the path grammar ceiling instead of emitting an op no peer can apply
+   ok  921 S1 the LIS reorder emits the minimal number of moves, and the exact order
+   ok  921 S1 an anchor is resolved against the base the op actually lands on: a two-layer paste and an und
+   ok  921 S1 keyed arrays: two peers adding an effect at once both survive, and a removal beats a child wr
+   ok  921 S1 stampIds fills a missing uid, re-stamps a duplicate on the later copy, and never touches an i
+   ok  921 S1 the host role filter, exhaustively: role x op x path
+   ok  921 S1 a comment is validated against §17.1 before it lands: a nested reply cannot forge identity, a
+   ok  921 S1 lease refusal, CAS, the li anchor fallback and a forced delete
+   ok  921 S1 a queued li or ai over an element that is back is a CLASH, not a silent overwrite
+   ok  921 S1 the host sanitises on a CLONE: the fix goes out and every live array keeps its identity
+   ok  921 S1 the host repairs a parent cycle and a repeated id, on a clone, as ordinary ops
+   ok  921 S1 a whole-layer write is structural too, so the parent-cycle repair does not depend on how the 
+   ok  921 S1 hostile input: prototype keys, a 10 MB string, an https fillImage, 6000 ops and HTML in a nam
+   ok  921 S1 an op may not rewrite or delete the key that addresses it: no duplicate ids, no unaddressable
+   ok  921 S1 the diagnostics ring is bounded, and an ack names the batch that carries its ops or null
+   ok  921 S1 the sanitiser is a fixed point on the kitchen sink, on every registered effect and on the ope
+   ok  921 S1 the schema fingerprint gate
+   ok  921 S1 an extra uid changes no effect comparison, no picture and no sanitiser answer
+   ok  921 S2 the collab core is inert until a session is attached: no session, no listeners, no UI, no glo
+   ok  921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, 
+   ok  921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself co
+   ok  921 S2 one commit is exactly one tx, and a muted batch of five edits is still one
+   ok  921 S2 the derived writes never leak: a rebuild, a render and a second normalise send nothing
+   ok  921 S2 a remote change is applied IN PLACE: every object and array the UI is holding survives it
+   ok  921 S2 a slider under a finger never jumps, and the last person to let go wins — in both orders
+   ok  921 S2 a gesture that was rolled back adopts the value it was protected from
+   ok  921 S2 a remote change DEEPER than the held path is adopted at release, not dropped and then reverte
+   ok  921 S2 a held reorder parks the LAYER order only — every other order statement in the batch still re
+   ok  921 S2 a remote delete during a gesture wins: the gesture is cancelled and the selection is cleared
+   ok  921 S2 an export freezes the live apply while the host base keeps advancing, then drains
+   ok  921 S2 the busy barrier: a half-built paste is never sent, and it arrives as one tx when the job end
+   ok  921 S2 the settle release stands down behind the export/job barrier, and lands the moment it lifts
+   ok  921 S2 a tick that lands mid project switch sends nothing, instead of deleting every layer for every
+   ok  921 S2 switching project stands the session down BEFORE the scene is torn, not after the load
+   ok  921 S2 a history.reset() for the document the session is ALREADY on leaves it attached — only a docu
+   ok  921 S2 the host autosaves after a remote batch
+   ok  921 S2 undo is per person: a changed path is left alone, a delete comes back with its media, a struc
+   ok  921 S2 a viewer cannot write: the refusal comes back with the host value and the local change is rev
+   ok  921 S2 a hash mismatch resyncs, writes a report, and escalates after three
+   ok  921 S2 a gap in the batch sequence is noticed when it lands, not ten seconds later by the hash
+   ok  921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped
+   ok  921 S2 being told the wire is cut really marks the outbox, so work done away comes back as a CAS and
+   ok  921 S2 a persisted guest base answers for the WRITE, not for having asked for one
+   ok  921 S2 a second Share stands the first session down instead of leaving an orphan ticking
+   ok  921 S2 leaving an OWNER session ends it — it never duplicates or deletes his own project
+   ok  921 S2 a service-worker takeover mid-session is held until the session lets go
+   ok  921 S2 tier 3: a guest joins and gets the document, and not one byte of its own projects moves — on 
+   ok  921 S2 tier 3: three real instances converge, a delete lands on a layer someone else has selected, a
+   ok  921 S2 tier 3: the host reloads — a new epoch, a snapshot, and the guest's work made while it was go
+   ok  921 S2 tier 3: a partition counts the clashes, Save my version makes a real project, and a guest rel
+   ok  921 S2 tier 3: the same-device refusal, Replace and Keep-first, and leave-keep detaching with ids th
+   ok  921 S3 the three channels open with the negotiated ids 0/1/2, presence is the lossy one, and a ctl r
+   ok  921 S3 a 300 KB control message is cut into frames no bigger than the SCTP limit and arrives byte-id
+   ok  921 S3 when a link says it is open, every channel is open — a bulk send straight after ready arrives
+   ok  921 S3 20 MB on the bulk channel never buffers more than 4 MiB plus one chunk, and arrives whole
+   ok  921 S3 the chunk size is read off the peer connection, never a constant
+   ok  921 S3 the connection code round trips a real description, and refuses a truncated or mistyped one
+   ok  921 S3 auth binds the key AND both fingerprints: the right key passes, a wrong key is denied, a tamp
+   ok  921 S3 a name full of HTML is printed, never parsed — in the people list and in the knock card
+   ok  921 S3 the Share panel and the Join sheet fit a 380px phone with no sideways scroll, and a desktop t
+   ok  921 S3 with the Labs switch off the only collab DOM is the two doors — one button each, no network, 
+   ok  921 S3 arming writes a checkpoint of the project as it was, and keeps only the last ten
+   ok  921 S3 the profile refuses an empty name and a colour that is not one of the eight, and cleans the o
+   RED 921 S3 Stop sharing revokes the code that was handed out — the offer is closed, and the next share m
+   ok  921 S3 the key rides in the code, so the fingerprint binding cannot stop a relay — the five letters 
+   ok  921 S3 the owner cannot admit anybody without confirming the five letters, and a refusal spends the 
+   ok  921 S3 a peer that authenticated and never says hello cannot make the owner buffer without limit
+   ok  921 S3 an emoji that lands on a fragment boundary survives the wire — code units are not characters
+   ok  921 S3 the handshake really refuses when a fingerprint is missing, on the host side as well as the g
+   ok  921 S3 there is a Share button on a phone, in the bar a phone actually shows
+   ok  921 S3 the app is told when a session ends or the wire goes, and the offline line stops promising a 
+   ok  921 S3 a guest that has already given up is not admitted as a member nobody can see
+   ok  921 S3 a guest who already holds this project is offered the two answers C.join implements, instead 
+   ok  921 S3 a connection that never opens gives up and says so, and a code with no candidates is refused 
+   ok  921 S3 a share button removed with Labs off does not come back when the window narrows
+   ok  921 S3 undo still works after Stop sharing — the hand-over points at the session that ended
+   ok  921 S3 demoting a guest reaches the guest, and the Leave dialog offers only what it has buttons for
+   ok  921 S3 turning Labs off as a guest detaches the linked copy instead of stranding it
+   ok  921 S4 the manifest groups one file for every layer that uses it, so a split and a duplicate transfe
+   RED 921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture re
+   ok  921 S4 a link that dies mid-file resumes from the bytes already kept, and what lands is byte-identic
+   ok  921 S4 the boot sweep never collects a half-arrived file, and neither does the media collector
+   ok  921 S4 a device with no room says so and writes nothing beyond what fits
+   ok  921 S4 a guest export waits for the media it still needs, and “Export anyway” goes ahead
+   ok  921 S4 replacing a clip keeps the one it replaced, and undoing the replace puts it back
+   ok  921 S4 a font crosses with the document and is applied on the far side, byte for byte
+   ok  921 S4 a manifest naming a layer id this device holds in ANOTHER project writes nothing
+   ok  921 S4 tier 3: a clip a guest adds reaches the host and every other peer, and draws there
+   ok  921 S4 tier 3: the clips arrive into the guest’s own copy and not one byte of its own projects moves
+   ok  921 S4 review: a replace HE makes during a session keeps HIS footage in the stash, not the file that
+   ok  921 S4 review: a clip that arrives late never overwrites the one he imported while it was downloadin
+   ok  921 S4 review: two peers uploading at once do not cross their files — a transfer is named by its pee
+   ok  921 S4 review: a file that fails at the last step is asked for again, instead of being dropped for t
+   ok  921 S4 review: ending a session collects the abandoned parts the rooms before it left behind
+   ok  921 S4 review: a sender that restarts from zero cannot have its new part 0 deleted by the drop of th
+   ok  921 S4 review: the progress card’s × dismisses it, and a failure he has not seen still gets through
+   ok  921 S4 review: a device that runs out mid-transfer says “This device is full” instead of a bar froze
+   ok  921 S4 review: a timeline rebuild does not lose the missing-clip markers
+   ok  921 S4 review: a file whose bytes never match its declared size is asked for twice and then left alo
+   ok  921 S4 review: a 90 MB “font” is refused before a byte of it moves
+   ok  921 S4 review: a peer cannot register a face under a built-in family name
+   ok  921 S4 review: one file, one job per peer — a flood of wants does not open a transfer each
+   ok  921 S4 review: only the peer a file is sourced from can say it no longer has it
+   ok  921 S4 review: a “miss” answer frees the in-flight slot it was holding
+   ok  921 S5 a three-layer remote multi-select draws three outlines — one solid, two dashed — and rings th
+   ok  921 S5 two seconds of a remote pointer moving never renders the scene — requestRender and renderScen
+   ok  921 S5 a remote playhead sits at timeToX, and one off screen becomes a chip at the lane edge that ta
+   ok  921 S5 the people chip shows three faces and +N, the ones away or silent go grey, and alone it is an
+   ok  921 S5 follow tracks their playhead within 0.4 s, starts and stops with them, and ends on a local ta
+   ok  921 S5 a text lease: while Sam types in a layer, opening it here is refused with a toast and the loc
+   ok  921 S5 a viewer cannot take a lease, and nobody can lease a layer that does not exist
+   ok  921 S5 a text lease seen from a GUEST: the host’s lease-no closes the editor there and says who has 
+   ok  921 S5 the pointer and selection switches hide their own overlays, and only their own
+   ok  921 S5 the people chip overlaps neither the view bar nor the canvas — 9:16 and 16:9 at 380×760, and 
+   ok  921 S5 with no session there is no presence DOM, listener or timer, and ending a session takes all t
+   ok  921 S5 the inspector says when someone else is on the layer you have open, and what they are adjusti
+   ok  921 S5 the eight person colours read on the dark canvas, are never mistaken for my selection, the ke
+   ok  921 S5 the Labs switch and the two display switches survive a reload
+   ok  921 S5 the guest panel lists who is here, printed as text, each with a Follow
+   ok  921 S5 review: the render hook reads every outline’s geometry before it writes any, a still frame wr
+   ok  921 S5 review: Follow never replays a frozen state — somebody who goes quiet mid-play is not seeked 
+   ok  921 S5 review: a guest whose session the owner ended keeps no presence — no timer, listener, chip, l
+   ok  921 S5 review: a guest whose link dropped obeys nothing from the last roster — its text editor stays
+   ok  921 S5 review: every PR frame fits in 1 KB — the owner with 64 layers selected, and a guest’s full-s
+   ok  921 S5 review: a remote pointer glides on a transform — never on left/top — and sits exactly where t
+   ok  921 S5 review: looking at a gradient’s Colour view or a drawn shape’s Element view locks nothing — t
+   ok  921 S5 review: a guest greys a host that has gone silent, and the owner’s own “away” leaves in the v
+   ok  921 S5 review: a Viewer who follows is told so in the banner, and gets the × to stop
+   ok  921 S5 review: the Share panel paints each person in the colour presence draws them in
+   ok  921 S5 review: at 1280×760 the inspector line takes no height from the band — the cards neither scro
+   ok  921 S5 review: at 380 px the banner clears a four-person chip, and a long Follow name never pushes t
+   ok  921 S5 review: the people panels stay current while open, a Follow on somebody who has left says so 
+   ok  921 S5 review: a lease refusal names who holds the layer — on the owner, and on a guest
+   ok  921 S5 review: demoting an editor releases the layer they held, even with their text editor still op
+   ok  921 S5 review: the roster goes to a peer at most twice a second however fast a member flips its stat
+   ok  921 S5 review: one person’s taps make at most one ring per 600 ms, and a ring lands inside the proje
+   ok  921 S5 review: a peer’s pn and af are looked up, never printed — prototype keys and free text show n
+   ok  921 S6 the collaboration code can reach exactly the relays and STUN servers §14.4 names — no other h
+   ok  921 S6 the envelope seals and opens; a flipped byte, a wrong key, an old timestamp and a reused nonc
+   ok  921 S6 an invite is read from the fragment only, and one that opened the app is stashed, taken off t
+   ok  921 S6 a room code folds I, L, O and dashes the way people read it, and its PBKDF2 key is the same o
+   ok  921 S6 the MQTT client speaks 3.1.1 to a broker: CONNECT, SUBSCRIBE and PUBLISH byte by byte, and an
+   ok  921 S6 the PeerJS client against a fake server: OPEN, an offer relayed with its source, EXPIRE for a
+   ok  921 S6 with any one relay dead a real join still works, and an offer the three relays all deliver is
+   ok  921 S6 the knock lets in, turns away, and declines by itself; a member’s token skips it next time; a
+   RED 921 S6 a shared copy finds its owner by itself: a here from the owner makes it offer again at once, 
+   ok  921 S6 an owner who opens another project PAUSES the room — the copy stays linked and comes back by 
+   ok  921 S6 an invite that opened the app fills in the Join sheet and waits for one tap — nothing reaches
+   ok  921 S6 the version gate speaks on both screens: a newer joiner is told the owner needs an update and
+   ok  921 S6 an invite opened in Safari on an iPhone offers the installed app first, and nowhere else does
+   ok  921 S6 Codes only opens no WebSocket at all — sharing, a pasted link and a dropped copy all stay off
+   RED 921 S6 the Share panel hands out a link, a QR the camera reads back as that link, and a 9-character 
+   ok  921 S6 six seconds with nothing from the owner takes the guest Offline — which starts the reconnect 
+   ok  921 S6 reopening a project he is sharing asks “Carry on sharing?” (#967 B3), and Share again starts 
+   ok  921 S6 review: Remove changes the link and the code — the old link reaches nobody, even from another
+   ok  921 S6 review: only a refusal the owner SIGNED ends a shared copy — a link holder answering first, a
+   ok  921 S6 review: four knocks waiting on the short code do not stop a member coming back, and a queued 
+   ok  921 S6 review: a knock belongs to its session — opening another project answers it “paused” and take
+   ok  921 S6 review: “Back in sync” waits for the owner’s welcome — a reconnect he turns away (full) never
+   ok  921 S6 review: a link that dies while the joiner waits at the knock is said at once — not after two 
+   ok  921 S6 review: [Update] on a join typed as a short code keeps the code, and the join is waiting, fil
+   ok  921 S6 review: while nobody answers, the Join sheet says “their device”, never “them’s”, and a short
+   ok  921 S6 review: a reopened shared copy says it is reconnecting, and its Share button shows the guest 
+   ok  921 S6 review: the iPhone landing card says how to reach Join in the app — straight to Home’s worded
+   ok  921 S6 review: turning Labs off while sharing drops the room, so turning it on again does not re-sha
+   ok  921 S6 review: the Share panel says when every relay has dropped, and an MQTT socket that stops answ
+   ok  921 S6 review: the short code lapses — once it has not been on screen for CODE_TTL the owner stops l
+   ok  921 S6 review: the room-wide offer cap is per door — thirty offers a minute through the link or the 
+   ok  921 S6 review: Settings → Labs names every third party the relay uses, like the Share panel does
+   ok  921 S6 review: an invite pasted into the address bar of a tab that is already open is picked up, and
+   ok  921 S6 review: a member who is offline is in the people list with a Remove, and removing them refuse
+   ok  921 S7 the host refuses whatever a role may not do, whatever the device claims — a Viewer’s forged e
+   ok  921 S7 an Editor changes the canvas only after “Change the canvas for everyone?” — Cancel changes no
+   ok  921 S7 a role change reaches the other device at once — the gating classes, the note above the inspe
+   ok  921 S7 Remove sends “removed”, revokes the token and rotates the link and code — the old link reache
+   ok  921 S7 comments: add, reply and resolve on the card, a mark on the ruler at the comment’s time that 
+   ok  921 S7 with “Viewers and commenters can export” off, a Viewer’s Export says so and opens nothing; on
+   ok  921 S7 deleting a layer somebody holds is refused and put back where it was, and “Delete anyway” del
+   ok  921 S7 save points: one when sharing starts, another only after ten minutes with a change, never mor
+   ok  921 S7 the sharing settings menu has every switch in one place, each reaches only the people it appl
+   ok  921 S7 a Viewer’s drag on the canvas and on a clip moves nothing, not even for a tick — their tap st
+   ok  921 S7 with Labs on, a phone’s top bar keeps the project name whole — Share is the round invite on t
+   ok  921 S7 review: an `ai` on a comment or reply that already exists is not an insert — a Commenter cann
+   ok  921 S7 review: a comment keyed `#u:` or naming another comment’s id is refused, so the id-keyed list
+   ok  921 S7 review: two whole-list sets in one tx cannot plant a comment in anybody’s name — the second b
+   ok  921 S7 review: the first comment posted at the same moment as somebody else’s is not lost — an Edito
+   ok  921 S7 review: undoing a comment delete brings back the right authors — Sam’s reply stays Sam’s, an 
+   ok  921 S7 review: a Commenter may take her own `resolved` away — the Undo of her own Resolve — and stil
+   ok  921 S7 review: a guest’s Undo runs the same backstop as an edit — an Editor made a Viewer sends noth
+   ok  921 S7 review: a Viewer cannot put her own bytes on the owner’s clip through the media channel — onl
+   ok  921 S7 review: a new session never hands a newcomer somebody else’s comments by number — mids start 
+   ok  921 S7 review: a member who comes back through its token after the owner’s session restarts gets its
+   ok  921 S7 review: “Editors can invite others” says what the link does — straight in with “Let them in”,
+   ok  921 S7 review: under “Connect with codes only”, Sharing settings does not print the relay privacy pa
+   ok  921 S7 review: a comment’s ⋯ opens ABOVE the comments card, so Edit and Delete can be tapped at 380 
+   ok  921 S7 review: with the comments card open, a knock’s “Let in” and a toast are ABOVE it, and the 500
+   ok  921 S7 review: on a phone a Viewer is not offered the timeline’s +, the ⋯ of edits or the ≡ grips, a
+   ok  921 S7 review: a Commenter who opens Canvas settings is told in the card, in words for a Commenter, 
+   ok  921 S7 review: the save point from when sharing started is never the one trimmed — twelve save point
+   ok  921 S7 review: “Earlier versions…” opens from the project’s ⋯ on Home with no session — nothing is a
+   ok  921 S7 review: a comment pinned at the playhead is not hidden under its head — the head wears it, an
+   ok  921 S7 review: a Viewer’s Comments row does not offer to reply or leave a note — a Commenter’s does
+   ok  921 S7 review: the composer’s “At 0:01” follows the playhead — after tapping another comment’s “at 0
+   ok  921 S7 review: “Exporting is turned off” is a notice with one button, not a choice between two that 
+   ok  921 S8 a 500-layer project under a 4× CPU throttle: the commit-hook diff stays within 30 ms and the 
+   ok  921 S8 adversarial peer fuzz: a minute of malformed, oversized, out-of-order and hostile messages on
+   ok  921 S8 eight devices converge: an owner and seven guests editing at once for 400 seeded rounds, with
+   ok  921 S8 an accelerated one-hour soak: the ring, lastBy, pending, the ack cache and the presence pools
+   RED 921 S8 [Scan QR] reads the app’s own invite code off the camera into the Join field and waits for a 
+   ok  921 S8 Settings → Labs → Test connection says plainly what works on this network — the relays, the a
+   ok  921 S8 a refused delete or move puts the element back where it was on the device that tried — an eff
+   ok  921 S8r a layer id from one of his OTHER projects, planted in the shared document, is never read, se
+   ok  921 S8r a refused tx is repaired within a budget: a Viewer naming every layer gets a bounded answer 
+   ok  921 S8r a removed member’s token gets its own door: one answer at a time, never a member’s slot, a f
+   ok  921 S8r an Editor’s malformed markers never reach the owner’s project — playback’s readout, the time
+   ok  921 S8r a comment’s text is a string and its resolved flag a boolean, for every role, and all of the
+   ok  921 S8r fonts from a session are capped, and the ones it installed that nothing uses any more leave 
+   ok  921 S8r a link waiting on the knock is quiet: its frames are dropped unread, and a flood closes it a
+   ok  921 S8r the owner’s comments carry a mark nobody else can choose — a guest named “Ezra” in his colou
+   ok  921 S8r a relay floods no more decrypts than a room could honestly be spoken to: junk to the hub is 
+   ok  921 S8r Leave marks the copy first, waits for a pending update until the copy has settled, and says 
+   ok  921 S8r one tab per room: a second tab does not arm a second host for a project another tab is shari
+   ok  921 S8r an offline clash offers “Save my version as a copy” with the version kept before the flush, 
+   ok  921 S8r a toast raised from a collaboration card is painted above it, and a refused copy puts the te
+   ok  921 S8r after the owner stops sharing, the guest can join his next share straight away — the ended s
+   ok  921 S8r a guest who LEAVES is forgotten by the owner’s room — no offline ghost, no second row on a r
+   ok  921 S8r at 380×667 the Join sheet keeps Cancel and Join on screen with the code step and the five le
+   ok  921 S8r Home says what is shared: LIVE on the project he is hosting (whose ⋯ offers Stop sharing, #9
+   ok  921 S8r a copy that joined with a code says it cannot reconnect by itself, and never promises to sen
+   ok  921 S8r an old invite link that nobody answers names the reset as a reason — not only “their device 
+   ok  921 S8r “Most people at once” holds after the knock: two knocks that each saw one place left cannot 
+   ok  921 S8r the short code on an open Share panel is the code that works — never replaced behind the scr
+   ok  921 S8r Test connection’s ✓ and ✕ read on the light Settings panel, and its Copy says what it did wh
+   ok  921 S8r “Not now” on the big-download question defers the media: the clip is marked missing, the car
+   ok  921 S8r a phone receiving the shared media holds the screen awake until it lands, and the card says 
+   ok  921 S0 restore uses _afterExternalChange (629 rule intact)
+   ok  921 S0 nothing leaves the device, and solo undo still restores byte-for-byte
+   ok  921 S0 boxFor equals #select-box geometry (rotated, parented, group, skew, text wrap)
+FAIL921 S3 Stop sharing revokes the code that was handed out — the offer is closed, and the next share mints a different one — the module is not holding the offer whose code is on screen, so this test cannot see whether it is revoked
+FAIL921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders — the video has no decoded element in the registry after arriving, so nothing could ever draw it
+FAIL921 S6 a shared copy finds its owner by itself: a here from the owner makes it offer again at once, its token lets it in, and a dropped link comes back with the banner saying so — the re-offer came 3025 ms after `here` — §13.5 says retry IMMEDIATELY on the owner’s announce

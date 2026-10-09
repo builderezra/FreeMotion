@@ -1,0 +1,9 @@
+380 Regression 0/4 ✗Pending 0/0 built
+   RED P23 #1093 a picture a peer sends over 50 megapixels is skipped and never stored, a normal one still 
+   RED P23 #1092 the full privacy list says the OWNER’s internet address is seen by whoever tries to join, 
+   RED P23 #1090 the Notes pad stays on the owner’s device: not in what a guest is sent, and a peer that se
+   RED P23 #1091 a Viewer or Commenter whose owner turned exporting off cannot leave with a copy, and every
+FAILP23 #1093 a picture a peer sends over 50 megapixels is skipped and never stored, a normal one still lands — the 224638-byte, 57.8 MP picture a peer sent was written to this device (224638 bytes) and is decoded again on every open
+FAILP23 #1092 the full privacy list says the OWNER’s internet address is seen by whoever tries to join, even someone he turns away — the line still says the link holder sees the address "of each device that joins" — all guest traffic goes through the owner, so what is exposed is the OWNER’s address: “Anyone with your link or short code can see the internet address of each device that joins.”
+FAILP23 #1090 the Notes pad stays on the owner’s device: not in what a guest is sent, and a peer that sends a notes edit is refused — the view a guest is built from carries the owner’s Notes pad: [{"id":"n1","text":"quote the client 4,200","done":false,"remind":true}]
+FAILP23 #1091 a Viewer or Commenter whose owner turned exporting off cannot leave with a copy, and every other case still can — timed out waiting for the card to hear that exporting is off (last answer: null)

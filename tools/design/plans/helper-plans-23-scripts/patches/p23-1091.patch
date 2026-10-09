@@ -1,0 +1,125 @@
+diff --git a/index.html b/index.html
+index dae1109d..c05a631a 100644
+--- a/index.html
++++ b/index.html
+@@ -1091,12 +1091,12 @@
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+   <script src="js/history.js?v=37"></script>
+-  <script src="js/storage.js?v=58"></script>
++  <script src="js/storage.js?v=59"></script>
+   <script src="js/export-resume.js?v=7"></script>
+   <script src="js/medialib.js?v=8"></script>
+   <script src="js/template-fill.js?v=4"></script>
+   <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
+-  <script src="js/home.js?v=201"></script>
++  <script src="js/home.js?v=202"></script>
+   <script src="js/graph-editor.js?v=18"></script>
+   <script src="js/gif-encode.js?v=1"></script>
+   <script src="js/zip-write.js?v=1"></script>
+@@ -1136,7 +1136,7 @@
+        All three are inert until something hands a session a link, which in S2 only the test rig does. -->
+   <script src="js/collab-signal.js?v=5"></script>
+   <script src="js/collab-link.js?v=9"></script>
+-  <script src="js/collab-session.js?v=12"></script>
++  <script src="js/collab-session.js?v=13"></script>
+   <script src="js/collab-bridge.js?v=11"></script>
+   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
+        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
+@@ -1150,7 +1150,7 @@
+   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
+        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
+   <script src="js/collab-qr.js?v=3"></script>
+-  <script src="js/collab-ui.js?v=18"></script>
++  <script src="js/collab-ui.js?v=19"></script>
+   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
+        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
+        there is no presence DOM, no listener and no timer. -->
+diff --git a/js/collab-session.js b/js/collab-session.js
+index 4aaf3080..06021a8f 100644
+--- a/js/collab-session.js
++++ b/js/collab-session.js
+@@ -857,6 +857,7 @@ window.FM = window.FM || {};
+           }
+           if (typeof x.owner === 'string') rs.owner = x.owner.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').slice(0, LIM.NAME);
+           S.roomSettings = rs;
++          if (S.gpid && FM.projects && FM.projects.patchCollab) { try { FM.projects.patchCollab(S.gpid, { roExport: rs.roExport }); } catch (e) {} }   // #1091: the card remembers it, for Home and for Leave
+           if (rs.owner) S.hostName = rs.owner;
+           if (A.onSettings) try { A.onSettings(rs); } catch (e) {}
+           return;
+@@ -1969,6 +1970,9 @@ window.FM = window.FM || {};
+        whose card carries no `collab` record is not a linked copy, whatever the session believes. */
+     const card = ((FM.projects && FM.projects.list()) || []).filter(function (p) { return p.id === gpid; })[0];
+     if (!card || !card.collab) { s.stop('left'); C.detach(); return Promise.resolve(null); }
++    /* #1091: a Viewer or Commenter whose owner turned exporting off may leave, but not with a copy. Refused here, not only in the panels, so
++       no door can hand him one; the session is left running, because nothing has been taken from him. */
++    if (o.keep !== false && FM.projects.canKeepLinked && !FM.projects.canKeepLinked(gpid)) return Promise.resolve(null);
+     /* ⚠️ S8 review: THE CARD IS MARKED LEFT FIRST, AND A WAITING APP UPDATE WAITS FOR THE COPY. `C.detach` runs a
+        deferred service-worker reload synchronously, so an update that had landed during the session reloaded
+        the page before `detachLinked` had copied a byte — and the linked card, untouched, reconnected on the
+diff --git a/js/collab-ui.js b/js/collab-ui.js
+index dc69c389..16ecbcd5 100644
+--- a/js/collab-ui.js
++++ b/js/collab-ui.js
+@@ -3186,6 +3186,16 @@ window.FM = window.FM || {};
+       const pend = C.media && C.media.pending ? C.media.pending(s) : null;
+       const blank = pend ? (pend.n || 0) + (pend.skipped || 0) : 0;
+       /* #967 B4 (J5-10c): the answer to "Leave?" is Leave — "Keep my own copy" read like a different choice. */
++      if (s.gpid && FM.projects.canKeepLinked && !FM.projects.canKeepLinked(s.gpid)) {
++        /* #1091: exporting is off for him, so there is no copy to keep — one honest choice, not two. */
++        return FM.ask({ title: 'Leave this project?', danger: true, ok: 'Leave & delete', cancel: 'Cancel',
++          message: 'You stop getting their changes. The owner turned off exporting for viewers and commenters, so this project is removed from this device when you leave.' })
++          .then(function (yes) {
++            if (!yes) return null;
++            if (host) closeAny(); else closeCard();
++            return C.leave({ keep: false }).then(function () { U.syncBanner(); if (FM.toast) FM.toast('You left — the project was removed from this device', 2600); return null; });
++          });
++      }
+       FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device — you can delete it from Home if you want.'
+         + (blank ? ' ' + (blank === 1 ? '1 clip has' : blank + ' clips have') + ' not arrived yet and will be blank in your copy.' : ''), ok: LEAVE_KEEP, cancel: 'Cancel' })
+         .then(function (yes) {
+diff --git a/js/home.js b/js/home.js
+index 0bb5326a..f48fbbb5 100644
+--- a/js/home.js
++++ b/js/home.js
+@@ -1398,7 +1398,7 @@ window.FM = window.FM || {};
+         /* §19.6: somebody else's shared copy is not his to duplicate, template or share — it can be kept as his
+            own (the same detach Leave does), exported, or left and deleted. */
+         ...(cx && cx.kind === 'shared' ? [
+-          { label: 'Keep as my own copy', action: async () => {
++          ...(FM.projects.canKeepLinked && !FM.projects.canKeepLinked(p.id) ? [] : [{ label: 'Keep as my own copy', action: async () => {
+             if (!await FM.ask({ title: 'Keep this as your own project?', message: 'It stops being a copy of ' + cx.host + '’s project and becomes yours — their changes stop arriving.', ok: 'Keep as mine' })) return;
+             const s = FM.collab.session;
+             if (s && !s.isOwner && s.gpid === p.id) { await FM.collab.leave({ keep: true }); }
+@@ -1408,7 +1408,7 @@ window.FM = window.FM || {};
+               if (!nid && FM.toast) FM.toast('Could not make it your own — the device may be full');
+             }
+             render();
+-          } },
++          } }]),
+           { label: 'Leave & delete', danger: true, action: async () => {
+             if (!await FM.ask({ title: 'Leave and delete this copy?', message: 'Your copy of ' + cx.host + '’s project is removed from this device. Their project is not touched.', ok: 'Leave & delete', danger: true })) return;
+             const s = FM.collab.session;
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..6f9f633d 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -2734,9 +2734,17 @@ window.FM = window.FM || {};
+       const idx = this.list();
+       const e = idx.find(p => p.id === id);
+       if (!e || !e.collab || !patch) return false;
+-      ['ended', 'seen'].forEach(k => { if (k in patch) e.collab[k] = patch[k]; });
++      ['ended', 'seen', 'roExport'].forEach(k => { if (k in patch) e.collab[k] = patch[k]; });
+       return this.saveIndex(idx);
+     },
++    /* #1091: may this linked copy become the guest's own? Not when he is a Viewer or Commenter and the owner has switched exporting
++       off for them: "can only watch" has to be true, and a copy he can edit and export is the opposite of it. `roExport` is the
++       owner's setting as this device last heard it (the session writes it onto the card); a card that never heard one is allowed. */
++    canKeepLinked(id) {
++      const e = this.list().find(p => p.id === id);
++      if (!e || !e.collab) return true;
++      return !((e.collab.role === 'viewer' || e.collab.role === 'commenter') && e.collab.roExport === false);
++    },
+     /* §12.3: the linked copy stops being linked and becomes HIS. New project id, NEW LAYER IDS (that is
+      * the whole point — the ids were the host's, and two projects on one device holding the same layer
+      * ids is what the same-device refusal in §12.2 exists to catch), media copied under them.

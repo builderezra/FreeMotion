@@ -1,0 +1,52 @@
+diff --git a/index.html b/index.html
+index dae1109d..fa992889 100644
+--- a/index.html
++++ b/index.html
+@@ -1141,7 +1141,7 @@
+   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
+        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
+        A library like the rest: it does nothing at all until a session installs a controller on it. -->
+-  <script src="js/collab-media.js?v=5"></script>
++  <script src="js/collab-media.js?v=6"></script>
+   <!-- queue 921 stage S3 — the first real connection and the only collaboration UI there is. Both are
+        libraries too: `signal` is the minimal-SDP codec and the auth handshake (no rendezvous driver, no
+        invite link — those are S6), and `ui` builds nothing at all until Settings → Labs → Live
+diff --git a/js/collab-media.js b/js/collab-media.js
+index bca64d23..e2b13934 100644
+--- a/js/collab-media.js
++++ b/js/collab-media.js
+@@ -1112,6 +1112,15 @@ window.FM = window.FM || {};
+     for (let i = 0; i < jobs.length; i++) await applyFile(ctl, jobs[i].e, jobs[i].file);
+   }
+ 
++  const MAX_PIXELS = 50e6;
++  async function tooManyPixels(file) {
++    let rec = null;
++    try { rec = await FM.loadImageFile(file, { still: true }); } catch (x) { return false; }   // not decodable: writeRecord handles it as it always did
++    const n = (rec.width || 0) * (rec.height || 0);
++    try { if (rec.el) rec.el.src = ''; if (rec.url) URL.revokeObjectURL(rec.url); } catch (x) {}
++    return n > MAX_PIXELS;
++  }
++
+   async function applyFile(ctl, e, file) {
+     if (e.kind === 'font') {
+       let ok = false;
+@@ -1140,6 +1149,18 @@ window.FM = window.FM || {};
+       M.ui.sync(ctl);
+       return ok;
+     }
++    /* #1093: a picture a PEER sent is read for its size before anything is stored or decoded. The only gate until now was in BYTES
++       (ASK_ABOVE), and a solid-colour image of 50+ megapixels is a few KB — it would be written to this device and decoded on
++       every open. Over the limit it is named as skipped, exactly as a file over the byte cap is in planWants. */
++    if (e.kind === 'image' && await tooManyPixels(file)) {
++      await dropParts(ctl, e.fid);
++      delete ctl.wanted[e.fid];
++      ctl.bad[e.fid] = 1;
++      ctl.failed++;
++      ctl.dirty = true;
++      M.ui.sync(ctl);
++      return false;
++    }
+     const v = ctl.S.adapter.view();
+     const byId = Object.create(null);
+     ((v && v.layers) || []).forEach(function (l) { if (l && l.id) byId[l.id] = l; });

@@ -1,0 +1,26 @@
+diff --git a/index.html b/index.html
+index dae1109d..c73fff48 100644
+--- a/index.html
++++ b/index.html
+@@ -1150,7 +1150,7 @@
+   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
+        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
+   <script src="js/collab-qr.js?v=3"></script>
+-  <script src="js/collab-ui.js?v=18"></script>
++  <script src="js/collab-ui.js?v=19"></script>
+   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
+        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
+        there is no presence DOM, no listener and no timer. -->
+diff --git a/js/collab-ui.js b/js/collab-ui.js
+index dc69c389..9191f59e 100644
+--- a/js/collab-ui.js
++++ b/js/collab-ui.js
+@@ -1985,7 +1985,7 @@ window.FM = window.FM || {};
+     'Your project — every edit and every clip — goes straight between the devices, encrypted. The helpers below never see your project.',
+     'To find each other, the devices use free public services: PeerJS, EMQX and HiveMQ pass the first hello between them, and Google and Cloudflare tell each device its internet address.',
+     'Those services see your internet address and when a project is being shared — and so can anyone watching those services.',
+-    'Anyone with your link or short code can see the internet address of each device that joins.',
++    'Anyone with your link or short code can see your internet address when they try to join, even if you do not let them in.',
+     'Swap codes only skips them all: links and short codes stop working, and you swap codes with each person instead.'
+   ];
+   const CODES_ONLY_HINT = 'No online helpers — links and short codes stop working, and you swap codes with each person instead.';
