@@ -20,7 +20,7 @@ So everything below says what the handler does with those events (**Measured**) 
 
 **How likely a real thumb is to cause these (Guess, said plainly).** AU7-1: a finger resting on a screen still produces small moves, whose own speed is low, so the stale speed is most likely with a mouse or a pen on a narrow window, and only occasionally with a thumb. AU7-2 needs the OS to take a touch without telling the page (a system gesture, a call): the spec says that gives a `pointercancel`, so it is a hardening against browsers that do not, which I cannot show on a phone from here. The 80 ms and 2 s are my numbers, easy to retune. Both fixes are small and neither changes a swipe that already worked; if you would rather not carry two guesses, AU7-1 is the one with the clearer logic and AU7-2 the more speculative.
 
-Mutations: **not run for AU7** (the mutation tool's output was not available for this branch in the time left; the red-on-main runs above are the proof I have). Busters bumped: `mobile.js?v=47`.
+Mutations (all CAUGHT on the touch-type test, `au7_mut.log`): the stale speed kept (A1), the window far too long (A2), the speed always zeroed so a real flick no longer closes (A3, caught by the flick control), no ghost takeover (B1), the takeover with no wait (B2, caught by the second-finger control). The mouse half and the finger half were not mutated separately. Busters bumped: `mobile.js?v=47`.
 
 `audit-mobile-scripts/`: `au7-tests.js` (append before `async function run()`; `?only=AU7`), `au7-fixes.patch`.
 

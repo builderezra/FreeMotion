@@ -1,0 +1,21 @@
+=== A1_stale_speed_kept
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU7-1 — a 48px drag, 600 ms at rest, then the lift closed the sheet: the speed of the last move (4 px/ms) was read as a flick
+=== A2_window_too_long
+   (a finger test: run again in a touch page of its own, FM_TOUCH_PAGE=1, as ship.sh and prove.sh run them)
+✅ CAUGHT:
+FAILAU7-1 — a 48px drag, 600 ms at rest, then the lift closed the sheet: the speed of the last move (4 px/ms) was read as a flick
+=== A3_flick_lost
+   (a finger test: run again in a touch page of its own, FM_TOUCH_PAGE=1, as ship.sh and prove.sh run them)
+✅ CAUGHT:
+FAILAU7-1 — CONTROL: a fast flick of 48px (3 px/ms) did not close the sheet, so the rule this test guards is gone
+=== B1_no_ghost_takeover
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU7-2 — 2.3 s after a press that never ended, a fresh swipe past a third did not close the sheet: the dead press still owns the handler
+=== B2_takeover_at_once
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU7-2 — CONTROL: a second finger put down moments after the first closed the sheet (the guard against a 2nd finger is gone)
+ALLDONE
