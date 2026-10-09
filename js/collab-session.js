@@ -902,8 +902,34 @@ window.FM = window.FM || {};
       }
       applyIncoming(b.ops.concat(b.fix || []), { by: b.by });
       adoptOrder(b.ord, true);
+      dropRecoveredInserts(b.ops.concat(b.fix || []));
       S.bs = b.seq;
       persistSoon();
+    }
+
+    /* AU5-2: A LAYER SOMEBODY ELSE REMOVED IS NOT BROUGHT BACK BY A GUESS. `recoverOutbox` (§12.4) turns "live minus the
+       persisted base" into work this device owes, and when the base is stale (it is written two seconds after a batch,
+       and not at all when the device is out of room) that includes layers that merely ARRIVED here and were never this
+       device's own. The tail the host answers the hello with then says the owner deleted one of them, and the recovered
+       `li` still went out afterwards as q:1: the host reads an insert of an id it does not have as "genuinely new"
+       (§13.3), so the owner's delete was undone for everybody by a phone that had only watched the layer exist.
+       Only the entries `recoverOutbox` made are touched; an offline add the person made in this session never carries the
+       flag, and an id nobody removed is untouched either way. */
+    function dropRecoveredInserts(ops) {
+      let gone = null;
+      for (let i = 0; i < ops.length; i++) if (ops[i] && ops[i].o === 'lr') (gone = gone || Object.create(null))[ops[i].id] = 1;
+      if (!gone) return;
+      for (let i = outstanding.length - 1; i >= 0; i--) {
+        const e = outstanding[i];
+        if (!e.recovered) continue;
+        const keep = e.ops.filter(function (op) { return !(op.o === 'li' && gone[op.id]); });
+        if (keep.length === e.ops.length) continue;
+        const dropped = e.ops.filter(function (op) { return keep.indexOf(op) < 0; });
+        outboxOps = Math.max(0, outboxOps - dropped.length);   // recoverOutbox never added these to the counters, so never go below none
+        outboxBytes = Math.max(0, outboxBytes - canon(dropped).length);
+        e.ops = keep;
+        if (!keep.length) outstanding.splice(i, 1);
+      }
     }
 
     function onAck(ack) {
@@ -1358,7 +1384,7 @@ window.FM = window.FM || {};
       for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
       S.cid += 1;
       for (let i = 0; i < ops.length; i++) if (ops[i].o === 's' || ops[i].o === 'd') pending[P.key(ops[i].p)] = S.cid;
-      outstanding.push({ cid: S.cid, ops: ops, sent: false, queued: true });
+      outstanding.push({ cid: S.cid, ops: ops, sent: false, queued: true, recovered: true });   // `recovered`: see dropRecoveredInserts
       keepMyVersion();                          // §13.2 step 5: a reload's recovered work is offline work too
       return ops.length;
     };
