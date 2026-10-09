@@ -139,6 +139,11 @@ window.FM = window.FM || {};
     if (u.kind === 'main' || u.kind === 'captions' || u.kind === 'fullOnly' || u.kind === 'undecided') return true;
     if (R.tail.indexOf(id) >= 0) return true;
     if (u.host && String(u.host).indexOf('slot:') === 0) return true;
+    /* 2.4b (§4.3): a rule-2 mover (a Controller that parents main clips), a unit hosted through the link rule or rule 1b, and a unit whose link chain ends at a
+       mover get no `sm` key: they travel with what they are tied to, so a reorder of all a Controller's children still moves it by d */
+    if (u.mover || u.linked) return true;
+    const l = FM.layerById(FM.scene, id);
+    if (l) { const seen = new Set([id]); let cur = l; for (let hops = 0; hops < 8; hops++) { const pid = cur.parent && cur.parent !== cur.id ? cur.parent : null; const pl = pid && FM.layerById(FM.scene, pid); if (!pl || pl.type === 'group' || seen.has(pid)) break; if (R.units[pid] && R.units[pid].mover) return true; seen.add(pid); cur = pl; } }
     return false;
   };
   /* A picture item whose end may follow the video (§4.5, D17 B): never a sound, a caption track, the camera, a Full-only
@@ -193,8 +198,10 @@ window.FM = window.FM || {};
      the new main-track end, keys re-timed by fitMap. A different end means he set its length on purpose: the flag goes
      (Stay put kept) and the line says so. Sound never carries the flag, and the runner clears a stray one. Only the
      latest-starting piece of one split lineage keeps it (an old build's double flag is repaired here). */
-  S.fitTails = function (R2, plan) {
+  S.fitTails = function (R2, plan, o) {
+    o = o || {};
     const end = R2.trackEnd, notes = [], map = byIdMap();
+    notes.broken = [];   // 2.4b: referenced tail units whose keys the fit would move (couplingsBroken, §3.10 rule 4)
     if (!R2.main.some(e => !e.slot)) return notes;
     const lineage = new Map();
     FM.scene.layers.forEach(l => {
@@ -216,7 +223,13 @@ window.FM = window.FM || {};
       if (l.type === 'video') { const r = FM.trimClipEdge(l, 'tail', D2 - D, srcDurOf(l)); D2 = r.duration; tr = r.trimStart; }
       else D2 = Math.max(MINLEN(), D2);
       const g = S.fitMap(s, D, D2);
-      S.mapLayerKeys(l, g);
+      /* §3.10 rule 4, THE TAIL FIT COUNTS: a tail unit something else is tied to (parent, matte, Follow target, Audio Drive source) whose keys the fit would move is a
+         coupling that breaks. Without Do it anyway it gets only the duration change and its keys stay, and the runner asks (notes.broken). */
+      const tied = FM.scene.layers.filter(x => x && x !== l && refsOf(x).some(r => r.id === l.id && r.via !== 'twin' && !(r.via === 'parent' && l.type === 'group')));
+      const moves = (FM.timedLists ? FM.timedLists(l) : FM.animatedProps(l)).some(pp => pp !== l.speed && pp.kf.some(k => Math.abs(g(k.t) - k.t) > 1e-9));
+      const breaks = tied.length > 0 && moves && timeVarying(l);
+      if (breaks) { const via = refsOf(tied[0]).filter(r => r.id === l.id)[0].via; if (!notes.broken.some(b => b.via === via)) notes.broken.push({ via: via, id: l.id }); }
+      if (!(breaks && !o.anyway)) S.mapLayerKeys(l, g);
       if (plan && plan.touched) plan.touched.add(l.id);
       l.duration = D2; if (l.type === 'video') l.trimStart = tr;
       l.sm.tailEnd = s + D2;
@@ -330,13 +343,41 @@ window.FM = window.FM || {};
   function refsOf(l) {
     const out = [];
     if (l.parent) out.push({ id: l.parent, via: 'parent' });
-    (l.behaviors || []).forEach(b => { if (b && b.params) ['targetId', 'sourceId'].forEach(k => { if (b.params[k]) out.push({ id: b.params[k], via: 'follow' }); }); });
+    (l.behaviors || []).forEach(b => { if (b && b.params) { if (b.params.targetId) out.push({ id: b.params.targetId, via: 'follow' }); if (b.params.sourceId) out.push({ id: b.params.sourceId, via: 'audio' }); } });   // 2.4b: an Audio Drive source is its own kind (read through the split lineage, §3.10 rule 1)
     if (FM.eachRefFx) FM.eachRefFx(l, fx => { if (fx && fx.params && fx.params.source) out.push({ id: fx.params.source, via: 'matte' }); });
     if (l.karaokeOf) out.push({ id: l.karaokeOf, via: 'twin' });
     return out;
   }
+  S.refsOf = refsOf;   // the read model's coupling list (js/spine.js) reads it lazily
   const timeVarying = l => !!l && (l.type === 'video' || (FM.animatedProps && FM.animatedProps(l).length > 0) || (l.behaviors || []).some(b => b && b.enabled !== false));
+  /* RULE 2 (§3.10): a null / controller that parents MAIN clips moves, keys and all, by the one d every one of its main-clip children moves by in this plan
+     (so a reorder of all of them, a delete before them, an insert, all carry it). If they move by different amounts it stays, and rule 4's ask reads the
+     difference below; if any of them is removed it stays too (its other children still need it). Added to the plan before the coupling pass reads it. */
+  function addNullMovers(p, R, map) {
+    const movers = Object.keys(R.units).filter(id => R.units[id].mover);
+    if (!movers.length) return;
+    const disp = dispOf(p, map);
+    movers.forEach(mid => {
+      if (disp.has(mid) || p.removes.has(mid)) return;
+      const kids = R.couplings.filter(c => c.via === 'parent' && c.toUnit === mid && R.isMain(c.fromUnit)).map(c => c.fromUnit);
+      if (!kids.length) return;
+      const ds = kids.map(k => disp.has(k) ? disp.get(k) : 0);
+      if (ds.some(d => d === null)) return;
+      if (ds.every(d => Math.abs(d - ds[0]) < 1e-9) && Math.abs(ds[0]) > 1e-9) addMove(p, mid, ds[0]);
+    });
+  }
+  /* the referenced end of a coupling (§3.10 rule 4): a parent or an Audio Drive source is the SET of lineage members that cover any part of the follower's span;
+     a Follow target or a matte source is the stored layer (that is what renders) */
+  function refEnds(x, ref, y) {
+    if ((ref.via === 'parent' || ref.via === 'audio') && y.splitOf) {
+      const xs = +x.start || 0, xe = xs + (+x.duration || 0);
+      const mem = FM.scene.layers.filter(m => m && m.splitOf === y.splitOf && (+m.start || 0) < xe - 1e-9 && (+m.start || 0) + (+m.duration || 0) > xs + 1e-9);
+      if (mem.length) return mem;
+    }
+    return [y];
+  }
   function couplingBlock(p, R, map) {
+    addNullMovers(p, R, map);
     const disp = dispOf(p, map);
     for (let i = 0; i < FM.scene.layers.length; i++) {
       const x = FM.scene.layers[i];
@@ -344,17 +385,35 @@ window.FM = window.FM || {};
       if (dx === null) continue;
       const refs = refsOf(x);
       for (let k = 0; k < refs.length; k++) {
-        const y = map.get(refs[k].id); if (!y) continue;
-        if (refs[k].via === 'parent' && y.type === 'group') continue;   // membership, not a link (§2.5)
-        const dy = disp.has(y.id) ? disp.get(y.id) : 0;
-        if (dy === null) {
-          if (refs[k].via === 'twin') continue;   // a karaoke twin is a follower: it is removed with its clip
-          return { kind: 'attached', a: S.itemWord(x, R), b: S.itemWord(y, R) };
+        const y0 = map.get(refs[k].id); if (!y0) continue;
+        if (refs[k].via === 'parent' && y0.type === 'group') continue;   // membership, not a link (§2.5)
+        const via = refs[k].via, ends = refEnds(x, refs[k], y0), dy0 = disp.has(y0.id) ? disp.get(y0.id) : 0;
+        const raise = () => { if (!(p.asks || []).some(a => a.kind === 'slip' && a.via === via)) p.asks = (p.asks || []).concat([{ kind: 'slip', via: via }]); };
+        if (dy0 === null) {
+          if (via === 'twin') continue;   // a karaoke twin is a follower: it is removed with its clip
+          /* RULE 5, the split-lineage exception: a deleted HALF is not a deleted target when a surviving half covers the follower's start (half-open); the
+             follower's stored reference is repointed at it inside the same plan, as Full's rehomeOrphans does. Anything else refuses, naming both. */
+          const lin = (via === 'parent' || via === 'audio') && y0.splitOf;
+          const alive = lin ? R.lineageOf(y0.id).filter(m => m.id !== y0.id && !(disp.has(m.id) && disp.get(m.id) === null)) : [];
+          const at = +x.start || 0;
+          const surv = alive.find(m => (+m.start || 0) <= at + 1e-9 && at < (+m.start || 0) + (+m.duration || 0) - 1e-9);
+          if (!surv) return { kind: 'attached', a: S.itemWord(x, R), b: S.itemWord(y0, R) };
+          const from = y0.id, to = surv.id;
+          p.writes.push(() => {
+            if (via === 'parent') { if (x.parent === from) x.parent = to; }
+            else (x.behaviors || []).forEach(b => { if (b && b.params && b.params.sourceId === from) b.params.sourceId = to; });
+          });
+          p.touched.add(x.id);
         }
-        if (Math.abs(dx - dy) > 1e-9 && timeVarying(y)) { const v = refs[k].via; if (!(p.asks || []).some(a => a.kind === 'slip' && a.via === v)) p.asks = (p.asks || []).concat([{ kind: 'slip', via: v }]); }
+        for (let e = 0; e < ends.length; e++) {
+          const y = ends[e], dy = disp.has(y.id) ? disp.get(y.id) : 0;
+          if (y === y0 && dy0 === null) continue;                        // handled above
+          if (dy === null) { raise(); continue; }                          // a lineage member under the follower is deleted while the follower stays
+          if (Math.abs(dx - dy) > 1e-9 && timeVarying(y)) raise();
+        }
       }
     }
-    return null;   // 2.4: a link whose two ends move by different amounts is an ASK now (plan.asks), never a refusal; deleting a referenced unit still refuses ('attached')
+    return null;   // 2.4: a link whose two ends move by different amounts is an ASK now (plan.asks), never a refusal; deleting a referenced unit still refuses ('attached') unless a surviving lineage half covers the follower (2.4b)
   }
 
   /* ═══════════════ RELEASE 2.4: riders, couplings and crossfades (DESIGN §3.5, §3.10, §3.1) ═══════════════
@@ -614,11 +673,35 @@ window.FM = window.FM || {};
       else {
         if (!anyway) return { ask: true, window: null };
         let lo = Infinity, hi = -Infinity;
-        m.pieces.forEach(pc => { const a = Math.max(pc.lo, s), b = Math.min(pc.hi, s + d); if (b > a + 1e-9) { lo = Math.min(lo, pc.i0 + (a - pc.lo)); hi = Math.max(hi, pc.i0 + (b - pc.lo)); } });
+        const cov = [];
+        m.pieces.forEach(pc => { const a = Math.max(pc.lo, s), b = Math.min(pc.hi, s + d); if (b > a + 1e-9) { const x0 = pc.i0 + (a - pc.lo), x1 = pc.i0 + (b - pc.lo); cov.push([x0, x1]); lo = Math.min(lo, x0); hi = Math.max(hi, x1); } });
         ns = lo; ne = hi;
+        /* 2.4b (§3.10 rule 3g): the stretches of the hull the original window did NOT cover. Those frames used to have no camera; the hull switches it on there, so
+           they get a boundary pair of hold keys at the camera's rest pose and read as camera-less again. */
+        cov.sort((x, y) => x[0] - y[0]);
+        const gaps = []; let reach = cov.length ? cov[0][1] : 0;
+        cov.slice(1).forEach(c => { if (c[0] > reach + 1e-6) gaps.push([reach, c[0]]); reach = Math.max(reach, c[1]); });
+        return { ask: false, window: { start: ns, duration: ne - ns }, gaps: gaps };
       }
     } else { ns = m.R(s); ne = Math.max(ns + minCue(), m.L(s + d)); }
-    return { ask: false, window: { start: ns, duration: ne - ns } };
+    return { ask: false, window: { start: ns, duration: ne - ns }, gaps: [] };
+  }
+  /* the camera's rest pose (scale 1, rotation 0, x and y at the project centre) held over each gap, with a clean step in and out: both keys at a gap's edge are KEPT (left value,
+     then the rest value), which evalProp reads as a step. A property that was a plain number becomes a keyed one that equals it everywhere else. */
+  function restPairs(cam, gaps) {
+    const P = FM.scene.project, rest = { scale: 1, rotation: 0, x: P.width / 2, y: P.height / 2 };
+    Object.keys(rest).forEach(prop => {
+      const p0 = cam.transform[prop], ev = t => FM.evalProp(p0, t);
+      const kf = (p0 && Array.isArray(p0.kf)) ? p0.kf.map(clone) : [];
+      const mk = (t, v) => ({ t: t, v: v, e: 'linear', sb: 1, split: 1 });
+      gaps.forEach(g => {
+        const left = ev(g[0] - 1e-6), right = ev(g[1] + 1e-6);
+        kf.push(mk(g[0], left), mk(g[0], rest[prop]), mk(g[1], rest[prop]), mk(g[1], right));
+      });
+      const idx = kf.map((k, i) => i);
+      idx.sort((x, y) => kf[x].t - kf[y].t || x - y);
+      cam.transform[prop] = { kf: idx.map(i => kf[i]) };
+    });
   }
 
   /* ═══ riderPlan: where riderBlock stood. It validates (a camera crossing a piecewise map asks; nothing else refuses any more), counts, and
@@ -628,6 +711,9 @@ window.FM = window.FM || {};
     const caps = (R.riders || []).map(id => map.get(id)).filter(l => isCaptionTrack(l) && !(l.sm && l.sm.stay));
     const cams = (R.fullOnly || []).map(id => map.get(id)).filter(l => l && l.type === 'camera' && !(l.sm && l.sm.stay));
     const capJobs = caps.map(t => ({ t: t, r: captionRider(R, t, m) }));
+    /* 2.4b (§3.10 rule 3): the opt-in volume rider: a stay-put sound with sm.rideVol has its VOLUME and OPACITY keys carried through the same map, so a dip under one
+       clip stays under that clip. Its start never moves (it is Stay put); only its keys do. */
+    const volLayers = Object.keys(R.units).map(id => map.get(id)).filter(l => l && R.units[l.id].kind === 'audio' && l.sm && l.sm.stay && l.sm.rideVol && !l.sm.twin);
     const camJobs = [], asks = [];
     cams.forEach(cm => { const r = cameraRider(R, cm, m, R.anyway); if (r.ask) asks.push('camera'); camJobs.push({ cam: cm, r: r }); });
     const keyed = cams.some(cm => (FM.timedLists ? FM.timedLists(cm) : FM.animatedProps(cm)).some(pp => pp.kf.length));
@@ -636,9 +722,12 @@ window.FM = window.FM || {};
       asks: asks, dropped: dropped, moves: keyed,
       attach(plan) {
         loopRider(plan, m);
+        /* a camera with a dolly (transform.z, static or keyed) is not camera-less at the rest pose: the hull cannot be given its rest-pose hold (rule 3g's fallback) */
+        if (camJobs.some(j => j.r.gaps && j.r.gaps.length && j.cam.transform.z != null && (FM.isAnimated(j.cam.transform.z) || FM.evalProp(j.cam.transform.z, 0) !== 0))) { plan.refuse = 'cameraRest'; plan.refuseOpts = {}; }
         asks.forEach(a => { plan.asks = (plan.asks || []).concat([{ kind: 'camera' }]); });
         if (dropped) plan.counts.cuesDropped = (plan.counts.cuesDropped || 0) + dropped;
         if (keyed) plan.counts.camera = (plan.counts.camera || 0) + 1;
+        if (volLayers.length) plan.writes.push(() => volLayers.forEach(l => S.riderKeys([l.volume, l.transform && l.transform.opacity].filter(p => p && Array.isArray(p.kf)), m)));
         plan.writes.push(() => {
           capJobs.forEach(j => {
             const t = j.t, r = j.r;
@@ -649,6 +738,7 @@ window.FM = window.FM || {};
           camJobs.forEach(j => {
             S.riderKeys(j.cam, m);
             if (j.r.window) { j.cam.start = j.r.window.start; j.cam.duration = j.r.window.duration; }
+            if (j.r.gaps && j.r.gaps.length) restPairs(j.cam, j.r.gaps);
           });
         });
       }
@@ -828,6 +918,10 @@ window.FM = window.FM || {};
         if (u && u.kind === 'effect' && fs + fd <= c.end + 1e-9) plan.writes.push(() => { f.duration = Math.max(ml, Math.min(fd, newEnd - s2)); });
       } else if (dt < 0 && u && u.kind === 'effect' && fs + fd <= c.end + 1e-9 && fs + fd > newEnd + 1e-9) {
         plan.touched.add(fid); plan.writes.push(() => { f.duration = Math.max(ml, newEnd - fs); });   // §4.3: stays inside its clip
+      } else if (dt < 0 && u && u.kind === 'captions' && fs + fd > newEnd + 1e-9) {
+        /* 2.4b: a caption track lying inside c is clamped to c's new end, like an effect segment. Only the part inside the window is ever drawn
+           (js/captions.js), so cutting the window hides the cues past it and none of them is rewritten (Undo restores the window). */
+        plan.touched.add(fid); plan.writes.push(() => { f.duration = Math.max(ml, newEnd - fs); });
       }
     });
     const rp = ripple(plan, R, i + 1, dt, new Set([c.id].concat(twins.map(t => t.id))), newEnd, false);
@@ -882,7 +976,7 @@ window.FM = window.FM || {};
       const fs = +f.start || 0, fd = +f.duration || 0;
       const s2 = Math.max(c.start, fs - Lnd);
       addLand(plan, fid, s2);
-      if (u && u.kind === 'effect' && fs + fd <= c.end + 1e-9 && s2 + fd > newEnd + 1e-9) plan.writes.push(() => { f.duration = Math.max(ml, newEnd - s2); });
+      if (u && (u.kind === 'effect' || u.kind === 'captions') && fs + fd <= c.end + 1e-9 && s2 + fd > newEnd + 1e-9) plan.writes.push(() => { f.duration = Math.max(ml, newEnd - s2); });   // 2.4b: a caption track too
     });
     const rp = ripple(plan, R, i + 1, -Lnd, new Set([c.id].concat(twins.map(t => t.id))), newEnd, false);
     tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);   // c last: its start never moves, so its end is start + the new duration
@@ -1112,7 +1206,7 @@ window.FM = window.FM || {};
       case 'cutShort': text = line('cutShort', o.name); buttons = [full]; break;
       case 'insertFade': text = line('insertFade', o.a, o.b); break;   // 2.2: the two clip numbers (DESIGN §3.11)
       default: text = line(kind) || line('failed');
-        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow' || kind === 'speedBlock' || kind === 'replaceBlock') buttons = [full];
+        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow' || kind === 'speedBlock' || kind === 'replaceBlock' || kind === 'cameraRest') buttons = [full];
     }
     S.say(text, { buttons: buttons, refusal: kind, ids: o.ids });
     S.lastRefusal = kind;
@@ -1226,7 +1320,7 @@ window.FM = window.FM || {};
         if (gated) S.pinStrays(R);
         await applyPlan(plan);
         const R2 = S.classify(FM.scene);
-        if (gated) { notes = S.fitTails(R2, plan); pinTailsAfter(R2); refitTransparentGroups(R2); }
+        if (gated) { notes = S.fitTails(R2, plan, { anyway: !!opts.anyway }); pinTailsAfter(R2); refitTransparentGroups(R2); }
         markCuts(plan.touched);
         if (relock.size) relockAfter(relock, ids0, plan);
         ok = true;
@@ -1234,6 +1328,10 @@ window.FM = window.FM || {};
         if (FM.reportError) { try { FM.reportError('Simple edit failed: ' + label, e); } catch (x) {} }
       } finally { FM.history.unmute(); muted = false; }
       if (!ok) { restorePreEdit(pre); return refuse('failed'); }   // the document from before the unlock: every lock as it was
+      if (notes.broken && notes.broken.length && !opts.anyway) {   // 2.4b: the tail fit would pull a tied unit's keys: put everything back and ask once
+        restorePreEdit(pre);
+        return ask(notes.broken.map(b => ({ kind: 'slip', via: b.via })), () => S.edit(label, makePlan, Object.assign({}, opts, { anyway: true })), R);
+      }
       if (plan.selectNone) { FM.scene.selectedId = null; FM.scene.selectedIds = []; }
       else if (plan.selectId && FM.layerById(FM.scene, plan.selectId)) { FM.scene.selectedId = plan.selectId; FM.scene.selectedIds = [plan.selectId]; }
       else if (plan.keepSel && sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = sels0.filter(x => FM.layerById(FM.scene, x)); }   // a tray action on 2+ keeps them (§8.5b)
@@ -2131,7 +2229,53 @@ window.FM = window.FM || {};
     return plan;
   };
 
+  /* SORT BY DATE TAKEN (§3.6 Sort row, shown only when at least two main clips carry `taken`). Main clips by `taken` ascending; undated ones after the dated, in their current
+     order (stable; ties by current index). Packed end to end from the first clip's start, each keeping its length (gaps and overlaps closed, and the line says so), built DIRECTLY from final
+     positions: never a sum of Reorders (each Reorder's ripple assumes the others stay put). Every clip lands exactly, its followers and twins move by its d, the tail by the change of
+     trackEnd. Cues and keys ride the piecewise translation of §3.5 (a piece per clip, in the original order), the loop region is cleared. Refuses on a blend, a slot or a block. */
+  S.planSort = function (R) {
+    const map = byIdMap(), clips = R.main.filter(e => !e.slot);
+    if (R.main.some(e => e.slot) || R.main.some(e => e.seam && e.seam.kind === 'blend') || clips.some(e => { const l = map.get(e.id); return !l || l.type === 'group'; })) return refusePlan('sortFade');
+    const dated = clips.filter(e => Number.isFinite(+map.get(e.id).taken)), undated = clips.filter(e => !Number.isFinite(+map.get(e.id).taken));
+    if (dated.length < 2) return refusePlan('inOrder');
+    const idx = new Map(clips.map((e, i) => [e.id, i]));
+    dated.sort((a, b) => (+map.get(a.id).taken - +map.get(b.id).taken) || (idx.get(a.id) - idx.get(b.id)));
+    const order = dated.concat(undated);
+    if (order.every((e, i) => e.id === clips[i].id)) return refusePlan('inOrder');
+    const plan = newPlan('Sort ' + clips.length + ' clips by date');
+    let cursor = clips[0].start, closed = 0;
+    const off = new Map();
+    order.forEach(e => {
+      const ns = cursor, d = ns - e.start, len = e.end - e.start;
+      off.set(e.id, d);
+      addLand(plan, e.id, ns);
+      (R.followers[e.id] || []).forEach(f => { if (d) addMove(plan, f, d); });
+      cursor = ns + len;
+    });
+    clips.forEach((e, i) => { const nx = clips[i + 1]; if (nx && Math.abs(nx.start - e.end) > R.eps) closed++; });
+    tailMove(plan, R, cursor, map);
+    const pieces = [{ lo: 0, hi: clips[0].start, off: 0 }];
+    clips.forEach((e, i) => { const nx = clips[i + 1]; pieces.push({ lo: e.start, hi: nx ? nx.start : BIG, off: off.get(e.id) }); });
+    riderPlan(R, map, tmPieces(pieces)).attach(plan);
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    plan.time = clips[0].start;
+    plan.say = line('sorted', clips.length) + (closed ? ' · ' + line('gapsClosed', closed) : '');
+    plan.pulse = clips.map(e => e.id);
+    return plan;
+  };
+  /* KEEP VOLUME CHANGES WITH THE CLIPS (§3.10 rule 3, opt-in, off by default): a look, not an arrangement. */
+  S.planRideVol = function (R, id, on) {
+    const map = byIdMap(), L = soundTarget(R, id, map);
+    if (!L || !(L.sm && L.sm.stay)) return refusePlan('gone');
+    if (!!(L.sm && L.sm.rideVol) === !!on) return refusePlan('nothingChanged');
+    const plan = newPlan(on ? 'Keep volume with the clips' : 'Leave volume where it is'); plan.arranges = false; plan.adopts = false; plan.touched.add(L.id); plan.keepSel = true;
+    plan.writes.push(() => { S.setFlag(L, 'rideVol', !!on); });
+    plan.live = line(on ? 'rideVolOn' : 'rideVolOff');
+    return plan;
+  };
   Object.assign(S.cmd, {
+    sortByDate() { return S.edit('Sort by date', R => S.planSort(R)); },
+    rideVol(id, on) { return S.edit(on ? 'Keep volume with the clips' : 'Leave volume where it is', R => S.planRideVol(R, id, on)); },
     append(files) { return afterRead(files, picked => S.edit('Add clips', R => S.planAppend(R, picked))); },
     insert(files, j) { return afterRead(files, picked => S.edit('Add clips', R => S.planInsert(R, picked, j))); },
     move(id, dir) { return S.edit('Move clip', R => { const j = S.moveIndexFor(R, id, dir); return j < 0 ? refusePlan(dir < 0 ? 'atStart' : 'atEnd') : S.planReorder(R, id, j); }); },
