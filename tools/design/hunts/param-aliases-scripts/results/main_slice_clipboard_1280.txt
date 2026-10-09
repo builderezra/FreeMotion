@@ -1,0 +1,7 @@
+1280 Regression 6/6 ✓Pending 0/0 built
+   ok  915.5Br the clipboard alone keeps a stored file: copy, open another project, delete the first, then 
+   ok  915.5Br a pasted copy alone keeps the stored file it plays from, with the clipboard empty
+   ok  effect clipboard: a copied effect does not paste a layer reference from another project
+   ok  clipboard: paste reproduces the layer exactly, and independently
+   ok  effects: one clipboard — copy one effect, paste one effect
+   ok  a refused clipboard names the route that still works (queue 202)

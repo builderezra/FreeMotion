@@ -1,0 +1,10 @@
+1280 Regression 0/3 ✗Pending 0/0 built
+   RED PL1 the guard demands an alias for a rename and accepts one that exists, and a bad table is refused
+   RED PL1 a saved effect whose parameter or type was renamed keeps its value, keyframes included
+   RED PL1 an effect preset saved under the old names still loads under the new ones
+FAILPL1 the guard demands an alias for a rename and accepts one that exists, and a bad table is refused — FM.fxAliases is not reachable
+FAILPL1 a saved effect whose parameter or type was renamed keeps its value, keyframes included — FM.fxAliases is not reachable
+FAILPL1 an effect preset saved under the old names still loads under the new ones — FM.fxAliases is not reachable
+1280 Regression 0/1 ✗Pending 0/0 built
+   RED AU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by 
+FAILAU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by an alias — FM.fxAliases is not reachable

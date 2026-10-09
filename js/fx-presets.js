@@ -126,6 +126,8 @@ window.FM = window.FM || {};
   function sanePreset(raw) {
     _why = '';
     if (!raw || typeof raw !== 'object') { _why = 'it isn’t a preset'; return null; }
+    /* A RENAMED EFFECT OR PARAMETER (PL1): a preset saved under the old names still loads (FM.fxAliases, fx-registry.js). */
+    if (FM.fxRegistry && FM.fxRegistry.migrate && typeof raw.fx === 'string') { const m = FM.fxRegistry.migrate({ type: raw.fx, params: raw.params }); if (m && (m.type !== raw.fx || m.params !== raw.params)) raw = Object.assign({}, raw, { fx: m.type, params: m.params }); }
     const reg = FM.fxRegistry && FM.fxRegistry.get(String(raw.fx || ''));
     if (!reg) { _why = raw.fx ? ('this build has no “' + String(raw.fx).slice(0, 40) + '” effect') : 'it names no effect (an effect-stack preset can’t be saved here)'; return null; }
     const kinds = {};   // real storage key -> param type ('layer' excluded: source ids don't travel)

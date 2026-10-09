@@ -59811,6 +59811,137 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* ═══ PL1: A RENAMED EFFECT OR PARAMETER KEEPS EVERY OLD SAVE (FM.fxAliases, js/fx-registry.js) ═══ */
+  /* AU17-2, now with the alias table: A RENAME NEEDS AN ALIAS. A saved project keeps only the effect types and parameter keys the registry knows
+     (anything else is dropped on load, and the autosave then writes the loss back), so renaming `radius` to `size` would silently reset every saved
+     Blur. This pins every type and key that exists in v17.32. A name that is gone passes ONLY if FM.fxAliases carries it to something that exists;
+     otherwise it fails with the line to add. New types and keys are fine: they are not in the list. The list only ever grows. */
+  const PL1_PINNED = (function () {
+    return ["blur:radius", "brightness:amount", "contrast:amount", "saturate:amount", "hue:deg", "grayscale:amount", "sepia:amount", "invert:amount", "glow:radius,passes,strength,color", "vignette:amount,size,round,feather,x,y,mode,color,hilite", "chromakey:tolerance,softness,despill,color", "lumakey:threshold,softness,mode", "rgbsplit:amount,angle,radial,green", "pixelate:size,aspect,smooth", "posterize:levels,mix,channels,gamma", "mirror:mode,position", "tint:amount,range,preserve,mode,soft,color", "threshold:level,softness,color,color2", "duotone:amount,balance,contrast,blend,color,color2", "solarize:threshold,softness,mix,mode", "gamma:gamma,red,green,blue", "temperature:amount,tint,preserve,method,range", "noise:amount,speed,size,grain,color", "scanlines:amount,spacing,thickness,roll", "vibrance:amount,skin,highlights", "sharpen:amount,radius,threshold,mode", "thermal:amount,palette,low,high", "dither:levels,scale,matrix,mono", "halftone:size,angle,gain,shape", "wave:amount,wavelength,phase,vertical,angle", "ripple:amount,wavelength,phase,centerx,centery", "twirl:amount,centerx,centery,radius", "bulge:amount,centerx,centery,radius", "edge:amount,polarity,threshold,mix,blend", "emboss:amount,angle,mono,blend", "exposure:stops,offset,rolloff,gamma,space", "fisheye:amount,centerx,centery,radius", "squish:source,amount,spread,bulge,firmness,inset,walls,collide", "kaleidoscope:segments,phase,centerx,centery", "glitch:amount,bands,speed,split,dir,jitter,blocks,seed,wrap", "zoomblur:amount,centerx,centery,samples", "crt:amount,scale,scanline,mask,vignette", "boxblur:radius,aspect,passes", "spinblur:amount,centerx,centery,samples", "gradientmap:amount,stops,midpoint,reverse,blend,dither,color,color3,color2", "colorize:amount,lift,blend,color", "checker:size,mix,ratio,angle,color", "grid:size,thickness,mix,angle,color", "mosaic:size,aspect,gap,sample", "lensblur:radius,bloom,samples,blades", "dots:size,radius,opacity,softness,color", "polarcoords:amount,mode", "bend:amount,axis,position", "glass:amount,scale,axis,seed", "lightglow:amount,radius,threshold,knee,passes,outside,blend,from,color", "longshadow:length,angle,color", "halftonelines:size,angle,weight,softness", "clouds:amount,scale,drift,color", "rays:count,x,y,intensity,phase,color", "stripes:size,direction,duty,strength,color", "darkglow:amount,radius,threshold,knee,passes,outside,blend", "stroke:width,position,shape,softness,gap,color", "smoothedges:radius,choke,quality", "liquidglass:amount,frost,clarity,sheen,bevel,tint,angle,color", "roundcorners:style,radius", "filmgrain:amount,size,shape,color,shadows,highlights,speed,soft,seed", "blocknoise:amount,size,aspect,speed", "starfield:amount,size,variation,twinkle,twinklespeed,color", "curl:amount,wavelength,phase,centerx,centery", "bumpmap:amount,angle,relief,ambient", "edgeglow:source,amount,radius,color", "contourlines:levels,smooth,thickness,paper,color,color2", "grunge:amount,scale,darkness,color", "iridescence:amount,scale,bands,blur,motion,speed", "fractalwarp:amount,evolve,scale,detail", "motionblur:distance,angle,samples", "colorbalance:red,green,blue,range,preserve,soft", "highlightsshadows:highlights,shadows,whites,blacks,width,radius,sat", "tiltshift:center,softness,blur,angle", "dropshadow:distance,angle,softness,spread,smooth,opacity,shadowonly,color", "chromaticaberration:amount,angle,radial", "innerglow:radius,intensity,color", "unsharpmask:amount,radius,threshold", "hextiles:size", "linstreaks:length,angle,samples,both,threshold,color", "blink:rate,duty,min,phase", "flicker:amount,speed,seed", "flashdark:amount,speed,soft,floor,seed,rhythm,hold", "pulseopacity:speed,depth,phase", "dissolve:amount,direction,soft,speed,front", "blockdissolve:amount,size,dir,seed", "wipe:progress,angle,softness", "radialwipe:progress,start,centerx,centery,softness", "solidmatte:amount,color", "mattechoker:choke,feather,contrast", "mattefringe:width,opacity,feather,color", "gridrepeat:count,rows,mirror,stagger", "linearrepeat:count,spacing,angle,fade", "scatterarray:count,spread,sizevary,rotate,fade,seed", "radialrepeat:count,rotate,mirror,twist,centerx,centery", "mirrortile:size,offsetx,offsety,axis,shape", "channelremap:mode,mix,luma", "gradientoverlay:angle,shape,blend,mid,dither,amount,color,color2", "lensflare:x,y,intensity,size,rays,rotation,ghosts,halo,streak,color,color2", "roughenedges:amount,scale", "hexarray:size,thickness,opacity,color", "electricedges:amount,speed,soft,color", "glowscan:speed,width,amount,direction,angle,span,pause,loop,color", "spinstreaks:amount,centerx,centery,decay,samples,threshold,dir", "fractalridges:amount,scale,sharpness,seed,mode,bands,blend,speed,driftX,driftY,color,color2", "smoothbevel:depth,strength,angle", "zoomstreaks:amount,centerx,centery,threshold,samples", "innerblur:radius,edge,bleed,aspect,passes", "contourstrips:levels,mix,alternate,offset,color,color2", "innerpinch:amount,radius,centerx,centery", "crosshatch:spacing,density,weight,angle,color", "counter:progress,from,to,decimals,group,wrap", "textprogress:progress,unit,dir,cursor", "textrandomizer:progress,speed,chars", "textcurve:curve,mode", "textreverse:unit", "textrepeat:count,sep", "textpad:length,ch,side", "textspacing:spacing,word,line,mode", "texttransform:mode", "timecode:mode,offset,dir,source", "bleachbypass:amount,desat,contrast", "tealorange:amount,pivot,spread,mode,skin,balance,keep", "crossprocess:amount,variant,lift,gain", "lightleak:amount,x,y,size,speed,wander,flicker,blend,color,color2", "letterbox:ratio,size,metric,orient,offset,feather,opacity,color", "border:width,inset,radius,opacity,color", "faded:amount,lift,desat,tone,crush,rolloff,fadecol", "nightvision:amount,color,noise,gain", "sketch:amount,darkness,threshold,tooth", "cube3d:rotx,roty,rotz,size,shading,light", "box3d:rotx,roty,rotz,depth,size,shading,light", "cylinder3d:rotx,roty,rotz,length,size,shading,light", "sphere3d:rotx,roty,rotz,size,shading,light", "ellipsoid3d:rotx,roty,rotz,height,depth,size,shading,light", "torus3d:rotx,roty,rotz,thickness,size,shading,light", "ring3d:rotx,roty,rotz,hole,depth,size,shading,light", "pyramid3d:rotx,roty,rotz,size,shading,light", "octahedron3d:rotx,roty,rotz,size,shading,light", "hexprism3d:rotx,roty,rotz,depth,size,shading,light", "starprism3d:rotx,roty,rotz,points,inner,depth,size,shading,light", "starpoly3d:rotx,roty,rotz,spike,size,shading,light", "heart3d:rotx,roty,rotz,depth,size,shading,light", "hollowbox3d:rotx,roty,rotz,wall,depth,size,shading,light", "axiscross3d:rotx,roty,rotz,arm,size,shading,light", "pagecurl:amount,angle,radius,shading,light", "fliplayer:mode,keep,pivotx,pivoty", "rasterextrude:depth,angle,darken", "wiggle:amount,speed,amounty,rotate,scale,octaves,seed", "shake:amount,speed,twist,zoom,jitter,smear,smearlen,direction,overscan,seed", "swing:angle,speed,pivotx,pivoty,phase,damping", "spin:speed,offset,pivotx,pivoty", "pulse:amount,speed,phase,wave,stretch,pivotx,pivoty", "drift:x,y,wrap", "orbit:radius,speed,phase,ry,depth,face", "squeeze:amount,axis,position", "tiles:mode,count,gap,mirror,source", "motionflow:style,amount,samples,threshold,softness", "objectblur:shutter,samples,phase", "softglow:amount,radius,threshold,knee,passes,outside,blend,from,color", "replacecolor:tolerance,mode,softness,color,color2", "spotcolor:tolerance,desat,boost,invert,color", "fourcolor:amount,blend,spread,color,color2,color3,color4", "spectralmap:amount,span,offset,saturation", "radialshadow:reach,x,y,color", "voronoi:cells,edge,motion,speed,wall", "tunnel:amount,radius,centerx,centery", "turbulentdisplace:amount,scale,evolve,seed", "stretchseg:y,height,amount,softness", "tileshift:size,amount", "tilerotate:size,angle", "wrapshift:offsetx,offsety", "palettemap:mode,count,amount,color,color2,color3,color4", "lightning:count,intensity,thickness,jitter,forks,flicker,seed,angle,color", "displacemap:source,amount,channel", "polardisplace:source,radius,angle,centerx,centery", "touchup:x,y,w,h,mode,feather,strength", "copybg:", "magnifybg:zoom", "fillbehind:blur,zoom,dim", "particles:rate,lifetime,direction,spread,speed,gravity,sizeStart,sizeEnd,opacityStart,opacityEnd,spin,shape,blend,color,color2", "levels:channel,inblack,inwhite,gamma,outblack,outwhite", "halation:amount,threshold,tightness,spread,knee,color", "framestutter:rate,mode,blend,duty,trail,offset,random", "shockwave:radius,width,strength,rim,chroma,x,y", "speedlines:count,mode,angle,inner,aspect,length,width,jitter,spin,boil,x,y,blend,color", "weather:kind,amount,size,speed,wind,length,depth,opacity,color", "hslbands:band,hue,sat,lum,range,centre,width", "timewarp:duration,direction,mode,barwidth,glow,loop,color", "chromakeypro:tolerance,softness,despill,edgedesat,view,color", "lightwrap:intensity,reach,radius,mode", "dispersion:progress,direction,distance,scale,softness,glow,color", "vhstape:amount,chromableed,halo,wobble,tracking,trackspeed,headswitch", "compresscrunch:quality,blocksize,chromablock,ringing,fry", "temporaldenoise:strength,threshold,spatial", "lensdistort:k1,k2,zoom,chroma", "pixelsort:density,low,high,length,direction,order", "lumamatte:source,channel,invert,black,white,feather", "compoundblur:source,radius,levels,invert", "matchgrade:source,amount,mode", "filter:strength"];
+  })();
+  // `have(type)` -> the keys of a type that exists, or null; `table` -> an alias table. Returns the names that a saved project can hold and that mean nothing now.
+  function pl1Gone(have, table) {
+    const gone = [];
+    PL1_PINNED.forEach(s => {
+      const i = s.indexOf(':'), type = s.slice(0, i), ks = s.slice(i + 1) ? s.slice(i + 1).split(',') : [];
+      if (!have(type)) { const r = FM.fxRegistry.aliasResolve(type, undefined, have, table); if (!have(r.type)) gone.push(type + ' (the whole effect)'); return; }
+      ks.forEach(k => { if (have(type).indexOf(k) < 0) { const r = FM.fxRegistry.aliasResolve(type, k, have, table); if (have(r.type).indexOf(r.key) < 0) gone.push(type + '.' + k); } });
+    });
+    return gone;
+  }
+  // an alias table that would do harm: hides a name that still exists, loops, or points at nothing
+  function pl1Problems(have, table) {
+    const bad = [];
+    Object.keys(table.types).forEach(o => {
+      if (have(o)) bad.push('type ' + o + ' is aliased but still exists');
+      let t = o, n = 0; while (n++ < 9 && !have(t) && typeof table.types[t] === 'string') t = table.types[t];
+      if (!have(t)) bad.push('type ' + o + ' leads to ' + t + ', which does not exist (or loops)');
+    });
+    Object.keys(table.params).forEach(ty => {
+      const real = FM.fxRegistry.aliasResolve(ty, undefined, have, table).type;
+      if (real !== ty) bad.push('params are filed under ' + ty + ', which is an old type name; file them under ' + real);
+      if (!have(real)) { bad.push('params are filed under ' + ty + ', which does not exist'); return; }
+      Object.keys(table.params[ty]).forEach(o => {
+        if (have(real).indexOf(o) >= 0) bad.push(ty + '.' + o + ' is aliased but still exists');
+        let k = o, n = 0; while (n++ < 9 && have(real).indexOf(k) < 0 && typeof table.params[ty][k] === 'string') k = table.params[ty][k];
+        if (have(real).indexOf(k) < 0) bad.push(ty + '.' + o + ' leads to ' + k + ', which does not exist (or loops)');
+      });
+    });
+    return bad;
+  }
+  const pl1HaveReal = (t) => { const r = FM.fxRegistry.get(t); return r ? r.params.map(p => p.key) : null; };
+  test('AU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by an alias', { item: 'AU17', budgetMs: 30000 }, function () {
+    if (!FM.fxAliases || !FM.fxRegistry.aliasResolve) throw new Error('FM.fxAliases is not reachable');
+    const gone = pl1Gone(pl1HaveReal, FM.fxAliases);
+    if (gone.length) throw new Error(gone.length + ' effect type(s) or parameter key(s) a saved project can hold are gone: ' + gone.slice(0, 12).join(', ') + (gone.length > 12 ? ' …' : '') + ' — a renamed key resets that setting in every saved project; add an alias in FM.fxAliases (js/fx-registry.js): FM.fxAliases.types.oldtype = \'newtype\' or FM.fxAliases.params.newtype = { oldkey: \'newkey\' }, and keep the old name in this list');
+    if (PL1_PINNED.length < 150) throw new Error('CONTROL: the pinned list is suspiciously short (' + PL1_PINNED.length + ')');
+  });
+
+  test('PL1 the guard demands an alias for a rename and accepts one that exists, and a bad table is refused', { item: 'PL1', budgetMs: 30000 }, function () {
+    if (!FM.fxAliases || !FM.fxRegistry.aliasResolve) throw new Error('FM.fxAliases is not reachable');
+    // a pretend build where Blur's `radius` became `size`, and `glow` became `halo`
+    const fake = { blur: ['size'], halo: PL1_PINNED.filter(s => /^glow:/.test(s))[0].slice(5).split(',') };
+    PL1_PINNED.forEach(s => { const i = s.indexOf(':'), t = s.slice(0, i); if (t !== 'blur' && t !== 'glow') fake[t] = s.slice(i + 1) ? s.slice(i + 1).split(',') : []; });
+    const have = (t) => fake[t] || null;
+    const empty = { types: Object.create(null), params: Object.create(null) };
+    const g0 = pl1Gone(have, empty);
+    if (g0.indexOf('blur.radius') < 0 || g0.indexOf('glow (the whole effect)') < 0) throw new Error('with no alias the guard did not flag the rename: ' + g0.slice(0, 5).join(', '));
+    const table = { types: Object.assign(Object.create(null), { glow: 'halo' }), params: Object.assign(Object.create(null), { blur: { radius: 'size' } }) };
+    const g1 = pl1Gone(have, table);
+    if (g1.length) throw new Error('with the alias the guard still failed: ' + g1.slice(0, 5).join(', '));
+    if (pl1Problems(have, table).length) throw new Error('a correct table was called harmful: ' + pl1Problems(have, table).join(', '));
+    // the harmful ones
+    const shadow = { types: Object.create(null), params: Object.assign(Object.create(null), { blur: { size: 'radius' } }) };
+    if (!pl1Problems(have, shadow).some(m => /still exists/.test(m))) throw new Error('an alias hiding a name that still exists was not refused');
+    const loop = { types: Object.assign(Object.create(null), { glow: 'halo2', halo2: 'glow' }), params: Object.create(null) };
+    if (!pl1Problems(have, loop).some(m => /does not exist/.test(m))) throw new Error('an alias loop was not refused');
+    const dead = { types: Object.create(null), params: Object.assign(Object.create(null), { blur: { radius: 'nothing' } }) };
+    if (!pl1Problems(have, dead).some(m => /does not exist/.test(m))) throw new Error('an alias to a name that does not exist was not refused');
+    const oldFiled = { types: Object.assign(Object.create(null), { glow: 'halo' }), params: Object.assign(Object.create(null), { glow: { radius: 'x' } }) };
+    if (!pl1Problems(have, oldFiled).some(m => /old type name/.test(m))) throw new Error('params filed under an old type name were not refused');
+    // and the table that ships is clean
+    const live = pl1Problems(pl1HaveReal, FM.fxAliases);
+    if (live.length) throw new Error('the shipped alias table is harmful: ' + live.join(', '));
+  });
+
+  // the sanitiser every load, import, undo, paste and collab clone goes through
+  test('PL1 a saved effect whose parameter or type was renamed keeps its value, keyframes included', { item: 'PL1', budgetMs: 30000 }, function () {
+    if (!FM.fxAliases || !FM.storage || !FM.storage._sanitizeEffects) throw new Error('FM.fxAliases is not reachable');
+    const A = FM.fxAliases, hadT = Object.assign(Object.create(null), A.types), hadP = Object.assign(Object.create(null), A.params);
+    const run = (effects) => { const h = { effects: JSON.parse(JSON.stringify(effects)) }; FM.storage._sanitizeEffects(h); return h.effects; };
+    const kf = { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 1, v: 20, e: 'linear' }] };
+    try {
+      // pretend Blur.radius was once called `size`, Glow.radius was `reach` then `spread`, and the type `glow` was once `bloom`
+      A.params.blur = { size: 'radius' };
+      A.params.glow = { reach: 'spread', spread: 'radius' };
+      A.types.bloom = 'glow';
+      const out = run([
+        { type: 'blur', enabled: true, params: { size: 9 } },
+        { type: 'blur', enabled: true, params: { size: kf } },
+        { type: 'blur', enabled: true, params: { size: 3, radius: 11 } },
+        { type: 'bloom', enabled: true, params: { reach: 14, passes: 2 } },
+        { type: 'glow', enabled: false, params: { reach: 7 } },
+      ]);
+      if (out.length !== 5) throw new Error('an aliased effect was dropped: ' + out.length + ' of 5 survived');
+      if (out[0].params.radius !== 9 || 'size' in out[0].params) throw new Error('a renamed number did not carry over: ' + JSON.stringify(out[0].params));
+      if (!out[1].params.radius || !Array.isArray(out[1].params.radius.kf) || out[1].params.radius.kf.length !== 2 || out[1].params.radius.kf[1].v !== 20) throw new Error('a renamed animated parameter lost its keyframes: ' + JSON.stringify(out[1].params));
+      if (out[2].params.radius !== 11) throw new Error('when both the old and the new key are present the new one must win, got ' + out[2].params.radius);
+      if (out[3].type !== 'glow' || out[3].params.radius !== 14 || out[3].params.passes !== 2) throw new Error('a renamed type with a two-step renamed key did not carry over: ' + JSON.stringify(out[3]));
+      if (out[4].type !== 'glow' || out[4].enabled !== false || out[4].params.radius !== 7) throw new Error('a disabled effect lost its state or value: ' + JSON.stringify(out[4]));
+      // control: a key that is NOT aliased is still dropped, and a type that is not aliased is still refused
+      const ctl = run([{ type: 'blur', enabled: true, params: { nonsense: 5, radius: 4 } }, { type: 'neverexisted', enabled: true, params: {} }]);
+      if (ctl.length !== 1 || ctl[0].params.nonsense !== undefined || ctl[0].params.radius !== 4) throw new Error('the whitelist stopped dropping unknown names: ' + JSON.stringify(ctl));
+      // control 2: an alias may never rewrite a name that still exists (a bad table must not eat a live setting)
+      A.params.blur = { radius: 'size' };
+      const shadow = run([{ type: 'blur', enabled: true, params: { radius: 4 } }]);
+      if (shadow.length !== 1 || shadow[0].params.radius !== 4) throw new Error('an alias rewrote a parameter that still exists: ' + JSON.stringify(shadow));
+      A.params.blur = { size: 'radius' };
+      // the same through a Filter container's children, which are sanitised one level down
+      const f = run([{ type: FM.FX_CONTAINER, enabled: true, params: {}, effects: [{ type: 'blur', enabled: true, params: { size: 6 } }] }]);
+      if (!f.length || !f[0].effects || !f[0].effects.length || f[0].effects[0].params.radius !== 6) throw new Error('an aliased effect inside a Filter was dropped: ' + JSON.stringify(f));
+    } finally { A.types = hadT; A.params = hadP; }
+  });
+
+  test('PL1 an effect preset saved under the old names still loads under the new ones', { item: 'PL1', budgetMs: 30000 }, function () {
+    if (!FM.fxAliases || !FM.effectPresets) throw new Error('FM.fxAliases is not reachable');
+    const A = FM.fxAliases, hadT = Object.assign(Object.create(null), A.types), hadP = Object.assign(Object.create(null), A.params);
+    const KEY = 'fm.fx.userpresets', keep = (function () { try { return localStorage.getItem(KEY); } catch (e) { return null; } })();
+    try {
+      A.params.blur = { size: 'radius' }; A.types.softener = 'blur';
+      const ok = FM.effectPresets.save({ id: 'pl1old', fx: 'softener', name: 'PL1 old', desc: '', dur: 0, params: { size: 12 } });
+      const mine = FM.effectPresets.for('blur').mine.filter(p => p.id === 'pl1old')[0];
+      if (!ok || !mine) throw new Error('a preset saved under an old effect name did not load (save returned ' + ok + ')');
+      if (mine.fx !== 'blur' || mine.params.radius !== 12 || 'size' in mine.params) throw new Error('the preset kept the old names: ' + JSON.stringify(mine));
+      // control: with the table empty the same preset is refused, not guessed at
+      A.types = Object.create(null); A.params = Object.create(null);
+      if (FM.effectPresets.save({ id: 'pl1old2', fx: 'softener', name: 'PL1 old 2', desc: '', dur: 0, params: { size: 12 } })) throw new Error('control: an unknown effect name was accepted with no alias');
+    } finally {
+      A.types = hadT; A.params = hadP;
+      try { FM.effectPresets.remove('pl1old'); FM.effectPresets.remove('pl1old2'); } catch (e) {}
+      try { if (keep == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, keep); } catch (e) {}
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

@@ -638,6 +638,34 @@ window.FM = window.FM || {};
     .filter(key => Object.keys(REG).some(t => REG[t].category === key && !REG[t].hidden))
     .map(key => ({ key: key, label: CATEGORY_LABELS[key] || key }));
 
+  /* ═══ ALIASES: A RENAMED EFFECT OR PARAMETER KEEPS EVERY OLD SAVE (PL1) ═══
+   * A saved project, a preset and the effect clipboard keep only the effect types and parameter keys the registry knows
+   * (storage.js sanitizeEffects, fx-presets.js sanePreset): anything else is DROPPED on load, and the autosave then writes the
+   * loss back. So renaming `radius` to `size`, or an effect type to a new one, resets that setting in every project a user has
+   * ever saved, with no error. This table is how a rename stays harmless. Add ONE line here in the same change as the rename:
+   *   FM.fxAliases.types.oldtype = 'newtype';           // an effect type that was renamed
+   *   FM.fxAliases.params.newtype = { oldkey: 'newkey' }; // a parameter key that was renamed — keyed by the effect's NEW type name
+   * It is applied (FM.fxRegistry.migrate) BEFORE the unknown-name check, so the old value is carried over, keyframes included. It
+   * does NOT convert values: if the meaning or the unit changed (radius in px became a 0-100 amount) that is a migration, not an
+   * alias, and it must write the new value itself. Rules the suite enforces (`PL1 …`): an alias may not shadow a name that still
+   * exists, may not loop, and must point at a type or key that exists; and the AU17-2 pin list still holds every name a saved
+   * project can contain, so a rename WITHOUT an alias fails there with the line to add. Empty today: nothing has been renamed. */
+  FM.fxAliases = { types: Object.create(null), params: Object.create(null) };
+  const hasOwnA = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+  /* ONE implementation of "what does this old name mean now", with the registry and the table passed in so the suite can ask it about
+     a rename that has not happened. `have(type)` returns the parameter keys of a type that exists today, or null. A name that still
+     exists is never rewritten (so an alias can never hide a live control); chains are followed and capped, so a loop ends. */
+  function aliasResolve(type, key, have, table) {
+    for (let hops = 0; hops < 8 && !have(type) && hasOwnA(table.types, type) && typeof table.types[type] === 'string'; hops++) type = table.types[type];
+    const live = have(type);
+    if (key !== undefined && live) {
+      const pa = hasOwnA(table.params, type) ? table.params[type] : null;
+      for (let hops = 0; pa && hops < 8 && live.indexOf(key) < 0 && hasOwnA(pa, key) && typeof pa[key] === 'string'; hops++) key = pa[key];
+    }
+    return { type: type, key: key };
+  }
+  const liveKeys = (t) => (REG[t] ? REG[t].params.map(p => p && p.key) : null);
+
   FM.fxRegistry = {
     get: function (id) { return REG[id] || null; },
     // THE GATES, READABLE (queue 733, hunt MEDIUM #16). The AI digest and the AI op path carried hand-written copies of
@@ -650,6 +678,29 @@ window.FM = window.FM || {};
     // the inspector row). get() already returns hidden entries; this is only for enumeration.
     allIncludingHidden: function () { return (FM.EFFECTS || []).map(d => REG[d.type]); },
     categories: function () { return FM.FX_CATEGORIES; },
+    /* The effect this saved entry means under today's names: `{ type, params }` with an old type and old parameter keys renamed
+       (see FM.fxAliases above). Returns the SAME object when nothing needed renaming, so with an empty table this costs one lookup
+       and changes nothing. Never mutates its input; when an entry carries both an old key and its new one, the new one wins. */
+    migrate: function (f) {
+      if (!f || typeof f !== 'object' || typeof f.type !== 'string') return f;
+      const tbl = FM.fxAliases;
+      if (!tbl) return f;
+      const type = aliasResolve(f.type, undefined, liveKeys, tbl).type;
+      const src = (f.params && typeof f.params === 'object') ? f.params : null;
+      let out = null;
+      if (src && REG[type]) {
+        const keys = Object.keys(src);
+        for (let i = 0; i < keys.length; i++) {
+          const nk = aliasResolve(type, keys[i], liveKeys, tbl).key;
+          if (nk === keys[i]) continue;
+          if (!out) { out = {}; keys.forEach(k => { if (aliasResolve(type, k, liveKeys, tbl).key === k) out[k] = src[k]; }); }
+          if (!hasOwnA(src, nk)) out[nk] = src[keys[i]];
+        }
+      }
+      if (type === f.type && !out) return f;
+      return Object.assign({}, f, { type: type, params: out || src || f.params });
+    },
+    aliasResolve: aliasResolve,   // suite seam: the same function with the registry and the table passed in
     paramsOf: function (id) { return (REG[id] && REG[id].params) || []; },
     // THE single creation path — returns exactly ONE instance (kills the duplicate-add bug by design).
     makeInstance: function (id) {

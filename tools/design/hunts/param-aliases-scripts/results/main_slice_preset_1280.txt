@@ -1,0 +1,42 @@
+1280 Regression 30/37 ✗ · NOT RUN HERE 3 Pending 0/0 built
+   ok  581: saving a FILTER as a preset keeps the effects inside it
+   ok  easing: every parameterised preset lands exactly on its keyframes
+   ok  preset previews: the tile is a picture of the SELECTED layer
+   ok  preset previews: adding the preset changes the picture
+   ok  preset previews: an edit to the layer changes its preview
+   ok  preset previews: a layer with nothing on screen falls back to the sample
+   ok  preset previews: rendering one never touches the layer document
+   ok  preset previews: the CACHE follows the layer, not just the preset
+   ok  preset previews: the art-decode re-mount keeps the preset
+   ok  a saved preset keeps the easing you authored (BUG-HUNT)
+   ok  filter survives: saved as an effect preset and read back
+   RED PL1 an effect preset saved under the old names still loads under the new ones
+   ok  the first import cannot create a project bigger than the biggest preset
+   ok  a preset preview runs the same code the Apply button runs
+   ok  the Presets card renders a live tile per applicable preset, and none for a broken one
+   ok  an easing preset does not reach back into a channel whose animation already ended
+   ok  a preset keeps a looping animation looping
+   ok  the two preset save buttons say what each one keeps (queue 329)
+   RED saving a preset updates the open Presets card by itself (queue 330)
+   RED presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)
+   ok  the three preset savers capture three different things
+   RED the per-effect preset list says WHICH presets it means
+   ok  applying a preset remembers it, and the layer can be written back over it
+   ok  721: a colour keyframe list survives saving a preset, and saving one preset does not delete an unpar
+   ok  722: a preset applied from the browser anchors its keyframes at the playhead he parked, not the prev
+   ok  presets: the layer remembers which preset it came from AFTER a save
+   ok  a parameterised easing survives being saved as a preset and being split (queue 701)
+   RED 690 a preset row tapped while he has numbered picks adds his picks and then the preset, in one go
+   ok  690 an animated effect copied onto a clip that starts later animates from that clip start, by Copy a
+   RED 690 an Animate preset plays on EVERY caption of a caption track, not only the first
+   RED 690 gradient text keeps its gradient when an Animate preset is picked
+   ok  690 under an Animate preset gradient text looks like the still text once settled — top to bottom, An
+   ok  690 the Colouring Opacity holds under an Animate preset and on a Curve, and leaves the Outline solid
+   ok  690 a look + animations preset carries the animation and not the size: applied to a fitted photo it 
+   ok  986 C9 a filter saved as a preset is kept whole - the toast no longer sends him to the Effects brows
+   ok  994 the layer ⋯ and ⧉ menus carry no preset save, and the Presets card still saves the whole look
+   ok  994 the unblock page no longer asks which preset save goes — the layer ⋯ row it named is gone
+FAILPL1 an effect preset saved under the old names still loads under the new ones — FM.fxAliases is not reachable
+FAILsaving a preset updates the open Presets card by itself (queue 330) — no layer to work from
+FAILpresets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9) — no layer to work from
+FAILthe per-effect preset list says WHICH presets it means — the message does not name the effect it is about: [No recent effects yet]
