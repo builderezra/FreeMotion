@@ -214,3 +214,24 @@ ADDED 9 Oct 10:20 by the PM. Superb run: S2, S3, S4, S5, H57 and P16 all landed,
 - R7  A beginner's walk of the WHOLE Simple chain tip (2.5, or 2.6 if done) at 380 and at 1280, like your T10. Try to make a 30-second video from 3 clips, a title, music and a transition, without reading anything. List every place you got stuck or surprised, each with a screenshot and file:line where you can, ranked by how badly it would stop a first-time user.
       → tools/design/research/simple-walk-2.md on branch research/simple-walk-2.
 - P17  Plans for the 5 oldest open items after P16's, callers traced. → plans/helper-17.
+
+ADDED 9 Oct 13:10 by the PM. Huge run: S6–S9, R7 and P17. Your R7 walk is exactly what was needed. Same rules and QUALITY RULE. Keep your turn alive with short polls; push as you go; never push to main; never force-push (new branch names only). In order:
+- S10  Fix the bugs your R7 walk found on the 2.6 tip, one commit each with a red-first test at 1280 and 380 and a caught mutation. For each, quote the DESIGN.md line that says what it should do.
+      (a) The time readout is wrong after adding clips: js/spine-edit.js:1292 never calls FM.updateReadout().
+      (b) The PC's first Simple screen overlaps Full's Add grid.
+      (c) A long song stretches the film (34.7 s, not 30).
+      (d) Music and titles land at the playhead. If DESIGN says that is right, say so and leave it.
+      (e) A new project opening in Full: check it against D3 A ("opens in whichever editor this device last used"). Fix it only if it breaks D3.
+      → hunt/simple-r7-fixes on top of hunt/simple-2.6.
+- S11  Transitions in Simple. Your walk found none anywhere at the 2.6 tip.
+      - Find where DESIGN.md and the BUILD-PLANs put clip transitions (D13 "transitions never shorten the video"; judge-buildability's step 7 "Transitions and clip animations"), and quote it.
+      - Then write that release in full on top of S10's branch, the same way as S1–S6: plan text, hunks and tests red-before/green-after at 1280 and 380; the preview must equal the export at every seam where measurable; Full unchanged.
+      - If DESIGN leaves a choice open, draw 2–3 options as pictures in the real app (one marked recommended) for Ezra instead of guessing.
+      → plans/simple-transitions + hunt/simple-transitions.
+- S12  The landing check. Rebase your whole Simple stack (2.3 → 2.4b → 2.5b → 2.6 → r7 fixes, plus simple-t10-fixes and simple-a1-e as separate commits) onto the builder's newest chain tip (980-p22-r6 or later; fetch first). Report every conflict and how you resolved it, and run the whole Simple slice at both widths.
+      → hunt/simple-stack-landing. This is what the builder will take release by release.
+- R8  Your R5 listed 10 gaps vs CapCut. Re-check each against the 2.6 tip plus S10/S11: closed, still open, or partly. Rank what is still open by how often a beginner hits it.
+      → tools/design/research/simple-gaps-2.md on research/simple-gaps.
+- T11  Four Simple tutorials for the new releases (speed and sound, crossfades, dragging clips, editing with a friend), walked at 380 on your newest Simple tip, same format as T9/T10.
+      → tutorials-drafts.
+- P18  Plans for the 5 oldest open items after P17's, callers traced. → plans/helper-18.
