@@ -60571,6 +60571,9 @@
       if (!(await FM.spine.cmd.del(c.id('B')))) throw new Error('the delete after Make a Viewer was refused: “' + sm6Say().text + '”');
       /* the People menu goes through the same helper: back to Editor, and the room follows */
       if (!U.setMemberRole(g.mid, 'editor') || room.members[c.rid].role !== 'editor' || c.S.host.members[g.mid].role !== 'editor') throw new Error('U.setMemberRole did not move both the session and the room');
+      /* the same member by its ROW (rid) while connected: both halves again */
+      if (!U.setMemberRole(c.rid, 'commenter') || c.S.host.members[g.mid].role !== 'commenter' || room.members[c.rid].role !== 'commenter') throw new Error('a connected member given by its row did not move both the session (' + c.S.host.members[g.mid].role + ') and the room (' + room.members[c.rid].role + ')');
+      U.setMemberRole(c.rid, 'editor');
       /* a member who has dropped has no mid, so setPeerRole refuses it: the row is what changes */
       c.S.dropPeer(g.mid);
       if (!C.othersCanEdit()) throw new Error('CONTROL: a remembered Editor should count');
