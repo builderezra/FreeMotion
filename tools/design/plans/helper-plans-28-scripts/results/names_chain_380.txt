@@ -1,0 +1,9 @@
+   RED export: a zero-chunk AAC encode cannot masquerade as a soundtrack (batch2 1a)
+FAILexport: a zero-chunk AAC encode cannot masquerade as a soundtrack (batch2 1a) — NO_VIDEO_CODEC
+   ok  a panorama import keeps its canvas and centred photo when reopened (batch2 1b.2)
+   ok  offline guest edits made during reconnect still use clash checks, including Undo (batch2 1b.3)
+   ok  keyboard can edit numeric Volume and Position values and effect inputs have names (batch2 1b.4)
+   ok  a project file without a layer transform survives import, save and reopen
+   ok  three and four styled group levels each draw once and keep every fade
+   ok  Detect speech skips silent B-roll and continues after a failed source
+END
