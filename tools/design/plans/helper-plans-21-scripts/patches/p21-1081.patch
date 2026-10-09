@@ -1,0 +1,25 @@
+diff --git a/js/exporter.js b/js/exporter.js
+index b16cdd73..18916986 100644
+--- a/js/exporter.js
++++ b/js/exporter.js
+@@ -66,7 +66,10 @@ window.FM = window.FM || {};
+   async function deliver(blob, name) {
+     let file = null;
+     try { file = new File([blob], name, { type: 'video/mp4' }); } catch (e) {}
+-    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
++    /* #1081: the share sheet is for a phone (Save to Photos, AirDrop). Desktop Chrome and Edge also answer canShare({files}) with true, and on Windows that sheet has no "save to disk", so a PC
++       user could be left with an export and no way to keep it. A mouse-primary device downloads. (A touch screen whose primary pointer is coarse, a phone or an iPad, keeps the sheet.) */
++    const coarse = (function () { try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { return false; } })();
++    if (coarse && file && navigator.canShare && navigator.canShare({ files: [file] })) {
+       try { await navigator.share({ files: [file], title: name }); return 'shared'; }
+       catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
+     }
+@@ -74,6 +77,8 @@ window.FM = window.FM || {};
+     return 'downloaded';
+   }
+ 
++  FM._deliver = deliver;   // suite seam (#1081): the real delivery function, not a copy
++
+   /* ---- streaming MP4 sink: keep the finished file OFF the JS heap ---------------------------- (#47)
+    *
+    * The muxer used to write into an ArrayBufferTarget with fastStart:'in-memory', which by definition

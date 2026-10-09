@@ -1,0 +1,41 @@
+=== A1_footage_also_at_zero
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP21 #1080 — CONTROL: footage added at the end should butt onto the end (10), started at 0
+=== A2_song_always_zero
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP21 #1080 — CONTROL: a song added mid-video should start at the playhead (4), started at 0
+=== A3_old_line
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP21 #1080 — a song added with the playhead at the end of the video starts at 10 s, after the video, and lengthens the project by the song, instead of playing under it
+=== B1_pc_shares
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP21 #1081 — on a PC (mouse) Save opened the OS share sheet instead of downloading the file ({"how":"shared","shared":1,"downloaded":0}): on Windows that sheet has no "save to disk"
+=== B2_phone_downloads
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP21 #1081 — CONTROL: on a phone (coarse pointer) Save should open the share sheet once and not download: {"how":"downloaded","shared":0,"downloaded":1}
+=== C1_zone_never
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP21 #1083 — the mouse is in the top-left corner and the pill did not appear (opacity 0)
+=== C2_no_click
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP21 #1083 — inside a group the pill should leave the group (exitGroup called 0 times)
+=== C3_always_visible
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP21 #1083 — at rest the pill must be invisible and inert (opacity 1, pointer-events none)
+=== C4_rest_blocks_clicks
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP21 #1083 — at rest the pill must be invisible and inert (opacity 0, pointer-events auto)
+=== C5_zone_leaves_stuck
+→ baseline: these titles were proven green on this exact tree already (cached)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+ALLDONE

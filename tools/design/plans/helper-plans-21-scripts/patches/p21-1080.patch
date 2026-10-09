@@ -1,0 +1,18 @@
+diff --git a/js/app.js b/js/app.js
+index 0e2685ac..1040c227 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -3052,7 +3052,12 @@ window.FM = window.FM || {};
+     // in front of it: measured 12.828s of comp, playhead at 16.828s, new clip at 16.828s, comp end
+     // 29.656s — four seconds of black the user never asked for, with the clip they just added
+     // stranded behind it. Clamped to the comp end it butts straight onto the existing work instead.
+-    const start = first ? 0 : Math.min(FM.time, P.duration || 0);
++    /* #1080: A SONG ADDED WITH THE PLAYHEAD AT THE END STARTS AT 0. Clips butt onto the end of the work (above), which is right for footage, but a file with no picture is music, and someone who has
++       just watched the video through and adds a song wants it UNDER the video, not after it (it used to start at the end and lengthen the project by the song). Mid-video it is still added at the
++       playhead, as before. */
++    const noPicture = rec.kind === 'video' && !(rec.width > 0 && rec.height > 0);
++    const atEnd = !first && (P.duration || 0) > 0 && FM.time >= (P.duration || 0) - 1e-3;
++    const start = first ? 0 : (noPicture && atEnd ? 0 : Math.min(FM.time, P.duration || 0));
+     const layer = FM.makeLayer(rec.kind, {
+       name: rec.file ? rec.file.name.replace(/\.[^.]+$/, '') : rec.kind,
+       x: P.width / 2, y: P.height / 2, start: start, duration: dur,
