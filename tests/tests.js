@@ -30655,7 +30655,9 @@
       'runPendingReload', 'leaving',
       /* Simple mode P2 (queue 980): the live gate's one predicate and the linked-copy test it uses — answers, not state;
          with no session they read the project list only and change nothing. Full never calls them. */
-      'isLinkedCopy', 'othersCanEdit'];
+      'isLinkedCopy', 'othersCanEdit',
+      /* Simple mode 2.6 (queue 980, DESIGN section 11): which step the last undo or redo ran, for FM.history.lastStep — an answer, not state; null with no session. */
+      'lastStep'];
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
     if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S7 is the engine, its hooks, the connection codes and the relay, the UI, media, presence, roles and comments, and anything beyond that list belongs to a later stage');
     if (C.readOnly && (C.readOnly() !== false || C.myRole() !== 'owner' || C.canExport() !== true)) throw new Error('with no session this device reads as read-only, or not the owner — a solo user would be locked out of his own project');
