@@ -60695,9 +60695,10 @@
      need no 20-second hold: _tick() is the loop's own frame, called by hand while a REAL mouse sits at the edge. */
   test('simple P2.5b · S8b brake 3: holding a clip at the right edge for 400 frames never scrolls or grows the strip past the far limit frozen at the start of the drag (project end, the clip’s own end, track end plus the clip)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
-    const many = (W, H) => { const out = []; for (let i = 5; i >= 0; i--) out.push(smV('K' + i, i * 2, 2, W, H)); return out; };
+    /* an OVERLAY, not a main clip: a main clip held at the edge becomes the last slot and brake 4 stops the strip first, which hid brake 3 (mutations B1 and B2 survived) */
+    const many = (W, H) => smClips3(W, H).concat([smShape('Rock', 1, 2, W, H)]);
     await smDragEnv(many, async function (v) {
-      const A = smCtr(smNode(v.L('K0').id)), sc = document.getElementById('sm-scroll'), rect = sc.getBoundingClientRect(), ex = rect.right - 6, inner = document.getElementById('sm-inner');
+      const A = smCtr(smNode(v.L('Rock').id)), sc = document.getElementById('sm-scroll'), rect = sc.getBoundingClientRect(), ex = rect.right - 6, inner = document.getElementById('sm-inner');
       await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', ex, A.y, 60]]), 'holding a clip at the right edge');
       const g = FM.simpleTimeline._g(); if (!g) throw new Error('CONTROL: no drag is live');
       const far = Math.max(g.projDur0, g.start0 + g.dur0, FM.spine.read(FM.scene).trackEnd + g.dur0), limit = FM.simpleTimeline.xOf(far) + sc.clientWidth;
