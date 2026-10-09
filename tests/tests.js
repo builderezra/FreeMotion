@@ -61012,6 +61012,20 @@
     });
   });
 
+  test('simple P2.7 · T8b a REAL press on the ◇ (hit-tested through the page, not a synthetic click) lands on the ◇ and opens that clip’s Transition row, with nothing else above it', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv((W, H) => smClips3(W, H), async function (v) {
+      const c = document.querySelector('.sm-chip-tr[data-tr="' + v.L('B').id + '"]');
+      if (!c) throw new Error('CONTROL: no ◇ at the cut of B');
+      const p = smCtr(c), hit = document.elementFromPoint(p.x, p.y);
+      if (!hit || !hit.closest('.sm-chip-tr')) throw new Error('at the ◇’s centre (' + Math.round(p.x) + ',' + Math.round(p.y) + ') the page hit ' + (hit && (hit.id ? '#' + hit.id : hit.className || hit.tagName)) + ', not the ◇: a finger or a mouse never reaches it');
+      await realInput924(smMS([['mouseMove', p.x, p.y], ['mouseDown', p.x, p.y, 60], ['mouseUp', p.x, p.y, 40]]), 'a click on the ◇');
+      await v.idle(); await v.sleep(250);
+      if (FM.scene.selectedId !== v.L('B').id) throw new Error('the press did not select the incoming clip (selected: ' + FM.scene.selectedId + ')');
+      if (!smTool('tr-crossfade')) throw new Error('the press did not open the Transition row (tray holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+    });
+  });
+
   test('simple P2.6 · S10a the time readout follows the playhead after a command moves it (DESIGN §8.3: the pill is Full’s #time-readout, unchanged)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await smP2(smClips3, async function (v) {
