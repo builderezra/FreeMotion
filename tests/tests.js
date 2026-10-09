@@ -60825,6 +60825,64 @@
 
   /* ═══ S10 · the bugs the R7 walk found on the 2.6 tip (tools/design/research/simple-walk-2.md). ═══ */
   const sm10Tc = t => { const f = FM.scene.project.fps || 30, tot = Math.round(t * f), s = Math.floor(tot / f), p = n => (n < 10 ? '0' : '') + n; return p(Math.floor(s / 60)) + ':' + p(s % 60) + ':' + p(tot % f); };
+  const sm7s = async v => { await v.sleep(520); const lv = document.getElementById('sm-live'); return v.say() + ' | ' + (lv ? lv.textContent : ''); };
+  /* ── 2.7 step 2: the planners (S.planTransition / planTransitionAll / the drop rule) ── */
+  test('simple P2.7 · T5 setting a transition writes trIn on the incoming clip only, nothing moves, one undo takes it back; a gap seam refuses in a plain line', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      const A = v.L('A'), B = v.L('B'), C = v.L('C'), t0 = [A, B, C].map(l => l.start + '/' + l.duration);
+      if (!(await FM.spine.cmd.transition(B.id, 'crossfade', 0.6))) throw new Error('refused: ' + (await sm7s(v)));
+      const b = v.L('B');
+      if (!b.trIn || b.trIn.type !== 'crossfade' || Math.abs(b.trIn.d - 0.6) > 1e-9) throw new Error('trIn is ' + JSON.stringify(b.trIn));
+      if (v.L('A').trIn || v.L('C').trIn) throw new Error('a neighbour got a transition too');
+      if ([v.L('A'), v.L('B'), v.L('C')].map(l => l.start + '/' + l.duration).join() !== t0.join()) throw new Error('the clips moved');
+      if (!/Crossfade 0\.6 s/.test((await sm7s(v)))) throw new Error('line says: ' + (await sm7s(v)));
+      if (await FM.spine.cmd.transition(B.id, 'crossfade', 0.6)) throw new Error('setting the same thing again should refuse');
+      await FM.spine.cmd.transition(B.id, 'dipblack', 99);
+      if (v.L('B').trIn.type !== 'dipblack' || v.L('B').trIn.d !== 3) throw new Error('length is not clamped to 3 s: ' + JSON.stringify(v.L('B').trIn));
+      await FM.spine.cmd.transition(B.id, 'none');
+      if (v.L('B').trIn) throw new Error('None left a trIn');
+      await FM.spine.cmd.transition(B.id, 'crossfade', 0.5);
+      FM.history.undo();
+      if (v.L('B').trIn) throw new Error('one undo did not take the transition back');
+      const first = v.L('A');
+      if (await FM.spine.cmd.transition(first.id, 'crossfade', 0.5)) throw new Error('the first clip has no cut before it; it must refuse');
+      if (!/two clips that meet/.test((await sm7s(v)))) throw new Error('refusal line: ' + (await sm7s(v)));
+    });
+    await smP2(() => [smV('B', 3, 2, 1280, 800), smV('A', 0, 2, 1280, 800)], async function (v) {
+      if (await FM.spine.cmd.transition(v.L('B').id, 'crossfade', 0.5)) throw new Error('a gap seam must refuse');
+      if (!/two clips that meet/.test((await sm7s(v)))) throw new Error('gap refusal line: ' + (await sm7s(v)));
+    });
+  });
+  test('simple P2.7 · T6 "same on every cut" copies one transition to every join, and the drop rule removes a transition whose cut changed (delete, split, duplicate, reorder) and says so', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      await FM.spine.cmd.transition(v.L('B').id, 'dipwhite', 0.8);
+      if (!(await FM.spine.cmd.transitionAll(v.L('B').id))) throw new Error('refused: ' + (await sm7s(v)));
+      if (!v.L('C').trIn || v.L('C').trIn.type !== 'dipwhite' || v.L('C').trIn.d !== 0.8) throw new Error('C did not get it: ' + JSON.stringify(v.L('C').trIn));
+      if (v.L('A').trIn) throw new Error('the first clip must not get one');
+      if (!/all 2 cuts/.test((await sm7s(v)))) throw new Error('line: ' + (await sm7s(v)));
+      await FM.spine.cmd.del(v.L('B').id);
+      if (v.L('C').trIn) throw new Error('C kept a transition whose cut (B|C) no longer exists');
+      if (!/removed a transition/.test((await sm7s(v)))) throw new Error('the line did not say it: ' + (await sm7s(v)));
+    });
+    await smP2(smClips3, async function (v) {
+      await FM.spine.cmd.transition(v.L('B').id, 'crossfade', 0.5);
+      FM.time = 3; await FM.spine.cmd.split(v.L('B').id, 3);
+      const halves = FM.scene.layers.filter(l => l.sm && l.sm.main && l.start >= 2 && l.start < 4);
+      if (halves.length !== 2) throw new Error('split made ' + halves.length + ' halves');
+      const withTr = halves.filter(l => l.trIn);
+      if (withTr.length !== 1 || withTr[0].start !== 2) throw new Error('only the first half keeps the cut at its head: ' + JSON.stringify(halves.map(l => [l.start, !!l.trIn])));
+    });
+    await smP2(smClips3, async function (v) {
+      await FM.spine.cmd.transition(v.L('B').id, 'crossfade', 0.5);
+      await FM.spine.cmd.duplicate(v.L('B').id);
+      const trs = FM.scene.layers.filter(l => l.trIn);
+      if (trs.length !== 1) throw new Error('a copy must not carry the transition: ' + trs.length + ' clips have one');
+      if (trs[0].id !== v.L('B').id) throw new Error('the original B lost its transition');
+    });
+  });
+
   test('simple P2.6 · S10a the time readout follows the playhead after a command moves it (DESIGN §8.3: the pill is Full’s #time-readout, unchanged)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await smP2(smClips3, async function (v) {
@@ -60937,6 +60995,45 @@
     const sc = tr27Scene(['dipblack', null]);
     const T = FM.makeLayer('shape', { name: 'T', shape: 'rect', x: 40, y: 30, shapeW: 30, shapeH: 20, start: 0, duration: 6 }); T.fill = '#ffff00'; sc.layers.unshift(T);
     const p = tr27Px(sc, 2.0, 40, 30); if (p[0] < 250 || p[1] < 250) throw new Error('a layer above the pair was dipped with it: ' + p);
+  });
+
+
+  function tr27Vid(name, start, dur, trim, mdur) {
+    const l = FM.makeLayer('video', { name: name, x: 80, y: 60, start: start, duration: dur }); l.trimStart = trim; l.sm = { main: true }; l.muted = true; l.srcW = 160; l.srcH = 120; l.srcRev = 0;
+    const ls = [];
+    const el = { _ct: 0, readyState: 4, seeking: false, error: null, paused: true, muted: true, pause() {}, play() { return Promise.resolve(); }, addEventListener(n, f) { ls.push(f); }, removeEventListener() {},
+      get currentTime() { return this._ct; }, set currentTime(v) { this._ct = v; setTimeout(() => ls.slice().forEach(f => f()), 0); } };
+    return { layer: l, rec: Object.assign(smRec(mdur, name + '.mp4', { width: 160, height: 120 }), { el: el }), el: el };
+  }
+  test('simple P2.7 · T4 the picture of a clip in a transition is seeked the same way by the exporter\'s frame path and by the paused preview: handles past the window, a held edge frame past the source, none for a clip inside its own window', { item: '980' }, async function () {
+    const A = tr27Vid('A', 0, 2, 0, 10), B = tr27Vid('B', 2, 2, 1, 10), C = tr27Vid('C', 4, 2, 0, 4.1);
+    B.layer.trIn = { type: 'crossfade', d: 1 };
+    const sc = scene([C.layer, B.layer, A.layer], { project: { width: 160, height: 120, fps: 30, duration: 6, background: '#000', sm: { adopted: true, v: FM.SM_V } } });
+    [A, B, C].forEach(x => FM.media.set(x.layer.id, x.rec));
+    const P0 = FM.scene, t0 = FM.time;
+    try {
+      const want = (t, ex) => { const seeks = FM.transitionSeeks(sc, t); return seeks.map(s => s.layer.name + '@' + s.local.toFixed(3)).join() === ex; };
+      if (!want(1.8, 'B@0.800')) throw new Error('at 1.8 s B (trimStart 1, window opens at 1.5) should be seeked to its handle 0.8: ' + FM.transitionSeeks(sc, 1.8).map(s => s.layer.name + '@' + s.local));
+      if (!want(2.2, 'A@2.200')) throw new Error('at 2.2 s A (out at 2, 10 s of source) should be seeked 0.2 past its out-point: ' + FM.transitionSeeks(sc, 2.2).map(s => s.layer.name + '@' + s.local));
+      if (FM.transitionSeeks(sc, 1.2).length || FM.transitionSeeks(sc, 3.0).length) throw new Error('a seek was asked for outside any window');
+      if (!want(2.0, 'A@2.000')) throw new Error('at the cut A is just past its end and B is at its start: only A may be asked, at 2.0: ' + FM.transitionSeeks(sc, 2.0).map(s => s.layer.name + '@' + s.local));
+      /* a source with no more: A has 2.05 s of source and trimStart 0, so 0.2 past its out-point is the held last frame */
+      A.rec.duration = 2.05; const held = FM.transitionSeeks(sc, 2.4)[0]; if (!held || Math.abs(held.local - 2.05) > 1e-6) throw new Error('past the end of the source the handle should hold at 2.05, got ' + (held && held.local)); A.rec.duration = 10;
+      /* a handle before the start of the source clamps at 0 */
+      B.layer.trimStart = 0.1; const first = FM.transitionSeeks(sc, 1.6)[0]; if (!first || first.local !== 0) throw new Error('before the start of the source the handle should hold at 0, got ' + (first && first.local)); B.layer.trimStart = 1;
+      /* the two paths land the same */
+      for (const t of [1.8, 2.2]) {
+        [A, B, C].forEach(x => { x.el._ct = 99; });
+        await FM.exporter.seekAllVideos(sc, t);
+        const ex = [A, B, C].map(x => x.el._ct);
+        [A, B, C].forEach(x => { x.el._ct = 99; });
+        FM.scene = sc; FM.time = t; FM.seekVideosToTime({ exact: true });
+        const pv = [A, B, C].map(x => x.el._ct);
+        if (ex.join() !== pv.join()) throw new Error('at ' + t + ' s the exporter seeks ' + ex.map(v => v.toFixed(3)) + ' and the paused preview ' + pv.map(v => v.toFixed(3)));
+        const idx = t < 2 ? 1 : 0;
+        if (Math.abs(ex[idx] - (t < 2 ? 0.8 : 2.2)) > 0.04) throw new Error('at ' + t + ' s the overhang clip was seeked to ' + ex[idx]);
+      }
+    } finally { FM.scene = P0; FM.time = t0; [A, B, C].forEach(x => { try { FM.media.remove(x.layer.id); } catch (e) {} }); }
   });
 
   async function run() {

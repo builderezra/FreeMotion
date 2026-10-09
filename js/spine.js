@@ -63,7 +63,7 @@ window.FM = window.FM || {};
     if (S.STRIP_ROUTES.indexOf(route) < 0) return copies;
     (Array.isArray(copies) ? copies : [copies]).forEach(c => {
       if (!c) return;
-      delete c.pick;
+      delete c.pick; delete c.trIn;
       if (c.sm && typeof c.sm === 'object') {
         delete c.sm.main; delete c.sm.tail; delete c.sm.tailEnd;
         if (!Object.keys(c.sm).length) delete c.sm;
