@@ -1,0 +1,90 @@
+diff --git a/index.html b/index.html
+index c39a9ed3..105ba67e 100644
+--- a/index.html
++++ b/index.html
+@@ -1091,7 +1091,7 @@
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+   <script src="js/history.js?v=37"></script>
+-  <script src="js/storage.js?v=58"></script>
++  <script src="js/storage.js?v=59"></script>
+   <script src="js/export-resume.js?v=7"></script>
+   <script src="js/medialib.js?v=8"></script>
+   <script src="js/template-fill.js?v=4"></script>
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..3b6d25b7 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -335,7 +335,7 @@ window.FM = window.FM || {};
+     if (isLibKey(key)) return Promise.resolve();   // queue 915: no deleter may take a shared copy — clips in any project point at it (phase B still never collects one)
+     if (heldByAnother(key)) return Promise.resolve();   // queue 915 phase B: another copy in memory still plays from this record's file — it goes at a later sweep, when nothing holds it
+     _stored.delete(key);   // queue 690 (hunt 5): no longer known to be on disk — a clip brought back by undo is noted again on its next save
+-    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
++    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); tx.onabort = () => res(); /* AU3-4: a commit-time abort fires only this — idbPut already listened for it */ } catch (e) { res(); } }); }
+   function idbKeys(db) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]); } catch (e) { res([]); } }); }
+ 
+   /* ═══ THE LAYER IDS A COLLAB CHECKPOINT CAN STILL BRING BACK (queue 921 S0, spec §12.4) ════════════
+@@ -676,6 +676,16 @@ window.FM = window.FM || {};
+      the session — so after a reload nothing is looked up, even while the boot sweep has not yet run. */
+   const _prevFiles = new Map();
+   function prevKey(id, rev) { return 'prev:' + id + ':' + (rev || 0); }
++  /* AU3-1: the layer list is data from disk or from a file. Keep only the entries that are plain objects, so one stray null cannot stop a project from opening. */
++  function plainLayers(list) {
++    const out = (Array.isArray(list) ? list : []).filter(l => l && typeof l === 'object' && !Array.isArray(l));
++    out.forEach(l => {
++      if (!l.transform || typeof l.transform !== 'object' || Array.isArray(l.transform)) l.transform = {};
++      /* …and a caption track's cues must be cues: the timeline writes cue.start.toFixed(2) on every rebuild, so one cue without numeric times stopped the whole timeline from drawing. */
++      if (l.captions != null) l.captions = Array.isArray(l.captions) ? l.captions.filter(c => c && typeof c === 'object' && isFinite(+c.start) && isFinite(+c.end)).map(c => (typeof c.start === 'number' && typeof c.end === 'number') ? c : Object.assign({}, c, { start: +c.start, end: +c.end })) : [];
++    });   // every reader walks layer.transform (animatedProps, the compositor): a layer without one is a layer that stops the project
++    return out;
++  }
+   FM.storage = {
+     _writeJobs: planBlobWrites,   // queue 830 suite seam
+     _hydrateSceneMedia: hydrateSceneMedia,   // queue 834 (u8) suite seam: the shared-run guard itself
+@@ -889,7 +899,7 @@ window.FM = window.FM || {};
+          corrupted doc, a build that predates a clamp — opening it repairs it instead of dying on it. */
+       clampProjectDims(scene.project);
+       FM.scene.project = scene.project;
+-      FM.scene.layers = Array.isArray(scene.layers) ? scene.layers : [];
++      FM.scene.layers = plainLayers(scene.layers);   // AU3-1: a null (an undefined entry stringifies to null) or any non-object in the stored list used to throw below and leave the project unopenable
+       // The AUTOSAVE path sanitises nothing — applyScene (the .fmproj import) is the only caller of
+       // sanitizeImportedLayers, and this is the route every project takes on every open. So anything
+       // an import once let through has been autosaved back into localStorage and comes in unchecked
+@@ -1534,6 +1544,7 @@ window.FM = window.FM || {};
+     if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
+     if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour
+     if (l.clipColorSet != null) l.clipColorSet = !!l.clipColorSet;               // deliberate-choice flag: boolean only
++    if (l.fillGradient && (typeof l.fillGradient !== 'object' || Array.isArray(l.fillGradient))) delete l.fillGradient;   // AU3-3: a string / number / true here threw at the .angle write below, on every open of the project
+     if (l.fillGradient) {
+       if (l.fillGradient.c0 != null && !safeColor(l.fillGradient.c0)) l.fillGradient.c0 = '#3a7bd5';
+       if (l.fillGradient.c1 != null && !safeColor(l.fillGradient.c1)) l.fillGradient.c1 = '#0a0c10';
+@@ -1694,6 +1705,7 @@ window.FM = window.FM || {};
+   FM.storage.applyScene = async function (obj) {
+     if (!obj || !obj.project || !Array.isArray(obj.layers)) return false;
+     if (obj.layers.length > 2000) return false;   // absurd layer count = malicious/corrupt — refuse rather than hang the render
++    obj.layers = plainLayers(obj.layers);   // AU3-1: same guard as load(): reIdLayers and the sanitisers read l.id
+     clampProjectDims(obj.project);
+     sanitizeImportedLayers(obj.layers);
+     // Re-id EVERY imported layer. An exported file carries the ids of the project it came from —
+@@ -2874,8 +2886,8 @@ window.FM = window.FM || {};
+         for (let i = 0; i < localStorage.length; i++) {
+           const lk = localStorage.key(i);
+           if (!lk || lk.indexOf('fm.proj.') !== 0 || lk.slice(8) === id) continue;
+-          const d = readJSON(lk, null);
+-          if (d && Array.isArray(d.layers)) d.layers.forEach(l => { if (l && l.id) elsewhere.add(l.id); });
++          let raw = null; try { raw = localStorage.getItem(lk); } catch (e) {}
++          ckptLayerIds(raw).forEach(id => elsewhere.add(id));   // AU3-2: an unparseable sibling document still names what it names
+         }
+         if (id !== curId()) ((FM.scene && FM.scene.layers) || []).forEach(l => { if (l && l.id) elsewhere.add(l.id); });
+         const ckptPrefix = 'collab:ckpt:' + id + ':';
+@@ -2936,7 +2948,9 @@ window.FM = window.FM || {};
+             const lk = localStorage.key(i);
+             if (lk && lk.indexOf('fm.proj.') === 0) {
+               projIds.add(lk.slice(8));
+-              const d = readJSON(lk, null); if (d && d.layers) d.layers.forEach(l => keep.add(l.id));
++              /* AU3-2: through ckptLayerIds, not readJSON — a document that will not parse (cut off, hand-edited) names NOTHING to readJSON, so this sweep deleted every clip it still lists. A text that cannot be read keeps everything it appears to name, exactly as for a collab checkpoint. */
++              let raw = null; try { raw = localStorage.getItem(lk); } catch (e) {}
++              ckptLayerIds(raw).forEach(id => keep.add(id));
+             }
+           }
+           FM.scene.layers.forEach(l => keep.add(l.id));

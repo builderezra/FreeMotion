@@ -1,0 +1,5 @@
+=== D1_idbDel_no_abort
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU3-4 — removeMedia never finished when the delete transaction aborted at commit: every caller that awaits it (removing a project, the boot sweep) hangs behind it
+ALLDONE
