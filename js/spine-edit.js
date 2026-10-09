@@ -323,6 +323,11 @@ window.FM = window.FM || {};
       const end = (+l.start || 0) + (+l.duration || 0);
       if (end > from + R.eps) return { kind: 'riders', name: S.itemWord(l, R) };
     }
+    return cameraBlock(R, from, map);
+  }
+  /* The camera half alone: Append moves only the tail, so riders wholly after T stay a listed 2.4 gap, but a keyed camera
+     over the end card is not — it refuses rather than let the zoom play over the new clips (§3.10 rule 3e; review finding 5) */
+  function cameraBlock(R, from, map) {
     for (let k = 0; k < R.fullOnly.length; k++) {
       const l = map.get(R.fullOnly[k]); if (!l || l.type !== 'camera' || (l.sm && l.sm.stay)) continue;
       const keyed = (FM.timedLists ? FM.timedLists(l) : FM.animatedProps(l)).some(pp => pp.kf.some(kk => kk.t >= from - R.eps));
@@ -775,8 +780,9 @@ window.FM = window.FM || {};
       case 'cutKeys': text = line('cutKeysNext', o.name); buttons = [full]; break;
       case 'fadeOwned': text = line('fadeOwned', o.a, o.b); buttons = [full]; break;
       case 'cutShort': text = line('cutShort', o.name); buttons = [full]; break;
+      case 'insertFade': text = line('insertFade', o.a, o.b); break;   // 2.2: the two clip numbers (DESIGN §3.11)
       default: text = line(kind) || line('failed');
-        if (kind === 'splitBlock' || kind === 'trimBlock') buttons = [full];
+        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow') buttons = [full];
     }
     S.say(text, { buttons: buttons, refusal: kind, ids: o.ids });
     S.lastRefusal = kind;
@@ -789,6 +795,7 @@ window.FM = window.FM || {};
      stores each tap's intent; never coalesced. */
   S.running = false;
   S.queue = [];
+  S.reading = 0;   // adds still reading their picked files (before the runner): the editor switch waits on it (busyReason)
   const seq = () => (FM.history && FM.history._commitSeq) ? FM.history._commitSeq() : 0;
   S.queueStep = function (kind) {
     if (S.queue.length >= 4) { S.say(line('wait')); return false; }
@@ -799,7 +806,9 @@ window.FM = window.FM || {};
   };
   S.drain = function () {
     while (S.queue.length && !S.running) {
-      if (FM.history && FM.history.isMuted && FM.history.isMuted()) return;
+      /* re-armed, never dropped: a queue left waiting on a muted history held nothing open and nothing came back for it, and the
+         switch now waits on the queue (busyReason), so a stranded entry would hold it shut (review finding 10) */
+      if (FM.history && FM.history.isMuted && FM.history.isMuted()) { setTimeout(S.drain, 30); return; }
       if (FM.jobDepth && FM.jobDepth() > 0) { setTimeout(S.drain, 30); return; }
       const e = S.queue.shift();
       if (e.kind !== 'edit' && seq() - e.seq > 1) { S.say(line('skipped')); continue; }   // an edit is an intent, re-planned now (§3.7)
@@ -834,7 +843,7 @@ window.FM = window.FM || {};
       if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush();
       if (FM.playing && FM.pause) FM.pause();
       const pre = beginEdit(); muted = true;
-      const sel0 = FM.scene.selectedId;
+      const sel0 = FM.scene.selectedId, sels0 = (FM.scene.selectedIds || []).slice();
       /* D7's Do it anyway: the ids it unlocked are held HERE, never as a mark on the layer — FM.cloneLayer drops every '_' key,
          so a split's second half, a cut item's piece and a copy all came out unlocked (review finding 14) */
       const ids0 = new Set(FM.scene.layers.map(l => l.id)), relock = new Set();
@@ -855,15 +864,17 @@ window.FM = window.FM || {};
       if (!ok) { restorePreEdit(pre); return refuse('failed'); }   // the document from before the unlock: every lock as it was
       if (plan.selectNone) { FM.scene.selectedId = null; FM.scene.selectedIds = []; }
       else if (plan.selectId && FM.layerById(FM.scene, plan.selectId)) { FM.scene.selectedId = plan.selectId; FM.scene.selectedIds = [plan.selectId]; }
+      else if (plan.keepSel && sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = sels0.filter(x => FM.layerById(FM.scene, x)); }   // a tray action on 2+ keeps them (§8.5b)
       else if (sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = [sel0]; }
       FM.refreshAll();
       if (plan.time != null && !FM.playing) { const P = FM.scene.project; FM.time = Math.max(0, Math.min(P.duration || 0, plan.time)); if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead(); }
       FM.history.commit({ label: label, ed: 's', arr: gated });
-      /* a new media record (a duplicate's copy) is written NOW, not on the 600 ms autosave: a hide flush cancels that and writes
+      /* a new media record (a duplicate's copy, an added clip, overlay or song) is written NOW, not on the 600 ms autosave: a hide flush cancels that and writes
          the document only, so the copy came back blank (queue 681). Saved after the commit, so the finished document is what
          lands — the reason for {noSave} (nothing un-rippled on disk mid-run) still holds. */
       if (plan.mints && FM.storage && FM.storage.save) FM.storage.save();
       if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync();
+      if (plan.after) { try { plan.after(); } catch (e) {} }          // 2.2: e.g. Text opens for typing once its step is in
       speakDone(plan, notes);
       return true;
     } finally {
@@ -909,6 +920,529 @@ window.FM = window.FM || {};
     closeSeam(entryId) { return S.edit('Close gap', R => S.planSeam(R, entryId)); },
     duplicate(id) { return S.edit('Duplicate clip', R => S.planDuplicate(R, id)); }
   };
+  /* ═══════════════════════ RELEASE 2.2: the rest of the commands the tray and the tools need ═══════════════════════ */
+
+  /* WHERE A NEW THING GOES IN THE STACK (§3.6.1), the 2.2 subset: the array is z-order, index 0 on top. `insertAt` puts a
+     layer at a slot and gives Full's Add row its place back (§3.6.1 "one insert helper"), synchronously. */
+  S.insertAt = function (layer, slot) {
+    const keep = FM.clampAddAt();
+    FM.addAt = Math.max(0, Math.min(slot, FM.scene.layers.length));
+    FM.insertLayer(layer);
+    FM.addAt = keep + (FM.addAt <= keep ? 1 : 0);
+    FM.clampAddAt();
+    return layer;
+  };
+  const overlaps = (a, s, e) => (+a.start || 0) < e - 1e-9 && (+a.start || 0) + (+a.duration || 0) > s + 1e-9;
+  const isCap = l => l.type === 'text' && Array.isArray(l.captions);
+  /* The slot ABOVE every layer `test` accepts that overlaps [s, e) (the top-most such layer's index), or `fallback`. */
+  function slotAbove(s, e, test, fallback, skip) {
+    const L = FM.scene.layers;
+    for (let i = 0; i < L.length; i++) { const l = L[i]; if (skip && skip.has(l.id)) continue; if (test(l) && overlaps(l, s, e)) return i; }
+    return fallback;
+  }
+  /* text: directly above the top-most non-caption layer it overlaps; overlay: directly above the top-most layer it overlaps
+     that is not text, captions or a sound. Returns that layer's id (moveLayers' beforeId puts a layer just ABOVE it), or
+     null when it overlaps nothing of that kind (then it stays where the add put it). */
+  S.bandAnchor = function (kind, s, e, skip) {
+    const test = kind === 'text' ? (l => !isCap(l) && l.type !== 'camera' && !(l.audioOnly === true))
+                                 : (l => l.type !== 'text' && l.type !== 'camera' && !(l.audioOnly === true) && !(l.sm && l.sm.snd === true));
+    const i = slotAbove(s, e, test, -1, skip);
+    return i >= 0 ? FM.scene.layers[i].id : null;
+  };
+  /* §3.6 Add row: a new text, overlay or sticker is clamped to the TRACK end (never lengthens the video). */
+  S.clampToTrack = function (R, start, len) {
+    const ml = MINLEN(), clips = R.main.filter(e => !e.slot);
+    if (!clips.length) return { start: start, duration: len };
+    const last = clips[clips.length - 1];
+    let s = start;
+    if (s >= R.trackEnd - ml) s = Math.max(last.start, R.trackEnd - len);
+    return { start: s, duration: Math.max(ml, Math.min(len, R.trackEnd - s)) };
+  };
+
+  /* THE Z ANCHOR FOR CUT j (§3.6.1 "directly above the main clip before it"): the nearest real CLIP before j, or failing that
+     the first clip from j on. A card (slot) entry's id is 'slot:…', no layer's id, and moveLayers sent an unknown anchor to
+     the very bottom — under a background or a backdrop, where nothing of the new clip showed (review finding 6). */
+  S.rowAnchor = function (R, j, skip) {
+    for (let k = j - 1; k >= 0; k--) if (!R.main[k].slot && R.main[k].id !== skip) return R.main[k].id;
+    for (let k = j; k < R.main.length; k++) if (!R.main[k].slot && R.main[k].id !== skip) return R.main[k].id;
+    return null;
+  };
+  /* The cut nearest t (§3.6 Insert, §8.5 "After Clip N"): an exact tie at a clip's midpoint goes AFTER it. Returns the
+     index j of the entry the new clips go before (R.main.length = the end). */
+  S.insertIndexAt = function (R, t) {
+    if (!R.main.length) return 0;
+    let best = 0, bd = Infinity;
+    for (let j = 0; j <= R.main.length; j++) {
+      const cut = j === 0 ? R.main[0].start : R.main[j - 1].end;
+      const d = Math.abs(t - cut);
+      if (d < bd - 1e-9 || (Math.abs(d - bd) <= 1e-9 && j > best)) { bd = d; best = j; }
+    }
+    return best;
+  };
+
+  const mediaKindOf = f => { const t = String((f && f.type) || ''), n = String((f && f.name) || '').toLowerCase();
+    if (/^video\//.test(t) || /\.(mp4|mov|m4v|webm)$/.test(n)) return /^audio\//.test(t) ? 'audio' : 'video';
+    if (/^image\//.test(t) || /\.(jpe?g|png|gif|heic|webp)$/.test(n)) return 'image';
+    if (/^audio\//.test(t) || /\.(mp3|m4a|aac|wav|ogg|opus|flac|aiff?|caf)$/.test(n)) return 'audio';
+    return ''; };
+  /* Read the picked files BEFORE the runner (§3.7: no picker and no long decode inside a step that a refusal could undo):
+     the records, in pick order, with the length each clip will get. Sound files are kept apart: they never enter the clip
+     row (§7.3), they go in as music. */
+  S.readPicked = async function (files) {
+    const pickedIn = FM.startedIn ? FM.startedIn() : null, out = { clips: [], sounds: [], skipped: 0 };
+    for (const f of files || []) {
+      const k = mediaKindOf(f);
+      try {
+        const rec = k === 'image' ? await FM.loadImageFile(f) : (k === 'video' || k === 'audio') ? await FM.loadVideoFile(f) : null;
+        if (!rec) { out.skipped++; continue; }
+        if (FM.stillIn && !FM.stillIn(pickedIn)) { FM.letGoMedia(rec); out.skipped++; continue; }
+        const picture = rec.kind === 'image' || (rec.width > 0 && rec.height > 0);
+        const len = rec.kind === 'video' ? Math.max(0.1, rec.duration || 5) : FM.defaultLayerDuration();
+        (picture ? out.clips : out.sounds).push({ rec: rec, len: len });
+      } catch (e) { out.skipped++; if (FM.reportError) FM.reportError('reading “' + (f && f.name) + '”', e); }
+    }
+    return out;
+  };
+  function addRecs(recs, at, pickB, map) {
+    const made = [];
+    let t = at;
+    recs.forEach((it, i) => {
+      const l = FM.addMediaLayer(it.rec, { at: t, pick: recs.length > 1 ? { b: pickB, i: i } : null, noSave: true });
+      if (!l) return;
+      if (it.rec.kind !== 'image' && !(it.rec.width > 0 && it.rec.height > 0)) S.setFlag(l, 'snd', true);   // §0.4 B8: Simple's own sound-only fact
+      made.push(l); t = (+l.start || 0) + (+l.duration || 0);
+    });
+    return made;
+  }
+  const newPickB = () => 'pk' + Date.now().toString(36).slice(-6) + Math.floor(Math.random() * 1296).toString(36);
+  /* FULL'S ADD ROW KEEPS ITS PLACE (§3.6.1 "one insert helper", as S.insertAt): addMediaLayer inserts at FM.addAt and the
+     plan then moves the new layers into their band, which left the row one layer off (review finding 17). Call before the
+     adds; the returned function puts the row back above the layer it sat above. */
+  function addRowMark() {
+    const L = FM.scene.layers, k = FM.clampAddAt(), id = L[k] ? L[k].id : null;
+    return () => { const i = id ? FM.scene.layers.findIndex(l => l.id === id) : -1; FM.addAt = i >= 0 ? i : FM.scene.layers.length; FM.clampAddAt(); };
+  }
+  /* §3.6.1 BACKDROP: in a project with no main clips, a visual that fills the frame, at opacity 1, normal blend, no mask, below
+     every other visual it overlaps (a text-and-shapes template's full-canvas rect). `vis` is in array order. */
+  function isBackdrop(l, vis) {
+    if (!l || l.type === 'text' || l.type === 'group') return false;
+    if (l.blendMode && l.blendMode !== 'normal') return false;
+    if ((l.mask && l.mask.enabled) || (l.masks || []).some(m => m && m.enabled !== false)) return false;
+    const s = +l.start || 0, d = +l.duration || 0;
+    if (FM.layerOpacity && [s, s + d / 2].some(t => FM.layerOpacity(l, t) < 0.999)) return false;
+    const P = FM.scene.project, W = P.width || 1080, H = P.height || 1920;
+    let b = null; try { b = FM.worldBox ? FM.worldBox(l, s, FM.scene) : null; } catch (e) { b = null; }
+    if (!b) return false;
+    const iw = Math.max(0, Math.min(W, b.x1) - Math.max(0, b.x0)), ih = Math.max(0, Math.min(H, b.y1) - Math.max(0, b.y0));
+    if (iw * ih < 0.9 * W * H) return false;
+    const i = FM.scene.layers.indexOf(l);
+    return vis.every(o => o === l || FM.scene.layers.indexOf(o) < i);
+  }
+  /* §3.6.1: THE FIRST MAIN CLIPS of a project with none go directly above the top-most backdrop they overlap, else directly
+     below the lowest visual they overlap — never at FM.addAt's default, the top, over every title and shape (finding 17). */
+  function placeFirstMain(made, s, e, R) {
+    const ids = new Set(made.map(l => l.id));
+    const vis = FM.scene.layers.filter(l => !ids.has(l.id) && overlaps(l, s, e) && l.type !== 'camera' && l.type !== 'group' &&
+      l.audioOnly !== true && !(l.sm && l.sm.snd === true) && !(R.units[l.id] && (R.units[l.id].kind === 'audio' || R.units[l.id].kind === 'fullOnly')));
+    if (!vis.length) return;
+    const back = vis.filter(l => isBackdrop(l, vis));
+    if (back.length) { FM.moveLayers(made.map(l => l.id), back[0].id); return; }   // just above the top-most backdrop
+    const L = FM.scene.layers, k = L.indexOf(vis[vis.length - 1]);
+    const nx = L.slice(k + 1).find(l => !ids.has(l.id));
+    FM.moveLayers(made.map(l => l.id), nx ? nx.id : null);                         // just below the lowest visual
+  }
+
+  /* APPEND (the clip row's +, Clips › At the end): the clips go end to end from the track end, BEFORE an end card, which
+     moves along. Arranging only when it moves something (a tail item) or the project is not adopted yet (§3.6 Append row):
+     a plain clips-only Append works with a friend in. Cues or a window that cross the track end refuse until 2.4. */
+  S.planAppend = function (R, picked) {
+    const map = byIdMap(), clips = picked.clips;
+    if (!clips.length && !picked.sounds.length) return refusePlan('nothingAdded');
+    const T = R.main.some(e => !e.slot) ? R.trackEnd : 0;
+    const sum = clips.reduce((a, c) => a + c.len, 0);
+    for (const id of R.riders) { const l = map.get(id); if (l && (+l.start || 0) < T - R.eps && (+l.start || 0) + (+l.duration || 0) > T + R.eps) return refusePlan('riders'); }
+    if (R.tail.length && clips.length) { const cm = cameraBlock(R, T, map); if (cm) return refusePlan(cm.kind, cm); }   // rule 3e: only when it moves the tail
+    const plan = newPlan(clips.length > 1 ? 'Add ' + clips.length + ' clips' : 'Add clip');
+    /* §3.6 Append row: arranging (so gated, pinned and tail-fitted in this same step) when it moves an end card, when an
+       sm.tail item will be refitted to the new end, or when a whole-video picture added in Full after adoption carries no
+       flag yet (pinStrays tags it, the tail fit takes it to the new end). Otherwise not: a plain Append works live. */
+    const first0 = R.main.filter(e => !e.slot)[0];
+    const wholeUntagged = id => { const l = map.get(id), u = R.units[id];
+      if (!l || !first0 || (l.sm && (l.sm.stay || l.sm.main || l.sm.tail)) || S.neverPinned(id, R) || !tailOk(l, u)) return false;
+      const s = +l.start || 0; return s <= first0.start + R.eps && s + (+l.duration || 0) >= R.trackEnd - R.eps; };
+    plan.arranges = R.tail.length > 0 || (clips.length > 0 && (FM.scene.layers.some(l => l.sm && l.sm.tail === true) || Object.keys(R.units).some(wholeUntagged)));
+    R.tail.forEach(id => addMove(plan, id, sum));
+    const lastMain = (() => { const m = R.main.filter(e => !e.slot); return m.length ? m[m.length - 1].id : null; })();
+    plan.pre.push(async () => {
+      const keepRow = addRowMark();
+      const made = addRecs(clips, T, newPickB(), map);
+      made.forEach(l => S.setFlag(l, 'main', true));
+      if (made.length && lastMain && FM.layerById(FM.scene, lastMain)) FM.moveLayers(made.map(l => l.id), lastMain);   // just above the clip before (§3.6.1)
+      else if (made.length) placeFirstMain(made, T, T + sum, R);
+      const snd = addRecs(picked.sounds, Math.max(0, Math.min(FM.time || 0, T)), newPickB(), map);
+      snd.forEach(l => { S.setFlag(l, 'stay', true); FM.moveLayers([l.id], null); });   // music: Stay put, left whole (D17 B); sound sits at the end of the stack
+      keepRow();
+      if (made.length || snd.length) plan.mints = true;   // {noSave} records: the runner writes their files at once (queue 681, review finding 9)
+      plan.selectId = made.length ? made[0].id : (snd[0] && snd[0].id);
+      plan.made = made.length;
+    });
+    plan.time = T;
+    plan.live = clips.length > 1 ? line('addedN', clips.length) : line('added1');
+    return plan;
+  };
+  /* INSERT at the cut j (Clips › After Clip N): the new clips go in there, everything from j on moves along by their
+     length. A crossfade at that cut refuses (its fade would end up spanning the new clips). */
+  S.planInsert = function (R, picked, j) {
+    const map = byIdMap(), clips = picked.clips;
+    if (!clips.length) return S.planAppend(R, picked);
+    if (j >= R.main.length) return S.planAppend(R, picked);
+    const e = R.main[j];
+    if (e.seam && e.seam.kind === 'blend') return refusePlan('insertFade', { a: j, b: j + 1 });
+    const at = j === 0 ? R.main[0].start : R.main[j - 1].end;
+    const rb = riderBlock(R, at, map); if (rb) return refusePlan(rb.kind, rb);
+    const sum = clips.reduce((a, c) => a + c.len, 0);
+    /* the new clips' end exactly as addRecs writes it (each start = the last end, duration = its len), so the ripple lands
+       entry j there only when its seam was a join or a hairline — with the same correction carried to its followers, every
+       later clip and the tail. A gap stays a gap (§3.2 rule 1): a late land after the ripple moved j by sum − gap while
+       everything tied to it moved by sum (review finding 11). */
+    let newEnd = at; clips.forEach(c => { newEnd = newEnd + c.len; });
+    const plan = newPlan(clips.length > 1 ? 'Add ' + clips.length + ' clips' : 'Add clip');
+    const rp = ripple(plan, R, j, sum, new Set(), newEnd, true);
+    tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    const anchor = S.rowAnchor(R, j);
+    plan.pre.push(async () => {
+      const keepRow = addRowMark();
+      const made = addRecs(clips, at, newPickB(), map);
+      made.forEach(l => S.setFlag(l, 'main', true));
+      if (made.length && anchor) FM.moveLayers(made.map(l => l.id), anchor);
+      plan.selectId = made.length ? made[0].id : null;
+      const snd = addRecs(picked.sounds, Math.max(0, FM.time || 0), newPickB(), map);
+      snd.forEach(l => { S.setFlag(l, 'stay', true); FM.moveLayers([l.id], null); });
+      keepRow();
+      if (made.length || snd.length) plan.mints = true;
+    });
+    plan.time = at;
+    plan.live = clips.length > 1 ? line('addedN', clips.length) : line('added1');
+    return plan;
+  };
+
+  /* REORDER c to before entry j (Move earlier / Move later, §3.6 Reorder row). One slot length L = n.start − c.start (c's
+     trailing seam travels with it), both halves against the ORIGINAL read model; c and its followers get ONE move to their
+     new place. A clip on a crossfade refuses. Exact landings at the two seams the move creates. */
+  S.planReorder = function (R, id, j) {
+    const map = byIdMap(), i = mainIdx(R, id);
+    if (i < 0) return refusePlan('gone');
+    if (j === i || j === i + 1 || j < 0 || j > R.main.length) return refusePlan('noMove');
+    const c = R.main[i], n = R.main[i + 1] || null, L = map.get(c.id);
+    const fades = k => R.main[k] && R.main[k].seam && R.main[k].seam.kind === 'blend';
+    if (fades(i) || fades(i + 1) || (j < R.main.length && fades(j))) return refusePlan('sortFade');
+    const len = n ? n.start - c.start : (+L.duration || 0);
+    const S0 = new Set([c.id].concat(R.followers[c.id] || []));
+    const lo = Math.min(c.start, j < R.main.length ? R.main[j].start : R.trackEnd);
+    const rb = riderBlock(R, lo, map); if (rb) return refusePlan(rb.kind, rb);
+    const plan = newPlan('Move clip');
+    /* new positions, walked in the NEW order: every entry keeps its own seam amount except at the two edit points */
+    const order = R.main.map((e, k) => k).filter(k => k !== i);
+    const at = j > i ? j - 1 : j;
+    order.splice(at, 0, i);
+    const dOf = k => (k > i && k < j) ? -len : (k >= j && k < i) ? len : 0;   // forward: (i, j) move −L; backward: [j, i) move +L
+    let prevEnd = null, acc = 0, cStart = null, clipEnd = null;
+    order.forEach((k, pos) => {
+      const e = R.main[k];
+      let ns;
+      if (k === i) ns = pos === 0 ? R.main[0].start : prevEnd;                  // c lands exactly where its slot opens (§3.6 seam')
+      else {
+        const prop = e.start + dOf(k) + acc;
+        const gap = prevEnd == null ? null : prop - prevEnd;
+        /* the entry that closes up behind c meets p across the removed c: its seam is p|c's, not its own c|n (Delete reads
+           isFloatJoin(R, i) the same way) — a p|c hairline was read as a join, moved off the grid and left open (finding 7) */
+        const sk = (k === i + 1 && i > 0) ? R.main[i].seam : e.seam;
+        if (gap != null && ((Math.abs(gap) < 1e-9 && gap !== 0) || (gap > 0 && gap <= R.eps && sk && sk.kind === 'hairline'))) { acc += prevEnd - prop; ns = prevEnd; }
+        else if (pos > 0 && order[pos - 1] === i && Math.abs(gap) <= R.eps) { acc += prevEnd - prop; ns = prevEnd; }   // the seam after c is new: land it
+        else ns = prop;
+      }
+      const d = ns - e.start;
+      if (e.slot) { e.members.forEach(m => { if (d) addMove(plan, m, d); }); prevEnd = e.end + d; }
+      else {
+        const landed = k === i || ns !== e.start + dOf(k), Lk = map.get(e.id);
+        if (landed) addLand(plan, e.id, ns); else if (d) addMove(plan, e.id, d);
+        (R.followers[e.id] || []).forEach(f => { if (d) addMove(plan, f, d); });
+        if (k === i) cStart = ns;
+        /* the end apply() will write, bit for bit (a landed start, else old + d), for the next seam and for the tail */
+        prevEnd = (landed ? ns : (+Lk.start || 0) + d) + (+Lk.duration || 0);
+        clipEnd = prevEnd;
+      }
+    });
+    plan.touched.add(c.id);
+    /* §3.6 Reorder row: with c last (L = c.duration), or c moved to the end, the track end changes and the tail follows it —
+       an end card waited after seconds of black, or slid under the clips (review finding 13). The last CLIP's end, never a
+       card's: trackEnd is always a clip's end. */
+    if (clipEnd != null) tailMove(plan, R, clipEnd, map);
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    plan.time = cStart;
+    const newIndex = order.filter(k => !R.main[k].slot).indexOf(i) + 1;
+    plan.live = line('moved', S.itemWord(L, R), newIndex, R.main.filter(e => !e.slot).length);
+    plan.pulse = [c.id];
+    return plan;
+  };
+  S.moveIndexFor = function (R, id, dir) {
+    const i = mainIdx(R, id); if (i < 0) return -1;
+    if (dir < 0) { let k = i - 1; while (k >= 0 && R.main[k].slot) k--; return k < 0 ? -1 : k; }
+    let k = i + 1; while (k < R.main.length && R.main[k].slot) k++;
+    return k >= R.main.length ? -1 : k + 1;
+  };
+
+  /* LIFT OFF (Make overlay, §3.6): c keeps its time but leaves the clip row; what comes after closes up under it; the
+     things on it stay with it, Stay put; it goes up into the overlay band, under its own titles. */
+  S.planLift = function (R, id) {
+    const map = byIdMap(), i = mainIdx(R, id);
+    if (i < 0) return refusePlan('gone');
+    const c = R.main[i], p = R.main[i - 1] || null, n = R.main[i + 1] || null, L = map.get(c.id);
+    /* a main block (§8.5 Block row: Open in Full · Duplicate · 🗑): sm.main lives on its members, never on the group row, so
+       clearing the group's flag left the block main while the clips after it slid under it (review finding 0) */
+    if (L.type === 'group') return refusePlan('liftBlock');
+    if ((n && n.seam && n.seam.kind === 'blend') || (p && c.seam && c.seam.kind === 'blend')) return refusePlan('sortFade');
+    const rb = riderBlock(R, c.start, map); if (rb) return refusePlan(rb.kind, rb);
+    const plan = newPlan('Lift off');
+    const fol = R.followers[c.id] || [];
+    const dt = n ? -(n.start - c.start) : 0;
+    const prevEnd = p ? p.end : null;
+    const rp = ripple(plan, R, i + 1, dt, new Set([c.id].concat(fol)), prevEnd, !!(p && isFloatJoin(R, i)));
+    if (n) tailMove(plan, R, rp.end != null ? rp.end : R.trackEnd + (rp.last == null ? dt : rp.last), map);   // the last clip's end as apply() writes it, never trackEnd + d (§3.1, finding 16)
+    else { const lastClip = R.main.filter(e => !e.slot && e.id !== c.id).pop(); tailMove(plan, R, lastClip ? lastClip.end : c.start, map); }
+    plan.touched.add(c.id);
+    plan.post.push(() => {
+      S.setFlag(L, 'main', false);
+      fol.forEach(fid => { const f = map.get(fid); if (f && !S.isTwinOf(f, L, R.eps)) S.setFlag(f, 'stay', true); });
+      /* overlay band: directly above the top-most layer it overlaps that is not text, captions or itself */
+      const s = +L.start || 0, e = s + (+L.duration || 0), skip = new Set([L.id].concat(fol));
+      const idx = slotAbove(s, e, l => l.type !== 'text' && l.type !== 'camera' && !(l.audioOnly === true) && !fol.includes(l.id), -1, skip);
+      if (idx >= 0) { const above = FM.scene.layers[idx]; if (above && above.id !== L.id) FM.moveLayers([L.id], above.id); }
+    });
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    plan.live = line('lifted');
+    plan.pulse = [c.id];
+    return plan;
+  };
+  /* INTO ROW (Make main clip, §3.6): an overlay goes into the clip row at the cut nearest its start; the clips from there on
+     move along by its length; it lands exactly on that cut. */
+  S.planIntoRow = function (R, id) {
+    const map = byIdMap(), o = map.get(id), u = R.units[id];
+    if (!o || !u || R.isMain(id)) return refusePlan('gone');
+    /* a member of a card between clips (a slot): DESIGN §3.6's slot form puts the card in the row with no ripple and no move.
+       Make main clip's map rippled the card's other members and every later clip by +len and opened a gap (finding 12).
+       Refused with Open in Full until the slot form is built. */
+    if (u.host && String(u.host).indexOf('slot:') === 0) return refusePlan('slotIntoRow');
+    if (!(o.type === 'video' || o.type === 'image' || o.type === 'shape' || (o.type === 'text' && !isCap(o)))) return refusePlan('cannotMain');
+    if (o.audioOnly === true || (o.sm && o.sm.snd === true)) return refusePlan('cannotMain');
+    const j = S.insertIndexAt(R, +o.start || 0);
+    if (j < R.main.length && R.main[j].seam && R.main[j].seam.kind === 'blend') return refusePlan('insertFade', { a: j, b: j + 1 });
+    const seam = j === 0 ? (R.main[0] ? R.main[0].start : 0) : R.main[j - 1].end;
+    const len = +o.duration || 0, dO = seam - (+o.start || 0);
+    /* its sound twin travels with it (§4.6: a twin belongs to its clip's unit, never a follower). After a Lift off the twin
+       reads as a follower of whatever slid under it, so the ripple would carry it len seconds away from its picture, or a
+       karaoke twin refused as a slip (review finding 1). o is not a main entry, so twinsOf (R.followers) cannot find them. */
+    const twins = FM.scene.layers.filter(t => S.isTwinOf(t, o, R.eps));
+    const rb = riderBlock(R, seam, map); if (rb) return refusePlan(rb.kind, rb);
+    const plan = newPlan('Put in the clip row');
+    const rp = ripple(plan, R, j, len, new Set([id].concat(twins.map(t => t.id))), seam + len, true);
+    tailMove(plan, R, rp.end != null ? rp.end : seam + len, map);   // o last: its end, landed at seam with its own duration
+    addLand(plan, id, seam);
+    twins.forEach(t => { plan.moves.delete(t.id); addLand(plan, t.id, (+t.start || 0) + dO); });   // a land beats a move or a tail land
+    plan.post.push(() => {
+      S.setFlag(o, 'main', true); S.setFlag(o, 'stay', false);
+      twins.forEach(t => S.setFlag(t, 'stay', false));
+      const anchor = S.rowAnchor(R, j, o.id);
+      if (anchor) FM.moveLayers([o.id], anchor);   // main band: just above the clip before it (never a card's slot id)
+    });
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    plan.time = seam;
+    plan.live = line('intoRow');
+    plan.pulse = [id];
+    return plan;
+  };
+  /* STAY PUT (a flag; nothing moves). Several at once (§8.5b "Stay put (all)") are ONE plan: one undo step, one collab
+     transaction. A forEach of single edits made one step per item and dropped every tap past the runner's queue of four
+     (review findings 8 / 24). Refused whole when any is gone or main (§3.2 rule 6); the selection is kept. */
+  S.planStayMany = function (R, ids, on) {
+    const map = byIdMap(), ls = ids.map(id => map.get(id));
+    if (!ls.length || ls.some((l, k) => !l || R.isMain(ids[k]))) return refusePlan('gone');
+    const plan = newPlan(on ? 'Stay put' : 'Follow clip'); plan.arranges = false; plan.adopts = false; plan.keepSel = true;
+    plan.post.push(() => ls.forEach(l => { S.setFlag(l, 'stay', !!on); if (!on) S.setFlag(l, 'tail', false); }));
+    plan.live = on ? line('stays') : line('follows');
+    return plan;
+  };
+  S.planStay = function (R, id, on) { return S.planStayMany(R, [id], on); };
+  /* FORWARD / BACK for an overlay or text (z one step among the items it overlaps; it never crosses the clip row, §3.6.1). */
+  S.planZ = function (R, id, dir) {
+    const map = byIdMap(), l = map.get(id);
+    if (!l || R.isMain(id)) return refusePlan('gone');
+    const L = FM.scene.layers, i = L.indexOf(l), s = +l.start || 0, e = s + (+l.duration || 0);
+    let k = i + (dir > 0 ? -1 : 1);
+    while (k >= 0 && k < L.length && !(overlaps(L[k], s, e) && L[k].type !== 'camera')) k += (dir > 0 ? -1 : 1);
+    if (k < 0 || k >= L.length || R.isMain(L[k].id)) return refusePlan(dir > 0 ? 'atTop' : 'atBottom');
+    const plan = newPlan(dir > 0 ? 'Forward' : 'Back'); plan.arranges = false; plan.adopts = false; plan.touched.add(id);
+    const target = L[k];
+    plan.post.push(() => { if (dir > 0) FM.moveLayers([id], target.id); else { const nx = FM.scene.layers[FM.scene.layers.indexOf(target) + 1]; FM.moveLayers([id], nx ? nx.id : null); } });
+    plan.live = line(dir > 0 ? 'forward' : 'backward');
+    return plan;
+  };
+  /* CLOSE ALL GAPS (Simple's ⋯): every gap and overlap and every hairline a frame falls into, left to right, landed shut,
+     one step. Blends, slots and covered gaps are left alone. */
+  S.planCloseAll = function (R) {
+    const map = byIdMap(), fps0 = fps();
+    const rb = riderBlock(R, R.main.length ? R.main[0].start : 0, map); if (rb) return refusePlan(rb.kind, rb);
+    const plan = newPlan('Close all gaps');
+    let prevEnd = null, acc = 0, closed = 0;
+    R.main.forEach((e, k) => {
+      let d = acc, ns = e.start + acc;
+      const sm = e.seam, hair = !!(sm && sm.kind === 'hairline');
+      /* frame f is black when prevEnd ≤ f/fps < start: a CEIL test on the original edges (a floor test missed an edge that sits
+         on a frame and counted one that does not), and a hairline this command moves is landed shut whatever it held, since
+         its new place is off the grid (§3.1: landed whenever it moves; inv. 13; review finding 4) */
+      const pEnd0 = k ? R.main[k - 1].end : 0;
+      const frameIn = hair && Math.ceil(pEnd0 * fps0 - 1e-9) !== Math.ceil(e.start * fps0 - 1e-9);
+      const movedHair = hair && acc !== 0 && prevEnd != null;
+      const fix = sm && !sm.covered && (sm.kind === 'gap' || sm.kind === 'overlap' || frameIn || movedHair || (sm.kind === 'join' && Math.abs((k ? R.main[k - 1].end : e.start) - e.start) < 1e-9 && prevEnd != null));
+      if (fix) { const target = prevEnd != null ? prevEnd : 0; if (sm.kind === 'gap' || sm.kind === 'overlap' || frameIn) closed++; acc += target - ns; d = acc; ns = target; }
+      if (e.slot) { e.members.forEach(m => { if (d) addMove(plan, m, d); }); prevEnd = e.end + d; return; }
+      if (fix) addLand(plan, e.id, ns); else if (d) addMove(plan, e.id, d);
+      (R.followers[e.id] || []).forEach(f => { if (d) addMove(plan, f, d); });
+      prevEnd = ns + (+map.get(e.id).duration || 0);
+    });
+    if (!closed) return refusePlan('noGaps');
+    tailMove(plan, R, prevEnd, map);
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    plan.live = line('gapsClosed', closed);
+    return plan;
+  };
+  /* END WITH THE VIDEO (the black band, §5.4, D17 B): every PICTURE item that runs past the last clip is fitted to it —
+     media through the tail trim, keys re-timed like the tail fit. A sound is named and left running (his D17 B). */
+  S.overrun = function (R) {
+    const out = { pictures: [], sounds: [], ends: [] };
+    if (!R.main.some(e => !e.slot)) return out;
+    FM.scene.layers.forEach(l => {
+      if (l.type === 'camera') return;
+      const s = +l.start || 0, e = s + (+l.duration || 0);
+      if (e <= R.trackEnd + 1e-9) return;
+      const u = R.units[l.id] || {};
+      if (u.kind === 'audio' || l.audioOnly === true || (l.sm && l.sm.snd === true)) out.sounds.push(l);
+      else if (s >= R.trackEnd - 1e-9) out.ends.push(l);
+      else if (l.type !== 'group') out.pictures.push(l);
+    });
+    return out;
+  };
+  S.planEndWithVideo = function (R) {
+    const o = S.overrun(R);
+    if (!o.pictures.length) return refusePlan('nothingToFit');
+    const plan = newPlan('End with the video'); plan.arranges = false; plan.adopts = false;
+    o.pictures.forEach(l => plan.touched.add(l.id));
+    plan.writes.push(() => o.pictures.forEach(l => {
+      const s = +l.start || 0, D = +l.duration || 0;
+      let D2 = R.trackEnd - s, tr = l.trimStart;
+      if (l.type === 'video') { const r = FM.trimClipEdge(l, 'tail', D2 - D, srcDurOf(l)); D2 = r.duration; tr = r.trimStart; }
+      D2 = Math.max(MINLEN(), D2);
+      S.mapLayerKeys(l, S.fitMap(s, D, D2));
+      l.duration = D2; if (l.type === 'video') l.trimStart = tr;
+      if (l.sm && l.sm.tail) l.sm.tailEnd = s + D2;
+    }));
+    plan.live = line('fitted', o.pictures.length);
+    return plan;
+  };
+  /* ADD TEXT / OVERLAY (the project tools, §3.6 Add row): at the playhead, clamped to the TRACK end, in its band. The text
+     opens for typing. Not arranging: it moves nothing that exists, so it works with a friend in. */
+  S.planAddText = function (R) {
+    const plan = newPlan('Add text'); plan.arranges = false; plan.adopts = false;
+    plan.pre.push(async () => {
+      const P = FM.scene.project, c = S.clampToTrack(R, Math.max(0, FM.time || 0), FM.defaultLayerDuration());
+      /* today's text defaults (js/app.js addTextLayer), placed by Simple: no commit, no editor opened mid-step */
+      const t = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: FM.defaultTextSize(), start: c.start, duration: c.duration });
+      const anchor = S.bandAnchor('text', c.start, c.start + c.duration, null);
+      S.insertAt(t, anchor ? FM.scene.layers.findIndex(l => l.id === anchor) : 0);
+      plan.selectId = t.id; plan.typeInto = t.id;
+    });
+    plan.after = () => { if (plan.typeInto && FM.textEdit && FM.textEdit.start) FM.textEdit.start(plan.typeInto, { selectAll: true }); };
+    plan.live = line('textAdded');
+    return plan;
+  };
+  S.planAddOverlay = function (R, picked) {
+    const items = picked.clips;
+    if (!items.length) return refusePlan('nothingAdded');
+    const plan = newPlan('Add overlay'); plan.arranges = false; plan.adopts = false;
+    plan.pre.push(async () => {
+      const keepRow = addRowMark();
+      const t0 = Math.max(0, FM.time || 0), made = addRecs(items, t0, newPickB(), null);
+      made.forEach(l => {
+        const c = S.clampToTrack(R, +l.start || 0, +l.duration || 0);
+        l.start = c.start;
+        if (c.duration < l.duration) { if (l.type === 'video') { const r = FM.trimClipEdge(l, 'tail', c.duration - l.duration, srcDurOf(l)); l.duration = r.duration; l.trimStart = r.trimStart; } else l.duration = c.duration; }
+        const s0 = +l.start || 0, e0 = s0 + (+l.duration || 0);
+        const anchor = S.bandAnchor('overlay', s0, e0, new Set([l.id]));
+        if (anchor) FM.moveLayers([l.id], anchor);
+        else {   // nothing but words under it: below every text and caption track it overlaps (§3.6.1), not left on top of them
+          const L = FM.scene.layers, words = L.filter(x => x !== l && x.type === 'text' && overlaps(x, s0, e0));
+          if (words.length) { const k = L.indexOf(words[words.length - 1]), nx = L.slice(k + 1).find(x => x !== l); FM.moveLayers([l.id], nx ? nx.id : null); }
+        }
+      });
+      keepRow();
+      if (made.length) plan.mints = true;
+      plan.selectId = made.length ? made[0].id : null;
+    });
+    plan.live = line('overlayAdded');
+    return plan;
+  };
+  S.planAddMusic = function (R, picked) {
+    const items = picked.sounds.concat(picked.clips.filter(c => c.rec.kind === 'video'));
+    if (!items.length) return refusePlan('nothingAdded');
+    const plan = newPlan('Add music'); plan.arranges = false; plan.adopts = false;
+    plan.pre.push(async () => {
+      const keepRow = addRowMark();
+      const made = addRecs(items, Math.max(0, FM.time || 0), newPickB(), null);
+      made.forEach(l => {
+        /* a PICTURE video picked as music: its sound only, as Full's Extract Audio makes it (audioOnly, opacity 0 — the only
+           thing that stops the compositor drawing it) plus Simple's sound fact. Added as it was, it drew a full-frame picture
+           in every gap and, at the bottom of an un-adopted project, became the whole clip row (review finding 15). */
+        if (!(l.sm && l.sm.snd)) { l.audioOnly = true; l.transform.opacity = 0; S.setFlag(l, 'snd', true); l.muted = false; }
+        S.setFlag(l, 'stay', true); FM.moveLayers([l.id], null);   // music: Stay put, whole (D17 B); sound sits at the end of the stack
+      });
+      keepRow();
+      if (made.length) plan.mints = true;
+      plan.selectId = made.length ? made[0].id : null;
+    });
+    plan.live = line('musicAdded');
+    return plan;
+  };
+
+  /* READ, THEN RUN, with the switch held shut between (review finding 10): readPicked can take seconds (a decode, a 20 s metadata
+     wait), and S.running is not set until S.edit starts, so the cog's switch went through and the Simple ripple, its adoption
+     and its refusals (spoken into a hidden row) all landed in Full. S.edit sets S.running synchronously, so there is no gap. */
+  function afterRead(files, run) {
+    return (async () => {
+      S.reading++;
+      let picked;
+      try { picked = await S.readPicked(files); } finally { S.reading--; }
+      return run(picked);
+    })();
+  }
+  Object.assign(S.cmd, {
+    append(files) { return afterRead(files, picked => S.edit('Add clips', R => S.planAppend(R, picked))); },
+    insert(files, j) { return afterRead(files, picked => S.edit('Add clips', R => S.planInsert(R, picked, j))); },
+    move(id, dir) { return S.edit('Move clip', R => { const j = S.moveIndexFor(R, id, dir); return j < 0 ? refusePlan(dir < 0 ? 'atStart' : 'atEnd') : S.planReorder(R, id, j); }); },
+    lift(id) { return S.edit('Lift off', R => S.planLift(R, id)); },
+    intoRow(id) { return S.edit('Put in the clip row', R => S.planIntoRow(R, id)); },
+    stay(id, on) { return S.edit(on ? 'Stay put' : 'Follow clip', R => S.planStay(R, id, on)); },
+    stayMany(ids, on) { ids = ids.slice(); return S.edit(on ? 'Stay put' : 'Follow clip', R => S.planStayMany(R, ids, on)); },
+    z(id, dir) { return S.edit(dir > 0 ? 'Forward' : 'Back', R => S.planZ(R, id, dir)); },
+    closeAll() { return S.edit('Close all gaps', R => S.planCloseAll(R)); },
+    endWithVideo() { return S.edit('End with the video', R => S.planEndWithVideo(R)); },
+    addText() { return S.edit('Add text', R => S.planAddText(R)); },
+    addOverlay(files) { return afterRead(files, picked => S.edit('Add overlay', R => S.planAddOverlay(R, picked))); },
+    addMusic(files) { return afterRead(files, picked => S.edit('Add music', R => S.planAddMusic(R, picked))); },
+    length(id, newDur) { return S.edit('Trim clip', R => S.planTrimTail(R, id, newDur, { typed: true })); },
+    trimStartBy(id, h) { return S.edit('Trim clip', R => S.planTrimHead(R, id, h, { typed: true })); }
+  });
+
   S.undoGate = function () { return S.arrangeGate(); };
   /* runStep's refusal of an arranging step while someone else can edit (§10.2 door 2). In Simple it is the gate's line;
      in Full it is Full's existing undo-refusal toast, word for word (§0.4 N4): no new words in Full. */

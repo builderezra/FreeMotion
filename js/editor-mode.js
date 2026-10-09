@@ -78,7 +78,9 @@ window.FM = window.FM || {};
   function busyReason() {
     if (FM._exporting) return 'export';
     if (FM.voiceRec && FM.voiceRec.isOpen && FM.voiceRec.isOpen()) return 'recording';   // §21 F2: open at all, not only recording (refusal line: "Close the recorder first")
-    if ((FM.spine && FM.spine.running) || body().classList.contains('sm-running')) return 'busy';
+    /* a Simple add still reading its files, or Simple edits queued behind the running one, are a command in flight too (§3.7).
+       Both are only ever non-zero from Simple's own commands, so in Full this answers exactly as before. */
+    if ((FM.spine && (FM.spine.running || FM.spine.reading > 0 || (FM.spine.queue && FM.spine.queue.length))) || body().classList.contains('sm-running')) return 'busy';
     if ((FM.timeline && FM.timeline.gestureLive && FM.timeline.gestureLive()) || (FM.canvasGestureLive && FM.canvasGestureLive())) return 'drag';
     return '';
   }
@@ -242,6 +244,11 @@ window.FM = window.FM || {};
       /* PHASE 2 (DESIGN.md §8.3's table). A / D ripple-trim a main clip with the playhead inside it, else the main clip under
          the playhead (selected first); S splits the selected item, else that main clip; Delete and ⌘D on one main clip are
          Simple's delete and duplicate. An overlay, text or caption item keeps Full's own A / D / Delete / ⌘D (no ripple). */
+      /* Phase 2.2 (§8.3): Alt+← / Alt+→ are Move earlier / Move later on one selected main clip (free keys in Full) */
+      if (mode === 'simple' && e.altKey && !(e.metaKey || e.ctrlKey) && (e.code === 'ArrowLeft' || e.code === 'ArrowRight') && FM.spine && FM.spine.cmd && FM.spine.cmd.move) {
+        const sel = FM.selectionIds ? FM.selectionIds() : [];
+        if (sel.length === 1 && FM.spine.read(FM.scene).isMain(sel[0])) { e.preventDefault(); if (!e.repeat) FM.spine.cmd.move(sel[0], e.code === 'ArrowLeft' ? -1 : 1); return true; }
+      }
       if (mode !== 'simple' || e.altKey) return false;
       const mod = e.metaKey || e.ctrlKey;
       const S = FM.spine;
