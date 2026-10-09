@@ -54,6 +54,8 @@ logic included), and `smDragEnv` narrows run.html's 900 px frame to the viewport
 | **FINGER: 350 ms hold, swipe before it, no selection after** | **NOT RUN HERE** | reports `NOT RUN HERE: needs real touch emulation` (never a pass); runs on the laptop's finger pass |
 | **FINGER: two-finger pinch** | **NOT RUN HERE** | same |
 
+> **Correction (S8): the "NOT RUN HERE" finger rows in this doc DO run in this container under `FM_TOUCH_PAGE=1`, and pass; see BUILD-PLAN-PHASE2-2.5b.md.**
+
 ## 4. What was run (Measured, Chromium 141, this container)
 
 | run | result |
