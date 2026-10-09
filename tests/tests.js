@@ -60822,6 +60822,21 @@
   });
 
 
+
+  /* ═══ S10 · the bugs the R7 walk found on the 2.6 tip (tools/design/research/simple-walk-2.md). ═══ */
+  const sm10Tc = t => { const f = FM.scene.project.fps || 30, tot = Math.round(t * f), s = Math.floor(tot / f), p = n => (n < 10 ? '0' : '') + n; return p(Math.floor(s / 60)) + ':' + p(s % 60) + ':' + p(tot % f); };
+  test('simple P2.6 · S10a the time readout follows the playhead after a command moves it (DESIGN §8.3: the pill is Full’s #time-readout, unchanged)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      FM.time = 3; FM.updateReadout();
+      const ro = document.getElementById('time-readout');
+      if (ro.textContent !== sm10Tc(3)) throw new Error('CONTROL: the readout reads ' + ro.textContent + ' at 3 s');
+      if (!(await FM.spine.cmd.del(v.L('B').id))) throw new Error('setup: the delete was refused: ' + v.say());
+      if (Math.abs(FM.time - 3) < 1e-6) throw new Error('setup: deleting the clip under the playhead did not move the playhead (FM.time ' + FM.time + ')');
+      if (ro.textContent !== sm10Tc(FM.time)) throw new Error('the playhead is at ' + FM.time + ' s (' + sm10Tc(FM.time) + ') and the readout says ' + ro.textContent);
+    });
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
