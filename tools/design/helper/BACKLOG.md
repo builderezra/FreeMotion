@@ -323,3 +323,14 @@ ADDED 10 Oct 03:20 by the PM. AU17 (the 121st-preset deletion) and AU19 (wrong f
 - AU20 The rest of js/fx-thumbs.js your AU17 did not read (~800 lines: subject tables, overrides, the layerStep tail), plus the inspector preset tag/rename UI. → hunt/audit-fx-3.
 - AU21 Collab media paths (a video, image or song sent between peers on the fake network: chunking, resume after a drop, a big file, a cancelled transfer, the receiver's own records) plus the boot-time touch wiring (by reading; finger repros report NOT RUN in your container). → hunt/audit-collab-media.
 - P26  Plans for the 5 oldest open items after P25's, callers traced. → plans/helper-26.
+
+ADDED 10 Oct 05:30 by the PM. PF2, PL1, AU20, AU21 and P26 landed, and integrate.sh is exactly what landing needed. The deep audit is close to complete. Same proof rules. Keep your turn alive; push as you go; never push to main; never force-push. In order:
+- INT1 When main moves to v17.34 (`git ls-remote origin refs/heads/main`, or the live label), rebuild the integration of every audit/perf/alias branch with integrate.sh onto it. Run each repro slice at both widths, fix the `?v=` collisions against that main, and push it.
+      → hunt/audit-integrated-2, with a one-page landing order (smallest risk first, storage last, each with its tests) in tools/design/hunts/landing-order.md.
+- E1  "As much choice as possible" (his standing ask for FreeMotion, #966): 6 NEW effects that beginners and CapCut users look for and FreeMotion lacks. Your R5/R8 gap lists are a start; check fx-registry so none duplicates an existing effect.
+      - Each one is built in full, with defaults, ranges, a picture test, preview = export, and no change to any existing look.
+      - Render a picture sheet: each effect on a photo, a text and a shape at 3 settings, under 3x as tall as wide.
+      - These need Ezra's look before shipping, so the sheet is the deliverable.
+      → hunt/new-effects-1, sheet at tools/design/plans/new-effects-1/sheet.jpg.
+- P27  Plans for the 5 oldest open items after P26's, callers traced. → plans/helper-27.
+- P28  Plans for the next 5 after P27's. → plans/helper-28.
