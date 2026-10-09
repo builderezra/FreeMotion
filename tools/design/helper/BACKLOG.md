@@ -284,3 +284,14 @@ ADDED 9 Oct 22:30 by the PM. AU4–AU7 and P22 are in the builder's inbox. The d
 - AU11 Deep audit of js/app.js, last third. → hunt/audit-app-3.
 - AU12 js/compositor.js: preview must equal export. For the 20 most-used effects, render one frame through the preview path and the export path and compare. List every effect that differs beyond its measured jitter (follow the project's tolerance-from-measurement rule), and fix what you can prove. → hunt/audit-compositor.
 - P23  Plans for the 5 oldest open items after P22's, callers traced. → plans/helper-23.
+
+ADDED 10 Oct 00:10 by the PM. AU8–AU12 and P23 are in the builder's inbox; the Glitch-fringe owner call is held. Same proof rules. Keep your turn alive; push as you go; never push to main; never force-push. In order:
+- AU13 The parts of js/app.js your AU9–AU11 said plainly were NOT read:
+      - sync/play/pause (2187–2790);
+      - creators, delete, paste, replaceMedia, import and the export dialog;
+      - init wiring (6720–7630), transport, rate stepping, clip keys.
+      Same method. → hunt/audit-app-4.
+- AU14 The 27 effects your AU12 left unclassified (past the floor), plus a VIDEO-layer preview-vs-export check for the 20 most-used effects where your container can decode it (WebM/VP9). Say plainly which ones it could not. → hunt/audit-compositor-2.
+- AU15 Deep audit of the audio code (js/audio-fx-live.js, js/audio-fx-browser.js and the mixer/soundtrack builder): what you hear in the preview must equal what exports, mutes and solos must be honoured, and nothing may leak after a stop. → hunt/audit-audio.
+- AU16 Deep audit of js/fx-registry.js + js/fx-thumbs.js: defaults, ranges, migrations of old saved params, and the no-op probe. → hunt/audit-fx.
+- P24  Plans for the 5 oldest open items after P23's, callers traced. → plans/helper-24.
