@@ -2136,10 +2136,11 @@ window.FM = window.FM || {};
   /* THE ARM GATE (§3.8): null, or the reason a hold or a grip must not start. Read when a gesture arms and again on release; the runner's own
      checks stay as the backstop. 'view' / 'comment' / 'outbox' (the room), 'newer', 'offline' / 'live' (a friend who can edit), 'gone',
      'locked', 'busy' (a friend holds it). */
-  S.canArrange = function (id) {
+  S.canArrange = function (id, o) {
     const ro = S.roReason(); if (ro) return ro;
     if (S.newerSchema()) return 'newer';
-    const g = S.arrangeGate(); if (g) return g;
+    const g = (o && o.look) ? '' : S.arrangeGate();   // 2.5b: trimming an overlay, text or sound moves nothing else, so a friend who can edit does not shut it (a look, like Volume)
+    if (g) return g;
     const map = byIdMap(); if (!map.get(id)) return 'gone';
     if (unitLayers(id, map).some(l => l.locked)) return 'locked';
     if (S.blockers({ touched: new Set([id]) })) return 'busy';
@@ -2174,7 +2175,31 @@ window.FM = window.FM || {};
     plan.pulse = [id];
     return plan;
   };
+  /* TRIM AN ITEM'S EDGE (2.5b, DESIGN §8.2: "its trim grips work on that drawing"; the Gestures line: "edge grips trim with a length readout"): a text, overlay or sound that is not in the clip row
+     gets its own length changed through the same trimClipEdge maths as a clip, and NOTHING else moves (no ripple, no followers: it is not a clip). A head trim moves its start by the amount
+     trimmed and its footage with it (keys are absolute time, so they stay where they are, which is exactly "the same footage on the same frame"). A look, not an arrangement. */
+  S.planTrimItem = function (R, id, side, t) {
+    const map = byIdMap(), L = map.get(id), u = R.units[id];
+    if (!L || !u || R.isMain(id)) return refusePlan('gone');
+    if (L.type === 'group' || L.type === 'camera' || u.kind === 'captions' || u.kind === 'block' || u.kind === 'fullOnly' || u.kind === 'undecided' || (L.sm && L.sm.twin) || S.isTwinOf(L, null, R.eps)) return refusePlan('trimBlock');
+    if (side !== 'head' && side !== 'tail') return refusePlan('gone');
+    const s = +L.start || 0, d = +L.duration || 0, ml = MINLEN();
+    if (side === 'tail' && t - s < ml - SLACK) return refusePlan('trimEdge');
+    if (side === 'head' && (s + d) - t < ml - SLACK) return refusePlan('trimEdge');
+    const r = FM.trimClipEdge(L, side, side === 'tail' ? t - (s + d) : t - s, srcDurOf(L));
+    if (Math.abs(r.landed) < 1e-9) return refusePlan((side === 'tail' ? t > s + d : t < s) ? 'shortSource' : 'nothingMore');
+    const plan = newPlan('Trim item'); plan.arranges = false; plan.adopts = false; plan.touched.add(id); plan.keepSel = true;
+    plan.writes.push(() => {
+      L.duration = r.duration; if (L.type === 'video') L.trimStart = r.trimStart;
+      if (side === 'head') { L.start = r.start; if (FM.shiftLayerFxClock) FM.shiftLayerFxClock(L, r.fxShift); }
+    });
+    plan.after = () => { if (FM.reconcileAudio) FM.reconcileAudio(); };
+    plan.live = line('trimmed', S.itemWord(L, R));
+    plan.pulse = [id];
+    return plan;
+  };
   Object.assign(S.cmd, {
+    trimItem(id, side, t) { return S.edit('Trim item', R => S.planTrimItem(R, id, side, t)); },
     moveTo(id, j) { return S.edit('Move clip', R => S.planReorder(R, id, j)); },
     moveItem(id, ns) { return S.edit('Move item', R => S.planMoveItem(R, id, ns)); }
   });
