@@ -1,0 +1,47 @@
+diff --git a/js/app.js b/js/app.js
+index 0e2685ac..ce7cb1f6 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -3799,6 +3799,10 @@ window.FM = window.FM || {};
+     const g = FM.makeLayer('group', { name: 'Group', x: 0, y: 0, start: 0, duration: P.duration || 5 });
+     // Same insert as everything else (queue 298) — it honours the Add-layer marker, and it does the
+     // group-context parenting this line used to do by hand, so the two cannot disagree.
++    /* AU4-2: close the text editor BEFORE the group exists. selectLayer below closes it too, and its commit used to
++       run with the group already inserted and the old selection still on, so Add group with the card open made TWO
++       history steps and the first ↶ undid nothing visible (a selection-only step). The typing still gets its own step. */
++    if (FM.textEdit && FM.textEdit.syncToSelection) FM.textEdit.syncToSelection(g.id);
+     FM.insertLayer(g);
+     FM.selectLayer(g.id);
+     // …and the toast says the same words as the tile that made it (queue 412).
+diff --git a/js/history.js b/js/history.js
+index 5cb21125..fa9cab4d 100644
+--- a/js/history.js
++++ b/js/history.js
+@@ -75,6 +75,11 @@ window.FM = window.FM || {};
+     const wasIds = FM.selectionIds ? FM.selectionIds() : (wasSelected ? [wasSelected] : []);
+     const hadIds = new Set(FM.scene.layers.map(l => l.id));
+     suppress = true;
++    /* AU4-1: held for the WHOLE restore, not only the swap. refreshAll below can reach commit() — the text editor
++       closes itself when its layer is gone and commits on the way out — and at that moment stack[index] still carries
++       the OLD selection, so that commit pushed a selection-only step and threw the redo tail away: Add text, ↶, and ↷
++       was greyed out for good. try/finally because a stuck flag would make commit a no-op forever. */
++    try {
+     const outgoing = FM.scene.layers;
+     FM.scene.project = s.project;
+     FM.scene.layers = s.layers;
+@@ -112,7 +117,6 @@ window.FM = window.FM || {};
+       FM.scene.selectedId = null;   // the 629 rule in _afterExternalChange says the same; set here so no
+       FM.scene.selectedIds = [];    // snapshot selection is ever installed, even for a moment
+     }
+-    suppress = false;
+     /* The block that used to stand here — the 629 rule, restoreReplacedMedia, the groupContext exit, the
+        mask resync and the time clamp — is now _afterExternalChange below, WORD FOR WORD. See it for why
+        (queue 921 S0). `pause:true` is what restore has always done; nothing else moved. */
+@@ -120,6 +124,7 @@ window.FM = window.FM || {};
+     if (FM.resizeCanvas) FM.resizeCanvas();
+     FM.refreshAll();
+     if (FM.seekVideosToTime) FM.seekVideosToTime();
++    } finally { suppress = false; }
+     /* The stack entry we are now standing on still names the OLD selection. commit() treats a snapshot
+        identical to stack[index] as a no-op, and one that differs only by selection as a real step — so
+        without this, the first no-op commit after an undo (a panel that commits on close, a slider let go
