@@ -180,6 +180,9 @@ REPORT="$ROOT/tools/.full-unchanged-report"
 : > "$REPORT"
 log() { printf '%s\n' "$*" | tee -a "$REPORT"; }
 
+# ─── 0. THE PLANTS' ANCHORS, IN A SECOND (H59): a plant whose `old` anchor is missing or doubled in this tree used to cost a whole run ("could not plant sanitiser", 9 Oct)
+python3 "$ROOT/tools/_fu_plantcheck.py" --root "$ROOT" --plants "$ROOT/tools/full-unchanged-plants.json" || { echo "❌ a plant cannot be planted in this tree: fix tools/full-unchanged-plants.json first (nothing was started)" >&2; exit 2; }
+
 # ─── 1. THE BUILDER MUST BE IDLE, AND THE MAC NOT DROWNING ───────────────────────────────────────────────────────────
 # A ship, a mutation or a spot-check running beside this would serve a mutated tree or starve both runs' timing.
 waited=0
