@@ -1,0 +1,678 @@
+diff --git a/js/collab-bridge.js b/js/collab-bridge.js
+index 61ea3823..c2564611 100644
+--- a/js/collab-bridge.js
++++ b/js/collab-bridge.js
+@@ -144,7 +144,12 @@ window.FM = window.FM || {};
+         layer: function (c) { FM.storage._sanitizeLayers([c]); },
+         /* The REAL clamp, exposed by storage.js for this (queue 921 S2). S1's host had to use the
+            suite's copy of the arithmetic, which is two sources of truth for one rule. */
+-        project: function (p) { FM.storage._clampProjectDims(p); },
++        project: function (p) {
++          FM.storage._clampProjectDims(p);
++          /* 2.6 (§10.1): a guest on a NEWER build can write `sm.v` above what this host knows. The sanitiser keeps it (the newer-file guard reads it), so the room
++             would turn read-only for everyone on the next write; the host holds the room at its own version. */
++          if (p && p.sm && typeof p.sm.v === 'number' && FM.SM_V && p.sm.v > FM.SM_V) p.sm.v = FM.SM_V;
++        },
+         layers: function (arr) { FM.repairParentCycles(arr); return FM.normalizeGroupOrder(arr); }
+       };
+     },
+diff --git a/js/collab-core.js b/js/collab-core.js
+index f71035b3..c8c1fef4 100644
+--- a/js/collab-core.js
++++ b/js/collab-core.js
+@@ -363,6 +363,7 @@ window.FM = window.FM || {};
+   C.undoActive = function () { return undoHandover; };
+   C.undo = function () { const s = US(); return s ? s.undo() : false; };
+   C.redo = function () { const s = US(); return s ? s.redo() : false; };
++  C.lastStep = function () { const s = US(); return s && s.lastStep ? s.lastStep : null; };   // 2.6 (§11): {label, ed, arr, soft, who} of the step the last undo / redo ran
+   C.canUndo = function () { const s = US(); return s ? s.canUndo() : false; };
+   C.canRedo = function () { const s = US(); return s ? s.canRedo() : false; };
+   C.redoDepth = function () { const s = US(); return s && s._undoDepth ? s._undoDepth().redo : 0; };   // #980: the switch's redo line counts steps
+diff --git a/js/collab-diff.js b/js/collab-diff.js
+index e2d2f495..e668a682 100644
+--- a/js/collab-diff.js
++++ b/js/collab-diff.js
+@@ -459,7 +459,7 @@ window.FM = window.FM || {};
+       const L = ll[i];
+       if (!L || !L.id) continue;
+       if (bIdx[L.id] === undefined) {
+-        push(out, { o: 'li', id: L.id, a: prev, v: clone(L) }, { p: ['L', L.id], o: 'li', after: canon(L) });
++        push(out, { o: 'li', id: L.id, a: prev, v: clone(L) }, { p: ['L', L.id], o: 'li', after: maskLayer(L), afterRaw: canon(L) });   // 2.6: `after` is masked (§11); `afterRaw` is what it read as, so a difference the mask hid can still be said
+       } else if (!keepSet[L.id]) {
+         const bi = bIdx[L.id];
+         let aBefore = null;
+@@ -683,7 +683,21 @@ window.FM = window.FM || {};
+     return inv;
+   }
+ 
++  /* Release 2.6 (DESIGN §11, §0.4 B19): THE `li` MASK. An undo of an add keeps the op only while the layer still reads as the person left it, and "as they left it"
++     must not include what Simple's own arranging writes: every ripple (`kb`), every pin (`sm.stay`), every adoption or Make overlay (`sm.main`) and the host's `by`
++     stamp broke the compare, so an add became un-undoable the moment anyone arranged. `start` stays compared (a Full person's undo of an add after a friend moved
++     it fails exactly as today). Returns the layer's canon string with those fields dropped, `sm` gone when nothing else is in it. */
++  const SM_MEMBERSHIP = ['main', 'stay', 'tail', 'tailEnd', 'twin', 'muteByMode', 'snd', 'cut'];
++  function maskLayer(L) {
++    if (!L || typeof L !== 'object') return canon(L);
++    const c = clone(L);
++    delete c.kb; delete c.by;
++    if (c.sm && typeof c.sm === 'object') { SM_MEMBERSHIP.forEach(function (k) { delete c.sm[k]; }); if (!Object.keys(c.sm).length) delete c.sm; }
++    return canon(c);
++  }
++
+   C.diff = {
++    maskLayer: maskLayer,
+     diffDoc: diffDoc, diffNode: diffNode, apply: apply, invertStep: invertStep,
+     applyOrder: applyOrder, orderStatementsFor: orderStatementsFor,
+     valueAt: valueAt, nodeAt: nodeAt, locate: locate,
+diff --git a/js/collab-presence.js b/js/collab-presence.js
+index cc5c0f0b..455f34eb 100644
+--- a/js/collab-presence.js
++++ b/js/collab-presence.js
+@@ -1315,6 +1315,19 @@ window.FM = window.FM || {};
+     const h = holderOf(lid);
+     return (h && h !== myMid) ? h : null;
+   };
++  /* Release 2.6 (DESIGN §3.11, the `live` row): WHAT a member is in the middle of, for the "make Sam a Viewer anyway?" question — 'typing',
++     'dragging', 'animating', 'editing' (holds a lease) or null. Read-only, and null for somebody whose presence has faded. */
++  PZ.busyWith = function (mid) {
++    const p = S && people[mid];
++    if (!p || !p.pr || faded(p)) return null;
++    const pr = p.pr;
++    if (pr.tool === 'text' || pr.act === 'type') return 'typing';
++    if (pr.act === 'drag' || pr.act === 'trim') return 'dragging';
++    if (pr.tool === 'motion' || pr.tool === 'graph' || pr.tool === 'points') return 'animating';
++    if (p.ls) return 'editing';
++    if (S.isOwner && S.host && S.host.leases) { for (const k in S.host.leases) if (S.host.leases[k] === mid) return 'editing'; }
++    return null;
++  };
+   PZ.holderName = function (lid) {
+     if (!S || !isId(lid)) return null;
+     const h = holderOf(lid);
+diff --git a/js/collab-session.js b/js/collab-session.js
+index c3ed7a64..645d01e2 100644
+--- a/js/collab-session.js
++++ b/js/collab-session.js
+@@ -86,6 +86,7 @@ window.FM = window.FM || {};
+       online: true,
+       active: true,
+       /* diagnostics / assertions */
++      othersSeq: 0,   // 2.6 (§5.3)
+       stats: { tx: 0, batches: 0, skipped: 0, deferredN: 0, adopted: 0, reasserted: 0, structWins: 0, resyncs: 0, queued: 0, forcedN: 0 }
+     };
+ 
+@@ -140,7 +141,7 @@ window.FM = window.FM || {};
+     let lastBatchAt = 0, lastHashAt = 0, resyncAt = [];
+     const reports = S.reports = [];
+ 
+-    function newStep() { return { ops: [], recs: [], orders: [], byKey: Object.create(null) }; }
++    function newStep() { return { ops: [], recs: [], orders: [], byKey: Object.create(null), cids: [] }; }
+     function doc() { return A.doc(); }
+     function view() { return A.view(); }
+     function frozen() { return !!(A.frozen && A.frozen()); }
+@@ -285,6 +286,7 @@ window.FM = window.FM || {};
+       for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
+       S.cid += 1;
+       const entry = { cid: S.cid, ops: ops, sent: false };
++      step.cids.push(S.cid);   // 2.6 (Q29): which txs this undo step went out as, so a whole-tx refusal can drop it
+       for (let i = 0; i < ops.length; i++) {
+         const op = ops[i];
+         /* §8.1 correction: ONLY `s` and `d`. A structural op's key is the whole layer, so recording it
+@@ -489,6 +491,7 @@ window.FM = window.FM || {};
+     /* opts: {own:true, cid} for our own ack echo; {by:mid} otherwise. Returns the summary §8.6 needs. */
+     function applyIncoming(ops, opts) {
+       const oo = opts || {};
++      if (!oo.own && oo.by !== S.mid) S.othersSeq += ops.length;   // 2.6 (§5.3): what anyone ELSE has written, counted, so adoption is not undone under their work
+       const sum = {
+         wasSelected: A.selected ? A.selected() : null,
+         paths: [], layerIds: Object.create(null), removed: [], inserted: [],
+@@ -924,12 +927,30 @@ window.FM = window.FM || {};
+       adoptOrder(ack.ord);
+       if (ack.seq != null) S.bs = Math.max(S.bs, ack.seq);
+       if ((ack.lost && ack.lost.length) || (ack.rej && ack.rej.length)) { forceRefused(ack, entry); onClash(ack, entry); }
+-      /* S8 review: the host's repair of what it refused did not all fit its budget (collab-host.js FIX_OPS), so
++      /* 2.6 (§10.1, Q29): a whole-tx refusal of a SIMPLE step. The host answers `rej [['*','bad']]` with no ops and no fix, repair skips '*', and nothing here
++         noticed: the guest kept an edit nobody else had, in base and on screen, until the hash check next found it. So: copy now, one line, and no undo of it. */
++      const star = !!(entry && entry.ed === 's' && (ack.rej || []).some(function (r) { return r[0] === '*'; }));
++      if (star) wholeRefused(ack);      /* S8 review: the host's repair of what it refused did not all fit its budget (collab-host.js FIX_OPS), so
+          the rest of the truth comes as a copy — asked for once, and paced by the owner's `catchUp`. */
+-      if (ack.resync === 1) sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });
++      if (ack.resync === 1 && !star) sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });
+       persistSoon();
+     }
+ 
++    function wholeRefused(ack) {
++      sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });   // the snapshot reverts the refused ops (the entry is already out of `outstanding`)
++      [undoStack, redoStack].forEach(function (stk) {
++        for (let i = stk.length - 1; i >= 0; i--) if (stk[i].cids && stk[i].cids.indexOf(ack.cid) >= 0) stk.splice(i, 1);
++      });
++      if (A.syncUndoButtons) { try { A.syncUndoButtons(); } catch (e) {} }
++      S.stats.wholeRefused = (S.stats.wholeRefused || 0) + 1;
++      simpleSay('That change couldn’t be sent to your friends, so it was put back.');
++    }
++    /* Simple speaks through its own line; anywhere else it is the toast every other collab message uses. */
++    function simpleSay(text) {
++      if (window.FM && FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.spine && FM.spine.say) { try { FM.spine.say(text); return; } catch (e) {} }
++      toast(text);
++    }
++
+     /* §8.2's last rule, and it is not cosmetic: "rejected paths are put into `forced` and applied to
+        live at release regardless".
+        ⚠️ WITHOUT IT A REFUSED EDIT MID-GESTURE LOOPS FOREVER. The ack carries the host's value for the
+@@ -972,6 +993,7 @@ window.FM = window.FM || {};
+       const lost = (ack.lost || []).length, gone = (ack.rej || []).filter(function (r) { return r[1] === 'gone'; }).length;
+       const role = (ack.rej || []).filter(function (r) { return r[1] === 'role'; }).length;
+       const lease = (ack.rej || []).filter(function (r) { return r[1] === 'lease'; }).length;
++      const big = (entry && entry.ed === 's') ? (ack.rej || []).filter(function (r) { return r[1] === 'limit' && r[0] !== '*'; }).length : 0;
+       S.clashes = (S.clashes || 0) + lost + gone;
+       /* The WORDING follows S.role, not the reason code: a viewer told "you can only comment" is being
+          given the wrong permission to ask for (queue 921 S3 review). */
+@@ -979,6 +1001,7 @@ window.FM = window.FM || {};
+          pin, which only the host writes (S7 review). */
+       if (role) toast(S.role === 'viewer' ? 'View only — ask for edit access' : S.role === 'commenter' ? 'You can only comment in this project' : 'That change to a comment wasn’t allowed, so it was put back');
+       else if (lease) leaseToast(ack.rej, entry && entry.ops, 'that layer');
++      else if (big) simpleSay('Part of that change was too big to share, so it was put back.');   // 2.6 (Q29 item 4); the host's own repair already fixed the data
+       if (lost || gone) {
+         S.lastClash = { lost: lost, gone: gone, at: now() };
+         /* §13.4 (S8 review): [Save my version as a copy] — a real offer now, because the version was kept
+@@ -1104,6 +1127,16 @@ window.FM = window.FM || {};
+       if (!step.ops.length) { step = newStep(); return; }
+       const st = { ops: step.ops, recs: step.recs, orders: step.orders };
+       if (meta && meta.arr === true) st.arr = true;   // Simple mode P2: an arranging Simple step (§10.2 door 2); Full's steps carry none
++      /* 2.6 (§10.1, Q29): a step Simple made is tagged, and so are the txs it went out as (still outstanding: the ack has not come yet), so that
++         a whole-tx refusal of one of THEM (and only them; a Full tx keeps today's handling) is answered. */
++      if (meta && typeof meta.label === 'string' && meta.label) st.label = meta.label.slice(0, 80);   // 2.6 (§11): the step keeps its name, so a session's undo can say what it undid
++      if (meta && meta.ed === 's') {
++        st.ed = 's';
++        (step.cids || []).forEach(function (cid) { const e = outstanding.find(function (x) { return x.cid === cid; }); if (e) e.ed = 's'; });
++      }
++      st.cids = (step.cids || []).slice();
++      st.seq = S.othersSeq;
++      if (meta && Array.isArray(meta.adopt) && meta.adopt.length) st.adopt = meta.adopt.slice(0, 400).map(String);
+       undoStack.push(st);
+       while (undoStack.length > LIM.UNDO_STEPS) undoStack.shift();
+       redoStack.length = 0;
+@@ -1124,6 +1157,10 @@ window.FM = window.FM || {};
+       res.recs.forEach(function (r, i) { if (res.ops[i].o === 's') r.after = clone(res.ops[i].v); });
+       const st = { ops: res.ops, recs: res.recs, orders: res.orders, pre: true };
+       if (meta && meta.arr === true) st.arr = true;
++      if (meta && typeof meta.label === 'string' && meta.label) st.label = meta.label.slice(0, 80);
++      if (meta && meta.ed === 's') st.ed = 's';
++      st.seq = 0;   // 2.6 (§5.3): written before anyone else was here
++      if (meta && Array.isArray(meta.adopt) && meta.adopt.length) st.adopt = meta.adopt.slice(0, 400).map(String);
+       return st;
+     }
+     function docOfSnapshot(str) {
+@@ -1142,7 +1179,25 @@ window.FM = window.FM || {};
+       return (m && m.name) || 'someone else';
+     }
+ 
++    /* 2.6 (§11): ONE WRAPPER, so every exit of the step sets `S.lastStep` (a plain boolean is still what undo returns, so no caller changes): {label, ed, arr, soft, who} of the step
++       that ran, null when none did. A soft skip says its line itself only where Simple is not on screen; in Simple the caller builds the one #sm-say line (§3.12). */
+     function runStep(st, intoRedo) {
++      S._softNow = null; S._adoptKept = false;
++      const ok = runStep0(st, intoRedo);
++      S.lastStep = ok ? { label: st.label || null, ed: st.ed || null, arr: !!st.arr, soft: !!S._softNow, who: S._softNow ? S._softNow.who : null, adoptKept: !!S._adoptKept } : null;
++      return ok;
++    }
++    /* a path adoption wrote, or the object around it (`P/sm` created whole, `L/<id>/sm`) */
++    function adoptHit(list, key) {
++      for (let i = 0; i < list.length; i++) {
++        const a = list[i];
++        if (a === key || key.indexOf(a + '/') === 0) return true;
++        if (a.indexOf(key + '/') === 0 && (key === 'P/sm' || /^L\/[^/]+\/sm$/.test(key))) return true;
++      }
++      return false;
++    }
++    function simpleOnScreen() { return !!(window.FM && FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.spine && FM.spine.say); }
++    function runStep0(st, intoRedo) {
+       /* SIMPLE MODE P2 — THE UNDO DOOR (DESIGN.md §10.2 door 2, his D14). Undoing or redoing a step that moved clips would send
+          a ripple while someone else can edit — exactly what the runner refuses. Put back unconsumed, as the backstop refusal
+          below does, before anything is applied or sent. Only steps Simple's runner tagged `arr` ever reach this. */
+@@ -1158,10 +1213,13 @@ window.FM = window.FM || {};
+       if (A.flushPendingCommit) { try { A.flushPendingCommit(); } catch (e) {} }
+       pushLocal('hot');
+       const keepOps = [], keepRecs = [];
+-      let soft = 0, hardFail = null;
++      let soft = 0, hardFail = null, undoCids = null;
+       for (let i = 0; i < st.ops.length; i++) {
+         const op = st.ops[i], rec = st.recs[i] || {};
+         const p = rec.p || pathOf(op);
++        /* 2.6 (§5.3): ADOPTION IS NOT UNDONE ONCE ANYONE ELSE HAS WRITTEN SINCE, in a session and after one (whether or not `S.active`: a stopped session still holds undo). The
++           edit it rode on still undoes. Without this Ezra's ⌘Z after Sam made an overlay a main clip un-adopted the project on every device and demoted Sam's clip. */
++        if (st.adopt && S.othersSeq > (st.seq || 0) && adoptHit(st.adopt, P.key(p))) { S._adoptKept = true; continue; }
+         const cur = D.valueAt(S.base, p);
+         if (op.o === 's' || op.o === 'd') {
+           /* §10.2: undo only what is still as this person left it. Anything a peer has changed since is
+@@ -1172,7 +1230,11 @@ window.FM = window.FM || {};
+           continue;
+         }
+         if (op.o === 'li') {
+-          if (cur !== undefined && canon(cur) === rec.after) { keepOps.push(op); keepRecs.push(rec); }
++          if (cur !== undefined && D.maskLayer(cur) === rec.after) {
++            keepOps.push(op); keepRecs.push(rec);
++            /* the mask hid a difference (somebody moved or pinned it since): the add is still taken back, and it is SAID, not silent (§11) */
++            if (rec.afterRaw !== undefined && canon(cur) !== rec.afterRaw) { soft++; S.lastSoftPath = P.key(p); }
++          }
+           else hardFail = P.key(p);
+           continue;
+         }
+@@ -1198,6 +1260,28 @@ window.FM = window.FM || {};
+         toast(who ? "Can't undo — " + who + ' changed it since' : "Can't undo — it has changed since");
+         return false;
+       }
++      /* 2.6 (§10.2 door 2a): THE LEASE HALF OF UNDO'S PRE-FLIGHT, for every step Simple made while a session runs, arranging or not. A split is live and not arranging, so
++         its undo never reached the `st.arr` door: with a guest who had just opened Crop on B (a lease that has not written yet, so the `li` check passes) the owner's host
++         refused the `lr B` per op and applied A's duration restore, so A grew back over B on every device and the step was used up. A step with an `li` / `lr` op or one that
++         writes more than one layer asks `FM.spine.blockersForLayers`; a single-layer, non-structural step stays per-op as today, and a Full step (no `ed`) skips it. */
++      if (st.ed === 's' && S.active && window.FM && FM.spine && FM.spine.blockersForLayers) {
++        const lids = Object.create(null); let structural = false;
++        for (let i = 0; i < keepOps.length; i++) {
++          if (keepOps[i].o === 'li' || keepOps[i].o === 'lr') structural = true;
++          const lid = C.Host && C.Host.layerOf ? C.Host.layerOf(keepOps[i]) : null;
++          if (lid) lids[lid] = 1;
++        }
++        const ids = Object.keys(lids);
++        if (structural || ids.length > 1) {
++          const blocked = FM.spine.blockersForLayers(ids);
++          if (blocked) {
++            if (st.pre) preIdx++;
++            else (intoRedo ? undoStack : redoStack).push(st);
++            if (FM.spine.undoBlocked) FM.spine.undoBlocked(blocked);
++            return false;
++          }
++        }
++      }
+       const inv = D.invertStep({ ops: keepOps, recs: keepRecs, orders: st.orders || [] });
+       const sum = { wasSelected: A.selected ? A.selected() : null, paths: [], layerIds: Object.create(null), removed: [], inserted: [], structural: false, projectKeys: Object.create(null) };
+       for (let i = 0; i < inv.length; i++) applyLive(inv[i], sum);
+@@ -1233,18 +1317,26 @@ window.FM = window.FM || {};
+           for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
+           S.cid += 1;
+           for (let i = 0; i < ops.length; i++) if (ops[i].o === 's' || ops[i].o === 'd') pending[P.key(ops[i].p)] = S.cid;
+-          outstanding.push({ cid: S.cid, ops: ops, sent: false });
++          outstanding.push({ cid: S.cid, ops: ops, sent: false, ed: st.ed === 's' ? 's' : undefined });
++          undoCids = [S.cid];
+           if (S.online) flushOutstanding();
+         }
+         res.recs.forEach(function (r, i) { if (res.ops[i].o === 's') r.after = clone(res.ops[i].v); });
+         const inv = { ops: res.ops, recs: res.recs, orders: res.orders };
++        if (st.ed === 's') inv.ed = 's';
++        if (st.label) inv.label = st.label;   // 2.6: redo keeps the name
++        if (undoCids) inv.cids = undoCids;   // 2.6 (Q29): the inverse step carries the tx it went out as
+         if (st.arr) inv.arr = true;   // Simple mode P2: redoing an arranging step is arranging too
+         (intoRedo ? redoStack : undoStack).push(inv);
+         while (redoStack.length > LIM.UNDO_STEPS) redoStack.shift();
+         while (undoStack.length > LIM.UNDO_STEPS) undoStack.shift();
+       }
+       if (A.autosave) { try { A.autosave(); } catch (e) {} }
+-      if (soft) { const who = whoChanged(S.lastSoftPath); toast(who ? 'Part of this was changed by ' + who + ' since, so it was left alone' : 'Part of this has changed since, so it was left alone'); }
++      if (soft) {
++        const who = whoChanged(S.lastSoftPath);
++        S._softNow = { who: who || null };
++        if (!simpleOnScreen()) toast(who ? 'Part of this was changed by ' + who + ' since, so it was left alone' : 'Part of this has changed since, so it was left alone');
++      }
+       return true;
+     }
+ 
+diff --git a/js/collab-ui.js b/js/collab-ui.js
+index 04c3aa1f..eb12e519 100644
+--- a/js/collab-ui.js
++++ b/js/collab-ui.js
+@@ -569,7 +569,7 @@ window.FM = window.FM || {};
+           /* THROUGH THE SESSION, not straight into the host's table (queue 921 S3 review): `H.setRole`
+              moves a number here and tells nobody, so a demoted guest kept the full editing UI and found
+              out one refused edit at a time. `setPeerRole` does both halves or neither. */
+-          return { label: roleItem(p), action: function () { s.setPeerRole(mid, p[0]); noteRole(mid, p[0]); redrawShare(); } };
++          return { label: roleItem(p), action: function () { U.setMemberRole(mid, p[0]); } };
+         });
+         items.push({ sep: true });
+         /* §19.1: Follow sits in the same menu, between the roles and Remove. */
+@@ -663,10 +663,59 @@ window.FM = window.FM || {};
+   U._forgetRid = forgetRid;
+   /* Simple mode P2 (DESIGN.md §3.7 (b)): the room's REMEMBERED editors — a member keeps its row (and its offline changes) after
+      its connection drops, until it leaves or is removed. Read-only; FM.collab.othersCanEdit is its one reader. */
++  /* Release 2.6 (DESIGN.md §3.7): ARRANGE ANYWAY. A remembered editor whose connection dropped keeps arranging off until they leave, are
++     removed, or the owner confirms once from the Simple line. `waived` holds those rids for THIS session only (emptied at every arm and at
++     the end), and a waived member who reconnects leaves it, so the gate shuts again (pruned lazily by whoever asks, so no event is needed). */
++  let waived = Object.create(null);
++  function pruneWaived() {
++    const s = C.session;
++    Object.keys(waived).forEach(function (rid) {
++      if (!memberByRid(rid)) { delete waived[rid]; return; }
++      if (s && ridMid[rid] && s.peerIds && s.peerIds().indexOf(ridMid[rid]) >= 0) delete waived[rid];
++    });
++  }
++  function hereRid(rid) { const s = C.session; return !!(s && ridMid[rid] && s.peerIds && s.peerIds().indexOf(ridMid[rid]) >= 0); }
+   U.roomEditors = function () {
+     if (!hostRoom || !hostRoom.members) return [];
+     if (hostRoomPid && FM.projects && FM.projects.currentId && hostRoomPid !== FM.projects.currentId()) return [];
+-    return Object.keys(hostRoom.members).filter(rid => { const m = hostRoom.members[rid]; return !!m && m.role === 'editor'; });
++    pruneWaived();
++    return Object.keys(hostRoom.members).filter(rid => { const m = hostRoom.members[rid]; return !!m && m.role === 'editor' && !waived[rid]; });
++  };
++  /* The ones the gate is waiting for that are NOT here right now: [{ rid, name }], the Simple line's "Sam is offline" and what Arrange anyway waives. */
++  U.offlineEditors = function () {
++    return U.roomEditors().filter(function (rid) { return !hereRid(rid); }).map(function (rid) { return { rid: rid, name: cleanName(hostRoom.members[rid].name) || 'Someone' }; });
++  };
++  U.waiveOffline = function (rids) {
++    if (!hostRoom) return 0;
++    let n = 0;
++    (rids || U.offlineEditors().map(function (e) { return e.rid; })).forEach(function (rid) {
++      if (memberByRid(rid) && !hereRid(rid) && !waived[rid]) { waived[rid] = 1; n++; }
++    });
++    return n;
++  };
++  U._waived = function () { pruneWaived(); return Object.keys(waived); };
++  /* suite seam (2.6): stand a member table in for a room the sheet would have made, and say which engine mid each rid has right now; returns what to hand back. */
++  U._testRoom = function (room, pid, map) {
++    const was = { room: hostRoom, pid: hostRoomPid, map: ridMid, waived: waived };
++    hostRoom = room; hostRoomPid = pid; ridMid = map || Object.create(null); waived = Object.create(null);
++    return was;
++  };
++  U._testRoomBack = function (was) { hostRoom = was.room; hostRoomPid = was.pid; ridMid = was.map; waived = was.waived; };
++  /* ONE PATH for a role change (DESIGN §3.11): the People menu and the Simple line's Make Sam a Viewer both come here. `setPeerRole` alone left the
++     persisted role at editor (the gate stayed shut and Sam came back an Editor), so it is always followed by `noteRole`. A member who is not
++     connected has no mid, so `setPeerRole` refuses it: that one is a row (`rid`) and only the persisted role changes, which is what the gate and
++     the reconnect read. */
++  U.setMemberRole = function (who, role) {
++    const s = C.session;
++    if (!hostRoom || !s || ['editor', 'commenter', 'viewer'].indexOf(role) < 0) return false;
++    const m = memberByRid(who);
++    if (m) {
++      if (hereRid(who)) { const mid = ridMid[who]; s.setPeerRole(mid, role); noteRole(mid, role); }
++      else { m.role = role; saveRoom(currentPid(), hostRoom); }
++    } else if (s.setPeerRole && s.setPeerRole(who, role) !== false) noteRole(who, role);
++    else return false;
++    redrawShare();
++    return true;
+   };
+   /* A guest's `bye` (collab-session.js, through the bridge). ⚠️ ONLY `left`: a guest on `paused` switched to
+      another project and is still a member. Leave throws the device's token away (the copy becomes its own, or
+@@ -1280,7 +1329,7 @@ window.FM = window.FM || {};
+     forgetPeerNotes();                       // #967: notes from a session that ended are not this one's
+     /* #967 B3: live again — the room no longer carries the mark of the switch that paused it (see U.onDetach). */
+     if (hostRoom && (hostRoom.paused || hostRoom.coded != null)) { delete hostRoom.paused; delete hostRoom.coded; saveRoom(hostRoomPid || currentPid(), hostRoom); }
+-    ridMid = Object.create(null);
++    ridMid = Object.create(null); waived = Object.create(null);
+     hostOlder = null;
+     startHostRelay();
+     /* S7: the room's switches reach every member from the first hello (collab-session.js sends them with
+@@ -3272,6 +3321,32 @@ window.FM = window.FM || {};
+   /* A shared copy that has no session right now — reopened, and finding its owner, or with nothing to
+      find it through (S6 review). The same card a guest gets, saying what is true, and a Leave that works
+      without a session: the copy becomes his own, exactly as Leave does in a session. */
++  /* Release 2.6 (DESIGN §3.11, the `offline` row): THE LEAVE ROUTE OF A LINKED COPY, one function. The Friends card's Leave and Simple's "Make it my own"
++     both call it, so a copy whose owner closed the app, paused or never came back (gated for good otherwise) has a way out that is the same
++     confirm, the same `ended: 'left'` mark BEFORE the copy is made (a copy that cannot be finished, a full device, is still never dialled
++     again), the same `detachLinked`, and the same two sentences. `onConfirm` runs once the person has said yes (the card closes then).
++     Resolves true when it went ahead, false when they said no. */
++  U.leaveKeep = function (pid, onConfirm) {
++    pid = pid || currentPid();
++    const s = C.session;
++    return FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device as a project of your own.', ok: LEAVE_KEEP, cancel: 'Cancel' })
++      .then(function (yes) {
++        if (!yes) return false;
++        if (onConfirm) { try { onConfirm(); } catch (e) {} }
++        if (s && !s.isOwner && C.active && pid === currentPid()) { leaveKeeping(s); return true; }   // a live session: the full route (room check, "Leaving…")
++        if (recon && recon.gpid === pid) stopRecon();
++        if (!FM.projects || !FM.projects.detachLinked) return true;
++        try { if (FM.projects.patchCollab) FM.projects.patchCollab(pid, { ended: 'left' }); } catch (e) {}
++        joinBusy++;
++        carryUnread(FM.projects.detachLinked(pid)).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
++          joinBusy = Math.max(0, joinBusy - 1); U.syncBanner();
++          if (nid) { if (FM.toast) FM.toast('You left — this is now your own copy', 2600); return; }
++          FM.ask({ title: 'Your copy could not be made your own', ok: 'OK', single: true,
++            message: 'This device could not finish copying the project — it may be full. The copy stays as it is and will not reconnect; free some space and open it to try again, or delete it from Home.' });
++        });
++        return true;
++      });
++  };
+   function drawLinkedPanel(pc, host) {
+     const pid = pc.id;
+     const who = hostNameFor(pid);
+@@ -3298,23 +3373,7 @@ window.FM = window.FM || {};
+     c.appendChild(offRow(host));   // #967 batch 2: the switch that stays, on a shared copy too
+     const foot = el('div', 'cs-foot');
+     foot.appendChild(btn('cs-stop', 'Leave', function () {
+-      FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device as a project of your own.', ok: LEAVE_KEEP, cancel: 'Cancel' })
+-        .then(function (yes) {
+-          if (!yes) return;
+-          if (recon && recon.gpid === pid) stopRecon();
+-          if (host) closeAny(); else closeCard();
+-          if (!FM.projects || !FM.projects.detachLinked) return;
+-          /* S8 review: marked left FIRST, so a copy that cannot be finished (a full device) is still never dialled
+-             again — and the result is said either way. */
+-          try { if (FM.projects.patchCollab) FM.projects.patchCollab(pid, { ended: 'left' }); } catch (e) {}
+-          joinBusy++;
+-          carryUnread(FM.projects.detachLinked(pid)).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
+-            joinBusy = Math.max(0, joinBusy - 1); U.syncBanner();
+-            if (nid) { if (FM.toast) FM.toast('You left — this is now your own copy', 2600); return; }
+-            FM.ask({ title: 'Your copy could not be made your own', ok: 'OK', single: true,
+-              message: 'This device could not finish copying the project — it may be full. The copy stays as it is and will not reconnect; free some space and open it to try again, or delete it from Home.' });
+-          });
+-        });
++      U.leaveKeep(pid, function () { if (host) closeAny(); else closeCard(); });
+     }));
+     foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
+     c.appendChild(foot);
+@@ -4697,7 +4756,7 @@ window.FM = window.FM || {};
+     if (s && !s.isOwner && s.gpid && !(recon && recon.gpid === s.gpid && !recon.stopped)) dropLock(guestLock(s.gpid));
+     if (!s || s.isOwner) {
+       stopCkpt();
+-      stopHostRelay(); dropWake(); ridMid = Object.create(null); hostOlder = null;
++      stopHostRelay(); dropWake(); ridMid = Object.create(null); waived = Object.create(null); hostOlder = null;
+       cancelKnocks(s && s.stopWhy === 'paused' ? 'paused' : 'ended');
+     }
+     if (recon && (!s || recon.gpid === s.gpid || recon.mode === 'live')) stopRecon();
+diff --git a/js/history.js b/js/history.js
+index aa65a681..6aed772b 100644
+--- a/js/history.js
++++ b/js/history.js
+@@ -214,7 +214,23 @@ window.FM = window.FM || {};
+     if (r) { r.classList.toggle('is-off', !canR); r.setAttribute('aria-disabled', canR ? 'false' : 'true'); }
+   }
+ 
++  /* Release 2.6 (DESIGN §11): WHAT AN UNDO OR REDO RAN. Both still return a plain boolean (true when a step ran, false otherwise: the solo path used to return
++     undefined), and the step's own words go in `FM.history.lastStep = { label, ed, arr, soft, who }` (null on a false return). `meta` is the solo snapshot's
++     meta; in a session the step comes from collab (`FM.collab.lastStep()`). Simple's `undoSaid` builds its one line from it. */
++  function stepDone(ok, kind, meta) {
++    const ran = ok === true;
++    let ls = null;
++    if (ran) {
++      if (meta === undefined) ls = FM.collab && FM.collab.lastStep ? FM.collab.lastStep() : null;
++      else if (meta) ls = { label: meta.label || null, ed: meta.ed || null, arr: !!meta.arr, soft: false, who: null };
++      if (!ls) ls = { label: null, ed: null, arr: false, soft: false, who: null };
++    }
++    FM.history.lastStep = ls;
++    if (ran && FM.spine && FM.spine.undoSaid) { try { FM.spine.undoSaid(ls, kind); } catch (e) {} }
++    return ran;
++  }
+   FM.history = {
++    lastStep: null,
+     canUndo() { return index > 0; },
+     /* queue 826 suite seam: how many steps are actually ON the stack. A test that counts CALLS to commit()
+        measures the wrong thing now — a muted batch still calls it, and it returns early — so the honest
+@@ -340,7 +356,7 @@ window.FM = window.FM || {};
+     /* Simple mode P2 (§3.7, §0.4 B15): pressed while Simple's runner is mid-command, undo and redo wait in its queue and run
+        right after that command commits, never half-way through it. `FM.spine.running` is only ever true inside Simple's
+        runner, so in Full this line never fires. */
+-    undo() { if (FM.spine && FM.spine.running && FM.spine.queueStep) return FM.spine.queueStep('undo'); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.undo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
+-    redo() { if (FM.spine && FM.spine.running && FM.spine.queueStep) return FM.spine.queueStep('redo'); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.redo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },
++    undo() { if (FM.spine && FM.spine.running && FM.spine.queueStep) return FM.spine.queueStep('undo'); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.undo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); stepDone(ok, 'undo'); return ok; } let ran = false, meta = null; if (index > 0) { meta = metas[index]; index--; ran = true; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); return stepDone(ran, 'undo', meta); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
++    redo() { if (FM.spine && FM.spine.running && FM.spine.queueStep) return FM.spine.queueStep('redo'); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.redo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); stepDone(ok, 'redo'); return ok; } let ran = false, meta = null; if (index < stack.length - 1) { index++; meta = metas[index]; ran = true; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); return stepDone(ran, 'redo', meta); },
+   };
+ })(window.FM);
+diff --git a/js/simple-timeline.js b/js/simple-timeline.js
+index 8f7efd63..13bf2798 100644
+--- a/js/simple-timeline.js
++++ b/js/simple-timeline.js
+@@ -134,7 +134,7 @@ window.FM = window.FM || {};
+     const tr = document.getElementById('sm-tray'), ae = document.activeElement;
+     if (tr && ae && tr.contains(ae) && !ptrDown && performance.now() - lastPtr > 500) raisedBy = (ae.dataset && ae.dataset.tool) || '';
+     ln.textContent = ''; sayEl.classList.add('sm-saying');
+-    const tx = el('span', 'sm-say-t', text); tx.title = text; ln.appendChild(tx);
++    const tx = el('span', 'sm-say-t', text); tx.title = opts.title || text; ln.appendChild(tx);
+     const btns = (opts.buttons || []).slice(0, 2);
+     if (opts.full && !btns.length) btns.push({ label: (W().lines || {}).openFull || 'Open in Full', fn: () => { if (FM.editor) FM.editor.request('full', { hop: true }); } });   // a hop: the guard, no memory (R1)
+     const t0 = performance.now(); let up = !ptrDown;
+@@ -143,7 +143,7 @@ window.FM = window.FM || {};
+     btns.forEach(bd => {
+       const b = el('button', 'sm-say-b', bd.label); b.type = 'button'; b.setAttribute('aria-disabled', 'true');
+       b.addEventListener('pointerdown', ev => { if (!armed()) { ev.preventDefault(); ev.stopPropagation(); } });
+-      b.addEventListener('click', ev => { ev.stopPropagation(); if (!armed()) { ev.preventDefault(); return; } clearSay(); try { bd.fn(); } catch (e) {} });
++      b.addEventListener('click', ev => { ev.stopPropagation(); if (!armed()) { ev.preventDefault(); return; } const at = b.getBoundingClientRect(); clearSay(); try { bd.fn(at); } catch (e) {} });   // 2.6: the button's box, so a menu button (Options ›) can open beside itself
+       ln.appendChild(b);
+     });
+     sayEl.classList.toggle('sm-say-has-b', btns.length > 0);
+diff --git a/js/spine-edit.js b/js/spine-edit.js
+index bdb0d26f..86366efc 100644
+--- a/js/spine-edit.js
++++ b/js/spine-edit.js
+@@ -181,7 +181,7 @@ window.FM = window.FM || {};
+       const whole = !!first && s <= first.start + R.eps && e >= R.trackEnd - R.eps;
+       if (!(whole || u.host == null)) return;
+       S.setFlag(l, 'stay', true); out.push('L/' + id + '/sm/stay');
+-      if (tailOk(l, u) && first && Math.abs(e - R.trackEnd) <= R.eps) { setTail(l, e); out.push('L/' + id + '/sm/tail'); }
++      if (tailOk(l, u) && first && Math.abs(e - R.trackEnd) <= R.eps) { setTail(l, e); out.push('L/' + id + '/sm/tail', 'L/' + id + '/sm/tailEnd'); }
+       if (!adopting) S._pinnedNow.push(id);
+     });
+     return out;
+@@ -1083,6 +1083,39 @@ window.FM = window.FM || {};
+     if (u && u.kind === 'block') return line('lockedBlock');
+     return l ? line('lockedClip') : line('lockedItems', 1);
+   }
++  /* ═══ 2.6: THE OWNER'S TWO WAYS THROUGH THE GATE (§3.7, §3.11). Who is holding it: { here: [{ mid, name }], away: [{ rid, name }] }, read from the session's
++     member table and the room's remembered editors; nothing is written. */
++  S.liveInfo = function () {
++    const C = FM.collab, s = C && C.session, H = s && s.host;
++    const here = (s && s.isOwner && H && H.members) ? Object.keys(H.members).filter(m => m !== H.ownerMid && H.members[m] && H.members[m].role === 'editor').map(m => ({ mid: m, name: H.members[m].name || '' })) : [];
++    const away = (s && s.isOwner && C.ui && C.ui.offlineEditors) ? C.ui.offlineEditors() : [];
++    return { here: here, away: away };
++  };
++  /* Make Sam a Viewer. Asks first when Sam is in the middle of something (typing, dragging, animating, holding a lease): the host changes the role before
++     the guest hears it, so Sam's unsent change would be undone. One path with the People menu (U.setMemberRole). */
++  S.makeViewer = async function (who) {
++    const C = FM.collab, U = C && C.ui, PZ = C && C.presence;
++    if (!U || !U.setMemberRole || !who) return false;
++    const name = S.nameWord(who.name || ''), busy = PZ && PZ.busyWith ? PZ.busyWith(who.mid) : null;
++    if (busy && FM.ask) {
++      const yes = await FM.ask({ title: name + ' is ' + (busy === 'editing' ? 'editing' : busy) + ' · make ' + name + ' a Viewer anyway?', message: name + '’s unsent change will be undone.', ok: 'Make Viewer', cancel: 'Not now' });
++      if (!yes) return false;
++    }
++    if (!U.setMemberRole(who.mid, 'viewer')) return false;
++    S.say(line('madeViewer', name));
++    return true;
++  };
++  /* Arrange anyway: one confirm, then the remembered editors who are offline stop counting for THIS session; one who reconnects counts again. */
++  S.arrangeAnyway = async function (away) {
++    const C = FM.collab, U = C && C.ui;
++    if (!U || !U.waiveOffline || !FM.ask) return false;
++    const name = away && away.length === 1 ? S.nameWord(away[0].name) : 'they';
++    const yes = await FM.ask({ title: 'Arrange anyway?', message: 'Anything ' + (away && away.length === 1 ? name : 'they') + ' changed offline may land in the wrong place.', ok: 'Arrange anyway', cancel: 'Not now' });
++    if (!yes) return false;
++    U.waiveOffline(away ? away.map(a => a.rid) : null);
++    S.say(line('waivedSaid'));
++    return true;
++  };
+   function refuse(kind, o, R) {
+     o = o || {};
+     const full = { label: line('openFull'), fn: () => { if (FM.editor && FM.editor.request) FM.editor.request('full', { hop: true }); } };   // a hop: no editor memory (Phase 1 review R1)
+@@ -1092,11 +1125,28 @@ window.FM = window.FM || {};
+       case 'live': {
+         const C = FM.collab, s = C && C.session;
+         if (s && !s.isOwner) { text = line('liveGuest'); buttons = [full]; break; }
+-        const H = s && s.host, eds = H && H.members ? Object.keys(H.members).filter(m => m !== H.ownerMid && H.members[m] && H.members[m].role === 'editor') : [];
+-        text = eds.length === 1 ? line('liveOwner1', S.nameWord(H.members[eds[0]].name)) : line('liveOwnerN', Math.max(2, eds.length));
+-        buttons = [full]; break;
++        /* 2.6 (§3.11): the owner's line says which of the two it is. Somebody who is HERE: "Sam can edit" + Options (Make Sam a Viewer · Open in Full; two
++           or more: Who can edit › · Open in Full). Somebody whose connection dropped and who is still remembered: "Sam is offline" + Arrange anyway (two or more:
++           Options). A role change or a waiver is never one tap: it is a menu item, or it asks. */
++        const info = S.liveInfo(), here = info.here, away = info.away;
++        const menu = items => at => { if (FM.contextMenu) FM.contextMenu.show(Math.min(at.left, window.innerWidth - 200), at.top - 4, items, { above: true }); };
++        const whoMenu = menu([{ label: line('whoCanEdit'), action: () => { if (C.ui && C.ui.openPeople) C.ui.openPeople(); } }, { label: line('openFull'), action: full.fn }]);
++        if (here.length) {
++          text = here.length === 1 ? line('liveOwner1', S.nameWord(here[0].name)) : line('liveOwnerN', Math.max(2, here.length));
++          buttons = [{ label: line('optionsMore'), fn: here.length === 1 ? menu([{ label: line('makeViewer', here[0].name ? S.nameWord(here[0].name) : ''), action: () => S.makeViewer(here[0]) }, { label: line('openFull'), action: full.fn }]) : whoMenu }];
++        } else if (away.length) {
++          text = away.length === 1 ? line('awayOwner1', S.nameWord(away[0].name)) : line('awayOwnerN', Math.max(2, away.length));
++          buttons = away.length === 1 ? [{ label: line('arrangeAnyway'), fn: () => S.arrangeAnyway(away) }] : [{ label: line('optionsMore'), fn: menu([{ label: line('arrangeAnyway'), action: () => S.arrangeAnyway(away) }, { label: line('whoCanEdit'), action: () => { if (C.ui && C.ui.openPeople) C.ui.openPeople(); } }, { label: line('openFull'), action: full.fn }]) }];
++        } else { text = line('liveOwnerN', 2); buttons = [full]; }
++        break;
++      }
++      case 'offline': {
++        const copy = !!(FM.collab && FM.collab.isLinkedCopy && FM.collab.isLinkedCopy());
++        text = copy ? line('offlineCopy') : line('offlineOwner');
++        /* 2.6: a linked copy's way out. After it the gate is false and the next arranging edit goes through (a copy whose owner closed the app, paused or never came back was gated for good). */
++        if (copy && FM.collab.ui && FM.collab.ui.leaveKeep) buttons = [{ label: line((window.matchMedia && window.matchMedia('(max-width: 700px)').matches) ? 'makeMineShort' : 'makeMine'), fn: () => FM.collab.ui.leaveKeep() }];
++        break;
+       }
+-      case 'offline': text = (FM.collab && FM.collab.isLinkedCopy && FM.collab.isLinkedCopy()) ? line('offlineCopy') : line('offlineOwner'); break;
+       case 'view': text = line('view'); break;
+       case 'comment': text = line('comment'); break;
+       case 'outbox': text = line('outbox'); break;
+@@ -1219,10 +1269,10 @@ window.FM = window.FM || {};
+       /* D7's Do it anyway: the ids it unlocked are held HERE, never as a mark on the layer — FM.cloneLayer drops every '_' key,
+          so a split's second half, a cut item's piece and a copy all came out unlocked (review finding 14) */
+       const ids0 = new Set(FM.scene.layers.map(l => l.id)), relock = new Set();
+-      let ok = false, notes = [];
++      let ok = false, notes = [], adoptPaths = null;
+       try {
+         if (opts.unlock) lk.forEach(id => unitLayers(id, map).forEach(l => { if (l.locked) { l.locked = false; relock.add(l.id); } }));
+-        if (!R.adopted && plan.adopts) S.adopt(R);
++        if (!R.adopted && plan.adopts) adoptPaths = S.adopt(R);
+         if (gated) S.pinStrays(R);
+         await applyPlan(plan);
+         const R2 = S.classify(FM.scene);
+@@ -1240,7 +1290,7 @@ window.FM = window.FM || {};
+       else if (sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = [sel0]; }
+       FM.refreshAll();
+       if (plan.time != null && !FM.playing) { const P = FM.scene.project; FM.time = Math.max(0, Math.min(P.duration || 0, plan.time)); if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead(); }
+-      FM.history.commit({ label: label, ed: 's', arr: gated });
++      FM.history.commit(adoptPaths ? { label: label, ed: 's', arr: gated, adopt: adoptPaths } : { label: label, ed: 's', arr: gated });   // 2.6 (§5.3): the paths adoption wrote, so a session's undo can leave them alone once anyone else has written
+       /* a new media record (a duplicate's copy, an added clip, overlay or song) is written NOW, not on the 600 ms autosave: a hide flush cancels that and writes
+          the document only, so the copy came back blank (queue 681). Saved after the commit, so the finished document is what
+          lands — the reason for {noSave} (nothing un-rippled on disk mid-run) still holds. */
+@@ -2241,8 +2291,23 @@ window.FM = window.FM || {};
+     }
+   });
+ 
++  /* 2.6 (§10.2 door 2a): the lease half only, by layer ids: who else holds any of them, or null. Read-only. */
++  S.blockersForLayers = function (ids) { return S.blockers({ touched: new Set(ids || []) }); };
++  S.undoBlocked = function (b) {
++    if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) refuse('busy', b, S.read(FM.scene));
++    else if (FM.toast) FM.toast("Can't undo — it has changed since");
++  };
+   S.undoGate = function () { return S.arrangeGate(); };
+-  /* runStep's refusal of an arranging step while someone else can edit (§10.2 door 2). In Simple it is the gate's line;
++  /* 2.6 (§11): ONE LINE PER UNDO that skipped part of itself because somebody else changed it since. In Full the session's own toast says it (today's, word for
++     word); in Simple the session stays quiet and this builds the one #sm-say line, with the full wording as its title. A plain undo says nothing here. */
++  S.undoSaid = function (ls, kind) {
++    if (!ls || !(ls.soft || ls.adoptKept) || !(FM.editor && FM.editor.isSimple && FM.editor.isSimple())) return;
++    const who = ls.who ? S.nameWord(ls.who) : '';
++    let text = !ls.soft ? line('undid') : who ? line('undidExcept', who) : line('undidExceptSome');
++    if (ls.adoptKept) text += ' · ' + line('adoptStays');   // §5.3: the edit adoption rode on undid, the main track stays as set up
++    S.say(text, { title: ls.soft ? line('undidTitle', ls.label || '', ls.who || '') : text, refusal: 'softUndo',
++      buttons: (ls.soft && ls.arr && kind === 'undo') ? [{ label: line('closeGaps'), fn: () => S.cmd.closeAll() }] : [] });
++  };  /* runStep's refusal of an arranging step while someone else can edit (§10.2 door 2). In Simple it is the gate's line;
+      in Full it is Full's existing undo-refusal toast, word for word (§0.4 N4): no new words in Full. */
+   S.undoRefused = function (why) {
+     if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) refuse(why || 'live');
+diff --git a/js/spine-words.js b/js/spine-words.js
+index b52b5bc4..74202771 100644
+--- a/js/spine-words.js
++++ b/js/spine-words.js
+@@ -54,6 +54,15 @@ window.FM = window.FM || {};
+       lockedClips: n => n + ' clips are locked', lockedItems: n => n + ' items are locked',
+       liveOwner1: name => name + ' can edit · clips stay put', liveOwnerN: n => n + ' others edit · clips stay put',
+       liveGuest: 'Clips stay put while you both edit',
++      undid: 'Undid', adoptStays: 'the main track stays as set up',
++      undidExcept: who => 'Undid, except what ' + who + ' changed', undidExceptSome: 'Undid, except what someone else changed', closeGaps: 'Close gaps',
++      undidTitle: (label, who) => 'Undid' + (label ? ': ' + label : '') + ' · part left alone' + (who ? ' — ' + who + ' changed it since' : ' — changed since'),
++      awayOwner1: name => name + ' is offline · clips stay put', awayOwnerN: n => n + ' others offline · clips stay put',
++      arrangeAnyway: 'Arrange anyway', optionsMore: 'Options ›',
++      makeViewer: name => name ? 'Make ' + name + ' a Viewer' : 'Make it a Viewer', whoCanEdit: 'Who can edit ›',
++      makeMine: 'Make it my own', makeMineShort: 'Mine',
++      madeViewer: name => name + ' is a Viewer now · clips can move',
++      waivedSaid: 'Clips can move · what they changed offline may land in the wrong place',
+       offlineOwner: 'You’re offline · text, captions and looks still work', offlineCopy: 'Offline · text and looks still work',
+       view: 'View only', comment: 'You can comment here', outbox: 'Too many offline changes',
+       waiting: 'Waiting for clips to arrive',
