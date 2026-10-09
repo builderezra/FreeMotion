@@ -59811,6 +59811,101 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* ═══ AU21: collab media, the two halves of a transfer and the member on the other end ═══ */
+  test('AU21 a guest that drops mid-upload and comes back finishes its clip on the host, from the bytes already kept', { item: 'AU21', budgetMs: 300000 }, async function () {
+    const C = need921S4('the media receiver on the host');
+    await withCollab921([mediaLayer921('Clip', 'image')], async function (c) {
+      const big = await q921bigPng();
+      if (big.size < 5 * 1024 * 1024) throw new Error('CONTROL: the fixture is ' + big.size + ' bytes, under one 4 MiB part, so nothing could resume from it');
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'p', mode: 'async' });
+      const mid = c.S.addPeer(loop.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
+      const peer = mediaPeer921(loop.b);
+      peer.cutAt = Math.floor(big.size * 0.55);
+      const ctl = C.media._ctl(c.S), lid = c.ids[0];
+      peer.add(big, 'image', [[lid, 0]]);
+      peer.announce('mf');
+      await until921('the upload to be cut', async function () { return peer.cut ? peer.servedBytes : null; }, 60000);
+      if (!Object.keys(ctl.inb).length) throw new Error('CONTROL: the host is not receiving, so the drop below proves nothing');
+      // the guest's link closes: the app drops the member (collab-ui link.onclose)
+      c.S.dropPeer(mid); try { loop.b.close(); } catch (e) {}
+      // past one sweep (1.5 s): an entry that is merely un-wanted would be queued again and sit in flight to nobody
+      const t0 = Date.now();
+      await until921('a sweep to have run', async function () { return (Date.now() - t0 > 2400) ? 1 : null; }, 8000);
+      const gone = C.media.pending(c.S);
+      if (gone.n !== 0 || Object.keys(ctl.inb).length) throw new Error('the host still counts the clip as arriving (' + gone.n + ' pending, ' + Object.keys(ctl.inb).length + ' in flight) from a member that has left: the export question would say "still arriving" for the rest of the session');
+      // the same guest comes back on a new link and offers the same file again
+      const loop2 = C.link.LoopLink({ aTag: 'h', bTag: 'p2', mode: 'async' });
+      const mid2 = c.S.addPeer(loop2.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
+      if (!mid2 || mid2 === mid) throw new Error('CONTROL: the returning guest did not get a new member id (' + mid + ' then ' + mid2 + ')');
+      const peer2 = mediaPeer921(loop2.b);
+      peer2.add(big, 'image', [[lid, 0]]);
+      peer2.announce('mf');
+      const rec = await until921('the clip to arrive after the guest came back', async function () { const r = await FM.storage.readMedia(lid); return (r && r.file) ? r : null; }, 120000);
+      if (!peer2.wants.length) throw new Error('the host never asked the returning guest for the file');
+      if (!(peer2.wants[0].from > 0)) throw new Error('the host asked again from ' + peer2.wants[0].from + ': it threw away the parts it had kept');
+      if (rec.file.size !== big.size) throw new Error('the clip is ' + rec.file.size + ' bytes, not ' + big.size);
+      const got = new Uint8Array(await rec.file.arrayBuffer()), want = new Uint8Array(await big.arrayBuffer());
+      for (let i = 0; i < want.length; i++) if (got[i] !== want[i]) throw new Error('the resumed clip differs from the original at offset ' + i);
+      try { loop2.b.close(); } catch (e) {}
+    });
+  });
+  test('AU21 a member who leaves does not leave send loops running behind it', { item: 'AU21', budgetMs: 240000 }, async function () {
+    const C = need921S4('the media sender');
+    await withCollab921([mediaLayer921('A', 'image'), mediaLayer921('B', 'image')], async function (c) {
+      const big = await q921bigPng(), big2 = await q921noisePng(1800, 7, 'big2.png');
+      await q921give(c.ids[0], big, 'image', 0); await q921give(c.ids[1], big2, 'image', 0);
+      FM.history.commit();
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'p', mode: 'async' });
+      const mid = c.S.addPeer(loop.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
+      const peer = mediaPeer921(loop.b);   // it never acknowledges (no `ok`), as a receiver that stopped would not
+      await until921('the host to advertise its media', async function () { return peer.mfs.length ? peer.mfs : null; }, 20000);
+      const byName = {}; peer.mfs.forEach(function (m) { (m.files || []).forEach(function (e) { byName[e.name] = e; }); });
+      const ctl = C.media._ctl(c.S);
+      peer.ep.send('ctl', { t: 'want', fid: byName['big.png'].fid, from: 0 });
+      peer.ep.send('ctl', { t: 'want', fid: byName['big2.png'].fid, from: 0 });
+      // both jobs run into the window brake: 8 MiB sent past the last acknowledgement, then they wait
+      const win = C.media.LIMITS.WINDOW;
+      await until921('both sends to reach the window brake', async function () {
+        const js = Object.keys(ctl.out).map(function (x) { return ctl.out[x]; });
+        return (js.length === 2 && js.every(function (j) { return j.off - j.upto >= win; })) ? js.length : null;
+      }, 60000);
+      c.S.dropPeer(mid); try { loop.b.close(); } catch (e) {}
+      await until921('the member’s send jobs to end', async function () { return Object.keys(ctl.out).length === 0 ? 1 : null; }, 3000).catch(function () {
+        throw new Error(Object.keys(ctl.out).length + ' send job(s) still running for a member who left, each polling every 25 ms until the room ends');
+      });
+    });
+  });
+
+  test('AU21 files that end exactly on a chunk, a part and the send window arrive byte-identical, with no part left behind', { item: 'AU21', budgetMs: 420000 }, async function () {
+    const C = need921S4('the media receiver');
+    const base = await q921png([30, 140, 200], 'pad-base.png');
+    const baseBytes = new Uint8Array(await base.arrayBuffer());
+    // a PNG ignores what follows its IEND chunk, so a valid image can be padded to ANY size: the receiver decodes it for real
+    const padded = function (size, name, seed) {
+      const bytes = new Uint8Array(size);
+      bytes.set(baseBytes, 0);
+      let x = (seed * 2654435761) | 0 || 1;
+      for (let i = baseBytes.length; i < size; i++) { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; bytes[i] = x & 255; }
+      return new File([bytes], name, { type: 'image/png', lastModified: 1600000010000 + seed });
+    };
+    const LIM = C.media.LIMITS;
+    const sizes = [LIM.CHUNK, LIM.CHUNK + 1, LIM.PART - 1, LIM.PART, LIM.PART + 1, 2 * LIM.PART, LIM.WINDOW + 1];
+    await withCollabGuest921(sizes.map(function (n, i) { return mediaLayer921('B' + i, 'image', { duration: 2 }); }), async function (c) {
+      const files = sizes.map(function (n, i) { return padded(n, 'edge' + n + '.png', i + 1); });
+      files.forEach(function (f, i) { c.peer.add(f, 'image', [[c.ids[i], 0]]); });
+      c.peer.announce('mf');
+      for (let i = 0; i < files.length; i++) {
+        const rec = await until921('the ' + files[i].size + '-byte file to arrive', async function () { const r = await FM.storage.readMedia(c.ids[i]); return (r && r.file) ? r : null; }, 120000);
+        if (rec.file.size !== files[i].size) throw new Error('a ' + files[i].size + '-byte file arrived as ' + rec.file.size + ' bytes');
+        const got = new Uint8Array(await rec.file.arrayBuffer()), want = new Uint8Array(await files[i].arrayBuffer());
+        let bad = -1; for (let k = 0; k < want.length; k++) if (got[k] !== want[k]) { bad = k; break; }
+        if (bad >= 0) throw new Error('a ' + files[i].size + '-byte file differs from the original at offset ' + bad);
+      }
+      await until921('every part to be collected', async function () { const ks = await FM.storage.collabKeys('collab:part:' + c.sid + ':'); return ks.length ? null : 1; }, 20000).catch(function () { throw new Error('parts of finished files are still on disk'); });
+      if (c.ctl.failed || Object.keys(c.ctl.bad).length) throw new Error('the receiver counted ' + c.ctl.failed + ' failed and ' + Object.keys(c.ctl.bad).length + ' abandoned files');
+    });
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

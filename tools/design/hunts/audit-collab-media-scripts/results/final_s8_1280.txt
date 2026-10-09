@@ -1,0 +1,33 @@
+1280 Regression 29/31 ✗ · NOT RUN HERE 1 Pending 0/0 built
+   ok  921 S8 a 500-layer project under a 4× CPU throttle: the commit-hook diff stays within 30 ms and the 
+   RED 921 S8 adversarial peer fuzz: a minute of malformed, oversized, out-of-order and hostile messages on
+   ok  921 S8 eight devices converge: an owner and seven guests editing at once for 400 seeded rounds, with
+   ok  921 S8 an accelerated one-hour soak: the ring, lastBy, pending, the ack cache and the presence pools
+   RED 921 S8 [Scan QR] reads the app’s own invite code off the camera into the Join field and waits for a 
+   ok  921 S8 Settings → Labs → Test connection says plainly what works on this network — the relays, the a
+   ok  921 S8 a refused delete or move puts the element back where it was on the device that tried — an eff
+   ok  921 S8r a layer id from one of his OTHER projects, planted in the shared document, is never read, se
+   ok  921 S8r a refused tx is repaired within a budget: a Viewer naming every layer gets a bounded answer 
+   ok  921 S8r a removed member’s token gets its own door: one answer at a time, never a member’s slot, a f
+   ok  921 S8r an Editor’s malformed markers never reach the owner’s project — playback’s readout, the time
+   ok  921 S8r a comment’s text is a string and its resolved flag a boolean, for every role, and all of the
+   ok  921 S8r fonts from a session are capped, and the ones it installed that nothing uses any more leave 
+   ok  921 S8r a link waiting on the knock is quiet: its frames are dropped unread, and a flood closes it a
+   ok  921 S8r the owner’s comments carry a mark nobody else can choose — a guest named “Ezra” in his colou
+   ok  921 S8r a relay floods no more decrypts than a room could honestly be spoken to: junk to the hub is 
+   ok  921 S8r Leave marks the copy first, waits for a pending update until the copy has settled, and says 
+   ok  921 S8r one tab per room: a second tab does not arm a second host for a project another tab is shari
+   ok  921 S8r an offline clash offers “Save my version as a copy” with the version kept before the flush, 
+   ok  921 S8r a toast raised from a collaboration card is painted above it, and a refused copy puts the te
+   ok  921 S8r after the owner stops sharing, the guest can join his next share straight away — the ended s
+   ok  921 S8r a guest who LEAVES is forgotten by the owner’s room — no offline ghost, no second row on a r
+   ok  921 S8r at 380×667 the Join sheet keeps Cancel and Join on screen with the code step and the five le
+   ok  921 S8r Home says what is shared: LIVE on the project he is hosting (whose ⋯ offers Stop sharing, #9
+   ok  921 S8r a copy that joined with a code says it cannot reconnect by itself, and never promises to sen
+   ok  921 S8r an old invite link that nobody answers names the reset as a reason — not only “their device 
+   ok  921 S8r “Most people at once” holds after the knock: two knocks that each saw one place left cannot 
+   ok  921 S8r the short code on an open Share panel is the code that works — never replaced behind the scr
+   ok  921 S8r Test connection’s ✓ and ✕ read on the light Settings panel, and its Copy says what it did wh
+   ok  921 S8r “Not now” on the big-download question defers the media: the clip is marked missing, the car
+   ok  921 S8r a phone receiving the shared media holds the screen awake until it lands, and the card says 
+FAIL921 S8 adversarial peer fuzz: a minute of malformed, oversized, out-of-order and hostile messages on every channel — the host never throws, takes nothing it must refuse, and keeps answering — one round of hostile messages held the owner’s main thread for 500 ms ([["ctl:\"constructor\"","ctl:\"obj\"","pres:\"obj\""],["pres:\"string\"","ctl:\"hello\"","ctl:\"tx\" {\"o\":\"s\",\"p\":[\"L\",\"l_mv1fnfjbzkt18\",\"name\"],\"v\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],["ctl:\"have\"","ctl:\"hash\"","bulk:\"object\""]])

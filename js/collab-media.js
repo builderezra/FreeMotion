@@ -1250,6 +1250,29 @@ window.FM = window.FM || {};
     const ctl = ctlOf(S);
     if (!ctl || mid == null) return false;
     delete ctl.told[mid];
+    /* ⚠️ NOTHING KEYED BY A MEMBER OUTLIVES IT — AND THESE TWO WERE KEYED BY ONE (AU21). Both halves of a transfer name the member
+       on the other end, and neither was ever let go when that member went (a closed link calls this too, and a guest who comes
+       back is a NEW member with a new id).
+       SENDING: the loop in `serve` ends on `stop`, a failed `sendBulk` or the end of the file — and a receiver that has gone quiet
+       is none of those, it is the window brake (`off - upto > WINDOW`), which sleeps 25 ms and looks again for ever. Measured: two
+       9 MB clips wanted by a guest that then left left two jobs polling at 40 Hz each until the room ended, and while a member who
+       is still there holds both of IN_FLIGHT's slots, every further file it asks for is ignored.
+       RECEIVING: on the host, a clip a guest was uploading stayed in `inb` and in `wanted` when the guest's link closed, and the
+       `planWants` test `if (ctl.inb[fid]) continue` then never asked again — the guest came back, announced the same file and the
+       host sat on a transfer nobody was sending for the rest of the session, counting it as "still arriving" in the export question.
+       The entry is kept, as the source's `miss` ("it no longer has the bytes") exactly like a `miss` answer: the parts on disk stay,
+       and the guest's next announcement of the file makes it live again and resumes from them. */
+    Object.keys(ctl.out).forEach(function (x) { const j = ctl.out[x]; if (j && j.to === mid) j.stop = true; });
+    Object.keys(ctl.peer).forEach(function (fid) {
+      const e = ctl.peer[fid];
+      if (!e || e.from !== mid) return;
+      e.miss = 1; e.from = null;
+      if (ctl.inb[fid]) abort(ctl, fid, 'gone');
+      delete ctl.wanted[fid];
+      const qi = ctl.queue.indexOf(fid);
+      if (qi >= 0) ctl.queue.splice(qi, 1);
+    });
+    ctl.dirty = true;
     return true;
   };
 
