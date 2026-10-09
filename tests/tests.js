@@ -59832,6 +59832,95 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* ═══ S9 · OPTION E (his A1 sheet): one "Audio" tool for a main video clip. Three sizes: a PC window of 1280x800 and one of 1024x600 (smTrayBAt), and a phone at 380. ═══ */
+  const SM9_SIZES = [[1280, 800], [1024, 600], [380, 0]];
+  const sm9At = (w, h, fn) => w <= 700 ? atPhoneWidth(fn, w) : smTrayBAt(w, h, fn);
+  const sm9Tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
+  const sm9Hit = id => { const b = smTool(id); if (!b) return 'missing'; const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e && b.contains(e) ? '' : 'its centre hits ' + (e ? (e.dataset && e.dataset.tool) || e.id || e.tagName : 'nothing'); };
+
+  test('simple P2.3 · S9 option E: a main video clip’s tray is Length, Audio, Move earlier, Move later, Lift off, Duplicate, Crop, Replace, More and 🗑 (Speed, Volume, Reverse and Take sound out are inside Audio): on a PC it lies on TWO rows of five, every tool on show, at 1280×800 and 1024×600; on a phone one row with Audio reachable; next to a gap it is eleven tools and says so by keeping one scrolling row', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    for (const [w, h] of SM9_SIZES) {
+      await sm9At(w, h, async function () {
+        await smP2((W, H) => [smV('C', 5, 3, W, H, { muted: false }), smV('B', 3, 2, W, H, { muted: false }), smV('A', 0, 3, W, H, { muted: false })], async function (v) {
+          FM.selectLayer(v.L('B').id); await v.sleep(150);
+          const t = sm9Tools().slice().sort().join();
+          if (['length', 'audio', 'earlier', 'later', 'lift', 'duplicateClip', 'crop', 'replace', 'more', 'delete'].sort().join() !== t) throw new Error(w + ': the tray holds ' + sm9Tools());
+          ['speed', 'volume', 'reverse', 'takeSound', 'putSound'].forEach(id => { if (smTool(id)) throw new Error(w + ': ' + id + ' is still on the top tray, not inside Audio'); });
+          if (w > 700) {
+            const m = smTrayBMeasure();
+            if (m.rows.join() !== '5,5') throw new Error(w + 'x' + h + ': the clip’s tray is on rows [' + m.rows + '], want [5,5]');
+            if (m.bad.length) throw new Error(w + 'x' + h + ': ' + m.bad.join('; '));
+            if (m.order.slice(-2).join() !== 'more,delete') throw new Error(w + ': More and 🗑 are not last: ' + m.order);
+          } else {
+            ['length', 'audio', 'more', 'delete'].forEach(id => { if (sm9Hit(id)) throw new Error('380: ' + id + ' cannot be pressed — ' + sm9Hit(id)); });
+          }
+        });
+        /* next to a gap there are eleven tools: ceil(11/2) = 6 a row is 324 px in a 306 px band, so the tray keeps its one scrolling row (a known limit, not a surprise) */
+        await smP2((W, H) => [smV('C', 6, 3, W, H, { muted: false }), smV('B', 3, 2, W, H, { muted: false }), smV('A', 0, 3, W, H, { muted: false })], async function (v) {
+          FM.selectLayer(v.L('B').id); await v.sleep(150);
+          if (!smTool('seam')) throw new Error('CONTROL: B has a gap after it and the tray offers no Close gap: ' + sm9Tools());
+          if (w > 700 && smTrayBMeasure().rows.join() !== '11') throw new Error(w + 'x' + h + ': eleven tools should stay on one row, got [' + smTrayBMeasure().rows + ']');
+          const tray = document.getElementById('sm-tray'); tray.scrollLeft = 0; await v.sleep(30);
+          if (sm9Hit('audio') || sm9Hit('length')) throw new Error(w + ': Length or Audio is not reachable beside a gap: ' + sm9Hit('audio') + ' ' + sm9Hit('length'));
+        });
+      });
+    }
+  });
+
+  test('simple P2.3 · S9 option E: the open Audio row is Done, Speed, Volume, Reverse and Take sound out, every button inside the band with its words inside it and nothing to scroll to, at 1280×800, 1024×600 and 380; Done from Speed or Volume comes back to it, Reverse presses in one step, Take sound out makes the twin and the row offers Put sound back', { item: '980', budgetMs: 240000 }, async function () {
+    smNeedP2();
+    for (const [w, h] of SM9_SIZES) {
+      await sm9At(w, h, async function () {
+        await smFakeLoad(() => smP2((W, H) => [smV('Z', 6, 3, W, H), smV('A', 0, 6, W, H, { muted: false })], async function (v) {
+          const S = FM.spine, tray = () => document.getElementById('sm-tray');
+          const asked = [], real = FM.ensureReverseCache, realClr = FM.maybeClearCache;
+          FM.ensureReverseCache = async function (l) { asked.push(l.id); };
+          FM.maybeClearCache = function () {};
+          try {
+            FM.selectLayer(v.L('A').id); await v.sleep(120);
+            await smOpenAudio(v);
+            if (sm9Tools().join() !== 'rowBack,speed,volume,reverse,takeSound') throw new Error(w + ': the Audio row holds ' + sm9Tools());
+            const t = tray();
+            if (t.scrollWidth > t.clientWidth + 1) throw new Error(w + 'x' + h + ': the Audio row scrolls sideways (' + t.scrollWidth + ' px in ' + t.clientWidth + '): its last button is cut');
+            if (w > 700) { const m = smTrayBMeasure(); if (m.bad.length) throw new Error(w + 'x' + h + ': ' + m.bad.join('; ')); }
+            const tr = t.getBoundingClientRect();
+            Array.from(t.querySelectorAll('.sm-tool')).forEach(b => {
+              const r = b.getBoundingClientRect(), l = b.querySelector('.sm-tool-l');
+              if (r.right > tr.right + 0.5 || r.left < tr.left - 0.5) throw new Error(w + ': ' + b.dataset.tool + ' lies outside the tray (' + r.left.toFixed(1) + '–' + r.right.toFixed(1) + ' in ' + tr.left.toFixed(1) + '–' + tr.right.toFixed(1) + ')');
+              if (l && l.scrollWidth > l.clientWidth + 0.5) throw new Error(w + ': the words “' + l.textContent + '” are cut (' + l.scrollWidth + ' in ' + l.clientWidth + ')');
+              if (r.width < 44 - 0.5) throw new Error(w + ': ' + b.dataset.tool + ' is ' + r.width.toFixed(1) + ' px wide');
+            });
+            /* Take sound out → the twin, and the row's last button becomes Put sound back */
+            const n1 = v.steps();
+            smTool('takeSound').click(); await v.idle(); await v.sleep(100);
+            if (!FM.scene.layers.some(l => l.sm && l.sm.twin === true && l.audioOnly === true) || v.steps() !== n1 + 1) throw new Error(w + ': Take sound out from the Audio row made no twin or took ' + (v.steps() - n1) + ' steps (' + v.say() + ')');
+            if (!smTool('putSound') || smTool('takeSound')) throw new Error(w + ': the row should now offer Put sound back: ' + sm9Tools());
+            smTool('putSound').click(); await v.idle(); await v.sleep(80);
+            if (FM.scene.layers.some(l => l.sm && l.sm.twin === true)) throw new Error(w + ': Put sound back left the twin');
+            /* Speed and Volume open their own rows and Done comes back HERE, not to the clip's tray */
+            for (const id of ['speed', 'volume']) {
+              smTool(id).click(); await v.sleep(100);
+              if (!smTool('rowBack') || smTool('audio') || sm9Tools().indexOf('reverse') >= 0) throw new Error(w + ': ' + id + ' did not open its own row (' + sm9Tools() + ')');
+              smTool('rowBack').click(); await v.sleep(100);
+              if (sm9Tools().join() !== 'rowBack,speed,volume,reverse,takeSound') throw new Error(w + ': Done from ' + id + ' did not come back to Audio (' + sm9Tools() + ')');
+            }
+            /* Reverse: one step, pressed in, goes back with one more */
+            const n0 = v.steps();
+            smTool('reverse').click(); await v.idle();
+            if (!v.L('A').reversed || v.steps() !== n0 + 1) throw new Error(w + ': Reverse from the Audio row took ' + (v.steps() - n0) + ' steps (reversed ' + v.L('A').reversed + ')');
+            if (smTool('reverse').getAttribute('aria-pressed') !== 'true') throw new Error(w + ': Reverse does not show as pressed');
+            smTool('reverse').click(); await v.idle();
+            if (v.L('A').reversed || v.steps() !== n0 + 2) throw new Error(w + ': Reverse did not go back with one more press');
+            /* Done leaves for the clip's own tray */
+            smTool('rowBack').click(); await v.sleep(100);
+            if (!smTool('audio') || !smTool('length')) throw new Error(w + ': Done from Audio did not return to the clip’s tray (' + sm9Tools() + ')');
+          } finally { FM.ensureReverseCache = real; FM.maybeClearCache = realClr; }
+        }, { media: [{ name: 'A', rec: smRec(10, 'a.mp4', { width: 320, height: 240 }) }] }));
+      });
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
@@ -122494,6 +122583,8 @@
      (D17 B) (queue 980 (partial); BUILD-PLAN-PHASE2.md §4) ═══════════════════════════════════════════════════════════ */
   const smPng = (color, name) => new Promise(res => { const c = offscreen(32, 32), x = c.getContext('2d'); x.fillStyle = color; x.fillRect(0, 0, 32, 32); c.toBlob(b => res(new File([b], name || color.slice(1) + '.png', { type: 'image/png' })), 'image/png'); });
   const smTool = id => document.querySelector('#sm-tray .sm-tool[data-tool="' + id + '"]') || document.querySelector('#sm-tools .sm-tool[data-tool="' + id + '"]');
+  /* S9 (option E): a main video clip's Speed, Volume, Reverse and Take sound out live in ONE row, opened by the Audio tool. This opens it. */
+  async function smOpenAudio(v) { if (!smTool('audio')) throw new Error('the clip’s tray has no Audio tool (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')'); smTool('audio').click(); await v.sleep(100); }
   const smTops = ids => ids.map(id => { const e = document.getElementById(id); return e ? Math.round(e.getBoundingClientRect().top) : NaN; });
 
   async function smTrayCheck(width) {
@@ -123151,7 +123242,7 @@
           if (width > 700) {
             tray.dispatchEvent(new WheelEvent('wheel', { deltaY: 600, bubbles: true, cancelable: true })); await v.sleep(30);
             if (tray.scrollWidth - tray.clientWidth > 1 && Math.abs(tray.scrollLeft - (tray.scrollWidth - tray.clientWidth)) > 1) throw new Error('1280 px: a mouse wheel does not scroll the tray (scrollLeft ' + tray.scrollLeft + ' of ' + (tray.scrollWidth - tray.clientWidth) + ')');
-            ['replace', 'reverse', 'seam'].forEach(id => { if (hits(id)) throw new Error('1280 px: after the wheel, ' + id + ' still cannot be clicked — ' + hits(id)); });
+            ['replace', 'seam'].forEach(id => { if (hits(id)) throw new Error('1280 px: after the wheel, ' + id + ' still cannot be clicked — ' + hits(id)); });
           }
         });
       }, width);
@@ -123845,7 +123936,9 @@
       const R = S.read(FM.scene);
       if ((R.lanes.audio || []).some(l => l.indexOf(tw().id) >= 0)) throw new Error('the twin still has a place in the Sound row (it belongs to its clip)');
       if (!document.querySelector('#sm-main .sm-item[data-id="' + v.L('A').id + '"] .sm-twinband')) throw new Error('the clip does not draw the twin as a band along its bottom edge');
-      if (!document.querySelector('#sm-tray [data-tool="putSound"]') || document.querySelector('#sm-tray [data-tool="takeSound"]')) throw new Error('the tray should now offer Put sound back, not Take sound out');
+      await smOpenAudio(v);
+      if (!document.querySelector('#sm-tray [data-tool="putSound"]') || document.querySelector('#sm-tray [data-tool="takeSound"]')) throw new Error('the Audio row should now offer Put sound back, not Take sound out');
+      smTool('rowBack').click(); await sleep(60);
       /* a tail trim, then a head trim */
       S.cmd.trimTail(v.L('A').id, 4, { key: true }); await v.idle(); inStep('after a tail trim to 4 s');
       FM.selectLayer(v.L('A').id); S.cmd.trimHead(v.L('A').id, 1, { key: true }); await v.idle(); inStep('after a head trim to 1 s');
@@ -123917,7 +124010,8 @@
     await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
       const B = v.L('B'), C = v.L('C');
       FM.selectLayer(B.id); await v.sleep(100);
-      if (!smTool('speed')) throw new Error('the clip’s tray has no Speed (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+      await smOpenAudio(v);
+      if (!smTool('speed')) throw new Error('the Audio row has no Speed (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
       smTool('speed').click(); await v.sleep(100);
       const tray = document.getElementById('sm-tray');
       ['rowBack', 'sp0.5', 'sp1', 'sp1.5', 'sp2', 'sp3'].forEach(id => { if (!smTool(id)) throw new Error('the Speed row has no ' + id + ': ' + Array.from(tray.querySelectorAll('button')).map(b => b.dataset.tool)); });
@@ -123940,7 +124034,7 @@
       /* a ramped clip: the row says so and offers the one way out, which keeps the length */
       const Bl = v.L('B'); Bl.speed = smKf([[Bl.start, 1], [Bl.start + 1, 2]]); FM.refreshAll(); await v.sleep(100);
       FM.selectLayer(null); FM.selectLayer(Bl.id); await v.sleep(100);
-      smTool('speed').click(); await v.sleep(100);
+      await smOpenAudio(v); smTool('speed').click(); await v.sleep(100);
       if (!smTool('oneSpeed') || tray.querySelector('.sm-speed-r')) throw new Error('a ramped clip’s Speed row should offer Use one speed and no slider');
       const len0 = v.L('B').duration, n1 = v.steps();
       smTool('oneSpeed').click(); await v.idle();
@@ -123952,7 +124046,7 @@
     await smFakeLoad(() => smP2((W, H) => [smV('B', 3, 3, W, H, { muted: false }), smV('A', 0, 3, W, H, { muted: false, volume: smKf([[0, 1], [1.5, 0.4], [3, 1]]) })], async function (v) {
       const S = FM.spine;
       FM.selectLayer(v.L('A').id); FM.time = 0; await v.sleep(100);
-      smTool('volume').click(); await v.sleep(100);
+      await smOpenAudio(v); smTool('volume').click(); await v.sleep(100);
       const rng = document.querySelector('#sm-tray .sm-vol-r');
       if (!rng) throw new Error('the Volume row has no slider');
       const n0 = v.steps();
@@ -123993,7 +124087,7 @@
       try {
         const B = v.L('B'), doc0 = v.doc(), n0 = v.steps();
         FM.selectLayer(B.id); await v.sleep(100);
-        smTool('reverse').click(); await v.idle();
+        await smOpenAudio(v); smTool('reverse').click(); await v.idle();
         const strip = JSON.stringify(FM.scene.layers.map(l => [l.name, l.start, l.duration, l.trimStart, l.volume && l.volume.kf && l.volume.kf.map(k => k.t)]));
         if (!v.L('B').reversed) throw new Error('Reverse did not flip the clip (it said “' + v.say() + '”)');
         if (v.steps() !== n0 + 1) throw new Error('Reverse took ' + (v.steps() - n0) + ' undo steps, not 1');
@@ -124128,7 +124222,7 @@
     await smP2((W, H) => [smSong('Song', 0, 8, W, H), smV('O', 1, 2, W, H, { muted: false }), smPic('P', 6, 3, W, H), smV('V', 0, 6, W, H, { muted: false })], async function (v) {
       const tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
       const has = (want, absent, who) => { const t = tools(); want.forEach(w => { if (t.indexOf(w) < 0) throw new Error(who + ': the tray is missing ' + w + ' (' + t + ')'); }); (absent || []).forEach(w => { if (t.indexOf(w) >= 0) throw new Error(who + ': the tray should not offer ' + w + ' (' + t + ')'); }); };
-      FM.selectLayer(v.L('V').id); await v.sleep(100); has(['speed', 'volume', 'replace', 'reverse'], [], 'a video clip');
+      FM.selectLayer(v.L('V').id); await v.sleep(100); has(['audio', 'replace'], ['speed', 'volume', 'reverse', 'takeSound', 'putSound'], 'a video clip'); await smOpenAudio(v); has(['rowBack', 'speed', 'volume', 'reverse'], ['audio', 'replace'], 'the Audio row'); smTool('rowBack').click(); await v.sleep(60);
       FM.selectLayer(v.L('P').id); await v.sleep(100); has(['replace'], ['speed', 'volume', 'reverse', 'takeSound', 'putSound'], 'a picture clip');
       FM.selectLayer(v.L('O').id); await v.sleep(100); has(['volume', 'speed'], ['reverse', 'takeSound'], 'an overlay video');
       FM.selectLayer(v.L('Song').id); await v.sleep(100); has(['volume', 'fade', 'stay'], ['reverse', 'replace', 'takeSound'], 'a song');
