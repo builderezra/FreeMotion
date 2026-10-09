@@ -222,7 +222,7 @@ window.FM = window.FM || {};
   const HOLD_MS = 350, SLOP = 8, MOUSE_SLOP = 4, LIFT_PX = 24, LIFT_MS = 150, EDGE_MAX = 22, SCROLL_FRAMES_MAX = 1200, GRIP_HIT = 24, GRIP_CAP = 13, SNAP_PX = 7, STALE_MS = 4000;
   let G = null, swallowUntil = 0, labelEl = null, pinch = null;
   const touches = new Map();
-  const gateOf = id => (FM.spine && FM.spine.canArrange) ? FM.spine.canArrange(id) : null;
+  const gateOf = (id, look) => (FM.spine && FM.spine.canArrange) ? FM.spine.canArrange(id, look ? { look: true } : null) : null;
   const hardGate = r => !!r && r !== 'locked';   // 'locked' does not stop a drag: the runner asks at the release, with its own Do it anyway
   const nowMs = () => performance.now();
   const clientToT = x => { const r = scroller.getBoundingClientRect(); return (x - r.left + scroller.scrollLeft - origin()) / pps(); };
@@ -290,11 +290,12 @@ window.FM = window.FM || {};
   }
   function onGripDown(e) {
     if (e.button > 0 || G || pinch || !R) return;
-    const gp = e.currentTarget, id = gp.dataset.id, L = FM.layerById(FM.scene, id), e0 = R.main.find(x => !x.slot && x.id === id);
-    if (!L || !e0) return;
+    const gp = e.currentTarget, id = gp.dataset.id, L = FM.layerById(FM.scene, id), me = R.main.find(x => !x.slot && x.id === id);
+    if (!L) return;
+    const e0 = me || { start: +L.start || 0, end: (+L.start || 0) + (+L.duration || 0) };   // 2.5b: an item's span is its own
     e.stopPropagation(); e.preventDefault();
-    const r = gateOf(id); if (hardGate(r)) { FM.spine.explain(r, id); return; }
-    G = { kind: 'trim', phase: 'drag', side: gp.dataset.side, id: id, pid: e.pointerId, ptype: e.pointerType || 'mouse', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, node: nodeOf(id), capEl: gp,
+    const r = gateOf(id, !me); if (hardGate(r)) { FM.spine.explain(r, id); return; }
+    G = { kind: 'trim', phase: 'drag', side: gp.dataset.side, id: id, main: !!me, pid: e.pointerId, ptype: e.pointerType || 'mouse', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, node: root.querySelector('.sm-item[data-id="' + id + '"]'), capEl: gp,
           scrollFrames: 0, edgeScrolled: false, raf: 0, timer: 0, start0: +L.start || 0, dur0: +L.duration || 0, entry: e0, projDur0: (FM.scene.project && FM.scene.project.duration) || 0, touchAt: nowMs(), dirty: false, moved: false, edge: null };
     try { gp.setPointerCapture(e.pointerId); } catch (er) {}
     window.addEventListener('pointermove', onMove, true); window.addEventListener('pointerup', onUp, true); window.addEventListener('pointercancel', onCancel, true);
@@ -414,7 +415,7 @@ window.FM = window.FM || {};
       refreshNodes(); FM.spine.say(((W().lines || {}).changedWhileDragging) || 'Clips changed while you were dragging · try again'); return;
     }
     let ran;
-    if (o.kind === 'trim') ran = o.side === 'tail' ? FM.spine.cmd.trimTail(id, o.edge) : FM.spine.cmd.trimHead(id, o.edge);
+    if (o.kind === 'trim') ran = !R2.isMain(id) ? FM.spine.cmd.trimItem(id, o.side, o.edge) : (o.side === 'tail' ? FM.spine.cmd.trimTail(id, o.edge) : FM.spine.cmd.trimHead(id, o.edge));
     else if (o.mode === 'lift') ran = FM.spine.cmd.lift(id);
     else if (o.mode === 'drop') ran = FM.spine.cmd.intoRow(id);
     else if (o.main) { const i = R2.main.findIndex(x => x.id === id); if (o.j < 0 || o.j === i || o.j === i + 1) { refreshNodes(); return; } ran = FM.spine.cmd.moveTo(id, o.j); }
@@ -447,15 +448,23 @@ window.FM = window.FM || {};
   function drawGrips(byId, sel, xOf, p) {
     root.querySelectorAll('.sm-grip').forEach(g => g.remove());
     if (sel.size !== 1) return;
-    const id = Array.from(sel)[0], e = R.main.find(x => !x.slot && x.id === id), L = byId.get(id);
-    if (!e || !L || L.type === 'group') return;
-    if (hardGate(gateOf(id))) return;
-    const w = (e.end - e.start) * p; if (w < GRIP_HIT) return;
-    [['head', xOf(e.start) - GRIP_CAP, (W().tools || {}).trimStart || 'Trim the start'], ['tail', xOf(e.end) - (GRIP_HIT - GRIP_CAP), (W().tools || {}).trimEnd || 'Trim the end']].forEach(a => {
+    const id = Array.from(sel)[0], me = R.main.find(x => !x.slot && x.id === id), L = byId.get(id), u = R.units[id];
+    if (!L || L.type === 'group') return;
+    /* 2.5b: a main clip has grips (a trim that ripples); so does a text, overlay or sound in its section or the sound row (a trim that moves nothing else, gated as a look). Not a
+       caption track, a block, a Full-only thing, a clip still loading or a sound taken out of a clip (it trims with its clip). */
+    if (!me && (!u || ['text', 'overlay', 'audio', 'effect'].indexOf(u.kind) < 0 || (L.sm && L.sm.twin) || L.type === 'camera')) return;
+    if (hardGate(gateOf(id, !me))) return;
+    const node = me ? null : root.querySelector('.sm-item[data-id="' + id + '"]');
+    if (!me && !node) return;
+    const start = me ? me.start : (+L.start || 0), end = me ? me.end : start + (+L.duration || 0);
+    const w = (end - start) * p; if (w < GRIP_HIT) return;
+    const host = me ? mainEl : node.parentNode;
+    [['head', xOf(start) - GRIP_CAP, (W().tools || {}).trimStart || 'Trim the start'], ['tail', xOf(end) - (GRIP_HIT - GRIP_CAP), (W().tools || {}).trimEnd || 'Trim the end']].forEach(a => {
       const g = el('div', 'sm-grip sm-grip-' + a[0]); g.dataset.id = id; g.dataset.side = a[0]; g.style.left = a[1] + 'px'; g.style.width = GRIP_HIT + 'px';
+      if (!me) { g.classList.add('sm-grip-item'); g.style.top = node.offsetTop + 'px'; g.style.height = node.offsetHeight + 'px'; }
       g.setAttribute('aria-label', a[2]); g.title = a[2]; g.setAttribute('role', 'button');
       g.addEventListener('pointerdown', onGripDown);
-      mainEl.appendChild(g);
+      host.appendChild(g);
     });
   }
 
@@ -556,7 +565,6 @@ window.FM = window.FM || {};
         chip.addEventListener('click', ev => { ev.stopPropagation(); if (FM.spine.cmd) FM.spine.cmd.closeSeam(e.id); });   // Phase 2: Close gap / Fix
         mainEl.appendChild(chip);
       });
-      drawGrips(byId, sel, xOf, p);   // 2.5: the selected clip's two trim grips
       // + at the end of the clip row: pick files, laid END TO END from the end of the main track (§15.1)
       const add = el('button', 'sm-add', '+');
       add.type = 'button';
@@ -591,6 +599,7 @@ window.FM = window.FM || {};
         more.title = (sl.length - 1) + ' more';
         soundEl.appendChild(more);
       }
+      drawGrips(byId, sel, xOf, p);   // 2.5: the selected clip's two trim grips (2.5b: and an item's: after the sound row is drawn, which an item's grips sit in)
       // selected items first for the roving tab stop (§8.10 item 3)
       const first = root.querySelector('.sm-item.sel') || mainEl.querySelector('.sm-item');
       if (first) first.tabIndex = 0;
