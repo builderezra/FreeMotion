@@ -1,0 +1,25 @@
+=== V1_chip_on_every_seam
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T7 — 1280: a clip after a gap has a ◇
+=== V2_chip_over_items
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T8 — 1280: a press on the title lands on the ◇ (sm-chip sm-chip-tr)
+=== V3_chip_before_sections_lost
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T8 — 1280: a press on the title lands on the ◇ (sm-chip sm-chip-tr)
+=== V4_always_filled
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T8 — 1280: a ◇ shows as filled with no transition set
+=== V5_blend_chip_no_select
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T10 — the ◇ on a crossfade did not select the clip that fades in
+=== V6_chip_tap_no_row
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T8 — 1280: the tap did not open the Transition row on Crossfade
+ALLDONE

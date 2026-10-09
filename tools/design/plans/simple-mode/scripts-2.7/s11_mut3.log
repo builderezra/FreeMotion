@@ -1,0 +1,21 @@
+=== W1_keys_kept
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T10 — the fade keys are still there: {"kf":[{"t":5,"v":0,"e":"linear"},{"t":6,"v":1,"e":"linear"}]}
+=== W2_no_head_trim
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T10 — they did not meet in the middle: C 0+5.5, N starts 5
+=== W3_no_tail_trim
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T10 — they did not meet in the middle: C 0+6, N starts 5.5
+=== W4_no_trin
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T10 — trIn is undefined
+=== W5_tool_always
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T10 — the first clip offers Turn into a transition
+ALLDONE

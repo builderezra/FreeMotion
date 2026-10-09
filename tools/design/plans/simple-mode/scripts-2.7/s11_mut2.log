@@ -1,0 +1,29 @@
+=== Z1_dip_always_full
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T3 — dipblack a quarter in: 0,0,0, want red halfway to the colour 128,0,0
+=== Z2_crossfade_top_out
+   baseline green ✅ (1 named title(s) ran and passed)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+=== Z3_closed_end
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T1 — the window did not close at cut + d/2 (half-open)
+=== Z4_no_clamp
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T4 — past the end of the source the handle should hold at 2.05, got 2.399999999
+=== Z5_seek_inside
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T4 — at 1.8 s B (trimStart 1, window opens at 1.5) should be seeked to its handle 0.8: A@1.8,B@0.8
+=== Z6_no_deff
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T1 — d_eff for d = 3 on two 2 s clips is 3, want 1 (half the shorter)
+=== Z7_no_proxy_alpha
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T2 — at the cut the picture is not half red, half green (0,255,0)
+ALLDONE

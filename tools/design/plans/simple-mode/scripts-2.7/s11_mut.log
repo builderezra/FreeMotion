@@ -1,0 +1,33 @@
+=== Y1_no_drop_rule
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T6 — C kept a transition whose cut (B|C) no longer exists
+=== Y2_no_clamp
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T5 — length is not clamped to 3 s: {"type":"dipblack","d":99}
+=== Y3_gap_allowed
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T5 — a gap seam must refuse
+=== Y4_chip_on_every_join
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T8 — Cannot read properties of undefined (reading 'type')
+=== Y5_tool_everywhere
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILsimple P2.7 · T7 — 1280: the first clip has nothing before it, yet it offers Transition
+=== Y6_no_stamp
+   baseline green ✅ (1 named title(s) ran and passed)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+=== Y7_copy_keeps
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T9 — a copy carries trIn on route duplicate
+=== Y8_all_hits_gap
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILsimple P2.7 · T7 — 1280: On every cut crossed a gap or hit the first clip
+ALLDONE

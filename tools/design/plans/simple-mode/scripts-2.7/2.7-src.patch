@@ -1,0 +1,639 @@
+diff --git a/index.html b/index.html
+index 86339d85..eeb3d9a0 100644
+--- a/index.html
++++ b/index.html
+@@ -39,7 +39,7 @@
+      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
+      in styles.css takes over immediately after and lets classic/glass each set their own. -->
+ <style>html,body{background:#060c0f}</style>
+-<link rel="stylesheet" href="styles.css?v=760">
++<link rel="stylesheet" href="styles.css?v=764">
+ <link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+ <link rel="manifest" href="manifest.json?v=2">
+ <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
+@@ -602,6 +602,7 @@
+       <div id="sm-timeline" role="group" aria-label="Timeline">
+         <div id="sm-scroll"><div id="sm-inner">
+           <div id="sm-ruler" aria-hidden="true"></div>
++          <div id="sm-trlane"></div>
+           <div id="sm-sections"></div>
+           <div id="sm-main"></div>
+           <div id="sm-sound"></div>
+@@ -1075,32 +1076,33 @@
+   <script src="js/settings.js?v=51"></script>
+   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
+        rest of the collab modules are pure libraries and sit at the end of the list. -->
+-  <script src="js/collab-core.js?v=24"></script>
++  <script src="js/collab-core.js?v=25"></script>
+   <script src="js/statusbar.js?v=4"></script>
+   <script src="js/screen.js?v=1"></script>
+   <script src="js/scene.js?v=120"></script>
+-  <script src="js/spine-words.js?v=7"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
+-  <script src="js/spine.js?v=3"></script>         <!-- Simple mode P1: FM.spine, the read side — after scene.js, before compositor/storage -->
+-  <script src="js/spine-edit.js?v=6"></script>    <!-- Simple mode P2: FM.spine.edit, the runner and the commands — after spine.js -->
++  <script src="js/spine-words.js?v=10"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
++  <script src="js/transitions.js?v=1"></script>   <!-- Simple mode 2.7: FM.transitionAt / handleLocalTime (DESIGN §12.1) — after scene.js -->
++  <script src="js/spine.js?v=5"></script>         <!-- Simple mode P1: FM.spine, the read side — after scene.js, before compositor/storage -->
++  <script src="js/spine-edit.js?v=9"></script>    <!-- Simple mode P2: FM.spine.edit, the runner and the commands — after spine.js -->
+   <script src="js/eases.js?v=3"></script>
+   <script src="js/masks.js?v=6"></script>
+-  <script src="js/behaviors.js?v=6"></script>
++  <script src="js/behaviors.js?v=7"></script>
+   <script src="js/media.js?v=54"></script>
+   <script src="js/blend-modes.js?v=1"></script>
+   <script src="js/gl-warp.js?v=4"></script>
+   <script src="js/gl-color.js?v=5"></script>
+-  <script src="js/compositor.js?v=212"></script>
++  <script src="js/compositor.js?v=213"></script>
+   <script src="js/fx-registry.js?v=25.31"></script>
+   <script src="js/filters.js?v=19"></script>
+   <script src="js/fx-presets.js?v=12"></script>
+   <script src="js/fx-thumbs.js?v=54"></script>
+   <script src="js/timeline.js?v=262"></script>
+-  <script src="js/simple-timeline.js?v=7"></script>   <!-- Simple mode P1: FM.simpleTimeline, read-only; after timeline.js -->
++  <script src="js/simple-timeline.js?v=11"></script>   <!-- Simple mode P1: FM.simpleTimeline, read-only; after timeline.js -->
+   <script src="js/tilefit.js?v=1"></script>
+   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
+   <script src="js/addmenu.js?v=83"></script>
+   <script src="js/inspector.js?v=413"></script>
+-  <script src="js/simple-tools.js?v=5"></script>   <!-- Simple mode P2.2: FM.simpleTools, the tray row and the project tools (D10) — after inspector.js -->
++  <script src="js/simple-tools.js?v=8"></script>   <!-- Simple mode P2.2: FM.simpleTools, the tray row and the project tools (D10) — after inspector.js -->
+   <script src="js/fx-browser.js?v=98"></script>
+   <script src="js/elements-browser.js?v=4"></script>
+   <script src="js/color-wheel.js?v=53"></script>
+@@ -1124,7 +1126,7 @@
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+   <script src="js/history.js?v=38"></script>
+-  <script src="js/storage.js?v=59"></script>
++  <script src="js/storage.js?v=60"></script>
+   <script src="js/export-resume.js?v=7"></script>
+   <script src="js/medialib.js?v=8"></script>
+   <script src="js/template-fill.js?v=4"></script>
+@@ -1133,7 +1135,7 @@
+   <script src="js/graph-editor.js?v=18"></script>
+   <script src="js/gif-encode.js?v=1"></script>
+   <script src="js/zip-write.js?v=1"></script>
+-  <script src="js/exporter.js?v=126"></script>
++  <script src="js/exporter.js?v=127"></script>
+   <script src="js/sample.js?v=10"></script>
+   <script src="js/contextmenu.js?v=49"></script>
+   <script src="js/ask.js?v=4"></script>
+@@ -1142,7 +1144,7 @@
+   <script src="js/captions.js?v=60"></script>
+   <script src="js/audio-health.js?v=6"></script>
+   <script src="js/editor-mode.js?v=5"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
+-  <script src="js/app.js?v=475"></script>
++  <script src="js/app.js?v=476"></script>
+   <script src="js/audio-tools.js?v=7"></script>
+   <script src="js/loading.js?v=3"></script>
+   <script src="js/sfx.js?v=19"></script>
+diff --git a/js/app.js b/js/app.js
+index 00731c0d..615e7d35 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -1305,6 +1305,14 @@ window.FM = window.FM || {};
+       if (Math.abs(cur - target) < (exact ? 0.001 : (0.5 / (FM.scene.project.fps || 30)))) return;
+       try { m.el.currentTime = target; } catch (e) {}
+     });
++    /* 2.7: …and the picture of a clip in a transition that is outside its own window (the exporter reads the same list) */
++    if (FM.transitionSeeks) FM.transitionSeeks(FM.scene, FM.time).forEach(s => {
++      const m = FM.media.get(s.layer.id);
++      if (!m || !m.el || (FM.seekBusy && FM.seekBusy(m))) return;
++      const target = FM.frameSeekTarget ? FM.frameSeekTarget(s.local, m.duration) : Math.min(Math.max(s.local, 0), Math.max(0, (m.duration || 0) - 0.001));
++      if (Math.abs((m.el.currentTime || 0) - target) < (exact ? 0.001 : (0.5 / (FM.scene.project.fps || 30)))) return;
++      try { m.el.pause(); m.el.muted = true; m.el.currentTime = target; } catch (e) {}
++    });
+   };
+ 
+   // Small status toast. AUTO-HIDES by default (omitting ms used to mean sticky — which left every
+@@ -2242,6 +2250,17 @@ window.FM = window.FM || {};
+           || (FM.soloSilenced && FM.soloSilenced(layer));
+         if (local == null || hiddenHere) {
+           if (local == null && !hiddenHere && prerollAtSeam(layer, m, now)) return;   // the next half of a split, starting early and muted (queue 690)
++          /* 2.7: a clip OUTSIDE its own window but inside a transition's overhang: silent (sound is picture-only, it hard-cuts at the cut as ever) and seeked for its
++             picture, the way a scrub is: the same list the paused preview and the exporter read (FM.transitionSeeks) */
++          if (local == null && !hiddenHere && FM.transitionSeeks) {
++            const sk = FM.transitionSeeks(FM.scene, FM.time).find(x => x.layer === layer);
++            if (sk && !(FM.seekBusy && FM.seekBusy(m))) {
++              try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {}
++              const tg = FM.frameSeekTarget ? FM.frameSeekTarget(sk.local, m.duration) : Math.min(Math.max(sk.local, 0), Math.max(0, (m.duration || 0) - 0.001));
++              if (Math.abs((m.el.currentTime || 0) - tg) >= 0.5 / (FM.scene.project.fps || 30)) { try { m.el.currentTime = tg; } catch (e) {} }
++              return;
++            }
++          }
+           try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return;
+         }
+         try {
+diff --git a/js/behaviors.js b/js/behaviors.js
+index 9ae055fd..2e4b3a67 100644
+--- a/js/behaviors.js
++++ b/js/behaviors.js
+@@ -285,6 +285,6 @@ window.FM = window.FM || {};
+   // Opacity resolves through the same pipeline, clamped to [0,1]. Matches the old inline expression
+   // clamp01(FM.evalProp(layer.transform.opacity, t)) exactly when the layer has no behaviors.
+   FM.layerOpacity = function (layer, t) {
+-    return clamp01(FM.behaviorValue(layer, 'opacity', FM.evalProp(layer.transform.opacity, t), t));
++    return clamp01(FM.behaviorValue(layer, 'opacity', FM.evalProp(layer.transform.opacity, t), t)) * (layer.__trA == null ? 1 : layer.__trA);   // 2.7: a layer drawn through a transition proxy carries its blend (js/transitions.js); absent on every other layer
+   };
+ })(window.FM);
+diff --git a/js/collab-core.js b/js/collab-core.js
+index c8c1fef4..ad5933fc 100644
+--- a/js/collab-core.js
++++ b/js/collab-core.js
+@@ -45,7 +45,7 @@ window.FM = window.FM || {};
+      sanitiser now puts `layer.sm`, `project.sm`, an effect's `sm` marker and the plain helper fields (srcW/srcH/srcRev, pick) in
+      canonical form. A rev-7 build keeps them untouched, so the two would normalise one project to two documents; the fixture
+      below carries each, and SM_V is hashed in. */
+-  C.SCHEMA_REV = 8;
++  C.SCHEMA_REV = 9;
+ 
+   C.active = false;      // no session is running
+   C.role = 'owner';
+@@ -254,7 +254,7 @@ window.FM = window.FM || {};
+ 
+   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
+      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
+-  C.SCHEMA_FP = 8673617696742561;   // Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate` on this tree
++  C.SCHEMA_FP = 6484757361590586;   // Simple mode 2.7 (SCHEMA_REV 9, SM_V 2: layer.sm.trIn kept by the sanitiser); was 8673617696742561 at SCHEMA_REV 8 (Simple mode P1): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate` on this tree
+ 
+   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
+    *
+diff --git a/js/compositor.js b/js/compositor.js
+index 2ce6ab5c..97f3f6dd 100644
+--- a/js/compositor.js
++++ b/js/compositor.js
+@@ -18900,6 +18900,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
+       if (L.type === 'group') return null;   // a group that is not a unit rasterises nothing of its own
+       return FM.isLayerVisibleAt(L, t) ? L : null;
+     });
++    const _tr = FM.transitionAt ? FM.transitionAt(scene, t) : null;   // 2.7: the one transition pass (js/transitions.js); null on every project without a trIn
+     for (let i = scene.layers.length - 1; i >= 0; i--) {
+       const L = scene.layers[i];
+       if (soloActive && !L.solo) continue;
+@@ -18921,7 +18922,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
+           L._bgSnap.__fmRS = target.canvas.__fmRS || 1; L._bgSnap.__fmOX = target.canvas.__fmOX || 0; L._bgSnap.__fmOY = target.canvas.__fmOY || 0;
+           L._bgSnap.__fmCamExt = !!target.canvas.__fmCamExt;
+         }
+-        drawLayer(target, L, t, scene);
++        if (_tr && (L === _tr.out || L === _tr.inc)) {
++          /* a clip in a transition draws through its proxy (own window reaching t, blend alpha); a dip's other half is simply not drawn, and the dip colour
++             goes over the pair right after the one drawn on top, so layers above it (titles) are not dipped */
++          if ((L === _tr.out ? _tr.aOut : _tr.aInc) > 0) drawLayer(target, FM.transitionProxy(L, _tr, t), t, scene);
++          if (L === _tr.top && _tr.dip && _tr.dipA > 0) {
++            target.save(); baseT(target); target.globalAlpha = _tr.dipA; target.fillStyle = _tr.dip; target.fillRect(-4 * P.width, -4 * P.height, 9 * P.width, 9 * P.height); target.restore();
++          }
++        } else drawLayer(target, L, t, scene);
+       }
+     }
+     // Isolate mode 2: the chosen layer goes on last, so it reads above everything without its real
+diff --git a/js/exporter.js b/js/exporter.js
+index b16cdd73..67a3f7c1 100644
+--- a/js/exporter.js
++++ b/js/exporter.js
+@@ -269,6 +269,9 @@ window.FM = window.FM || {};
+       const m = FM.media.get(layer.id);
+       if (m) ps.push(seekVideo(m, local, layer.name || layer.type || layer.id));
+     });
++    /* 2.7: a clip in a transition, outside its own window, is seeked for its picture (handles; a held edge frame past the source). The paused preview
++       reads the SAME list (FM.transitionSeeks), so the two cannot disagree. */
++    if (FM.transitionSeeks) FM.transitionSeeks(scene, t).forEach(s => { const m = FM.media.get(s.layer.id); if (m) ps.push(seekVideo(m, s.local, s.layer.name || s.layer.type || s.layer.id)); });
+     await Promise.all(ps);
+   }
+ 
+@@ -1158,6 +1161,7 @@ window.FM = window.FM || {};
+   }
+ 
+   FM.exporter = {
++    seekAllVideos,   // suite seam (2.7): the frame path's own seek, so a test can run the exporter's frame path without encoding
+     prepareCaches,
+     buildAudioMix,
+     encodeM4A,
+diff --git a/js/simple-timeline.js b/js/simple-timeline.js
+index 13bf2798..bc0cc96c 100644
+--- a/js/simple-timeline.js
++++ b/js/simple-timeline.js
+@@ -19,7 +19,7 @@ window.FM = window.FM || {};
+   const SECTIONS = ['captions', 'text', 'overlay', 'behind'];   // top → bottom inside the sections box (stacking order)
+   const GLYPH = { captions: 'Cc', text: 'Aa', overlay: '◧', behind: '▤' };
+   const RULER = 18, MAIN_H = 56, SOUND_H = 32, LANE = 32;
+-  let root = null, scroller = null, inner = null, rulerEl = null, secEl = null, mainEl = null, soundEl = null, sayEl = null, liveEl = null;
++  let root = null, scroller = null, inner = null, trEl = null, rulerEl = null, secEl = null, mainEl = null, soundEl = null, sayEl = null, liveEl = null;
+   let lastProg = -1, userScrollAt = 0, settleT = 0, R = null, strips = new Map();
+ 
+   const pps = () => (FM.timeline && FM.timeline.pxPerSec) ? FM.timeline.pxPerSec() : 100;
+@@ -35,7 +35,7 @@ window.FM = window.FM || {};
+     root = document.getElementById('sm-timeline');
+     if (!root) return false;
+     scroller = root.querySelector('#sm-scroll'); inner = root.querySelector('#sm-inner');
+-    rulerEl = root.querySelector('#sm-ruler'); secEl = root.querySelector('#sm-sections');
++    rulerEl = root.querySelector('#sm-ruler'); trEl = root.querySelector('#sm-trlane'); secEl = root.querySelector('#sm-sections');
+     mainEl = root.querySelector('#sm-main'); soundEl = root.querySelector('#sm-sound');
+     sayEl = document.getElementById('sm-say'); liveEl = document.getElementById('sm-live');
+     // the playhead is FIXED at 50vw and the content scrolls under it, exactly as in Full
+@@ -512,7 +512,7 @@ window.FM = window.FM || {};
+       secEl.appendChild(stack);
+ 
+       // ── the clip row ──
+-      mainEl.textContent = '';
++      mainEl.textContent = ''; trEl.textContent = '';
+       const clips = R.main.filter(e => !e.slot);
+       clips.forEach((e, i) => {
+         const l = byId.get(e.id); if (!l) return;
+@@ -565,6 +565,34 @@ window.FM = window.FM || {};
+         chip.addEventListener('click', ev => { ev.stopPropagation(); if (FM.spine.cmd) FM.spine.cmd.closeSeam(e.id); });   // Phase 2: Close gap / Fix
+         mainEl.appendChild(chip);
+       });
++      const trTop = mainEl.offsetTop - 36;   // the ◇s sit in their own lane above the clip row, clear of the trim grips
++      // 2.7 (DESIGN :522): a ◇ on a BLEND too; it selects the incoming clip, whose tray then offers Turn into a transition
++      R.main.forEach((e, i) => {
++        const l = byId.get(e.id), s = e.seam;
++        if (e.slot || i < 1 || !l || !s || s.kind !== 'blend') return;
++        const chip = el('button', 'sm-chip sm-chip-tr sm-chip-tr-blend', '◇');
++        chip.type = 'button'; chip.dataset.trBlend = e.id;
++        chip.style.left = xOf(e.start + s.amt / 2) + 'px';
++        chip.setAttribute('aria-label', 'Crossfade: turn into a transition'); chip.title = 'Crossfade: turn into a transition';
++        chip.addEventListener('click', ev => { ev.stopPropagation(); FM.selectLayer(e.id); });
++        chip.style.top = trTop + 'px'; trEl.appendChild(chip);
++      });
++      // 2.7 (DESIGN §8.2 "Transition ◇", Phase 6 "◇ at each cut"): a ◇ above every cut that is a clean join between two pictures, filled when the cut carries a
++      // transition. It sits ABOVE the clip row so it never covers a trim grip; tap it to select the incoming clip and open its Transition row.
++      R.main.forEach((e, i) => {
++        const l = byId.get(e.id);
++        if (e.slot || i < 1 || !l || !(FM.spine.joinInto && FM.spine.joinInto(R, e.id))) return;
++        const pl = byId.get(R.main[i - 1].id);
++        if (!pl || !(l.type === 'video' || l.type === 'image' || l.type === 'shape') || !(pl.type === 'video' || pl.type === 'image' || pl.type === 'shape')) return;
++        const chip = el('button', 'sm-chip sm-chip-tr' + (l.trIn ? ' sm-chip-tr-on' : ''), '◇');
++        chip.type = 'button'; chip.dataset.tr = e.id;
++        chip.style.left = xOf(e.start) + 'px';
++        const kind = l.trIn ? ({ crossfade: 'crossfade', dipblack: 'dip to black', dipwhite: 'dip to white' }[l.trIn.type] || '') + ' ' + l.trIn.d.toFixed(1) + ' s' : 'none';
++        const name = 'Transition: ' + kind;
++        chip.setAttribute('aria-label', name); chip.title = name;
++        chip.addEventListener('click', ev => { ev.stopPropagation(); FM.selectLayer(e.id); if (FM.simpleTools && FM.simpleTools.openRow) FM.simpleTools.openRow('transition', e.id); });
++        chip.style.top = trTop + 'px'; trEl.appendChild(chip);   // #sm-trlane comes BEFORE the sections in the document, so it paints UNDER them: a title or overlay at the cut is still what a press lands on
++      });
+       // + at the end of the clip row: pick files, laid END TO END from the end of the main track (§15.1)
+       const add = el('button', 'sm-add', '+');
+       add.type = 'button';
+diff --git a/js/simple-tools.js b/js/simple-tools.js
+index 3e311f49..42d3bcae 100644
+--- a/js/simple-tools.js
++++ b/js/simple-tools.js
+@@ -44,6 +44,7 @@ window.FM = window.FM || {};
+     reverse: '<path d="M11 6l-7 6 7 6zM20 6l-7 6 7 6z"/>',
+     soundout: '<path d="M9 5L4.5 8.5H2v7h2.5L9 19z"/><path d="M13 12h8M18 9l3 3-3 3"/>',
+     soundback: '<path d="M9 5L4.5 8.5H2v7h2.5L9 19z"/><path d="M21 12h-8M16 9l-3 3 3 3"/>',
++    transition: '<rect x="3.5" y="6" width="10" height="12" rx="1.5"/><rect x="10.5" y="6" width="10" height="12" rx="1.5" stroke-dasharray="2.4 2"/>',
+     fade: '<path d="M3.5 18.5L20.5 5.5M3.5 18.5V8M7 18.5v-5M10.5 18.5v-3M14 18.5v-1"/>',
+     mute: '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 9.5l4.5 5M20.5 9.5l-4.5 5"/>'
+   };
+@@ -241,7 +242,8 @@ window.FM = window.FM || {};
+       /* §8.2: a clip next to a gap or an overlap offers Close gap / Fix too (the seam chip's command) */
+       /* its key names the seam it closes, so a double click never runs on into the next seam (the guard in tool()) */
+       const seamTool = (e, s) => ({ id: 'seam', key: 'seam:' + e.id + ':' + s.kind, label: s.kind === 'gap' ? (w.closeGap || 'Close gap') : (w.fix || 'Fix'), icon: 'check', run: () => S.cmd.closeSeam(e.id) });
+-      if (sb && (sb.kind === 'gap' || sb.kind === 'overlap') && !sb.covered) out.push(seamTool(R.main[i], sb));
++      if (sb && sb.kind === 'blend') out.push({ id: 'turnTr', key: 'turnTr:' + id, label: w.turnTr || 'Turn into a transition', icon: 'transition', run: () => S.cmd.turnTransition(id) });
++      else if (sb && (sb.kind === 'gap' || sb.kind === 'overlap') && !sb.covered) out.push(seamTool(R.main[i], sb));
+       else if (sa && (sa.kind === 'gap' || sa.kind === 'overlap') && !sa.covered) out.push(seamTool(na, sa));
+       out.push(more, del);
+       return out;
+@@ -338,7 +340,22 @@ window.FM = window.FM || {};
+     });
+     return out;
+   }
+-  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow };
++  /* 2.7: TRANSITION row (DESIGN §12.1): None / Crossfade / Dip to black / Dip to white, a length stepper, and one button that copies it to every cut. */
++  function transitionRow(R, id) {
++    const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), out = [rowBack()];
++    if (!l) return out;
++    const cur = () => { const L = FM.layerById(FM.scene, id); return L && L.trIn ? L.trIn : null; };
++    const types = [['none', w.trNone || 'None'], ['crossfade', w.trCrossfade || 'Crossfade'], ['dipblack', w.trDipBlack || 'Dip to black'], ['dipwhite', w.trDipWhite || 'Dip to white']];
++    types.forEach(t => out.push(tool({ id: 'tr-' + t[0], label: t[1], icon: null, pressed: (cur() ? cur().type : 'none') === t[0], run: () => S.cmd.transition(id, t[0]) })));
++    if (cur()) {
++      out.push(el('div', 'sm-quiet sm-fade-l', (w.trLength || 'Length') + ' ' + cur().d.toFixed(1) + ' s'));
++      out.push(tool({ id: 'trMinus', label: '−', icon: null, title: w.shorter || 'shorter', run: () => S.cmd.transition(id, cur().type, cur().d - 0.1) }));
++      out.push(tool({ id: 'trPlus', label: '+', icon: null, title: w.longer || 'longer', run: () => S.cmd.transition(id, cur().type, cur().d + 0.1) }));
++      out.push(tool({ id: 'trAll', label: w.trEvery || 'On every cut', icon: null, run: () => S.cmd.transitionAll(id) }));
++    }
++    return out;
++  }
++  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow, transition: transitionRow };
+ 
+   function quietLine(R) {
+     const clips = R.main.filter(e => !e.slot), sum = (FM.spineWords && FM.spineWords.summary) ? FM.spineWords.summary(clips.length, R.trackEnd || 0) : '';
+@@ -468,7 +485,7 @@ window.FM = window.FM || {};
+       roomy = !!one && roomForTwo();   // measured only for one item, the only tray that can take two rows
+       const rowTarget = rowFor && FM.spine.soundTargetId ? FM.layerById(FM.scene, FM.spine.soundTargetId(R, rowFor.id)) : null;   // 2.3: a row redraws when what it shows changes
+       const rowSig = rowFor ? [rowFor.kind, rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration].join('|') : ''].join('#') : '';
+-      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
++      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), JSON.stringify(l.trIn || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
+       if (sig === lastSig) return;
+       lastSig = sig;
+       /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the
+diff --git a/js/spine-edit.js b/js/spine-edit.js
+index b4e29f1b..6fea7931 100644
+--- a/js/spine-edit.js
++++ b/js/spine-edit.js
+@@ -1270,11 +1270,13 @@ window.FM = window.FM || {};
+          so a split's second half, a cut item's piece and a copy all came out unlocked (review finding 14) */
+       const ids0 = new Set(FM.scene.layers.map(l => l.id)), relock = new Set();
+       let ok = false, notes = [], adoptPaths = null;
++      const trPre = S.trPairs();
+       try {
+         if (opts.unlock) lk.forEach(id => unitLayers(id, map).forEach(l => { if (l.locked) { l.locked = false; relock.add(l.id); } }));
+         if (!R.adopted && plan.adopts) adoptPaths = S.adopt(R);
+         if (gated) S.pinStrays(R);
+         await applyPlan(plan);
++        if (!plan.keepsTransitions) { const dropped = S.dropStaleTransitions(trPre); if (dropped) { plan.counts.trDropped = dropped; } }
+         const R2 = S.classify(FM.scene);
+         if (gated) { notes = S.fitTails(R2, plan); pinTailsAfter(R2); refitTransparentGroups(R2); }
+         markCuts(plan.touched);
+@@ -1332,6 +1334,7 @@ window.FM = window.FM || {};
+     if (plan.counts.cuesDropped) extra.push(line('cuesShort', plan.counts.cuesDropped));
+     if (plan.counts.camera) extra.push(line('cameraMoves'));
+     if (plan.counts.loopCleared) extra.push(line('loopCleared'));
++    if (plan.counts.trDropped) extra.push(line('trDropped', plan.counts.trDropped));
+     if (extra.length) { text = (text || live || '') + ' · ' + extra.join(' · '); }
+     if (notes && notes.length) text = (text || live || '') + ' · ' + notes.join(' · ');
+     if (plan.musicTimed && plan.musicTimed.length) {   // §4.1: titles timed to a song moved with their clips; one tap puts them back on the music
+@@ -1350,7 +1353,10 @@ window.FM = window.FM || {};
+     trimHead(id, t, o) { t = t == null ? FM.time : t; return S.edit('Trim clip', R => { const L = FM.layerById(FM.scene, id); return L ? S.planTrimHead(R, id, t - (+L.start || 0), o || { key: true }) : refusePlan('gone'); }); },
+     split(id, t) { t = t == null ? FM.time : t; return S.edit('Split', R => { const target = id || (S.mainAtTime(R, t) || {}).id; return target ? S.planSplit(R, target, t) : refusePlan('noClipHere'); }); },
+     closeSeam(entryId) { return S.edit('Close gap', R => S.planSeam(R, entryId)); },
+-    duplicate(id) { return S.edit('Duplicate clip', R => S.planDuplicate(R, id)); }
++    duplicate(id) { return S.edit('Duplicate clip', R => S.planDuplicate(R, id)); },
++    transition(id, type, d) { return S.edit('Transition', R => S.planTransition(R, id, type, d)); },
++    transitionAll(id) { return S.edit('Transition on every cut', R => S.planTransitionAll(R, id)); },
++    turnTransition(id) { return S.edit('Turn into a transition', R => S.planTurnIntoTransition(R, id)); }
+   };
+   /* ═══════════════════════ RELEASE 2.2: the rest of the commands the tray and the tools need ═══════════════════════ */
+ 
+@@ -2309,6 +2315,92 @@ window.FM = window.FM || {};
+       buttons: (ls.soft && ls.arr && kind === 'undo') ? [{ label: line('closeGaps'), fn: () => S.cmd.closeAll() }] : [] });
+   };  /* runStep's refusal of an arranging step while someone else can edit (§10.2 door 2). In Simple it is the gate's line;
+      in Full it is Full's existing undo-refusal toast, word for word (§0.4 N4): no new words in Full. */
++
++  /* TRANSITIONS (2.7, DESIGN §12.1): `trIn = {type, d}` on the incoming main clip of a JOIN seam. A look edit only: nothing moves, no
++     adoption, no ripple. A seam that is a gap, an overlap or a card refuses in one plain line. */
++  S.joinInto = function (R, id) {
++    const i = mainIdx(R, id);
++    if (i < 1) return null;
++    const e = R.main[i], prev = R.main[i - 1];
++    if (!e || e.slot || !prev || prev.slot || !e.seam || e.seam.kind !== 'join') return null;
++    return { inc: e.id, out: prev.id };
++  };
++  S.planTransition = function (R, id, type, d) {
++    const map = byIdMap(), L = map.get(id);
++    if (!L) return refusePlan('gone');
++    if (!S.joinInto(R, id)) return refusePlan('noTransition');
++    const none = type == null || type === 'none';
++    if (!none && FM.TR_TYPES.indexOf(type) < 0) return refusePlan('gone');
++    const cur = L.trIn || null;
++    d = none ? 0 : Math.round(Math.max(FM.TR_MIN, Math.min(FM.TR_MAX, d == null ? (cur ? cur.d : FM.TR_DEFAULT) : +d)) * 10) / 10;
++    if (none ? !cur : (cur && cur.type === type && Math.abs(cur.d - d) < 1e-9)) return refusePlan('nothingChanged');
++    const plan = newPlan(none ? 'No transition' : 'Transition'); plan.arranges = false; plan.adopts = true; plan.touched.add(id); plan.keepSel = true; plan.keepsTransitions = true;
++    plan.writes.push(() => { if (none) delete L.trIn; else { L.trIn = { type: type, d: d }; const P = FM.scene.project; if (P.sm && !(P.sm.v >= FM.SM_V)) P.sm.v = FM.SM_V; } });   // a file that holds a transition is stamped as this release's, so an older build opens it read-only instead of dropping the transitions
++    plan.live = none ? line('trNone') : line('trSet', type, d);
++    return plan;
++  };
++  S.planTransitionAll = function (R, id) {
++    const map = byIdMap(), L = map.get(id);
++    if (!L || !L.trIn) return refusePlan('gone');
++    const tr = { type: L.trIn.type, d: L.trIn.d }, ids = [];
++    R.main.forEach((e, i) => { if (i > 0 && !e.slot && e.id !== id && S.joinInto(R, e.id)) { const l = map.get(e.id); if (l && !(l.trIn && l.trIn.type === tr.type && l.trIn.d === tr.d)) ids.push(e.id); } });
++    if (!ids.length) return refusePlan('nothingChanged');
++    const plan = newPlan('Transition on every cut'); plan.arranges = false; plan.adopts = true; plan.keepSel = true; plan.keepsTransitions = true;
++    ids.forEach(x => plan.touched.add(x));
++    plan.writes.push(() => { ids.forEach(x => { const l = FM.layerById(FM.scene, x); if (l) l.trIn = { type: tr.type, d: tr.d }; }); });
++    plan.live = line('trAll', ids.length + 1);
++    return plan;
++  };
++  /* THE DROP RULE (all plans): a transition belongs to ONE cut. After any edit, a clip whose out-neighbour changed, or that is new (a copy,
++     a split half), or whose seam is no longer a join, loses its trIn, and the line says so. `pre` is the {incId: outId} map from before. */
++  S.trPairs = function () {
++    const m = new Map();
++    FM.scene.layers.forEach(l => { if (l.trIn) { const o = FM.transitionOutOf ? FM.transitionOutOf(FM.scene, l) : null; m.set(l.id, o ? o.id : null); } });
++    return m;
++  };
++  S.dropStaleTransitions = function (pre) {
++    let n = 0;
++    FM.scene.layers.forEach(l => {
++      if (!l.trIn) return;
++      const o = FM.transitionOutOf(FM.scene, l);
++      if (!pre.has(l.id) || !o || pre.get(l.id) !== o.id) { delete l.trIn; n++; }
++    });
++    return n;
++  };
++  /* TURN INTO A TRANSITION (§12.1) on a BLEND seam: the two clips meet at the middle of the overlap with no ripple (a's tail trimmed by amt/2,
++     b's head by amt/2, b keeps its end), b.trIn = a crossfade of length amt, and the opacity keys the blend counted are gone (the static value
++     comes back, never an empty key list). A follower of b that began inside the cut-away head slides forward onto b's new start (D6). */
++  S.planTurnIntoTransition = function (R, id) {
++    const map = byIdMap(), j = mainIdx(R, id);
++    if (j < 1) return refusePlan('noSeam');
++    const e = R.main[j], pe = R.main[j - 1], sm = e.seam;
++    if (!sm || sm.kind !== 'blend' || e.slot || pe.slot) return refusePlan('noSeam');
++    const La = map.get(pe.id), Lb = map.get(e.id), amt = sm.amt, half = amt / 2;
++    if (!La || !Lb || La.type === 'group' || Lb.type === 'group') return refusePlan('splitBlock');
++    if (FM.TR_TYPES.indexOf('crossfade') < 0 || !(amt >= FM.TR_MIN - 1e-9)) return refusePlan('noTransition');
++    const owner = blendOwner(pe, e, map), lo = e.start - R.eps, hi = pe.end + R.eps;
++    const rA = FM.trimClipEdge(La, 'tail', -half, srcDurOf(La)), rB = FM.trimClipEdge(Lb, 'head', half, srcDurOf(Lb));
++    if (Math.abs(rA.duration - (La.duration - half)) > 1e-6 || Math.abs(rB.landed - half) > 1e-6) return refusePlan('nothingMore');
++    const plan = newPlan('Turn into a transition'); plan.touched.add(pe.id); plan.touched.add(e.id);
++    const twA = twinsOf(R, pe, map), twB = twinsOf(R, e, map), twIds = new Set(twA.concat(twB).map(t => t.id));
++    const M = La.start + rA.duration, dB = Lb.start + Lb.duration - M;
++    plan.writes.push(() => {
++      stripOwned(owner, lo, hi, owner === Lb ? 'in' : 'out');
++      [La].concat(twA).forEach(x => { x.duration = rA.duration; if (x.type === 'video') x.trimStart = rA.trimStart; });
++      [Lb].concat(twB).forEach(x => { x.start = M; x.duration = dB; if (x.type === 'video') x.trimStart = rB.trimStart; FM.shiftLayerFxClock(x, rB.fxShift); });
++      Lb.trIn = { type: 'crossfade', d: Math.round(Math.min(FM.TR_MAX, Math.max(FM.TR_MIN, amt)) * 10) / 10 };
++      const P = FM.scene.project; if (P.sm && !(P.sm.v >= FM.SM_V)) P.sm.v = FM.SM_V;
++    });
++    twA.concat(twB).forEach(t => plan.touched.add(t.id));
++    (R.followers[e.id] || []).forEach(fid => {   // D6: its first frame was cut away, so it keeps its host
++      if (twIds.has(fid)) return;
++      const f = map.get(fid); if (!f) return;
++      if ((+f.start || 0) < M - R.eps) addLand(plan, fid, M);
++    });
++    plan.keepsTransitions = true;
++    plan.live = line('trTurned');
++    return plan;
++  };
+   S.undoRefused = function (why) {
+     if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) refuse(why || 'live');
+     else if (FM.toast) FM.toast("Can't undo — it has changed since");
+diff --git a/js/spine-words.js b/js/spine-words.js
+index 74202771..a9b1af26 100644
+--- a/js/spine-words.js
++++ b/js/spine-words.js
+@@ -114,6 +114,9 @@ window.FM = window.FM || {};
+       speedBlock: 'Open in Full to change this speed', replaceBlock: 'Open in Full to replace this',
+       nothingChanged: 'Nothing changed', oneSpeed: 'One speed now, the same length',
+       volumeSet: pct => 'Volume ' + pct + '%', fadeSet: (which, s) => 'Fade ' + which + ' ' + s.toFixed(1) + ' s',
++      trTurned: 'Now a crossfade transition', trNone: 'No transition', noTransition: 'A transition needs two clips that meet, with nothing between them',
++      trSet: (type, d) => ({ crossfade: 'Crossfade', dipblack: 'Dip to black', dipwhite: 'Dip to white' }[type] || 'Transition') + ' ' + d.toFixed(1) + ' s',
++      trAll: n => 'Same transition on all ' + n + ' cuts', trDropped: n => n === 1 ? 'removed a transition' : 'removed ' + n + ' transitions',
+       noReverse: 'Only a video can play backwards', reversed: 'Playing backwards', forwards: 'Playing forwards',
+       reverseSlow: 'Couldn’t prepare the reversed clip, it will play slowly',
+       soundTaken: 'Sound taken out · it sits on the clip as its own track', alreadyOut: 'Its sound is already out · Put sound back first',
+@@ -133,6 +136,7 @@ window.FM = window.FM || {};
+       bandHintSelPc: 'Its tools are below',   // PC (his pick B): every tool is on show there, More with them
+       /* release 2.3 */
+       speed: 'Speed', volume: 'Volume', replace: 'Replace', reverse: 'Reverse', forwards: 'Play forwards', takeSound: 'Take sound out', putSound: 'Put sound back',
++      transition: 'Transition', turnTr: 'Turn into a transition', trNone: 'None', trCrossfade: 'Crossfade', trDipBlack: 'Dip to black', trDipWhite: 'Dip to white', trLength: 'Length', trEvery: 'On every cut',
+       fade: 'Fade', fadeIn: 'In', fadeOut: 'Out', useOneSpeed: 'Use one speed', speedRamped: 'Speed changes over the clip',
+       speedLabel: 'Speed', volumeLabel: 'Volume in percent', muteClips: 'Clip sound', muteOn: 'Mute clip sound', muteOff: 'Clip sound is off, tap to turn it on'
+     },
+diff --git a/js/spine.js b/js/spine.js
+index e44b3cd4..b3504ce1 100644
+--- a/js/spine.js
++++ b/js/spine.js
+@@ -18,7 +18,7 @@ window.FM = window.FM || {};
+ 
+   /* The version of the `sm` rules this build writes. Changes ONLY with a collab SCHEMA_REV bump — collab-core.js hashes it
+      into the schema fingerprint, so a build that moved one without the other cannot join a room (§2.3). */
+-  FM.SM_V = 1;
++  FM.SM_V = 2;
+   const S = FM.spine = FM.spine || {};
+   S.SM_V = FM.SM_V;
+   const words = () => FM.spineWords || {};
+@@ -63,7 +63,7 @@ window.FM = window.FM || {};
+     if (S.STRIP_ROUTES.indexOf(route) < 0) return copies;
+     (Array.isArray(copies) ? copies : [copies]).forEach(c => {
+       if (!c) return;
+-      delete c.pick;
++      delete c.pick; delete c.trIn;
+       if (c.sm && typeof c.sm === 'object') {
+         delete c.sm.main; delete c.sm.tail; delete c.sm.tailEnd;
+         if (!Object.keys(c.sm).length) delete c.sm;
+diff --git a/js/storage.js b/js/storage.js
+index a0272084..d7c364a0 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -1591,6 +1591,11 @@ window.FM = window.FM || {};
+       if (!ok) delete l.pick;
+       else if (Object.keys(p).length !== 2) l.pick = { b: p.b, i: p.i };
+     }
++    /* 2.7: the transition into this clip (DESIGN §12.1): { type, d } with a known type and a length of 0.1 to 3 s, and only on a picture layer; anything else goes */
++    if ('trIn' in l) {
++      const t = l.trIn, ok = isPlainObj(t) && (FM.TR_TYPES || ['crossfade', 'dipblack', 'dipwhite']).indexOf(t.type) >= 0 && typeof t.d === 'number' && isFinite(t.d) && t.d >= 0.1 && t.d <= 3 && (l.type === 'video' || l.type === 'image' || l.type === 'shape');
++      if (!ok) delete l.trIn; else if (Object.keys(t).length !== 2) l.trIn = { type: t.type, d: t.d };
++    }
+     if (!('sm' in l)) return;
+     const sm = l.sm;
+     if (!isPlainObj(sm)) { delete l.sm; return; }
+diff --git a/js/transitions.js b/js/transitions.js
+new file mode 100644
+index 00000000..04c3340b
+--- /dev/null
++++ b/js/transitions.js
+@@ -0,0 +1,96 @@
++/* FreeMotion — transitions between two main clips (Simple mode release 2.7; DESIGN.md §12.1, D13 A: a transition NEVER makes the video shorter).
++ *
++ * `inc.trIn = { type, d }` on the incoming main clip. Over [cut − d/2, cut + d/2] (cut = inc.start) the renderer shows the outgoing clip past its
++ * out-point and the incoming clip before its in-point, blended. Clip times never change, so the main-track maths is untouched, and THE SHARED
++ * GATES ARE NOT WIDENED (Q10): FM.isLayerVisibleAt and FM.layerLocalTime keep their exact windows — a transition draws through a proxy of the
++ * layer (the renderer's one transition pass) and seeks its picture through FM.transitionSeeks, which the exporter and the paused preview share.
++ *
++ * FM.transitionAt reads STORED FLAGS ONLY (never the classifier, whose answer depends on media records and can differ on a guest before loading):
++ * layers with `sm.main` and `trIn`, on a project where `project.sm.adopted` is true. It owns validity: null unless `out` and `inc` are
++ * consecutive main clips whose seam is a join (never across a gap, an overlap or a card), and `d_eff = min(trIn.d, ½·min(out.duration,
++ * inc.duration))` so the windows on neighbouring cuts can never overlap. The stored `d` is never rewritten by a trim, so undoing a trim brings
++ * the old length back.
++ *
++ * Sound is picture-only here: audio hard-cuts at the cut exactly as it does today; the overhang elements are seeked for their picture and stay
++ * muted. A matching audio crossfade is a Later item with its own picture for him.
++ */
++window.FM = window.FM || {};
++(function (FM) {
++  'use strict';
++  FM.TR_TYPES = ['crossfade', 'dipblack', 'dipwhite'];
++  FM.TR_MIN = 0.1; FM.TR_MAX = 3; FM.TR_DEFAULT = 0.5;
++  const VISUAL = { video: 1, image: 1, shape: 1 };
++  const isMainPic = l => !!(l && l.sm && l.sm.main === true && VISUAL[l.type] && l.visible !== false && l.audioOnly !== true);
++  const eps = scene => 0.5 / ((scene.project && scene.project.fps) || 30);
++
++  /* the outgoing clip of `inc`: the main picture whose end is within half a frame of inc.start, the lowest in the stack if several; null unless
++     the seam is a clean join (nothing else main covers the cut) */
++  FM.transitionOutOf = function (scene, inc) {
++    const L = scene.layers, e = eps(scene);
++    let out = null;
++    for (let j = 0; j < L.length; j++) {
++      const o = L[j];
++      if (o === inc || !isMainPic(o)) continue;
++      if (Math.abs(o.start + o.duration - inc.start) <= e) out = o;
++    }
++    if (!out) return null;
++    for (let j = 0; j < L.length; j++) {   // an overlap or a third main clip across the cut is a blend, not a join
++      const o = L[j];
++      if (o === inc || o === out || !isMainPic(o)) continue;
++      if (o.start < inc.start - e && o.start + o.duration > inc.start + e) return null;
++    }
++    return out;
++  };
++  FM.transitionDEff = function (tr, out, inc) { return Math.min(+tr.d || 0, 0.5 * Math.min(out.duration, inc.duration)); };
++
++  FM.transitionAt = function (scene, t) {
++    if (!scene || !scene.layers || !scene.project || !scene.project.sm || scene.project.sm.adopted !== true) return null;
++    const L = scene.layers;
++    for (let i = 0; i < L.length; i++) {
++      const inc = L[i], tr = inc.trIn;
++      if (!tr || !isMainPic(inc) || FM.TR_TYPES.indexOf(tr.type) < 0 || !(+tr.d > 0)) continue;
++      const out = FM.transitionOutOf(scene, inc); if (!out) continue;
++      const d = FM.transitionDEff(tr, out, inc), cut = inc.start;
++      if (!(d > 1e-9) || t < cut - d / 2 || t >= cut + d / 2) continue;
++      const p = Math.max(0, Math.min(1, (t - (cut - d / 2)) / d));
++      const top = L.indexOf(out) < L.indexOf(inc) ? out : inc;   // the loop draws from the end of the list to the start, so the lower index is drawn last, on top
++      const r = { out: out, inc: inc, type: tr.type, d: d, cut: cut, p: p, top: top, aOut: 1, aInc: 1, dip: null, dipA: 0 };
++      if (tr.type === 'crossfade') { if (top === inc) r.aInc = p; else r.aOut = 1 - p; }
++      else { r.dip = tr.type === 'dipwhite' ? '#ffffff' : '#000000'; r.dipA = 1 - Math.abs(2 * p - 1); if (p < 0.5) r.aInc = 0; else r.aOut = 0; }
++      return r;
++    }
++    return null;
++  };
++
++  /* the source time a clip's picture shows at project time t, extended past its own window along the same line (a held first or last frame when the
++     source has no more): FM.layerLocalTime inside the clip, otherwise the extension of its first or last speed */
++  FM.handleLocalTime = function (layer, t) {
++    const inside = FM.layerLocalTime(layer, t);
++    const m = FM.media && FM.media.get ? FM.media.get(layer.id) : null, mdur = m && m.duration > 0 ? m.duration : Infinity;
++    let src;
++    const dir = layer.reversed ? -1 : 1;
++    if (inside != null) src = inside;
++    else if (t < layer.start) src = FM.layerLocalTime(layer, layer.start) - dir * (layer.start - t) * FM.speedAt(layer, layer.start);
++    else { const e = layer.start + layer.duration - 1e-9; src = FM.layerLocalTime(layer, e) + dir * (t - (layer.start + layer.duration)) * FM.speedAt(layer, e); }
++    return Math.max(0, Math.min(mdur, src));
++  };
++
++  /* the picture seeks a transition asks for at time t: [{ layer, local }], only for an element OUTSIDE its own window (inside it the ordinary
++     seek applies). The exporter and the paused preview both read THIS, so they cannot disagree. */
++  FM.transitionSeeks = function (scene, t) {
++    const tr = FM.transitionAt(scene, t); if (!tr) return [];
++    const out = [];
++    [tr.out, tr.inc].forEach(l => { if (l.type === 'video' && FM.layerLocalTime(l, t) == null) out.push({ layer: l, local: FM.handleLocalTime(l, t) }); });
++    return out;
++  };
++
++  /* the renderer's proxy of a layer in a transition: a shallow copy whose own window reaches t (so the unwidened gate passes it), carrying the
++     alpha FM.layerOpacity multiplies in */
++  FM.transitionProxy = function (layer, tr, t) {
++    const a = layer === tr.out ? tr.aOut : tr.aInc;
++    const x = Object.assign({}, layer, { __trA: a });
++    if (t < layer.start) { x.duration = layer.duration + (layer.start - t); x.start = t; }
++    else if (t >= layer.start + layer.duration) x.duration = t - layer.start + 1e-6;
++    return x;
++  };
++})(window.FM);
+diff --git a/styles.css b/styles.css
+index d68c1c99..17946697 100644
+--- a/styles.css
++++ b/styles.css
+@@ -11746,6 +11746,9 @@ body.ed-simple #sm-timeline { display: flex; }
+ }
+ .sm-chip-gap { background: #2a1f14; color: #ffb454; border: 1.5px solid #ffb454; }
+ .sm-chip-overlap { background: #2a1418; color: #ff6b6b; border: 1.5px solid #ff6b6b; }
++#sm-trlane { position: absolute; left: 0; top: 0; width: 0; height: 0; }
++.sm-chip-tr { z-index: auto; background: transparent; color: #7f8aa0; border: 1.5px dashed #5a667c; font-size: 14px; }
++.sm-chip-tr-on { background: #14202a; color: #7cc4ff; border: 1.5px solid #7cc4ff; }
+ .sm-add { position: absolute; top: 10px; width: 36px; height: 36px; border-radius: 10px; border: 1.5px dashed #8b97ab; background: transparent; color: #cfd6e2; font: 400 22px/1 system-ui, sans-serif; cursor: pointer; }
+ .sm-more { position: sticky; left: calc(100% - 40px); top: 0; float: right; margin-top: 4px; min-width: 32px; height: 24px; border-radius: 12px; background: #1d2533; color: #cfd6e2; font: 700 10px/24px system-ui, sans-serif; text-align: center; }
+ #sm-say { flex: 0 0 52px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-top: 1px solid var(--line); font: 600 12.5px/1.25 system-ui, sans-serif; color: #dfe6f0; box-sizing: border-box; }

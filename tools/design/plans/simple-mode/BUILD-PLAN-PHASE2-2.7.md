@@ -1,0 +1,76 @@
+# Release 2.7: transitions in Simple (S11)
+
+Branch with the code: `hunt/simple-transitions` (on top of `hunt/simple-r7-fixes`). Patches and scripts: `scripts-2.7/` (`2.7-src.patch`, `2.7-tests.patch`, the three mutation scripts). Pictures for Ezra: `transition-options/sheet.jpg` (three phones side by side) plus each option at 380 and 1280.
+
+Labels: **Verified** = ran it here (suite, browser, mutation). **Read** = read in the code or DESIGN. **Measured** = a number taken in the browser. **Guess** = not checked.
+
+## 1. Where DESIGN and the build plans put transitions (Read)
+
+- **D13 A** (answered 1 Oct, DESIGN section 17, row "0. Decide" at `DESIGN.md:4029`): build as designed. A transition never makes the video shorter.
+- **DESIGN section 12.1, `DESIGN.md:3633-3690`:** `trIn = {type, d}` on the incoming main clip. Over `[cut - d/2, cut + d/2]` the renderer draws the outgoing clip past its out-point and the incoming clip before its in-point, blended. "Clip times never change, so the main-track maths is untouched." "The shared gates are not widened (Q10)": `FM.isLayerVisibleAt` and `FM.layerLocalTime` keep their windows. `FM.transitionAt` "reads stored flags only, never the classifier", owns validity, and uses `d_eff = min(trIn.d, 0.5 * min(out.duration, inc.duration))`. Sound is picture-only. In the overhang the outgoing clip holds its state at the out-point. "Turn into a transition" on a blend seam trims both clips by half the overlap, sets a crossfade of the overlap length, strips the keys the blend counted and never leaves `{kf: []}`. Transitions follow the clips they sit between: Delete, Reorder, Make overlay and Make main clip drop `trIn` where the outgoing neighbour changed, and the line adds "removed 1 transition". `onSplit` drops `B.trIn`; `onCopy` drops it. `SCHEMA_REV` and `SM_V` both bump.
+- **DESIGN `:821` (the plan table row "Transition picker / Length"):** `sets: trIn` on the incoming main clip, adopts first on an un-adopted project, no arrange; "Turn into a transition" trims two clips and does arrange.
+- **DESIGN `:2706` (tray table):** "Transition ◇ (Phase 6): the picker, Length, Use on every cut." `:4035` (phase table): "◇ at each cut in Simple". `:522`: "Phase 6's ◇ on a blend offers Turn into a transition". `:140` (V14): Full gets no ◇ and no inspector row; the picture itself draws in Full (N2).
+- **judge-buildability.md `:244`:** "7 | Transitions and clip animations (renderer) | Yes | medium | preview = export at every seam". `:194`: the renderer, exporter and schema fingerprint are untouched until transitions.
+
+## 2. What DESIGN leaves open, and what I did about it
+
+DESIGN names the three controls (picker, Length, Use on every cut) and says the ◇ is at each cut. It does **not** say what the picker looks like or whether it opens in the tray or floats. That is the choice, so three pictures (`transition-options/sheet.jpg`), all with the same project, the playhead on the first cut mid-crossfade:
+
+| | What it is | Cost | Verdict |
+|---|---|---|---|
+| **A, recommended (built)** | A ◇ above every cut. Tap it and the tray becomes one row: Done, None, Crossfade, Dip to black, Dip to white, a length stepper, On every cut. Same pattern as Speed, Volume and Fade (2.3). | No new surface. The clip tray gets no new tool, so the tray tests that count tools are untouched. | Measured: at 380 the row shows Done to Dip to white and the rest is one swipe away; at 1280 Studio the left tray is 306 px wide and it scrolls the same way (see 6.1). |
+| B | Same ◇, but the tap opens a floating list over the preview. | A new floating surface, a new focus trap, a new way to dismiss, and it covers the picture the person is judging the transition by. | Mock only, not built. Not recommended: the whole point is to look at the result while choosing. |
+| C | No ◇. A "Transition" tool on the clip's own tray. | One more tool on a tray that already holds nine on two rows at 1280 (the 2.2 tray tests assert exactly that). I built this first and it failed those tests. | Not recommended. It also hides the feature: nothing on the timeline says a cut has a transition. |
+
+Ezra picks. Everything below is written for A.
+
+## 3. What was built (Verified)
+
+| Piece | Where | What it does |
+|---|---|---|
+| The renderer | NEW `js/transitions.js`; `js/compositor.js` (one pass in `renderScene`'s layer loop); `js/behaviors.js` (`FM.layerOpacity` multiplies a `__trA` alpha) | `FM.transitionAt(scene, t)`, `FM.transitionOutOf`, `FM.transitionDEff`, `FM.handleLocalTime`, `FM.transitionSeeks`, `FM.transitionProxy`. The two clips draw through proxies whose own window reaches `t`, so the shared gates are not widened. Crossfade: the layer on top gets alpha `p` (or `1-p` when the outgoing clip is on top). Dips: outgoing visible for `p < .5`, incoming after, an overlay of the colour at alpha `1-|2p-1|` drawn right after the upper layer. |
+| Picture seeks | `js/exporter.js` (`seekAllVideos` also seeks `FM.transitionSeeks`), `js/app.js` (`FM.seekVideosToTime` and the playback tick keep overhang elements paused and muted, and seek them for the picture) | The exporter and the paused preview read the same list, so they cannot disagree. Audio is untouched. |
+| Planners | `js/spine-edit.js`: `S.planTransition`, `S.planTransitionAll`, `S.planTurnIntoTransition`, `S.joinInto`, `S.trPairs`, `S.dropStaleTransitions`; `S.cmd.transition / transitionAll / turnTransition` | Look-class edits (adopt first, no arrange) for the first two. The runner records `{incId: outId}` before any plan and, after it, drops `trIn` from any clip whose outgoing neighbour changed or that is new (a copy, a split half), and the line ends "removed N transition(s)". One generic rule for every plan, so Reorder, Lift, Make overlay and Make main clip are covered without each planner remembering. |
+| The ◇ and the row | `index.html` (`#sm-trlane`), `js/simple-timeline.js`, `js/simple-tools.js` (`transitionRow`, `ROWS.transition`), `styles.css` | A ◇ above every clean join between two pictures, dashed when empty, filled when set, 32 px, centred on the cut. On a crossfade (blend) seam the ◇ selects the clip that fades in and its tray offers **Turn into a transition**. |
+| Words | `js/spine-words.js` | "Crossfade 0.6 s", "Same transition on all 2 cuts", "removed a transition", "A transition needs two clips that meet, with nothing between them", "Now a crossfade transition". |
+| Schema | `js/storage.js` (`sanitizeSmLayer` keeps a valid `trIn`, drops a bad one), `js/spine.js` (`FM.SM_V` 2, `onCopy` drops `trIn`), `js/collab-core.js` (`SCHEMA_REV` 9, `SCHEMA_FP` 6484757361590586 as the fingerprint test reported it) | A project that holds a transition is stamped `sm.v = 2`, so a 2.6 build opens it read-only instead of dropping the transitions without a word. |
+
+## 4. The ◇ lane: a real bug found on the way (Verified)
+
+The first version put the ◇ just above the clip row. Three existing tests went red: a title dragged sideways, the S8b brake, and the P2.1 chip test. Measured with a probe: the title (28 px wide at 28 px per second) and the ◇ occupy the same y band, and the press landed on the ◇ (`elementFromPoint` returned `sm-chip sm-chip-tr`). So a title or overlay at a cut could not be grabbed. Fix: the ◇s live in their own absolutely positioned lane `#sm-trlane`, which comes **before** `#sm-sections` in the document, so it paints under every item; and it sits above the row, clear of the trim grips (the first measurement had it overlapping the selected clip's grip, 300-332 against 303-327). T8 now asserts both: no grip overlap with either neighbour selected, and a title straddling the cut gets the press.
+
+## 5. Tests (all `{ item: '980' }`, name prefix `simple P2.7 ·`)
+
+| Test | What it proves | Mutation that it catches |
+|---|---|---|
+| T1 | `transitionAt` rules: window, half-open end, d_eff cap, null on gap, overlap, un-adopted project, Full-made `trIn` without `sm.main` | closed window end; no d_eff cap |
+| T2 | crossfade pixel values through the cut (also with the outgoing clip above the incoming); the video keeps its length; pictures outside the window equal the no-transition project | crossfade alpha on the wrong layer when the outgoing clip is on top (this one **survived** the first time: no test had that stack order; I added it); proxy alpha dropped |
+| T3 | dip to black and to white; a layer above the pair is not dipped | dip alpha always 1 |
+| T4 | seek targets for the overhang (fake video elements), held edge frames, clamp at 0; exporter and paused preview land identically | no clamp; seeking elements already inside their window |
+| T5 | `cmd.transition` writes `trIn` on the incoming clip only, nothing moves, length clamps to 3 s, None clears it, one undo; a first clip and a gap seam refuse in a plain line | no clamp; gap allowed |
+| T6 | "same on every cut", and the drop rule: delete, split, duplicate | drop rule off |
+| T7 | the ◇ opens the row; Crossfade, length +, Dip to black keeps the length, On every cut crosses neither a gap nor the first clip, None; at 1280 and 380; no Transition tool on the clip tray | On every cut allowed across a gap |
+| T8 | ◇ above each join, filled where set, 32 px, centred, clear of grips, press on a title at the cut lands on the title | ◇ on every join regardless of state |
+| T9 | a transition stamps a 2.6-adopted project `sm.v = 2` (this one **survived** at first because adoption already stamps 2 on a fresh project; the test now starts from a project stamped 1); a newer file is refused; copy drops `trIn` | stamp removed; `onCopy` keeps `trIn` |
+| T10 | Turn into a transition: clips meet in the middle of the overlap, nothing ripples, the end does not move, the fade keys go and the clip rests at its visible value, a 1 s crossfade is set, one undo restores the document byte for byte; the ◇ on a crossfade selects the clip and offers the tool | keys kept; head trim missing; tail trim missing; no `trIn`; tool offered on every clip |
+
+Mutation scripts and logs: `scripts-2.7/` (`s11_mut.sh` to `s11_mut4.sh` with their `.log`). `s11_mut4.sh` is the final-code set for the ◇ lane (six mutations, six CAUGHT); in `s11_mut.sh`, Y4 and Y5 mutated an earlier shape of the ◇ and the clip tray and are superseded by it. In total about 30 mutations: every one ended CAUGHT except the two survivors named in the table, and both were fixed by strengthening the test and re-running that mutation to CAUGHT. After the T7/T8/T10 rework I re-ran the two mutations that touch them (On every cut across a gap; the Turn tool on every clip): CAUGHT.
+
+## The neighbouring slices (Verified)
+
+- **The whole Simple slice, `?only=simple P`, on the final tree:** 1280: **148 of 151 pass**; 380: **148 of 151 pass**; the 3 that do not are the finger tests, NOT RUN in the headless run. Run the way CLAUDE.md says (`FM_TOUCH_PAGE=1 python3 tests/_cdp.py`, one per browser) all three **pass at 380**. (The same slice on the 2.6 tip was 138 of 141 plus those 3 before this release, so the 10 new tests are the whole difference: 148 = 138 + 10.)
+- **Three tests went red when the ◇ was first built and were fixed, not edited around:** a title dragged sideways, the S8b edge-scroll brake and the P2.1 chip test (section 4). The P2.1 line changed from "no `.sm-chip` is drawn after both were fixed" to "no `.sm-chip` that is not a ◇", because a ◇ over a plain join is now meant to be drawn; that is the only existing assertion I touched.
+- **The 921 slice (`?only=921 S`, 1280, the fake network):** 247 of 253 pass, 2 NOT RUN (BarcodeDetector). The four reds are **identical on the parent `hunt/simple-r7-fixes`** run the same way (247 of 253): S0 duplicateFrom (the fixture has no project document), S3 Stop sharing (passes alone, fails inside the slice, on both), S4 splash.mp4 (no H.264 decoder in the container), S6 re-offer (3022 ms against 3025 ms on the parent: container timing). `921 S6 the version gate` and `921 S1 the schema fingerprint gate` pass on this branch. One run of the 921 slice hung for 44 minutes inside `921 S6 the version gate` while I had other browsers running beside it; the same test alone takes 16 seconds on both branches and the re-run of the whole slice finished, so I put it down to my own load, not to the release (Guess).
+- **Full unchanged (Read, plus the suite):** `FM.renderScene` reads `trIn` only on layers that carry `sm.main` inside a project whose `sm.adopted` is true, so a Full-made project never takes the transition path (T1 asserts a `trIn` without `sm.main` and an un-adopted project both return null). Full gets no ◇ and no row (the lane and the row are Simple's DOM). The tools/full-unchanged.sh lock (new on `main`, v17.30) has not been run against this branch (it lives on `main`, not on the chain this branch sits on).
+
+
+## 6. Honest limits and things DESIGN does not settle
+
+1. **The row is wider than the tray on desktop (Measured).** At 1280 the Studio tray is 306 px wide; Done, None, Crossfade and Dip to black fit and Dip to white, the length stepper and On every cut need a scroll (the plain wheel scrolls the tray, #976). On a 380 phone it is the same swipe. I did not shorten the labels. If it matters to Ezra the cheap fix is "Fade", "Dip black", "Dip white".
+2. **Picture only, as DESIGN says.** Sound hard-cuts at the cut. A matching audio crossfade is DESIGN's own Later item.
+3. **The blend that "Turn into" understands is opacity keys only.** DESIGN `:3680` also says "a fade or dissolve effect's keyframed params", but `isBlend` in `js/spine.js:242` counts only opacity keys on the upper clip, so that is all this build strips. A crossfade made another way is a red overlap today and stays one.
+4. **T4 is fake video elements, not decoded video (Guess for real files).** The seek targets and the shared list are proven; that a real `<video>` lands on the frame in time on a phone is not something this headless run can show. Reverse and speed-ramped clips in the overhang use `FM.speedAt`; I tested neither.
+5. **The "Made with a newer FreeMotion" line cannot be changed retroactively.** A 2.6 build already refuses edits to a project with `sm.v` above its own with its own words ("Update to edit clips here"). DESIGN's longer wording would have to live in the older build. 2.7 opens its own files normally.
+6. **Reorder, Lift, Make overlay and Make main clip drop `trIn` through the generic runner rule, and I tested delete, split and duplicate only.** The rule is one function, so I expect the rest to follow, but that is a Guess until someone runs them.
+7. **Collab:** `SCHEMA_REV` moved 8 to 9 and `SCHEMA_FP` to the value the fingerprint test reported, as DESIGN requires, and a room whose two sides disagree on the revision is refused by the existing version gate (`921 S6 the version gate` passes). A guest on a build that does not know `trIn` is the case the gate exists for. I did not test two builds against each other: only this build exists here.
+8. **The first publish of the idea was wrong and the tests said so.** I built the picker as a Transition tool on the clip tray first. The 2.2 tray tests assert the exact tool list and the two-row geometry, and failed. That is also why option C is in the pictures: it is the thing I tried, and the reason it is not recommended is a measured one, not a taste.
