@@ -59811,6 +59811,74 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* ═══ AU20: the inspector's Presets card (tags, rename, long names) ═══ */
+  async function au20Card(setup) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const keepLayers = FM.scene.layers.slice(), keepSel = FM.scene.selectedId;
+    const keepLP = JSON.stringify(FM.layerPresets.list()), keepTags = localStorage.getItem('fm.presettags');
+    const had = { w: FM.scene.project.width, h: FM.scene.project.height };
+    try {
+      FM.scene.layers.length = 0; FM.history.reset(); FM.addShapeLayer('ellipse');
+      const L = FM.scene.layers[0]; L.start = 0; L.duration = 4; L.effects = [FM.fxRegistry.makeInstance('glow')];
+      FM.selectLayer(L.id);
+      FM.layerPresets.list().slice().forEach(p => FM.layerPresets.remove(p.name));
+      return await setup(L, sleep);
+    } finally {
+      try { FM.layerPresets.list().slice().forEach(p => FM.layerPresets.remove(p.name)); localStorage.setItem('fm.layerpresets', keepLP); } catch (e) {}
+      try { if (keepTags == null) localStorage.removeItem('fm.presettags'); else localStorage.setItem('fm.presettags', keepTags); } catch (e) {}
+      FM.scene.layers.length = 0; keepLayers.forEach(l => FM.scene.layers.push(l));
+      try { FM.inspector.refresh(); } catch (e) {}
+    }
+  }
+  test('AU20 clearing the last tag while its chip is the filter does not leave the Presets card empty', { item: 'AU20', budgetMs: 30000 }, async function () {
+    await au20Card(async function (L, sleep) {
+      const rows = () => [].slice.call(document.querySelectorAll('#inspector .insp-preset-name')).map(n => n.textContent);
+      const chips = () => [].slice.call(document.querySelectorAll('#inspector .preset-chip')).map(c => c.textContent + (c.classList.contains('on') ? '*' : ''));
+      FM.layerPresets.save('AU20 A', L); FM.layerPresets.save('AU20 B', L); FM.presetTags.set('lp:AU20 A', ['au20warm']);
+      FM.inspector.openCategory('presets'); await sleep(200);
+      const chip = [].slice.call(document.querySelectorAll('#inspector .preset-chip')).filter(c => c.textContent === 'au20warm')[0];
+      if (!chip) throw new Error('setup: the tag chip did not appear: ' + JSON.stringify(chips()));
+      chip.click(); await sleep(200);
+      if (rows().join('|') !== 'AU20 A') throw new Error('setup: the filter did not narrow the card: ' + JSON.stringify(rows()));
+      FM.presetTags.set('lp:AU20 A', ['']);   // what Tags… with an empty answer does
+      await sleep(250);
+      if (rows().indexOf('AU20 A') < 0 || rows().indexOf('AU20 B') < 0) throw new Error('the card is empty after the last tag was cleared while it was the filter: rows ' + JSON.stringify(rows()) + ', chips ' + JSON.stringify(chips()) + ' (nothing on screen can turn the filter off)');
+      // …and removing the last preset that carries the tag does the same
+      FM.presetTags.set('lp:AU20 B', ['au20cold']); await sleep(200);
+      [].slice.call(document.querySelectorAll('#inspector .preset-chip')).filter(c => c.textContent === 'au20cold')[0].click(); await sleep(200);
+      FM.layerPresets.remove('AU20 B'); await sleep(250);
+      if (rows().indexOf('AU20 A') < 0) throw new Error('the card is empty after the last tagged preset was deleted while its tag was the filter: ' + JSON.stringify(rows()));
+    });
+  });
+  test('AU20 renaming a layer preset keeps the Update button of layers that were applied from it', { item: 'AU20', budgetMs: 30000 }, async function () {
+    await au20Card(async function (L, sleep) {
+      FM.layerPresets.save('AU20 Look', L);
+      FM.layerPresets.apply('AU20 Look', L);
+      if (L.fromPreset !== 'AU20 Look') throw new Error('setup: apply did not record where the layer came from: ' + L.fromPreset);
+      FM.inspector.openCategory('presets'); await sleep(200);
+      if (!document.querySelector('#inspector .insp-preset-update')) throw new Error('setup: no Update button before the rename');
+      if (!FM.layerPresets.rename('AU20 Look', 'AU20 Renamed')) throw new Error('setup: the rename was refused');
+      await sleep(250);
+      if (L.fromPreset !== 'AU20 Renamed') throw new Error('the layer still says it came from “' + L.fromPreset + '”, a preset that no longer exists');
+      const up = document.querySelector('#inspector .insp-preset-update');
+      if (!up || up.textContent.indexOf('AU20 Renamed') < 0) throw new Error('the Update button is gone after the rename (' + (up ? up.textContent : 'none') + ')');
+    });
+  });
+  test('AU20 a long unbroken preset name wraps inside its row instead of running under the delete button or out of the panel', { item: 'AU20', budgetMs: 30000 }, async function () {
+    await au20Card(async function (L, sleep) {
+      const longName = 'Cinematic_Teal_Orange_Final_v2_FIX_new_AU20_' + 'x'.repeat(40);   // 84 characters, no space
+      FM.layerPresets.save(longName, L);
+      FM.inspector.openCategory('presets'); await sleep(250);
+      const ins = document.getElementById('inspector'), row = document.querySelector('#inspector .insp-preset-row'), nm = row && row.querySelector('.insp-preset-name'), del = row && row.querySelector('.fxp-del');
+      if (!row || !nm || !del) throw new Error('setup: the preset row did not render');
+      const nr = nm.getBoundingClientRect(), dr = del.getBoundingClientRect(), rr = row.getBoundingClientRect();
+      if (nr.right > dr.left + 1) throw new Error('the name runs under the delete button: name ends at ' + Math.round(nr.right) + ', the ✕ starts at ' + Math.round(dr.left));
+      if (nr.right > rr.right + 1) throw new Error('the name runs out of its row: ' + Math.round(nr.right) + ' against ' + Math.round(rr.right));
+      if (ins.scrollWidth > ins.clientWidth + 1) throw new Error('the inspector scrolls sideways because of the name: scrollWidth ' + ins.scrollWidth + ' against ' + ins.clientWidth);
+    });
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

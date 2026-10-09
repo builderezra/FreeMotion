@@ -1,0 +1,17 @@
+=== M1_stuck_filter_kept
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU20 clearing the last tag — the card is empty after the last tag was cleared while it was the filter: rows [], chips [] (nothing on screen can turn the filter off)
+=== M2_rename_leaves_fromPreset
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU20 renaming a layer preset — the layer still says it came from “AU20 Look”, a preset that no longer exists
+=== M3_name_no_wrap
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU20 a long unbroken — the inspector scrolls sideways because of the name: scrollWidth 762 against 299
+=== M4_fromPreset_wrong_name
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU20 renaming a layer preset — the layer still says it came from “AU20 Look”, a preset that no longer exists
+ALLDONE

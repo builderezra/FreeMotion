@@ -594,6 +594,9 @@ window.FM = window.FM || {};
       if (arr.some(x => x !== p && x.name === to)) { if (FM.toast) FM.toast('There is already a preset called “' + to + '”'); return false; }
       p.name = to;
       FM.presetTags.move('lp:' + oldName, 'lp:' + to);
+      /* LAYERS APPLIED FROM THIS PRESET FOLLOW ITS NEW NAME (AU20). `layer.fromPreset` is a name, and the card shows "Update “name”" only while a
+         preset of that name exists, so a rename took the button away from every layer that had come from it. */
+      (FM.scene && FM.scene.layers || []).forEach(l => { if (l && l.fromPreset === oldName) l.fromPreset = to; });
       this._write(arr);
       return true;
     },
@@ -6188,6 +6191,11 @@ window.FM = window.FM || {};
       });
       bar.appendChild(q);
       const tags = FM.presetTags.list();
+      /* A TAG FILTER THAT NOTHING CARRIES ANY MORE IS DROPPED (AU20). `presetTag` is module state, and the chip that would clear it is built
+         from the tags in use. Clear the last preset's tag, or delete the last preset that had it, while that chip is the filter, and the
+         filter stayed on with no chip left to turn it off: every row was filtered out, "All" was not on screen, and it stayed that way
+         across layers and projects until the page was reloaded. */
+      if (presetTag && !tags.some(t => t.toLowerCase() === presetTag.toLowerCase())) presetTag = '';
       if (tags.length) {
         const chips = el('div', 'preset-chips');
         const chip = (label, val) => {

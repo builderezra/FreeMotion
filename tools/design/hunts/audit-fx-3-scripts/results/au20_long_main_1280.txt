@@ -1,0 +1,3 @@
+1280 Regression 0/1 ✗Pending 0/0 built
+   RED AU20 a long unbroken preset name wraps inside its row instead of running under the delete button or 
+FAILAU20 a long unbroken preset name wraps inside its row instead of running under the delete button or out of the panel — the name runs under the delete button: name ends at 762, the ✕ starts at 245

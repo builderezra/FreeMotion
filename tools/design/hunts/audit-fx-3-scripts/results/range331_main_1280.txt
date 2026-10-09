@@ -1,0 +1,9 @@
+1280 Regression 8/8 ✓Pending 0/0 built
+   ok  ZZ seed a layer for the preset card tests
+   ok  the two preset save buttons say what each one keeps (queue 329)
+   ok  every filter demonstrates on a photograph that exists and is preloaded (queue 359)
+   ok  a decoded photo re-mounts every tile, whatever class its canvas wears (queue 359)
+   ok  saving a preset updates the open Presets card by itself (queue 330)
+   ok  the Presets card leads with its save button and its ✕ is drawn, not typed (queue 331)
+   ok  917.16 the Presets save buttons are full buttons, flush with the card column, on a phone
+   ok  presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)
