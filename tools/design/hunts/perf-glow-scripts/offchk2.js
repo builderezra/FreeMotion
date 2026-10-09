@@ -1,0 +1,6 @@
+(async function(){ if(FM.home&&FM.home.isOpen&&FM.home.isOpen()) FM.home.close(); const me=await FM.projects.create({name:'off',width:1080,height:1920}); await new Promise(r=>setTimeout(r,300));
+ const P=FM.scene.project; P.width=1080;P.height=1920; FM.scene.layers.length=0;
+ const CW=302,CH=537; const render=()=>{const c=document.createElement('canvas');c.width=CW;c.height=CH;c.__fmRS=CW/1080;c.__fmOX=0;c.__fmOY=0;const g=c.getContext('2d');FM.renderScene(g,FM.scene,0.2);return g.getImageData(0,0,CW,CH).data;};
+ const base=render(); FM.addShapeLayer('ellipse'); const L=FM.scene.layers[0]; L.shapeW=400;L.shapeH=400;L.fillColor='#33ccff';L.transform.x=window.__x||1480;L.start=0;L.duration=4; L.effects=[]; if(window.__pre){ const q=FM.fxRegistry.makeInstance('blur'); q.params.radius=window.__pre; L.effects.push(q);} for(let i=0;i<4;i++) L.effects.push(FM.fxRegistry.makeInstance('glow'));
+ const cnt=(a)=>{let n=0,mx=0;for(let i=0;i<a.length;i+=4){const d=Math.abs(a[i]-base[i])+Math.abs(a[i+1]-base[i+1])+Math.abs(a[i+2]-base[i+2]); if(d>0)n++; if(d>mx)mx=d;} return n+'/'+mx;};
+ FM._glowSplitOff=true; const c1=render(); FM._glowSplitOff=false; const c2=render(); return 'chain '+cnt(c1)+' split '+cnt(c2); })()

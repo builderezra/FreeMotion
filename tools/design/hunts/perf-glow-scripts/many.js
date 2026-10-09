@@ -1,0 +1,6 @@
+(async function(){ if(FM.home&&FM.home.isOpen&&FM.home.isOpen()) FM.home.close(); const me=await FM.projects.create({name:'many',width:1080,height:1920}); await new Promise(r=>setTimeout(r,300));
+ const P=FM.scene.project; P.width=1080;P.height=1920; FM.scene.layers.length=0; FM.history.reset();
+ const NL=window.__nl||10; for(let k=0;k<NL;k++){ FM.addShapeLayer(k%2?'rect':'ellipse'); const L=FM.scene.layers[0]; L.shapeW=120;L.shapeH=120;L.transform.x=100+(k%5)*200;L.transform.y=300+Math.floor(k/5)*300; L.start=0;L.duration=4; L.effects=[]; for(let i=0;i<20;i++) L.effects.push(FM.fxRegistry.makeInstance('glow')); }
+ const CW=302,CH=537; const render=()=>{const c=document.createElement('canvas');c.width=CW;c.height=CH;c.__fmRS=CW/1080;c.__fmOX=0;c.__fmOY=0;const g=c.getContext('2d');const t0=performance.now();FM.renderScene(g,FM.scene,0.2);g.getImageData(0,0,1,1);return [g.getImageData(0,0,CW,CH).data,performance.now()-t0];};
+ FM._glowSplitOff=false; const [b,bm]=render(); let a,am; if(window.__chain){ FM._glowSplitOff=true; [a,am]=render(); } let mx=0,n=0; if(a){ for(let i=0;i<a.length;i++){const d=Math.abs(a[i]-b[i]); if(d>mx)mx=d; if(d>0)n++;} }
+ return JSON.stringify({layers:NL,glowsEach:20,splitMs:Math.round(bm),chainMs:a?Math.round(am):null,max:mx,diffBytes:n}); })()
