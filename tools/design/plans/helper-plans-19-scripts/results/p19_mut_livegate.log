@@ -1,0 +1,7 @@
+L1_no_ancestor_check: CAUGHT (4 failing checks)
+L2_unreachable_goes_on: CAUGHT (1 failing checks)
+L3_offline_flag_ignored: CAUGHT (1 failing checks)
+L4_no_fetch: CAUGHT (7 failing checks)
+L5_ancestor_reversed: CAUGHT (3 failing checks)
+L6_offline_flag_always: CAUGHT (2 failing checks)
+MUTDONE

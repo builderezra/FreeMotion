@@ -1,0 +1,13 @@
+=== A1_back_to_480_in_preview
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP19 #1062 — Pixel Motion: the paused preview frame differs from the export frame by up to 46 levels (preview builds the smear at 480 px, export at 720)
+=== A2_export_480
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP19 #1062 — while PLAYING the preview should still use the cheaper 480 px smear (it differs from export by 0), otherwise playback pays 2.25x for it, or export was lowered to 480
+=== A3_playback_720
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP19 #1062 — while PLAYING the preview should still use the cheaper 480 px smear (it differs from export by 0), otherwise playback pays 2.25x for it, or export was lowered to 480
+ALLDONE

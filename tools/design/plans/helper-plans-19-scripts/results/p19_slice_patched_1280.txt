@@ -1,0 +1,4 @@
+1280 Regression 3/3 ✓Pending 0/0 built
+   ok  P19 #1062 Motion Blur (Footage), Pixel Motion: a paused preview frame equals the export fr
+   ok  P19 #1063 rotating on the canvas: a drag across the point straight left of the pivot keeps
+   ok  P19 #1074 phone: the FIRST import into an empty project leaves Export on the bar (nothing 

@@ -1,0 +1,17 @@
+=== A1_back_to_480_in_preview
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP19 #1062 — Pixel Motion: the paused preview frame differs from the export frame by up to 46 levels (preview builds the smear at 480 px, export at 720)
+=== A2_export_480
+→ baseline: these titles were proven green on this exact tree already (cached)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+=== B1_no_wrap
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP19 #1063 — crossing 180° made the rotation jump: 0,2,4,6,8,10,-348,-346,-344,-342,-340
+=== B2_absolute
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP19 #1063 — crossing 180° made the rotation jump: 0,2,4,6,8,-350,-348,-346,-344,-342,-340
+ALLDONE

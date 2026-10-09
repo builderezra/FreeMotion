@@ -1,0 +1,13 @@
+=== N1_always_select
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP19 #1074 — phone: the first import auto-selected its clip, which hides Export (body.m-editing) until the back arrow is found
+=== N2_never_select_on_phone
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP19 #1074 — CONTROL: a second import should still select its clip
+=== N3_pc_not_selected
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP19 #1074 — CONTROL: on a PC the first import should still select its clip
+ALLDONE

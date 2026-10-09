@@ -1,0 +1,9 @@
+M1_empty_equals_empty: CAUGHT (0 failing checks; 1 crash)
+M2_no_styles_source: CAUGHT (4 failing checks; 0 crash)
+M3_no_templated: CAUGHT (4 failing checks; 0 crash)
+M4_bump_first_only: CAUGHT (1 failing checks; 0 crash)
+M5_equal_ignored: CAUGHT (10 failing checks; 0 crash)
+M6_templated_never_equal: CAUGHT (4 failing checks; 0 crash)
+M7_settle_once: CAUGHT (2 failing checks; 0 crash)
+M8_cascade_not_tracked: CAUGHT (2 failing checks; 0 crash)
+MUTDONE

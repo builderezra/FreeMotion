@@ -1,0 +1,27 @@
+diff --git a/js/canvas-edit.js b/js/canvas-edit.js
+index c4c0a15c..b4430cc1 100644
+--- a/js/canvas-edit.js
++++ b/js/canvas-edit.js
+@@ -536,7 +536,7 @@ window.FM = window.FM || {};
+         }
+         drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startScale: s0, startDist: Math.hypot(p.x - cx, p.y - cy) || 1 };
+       } else {
+-        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(p.y - cy, p.x - cx) };
++        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(p.y - cy, p.x - cx), lastAngle: Math.atan2(p.y - cy, p.x - cx), turned: 0 };
+       }
+     };
+   }
+@@ -679,7 +679,12 @@ window.FM = window.FM || {};
+       }
+       FM.shiftTransform(L, 'scale', s, FM.time);
+     } else if (drag.mode === 'rotate') {
+-      const deg = drag.startRot + (Math.atan2(p.y - drag.cy, p.x - drag.cx) - drag.startAngle) * 180 / Math.PI;
++      /* #1063: accumulate each step, wrapped into (-180, 180], the way the pinch path and the inspector dial do. atan2 folds at the point straight
++         left of the pivot, so the raw difference to the start angle jumped by 360 mid-drag (170 to 190 degrees gave -340, not +20). */
++      const ang = Math.atan2(p.y - drag.cy, p.x - drag.cx);
++      let step = ang - drag.lastAngle; step -= 2 * Math.PI * Math.round(step / (2 * Math.PI));
++      drag.turned += step; drag.lastAngle = ang;
++      const deg = drag.startRot + drag.turned * 180 / Math.PI;
+       if (drag.pivot && !drag.pivot.sandwich) {
+         // rotate about the bounds centre C: G' = C + R(Δ)·(G0 − C), so the visible box turns in place
+         // (queue 831: only when the RENDERER is not pivoting — see the note where `pivot` is built)

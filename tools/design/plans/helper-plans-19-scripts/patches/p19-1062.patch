@@ -1,0 +1,14 @@
+diff --git a/js/compositor.js b/js/compositor.js
+index 944ab78b..f10f5022 100644
+--- a/js/compositor.js
++++ b/js/compositor.js
+@@ -13351,7 +13351,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
+       }
+ 
+       // STYLE 0: PIXEL MOTION — per-pixel blur along the local flow vector, at a capped working res
+-      const WW = Math.min(FM._exporting ? 720 : 480, W), WH = Math.max(2, Math.round(H * WW / W));
++      // #1062: the SAME working width whenever nobody is watching it move (paused, scrubbing, export), so a paused preview frame is the export frame; only live playback drops to 480 to keep its frame time.
++      const WW = Math.min((FM._exporting || !FM.playing) ? 720 : 480, W), WH = Math.max(2, Math.round(H * WW / W));
+       if (!_mfW1) _mfW1 = document.createElement('canvas');
+       if (_mfW1.width !== WW || _mfW1.height !== WH) { _mfW1.width = WW; _mfW1.height = WH; }
+       const wc = _mfW1.getContext('2d', { willReadFrequently: true });

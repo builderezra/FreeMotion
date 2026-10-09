@@ -1,0 +1,20 @@
+diff --git a/js/app.js b/js/app.js
+index 0e2685ac..c87749c4 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -3096,8 +3096,13 @@ window.FM = window.FM || {};
+      * fix that was never applied here. Imported media is also the most common thing anyone adds, which
+      * is why the marker looked broken rather than partly working. */
+     FM.insertLayer(layer);
+-    scene.selectedId = layer.id;
+-    scene.selectedIds = [layer.id];
++    /* #1074: on a phone, selecting the very first clip turns on body.m-editing, which hides Export (the queue-52 rule: Export never moves and
++       never shares the bar with the delete bin) until the back arrow is found. So the FIRST import into an empty project leaves nothing selected
++       there; every later import, and a PC, still selects what it added. */
++    if (!(first && window.matchMedia && window.matchMedia('(max-width: 700px)').matches)) {
++      scene.selectedId = layer.id;
++      scene.selectedIds = [layer.id];
++    }
+     // Composition grows to fit: the first clip sets the length; later clips extend it.
+     if (first) P.duration = layer.start + layer.duration;
+     else P.duration = Math.max(P.duration, layer.start + layer.duration);
