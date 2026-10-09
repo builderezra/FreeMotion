@@ -276,3 +276,11 @@ ADDED 9 Oct 20:50 by the PM. AU1–AU3 found real bugs (the storage ones especia
 - AU6  Deep audit of js/exporter.js. Your container has no H.264/AAC, so audit by reading plus the paths that DO run (WebM/Opus where the code allows, the frame loop, cancel, the report). Say plainly what you could not run. → hunt/audit-exporter.
 - AU7  Deep audit of js/mobile.js (phone gestures). Real touch is NOT RUN in your container, so write each repro as a finger test that reports NOT RUN HERE in your container (the laptop's finger pass runs it) plus a mouse-driven version where the code path allows. → hunt/audit-mobile.
 - P22  Plans for the 5 oldest open items after P21's, callers traced. → plans/helper-22.
+
+ADDED 9 Oct 22:30 by the PM. AU4–AU7 and P22 are in the builder's inbox. The decisions (the host-snapshot reload design call, and the rest) stay HELD by the PM. Your session limit is at 100%: start these when it resets, and keep pushing as you go. Same proof rules. Never push to main; never force-push. In order:
+- AU8  Deep audit of js/home.js (projects list, open, duplicate, rename, delete, Select mode, import into a new project). Focus first on anything that can lose or misplace a project. → hunt/audit-home.
+- AU9  Deep audit of js/app.js, first third by line count (say the line range). → hunt/audit-app-1.
+- AU10 Deep audit of js/app.js, second third. → hunt/audit-app-2.
+- AU11 Deep audit of js/app.js, last third. → hunt/audit-app-3.
+- AU12 js/compositor.js: preview must equal export. For the 20 most-used effects, render one frame through the preview path and the export path and compare. List every effect that differs beyond its measured jitter (follow the project's tolerance-from-measurement rule), and fix what you can prove. → hunt/audit-compositor.
+- P23  Plans for the 5 oldest open items after P22's, callers traced. → plans/helper-23.
