@@ -1715,7 +1715,12 @@ window.FM = window.FM || {};
   // Quantize to the project frame grid — EVERYTHING user-placed (playhead, keyframes, markers,
   // splits) lives on an exact frame, like AM. Playback itself stays smooth (tick bypasses setTime).
   FM.snapFrame = function (t) { const f = FM.scene.project.fps || 30; return Math.round(t * f) / f; };
+  /* AU9-1: A TIME THAT IS NOT A NUMBER LEAVES THE PLAYHEAD WHERE IT IS. Math.max(0, Math.min(duration, NaN)) is NaN, so a
+     caller handing over `undefined` or NaN (a comment or a remote playhead without a time, a 0/0 from a zero-width lane)
+     set FM.time to NaN, and every render, readout and clip lookup after it read a NaN time until something else moved it. */
+  function finiteTime(t) { return (typeof t === 'number' && !isNaN(t)) ? t : (isFinite(FM.time) ? FM.time : 0); }   // ±Infinity is a number and is clamped to the ends below
   FM.setTime = function (t, noSnap) {
+    t = finiteTime(t);
     if (!FM.playing && !noSnap) t = FM.snapFrame(t);   // momentum glide passes noSnap for a smooth ride; it snaps on settle
     FM.time = Math.max(0, Math.min(FM.scene.project.duration, t));
     if (!FM.playing) FM.seekVideosToTime();
@@ -1748,6 +1753,7 @@ window.FM = window.FM || {};
   // stay synchronous (cheap DOM) so the line tracks the finger. Same pattern as the inspector sliders.
   let videoSeekQueued = false;
   FM.scrubTime = function (t, noSnap) {
+    t = finiteTime(t);
     if (!FM.playing && !noSnap) t = FM.snapFrame(t);
     FM.time = Math.max(0, Math.min(FM.scene.project.duration, t));
     if (!FM.playing && !videoSeekQueued) {

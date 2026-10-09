@@ -1,0 +1,13 @@
+=== A1_setTime_unguarded
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU9-1 — setTime(NaN) left the playhead at NaN, not where it was (2)
+=== A2_scrubTime_unguarded
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU9-1 — scrubTime(NaN) left the playhead at NaN, not where it was (2)
+=== A3_infinity_rejected
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU9-1 — CONTROL: Infinity did not clamp to the end (0)
+ALLDONE
