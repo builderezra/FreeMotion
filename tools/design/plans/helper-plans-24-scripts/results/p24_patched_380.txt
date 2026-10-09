@@ -1,0 +1,2 @@
+380 Regression 1/1 ✓Pending 0/0 built
+   ok  P24 #1099 a file with a damaged project block, too many keyframes, too many path points or too many 

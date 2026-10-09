@@ -1,0 +1,3 @@
+380 Regression 0/1 ✗Pending 0/0 built
+   RED P24 #1099 a file with a damaged project block, too many keyframes, too many path points or too many 
+FAILP24 #1099 a file with a damaged project block, too many keyframes, too many path points or too many fonts is refused before anything is created; a stray entry in the layer list is dropped — project given as text passed the door check

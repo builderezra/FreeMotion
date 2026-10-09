@@ -1,0 +1,64 @@
+diff --git a/index.html b/index.html
+index dae1109d..c8de8681 100644
+--- a/index.html
++++ b/index.html
+@@ -1091,7 +1091,7 @@
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+   <script src="js/history.js?v=37"></script>
+-  <script src="js/storage.js?v=58"></script>
++  <script src="js/storage.js?v=59"></script>
+   <script src="js/export-resume.js?v=7"></script>
+   <script src="js/medialib.js?v=8"></script>
+   <script src="js/template-fill.js?v=4"></script>
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..59d06736 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -1977,8 +1977,38 @@ window.FM = window.FM || {};
+     if (!obj.project) return 'That project file is missing its canvas settings — it may be truncated or only half-downloaded.';
+     if (!Array.isArray(obj.layers)) return 'That project file has no layers list — it may be truncated or only half-downloaded.';
+     if (obj.layers.length > 2000) return 'That project has ' + obj.layers.length + ' layers, which is more than FreeMotion will open.';
++    /* #1099 (P24): THE SHAPE, THEN THE SIZE, AT THE DOOR AND NOWHERE ELSE. This runs before projects.create, so a refusal costs nothing
++       and leaves nothing behind. The caps are NOT in sanitizeKeyframes / sanitizeImportedLayers on purpose: history.restore runs those on
++       every undo and redo while an ordinary open does not, so a cap there would cut a saved project on the first undo and the autosave
++       would keep the cut (queue 680's shape). FX_MAX stays where it is (sanitizeEffects cuts to it on every open). */
++    const plain = v => !!v && typeof v === 'object' && !Array.isArray(v);
++    if (!plain(obj.project)) return 'That project file\u2019s canvas settings are not valid \u2014 it may be damaged.';
++    if (obj.fonts != null && (!plain(obj.fonts) || Object.keys(obj.fonts).length > IMPORT_MAX_FONTS)) return 'That project file carries ' + (plain(obj.fonts) ? Object.keys(obj.fonts).length : 'an unreadable list of') + ' fonts, which is more than FreeMotion will open (' + IMPORT_MAX_FONTS + ').';
++    let nodes = 0;
++    const walk = (v, depth, inSubs) => {
++      if (!v || typeof v !== 'object' || depth > 14) return null;
++      if (Array.isArray(v)) {
++        if (inSubs && (nodes += v.length + 1) > IMPORT_MAX_PATH_NODES) return 'path';
++        for (let i = 0; i < v.length; i++) { const r = walk(v[i], depth + 1, inSubs); if (r) return r; }
++        return null;
++      }
++      if (Array.isArray(v.kf) && v.kf.length > IMPORT_MAX_KEYFRAMES) return 'kf';
++      for (const k in v) {
++        if (k === 'subs' || k === 'points') { const r = walk(v[k], depth + 1, true); if (r) return r; continue; }
++        const r = walk(v[k], depth + 1, inSubs); if (r) return r;
++      }
++      return null;
++    };
++    for (let i = 0; i < obj.layers.length; i++) {
++      const l = obj.layers[i]; if (!plain(l)) continue;   // a non-object entry is dropped by importObject, not refused
++      nodes = 0;
++      const r = walk(l, 0, false);
++      if (r === 'kf') return 'A layer in that project has more than ' + IMPORT_MAX_KEYFRAMES + ' keyframes on one setting, which is more than FreeMotion will open.';
++      if (r === 'path') return 'A drawing in that project has more than about ' + Math.round(IMPORT_MAX_PATH_NODES / 3) + ' points, which is more than FreeMotion will open.';
++    }
+     return null;
+   };
++  const IMPORT_MAX_KEYFRAMES = 2000, IMPORT_MAX_PATH_NODES = 60000, IMPORT_MAX_FONTS = 16;
+ 
+   /* Split out of importFile so the ORDER can be tested. The bug was never in the parsing or the
+      applying — it was that "create the project" happened before "is this file any good", and a file
+@@ -1989,6 +2019,7 @@ window.FM = window.FM || {};
+   FM.storage.importObject = async function (obj, onDone, opts) {
+     const problem = FM.storage.sceneFileProblem(obj);
+     if (problem) { if (FM.toast) FM.toast(problem, 5000); return false; }
++    obj.layers = obj.layers.filter(l => !!l && typeof l === 'object' && !Array.isArray(l));   // #1099: a stray number or null in the list is dropped, the rest opens
+     const kind = opts && opts.draft;   // queue 915 clause 8: only restoreBackup passes this, and only these two values
+     if (FM.projects) {
+       const pid = await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
