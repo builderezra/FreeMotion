@@ -59951,6 +59951,1286 @@
     } finally { IDBDatabase.prototype.transaction = realTx; }
   });
 
+  /* ════════ AU1: repro tests for the js/timeline.js audit. Append before `async function run()` in tests/tests.js; `?only=AU1` runs them. ════════ */
+  test('AU1-1 dragging the LEFT grip of a REVERSED clip keeps its effect clock still (Drift, Spin, Orbit do not jump), as the forward grip and the A key do', { item: 'au1' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const grip = async (rev) => {
+      FM.scene.layers.length = 0;
+      const v = FM.makeLayer('video', { name: 'clip' });
+      v.start = 2; v.duration = 6; v.trimStart = 2; v.reversed = rev; v.speed = 1;
+      FM.scene.layers.push(v); FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+      FM.scene.project.duration = 12; FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0); await sleep(300);
+      const g = document.querySelector('#tl-tracks .clip .clip-grip.left');
+      if (!g) throw new Error('setup: no left grip');
+      const r = g.getBoundingClientRect(), x = (r.left + r.right) / 2, y = (r.top + r.bottom) / 2;
+      const pps = document.querySelector('#tl-tracks .clip').getBoundingClientRect().width / v.duration;
+      const probe = 6, before = FM.fxLocalTime(v, probe), s0 = v.start;
+      const ev = (t, cx, b) => new PointerEvent(t, { pointerId: 31, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, clientX: cx, clientY: y, button: 0, buttons: b });
+      g.dispatchEvent(ev('pointerdown', x, 1));
+      for (let k = 1; k <= 6; k++) window.dispatchEvent(ev('pointermove', x + 40 * k / 6, 1));
+      window.dispatchEvent(ev('pointerup', x + 40, 0)); await sleep(120);
+      if (Math.abs(v.start - s0) < 0.2) throw new Error('setup: the grip drag did not move the head (start ' + s0 + ' to ' + v.start + ', pps ' + pps.toFixed(1) + ')');
+      return Math.abs(FM.fxLocalTime(v, probe) - before);
+    };
+    try {
+      const fwd = await grip(false);
+      if (fwd > 0.02) throw new Error('CONTROL: the forward clip’s effect clock moved by ' + fwd.toFixed(3) + ' s when its head was trimmed');
+      const rev = await grip(true);
+      if (rev > 0.02) throw new Error('trimming the head of a REVERSED clip moved its effect clock by ' + rev.toFixed(3) + ' s at a fixed time: every Drift / Spin / Orbit on it jumps (the forward grip, the A key and Extend all carry the clock)');
+    } finally {
+      try { FM.timeline._abortGestures && FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.time = t0; FM.selectLayer(sel0 || null); FM.refreshAll(); FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('AU1-2 growing the HEAD of a REVERSED clip with a speed ramp never reaches past the end of its source (grip, and the D/extend twin)', { item: 'au1' }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, t0 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const SRC = 20, problems = [];
+    const mk = (ramped) => {
+      FM.scene.layers.length = 0;
+      const v = FM.makeLayer('video', { name: 'clip' });
+      v.start = 6; v.duration = 6; v.trimStart = 1; v.reversed = true;
+      v.speed = ramped ? { kf: [{ t: 6, v: 3, e: 'linear' }, { t: 12, v: 0.5, e: 'linear' }] } : 3;
+      FM.scene.layers.push(v); FM.media.set(v.id, { kind: 'video', duration: SRC, width: 2, height: 2 });
+      FM.scene.project.duration = 14; FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0);
+      return v;
+    };
+    const head = v => FM.layerLocalTime(v, v.start + 0.001);   // a reversed clip opens on the END of its source window
+    try {
+      for (const [what, ramped] of [['flat 3x (CONTROL)', false], ['ramped 3x -> 0.5x', true]]) {
+        const v = mk(ramped); await sleep(200);
+        FM.time = 0;
+        if (!FM.extendClipTo(v, 0)) throw new Error('setup: extendClipTo(0) did nothing on the ' + what + ' clip');
+        const h = head(v);
+        if (h > SRC + 0.01) problems.push('extend (D key) on the ' + what + ' reversed clip: the head frame reads source ' + h.toFixed(2) + ' s of a ' + SRC + ' s file');
+      }
+      for (const [what, ramped] of [['flat 3x (CONTROL)', false], ['ramped 3x -> 0.5x', true]]) {
+        const v = mk(ramped); await sleep(300);
+        const g = document.querySelector('#tl-tracks .clip .clip-grip.left');
+        if (!g) throw new Error('setup: no left grip');
+        const r = g.getBoundingClientRect(), x = (r.left + r.right) / 2, y = (r.top + r.bottom) / 2;
+        const ev = (t, cx, b) => new PointerEvent(t, { pointerId: 32, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, clientX: cx, clientY: y, button: 0, buttons: b });
+        g.dispatchEvent(ev('pointerdown', x, 1));
+        for (let k = 1; k <= 4; k++) window.dispatchEvent(ev('pointermove', x - 400 * k, 1));
+        window.dispatchEvent(ev('pointerup', x - 1600, 0)); await sleep(120);
+        if (!(v.start < 5.9)) throw new Error('setup: the grip drag did not pull the head back (start ' + v.start + ')');
+        const h = head(v);
+        if (h > SRC + 0.01) problems.push('left grip on the ' + what + ' reversed clip: the head frame reads source ' + h.toFixed(2) + ' s of a ' + SRC + ' s file (start ' + v.start.toFixed(2) + ', duration ' + v.duration.toFixed(2) + ')');
+      }
+      if (problems.length) throw new Error(problems.join(' AND '));
+    } finally {
+      try { FM.timeline._abortGestures && FM.timeline._abortGestures(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.time = t0; FM.selectLayer(sel0 || null); FM.refreshAll(); FM.timeline.rebuild();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ════════ AU2: repro tests for the js/inspector.js audit. Append before `async function run()` in tests/tests.js; `?only=AU2` runs them. ════════ */
+  test('AU2-1 typing the number an effect slider is already showing leaves it alone (26 shipped defaults sit between the step notches, and typing them moved them)', { item: 'au2', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    try {
+      const a = FM.makeLayer('shape', { name: 'AU2', shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: '#c05030', start: 0, duration: 4 });
+      const fx = FM.fxRegistry.makeInstance('crt'); fx._expanded = true; a.effects = [fx];
+      FM.scene = { layers: [a], project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' }, selectedId: null, version: 1 };
+      FM.refreshAll(); FM.selectLayer(a.id); await sleep(250);
+      FM.inspector.openCategory('effects'); await sleep(450);
+      const row = [].slice.call(document.querySelectorAll('#inspector-panel .fx-scrub-row')).find(r => /Scanline/i.test((r.querySelector('.fx-scrub-label') || {}).textContent || ''));
+      if (!row) throw new Error('setup: no Scanline row in the open CRT effect');
+      const box = row.querySelector('.fx-scrub-val'), want = fx.params.scanline;
+      if (!(want > 0)) throw new Error('setup: CRT Scanline has no default to type back');
+      const shown = parseFloat(box.value);
+      if (Math.abs(shown - want) > 0.0051) throw new Error('CONTROL: the box shows ' + box.value + ' for a stored ' + want);
+      box.value = String(shown); box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(120);
+      const got = FM.evalProp(fx.params.scanline, FM.time);
+      if (Math.abs(got - want) > 1e-9) throw new Error('typing the value Scanline already shows (' + shown + ') changed it from ' + want + ' to ' + got);
+      // CONTROL: a value that IS on the grid is kept exactly
+      box.value = '0.30'; box.dispatchEvent(new Event('change', { bubbles: true })); await sleep(120);
+      if (Math.abs(FM.evalProp(fx.params.scanline, FM.time) - 0.3) > 1e-9) throw new Error('CONTROL: typing 0.30 stored ' + FM.evalProp(fx.params.scanline, FM.time));
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('AU2-2 Paste look → Effects fits a copied filter to the layer it lands on (a text-only child is dropped, as the effect Paste button does)', { item: 'au2', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, clip0 = FM.clipboard, hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    try {
+      const txt = FM.makeLayer('text', { name: 'src', text: 'Hi', start: 0, duration: 4 });
+      const kid = (id) => FM.fxRegistry.makeInstance(id);
+      txt.effects = [{ type: FM.FX_CONTAINER, enabled: true, name: 'Mixed', effects: [kid('counter'), kid('blur')] }];
+      if (!FM.fxRegistry.supportsLayer('counter', txt) || FM.fxRegistry.supportsLayer('counter', FM.makeLayer('shape', { shape: 'rect' }))) throw new Error('setup: counter is not a text-only effect any more, pick another');
+      const shp = FM.makeLayer('shape', { name: 'dst', shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: '#c05030', start: 0, duration: 4 });
+      FM.scene = { layers: [shp], project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' }, selectedId: null, version: 1 };
+      FM.clipboard = [{ snapshot: JSON.parse(JSON.stringify(txt)) }];
+      FM.refreshAll(); FM.selectLayer(shp.id); await sleep(200);
+      FM.openPasteStyle(shp); await sleep(100);
+      const tiles = [].slice.call(document.querySelectorAll('.ps-overlay .ps-cat'));
+      tiles.forEach(b => { const on = b.classList.contains('on'); const isFx = /effect/i.test(b.title || ''); if (on !== isFx && !b.disabled) b.click(); });   // only Effects ticked
+      const fxTile = tiles.find(b => /effect/i.test(b.title || ''));
+      if (!fxTile || fxTile.disabled) throw new Error('CONTROL: the Effects tile is not available for a copied filter (' + (fxTile && fxTile.title) + ')');
+      document.querySelector('.ps-overlay .ps-paste').click(); await sleep(150);
+      const out = (FM.layerById(FM.scene, shp.id).effects || []);
+      const box = out.find(e => FM.isFxContainer(e));
+      if (!box) throw new Error('CONTROL: the pasted filter did not arrive at all (effects: ' + out.map(e => e.type).join(',') + ')');
+      const types = (box.effects || []).map(e => e.type);
+      if (types.indexOf('blur') < 0) throw new Error('CONTROL: the child that suits a shape (blur) was dropped: ' + types.join(','));
+      if (types.indexOf('counter') >= 0) throw new Error('Paste look landed a text-only effect (counter) inside a filter on a SHAPE, where it can never run: ' + types.join(','));
+    } finally {
+      FM.scene = saved; FM.clipboard = clip0; document.querySelectorAll('.ps-overlay').forEach(o => o.remove());
+      try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('AU2-3 the multi-select Align buttons (Start together, Chain, End together) leave a LOCKED clip where it is, as the A / S / D keys and the drag do', { item: 'au2', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    try {
+      const mk = (name, start, dur) => { const l = FM.makeLayer('shape', { name: name, shape: 'rect', x: 300, y: 300, shapeW: 80, shapeH: 80, fill: '#c05030', start: start, duration: dur }); return l; };
+      const run = async (title) => {
+        const A = mk('A', 0, 2), B = mk('B', 3, 2), C = mk('C', 6, 2); B.locked = true;
+        FM.scene = { layers: [A, B, C], project: { width: 1080, height: 1920, fps: 30, duration: 8, background: '#000000' }, selectedId: C.id, selectedIds: [A.id, B.id, C.id], version: 1 };
+        FM.refreshAll(); FM.inspector.refresh(); await sleep(250);
+        const btn = [].slice.call(document.querySelectorAll('.align-big .qr-btn')).find(b => (b.title || '').indexOf(title) === 0);
+        if (!btn) throw new Error('setup: no "' + title + '" button in the multi-select Align row');
+        btn.click(); await sleep(120);
+        return { A: A.start, B: B.start, C: C.start };
+      };
+      const bad = [];
+      for (const title of ['Start together', 'One after another, down', 'End together']) {
+        const r = await run(title);
+        if (r.B !== 3) bad.push(title + ' moved the LOCKED clip from 3 s to ' + r.B + ' s');
+      }
+      if (bad.length) throw new Error(bad.join('; '));
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('AU2-4 the multi-select Align buttons move a selected GROUP together with what is inside it', { item: 'au2', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    try {
+      const mk = (name, start, dur) => FM.makeLayer('shape', { name: name, shape: 'rect', x: 300, y: 300, shapeW: 80, shapeH: 80, fill: '#c05030', start: start, duration: dur });
+      const P = mk('Plain', 0, 2);
+      const G = FM.makeLayer('group', { name: 'G', start: 5, duration: 3 });
+      const M = mk('Member', 5, 3); M.parent = G.id;
+      FM.scene = { layers: [P, G, M], project: { width: 1080, height: 1920, fps: 30, duration: 8, background: '#000000' }, selectedId: G.id, selectedIds: [P.id, G.id], version: 1 };
+      if (!FM.groupDescendants || FM.groupDescendants(G.id).map(l => l.id).indexOf(M.id) < 0) throw new Error('setup: the member is not a descendant of the group (' + (FM.groupDescendants ? FM.groupDescendants(G.id).length : 'no API') + ')');
+      FM.refreshAll(); FM.inspector.refresh(); await sleep(250);
+      const btn = [].slice.call(document.querySelectorAll('.align-big .qr-btn')).find(b => (b.title || '').indexOf('Start together') === 0);
+      if (!btn) throw new Error('setup: no "Start together" button in the multi-select Align row');
+      btn.click(); await sleep(120);
+      if (Math.abs(G.start - 0) > 1e-6) throw new Error('CONTROL: the group bar did not move to 0 (it is at ' + G.start + ')');
+      if (Math.abs(M.start - G.start) > 1e-6) throw new Error('the group bar moved to ' + G.start + ' s but the layer inside it stayed at ' + M.start + ' s, so the group no longer contains its own contents');
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ════════ AU4: audit of js/scene.js + js/history.js. Append before `async function run()` in tests/tests.js; `?only=AU4` runs them. ════════ */
+  const au4Fresh = function () {
+    if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
+    FM.scene.layers.length = 0; FM.scene.project.duration = 0; FM.selectLayer(null); FM.history.reset();
+    FM.addShapeLayer('rect'); FM.history.commit();
+  };
+  test('AU4-1 undo right after Add text / Add captions (the editor still open) can be REDONE; the redo is not thrown away', { item: 'AU4', budgetMs: 30000 }, async function () {
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, dur0 = FM.scene.project.duration;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    try {
+      // CONTROL: a shape (no editor opens) undoes and redoes
+      au4Fresh(); FM.addShapeLayer('ellipse');
+      if (FM.scene.layers.length !== 2) throw new Error('setup: shape not added');
+      FM.history.undo(); if (!FM.history.canRedo()) throw new Error('CONTROL: nothing to redo after undoing a shape');
+      FM.history.redo(); if (FM.scene.layers.length !== 2) throw new Error('CONTROL: redo did not bring the shape back');
+      for (const kind of ['text', 'caption']) {
+        au4Fresh();
+        if (kind === 'text') FM.addTextLayer(); else FM.addCaptionLayer();
+        if (FM.scene.layers.length !== 2) throw new Error(kind + ': setup: layer not added');
+        if (!(FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive())) throw new Error(kind + ': setup: the editor is not open, so this is not the case under test');
+        FM.history.undo();
+        if (FM.scene.layers.length !== 1) throw new Error(kind + ': undo did not remove the layer (' + FM.scene.layers.length + ' layers)');
+        if (!FM.history.canRedo()) throw new Error(kind + ': after undoing "Add ' + kind + '" with the editor open, Redo is gone: the editor closing pushed a selection-only step and threw the redo tail away');
+        FM.history.redo();
+        if (FM.scene.layers.length !== 2) throw new Error(kind + ': redo did not bring the layer back');
+      }
+    } finally {
+      if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
+      FM.scene.layers = savedLayers; FM.scene.project.duration = dur0; FM.scene.selectedId = sel0; FM.history.reset(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+  test('AU4-2 Add group while the text editor is open is ONE undo step, not two (the first undo used to do nothing visible)', { item: 'AU4', budgetMs: 30000 }, async function () {
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, dur0 = FM.scene.project.duration;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    try {
+      // CONTROL: with no editor open, Add group is one step
+      au4Fresh(); let n0 = FM.history._steps().len; FM.addEmptyGroup();
+      if (FM.history._steps().len - n0 !== 1) throw new Error('CONTROL: Add group with no editor open made ' + (FM.history._steps().len - n0) + ' steps');
+      au4Fresh(); FM.addTextLayer();
+      if (!(FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive())) throw new Error('setup: the editor is not open');
+      n0 = FM.history._steps().len; const layers0 = FM.scene.layers.length;
+      FM.addEmptyGroup();
+      const steps = FM.history._steps().len - n0;
+      if (steps !== 1) throw new Error('Add group with the text editor open made ' + steps + ' history steps (the first one is a selection-only copy of the half-done add)');
+      FM.history.undo();
+      if (FM.scene.layers.length !== layers0) throw new Error('one undo did not take the group back (' + FM.scene.layers.length + ' layers, expected ' + layers0 + ')');
+    } finally {
+      if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
+      FM.scene.layers = savedLayers; FM.scene.project.duration = dur0; FM.scene.selectedId = sel0; FM.history.reset(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+  test('AU4-3 a random sequence of real commands: every undo and every redo lands byte for byte on the snapshot it names (layers and project, duration aside)', { item: 'AU4', budgetMs: 120000 }, async function () {
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, dur0 = FM.scene.project.duration;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const J = () => JSON.stringify({ project: Object.assign({}, FM.scene.project, { duration: 0 }), layers: FM.scene.layers }, FM.jsonReplacer);
+    const proj = x => { const o = JSON.parse(x); return JSON.stringify({ project: Object.assign({}, o.project, { duration: 0 }), layers: o.layers }, FM.jsonReplacer); };
+    let seed = 12345; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }; const pick = a => a[Math.floor(rnd() * a.length)];
+    try {
+      let steps = 0;
+      for (let round = 0; round < 4; round++) {
+        if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
+        FM.scene.layers.length = 0; FM.scene.project.duration = 0; FM.selectLayer(null); FM.history.reset();
+        FM.addShapeLayer('rect'); FM.addShapeLayer('ellipse'); FM.addNullLayer(); FM.addAdjustmentLayer();
+        if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
+        FM.history.commit();
+        const L = () => FM.scene.layers, any = () => pick(L());
+        const sel = l => { FM.scene.selectedId = l.id; FM.scene.selectedIds = [l.id]; };
+        const ops = [
+          () => { const l = any(); FM.setTransform(l, 'x', Math.round(rnd() * 400), pick([0, 1, 2])); },
+          () => { const l = any(); FM.toggleKeyframe(l, pick(['x', 'y', 'scale', 'opacity']), pick([0, .5, 1, 2])); },
+          () => FM.addShapeLayer(pick(['rect', 'ellipse', 'star'])),
+          async () => { const l = any(); sel(l); await FM.duplicateLayer(l.id); },
+          () => { const l = any(); if (L().length > 2) { sel(l); FM.deleteSelected(); } },
+          async () => { const l = any(); FM.time = Math.min(l.start + l.duration * 0.5, FM.scene.project.duration); sel(l); await FM.splitLayer(l.id); },
+          () => { const a = any(), b = any(); if (a !== b && a.type !== 'group' && b.type !== 'group' && !a.parent && !b.parent) { FM.scene.selectedIds = [a.id, b.id]; FM.scene.selectedId = a.id; FM.groupSelection(); } },
+          () => { const g = L().find(l => l.type === 'group'); if (g) FM.ungroup(g.id); },
+          () => { FM.flipLayer(any(), pick(['x', 'y'])); },
+          () => { const l = any(); if (!l.locked) FM.moveClipTo(l, rnd() * 3); },
+          () => { const a = any(), b = any(); if (a !== b && !a.parent && !b.parent) FM.moveLayers([a.id], b.id); },
+          async () => { const l = any(); sel(l); FM.copySelection(); await FM.pasteClipboard(); },
+          () => { FM.scene.project.background = pick(['#000000', '#ffffff', '#336699']); },
+        ];
+        for (let i = 0; i < 30; i++) {
+          await pick(ops)();
+          if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
+          FM.history.commit();
+        }
+        const S = FM.history._snapshotsUpTo(); steps += S.length;
+        const tip = J(); if (tip !== proj(S[S.length - 1])) throw new Error('round ' + round + ': the live scene is not the newest snapshot');
+        const bad = [];
+        for (let i = S.length - 2; i >= 0; i--) { FM.history.undo(); if (J() !== proj(S[i])) bad.push('undo to ' + i); }
+        for (let i = 1; i < S.length; i++) { FM.history.redo(); if (J() !== proj(S[i])) bad.push('redo to ' + i); }
+        if (bad.length) throw new Error('round ' + round + ': ' + bad.length + ' of ' + (2 * (S.length - 1)) + ' steps did not land on their snapshot: ' + bad.slice(0, 6).join(', '));
+      }
+      if (steps < 60) throw new Error('setup: the sequences made only ' + steps + ' steps, too few to mean anything');
+    } finally {
+      if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
+      FM.scene.layers = savedLayers; FM.scene.project.duration = dur0; FM.scene.selectedId = sel0; FM.history.reset(); FM.refreshAll();
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+  /* ════════ AU5: the REAL collab Session over a fake wire (LoopLink, never a socket). `?only=AU5` runs these. ════════ */
+  test('AU5-1 lost edits, stale overwrites and duplicate layers: an owner and two real guests, cuts and heals mid-edit, 6 seeds of 100 rounds', { item: 'AU5', budgetMs: 600000 }, async function () {
+    // A semantic check the convergence fuzz (a MODEL of a guest) does not make: every layer somebody added and
+    // nobody deleted exists exactly ONCE everywhere, and a value only ONE person writes ends as that person's last write.
+    const seeds = [100, 107, 114, 121, 128, 135];
+    const problems = [];
+    let totalCuts = 0, totalOffline = 0;
+    for (const seed of seeds) {
+      await withCollab921([layer921('base0'), layer921('base1')], async function (c) {
+        const R = rng921(seed);
+        const g = [c.addGuest({ name: 'G0' }), c.addGuest({ name: 'G1' })];
+        const docs = [null, g[0].doc, g[1].doc];                 // actor 0 = the owner (the real scene)
+        const exp = {};                                           // id -> { actor, deleted, name }
+        let n = 0, cuts = 0, offlineAdds = 0;
+        const layersOf = (a) => a === 0 ? FM.scene.layers : docs[a].layers;
+        // the pump must go round until every loop is empty: a batch one loop delivers is queued on ANOTHER loop
+        const settle = () => { for (let k = 0; k < 30; k++) { g.forEach(x => x.loop.settle(400)); if (!g.some(x => x.loop.pending())) break; } };
+        // the owner's tick matters: it is what serves a catch-up the budget put off (a guest that reconnects often)
+        const tickAll = () => { c.S.tick('full'); g.forEach(x => x.G.tick('full')); FM.history.commit(); settle(); };
+        const cut = [false, false];
+        for (let round = 0; round < 100; round++) {
+          const a = Math.floor(R() * 3);
+          const mine = Object.keys(exp).filter(id => exp[id].actor === a && !exp[id].deleted);
+          const r = R();
+          if (r < 0.4 || !mine.length) {
+            const id = 'au5_' + a + '_' + (++n);
+            layersOf(a).push(layer921('L' + n, { id: id }));
+            if (a > 0 && cut[a - 1]) offlineAdds++;
+            exp[id] = { actor: a, deleted: false, name: 'L' + n };
+          } else if (r < 0.8) {
+            const id = mine[Math.floor(R() * mine.length)];
+            const L = layersOf(a).filter(x => x.id === id)[0];
+            if (L) { L.name = 'v' + (++n); exp[id].name = L.name; }
+          } else {
+            const id = mine[Math.floor(R() * mine.length)];
+            const arr = layersOf(a), i = arr.findIndex(x => x.id === id);
+            if (i >= 0) { arr.splice(i, 1); exp[id].deleted = true; }
+          }
+          if (a === 0) FM.history.commit(); else g[a - 1].G.tick('full');
+          if (R() < 0.5) settle();
+          if (R() < 0.15) { const k = Math.floor(R() * 2); if (!cut[k]) { g[k].loop.partition('g' + k); cut[k] = true; cuts++; } }
+          if (R() < 0.25) { const k = Math.floor(R() * 2); if (cut[k]) { g[k].loop.heal('g' + k); cut[k] = false; } }
+        }
+        for (let k = 0; k < 2; k++) if (cut[k]) { g[k].loop.heal('g' + k); cut[k] = false; }
+        const sig = () => [FM.scene.layers, g[0].doc.layers, g[1].doc.layers].map(arr => arr.map(l => l.id + '|' + l.name).sort().join(','));
+        for (let i = 0; i < 60; i++) { tickAll(); const [o, a1, a2] = sig(); if (o === a1 && o === a2 && i > 3) break; await new Promise(r => setTimeout(r, 150)); }
+        totalCuts += cuts; totalOffline += offlineAdds;
+        const norm = (arr) => arr.map(l => l.id + '|' + l.name).sort().join(',');
+        const ref = norm(FM.scene.layers);
+        g.forEach((x, k) => { if (norm(x.doc.layers) !== ref) problems.push('seed ' + seed + ': guest ' + k + ' differs from the owner'); });
+        Object.keys(exp).forEach(id => {
+          const e = exp[id];
+          [['owner', FM.scene.layers], ['g0', g[0].doc.layers], ['g1', g[1].doc.layers]].forEach(([who, arr]) => {
+            const hits = arr.filter(l => l.id === id);
+            if (e.deleted && hits.length) problems.push('seed ' + seed + ': ' + id + ' was deleted by its author and is back on ' + who);
+            if (!e.deleted && hits.length !== 1) problems.push('seed ' + seed + ': ' + id + ' (added by actor ' + e.actor + ') is on ' + who + ' ' + hits.length + ' times');
+            if (!e.deleted && hits.length === 1 && hits[0].name !== e.name) problems.push('seed ' + seed + ': ' + id + ' on ' + who + ' is named "' + hits[0].name + '", its author last wrote "' + e.name + '"');
+          });
+        });
+      });
+    }
+    if (totalCuts < 6 || totalOffline < 6) problems.push('CONTROL: the runs cut a link only ' + totalCuts + ' times and added only ' + totalOffline + ' layers while cut, too few to mean anything');
+    if (problems.length) throw new Error(problems.length + ' problems; first: ' + problems.slice(0, 4).join(' | '));
+  });
+  test('AU5-2 a guest that reloads with a base persisted BEFORE a layer arrived does not hand that layer back after the owner deleted it, and still sends its own offline layer', { item: 'AU5', budgetMs: 90000 }, async function () {
+    await withCollab921([layer921('A')], async function (c) {
+      const C = c.C;
+      const g = c.addGuest({ name: 'G0' });
+      const clone = jclone921;
+      // 1. the guest persisted its base here (what bridge.persistBase writes 2 s after a batch)
+      const persisted = { epoch: g.G.epoch, seq: g.G.bs, cid: g.G.cid, D: clone({ project: g.G.base.project, layers: g.G.base.layers }) };
+      // 2. the owner adds Y and Z; both reach the guest (live and base) before the 2 s persist would have fired
+      FM.scene.layers.push(layer921('Y', { id: 'au5_Y' }), layer921('Z', { id: 'au5_Z' }));
+      FM.history.commit(); g.loop.settle();
+      if (!g.doc.layers.some(l => l.id === 'au5_Y') || !g.doc.layers.some(l => l.id === 'au5_Z')) throw new Error('CONTROL: Y and Z never reached the guest');
+      // 3. the guest goes away (a reload), having also made a layer of its own that no base has seen; the owner deletes Y meanwhile
+      g.doc.layers.push(layer921('mine', { id: 'au5_mine' }));
+      g.G.setOnline(false);
+      g.loop.partition('g0');
+      FM.scene.layers.splice(FM.scene.layers.findIndex(l => l.id === 'au5_Y'), 1);
+      FM.history.commit(); g.loop.settle();
+      if (FM.scene.layers.some(l => l.id === 'au5_Y')) throw new Error('CONTROL: the owner still has Y');
+      // 4. the guest comes back as a NEW session: live = what it autosaved (has Y, Z, mine), base = the stale persisted one
+      const A2 = plainAdapter921(g.doc, C.bridge.invariants());
+      const loop2 = C.link.LoopLink({ aTag: 'h', bTag: 'g0b', mode: 'manual' });
+      c.S.addPeer(loop2.a, { role: 'editor', name: 'G0', color: '#44aaff', mid: g.mid });
+      const G2 = C.Session({ adapter: A2, role: 'editor', mid: g.mid, base: clone(persisted.D), epoch: persisted.epoch });
+      G2.bs = persisted.seq; G2.cid = persisted.cid;
+      const owed = G2.recoverOutbox(persisted);
+      G2.setLink(loop2.b);
+      loop2.b.send('ctl', G2._helloMsg({ name: 'G0' }));
+      G2.tick('full'); loop2.settle(); G2.tick('full'); loop2.settle();
+      const count = (arr, id) => arr.filter(l => l.id === id).length;
+      if (!owed) throw new Error('CONTROL: recoverOutbox owed nothing, so the stale-base resend is not what ran');
+      if (count(FM.scene.layers, 'au5_mine') !== 1) throw new Error('CONTROL: the guest\'s own offline layer reached the owner ' + count(FM.scene.layers, 'au5_mine') + ' times, not once');
+      if (count(FM.scene.layers, 'au5_Z') !== 1) throw new Error('CONTROL: Z (nobody removed it) is on the owner ' + count(FM.scene.layers, 'au5_Z') + ' times');
+      if (count(FM.scene.layers, 'au5_Y')) throw new Error('the owner deleted Y and the reloaded guest handed it back: the owner has Y again (the guest owed ' + owed + ' ops)');
+      if (count(A2.doc().layers, 'au5_Y')) throw new Error('the reloaded guest still shows Y, which the owner deleted');
+    });
+  });
+  /* ════════ AU6: audit of js/exporter.js. Append before `async function run()` in tests/tests.js; `?only=AU6` runs them. ════════
+     THE CONTAINER HAS NO H.264 AND NO AAC (VP9, VP8, AV1 and Opus only), so run() cannot finish on a stock encoder here. The two
+     encoder tests put a spy in front of VideoEncoder / AudioEncoder that hands the export a codec this browser CAN encode (VP9,
+     Opus) under the name the exporter asks for; everything else in run() is the real code. On a browser that has H.264 and AAC
+     the spy is not needed, and the same assertions hold with it in place. */
+  const au6Spy = function (kind, opts) {
+    const o = opts || {};
+    const Real = window[kind], made = [], frames = [];
+    const realCS = Real.isConfigSupported.bind(Real);
+    const swap = kind === 'VideoEncoder' ? { codec: 'vp09.00.10.08' } : { codec: 'opus' };
+    class Spy extends Real {
+      constructor(init) { super(init); made.push(this); this._n = 0; this._idx = made.length; }
+      configure(cfg) { const c = Object.assign({}, cfg, swap); if (kind === 'AudioEncoder') { delete c.bitrate; } return super.configure(c); }
+      encode(x, y) { frames.push(x); if (o.throwAt && (!o.instance || o.instance === this._idx) && ++this._n === o.throwAt) throw new Error('au6 boom: encode'); return y === undefined ? super.encode(x) : super.encode(x, y); }
+      static isConfigSupported(c) { const d = Object.assign({}, c, swap); if (kind === 'AudioEncoder') delete d.bitrate; return realCS(d); }
+    }
+    window[kind] = Spy;
+    return { made: made, frames: frames, restore: function () { window[kind] = Real; } };
+  };
+  test('AU6-1 an MP4 export that fails part-way (a layer that will not draw, an encoder that throws) closes its video encoder and every frame it made', { item: 'AU6', budgetMs: 60000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer here');
+    const saved = { layers: FM.scene.layers.slice(), dur: FM.scene.project.duration, w: FM.scene.project.width, h: FM.scene.project.height, fps: FM.scene.project.fps, time: FM.time };
+    const realRS = FM.renderScene;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    let spy = null;
+    try {
+      FM.scene.layers.length = 0; FM.scene.project.width = 160; FM.scene.project.height = 90; FM.scene.project.duration = 2; FM.scene.project.fps = 10;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 45, shapeW: 20, shapeH: 20, fill: '#ff0000' }); L.start = 0; L.duration = 2; FM.scene.layers.push(L);
+      const go = async function (extra) {
+        FM._exportCancel = false;
+        // a failed export KEEPS its saved render by design (crash-resume), and the next one with the same settings resumes from it, so the
+        // frame the test injects its failure at would never be reached: start each run from an empty store
+        if (FM.exportResume) { try { await FM.exportResume.clear(); } catch (e) {} }
+        let err = null, ready = null;
+        try { await FM.exporter.run(Object.assign({ scale: 1, fps: 10, name: 'au6', onProgress: function () {}, onReady: function (r) { ready = r; } }, extra || {})); }
+        catch (e) { err = e && e.message; }
+        return { err: err, ready: ready };
+      };
+      const open = function (s) { return s.made.filter(function (e) { return e.state !== 'closed'; }).length; };
+      // CONTROL: a clean export finishes with 20 frames, closes its encoder and releases the flag
+      spy = au6Spy('VideoEncoder');
+      let r = await go();
+      if (r.err) throw new Error('CONTROL: the clean export failed: ' + r.err);
+      if (!r.ready || Math.round(r.ready.seconds * r.ready.fps) !== 20) throw new Error('CONTROL: the clean export is not 20 frames');
+      if (spy.made.length !== 1 || open(spy)) throw new Error('CONTROL: the clean export left ' + open(spy) + ' of ' + spy.made.length + ' encoders open');
+      // CONTROL: a Cancel closes it (the branch that always did)
+      spy.made.length = 0; let n = 0;
+      r = await go({ onProgress: function () { if (++n === 5) FM._exportCancel = true; } });
+      if (r.err !== 'CANCELLED') throw new Error('CONTROL: the cancelled export ended with ' + r.err);
+      if (open(spy)) throw new Error('CONTROL: a cancelled export left an encoder open');
+      // 1: the sixth frame fails to draw
+      spy.made.length = 0; let k = 0;
+      FM.renderScene = function () { if (++k === 6) throw new Error('au6 boom: render'); return realRS.apply(this, arguments); };
+      r = await go(); FM.renderScene = realRS;
+      if (r.err !== 'au6 boom: render') throw new Error('setup: the injected render failure did not reach the caller (' + r.err + ')');
+      if (FM._exporting) throw new Error('the export flag is still on after a failure');
+      if (open(spy)) throw new Error('an export that failed while drawing frame 6 left ' + open(spy) + ' video encoder(s) configured: it is only closed by the Cancel branches, so every failed export holds a hardware encoder until the page goes');
+      // 2: the encoder itself throws on the fourth frame; the frame in hand must be closed too
+      spy.restore(); spy = au6Spy('VideoEncoder', { throwAt: 4 });
+      r = await go();
+      if (r.err !== 'au6 boom: encode') throw new Error('setup: the injected encode failure did not reach the caller (' + r.err + ')');
+      if (open(spy)) throw new Error('a throwing encode left an encoder open');
+      const alive = spy.frames.filter(function (f) { return f.format !== null; }).length;
+      if (alive) throw new Error(alive + ' VideoFrame(s) were never closed after the encoder threw on the one it was handed');
+    } finally {
+      if (spy) spy.restore();
+      if (FM.exportResume) { try { await FM.exportResume.clear(); } catch (e) {} }
+      FM.renderScene = realRS; FM._exportCancel = false; FM._exporting = false;
+      FM.scene.layers = saved.layers; FM.scene.project.duration = saved.dur; FM.scene.project.width = saved.w; FM.scene.project.height = saved.h; FM.scene.project.fps = saved.fps; FM.time = saved.time;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+  test('AU6-2 a soundtrack encode that throws part-way closes its audio encoder and the AudioData in hand', { item: 'AU6', budgetMs: 30000 }, async function () {
+    if (typeof AudioEncoder === 'undefined' || !FM._encodeAudio) throw new Error('setup: no AudioEncoder or seam here');
+    const SR = 48000, len = SR;   // one second, mono
+    const buf = new AudioBuffer({ numberOfChannels: 1, length: len, sampleRate: SR });
+    const d = buf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.sin(2 * Math.PI * 440 * i / SR) * 0.3;
+    const mix = { audioBuffer: buf, sampleRate: SR, channels: 1 };
+    let spy = au6Spy('AudioEncoder');
+    try {
+      // CONTROL: the clean encode produces chunks and closes its encoder
+      const chunks = []; await FM._encodeAudio(function (c) { chunks.push(c); }, mix);
+      if (!chunks.length) throw new Error('CONTROL: the clean encode made no chunks');
+      const open = function () { return spy.made.filter(function (e) { return e.state !== 'closed'; }).length; };
+      if (!spy.made.length || open()) throw new Error('CONTROL: the clean encode left ' + open() + ' of ' + spy.made.length + ' encoders open');
+      // 1: the SOUNDTRACK encoder (the second one made; the first is the warm-up probe) throws on its fifth frame
+      spy.restore(); spy = au6Spy('AudioEncoder', { throwAt: 5, instance: 2 });
+      let err = null; try { await FM._encodeAudio(function () {}, mix); } catch (e) { err = e && e.message; }
+      if (err !== 'au6 boom: encode') throw new Error('setup: the injected failure did not reach the caller (' + err + ')');
+      let live = spy.made.filter(function (e) { return e.state !== 'closed'; }).length;
+      if (live) throw new Error('a soundtrack encode that threw left ' + live + ' audio encoder(s) configured (the export then drops its sound and carries on, holding the encoder)');
+      const openData = spy.frames.filter(function (a) { return a.numberOfFrames !== 0; }).length;
+      if (openData) throw new Error(openData + ' AudioData object(s) were never closed after the encoder threw');
+      // 2: the WARM-UP probe (the first one made) throws; the export must carry on without the trim and leave nothing open
+      spy.restore(); spy = au6Spy('AudioEncoder', { throwAt: 5, instance: 1 });
+      const got2 = []; await FM._encodeAudio(function (c) { got2.push(c); }, mix);
+      if (!got2.length) throw new Error('with the warm-up probe failing, the soundtrack still has to encode (no chunks came out)');
+      live = spy.made.filter(function (e) { return e.state !== 'closed'; }).length;
+      if (live) throw new Error('the warm-up probe threw and left ' + live + ' audio encoder(s) configured');
+    } finally { spy.restore(); }
+  });
+  test('AU6-3 the pure export arithmetic: the mix limiter equals a plain reference across its block edges and never passes the ceiling, the streaming MP4 sink reproduces a dense buffer byte for byte, and the fit rectangle always fits', { item: 'AU6', budgetMs: 60000 }, async function () {
+    let seed = 5; const rnd = function () { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const ref = function (chs, ceil, sr) {
+      const n = chs[0].length, A = Math.max(1, Math.round(0.005 * sr)), fall = 1 / A, rise = 1 / Math.max(1, Math.round(0.25 * sr));
+      const r = new Float32Array(n); let cur = 1;
+      for (let i = 0; i < n; i++) { let a = 0; chs.forEach(function (c) { const v = Math.abs(c[i]); if (v > a) a = v; }); const need = a > ceil ? ceil / a : 1; cur = Math.min(need, cur + rise); r[i] = cur; }
+      const g = new Float32Array(n); for (let i = n - 1; i >= 0; i--) g[i] = i === n - 1 ? r[i] : Math.min(r[i], g[i + 1] + fall);
+      return g;
+    };
+    for (let t = 0; t < 8; t++) {
+      const sr = 48000, n = 70000 + Math.floor(rnd() * 80000), nc = 1 + Math.floor(rnd() * 2);
+      const buf = new AudioBuffer({ numberOfChannels: nc, length: n, sampleRate: sr }), chs = [];
+      for (let c = 0; c < nc; c++) { const d = buf.getChannelData(c); chs.push(d); for (let i = 0; i < n; i++) d[i] = (rnd() * 2 - 1) * 0.4; }
+      const B = 32768;
+      [B - 1, B, B - 240, 2 * B - 5, 2 * B + 1].concat(Array.from({ length: 5 }, function () { return Math.floor(rnd() * n); })).forEach(function (s) { for (let k = 0; k < 30; k++) { const i = s + k; if (i < n) chs.forEach(function (d) { d[i] = (rnd() < .5 ? -1 : 1) * (1 + rnd() * 3); }); } });
+      const orig = chs.map(function (d) { return Float32Array.from(d); }), g = ref(orig, 0.995, sr);
+      FM._limitMix(buf, 0.995);
+      let pk = 0, md = 0;
+      for (let i = 0; i < n; i++) for (let c = 0; c < nc; c++) { const v = Math.abs(chs[c][i]); if (v > pk) pk = v; const df = Math.abs(chs[c][i] - orig[c][i] * g[i]); if (df > md) md = df; }
+      if (pk > 0.9951) throw new Error('limiter round ' + t + ': the loudest output sample is ' + pk + ', over the 0.995 ceiling');
+      if (md > 1e-4) throw new Error('limiter round ' + t + ': differs from the plain reference by ' + md + ' (a block edge?)');
+    }
+    for (let t = 0; t < 120; t++) {
+      const sink = FM._createMp4Sink('video/mp4', 1 + Math.floor(rnd() * 64)), want = new Uint8Array(4096); let len = 0;
+      for (let w = 0, W = 1 + Math.floor(rnd() * 30); w < W; w++) {
+        const sz = 1 + Math.floor(rnd() * 60), data = new Uint8Array(sz); for (let i = 0; i < sz; i++) data[i] = 1 + Math.floor(rnd() * 254);
+        const m = rnd(), pos = (m < 0.55 || !len) ? len : m < 0.7 ? len + Math.floor(rnd() * 8) : Math.floor(rnd() * len);
+        sink.onData(data, pos); want.set(data, pos); len = Math.max(len, pos + sz);
+      }
+      const got = new Uint8Array(await sink.finish().arrayBuffer());
+      if (got.length !== len) throw new Error('sink round ' + t + ': ' + got.length + ' bytes, expected ' + len);
+      for (let i = 0; i < len; i++) if (got[i] !== want[i]) throw new Error('sink round ' + t + ': byte ' + i + ' is ' + got[i] + ', expected ' + want[i]);
+    }
+    for (let t = 0; t < 1500; t++) {
+      const pw = 1 + Math.floor(rnd() * 4000), ph = 1 + Math.floor(rnd() * 4000), ow = 2 + Math.floor(rnd() * 4000), oh = 2 + Math.floor(rnd() * 4000), f = FM.exportFitRect(pw, ph, ow, oh);
+      if (f.dx < -1e-6 || f.dy < -1e-6 || f.dx + f.dw > ow + 1e-6 || f.dy + f.dh > oh + 1e-6 || Math.abs(f.dw / f.dh - pw / ph) > 1e-6) throw new Error('fit rect ' + pw + 'x' + ph + ' into ' + ow + 'x' + oh + ' is ' + JSON.stringify(f));
+    }
+  });
+  /* ════════ AU7: audit of js/mobile.js (the phone sheets' swipe-down). Append before `async function run()` in tests/tests.js; `?only=AU7` runs them. ════════
+     A REAL FINGER CANNOT BE SENT FROM THIS CONTAINER (the driver has no touch emulation on Linux), so each repro comes in two halves:
+       · `AU7-n …` drives the SAME handler with pointer events from script, once as a touch-type pointer and once as a mouse (the mouse
+         half is a real input path on a narrow desktop window, and the handler treats it the same). These run here.
+       · `AU7-nf …` is the real-finger version, through the driver's trusted touch (realInput924). It reports NOT RUN HERE where the
+         driver cannot emulate touch, and runs on the laptop's finger pass.
+     Neither half is a substitute for the other: a scripted touch-type event skips the browser's own scroll takeover. */
+  const au7Open = async function (sleep) {
+    const sheet = document.getElementById('add-sheet'), fab = document.getElementById('add-fab');
+    if (!sheet || !fab) throw new Error('#add-sheet / #add-fab missing');
+    if (sheet.classList.contains('open')) { FM._addSheetClose && FM._addSheetClose(); await sleep(500); }
+    fab.click(); await sleep(700);
+    if (!sheet.classList.contains('open')) throw new Error('setup: the Add sheet did not open');
+    const grab = sheet.querySelector('.sheet-grab'); if (!grab) throw new Error('setup: no .sheet-grab');
+    return { sheet: sheet, grab: grab, h: sheet.getBoundingClientRect().height, r: grab.getBoundingClientRect() };
+  };
+  const au7Ptr = function (grab, kind, id, x, y, b) {
+    const o = { bubbles: true, cancelable: true, pointerId: id, pointerType: kind, isPrimary: true, clientX: x, clientY: y, buttons: b, button: 0 };
+    return function (t, yy, bb) { (t === 'pointerup' || t === 'pointercancel' ? window : grab).dispatchEvent(new PointerEvent(t, Object.assign({}, o, { clientY: yy, buttons: bb }))); };
+  };
+  for (const kind of ['touch', 'mouse']) {
+    test('AU7-1 ' + kind + ': a quick drag that then rests before the lift does not close the sheet (the flick speed goes stale)', { item: 'AU7', budgetMs: 30000 }, async function () {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+      let o = null;
+      try {
+        if (hadHome) FM.home.close();
+        await atPhoneWidth(async function () {
+          // CONTROL 1: a real flick (fast, lifted at once) of a short distance DOES close it
+          o = await au7Open(sleep);
+          let x = o.r.left + o.r.width / 2, y0 = o.r.top + o.r.height / 2, short = Math.round(o.h * 0.12);
+          let pe = au7Ptr(o.grab, kind, 41, x, y0, 1);
+          pe('pointerdown', y0, 1); pe('pointermove', y0 + short * 0.4, 1); await sleep(8); pe('pointermove', y0 + short, 1); await sleep(8); pe('pointerup', y0 + short, 0);
+          await sleep(700);
+          if (o.sheet.classList.contains('open')) throw new Error('CONTROL: a fast flick of ' + short + 'px (' + Math.round(short / 16) + ' px/ms) did not close the sheet, so the rule this test guards is gone');
+          // CONTROL 2: the same distance dragged slowly and released still does NOT close it
+          o = await au7Open(sleep);
+          x = o.r.left + o.r.width / 2; y0 = o.r.top + o.r.height / 2;
+          pe = au7Ptr(o.grab, kind, 42, x, y0, 1);
+          pe('pointerdown', y0, 1); for (let i = 1; i <= 4; i++) { pe('pointermove', y0 + short * i / 4, 1); await sleep(120); } await sleep(40); pe('pointerup', y0 + short, 0);
+          await sleep(600);
+          if (!o.sheet.classList.contains('open')) throw new Error('CONTROL: a slow ' + short + 'px drag closed the sheet');
+          // THE CASE: fast, then 600 ms with the finger resting, then the lift — nothing is moving as it leaves
+          pe = au7Ptr(o.grab, kind, 43, x, y0, 1);
+          pe('pointerdown', y0, 1); pe('pointermove', y0 + short * 0.4, 1); await sleep(8); pe('pointermove', y0 + short, 1); await sleep(600); pe('pointerup', y0 + short, 0);
+          await sleep(700);
+          if (!o.sheet.classList.contains('open')) throw new Error('a ' + short + 'px drag, 600 ms at rest, then the lift closed the sheet: the speed of the last move (' + Math.round(short * 0.6 / 8) + ' px/ms) was read as a flick');
+        });
+      } finally {
+        try { if (o && o.sheet.classList.contains('open') && FM._addSheetClose) FM._addSheetClose(); } catch (e) {}
+        if (hadHome && FM.home && FM.home.open) FM.home.open();
+        await sleep(80);
+      }
+    });
+    test('AU7-2 ' + kind + ': a press that never gets its lift (a taken finger) does not freeze every later swipe', { item: 'AU7', budgetMs: 30000 }, async function () {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+      let o = null;
+      const swipe = async function (id) {
+        const x = o.r.left + o.r.width / 2, y0 = o.r.top + o.r.height / 2, drag = Math.round(o.h * 0.55), pe = au7Ptr(o.grab, kind, id, x, y0, 1);
+        pe('pointerdown', y0, 1); for (let i = 1; i <= 6; i++) { pe('pointermove', y0 + drag * i / 6, 1); await sleep(30); } pe('pointerup', y0 + drag, 0);
+        await sleep(700);
+      };
+      try {
+        if (hadHome) FM.home.close();
+        await atPhoneWidth(async function () {
+          // CONTROL: an ordinary swipe closes the sheet
+          o = await au7Open(sleep); await swipe(51);
+          if (o.sheet.classList.contains('open')) throw new Error('CONTROL: an ordinary swipe past a third did not close the sheet');
+          // CONTROL: a second finger while the first is still down (recent) is ignored, as designed
+          o = await au7Open(sleep);
+          const x = o.r.left + o.r.width / 2, y0 = o.r.top + o.r.height / 2;
+          au7Ptr(o.grab, kind, 52, x, y0, 1)('pointerdown', y0, 1);   // never lifted
+          await swipe(53);
+          if (!o.sheet.classList.contains('open')) throw new Error('CONTROL: a second finger put down moments after the first closed the sheet (the guard against a 2nd finger is gone)');
+          // THE CASE: that first press is now old and was never lifted; a fresh swipe must work
+          await sleep(2300);
+          await swipe(54);
+          if (o.sheet.classList.contains('open')) throw new Error('2.3 s after a press that never ended, a fresh swipe past a third did not close the sheet: the dead press still owns the handler');
+        });
+      } finally {
+        try { window.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 52, pointerType: kind })); } catch (e) {}
+        try { if (o && o.sheet.classList.contains('open') && FM._addSheetClose) FM._addSheetClose(); } catch (e) {}
+        if (hadHome && FM.home && FM.home.open) FM.home.open();
+        await sleep(80);
+      }
+    });
+  }
+  test('AU7-1f a REAL finger: a quick drag that rests before the lift does not close the Add sheet', { item: 'AU7', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    needsTouch924();
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    let o = null;
+    try {
+      if (hadHome) FM.home.close();
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          o = await au7Open(sleep);
+          const x = o.r.left + o.r.width / 2, y0 = o.r.top + o.r.height / 2, short = Math.round(o.h * 0.12);
+          await realInput924([{ t: 'touchStart', x: x, y: y0, ms: 60 }, { t: 'touchMove', x: x, y: y0 + short * 0.4, ms: 8 }, { t: 'touchMove', x: x, y: y0 + short, ms: 600 }, { t: 'touchEnd', x: x, y: y0 + short, ms: 0 }], 'the quick drag then rest');
+          await sleep(700);
+          if (!o.sheet.classList.contains('open')) throw new Error('a quick ' + short + 'px drag, 600 ms at rest, then the lift closed the sheet under a real finger');
+        });
+      });
+    } finally {
+      try { if (o && o.sheet.classList.contains('open') && FM._addSheetClose) FM._addSheetClose(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+  /* ════════ AU8: audit of js/home.js (and the storage calls it makes). Append before `async function run()`; `?only=AU8` runs them. ════════ */
+  test('AU8-1 a project name is cut to 200 characters when it is given (Rename, Duplicate; New project already is), so the card does not change under him later', { item: 'AU8', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const orig = FM.projects.currentId(), made = [];
+    const nameOf = id => (FM.projects.list().find(p => p.id === id) || {}).name;
+    try {
+      // CONTROL: an ordinary name is kept exactly
+      const a = await FM.projects.create({ name: 'AU8 plain name', width: 320, height: 240 }); made.push(a);
+      if (nameOf(a) !== 'AU8 plain name') throw new Error('CONTROL: an ordinary name came back as "' + nameOf(a) + '"');
+      const long = 'n'.repeat(300);
+      const b = await FM.projects.create({ name: long, width: 320, height: 240 }); made.push(b);
+      if (nameOf(b).length !== 200) throw new Error('CONTROL, New project: a 300-character name is ' + nameOf(b).length + ' characters on its card');
+      FM.projects.rename(a, 'r'.repeat(300));
+      if (nameOf(a).length !== 200) throw new Error('Rename: a 300-character name is ' + nameOf(a).length + ' characters on its card');
+      const had = new Set(FM.projects.list().map(p => p.id));
+      if (!(await FM.projects.duplicate(a))) throw new Error('setup: duplicate failed');
+      const d = FM.projects.list().find(p => !had.has(p.id)); made.push(d.id);
+      if (d.name.length > 200) throw new Error('Duplicate: the copy of a 200-character name is ' + d.name.length + ' characters on its card');
+      // …and the card and the project agree after it is opened (that is the whole point: nothing changes later)
+      await FM.projects.open(a); await sleep(150);
+      if (FM.scene.project.name !== nameOf(a)) throw new Error('the open project is called ' + FM.scene.project.name.length + ' characters but its card ' + nameOf(a).length);
+    } finally {
+      try { if (orig && FM.projects.list().some(p => p.id === orig)) await FM.projects.open(orig); } catch (e) {}
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+  /* ════════ AU9: audit of js/app.js, lines 1 to 3050. Append before `async function run()`; `?only=AU9` runs them. ════════ */
+  test('AU9-1 setTime and scrubTime ignore a time that is not a number instead of making the playhead NaN', { item: 'AU9', budgetMs: 30000 }, async function () {
+    const P = FM.scene.project, keep = FM.scene.layers.slice(), d0 = P.duration, t0 = FM.time, wasPlaying = FM.playing;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 40, shapeH: 40, fill: '#fff' }); L.start = 0; L.duration = 4; FM.scene.layers.push(L); FM.autoFitDuration();
+      FM.playing = false;
+      FM.setTime(2);
+      // CONTROL: ordinary values still move it, and the ends still clamp
+      if (Math.abs(FM.time - 2) > 1e-6) throw new Error('CONTROL: setTime(2) left the playhead at ' + FM.time);
+      FM.setTime(99); if (FM.time !== 4) throw new Error('CONTROL: past the end did not clamp (' + FM.time + ')');
+      FM.setTime(-3); if (FM.time !== 0) throw new Error('CONTROL: before the start did not clamp (' + FM.time + ')');
+      FM.setTime(Infinity); if (FM.time !== 4) throw new Error('CONTROL: Infinity did not clamp to the end (' + FM.time + ')');
+      for (const bad of [NaN, undefined, null, 'x']) {
+        FM.setTime(2);
+        FM.setTime(bad);
+        if (!isFinite(FM.time) || Math.abs(FM.time - 2) > 1e-6) throw new Error('setTime(' + String(bad) + ') left the playhead at ' + FM.time + ', not where it was (2)');
+        FM.scrubTime(bad);
+        if (!isFinite(FM.time) || Math.abs(FM.time - 2) > 1e-6) throw new Error('scrubTime(' + String(bad) + ') left the playhead at ' + FM.time + ', not where it was (2)');
+      }
+      // a poisoned playhead is repaired by the next call rather than kept
+      FM.time = NaN; FM.setTime(NaN);
+      if (!isFinite(FM.time)) throw new Error('a NaN playhead stayed NaN after setTime(NaN)');
+    } finally {
+      FM.scene.layers = keep; P.duration = d0; FM.time = t0; FM.playing = wasPlaying; try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+  /* ════════ AU10: audit of js/app.js, lines 3051 to 6100. Append before `async function run()`; `?only=AU10` runs them. ════════ */
+  test('AU10-1 Align puts a layer\'s DRAWN box on the canvas edge or centre, also for a member of an offset / scaled / turned group and for a turned layer', { item: 'AU10', budgetMs: 60000 }, async function () {
+    const P = FM.scene.project, keep = FM.scene.layers.slice(), keepSel = [FM.scene.selectedId, FM.scene.selectedIds], d0 = P.duration, w0 = P.width, h0 = P.height, t0 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const box = L => FM._layerAABB(L, FM.time, FM.scene);
+    const want = { left: b => b.x0, hcenter: b => (b.x0 + b.x1) / 2, right: b => b.x1, top: b => b.y0, vcenter: b => (b.y0 + b.y1) / 2, bottom: b => b.y1 };
+    const target = { left: () => 0, hcenter: () => P.width / 2, right: () => P.width, top: () => 0, vcenter: () => P.height / 2, bottom: () => P.height };
+    const fresh = () => {
+      FM.scene.layers.length = 0; FM.history.reset();
+      const mk = (x, y, w, h, fill) => { FM.addShapeLayer('rect'); const L = FM.scene.layers[0]; L.transform.x = x; L.transform.y = y; L.shapeW = w; L.shapeH = h; L.fill = fill; L.start = 0; L.duration = 4; return L; };
+      return mk;
+    };
+    try {
+      P.width = 300; P.height = 240; P.duration = 4; FM.time = 1;
+      const sel = L => { FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id]; };
+      // CONTROL: a plain layer keeps its exact old numbers (left puts transform.x at round(half the width))
+      let mk = fresh(); let L = mk(150, 120, 81, 40, '#fff'); FM.autoFitDuration(); sel(L); FM.alignLayers('left');
+      if (L.transform.x !== 41) throw new Error('CONTROL: Align left on a plain 81-wide layer put x at ' + L.transform.x + ', the old rule gives 41');
+      for (const mode of Object.keys(want)) {
+        // a layer turned 37 degrees
+        mk = fresh(); L = mk(150, 120, 80, 40, '#fff'); L.transform.rotation = 37; FM.autoFitDuration(); sel(L);
+        FM.alignLayers(mode);
+        let got = want[mode](box(L)), exp = target[mode]();
+        if (Math.abs(got - exp) > 0.05) throw new Error('Align ' + mode + ' on a layer turned 37 degrees: its drawn box is at ' + got.toFixed(2) + ', the canvas ' + mode + ' is ' + exp);
+        // a member of a group that is offset, scaled and turned
+        mk = fresh(); const a = mk(100, 60, 80, 40, '#fff'), b = mk(200, 180, 80, 40, '#fff'); FM.autoFitDuration();
+        FM.scene.selectedIds = [a.id, b.id]; FM.scene.selectedId = a.id; FM.groupSelection();
+        const g = FM.scene.layers.find(l => l.type === 'group'); if (!g) throw new Error('setup: no group');
+        g.transform.x = 60; g.transform.y = -20; g.transform.scale = 1.25; g.transform.rotation = 20;
+        sel(a); FM.alignLayers(mode);
+        got = want[mode](box(a)); exp = target[mode]();
+        if (Math.abs(got - exp) > 0.05) throw new Error('Align ' + mode + ' on a member of an offset, scaled and turned group: its drawn box is at ' + got.toFixed(2) + ', the canvas ' + mode + ' is ' + exp);
+      }
+    } finally {
+      FM.scene.layers = keep; FM.scene.selectedId = keepSel[0]; FM.scene.selectedIds = keepSel[1]; P.duration = d0; P.width = w0; P.height = h0; FM.time = t0; try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+  /* ════════ AU11: audit of js/app.js, lines 6101 to 9151. Append before `async function run()`; `?only=AU11` runs them. ════════ */
+  test('AU11-1 an arrow key nudges a layer on the SCREEN, also for a member of a group that is turned or scaled', { item: 'AU11', budgetMs: 60000 }, async function () {
+    const P = FM.scene.project, keep = FM.scene.layers.slice(), keepSel = [FM.scene.selectedId, FM.scene.selectedIds], d0 = P.duration, w0 = P.width, h0 = P.height, t0 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const centre = l => { const b = FM._layerAABB(l, FM.time, FM.scene); return [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]; };
+    const press = (code, shift) => document.dispatchEvent(new KeyboardEvent('keydown', { code: code, key: code.replace('Arrow', ''), shiftKey: !!shift, bubbles: true, cancelable: true }));
+    const dirs = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] };
+    try {
+      P.width = 300; P.height = 240; P.duration = 4; FM.time = 1;
+      const member = (rot, sc) => {
+        FM.scene.layers.length = 0; FM.history.reset(); FM.addShapeLayer('rect'); FM.addShapeLayer('rect');
+        const [a, b] = FM.scene.layers; for (const l of [a, b]) { l.shapeW = 40; l.shapeH = 40; l.start = 0; l.duration = 4; }
+        a.transform.x = 100; a.transform.y = 80; b.transform.x = 160; b.transform.y = 140; FM.autoFitDuration();
+        FM.scene.selectedIds = [a.id, b.id]; FM.scene.selectedId = a.id; FM.groupSelection();
+        const g = FM.scene.layers.find(l => l.type === 'group'); if (!g) throw new Error('setup: no group');
+        g.transform.rotation = rot; g.transform.scale = sc;
+        FM.scene.selectedId = a.id; FM.scene.selectedIds = [a.id]; return a;
+      };
+      // CONTROL: a plain layer and a member of an untouched group move 1 px, in whole pixels
+      FM.scene.layers.length = 0; FM.history.reset(); FM.addShapeLayer('rect'); const plain = FM.scene.layers[0]; plain.shapeW = 40; plain.shapeH = 40; plain.start = 0; plain.duration = 4; plain.transform.x = 100.4; plain.transform.y = 100; FM.autoFitDuration();
+      FM.scene.selectedId = plain.id; FM.scene.selectedIds = [plain.id]; press('ArrowRight');
+      if (plain.transform.x !== 101) throw new Error('CONTROL: Right on a plain layer at x 100.4 wrote ' + plain.transform.x + ', the old rule gives 101');
+      let a = member(0, 1); a.transform.x = 100.4; let c0 = centre(a); press('ArrowRight'); let c1 = centre(a);
+      if (a.transform.x !== 101) throw new Error('CONTROL: Right on a member of an UNTOUCHED group at x 100.4 wrote ' + a.transform.x + ', the old whole-pixel rule gives 101');
+      if (Math.abs(c1[0] - c0[0] - 0.6) > 0.02 || Math.abs(c1[1] - c0[1]) > 0.02) throw new Error('CONTROL: Right on a member of an untouched group at x 100.4 moved it ' + (c1[0] - c0[0]).toFixed(2) + ', ' + (c1[1] - c0[1]).toFixed(2));
+      for (const [rot, sc] of [[90, 1], [90, 2], [30, 1], [0, 1.5], [-45, 0.5]]) {
+        for (const code of Object.keys(dirs)) for (const shift of [false, true]) {
+          a = member(rot, sc); c0 = centre(a); press(code, shift); c1 = centre(a);
+          const step = shift ? 10 : 1, ex = dirs[code][0] * step, ey = dirs[code][1] * step, dx = c1[0] - c0[0], dy = c1[1] - c0[1];
+          if (Math.abs(dx - ex) > 0.05 || Math.abs(dy - ey) > 0.05) throw new Error(code + (shift ? ' with Shift' : '') + ' on a member of a group turned ' + rot + ' degrees and scaled ' + sc + ' moved it on screen by (' + dx.toFixed(2) + ', ' + dy.toFixed(2) + '), expected (' + ex + ', ' + ey + ')');
+        }
+      }
+    } finally {
+      FM.scene.layers = keep; FM.scene.selectedId = keepSel[0]; FM.scene.selectedIds = keepSel[1]; P.duration = d0; P.width = w0; P.height = h0; FM.time = t0; try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+  test('AU12-1 Tilt-Shift blurs a half-scale preview as much as the export, not twice as much', { item: 'AU12', budgetMs: 60000 }, async function () {
+    const P = FM.scene.project, keep = FM.scene.layers.slice(), keepSel = [FM.scene.selectedId, FM.scene.selectedIds], d0 = P.duration, w0 = P.width, h0 = P.height, bg0 = P.background;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const W = 320, H = 240;
+    try {
+      P.width = W; P.height = H; P.duration = 4; P.background = '#202830';
+      const sc = document.createElement('canvas'); sc.width = W; sc.height = H; const g = sc.getContext('2d');
+      const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#e8553a'); gr.addColorStop(0.5, '#3ab0e8'); gr.addColorStop(1, '#f2e04a'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#111'; g.fillRect(40, 40, 90, 60); g.fillStyle = '#fff'; g.beginPath(); g.arc(220, 150, 50, 0, 7); g.fill();
+      g.strokeStyle = '#000'; g.lineWidth = 4; for (let i = 0; i < 8; i++) { g.beginPath(); g.moveTo(10 + i * 38, 0); g.lineTo(30 + i * 38, H); g.stroke(); }
+      const blob = await new Promise(r => sc.toBlob(r, 'image/png')); const rec = await FM.loadImageFile(new File([blob], 't.png', { type: 'image/png' }));
+      const mk = (type, params) => {
+        const L = FM.makeLayer('image', { name: 'src', x: W / 2, y: H / 2, start: 0, duration: 4 }); L.transform.scale = 1; FM.media.set(L.id, rec);
+        const e = FM.fxRegistry.makeInstance(type); if (!e) throw new Error('no effect ' + type); Object.assign(e.params, params || {}); L.effects = [e];
+        return { project: P, layers: [L], selectedId: null, selectedIds: [] };
+      };
+      const draw = (scene, rs, exporting) => {
+        const c = document.createElement('canvas'); c.width = Math.round(W * rs); c.height = Math.round(H * rs); c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0;
+        FM._exporting = !!exporting; try { FM.renderScene(c.getContext('2d'), scene, 0.5); } finally { FM._exporting = false; }
+        return c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      };
+      const ref = (scene, rs) => {
+        const full = document.createElement('canvas'); full.width = W; full.height = H; full.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(draw(scene, 1, false)), W, H), 0, 0);
+        const w = Math.round(W * rs), h = Math.round(H * rs), d = document.createElement('canvas'); d.width = w; d.height = h;
+        const x = d.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(full, 0, 0, w, h); return x.getImageData(0, 0, w, h).data;
+      };
+      const cmp = (a, b) => { let s = 0, n = 0, hi = 0; for (let i = 0; i < a.length; i += 4) { let m = 0; for (let k = 0; k < 3; k++) { const d = Math.abs(a[i + k] - b[i + k]); s += d; if (d > m) m = d; } if (m > 8) hi++; n++; } return { mad: s / (n * 3), hi: hi * 100 / n }; };
+      // CONTROL 1: at full scale the preview and the export draw the same bytes
+      const ts = mk('tiltshift');
+      const a = draw(ts, 1, false), b = draw(ts, 1, true); for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) throw new Error('CONTROL: tiltshift preview and export differ at full scale (byte ' + i + ')');
+      // CONTROL 2: a pure per-pixel effect shows the floor this comparison itself has (measured 2.2 MAD / 13 % at half scale)
+      const br = cmp(ref(mk('brightness'), 0.5), draw(mk('brightness'), 0.5, false));
+      if (br.mad > 4.5 || br.hi > 26) throw new Error('CONTROL: brightness at half scale is ' + br.mad.toFixed(2) + ' MAD / ' + br.hi.toFixed(1) + ' % off its downscaled export, past the floor this test relies on');
+      // the claim: measured 10.0 MAD / 58.7 % of pixels before, 0.98 / 0 % after (320x240, blur 1x)
+      for (const [blur, rs] of [[1, 0.5], [1, 0.75], [2, 0.5]]) {
+        const r = cmp(ref(mk('tiltshift', { blur }), rs), draw(mk('tiltshift', { blur }), rs, false));
+        if (r.mad > 2.5 || r.hi > 5) throw new Error('Tilt-Shift blur ' + blur + 'x at render scale ' + rs + ' is ' + r.mad.toFixed(2) + ' MAD / ' + r.hi.toFixed(1) + ' % of pixels off the export (limit 2.5 / 5): the preview blurs more than the export');
+      }
+    } finally {
+      FM.scene.layers.length = 0; for (const l of keep) FM.scene.layers.push(l); FM.scene.selectedId = keepSel[0]; FM.scene.selectedIds = keepSel[1];
+      P.duration = d0; P.width = w0; P.height = h0; P.background = bg0; if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  test('AU17-1 saving a 121st effect preset is refused with a message, it does not delete the oldest one', { item: 'AU17', budgetMs: 60000 }, function () {
+    const EP = FM.effectPresets; if (!EP || !EP._storageKey) throw new Error('FM.effectPresets is not reachable');
+    const KEY = EP._storageKey, keep = localStorage.getItem(KEY), realToast = FM.toast, said = [];
+    try {
+      FM.toast = function (m) { said.push(String(m || '')); };
+      localStorage.removeItem(KEY);
+      const e = FM.fxRegistry.makeInstance('blur');
+      const mk = i => { e.params.radius = 1 + (i % 40); const p = EP.capture(e, 'p' + i); p.name = 'p' + i; return p; };
+      const ids = [];
+      for (let i = 0; i < 120; i++) { const p = mk(i); if (!EP.save(p)) throw new Error('CONTROL: preset ' + i + ' of 120 was refused: ' + said.join(' | ')); ids.push(p.id); }
+      const names = () => JSON.parse(localStorage.getItem(KEY)).map(p => p.name);
+      if (names().length !== 120) throw new Error('CONTROL: expected 120 stored, found ' + names().length);
+      // saving OVER an existing preset at the limit is allowed (a re-save, not a new one)
+      const again = mk(7); again.id = ids[7]; again.name = 'p7 renamed';
+      if (!EP.save(again)) throw new Error('CONTROL: re-saving an existing preset at the limit was refused');
+      if (names().length !== 120 || names().indexOf('p7 renamed') < 0) throw new Error('CONTROL: the re-save did not replace its preset');
+      said.length = 0;
+      const ok = EP.save(mk(120));
+      if (ok) throw new Error('the 121st preset was saved (and so one was dropped: p0 is ' + (names().indexOf('p0') < 0 ? 'gone' : 'still there') + ')');
+      if (names().indexOf('p0') < 0 || names().length !== 120) throw new Error('refusing the 121st preset still changed the stored list (' + names().length + ' stored, p0 ' + (names().indexOf('p0') < 0 ? 'gone' : 'there') + ')');
+      if (!said.some(m => /120/.test(m) && /delete/i.test(m))) throw new Error('the refusal said nothing useful: ' + JSON.stringify(said));
+      // and after one is deleted there is room again
+      EP.remove(ids[3]);
+      if (!EP.save(mk(121))) throw new Error('after deleting one the next preset was still refused');
+    } finally { FM.toast = realToast; if (keep === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, keep); }
+  });
+
+  /* AU17-2: A RENAME NEEDS AN ALIAS. A saved project keeps only the effect types and parameter keys the registry knows (anything else is dropped on
+     load, and the autosave then writes the loss back), and no table of renamed keys exists, so renaming `radius` to `size` would silently reset every
+     saved Blur. This pins every type and key that exists in v17.32; a rename or a removal fails here, which is the moment to add an alias (or a
+     migration) and then re-pin. New types and keys are fine: they are not in the list. */
+  test('AU17-2 every effect type and parameter key a v17.32 project can hold still exists', { item: 'AU17', budgetMs: 30000 }, function () {
+    const PINNED = ["blur:radius", "brightness:amount", "contrast:amount", "saturate:amount", "hue:deg", "grayscale:amount", "sepia:amount", "invert:amount", "glow:radius,passes,strength,color", "vignette:amount,size,round,feather,x,y,mode,color,hilite", "chromakey:tolerance,softness,despill,color", "lumakey:threshold,softness,mode", "rgbsplit:amount,angle,radial,green", "pixelate:size,aspect,smooth", "posterize:levels,mix,channels,gamma", "mirror:mode,position", "tint:amount,range,preserve,mode,soft,color", "threshold:level,softness,color,color2", "duotone:amount,balance,contrast,blend,color,color2", "solarize:threshold,softness,mix,mode", "gamma:gamma,red,green,blue", "temperature:amount,tint,preserve,method,range", "noise:amount,speed,size,grain,color", "scanlines:amount,spacing,thickness,roll", "vibrance:amount,skin,highlights", "sharpen:amount,radius,threshold,mode", "thermal:amount,palette,low,high", "dither:levels,scale,matrix,mono", "halftone:size,angle,gain,shape", "wave:amount,wavelength,phase,vertical,angle", "ripple:amount,wavelength,phase,centerx,centery", "twirl:amount,centerx,centery,radius", "bulge:amount,centerx,centery,radius", "edge:amount,polarity,threshold,mix,blend", "emboss:amount,angle,mono,blend", "exposure:stops,offset,rolloff,gamma,space", "fisheye:amount,centerx,centery,radius", "squish:source,amount,spread,bulge,firmness,inset,walls,collide", "kaleidoscope:segments,phase,centerx,centery", "glitch:amount,bands,speed,split,dir,jitter,blocks,seed,wrap", "zoomblur:amount,centerx,centery,samples", "crt:amount,scale,scanline,mask,vignette", "boxblur:radius,aspect,passes", "spinblur:amount,centerx,centery,samples", "gradientmap:amount,stops,midpoint,reverse,blend,dither,color,color3,color2", "colorize:amount,lift,blend,color", "checker:size,mix,ratio,angle,color", "grid:size,thickness,mix,angle,color", "mosaic:size,aspect,gap,sample", "lensblur:radius,bloom,samples,blades", "dots:size,radius,opacity,softness,color", "polarcoords:amount,mode", "bend:amount,axis,position", "glass:amount,scale,axis,seed", "lightglow:amount,radius,threshold,knee,passes,outside,blend,from,color", "longshadow:length,angle,color", "halftonelines:size,angle,weight,softness", "clouds:amount,scale,drift,color", "rays:count,x,y,intensity,phase,color", "stripes:size,direction,duty,strength,color", "darkglow:amount,radius,threshold,knee,passes,outside,blend", "stroke:width,position,shape,softness,gap,color", "smoothedges:radius,choke,quality", "liquidglass:amount,frost,clarity,sheen,bevel,tint,angle,color", "roundcorners:style,radius", "filmgrain:amount,size,shape,color,shadows,highlights,speed,soft,seed", "blocknoise:amount,size,aspect,speed", "starfield:amount,size,variation,twinkle,twinklespeed,color", "curl:amount,wavelength,phase,centerx,centery", "bumpmap:amount,angle,relief,ambient", "edgeglow:source,amount,radius,color", "contourlines:levels,smooth,thickness,paper,color,color2", "grunge:amount,scale,darkness,color", "iridescence:amount,scale,bands,blur,motion,speed", "fractalwarp:amount,evolve,scale,detail", "motionblur:distance,angle,samples", "colorbalance:red,green,blue,range,preserve,soft", "highlightsshadows:highlights,shadows,whites,blacks,width,radius,sat", "tiltshift:center,softness,blur,angle", "dropshadow:distance,angle,softness,spread,smooth,opacity,shadowonly,color", "chromaticaberration:amount,angle,radial", "innerglow:radius,intensity,color", "unsharpmask:amount,radius,threshold", "hextiles:size", "linstreaks:length,angle,samples,both,threshold,color", "blink:rate,duty,min,phase", "flicker:amount,speed,seed", "flashdark:amount,speed,soft,floor,seed,rhythm,hold", "pulseopacity:speed,depth,phase", "dissolve:amount,direction,soft,speed,front", "blockdissolve:amount,size,dir,seed", "wipe:progress,angle,softness", "radialwipe:progress,start,centerx,centery,softness", "solidmatte:amount,color", "mattechoker:choke,feather,contrast", "mattefringe:width,opacity,feather,color", "gridrepeat:count,rows,mirror,stagger", "linearrepeat:count,spacing,angle,fade", "scatterarray:count,spread,sizevary,rotate,fade,seed", "radialrepeat:count,rotate,mirror,twist,centerx,centery", "mirrortile:size,offsetx,offsety,axis,shape", "channelremap:mode,mix,luma", "gradientoverlay:angle,shape,blend,mid,dither,amount,color,color2", "lensflare:x,y,intensity,size,rays,rotation,ghosts,halo,streak,color,color2", "roughenedges:amount,scale", "hexarray:size,thickness,opacity,color", "electricedges:amount,speed,soft,color", "glowscan:speed,width,amount,direction,angle,span,pause,loop,color", "spinstreaks:amount,centerx,centery,decay,samples,threshold,dir", "fractalridges:amount,scale,sharpness,seed,mode,bands,blend,speed,driftX,driftY,color,color2", "smoothbevel:depth,strength,angle", "zoomstreaks:amount,centerx,centery,threshold,samples", "innerblur:radius,edge,bleed,aspect,passes", "contourstrips:levels,mix,alternate,offset,color,color2", "innerpinch:amount,radius,centerx,centery", "crosshatch:spacing,density,weight,angle,color", "counter:progress,from,to,decimals,group,wrap", "textprogress:progress,unit,dir,cursor", "textrandomizer:progress,speed,chars", "textcurve:curve,mode", "textreverse:unit", "textrepeat:count,sep", "textpad:length,ch,side", "textspacing:spacing,word,line,mode", "texttransform:mode", "timecode:mode,offset,dir,source", "bleachbypass:amount,desat,contrast", "tealorange:amount,pivot,spread,mode,skin,balance,keep", "crossprocess:amount,variant,lift,gain", "lightleak:amount,x,y,size,speed,wander,flicker,blend,color,color2", "letterbox:ratio,size,metric,orient,offset,feather,opacity,color", "border:width,inset,radius,opacity,color", "faded:amount,lift,desat,tone,crush,rolloff,fadecol", "nightvision:amount,color,noise,gain", "sketch:amount,darkness,threshold,tooth", "cube3d:rotx,roty,rotz,size,shading,light", "box3d:rotx,roty,rotz,depth,size,shading,light", "cylinder3d:rotx,roty,rotz,length,size,shading,light", "sphere3d:rotx,roty,rotz,size,shading,light", "ellipsoid3d:rotx,roty,rotz,height,depth,size,shading,light", "torus3d:rotx,roty,rotz,thickness,size,shading,light", "ring3d:rotx,roty,rotz,hole,depth,size,shading,light", "pyramid3d:rotx,roty,rotz,size,shading,light", "octahedron3d:rotx,roty,rotz,size,shading,light", "hexprism3d:rotx,roty,rotz,depth,size,shading,light", "starprism3d:rotx,roty,rotz,points,inner,depth,size,shading,light", "starpoly3d:rotx,roty,rotz,spike,size,shading,light", "heart3d:rotx,roty,rotz,depth,size,shading,light", "hollowbox3d:rotx,roty,rotz,wall,depth,size,shading,light", "axiscross3d:rotx,roty,rotz,arm,size,shading,light", "pagecurl:amount,angle,radius,shading,light", "fliplayer:mode,keep,pivotx,pivoty", "rasterextrude:depth,angle,darken", "wiggle:amount,speed,amounty,rotate,scale,octaves,seed", "shake:amount,speed,twist,zoom,jitter,smear,smearlen,direction,overscan,seed", "swing:angle,speed,pivotx,pivoty,phase,damping", "spin:speed,offset,pivotx,pivoty", "pulse:amount,speed,phase,wave,stretch,pivotx,pivoty", "drift:x,y,wrap", "orbit:radius,speed,phase,ry,depth,face", "squeeze:amount,axis,position", "tiles:mode,count,gap,mirror,source", "motionflow:style,amount,samples,threshold,softness", "objectblur:shutter,samples,phase", "softglow:amount,radius,threshold,knee,passes,outside,blend,from,color", "replacecolor:tolerance,mode,softness,color,color2", "spotcolor:tolerance,desat,boost,invert,color", "fourcolor:amount,blend,spread,color,color2,color3,color4", "spectralmap:amount,span,offset,saturation", "radialshadow:reach,x,y,color", "voronoi:cells,edge,motion,speed,wall", "tunnel:amount,radius,centerx,centery", "turbulentdisplace:amount,scale,evolve,seed", "stretchseg:y,height,amount,softness", "tileshift:size,amount", "tilerotate:size,angle", "wrapshift:offsetx,offsety", "palettemap:mode,count,amount,color,color2,color3,color4", "lightning:count,intensity,thickness,jitter,forks,flicker,seed,angle,color", "displacemap:source,amount,channel", "polardisplace:source,radius,angle,centerx,centery", "touchup:x,y,w,h,mode,feather,strength", "copybg:", "magnifybg:zoom", "fillbehind:blur,zoom,dim", "particles:rate,lifetime,direction,spread,speed,gravity,sizeStart,sizeEnd,opacityStart,opacityEnd,spin,shape,blend,color,color2", "levels:channel,inblack,inwhite,gamma,outblack,outwhite", "halation:amount,threshold,tightness,spread,knee,color", "framestutter:rate,mode,blend,duty,trail,offset,random", "shockwave:radius,width,strength,rim,chroma,x,y", "speedlines:count,mode,angle,inner,aspect,length,width,jitter,spin,boil,x,y,blend,color", "weather:kind,amount,size,speed,wind,length,depth,opacity,color", "hslbands:band,hue,sat,lum,range,centre,width", "timewarp:duration,direction,mode,barwidth,glow,loop,color", "chromakeypro:tolerance,softness,despill,edgedesat,view,color", "lightwrap:intensity,reach,radius,mode", "dispersion:progress,direction,distance,scale,softness,glow,color", "vhstape:amount,chromableed,halo,wobble,tracking,trackspeed,headswitch", "compresscrunch:quality,blocksize,chromablock,ringing,fry", "temporaldenoise:strength,threshold,spatial", "lensdistort:k1,k2,zoom,chroma", "pixelsort:density,low,high,length,direction,order", "lumamatte:source,channel,invert,black,white,feather", "compoundblur:source,radius,levels,invert", "matchgrade:source,amount,mode", "filter:strength"];
+    const have = {};
+    FM.fxRegistry.allIncludingHidden().filter(Boolean).forEach(d => { have[d.type] = (d.params || []).map(p => p.key); });
+    const gone = [];
+    PINNED.forEach(s => { const i = s.indexOf(':'), type = s.slice(0, i), ks = s.slice(i + 1) ? s.slice(i + 1).split(',') : []; if (!have[type]) { gone.push(type + ' (the whole effect)'); return; } ks.forEach(k => { if (have[type].indexOf(k) < 0) gone.push(type + '.' + k); }); });
+    if (gone.length) throw new Error(gone.length + ' effect type(s) or parameter key(s) a saved project can hold are gone: ' + gone.slice(0, 12).join(', ') + (gone.length > 12 ? ' …' : '') + ' — a renamed key resets that setting in every saved project; add an alias first, then re-pin');
+    if (PINNED.length < 150) throw new Error('CONTROL: the pinned list is suspiciously short (' + PINNED.length + ')');
+  });
+
+  test('AU19-1 after Undo or Redo of a replaced video the timeline bar shows that clip’s frames, not the other one’s', { item: 'AU19', budgetMs: 90000 }, async function () {
+    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) throw new Error('setup: this browser cannot record the two test clips (no VP9 MediaRecorder)');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const clip = async hue => {
+      const cv = document.createElement('canvas'); cv.width = 160; cv.height = 120; const g = cv.getContext('2d');
+      const rec = new MediaRecorder(cv.captureStream(15), { mimeType: 'video/webm;codecs=vp9' }), ch = []; rec.ondataavailable = e => ch.push(e.data);
+      const done = new Promise(r => rec.onstop = r); rec.start(100);
+      for (let i = 0; i < 14; i++) { g.fillStyle = 'hsl(' + hue + ',80%,' + (35 + i) + '%)'; g.fillRect(0, 0, 160, 120); await sleep(66); }
+      rec.stop(); await done; return new File([new Blob(ch, { type: 'video/webm' })], 'v' + hue + '.webm', { type: 'video/webm' });
+    };
+    const P = FM.scene.project, keep = FM.scene.layers.slice(), keepSel = [FM.scene.selectedId, FM.scene.selectedIds];
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const red = await clip(0), blue = await clip(230);
+    try {
+      FM.scene.layers.length = 0; FM.history.reset(); FM.selectLayer(null);
+      FM.addMediaLayer(await FM.loadVideoFile(red)); const L = FM.scene.layers[0], id = L.id;
+      const hue = c => { const mx = Math.max(c[0], c[1], c[2]); return c[0] === mx ? 'red' : (c[2] === mx ? 'blue' : 'green'); };
+      const dom = () => { const c = document.querySelector('.clip-filmstrip'); if (!c) return null; const d = c.getContext('2d').getImageData(4, 16, 1, 1).data; return d[3] ? hue([d[0], d[1], d[2]]) : null; };
+      const model = () => { const m = FM.media.get(id), f = m && m.stripFrames && m.stripFrames[0]; if (!f) return null; const c = document.createElement('canvas'); c.width = f.width; c.height = f.height; c.getContext('2d').drawImage(f, 0, 0); const d = c.getContext('2d').getImageData(4, 4, 1, 1).data; return hue([d[0], d[1], d[2]]); };
+      const settle = async want => { for (let i = 0; i < 80; i++) { await sleep(100); FM.timeline.rebuild(); if (model() === want && dom()) break; } return { model: model(), dom: dom() }; };
+      let r = await settle('red'); if (r.dom !== 'red') throw new Error('CONTROL: the first clip’s bar is ' + r.dom + ', not red');
+      // the real replace sequence (js/app.js FM.replaceMedia)
+      const nrec = await FM.loadVideoFile(blue), outgoing = FM.media.get(id);
+      await FM.storage.stashPrevMedia(id, outgoing, L.mediaRev || 0);
+      FM.replaceMediaWith(id, nrec); L.mediaRev = (L.mediaRev || 0) + 1; FM.media.get(id).rev = L.mediaRev;
+      FM.refreshAll(); FM.history.commit(); FM.storage.save();
+      r = await settle('blue'); if (r.dom !== 'blue') throw new Error('CONTROL: after the replace the bar is ' + r.dom + ', not blue');
+      FM.history.undo(); await sleep(200); await FM.restoreReplacedMedia();
+      r = await settle('red'); if (r.model !== 'red') throw new Error('setup: Undo did not bring the red clip back (record is ' + r.model + ')');
+      if (r.dom !== 'red') throw new Error('after Undo the clip is red but its timeline bar shows ' + r.dom + ' frames');
+      FM.history.redo(); await sleep(200); await FM.restoreReplacedMedia();
+      r = await settle('blue'); if (r.model !== 'blue') throw new Error('setup: Redo did not bring the blue clip back (record is ' + r.model + ')');
+      if (r.dom !== 'blue') throw new Error('after Redo the clip is blue but its timeline bar shows ' + r.dom + ' frames');
+    } finally {
+      FM.scene.layers.length = 0; for (const l of keep) FM.scene.layers.push(l); FM.scene.selectedId = keepSel[0]; FM.scene.selectedIds = keepSel[1];
+      FM.history.reset(); if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ═══ PF1: opening a project must not render it at full size, and must not render its card twice ═══ */
+  test('PF1 importing a project with a heavy effect stack draws its card at the card’s size, no full-size render, and the import stays within its time ceiling', { item: 'PF1', budgetMs: 120000 }, async function () {
+    if (!FM.storage || typeof FM.storage.importObject !== 'function') throw new Error('FM.storage.importObject is not reachable');
+    const P = FM.scene.project, keepLayers = FM.scene.layers.slice(), keepSel = [FM.scene.selectedId, FM.scene.selectedIds];
+    const had = P.width + 'x' + P.height + 'x' + P.duration;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const realRender = FM.renderScene, sizes = [];
+    try {
+      // a layer with 8 Glow effects on a 1080 x 1920 project: measured 3.0 s per full-size render here, and 0.16 s at card size
+      P.width = 1080; P.height = 1920; P.duration = 6; FM.scene.layers.length = 0; FM.history.reset();
+      FM.addShapeLayer('rect'); const l = FM.scene.layers[0]; l.shapeW = 300; l.shapeH = 300; l.start = 0; l.duration = 6; l.effects = [];
+      for (let k = 0; k < 8; k++) l.effects.push(FM.fxRegistry.makeInstance('glow'));
+      const obj = { app: 'freemotion', project: Object.assign({}, P, { name: 'pf1 probe' }), layers: JSON.parse(JSON.stringify(FM.scene.layers)) };
+      FM.scene.layers.length = 0; FM.history.reset();
+      const where = [], heavyW = [];
+      FM.renderScene = function (ctx, scn) { const c = ctx && ctx.canvas; if (c) { const heavy = !!(scn && scn.layers && scn.layers.some(x => x && x.effects && x.effects.length === 8)); sizes.push(c.width); if (heavy) heavyW.push(c.width); where.push(c.width + ' <- ' + new Error().stack.split('\n').slice(2, 6).map(x => x.trim().replace(/http:\/\/[^/]+\//, '')).join(' < ')); } return realRender.apply(this, arguments); };
+      const t0 = performance.now();
+      const ok = await FM.storage.importObject(obj);
+      const ms = performance.now() - t0;
+      await new Promise(r => setTimeout(r, 400));
+      FM.renderScene = realRender;
+      if (!ok) throw new Error('setup: the import was refused');
+      if (FM.scene.layers.length !== 1 || (FM.scene.layers[0].effects || []).length !== 8) throw new Error('setup: the imported layer lost its effects');
+      const big = heavyW.filter(w => w > 1000);   // the preview canvas is smaller than the project; only a project-size render counts here
+      if (big.length) throw new Error('opening the project rendered it at full size ' + big.length + ' time(s) (canvas widths ' + big.join(', ') + '): the card only needs 360 px, and a full-size render of this stack is about 3 s each');
+      const cardW = Math.round(1080 * Math.min(360 / 1080, 360 / 1920)) * 2;   // the card is drawn at twice its 203 px width
+      // the OUTGOING project's card is drawn first (create() keeps it fresh); what must not repeat is the IMPORTED project's
+      const mine = heavyW.filter(w => w === cardW);
+      if (mine.length > 1) throw new Error('the imported project\u2019s card was drawn ' + mine.length + ' times for one import, once is enough');
+      /* CEILING WITH HEADROOM: measured here, 6.2 s before and 0.3 to 0.6 s after (one layer, 8 Glow, 1080 x 1920). 2.5 s is four times the worst
+         "after" and well under the "before", so a slower machine passes and the old behaviour does not. */
+      if (ms > 2500) throw new Error('the import took ' + Math.round(ms) + ' ms (ceiling 2500; measured 6200 before the fix and 300 to 600 after)');
+    } finally {
+      FM.renderScene = realRender;
+      try { for (const p of (FM.projects.list() || []).filter(p => /pf1 probe/.test(p.name || ''))) await FM.projects.remove(p.id); } catch (e) {}
+      if (had !== P.width + 'x' + P.height + 'x' + P.duration) { /* the open project is whatever the import left; the suite resets per test */ }
+    }
+  });
+
+  /* ═══ PF2: stacked Glows are drawn as separate single-stage draws ═══ */
+  test('PF2 a stack of Glows never puts more than one drop-shadow in a filter list, draws the same picture as the one-list filter, and is faster', { item: 'PF2', budgetMs: 120000 }, async function () {
+    if (!FM.fxRegistry || !FM.addShapeLayer) throw new Error('setup: the app is not reachable');
+    const P = FM.scene.project, hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const keepLayers = FM.scene.layers.slice();
+    const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'filter');
+    let maxShadows = 0, counting = false;
+    try {
+      P.width = 1080; P.height = 1920; P.duration = 4;
+      if (!desc || !desc.set) throw new Error('setup: ctx.filter cannot be observed here');
+      Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', { configurable: true, enumerable: desc.enumerable, get: desc.get, set: function (v) { if (counting && typeof v === 'string') { const n = (v.match(/drop-shadow\(/g) || []).length; if (n > maxShadows) maxShadows = n; } return desc.set.call(this, v); } });
+      const CW = 302, CH = 537;   // a quarter-size frame: the pictures are compared, not timed, at this size
+      const render = () => { const c = document.createElement('canvas'); c.width = CW; c.height = CH; c.__fmRS = CW / 1080; c.__fmOX = 0; c.__fmOY = 0; const g = c.getContext('2d'); FM.renderScene(g, FM.scene, 0.2); return g.getImageData(0, 0, CW, CH).data; };
+      const build = (kind, edge, n, extra) => {
+        FM.scene.layers.length = 0; FM.history.reset();
+        if (kind === 'text') { FM.addTextLayer(); FM.textEdit && FM.textEdit.stop && FM.textEdit.stop(); } else FM.addShapeLayer('ellipse');
+        const l = FM.scene.layers[0]; l.start = 0; l.duration = 4;
+        if (kind === 'text') { l.text = 'GLOW'; l.fontSize = 300; l.color = '#ffcc33'; if (edge) l.transform.x = 300; } else { l.shapeW = edge === true ? 1080 : 400; l.shapeH = edge === true ? 1920 : 400; l.fillColor = '#33ccff'; if (edge === 'off') l.transform.x = 1300; if (edge === 'off2') l.transform.x = 1480; }   // 'off': wholly outside the frame, its light still reaches in
+        l.effects = []; for (let i = 0; i < n; i++) l.effects.push(FM.fxRegistry.makeInstance('glow'));
+        if (extra === 'after') { const e = FM.fxRegistry.makeInstance('hue'); e.params.deg = 90; l.effects.push(e); const q = FM.fxRegistry.makeInstance('blur'); q.params.radius = 8; l.effects.push(q); }   // CSS effects that come AFTER the glows
+        if (extra === 'before') { const q = FM.fxRegistry.makeInstance('blur'); q.params.radius = edge === 'off2' ? 200 : 40; l.effects.unshift(q); }                                                                                      // …and one before
+        if (extra === 'shadow') { l.shadow = { enabled: true, color: '#ff0000', alpha: 80, blur: 12, dx: 30, dy: 40 }; l.transform.opacity = 0.6; }                                                            // the layer's own Shadow and an opacity
+        return l;
+      };
+      const cases = [['text', false], ['text', true], ['shape', false], ['shape', true], ['shape', false, 'after'], ['shape', false, 'before'], ['shape', false, 'shadow'], ['text', true, 'shadow'], ['shape', 'off'], ['shape', 'off', 'shadow'], ['shape', true, 'before'], ['shape', 'off2', 'before']];   // 'off2': a gap the glows alone cannot cross, a Blur before them can
+      const bad = [];
+      for (const [kind, edge, extra] of cases) for (const n of [4, 8]) {
+        build(kind, edge, n, extra);
+        FM._glowSplitOff = true; const a = render();
+        FM._glowSplitOff = false; maxShadows = 0; counting = true; const b = render(); counting = false;
+        const tag = kind + (edge === 'off' || edge === 'off2' ? ' off the frame' : edge ? ' at the edge' : '') + (extra ? ' + ' + extra : '');
+        if (maxShadows > 1) bad.push(kind + (edge ? ' at the edge' : '') + ' x' + n + ': a filter list held ' + maxShadows + ' drop-shadows');
+        let mx = 0, cnt = 0; for (let i = 0; i < a.length; i += 4) { let m = 0; for (let k = 0; k < 4; k++) { const d = Math.abs(a[i + k] - b[i + k]); if (d > m) m = d; } if (m > mx) mx = m; if (m > 0) cnt++; }
+        /* MEASURED against the one-list filter on 24 combinations (perf-glow.md): 0 differing bytes everywhere except a shape that
+           touches the frame, where up to 9 of 255 on under 200 pixels. 16 levels and 0.1 % of the frame leave that jitter room (10 of 255 on under 150 pixels was the worst seen) and
+           would catch a missing pad (which measured 25 to 37 on thousands of pixels). */
+        if (mx > 16 || cnt > CW * CH * 0.001) bad.push(tag + ' x' + n + ': picture differs from the one-list filter, max ' + mx + ' on ' + cnt + ' px');
+      }
+      FM._glowSplitOff = false;
+      if (bad.length) throw new Error(bad.join(' | '));
+      // SPEED, as a ratio on the machine running it: 12 Glows on a shape, one-list filter against separate draws. Measured 3.4 s vs 0.4 s at 16 and 0.5 s vs 0.11 s at 8; the ratio, not the seconds, is what a slow machine keeps.
+      const timed = (off) => { build('shape', false, 12); FM._glowSplitOff = off; const t0 = performance.now(); render(); return performance.now() - t0; };
+      const chain = timed(true), split = timed(false);
+      FM._glowSplitOff = false;
+      if (split > chain * 0.6) throw new Error('12 stacked Glows took ' + Math.round(split) + ' ms as separate draws against ' + Math.round(chain) + ' ms as one filter list; expected well under 60 % (measured about 15 %)');
+    } finally {
+      counting = false; FM._glowSplitOff = false;
+      if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc);
+      FM.scene.layers.length = 0; keepLayers.forEach(l => FM.scene.layers.push(l));
+    }
+  });
+
+  /* ═══ PL1: A RENAMED EFFECT OR PARAMETER KEEPS EVERY OLD SAVE (FM.fxAliases, js/fx-registry.js) ═══ */
+  /* AU17-2, now with the alias table: A RENAME NEEDS AN ALIAS. A saved project keeps only the effect types and parameter keys the registry knows
+     (anything else is dropped on load, and the autosave then writes the loss back), so renaming `radius` to `size` would silently reset every saved
+     Blur. This pins every type and key that exists in v17.32. A name that is gone passes ONLY if FM.fxAliases carries it to something that exists;
+     otherwise it fails with the line to add. New types and keys are fine: they are not in the list. The list only ever grows. */
+  const PL1_PINNED = (function () {
+    return ["blur:radius", "brightness:amount", "contrast:amount", "saturate:amount", "hue:deg", "grayscale:amount", "sepia:amount", "invert:amount", "glow:radius,passes,strength,color", "vignette:amount,size,round,feather,x,y,mode,color,hilite", "chromakey:tolerance,softness,despill,color", "lumakey:threshold,softness,mode", "rgbsplit:amount,angle,radial,green", "pixelate:size,aspect,smooth", "posterize:levels,mix,channels,gamma", "mirror:mode,position", "tint:amount,range,preserve,mode,soft,color", "threshold:level,softness,color,color2", "duotone:amount,balance,contrast,blend,color,color2", "solarize:threshold,softness,mix,mode", "gamma:gamma,red,green,blue", "temperature:amount,tint,preserve,method,range", "noise:amount,speed,size,grain,color", "scanlines:amount,spacing,thickness,roll", "vibrance:amount,skin,highlights", "sharpen:amount,radius,threshold,mode", "thermal:amount,palette,low,high", "dither:levels,scale,matrix,mono", "halftone:size,angle,gain,shape", "wave:amount,wavelength,phase,vertical,angle", "ripple:amount,wavelength,phase,centerx,centery", "twirl:amount,centerx,centery,radius", "bulge:amount,centerx,centery,radius", "edge:amount,polarity,threshold,mix,blend", "emboss:amount,angle,mono,blend", "exposure:stops,offset,rolloff,gamma,space", "fisheye:amount,centerx,centery,radius", "squish:source,amount,spread,bulge,firmness,inset,walls,collide", "kaleidoscope:segments,phase,centerx,centery", "glitch:amount,bands,speed,split,dir,jitter,blocks,seed,wrap", "zoomblur:amount,centerx,centery,samples", "crt:amount,scale,scanline,mask,vignette", "boxblur:radius,aspect,passes", "spinblur:amount,centerx,centery,samples", "gradientmap:amount,stops,midpoint,reverse,blend,dither,color,color3,color2", "colorize:amount,lift,blend,color", "checker:size,mix,ratio,angle,color", "grid:size,thickness,mix,angle,color", "mosaic:size,aspect,gap,sample", "lensblur:radius,bloom,samples,blades", "dots:size,radius,opacity,softness,color", "polarcoords:amount,mode", "bend:amount,axis,position", "glass:amount,scale,axis,seed", "lightglow:amount,radius,threshold,knee,passes,outside,blend,from,color", "longshadow:length,angle,color", "halftonelines:size,angle,weight,softness", "clouds:amount,scale,drift,color", "rays:count,x,y,intensity,phase,color", "stripes:size,direction,duty,strength,color", "darkglow:amount,radius,threshold,knee,passes,outside,blend", "stroke:width,position,shape,softness,gap,color", "smoothedges:radius,choke,quality", "liquidglass:amount,frost,clarity,sheen,bevel,tint,angle,color", "roundcorners:style,radius", "filmgrain:amount,size,shape,color,shadows,highlights,speed,soft,seed", "blocknoise:amount,size,aspect,speed", "starfield:amount,size,variation,twinkle,twinklespeed,color", "curl:amount,wavelength,phase,centerx,centery", "bumpmap:amount,angle,relief,ambient", "edgeglow:source,amount,radius,color", "contourlines:levels,smooth,thickness,paper,color,color2", "grunge:amount,scale,darkness,color", "iridescence:amount,scale,bands,blur,motion,speed", "fractalwarp:amount,evolve,scale,detail", "motionblur:distance,angle,samples", "colorbalance:red,green,blue,range,preserve,soft", "highlightsshadows:highlights,shadows,whites,blacks,width,radius,sat", "tiltshift:center,softness,blur,angle", "dropshadow:distance,angle,softness,spread,smooth,opacity,shadowonly,color", "chromaticaberration:amount,angle,radial", "innerglow:radius,intensity,color", "unsharpmask:amount,radius,threshold", "hextiles:size", "linstreaks:length,angle,samples,both,threshold,color", "blink:rate,duty,min,phase", "flicker:amount,speed,seed", "flashdark:amount,speed,soft,floor,seed,rhythm,hold", "pulseopacity:speed,depth,phase", "dissolve:amount,direction,soft,speed,front", "blockdissolve:amount,size,dir,seed", "wipe:progress,angle,softness", "radialwipe:progress,start,centerx,centery,softness", "solidmatte:amount,color", "mattechoker:choke,feather,contrast", "mattefringe:width,opacity,feather,color", "gridrepeat:count,rows,mirror,stagger", "linearrepeat:count,spacing,angle,fade", "scatterarray:count,spread,sizevary,rotate,fade,seed", "radialrepeat:count,rotate,mirror,twist,centerx,centery", "mirrortile:size,offsetx,offsety,axis,shape", "channelremap:mode,mix,luma", "gradientoverlay:angle,shape,blend,mid,dither,amount,color,color2", "lensflare:x,y,intensity,size,rays,rotation,ghosts,halo,streak,color,color2", "roughenedges:amount,scale", "hexarray:size,thickness,opacity,color", "electricedges:amount,speed,soft,color", "glowscan:speed,width,amount,direction,angle,span,pause,loop,color", "spinstreaks:amount,centerx,centery,decay,samples,threshold,dir", "fractalridges:amount,scale,sharpness,seed,mode,bands,blend,speed,driftX,driftY,color,color2", "smoothbevel:depth,strength,angle", "zoomstreaks:amount,centerx,centery,threshold,samples", "innerblur:radius,edge,bleed,aspect,passes", "contourstrips:levels,mix,alternate,offset,color,color2", "innerpinch:amount,radius,centerx,centery", "crosshatch:spacing,density,weight,angle,color", "counter:progress,from,to,decimals,group,wrap", "textprogress:progress,unit,dir,cursor", "textrandomizer:progress,speed,chars", "textcurve:curve,mode", "textreverse:unit", "textrepeat:count,sep", "textpad:length,ch,side", "textspacing:spacing,word,line,mode", "texttransform:mode", "timecode:mode,offset,dir,source", "bleachbypass:amount,desat,contrast", "tealorange:amount,pivot,spread,mode,skin,balance,keep", "crossprocess:amount,variant,lift,gain", "lightleak:amount,x,y,size,speed,wander,flicker,blend,color,color2", "letterbox:ratio,size,metric,orient,offset,feather,opacity,color", "border:width,inset,radius,opacity,color", "faded:amount,lift,desat,tone,crush,rolloff,fadecol", "nightvision:amount,color,noise,gain", "sketch:amount,darkness,threshold,tooth", "cube3d:rotx,roty,rotz,size,shading,light", "box3d:rotx,roty,rotz,depth,size,shading,light", "cylinder3d:rotx,roty,rotz,length,size,shading,light", "sphere3d:rotx,roty,rotz,size,shading,light", "ellipsoid3d:rotx,roty,rotz,height,depth,size,shading,light", "torus3d:rotx,roty,rotz,thickness,size,shading,light", "ring3d:rotx,roty,rotz,hole,depth,size,shading,light", "pyramid3d:rotx,roty,rotz,size,shading,light", "octahedron3d:rotx,roty,rotz,size,shading,light", "hexprism3d:rotx,roty,rotz,depth,size,shading,light", "starprism3d:rotx,roty,rotz,points,inner,depth,size,shading,light", "starpoly3d:rotx,roty,rotz,spike,size,shading,light", "heart3d:rotx,roty,rotz,depth,size,shading,light", "hollowbox3d:rotx,roty,rotz,wall,depth,size,shading,light", "axiscross3d:rotx,roty,rotz,arm,size,shading,light", "pagecurl:amount,angle,radius,shading,light", "fliplayer:mode,keep,pivotx,pivoty", "rasterextrude:depth,angle,darken", "wiggle:amount,speed,amounty,rotate,scale,octaves,seed", "shake:amount,speed,twist,zoom,jitter,smear,smearlen,direction,overscan,seed", "swing:angle,speed,pivotx,pivoty,phase,damping", "spin:speed,offset,pivotx,pivoty", "pulse:amount,speed,phase,wave,stretch,pivotx,pivoty", "drift:x,y,wrap", "orbit:radius,speed,phase,ry,depth,face", "squeeze:amount,axis,position", "tiles:mode,count,gap,mirror,source", "motionflow:style,amount,samples,threshold,softness", "objectblur:shutter,samples,phase", "softglow:amount,radius,threshold,knee,passes,outside,blend,from,color", "replacecolor:tolerance,mode,softness,color,color2", "spotcolor:tolerance,desat,boost,invert,color", "fourcolor:amount,blend,spread,color,color2,color3,color4", "spectralmap:amount,span,offset,saturation", "radialshadow:reach,x,y,color", "voronoi:cells,edge,motion,speed,wall", "tunnel:amount,radius,centerx,centery", "turbulentdisplace:amount,scale,evolve,seed", "stretchseg:y,height,amount,softness", "tileshift:size,amount", "tilerotate:size,angle", "wrapshift:offsetx,offsety", "palettemap:mode,count,amount,color,color2,color3,color4", "lightning:count,intensity,thickness,jitter,forks,flicker,seed,angle,color", "displacemap:source,amount,channel", "polardisplace:source,radius,angle,centerx,centery", "touchup:x,y,w,h,mode,feather,strength", "copybg:", "magnifybg:zoom", "fillbehind:blur,zoom,dim", "particles:rate,lifetime,direction,spread,speed,gravity,sizeStart,sizeEnd,opacityStart,opacityEnd,spin,shape,blend,color,color2", "levels:channel,inblack,inwhite,gamma,outblack,outwhite", "halation:amount,threshold,tightness,spread,knee,color", "framestutter:rate,mode,blend,duty,trail,offset,random", "shockwave:radius,width,strength,rim,chroma,x,y", "speedlines:count,mode,angle,inner,aspect,length,width,jitter,spin,boil,x,y,blend,color", "weather:kind,amount,size,speed,wind,length,depth,opacity,color", "hslbands:band,hue,sat,lum,range,centre,width", "timewarp:duration,direction,mode,barwidth,glow,loop,color", "chromakeypro:tolerance,softness,despill,edgedesat,view,color", "lightwrap:intensity,reach,radius,mode", "dispersion:progress,direction,distance,scale,softness,glow,color", "vhstape:amount,chromableed,halo,wobble,tracking,trackspeed,headswitch", "compresscrunch:quality,blocksize,chromablock,ringing,fry", "temporaldenoise:strength,threshold,spatial", "lensdistort:k1,k2,zoom,chroma", "pixelsort:density,low,high,length,direction,order", "lumamatte:source,channel,invert,black,white,feather", "compoundblur:source,radius,levels,invert", "matchgrade:source,amount,mode", "filter:strength"];
+  })();
+  // `have(type)` -> the keys of a type that exists, or null; `table` -> an alias table. Returns the names that a saved project can hold and that mean nothing now.
+  function pl1Gone(have, table) {
+    const gone = [];
+    PL1_PINNED.forEach(s => {
+      const i = s.indexOf(':'), type = s.slice(0, i), ks = s.slice(i + 1) ? s.slice(i + 1).split(',') : [];
+      if (!have(type)) { const r = FM.fxRegistry.aliasResolve(type, undefined, have, table); if (!have(r.type)) gone.push(type + ' (the whole effect)'); return; }
+      ks.forEach(k => { if (have(type).indexOf(k) < 0) { const r = FM.fxRegistry.aliasResolve(type, k, have, table); if (have(r.type).indexOf(r.key) < 0) gone.push(type + '.' + k); } });
+    });
+    return gone;
+  }
+  // an alias table that would do harm: hides a name that still exists, loops, or points at nothing
+  function pl1Problems(have, table) {
+    const bad = [];
+    Object.keys(table.types).forEach(o => {
+      if (have(o)) bad.push('type ' + o + ' is aliased but still exists');
+      let t = o, n = 0; while (n++ < 9 && !have(t) && typeof table.types[t] === 'string') t = table.types[t];
+      if (!have(t)) bad.push('type ' + o + ' leads to ' + t + ', which does not exist (or loops)');
+    });
+    Object.keys(table.params).forEach(ty => {
+      const real = FM.fxRegistry.aliasResolve(ty, undefined, have, table).type;
+      if (real !== ty) bad.push('params are filed under ' + ty + ', which is an old type name; file them under ' + real);
+      if (!have(real)) { bad.push('params are filed under ' + ty + ', which does not exist'); return; }
+      Object.keys(table.params[ty]).forEach(o => {
+        if (have(real).indexOf(o) >= 0) bad.push(ty + '.' + o + ' is aliased but still exists');
+        let k = o, n = 0; while (n++ < 9 && have(real).indexOf(k) < 0 && typeof table.params[ty][k] === 'string') k = table.params[ty][k];
+        if (have(real).indexOf(k) < 0) bad.push(ty + '.' + o + ' leads to ' + k + ', which does not exist (or loops)');
+      });
+    });
+    return bad;
+  }
+  const pl1HaveReal = (t) => { const r = FM.fxRegistry.get(t); return r ? r.params.map(p => p.key) : null; };
+  test('AU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by an alias', { item: 'AU17', budgetMs: 30000 }, function () {
+    if (!FM.fxAliases || !FM.fxRegistry.aliasResolve) throw new Error('FM.fxAliases is not reachable');
+    const gone = pl1Gone(pl1HaveReal, FM.fxAliases);
+    if (gone.length) throw new Error(gone.length + ' effect type(s) or parameter key(s) a saved project can hold are gone: ' + gone.slice(0, 12).join(', ') + (gone.length > 12 ? ' …' : '') + ' — a renamed key resets that setting in every saved project; add an alias in FM.fxAliases (js/fx-registry.js): FM.fxAliases.types.oldtype = \'newtype\' or FM.fxAliases.params.newtype = { oldkey: \'newkey\' }, and keep the old name in this list');
+    if (PL1_PINNED.length < 150) throw new Error('CONTROL: the pinned list is suspiciously short (' + PL1_PINNED.length + ')');
+  });
+
+  test('PL1 the guard demands an alias for a rename and accepts one that exists, and a bad table is refused', { item: 'PL1', budgetMs: 30000 }, function () {
+    if (!FM.fxAliases || !FM.fxRegistry.aliasResolve) throw new Error('FM.fxAliases is not reachable');
+    // a pretend build where Blur's `radius` became `size`, and `glow` became `halo`
+    const fake = { blur: ['size'], halo: PL1_PINNED.filter(s => /^glow:/.test(s))[0].slice(5).split(',') };
+    PL1_PINNED.forEach(s => { const i = s.indexOf(':'), t = s.slice(0, i); if (t !== 'blur' && t !== 'glow') fake[t] = s.slice(i + 1) ? s.slice(i + 1).split(',') : []; });
+    const have = (t) => fake[t] || null;
+    const empty = { types: Object.create(null), params: Object.create(null) };
+    const g0 = pl1Gone(have, empty);
+    if (g0.indexOf('blur.radius') < 0 || g0.indexOf('glow (the whole effect)') < 0) throw new Error('with no alias the guard did not flag the rename: ' + g0.slice(0, 5).join(', '));
+    const table = { types: Object.assign(Object.create(null), { glow: 'halo' }), params: Object.assign(Object.create(null), { blur: { radius: 'size' } }) };
+    const g1 = pl1Gone(have, table);
+    if (g1.length) throw new Error('with the alias the guard still failed: ' + g1.slice(0, 5).join(', '));
+    if (pl1Problems(have, table).length) throw new Error('a correct table was called harmful: ' + pl1Problems(have, table).join(', '));
+    // the harmful ones
+    const shadow = { types: Object.create(null), params: Object.assign(Object.create(null), { blur: { size: 'radius' } }) };
+    if (!pl1Problems(have, shadow).some(m => /still exists/.test(m))) throw new Error('an alias hiding a name that still exists was not refused');
+    const loop = { types: Object.assign(Object.create(null), { glow: 'halo2', halo2: 'glow' }), params: Object.create(null) };
+    if (!pl1Problems(have, loop).some(m => /does not exist/.test(m))) throw new Error('an alias loop was not refused');
+    const dead = { types: Object.create(null), params: Object.assign(Object.create(null), { blur: { radius: 'nothing' } }) };
+    if (!pl1Problems(have, dead).some(m => /does not exist/.test(m))) throw new Error('an alias to a name that does not exist was not refused');
+    const oldFiled = { types: Object.assign(Object.create(null), { glow: 'halo' }), params: Object.assign(Object.create(null), { glow: { radius: 'x' } }) };
+    if (!pl1Problems(have, oldFiled).some(m => /old type name/.test(m))) throw new Error('params filed under an old type name were not refused');
+    // and the table that ships is clean
+    const live = pl1Problems(pl1HaveReal, FM.fxAliases);
+    if (live.length) throw new Error('the shipped alias table is harmful: ' + live.join(', '));
+  });
+
+  // the sanitiser every load, import, undo, paste and collab clone goes through
+  test('PL1 a saved effect whose parameter or type was renamed keeps its value, keyframes included', { item: 'PL1', budgetMs: 30000 }, function () {
+    if (!FM.fxAliases || !FM.storage || !FM.storage._sanitizeEffects) throw new Error('FM.fxAliases is not reachable');
+    const A = FM.fxAliases, hadT = Object.assign(Object.create(null), A.types), hadP = Object.assign(Object.create(null), A.params);
+    const run = (effects) => { const h = { effects: JSON.parse(JSON.stringify(effects)) }; FM.storage._sanitizeEffects(h); return h.effects; };
+    const kf = { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 1, v: 20, e: 'linear' }] };
+    try {
+      // pretend Blur.radius was once called `size`, Glow.radius was `reach` then `spread`, and the type `glow` was once `bloom`
+      A.params.blur = { size: 'radius' };
+      A.params.glow = { reach: 'spread', spread: 'radius' };
+      A.types.bloom = 'glow';
+      const out = run([
+        { type: 'blur', enabled: true, params: { size: 9 } },
+        { type: 'blur', enabled: true, params: { size: kf } },
+        { type: 'blur', enabled: true, params: { size: 3, radius: 11 } },
+        { type: 'bloom', enabled: true, params: { reach: 14, passes: 2 } },
+        { type: 'glow', enabled: false, params: { reach: 7 } },
+      ]);
+      if (out.length !== 5) throw new Error('an aliased effect was dropped: ' + out.length + ' of 5 survived');
+      if (out[0].params.radius !== 9 || 'size' in out[0].params) throw new Error('a renamed number did not carry over: ' + JSON.stringify(out[0].params));
+      if (!out[1].params.radius || !Array.isArray(out[1].params.radius.kf) || out[1].params.radius.kf.length !== 2 || out[1].params.radius.kf[1].v !== 20) throw new Error('a renamed animated parameter lost its keyframes: ' + JSON.stringify(out[1].params));
+      if (out[2].params.radius !== 11) throw new Error('when both the old and the new key are present the new one must win, got ' + out[2].params.radius);
+      if (out[3].type !== 'glow' || out[3].params.radius !== 14 || out[3].params.passes !== 2) throw new Error('a renamed type with a two-step renamed key did not carry over: ' + JSON.stringify(out[3]));
+      if (out[4].type !== 'glow' || out[4].enabled !== false || out[4].params.radius !== 7) throw new Error('a disabled effect lost its state or value: ' + JSON.stringify(out[4]));
+      // control: a key that is NOT aliased is still dropped, and a type that is not aliased is still refused
+      const ctl = run([{ type: 'blur', enabled: true, params: { nonsense: 5, radius: 4 } }, { type: 'neverexisted', enabled: true, params: {} }]);
+      if (ctl.length !== 1 || ctl[0].params.nonsense !== undefined || ctl[0].params.radius !== 4) throw new Error('the whitelist stopped dropping unknown names: ' + JSON.stringify(ctl));
+      // control 2: an alias may never rewrite a name that still exists (a bad table must not eat a live setting)
+      A.params.blur = { radius: 'size' };
+      const shadow = run([{ type: 'blur', enabled: true, params: { radius: 4 } }]);
+      if (shadow.length !== 1 || shadow[0].params.radius !== 4) throw new Error('an alias rewrote a parameter that still exists: ' + JSON.stringify(shadow));
+      A.params.blur = { size: 'radius' };
+      // the same through a Filter container's children, which are sanitised one level down
+      const f = run([{ type: FM.FX_CONTAINER, enabled: true, params: {}, effects: [{ type: 'blur', enabled: true, params: { size: 6 } }] }]);
+      if (!f.length || !f[0].effects || !f[0].effects.length || f[0].effects[0].params.radius !== 6) throw new Error('an aliased effect inside a Filter was dropped: ' + JSON.stringify(f));
+    } finally { A.types = hadT; A.params = hadP; }
+  });
+
+  test('PL1 an effect preset saved under the old names still loads under the new ones', { item: 'PL1', budgetMs: 30000 }, function () {
+    if (!FM.fxAliases || !FM.effectPresets) throw new Error('FM.fxAliases is not reachable');
+    const A = FM.fxAliases, hadT = Object.assign(Object.create(null), A.types), hadP = Object.assign(Object.create(null), A.params);
+    const KEY = 'fm.fx.userpresets', keep = (function () { try { return localStorage.getItem(KEY); } catch (e) { return null; } })();
+    try {
+      A.params.blur = { size: 'radius' }; A.types.softener = 'blur';
+      const ok = FM.effectPresets.save({ id: 'pl1old', fx: 'softener', name: 'PL1 old', desc: '', dur: 0, params: { size: 12 } });
+      const mine = FM.effectPresets.for('blur').mine.filter(p => p.id === 'pl1old')[0];
+      if (!ok || !mine) throw new Error('a preset saved under an old effect name did not load (save returned ' + ok + ')');
+      if (mine.fx !== 'blur' || mine.params.radius !== 12 || 'size' in mine.params) throw new Error('the preset kept the old names: ' + JSON.stringify(mine));
+      // control: with the table empty the same preset is refused, not guessed at
+      A.types = Object.create(null); A.params = Object.create(null);
+      if (FM.effectPresets.save({ id: 'pl1old2', fx: 'softener', name: 'PL1 old 2', desc: '', dur: 0, params: { size: 12 } })) throw new Error('control: an unknown effect name was accepted with no alias');
+    } finally {
+      A.types = hadT; A.params = hadP;
+      try { FM.effectPresets.remove('pl1old'); FM.effectPresets.remove('pl1old2'); } catch (e) {}
+      try { if (keep == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, keep); } catch (e) {}
+    }
+  });
+
+  /* ═══ AU20: the inspector's Presets card (tags, rename, long names) ═══ */
+  async function au20Card(setup) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const keepLayers = FM.scene.layers.slice(), keepSel = FM.scene.selectedId;
+    const keepLP = JSON.stringify(FM.layerPresets.list()), keepTags = localStorage.getItem('fm.presettags');
+    const had = { w: FM.scene.project.width, h: FM.scene.project.height };
+    try {
+      FM.scene.layers.length = 0; FM.history.reset(); FM.addShapeLayer('ellipse');
+      const L = FM.scene.layers[0]; L.start = 0; L.duration = 4; L.effects = [FM.fxRegistry.makeInstance('glow')];
+      FM.selectLayer(L.id);
+      FM.layerPresets.list().slice().forEach(p => FM.layerPresets.remove(p.name));
+      return await setup(L, sleep);
+    } finally {
+      try { FM.layerPresets.list().slice().forEach(p => FM.layerPresets.remove(p.name)); localStorage.setItem('fm.layerpresets', keepLP); } catch (e) {}
+      try { if (keepTags == null) localStorage.removeItem('fm.presettags'); else localStorage.setItem('fm.presettags', keepTags); } catch (e) {}
+      FM.scene.layers.length = 0; keepLayers.forEach(l => FM.scene.layers.push(l));
+      try { FM.inspector.refresh(); } catch (e) {}
+    }
+  }
+  test('AU20 clearing the last tag while its chip is the filter does not leave the Presets card empty', { item: 'AU20', budgetMs: 30000 }, async function () {
+    await au20Card(async function (L, sleep) {
+      const rows = () => [].slice.call(document.querySelectorAll('#inspector .insp-preset-name')).map(n => n.textContent);
+      const chips = () => [].slice.call(document.querySelectorAll('#inspector .preset-chip')).map(c => c.textContent + (c.classList.contains('on') ? '*' : ''));
+      FM.layerPresets.save('AU20 A', L); FM.layerPresets.save('AU20 B', L); FM.presetTags.set('lp:AU20 A', ['au20warm']);
+      FM.inspector.openCategory('presets'); await sleep(200);
+      const chip = [].slice.call(document.querySelectorAll('#inspector .preset-chip')).filter(c => c.textContent === 'au20warm')[0];
+      if (!chip) throw new Error('setup: the tag chip did not appear: ' + JSON.stringify(chips()));
+      chip.click(); await sleep(200);
+      if (rows().join('|') !== 'AU20 A') throw new Error('setup: the filter did not narrow the card: ' + JSON.stringify(rows()));
+      FM.presetTags.set('lp:AU20 A', ['']);   // what Tags… with an empty answer does
+      await sleep(250);
+      if (rows().indexOf('AU20 A') < 0 || rows().indexOf('AU20 B') < 0) throw new Error('the card is empty after the last tag was cleared while it was the filter: rows ' + JSON.stringify(rows()) + ', chips ' + JSON.stringify(chips()) + ' (nothing on screen can turn the filter off)');
+      // …and removing the last preset that carries the tag does the same
+      FM.presetTags.set('lp:AU20 B', ['au20cold']); await sleep(200);
+      [].slice.call(document.querySelectorAll('#inspector .preset-chip')).filter(c => c.textContent === 'au20cold')[0].click(); await sleep(200);
+      FM.layerPresets.remove('AU20 B'); await sleep(250);
+      if (rows().indexOf('AU20 A') < 0) throw new Error('the card is empty after the last tagged preset was deleted while its tag was the filter: ' + JSON.stringify(rows()));
+    });
+  });
+  test('AU20 renaming a layer preset keeps the Update button of layers that were applied from it', { item: 'AU20', budgetMs: 30000 }, async function () {
+    await au20Card(async function (L, sleep) {
+      FM.layerPresets.save('AU20 Look', L);
+      FM.layerPresets.apply('AU20 Look', L);
+      if (L.fromPreset !== 'AU20 Look') throw new Error('setup: apply did not record where the layer came from: ' + L.fromPreset);
+      FM.inspector.openCategory('presets'); await sleep(200);
+      if (!document.querySelector('#inspector .insp-preset-update')) throw new Error('setup: no Update button before the rename');
+      if (!FM.layerPresets.rename('AU20 Look', 'AU20 Renamed')) throw new Error('setup: the rename was refused');
+      await sleep(250);
+      if (L.fromPreset !== 'AU20 Renamed') throw new Error('the layer still says it came from “' + L.fromPreset + '”, a preset that no longer exists');
+      const up = document.querySelector('#inspector .insp-preset-update');
+      if (!up || up.textContent.indexOf('AU20 Renamed') < 0) throw new Error('the Update button is gone after the rename (' + (up ? up.textContent : 'none') + ')');
+    });
+  });
+  test('AU20 a long unbroken preset name wraps inside its row instead of running under the delete button or out of the panel', { item: 'AU20', budgetMs: 30000 }, async function () {
+    await au20Card(async function (L, sleep) {
+      const longName = 'Cinematic_Teal_Orange_Final_v2_FIX_new_AU20_' + 'x'.repeat(40);   // 84 characters, no space
+      FM.layerPresets.save(longName, L);
+      FM.inspector.openCategory('presets'); await sleep(250);
+      const ins = document.getElementById('inspector'), row = document.querySelector('#inspector .insp-preset-row'), nm = row && row.querySelector('.insp-preset-name'), del = row && row.querySelector('.fxp-del');
+      if (!row || !nm || !del) throw new Error('setup: the preset row did not render');
+      const nr = nm.getBoundingClientRect(), dr = del.getBoundingClientRect(), rr = row.getBoundingClientRect();
+      if (nr.right > dr.left + 1) throw new Error('the name runs under the delete button: name ends at ' + Math.round(nr.right) + ', the ✕ starts at ' + Math.round(dr.left));
+      if (nr.right > rr.right + 1) throw new Error('the name runs out of its row: ' + Math.round(nr.right) + ' against ' + Math.round(rr.right));
+      if (ins.scrollWidth > ins.clientWidth + 1) throw new Error('the inspector scrolls sideways because of the name: scrollWidth ' + ins.scrollWidth + ' against ' + ins.clientWidth);
+    });
+  });
+
+  /* ═══ AU21: collab media, the two halves of a transfer and the member on the other end ═══ */
+  test('AU21 a guest that drops mid-upload and comes back finishes its clip on the host, from the bytes already kept', { item: 'AU21', budgetMs: 300000 }, async function () {
+    const C = need921S4('the media receiver on the host');
+    await withCollab921([mediaLayer921('Clip', 'image')], async function (c) {
+      const big = await q921bigPng();
+      if (big.size < 5 * 1024 * 1024) throw new Error('CONTROL: the fixture is ' + big.size + ' bytes, under one 4 MiB part, so nothing could resume from it');
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'p', mode: 'async' });
+      const mid = c.S.addPeer(loop.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
+      const peer = mediaPeer921(loop.b);
+      peer.cutAt = Math.floor(big.size * 0.55);
+      const ctl = C.media._ctl(c.S), lid = c.ids[0];
+      peer.add(big, 'image', [[lid, 0]]);
+      peer.announce('mf');
+      await until921('the upload to be cut', async function () { return peer.cut ? peer.servedBytes : null; }, 60000);
+      if (!Object.keys(ctl.inb).length) throw new Error('CONTROL: the host is not receiving, so the drop below proves nothing');
+      // the guest's link closes: the app drops the member (collab-ui link.onclose)
+      c.S.dropPeer(mid); try { loop.b.close(); } catch (e) {}
+      // past one sweep (1.5 s): an entry that is merely un-wanted would be queued again and sit in flight to nobody
+      const t0 = Date.now();
+      await until921('a sweep to have run', async function () { return (Date.now() - t0 > 2400) ? 1 : null; }, 8000);
+      const gone = C.media.pending(c.S);
+      if (gone.n !== 0 || Object.keys(ctl.inb).length) throw new Error('the host still counts the clip as arriving (' + gone.n + ' pending, ' + Object.keys(ctl.inb).length + ' in flight) from a member that has left: the export question would say "still arriving" for the rest of the session');
+      // the same guest comes back on a new link and offers the same file again
+      const loop2 = C.link.LoopLink({ aTag: 'h', bTag: 'p2', mode: 'async' });
+      const mid2 = c.S.addPeer(loop2.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
+      if (!mid2 || mid2 === mid) throw new Error('CONTROL: the returning guest did not get a new member id (' + mid + ' then ' + mid2 + ')');
+      const peer2 = mediaPeer921(loop2.b);
+      peer2.add(big, 'image', [[lid, 0]]);
+      peer2.announce('mf');
+      const rec = await until921('the clip to arrive after the guest came back', async function () { const r = await FM.storage.readMedia(lid); return (r && r.file) ? r : null; }, 120000);
+      if (!peer2.wants.length) throw new Error('the host never asked the returning guest for the file');
+      if (!(peer2.wants[0].from > 0)) throw new Error('the host asked again from ' + peer2.wants[0].from + ': it threw away the parts it had kept');
+      if (rec.file.size !== big.size) throw new Error('the clip is ' + rec.file.size + ' bytes, not ' + big.size);
+      const got = new Uint8Array(await rec.file.arrayBuffer()), want = new Uint8Array(await big.arrayBuffer());
+      for (let i = 0; i < want.length; i++) if (got[i] !== want[i]) throw new Error('the resumed clip differs from the original at offset ' + i);
+      try { loop2.b.close(); } catch (e) {}
+    });
+  });
+  test('AU21 a member who leaves does not leave send loops running behind it', { item: 'AU21', budgetMs: 240000 }, async function () {
+    const C = need921S4('the media sender');
+    await withCollab921([mediaLayer921('A', 'image'), mediaLayer921('B', 'image')], async function (c) {
+      const big = await q921bigPng(), big2 = await q921noisePng(1800, 7, 'big2.png');
+      await q921give(c.ids[0], big, 'image', 0); await q921give(c.ids[1], big2, 'image', 0);
+      FM.history.commit();
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'p', mode: 'async' });
+      const mid = c.S.addPeer(loop.a, { role: 'editor', name: 'Sam', color: '#44aaff' });
+      const peer = mediaPeer921(loop.b);   // it never acknowledges (no `ok`), as a receiver that stopped would not
+      await until921('the host to advertise its media', async function () { return peer.mfs.length ? peer.mfs : null; }, 20000);
+      const byName = {}; peer.mfs.forEach(function (m) { (m.files || []).forEach(function (e) { byName[e.name] = e; }); });
+      const ctl = C.media._ctl(c.S);
+      peer.ep.send('ctl', { t: 'want', fid: byName['big.png'].fid, from: 0 });
+      peer.ep.send('ctl', { t: 'want', fid: byName['big2.png'].fid, from: 0 });
+      // both jobs run into the window brake: 8 MiB sent past the last acknowledgement, then they wait
+      const win = C.media.LIMITS.WINDOW;
+      await until921('both sends to reach the window brake', async function () {
+        const js = Object.keys(ctl.out).map(function (x) { return ctl.out[x]; });
+        return (js.length === 2 && js.every(function (j) { return j.off - j.upto >= win; })) ? js.length : null;
+      }, 60000);
+      c.S.dropPeer(mid); try { loop.b.close(); } catch (e) {}
+      await until921('the member’s send jobs to end', async function () { return Object.keys(ctl.out).length === 0 ? 1 : null; }, 3000).catch(function () {
+        throw new Error(Object.keys(ctl.out).length + ' send job(s) still running for a member who left, each polling every 25 ms until the room ends');
+      });
+    });
+  });
+
+  test('AU21 files that end exactly on a chunk, a part and the send window arrive byte-identical, with no part left behind', { item: 'AU21', budgetMs: 420000 }, async function () {
+    const C = need921S4('the media receiver');
+    const base = await q921png([30, 140, 200], 'pad-base.png');
+    const baseBytes = new Uint8Array(await base.arrayBuffer());
+    // a PNG ignores what follows its IEND chunk, so a valid image can be padded to ANY size: the receiver decodes it for real
+    const padded = function (size, name, seed) {
+      const bytes = new Uint8Array(size);
+      bytes.set(baseBytes, 0);
+      let x = (seed * 2654435761) | 0 || 1;
+      for (let i = baseBytes.length; i < size; i++) { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; bytes[i] = x & 255; }
+      return new File([bytes], name, { type: 'image/png', lastModified: 1600000010000 + seed });
+    };
+    const LIM = C.media.LIMITS;
+    const sizes = [LIM.CHUNK, LIM.CHUNK + 1, LIM.PART - 1, LIM.PART, LIM.PART + 1, 2 * LIM.PART, LIM.WINDOW + 1];
+    await withCollabGuest921(sizes.map(function (n, i) { return mediaLayer921('B' + i, 'image', { duration: 2 }); }), async function (c) {
+      const files = sizes.map(function (n, i) { return padded(n, 'edge' + n + '.png', i + 1); });
+      files.forEach(function (f, i) { c.peer.add(f, 'image', [[c.ids[i], 0]]); });
+      c.peer.announce('mf');
+      for (let i = 0; i < files.length; i++) {
+        const rec = await until921('the ' + files[i].size + '-byte file to arrive', async function () { const r = await FM.storage.readMedia(c.ids[i]); return (r && r.file) ? r : null; }, 120000);
+        if (rec.file.size !== files[i].size) throw new Error('a ' + files[i].size + '-byte file arrived as ' + rec.file.size + ' bytes');
+        const got = new Uint8Array(await rec.file.arrayBuffer()), want = new Uint8Array(await files[i].arrayBuffer());
+        let bad = -1; for (let k = 0; k < want.length; k++) if (got[k] !== want[k]) { bad = k; break; }
+        if (bad >= 0) throw new Error('a ' + files[i].size + '-byte file differs from the original at offset ' + bad);
+      }
+      await until921('every part to be collected', async function () { const ks = await FM.storage.collabKeys('collab:part:' + c.sid + ':'); return ks.length ? null : 1; }, 20000).catch(function () { throw new Error('parts of finished files are still on disk'); });
+      if (c.ctl.failed || Object.keys(c.ctl.bad).length) throw new Error('the receiver counted ' + c.ctl.failed + ' failed and ' + Object.keys(c.ctl.bad).length + ' abandoned files');
+    });
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
