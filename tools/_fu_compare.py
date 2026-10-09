@@ -701,6 +701,24 @@ def plants():
     return json.load(open(PLANTS_FILE, encoding='utf-8'))['plants']
 
 
+def plantcheck(d):
+    """Every plant with an anchor finds it exactly once in d's copy of its file (tools/full-unchanged.sh asks before it
+    measures: 9 Oct, step 1.2's run measured for 30 minutes and then could not plant the sanitiser plant)."""
+    bad = []
+    for p in plants():
+        if 'old' not in p:
+            continue
+        try:
+            n = open(os.path.join(d, p['file']), encoding='utf-8').read().count(p['old'])
+        except OSError:
+            n = 'no file'
+        if n != 1:
+            bad.append('   · the %s plant\'s anchor is in %s %s time(s), not once — re-anchor it in %s' % (p['name'], p['file'], n, PLANTS_FILE))
+    for b in bad:
+        print(b)
+    return 1 if bad else 0
+
+
 def plant(kind, d):
     ps = [p for p in plants() if p['name'] == kind]
     if not ps:
@@ -858,8 +876,10 @@ def measure(head, head2, margin):
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] in ('plant', 'judge', 'measure', 'plants', 'linkcopy', 'selftest'):
+    if len(sys.argv) > 1 and sys.argv[1] in ('plant', 'judge', 'measure', 'plants', 'linkcopy', 'selftest', 'plantcheck'):
         cmd = sys.argv[1]
+        if cmd == 'plantcheck':
+            return plantcheck(sys.argv[2])
         if cmd == 'selftest':
             # tools/full-unchanged.sh runs this BEFORE a Chrome starts (7 Oct, the laptop: no numpy, so a run measured
             # for 22 minutes, died on this file's import at the end and said NOT PASS — about the machine, not the app)

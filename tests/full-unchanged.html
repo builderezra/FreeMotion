@@ -530,6 +530,12 @@
     if (FM.requestRender) FM.requestRender();
     await raf2(); await raf2();
   }
+  function previewHashNow() {
+    var pv = D.getElementById('preview');
+    if (!pv) return '';
+    try { var g = pv.getContext('2d'); return cyrb53(new Uint8Array(g.getImageData(0, 0, pv.width, pv.height).data.buffer)); }
+    catch (e) { return 'unreadable: ' + (e && e.message); }
+  }
   async function previewState() {
     var pv = D.getElementById('preview');
     if (!pv) return { pv: null };
@@ -596,6 +602,16 @@
       fr = fr.concat(freezeInfinite());
       await raf2();
       var rec = layoutRecord(opts.root ? D.querySelector(opts.root) : D.body, opts.skip);
+      /* THE PREVIEW'S HASH IS READ AT THE PICTURE'S INSTANT (9 Oct, step 1.2's run at 320×568: fu1-one-selected read
+         1cmiq, then 25m5 after one more render on HEAD and 16144 at once on the tree — and the two screenshots taken a
+         moment later were identical to the pixel: this small preview goes on refining past previewState's wait, so its
+         hash said when it was read, not what it drew). previewState still waits it out; the hash compared is the one the
+         picture shows, and a change since previewState is written to DUMP.diag. */
+      if (pvs.pv) {
+        var pvNow = previewHashNow();
+        if (pvNow !== pvs.pvHash) (DUMP.diag = DUMP.diag || []).push({ step: DUMP.step, previewAtPicture: [pvs.pvHash, pvNow] });
+        pvs.pvHash = pvNow;
+      }
       DUMP.screens[name] = { layout: rec, focus: D.activeElement ? pathOf(D.activeElement) : '', canvasesQuiet: quiet,
         pv: pvs.pv || null, pvHash: pvs.pvHash || '', motion: motion };
       if (toastRec) DUMP.screens[name].toast = toastRec;

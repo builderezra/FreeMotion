@@ -138,8 +138,8 @@
       "name": "sanitiser",
       "kind": "a sanitiser key (review S1: every layer gets `pick`)",
       "file": "js/storage.js",
-      "old": "      if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';\n    }\n  }\n  FM.storage_sanitizeUnsafeValues",
-      "new": "      if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';\n    }\n    l.pick = { b: 'pk0', i: 0 };   // full-unchanged self-test plant: never shipped\n  }\n  FM.storage_sanitizeUnsafeValues",
+      "old": "      if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';\n    }\n",
+      "new": "      if (['linear', 'radial', 'angular'].indexOf(l.fillGradient.type) < 0) l.fillGradient.type = 'linear';\n    }\n    l.pick = { b: 'pk0', i: 0 };   // full-unchanged self-test plant: never shipped\n",
       "widths": [
         "380"
       ],

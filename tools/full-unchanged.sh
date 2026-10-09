@@ -328,6 +328,12 @@ fi
 if ! _pf="$(python3 tools/_fu_compare.py selftest 2>&1)"; then
   say "❌ the picture comparer cannot run on this machine, so nothing was measured: $(tail -1 <<<"$_pf")"; exit 2
 fi
+# EVERY PLANT MUST LAND IN THE TREE BEFORE ANYTHING IS MEASURED (9 Oct: step 1.2 inserts its sanitiser call where the
+# sanitiser plant was anchored, and the run found out only after 30 minutes of measuring both sides — "could not plant
+# sanitiser"). Each plant's anchor must be exactly once in the copy of the tree it will be planted into; in a second.
+if [ "$MODE" = run ] && ! _pc="$(python3 tools/_fu_compare.py plantcheck "$WORK/tree" 2>&1)"; then
+  say "❌ a self-test plant cannot land in this tree, so a PASS could not be proved — nothing was measured:"; say "$_pc"; exit 2
+fi
 start_server || exit 2
 URL="http://localhost:$PORT"
 
