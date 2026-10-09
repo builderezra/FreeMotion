@@ -59811,6 +59811,106 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* ════════ AU5: the REAL collab Session over a fake wire (LoopLink, never a socket). `?only=AU5` runs these. ════════ */
+  test('AU5-1 lost edits, stale overwrites and duplicate layers: an owner and two real guests, cuts and heals mid-edit, 6 seeds of 100 rounds', { item: 'AU5', budgetMs: 600000 }, async function () {
+    // A semantic check the convergence fuzz (a MODEL of a guest) does not make: every layer somebody added and
+    // nobody deleted exists exactly ONCE everywhere, and a value only ONE person writes ends as that person's last write.
+    const seeds = [100, 107, 114, 121, 128, 135];
+    const problems = [];
+    let totalCuts = 0, totalOffline = 0;
+    for (const seed of seeds) {
+      await withCollab921([layer921('base0'), layer921('base1')], async function (c) {
+        const R = rng921(seed);
+        const g = [c.addGuest({ name: 'G0' }), c.addGuest({ name: 'G1' })];
+        const docs = [null, g[0].doc, g[1].doc];                 // actor 0 = the owner (the real scene)
+        const exp = {};                                           // id -> { actor, deleted, name }
+        let n = 0, cuts = 0, offlineAdds = 0;
+        const layersOf = (a) => a === 0 ? FM.scene.layers : docs[a].layers;
+        // the pump must go round until every loop is empty: a batch one loop delivers is queued on ANOTHER loop
+        const settle = () => { for (let k = 0; k < 30; k++) { g.forEach(x => x.loop.settle(400)); if (!g.some(x => x.loop.pending())) break; } };
+        // the owner's tick matters: it is what serves a catch-up the budget put off (a guest that reconnects often)
+        const tickAll = () => { c.S.tick('full'); g.forEach(x => x.G.tick('full')); FM.history.commit(); settle(); };
+        const cut = [false, false];
+        for (let round = 0; round < 100; round++) {
+          const a = Math.floor(R() * 3);
+          const mine = Object.keys(exp).filter(id => exp[id].actor === a && !exp[id].deleted);
+          const r = R();
+          if (r < 0.4 || !mine.length) {
+            const id = 'au5_' + a + '_' + (++n);
+            layersOf(a).push(layer921('L' + n, { id: id }));
+            if (a > 0 && cut[a - 1]) offlineAdds++;
+            exp[id] = { actor: a, deleted: false, name: 'L' + n };
+          } else if (r < 0.8) {
+            const id = mine[Math.floor(R() * mine.length)];
+            const L = layersOf(a).filter(x => x.id === id)[0];
+            if (L) { L.name = 'v' + (++n); exp[id].name = L.name; }
+          } else {
+            const id = mine[Math.floor(R() * mine.length)];
+            const arr = layersOf(a), i = arr.findIndex(x => x.id === id);
+            if (i >= 0) { arr.splice(i, 1); exp[id].deleted = true; }
+          }
+          if (a === 0) FM.history.commit(); else g[a - 1].G.tick('full');
+          if (R() < 0.5) settle();
+          if (R() < 0.15) { const k = Math.floor(R() * 2); if (!cut[k]) { g[k].loop.partition('g' + k); cut[k] = true; cuts++; } }
+          if (R() < 0.25) { const k = Math.floor(R() * 2); if (cut[k]) { g[k].loop.heal('g' + k); cut[k] = false; } }
+        }
+        for (let k = 0; k < 2; k++) if (cut[k]) { g[k].loop.heal('g' + k); cut[k] = false; }
+        const sig = () => [FM.scene.layers, g[0].doc.layers, g[1].doc.layers].map(arr => arr.map(l => l.id + '|' + l.name).sort().join(','));
+        for (let i = 0; i < 60; i++) { tickAll(); const [o, a1, a2] = sig(); if (o === a1 && o === a2 && i > 3) break; await new Promise(r => setTimeout(r, 150)); }
+        totalCuts += cuts; totalOffline += offlineAdds;
+        const norm = (arr) => arr.map(l => l.id + '|' + l.name).sort().join(',');
+        const ref = norm(FM.scene.layers);
+        g.forEach((x, k) => { if (norm(x.doc.layers) !== ref) problems.push('seed ' + seed + ': guest ' + k + ' differs from the owner'); });
+        Object.keys(exp).forEach(id => {
+          const e = exp[id];
+          [['owner', FM.scene.layers], ['g0', g[0].doc.layers], ['g1', g[1].doc.layers]].forEach(([who, arr]) => {
+            const hits = arr.filter(l => l.id === id);
+            if (e.deleted && hits.length) problems.push('seed ' + seed + ': ' + id + ' was deleted by its author and is back on ' + who);
+            if (!e.deleted && hits.length !== 1) problems.push('seed ' + seed + ': ' + id + ' (added by actor ' + e.actor + ') is on ' + who + ' ' + hits.length + ' times');
+            if (!e.deleted && hits.length === 1 && hits[0].name !== e.name) problems.push('seed ' + seed + ': ' + id + ' on ' + who + ' is named "' + hits[0].name + '", its author last wrote "' + e.name + '"');
+          });
+        });
+      });
+    }
+    if (totalCuts < 6 || totalOffline < 6) problems.push('CONTROL: the runs cut a link only ' + totalCuts + ' times and added only ' + totalOffline + ' layers while cut, too few to mean anything');
+    if (problems.length) throw new Error(problems.length + ' problems; first: ' + problems.slice(0, 4).join(' | '));
+  });
+  test('AU5-2 a guest that reloads with a base persisted BEFORE a layer arrived does not hand that layer back after the owner deleted it, and still sends its own offline layer', { item: 'AU5', budgetMs: 90000 }, async function () {
+    await withCollab921([layer921('A')], async function (c) {
+      const C = c.C;
+      const g = c.addGuest({ name: 'G0' });
+      const clone = jclone921;
+      // 1. the guest persisted its base here (what bridge.persistBase writes 2 s after a batch)
+      const persisted = { epoch: g.G.epoch, seq: g.G.bs, cid: g.G.cid, D: clone({ project: g.G.base.project, layers: g.G.base.layers }) };
+      // 2. the owner adds Y and Z; both reach the guest (live and base) before the 2 s persist would have fired
+      FM.scene.layers.push(layer921('Y', { id: 'au5_Y' }), layer921('Z', { id: 'au5_Z' }));
+      FM.history.commit(); g.loop.settle();
+      if (!g.doc.layers.some(l => l.id === 'au5_Y') || !g.doc.layers.some(l => l.id === 'au5_Z')) throw new Error('CONTROL: Y and Z never reached the guest');
+      // 3. the guest goes away (a reload), having also made a layer of its own that no base has seen; the owner deletes Y meanwhile
+      g.doc.layers.push(layer921('mine', { id: 'au5_mine' }));
+      g.G.setOnline(false);
+      g.loop.partition('g0');
+      FM.scene.layers.splice(FM.scene.layers.findIndex(l => l.id === 'au5_Y'), 1);
+      FM.history.commit(); g.loop.settle();
+      if (FM.scene.layers.some(l => l.id === 'au5_Y')) throw new Error('CONTROL: the owner still has Y');
+      // 4. the guest comes back as a NEW session: live = what it autosaved (has Y, Z, mine), base = the stale persisted one
+      const A2 = plainAdapter921(g.doc, C.bridge.invariants());
+      const loop2 = C.link.LoopLink({ aTag: 'h', bTag: 'g0b', mode: 'manual' });
+      c.S.addPeer(loop2.a, { role: 'editor', name: 'G0', color: '#44aaff', mid: g.mid });
+      const G2 = C.Session({ adapter: A2, role: 'editor', mid: g.mid, base: clone(persisted.D), epoch: persisted.epoch });
+      G2.bs = persisted.seq; G2.cid = persisted.cid;
+      const owed = G2.recoverOutbox(persisted);
+      G2.setLink(loop2.b);
+      loop2.b.send('ctl', G2._helloMsg({ name: 'G0' }));
+      G2.tick('full'); loop2.settle(); G2.tick('full'); loop2.settle();
+      const count = (arr, id) => arr.filter(l => l.id === id).length;
+      if (!owed) throw new Error('CONTROL: recoverOutbox owed nothing, so the stale-base resend is not what ran');
+      if (count(FM.scene.layers, 'au5_mine') !== 1) throw new Error('CONTROL: the guest\'s own offline layer reached the owner ' + count(FM.scene.layers, 'au5_mine') + ' times, not once');
+      if (count(FM.scene.layers, 'au5_Z') !== 1) throw new Error('CONTROL: Z (nobody removed it) is on the owner ' + count(FM.scene.layers, 'au5_Z') + ' times');
+      if (count(FM.scene.layers, 'au5_Y')) throw new Error('the owner deleted Y and the reloaded guest handed it back: the owner has Y again (the guest owed ' + owed + ' ops)');
+      if (count(A2.doc().layers, 'au5_Y')) throw new Error('the reloaded guest still shows Y, which the owner deleted');
+    });
+  });
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
