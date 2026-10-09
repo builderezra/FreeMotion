@@ -1,0 +1,42 @@
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -677,6 +677,7 @@
+   const _prevFiles = new Map();
+   function prevKey(id, rev) { return 'prev:' + id + ':' + (rev || 0); }
+   FM.storage = {
++    _makeThumb: makeThumb,   // suite seam (P22 #1089): the card picture, so a test can count the canvases it leaves behind
+     _writeJobs: planBlobWrites,   // queue 830 suite seam
+     _hydrateSceneMedia: hydrateSceneMedia,   // queue 834 (u8) suite seam: the shared-run guard itself
+     /* ⚠️ queue 829: THE FILE HE IS REPLACING MUST SURVIVE THE REPLACE. A layer's blob is keyed by the
+@@ -2153,13 +2154,19 @@
+         half.width = Math.max(tw, Math.round(src.width / 2)); half.height = Math.max(th, Math.round(src.height / 2));
+         const hg = half.getContext('2d'); hg.imageSmoothingQuality = 'high';
+         hg.drawImage(src, 0, 0, half.width, half.height);
++        src.width = src.height = 0;   // P22 #1089: a finished stage is let go at once (see below)
+         src = half;
+       }
+       const c = document.createElement('canvas');
+       c.width = tw; c.height = th;
+       const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+       g.drawImage(src, 0, 0, tw, th);
+-      return c.toDataURL('image/jpeg', 0.8);
++      const url = c.toDataURL('image/jpeg', 0.8);
++      /* P22 #1089: EVERY CANVAS THIS MADE IS ZEROED. The first one is the project's full size (about 11 MB at 1080x1920) and
++         this runs on every autosave tick, every import and every Home visit; an unreferenced canvas on iOS Safari is
++         collected late, and its backing store counts against the tab until then. */
++      src.width = src.height = 0; c.width = c.height = 0;
++      return url;
+     } catch (e) { return null; }
+   }
+   /* ⚠️ queue 915 clause 6: THE PICTURE OF WHAT IS BEING SAVED, NOT OF WHAT WAS AUTOSAVED A WHILE AGO.
+--- a/index.html
++++ b/index.html
+@@ -1091,7 +1091,7 @@
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+   <script src="js/history.js?v=37"></script>
+-  <script src="js/storage.js?v=58"></script>
++  <script src="js/storage.js?v=59"></script>
+   <script src="js/export-resume.js?v=7"></script>
+   <script src="js/medialib.js?v=8"></script>
+   <script src="js/template-fill.js?v=4"></script>

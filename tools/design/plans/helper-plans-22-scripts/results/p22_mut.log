@@ -1,0 +1,49 @@
+=== A1_card_ignores_missing
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP22 #1086 — one clip's sound is missing from the file and the card reads "Sound ✓" (audioMissing 1)
+=== A2_run_never_reports_missing
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP22 #1086 — one clip's sound is missing from the file and the card reads "Sound ✓" (audioMissing 0)
+=== B1_release_never_runs
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP22 #1087 — after the mix was built the clip's whole decoded soundtrack is still on its record (44099 samples)
+=== B2_release_drops_reversed_too
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP22 #1087 — a reversed clip lost its decoded buffer
+=== B3_release_drops_foreign_buffers
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP22 #1087 — a buffer somebody else had decoded was thrown away
+=== B4_no_ceiling
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP22 #1087 — on a touch device a source over 300 MB was not refused by name (drops: ["huge source (its audio would not decode)"])
+=== B5_ceiling_on_desktop_too
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP22 #1087 — CONTROL: on a desktop the oversized source was refused (it must still be decoded there)
+=== C1_old_download_path
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP22 #1088 — the file was downloaded straight away (Untitled.wav) with no Save card and no tap — on an iPhone a click that comes minutes after the tap is the one that may never save
+=== C2_saved_said_on_cancel
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP22 #1088 — Discard still delivered or announced the file
+=== C3_wrong_mime
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP22 #1088 — deliver() was not given an audio type and a .wav name: [{"size":384044,"name":"Untitled.wav","type":"video/mp4"},{"size":384044,"name":"Untitled.wav","type":"video/mp4"}]
+=== D1_thumb_first_stage_kept
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILP22 #1089 — 2 of the 4 canvases the card picture made still hold pixels (9.9 MB): 1080x1920, 540x960
+=== D2_thumb_final_kept
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILP22 #1089 — 2 of the 4 canvases the card picture made still hold pixels (0.8 MB): 270x480, 203x360
+ALLDONE

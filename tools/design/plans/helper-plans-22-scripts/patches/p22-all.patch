@@ -1,0 +1,223 @@
+diff --git a/index.html b/index.html
+index c39a9ed3..e45d0662 100644
+--- a/index.html
++++ b/index.html
+@@ -1091,7 +1091,7 @@
+   <script src="js/audio-fx-live.js?v=14"></script>
+   <script src="js/audio-fx-browser.js?v=14"></script>
+   <script src="js/history.js?v=37"></script>
+-  <script src="js/storage.js?v=58"></script>
++  <script src="js/storage.js?v=59"></script>
+   <script src="js/export-resume.js?v=7"></script>
+   <script src="js/medialib.js?v=8"></script>
+   <script src="js/template-fill.js?v=4"></script>
+@@ -1100,7 +1100,7 @@
+   <script src="js/graph-editor.js?v=18"></script>
+   <script src="js/gif-encode.js?v=1"></script>
+   <script src="js/zip-write.js?v=1"></script>
+-  <script src="js/exporter.js?v=126"></script>
++  <script src="js/exporter.js?v=127"></script>
+   <script src="js/sample.js?v=10"></script>
+   <script src="js/contextmenu.js?v=49"></script>
+   <script src="js/ask.js?v=4"></script>
+@@ -1108,7 +1108,7 @@
+   <script src="js/captions-vad.js?v=1"></script>
+   <script src="js/captions.js?v=60"></script>
+   <script src="js/audio-health.js?v=6"></script>
+-  <script src="js/app.js?v=468"></script>
++  <script src="js/app.js?v=469"></script>
+   <script src="js/audio-tools.js?v=7"></script>
+   <script src="js/loading.js?v=3"></script>
+   <script src="js/sfx.js?v=19"></script>
+diff --git a/js/app.js b/js/app.js
+index 0e2685ac..8be2b7d8 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -5997,11 +5997,28 @@ window.FM = window.FM || {};
+     }
+     FM._lastAudioExport = { ext: ext, fellBack: fellBack, bytes: blob.size };   // read by the suite
+     const name = ((P.name || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
++    const fullName = name + '.' + ext, mime = ext === 'm4a' ? 'audio/mp4' : 'audio/wav';
++    const secs = Math.round((to - from) * 10) / 10;
++    /* P22 #1088: THE FILE LEAVES THROUGH THE SAME SAVE CARD AS THE VIDEO. This used to click a programmatic <a download> after
++       the mix, with no tap near it (the mix of a long project is minutes), revoke the file a second later and say "Audio
++       exported" whatever happened — on an iPhone the file may never appear, and nothing said so. The card's Save is a fresh
++       tap (so the share sheet can open), and the toast waits for a real hand-over. Without the card in this document it falls
++       back to the old click, with the URL kept for 4 s. */
++    if (FM._showExportReady && document.getElementById('export-ready') && FM.exporter && FM.exporter.deliver) {
++      let how = null;
++      await FM._showExportReady({
++        blob: blob, name: fullName, poster: null, width: 0, height: 0, fps: 0, seconds: to - from,
++        hasAudio: true, audioDropped: null, audioMissing: (FM._lastAudioDrops || []).length, audioOnly: true,
++        save: async () => { how = await FM.exporter.deliver(blob, fullName, mime); return how; },
++      });
++      if (how && how !== 'cancelled' && FM.toast) FM.toast('Audio saved — ' + secs + 's', 2600);
++      return;
++    }
+     const url = URL.createObjectURL(blob);
+-    const a = document.createElement('a'); a.href = url; a.download = name + '.' + ext;
++    const a = document.createElement('a'); a.href = url; a.download = fullName;
+     document.body.appendChild(a); a.click(); a.remove();
+-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+-    if (FM.toast) FM.toast('Audio exported — ' + (Math.round((to - from) * 10) / 10) + 's', 2600);
++    setTimeout(() => URL.revokeObjectURL(url), 4000);
++    if (FM.toast) FM.toast('Audio exported — ' + secs + 's', 2600);
+   }
+   FM._runAudioOnlyExport = runAudioOnlyExport;   // read by the suite
+ 
+@@ -6239,6 +6256,15 @@ window.FM = window.FM || {};
+    *
+    * Returns a promise the exporter awaits, so `finally` (which frees the export frame caches and drops
+    * the crash-resume data) does not run until the file has been handed over or deliberately discarded. */
++  /* P22 #1086: the card's sound line, pulled out so it can be asserted. A file that HAS a soundtrack but is missing some
++     clips' sound says so (and how many) instead of "Sound ✓". */
++  function exportSoundText(out, why) {
++    const W = why || {};
++    if (out.audioDropped) return 'NO SOUND — ' + (W[out.audioDropped] || out.audioDropped);
++    if (out.hasAudio && out.audioMissing > 0) return 'Sound — ' + out.audioMissing + ' clip' + (out.audioMissing === 1 ? '' : 's') + ' missing';
++    return out.hasAudio ? 'Sound ✓' : 'no soundtrack';
++  }
++  FM._exportSoundText = exportSoundText;   // suite seam
+   function showExportReady(out) {
+     return new Promise(function (resolve) {
+       const overlay = document.getElementById('export-ready');
+@@ -6277,15 +6303,16 @@ window.FM = window.FM || {};
+         // decode fell through to 'no soundtrack' — the same words a project with no audio gets.
+         'all-unreadable': 'none of the audio clips could be read',
+       };
+-      const sound = out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
+-                  : out.hasAudio ? 'Sound ✓'
+-                  : 'no soundtrack';
++      const sound = exportSoundText(out, AUDIO_WHY);
++      /* P22 #1088: an audio-only file has no picture size or frame rate to list, and says "audio only" instead; its sound line is
++         only worth printing when some clip's sound is missing (the file IS the sound). */
++      const dims = out.audioOnly ? 'audio only' : (out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps');
++      const soundPart = (out.audioOnly && !(out.audioMissing > 0)) ? '' : ' · ' + sound;
+       document.getElementById('xr-meta').textContent =
+         (mb < 0.1 ? (Math.round(out.blob.size / 1024) + ' KB') : (mb.toFixed(1) + ' MB')) +
+-        ' · ' + mmss + ' · ' + out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps' +
+-        ' · ' + sound;
++        ' · ' + mmss + ' · ' + dims + soundPart;
+       const xrm = document.getElementById('xr-meta');
+-      if (xrm) xrm.classList.toggle('xr-nosound', !!out.audioDropped);
++      if (xrm) xrm.classList.toggle('xr-nosound', !!out.audioDropped || out.audioMissing > 0);
+       /* …AND SAY IT SURVIVED (queue 47, v14.34). This card is the last thing on screen, and until now
+          a resumed export looked exactly like an ordinary one from here. Four releases built
+          crash-resume and nothing has ever told him it worked — which is why the entry cannot be closed
+diff --git a/js/exporter.js b/js/exporter.js
+index b16cdd73..43c961c6 100644
+--- a/js/exporter.js
++++ b/js/exporter.js
+@@ -63,9 +63,9 @@ window.FM = window.FM || {};
+   // Takes the finished file as a BLOB (see createMp4Sink). It used to take the muxer's ArrayBuffer and
+   // do `new Blob([buffer])` here, which meant that at the moment of delivery the whole movie existed
+   // TWICE — once on the JS heap, once in blob storage. A blob in, a blob out: no copy. (#47)
+-  async function deliver(blob, name) {
++  async function deliver(blob, name, type) {   // P22 #1088: `type` so an audio file shares as audio (it was always 'video/mp4')
+     let file = null;
+-    try { file = new File([blob], name, { type: 'video/mp4' }); } catch (e) {}
++    try { file = new File([blob], name, { type: type || 'video/mp4' }); } catch (e) {}
+     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+       try { await navigator.share({ files: [file], title: name }); return 'shared'; }
+       catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
+@@ -474,7 +474,26 @@ window.FM = window.FM || {};
+   }
+   FM._limitMix = limitMix;   // suite seam: the limiter is pure arithmetic, so it can be driven on a buffer directly
+ 
++  /* P22 #1087 / #1089: THE SOURCES THE MIX DECODED ARE NOT KEPT. buildAudioMix decodes each source file whole (full-fidelity
++     float PCM, ~10 MB a minute per channel pair) into `m.audioBuffer`, and nothing ever let go: after an export every clip's
++     whole soundtrack stayed on its record for the life of the page. The rendered MIX is what the export keeps, so the
++     sources it decoded are put back to "not decoded yet" (`undefined`, which every other reader already treats as "decode me
++     when you need me") as soon as the mix is built, whether it built or threw. Records a reader decoded for itself are not
++     flagged and are never touched, and a REVERSED clip keeps its buffer (its preview plays from it). */
++  function releaseDecodedAudio(scene) {
++    const layers = (scene && scene.layers) || [];
++    for (const layer of layers) {
++      const m = FM.media && FM.media.get(layer.id);
++      if (!m || !m._exportDecoded) continue;
++      m._exportDecoded = false;
++      if (m.audioBuffer && !layer.reversed) m.audioBuffer = undefined;
++    }
++  }
++  /* A touch device (no fine pointer with hover) is where a tab dies for a whole-file decode: the same test the frame-cache
++     limits use (js/app.js FM.frameCacheLimits). */
++  function touchDevice() { return !!window.matchMedia && !window.matchMedia('(hover: hover) and (pointer: fine)').matches; }
+   async function buildAudioMix(scene, from, to) {
++    try {   // P22 #1087: the sources it decodes are let go on every exit, below (the body is NOT re-indented, to keep this diff reviewable)
+     const P = scene.project;
+     const sampleRate = 48000, channels = 2;
+     from = from || 0; to = (to == null) ? P.duration : to;
+@@ -559,7 +578,13 @@ window.FM = window.FM || {};
+        * One bad clip is now exactly as expensive as it should be: that clip, and it is reported by name
+        * through the same `dropped` list as every other reason a layer contributes nothing. */
+       if (m.audioBuffer === undefined) {
+-        try { m.audioBuffer = await FM.decodeAudio(m.file); }
++        /* P22 #1087: THE CEILING THE OTHER THREE DECODE PATHS HAVE. The waveform, the audio probe and the import from video
++           all refuse a source over WAVE_MAX_BYTES; this one decoded any file whole, so a long 4K clip sent PCM for its whole
++           length at a phone at export start. On a touch device an oversized source is named and left out of the sound; a
++           desktop keeps decoding it. */
++        const cap = FM.media && FM.media.WAVE_MAX_BYTES;
++        if (cap && m.file.size > cap && touchDevice()) { dropped.push(nameOf(layer) + ' (too big to read its sound on this device)'); continue; }
++        try { m.audioBuffer = await FM.decodeAudio(m.file); m._exportDecoded = true; }
+         catch (e) { m.audioBuffer = null; dropped.push(nameOf(layer) + ' (its audio would not decode: ' + (e && e.message ? e.message : e) + ')'); continue; }
+       }
+       if (!m.audioBuffer) {
+@@ -838,6 +863,7 @@ window.FM = window.FM || {};
+       if (FM.toast) FM.toast('Exporting with NO SOUND — every audio clip is muted or at zero volume', 5600);
+     }
+     return { audioBuffer: rendered, sampleRate, channels };
++    } finally { releaseDecodedAudio(scene); }
+   }
+ 
+   /* ═══ THE ENCODER'S WARM-UP IS NOT PART OF THE SOUND (queue 690, audio hunt) ═══════════════════════
+@@ -1158,6 +1184,7 @@ window.FM = window.FM || {};
+   }
+ 
+   FM.exporter = {
++    deliver,   // P22 #1088: the audio-only export hands its file over through the same Save card as the video
+     prepareCaches,
+     buildAudioMix,
+     encodeM4A,
+@@ -1618,6 +1645,9 @@ window.FM = window.FM || {};
+           blob: outBlob, name: outName, poster: poster,
+           width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
+           hasAudio: !!mix, audioDropped: FM._audioTrackDropped || null,
++          /* P22 #1086: clips that contributed no sound to a file that DOES have a soundtrack. `audioDropped` is only set when the
++             whole soundtrack is lost, so one unreadable clip among good ones went out under a card that read "Sound ✓". */
++          audioMissing: mix ? (FM._lastAudioDrops || []).length : 0,
+           resumedPct: resumedPct, resumedParts: resumedParts,
+           protected: !recorder ? null : (recorder.recording ? true : recorder.capped ? 'capped' : false),
+           save: () => deliver(outBlob, outName),
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..7e1163a0 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -677,6 +677,7 @@ window.FM = window.FM || {};
+   const _prevFiles = new Map();
+   function prevKey(id, rev) { return 'prev:' + id + ':' + (rev || 0); }
+   FM.storage = {
++    _makeThumb: makeThumb,   // suite seam (P22 #1089): the card picture, so a test can count the canvases it leaves behind
+     _writeJobs: planBlobWrites,   // queue 830 suite seam
+     _hydrateSceneMedia: hydrateSceneMedia,   // queue 834 (u8) suite seam: the shared-run guard itself
+     /* ⚠️ queue 829: THE FILE HE IS REPLACING MUST SURVIVE THE REPLACE. A layer's blob is keyed by the
+@@ -2153,13 +2154,19 @@ window.FM = window.FM || {};
+         half.width = Math.max(tw, Math.round(src.width / 2)); half.height = Math.max(th, Math.round(src.height / 2));
+         const hg = half.getContext('2d'); hg.imageSmoothingQuality = 'high';
+         hg.drawImage(src, 0, 0, half.width, half.height);
++        src.width = src.height = 0;   // P22 #1089: a finished stage is let go at once (see below)
+         src = half;
+       }
+       const c = document.createElement('canvas');
+       c.width = tw; c.height = th;
+       const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+       g.drawImage(src, 0, 0, tw, th);
+-      return c.toDataURL('image/jpeg', 0.8);
++      const url = c.toDataURL('image/jpeg', 0.8);
++      /* P22 #1089: EVERY CANVAS THIS MADE IS ZEROED. The first one is the project's full size (about 11 MB at 1080x1920) and
++         this runs on every autosave tick, every import and every Home visit; an unreferenced canvas on iOS Safari is
++         collected late, and its backing store counts against the tab until then. */
++      src.width = src.height = 0; c.width = c.height = 0;
++      return url;
+     } catch (e) { return null; }
+   }
+   /* ⚠️ queue 915 clause 6: THE PICTURE OF WHAT IS BEING SAVED, NOT OF WHAT WAS AUTOSAVED A WHILE AGO.

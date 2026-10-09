@@ -1,0 +1,53 @@
+diff --git a/js/app.js b/js/app.js
+index 0e2685ac..bbd56b33 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -6239,6 +6239,13 @@ window.FM = window.FM || {};
+    *
+    * Returns a promise the exporter awaits, so `finally` (which frees the export frame caches and drops
+    * the crash-resume data) does not run until the file has been handed over or deliberately discarded. */
++  function exportSoundText(out, why) {
++    const W = why || {};
++    return out.audioDropped ? ('NO SOUND — ' + (W[out.audioDropped] || out.audioDropped))
++         : out.hasAudio ? 'Sound ✓'
++         : 'no soundtrack';
++  }
++  FM._exportSoundText = exportSoundText;   // seam only
+   function showExportReady(out) {
+     return new Promise(function (resolve) {
+       const overlay = document.getElementById('export-ready');
+@@ -6277,9 +6284,7 @@ window.FM = window.FM || {};
+         // decode fell through to 'no soundtrack' — the same words a project with no audio gets.
+         'all-unreadable': 'none of the audio clips could be read',
+       };
+-      const sound = out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
+-                  : out.hasAudio ? 'Sound ✓'
+-                  : 'no soundtrack';
++      const sound = exportSoundText(out, AUDIO_WHY);
+       document.getElementById('xr-meta').textContent =
+         (mb < 0.1 ? (Math.round(out.blob.size / 1024) + ' KB') : (mb.toFixed(1) + ' MB')) +
+         ' · ' + mmss + ' · ' + out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps' +
+diff --git a/js/exporter.js b/js/exporter.js
+index b16cdd73..2fb6eb45 100644
+--- a/js/exporter.js
++++ b/js/exporter.js
+@@ -1158,6 +1158,7 @@ window.FM = window.FM || {};
+   }
+ 
+   FM.exporter = {
++    deliver,   // seam only
+     prepareCaches,
+     buildAudioMix,
+     encodeM4A,
+diff --git a/js/storage.js b/js/storage.js
+index 43f0df5b..f2338243 100644
+--- a/js/storage.js
++++ b/js/storage.js
+@@ -677,6 +677,7 @@ window.FM = window.FM || {};
+   const _prevFiles = new Map();
+   function prevKey(id, rev) { return 'prev:' + id + ':' + (rev || 0); }
+   FM.storage = {
++    _makeThumb: makeThumb,   // seam only
+     _writeJobs: planBlobWrites,   // queue 830 suite seam
+     _hydrateSceneMedia: hydrateSceneMedia,   // queue 834 (u8) suite seam: the shared-run guard itself
+     /* ⚠️ queue 829: THE FILE HE IS REPLACING MUST SURVIVE THE REPLACE. A layer's blob is keyed by the

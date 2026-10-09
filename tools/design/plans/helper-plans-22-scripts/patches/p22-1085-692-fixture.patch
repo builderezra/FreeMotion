@@ -1,0 +1,19 @@
+--- a/tests/tests.js	2026-10-09 14:15:31.007626967 +0000
++++ b/tests/tests.js	2026-10-09 14:15:31.251626982 +0000
+@@ -84053,6 +84053,7 @@
+     const FIX = [[90, 70, 60, 50, 'centred'], [0, 0, 60, 50, 'corner'], [200, 160, 60, 50, 'clipped'], [0, 0, W, H, 'full plate'], [119, 99, 2, 1, 'hairline']];
+     const maxParams = type => { const ps = FM.fxRegistry.paramsOf(type) || []; const inst = FM.fxRegistry.makeInstance(type); const p = Object.assign({}, inst ? inst.params : {}); ps.forEach(c => { if (c.type === 'range' && typeof c.max === 'number') p[c.key] = c.max; }); return p; };
+     const bad = [];
++    const BIG692 = mk(450, 900, 180, 150, 1080, 1920);
+     for (const type of admitted) {
+       if (FM._boundedFx && FM._boundedFx[type]) { bad.push(type + ': is BOTH bounded and crop-admitted'); continue; }
+       const inst = FM.fxRegistry.makeInstance(type); if (!inst) { bad.push(type + ': not in the registry'); continue; }
+@@ -84060,7 +84061,7 @@
+         const r = I(type, mk(f[0], f[1], f[2], f[3]), W, H, params, 0.3, 1);
+         if (!r || r.same !== true) { bad.push(type + ' (' + pl + ', ' + f[4] + '): ' + (r ? r.diff + ' bytes differ' : 'no result')); break; }
+       }
+-      const big = I(type, mk(450, 900, 180, 150, 1080, 1920), 1080, 1920, inst.params, 0.3, 1);
++      const big = I(type, BIG692, 1080, 1920, inst.params, 0.3, 1);   // P22 #1085: ONE shared 1080x1920 fixture (the kernels only read it); it was rebuilt per kernel
+       if (!big || big.same !== true) bad.push(type + ' (1080x1920): ' + (big ? big.diff + ' bytes differ' : 'no result'));
+       else if (!(big.area < big.plate * 0.25)) bad.push(type + ': the crop covered ' + Math.round(big.area * 100 / big.plate) + '% of the big plate — nothing saved');
+     }

@@ -1,0 +1,5 @@
+1280 Regression 4/4 ✓Pending 0/0 built
+   ok  P22 #1086 a file that HAS a soundtrack but is missing one clip's sound says so on the ready card, in
+   ok  P22 #1087 export does not decode a source over the size ceiling on a touch device, and does not keep
+   ok  P22 #1088 an audio-only export hands its file over through the Save card (a fresh tap), and says "sa
+   ok  P22 #1089 the card picture leaves no canvas holding pixels behind it

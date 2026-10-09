@@ -1,0 +1,9 @@
+380 Regression 0/4 ✗Pending 0/0 built
+   RED P22 #1086 a file that HAS a soundtrack but is missing one clip's sound says so on the ready card, in
+   RED P22 #1087 export does not decode a source over the size ceiling on a touch device, and does not keep
+   RED P22 #1088 an audio-only export hands its file over through the Save card (a fresh tap), and says "sa
+   RED P22 #1089 the card picture leaves no canvas holding pixels behind it
+FAILP22 #1086 a file that HAS a soundtrack but is missing one clip's sound says so on the ready card, instead of "Sound ✓" — one clip's sound is missing from the file and the card reads "Sound ✓" (audioMissing undefined)
+FAILP22 #1087 export does not decode a source over the size ceiling on a touch device, and does not keep the PCM it decoded — after the mix was built the clip's whole decoded soundtrack is still on its record (44099 samples)
+FAILP22 #1088 an audio-only export hands its file over through the Save card (a fresh tap), and says "saved" only after a real hand-over — the file was downloaded straight away (Untitled.wav) with no Save card and no tap — on an iPhone a click that comes minutes after the tap is the one that may never save
+FAILP22 #1089 the card picture leaves no canvas holding pixels behind it — 4 of the 4 canvases the card picture made still hold pixels (10.7 MB): 1080x1920, 540x960, 270x480, 203x360

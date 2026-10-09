@@ -1,0 +1,68 @@
+--- a/js/app.js
++++ b/js/app.js
+@@ -6239,6 +6239,15 @@
+    *
+    * Returns a promise the exporter awaits, so `finally` (which frees the export frame caches and drops
+    * the crash-resume data) does not run until the file has been handed over or deliberately discarded. */
++  /* P22 #1086: the card's sound line, pulled out so it can be asserted. A file that HAS a soundtrack but is missing some
++     clips' sound says so (and how many) instead of "Sound ✓". */
++  function exportSoundText(out, why) {
++    const W = why || {};
++    if (out.audioDropped) return 'NO SOUND — ' + (W[out.audioDropped] || out.audioDropped);
++    if (out.hasAudio && out.audioMissing > 0) return 'Sound — ' + out.audioMissing + ' clip' + (out.audioMissing === 1 ? '' : 's') + ' missing';
++    return out.hasAudio ? 'Sound ✓' : 'no soundtrack';
++  }
++  FM._exportSoundText = exportSoundText;   // suite seam
+   function showExportReady(out) {
+     return new Promise(function (resolve) {
+       const overlay = document.getElementById('export-ready');
+@@ -6277,15 +6286,13 @@
+         // decode fell through to 'no soundtrack' — the same words a project with no audio gets.
+         'all-unreadable': 'none of the audio clips could be read',
+       };
+-      const sound = out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
+-                  : out.hasAudio ? 'Sound ✓'
+-                  : 'no soundtrack';
++      const sound = exportSoundText(out, AUDIO_WHY);
+       document.getElementById('xr-meta').textContent =
+         (mb < 0.1 ? (Math.round(out.blob.size / 1024) + ' KB') : (mb.toFixed(1) + ' MB')) +
+         ' · ' + mmss + ' · ' + out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps' +
+         ' · ' + sound;
+       const xrm = document.getElementById('xr-meta');
+-      if (xrm) xrm.classList.toggle('xr-nosound', !!out.audioDropped);
++      if (xrm) xrm.classList.toggle('xr-nosound', !!out.audioDropped || out.audioMissing > 0);
+       /* …AND SAY IT SURVIVED (queue 47, v14.34). This card is the last thing on screen, and until now
+          a resumed export looked exactly like an ordinary one from here. Four releases built
+          crash-resume and nothing has ever told him it worked — which is why the entry cannot be closed
+--- a/js/exporter.js
++++ b/js/exporter.js
+@@ -1618,6 +1618,9 @@
+           blob: outBlob, name: outName, poster: poster,
+           width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
+           hasAudio: !!mix, audioDropped: FM._audioTrackDropped || null,
++          /* P22 #1086: clips that contributed no sound to a file that DOES have a soundtrack. `audioDropped` is only set when the
++             whole soundtrack is lost, so one unreadable clip among good ones went out under a card that read "Sound ✓". */
++          audioMissing: mix ? (FM._lastAudioDrops || []).length : 0,
+           resumedPct: resumedPct, resumedParts: resumedParts,
+           protected: !recorder ? null : (recorder.recording ? true : recorder.capped ? 'capped' : false),
+           save: () => deliver(outBlob, outName),
+--- a/index.html
++++ b/index.html
+@@ -1100,7 +1100,7 @@
+   <script src="js/graph-editor.js?v=18"></script>
+   <script src="js/gif-encode.js?v=1"></script>
+   <script src="js/zip-write.js?v=1"></script>
+-  <script src="js/exporter.js?v=126"></script>
++  <script src="js/exporter.js?v=127"></script>
+   <script src="js/sample.js?v=10"></script>
+   <script src="js/contextmenu.js?v=49"></script>
+   <script src="js/ask.js?v=4"></script>
+@@ -1108,7 +1108,7 @@
+   <script src="js/captions-vad.js?v=1"></script>
+   <script src="js/captions.js?v=60"></script>
+   <script src="js/audio-health.js?v=6"></script>
+-  <script src="js/app.js?v=468"></script>
++  <script src="js/app.js?v=469"></script>
+   <script src="js/audio-tools.js?v=7"></script>
+   <script src="js/loading.js?v=3"></script>
+   <script src="js/sfx.js?v=19"></script>

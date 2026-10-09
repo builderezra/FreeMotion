@@ -1,0 +1,41 @@
+1280 Regression 28/35 ✗ · NOT RUN HERE 2 Pending 0/0 built
+   ok  442: the track head hugs the wall, and the saving does not come out of the thumbnail
+   ok  536: the pill holds for loop, the bookmark button holds for the thumbnail
+   ok  home: the OPEN badge says OPEN over any thumbnail
+   ok  effects browser: no thumbnail is a picture of the subject doing nothing
+   ok  916.6 voice: coming back to the app while the mic prompt is up does not leave a second mic live
+   ok  916.1 a sped-up clip sounds sped up in the preview — its media element does not preserve pitch
+   ok  the audio export uses the same range and the same mixer as the video
+   ok  916.4 a reversed clip with audio shorter than the clip plays its sound in step with the picture — ex
+   ok  a layer thumbnail never spills out of the track head on a phone (queue 211)
+   ok  a shape thumbnail keeps the shape's aspect, it is not stretched to the box (queue 211)
+   ok  916.7 captions: detected speech lands where it is heard on a reversed or trimmed clip, and never bef
+   ok  export ready: the file is handed over on Save, not flung at you when the render ends
+   ok  916.9 export resume: a render saved by an older build of the app is not resumed by a newer one
+   RED export: a browser with no AAC encoder ships an honest silent file, not one promising a track (queue 
+   RED export: a soundtrack that is entirely muted says so instead of shipping a silent file (queue 215)
+   RED export: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215)
+   ok  916.8 exporting a short range builds only that stretch of each clip’s audio — and the samples match 
+   ok  #215: an export audio warning reaches a surface the export cannot cover
+   RED #215: an audio warning survives the frame loop, and a verdict does not carry into the next export
+   ok  #215: the export-ready card says whether the file has sound
+   ok  the export dialog warns about a silent export BEFORE the render (queue 215)
+   ok  having sound to lose counts audio LAYERS, not layer types (queue 215)
+   RED export: a soundtrack that fails to ENCODE says so, so it is not mistaken for the muxer (queue 215)
+   ok  916.2 starting an export stops an audio-effect audition, and an audition never runs under one
+   ok  916.10 the audition drives keyframed effect settings at the right timeline moment on a sped-up or ra
+   RED 658 — the thumbnail pin turns the playhead blue, and the yellow stops lying
+   ok  669 — every export format actually produces a file
+   ok  916.3 Cancel during the prepare phase or the mix stops the export before it does any more work
+   ok  916.5 a boosted reversed clip ends in the same limiter the forward preview and the export use
+   ok  690 the export limiter keeps every sample under the ceiling, never jumps its gain at a block seam, a
+   ok  690 every clip that cannot be saved is warned about, however many warnings came before — and a thumb
+   RED 690 an export started while the timeline is still drawing a clip thumbnails has no black or misplace
+   ok  690 trying looks on the Filters tab and opening the effects browser gives back every thumbnail once 
+   ok  690 each stroke keeps its own brush through the eraser, undo and redo, Draw more and the timeline th
+   ok  986 C2 the boost limiter on a clip above 100 percent adds no level of its own - in the limiter and i
+FAILexport: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215) — NO_VIDEO_CODEC
+FAIL#215: an audio warning survives the frame loop, and a verdict does not carry into the next export — NO_VIDEO_CODEC
+FAILexport: a soundtrack that fails to ENCODE says so, so it is not mistaken for the muxer (queue 215) — NO_VIDEO_CODEC
+FAIL658 — the thumbnail pin turns the playhead blue, and the yellow stops lying — parked on an ordinary benchmark the playhead is no longer marked yellow — that state is unchanged and must stay
+FAIL690 an export started while the timeline is still drawing a clip thumbnails has no black or misplaced frame — Failed to execute 'encode' on 'VideoEncoder': Cannot call 'encode' on a closed codec.

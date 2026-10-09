@@ -1,0 +1,67 @@
+diff --git a/index.html b/index.html
+index c39a9ed3..93289689 100644
+--- a/index.html
++++ b/index.html
+@@ -1100,7 +1100,7 @@
+   <script src="js/graph-editor.js?v=18"></script>
+   <script src="js/gif-encode.js?v=1"></script>
+   <script src="js/zip-write.js?v=1"></script>
+-  <script src="js/exporter.js?v=126"></script>
++  <script src="js/exporter.js?v=127"></script>
+   <script src="js/sample.js?v=10"></script>
+   <script src="js/contextmenu.js?v=49"></script>
+   <script src="js/ask.js?v=4"></script>
+diff --git a/js/exporter.js b/js/exporter.js
+index b16cdd73..69b9b28e 100644
+--- a/js/exporter.js
++++ b/js/exporter.js
+@@ -474,7 +474,26 @@ window.FM = window.FM || {};
+   }
+   FM._limitMix = limitMix;   // suite seam: the limiter is pure arithmetic, so it can be driven on a buffer directly
+ 
++  /* P22 #1087 / #1089: THE SOURCES THE MIX DECODED ARE NOT KEPT. buildAudioMix decodes each source file whole (full-fidelity
++     float PCM, ~10 MB a minute per channel pair) into `m.audioBuffer`, and nothing ever let go: after an export every clip's
++     whole soundtrack stayed on its record for the life of the page. The rendered MIX is what the export keeps, so the
++     sources it decoded are put back to "not decoded yet" (`undefined`, which every other reader already treats as "decode me
++     when you need me") as soon as the mix is built, whether it built or threw. Records a reader decoded for itself are not
++     flagged and are never touched, and a REVERSED clip keeps its buffer (its preview plays from it). */
++  function releaseDecodedAudio(scene) {
++    const layers = (scene && scene.layers) || [];
++    for (const layer of layers) {
++      const m = FM.media && FM.media.get(layer.id);
++      if (!m || !m._exportDecoded) continue;
++      m._exportDecoded = false;
++      if (m.audioBuffer && !layer.reversed) m.audioBuffer = undefined;
++    }
++  }
++  /* A touch device (no fine pointer with hover) is where a tab dies for a whole-file decode: the same test the frame-cache
++     limits use (js/app.js FM.frameCacheLimits). */
++  function touchDevice() { return !!window.matchMedia && !window.matchMedia('(hover: hover) and (pointer: fine)').matches; }
+   async function buildAudioMix(scene, from, to) {
++    try {   // P22 #1087: the sources it decodes are let go on every exit, below (the body is NOT re-indented, to keep this diff reviewable)
+     const P = scene.project;
+     const sampleRate = 48000, channels = 2;
+     from = from || 0; to = (to == null) ? P.duration : to;
+@@ -559,7 +578,13 @@ window.FM = window.FM || {};
+        * One bad clip is now exactly as expensive as it should be: that clip, and it is reported by name
+        * through the same `dropped` list as every other reason a layer contributes nothing. */
+       if (m.audioBuffer === undefined) {
+-        try { m.audioBuffer = await FM.decodeAudio(m.file); }
++        /* P22 #1087: THE CEILING THE OTHER THREE DECODE PATHS HAVE. The waveform, the audio probe and the import from video
++           all refuse a source over WAVE_MAX_BYTES; this one decoded any file whole, so a long 4K clip sent PCM for its whole
++           length at a phone at export start. On a touch device an oversized source is named and left out of the sound; a
++           desktop keeps decoding it. */
++        const cap = FM.media && FM.media.WAVE_MAX_BYTES;
++        if (cap && m.file.size > cap && touchDevice()) { dropped.push(nameOf(layer) + ' (too big to read its sound on this device)'); continue; }
++        try { m.audioBuffer = await FM.decodeAudio(m.file); m._exportDecoded = true; }
+         catch (e) { m.audioBuffer = null; dropped.push(nameOf(layer) + ' (its audio would not decode: ' + (e && e.message ? e.message : e) + ')'); continue; }
+       }
+       if (!m.audioBuffer) {
+@@ -838,6 +863,7 @@ window.FM = window.FM || {};
+       if (FM.toast) FM.toast('Exporting with NO SOUND — every audio clip is muted or at zero volume', 5600);
+     }
+     return { audioBuffer: rendered, sampleRate, channels };
++    } finally { releaseDecodedAudio(scene); }
+   }
+ 
+   /* ═══ THE ENCODER'S WARM-UP IS NOT PART OF THE SOUND (queue 690, audio hunt) ═══════════════════════
