@@ -60747,6 +60747,376 @@
     });
   });
 
+  /* ═══ RELEASE 2.6 · THE LIVE SESSION, FINISHED (BUILD-PLAN-PHASE2-2.6.md). Every collaboration test here runs on the fake network
+     (withCollab921: a real host session, headless guests over a manual loop link); nothing opens a socket. */
+  function sm6Say() {
+    const s = document.getElementById('sm-say'), ln = s && s.querySelector('.sm-line');
+    return { text: ((ln || s || {}).textContent) || '', buttons: Array.from(document.querySelectorAll('#sm-say .sm-say-b')).map(b => b.textContent) };
+  }
+  async function sm6Press(label) {   // an armed button on #sm-say (they ignore taps for 400 ms), by its words
+    for (let i = 0; i < 60; i++) {
+      const b = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).find(x => x.textContent === label);
+      if (b && b.getAttribute('aria-disabled') !== 'true') { b.click(); return; }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    throw new Error('no armed “' + label + '” button on the line; it reads “' + sm6Say().text + '” with ' + JSON.stringify(sm6Say().buttons));
+  }
+  async function sm6MenuPick(label) {   // an item of the context menu that just opened
+    for (let i = 0; i < 40; i++) {
+      const it = Array.from(document.querySelectorAll('[role="menuitem"]')).find(x => x.textContent.trim() === label);
+      if (it) { it.click(); return; }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    throw new Error('no “' + label + '” in the menu; it has ' + JSON.stringify(Array.from(document.querySelectorAll('[role="menuitem"]')).map(x => x.textContent.trim())));
+  }
+  async function sm6Ask(yes) {   // answer FM.ask; returns { title, msg }
+    for (let i = 0; i < 60; i++) {
+      const a = document.getElementById('fm-ask');
+      if (a && !a.classList.contains('hidden')) {
+        const title = (a.querySelector('.fm-ask-title') || {}).textContent || '', msg = (document.getElementById('fm-ask-msg') || {}).textContent || '';
+        (a.querySelector(yes ? '.fm-ask-ok' : '.fm-ask-cancel')).click();
+        await new Promise(r => setTimeout(r, 60));
+        return { title: title, msg: msg };
+      }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    throw new Error('no question came up');
+  }
+  async function sm6Live(fn, o) {
+    const C = FM.collab; if (!C || !C.share) throw new Error('setup: FM.collab is not loaded');
+    smNeedP2();
+    const full = (n, s, d) => layer921(n, { start: s, duration: d, shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, sm: { main: true } });
+    const clips = (o && o.unadopted) ? [smV('A', 0, 3, 320, 240), smV('B', 3, 3, 320, 240), smV('C', 6, 3, 320, 240)] : [full('A', 0, 3), full('B', 3, 3), full('C', 6, 3)];
+    await withCollab921(clips, async function (c) {
+      if (!(o && o.unadopted)) { FM.scene.project.sm = { adopted: true, v: 1 }; FM.history.commit(); }
+      c.id = n => FM.scene.layers.find(l => l.name === n).id;
+      c.rid = 'r0123456789abcdef';
+      /* a member table the Share sheet would have made: Sam's row, and which engine mid it has right now */
+      c.room = function (g, role) {
+        const room = { members: {}, settings: {}, blocked: [] }; room.members[c.rid] = { name: 'Sam', role: role || 'editor', mid: g.mid, tok: 't' };
+        const map = {}; map[c.rid] = g.mid;
+        c.roomWas = C.ui._testRoom(room, c.pid, map); c.roomObj = room; c.roomMap = map;
+        return room;
+      };
+      FM.editor.set('simple');
+      try { await fn(c); }
+      finally { if (c.roomWas) C.ui._testRoomBack(c.roomWas); try { FM.editor.apply('full', { force: true, quiet: true }); } catch (e) {} }
+    });
+  }
+
+  test('simple P2.6 · S6a Sam’s connection drops: the line says Sam is offline and offers Arrange anyway; Not now keeps the gate shut, Arrange anyway (after its warning) opens it for this session, and Sam coming back shuts it again', { item: '980', budgetMs: 120000 }, async function () {
+    const C = FM.collab;
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      c.room(g);
+      const d0 = JSON.stringify(FM.scene.layers);
+      if (await FM.spine.cmd.del(c.id('B')) !== false) throw new Error('CONTROL: a delete went through with Sam connected');
+      let say = sm6Say();
+      if (!/^Sam can edit · clips stay put/.test(say.text)) throw new Error('CONTROL: the connected line reads “' + say.text + '”');
+      c.S.dropPeer(g.mid);
+      if (!C.othersCanEdit()) throw new Error('a dropped Editor who is still in the room stopped counting by himself');
+      if (await FM.spine.cmd.del(c.id('B')) !== false || JSON.stringify(FM.scene.layers) !== d0) throw new Error('a delete went through while Sam is only offline');
+      say = sm6Say();
+      if (!/^Sam is offline · clips stay put/.test(say.text)) throw new Error('the away line reads “' + say.text + '”');
+      if (say.buttons.join('|') !== 'Arrange anyway') throw new Error('the away line’s buttons are ' + JSON.stringify(say.buttons) + ', want only Arrange anyway');
+      await sm6Press('Arrange anyway');
+      const q = await sm6Ask(false);
+      if (!/may land in the wrong place/.test(q.msg) || !/Sam/.test(q.msg)) throw new Error('the warning reads “' + q.msg + '”');
+      if (!C.othersCanEdit() || C.ui._waived().length) throw new Error('Not now still waived Sam');
+      await FM.spine.cmd.del(c.id('B'));
+      await sm6Press('Arrange anyway');
+      await sm6Ask(true);
+      if (C.ui._waived().join() !== c.rid) throw new Error('confirming did not waive Sam (waived: ' + JSON.stringify(C.ui._waived()) + ')');
+      if (C.othersCanEdit()) throw new Error('with Sam waived the gate is still shut');
+      if (!(await FM.spine.cmd.del(c.id('B'))) || FM.scene.layers.some(l => l.name === 'B')) throw new Error('with Sam waived the delete was refused: “' + sm6Say().text + '”');
+      /* Sam is back on his token: he counts again */
+      const g2 = c.addGuest({ role: 'editor', name: 'Sam' });
+      c.roomMap[c.rid] = g2.mid; c.roomObj.members[c.rid].mid = g2.mid;
+      if (C.ui._waived().length) throw new Error('a waived member who reconnected is still waived');
+      if (!C.othersCanEdit()) throw new Error('Sam is back and the gate did not shut again');
+      /* …and a second drop is a new question: the waiver does not outlive his visit */
+      c.S.dropPeer(g2.mid);
+      if (!C.othersCanEdit()) throw new Error('Sam’s second drop was still waived from the first');
+    });
+  });
+
+  test('simple P2.6 · S6b Make Sam a Viewer: the live line has one Options button whose menu holds it; Sam typing is asked about first; the role is saved in the room as well as sent (so the gate opens and a reconnect brings him back as a Viewer); a dropped member can be demoted from its row', { item: '980', budgetMs: 120000 }, async function () {
+    const C = FM.collab, U = C.ui;
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      const room = c.room(g);
+      if (await FM.spine.cmd.del(c.id('B')) !== false) throw new Error('CONTROL: a delete went through with Sam in');
+      let say = sm6Say();
+      if (say.buttons.join('|') !== 'Options ›') throw new Error('the owner’s live line has ' + JSON.stringify(say.buttons) + ', want one Options › button');
+      await sm6Press('Options ›');
+      const items = Array.from(document.querySelectorAll('[role="menuitem"]')).map(x => x.textContent.trim());
+      if (items.join('|') !== 'Make Sam a Viewer|Open in Full') throw new Error('the Options menu holds ' + JSON.stringify(items));
+      FM.contextMenu.hide(true);
+      /* Sam is in the middle of typing: ask first, and Not now changes nothing */
+      const bw = C.presence.busyWith; C.presence.busyWith = () => 'typing';
+      try {
+        await FM.spine.cmd.del(c.id('B'));
+        await sm6Press('Options ›'); await sm6MenuPick('Make Sam a Viewer');
+        const q = await sm6Ask(false);
+        if (!/Sam is typing · make Sam a Viewer anyway\?/.test(q.title) || !/unsent change will be undone/.test(q.msg)) throw new Error('the typing question reads “' + q.title + '” / “' + q.msg + '”');
+        if (c.S.host.members[g.mid].role !== 'editor' || room.members[c.rid].role !== 'editor') throw new Error('Not now still changed Sam’s role');
+        await FM.spine.cmd.del(c.id('B'));
+        await sm6Press('Options ›'); await sm6MenuPick('Make Sam a Viewer');
+        await sm6Ask(true);
+      } finally { C.presence.busyWith = bw; }
+      if (c.S.host.members[g.mid].role !== 'viewer') throw new Error('the host still has Sam as ' + c.S.host.members[g.mid].role);
+      if (room.members[c.rid].role !== 'viewer') throw new Error('the room remembers Sam as ' + room.members[c.rid].role + ': the gate stays shut and he comes back an Editor (setPeerRole alone)');
+      if (C.othersCanEdit()) throw new Error('with Sam a Viewer the gate is still shut');
+      if (!/Sam is a Viewer now/.test(sm6Say().text)) throw new Error('nothing said it: “' + sm6Say().text + '”');
+      if (!(await FM.spine.cmd.del(c.id('B')))) throw new Error('the delete after Make a Viewer was refused: “' + sm6Say().text + '”');
+      /* the People menu goes through the same helper: back to Editor, and the room follows */
+      if (!U.setMemberRole(g.mid, 'editor') || room.members[c.rid].role !== 'editor' || c.S.host.members[g.mid].role !== 'editor') throw new Error('U.setMemberRole did not move both the session and the room');
+      /* a member who has dropped has no mid, so setPeerRole refuses it: the row is what changes */
+      c.S.dropPeer(g.mid);
+      if (!C.othersCanEdit()) throw new Error('CONTROL: a remembered Editor should count');
+      if (!U.setMemberRole(c.rid, 'viewer') || room.members[c.rid].role !== 'viewer') throw new Error('a dropped member could not be made a Viewer from its row');
+      if (C.othersCanEdit()) throw new Error('a dropped member made a Viewer still counts');
+      if (U.setMemberRole(c.rid, 'owner') !== false) throw new Error('setMemberRole accepted the role “owner”');
+    });
+  });
+
+  test('simple P2.6 · S6c a linked copy whose owner never came back: the line offers Make it my own, which runs the Leave route (the confirm, the left mark BEFORE the copy is made, the copy), and the next arranging edit goes through', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const C = FM.collab, U = C.ui;
+    const s0 = C.session, a0 = C.active, list0 = FM.projects.list, pc0 = FM.projects.patchCollab, dl0 = FM.projects.detachLinked;
+    await smDragEnv(smClips3, async function (v) {
+      const calls = [], card = { id: FM.storage.openProjectId(), collab: { v: 1 } };
+      FM.projects.list = () => [card];
+      FM.projects.patchCollab = (pid, p) => { calls.push('patch:' + pid + ':' + p.ended); Object.assign(card.collab, p); };
+      FM.projects.detachLinked = pid => { calls.push('detach:' + pid); return Promise.resolve('newid'); };
+      C.session = null; C.active = false;
+      try {
+        if (!C.isLinkedCopy()) throw new Error('CONTROL: the stubbed card is not a linked copy');
+        const d0 = v.doc();
+        if (await FM.spine.cmd.del(v.L('B').id) !== false || v.doc() !== d0) throw new Error('CONTROL: a delete went through on a linked copy');
+        const say = sm6Say(), want = (window.matchMedia && window.matchMedia('(max-width: 700px)').matches) ? 'Mine' : 'Make it my own';
+        if (!/^Offline · text and looks still work/.test(say.text) || say.buttons.join('|') !== want) throw new Error('the copy’s line reads “' + say.text + '” with ' + JSON.stringify(say.buttons) + ', want [' + want + ']');
+        await sm6Press(want);
+        const q = await sm6Ask(false);
+        if (!/Leave this project\?/.test(q.title)) throw new Error('the question is “' + q.title + '”');
+        if (calls.length) throw new Error('Cancel still ran the leave: ' + calls.join());
+        await FM.spine.cmd.del(v.L('B').id); await sm6Press(want);
+        await sm6Ask(true); await v.sleep(200);
+        if (calls.join() !== 'patch:' + card.id + ':left,detach:' + card.id) throw new Error('the leave ran as ' + calls.join() + ' (the left mark must come first, then the copy)');
+        if (C.isLinkedCopy() || C.othersCanEdit()) throw new Error('after Make it my own the copy still counts as linked');
+        if (!(await FM.spine.cmd.del(v.L('B').id))) throw new Error('the delete after leaving was refused: “' + sm6Say().text + '”');
+      } finally { C.session = s0; C.active = a0; FM.projects.list = list0; FM.projects.patchCollab = pc0; FM.projects.detachLinked = dl0; }
+    });
+  });
+
+  test('simple P2.6 · S6d undo and redo return true / false and say what they ran: FM.history.lastStep carries the step’s name and editor on the solo stack and in a session, redo keeps the name, and a false return leaves null', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      FM.time = 1.5;
+      if (!(await FM.spine.cmd.split(v.L('A').id))) throw new Error('setup: the split was refused');
+      const u = FM.history.undo();
+      if (u !== true) throw new Error('a solo undo returned ' + u + ', want true');
+      const ls = FM.history.lastStep;
+      if (!ls || ls.label !== 'Split' || ls.ed !== 's' || ls.soft) throw new Error('lastStep after a solo undo is ' + JSON.stringify(ls));
+      if (FM.history.redo() !== true || !FM.history.lastStep || FM.history.lastStep.label !== 'Split') throw new Error('redo did not keep the name: ' + JSON.stringify(FM.history.lastStep));
+      let guard = 0; while (FM.history.undo() === true && guard++ < 50);
+      if (FM.history.undo() !== false || FM.history.lastStep !== null) throw new Error('with nothing to undo the return is not false / lastStep not null: ' + JSON.stringify(FM.history.lastStep));
+    });
+    await sm6Live(async function (c) {
+      FM.time = 1.5;
+      if (!(await FM.spine.cmd.split(c.id('A')))) throw new Error('setup: the split was refused in the session');
+      if (FM.history.undo() !== true) throw new Error('a session undo did not return true');
+      let ls = FM.history.lastStep;
+      if (!ls || ls.label !== 'Split' || ls.ed !== 's') throw new Error('lastStep after a session undo is ' + JSON.stringify(ls));
+      if (FM.history.redo() !== true || FM.history.lastStep.label !== 'Split') throw new Error('a session redo lost the name: ' + JSON.stringify(FM.history.lastStep));
+      /* a Full edit in the same session names nothing and has no editor */
+      FM.editor.apply('full', { force: true, quiet: true });
+      FM.scene.layers.find(l => l.name === 'C').name = 'C2'; FM.history.commit();
+      if (FM.history.undo() !== true || !FM.history.lastStep || FM.history.lastStep.ed !== null || FM.history.lastStep.label !== null) throw new Error('a Full step reads as ' + JSON.stringify(FM.history.lastStep));
+    });
+  });
+
+  test('simple P2.6 · S6d one soft-undo line: when Sam changed part of what you undid, Simple says ONE line (no toast) and Full keeps today’s toast word for word', { item: '980', budgetMs: 150000 }, async function () {
+    const run = async function (inFull) {
+      const toasts = [], t0 = FM.toast; let out = null;
+      FM.toast = function (m) { toasts.push(String(m)); return t0.apply(this, arguments); };
+      try {
+        await sm6Live(async function (c) {
+          const g = c.addGuest({ role: 'editor', name: 'Sam' });
+          FM.time = 1.5;
+          if (!(await FM.spine.cmd.split(c.id('A')))) throw new Error('setup: the split was refused');
+          g.loop.settle();
+          const gl = g.doc.layers.find(l => l.id === c.id('A'));
+          gl.duration = 2.2; g.G.tick('full'); g.loop.settle();
+          if (FM.layerById(FM.scene, c.id('A')).duration !== 2.2) throw new Error('setup: Sam’s change did not reach the owner');
+          if (inFull) FM.editor.apply('full', { force: true, quiet: true });
+          toasts.length = 0;
+          const ok = FM.history.undo();
+          out = { ok: ok, ls: FM.history.lastStep, say: sm6Say().text, title: (document.querySelector('#sm-say .sm-say-t') || {}).title || '', toasts: toasts.slice() };
+        });
+      } finally { FM.toast = t0; }
+      return out;
+    };
+    const s = await run(false), f = await run(true);
+    if (s.ok !== true || !s.ls || !s.ls.soft || s.ls.who !== 'Sam') throw new Error('lastStep did not say Sam changed part of it: ' + JSON.stringify(s.ls));
+    if (!/^Undid, except what Sam changed/.test(s.say)) throw new Error('Simple’s line reads “' + s.say + '”');
+    if (s.toasts.some(t => /left alone/.test(t))) throw new Error('Simple ALSO toasted: ' + s.toasts.join(' | '));
+    if (!/Sam changed it since/.test(s.title)) throw new Error('the full wording is not in the line’s title: “' + s.title + '”');
+    if (f.ok !== true || !f.toasts.some(t => t === 'Part of this was changed by Sam since, so it was left alone')) throw new Error('Full’s toast changed: ' + JSON.stringify(f.toasts));
+  });
+
+  test('simple P2.6 · S6e the lease half of undo’s pre-flight: undoing a Simple split while a friend holds one of its layers is refused with the busy line and the step is kept; a single-layer step and a Full step are untouched', { item: '980', budgetMs: 120000 }, async function () {
+    const C = FM.collab;
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      FM.time = 1.5;
+      if (!(await FM.spine.cmd.split(c.id('A')))) throw new Error('setup: the split was refused');
+      const idA = c.id('A'), sent = c.sentTo(g.loop), batches = () => sent.filter(m => m.t === 'b').length;
+      /* Sam has just opened a tool on A: a lease that has not written yet */
+      c.S.host.leases[idA] = g.mid; sent.length = 0;
+      const d1 = JSON.stringify(FM.scene.layers), n1 = FM.scene.layers.length;
+      if (FM.history.undo() !== false) throw new Error('the undo of a split ran while Sam holds A');
+      if (JSON.stringify(FM.scene.layers) !== d1 || FM.scene.layers.length !== n1) throw new Error('the refused undo still changed the document (' + n1 + ' → ' + FM.scene.layers.length + ' layers)');
+      if (batches()) throw new Error('the refused undo sent ' + batches() + ' batch(es)');
+      if (!C.canUndo()) throw new Error('the refused undo used the step up');
+      if (!/is editing/.test(sm6Say().text)) throw new Error('the refusal reads “' + sm6Say().text + '”, want the busy line');
+      /* Sam lets go: the same step now undoes, whole */
+      delete c.S.host.leases[idA];
+      if (FM.history.undo() !== true || FM.scene.layers.length !== n1 - 1) throw new Error('with the lease gone the undo did not run whole (' + FM.scene.layers.length + ' layers)');
+      const idC = c.id('C');
+      /* a Full step is never gated: rename in Full with Sam holding the layer, undo it, and Simple says nothing about it */
+      const sayed = [], sp0 = FM.spine.say; FM.spine.say = function (t) { sayed.push(String(t)); return sp0.apply(this, arguments); };
+      try {
+        FM.editor.apply('full', { force: true, quiet: true });
+        FM.scene.layers.find(l => l.id === idC).name = 'C2'; FM.history.commit();
+        c.S.host.leases[idC] = g.mid;
+        FM.history.undo();
+      } finally { FM.spine.say = sp0; }
+      if (sayed.some(t => /is editing/.test(t))) throw new Error('a Full step met Simple’s busy line: ' + sayed.join(' | '));
+    });
+  });
+
+  test('simple P2.6 · S6f a whole-transaction refusal of a Simple step (host answers ["*", "bad"]) is no longer silent: one line, the screen put back at once, and the undo step dropped; a Full step keeps today’s handling', { item: '980', budgetMs: 150000 }, async function () {
+    const C = FM.collab;
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      const toasts = []; g.A.toast = function (m) { toasts.push(String(m)); };
+      g.A.syncUndoButtons = function () {};
+      const gsent = [], ob = g.loop.b.send; g.loop.b.send = function (ch, msg) { gsent.push(msg); return ob.apply(this, arguments); };
+      const big = 'x'.repeat(2600000), depth = () => g.G._undoDepth().undo;
+      const La = () => g.doc.layers.find(l => l.id === c.id('A')), was = La().name;
+      const mark = ed => { La().name = big; g.G.tick('full'); g.G.afterCommit(ed ? { label: 'Rename', ed: 's' } : {}); };
+      const sayed = [], sp0 = FM.spine.say; FM.spine.say = function (t) { sayed.push(String(t)); return sp0.apply(this, arguments); };
+      /* a Full-made step first: the same refusal, today's handling (nothing said, the step stays) */
+      mark(false); g.loop.settle();
+      if (toasts.length) throw new Error('CONTROL: a Full step’s refusal said something: ' + toasts.join(' | '));
+      /* today a Full step's refused change stays on the guest's screen (that is what Q29 fixes for Simple's own steps); put it back by hand */
+      La().name = was; g.G.tick('full'); g.G.afterCommit({}); g.loop.settle();
+      const d0 = depth();
+      /* now a Simple-made one */
+      gsent.length = 0;
+      mark(true);
+      if (depth() !== d0 + 1) throw new Error('CONTROL: the Simple step did not become an undo step (' + d0 + ' → ' + depth() + ')');
+      g.loop.settle();
+      /* Simple is on screen in this test (the owner's editor), so the line goes through #sm-say and not the toast */
+      if (!/couldn.t be sent to your friends, so it was put back/.test(sm6Say().text) && !sayed.some(t => /put back/.test(t))) throw new Error('the guest was told nothing: say ' + JSON.stringify(sm6Say().text) + ', toasts ' + JSON.stringify(toasts));
+      if (toasts.some(t => /put back/.test(t))) throw new Error('Simple was on screen and the line was a toast: ' + JSON.stringify(toasts));
+      if (sayed.filter(t => /put back/.test(t)).length > 1) throw new Error('more than one line: ' + JSON.stringify(sayed));
+      if (!gsent.some(m => m && m.t === 'resync')) throw new Error('no resync went out: ' + JSON.stringify(gsent.map(m => m && m.t)));
+      if (La().name !== was) throw new Error('the refused change is still on the guest’s screen');
+      if (depth() !== d0) throw new Error('the refused step is still an undo step (' + depth() + ', want ' + d0 + '): an undo pressed now would send nothing and say “changed since”');
+      FM.spine.say = sp0;   // (the wrapper only recorded; it called the original)
+      /* Full on screen: the toast every other collab message uses */
+      FM.editor.apply('full', { force: true, quiet: true });
+      toasts.length = 0; mark(true); g.loop.settle();
+      if (toasts.filter(t => /couldn.t be sent to your friends, so it was put back/.test(t)).length !== 1) throw new Error('with Full on screen the toast was ' + JSON.stringify(toasts));
+    });
+  });
+
+  test('simple P2.6 · S6g the undo of an add survives what Simple’s arranging writes: a pin, a main flag, a ripple key or the host’s stamp on the layer no longer fails it; a change to its content or start still does, and what the mask hid is said', { item: '980', budgetMs: 120000 }, async function () {
+    const C = FM.collab, D = C.diff;
+    const L = FM.makeLayer('shape', { name: 'T', start: 2, duration: 2 });
+    const plain = D.maskLayer(L);
+    const m = Object.assign(JSON.parse(JSON.stringify(L)), { kb: [1, 2], by: 'm9', sm: { main: true, stay: true, tail: true, tailEnd: 4, twin: 'x', muteByMode: true, snd: 1, cut: true } });
+    if (D.maskLayer(m) !== plain) throw new Error('the mask did not drop kb / by / the sm membership keys');
+    const keep = Object.assign(JSON.parse(JSON.stringify(L)), { sm: { cut: true, other: 7 } });
+    if (D.maskLayer(keep) === plain) throw new Error('the mask dropped an sm key that is not a membership key');
+    if (D.maskLayer(Object.assign(JSON.parse(JSON.stringify(L)), { start: 2.5 })) === plain) throw new Error('start is not compared any more');
+    if (D.maskLayer(Object.assign(JSON.parse(JSON.stringify(L)), { name: 'U' })) === plain) throw new Error('content is not compared any more');
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      if (!(await FM.spine.cmd.addText())) throw new Error('setup: Add text was refused');
+      const tid = FM.scene.selectedId;
+      if (!tid || !FM.layerById(FM.scene, tid)) throw new Error('setup: the new text is not selected');
+      g.loop.settle();
+      /* Sam pins it (what arranging writes on a layer): a content-neutral change the old compare read as "changed since" */
+      const gl = g.doc.layers.find(l => l.id === tid);
+      if (!gl) throw new Error('setup: Sam does not have the new text');
+      gl.sm = Object.assign({}, gl.sm, { stay: true }); g.G.tick('full'); g.loop.settle();
+      if (!(FM.layerById(FM.scene, tid).sm || {}).stay) throw new Error('setup: the pin did not reach the owner');
+      const n0 = FM.scene.layers.length;
+      if (FM.history.undo() !== true) throw new Error('the undo of the add was refused although only a pin differs (' + sm6Say().text + ')');
+      if (FM.scene.layers.length !== n0 - 1 || FM.layerById(FM.scene, tid)) throw new Error('the add is still there after its undo');
+      if (!FM.history.lastStep || !FM.history.lastStep.soft) throw new Error('the pin the mask hid was not said: ' + JSON.stringify(FM.history.lastStep));
+      /* CONTROL: a change to what the layer IS still refuses, and says so */
+      FM.history.redo();
+      const tid2 = FM.scene.selectedId || tid;
+      g.loop.settle();
+      const gl2 = g.doc.layers.find(l => l.id === tid2);
+      if (gl2) {
+        gl2.name = 'Sam’s title'; g.G.tick('full'); g.loop.settle();
+        const n1 = FM.scene.layers.length;
+        if (FM.history.undo() !== false || FM.scene.layers.length !== n1) throw new Error('CONTROL: an undo of an add went through after Sam renamed it');
+      }
+    });
+  });
+
+  test('simple P2.6 · S6h adoption is not undone once anyone else has written since: Ezra’s first arranging edit adopts, Sam writes, Ezra’s undo takes the edit back and leaves the project adopted (and says so); with nobody else writing the undo takes it all back', { item: '980', budgetMs: 150000 }, async function () {
+    const C = FM.collab;
+    const run = async function (samWrites) {
+      let out = null;
+      await sm6Live(async function (c) {
+        const g = c.addGuest({ role: 'viewer', name: 'Sam' });
+        if (FM.scene.project.sm && FM.scene.project.sm.adopted) throw new Error('setup: the fixture is already adopted');
+        if (!(await FM.spine.cmd.del(c.id('B')))) throw new Error('setup: the first delete was refused: ' + sm6Say().text);
+        if (!(FM.scene.project.sm || {}).adopted) throw new Error('setup: the first arranging edit did not adopt');
+        if (samWrites) {
+          c.S.setPeerRole(g.mid, 'editor'); g.loop.settle();
+          const gl = g.doc.layers.find(l => l.name === 'C');
+          gl.name = 'C by Sam'; g.G.tick('full'); g.loop.settle();
+          c.S.setPeerRole(g.mid, 'viewer');
+          if (FM.scene.layers.find(l => l.id === gl.id).name !== 'C by Sam') throw new Error('setup: Sam’s write did not reach the owner');
+        }
+        const mains0 = FM.scene.layers.filter(l => l.sm && l.sm.main).length;
+        if (FM.history.undo() !== true) throw new Error('the undo was refused: ' + sm6Say().text);
+        out = { adopted: !!(FM.scene.project.sm || {}).adopted, back: FM.scene.layers.some(l => l.name === 'B'), mains: FM.scene.layers.filter(l => l.sm && l.sm.main).length, mains0: mains0, say: sm6Say().text, ls: FM.history.lastStep };
+      }, { unadopted: true });
+      return out;
+    };
+    const a = await run(true), b = await run(false);
+    if (!a.back) throw new Error('the delete itself was not undone');
+    if (!a.adopted) throw new Error('Sam wrote, and Ezra’s undo un-adopted the project under him');
+    if (!a.ls || !a.ls.adoptKept || !/main track stays as set up/.test(a.say)) throw new Error('the line does not say the main track stays: “' + a.say + '” ' + JSON.stringify(a.ls));
+    if (!b.back || b.adopted) throw new Error('CONTROL: with nobody else writing the undo should take adoption back too (back ' + b.back + ', adopted ' + b.adopted + ')');
+  });
+
+  test('simple P2.6 · S6i the host holds the room at its own Simple version: a guest on a newer build writing project.sm.v above SM_V is clamped by the host, and an ordinary value is left alone', { item: '980', budgetMs: 90000 }, async function () {
+    const C = FM.collab;
+    const inv = C.bridge.invariants(), v0 = FM.SM_V;
+    const hi = { sm: { adopted: true, v: v0 + 4 } }, ok = { sm: { adopted: true, v: v0 } }, none = { name: 'x' };
+    inv.project(hi); inv.project(ok); inv.project(none);
+    if (hi.sm.v !== v0) throw new Error('a newer sm.v came through the host’s project invariant as ' + hi.sm.v);
+    if (ok.sm.v !== v0 || 'sm' in none) throw new Error('an ordinary project was changed by the clamp');
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      g.doc.project.sm = { adopted: true, v: v0 + 4 }; g.G.tick('full'); g.loop.settle();
+      const hv = (c.S.host.base.project.sm || {}).v;
+      if (hv !== v0) throw new Error('the host kept sm.v = ' + hv + ' from a newer guest');
+      if (((FM.scene.project.sm || {}).v) !== v0) throw new Error('the owner’s own project reads sm.v = ' + (FM.scene.project.sm || {}).v);
+    });
+  });
+
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

@@ -214,7 +214,23 @@ window.FM = window.FM || {};
     if (r) { r.classList.toggle('is-off', !canR); r.setAttribute('aria-disabled', canR ? 'false' : 'true'); }
   }
 
+  /* Release 2.6 (DESIGN §11): WHAT AN UNDO OR REDO RAN. Both still return a plain boolean (true when a step ran, false otherwise: the solo path used to return
+     undefined), and the step's own words go in `FM.history.lastStep = { label, ed, arr, soft, who }` (null on a false return). `meta` is the solo snapshot's
+     meta; in a session the step comes from collab (`FM.collab.lastStep()`). Simple's `undoSaid` builds its one line from it. */
+  function stepDone(ok, kind, meta) {
+    const ran = ok === true;
+    let ls = null;
+    if (ran) {
+      if (meta === undefined) ls = FM.collab && FM.collab.lastStep ? FM.collab.lastStep() : null;
+      else if (meta) ls = { label: meta.label || null, ed: meta.ed || null, arr: !!meta.arr, soft: false, who: null };
+      if (!ls) ls = { label: null, ed: null, arr: false, soft: false, who: null };
+    }
+    FM.history.lastStep = ls;
+    if (ran && FM.spine && FM.spine.undoSaid) { try { FM.spine.undoSaid(ls, kind); } catch (e) {} }
+    return ran;
+  }
   FM.history = {
+    lastStep: null,
     canUndo() { return index > 0; },
     /* queue 826 suite seam: how many steps are actually ON the stack. A test that counts CALLS to commit()
        measures the wrong thing now — a muted batch still calls it, and it returns early — so the honest
@@ -340,7 +356,7 @@ window.FM = window.FM || {};
     /* Simple mode P2 (§3.7, §0.4 B15): pressed while Simple's runner is mid-command, undo and redo wait in its queue and run
        right after that command commits, never half-way through it. `FM.spine.running` is only ever true inside Simple's
        runner, so in Full this line never fires. */
-    undo() { if (FM.spine && FM.spine.running && FM.spine.queueStep) return FM.spine.queueStep('undo'); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.undo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index > 0) { index--; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
-    redo() { if (FM.spine && FM.spine.running && FM.spine.queueStep) return FM.spine.queueStep('redo'); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.redo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return ok; } if (index < stack.length - 1) { index++; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); },
+    undo() { if (FM.spine && FM.spine.running && FM.spine.queueStep) return FM.spine.queueStep('undo'); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.undo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return stepDone(ok, 'undo'); } let ran = false, meta = null; if (index > 0) { meta = metas[index]; index--; ran = true; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); return stepDone(ran, 'undo', meta); },   // persist so a hard kill after undo can't resurrect the edit; `re` — see the end of restore()
+    redo() { if (FM.spine && FM.spine.running && FM.spine.queueStep) return FM.spine.queueStep('redo'); if (FM.flushPendingCommit) FM.flushPendingCommit(); if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush(); if (FM.collab && FM.collab.undoActive && FM.collab.undoActive()) { const ok = FM.collab.redo(); if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); return stepDone(ok, 'redo'); } let ran = false, meta = null; if (index < stack.length - 1) { index++; meta = metas[index]; ran = true; const re = restore(stack[index]); if (re) stack[index] = re; if (FM.storage) FM.storage.autosave(); } if (FM.textEdit && FM.textEdit.resync) FM.textEdit.resync(); syncButtons(); return stepDone(ran, 'redo', meta); },
   };
 })(window.FM);

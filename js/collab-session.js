@@ -86,6 +86,7 @@ window.FM = window.FM || {};
       online: true,
       active: true,
       /* diagnostics / assertions */
+      othersSeq: 0,   // 2.6 (§5.3)
       stats: { tx: 0, batches: 0, skipped: 0, deferredN: 0, adopted: 0, reasserted: 0, structWins: 0, resyncs: 0, queued: 0, forcedN: 0 }
     };
 
@@ -140,7 +141,7 @@ window.FM = window.FM || {};
     let lastBatchAt = 0, lastHashAt = 0, resyncAt = [];
     const reports = S.reports = [];
 
-    function newStep() { return { ops: [], recs: [], orders: [], byKey: Object.create(null) }; }
+    function newStep() { return { ops: [], recs: [], orders: [], byKey: Object.create(null), cids: [] }; }
     function doc() { return A.doc(); }
     function view() { return A.view(); }
     function frozen() { return !!(A.frozen && A.frozen()); }
@@ -285,6 +286,7 @@ window.FM = window.FM || {};
       for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
       S.cid += 1;
       const entry = { cid: S.cid, ops: ops, sent: false };
+      step.cids.push(S.cid);   // 2.6 (Q29): which txs this undo step went out as, so a whole-tx refusal can drop it
       for (let i = 0; i < ops.length; i++) {
         const op = ops[i];
         /* §8.1 correction: ONLY `s` and `d`. A structural op's key is the whole layer, so recording it
@@ -489,6 +491,7 @@ window.FM = window.FM || {};
     /* opts: {own:true, cid} for our own ack echo; {by:mid} otherwise. Returns the summary §8.6 needs. */
     function applyIncoming(ops, opts) {
       const oo = opts || {};
+      if (!oo.own && oo.by !== S.mid) S.othersSeq += ops.length;   // 2.6 (§5.3): what anyone ELSE has written, counted, so adoption is not undone under their work
       const sum = {
         wasSelected: A.selected ? A.selected() : null,
         paths: [], layerIds: Object.create(null), removed: [], inserted: [],
@@ -924,10 +927,28 @@ window.FM = window.FM || {};
       adoptOrder(ack.ord);
       if (ack.seq != null) S.bs = Math.max(S.bs, ack.seq);
       if ((ack.lost && ack.lost.length) || (ack.rej && ack.rej.length)) { forceRefused(ack, entry); onClash(ack, entry); }
-      /* S8 review: the host's repair of what it refused did not all fit its budget (collab-host.js FIX_OPS), so
+      /* 2.6 (§10.1, Q29): a whole-tx refusal of a SIMPLE step. The host answers `rej [['*','bad']]` with no ops and no fix, repair skips '*', and nothing here
+         noticed: the guest kept an edit nobody else had, in base and on screen, until the hash check next found it. So: copy now, one line, and no undo of it. */
+      const star = !!(entry && entry.ed === 's' && (ack.rej || []).some(function (r) { return r[0] === '*'; }));
+      if (star) wholeRefused(ack);      /* S8 review: the host's repair of what it refused did not all fit its budget (collab-host.js FIX_OPS), so
          the rest of the truth comes as a copy — asked for once, and paced by the owner's `catchUp`. */
-      if (ack.resync === 1) sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });
+      if (ack.resync === 1 && !star) sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });
       persistSoon();
+    }
+
+    function wholeRefused(ack) {
+      sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });   // the snapshot reverts the refused ops (the entry is already out of `outstanding`)
+      [undoStack, redoStack].forEach(function (stk) {
+        for (let i = stk.length - 1; i >= 0; i--) if (stk[i].cids && stk[i].cids.indexOf(ack.cid) >= 0) stk.splice(i, 1);
+      });
+      if (A.syncUndoButtons) { try { A.syncUndoButtons(); } catch (e) {} }
+      S.stats.wholeRefused = (S.stats.wholeRefused || 0) + 1;
+      simpleSay('That change couldn’t be sent to your friends, so it was put back.');
+    }
+    /* Simple speaks through its own line; anywhere else it is the toast every other collab message uses. */
+    function simpleSay(text) {
+      if (window.FM && FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.spine && FM.spine.say) { try { FM.spine.say(text); return; } catch (e) {} }
+      toast(text);
     }
 
     /* §8.2's last rule, and it is not cosmetic: "rejected paths are put into `forced` and applied to
@@ -972,6 +993,7 @@ window.FM = window.FM || {};
       const lost = (ack.lost || []).length, gone = (ack.rej || []).filter(function (r) { return r[1] === 'gone'; }).length;
       const role = (ack.rej || []).filter(function (r) { return r[1] === 'role'; }).length;
       const lease = (ack.rej || []).filter(function (r) { return r[1] === 'lease'; }).length;
+      const big = (entry && entry.ed === 's') ? (ack.rej || []).filter(function (r) { return r[1] === 'limit' && r[0] !== '*'; }).length : 0;
       S.clashes = (S.clashes || 0) + lost + gone;
       /* The WORDING follows S.role, not the reason code: a viewer told "you can only comment" is being
          given the wrong permission to ask for (queue 921 S3 review). */
@@ -979,6 +1001,7 @@ window.FM = window.FM || {};
          pin, which only the host writes (S7 review). */
       if (role) toast(S.role === 'viewer' ? 'View only — ask for edit access' : S.role === 'commenter' ? 'You can only comment in this project' : 'That change to a comment wasn’t allowed, so it was put back');
       else if (lease) leaseToast(ack.rej, entry && entry.ops, 'that layer');
+      else if (big) simpleSay('Part of that change was too big to share, so it was put back.');   // 2.6 (Q29 item 4); the host's own repair already fixed the data
       if (lost || gone) {
         S.lastClash = { lost: lost, gone: gone, at: now() };
         /* §13.4 (S8 review): [Save my version as a copy] — a real offer now, because the version was kept
@@ -1104,6 +1127,16 @@ window.FM = window.FM || {};
       if (!step.ops.length) { step = newStep(); return; }
       const st = { ops: step.ops, recs: step.recs, orders: step.orders };
       if (meta && meta.arr === true) st.arr = true;   // Simple mode P2: an arranging Simple step (§10.2 door 2); Full's steps carry none
+      /* 2.6 (§10.1, Q29): a step Simple made is tagged, and so are the txs it went out as (still outstanding: the ack has not come yet), so that
+         a whole-tx refusal of one of THEM (and only them; a Full tx keeps today's handling) is answered. */
+      if (meta && typeof meta.label === 'string' && meta.label) st.label = meta.label.slice(0, 80);   // 2.6 (§11): the step keeps its name, so a session's undo can say what it undid
+      if (meta && meta.ed === 's') {
+        st.ed = 's';
+        (step.cids || []).forEach(function (cid) { const e = outstanding.find(function (x) { return x.cid === cid; }); if (e) e.ed = 's'; });
+      }
+      st.cids = (step.cids || []).slice();
+      st.seq = S.othersSeq;
+      if (meta && Array.isArray(meta.adopt) && meta.adopt.length) st.adopt = meta.adopt.slice(0, 400).map(String);
       undoStack.push(st);
       while (undoStack.length > LIM.UNDO_STEPS) undoStack.shift();
       redoStack.length = 0;
@@ -1124,6 +1157,10 @@ window.FM = window.FM || {};
       res.recs.forEach(function (r, i) { if (res.ops[i].o === 's') r.after = clone(res.ops[i].v); });
       const st = { ops: res.ops, recs: res.recs, orders: res.orders, pre: true };
       if (meta && meta.arr === true) st.arr = true;
+      if (meta && typeof meta.label === 'string' && meta.label) st.label = meta.label.slice(0, 80);
+      if (meta && meta.ed === 's') st.ed = 's';
+      st.seq = 0;   // 2.6 (§5.3): written before anyone else was here
+      if (meta && Array.isArray(meta.adopt) && meta.adopt.length) st.adopt = meta.adopt.slice(0, 400).map(String);
       return st;
     }
     function docOfSnapshot(str) {
@@ -1142,7 +1179,25 @@ window.FM = window.FM || {};
       return (m && m.name) || 'someone else';
     }
 
+    /* 2.6 (§11): ONE WRAPPER, so every exit of the step sets `S.lastStep` (a plain boolean is still what undo returns, so no caller changes): {label, ed, arr, soft, who} of the step
+       that ran, null when none did. A soft skip says its line itself only where Simple is not on screen; in Simple the caller builds the one #sm-say line (§3.12). */
     function runStep(st, intoRedo) {
+      S._softNow = null; S._adoptKept = false;
+      const ok = runStep0(st, intoRedo);
+      S.lastStep = ok ? { label: st.label || null, ed: st.ed || null, arr: !!st.arr, soft: !!S._softNow, who: S._softNow ? S._softNow.who : null, adoptKept: !!S._adoptKept } : null;
+      return ok;
+    }
+    /* a path adoption wrote, or the object around it (`P/sm` created whole, `L/<id>/sm`) */
+    function adoptHit(list, key) {
+      for (let i = 0; i < list.length; i++) {
+        const a = list[i];
+        if (a === key || key.indexOf(a + '/') === 0) return true;
+        if (a.indexOf(key + '/') === 0 && (key === 'P/sm' || /^L\/[^/]+\/sm$/.test(key))) return true;
+      }
+      return false;
+    }
+    function simpleOnScreen() { return !!(window.FM && FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.spine && FM.spine.say); }
+    function runStep0(st, intoRedo) {
       /* SIMPLE MODE P2 — THE UNDO DOOR (DESIGN.md §10.2 door 2, his D14). Undoing or redoing a step that moved clips would send
          a ripple while someone else can edit — exactly what the runner refuses. Put back unconsumed, as the backstop refusal
          below does, before anything is applied or sent. Only steps Simple's runner tagged `arr` ever reach this. */
@@ -1158,10 +1213,13 @@ window.FM = window.FM || {};
       if (A.flushPendingCommit) { try { A.flushPendingCommit(); } catch (e) {} }
       pushLocal('hot');
       const keepOps = [], keepRecs = [];
-      let soft = 0, hardFail = null;
+      let soft = 0, hardFail = null, undoCids = null;
       for (let i = 0; i < st.ops.length; i++) {
         const op = st.ops[i], rec = st.recs[i] || {};
         const p = rec.p || pathOf(op);
+        /* 2.6 (§5.3): ADOPTION IS NOT UNDONE ONCE ANYONE ELSE HAS WRITTEN SINCE, in a session and after one (whether or not `S.active`: a stopped session still holds undo). The
+           edit it rode on still undoes. Without this Ezra's ⌘Z after Sam made an overlay a main clip un-adopted the project on every device and demoted Sam's clip. */
+        if (st.adopt && S.othersSeq > (st.seq || 0) && adoptHit(st.adopt, P.key(p))) { S._adoptKept = true; continue; }
         const cur = D.valueAt(S.base, p);
         if (op.o === 's' || op.o === 'd') {
           /* §10.2: undo only what is still as this person left it. Anything a peer has changed since is
@@ -1172,7 +1230,11 @@ window.FM = window.FM || {};
           continue;
         }
         if (op.o === 'li') {
-          if (cur !== undefined && canon(cur) === rec.after) { keepOps.push(op); keepRecs.push(rec); }
+          if (cur !== undefined && D.maskLayer(cur) === rec.after) {
+            keepOps.push(op); keepRecs.push(rec);
+            /* the mask hid a difference (somebody moved or pinned it since): the add is still taken back, and it is SAID, not silent (§11) */
+            if (rec.afterRaw !== undefined && canon(cur) !== rec.afterRaw) { soft++; S.lastSoftPath = P.key(p); }
+          }
           else hardFail = P.key(p);
           continue;
         }
@@ -1197,6 +1259,28 @@ window.FM = window.FM || {};
         const who = whoChanged(hardFail);
         toast(who ? "Can't undo — " + who + ' changed it since' : "Can't undo — it has changed since");
         return false;
+      }
+      /* 2.6 (§10.2 door 2a): THE LEASE HALF OF UNDO'S PRE-FLIGHT, for every step Simple made while a session runs, arranging or not. A split is live and not arranging, so
+         its undo never reached the `st.arr` door: with a guest who had just opened Crop on B (a lease that has not written yet, so the `li` check passes) the owner's host
+         refused the `lr B` per op and applied A's duration restore, so A grew back over B on every device and the step was used up. A step with an `li` / `lr` op or one that
+         writes more than one layer asks `FM.spine.blockersForLayers`; a single-layer, non-structural step stays per-op as today, and a Full step (no `ed`) skips it. */
+      if (st.ed === 's' && S.active && window.FM && FM.spine && FM.spine.blockersForLayers) {
+        const lids = Object.create(null); let structural = false;
+        for (let i = 0; i < keepOps.length; i++) {
+          if (keepOps[i].o === 'li' || keepOps[i].o === 'lr') structural = true;
+          const lid = C.Host && C.Host.layerOf ? C.Host.layerOf(keepOps[i]) : null;
+          if (lid) lids[lid] = 1;
+        }
+        const ids = Object.keys(lids);
+        if (structural || ids.length > 1) {
+          const blocked = FM.spine.blockersForLayers(ids);
+          if (blocked) {
+            if (st.pre) preIdx++;
+            else (intoRedo ? undoStack : redoStack).push(st);
+            if (FM.spine.undoBlocked) FM.spine.undoBlocked(blocked);
+            return false;
+          }
+        }
       }
       const inv = D.invertStep({ ops: keepOps, recs: keepRecs, orders: st.orders || [] });
       const sum = { wasSelected: A.selected ? A.selected() : null, paths: [], layerIds: Object.create(null), removed: [], inserted: [], structural: false, projectKeys: Object.create(null) };
@@ -1233,18 +1317,26 @@ window.FM = window.FM || {};
           for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
           S.cid += 1;
           for (let i = 0; i < ops.length; i++) if (ops[i].o === 's' || ops[i].o === 'd') pending[P.key(ops[i].p)] = S.cid;
-          outstanding.push({ cid: S.cid, ops: ops, sent: false });
+          outstanding.push({ cid: S.cid, ops: ops, sent: false, ed: st.ed === 's' ? 's' : undefined });
+          undoCids = [S.cid];
           if (S.online) flushOutstanding();
         }
         res.recs.forEach(function (r, i) { if (res.ops[i].o === 's') r.after = clone(res.ops[i].v); });
         const inv = { ops: res.ops, recs: res.recs, orders: res.orders };
+        if (st.ed === 's') inv.ed = 's';
+        if (st.label) inv.label = st.label;   // 2.6: redo keeps the name
+        if (undoCids) inv.cids = undoCids;   // 2.6 (Q29): the inverse step carries the tx it went out as
         if (st.arr) inv.arr = true;   // Simple mode P2: redoing an arranging step is arranging too
         (intoRedo ? redoStack : undoStack).push(inv);
         while (redoStack.length > LIM.UNDO_STEPS) redoStack.shift();
         while (undoStack.length > LIM.UNDO_STEPS) undoStack.shift();
       }
       if (A.autosave) { try { A.autosave(); } catch (e) {} }
-      if (soft) { const who = whoChanged(S.lastSoftPath); toast(who ? 'Part of this was changed by ' + who + ' since, so it was left alone' : 'Part of this has changed since, so it was left alone'); }
+      if (soft) {
+        const who = whoChanged(S.lastSoftPath);
+        S._softNow = { who: who || null };
+        if (!simpleOnScreen()) toast(who ? 'Part of this was changed by ' + who + ' since, so it was left alone' : 'Part of this has changed since, so it was left alone');
+      }
       return true;
     }
 
