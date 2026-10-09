@@ -1,0 +1,7146 @@
+{
+ "about": "FU6 price (DESIGN §0.4.5 FU6, COG-DESIGN §6.4): with the cog’s third block against without it, each element’s rect delta [dx, dy, dw, dh] and each flight’s px deltas, per run, size and part; checked ±1 px; anything not named must not move. Measured on this machine by `tools/_fu_compare.py price`.",
+ "measured": "fm-full-unchanged.5CzTJV",
+ "price": {
+  "1280": {
+   "320x568": {
+    "canvas": {
+     "layout": {
+      "button#cv-appset.btn.cv-appset": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-cancel.btn": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-go.btn.btn-accent": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#4": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#5": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on>span.ac-custom.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-11.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-169.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-43.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-45.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-916.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.dialog-actions": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.export-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.active.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-none.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-bg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-ch.cv-num": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-cw.cv-num": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-scale": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "select#cv-fps": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-fr-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-size.cv-size": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     }
+    },
+    "friends": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     },
+     "motion": {
+      "W div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       0.0,
+       77.0,
+       -78.0,
+       0.0,
+       0.0,
+       77.0,
+       0.0
+      ],
+      "W div#cv-friends": [
+       0.0,
+       0.0,
+       77.0,
+       0.0,
+       0.0,
+       0.0,
+       77.0,
+       -78.0
+      ]
+     }
+    },
+    "reopened": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     }
+    }
+   },
+   "375x553": {
+    "canvas": {
+     "layout": {
+      "button#cv-appset.btn.cv-appset": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-cancel.btn": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-go.btn.btn-accent": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#4": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#5": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on>span.ac-custom.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-11.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-169.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-43.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-45.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-916.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.dialog-actions": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.export-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.active.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-none.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-bg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-ch.cv-num": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-cw.cv-num": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-scale": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "select#cv-fps": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-fr-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-size.cv-size": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     }
+    },
+    "friends": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -70.5
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     },
+     "motion": {
+      "W div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       0.0,
+       77.0,
+       -78.0,
+       0.0,
+       0.0,
+       77.0,
+       0.0
+      ],
+      "W div#cv-friends": [
+       0.0,
+       0.0,
+       77.0,
+       0.0,
+       0.0,
+       0.0,
+       77.0,
+       -78.0
+      ]
+     }
+    },
+    "reopened": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -70.5
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     }
+    }
+   },
+   "380x667": {
+    "canvas": {
+     "layout": {
+      "button#cv-appset.btn.cv-appset": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-cancel.btn": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg>path": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-go.btn.btn-accent": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#2": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#3": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#4": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#5": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on>span.ac-custom.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-11.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-169.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-43.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-45.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-916.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.dialog-actions": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.export-title": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field#2": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span#2": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.active.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-none.hm-bg-sw": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw#2": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field>span": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span#2": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span>span": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt>span.cv-mini-t": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-bg": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-ch.cv-num": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-cw.cv-num": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-scale": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field>span": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "select#cv-fps": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-fr-sub.cv-mini-s": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-size.cv-size": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ]
+     }
+    },
+    "friends": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     },
+     "motion": {
+      "W div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       0.0,
+       27.0,
+       0.0,
+       0.0,
+       0.0,
+       77.0,
+       0.0
+      ],
+      "W div#cv-friends": [
+       0.0,
+       0.0,
+       27.0,
+       0.0,
+       0.0,
+       0.0,
+       77.0,
+       -78.0
+      ]
+     }
+    },
+    "reopened": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     }
+    }
+   },
+   "380x800": {
+    "friends": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       61.0,
+       0.0,
+       -46.5
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       61.5,
+       0.0,
+       -46.5
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       61.0,
+       0.0,
+       -46.5
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ]
+     },
+     "motion": {
+      "W div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       61.19,
+       0.0
+      ],
+      "W div#cv-friends": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       61.19,
+       -46.36
+      ]
+     }
+    },
+    "reopened": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       61.0,
+       0.0,
+       -46.5
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       61.5,
+       0.0,
+       -46.5
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       61.0,
+       0.0,
+       -46.5
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ]
+     }
+    }
+   }
+  },
+  "380": {
+   "320x568": {
+    "canvas": {
+     "layout": {
+      "button#cv-appset.btn.cv-appset": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-cancel.btn": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-go.btn.btn-accent": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#4": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#5": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on>span.ac-custom.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-11.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-169.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-43.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-45.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-916.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.dialog-actions": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.export-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.active.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-none.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-bg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-ch.cv-num": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-cw.cv-num": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-scale": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "select#cv-fps": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-fr-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-size.cv-size": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     }
+    },
+    "friends": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     },
+     "motion": {
+      "W div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       0.0,
+       77.0,
+       -78.0,
+       0.0,
+       0.0,
+       77.0,
+       0.0
+      ],
+      "W div#cv-friends": [
+       0.0,
+       0.0,
+       77.0,
+       0.0,
+       0.0,
+       0.0,
+       77.0,
+       -78.0
+      ]
+     }
+    },
+    "reopened": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     }
+    }
+   },
+   "375x553": {
+    "canvas": {
+     "layout": {
+      "button#cv-appset.btn.cv-appset": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-cancel.btn": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-go.btn.btn-accent": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#4": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#5": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on>span.ac-custom.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-11.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-169.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-43.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-45.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-916.ac-frame": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.dialog-actions": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.export-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.active.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-none.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-bg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-ch.cv-num": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-cw.cv-num": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-scale": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field>span": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "select#cv-fps": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-fr-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-size.cv-size": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     }
+    },
+    "friends": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -70.5
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     },
+     "motion": {
+      "W div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       0.0,
+       77.0,
+       -78.0,
+       0.0,
+       0.0,
+       77.0,
+       0.0
+      ],
+      "W div#cv-friends": [
+       0.0,
+       0.0,
+       77.0,
+       0.0,
+       0.0,
+       0.0,
+       77.0,
+       -78.0
+      ]
+     }
+    },
+    "reopened": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -70.5
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       6.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     }
+    }
+   },
+   "380x667": {
+    "canvas": {
+     "layout": {
+      "button#cv-appset.btn.cv-appset": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-cancel.btn": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-fr-exp.cv-mini-exp>svg>path": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-go.btn.btn-accent": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#2": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#3": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#4": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip#5": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip.on>span.ac-custom.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-11.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-169.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-43.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-45.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#aspect-row.aspect-row>button.aspect-chip>span.ac-916.ac-frame": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.dialog-actions": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.export-title": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field#2": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span#2": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.active.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-none.hm-bg-sw": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>div.field>span.hm-bg-row>button.cv-bg-sw.hm-bg-sw#2": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-pair>div.export-card>label.field>span": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span#2": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-custom-size.field>span>span": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-bar.cv-mini>span.cv-mini-txt>span.cv-mini-t": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-bg": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-ch.cv-num": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-cw.cv-num": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "input#cv-scale": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "label#cv-scale-row.field>span": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "select#cv-fps": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-fr-sub.cv-mini-s": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-size.cv-size": [
+       0.0,
+       27.0,
+       0.0,
+       0.0
+      ]
+     }
+    },
+    "friends": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     },
+     "motion": {
+      "W div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       0.0,
+       27.0,
+       0.0,
+       0.0,
+       0.0,
+       77.0,
+       0.0
+      ],
+      "W div#cv-friends": [
+       0.0,
+       0.0,
+       27.0,
+       0.0,
+       0.0,
+       0.0,
+       77.0,
+       -78.0
+      ]
+     }
+    },
+    "reopened": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       -1.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       77.0,
+       0.0,
+       -78.0
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       77.0,
+       0.0,
+       0.0
+      ]
+     }
+    }
+   },
+   "380x800": {
+    "friends": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       61.0,
+       0.0,
+       -46.5
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       61.5,
+       0.0,
+       -46.5
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       61.0,
+       0.0,
+       -46.5
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ]
+     },
+     "motion": {
+      "W div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       61.19,
+       0.0
+      ],
+      "W div#cv-friends": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       61.19,
+       -46.36
+      ]
+     }
+    },
+    "reopened": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       61.0,
+       0.0,
+       -46.5
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       61.5,
+       0.0,
+       -46.5
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       61.0,
+       0.0,
+       -46.5
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ]
+     }
+    }
+   },
+   "function": {
+    "swapBack": {
+     "motion": {
+      "W div#canvas-dialog.cv-pair>div.export-card": [
+       0.0,
+       0.0,
+       61.19,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "W div#cv-friends": [
+       0.0,
+       0.0,
+       61.19,
+       -46.36,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     }
+    },
+    "swapToFriends": {
+     "layout": {
+      "button#cv-mini-app.cv-mini-app": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "button#cv-mini-exp.cv-mini-exp>svg>path": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body": [
+       0.0,
+       61.0,
+       0.0,
+       -46.5
+      ],
+      "div#cv-fr-body>div.cs-body": [
+       0.0,
+       61.5,
+       0.0,
+       -46.5
+      ],
+      "div#cv-fr-body>div.cs-body>button.accent.cs-start": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>button.cs-joinlink.cs-navrow>span.cs-add-sub": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-fr-hint": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>button.cs-joinas.cs-role": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>div.cs-joinrow.cs-row>div.cs-rowlabel": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>button.cs-fr-profile.cs-role": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-pname": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>div.cs-ptext>div.cs-prole": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-body>ul.cs-people>li.cs-person>span.cs-dot": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-foot>button.cs-done": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>div.cs-state": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>h2.fm-ask-title": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#2": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li#3": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#2": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-head>ol.cs-how>li>b#3": [
+       0.0,
+       61.5,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>button.cs-switch.on.set-switch>span.set-knob": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-shint": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-fr-body>div.cs-offrow.cs-srow>div.cs-stext>div.cs-slabel": [
+       0.0,
+       15.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-friends": [
+       0.0,
+       61.0,
+       0.0,
+       -46.5
+      ],
+      "div#cv-mini.cv-mini": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-ico>svg>path": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "div#cv-mini.cv-mini>span.cv-mini-txt>span.cv-mini-trow>span.cv-mini-t": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ],
+      "span#cv-mini-sub.cv-mini-s": [
+       0.0,
+       61.0,
+       0.0,
+       0.0
+      ]
+     },
+     "motion": {
+      "W div#canvas-dialog.cv-fr-big.cv-pair>div.export-card": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       61.19,
+       0.0
+      ],
+      "W div#cv-friends": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       61.19,
+       -46.36
+      ]
+     }
+    }
+   }
+  }
+ }
+}

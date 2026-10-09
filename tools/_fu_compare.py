@@ -136,6 +136,281 @@ def drop_keys(v, names):
             drop_keys(x, names)
 
 
+# ─── the cog's third block (step 1.3 — his one sanctioned change, DESIGN §0.4.5 FU6) ─────────────────────────────────
+# The layout record skips #cv-editor itself. Its presence also puts the class `cv-ed-on` on #canvas-dialog and two spacer
+# pseudo-elements on it, and that class is in every path under the dialog — so without this every element of the cog read
+# GONE and NEW at the same place (measured 10 Oct, phase 1 against v17.33: 1930 lines; with these three left out, the cog is
+# the same at every size except the ones COG-DESIGN §6.4 prices, which FU6's price check holds to the measured numbers).
+# Both sides: once phase 1 ships, HEAD has the block too. The whole `cv-ed-…` class family is the block's (`cv-ed-on` while
+# it is there, `cv-ed-short` on a short landscape screen); only the class NAME is left out — every box is still compared.
+ED_ON_PATH = re.compile(r'\.cv-ed-[\w-]+(?=[.>:#\[\s]|$)')
+ED_ON_CLASS = re.compile(r'(?:(?<=\s)|^)cv-ed-[\w-]+(?:\s+|$)')
+ED_PSEUDO = re.compile(r'(?:^|>)div#canvas-dialog(?:\.[\w-]+)*\.cv-ed-[\w-]+(?:\.[\w-]+)*::(?:before|after)$')
+ED_BLOCK = re.compile(r'#cv-editor(?![\w-])')
+
+
+def motion_row(x):
+    """A motion record's row — the probe writes each as JSON text: [kind, path, keyframes, options]."""
+    try:
+        r = json.loads(x) if isinstance(x, str) else x
+    except ValueError:
+        return None
+    return r if isinstance(r, list) and len(r) > 1 else None
+
+
+def simple_normalize(v, key=None):
+    if isinstance(v, list):
+        out = []
+        for x in v:
+            if isinstance(x, list) and x and isinstance(x[0], str) and ED_PSEUDO.search(x[0]):
+                continue
+            # the cog's flight animates the block with the rest; the layout record already leaves it out
+            if key == 'motion' and ED_BLOCK.search(str((motion_row(x) or [None, ''])[1])):
+                continue
+            out.append(simple_normalize(x))
+        return out
+    if isinstance(v, dict):
+        return dict((k, simple_normalize(x, k)) for k, x in v.items())
+    if isinstance(v, str):
+        v = ED_ON_PATH.sub('', v)
+        return ED_ON_CLASS.sub('', v).strip() if key == 'cls' else v
+    return v
+
+
+# ─── FU6's price check (DESIGN §0.4.5 FU6: "the 380×800 Friends-open, 380×667, 375×553 and 320×568 differences against
+# COG-DESIGN §6.4's measured numbers ±1 px") ─────────────────────────────────────────────────────────────────────────────
+# §6.4's numbers were measured on the Mac (Friends 72 px lower at 375×553); this laptop's Chrome lays the same cog out in its
+# own fonts (77 px). So the price is a MEASURED FILE, written from a run on the machine that judges (`_fu_compare.py price`),
+# per run, size and part: each element's rect delta, and each flight's px deltas (the Canvas ⇄ Friends flight starts and ends
+# at those same rects). It is instrument (tools/_fu_gate.py): a Simple release cannot edit it, and a price that grows is a
+# loosening that must be declared. An element or flight the file does not name must not move at all — and only the sizes and
+# parts PRICED names may carry a price at all (write_price refuses to write one anywhere else).
+PRICE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'full-unchanged-price.json')
+PRICED = {'380x800': ('friends', 'reopened'), '380x667': ('canvas', 'friends', 'reopened'),
+          '375x553': ('canvas', 'friends', 'reopened'), '320x568': ('canvas', 'friends', 'reopened')}
+SWAP_PARTS = ('swapToFriends', 'swapBack')     # FU6's function: the swap, taken at the run's own size
+PX = re.compile(r'(-?\d+(?:\.\d+)?)px')
+
+
+def priced(size, part, run_size):
+    if size == 'function':
+        return part in SWAP_PARTS and run_size in PRICED
+    return part in PRICED.get(size, ())
+
+
+def has_editor(f6):
+    return any(isinstance(v, dict) and any((v.get(p) or {}).get('hasEditor') for p in ('canvas', 'friends', 'reopened', 'swapToFriends', 'swapBack'))
+               for v in (f6 or {}).values())
+
+
+def load_price():
+    try:
+        return json.load(open(PRICE_FILE, encoding='utf-8')).get('price') or {}
+    except Exception:
+        return {}
+
+
+def _num(x):
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def rect_delta(a, b):
+    """[dx, dy, dw, dh] between two layout rows, or None when a box value is not a number (a pseudo-element's 'auto')."""
+    d = []
+    for i in (1, 2, 3, 4):
+        x, y = _num(a[i]), _num(b[i])
+        if x is None or y is None:
+            if a[i] != b[i]:
+                return None
+            d.append(0.0)
+        else:
+            d.append(round(y - x, 1))
+    return d
+
+
+def keyed_rows(rows):
+    """{path: row}, a repeated path (a list's items) numbered by its place — `…>li`, `…>li#2`, … — so none is lost."""
+    out, seen = {}, {}
+    for r in rows or []:
+        if not r:
+            continue
+        n = seen[r[0]] = seen.get(r[0], 0) + 1
+        out[r[0] if n == 1 else '%s#%d' % (r[0], n)] = r
+    return out
+
+
+def keyed_motion(m):
+    """{'<kind> <path>': row} for a motion record, numbered like keyed_rows."""
+    out, seen = {}, {}
+    for x in m or []:
+        r = motion_row(x)
+        k = '%s %s' % (r[0], r[1]) if r else str(x)
+        n = seen[k] = seen.get(k, 0) + 1
+        out[k if n == 1 else '%s#%d' % (k, n)] = r if r else x
+    return out
+
+
+def motion_delta(a, b):
+    """The deltas of a flight's px values, in order, when the two rows are the same but for those values; else None."""
+    sa, sb = json.dumps(a, sort_keys=True), json.dumps(b, sort_keys=True)
+    if PX.sub('#', sa) != PX.sub('#', sb):
+        return None
+    return [round(float(y) - float(x), 2) for x, y in zip(PX.findall(sa), PX.findall(sb))]
+
+
+def part_deltas(pa, pb, out=None):
+    """What the block moved in one cog record: ({path: rect delta}, {flight: px deltas}) for what moved, and every way the two
+    differ by more than a place — a row new, gone, restyled, a flight retimed — into `out` (as (key, what) pairs)."""
+    lay, mot = {}, {}
+    out = [] if out is None else out
+    A, B = keyed_rows((pa or {}).get('layout')), keyed_rows((pb or {}).get('layout'))
+    for k in sorted(set(A) | set(B)):
+        a, b = A.get(k), B.get(k)
+        if a is None or b is None:
+            out.append((k, 'NEW on the tree' if a is None else 'GONE on the tree'))
+        elif a[5:] != b[5:]:
+            out.append((k, 'more than its place changed: %s → %s' % (short(a[5:], 70), short(b[5:], 70))))
+        else:
+            d = rect_delta(a, b)
+            if d is None:
+                out.append((k, 'a box value changed that is not a number: %s → %s' % (short(a[1:5]), short(b[1:5]))))
+            elif any(d):
+                lay[k] = d
+    MA, MB = keyed_motion((pa or {}).get('motion')), keyed_motion((pb or {}).get('motion'))
+    for k in sorted(set(MA) | set(MB)):
+        a, b = MA.get(k), MB.get(k)
+        if a is None or b is None:
+            out.append(('flight ' + k, 'NEW on the tree' if a is None else 'GONE on the tree'))
+            continue
+        d = motion_delta(a, b)
+        if d is None:
+            out.append(('flight ' + k, 'more than its px changed: %s → %s' % (short(a, 70), short(b, 70))))
+        elif any(d):
+            mot[k] = d
+    return lay, mot, out
+
+
+def price_diff(pa, pb, price, where, out, limit):
+    """One cog record against its price: every element and flight within ±1 px of its measured delta, everything else equal."""
+    lay, mot, other = part_deltas(pa, pb)
+    for k, what in other:
+        out.append('%s: %s — %s' % (where, k, what))
+    pl, pm = (price or {}).get('layout') or {}, (price or {}).get('motion') or {}
+    for k in sorted(set(lay) | set(pl)):
+        d, e = lay.get(k, [0, 0, 0, 0]), pl.get(k, [0, 0, 0, 0])
+        if any(abs(d[i] - e[i]) > 1 for i in range(4)):
+            out.append('%s: %s moved %s — the measured price is %s (±1 px)' % (where, k, d, e))
+    for k in sorted(set(mot) | set(pm)):
+        d, e = mot.get(k), pm.get(k)
+        n = len(d or e)
+        d, e = d or [0] * n, e or [0] * n
+        if len(d) != len(e) or any(abs(x - y) > 1 for x, y in zip(d, e)):
+            out.append('%s: the flight %s moved %s — the measured price is %s (±1 px)' % (where, k, d, e))
+    del out[limit:]
+
+
+def fu6_parts(f6):
+    """(size, part, record) for every cog record in FU6: the fourteen sizes' three, and the function's swap."""
+    for size, v in sorted((f6 or {}).items()):
+        if not isinstance(v, dict):
+            continue
+        for part in (SWAP_PARTS if size == 'function' else ('canvas', 'friends', 'reopened')):
+            if isinstance(v.get(part), dict):
+                yield size, part, v[part]
+
+
+def write_price(work, dest):
+    """From a run's kept records (head = without the block, tree = with it): every element's rect delta and every flight's px
+    deltas, per run, size and part. REFUSES (exit 2) when anything moved outside PRICED, or the two differ by more than a
+    place anywhere — that is not a price, it is a difference. Run on the machine that judges; read the file before committing."""
+    out, refused = {}, []
+    for f in sorted(os.listdir(os.path.join(work, 'head'))):
+        m = re.match(r'rec-(.+)\.json(\.gz)?$', f)
+        if not m:
+            continue
+        w = m.group(1)
+        A, B = simple_normalize(load(os.path.join(work, 'head'), w) or {}), simple_normalize(load(os.path.join(work, 'tree'), w) or {})
+        if not A.get('fu6') and not B.get('fu6'):
+            continue                                    # a run without FU6 (the FU1-only phone sizes)
+        if not has_editor(B.get('fu6')) or has_editor(A.get('fu6')):
+            refused.append('%s: the price is measured from HEAD without #cv-editor against a tree with it' % w)
+            continue
+        run_size = '%sx%s' % (B.get('w'), B.get('h'))
+        fb = dict(((s, p), r) for s, p, r in fu6_parts(B.get('fu6')))
+        for size, part, ra in fu6_parts(A.get('fu6')):
+            other = []
+            lay, mot, other = part_deltas(ra, fb.get((size, part)), other)
+            refused += ['%s FU6 %s %s: %s — %s' % (w, size, part, k, what) for k, what in other]
+            if not (lay or mot):
+                continue
+            if not priced(size, part, run_size):
+                refused.append('%s FU6 %s %s: %d elements and %d flights moved, and COG-DESIGN §6.4 prices no change here'
+                               % (w, size, part, len(lay), len(mot)))
+                continue
+            p = out.setdefault(w, {}).setdefault(size, {}).setdefault(part, {})
+            if lay:
+                p['layout'] = lay
+            if mot:
+                p['motion'] = mot
+    if refused:
+        print('❌ NO PRICE WRITTEN — %d thing(s) are not a price:' % len(refused))
+        for r in refused[:40]:
+            print('   · ' + r)
+        return 2
+    doc = {'about': 'FU6 price (DESIGN §0.4.5 FU6, COG-DESIGN §6.4): with the cog’s third block against without it, each '
+                    'element’s rect delta [dx, dy, dw, dh] and each flight’s px deltas, per run, size and part; checked ±1 px; '
+                    'anything not named must not move. Measured on this machine by `tools/_fu_compare.py price`.',
+           'measured': os.path.basename(os.path.normpath(work)), 'price': out}
+    with open(dest, 'w', encoding='utf-8') as fh:
+        json.dump(doc, fh, ensure_ascii=False, indent=1, sort_keys=True)
+        fh.write('\n')
+    n = sum(len(x.get('layout') or {}) + len(x.get('motion') or {}) for s in out.values() for p in s.values() for x in p.values())
+    print('price written: %s (%d runs, %d entries)' % (dest, len(out), n))
+    return 0
+
+
+def price_selftest():
+    """The price check against made-up records: each way a move could slip through, and the exact price passing. Run with
+    the pictures' self-test before a Chrome starts."""
+    fails = []
+    fl = lambda top, opt='{}': json.dumps(['W', 'div#a', '[{"top":"10px"},{"top":"%spx"}]' % top, opt])
+    row = lambda p, y, s='x': [p, 0, y, 100, 20, s]
+    pa = {'layout': [row('div#a', 10), row('div#b', 40)], 'motion': [fl(50)]}
+    price = {'layout': {'div#a': [0, 77, 0, 0]}, 'motion': {'W div#a': [0, 77]}}
+
+    def caught(name, pb, want=True):
+        out = []
+        price_diff(pa, pb, price, 'self-test', out, 50)
+        if bool(out) != want:
+            fails.append('%s: %s' % (name, ('not caught' if want else 'refused: %s' % out[:2])))
+    caught('the exact price', {'layout': [row('div#a', 87), row('div#b', 40)], 'motion': [fl(127)]}, False)
+    caught('the price within 1 px', {'layout': [row('div#a', 87.5), row('div#b', 40)], 'motion': [fl(127.8)]}, False)
+    caught('a priced element moved 2 px past its price', {'layout': [row('div#a', 89), row('div#b', 40)], 'motion': [fl(127)]})
+    caught('an element with no price moved', {'layout': [row('div#a', 87), row('div#b', 43)], 'motion': [fl(127)]})
+    caught('a priced element restyled', {'layout': [row('div#a', 87, 'y'), row('div#b', 40)], 'motion': [fl(127)]})
+    caught('a priced element that did not move', {'layout': [row('div#a', 10), row('div#b', 40)], 'motion': [fl(50)]})
+    caught('a new element', {'layout': [row('div#a', 87), row('div#b', 40), row('div#c', 0)], 'motion': [fl(127)]})
+    caught('the flight past its price', {'layout': [row('div#a', 87), row('div#b', 40)], 'motion': [fl(130)]})
+    caught('the flight retimed', {'layout': [row('div#a', 87), row('div#b', 40)], 'motion': [fl(127, '{"duration":9}')]})
+    caught('a second flight', {'layout': [row('div#a', 87), row('div#b', 40)], 'motion': [fl(127), json.dumps(['W', 'div#b', '[]', '{}'])]})
+    n = simple_normalize({'cls': 'cv-pair cv-ed-on cv-fr-big', 'layout': [['div#canvas-dialog.cv-ed-on.cv-pair::before', 'auto'],
+                          ['div#canvas-dialog.cv-ed-short.cv-pair>div.x', 1]],
+                          'motion': [json.dumps(['W', 'div#cv-editor', '[]', '{}']), json.dumps(['W', 'div#cv-editorial', '[]', '{}'])]})
+    if n['cls'] != 'cv-pair cv-fr-big' or n['layout'] != [['div#canvas-dialog.cv-pair>div.x', 1]] or len(n['motion']) != 1:
+        fails.append('the block is not left out as it should be (or something else is): %s' % short(n, 200))
+    if priced('1280x800', 'friends', '380x800') or not priced('function', 'swapBack', '380x800') or priced('function', 'swapBack', '1280x800'):
+        fails.append('a size or part COG-DESIGN §6.4 does not price is priced (or the reverse)')
+    if fails:
+        print('❌ THE FU6 PRICE CHECK IS BROKEN:')
+        for f in fails:
+            print('   · ' + f)
+        return 3
+    return 0
+
+
 def wire_lists(v):
     """Every list named `wire` anywhere under v (FU4's steps, its friends, its leave)."""
     if isinstance(v, dict):
@@ -529,6 +804,7 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
         if A is None:
             continue
         A, B = apply_mask(A, keys), apply_mask(B, keys)
+        A, B = simple_normalize(A), simple_normalize(B)
         fields = A.get('fields') or FIELDS_V1
         out = []
         if A.get('fields') != B.get('fields'):
@@ -634,11 +910,17 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
             out += ['%s %s' % (w, x) for x in local]
         if 'FU6' in groups:
             f6a, f6b = A.get('fu6') or {}, B.get('fu6') or {}
-            if any(((v.get('canvas') or {}).get('hasEditor') or (v.get('friends') or {}).get('hasEditor')) for v in f6b.values() if isinstance(v, dict)):
-                # COG-DESIGN §6.4's measured price applies only once the Editor block exists. Until step 1.3 builds the check
-                # that holds the price to those numbers ±1 px, a tree WITH the block cannot PASS — it must not skip FU6.
-                out.append('%s FU6: the tree has #cv-editor, and the price check (COG-DESIGN §6.4 ±1 px at 380×800 Friends, '
-                           '380×667, 375×553, 320×568) is not built yet — step 1.3 must build it in tools/_fu_compare.py' % w)
+            # COG-DESIGN §6.4's price applies only where the TREE adds the Editor block and HEAD has none (the release that
+            # builds it); once it ships both sides have it and every size is exact again. The price is this machine's
+            # measured file — and a tree with the block and no price for this run cannot PASS (it must not skip FU6).
+            price = None
+            if has_editor(f6b) and not has_editor(f6a):
+                price = load_price().get(w)
+                if not price:
+                    out.append('%s FU6: the tree adds #cv-editor, and %s holds no measured price for this run — '
+                               '`_fu_compare.py price <kept run>` on this machine writes it' % (w, os.path.basename(PRICE_FILE)))
+                    price = {}
+            run_size = '%sx%s' % (B.get('w'), B.get('h'))
             for size, va in f6a.items():
                 vb = f6b.get(size) or {}
                 if va.get('noCog') != vb.get('noCog'):
@@ -646,23 +928,49 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                 for part in ('canvas', 'friends', 'reopened'):
                     if part in va or part in vb:
                         pa_, pb_ = va.get(part) or {}, vb.get(part) or {}
-                        layout_diff(pa_.get('layout') or [], pb_.get('layout') or [], '%s FU6 %s %s' % (w, size, part), out, limit, fields)
+                        where = '%s FU6 %s %s' % (w, size, part)
+                        if price is not None and priced(size, part, run_size):
+                            price_diff(pa_, pb_, (price.get(size) or {}).get(part), where, out, limit)
+                        else:
+                            layout_diff(pa_.get('layout') or [], pb_.get('layout') or [], where, out, limit, fields)
                         for k in ('cls', 'focus', 'exp'):
                             if pa_.get(k) != pb_.get(k):
                                 out.append('%s FU6 %s %s: %s %s → %s' % (w, size, part, k, short(pa_.get(k)), short(pb_.get(k))))
-                        if pa_.get('motion') != pb_.get('motion'):
+                        if pa_.get('motion') != pb_.get('motion') and not (price is not None and priced(size, part, run_size)):
                             local = []
                             json_diff(pa_.get('motion'), pb_.get('motion'), 'what it animated', local, max(4, per_step))
                             out += ['%s FU6 %s %s: %s' % (w, size, part, x) for x in local]
                 if size == 'function':
+                    va, vb = dict(va), dict(vb)
+                    if price is not None:
+                        # the swap's two cog records, taken at the run's own size: what the block moved there is priced,
+                        # and the rest of each (which way it is open, its focus) is compared exactly below
+                        for k in SWAP_PARTS:
+                            ra, rb = dict(va.get(k) or {}), dict(vb.get(k) or {})
+                            if priced(size, k, run_size):
+                                price_diff(ra, rb, (price.get(size) or {}).get(k), '%s FU6 function %s' % (w, k), out, limit)
+                                for x in ('layout', 'motion'):
+                                    ra.pop(x, None), rb.pop(x, None)
+                            ra.pop('hasEditor', None), rb.pop('hasEditor', None)
+                            va[k], vb[k] = ra, rb
                     local = []
                     json_diff(va, vb, 'FU6 function', local, limit)
                     out += ['%s %s' % (w, x) for x in local]
         if 'FU7' in groups:
             f7 = B.get('fu7') or {}
             if f7.get('hasSwitch') and not f7.get('wired'):
-                out.append('%s FU7: the tree has a switch (FM.editor or #cv-editor) and the round trip through the cog is not '
-                           'wired in tests/full-unchanged.html yet — step 1.3 must wire it; FU7 cannot be skipped' % w)
+                out.append('%s FU7: the tree has a switch (FM.editor or #cv-editor) and the round trip through the cog did not '
+                           'run — %s; FU7 cannot be skipped' % (w, f7.get('err') or 'not wired'))
+            elif f7.get('hasSwitch') and not f7.get('inSimple'):
+                out.append('%s FU7: the round trip never reached Simple (the cog’s switch did not switch)' % w)
+            elif f7.get('hasSwitch') and not f7.get('controlCaught'):
+                out.append('%s FU7: the round trip’s CONTROL (the zoom moved by a quarter) was not seen by its own '
+                           'comparison — a trip that compares nothing cannot pass' % w)
+            elif f7.get('hasSwitch') and not f7.get('same'):
+                # the trip's own before and after, on the TREE: Full must come back exactly as it was (DESIGN §0.4.5 FU7)
+                local = []
+                json_diff(f7.get('before'), f7.get('after'), 'FU7 before → after the round trip', local, max(6, per_step))
+                out += ['%s %s' % (w, x) for x in local] or ['%s FU7: the round trip changed Full' % w]
             elif json.dumps(A.get('fu7'), sort_keys=True) != json.dumps(B.get('fu7'), sort_keys=True) and not f7.get('hasSwitch'):
                 out.append('%s FU7: %s → %s' % (w, short(A.get('fu7')), short(B.get('fu7'))))
         # pictures: the screen (the preview's own box left out — see PNG_UNSTABLE) and the screen with the preview hidden
@@ -876,14 +1184,17 @@ def measure(head, head2, margin):
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] in ('plant', 'judge', 'measure', 'plants', 'linkcopy', 'selftest', 'plantcheck'):
+    if len(sys.argv) > 1 and sys.argv[1] in ('plant', 'judge', 'measure', 'plants', 'linkcopy', 'selftest', 'plantcheck', 'price'):
         cmd = sys.argv[1]
         if cmd == 'plantcheck':
             return plantcheck(sys.argv[2])
+        if cmd == 'price':
+            # `price <kept run dir> [dest]` — a run of HEAD without the block against a tree with it (FU_KEEP=1)
+            return write_price(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else PRICE_FILE)
         if cmd == 'selftest':
             # tools/full-unchanged.sh runs this BEFORE a Chrome starts (7 Oct, the laptop: no numpy, so a run measured
             # for 22 minutes, died on this file's import at the end and said NOT PASS — about the machine, not the app)
-            return png_gate(True)
+            return png_gate(True) or price_selftest()
         if cmd == 'plant':
             return plant(sys.argv[2], sys.argv[3])
         if cmd == 'linkcopy':
@@ -907,7 +1218,7 @@ def main():
     a = ap.parse_args()
     tol, chan = envint('FU_TOL_PX'), envint('FU_CHAN')
     ftol, fchan = envint('FU_FAINT_TOL_PX', 10 ** 9), envint('FU_FAINT_CHAN', 255)
-    if png_gate(a.png_selftest):
+    if png_gate(a.png_selftest) or price_selftest():
         return 3
     if a.runs:
         runs = [x.split('=', 1) for x in a.runs.split()]

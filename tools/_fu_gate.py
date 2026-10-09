@@ -48,7 +48,7 @@ js/ai-ops.js already has two). A bare SCHEMA_REV / SCHEMA_FP bump is deliberatel
 makes one (v17.19, v17.20, v17.21), and such a release changes Full on purpose, so it could never get a PASS — the bump in
 step 1.2 fires anyway, by its "Simple mode" comment and by the sanitiser lines it travels with.
 """
-import hashlib, io, os, re, subprocess, sys
+import hashlib, io, json, os, re, subprocess, sys
 
 SIMPLE_FILES = ['js/spine.js', 'js/spine-words.js', 'js/simple-timeline.js', 'js/editor-mode.js', 'js/simple-tools.js']
 # (what it is, the pattern, the files it applies to: None for every shared file, 'js' for the shared scripts only, or a list)
@@ -97,7 +97,8 @@ QUEUE = re.compile(r'queue (\d+)\b')
 PASS_FILE = os.path.join('tools', '.full-unchanged-pass')
 # THE INSTRUMENT: what measures, judges and runs the lock. A Simple release may not change any of it (see the docstring).
 INSTRUMENT_FILES = ['tools/full-unchanged.sh', 'tools/_fu_compare.py', 'tools/_fu_gate.py', 'tools/full-unchanged-plants.json',
-                    'tests/full-unchanged.html', 'tests/_cdp.py', 'tools/serve.sh', 'tools/ship.sh']
+                    'tools/full-unchanged-price.json', 'tests/full-unchanged.html', 'tests/_cdp.py', 'tools/serve.sh', 'tools/ship.sh']
+PRICE_FILE = 'tools/full-unchanged-price.json'      # FU6's measured price for the cog's third block (lock 5, 10 Oct)
 
 # What a PASS depends on. The app (every file it serves), plus the instrument itself: a changed probe, comparer or driver
 # is a different measurement, so it must not inherit the old verdict.
@@ -108,7 +109,7 @@ HASH_DIRS = ['js', 'vendor', 'fx-art', 'launch']          # every folder index.h
 # release may change it. The fixture builder lives in the probe now; nothing of the suite runs in the frame being measured.
 PROBE_FILES = ['tests/full-unchanged.html']
 HASH_FILES = PROBE_FILES + ['tests/_cdp.py', 'tools/full-unchanged.sh', 'tools/_fu_compare.py', 'tools/_fu_gate.py',
-                            'tools/full-unchanged-plants.json', 'tools/serve.sh']
+                            'tools/full-unchanged-plants.json', 'tools/full-unchanged-price.json', 'tools/serve.sh']
 
 
 def is_app_path(rel):
@@ -508,7 +509,7 @@ def instrument_changed(files):
 # reach is what the self-test is for: the next PASS runs every plant through the changed driver (`pixels` proves the
 # pictures, `touch` / `hold500` / `scrubrate` the fingers, `hover` / `ctxhover` the mouse).
 LOCK_FILES = ['tools/full-unchanged.sh', 'tools/_fu_compare.py', 'tools/_fu_gate.py', 'tools/full-unchanged-plants.json',
-              'tests/full-unchanged.html']
+              'tools/full-unchanged-price.json', 'tests/full-unchanged.html']
 LOCK_PART = {
     'tests/_cdp.py': re.compile(r'980|__fmWant(?:Setup|Shot)\b|__fm(?:Setup|Shot)(?:Done|Err)\b|\ba\.(?:dump|shots)\b|'
                                 r'--(?:dump|shots)\b|_dump_open|touch_base|prefers-reduced-motion|captureScreenshot'),
@@ -806,7 +807,28 @@ def loosenings(root):
         lost = sorted(a[3] - b[3])
         if lost:
             out.append('the run %s loses %s' % (lab, ', '.join(lost)))
+    try:
+        now_price = io.open(os.path.join(root, PRICE_FILE), encoding='utf-8').read()
+    except OSError:
+        now_price = ''
+    moved = price_moves(sh(['git', 'show', 'HEAD:' + PRICE_FILE], root), now_price)
+    if moved:
+        out.append('FU6’s price (%s) accepts a move it did not at %d place(s), e.g. %s' % (PRICE_FILE, len(moved), ' '.join(moved[0])))
     return out
+
+
+def price_moves(old, new):
+    """Every price entry the new file has that the old did not, or whose numbers changed by more than rounding — each one
+    lets a move through that the old price refused. An entry taken out refuses more, so it is not one."""
+    def flat(text):
+        try:
+            d = json.loads(text).get('price') or {}
+        except (ValueError, AttributeError):
+            return {}
+        return dict(((run, size, part, kind, k), v) for run, sizes in d.items() for size, parts in sizes.items()
+                    for part, x in parts.items() for kind in ('layout', 'motion') for k, v in ((x or {}).get(kind) or {}).items())
+    o, n = flat(old), flat(new)
+    return sorted(k for k, v in n.items() if k not in o or len(o[k]) != len(v) or any(abs(a - b) > 0.5 for a, b in zip(o[k], v)))
 
 
 def source_hash(root):
@@ -1073,14 +1095,26 @@ def selftest():
     # the instrument lock
     if instrument_changed(['js/app.js', 'tools/_fu_compare.py']) != ['tools/_fu_compare.py']:
         fails.append('a changed comparer is not seen as an instrument change')
-    for f in ['tools/full-unchanged.sh', 'tools/_fu_gate.py', 'tools/full-unchanged-plants.json', 'tests/full-unchanged.html', 'tests/_cdp.py', 'tools/ship.sh']:
+    for f in ['tools/full-unchanged.sh', 'tools/_fu_gate.py', 'tools/full-unchanged-plants.json', PRICE_FILE, 'tests/full-unchanged.html', 'tests/_cdp.py', 'tools/ship.sh']:
         if not instrument_changed([f]):
             fails.append('%s is not part of the instrument' % f)
     if instrument_changed(['js/app.js', 'tests/tests.js', 'POLISH-LOG.md']):
         fails.append('an app or log file is read as an instrument change')
-    for f in ['tools/full-unchanged-plants.json']:
+    for f in ['tools/full-unchanged-plants.json', PRICE_FILE]:
         if f not in HASH_FILES:
             fails.append('%s is not in the PASS hash' % f)
+        if f not in LOCK_FILES:
+            fails.append('%s is not one of the lock’s own files (any change must fire the gate)' % f)
+    # FU6's price: a grown or new entry lets a move through, so it is a loosening; one taken out, or the same, is not
+    P0 = '{"price": {"380": {"380x667": {"friends": {"layout": {"div#cv-friends": [0, 77, 0, -78]}}}}}}'
+    if not price_moves(P0, P0.replace('77, 0, -78', '80, 0, -78')):
+        fails.append('a price that grew is not seen as a loosening')
+    if not price_moves(P0, P0.replace('"div#cv-friends"', '"div#cv-friends": [0, 5, 0, 0], "div#cv-mini"')):
+        fails.append('a new price entry is not seen as a loosening')
+    if not price_moves('', P0):
+        fails.append('a price where there was none is not seen as a loosening')
+    if price_moves(P0, P0) or price_moves(P0, P0.replace('77, 0, -78', '77.4, 0, -78')) or price_moves(P0, '{"price": {}}'):
+        fails.append('the same price, a rounding, or a price taken out reads as a loosening')
     if 'tests/tests.js' in PROBE_FILES:
         fails.append('tests/tests.js is served to the probe again — the suite would run inside the frame being measured')
     # the other-queue rule

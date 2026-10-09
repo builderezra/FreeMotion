@@ -615,7 +615,13 @@
       DUMP.screens[name] = { layout: rec, focus: D.activeElement ? pathOf(D.activeElement) : '', canvasesQuiet: quiet,
         pv: pvs.pv || null, pvHash: pvs.pvHash || '', motion: motion };
       if (toastRec) DUMP.screens[name].toast = toastRec;
-      if (!opts.noShot) { await shot(name); if (!opts.noPreview) await shotNoPreview(name); }
+      if (!opts.noShot) {
+        // `hide`: what the record skips is also kept out of the picture (visibility only, so nothing else moves)
+        var hid = opts.hide ? [].slice.call(D.querySelectorAll(opts.hide)) : [];
+        hid.forEach(function (h) { h.__fuVis = h.style.visibility; h.style.visibility = 'hidden'; });
+        try { if (hid.length) await raf2(); await shot(name); if (!opts.noPreview) await shotNoPreview(name); }
+        finally { hid.forEach(function (h) { h.style.visibility = h.__fuVis || ''; }); }
+      }
     } finally { unfreeze(fr); await toastAway(); }
   }
 
@@ -780,6 +786,15 @@
     toastFirst = { rise: rise.sort(), box: layoutRecord(t) };
   }
   function takeToastFirst() { var f = toastFirst; toastFirst = null; return f; }
+  /* EVERY STEP STARTS WITH THE TOAST PUT AWAY, then its words and its rise are taken fresh. Lock 2 did this for FU2's
+     steps alone; 9 Oct, step 1.2's run at 1280: in FU3's sweep shift+M raised "Benchmark added" and alt+M raised it again,
+     and on one side the first was still up on the wall clock — the second only relabelled it, and no rise was recorded.
+     One helper, used by FU2's steps, FU3's keys and sweep, and FU4's friends and leave. */
+  async function freshToast() {
+    var t = D.getElementById('toast');
+    if (t && !t.classList.contains('hidden') && FM.hideToast) { FM.hideToast(); await raf2(); }
+    takeToasts(); takeToastFirst();
+  }
   function histInfo() {
     var s = FM.history && FM.history._steps ? FM.history._steps() : null;
     return { canUndo: !!(FM.history && FM.history.canUndo()), canRedo: !!(FM.history && FM.history.canRedo()), len: s ? s.len : null, index: s ? s.index : null };
@@ -1268,7 +1283,15 @@
        its way into the sheet is Home › Settings › Keyboard shortcuts, over Home, not the editor. So this editor screen exists
        where a ? does (the PC widths, which still capture it) and is skipped where none is — the same on both sides. */
     if (firstVisible(['btn-help', 'm-help'])) await screen('fu1-help-sheet', async function () { firstVisible(['btn-help', 'm-help']).click(); });
-    await screen('fu1-cog', async function () { FM.selectLayer(null); var b = firstVisible(['btn-settings', 'm-settings']); if (!b) throw new Error('no cog on screen'); b.click(); });
+    /* THE COG'S THIRD BLOCK, #cv-editor (step 1.3 — his one sanctioned change, DESIGN §0.4.5 FU6), is left out of the record
+       and out of the picture: COG-DESIGN §6.4 measures the rest of the cog as the same pixels at this run's size. At the sizes
+       §6.4 PRICES (320×568, 375×553, 380×667: the block pushes Canvas down) the cog is FU6's to judge against that price, on
+       both sides, whatever the build — FU6 compares it there exactly when there is no block. */
+    if ((W === 320 && H === 568) || (W === 375 && H === 553) || (W === 380 && H === 667)) {
+      DUMP.screens['fu1-cog'] = { deferred: 'the cog at a size COG-DESIGN §6.4 prices is judged by FU6' };
+    } else {
+      await screen('fu1-cog', async function () { FM.selectLayer(null); var b = firstVisible(['btn-settings', 'm-settings']); if (!b) throw new Error('no cog on screen'); b.click(); }, { skip: '#cv-editor', hide: '#cv-editor' });
+    }
     /* Overlays drawn over the preview, which v1's pictures could not see: onion skin and the guides, on a selected clip
        with keys (the selection box, its handles, the ghosts, the thirds). */
     var x0 = JSON.stringify(A.transform.x);
@@ -1341,7 +1364,7 @@
     ['add tab', ['.addmenu-tab:not(.active)'], 'nothing selected', '', null],
     ['clip grip', ['#tl-tracks .clip.selected .clip-grip.right', '#tl-tracks .clip .clip-grip.right'], 'Clip A selected', '', null],
     ['effect category', ['#fx-browser .fxb-banner'], 'the effects browser', '', -1],
-    ['cog bar', ['#cv-fr-bar', '#cv-fr-exp'], 'the cog', '', null]
+    ['cog bar', ['#cv-fr-bar', '#cv-fr-exp'], 'the cog', '#cv-editor', null]   // the cog's third block out of the picture, as in fu1-cog
   ];
   async function hoverWay(how, A) {
     if (how === 'the layer menu') { FM.selectLayer(A.id); await settle(250); press('btn-layermenu', 'the layer menu button'); await settle(200); }
@@ -2162,9 +2185,7 @@
       /* Every step starts with the toast put away (seen 8 Oct at 1280: Extract Audio's toast times out on the wall
          clock, so on one run it was still up when Reverse began, Reverse's "Preparing frames…" relabelled it and nothing
          rose — toastBox null — and on the next it had gone and the rise was recorded). */
-      var tst = D.getElementById('toast');
-      if (tst && !tst.classList.contains('hidden') && FM.hideToast) { FM.hideToast(); await raf2(); }
-      takeToasts(); takeToastFirst();
+      await freshToast();
       CUR_FELL = []; CUR_SURF = {};
       try { await steps[i][1](); } catch (e) { err = String(e && e.message || e); }
       var fell = CUR_FELL, surf = CUR_SURF; CUR_FELL = null; CUR_SURF = null;
@@ -2445,7 +2466,7 @@
           await restoreFrom(base);
           if (pass) { FM.selectLayer(byName('Clip B').id); }
           FM.setTime(2.5);
-          await settle(60); takeToasts(); takeToastFirst();
+          await settle(60); await freshToast();
           FM.clockNow = function () { return FM.time; };
           key(K[0], K[1], K[2]);
           await settle(160);
@@ -2465,7 +2486,7 @@
           await restoreFrom(base);
           if (pass) { FM.selectLayer(byName('Clip B').id); }
           FM.setTime(2.5);
-          await settle(60); takeToasts(); takeToastFirst();
+          await settle(60); await freshToast();
           FM.clockNow = function () { return FM.time; };
           key(K2[0], K2[1], K2[2]); await settle(160);
           key(K2[0], K2[1], K2[2]); await settle(160);
@@ -2516,7 +2537,7 @@
         var prep = async function () {
           await restoreFrom(base);
           if (pass) FM.selectLayer(byName('Clip B').id);
-          FM.setTime(2.5); await settle(60); takeToasts(); takeToastFirst();
+          FM.setTime(2.5); await settle(60); await freshToast();
           FM.clockNow = function () { return FM.time; };
           return await stateRecord({ noFrames: true });
         };
@@ -2623,7 +2644,7 @@
       for (var fi = 0; fi < FRIEND.length; fi++) {
         var fn0 = FRIEND[fi][0], fr0 = { name: fn0, err: '' };
         step('FU4 ' + fn0);
-        takeToasts(); takeToastFirst();
+        await freshToast();
         try {
           FRIEND[fi][1](s.gdoc);
           s.G.tick('full'); s.loop.settle(); pump();
@@ -2673,7 +2694,7 @@
          document, and the Friends block after. */
       step('FU4 Sam leaves');
       var lv = out.leave = { name: 'Sam leaves (his goodbye)', err: '' };
-      takeToasts(); takeToastFirst();
+      await freshToast();
       try { s.G.stop('left'); s.loop.settle(); pump(); await settle(250); } catch (e) { lv.err = String(e && e.message || e); }
       lv.wire = await wire();
       lv.doc = canonDoc(); lv.toasts = takeToasts(); lv.toastBox = takeToastFirst();
@@ -2921,7 +2942,8 @@
   function cogRecord() {
     var d = D.getElementById('canvas-dialog');
     return { layout: layoutRecord(d, '#cv-editor'), cls: String(d.className), focus: D.activeElement ? pathOf(D.activeElement) : '',
-      exp: [].slice.call(d.querySelectorAll('[aria-expanded]')).map(function (e) { return pathOf(e) + '=' + e.getAttribute('aria-expanded'); }),
+      exp: [].slice.call(d.querySelectorAll('[aria-expanded]')).filter(function (e) { return !e.closest('#cv-editor'); })   // the block is left out here too
+        .map(function (e) { return pathOf(e) + '=' + e.getAttribute('aria-expanded'); }),
       hasEditor: !!D.getElementById('cv-editor') };
   }
   async function openFriends() {
@@ -2982,6 +3004,68 @@
      REFUSES PASS until step 1.3 wires the trip through the cog (it cannot quietly skip the check it exists for). ═══ */
   async function FU7() {
     DUMP.fu7 = { hasSwitch: !!(FM.editor) || !!D.getElementById('cv-editor'), wired: false };
+    if (!DUMP.fu7.hasSwitch) return;
+    /* THE ROUND TRIP (DESIGN §0.4.5 FU7): in Full with one clip selected, ◐ mid-stack, a zoom and a scroll set, switch to
+       Simple and back THROUGH THE COG — its own ⇄ in #cv-editor, the control he taps — and Full's layout record (the body, the
+       Editor block left out) and FU2's state record must be what they were before the trip. Same side, before against after;
+       HEAD has no switch, so this is the tree's own proof, and tools/_fu_compare.py refuses a trip that changed anything. */
+    var f = DUMP.fu7;
+    step('FU7 the round trip through the cog');
+    try {
+      await freshCopy('FU7');
+      var A = byName('Clip A');
+      FM.selectLayer(A.id);
+      if (FM.clampAddAt) FM.addAt = FM.clampAddAt(2); else FM.addAt = 2;
+      FM.setTime(1.5);
+      if (FM.timeline && FM.timeline.setZoom) FM.timeline.setZoom(1.5);
+      FM.refreshAll(); await settle(250);
+      var tl = D.getElementById('timeline'); if (tl) { tl.scrollLeft = 40; tl.dispatchEvent(new w.Event('scroll')); }
+      await settle(250);
+      /* On the phone a selected clip takes the cog off the top bar (Full's own behaviour — measured 10 Oct at 380×800), so
+         to reach the switch he taps away first. The trip starts from where he would be: the clip let go, the rest kept. */
+      if (!cogButton()) { FM.selectLayer(null); FM.refreshAll(); await settle(250); f.deselected = true; }
+      /* "Before" is Full where the trip itself starts and what Full itself does on the way, so the trip is judged on what it
+         ADDS (measured 10 Oct, phase 1 at 1280): he opens and closes the cog to reach the switch; every switch runs Full's own
+         timeline rebuild, whose playhead-follow puts a hand-set scroll back by half a pixel (two clip labels' caps 635.5 →
+         635); and the switch hands the focus to the cog it came from — DESIGN §8.10 item 2, "focus never falls to <body>"
+         (a focus ring on the cog the trip read as new). "Before" goes through all three, the last with the cog's own
+         focus(), so a trip that leaves the focus anywhere else, or changes anything at all besides, still reads as different. */
+      await mustOpenCog(); FM.closeCanvasDialog(); await settle(300);
+      if (FM.timeline.rebuild) { FM.timeline.rebuild(); await settle(250); }
+      var cg = cogButton(); if (cg) { try { cg.focus({ preventScroll: true }); } catch (e) {} await settle(120); }
+      /* The switch's first-arrival hint is a toast raised in Simple that may still be up back in Full (DESIGN I20: the swap
+         itself), and its screen-reader announcer, #ed-live, is a visually hidden live region built on the first switch
+         (§21 F12): both are the switch's, so each take puts the toast away and leaves the announcer out. */
+      var take = async function () {
+        await freshToast();
+        var fr = freezeInfinite();
+        try { await raf2(); fr = fr.concat(freezeInfinite()); await raf2(); return { layout: layoutRecord(D.body, '#cv-editor, #ed-live'), addAt: FM.addAt, zoom: FM.timeline.getZoom(), scroll: tl ? Math.round(tl.scrollLeft) : null, state: await stateRecord({ noFrames: true }) }; }
+        finally { unfreeze(fr); }
+      };
+      var before = await take();
+      var flip = async function (to) {
+        await mustOpenCog();
+        var sw = await until('the cog’s ⇄ Simple / Full switch', function () { var b = D.querySelector('#cv-editor .ed-sw'); return b && vis(b) ? b : null; }, 5000);
+        sw.click();
+        await until('the switch to ' + to, function () { return D.body.classList.contains('ed-simple') === (to === 'simple'); }, 8000);
+        await settle(600);
+        if (dlgUp()) { FM.closeCanvasDialog(); await settle(300); }
+      };
+      await flip('simple');
+      f.inSimple = D.body.classList.contains('ed-simple');
+      await flip('full');
+      var after = await take();
+      f.wired = true;
+      f.same = JSON.stringify(before) === JSON.stringify(after);
+      if (!f.same) { f.before = before; f.after = after; }
+      /* …AND A CONTROL: FU7 has no plant (NO_PLANT_GROUPS — nothing to plant on a build without a switch), so the trip
+         proves its own comparison is alive: the zoom moved by a quarter must make the same two records differ. */
+      var z = FM.timeline.getZoom();
+      FM.timeline.setZoom(z * 1.25); await settle(200);
+      var moved = await take();
+      f.controlCaught = JSON.stringify(moved) !== JSON.stringify(after);
+      FM.timeline.setZoom(z); await settle(200);
+    } catch (e) { f.err = String(e && e.message || e); }
   }
 
   /* ═══ BOOT ═══════════════════════════════════════════════════════════════════════════════════════════════════════ */
