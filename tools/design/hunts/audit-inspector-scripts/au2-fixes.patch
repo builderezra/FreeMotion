@@ -1,0 +1,115 @@
+diff --git a/index.html b/index.html
+index c39a9ed3..64b8312b 100644
+--- a/index.html
++++ b/index.html
+@@ -1067,7 +1067,7 @@
+   <script src="js/tilefit.js?v=1"></script>
+   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
+   <script src="js/addmenu.js?v=83"></script>
+-  <script src="js/inspector.js?v=410"></script>
++  <script src="js/inspector.js?v=411"></script>
+   <script src="js/fx-browser.js?v=98"></script>
+   <script src="js/elements-browser.js?v=4"></script>
+   <script src="js/color-wheel.js?v=53"></script>
+diff --git a/js/inspector.js b/js/inspector.js
+index 263becd6..8d734e4f 100644
+--- a/js/inspector.js
++++ b/js/inspector.js
+@@ -1162,8 +1162,10 @@ window.FM = window.FM || {};
+     if (!nameEl.classList.contains('kf-selectable') && fx.params && fx.params[p.key] == null && layer && Object.keys(fx.params).some(k => kfInScope(layer, 'fx:' + k))) nameEl.classList.add('kf-inset');
+     row.appendChild(nameEl);
+     const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + (p.unit || ''); typeInBox(valBox, p.min);
+-    function apply(v, commit) {
+-      v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
++    function apply(v, commit, typed) {
++      /* AU2-1: a TYPED value is exact to the digits the box shows, not moved to the nearest step notch (26 shipped defaults, e.g. CRT Scanline 0.45 on a 0.02
++         step, sit between notches, so typing the number you were looking at changed it to 0.46 — the X/Y boxes learned this as "545 became 540", mtSetXY). */
++      v = typed ? Math.max(p.min, Math.min(p.max, round(v, prec))) : Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
+       FM.setProp(fx.params, p.key, v, FM.time);
+       valBox.value = v.toFixed(prec) + (p.unit || '');
+       FM.requestRender();
+@@ -1176,7 +1178,7 @@ window.FM = window.FM || {};
+       // animated param: rebuild timeline + inspector so the just-made keyframe is visible/selectable (afterFx includes commit)
+       release: () => { if (FM.isAnimated(fx.params[p.key])) afterFx(); else if (FM.history) FM.history.commit(); },
+     });
+-    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + (p.unit || ''); });
++    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + (p.unit || ''); });
+     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
+     row.appendChild(strip); row.appendChild(valBox);
+     // A following slider with no value of its own shows its leader's new value the moment the leader moves.
+@@ -1349,8 +1351,8 @@ window.FM = window.FM || {};
+     row.appendChild(kfb);
+     row.appendChild(el('span', 'fx-scrub-label', label));
+     const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit; typeInBox(valBox, min);
+-    function apply(v, commit) {
+-      v = Math.max(min, Math.min(max, Math.round(v / step) * step));
++    function apply(v, commit, typed) {
++      v = typed ? Math.max(min, Math.min(max, round(v, prec))) : Math.max(min, Math.min(max, Math.round(v / step) * step));   // AU2-1: typed is exact to the box's digits
+       FM.setProp(container, key, v, FM.time);
+       valBox.value = v.toFixed(prec) + unit;
+       FM.requestRender();
+@@ -1361,7 +1363,7 @@ window.FM = window.FM || {};
+       apply: v => apply(v, false),
+       release: () => { if (FM.isAnimated(container[key])) afterKf(); else if (FM.history) FM.history.commit(); },
+     });
+-    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + unit; });
++    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + unit; });
+     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
+     row.appendChild(strip); row.appendChild(valBox);
+     return row;
+@@ -1381,8 +1383,8 @@ window.FM = window.FM || {};
+     row.appendChild(kfb);
+     row.appendChild(el('span', 'fx-scrub-label', label));
+     const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.value = read().toFixed(prec) + unit; typeInBox(valBox, min);
+-    function apply(v, commit) {
+-      v = Math.max(min, Math.min(max, Math.round(v / step) * step));
++    function apply(v, commit, typed) {
++      v = typed ? Math.max(min, Math.min(max, round(v, prec))) : Math.max(min, Math.min(max, Math.round(v / step) * step));   // AU2-1
+       FM.setProp(container, key, v / disp, FM.time);
+       valBox.value = v.toFixed(prec) + unit;
+       FM.requestRender();
+@@ -1393,7 +1395,7 @@ window.FM = window.FM || {};
+       apply: v => apply(v, false),
+       release: () => { if (FM.isAnimated(container[key])) afterKf(); else if (FM.history) FM.history.commit(); },
+     });
+-    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + unit; });
++    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + unit; });
+     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
+     row.appendChild(strip); row.appendChild(valBox);
+     return row;
+@@ -3345,7 +3347,8 @@ window.FM = window.FM || {};
+     }
+     if (cats.effects) {
+       const fx = clone(src.effects) || [];
+-      target.effects = (FM.fxRegistry && FM.fxRegistry.supportsLayer) ? fx.filter(f => FM.fxRegistry.supportsLayer(f.type, target)) : fx;
++      // AU2-2: fitted, not just type-checked — a filter is kept with only the children that suit THIS layer, exactly as the effect Paste button does (a text-only child inside a filter landed on a shape).
++      target.effects = (FM.fxRegistry && FM.fxRegistry.fitToLayer) ? fx.map(f => FM.fxRegistry.fitToLayer(f, target)).filter(Boolean) : fx;
+     }
+   }
+ 
+@@ -3400,7 +3403,7 @@ window.FM = window.FM || {};
+       case 'effects': {
+         const fx = (src.effects || []);
+         if (!fx.length) return 'The copied layer has no effects — pasting this would only delete the ones here';
+-        if (FM.fxRegistry && FM.fxRegistry.supportsLayer && !fx.some(f => FM.fxRegistry.supportsLayer(f.type, target))) {
++        if (FM.fxRegistry && FM.fxRegistry.fitToLayer && !fx.some(f => FM.fxRegistry.fitToLayer(f, target))) {   // AU2-2: a filter whose children all fail to suit this layer is 'none work' too, not a silent wipe
+           return 'None of the copied effects work on this kind of layer';
+         }
+         return null;
+@@ -3630,7 +3633,15 @@ window.FM = window.FM || {};
+     // things that have nowhere else to live: the clip actions and the timeline alignment.
+     const done = () => { FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); if (FM.history) FM.history.commit(); };
+     // move a clip in time: keyframes are absolute, so they must ride along (same rule as clip-drag v3.01)
+-    const setStart = (l, ns) => { const d = ns - l.start; if (!d) return; l.start = ns; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); };
++    /* AU2-3 / AU2-4: the same two rules every other mover keeps. A LOCKED clip is never moved (the A / S / D keys, the drag and the reorder all refuse it; it still
++       counts as an anchor for the others), and a GROUP bar carries what is inside it (FM.moveClipTo). A member that is selected too is then moved to its own target, which is absolute, so nothing moves twice. */
++    const setStart = (l, ns) => {
++      if (l.locked) return;
++      const d = ns - l.start; if (!d) return;
++      const movers = [l];
++      if (l.type === 'group' && FM.groupDescendants) FM.groupDescendants(l.id).forEach(m => { if (m && !m.locked) movers.push(m); });
++      movers.forEach(m => { m.start += d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(m, d); });
++    };
+ 
+     /* ---- clip actions on the whole selection (AM bottom-left) ----
+      * PHONE ONLY from v7.74 (queue 169). Ezra: "in the left massive area where its currently got the

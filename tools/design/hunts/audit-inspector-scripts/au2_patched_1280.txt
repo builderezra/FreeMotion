@@ -1,0 +1,5 @@
+1280 Regression 4/4 ✓Pending 0/0 built
+   ok  AU2-1 typing the number an effect slider is already showing leaves it alone (26 shipped defaults sit
+   ok  AU2-2 Paste look → Effects fits a copied filter to the layer it lands on (a text-only child is dropp
+   ok  AU2-3 the multi-select Align buttons (Start together, Chain, End together) leave a LOCKED clip where
+   ok  AU2-4 the multi-select Align buttons move a selected GROUP together with what is inside it

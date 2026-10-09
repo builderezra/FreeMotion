@@ -1,0 +1,17 @@
+=== A1_fxScrubber_typed_snaps
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU2-1 — typing the value Scanline already shows (0.45) changed it from 0.45 to 0.46
+=== B1_paste_look_supports_only
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU2-2 — Paste look landed a text-only effect (counter) inside a filter on a SHAPE, where it can never run: counter,blur
+=== C1_align_moves_locked
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU2-3 — Start together moved the LOCKED clip from 3 s to 0 s; One after another, down moved the LOCKED clip from 3 s to 2 s; End together moved the LOCKED clip from 3 s to 6 s
+=== C2_align_group_alone
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU2-4 — the group bar moved to 0 s but the layer inside it stayed at 5 s, so the group no longer contains its own contents
+ALLDONE
