@@ -8985,6 +8985,19 @@ window.FM = window.FM || {};
              the axis he did not press. A canvas drag already follows this rule (FM.shiftTransform, "never to add"). */
           nudgeable.forEach(layer => {
             const tr = layer.transform;
+            /* AU11-1: AN ARROW MOVES THE LAYER ON THE SCREEN. A member of a group that is turned or scaled was nudged in the
+               group's own axes (Right on a member of a group turned 90 degrees moved it DOWN; in a group scaled 2x it moved 2 px),
+               while a canvas drag already carries its world delta into the parent's frame (canvas-edit.js, `drag.pxf`). Same
+               mapping here, for a layer whose parent turns or scales; everything else keeps the exact old whole-pixel numbers. */
+            if (layer.parent && FM.settleGroupPivotsAbove) FM.settleGroupPivotsAbove(layer.id);   // a floating group pivot would move with the member (see alignByDrawnBox)
+            const pxf = layer.parent && FM.canvasEdit && FM.canvasEdit._parentXform ? FM.canvasEdit._parentXform(layer, FM.time) : null;
+            if (pxf && (pxf.rot !== 0 || pxf.s !== 1) && isFinite(pxf.rot) && pxf.s > 0 && isFinite(pxf.s)) {
+              const c = Math.cos(-pxf.rot), si = Math.sin(-pxf.rot);
+              const lx = (dx * c - dy * si) / pxf.s, ly = (dx * si + dy * c) / pxf.s, r2 = v => Math.round(v * 100) / 100;
+              if (Math.abs(lx) > 1e-9) FM.setTransform(layer, 'x', r2(FM.evalProp(tr.x, FM.time) + lx), FM.time);
+              if (Math.abs(ly) > 1e-9) FM.setTransform(layer, 'y', r2(FM.evalProp(tr.y, FM.time) + ly), FM.time);
+              return;
+            }
             if (dx) FM.setTransform(layer, 'x', Math.round(FM.evalProp(tr.x, FM.time) + dx), FM.time);
             if (dy) FM.setTransform(layer, 'y', Math.round(FM.evalProp(tr.y, FM.time) + dy), FM.time);
           });
