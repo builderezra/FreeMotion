@@ -59811,6 +59811,69 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* ═══ AU23: js/collab-ui.js (5,446 lines; no earlier audit read it), the largest file no AU had read ═══════════════════ */
+  test('AU23-1 a member admitted after the owner has opened another project is filed under the room\u2019s own project, not the one on screen', { item: 'AU23', budgetMs: 240000 }, async function () {
+    const C = need921S6('the room record of an admission');
+    const realId = FM.projects.currentId;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          const room = H.room, other = 'au23_other_project';
+          const g = await relayGuest921(C, room, { key: room.keys.auth, mode: 'link', name: 'Allie', mk: 'mk-allie-au23-0000000' });
+          const card = await until921S6('the knock card', function () { return document.getElementById('collab-knock'); });
+          try {
+            FM.projects.currentId = function () { return other; };   // the owner switched projects while the knock was up
+            card.querySelector('.ck-yes').click();
+            await g.wait('welcome');
+          } finally { FM.projects.currentId = realId; }
+          const strayed = localStorage.getItem('fm.collab.host.' + other);
+          try { localStorage.removeItem('fm.collab.host.' + other); } catch (e) {}
+          if (strayed) throw new Error('the admission wrote this room\u2019s record (link, key, members) under the OTHER project\u2019s key: that project now looks shared');
+          const mine = JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid) || 'null');
+          if (!mine || !Object.keys(mine.members || {}).length) throw new Error('CONTROL: the room\u2019s own record has no member after the admission');
+          g.close();
+        });
+      });
+    });
+  });
+
+  test('AU23-2 the Share panel\u2019s \u201cWhen someone uses the link\u201d switch saves the room under its own project even if another project is the one on screen', { item: 'AU23', budgetMs: 120000 }, async function () {
+    const C = need921S6('the room record of a switch');
+    const realId = FM.projects.currentId;
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const H = await relayHost921(ui, ctx);
+          await ui.share();
+          const other = 'au23_other_switch';
+          const btns = Array.prototype.slice.call(document.querySelectorAll('#collab-share .cs-seg .cs-segbtn'));
+          const letIn = btns.filter(function (b) { return /Let them in/.test(b.textContent); })[0];
+          if (!letIn) throw new Error('CONTROL: the Share panel has no \u201cLet them in\u201d switch');
+          try { FM.projects.currentId = function () { return other; }; letIn.click(); } finally { FM.projects.currentId = realId; }
+          const strayed = localStorage.getItem('fm.collab.host.' + other);
+          try { localStorage.removeItem('fm.collab.host.' + other); } catch (e) {}
+          if (strayed) throw new Error('the switch filed the room under the other project\u2019s key');
+          const mine = JSON.parse(localStorage.getItem('fm.collab.host.' + ctx.pid) || 'null');
+          if (!mine || mine.settings.ask !== false) throw new Error('CONTROL: the room\u2019s own record did not take the switch (ask = ' + (mine && mine.settings.ask) + ')');
+          ui.close();
+        });
+      });
+    });
+  });
+
+  test('AU23-3 a collaboration name is cut on a whole character and carries no direction overrides', { item: 'AU23' }, function () {
+    const U = FM.collab && FM.collab.ui; if (!U || !U.cleanName) throw new Error('FM.collab.ui.cleanName is not reachable');
+    const lone = function (str) { return /[\ud800-\udbff](?![\udc00-\udfff])|(?:^|[^\ud800-\udbff])[\udc00-\udfff]/.test(str); };
+    const cut = U.cleanName('a' + new Array(40).join('\ud83d\ude00'));
+    if (lone(cut)) throw new Error('a name cut at the limit ends in half an emoji (' + cut.length + ' units, last unit U+' + cut.charCodeAt(cut.length - 1).toString(16) + '): it crosses the wire as a replacement character');
+    if (U.cleanName('a' + new Array(40).join('\ud83d\ude00')).length > 32) throw new Error('the name is longer than 32 units');
+    ['\u202e', '\u202d', '\u202a', '\u2066', '\u2067', '\u2069'].forEach(function (c) { if (U.cleanName('Ez' + c + 'ra').indexOf(c) >= 0) throw new Error('U+' + c.charCodeAt(0).toString(16) + ' (a direction override or isolate) survived in a name, so it can be made to read backwards in the people list'); });
+    // controls: what must stay
+    if (U.cleanName('Zo\u00eb \ud83d\udc69\u200d\ud83d\udcbb') !== 'Zo\u00eb \ud83d\udc69\u200d\ud83d\udcbb') throw new Error('CONTROL: an accent and a joined emoji were damaged');
+    if (U.cleanName('  Sam\u0007  ') !== 'Sam') throw new Error('CONTROL: a control character and the padding are no longer removed');
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

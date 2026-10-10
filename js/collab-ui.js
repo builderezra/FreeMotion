@@ -98,7 +98,13 @@ window.FM = window.FM || {};
   function cleanName(s) {
     /* §14.9: at most 32 characters, control characters stripped. Applied on the way IN as well as on
        the way out, so the stored profile is already safe and nothing downstream has to remember. */
-    return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, (C.LIMITS && C.LIMITS.NAME) || 32);
+    /* AU23-3: and never half a character (a cut inside an emoji's surrogate pair leaves a lone high surrogate, which the wire turns into
+       U+FFFD), and never a direction override or isolate (U+202A–202E, U+2066–2069: a name that reads backwards in the people list).
+       The joiner U+200D and the marks U+200E/F stay: emoji sequences and right-to-left names need them. */
+    const max = (C.LIMITS && C.LIMITS.NAME) || 32;
+    let t = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, max);
+    if (/[\ud800-\udbff]$/.test(t)) t = t.slice(0, -1).trim();
+    return t;
   }
   function cleanColor(c) {
     const s = String(c == null ? '' : c).toLowerCase();
@@ -642,7 +648,7 @@ window.FM = window.FM || {};
     if (!hostRoom) return;
     Object.keys(ridMid).forEach(function (rid) {
       const m = ridMid[rid] === mid ? memberByRid(rid) : null;
-      if (m) { m.role = role; saveRoom(currentPid(), hostRoom); }
+      if (m) { m.role = role; saveRoom(hostRoomPid || currentPid(), hostRoom); }
     });
   }
   function ridOfMid(mid) {
@@ -1956,7 +1962,7 @@ window.FM = window.FM || {};
       const b = btn('cs-segbtn' + (on ? ' on' : ''), p[1], function () {
         if (!hostRoom) return;
         hostRoom.settings.ask = p[0] === 'ask';
-        saveRoom(currentPid(), hostRoom);
+        saveRoom(hostRoomPid || currentPid(), hostRoom);
         pushSettings();                      // an Editor who may invite is told what the link now does (S7 review)
         redrawShare();
       });
@@ -2248,7 +2254,7 @@ window.FM = window.FM || {};
       if (!yes || !hostRoom) return;
       const r = C.signal.newRoom();
       hostRoom.sid = r.sid; hostRoom.sk = r.sk; hostRoom.code = C.signal.newRoomCode();
-      saveRoom(currentPid(), hostRoom);
+      saveRoom(hostRoomPid || currentPid(), hostRoom);
       stopHostRelay();
       startHostRelay();
       pushSettings();                          // S7: the editors who may invite get the new link
@@ -2507,7 +2513,7 @@ window.FM = window.FM || {};
         if (pmk) rec.pmk = pmk;
         rec.last = Date.now();
         hostRoom.members[rid] = rec;
-        saveRoom(currentPid(), hostRoom);
+        saveRoom(hostRoomPid || currentPid(), hostRoom);
         /* A member coming back REPLACES its own old link: the phone that locked left a data channel the
            owner still thinks is open, and two endpoints for one person would double every broadcast. */
         const old = ridMid[rid];
