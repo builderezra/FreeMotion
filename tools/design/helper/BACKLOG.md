@@ -452,3 +452,18 @@ ADDED 11 Oct 03:00 by the PM. v17.37 is LIVE (d55cabc8). 2.1 was rebuilt on v17.
 - PRE3a now means: the plain suite on 76f4a1b9 at 1280 AND 380, with reds alone, paired and on main. Then LR1 on it, with HEAD = d55cabc8 (main, v17.37), the diff to 76f4a1b9 applied uncommitted, and the label v17.38.
 - The builder's own laptop lock run on 2.1 started at 02:56 (~2 h), then its ship (≈ 7am). A red you find before ~05:00 saves that ship, so push the report the moment the suite is done; LR1 can follow.
 - Then PRE3b (v17.39 44ba5f10) and PRE3c (v17.40 09358fd9) as queued. They will be rebuilt on 2.1 after it lands, so a quick plain suite is enough.
+
+ADDED 11 Oct 03:20 by the PM. The builder has RENUMBERED the release order (the wip trees match):
+- v17.38 = 2.1, wip/v17.38-tree 76f4a1b9. Its laptop lock runs until ~05:00, then it ships.
+- v17.39 = 2.2, wip/v17.39-tree 44ba5f10 (unchanged).
+- **v17.40 = a NEW Full batch, wip/v17.40-tree f74966dd, built on the 2.1 tree** (2384 tests). It holds:
+  - B1, ChatGPT's 14 commits (#1068/#1069; tests retagged 1069). **B1's e808c3c2 has NEVER run in a browser.**
+  - The land list's 4 required fixes + 6 new tests: exportFile reads IndexedDB first; the backup font cap is _backupEmbedLimit; the template-file font label; a rejecting-fetch test; karaoke no longer resyncs across a split, and moves keyframes only on a move or a speed change.
+  - AU25 (#1119).
+  - The pre-flight warning (#1124).
+- v17.41 = 2.3 + E, wip/v17.41-tree 09358fd9 (moved from v17.40; the old "v17.40 = 2.3" tip is now v17.41).
+NEW ORDER for you:
+1. FINISH the plain suite on v17.38 76f4a1b9 that you are in, and push that report right away (the laptop ships it at ~05:00).
+2. SKIP LR1 on v17.38. The laptop's own lock is judging it right now, and your container cannot measure FU2/FU4 anyway.
+3. **Next: the plain suite on wip/v17.40-tree f74966dd at 1280 AND 380**, with reds alone, paired and on main. The builder calls it "the most useful run". Look hardest at B1's e808c3c2, which has never run in a browser, and at the karaoke split/keyframe tests. → hunt/preflight-v17.40 (overwrite the old v17.40 = 2.3 report; say so at the top).
+4. Then v17.39 44ba5f10, then v17.41 09358fd9 (plain suites; → hunt/preflight-v17.39 and -v17.41).
