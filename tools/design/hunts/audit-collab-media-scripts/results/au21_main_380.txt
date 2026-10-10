@@ -1,0 +1,5 @@
+380 Regression 0/2 ✗Pending 0/0 built
+   RED AU21 a guest that drops mid-upload and comes back finishes its clip on the host, from the bytes alre
+   RED AU21 a member who leaves does not leave send loops running behind it
+FAILAU21 a guest that drops mid-upload and comes back finishes its clip on the host, from the bytes already kept — the host still counts the clip as arriving (1 pending, 1 in flight) from a member that has left: the export question would say "still arriving" for the rest of the session
+FAILAU21 a member who leaves does not leave send loops running behind it — 2 send job(s) still running for a member who left, each polling every 25 ms until the room ends

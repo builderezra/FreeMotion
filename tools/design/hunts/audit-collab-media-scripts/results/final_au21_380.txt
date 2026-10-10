@@ -1,0 +1,4 @@
+380 Regression 3/3 ✓Pending 0/0 built
+   ok  AU21 a guest that drops mid-upload and comes back finishes its clip on the host, from the bytes alre
+   ok  AU21 a member who leaves does not leave send loops running behind it
+   ok  AU21 files that end exactly on a chunk, a part and the send window arrive byte-identical, with no pa

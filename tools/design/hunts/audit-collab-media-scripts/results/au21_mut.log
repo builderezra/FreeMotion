@@ -1,0 +1,17 @@
+=== M1_send_jobs_not_stopped
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU21 a member who leaves — 2 send job(s) still running for a member who left, each polling every 25 ms until the room ends
+=== M2_inbound_not_aborted
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU21 a guest that drops mid-upload — the host still counts the clip as arriving (1 pending, 1 in flight) from a member that has left: the export question would say "still arriving" for the rest of the session
+=== M3_entry_not_marked_gone
+→ baseline: these titles were proven green on this exact tree already (cached)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+=== M4_returning_guest_stays_miss
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU21 a guest that drops mid-upload — timed out waiting for the clip to arrive after the guest came back (last answer: null)
+ALLDONE

@@ -1,0 +1,28 @@
+1280 Regression 25/26 ✗Pending 0/0 built
+   ok  921 S4 the manifest groups one file for every layer that uses it, so a split and a duplicate transfe
+   RED 921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture re
+   ok  921 S4 a link that dies mid-file resumes from the bytes already kept, and what lands is byte-identic
+   ok  921 S4 the boot sweep never collects a half-arrived file, and neither does the media collector
+   ok  921 S4 a device with no room says so and writes nothing beyond what fits
+   ok  921 S4 a guest export waits for the media it still needs, and “Export anyway” goes ahead
+   ok  921 S4 replacing a clip keeps the one it replaced, and undoing the replace puts it back
+   ok  921 S4 a font crosses with the document and is applied on the far side, byte for byte
+   ok  921 S4 a manifest naming a layer id this device holds in ANOTHER project writes nothing
+   ok  921 S4 tier 3: a clip a guest adds reaches the host and every other peer, and draws there
+   ok  921 S4 tier 3: the clips arrive into the guest’s own copy and not one byte of its own projects moves
+   ok  921 S4 review: a replace HE makes during a session keeps HIS footage in the stash, not the file that
+   ok  921 S4 review: a clip that arrives late never overwrites the one he imported while it was downloadin
+   ok  921 S4 review: two peers uploading at once do not cross their files — a transfer is named by its pee
+   ok  921 S4 review: a file that fails at the last step is asked for again, instead of being dropped for t
+   ok  921 S4 review: ending a session collects the abandoned parts the rooms before it left behind
+   ok  921 S4 review: a sender that restarts from zero cannot have its new part 0 deleted by the drop of th
+   ok  921 S4 review: the progress card’s × dismisses it, and a failure he has not seen still gets through
+   ok  921 S4 review: a device that runs out mid-transfer says “This device is full” instead of a bar froze
+   ok  921 S4 review: a timeline rebuild does not lose the missing-clip markers
+   ok  921 S4 review: a file whose bytes never match its declared size is asked for twice and then left alo
+   ok  921 S4 review: a 90 MB “font” is refused before a byte of it moves
+   ok  921 S4 review: a peer cannot register a face under a built-in family name
+   ok  921 S4 review: one file, one job per peer — a flood of wants does not open a transfer each
+   ok  921 S4 review: only the peer a file is sourced from can say it no longer has it
+   ok  921 S4 review: a “miss” answer frees the in-flight slot it was holding
+FAIL921 S4 splash.mp4, a PNG and a WAV all arrive, land in this device’s own records, and the picture renders — the video has no decoded element in the registry after arriving, so nothing could ever draw it
