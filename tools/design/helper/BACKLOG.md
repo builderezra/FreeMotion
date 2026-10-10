@@ -390,3 +390,18 @@ ADDED 10 Oct 16:15 by the PM: a NEW TOP PRIORITY, at Ezra's ask. He does not wan
       → hunt/preflight-<branch>, report at tools/design/hunts/preflight-<branch>.md, with a one-line DONE.
       Speed matters more than polish here, because the laptop's lock run takes ~2 h on that same tree. A red found in the first hour saves a refused 2-hour ship.
 - Then continue AU27, AU28, P35, P36 and INT3 as queued.
+
+ADDED 10 Oct 21:05 by the PM. TOP PRIORITY, at Ezra's ask (he told the builder himself at ~21:00): every release's tree is tested in the cloud FIRST. The builder has pushed three candidate trees. All are built on the phase-1 tree and NOT yet rebased on v17.36, which is shipping now (ETA ~22:05–22:45). Drop whatever you are on and do these, in order:
+- PRE2a wip/v17.37-tree (7d4152c0): the Full batch, i.e. ChatGPT's six fixes #1014 #1015 #1016 #1040 #1041 #1059, plus AU24, AU25, and a runner guard that puts back window stubs after every test.
+- PRE2b wip/v17.38-tree (6a9e5efe): Simple 2.1, with S4a/b/d and AU22 (spine.js was merged by hand: both helpers kept; the ✦ line = animProps + smFxProps filter).
+- PRE2c wip/v17.39-tree (e5c13554): Simple 2.2.
+  For EACH, run the FULL suite at 1280 AND 380 in your container (NOT RUN HERE is fine for real-finger and AAC tests), then:
+  - run every red ALONE;
+  - run every red PAIRED with the test before it in suite order (`?after=<predecessor>&upto=<red>`);
+  - run the same red on main, and say whether it is new on this tree.
+  On PRE2a only, also run #1015 and #1016 each WITH and WITHOUT its fix (revert just that hunk on a copy), and say whether each test fails without its fix (the check #1068 owed).
+  Report per tree: green/red counts at both widths, each red's title, alone/paired/main results, and the first assertion message.
+  → hunt/preflight-v17.37, -v17.38, -v17.39, reports at tools/design/hunts/preflight-<tree>.md, with one DONE line each. Push each report the moment that tree is done; do not wait for all three.
+  Never push to, or run anything that writes to, the builder's wip/* branches. Work on copies.
+- When the builder re-pushes these trees rebased on v17.36 (same names, or new ones; check ls-remote wip/* every ~15 minutes), run PRE2 again on the new tips.
+- Then continue AU27, AU28, P35, P36 and INT3.
