@@ -446,3 +446,9 @@ In order:
 - PRE3b The same plain suite on wip/v17.39-tree 44ba5f10. → hunt/preflight-v17.39.
 - PRE3c The same plain suite on wip/v17.40-tree 09358fd9. → hunt/preflight-v17.40.
 - The 5 order-dependent reds (home push x=40; playhead pop drift; 921 S3 Stop sharing; 981's 220 ms slide; #1016, which is FM._mtMode, fixed in v17.37): bisect them ONLY if they also show on main in your container. The builder says they pass in the laptop's full passes, and H56 tied at least two of them to your container's Chromium keeping paused animations.
+
+ADDED 11 Oct 03:00 by the PM. v17.37 is LIVE (d55cabc8). 2.1 was rebuilt on v17.37 as 980-p21-r12 and re-pushed:
+- **wip/v17.38-tree = 76f4a1b9.** It REPLACES 32422c8f. Treecheck is OK, and fixbust found nothing. If you are mid-run on 32422c8f, stop and switch.
+- PRE3a now means: the plain suite on 76f4a1b9 at 1280 AND 380, with reds alone, paired and on main. Then LR1 on it, with HEAD = d55cabc8 (main, v17.37), the diff to 76f4a1b9 applied uncommitted, and the label v17.38.
+- The builder's own laptop lock run on 2.1 started at 02:56 (~2 h), then its ship (≈ 7am). A red you find before ~05:00 saves that ship, so push the report the moment the suite is done; LR1 can follow.
+- Then PRE3b (v17.39 44ba5f10) and PRE3c (v17.40 09358fd9) as queued. They will be rebuilt on 2.1 after it lands, so a quick plain suite is enough.
