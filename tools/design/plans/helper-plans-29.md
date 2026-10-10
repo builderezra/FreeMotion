@@ -29,7 +29,7 @@ Against `origin/main` 1fa76385 (v17.34). **Measured** = I ran it here (headless 
 
 ## #923 An easy editor and a deep editor in one app (HELD for his approval)
 
-**Verdict: nothing to plan; this is the Simple mode that is being built under #980, and the builder's step 1.3 is its next release.** Read: `js/spine.js`, `spine-words.js` and the `sm` sanitiser are on main (v17.33); `editor-mode.js` and `simple-timeline.js` are not. AU22 (`hunt/audit-spine`) is my audit of what is there. His hold ("needs his approval before any build") is satisfied by his 1 Oct answers recorded in DESIGN.md §0.4; I did not re-open it.
+**Verdict: nothing to plan; this is the Simple mode that is being built under #980, and the builder's step 1.3 is its next release.** Read: `js/spine.js`, `spine-words.js` and the `sm` sanitiser are on main (v17.33); `editor-mode.js` and `simple-timeline.js` are not. AU22 (`hunt/audit-spine`) is my audit of what is there. His hold ("needs his approval before any build") was followed by #980, "BUILDING PHASE 1 (his D15 A, 1 Oct)", which is the build he approved (Read; I did not re-open the question).
 
 ## #778 A system that never stops (JUMPED standing instruction)
 
