@@ -59935,6 +59935,9 @@
 
   async function run() {
     var results = [];
+    // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
+    var WIN_KEYS = ['innerHeight', 'innerWidth', 'outerHeight', 'outerWidth', 'devicePixelRatio', 'visualViewport', 'matchMedia'];
+    var winD0 = {}; WIN_KEYS.forEach(function (k) { try { winD0[k] = Object.getOwnPropertyDescriptor(window, k); } catch (e) {} });
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
      * the suite is injected, while #splash is still covering the app — a hit-test through it sees the splash,
      * and the #429 test failed three times for exactly that. The full suite never noticed because the tests
@@ -60036,6 +60039,23 @@
          * with held pointers counted, each one would vouch for the next test's stale gesture as "still held". Cleared
          * silently, because a synthetic press with no release is ordinary fixture shorthand, not a leak. */
         if (FM._heldPointers && FM._heldPointers.clear) FM._heldPointers.clear();
+      } catch (e) {}
+      /* WINDOW STUBS ARE PUT BACK AFTER EVERY TEST, AND THE TEST THAT LEFT ONE IS NAMED (10 Oct, v17.36's three refused
+       * ships). "a short viewport caps the timeline band" restored window.innerHeight as a NUMBER, which pinned it at 760 for
+       * every later test — 921 blamed Chrome for a month, and the cog's T12 went red only deep in the full pass. The live
+       * descriptors are taken once, before the first test; any that a test left different are put back here and listed
+       * with the leaks below, so no later test can read a stub and the one that left it is on the list. */
+      try {
+        var _stubbed = [];
+        WIN_KEYS.forEach(function (k) {
+          var d = Object.getOwnPropertyDescriptor(window, k), d0 = winD0[k];
+          var same = d0 ? !!d && d.get === d0.get && d.set === d0.set && d.value === d0.value : !d;
+          if (!same) { _stubbed.push(k); try { if (d0) Object.defineProperty(window, k, d0); else delete window[k]; } catch (e) {} }
+        });
+        if (_stubbed.length) {
+          var LS = window.__fmSceneLeaks = window.__fmSceneLeaks || [];
+          if (LS.length < 60) LS.push({ test: t.name.slice(0, 120), added: _stubbed.map(function (k) { return 'window.' + k + ' left stubbed (put back)'; }), more: 0, preview: false, isolate: false });
+        }
       } catch (e) {}
       try {
         if (_lk0 && FM.scene === _lk0.scene) {
