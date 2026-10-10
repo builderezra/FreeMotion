@@ -4980,6 +4980,7 @@ window.FM = window.FM || {};
      * following the HEAD half — which has just had its keyframes truncated at the cut and therefore
      * stops moving. Both halves are stamped, so `!p.splitOf` stays the cheap gate in FM.parentAt. */
     { const lineage = layer.splitOf || layer.id; layer.splitOf = lineage; B.splitOf = lineage; }
+    if (FM.spine && FM.spine.onSplit) FM.spine.onSplit(layer, B);   // Simple mode §12.2: a split keeps `sm`, except that the head no longer ends with the video
     /* A CAPTION TRACK IS THE EXCEPTION (queue 690, fourth hunt). Its animation runs per CUE (FM.captions.animSpan),
        so clearing the whole layer's durIn / durOut would take the entrance off every caption after the cut and the
        exit off every caption before it. Only the ONE cue on screen across the cut must not leave or re-enter
