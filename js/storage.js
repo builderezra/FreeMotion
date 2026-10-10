@@ -2236,7 +2236,15 @@ window.FM = window.FM || {};
     if (sceneMediaReleased()) return null;
     try {
       const P = FM.scene.project;
-      let src = document.createElement('canvas'); src.width = P.width; src.height = P.height;
+      /* PF1: DRAWN AT THE CARD'S OWN SIZE, NOT THE PROJECT'S. This rendered the whole scene at 1080x1920 and then halved it down to 360, and
+         the render is where the time goes: 3.0 s at full size against 0.16 s at 360 px on a layer with 8 Glow effects, on every import and
+         every 12 s of editing. The compositor already draws at a render scale for the phone's preview, so the card is drawn the same way, at twice
+         its size so the last step is still an average of real pixels. A project already within 360 px is untouched. */
+      const s = Math.min(360 / P.width, 360 / P.height, 1);
+      const tw = Math.max(2, Math.round(P.width * s)), th = Math.max(2, Math.round(P.height * s));
+      let src = document.createElement('canvas');
+      if (s < 1) { src.width = tw * 2; src.height = th * 2; src.__fmRS = src.width / P.width; src.__fmOX = 0; src.__fmOY = 0; }
+      else { src.width = P.width; src.height = P.height; }
       /* ⚠️ THE CARD IS THE PICTURE THE PREVIEW SHOWS, WHICH AT THE END IS NOT THE RAW PLAYHEAD (queue 690, HUNT-c).
          Playback without Loop parks the playhead ON the project's last instant (FM.time = duration), and every clip's
          window is half-open, so at that instant nothing is live and a raw render is the bare background. The preview
@@ -2245,9 +2253,7 @@ window.FM = window.FM || {};
          project he had just watched through came Home as a plain black card. Same rule as the preview, so the card
          and the screen agree; a genuinely empty moment mid-timeline is left as it is, exactly as the preview leaves it. */
       FM.renderScene(src.getContext('2d'), FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time);
-      const s = Math.min(360 / P.width, 360 / P.height, 1);
-      const tw = Math.max(2, Math.round(P.width * s)), th = Math.max(2, Math.round(P.height * s));
-      while (src.width >= tw * 2) {   // halve until within 2× of target — each step averages real pixels
+      while (src.width > tw * 2) {   // halve until within 2× of target — each step averages real pixels
         const half = document.createElement('canvas');
         half.width = Math.max(tw, Math.round(src.width / 2)); half.height = Math.max(th, Math.round(src.height / 2));
         const hg = half.getContext('2d'); hg.imageSmoothingQuality = 'high';
