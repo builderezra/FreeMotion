@@ -254,7 +254,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 8673617696742561;   // Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate`, re-checked on step 1.2 alone
+  C.SCHEMA_FP = 8673617696742561;   // Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate` on this tree
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *
@@ -365,6 +365,7 @@ window.FM = window.FM || {};
   C.redo = function () { const s = US(); return s ? s.redo() : false; };
   C.canUndo = function () { const s = US(); return s ? s.canUndo() : false; };
   C.canRedo = function () { const s = US(); return s ? s.canRedo() : false; };
+  C.redoDepth = function () { const s = US(); return s && s._undoDepth ? s._undoDepth().redo : 0; };   // #980: the switch's redo line counts steps
 
   /* history.reset() runs on every project open, import and boot: the session stands down (§12.1
      `paused`) and the borrowed undo goes back. NOT gated on `active` — the hand-back is exactly the

@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=754">
+<link rel="stylesheet" href="styles.css?v=755">
 <link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -265,7 +265,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.35</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.36</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -524,6 +524,8 @@
         it deliberately does NOT take over ⧉ (#btn-layermenu): his arrows point at this END of the
         row, and ⧉ already opens the layer menu, so replacing it would cost him a control. -->
           <button id="btn-opts" class="tbtn" title="Timeline options (speed · loop · snapping · export marks)" aria-label="Timeline options"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></button>
+          <!-- Simple mode P1: ✂ in slot 2 of Simple's row, dimmed and inert until Phase 2 (D18 A: ⋯ · ✂ · (gap) · |◀); hidden in Full -->
+          <button id="btn-sm-split" class="tbtn sm-only" type="button" aria-disabled="true" aria-label="Split at the line" title="Split at the line (S)"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.5" y2="15.5"/><line x1="8.5" y1="8.5" x2="20" y2="20"/></svg></button>
           <button id="btn-layermenu" class="tbtn" title="Layer actions"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(0 0.5)"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></g></svg></button>
           <!-- THE ADD-ROW SWITCH (queue 373). Ezra: "on its right put a little switch toggle that moves the
                add menu button to the top of to the bottom of the timeline, if the switch is facing up it's at
@@ -586,6 +588,18 @@
           <div id="tl-tracks"></div>
           <div id="tl-playhead"></div>
         </div>
+      </div>
+      <!-- Simple mode P1 (DESIGN.md §8.1): the Simple editor's timeline, over #timeline (which stays laid out, hidden, so both
+           views share one pxPerSec). Read-only in Phase 1. #sm-say is the one place Simple speaks (§3.12); #sm-live is for screen readers. -->
+      <div id="sm-timeline" role="group" aria-label="Timeline">
+        <div id="sm-scroll"><div id="sm-inner">
+          <div id="sm-ruler" aria-hidden="true"></div>
+          <div id="sm-sections"></div>
+          <div id="sm-main"></div>
+          <div id="sm-sound"></div>
+        </div></div>
+        <div id="sm-say" role="status" aria-live="polite"></div>
+        <div id="sm-live" class="sm-vh" role="status" aria-live="polite"></div>
       </div>
       <!-- Phone only: a fixed-centre playhead that lives OUTSIDE the scroller, so it can never move.
            The timeline content scrolls underneath it (AM behaviour). Positioned by timeline.js. -->
@@ -1047,11 +1061,11 @@
   <script src="js/settings.js?v=51"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=23"></script>
+  <script src="js/collab-core.js?v=24"></script>
   <script src="js/statusbar.js?v=4"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=119"></script>
-  <script src="js/spine-words.js?v=1"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
+  <script src="js/spine-words.js?v=2"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
   <script src="js/spine.js?v=1"></script>         <!-- Simple mode P1: FM.spine, the read side — after scene.js, before compositor/storage -->
   <script src="js/eases.js?v=3"></script>
   <script src="js/masks.js?v=6"></script>
@@ -1065,7 +1079,8 @@
   <script src="js/filters.js?v=19"></script>
   <script src="js/fx-presets.js?v=12"></script>
   <script src="js/fx-thumbs.js?v=54"></script>
-  <script src="js/timeline.js?v=261"></script>
+  <script src="js/timeline.js?v=262"></script>
+  <script src="js/simple-timeline.js?v=1"></script>   <!-- Simple mode P1: FM.simpleTimeline, read-only; after timeline.js -->
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
   <script src="js/addmenu.js?v=83"></script>
@@ -1079,11 +1094,11 @@
   <script src="js/popfrom.js?v=11"></script>
   <script src="js/draw-tool.js?v=38"></script>
   <script src="js/point-edit.js?v=21"></script>
-  <script src="js/crop-tool.js?v=12"></script>
+  <script src="js/crop-tool.js?v=13"></script>
   <script src="js/fill-drag.js?v=2"></script>
   <script src="js/mask-tool.js?v=10"></script>
   <script src="js/motion-path.js?v=9"></script>
-  <script src="js/touchup-tool.js?v=3"></script>
+  <script src="js/touchup-tool.js?v=4"></script>
   <script src="js/eyedropper.js?v=2"></script>
   <script src="js/text-edit.js?v=26"></script>
   <script src="js/tracker.js?v=10"></script>
@@ -1092,7 +1107,7 @@
   <script src="js/audio-play.js?v=68"></script>
   <script src="js/audio-fx-live.js?v=14"></script>
   <script src="js/audio-fx-browser.js?v=14"></script>
-  <script src="js/history.js?v=37"></script>
+  <script src="js/history.js?v=38"></script>
   <script src="js/storage.js?v=59"></script>
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=8"></script>
@@ -1110,13 +1125,14 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=60"></script>
   <script src="js/audio-health.js?v=6"></script>
-  <script src="js/app.js?v=469"></script>
+  <script src="js/editor-mode.js?v=1"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
+  <script src="js/app.js?v=470"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=19"></script>
   <script src="js/voice-rec.js?v=9"></script>
   <script src="js/audio-react.js?v=12"></script>
-  <script src="js/mobile.js?v=46"></script>
+  <script src="js/mobile.js?v=47"></script>
   <script src="js/ai-manifest.js?v=11"></script>
   <script src="js/ai-ops.js?v=19"></script>
   <script src="js/ai-key.js?v=1"></script>
