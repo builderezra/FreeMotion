@@ -405,3 +405,13 @@ ADDED 10 Oct 21:05 by the PM. TOP PRIORITY, at Ezra's ask (he told the builder h
   Never push to, or run anything that writes to, the builder's wip/* branches. Work on copies.
 - When the builder re-pushes these trees rebased on v17.36 (same names, or new ones; check ls-remote wip/* every ~15 minutes), run PRE2 again on the new tips.
 - Then continue AU27, AU28, P35, P36 and INT3.
+
+ADDED 10 Oct 22:40 by the PM. PRE2 UPDATE from the builder. v17.36 (the Simple switch) is LIVE. v17.37 (ChatGPT's six + the runner's window-stub guard) has been shipping on the laptop since 22:32.
+- PRE2 now runs on the NEW tips:
+  1. **wip/v17.38-tree = 797ea31a, FIRST, because it is the next Simple release.** It is 2.1 + S4a/b/d + AU22 + AU24, built on v17.37's content (2362 tests).
+  2. Then wip/v17.37-tree = 8878582a, the exact v17.37 app. It is already on the laptop, so this one matters least.
+- **Skip** wip/v17.39-tree (e5c13554). It is STALE, and the builder will rebuild 2.2 on 2.1.
+- **Skip** the #1015/#1016 with/without check. The builder did it: each test fails with its own fix reverted, at 1280 and 380.
+- AU25 (the lost mouse release) moved to the next Full batch, after 2.1, because the FU gate refuses Full behaviour changes inside a Simple release.
+- Same method: full suite at 1280 and 380; every red alone, paired with its predecessor, and on main; one report per tree to hunt/preflight-<tree>, pushed the moment it is done.
+- If you are part-way through the OLD 7d4152c0 or 6a9e5efe runs, stop them. Their results no longer match what ships.
