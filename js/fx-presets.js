@@ -263,7 +263,15 @@ window.FM = window.FM || {};
       const clamped = _clamped || (p && _trimmedId === p.id);
       _trimmedId = '';
       if (!p) { if (FM.toast) FM.toast('Couldn’t save that preset — ' + (why || 'it didn’t validate'), 3600); return false; }
-      const arr = readRaw().filter(x => !(x && x.id === p.id)).slice(0, MAX_PRESETS - 1);   // queue 721: raw, so nothing else on disk is lost
+      const raw = readRaw();
+      /* AU17-1: A FULL LIST REFUSES, IT DOES NOT QUIETLY DROP THE OLDEST. The slice below kept the newest 119 and threw the rest away, so the
+         121st preset a person saved deleted their first one, with no message — the file's own rule two screens up is "a trimmed animation is
+         recoverable, a discarded preset is not". Saving over a preset that already exists (same id) is still fine at the limit. */
+      if (raw.length >= MAX_PRESETS && !raw.some(x => x && x.id === p.id)) {
+        if (FM.toast) FM.toast('You have ' + MAX_PRESETS + ' saved presets, which is the most FreeMotion keeps — delete one first', 4200);
+        return false;
+      }
+      const arr = raw.filter(x => !(x && x.id === p.id)).slice(0, MAX_PRESETS - 1);   // queue 721: raw, so nothing else on disk is lost
       arr.unshift(p);
       if (!writeCustom(arr)) return false;   // writeCustom has already said why
       if (clamped) {
