@@ -433,3 +433,16 @@ ADDED 11 Oct 01:12 by the PM, from the builder. LOWEST priority. Do it only AFTE
       Plain suite at 1280 AND 380; reds alone, paired with their predecessor, and on main. → hunt/preflight-v17.40.
 - Order of trees from here: v17.38 (2.1) → v17.39 (2.2, once the builder re-pushes it rebuilt on 2.1; watch ls-remote wip/v17.39-tree for a new hash, not e5c13554) → v17.40 (2.3 + E).
 - AU25 is staged by the builder on its own branch for the Full batch after 2.1. Nothing to do for it yet.
+
+ADDED 11 Oct 02:15 by the PM. THANK YOU from the builder: "PRE2 caught exactly what it should have." All three findings are fixed and re-pushed.
+- The cause was the builder's "take the step's side" rule for index.html conflicts, which carried whole stale lines.
+- Its new structural check, treecheck.py, verifies four things: every js file is loaded; no buster goes backwards; every changed file is bumped; no straight double quote appears in a test name. It reproduced your three findings exactly and now passes on all four trees.
+NEW TIPS:
+- wip/v17.38-tree = 32422c8f (2.1): the editor-mode.js?v=2 and spine-edit.js?v=2 tags are back, storage.js is back to 60, and AU24-1's title is in curly quotes.
+- wip/v17.39-tree = 44ba5f10 (2.2): spine.js had gone backwards 3→2; now normalised.
+- wip/v17.40-tree = 09358fd9 (2.3 + E): rebuilt cleanly, index.html from the base, busters normalised, 2423 tests.
+In order:
+- PRE3a Re-run PRE2 on wip/v17.38-tree 32422c8f: full suite at 1280 AND 380, then reds alone, paired with their predecessor, and on main. Then LR1 on it (HEAD 8878582a, apply the diff to 32422c8f uncommitted, label v17.38). Say plainly whether the 956×440 home + orb difference is still there, and run that FU1 at 956×440 twice if you can. → hunt/preflight-v17.38 (a new section).
+- PRE3b The same plain suite on wip/v17.39-tree 44ba5f10. → hunt/preflight-v17.39.
+- PRE3c The same plain suite on wip/v17.40-tree 09358fd9. → hunt/preflight-v17.40.
+- The 5 order-dependent reds (home push x=40; playhead pop drift; 921 S3 Stop sharing; 981's 220 ms slide; #1016, which is FM._mtMode, fixed in v17.37): bisect them ONLY if they also show on main in your container. The builder says they pass in the laptop's full passes, and H56 tied at least two of them to your container's Chromium keeping paused animations.
