@@ -782,7 +782,7 @@ window.FM = window.FM || {};
       case 'cutShort': text = line('cutShort', o.name); buttons = [full]; break;
       case 'insertFade': text = line('insertFade', o.a, o.b); break;   // 2.2: the two clip numbers (DESIGN §3.11)
       default: text = line(kind) || line('failed');
-        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow') buttons = [full];
+        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow' || kind === 'speedBlock' || kind === 'replaceBlock') buttons = [full];
     }
     S.say(text, { buttons: buttons, refusal: kind, ids: o.ids });
     S.lastRefusal = kind;
@@ -1076,7 +1076,7 @@ window.FM = window.FM || {};
     plan.pre.push(async () => {
       const keepRow = addRowMark();
       const made = addRecs(clips, T, newPickB(), map);
-      made.forEach(l => S.setFlag(l, 'main', true));
+      made.forEach(l => { S.setFlag(l, 'main', true); muteIfMode(l); });   // 2.3: Mute clip sound is on, so the new clip is muted too
       if (made.length && lastMain && FM.layerById(FM.scene, lastMain)) FM.moveLayers(made.map(l => l.id), lastMain);   // just above the clip before (§3.6.1)
       else if (made.length) placeFirstMain(made, T, T + sum, R);
       const snd = addRecs(picked.sounds, Math.max(0, Math.min(FM.time || 0, T)), newPickB(), map);
@@ -1114,7 +1114,7 @@ window.FM = window.FM || {};
     plan.pre.push(async () => {
       const keepRow = addRowMark();
       const made = addRecs(clips, at, newPickB(), map);
-      made.forEach(l => S.setFlag(l, 'main', true));
+      made.forEach(l => { S.setFlag(l, 'main', true); muteIfMode(l); });
       if (made.length && anchor) FM.moveLayers(made.map(l => l.id), anchor);
       plan.selectId = made.length ? made[0].id : null;
       const snd = addRecs(picked.sounds, Math.max(0, FM.time || 0), newPickB(), map);
@@ -1214,6 +1214,7 @@ window.FM = window.FM || {};
     plan.touched.add(c.id);
     plan.post.push(() => {
       S.setFlag(L, 'main', false);
+      if (L.sm && L.sm.muteByMode) { S.setFlag(L, 'muteByMode', false); L.muted = false; }   // 2.3: an overlay is not part of Mute clip sound; it gets its sound back
       fol.forEach(fid => { const f = map.get(fid); if (f && !S.isTwinOf(f, L, R.eps)) S.setFlag(f, 'stay', true); });
       /* overlay band: directly above the top-most layer it overlaps that is not text, captions or itself */
       const s = +L.start || 0, e = s + (+L.duration || 0), skip = new Set([L.id].concat(fol));
@@ -1251,7 +1252,7 @@ window.FM = window.FM || {};
     addLand(plan, id, seam);
     twins.forEach(t => { plan.moves.delete(t.id); addLand(plan, t.id, (+t.start || 0) + dO); });   // a land beats a move or a tail land
     plan.post.push(() => {
-      S.setFlag(o, 'main', true); S.setFlag(o, 'stay', false);
+      S.setFlag(o, 'main', true); S.setFlag(o, 'stay', false); muteIfMode(o);
       twins.forEach(t => S.setFlag(t, 'stay', false));
       const anchor = S.rowAnchor(R, j, o.id);
       if (anchor) FM.moveLayers([o.id], anchor);   // main band: just above the clip before it (never a card's slot id)
@@ -1425,6 +1426,307 @@ window.FM = window.FM || {};
       return run(picked);
     })();
   }
+  /* ═══════════════════════ RELEASE 2.3: speed, sound and replacing (BUILD-PLAN-PHASE2-2.3.md) ═══════════════════════
+     Speed, Volume, Fade, Replace, Reverse, Take sound out / Put sound back and Mute clip sound, each ONE plan through the same
+     runner as 2.1's and 2.2's commands. Only Speed on a main clip and Replace with a shorter file arrange (they ripple); the rest
+     are looks and sound, so they work with a friend in the session (D14 first half) and never move a clip. */
+  const SPEED_LO = 0.25, SPEED_HI = 4, VOL_HI = 10;   // VOL_HI: Full's own ceiling (1000%); Simple's row offers 0–200% but never clamps a level Full set higher
+  const flatSpan = l => (+l.duration || 0) * FM.speedAt(l, +l.start || 0);   // the footage the clip shows: what a re-time never changes
+  /* The Speed panel's stops: 0.25× to the lower of 4× and the speed at which the clip (and each blend beside it) would be too short */
+  S.speedRange = function (R, id) {
+    const L = FM.layerById(FM.scene, id); if (!L || FM.isAnimated(L.speed)) return null;
+    const span = flatSpan(L); let hi = Math.min(SPEED_HI, span / MINLEN());
+    const i = mainIdx(R, id);
+    if (i >= 0) {
+      const c = R.main[i], n = R.main[i + 1];
+      if (n && n.seam && n.seam.kind === 'blend') hi = Math.min(hi, span / (2 * n.seam.amt));
+      if (i > 0 && c.seam && c.seam.kind === 'blend') hi = Math.min(hi, span / (2 * c.seam.amt));
+    }
+    return { lo: SPEED_LO, hi: Math.max(SPEED_LO, hi), span: span, now: FM.speedAt(L, +L.start || 0) };
+  };
+  /* what setClipSpeed will really write: the new length, clamped by the 0.1 s floor and by the source left (its own rule, exactly) */
+  function speedLength(L, sp) {
+    let nd = Math.max(0.1, flatSpan(L) / sp);
+    if (L.type === 'video') { const sd = srcDurOf(L); if (isFinite(sd)) nd = Math.max(0.1, Math.min(nd, (sd - (+L.trimStart || 0)) / sp)); }
+    return nd;
+  }
+  /* the cue-effect key lists animatedProps leaves out (a caption cue's own effects) ride a re-time too, about the clip's own start */
+  function scaleCueKeys(l, k) {
+    const base = new Set(FM.animatedProps(l));
+    FM.timedLists(l).forEach(p => { if (!base.has(p)) p.kf.forEach(kk => { kk.t = (+l.start || 0) + (kk.t - (+l.start || 0)) * k; }); });
+  }
+
+  /* SPEED of a main clip (flat only): every footage frame stays, the length becomes span / sp, what starts on the clip moves with
+     its place on it (and keeps its own length), the clips after close up or open out, the playhead stays on the same moment. */
+  S.planSpeed = function (R, id, sp) {
+    const map = byIdMap(), i = mainIdx(R, id);
+    if (i < 0) return refusePlan('gone');
+    const c = R.main[i], n = R.main[i + 1] || null, L = map.get(c.id), ml = MINLEN();
+    if (L.type === 'group') return refusePlan('speedBlock');
+    if (L.type !== 'video') return refusePlan('failed');   // a picture has no clock to change
+    if (FM.isAnimated(L.speed)) return refusePlan('speedRamp');
+    if (!(sp > 0) || !isFinite(sp)) return refusePlan('failed');
+    const old = FM.speedAt(L, +L.start || 0), d0 = +L.duration || 0;
+    if (Math.abs(sp - old) < 1e-9) return refusePlan('nothingChanged');
+    const nd = speedLength(L, sp);
+    if (nd < ml - SLACK || Math.abs(nd - flatSpan(L) / sp) > 1e-6) return refusePlan('speedShort');   // under the shortest clip, or the source would run out before the speed did
+    if (n && n.seam && n.seam.kind === 'blend') {
+      if (nd < 2 * n.seam.amt - SLACK) return refusePlan('fadesNext');
+      if (blendOwner(c, n, map) === L) return refusePlan('fadeOwned', { a: S.itemWord(L, R), b: S.itemWord(map.get(n.id), R) });
+    }
+    if (i > 0 && c.seam && c.seam.kind === 'blend') {
+      if (nd < 2 * c.seam.amt - SLACK) return refusePlan('fadesBefore');
+      if (blendOwner(R.main[i - 1], c, map) === L) return refusePlan('fadeOwned', { a: S.itemWord(map.get(R.main[i - 1].id), R), b: S.itemWord(L, R) });
+    }
+    const fol = R.followers[c.id] || [];
+    if (fol.some(f => R.units[f] && R.units[f].kind === 'captions')) return refusePlan('riders');   // cues ride the speed (2.4)
+    const rb = riderBlock(R, c.start + Math.min(d0, nd), map); if (rb) return refusePlan(rb.kind, rb);
+    const k = nd / d0, dt = nd - d0;
+    const plan = newPlan('Change speed'); plan.touched.add(c.id);
+    const twins = twinsOf(R, c, map), twinIds = new Set(twins.map(t => t.id));
+    twins.forEach(t => plan.touched.add(t.id));
+    plan.writes.push(() => { [L].concat(twins).forEach(x => { FM.setClipSpeed(x, sp); scaleCueKeys(x, k); }); });
+    const newEnd = c.start + nd;
+    fol.forEach(fid => {
+      if (twinIds.has(fid)) return;
+      const f = map.get(fid), u = R.units[fid]; if (!f) return;
+      const x = (+f.start || 0) - c.start, mv = x * (k - 1);
+      if (Math.abs(mv) > 1e-9) addMove(plan, fid, mv);
+      const fd = +f.duration || 0, fe = c.start + x * k + fd;
+      if (u && u.kind === 'effect' && (+f.start || 0) + fd <= c.end + 1e-9 && fe > newEnd + 1e-9) {   // §4.3: an effect stays inside its clip
+        plan.touched.add(fid); plan.writes.push(() => { f.duration = Math.max(ml, newEnd - (c.start + x * k)); });
+      }
+    });
+    const rp = ripple(plan, R, i + 1, dt, new Set([c.id].concat(twins.map(t => t.id))), newEnd, false);
+    tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    const t = FM.time || 0;                                                       // §3.6.2: the same moment of the clip stays under the line
+    if (t >= c.start - 1e-9 && t < c.start + d0 - 1e-9) plan.time = c.start + (t - c.start) * k;
+    else if (t >= c.start + d0 - 1e-9) plan.time = t + dt;
+    plan.live = line('sped', S.itemWord(L, R), Math.round(sp * 100) / 100);
+    plan.pulse = [c.id];
+    return plan;
+  };
+  /* SPEED of anything else with a clock (an overlay video, a song): nothing follows it and nothing ripples, so it is a look. A
+     sm.tail mark goes (its end is no longer the track end), the Stay put under it stays. */
+  S.planSpeedItem = function (R, id, sp) {
+    const map = byIdMap(), L = map.get(id), u = R.units[id];
+    if (!L || !u || R.isMain(id)) return refusePlan('gone');
+    if (L.type !== 'video') return refusePlan('failed');
+    if (FM.isAnimated(L.speed)) return refusePlan('speedRamp');
+    if (!(sp > 0) || !isFinite(sp)) return refusePlan('failed');
+    const old = FM.speedAt(L, +L.start || 0);
+    if (Math.abs(sp - old) < 1e-9) return refusePlan('nothingChanged');
+    const nd = speedLength(L, sp);
+    if (nd < MINLEN() - SLACK || Math.abs(nd - flatSpan(L) / sp) > 1e-6) return refusePlan('speedShort');
+    const k = nd / (+L.duration || 1);
+    const plan = newPlan('Change speed'); plan.arranges = false; plan.adopts = false; plan.touched.add(id);
+    plan.writes.push(() => { FM.setClipSpeed(L, sp); scaleCueKeys(L, k); if (L.sm && L.sm.tail) S.setFlag(L, 'tail', false); });
+    plan.live = line('sped', S.itemWord(L, R), Math.round(sp * 100) / 100);
+    plan.keepSel = true;
+    return plan;
+  };
+  /* USE ONE SPEED (a ramped clip → flat): keeps the LENGTH, so nothing moves and nothing is arranged; the speed is the footage over the length */
+  S.planUseOneSpeed = function (R, id) {
+    const map = byIdMap(), L = map.get(id);
+    if (!L || L.type !== 'video') return refusePlan('gone');
+    if (!FM.isAnimated(L.speed)) return refusePlan('nothingChanged');
+    const fol = R.followers[id] || [];
+    if (fol.some(f => R.units[f] && R.units[f].kind === 'captions')) return refusePlan('riders');   // cues would need φ (2.4)
+    const span = FM.layerSourceAdvance(L, +L.duration || 0), d = +L.duration || 0;
+    if (!(span > 0) || !(d > 0)) return refusePlan('failed');
+    const twins = R.isMain(id) ? twinsOf(R, R.main[mainIdx(R, id)], map) : [];
+    const plan = newPlan('Use one speed'); plan.arranges = false; plan.adopts = false; plan.touched.add(id);
+    twins.forEach(t => plan.touched.add(t.id));
+    plan.writes.push(() => { [L].concat(twins).forEach(x => { x.speed = span / d; }); });
+    plan.live = line('oneSpeed');
+    plan.keepSel = true;
+    return plan;
+  };
+
+  /* VOLUME and FADE act on the sound twin when the clip has one (the original is muted, the twin carries the sound), else on the
+     clip. A keyed level keeps its shape (FM.shiftProp: no key at the playhead, the count never changes). A volume above 0 on a muted
+     clip is a wish to hear it, so it un-mutes (and drops the Mute clip sound mark, which only ever stood for "muted by that switch"). */
+  function soundTarget(R, id, map) {
+    const L = map.get(id); if (!L) return null;
+    if (R.isMain(id)) { const t = twinsOf(R, R.main[mainIdx(R, id)], map)[0]; if (t) return t; }
+    return L;
+  }
+  S.soundTargetId = function (R, id) { const t = soundTarget(R, id, byIdMap()); return t ? t.id : null; };
+  S.planVolume = function (R, id, v) {
+    const map = byIdMap(), L = soundTarget(R, id, map);
+    if (!L || !(v >= 0) || !isFinite(v)) return refusePlan('gone');
+    const t = FM.time || 0;
+    const plan = newPlan('Change volume'); plan.arranges = false; plan.adopts = false; plan.touched.add(L.id); plan.keepSel = true;
+    plan.writes.push(() => {
+      FM.shiftProp(L, 'volume', v, t, { min: 0, max: VOL_HI });
+      if (v > 0 && L.muted) { L.muted = false; S.setFlag(L, 'muteByMode', false); }
+    });
+    plan.after = () => { if (FM.reconcileAudio) FM.reconcileAudio(); };
+    plan.live = line('volumeSet', Math.round(v * 100));
+    return plan;
+  };
+  S.planFade = function (R, id, which, sec) {
+    const map = byIdMap(), L = soundTarget(R, id, map);
+    if (!L || (which !== 'in' && which !== 'out') || !(sec >= 0) || !isFinite(sec)) return refusePlan('gone');
+    const s = Math.round(Math.min(sec, Math.max(0, (+L.duration || 0))) * 10) / 10, key = which === 'in' ? 'fadeIn' : 'fadeOut';
+    if (Math.abs((+L[key] || 0) - s) < 1e-9) return refusePlan('nothingChanged');
+    const plan = newPlan('Change fade'); plan.arranges = false; plan.adopts = false; plan.touched.add(L.id); plan.keepSel = true;
+    plan.writes.push(() => { L[key] = s; });
+    plan.after = () => { if (FM.reconcileFades) FM.reconcileFades(); };
+    plan.live = line('fadeSet', which === 'in' ? 'in' : 'out', s);
+    return plan;
+  };
+
+  /* REVERSE / UN-REVERSE (a video): the flag on the clip and each twin, nothing else moves (start, length, keys, followers keep their
+     times, as Full's toggle does). The frame cache is never built in here (a decode can take seconds on a phone with history muted):
+     after the commit the runner's `after` asks for it, and never for a twin (a twin needs only its audio). */
+  S.planReverse = function (R, id) {
+    const map = byIdMap(), L = map.get(id);
+    if (!L) return refusePlan('gone');
+    if (L.type !== 'video') return refusePlan('noReverse');
+    const twins = R.isMain(id) ? twinsOf(R, R.main[mainIdx(R, id)], map) : [];
+    const on = !L.reversed;
+    const plan = newPlan(on ? 'Reverse' : 'Play forwards'); plan.arranges = false; plan.adopts = false; plan.touched.add(id); plan.keepSel = true;
+    twins.forEach(t => plan.touched.add(t.id));
+    plan.writes.push(() => { [L].concat(twins).forEach(x => { x.reversed = on; }); });
+    plan.after = async () => {
+      if (on && FM.ensureReverseCache) { try { await FM.ensureReverseCache(L); } catch (e) { S.say(line('reverseSlow')); } }
+      else if (!on && FM.maybeClearCache) FM.maybeClearCache(L);
+      if (FM.requestRender) FM.requestRender();
+      if (FM.reconcileAudio) FM.reconcileAudio();
+    };
+    plan.live = line(on ? 'reversed' : 'forwards');
+    return plan;
+  };
+
+  /* TAKE SOUND OUT / PUT SOUND BACK (§4.6). Take out: Full's own extractAudio inside a step of ours, so Full's function is untouched;
+     the layer it made is found by the ids around the call (it returns nothing) and marked sm.twin by us. Put back: the twin goes
+     and the clip is heard again, in one step. A clip that has no sound, or that is already muted, has nothing to take out. */
+  const hasSound = L => L && L.type === 'video' && !L.audioOnly && !(L.sm && L.sm.snd === true) && !L.muted && (() => { const m = FM.media && FM.media.get(L.id); return !(m && m.hasAudio === false); })();
+  S.canTakeSound = function (R, id) { const L = FM.layerById(FM.scene, id); return !!(L && R.isMain(id) && hasSound(L) && !twinsOf(R, R.main[mainIdx(R, id)], byIdMap()).length); };
+  S.planTakeSound = function (R, id) {
+    const map = byIdMap(), L = map.get(id);
+    if (!L || !R.isMain(id)) return refusePlan('gone');
+    if (twinsOf(R, R.main[mainIdx(R, id)], map).length) return refusePlan('alreadyOut');
+    if (!hasSound(L)) return refusePlan('noSound');
+    const plan = newPlan('Take sound out'); plan.arranges = false; plan.adopts = false; plan.touched.add(id); plan.keepSel = true; plan.mints = true;
+    plan.pre.push(async () => {
+      const before = new Set(FM.scene.layers.map(l => l.id));
+      await FM.extractAudio(L);
+      const dup = FM.scene.layers.find(l => !before.has(l.id));
+      if (dup) { S.setFlag(dup, 'twin', true); S.setFlag(dup, 'snd', true); S.setFlag(L, 'muteByMode', false); }
+    });
+    plan.live = line('soundTaken');
+    return plan;
+  };
+  S.planPutSoundBack = function (R, id) {
+    const map = byIdMap(), L = map.get(id);
+    if (!L || !R.isMain(id)) return refusePlan('gone');
+    const twins = twinsOf(R, R.main[mainIdx(R, id)], map);
+    if (!twins.length) return refusePlan('noTwin');
+    const plan = newPlan('Put sound back'); plan.arranges = false; plan.adopts = false; plan.touched.add(id); plan.keepSel = true;
+    twins.forEach(t => { plan.touched.add(t.id); plan.removes.add(t.id); });
+    plan.writes.push(() => { L.muted = false; S.setFlag(L, 'muteByMode', false); });
+    plan.after = () => { if (FM.reconcileAudio) FM.reconcileAudio(); };
+    plan.live = line('soundBack');
+    return plan;
+  };
+
+  /* MUTE CLIP SOUND (the clip row's 🔈): the mode lives on the document (project.sm.muteClips, it syncs: the mute is part of the
+     video). On: every main video not already muted is muted and marked sm.muteByMode (one he muted himself gets no mark). Off: only
+     the marked ones are un-muted, never one with a sound twin or a karaoke companion (that would play the sound twice), and a
+     mark whose clip is no longer muted is just dropped, so a manual choice is never overwritten. */
+  S.muteMode = function () { const P = FM.scene && FM.scene.project; return !!(P && P.sm && P.sm.muteClips === true); };
+  function muteIfMode(l) { if (S.muteMode() && l && l.type === 'video' && !l.audioOnly && !(l.sm && l.sm.snd === true) && !l.muted) { l.muted = true; S.setFlag(l, 'muteByMode', true); } }
+  S.planMuteClips = function (R, on) {
+    const map = byIdMap(), clips = R.main.filter(e => !e.slot).map(e => map.get(e.id)).filter(Boolean);
+    if (!clips.length) return refusePlan('noClipHere');
+    const P = FM.scene.project;
+    if (!!on === S.muteMode()) return refusePlan('nothingChanged');
+    const plan = newPlan(on ? 'Mute clip sound' : 'Clip sound back on'); plan.arranges = false; plan.adopts = false; plan.keepSel = true;
+    clips.forEach(l => plan.touched.add(l.id));
+    plan.writes.push(() => {
+      if (on) {
+        clips.forEach(l => { if (l.type === 'video' && !l.audioOnly && !l.muted) { l.muted = true; S.setFlag(l, 'muteByMode', true); } });
+        if (!P.sm || typeof P.sm !== 'object' || Array.isArray(P.sm)) P.sm = {};
+        P.sm.muteClips = true;
+      } else {
+        clips.forEach(l => {
+          if (!(l.sm && l.sm.muteByMode)) return;
+          const hasTwin = twinsOf(R, R.main[mainIdx(R, l.id)], map).length > 0 || FM.scene.layers.some(t => t.karaokeOf === l.id);
+          S.setFlag(l, 'muteByMode', false);
+          if (l.muted && !hasTwin) l.muted = false;
+        });
+        if (P.sm) { delete P.sm.muteClips; if (!Object.keys(P.sm).length) delete P.sm; }
+      }
+    });
+    plan.after = () => { if (FM.reconcileAudio) FM.reconcileAudio(); };
+    plan.live = line(on ? 'clipsMuted' : 'clipsHeard');
+    return plan;
+  };
+
+  /* REPLACE (a clip's footage, the slot kept). The picker has already run (FM.pickReplacement, at the tap, outside the runner) and
+     `nrec` is the decoded record. A shorter file is a tail trim in the same step: replaceMediaWith clamps the length to the new
+     source, so the plan ripples by the difference, with the tail trim's own refusals. A sound twin gets the same file (its own
+     record, a second decode of the same File) so it stays in step. The swap itself is a `pre` step; its file is written by the
+     runner after the commit (plan.mints). */
+  S.planReplace = function (R, id, nrec) {
+    const map = byIdMap(), L = map.get(id);
+    if (!L || !nrec) return refusePlan('gone');
+    if (L.type === 'text' || L.type === 'shape' || L.type === 'null' || L.type === 'group' || L.type === 'camera') return refusePlan('replaceBlock');
+    const main = R.isMain(id), i = main ? mainIdx(R, id) : -1, ml = MINLEN();
+    const d0 = +L.duration || 0;
+    let nd = d0;
+    if (nrec.kind === 'video' && nrec.duration > 0) {
+      const tr = Math.max(0, Math.min(+L.trimStart || 0, nrec.duration - 0.05));
+      const avail = FM.maxDurForSource ? FM.maxDurForSource(L, nrec.duration - tr) : (nrec.duration - tr) / (FM.speedAt(L, +L.start || 0) || 1);
+      nd = Math.max(0.1, Math.min(d0, avail));
+    }
+    const dt = nd - d0;
+    const plan = newPlan('Replace clip'); plan.touched.add(id); plan.mints = true; plan.keepSel = true; plan.arranges = main && dt < -1e-9; plan.adopts = plan.arranges;
+    let twins = [];
+    if (main) {
+      const c = R.main[i], n = R.main[i + 1] || null;
+      twins = twinsOf(R, c, map);
+      twins.forEach(t => plan.touched.add(t.id));
+      if (dt < -1e-9) {
+        if (nd < ml - SLACK) return refusePlan('shortSource');
+        if (n && n.seam && n.seam.kind === 'blend') {
+          if (nd < 2 * n.seam.amt - SLACK) return refusePlan('fadesNext');
+          if (blendOwner(c, n, map) === L) return refusePlan('fadeOwned', { a: S.itemWord(L, R), b: S.itemWord(map.get(n.id), R) });
+        }
+        if (i > 0 && c.seam && c.seam.kind === 'blend' && nd < 2 * c.seam.amt - SLACK) return refusePlan('fadesBefore');
+        const rb = riderBlock(R, c.start + nd, map); if (rb) return refusePlan(rb.kind, rb);
+        const newEnd = c.start + nd, twinIds = new Set(twins.map(t => t.id));
+        (R.followers[c.id] || []).forEach(fid => {   // the tail trim's follower rules: a title cut off slides back onto its clip (D6), an effect is clamped
+          if (twinIds.has(fid)) return;
+          const f = map.get(fid), u = R.units[fid]; if (!f) return;
+          const fs = +f.start || 0, fd = +f.duration || 0;
+          if (fs >= newEnd - R.eps) {
+            const s2 = Math.max(c.start, newEnd - fd); addLand(plan, fid, s2);
+            if (u && u.kind === 'effect' && fs + fd <= c.end + 1e-9) plan.writes.push(() => { f.duration = Math.max(ml, Math.min(fd, newEnd - s2)); });
+          } else if (u && u.kind === 'effect' && fs + fd <= c.end + 1e-9 && fs + fd > newEnd + 1e-9) {
+            plan.touched.add(fid); plan.writes.push(() => { f.duration = Math.max(ml, newEnd - fs); });
+          }
+        });
+        const rp = ripple(plan, R, i + 1, dt, new Set([c.id].concat(twins.map(t => t.id))), newEnd, false);
+        tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);
+        const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+        plan.pulse = [c.id];
+      }
+    } else if (L.sm && L.sm.tail && Math.abs(dt) > 1e-9) plan.writes.push(() => { S.setFlag(L, 'tail', false); });
+    plan.pre.push(async () => {
+      await FM.swapInMedia(id, nrec, { noSave: true, simple: true });
+      for (const t of twins) {
+        let r2 = null; try { r2 = nrec.file ? await FM.loadVideoFile(nrec.file) : null; } catch (e) { r2 = null; }
+        if (r2) await FM.swapInMedia(t.id, r2, { noSave: true, noLib: true, simple: true });
+      }
+    });
+    plan.live = line('replaced', S.itemWord(L, R));
+    return plan;
+  };
+
   Object.assign(S.cmd, {
     append(files) { return afterRead(files, picked => S.edit('Add clips', R => S.planAppend(R, picked))); },
     insert(files, j) { return afterRead(files, picked => S.edit('Add clips', R => S.planInsert(R, picked, j))); },
@@ -1440,7 +1742,26 @@ window.FM = window.FM || {};
     addOverlay(files) { return afterRead(files, picked => S.edit('Add overlay', R => S.planAddOverlay(R, picked))); },
     addMusic(files) { return afterRead(files, picked => S.edit('Add music', R => S.planAddMusic(R, picked))); },
     length(id, newDur) { return S.edit('Trim clip', R => S.planTrimTail(R, id, newDur, { typed: true })); },
-    trimStartBy(id, h) { return S.edit('Trim clip', R => S.planTrimHead(R, id, h, { typed: true })); }
+    trimStartBy(id, h) { return S.edit('Trim clip', R => S.planTrimHead(R, id, h, { typed: true })); },
+    /* release 2.3 */
+    speed(id, sp) { return S.edit('Change speed', R => R.isMain(id) ? S.planSpeed(R, id, sp) : S.planSpeedItem(R, id, sp)); },
+    useOneSpeed(id) { return S.edit('Use one speed', R => S.planUseOneSpeed(R, id)); },
+    volume(id, v) { return S.edit('Change volume', R => S.planVolume(R, id, v)); },
+    fade(id, which, sec) { return S.edit('Change fade', R => S.planFade(R, id, which, sec)); },
+    reverse(id) { return S.edit('Reverse', R => S.planReverse(R, id)); },
+    takeSoundOut(id) { return S.edit('Take sound out', R => S.planTakeSound(R, id)); },
+    putSoundBack(id) { return S.edit('Put sound back', R => S.planPutSoundBack(R, id)); },
+    muteClips(on) { return S.edit(on ? 'Mute clip sound' : 'Clip sound back on', R => S.planMuteClips(R, on)); },
+    replace(id, nrec) { return S.edit('Replace clip', R => S.planReplace(R, id, nrec)); },
+    /* the picker runs HERE, at the tap, never inside the runner (a dismissed picker can leave its promise unsettled): then the swap is one step.
+       A project switched away from while the file decoded lets the file go instead of landing it in the wrong project. */
+    async pickReplace(id) {
+      const pid = FM.startedIn ? FM.startedIn() : null;
+      const nrec = await FM.pickReplacement(id);
+      if (!nrec) return false;
+      if (FM.stillIn && !FM.stillIn(pid)) { if (FM.letGoMedia) FM.letGoMedia(nrec); return false; }
+      return S.cmd.replace(id, nrec);
+    }
   });
 
   S.undoGate = function () { return S.arrangeGate(); };

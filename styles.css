@@ -11842,10 +11842,21 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
   body.ed-simple #sm-say.sm-two { flex-basis: 104px; align-items: flex-start; }
   #sm-say.sm-two .sm-line { height: 52px; }
   #sm-tray.sm-tray-2 { display: grid; grid-template-columns: repeat(var(--sm-cols, 4), minmax(min-content, 1fr)); grid-template-rows: 52px 52px; }
-  #sm-tray.sm-tray-2 .sm-tool { min-width: 44px; padding: 0 4px; }
+  #sm-tray.sm-tray-2 .sm-tool { min-width: 44px; padding: 0 3px; }   /* 2.3: 3, not 4 — Replace joined the picture tray, and ten tools at 960 px wide were 2 px over the band */
   #sm-tray.sm-tray-2 .sm-tool[data-tool="more"] { grid-column-start: -3; }
   #sm-tray.sm-tray-2 .sm-tool.sm-pin { position: relative; margin-left: 0; padding-left: 4px; background: none; }
   /* the band above loses a row: its words keep one whole line, with nothing to scroll (1280×720 leaves it ~37 px) */
   #inspector-panel:has(#sm-say.sm-two) #inspector:has(> .sm-band-hint) { padding-bottom: 0; }
   #inspector-panel:has(#sm-say.sm-two) .sm-band-hint { padding-top: 6px; padding-bottom: 6px; }
 }
+
+/* ═══ Simple mode release 2.3: speed, sound and replacing ═══ */
+.sm-twinband { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; pointer-events: none; opacity: .85;
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,.7) 0 2px, rgba(255,255,255,.18) 2px 4px); }
+.sm-mute { position: absolute; top: 8px; width: 40px; height: 40px; padding: 0; border-radius: 10px; border: 1.5px solid #8b97ab; background: transparent; color: #cfd6e2; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.sm-mute .sm-ico { width: 22px; height: 22px; }
+.sm-mute.on { background: #2a1f14; color: #ffb454; border-color: #ffb454; }
+#sm-tray .sm-tool[data-tool^="sp0"], #sm-tray .sm-tool[data-tool^="sp1"], #sm-tray .sm-tool[data-tool^="sp2"], #sm-tray .sm-tool[data-tool^="sp3"] { min-width: 40px; padding: 0 2px; }   /* the five Speed presets: text only, narrow, so the slider is on screen at 380 */
+.sm-speed-r, .sm-vol-r { flex: 1 1 110px; min-width: 70px; align-self: center; margin: 0 6px; accent-color: var(--accent, #4da3ff); }
+.sm-speed-v, .sm-vol-v { flex: none; align-self: center; min-width: 46px; padding: 0 4px; font: 700 13px/1 system-ui, sans-serif; color: var(--text); font-variant-numeric: tabular-nums; text-align: center; }
+.sm-fade-l { flex: none; font-variant-numeric: tabular-nums; }

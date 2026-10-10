@@ -37,13 +37,22 @@ window.FM = window.FM || {};
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     minus: '<path d="M5 12h14"/>', plus: '<path d="M12 5v14M5 12h14"/>',
     editor: '<rect x="3" y="4" width="10" height="4" rx="1.3"/><rect x="8" y="10" width="13" height="4" rx="1.3"/><rect x="5" y="16" width="9" height="4" rx="1.3"/>',
-    back: '<path d="M15 5l-7 7 7 7"/>'
+    back: '<path d="M15 5l-7 7 7 7"/>',
+    speed: '<path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 17l4-5.5"/><circle cx="12" cy="17" r="1.1" fill="currentColor"/>',
+    volume: '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.7a4.5 4.5 0 0 1 0 6.6M18.5 6a8.5 8.5 0 0 1 0 12"/>',
+    replace: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+    reverse: '<path d="M11 6l-7 6 7 6zM20 6l-7 6 7 6z"/>',
+    soundout: '<path d="M9 5L4.5 8.5H2v7h2.5L9 19z"/><path d="M13 12h8M18 9l3 3-3 3"/>',
+    soundback: '<path d="M9 5L4.5 8.5H2v7h2.5L9 19z"/><path d="M21 12h-8M16 9l-3 3 3 3"/>',
+    fade: '<path d="M3.5 18.5L20.5 5.5M3.5 18.5V8M7 18.5v-5M10.5 18.5v-3M14 18.5v-1"/>',
+    mute: '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 9.5l4.5 5M20.5 9.5l-4.5 5"/>'
   };
   const svg = n => '<svg viewBox="0 0 24 24" class="sm-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON[n] || ICON.more) + '</svg>';
   const W = () => (FM.spineWords && FM.spineWords.tools) || {};
   const phone = window.matchMedia ? window.matchMedia('(max-width: 700px)') : { matches: false };
   let bar = null, sayEl = null, tray = null, tools = null, menu = null;
   let panelFor = null, lengthFor = null, lengthEdge = 'end', lastSig = '', lastSel = null;
+  let rowFor = null, rowLast = '';   // 2.3: the inline row open on the tray ({kind: 'speed' | 'volume' | 'fade', id}), and the tool that opened it (focus goes back there)
   let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
   let roomy = false;                 // PC, and the band is tall enough for the tray's two rows (roomForTwo)
   /* TWO ROWS NEED A BAND THAT HOLDS THEM: its title (33), the bar's edge and project tools (1 + 57), both rows (104) and one
@@ -54,6 +63,10 @@ window.FM = window.FM || {};
      the band down to 150 and the height is remembered (fm_tl_h); two rows there pushed the project tools out of the band, so
      a band shorter than this keeps one row. */
   const TWO_ROWS = 104, WORDS_LINE = 6 + 13 * 1.4 + 6;
+  /* 2.3: TWO ROWS HOLD AT MOST TEN TOOLS. The band is 307 px and a tool 54: five to a row. A video clip's tray is 13 tools from 2.3 (Speed, Volume,
+     Replace, Reverse, Take sound out join the nine), so it goes back to ONE scrolling row there, More and 🗑 pinned, exactly as on a phone. His pick B
+     holds for every tray that fits (a picture, a title, a sound, an overlay); BUILD-PLAN-PHASE2-2.3.md §A1 puts the choice back to him. */
+  const TWO_ROW_MAX = 10;
   function roomForTwo() {
     if (phone.matches || !bar || !sayEl) return false;
     const band = document.getElementById('inspector-panel'), insp = document.getElementById('inspector');
@@ -127,7 +140,7 @@ window.FM = window.FM || {};
   function tool(t) {
     const b = el('button', 'sm-tool' + (t.pin ? ' sm-pin' : ''));
     b.type = 'button'; b.dataset.tool = t.id;
-    b.innerHTML = svg(t.icon);                                        // a fixed string, never user data
+    b.innerHTML = t.icon === null ? '' : svg(t.icon);                 // a fixed string, never user data (null: a text-only tool, a speed preset)
     b.appendChild(el('span', 'sm-tool-l', t.label));
     /* the accessible name STARTS with the words on the face (WCAG 2.5.3 Label in Name, review finding 30): "Into row, Put in the
        clip row", so Voice Control's "tap Into row" finds it; a full name that already contains the face word is kept as is */
@@ -201,15 +214,29 @@ window.FM = window.FM || {};
     const stay = { id: 'stay', label: w.stay || 'Stay put', icon: 'pin', pressed: stayOn, run: () => S.cmd.stay(id, !stayOn) };
     const more = { id: 'more', label: w.more || 'More', icon: 'more', title: w.moreTitle, run: () => FM.simpleTools.openPanel(id) };
     const crop = { id: 'crop', label: w.crop || 'Crop', icon: 'crop', run: () => { if (FM.cropTool && FM.cropTool.start) FM.cropTool.start(id); } };
+    /* 2.3: the sound and speed tools. A video has all of them; a picture has only Replace; a sound has Volume, Fade and Speed. */
+    const isVid = l.type === 'video' && !l.audioOnly && !(l.sm && l.sm.snd === true);
+    const speedT = { id: 'speed', label: w.speed || 'Speed', icon: 'speed', run: () => FM.simpleTools.openRow('speed', id) };
+    const volumeT = { id: 'volume', label: w.volume || 'Volume', icon: 'volume', run: () => FM.simpleTools.openRow('volume', id) };
+    const fadeT = { id: 'fade', label: w.fade || 'Fade', icon: 'fade', run: () => FM.simpleTools.openRow('fade', id) };
+    const replaceT = { id: 'replace', label: w.replace || 'Replace', icon: 'replace', run: () => S.cmd.pickReplace(id) };
+    const reverseT = { id: 'reverse', label: w.reverse || 'Reverse', icon: 'reverse', pressed: !!l.reversed, run: () => S.cmd.reverse(id) };
     if (R.isMain(id)) {
       const i = R.main.findIndex(e => e.id === id), sb = R.main[i].seam, na = R.main[i + 1], sa = na && na.seam;
+      const hasTwin = (R.followers[id] || []).some(f => S.isTwinOf(FM.layerById(FM.scene, f), l, R.eps));
+      const soundT = hasTwin ? { id: 'putSound', label: w.putSound || 'Put sound back', icon: 'soundback', run: () => S.cmd.putSoundBack(id) }
+        : (S.canTakeSound(R, id) ? { id: 'takeSound', label: w.takeSound || 'Take sound out', icon: 'soundout', run: () => S.cmd.takeSoundOut(id) } : null);
       const out = [
         { id: 'length', label: w.length || 'Length', icon: 'length', run: () => FM.simpleTools.openLength(id) },
+        ...(isVid ? [speedT, volumeT] : []),
         { id: 'earlier', label: w.earlier || 'Move earlier', icon: 'earlier', disabled: S.moveIndexFor(R, id, -1) < 0, run: () => S.cmd.move(id, -1) },
         { id: 'later', label: w.later || 'Move later', icon: 'later', disabled: S.moveIndexFor(R, id, 1) < 0, run: () => S.cmd.move(id, 1) },
         { id: 'lift', label: w.lift || 'Lift off', icon: 'lift', title: w.liftTitle, run: () => S.cmd.lift(id) },
         { id: 'duplicateClip', label: w.duplicate || 'Duplicate', icon: 'duplicate', run: () => S.cmd.duplicate(id) },
-        crop
+        crop,
+        ...(l.type === 'video' || l.type === 'image' ? [replaceT] : []),   // after Crop: a picture's first row on two rows stays exactly as it was
+        ...(isVid ? [reverseT] : []),
+        ...(soundT ? [soundT] : [])
       ];
       /* §8.2: a clip next to a gap or an overlap offers Close gap / Fix too (the seam chip's command) */
       /* its key names the seam it closes, so a double click never runs on into the next seam (the guard in tool()) */
@@ -222,13 +249,14 @@ window.FM = window.FM || {};
     const k = u ? u.kind : '';
     if (k === 'text') return [{ id: 'editwords', label: w.editWords || 'Edit words', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, { selectAll: true }); } }, stay, more, del];
     if (k === 'captions') return [more, del];
-    if (k === 'audio') return [stay, more, del];
+    if (k === 'audio') return [volumeT, fadeT, ...(l.type === 'video' ? [speedT] : []), stay, more, del];
     if (k === 'effect') return [stay, more, del];
     if (k === 'block' || k === 'fullOnly') return [{ id: 'openFull', label: w.openFull || 'Open in Full', icon: 'editor', run: () => FM.editor && FM.editor.request('full', { hop: true }) }, del];
     if (k === 'undecided') return [];
     const inCard = !!(u && u.host && String(u.host).indexOf('slot:') === 0);   // a card between clips: no Into row until its slot form exists (§3.6)
     return [   // overlays, stickers, pictures, a background
       ...(inCard ? [] : [{ id: 'into', label: w.into || 'Into row', icon: 'drop', title: w.intoTitle, run: () => S.cmd.intoRow(id) }]),
+      ...(isVid ? [volumeT, speedT] : []),
       crop,
       { id: 'forward', label: w.forward || 'Forward', icon: 'forward', run: () => S.cmd.z(id, 1) },
       { id: 'backward', label: w.backward || 'Back', icon: 'backward', run: () => S.cmd.z(id, -1) },
@@ -261,6 +289,56 @@ window.FM = window.FM || {};
     row.push(back, which, step(-1), val, step(1));
     return row;
   }
+
+  /* ═══ RELEASE 2.3: SPEED, VOLUME and FADE are inline rows like Length (the row itself is the panel, so the timeline above never
+     moves). Each commits ONE command on release / press; while a slider moves only the DOM and the playback rate change, so the
+     scene stays exactly as it was until he lets go (and an undo has one step to go back). ═══ */
+  const pct = v => Math.round(v * 100);
+  const fmtX = sp => (Math.round(sp * 100) / 100) + '×';
+  function rowBack() { return tool({ id: 'rowBack', label: W().done || 'Done', icon: 'back', run: () => { rowLast = rowFor ? rowFor.kind : ''; rowFor = null; lastSig = ''; FM.simpleTools.sync(); } }); }
+  function speedRow(R, id) {
+    const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), out = [rowBack()];
+    if (!l) return out;
+    if (FM.isAnimated(l.speed)) {   // a ramp is not one speed: say so, and offer the one way out
+      out.push(el('div', 'sm-quiet', w.speedRamped || 'Speed changes over the clip'));
+      out.push(tool({ id: 'oneSpeed', label: w.useOneSpeed || 'Use one speed', icon: 'speed', run: () => S.cmd.useOneSpeed(id) }));
+      return out;
+    }
+    const rg = S.speedRange(R, id) || { lo: 0.25, hi: 4 }, now = FM.speedAt(l, +l.start || 0), why = (FM.spineWords.lines || {}).speedShort;
+    [0.5, 1, 1.5, 2, 3].forEach(sp => out.push(tool({ id: 'sp' + sp, label: sp + '×', icon: null, title: (w.speed || 'Speed') + ' ' + sp + '×', pressed: Math.abs(now - sp) < 1e-6, disabled: sp > rg.hi + 1e-9, why: why,
+      run: () => { if (Math.abs(now - sp) > 1e-9) S.cmd.speed(id, sp); } })));
+    const val = el('span', 'sm-speed-v', fmtX(now));
+    const rng = el('input', 'sm-speed-r'); rng.type = 'range'; rng.min = String(rg.lo); rng.max = String(rg.hi); rng.step = '0.05';
+    rng.value = String(Math.max(rg.lo, Math.min(rg.hi, now))); rng.setAttribute('aria-label', w.speedLabel || 'Speed');
+    rng.addEventListener('input', () => { const sp = parseFloat(rng.value); val.textContent = fmtX(sp); if (FM.simpleTimeline && FM.simpleTimeline.previewSpeed) FM.simpleTimeline.previewSpeed(id, sp); });
+    rng.addEventListener('change', () => { const sp = parseFloat(rng.value); if (FM.simpleTimeline && FM.simpleTimeline.previewSpeed) FM.simpleTimeline.previewSpeed(id, null); if (Math.abs(sp - now) > 1e-9) S.cmd.speed(id, sp); });
+    out.push(rng, val);
+    return out;
+  }
+  function volumeRow(R, id) {
+    const S = FM.spine, w = W(), tid = S.soundTargetId(R, id), t = tid && FM.layerById(FM.scene, tid), out = [rowBack()];
+    if (!t) return out;
+    const now = (() => { const v = t.volume == null ? 1 : FM.evalProp(t.volume, FM.time); return isFinite(v) ? v : 1; })();
+    const val = el('span', 'sm-vol-v', pct(now) + '%');
+    const rng = el('input', 'sm-vol-r'); rng.type = 'range'; rng.min = '0'; rng.max = '200'; rng.step = '1'; rng.value = String(Math.min(200, pct(now)));
+    rng.setAttribute('aria-label', w.volumeLabel || 'Volume in percent');
+    rng.addEventListener('input', () => { const v = parseFloat(rng.value) / 100; val.textContent = pct(v) + '%'; const m = FM.media && FM.media.get(t.id); if (m && m.el) { try { m.el.volume = Math.min(1, v); } catch (e) {} } });
+    rng.addEventListener('change', () => { const v = parseFloat(rng.value) / 100; if (Math.abs(v - now) > 0.004) S.cmd.volume(id, v); });
+    out.push(rng, val);
+    return out;
+  }
+  function fadeRow(R, id) {
+    const S = FM.spine, w = W(), tid = S.soundTargetId(R, id), t = tid && FM.layerById(FM.scene, tid), out = [rowBack()];
+    if (!t) return out;
+    [['in', 'fadeIn', w.fadeIn || 'In'], ['out', 'fadeOut', w.fadeOut || 'Out']].forEach(f => {
+      const cur = () => { const L = FM.layerById(FM.scene, tid); return L ? (+L[f[1]] || 0) : 0; };
+      out.push(el('div', 'sm-quiet sm-fade-l', f[2] + ' ' + cur().toFixed(1) + ' s'));
+      out.push(tool({ id: 'fade' + f[0] + 'Minus', label: '−', icon: null, title: f[2] + ': ' + (w.shorter || 'shorter'), run: () => S.cmd.fade(id, f[0], Math.max(0, cur() - 0.5)) }));
+      out.push(tool({ id: 'fade' + f[0] + 'Plus', label: '+', icon: null, title: f[2] + ': ' + (w.longer || 'longer'), run: () => S.cmd.fade(id, f[0], cur() + 0.5) }));
+    });
+    return out;
+  }
+  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow };
 
   function quietLine(R) {
     const clips = R.main.filter(e => !e.slot), sum = (FM.spineWords && FM.spineWords.summary) ? FM.spineWords.summary(clips.length, R.trackEnd || 0) : '';
@@ -311,6 +389,7 @@ window.FM = window.FM || {};
   /* What the tray holds; true when it lies on two rows */
   function fillTray(R, ids, one, S) {
     if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
+    if (rowFor && ROWS[rowFor.kind]) { ROWS[rowFor.kind](R, rowFor.id).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (!ids.length) { tray.appendChild(quietLine(R)); return false; }
     if (ids.length > 1) {   // §8.5b: the intersection — Stay put on all, Delete (one main clip at a time in 2.2)
       const w = W();
@@ -328,7 +407,7 @@ window.FM = window.FM || {};
        WHILE MORE'S PANEL IS OPEN the tray is today's one row (More and 🗑 pinned, the rest a scroll or a wheel away): the panel
        docks in the band above the tray (D20 A), and two rows left it 36 px at 1280×720 and 44 at 1280×800, under one row of its
        own buttons. One row gives it back the room it has always had (88 / 96 px). */
-    if (roomy && list.length > 5 && panelFor !== one) {
+    if (roomy && list.length > 5 && list.length <= TWO_ROW_MAX && panelFor !== one) {
       tray.style.setProperty('--sm-cols', String(Math.ceil(list.length / 2)));
       list.forEach(t => tray.appendChild(tool(t)));
       return true;
@@ -384,9 +463,12 @@ window.FM = window.FM || {};
       if (selKey !== lastSel) { if (lastSel !== null && FM.simpleTimeline && FM.simpleTimeline.clearSay) FM.simpleTimeline.clearSay(); lastSel = selKey; }
       if (panelFor && (ids.length !== 1 || ids[0] !== panelFor)) panelFor = null;
       if (lengthFor && (ids.length !== 1 || ids[0] !== lengthFor || !R.isMain(lengthFor))) lengthFor = null;
+      if (rowFor && (ids.length !== 1 || ids[0] !== rowFor.id || !FM.layerById(FM.scene, rowFor.id))) rowFor = null;
       const one = ids.length === 1 ? ids[0] : null, l = one && FM.layerById(FM.scene, one);
       roomy = !!one && roomForTwo();   // measured only for one item, the only tray that can take two rows
-      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
+      const rowTarget = rowFor && FM.spine.soundTargetId ? FM.layerById(FM.scene, FM.spine.soundTargetId(R, rowFor.id)) : null;   // 2.3: a row redraws when what it shows changes
+      const rowSig = rowFor ? [rowFor.kind, rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration].join('|') : ''].join('#') : '';
+      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
       if (sig === lastSig) return;
       lastSig = sig;
       /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the
@@ -394,9 +476,10 @@ window.FM = window.FM || {};
          Restored only when focus was already in the tray, so a tap on the timeline never pulls focus here. */
       const ae = document.activeElement, hadFocus = !!(ae && ae !== tray && tray.contains(ae));
       const focusKey = hadFocus ? ((ae.dataset && ae.dataset.tool) || (ae.classList.contains('sm-len-v') ? '#len' : '')) : '';
+      const afterRow = rowLast; rowLast = '';
       FM.simpleTools._fill(R, ids, one, S);
       if (hadFocus) {
-        const want = focusKey === 'lenBack' ? 'length' : focusKey;   // Done goes back to the Length that opened the row
+        const want = focusKey === 'lenBack' ? 'length' : focusKey === 'rowBack' ? (afterRow || 'length') : focusKey;   // Done goes back to the Length / Speed / Volume / Fade that opened the row
         const n = (want === '#len' ? tray.querySelector('.sm-len-v') : want && tray.querySelector('[data-tool="' + want + '"]')) || tray.querySelector('button, input');
         if (n) n.focus({ preventScroll: true });
       }
@@ -404,7 +487,7 @@ window.FM = window.FM || {};
     _fill(R, ids, one, S) {
       fills++;
       tray.textContent = '';
-      tray.classList.toggle('sm-tray-len', !!lengthFor);
+      tray.classList.toggle('sm-tray-len', !!lengthFor || !!rowFor);
       let two = false;
       try { two = fillTray(R, ids, one, S); } finally { rows(two); }
     },
@@ -412,6 +495,8 @@ window.FM = window.FM || {};
     openPanel(id) { panelFor = id; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },   // a closed sheet comes back (finding 20)
     closePanel() { if (!panelFor) return; panelFor = null; lastSig = ''; FM.refreshAll(); },
     openLength(id) { lengthFor = id; lengthEdge = 'end'; lastSig = ''; this.sync(); },
+    openRow(kind, id) { if (!ROWS[kind]) return; rowFor = { kind: kind, id: id }; lastSig = ''; this.sync(); },   // 2.3: Speed, Volume, Fade
+    rowFor: () => rowFor,
     panelFor: () => panelFor,
     /* js/mobile.js asks before raising the sheet for a selection; js/inspector.js before drawing the band */
     sheetHeld(id) { return isSimple() && panelFor !== id; },
@@ -419,7 +504,7 @@ window.FM = window.FM || {};
     /* …and the words it shows there while idle: a selected item's say where its tools are, "· More opens the rest" unless
        every tool is on show on the tray's two rows */
     bandWords: bandWords,
-    _reset() { panelFor = null; lengthFor = null; lastSig = ''; closeMenu(); },   // suite seam
+    _reset() { panelFor = null; lengthFor = null; rowFor = null; lastSig = ''; closeMenu(); },   // suite seam
     _menu: () => menu,
     ICON: ICON
   };

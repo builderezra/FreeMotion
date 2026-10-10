@@ -364,6 +364,40 @@ window.FM = window.FM || {};
     }
   };
 
+  /* queue 980 (release 2.3): THE SPEED SLIDER'S FLAT BRANCH, as a function. The lines are the slider's own, moved here unchanged
+     (comments and all), so Full's slider and Simple's Speed (js/spine-edit.js planSpeed) re-time a clip with the SAME code. It
+     keeps the source span, re-times `layer` about its own start, scales its keyframes by the durations that actually resulted,
+     lets a group around it follow, and grows the project to fit. A ramped speed is not its business (the slider keeps that
+     branch). The caller has already decided `sp` is wanted; this clamps the length only by the 0.1 s floor and the source. */
+  FM.setClipSpeed = function (layer, sp) {
+    const durBefore = layer.duration;                   // measured BEFORE, so the keyframes below scale by what ACTUALLY happened
+    const span = layer.duration * FM.speedAt(layer, layer.start);   // source span is invariant → re-time the clip (speedAt, queue 451)
+    layer.speed = sp;
+    layer.duration = Math.max(0.1, span / sp);
+    // Clamp against the source that's actually left, exactly as the trim grips do
+    // (timeline.js: nd = min(nd, (srcDur - trimStart) / sp)). Without this, a clip whose span
+    // already overruns its source — e.g. trimStart moved, or the media was replaced — keeps the
+    // overrun through the re-time and freezes on its last decoded frame for the tail.
+    const mm = FM.media.get(layer.id);
+    const srcDur = (mm && mm.duration) ? mm.duration : Infinity;
+    if (layer.type === 'video' && isFinite(srcDur)) {
+      layer.duration = Math.max(0.1, Math.min(layer.duration, (srcDur - (layer.trimStart || 0)) / sp));
+    }
+    /* …and the animation rides with the clip (queue 68). The factor is taken from the durations
+     * that actually resulted, not from the speed ratio, because layer.duration is CLAMPED just
+     * above — by the 0.1s floor and, on a video, by the source that is really left. Deriving it
+     * from sp instead would let the keyframes stretch past a bar that had stopped growing.
+     * This runs per slider step, and that is fine: each step scales by the ratio between two
+     * consecutive real durations, so the product telescopes to the exact total ratio. */
+    if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);
+    // A GROUP AROUND THIS CLIP MUST FOLLOW IT (queue 626) — otherwise the group keeps its old
+    // length, its tail is empty, and the preview goes black there. Measured: children 2.000 →
+    // 1.176 while the group stayed at 2.000.
+    if (FM.refitGroupsFor) FM.refitGroupsFor(layer);
+    const end = layer.start + layer.duration;
+    if (end > FM.scene.project.duration) FM.scene.project.duration = end;
+  };
+
   FM.fxPresets = {
     _key: 'fm.fxpresets',
     builtins: [],
@@ -6052,32 +6086,7 @@ window.FM = window.FM || {};
         if (FM.isAnimated(layer.speed)) {
           FM.setProp(layer, 'speed', sp, FM.time);          // ramp: writes/updates a keyframe at the playhead; clip window stays fixed
         } else {
-          const durBefore = layer.duration;                   // measured BEFORE, so the keyframes below scale by what ACTUALLY happened
-          const span = layer.duration * FM.speedAt(layer, layer.start);   // source span is invariant → re-time the clip (speedAt, queue 451)
-          layer.speed = sp;
-          layer.duration = Math.max(0.1, span / sp);
-          // Clamp against the source that's actually left, exactly as the trim grips do
-          // (timeline.js: nd = min(nd, (srcDur - trimStart) / sp)). Without this, a clip whose span
-          // already overruns its source — e.g. trimStart moved, or the media was replaced — keeps the
-          // overrun through the re-time and freezes on its last decoded frame for the tail.
-          const mm = FM.media.get(layer.id);
-          const srcDur = (mm && mm.duration) ? mm.duration : Infinity;
-          if (layer.type === 'video' && isFinite(srcDur)) {
-            layer.duration = Math.max(0.1, Math.min(layer.duration, (srcDur - (layer.trimStart || 0)) / sp));
-          }
-          /* …and the animation rides with the clip (queue 68). The factor is taken from the durations
-           * that actually resulted, not from the speed ratio, because layer.duration is CLAMPED just
-           * above — by the 0.1s floor and, on a video, by the source that is really left. Deriving it
-           * from sp instead would let the keyframes stretch past a bar that had stopped growing.
-           * This runs per slider step, and that is fine: each step scales by the ratio between two
-           * consecutive real durations, so the product telescopes to the exact total ratio. */
-          if (durBefore > 0 && FM.scaleLayerKeyframes) FM.scaleLayerKeyframes(layer, layer.duration / durBefore);
-          // A GROUP AROUND THIS CLIP MUST FOLLOW IT (queue 626) — otherwise the group keeps its old
-          // length, its tail is empty, and the preview goes black there. Measured: children 2.000 →
-          // 1.176 while the group stayed at 2.000.
-          if (FM.refitGroupsFor) FM.refitGroupsFor(layer);
-          const end = layer.start + layer.duration;
-          if (end > FM.scene.project.duration) FM.scene.project.duration = end;
+          FM.setClipSpeed(layer, sp);   // queue 980 (2.3): the body below moved, unchanged, into FM.setClipSpeed so Simple's Speed calls the same code
         }
         const m = FM.media.get(layer.id); if (m && m.el) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, FM.evalProp(layer.speed, FM.time) || 1)); } catch (e) {} }
         FM.seekVideosToTime();

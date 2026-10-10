@@ -370,6 +370,31 @@ window.FM = window.FM || {};
     if (delta) p.kf.forEach(k => { k.v += delta; });
   };
 
+  /* queue 980 (release 2.3, DESIGN §8.5): SET A NUMERIC PROP TO `value` AT `time` WITHOUT ADDING A KEYFRAME — the generic form of
+   * shiftTransform above, for a prop that is not in layer.transform (a clip's volume, a sound's level). Unkeyed: it is written
+   * plainly. Keyed: every key moves with it so the whole animation keeps its shape and its timing, and the key COUNT never
+   * changes (setProp would drop a stray key at the playhead, which a tray slider must never do). Gain-like props (the ones
+   * where "twice as loud" means a ratio) are scaled by value / now; anything else is shifted by the difference, and a gain
+   * that is ~0 right now shifts too, since the ratio would explode. `o.min` / `o.max` clamp every key, so a ratio can never
+   * push a keyed level out of the range the control offers. Returns the number of keys it wrote (0 when unkeyed). */
+  const GAIN_KEYS = { volume: 1, opacity: 1, scale: 1, scaleX: 1, scaleY: 1, gain: 1 };
+  FM.shiftProp = function (container, key, value, time, o) {
+    o = o || {};
+    const lo = o.min == null ? -Infinity : o.min, hi = o.max == null ? Infinity : o.max;
+    const p = container[key];
+    if (!isAnimated(p)) { container[key] = Math.max(lo, Math.min(hi, value)); return 0; }
+    const cur = evalProp(p, time);
+    let n = 0;
+    if (GAIN_KEYS[key] && Math.abs(cur) >= 1e-3) {
+      const ratio = value / cur;
+      if (ratio !== 1 && isFinite(ratio)) p.kf.forEach(k => { if (typeof k.v === 'number') { k.v = Math.max(lo, Math.min(hi, k.v * ratio)); n++; } });
+      return n;
+    }
+    const d = value - cur;
+    if (d && isFinite(d)) p.kf.forEach(k => { if (typeof k.v === 'number') { k.v = Math.max(lo, Math.min(hi, k.v + d)); n++; } });
+    return n;
+  };
+
   /* Slide a layer's WHOLE animation along the timeline: shift every keyframe's TIME by `delta` seconds
    * (transform, effect params, volume/speed/fill/stroke/shadow). Keyframe times are absolute project
    * time (evalProp is fed the raw playhead), so moving a clip in time must retime its keyframes or the
