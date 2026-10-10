@@ -547,6 +547,11 @@ window.FM = window.FM || {};
 
   // ---- drag move / end ----
   function onMove(e) {
+    /* AU25: THE BUTTON CAME UP AND WE NEVER HEARD (same shape as queue 511 / 541 in app.js and timeline.js). A mouse release lost to an
+       OS window switch or a right-click mid-drag delivers no pointerup and no pointercancel, so `drag` stayed live: the layer then
+       followed the mouse with no button held, and the Simple / Full switch (FM.canvasGestureLive) shook "drag" on every tap. Only a
+       MOUSE can prove it (buttons === 0 mid-drag is impossible for one); a touch reports 1 until it lifts, so no real finger is cut short. */
+    if (e.pointerType === 'mouse' && e.buttons === 0 && drag && drag.pointerId === e.pointerId) { finishDrag(); return; }
     if (e.pointerType === 'touch' && vpPtrs.has(e.pointerId)) {
       vpPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (vpPinch && vpPtrs.size === 2) {

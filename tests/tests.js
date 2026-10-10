@@ -59853,6 +59853,53 @@
     }
   });
 
+  /* AU25: the two cases AU24-1 left. (1) a mouse release that never arrives must not leave the canvas drag live (the layer followed the
+     mouse and the editor switch shook "drag" on every tap); (2) a two-finger pinch on the selected layer is a canvas gesture too. */
+  async function au25Setup() {
+    const saved = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), mode0 = FM.editor.mode();
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 300, shapeH: 300, fill: '#336699', start: 0, duration: 5, name: 'AU25' });
+    FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id); FM.requestRender && FM.requestRender();
+    const cv = document.getElementById('preview'), r = cv.getBoundingClientRect();
+    return { saved: saved, sid: sid, sids: sids, mode0: mode0, L: L, cv: cv, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+  }
+  async function au25Restore(c) {
+    if (FM._resetVpPointers) FM._resetVpPointers();
+    if (FM.editor.mode() !== c.mode0) await FM.editor.request(c.mode0);
+    FM.scene.layers.length = 0; c.saved.forEach(function (l) { FM.scene.layers.push(l); }); FM.scene.selectedId = c.sid; FM.scene.selectedIds = c.sids;
+  }
+  test('AU25-1 a mouse release that never arrives does not leave a canvas drag live: the layer stops following, the editor switch is allowed', { item: 'AU25' }, async function () {
+    if (!FM.editor || !FM.editor.request || !FM.canvasGestureLive) throw new Error('FM.editor / FM.canvasGestureLive is not on this build');
+    const c = await au25Setup();
+    const ev = function (t, x, y, b) { return new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 11, pointerType: 'mouse', button: 0, buttons: b, isPrimary: true }); };
+    try {
+      c.cv.dispatchEvent(ev('pointerdown', c.cx, c.cy, 1)); window.dispatchEvent(ev('pointermove', c.cx + 20, c.cy, 1));
+      if (!FM.canvasGestureLive()) throw new Error('CONTROL: the drag did not start');
+      window.dispatchEvent(ev('pointermove', c.cx + 60, c.cy, 0));   // no pointerup ever came; the button is up
+      const x1 = c.L.transform.x;
+      window.dispatchEvent(ev('pointermove', c.cx + 140, c.cy, 0));
+      if (c.L.transform.x !== x1) throw new Error('the layer kept following the mouse with no button held (' + x1 + ' to ' + c.L.transform.x + ')');
+      if (FM.canvasGestureLive()) throw new Error('the canvas drag is still live after the button came up');
+      const ok = await FM.editor.request(c.mode0 === 'simple' ? 'full' : 'simple');
+      if (!ok) throw new Error('the editor switch still refused (' + FM.editor.mode() + ') after a lost mouse release');
+    } finally { await au25Restore(c); }
+  });
+  test('AU25-2 a two-finger pinch on the selected layer refuses the editor switch, and a lost touch (pointercancel) lets it through', { item: 'AU25' }, async function () {
+    if (!FM.editor || !FM.editor.request || !FM.canvasGestureLive) throw new Error('FM.editor / FM.canvasGestureLive is not on this build');
+    const c = await au25Setup();
+    const ev = function (t, id, x, y) { return new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: id, pointerType: 'touch', button: 0, buttons: t === 'pointerup' || t === 'pointercancel' ? 0 : 1, isPrimary: id === 21 }); };
+    try {
+      c.cv.dispatchEvent(ev('pointerdown', 21, c.cx - 40, c.cy)); c.cv.dispatchEvent(ev('pointerdown', 22, c.cx + 40, c.cy));
+      window.dispatchEvent(ev('pointermove', 22, c.cx + 80, c.cy)); window.dispatchEvent(ev('pointermove', 22, c.cx + 90, c.cy));
+      if (!FM.canvasGestureLive()) throw new Error('CONTROL: the pinch did not start');
+      const ok = await FM.editor.request(c.mode0 === 'simple' ? 'full' : 'simple');
+      if (ok || FM.editor.mode() !== c.mode0) throw new Error('the editor switched to ' + FM.editor.mode() + ' while two fingers were pinching the layer');
+      window.dispatchEvent(ev('pointercancel', 21, c.cx - 40, c.cy)); window.dispatchEvent(ev('pointercancel', 22, c.cx + 90, c.cy));
+      if (FM.canvasGestureLive()) throw new Error('the pinch is still live after both touches were cancelled');
+      const ok2 = await FM.editor.request(c.mode0 === 'simple' ? 'full' : 'simple');
+      if (!ok2) throw new Error('the editor switch still refused after the touches were cancelled');
+    } finally { await au25Restore(c); }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

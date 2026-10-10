@@ -16,3 +16,20 @@
 
 ## Not done
 Releases 2.1 and 2.2 (`980-p21-r3`, `980-p22-r3`), the cog block's own code, and a live-session switch (§6.7). Reading `editor-mode.js`'s guard lists against the real tools (crop, touch-up, pen) was by Read only.
+
+## AU25 (10 Oct): the newest tip, the cog block, the live-session switch, and AU24-1's pinch and stuck cases
+
+**Which tip.** `git ls-remote origin 'refs/heads/980*'`: the newest pushed 1.3 branch is still `980-phase1-r3` (7 Oct, the one AU24 read). The r10 tree the PM names is **not on the remote** (Measured: no 980-* ref newer than r3; main v17.35 carries no `editor-mode.js` or `simple-timeline.js`). So **every AU24 finding still applies to the newest tip that can be read**, and AU25 was done on the same copy. Re-run it on r10 when it is pushed: the new commit here (`js/canvas-edit.js`) is a 7-line edit that should merge cleanly unless r10 touched `onMove`.
+
+**AU24-1's pinch case (Read + Measured).** `FM.canvasGestureLive` already returned `drag || vpPinch`, so a layer pinch refuses the switch. It had no test. `AU25-2` drives two real touch pointers on a selected layer: the switch is refused, and after `pointercancel` on both it goes through. Mutation: guard changed to `!!(drag)` makes AU25-2 RED (Measured, 1280).
+
+**The stuck gesture (Measured, a real defect I introduced the symptom of).** `timeline.gestureLive` recovers a lost pointer (`gestureIsStale`, `recoverStuckGesture`). The canvas had no such recovery, and AU24-1's guard now reads it. A mouse release lost to an OS window switch or a right-click mid-drag sends no `pointerup` and no `pointercancel` (`FM._resetVpPointers` exists but only the suite calls it). Probe (`audit-simple-13-scripts-au25-lost-release.js`, 800x600): drag starts, button comes up unheard, two more moves with `buttons: 0`: **the layer kept following the mouse (x 270 to 669) and the Simple/Full switch refused with "drag" on every tap** until the next canvas press. The first half is an old Full bug; the second is what AU24-1's guard turned it into.
+- **Fix:** `onMove` ends the drag when a MOUSE moves with `buttons === 0` and that pointer owns the drag (the same proof queue 511 and 541 use; a touch reports 1 until it lifts, so no real finger is cut short). It commits through `finishDrag`.
+- **AU25-1:** RED on the pre-fix `canvas-edit.js` at 1280 and 380 (the layer follows, the switch refuses), GREEN with it at both widths.
+- **Not covered (Guess):** a lost TOUCH with no `pointerup` and no `pointercancel` (the OS gives one almost always; the timeline uses a stamp for that case). I did not add a time-based staleness to the canvas.
+
+**The cog block's code (Read, `js/app.js` 8380-8450 and `fm-editor-refuse`).** Switch button awaits `FM.editor.request`, repaints, closes the cog unless picks are pending or Friends is big. No defect found. The refusal text goes to `#cv-ed-why` and the shake class is removed on animationend or at 600 ms.
+
+**The live-session switch, §6.2 (Read).** `canRedoNow` and `redoCountNow` read `FM.collab.canRedo` and `redoDepth`, which exist (`collab-core.js:367-368`, `collab-session.js:1247-1249`). Switch writes no op. **One gap, not a bug yet:** DESIGN §6.2 says the switch "sends presence `ed`", and `editor-mode.js` and `collab-presence.js` never do (Measured: grep for `ed` in presence finds only role code). §6.7 does not exist in the DESIGN.md on this branch (sections end at 6.5), so I could not audit it; it must be in the builder's newer tree.
+
+Tests: `AU25-1`, `AU25-2` in `tests/tests.js`; `?v=` of `canvas-edit.js` 122 to 123.
