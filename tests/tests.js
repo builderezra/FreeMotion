@@ -60069,6 +60069,30 @@
     }
   });
 
+  /* ═══ AU24: step 1.3 (the cog switch and Simple's timeline) audited against DESIGN.md §6.1 on a COPY of 980-phase1-r3 ═════ */
+  test('AU24-1 the editor switch refuses while a finger is dragging a layer on the canvas (§6.1: "a timeline or canvas drag live")', { item: 'AU24' }, async function () {
+    if (!FM.editor || !FM.editor.request) throw new Error('FM.editor is not on this build');
+    const saved = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), mode0 = FM.editor.mode();
+    const cv = document.getElementById('preview');
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 300, shapeH: 300, fill: '#336699', start: 0, duration: 5, name: 'AU24 drag' });
+    const ev = function (t, x, y) { return new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 7, button: 0, buttons: t === 'pointerup' ? 0 : 1, isPrimary: true, pointerType: 'mouse' }); };
+    let r = null, cx = 0, cy = 0;
+    try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id); FM.requestRender && FM.requestRender();
+      r = cv.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+      cv.dispatchEvent(ev('pointerdown', cx, cy)); window.dispatchEvent(ev('pointermove', cx + 30, cy + 10)); document.dispatchEvent(ev('pointermove', cx + 40, cy + 12));
+      if (!(FM.canvasEdit && FM.canvasEdit.cancelDrag && FM.canvasEdit.gestureLive ? FM.canvasEdit.gestureLive() : true)) throw new Error('CONTROL: the canvas drag did not start');
+      const startX = typeof L.transform.x === 'number' ? L.transform.x : null;
+      if (startX === 270) throw new Error('CONTROL: the layer did not move, so no drag is live');
+      const ok = await FM.editor.request(mode0 === 'simple' ? 'full' : 'simple');
+      if (ok || FM.editor.mode() !== mode0) throw new Error('the editor switched to ' + FM.editor.mode() + ' while a finger was still dragging a layer on the canvas');
+    } finally {
+      window.dispatchEvent(ev('pointerup', cx, cy)); document.dispatchEvent(ev('pointerup', cx, cy)); cv.dispatchEvent(ev('pointerup', cx, cy));
+      if (FM.editor.mode() !== mode0) await FM.editor.request(mode0);
+      FM.scene.layers.length = 0; saved.forEach(function (l) { FM.scene.layers.push(l); }); FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
+    }
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
