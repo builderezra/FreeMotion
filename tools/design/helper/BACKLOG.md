@@ -483,3 +483,17 @@ ADDED 11 Oct 05:35 by the PM, from the builder. v17.38 (2.1) has been shipping s
 - PRE4c wip/v17.44-tree = e551532c: 2.6 (simple-2.5b..simple-2.6); 2499 tests. **LOOK HARDEST HERE.** collab-session.js had 3 edit/edit blocks against v17.37's #1015 catch-up fix, resolved as UNIONS: #1015's queued/rememberCatchup/endCatchup kept, and 2.6's step.cids / ed / undoCids / !star added. Run ALL of 921 S1–S8 plus 2.6's S6 tests at BOTH widths. For any red, run it alone, paired, and on wip/v17.41-tree (its predecessor). The S6f title's straight quotes are now typographic.
 Same method as before: the tree's own tests/_cdp.py; one report per tree to hunt/preflight-<tree>, pushed as each is done.
 FYI, two retired tests will need DROPS TEST at ship time (the builder's note, nothing for you to do): 2.4 drops "simple P2.2 · review the + refuses (until 2.4)…", and 2.5 renames "simple P2.1 · review Delete never leaves a cut song's speed ramp…".
+
+ADDED 11 Oct 07:35 by the PM, from the builder. TOP PRIORITY: run it NEXT, before PRE4. It may be a REAL cross-project overwrite in live collaboration, not just a test leak.
+The builder's theory (code-read, NOT yet proven), for #996, which has now recurred 3 times:
+- `C.reopen` reads the linked copy's stored base ASYNC, then attaches a session with S.pid = the copy. A project switch during that read leaves the session sitting over the OTHER project.
+- `onSnap` then diffs that project against the room doc, writes it in place, and AUTOSAVES it.
+- pushLocal already had a "never one project against another" lock; the incoming side had none.
+Its fix: ssh/hunt/996-guard e87c7535, on the 2.1 tree 980-p21-r12. C.reopen re-checks the open project after its read, and offProject() gates applyLive, every applyOrder(doc()) and every autosave. Two new tests, with on-project controls: "996 a reconnect whose stored base…" and "996 a session that hears from the room while another project is open…".
+- G996 at BOTH widths, on copies:
+  1. The two 996 tests on e87c7535 must be GREEN, including their on-project controls.
+  2. Take js/collab-session.js from 980-p21-r12 (fix reverted): both 996 tests must FAIL. If either passes, the test cannot see the bug; say so loudly.
+  3. Run `?only=921` (all of S0–S8): no new reds against 980-p21-r12.
+  4. Revert ONE half at a time: first only the reopen re-check, then only the applyLive/offProject gate. Show that each test catches its own half; a test that catches neither half is a finding.
+  Report CAUGHT or SURVIVED per revert, with the first assertion message. → hunt/preflight-996 (report at tools/design/hunts/preflight-996.md), with a DONE line. If you can, also say whether the theory matches what you see: does a switch during the async read really leave S.pid on the other project?
+Then continue PRE3b/PRE3c (v17.39, v17.41) and PRE4.
