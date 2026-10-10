@@ -59888,6 +59888,40 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* FZ3: a comment list that holds one id twice (a hand-edited or buggy-build file; storage.js never looks at project.comments).
+     Sharing it used to put the host and a guest in DIFFERENT orders after one new comment, with nothing left to send. */
+  test('FZ3 sharing a project whose comment list repeats an id tidies it first, so the host and a guest never file a new comment in different places', { item: 'FZ3', budgetMs: 90000 }, async function () {
+    const C = need921('FZ3');
+    await withCollab921([layer921('A')], async function (c) {
+      C.end();
+      const by = { mid: 'o', name: 'Ezra', color: '#ff8800' };
+      FM.scene.project.comments = [
+        { id: 'cdup', by: by, at: 1, text: 'first', replies: [{ id: 'rdup', by: by, at: 2, text: 'r1' }, { id: 'rdup', by: by, at: 3, text: 'r2' }] },
+        { id: 'cdup', by: by, at: 4, text: 'second', replies: [] },
+        { id: 'cuniq', by: by, at: 5, text: 'unique', replies: [] }
+      ];
+      const S = C.share({ autoTick: false, ownerInfo: { name: 'Ezra', color: '#ff8800' } });
+      c.S = S;
+      const idsOf = function (d) { return (d.project.comments || []).map(function (x) { return x.id; }); };
+      const hostIds = idsOf(S.host.base), liveIds = (FM.scene.project.comments || []).map(function (x) { return x.id; });
+      if (new Set(hostIds).size !== hostIds.length) throw new Error('the host base still holds a comment id twice: ' + JSON.stringify(hostIds));
+      if (JSON.stringify(hostIds) !== JSON.stringify(liveIds)) throw new Error('the owner\'s open project and the host base disagree after arming: ' + JSON.stringify(liveIds) + ' vs ' + JSON.stringify(hostIds));
+      if (hostIds.join() !== 'cdup,cuniq') throw new Error('the FIRST comment of a repeated id should stay, in place: ' + JSON.stringify(hostIds));
+      const rep = (S.host.base.project.comments[0].replies || []).map(function (x) { return x.id + ':' + x.text; }).join();
+      if (rep !== 'rdup:r1') throw new Error('a repeated reply id was not tidied (first stays): ' + rep);
+      // and a guest that joins and adds a comment ends in the SAME order as the host
+      let clock = 0;
+      const host = S.host;
+      host.join('g1', { role: 'editor', name: 'g1', color: '#ff8800' });
+      const g = guest921('g1', jclone921({ project: host.base.project, layers: host.base.layers }), host);
+      g.live.project.comments.push({ id: 'cnew', by: { mid: 'g1', name: 'g1', color: '#fff' }, at: 3, text: 'n', replies: [] });
+      for (let k = 0; k < 8; k++) { clock += 500; const tx = g.step(); if (!tx) continue; const r = host.receive('g1', tx); if (r.ack) g.onAck(r.ack); }
+      const a = idsOf(host.base).join(), b = idsOf(g.live).join();
+      if (a !== b) throw new Error('host ' + a + ' and guest ' + b + ' file the new comment in different places');
+      if (a !== 'cdup,cuniq,cnew') throw new Error('unexpected order ' + a);
+    });
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

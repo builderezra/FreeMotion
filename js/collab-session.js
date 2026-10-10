@@ -1749,6 +1749,37 @@ window.FM = window.FM || {};
       inv.project(pc);
       D.diffNode(['P'], base.project, pc, out);
     }
+    /* FZ3: a comment or reply id is its KEY on the wire (`#i:<id>`), so a list that holds one twice has two elements no op can
+       tell apart — and the host and a guest then file a new comment in different places, with nothing left to send (found by the
+       convergence fuzz, FZ2). Real clients cannot make such a list; a hand-edited or buggy-build file can, and `storage.js`
+       never looks at project.comments. The FIRST of a repeated id stays, the later ones go, as one ordinary set before anybody
+       can join. */
+    const cm = base.project && base.project.comments;
+    if (Array.isArray(cm)) {
+      const seenC = Object.create(null); let changed = false;
+      const want = [];
+      for (let i = 0; i < cm.length; i++) {
+        const c = cm[i];
+        if (!c || typeof c !== 'object' || typeof c.id !== 'string') { want.push(c); continue; }
+        if (seenC[c.id]) { changed = true; continue; }
+        seenC[c.id] = true;
+        const cc = clone(c);
+        if (Array.isArray(cc.replies)) {
+          const seenR = Object.create(null), rr = [];
+          for (let j = 0; j < cc.replies.length; j++) {
+            const r = cc.replies[j];
+            if (r && typeof r === 'object' && typeof r.id === 'string') { if (seenR[r.id]) { changed = true; continue; } seenR[r.id] = true; }
+            rr.push(r);
+          }
+          cc.replies = rr;
+        }
+        want.push(cc);
+      }
+      if (changed) {
+        out.ops.push({ o: 's', p: ['P', 'comments'], v: want });
+        out.recs.push({ p: ['P', 'comments'], o: 's', b: clone(cm) });
+      }
+    }
     const cl = clone(base.layers || []);
     if (inv.layers) inv.layers(cl);
     for (let i = 0; i < cl.length; i++) {
