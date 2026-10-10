@@ -59811,6 +59811,26 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* AU26: the MQTT stream reader (js/collab-signal.js, FM.collab.signal.mqtt.reader). */
+  test('AU26-1 the MQTT reader takes a frame of many small whole packets (a burst the broker sent at once); it only refuses what is left waiting or a hostile frame', { item: 'AU26' }, function () {
+    const MQ = FM.collab && FM.collab.signal && FM.collab.signal.mqtt;
+    if (!MQ || !MQ.reader) throw new Error('FM.collab.signal.mqtt.reader is not on this build');
+    const one = MQ.publish('fm1/x', new Uint8Array(100)), n = 700, burst = new Uint8Array(one.length * n);
+    for (let i = 0; i < n; i++) burst.set(one, i * one.length);
+    if (burst.length <= 65536) throw new Error('CONTROL: the burst is not over the 64 KB cap (' + burst.length + ')');
+    const got = MQ.reader()(burst);
+    if (got === null) throw new Error('a ' + burst.length + '-byte frame of ' + n + ' whole, valid packets was called "not MQTT" (the socket would drop and reconnect into the same burst)');
+    if (got.length !== n) throw new Error('read ' + got.length + ' of ' + n + ' packets');
+    // the cap still does its job: an unfinished packet that grows past it, and a frame far past anything a broker sends
+    const r = MQ.reader(1000);
+    if (r(new Uint8Array([0x30, 0xFF, 0xFF, 0x03])) !== null && r(new Uint8Array(1200)) !== null) throw new Error('an unfinished packet past the cap was kept');
+    if (MQ.reader(1000)(new Uint8Array(9000)) !== null) throw new Error('a frame 9x the cap was accepted');
+    // chunk invariance holds (the reader is the same however the bytes are cut)
+    const r2 = MQ.reader(); let total = 0;
+    for (let i = 0; i < burst.length; i += 997) { const o = r2(burst.subarray(i, Math.min(burst.length, i + 997))); if (o === null) throw new Error('cut into 997-byte pieces the same stream was called malformed at ' + i); total += o.length; }
+    if (total !== n) throw new Error('cut into pieces read ' + total + ' of ' + n);
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

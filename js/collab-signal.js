@@ -974,7 +974,10 @@ window.FM = window.FM || {};
       const cap = maxBytes || 65536;
       return function (chunk) {
         const c = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
-        if (buf.length + c.length > cap) return null;
+        /* AU26: the cap bounds what is left WAITING for more bytes, not what arrives. It was tested before any packet was taken out, so
+           one frame carrying a burst of small whole packets (700 publishes, 76 KB) was called "not MQTT" and dropped the socket, and
+           the rendezvous reconnected into the same burst. A frame far past anything a broker sends is still refused up front. */
+        if (c.length > cap * 8) return null;
         const nb = new Uint8Array(buf.length + c.length);
         nb.set(buf, 0); nb.set(c, buf.length);
         buf = nb;
@@ -993,6 +996,7 @@ window.FM = window.FM || {};
           out.push({ type: buf[0] >> 4, flags: buf[0] & 15, body: buf.slice(i, i + len) });
           buf = buf.slice(i + len);
         }
+        if (buf.length > cap) return null;   // what is still waiting (an unfinished packet) is what the cap is for
         return out;
       };
     }
