@@ -7377,7 +7377,9 @@ window.FM = window.FM || {};
       /* BLUR AMOUNT (queue 904): the radius was a fixed 8 with no control. A MULTIPLE of it rather than a px value, so the
          default 1× is the old radius exactly and the param is not a px key pxToPlate would have to learn about. */
       var tsAmt = fparam(p, 'blur', 1, t); tsAmt = tsAmt < 0.25 ? 0.25 : (tsAmt > 4 ? 4 : tsAmt);
-      var tsW4=W*4, tsLen=d.length, tsR=Math.max(1, Math.round(8 * tsAmt)), tsWin=tsR*2+1;
+      /* AU12: the radius is project px, so a half-scale preview plate takes half of it (plate scale off `arguments`, not a 6th parameter: arity stays 5) */
+      var tsPs=arguments[5]>0?arguments[5]:1;
+      var tsW4=W*4, tsLen=d.length, tsR=Math.max(1, Math.round(8 * tsAmt * tsPs)), tsWin=tsR*2+1;
       var tsPad=tsR+1;
       var tsY0=tsBB?Math.max(0,tsBB.y-tsPad):0, tsY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad):H-1;
       var tsX0=tsBB?Math.max(0,tsBB.x):0,       tsX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1):W-1;
