@@ -1,0 +1,29 @@
+--- UNMUTATED @1280
+   Regression 2/2 ✓Pending 0/0 built
+   ok  1069 B1: Remove Vocals — splitting the song leaves the instrumental whole, so the song does not go silent afte
+   ok  1069 B1: Remove Vocals — a trim cuts the instrumental the same way and moves none of its keyframes; a move shi
+--- UNMUTATED @380
+   Regression 2/2 ✓Pending 0/0 built
+   ok  1069 B1: Remove Vocals — splitting the song leaves the instrumental whole, so the song does not go silent afte
+   ok  1069 B1: Remove Vocals — a trim cuts the instrumental the same way and moves none of its keyframes; a move shi
+--- M1 (split guard line deleted) @1280
+   Regression 1/2 ✗Pending 0/0 built
+   RED 1069 B1: Remove Vocals — splitting the song leaves the instrumental whole, so the song does not go silent afte
+   ok  1069 B1: Remove Vocals — a trim cuts the instrumental the same way and moves none of its keyframes; a move shi
+      FAIL1069 B1: Remove Vocals — splitting the song leaves the instrumental whole, so the song does not go silent after the cut — the instrumental was cut down to the head half (start 1, length 2) — after the cut the muted song plays nothing
+--- M1 (split guard line deleted) @380
+   Regression 1/2 ✗Pending 0/0 built
+   RED 1069 B1: Remove Vocals — splitting the song leaves the instrumental whole, so the song does not go silent afte
+   ok  1069 B1: Remove Vocals — a trim cuts the instrumental the same way and moves none of its keyframes; a move shi
+      FAIL1069 B1: Remove Vocals — splitting the song leaves the instrumental whole, so the song does not go silent after the cut — the instrumental was cut down to the head half (start 1, length 2) — after the cut the muted song plays nothing
+--- M2 (ratio ignores speedChanged; moved/speedChanged condition dropped) @1280
+   Regression 1/2 ✗Pending 0/0 built
+   ok  1069 B1: Remove Vocals — splitting the song leaves the instrumental whole, so the song does not go silent afte
+   RED 1069 B1: Remove Vocals — a trim cuts the instrumental the same way and moves none of its keyframes; a move shi
+      FAIL1069 B1: Remove Vocals — a trim cuts the instrumental the same way and moves none of its keyframes; a move shifts them — a trim squeezed the instrumental's volume keyframes to 1.375, 3.625 — they should stay at 1.5, 4.5
+--- M2 (ratio ignores speedChanged; moved/speedChanged condition dropped) @380
+   Regression 1/2 ✗Pending 0/0 built
+   ok  1069 B1: Remove Vocals — splitting the song leaves the instrumental whole, so the song does not go silent afte
+   RED 1069 B1: Remove Vocals — a trim cuts the instrumental the same way and moves none of its keyframes; a move shi
+      FAIL1069 B1: Remove Vocals — a trim cuts the instrumental the same way and moves none of its keyframes; a move shifts them — a trim squeezed the instrumental's volume keyframes to 1.375, 3.625 — they should stay at 1.5, 4.5
+restored: True
