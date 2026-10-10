@@ -128,13 +128,22 @@ window.FM = window.FM || {};
       const oldClock = karaokeClock(oldSource);
       if (sameClock(karaokeClock(source), oldClock) || !sameClock(karaokeClock(oldTwin), oldClock) ||
           !sameClock(karaokeClock(twin), karaokeClock(oldTwin))) return;
+      /* ⚠️ A SPLIT IS NOT A RETIME (B1, #1069 — the land list's required fix for b69c5795). Splitting the song leaves its
+         head half here with a shorter clock and puts the tail in a NEW layer of the same lineage (splitOf). Following the
+         head cut the instrumental down to the first half, and since the picture's own sound is muted, the song went
+         SILENT after the cut. The instrumental already spans both halves, which is right; leave it whole. */
+      if (source.splitOf && FM.scene.layers.some(l => l && l !== source && l.splitOf === source.splitOf && !before.has(l.id))) return;
 
-      // Map this track's independent volume/effect keyframes onto its new window.
-      // The speed track is replaced below with a CLONE of the source's new ramp.
+      /* Map this track's own volume/effect keyframes onto its new window — but ONLY when the clip's clock carries them:
+         a move shifts them, a speed change stretches them. A TRIM moves no keyframe (the song's own keys stay where they
+         are when its edge is dragged), so neither may the instrumental's: scaling them by the trimmed length squeezed a
+         fade into the part that was left. The speed track is replaced below with a CLONE of the source's new ramp. */
       const oldStart = twin.start || 0, oldDur = twin.duration || 0;
       const newStart = source.start || 0;
-      const ratio = oldDur > 0 ? source.duration / oldDur : 1;
-      if (FM.animatedProps && Number.isFinite(ratio) && ratio > 0) {
+      const speedChanged = oldClock[3] !== !!source.reversed || oldClock[4] !== JSON.stringify(source.speed == null ? 1 : source.speed);
+      const moved = !speedChanged && newStart !== oldStart && (source.duration || 0) === oldDur && (source.trimStart || 0) === (oldTwin.trimStart || 0);
+      const ratio = speedChanged ? (oldDur > 0 ? source.duration / oldDur : 1) : 1;
+      if ((speedChanged || moved) && FM.animatedProps && Number.isFinite(ratio) && ratio > 0) {
         FM.animatedProps(twin).forEach(prop => {
           if (prop === twin.speed) return;
           prop.kf.forEach(k => { k.t = newStart + (k.t - oldStart) * ratio; });
