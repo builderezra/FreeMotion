@@ -842,6 +842,52 @@ window.FM = window.FM || {};
       return { b: b, rej: rej };
     };
 
+    /* ⚠️ A RESENT TX GETS ITS ACK BACK — AND THE ACK MUST NOT UNDO WHAT HAPPENED AFTER IT (FZ1, found by the convergence fuzz).
+       A guest whose ack died with the line replays the tx after it reconnects, and §7.1 step 3 answers with the cached ack:
+       the values THIS tx wrote. If somebody else has since changed one of those paths, the guest has by then taken their
+       batch through the tail (and skipped that path, because its own tx was still pending), and the cached ack then
+       writes its OLDER value over both its base and its screen: the guest holds a number the host does not, until
+       §11.4's hash notices ten quiet seconds later (never, while it is editing). So the ack is refreshed: for every `s`/`d` the tx
+       carries whose path no longer holds what it wrote, and for every structural op it carries, the host's state now is appended to the repair, inside the same
+       per-tx and per-member budget a refusal's repair uses; whatever does not fit is `resync`, the budgeted copy. */
+    function refreshDup(m, tx, ack) {
+      const stale = [];
+      for (let i = 0; i < tx.ops.length; i++) {
+        const op = tx.ops[i];
+        if (op.o === 's' || op.o === 'd') {
+          if (!Array.isArray(op.p)) continue;
+          const cur = D.valueAt(base, op.p);
+          if (op.o === 'd' ? cur === undefined : (cur !== undefined && canon(cur) === canon(op.v))) continue;
+        }
+        stale.push(op);   // a structural op (li lr mv ai am ar) always: the cached ack re-applies the element AS THE TX LEFT IT, whole
+      }
+      if (!stale.length) return ack;
+      const ft = now();
+      m.fixTokens = Math.min(LIM.FIX_BURST, (m.fixTokens == null ? LIM.FIX_BURST : m.fixTokens) + (ft - (m.fixAt || ft)) / 1000 * LIM.FIX_PER_SEC);
+      m.fixAt = ft;
+      const fix = (ack.fix || []).slice(), seen = Object.create(null);
+      let fixN = 0, fixBytes = 0, cut = false;
+      stale.forEach(function (op) {
+        if (cut) return;
+        currentStateOps(op).forEach(function (f) {
+          if (cut) return;
+          const k = f.o + '|' + P.key(f.o === 'ai' ? f.p.concat(f.k) : (f.p || ['L', f.id]));
+          if (seen[k]) return;
+          const n = canon(f).length;
+          if (fixN >= LIM.FIX_OPS || fixBytes + n > LIM.FIX_BYTES || n > m.fixTokens) { cut = true; return; }
+          seen[k] = 1; fix.push(f);
+          fixN++; fixBytes += n; m.fixTokens -= n;
+        });
+      });
+      const out = Object.assign({}, ack, { fix: fix });
+      /* The order statement the original ack carried is as old as its values: re-adopting it would put a list back in the
+         order it had THEN, over a reorder somebody did since (which the tail already delivered). The repaired elements
+         above come with their present place instead. */
+      delete out.ord;
+      if (cut) out.resync = 1;
+      return out;
+    }
+
     /* One guest tx, §7.1 in order. Returns {ack, b}: `ack` goes back to the sender, `b` to everyone
        else. Either may be null — a tx that changed nothing is not a batch. */
     H.receive = function (mid, tx) {
@@ -859,7 +905,7 @@ window.FM = window.FM || {};
         return { ack: null, b: null, dropped: 'rate' };
       }
       if (tx.cid <= m.lastCid) {                              // 3
-        for (let i = m.acks.length - 1; i >= 0; i--) if (m.acks[i].cid === tx.cid) return { ack: m.acks[i], b: null, dup: true };
+        for (let i = m.acks.length - 1; i >= 0; i--) if (m.acks[i].cid === tx.cid) return { ack: refreshDup(m, tx, m.acks[i]), b: null, dup: true };
         return { ack: null, b: null, dup: true };
       }
 
