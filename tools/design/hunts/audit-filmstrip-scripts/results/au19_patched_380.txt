@@ -1,0 +1,2 @@
+380 Regression 1/1 ✓Pending 0/0 built
+   ok  AU19-1 after Undo or Redo of a replaced video the timeline bar shows that clip’s frames, not the oth
