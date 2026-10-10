@@ -59811,6 +59811,59 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* ═══ AU22: the Simple engine's read side (js/spine.js), audited against DESIGN.md §5.2 ═══════════════════════════════ */
+  function au22Clip(over) {
+    au22Clip.n = (au22Clip.n || 0) + 1;
+    return Object.assign({ id: 'au22_' + au22Clip.n, type: 'video', name: 'c.mp4', start: 0, duration: 2, visible: true, muted: false,
+      transform: { x: 540, y: 960, opacity: 1, scale: 1, rotation: 0 }, effects: [], masks: [], srcW: 1080, srcH: 1920, srcRev: 0, mediaRev: 0 }, over || {});
+  }
+  test('AU22-1 after adoption a main clip that is see-through for its whole length stays on the main track (§5.2: honoured, not a mainNoPicture), and a real audio-only one is still refused', { item: 'AU22' }, function () {
+    const P = { width: 1080, height: 1920, fps: 30, duration: 30, sm: { v: 1, adopted: true } };
+    const a = au22Clip({ start: 0, duration: 2, sm: { main: true } });
+    const b = au22Clip({ start: 2, duration: 2, sm: { main: true }, transform: { x: 540, y: 960, opacity: 0, scale: 1, rotation: 0 } });
+    const c = au22Clip({ start: 4, duration: 2, sm: { main: true } });
+    const R = FM.spine.classify({ project: P, layers: [c, b, a] });
+    const ids = R.main.map(function (e) { return e.id; });
+    if (ids.join() !== [a.id, b.id, c.id].join()) throw new Error('the main track is ' + ids.join() + ' (want ' + [a.id, b.id, c.id].join() + '): the faded clip left it, and its neighbours are now ' + R.anomalies.map(function (x) { return x.kind; }).join('/'));
+    if (R.anomalies.some(function (x) { return x.kind === 'mainNoPicture' || x.kind === 'gap'; })) throw new Error('a faded main clip was reported as ' + R.anomalies.map(function (x) { return x.kind; }).join(','));
+    // control: a stored sm.main on an audio-only layer is still ignored and named
+    const ao = au22Clip({ start: 6, duration: 2, sm: { main: true }, audioOnly: true });
+    const R2 = FM.spine.classify({ project: P, layers: [ao, c, b, a] });
+    if (R2.main.some(function (e) { return e.id === ao.id; }) || !R2.anomalies.some(function (x) { return x.kind === 'mainNoPicture' && x.ids[0] === ao.id; })) throw new Error('CONTROL: an audio-only layer carrying sm.main is no longer refused and named');
+  });
+  test('AU22-2 reading a scene whose layers have no transform (or are not layers at all) classifies what it can and never throws', { item: 'AU22' }, function () {
+    const P = { width: 1080, height: 1920, fps: 30, duration: 30 };
+    const noTr = au22Clip({ start: 0, duration: 2 }); delete noTr.transform;
+    const nullTr = au22Clip({ start: 2, duration: 2, transform: null });
+    const ok = au22Clip({ start: 4, duration: 2 });
+    let R;
+    try { R = FM.spine.classify({ project: P, layers: [null, {}, { id: 'bare' }, noTr, nullTr, ok] }); }
+    catch (e) { throw new Error('classify threw on a layer with no transform: ' + e.message + ' (the Simple timeline rebuilds from this, so one such layer would take the whole editor down)'); }
+    [noTr.id, nullTr.id, ok.id].forEach(function (id) { if (!R.units[id]) throw new Error('layer ' + id + ' was dropped from the read'); });
+  });
+
+  test('AU22-3 splitting a Stay-put item that ends with the video in Full: the head keeps staying put but no longer ends with the video, the tail half keeps both (§4.5, §12.2)', { item: 'AU22' }, async function () {
+    const saved = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), time = FM.time, sink = FM.history && FM.history.mute;
+    const seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
+    try {
+      const mark = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 40, fill: '#ffffff', start: 1, duration: 4 });
+      mark.sm = { stay: true, tail: true, tailEnd: 5 };
+      FM.scene.layers.length = 0; FM.scene.layers.push(mark);
+      FM.scene.selectedId = mark.id; FM.scene.selectedIds = [mark.id];
+      FM.seekVideosToTime = function () {}; if (FM.timeline) FM.timeline.rebuild = function () {}; FM.requestRender = function () {};
+      FM.history.reset(); FM.time = 3;
+      await FM.splitLayer(mark.id);
+      const tailHalf = FM.scene.layers.find(function (l) { return l.id !== mark.id; });
+      if (!tailHalf) throw new Error('CONTROL: the split did not happen');
+      if (!(mark.sm && mark.sm.stay === true)) throw new Error('the head lost Stay put: ' + JSON.stringify(mark.sm));
+      if (mark.sm.tail || 'tailEnd' in mark.sm) throw new Error('the head half still ends with the video (' + JSON.stringify(mark.sm) + '), so two items now claim the end of the track');
+      if (!(tailHalf.sm && tailHalf.sm.stay === true && tailHalf.sm.tail === true)) throw new Error('the tail half lost its end-of-video flag: ' + JSON.stringify(tailHalf.sm));
+    } finally {
+      FM.seekVideosToTime = seek; if (FM.timeline) FM.timeline.rebuild = rebuild; FM.requestRender = render; FM.time = time;
+      FM.scene.layers.length = 0; saved.forEach(function (l) { FM.scene.layers.push(l); }); FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
