@@ -1,0 +1,17 @@
+=== A1_rev_fx_clock
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU1-1 — trimming the head of a REVERSED clip moved its effect clock by 0.400 s at a fixed time: every Drift / Spin / Orbit on it jumps (the forward grip, the A key and Extend all carry the clock)
+=== B1_grip_cap_old
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU1-2 — left grip on the ramped 3x -> 0.5x reversed clip: the head frame reads source 29.50 s of a 20 s file (start 0.00, duration 12.00)
+=== B2_extend_cap_old
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU1-2 — extend (D key) on the ramped 3x -> 0.5x reversed clip: the head frame reads source 29.50 s of a 20 s file
+=== B3_limit_ignores_curve
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU1-2 — extend (D key) on the flat 3x (CONTROL) reversed clip: the head frame reads source 37.00 s of a 20 s file AND extend (D key) on the ramped 3x -> 0.5x reversed clip: the head frame reads source 29.50 s of a 20 s file AND left grip on the flat 3x (CONTROL) reversed clip: the head frame r
+ALLDONE
