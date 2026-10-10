@@ -29280,7 +29280,7 @@
 
   /* A seeded walk of ordinary editing: what a person does to a project, expressed as mutations of the
      plain tree. Used both for the diff property test and for the convergence fuzz. */
-  function mutate921(doc, seed, rounds) {
+  function mutate921(doc, seed, rounds, tag) {
     const R = rng921(seed);
     const pickL = function () { return doc.layers.length ? doc.layers[Math.floor(R() * doc.layers.length)] : null; };
     const num = function (lo, hi) { return Math.round((lo + R() * (hi - lo)) * 1000) / 1000; };
@@ -29318,7 +29318,7 @@
         const el = L.effects.splice(i, 1)[0]; L.effects.splice(j, 0, el); done.push('fxmove');
       } else if (k === 'layeradd') {
         const add = kitchen921(seed * 7 + r + 1).layers[3];
-        add.id = 'add_' + seed.toString(36) + '_' + r.toString(36);
+        add.id = 'add_' + (tag || '') + seed.toString(36) + '_' + r.toString(36);   // FZ1: the device's tag is in the id, as a real device's random suffix makes it: two devices can never mint one id
         add.parent = null;
         doc.layers.splice(Math.floor(R() * (doc.layers.length + 1)), 0, add); done.push('layeradd');
       } else if (k === 'layerdel' && doc.layers.length > 2) {
@@ -30691,7 +30691,7 @@
     const C = FM.collab, P = C.path, D = C.diff;
     const g = {
       mid: mid, live: doc, base: jclone921(doc),
-      cid: 0, pending: Object.create(null), outbox: [],
+      cid: 0, pending: Object.create(null), outbox: [], inflight: Object.create(null),
       online: true, bs: 0, epoch: host.epoch,
       sent: 0, skipped: 0, structWins: 0, snaps: 0, tails: 0, presSeen: 0, adopted: 0
     };
@@ -30777,6 +30777,7 @@
       g.sent++;
       const tx = { t: 'tx', cid: cid, bs: g.bs, ops: ops };
       if (!g.online) { g.outbox.push(tx); return null; }
+      g.inflight[cid] = tx;   // sent, not yet acked: the real Session keeps it in `outstanding` and replays it after a reconnect (collab-session.js replayOutstanding)
       return tx;
     };
 
@@ -30794,6 +30795,7 @@
       g.adopt(b.ord);
     };
     g.onAck = function (ack) {
+      delete g.inflight[ack.cid];
       Object.keys(g.pending).forEach(function (k) { if (g.pending[k] === ack.cid) delete g.pending[k]; });
       g.applyRemote((ack.ops || []).concat(ack.fix || []), true, ack.cid);
       g.adopt(ack.ord);
@@ -30803,6 +30805,9 @@
     /* §13.2. Tail when the epoch matches and the ring still reaches back; otherwise a snapshot, with
        our own outstanding ops re-applied on top and live repaired around them. */
     g.reconnect = function () {
+      /* A tx that went out and whose ack died with the line is still OURS (the real Session leaves it in `outstanding` until its ack lands), so it goes back out with the offline ones, in cid order. */
+      g.outbox = Object.keys(g.inflight).map(Number).sort(function (x, y) { return x - y; }).map(function (c) { return g.inflight[c]; }).concat(g.outbox);
+      g.inflight = Object.create(null);
       const t = (g.epoch === host.epoch) ? host.tail(g.bs) : null;
       if (t) {
         g.tails++;
@@ -30839,10 +30844,72 @@
     return g;
   }
 
-  test('921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, a disconnect, a rejoin and an epoch bump', { item: '921', budgetMs: 300000 }, function () {
+  test('FZ1 a tx whose ack died with the line, replayed after somebody else changed the same value, does not put the older value back', { item: 'FZ1' }, function () {
+    const C = need921('the lost-ack replay');
+    const P = C.path, D = C.diff;
+    let clock = 0;
+    const start = kitchen921(77);
+    FM.storage._sanitizeLayers(start.layers);
+    P.stampIds(start);
+    const host = C.Host({ base: jclone921(start), invariants: invariants921(), epoch: 'e1', now: function () { return clock; }, live: function () {} });
+    const mk = function (mid) { host.join(mid, { role: 'editor', name: mid, color: '#ff8800' }); return guest921(mid, jclone921(start), host); };
+    const g2 = mk('g2'), g3 = mk('g3');
+    const lid = start.layers[0].id, xOf = function (doc) { return doc.layers.find(function (l) { return l.id === lid; }).transform.x; };
+    // 1. g3 moves a layer; the host sequences it; the ack never reaches g3 (the line has gone); g2 sees the batch
+    clock += 500; g3.live.layers.find(function (l) { return l.id === lid; }).transform.x = 111;
+    const tx3 = g3.step(); const r3 = host.receive('g3', tx3);
+    if (!r3.ack || !r3.b) throw new Error('CONTROL: the host did not sequence the first move');
+    g3.online = false; g2.onB(r3.b);
+    // 2. g2 then moves the same layer; the host sequences that too
+    clock += 500; g2.live.layers.find(function (l) { return l.id === lid; }).transform.x = 222;
+    const tx2 = g2.step(); const r2 = host.receive('g2', tx2); g2.onAck(r2.ack);
+    if (xOf(host.base) !== 222) throw new Error('CONTROL: the host should hold g2\u2019s later value, it holds ' + xOf(host.base));
+    // 3. g3 comes back through the tail and replays what it never saw acknowledged
+    clock += 500;
+    g3.reconnect().forEach(function (tx) { const r = host.receive('g3', tx); if (r.ack) g3.onAck(r.ack); if (r.b) g2.onB(r.b); });
+    clock += 500; const tx = g3.step(); if (tx) { const r = host.receive('g3', tx); if (r.ack) g3.onAck(r.ack); }
+    if (g3.tails < 1) throw new Error('CONTROL: g3 should have come back through the tail, not a snapshot');
+    if (xOf(host.base) !== 222) throw new Error('the host\u2019s own value moved to ' + xOf(host.base));
+    if (xOf(g3.base) !== 222 || xOf(g3.live) !== 222) throw new Error('g3 holds ' + xOf(g3.live) + ' (base ' + xOf(g3.base) + ') while the host and g2 hold 222: the replayed ack put its OLDER value back over the later one');
+    if (P.canon({ project: g3.base.project, layers: g3.base.layers }) !== P.canon({ project: host.base.project, layers: host.base.layers })) throw new Error('g3 differs from the host after the replay');
+  });
+
+  test('FZ1 the refreshed ack of a replayed tx is budgeted like a refusal\u2019s repair: five later 150 000-character bodies are not all sent back, the ack says resync', { item: 'FZ1', budgetMs: 60000 }, function () {
+    const C = need921('the replay budget');
+    const P = C.path;
+    let clock = 0;
+    const start = kitchen921(77);
+    const texts = [];
+    for (let i = 0; i < 5; i++) { const T = FM.makeLayer('text', { name: 'T' + i, text: 'x' }); texts.push(T.id); start.layers.push(T); }
+    FM.storage._sanitizeLayers(start.layers);
+    P.stampIds(start);
+    const host = C.Host({ base: jclone921(start), invariants: invariants921(), epoch: 'e1', now: function () { return clock; }, live: function () {} });
+    host.join('g3', { role: 'editor', name: 'g3', color: '#ff8800' });
+    const big = function (c) { return new Array(150001).join(c); };
+    const ops = texts.map(function (id, i) { return { o: 's', p: ['L', id, 'text'], v: 'mine' + i, b: 'x' }; });
+    clock += 500;
+    const tx = { t: 'tx', cid: 1, bs: 0, ops: ops };
+    const r1 = host.receive('g3', tx);
+    if (!r1.ack || r1.ack.rej.length) throw new Error('CONTROL: the host refused the first tx: ' + JSON.stringify(r1.ack && r1.ack.rej));
+    // somebody else then writes a long body into every one of them
+    clock += 500;
+    const own = host.local(texts.map(function (id, i) { return { o: 's', p: ['L', id, 'text'], v: big('abcde'[i]) }; }));
+    if (!own.b) throw new Error('CONTROL: the owner\u2019s change was not sequenced');
+    clock += 500;
+    const again = host.receive('g3', { t: 'tx', cid: 1, bs: 0, q: 1, ops: ops });
+    if (!again.dup) throw new Error('CONTROL: the resent tx was not seen as a duplicate');
+    const bytes = JSON.stringify(again.ack.fix || []).length;
+    if (!(again.ack.fix || []).length) throw new Error('the resent tx got no repair at all, so it would put its older text back over the later one');
+    if (bytes > 512 * 1024 + 4096) throw new Error('the repair of a resent tx carried ' + bytes + ' bytes, past the 512 KB a refusal\u2019s repair is held to');
+    if (again.ack.resync !== 1) throw new Error('what did not fit was dropped without saying resync');
+  });
+
+  /* The convergence fuzz as a function of its seed (FZ1): the pinned seed runs in its own test below, and a battery of seeds that once failed
+     runs in the next one, so a fixed seed cannot go red again unseen. `?seed=N` on the page picks the seed of the first test, for hunting. */
+  function convergenceFuzz921(SEED) {
     const C = need921('convergence');
     const P = C.path, D = C.diff;
-    const R = rng921(20260923);
+    const R = rng921(SEED);
     let clock = 0;
 
     /* The document every device starts from, pre-sanitised — which is what §7.3 does when a share is
@@ -30935,10 +31002,10 @@
       const actors = 1 + Math.floor(R() * 3);
       for (let a = 0; a < actors; a++) {
         const who = Math.floor(R() * 4);
-        if (who === 3) { mutate921(ownerDoc, round * 31 + a * 7 + 1, 1 + Math.floor(R() * 2)); mutations++; ownerStep(); }
+        if (who === 3) { mutate921(ownerDoc, round * 31 + a * 7 + 1, 1 + Math.floor(R() * 2), 'o'); mutations++; ownerStep(); }
         else {
           const g = guests[who];
-          mutate921(g.live, round * 37 + a * 11 + 3, 1 + Math.floor(R() * 2)); mutations++;
+          mutate921(g.live, round * 37 + a * 11 + 3, 1 + Math.floor(R() * 2), g.mid); mutations++;
           const tx = g.step();
           if (tx) toHost(g.mid, tx);
         }
@@ -31015,7 +31082,7 @@
       const left = Object.keys(g.pending);
       if (left.length) trouble.push(g.mid + ' is still holding ' + left.length + ' pending path(s) at rest, starting ' + left[0] + ' — every remote value for those is being skipped');
     });
-    if (trouble.length) throw new Error('THE SESSION DID NOT CONVERGE after 300 seeded rounds (seed 20260923): ' + trouble.slice(0, 4).join(' ;; '));
+    if (trouble.length) throw new Error('THE SESSION DID NOT CONVERGE after 300 seeded rounds (seed ' + SEED + '): ' + trouble.slice(0, 8).join(' ;; '));
 
     /* no layer that was deleted came back (except as a fresh insert after the deletion) */
     const lastEvent = {};
@@ -31068,6 +31135,16 @@
        thing. Naming a ceiling makes that visible instead of silent. */
     if (rateRetries > 60) throw new Error('CONTROL: ' + rateRetries + ' txs were rate-limited and retried — the fuzz is running the token bucket dry, so slow the rounds down before trusting anything else here');
     if (host.base.layers.length < 2) throw new Error('CONTROL: the fuzz deleted its way down to ' + host.base.layers.length + ' layers, so most of it was running on an empty document');
+  }
+  test('921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, a disconnect, a rejoin and an epoch bump', { item: '921', budgetMs: 300000 }, function () {
+    const q = (function () { try { return /[?&]seed=(\d+)/.exec(window.top.location.search); } catch (e) { return null; } })();
+    convergenceFuzz921(q ? parseInt(q[1], 10) : 20260923);
+  });
+
+  test('FZ1 the convergence fuzz holds for the seeds that once failed: ids minted by two devices, a tx whose ack died with the line, and a stale order statement in a replayed ack', { item: 'FZ1', budgetMs: 240000 }, function () {
+    [23, 28, 30, 32, 38, 39, 43, 68, 107, 117, 119, 138].forEach(function (seed) {
+      try { convergenceFuzz921(seed); } catch (e) { throw new Error('seed ' + seed + ': ' + e.message); }
+    });
   });
 
   /* ═══════════════════════════════════════════════════════════════════════════════════════════════
