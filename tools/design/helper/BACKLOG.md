@@ -380,3 +380,13 @@ ADDED 10 Oct 14:50 by the PM. AU25, AU26, FZ3, P33 and P34 landed. AU25-1 is a r
 - P35  Plans for the 5 oldest open items after P34's, callers traced. → plans/helper-35.
 - P36  Plans for the next 5 after P35's. → plans/helper-36.
 - (INT3, from the previous batch, is still owed once v17.36 is live: add audit-simple-13, audit-unread-2 and the new fuzz-seeds commits.)
+
+ADDED 10 Oct 16:15 by the PM: a NEW TOP PRIORITY, at Ezra's ask. He does not want time wasted waiting on the laptop's tests, and usage is not the constraint. v17.36 (the Simple switch) was refused on `978 on a PC ⤢ swaps them with the flight…`, which you had already seen red on r3. The builder is fixing it.
+- PRE1 (TOP, whenever a candidate exists) CLOUD PRE-FLIGHT of the builder's next release candidate.
+      - Watch for a new builder branch: ls-remote for `980-phase1-r11`, any 980-* newer than r3, or anything the builder names in a commit. Check every ~10 minutes between your other items, and do not idle waiting for it.
+      - The moment one appears, run the FULL suite on it at 1280 AND 380 in your container (the same driver you use; NOT RUN HERE is fine for real-finger and AAC tests).
+      - Then run every red ALONE, and push a short report: each red's title, whether it FAILS ALONE or PASSES ALONE, its first assertion message, and the same test on main.
+      - Run nothing on, and push nothing to, the builder's branch.
+      → hunt/preflight-<branch>, report at tools/design/hunts/preflight-<branch>.md, with a one-line DONE.
+      Speed matters more than polish here, because the laptop's lock run takes ~2 h on that same tree. A red found in the first hour saves a refused 2-hour ship.
+- Then continue AU27, AU28, P35, P36 and INT3 as queued.
