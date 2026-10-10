@@ -467,3 +467,12 @@ NEW ORDER for you:
 2. SKIP LR1 on v17.38. The laptop's own lock is judging it right now, and your container cannot measure FU2/FU4 anyway.
 3. **Next: the plain suite on wip/v17.40-tree f74966dd at 1280 AND 380**, with reds alone, paired and on main. The builder calls it "the most useful run". Look hardest at B1's e808c3c2, which has never run in a browser, and at the karaoke split/keyframe tests. → hunt/preflight-v17.40 (overwrite the old v17.40 = 2.3 report; say so at the top).
 4. Then v17.39 44ba5f10, then v17.41 09358fd9 (plain suites; → hunt/preflight-v17.39 and -v17.41).
+
+ADDED 11 Oct 03:30 by the PM, from the builder. An addition to the v17.40 run (wip/v17.40-tree f74966dd), after its plain suite. prove.sh cannot see these: main has no karaoke resync at all, so the split test reads DEAD there.
+Do each one on a COPY of the tree, restore the file after each, and report CAUGHT or SURVIVED for each:
+- M1 In js/audio-tools.js, delete the line starting `if (source.splitOf && FM.scene.layers.some(` (the split guard). Run `?only=1069%20B1%3A%20Remove%20Vocals`. The split test must FAIL (CAUGHT).
+- M2 In the same function, make two changes:
+  - change `const ratio = speedChanged ? (oldDur > 0 ? source.duration / oldDur : 1) : 1;` to `const ratio = oldDur > 0 ? source.duration / oldDur : 1;`
+  - change `if ((speedChanged || moved) && FM.animatedProps` to `if (FM.animatedProps`
+  Run the same slice. The trim/move test must FAIL (CAUGHT).
+Also confirm the unmutated slice is green first, or CAUGHT means nothing. Put the results in hunt/preflight-v17.40's report.
