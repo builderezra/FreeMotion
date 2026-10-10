@@ -59831,6 +59831,73 @@
     if (total !== n) throw new Error('cut into pieces read ' + total + ' of ' + n);
   });
 
+  /* AU28: an import whose apply fails (a throw or a refusal AFTER the project was created) must not leave an empty project behind. The
+     failure is forced by wrapping applyScene, so the test does not depend on which odd layer a sanitiser happens to handle today. */
+  test('AU28-1 importing a file whose apply fails (throws, or refuses) leaves no empty project behind and puts you back in the project you were in, also through Restore from a backup', { item: 'AU28', budgetMs: 90000 }, async function () {
+    if (!FM.storage.importObject || !FM.storage.restoreBackup) throw new Error('FM.storage.importObject / restoreBackup is not on this build');
+    const real = FM.storage.applyScene, wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const made = [];
+    try {
+      if (wasHome) FM.home.close();
+      /* the project he is in sits in the MIDDLE of the list, so "land on the first other project" (what remove() does alone) is never it */
+      made.push(await FM.projects.create({ name: 'AU28 before', width: 320, height: 240 }));
+      const keep = await FM.projects.create({ name: 'AU28 keeper', width: 320, height: 240 }); made.push(keep);
+      made.push(await FM.projects.create({ name: 'AU28 after', width: 320, height: 240 }));
+      await FM.projects.open(keep, { confirmed: true });
+      await FM.storage.applyScene({ project: { name: 'AU28 keeper', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [], selectedId: null, selectedIds: [] });
+      const entry = function (n) { return { app: 'freemotion', project: { name: n, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [], selectedId: null }; };
+      const names = function () { return FM.projects.list().map(function (p) { return p.name; }); };
+      for (const how of ['throws', 'refuses']) {
+        FM.storage.applyScene = how === 'throws' ? async function () { throw new Error('forced'); } : async function () { return false; };
+        const n0 = FM.projects.list().length;
+        const ok = await FM.storage.importObject(entry('AU28 bad ' + how), null, { quiet: true });
+        if (ok) throw new Error('CONTROL: the forced failure did not fail the import (' + how + ')');
+        if (FM.projects.list().length !== n0) throw new Error(how + ': the project count went ' + n0 + ' to ' + FM.projects.list().length + ' (' + names().filter(function (x) { return /AU28 bad/.test(x); }).join() + ' was left behind)');
+        if (FM.projects.currentId() !== keep) throw new Error(how + ': he was left in another project than the one he was in (' + FM.projects.currentId() + ' instead of ' + keep + ')');
+        const r = await FM.storage.restoreBackup({ app: 'freemotion', backup: true, projects: [entry('AU28 badr ' + how)] }, null);
+        if (r.ok || (r.failed || []).length !== 1) throw new Error(how + ': restore did not report the one failure: ' + JSON.stringify(r));
+        if (FM.projects.list().length !== n0) throw new Error(how + ' (restore): the project count went ' + n0 + ' to ' + FM.projects.list().length);
+        if (FM.projects.currentId() !== keep) throw new Error(how + ' (restore): he was left in another project');
+      }
+    } finally {
+      FM.storage.applyScene = real;
+      for (const p of FM.projects.list().filter(function (p) { return /^AU28 /.test(p.name); })) { try { await FM.projects.remove(p.id); } catch (e) {} }
+      if (wasHome) { try { await FM.projects.open(null, { confirmed: true }); } catch (e) {} }
+    }
+  });
+
+  /* AU28: a long press on a library card asks "Remove this from your media library?". The dialog swallows the release, so no click
+     follows; after Cancel his next real tap on the card must still add it (it used to be swallowed by a stale long-press flag). */
+  test('AU28-2 after a long press on a media-library card is cancelled in the dialog, the very next tap on that card adds it', { item: 'AU28', budgetMs: 60000 }, async function () {
+    if (!FM.addMenu || !FM.addMenu.render || !FM.mediaLib || !FM.mediaLib.add) throw new Error('FM.addMenu / FM.mediaLib is not on this build');
+    const KEY = 'fm.medialib', saved0 = localStorage.getItem(KEY), realConfirm = window.confirm, realUse = FM.mediaLib.use;
+    let host = null;
+    try {
+      localStorage.removeItem(KEY);
+      if (!FM.mediaLib.add({ kind: 'video', file: { name: 'au28.mp4', type: 'video/mp4', size: 10, lastModified: 1 }, width: 100, height: 100, duration: 3 }, 'k_au28')) throw new Error('CONTROL: mediaLib.add refused the fixture');
+      let used = 0, asked = 0;
+      FM.mediaLib.use = function () { used++; };
+      host = document.createElement('div'); host.style.cssText = 'position:fixed;left:0;top:0;width:360px;height:420px;z-index:99999;background:#222';
+      document.body.appendChild(host);
+      FM.addMenu.render(host, { variant: 'sheet' });
+      Array.prototype.filter.call(host.querySelectorAll('.addmenu-tab'), function (t) { return /Media/.test(t.textContent); }).forEach(function (t) { t.click(); });
+      await new Promise(function (r) { setTimeout(r, 300); });
+      const card = host.querySelector('.addmenu-media');
+      if (!card) throw new Error('CONTROL: no media card on the Media tab');
+      window.confirm = function () { asked++; return false; };
+      card.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 5, pointerType: 'mouse', buttons: 1 }));
+      await new Promise(function (r) { setTimeout(r, 750); });
+      if (asked !== 1) throw new Error('CONTROL: the long press did not ask (' + asked + ')');
+      await new Promise(function (r) { setTimeout(r, 450); });
+      card.click();
+      if (used !== 1) throw new Error('the first tap after a cancelled long press did nothing (used ' + used + ' times)');
+    } finally {
+      window.confirm = realConfirm; FM.mediaLib.use = realUse;
+      if (host) host.remove();
+      try { if (saved0 === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved0); } catch (e) {}
+    }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment

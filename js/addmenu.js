@@ -1155,7 +1155,10 @@ window.FM = window.FM || {};
             c.addEventListener('contextmenu', function (ev) { ev.preventDefault(); forget(); });
             var t = null;
             var cancel = function () { if (t) { clearTimeout(t); t = null; } };
-            c.addEventListener('pointerdown', function () { cancel(); t = setTimeout(function () { c._longPressed = true; t = null; forget(); }, 550); });
+            /* AU28: the flag only used to be cleared by the click that follows the lift, and a confirm() that opens mid-press swallows that
+               release, so after "Cancel" the flag stayed set and his NEXT real tap on the card did nothing. It now clears itself a moment
+               after the dialog is gone: a click that does follow the dialog is still swallowed, a later tap is not. */
+            c.addEventListener('pointerdown', function () { cancel(); t = setTimeout(function () { c._longPressed = true; t = null; forget(); setTimeout(function () { c._longPressed = false; }, 400); }, 550); });
             ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { c.addEventListener(ev, cancel); });
           }
           return c;

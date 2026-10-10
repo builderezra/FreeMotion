@@ -2073,17 +2073,31 @@ window.FM = window.FM || {};
     const problem = FM.storage.sceneFileProblem(obj);
     if (problem) { if (FM.toast) FM.toast(problem, 5000); return false; }
     const kind = opts && opts.draft;   // queue 915 clause 8: only restoreBackup passes this, and only these two values
+    let madePid = null;                // AU28: the project THIS call created, so a failed apply can take it away again
+    const prevPid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
     if (FM.projects) {
-      const pid = await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
+      const pid = madePid = await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
         kind === 'element' ? { elementDraft: true } : kind === 'template' ? { templateDraft: true } : {}, opts && opts.confirmed ? { confirmed: true } : {}));
       /* queue 690: false = his open project could not be saved and he chose to stay. applyScene below writes the
          file INTO whatever is open, so going on would put the import over the very work he just chose to keep. */
       if (!pid) return false;
     }
-    const ok = await FM.storage.applyScene(obj);
+    let ok = false;
+    try { ok = await FM.storage.applyScene(obj); }
+    catch (e) { ok = false; if (FM.reportError) { try { FM.reportError('importing a project file', e); } catch (x) {} } }
     if (!ok) {
       /* Belt and braces: sceneFileProblem should have caught everything applyScene refuses, but if the
-         two ever disagree the user must still be told rather than left in an empty project. */
+         two ever disagree the user must still be told rather than left in an empty project.
+         AU28: "told" was all it did. The project create() had just made stayed behind, EMPTY and named after the file, and a throw
+         inside applyScene (a layer entry the sanitiser did not expect) skipped even the toast — the count went up by one for every
+         bad entry, which is exactly the "the import destroyed my project" reading #673 was written to end. Take it away again and
+         put him back where he was. */
+      if (madePid && FM.projects && FM.projects.remove) {
+        try {
+          await FM.projects.remove(madePid);
+          if (prevPid && FM.projects.list().some(p => p.id === prevPid)) await FM.projects.open(prevPid, { confirmed: true });
+        } catch (e) {}
+      }
       if (FM.toast) FM.toast('That project file could not be opened.', 5000);
       return false;
     }
