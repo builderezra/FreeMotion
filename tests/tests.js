@@ -60144,6 +60144,34 @@
     }
   });
 
+  test('690 project file names a video whose source media is no longer stored', { item: '1069' }, async function () {
+    const before = FM.scene.layers.slice(), project = FM.scene.project, selected = FM.scene.selectedId;
+    const selectedIds = FM.scene.selectedIds, toast = FM.toast, said = [];
+    try {
+      const missing = FM.makeLayer('video', { start: 0, duration: 2 });
+      missing.name = 'Missing camera clip';
+      const shape = FM.makeLayer('shape', { start: 0, duration: 2 });
+      FM.scene.layers = [missing, shape];
+      if (FM.media.get(missing.id)) throw new Error('The fixture video already has media');
+      const obj = await FM.storage.serializeScene(FM.scene);
+      if (Object.keys(obj.media).length || obj.omitted.length !== 1 ||
+          obj.omitted[0].layer !== missing.name || obj.omitted[0].missing !== true)
+        throw new Error('A media-less video was not named as missing in the project file');
+      FM.toast = message => said.push(String(message));
+      await FM.storage.exportFile();
+      if (!said.some(message => message.includes(missing.name) && message.includes('not stored') && !message.includes('too big')))
+        throw new Error('Saving a project file still claims a clean save when its video source is gone: ' + said.join(' | '));
+      said.length = 0;
+      await FM.storage.applyScene(JSON.parse(JSON.stringify(obj)));
+      if (!said.some(message => message.includes(missing.name) && message.includes('not stored') && !message.includes('too big')))
+        throw new Error('Importing the same file fails to identify its missing source: ' + said.join(' | '));
+    } finally {
+      FM.toast = toast;
+      FM.scene.project = project; FM.scene.layers = before; FM.scene.selectedId = selected; FM.scene.selectedIds = selectedIds;
+      FM.refreshAll();
+    }
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
@@ -86123,7 +86151,11 @@
     var said = [], toast0 = FM.toast;
     FM.toast = function (m) { said.push(String(m)); };
     function bigFile(name) { return new File([new Blob([new Uint8Array(7 * 1024 * 1024)], { type: 'video/mp4' })], name, { type: 'video/mp4' }); }
-    function tinyFile(name) { return new File([new Blob([new Uint8Array(64)], { type: 'image/png' })], name, { type: 'image/png' }); }
+    function tinyFile(name) {
+      var canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+      var bytes = atob(canvas.toDataURL('image/png').split(',')[1]);
+      return new File([Uint8Array.from(bytes, function (c) { return c.charCodeAt(0); })], name, { type: 'image/png' });
+    }
     try {
       // ── a project holding one clip that fits and one that does not
       FM.scene.layers.length = 0;
