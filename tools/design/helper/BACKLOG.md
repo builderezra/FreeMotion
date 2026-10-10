@@ -476,3 +476,10 @@ Do each one on a COPY of the tree, restore the file after each, and report CAUGH
   - change `if ((speedChanged || moved) && FM.animatedProps` to `if (FM.animatedProps`
   Run the same slice. The trim/move test must FAIL (CAUGHT).
 Also confirm the unmutated slice is green first, or CAUGHT means nothing. Put the results in hunt/preflight-v17.40's report.
+
+ADDED 11 Oct 05:35 by the PM, from the builder. v17.38 (2.1) has been shipping since 05:24 and goes live ~07:30. The builder rehearsed the REST of Phase 2 from your branches, each tree built on the one before. These are LESS urgent: do them AFTER v17.40 (f74966dd) and its M1/M2, then v17.39 and v17.41 as already queued. Each tree sits on the rehearsal chain (2.2 pre + the Full batch + 2.3), not on real main, so it will be re-chained for real later.
+- PRE4a wip/v17.42-tree = 0ea7e93a: 2.4 (hunt/simple-2.3..simple-2.4b). Clean merge; 2473 tests.
+- PRE4b wip/v17.43-tree = 1c333fef: 2.5 (simple-2.4..simple-2.5b). spine-edit.js had an add/add conflict, with both sides kept; 2489 tests. Note: hunt/simple-2.5 forks from 2.4, not 2.4b.
+- PRE4c wip/v17.44-tree = e551532c: 2.6 (simple-2.5b..simple-2.6); 2499 tests. **LOOK HARDEST HERE.** collab-session.js had 3 edit/edit blocks against v17.37's #1015 catch-up fix, resolved as UNIONS: #1015's queued/rememberCatchup/endCatchup kept, and 2.6's step.cids / ed / undoCids / !star added. Run ALL of 921 S1–S8 plus 2.6's S6 tests at BOTH widths. For any red, run it alone, paired, and on wip/v17.41-tree (its predecessor). The S6f title's straight quotes are now typographic.
+Same method as before: the tree's own tests/_cdp.py; one report per tree to hunt/preflight-<tree>, pushed as each is done.
+FYI, two retired tests will need DROPS TEST at ship time (the builder's note, nothing for you to do): 2.4 drops "simple P2.2 · review the + refuses (until 2.4)…", and 2.5 renames "simple P2.1 · review Delete never leaves a cut song's speed ramp…".
