@@ -220,23 +220,18 @@ window.FM = window.FM || {};
     const volumeT = { id: 'volume', label: w.volume || 'Volume', icon: 'volume', run: () => FM.simpleTools.openRow('volume', id) };
     const fadeT = { id: 'fade', label: w.fade || 'Fade', icon: 'fade', run: () => FM.simpleTools.openRow('fade', id) };
     const replaceT = { id: 'replace', label: w.replace || 'Replace', icon: 'replace', run: () => S.cmd.pickReplace(id) };
-    const reverseT = { id: 'reverse', label: w.reverse || 'Reverse', icon: 'reverse', pressed: !!l.reversed, run: () => S.cmd.reverse(id) };
     if (R.isMain(id)) {
       const i = R.main.findIndex(e => e.id === id), sb = R.main[i].seam, na = R.main[i + 1], sa = na && na.seam;
-      const hasTwin = (R.followers[id] || []).some(f => S.isTwinOf(FM.layerById(FM.scene, f), l, R.eps));
-      const soundT = hasTwin ? { id: 'putSound', label: w.putSound || 'Put sound back', icon: 'soundback', run: () => S.cmd.putSoundBack(id) }
-        : (S.canTakeSound(R, id) ? { id: 'takeSound', label: w.takeSound || 'Take sound out', icon: 'soundout', run: () => S.cmd.takeSoundOut(id) } : null);
+      const audioT = { id: 'audio', label: w.audio || 'Audio', icon: 'volume', title: w.audioTitle || 'Speed, volume, reverse and the clip’s sound', run: () => FM.simpleTools.openRow('audio', id) };
       const out = [
         { id: 'length', label: w.length || 'Length', icon: 'length', run: () => FM.simpleTools.openLength(id) },
-        ...(isVid ? [speedT, volumeT] : []),
+        ...(isVid ? [audioT] : []),
         { id: 'earlier', label: w.earlier || 'Move earlier', icon: 'earlier', disabled: S.moveIndexFor(R, id, -1) < 0, run: () => S.cmd.move(id, -1) },
         { id: 'later', label: w.later || 'Move later', icon: 'later', disabled: S.moveIndexFor(R, id, 1) < 0, run: () => S.cmd.move(id, 1) },
         { id: 'lift', label: w.lift || 'Lift off', icon: 'lift', title: w.liftTitle, run: () => S.cmd.lift(id) },
         { id: 'duplicateClip', label: w.duplicate || 'Duplicate', icon: 'duplicate', run: () => S.cmd.duplicate(id) },
         crop,
-        ...(l.type === 'video' || l.type === 'image' ? [replaceT] : []),   // after Crop: a picture's first row on two rows stays exactly as it was
-        ...(isVid ? [reverseT] : []),
-        ...(soundT ? [soundT] : [])
+        ...(l.type === 'video' || l.type === 'image' ? [replaceT] : [])   // after Crop: a picture's first row on two rows stays exactly as it was
       ];
       /* §8.2: a clip next to a gap or an overlap offers Close gap / Fix too (the seam chip's command) */
       /* its key names the seam it closes, so a double click never runs on into the next seam (the guard in tool()) */
@@ -295,7 +290,7 @@ window.FM = window.FM || {};
      scene stays exactly as it was until he lets go (and an undo has one step to go back). ═══ */
   const pct = v => Math.round(v * 100);
   const fmtX = sp => (Math.round(sp * 100) / 100) + '×';
-  function rowBack() { return tool({ id: 'rowBack', label: W().done || 'Done', icon: 'back', run: () => { rowLast = rowFor ? rowFor.kind : ''; rowFor = null; lastSig = ''; FM.simpleTools.sync(); } }); }
+  function rowBack() { return tool({ id: 'rowBack', label: W().done || 'Done', icon: 'back', run: () => { rowLast = rowFor ? rowFor.kind : ''; rowFor = (rowFor && rowFor.from) ? { kind: rowFor.from, id: rowFor.id } : null; lastSig = ''; FM.simpleTools.sync(); } }); }   // S9: Done from Speed or Volume opened inside Audio goes back to Audio
   function speedRow(R, id) {
     const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), out = [rowBack()];
     if (!l) return out;
@@ -338,7 +333,23 @@ window.FM = window.FM || {};
     });
     return out;
   }
-  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow };
+  /* OPTION E (S9, his A1 sheet): a video clip's four sound-and-time tools live in ONE row, opened by one tool, "Audio": Speed, Volume, Reverse, and Take sound out / Put sound back.
+     That takes a clip's tray from 13 tools to 10, so it lays out on two rows on a PC with every tool on show, and loses nothing: each one is one tap further. Speed and Volume open
+     their own rows with Done coming back HERE. */
+  function audioRow(R, id) {
+    const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), out = [rowBack()];
+    if (!l) return out;
+    out.push(tool({ id: 'speed', label: w.speed || 'Speed', icon: 'speed', run: () => FM.simpleTools.openRow('speed', id, 'audio') }));
+    out.push(tool({ id: 'volume', label: w.volume || 'Volume', icon: 'volume', run: () => FM.simpleTools.openRow('volume', id, 'audio') }));
+    out.push(tool({ id: 'reverse', label: w.reverse || 'Reverse', icon: 'reverse', pressed: !!l.reversed, run: () => S.cmd.reverse(id) }));
+    const hasTwin = (R.followers[id] || []).some(f => S.isTwinOf(FM.layerById(FM.scene, f), l, R.eps));
+    /* the sound commands make or remove a layer: the row is drawn again when they are done (the redraw during the command saw a half-done scene, and the sig only changes there), so the button that was pressed turns into its opposite where it was */
+    const again = async p => { const ok = await p; if (FM.layerById(FM.scene, id)) { FM.simpleTools.openRow('audio', id); FM.refreshAll(); } return ok; };
+    if (hasTwin) out.push(tool({ id: 'putSound', label: w.putSound || 'Put sound back', icon: 'soundback', run: () => again(S.cmd.putSoundBack(id)) }));
+    else if (S.canTakeSound(R, id)) out.push(tool({ id: 'takeSound', label: w.takeSound || 'Take sound out', icon: 'soundout', run: () => again(S.cmd.takeSoundOut(id)) }));
+    return out;
+  }
+  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow, audio: audioRow };
 
   function quietLine(R) {
     const clips = R.main.filter(e => !e.slot), sum = (FM.spineWords && FM.spineWords.summary) ? FM.spineWords.summary(clips.length, R.trackEnd || 0) : '';
@@ -388,6 +399,7 @@ window.FM = window.FM || {};
 
   /* What the tray holds; true when it lies on two rows */
   function fillTray(R, ids, one, S) {
+    if (rowFor && rowFor.kind === 'audio' && ROWS.audio) tray.setAttribute('data-row', 'audio'); else tray.removeAttribute('data-row');   // S9: the Audio row's five buttons are 317 px at their usual padding, 10 px over the 307 px band at 1280
     if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (rowFor && ROWS[rowFor.kind]) { ROWS[rowFor.kind](R, rowFor.id).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (!ids.length) { tray.appendChild(quietLine(R)); return false; }
@@ -467,7 +479,7 @@ window.FM = window.FM || {};
       const one = ids.length === 1 ? ids[0] : null, l = one && FM.layerById(FM.scene, one);
       roomy = !!one && roomForTwo();   // measured only for one item, the only tray that can take two rows
       const rowTarget = rowFor && FM.spine.soundTargetId ? FM.layerById(FM.scene, FM.spine.soundTargetId(R, rowFor.id)) : null;   // 2.3: a row redraws when what it shows changes
-      const rowSig = rowFor ? [rowFor.kind, rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration].join('|') : ''].join('#') : '';
+      const rowSig = rowFor ? [rowFor.kind, rowFor.from, rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration].join('|') : '', (l && rowFor.kind === 'audio') ? [l.reversed, l.muted, R.units[l.id] && (R.followers[l.id] || []).length].join('|') : ''].join('#') : '';
       const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
       if (sig === lastSig) return;
       lastSig = sig;
@@ -495,7 +507,7 @@ window.FM = window.FM || {};
     openPanel(id) { panelFor = id; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },   // a closed sheet comes back (finding 20)
     closePanel() { if (!panelFor) return; panelFor = null; lastSig = ''; FM.refreshAll(); },
     openLength(id) { lengthFor = id; lengthEdge = 'end'; lastSig = ''; this.sync(); },
-    openRow(kind, id) { if (!ROWS[kind]) return; rowFor = { kind: kind, id: id }; lastSig = ''; this.sync(); },   // 2.3: Speed, Volume, Fade
+    openRow(kind, id, from) { if (!ROWS[kind]) return; rowFor = { kind: kind, id: id, from: from || null }; lastSig = ''; this.sync(); },   // 2.3: Speed, Volume, Fade; S9: Audio (and `from` = the row Done returns to)
     rowFor: () => rowFor,
     panelFor: () => panelFor,
     /* js/mobile.js asks before raising the sheet for a selection; js/inspector.js before drawing the band */
