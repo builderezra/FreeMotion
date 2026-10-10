@@ -1687,7 +1687,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    them, and on a phone a 20px-tall target. Same shape as "+ Add Effect", the other lone action in the
    inspector, and flush with the column. Scoped to this card, so Copy / Paste keep their chips. */
 .preset-wrap.rows > .fx-act { margin-left: 0; padding: 11px 12px; border-radius: 10px; background: var(--panel-2); border-color: var(--line); color: var(--text); font-size: 13px; font-weight: 600; }
-.insp-preset-row .fxp-name { background: none; border: 0; padding: 0; color: var(--text); text-align: left; cursor: pointer; }
+.insp-preset-row .fxp-name { background: none; border: 0; padding: 0; color: var(--text); text-align: left; cursor: pointer; min-width: 0; max-width: 100%; display: block; white-space: normal; overflow-wrap: anywhere; }   /* a long unbroken name wraps inside its row instead of running under the ✕ and out of the panel (AU20) */
 .insp-preset-row.builtin { border-color: rgba(106,160,255,.38); }
 .insp-preset-row.broken { border-color: rgba(255,170,60,.42); background: rgba(255,170,60,.09); }
 .insp-preset-row.broken .fxp-name { color: #9aa3b4; cursor: help; }

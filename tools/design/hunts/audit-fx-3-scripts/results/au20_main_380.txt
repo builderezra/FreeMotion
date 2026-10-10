@@ -1,0 +1,7 @@
+380 Regression 0/3 ✗Pending 0/0 built
+   RED AU20 clearing the last tag while its chip is the filter does not leave the Presets card empty
+   RED AU20 renaming a layer preset keeps the Update button of layers that were applied from it
+   RED AU20 a long unbroken preset name wraps inside its row instead of running under the delete button or 
+FAILAU20 clearing the last tag while its chip is the filter does not leave the Presets card empty — the card is empty after the last tag was cleared while it was the filter: rows [], chips [] (nothing on screen can turn the filter off)
+FAILAU20 renaming a layer preset keeps the Update button of layers that were applied from it — the layer still says it came from “AU20 Look”, a preset that no longer exists
+FAILAU20 a long unbroken preset name wraps inside its row instead of running under the delete button or out of the panel — setup: the preset row did not render
