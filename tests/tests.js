@@ -60061,6 +60061,24 @@
     } finally { FM.projects = oldProjects; FM.toast = oldToast; }
   });
 
+  test('690 a corrupt embedded clip is named as missing on project import', { item: '1069' }, async function () {
+    const oldScene = FM.scene, oldToast = FM.toast, said = [];
+    try {
+      FM.scene = { project: Object.assign({}, oldScene.project), layers: [], selectedId: null, selectedIds: [] };
+      const layer = FM.makeLayer('image', { name: 'Broken holiday clip', start: 0, duration: 2 });
+      layer.name = 'Broken holiday clip';
+      FM.toast = function (message) { said.push(String(message)); };
+      const file = { project: Object.assign({}, FM.scene.project), layers: [layer], media: {} };
+      file.media[layer.id] = { kind: 'image', name: 'holiday.png', dataURL: 'not-an-embedded-file' };
+      if (await FM.storage.applyScene(file) !== true) throw new Error('Import failed before the missing-footage check');
+      if (!said.some(message => message.includes('Broken holiday clip') && message.includes('no footage')))
+        throw new Error('A present but corrupt media entry left a blank clip without a warning');
+    } finally {
+      FM.scene = oldScene; FM.toast = oldToast;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
