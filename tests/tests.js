@@ -59936,6 +59936,132 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+
+
+  /* ═══ AU24: step 1.3 (the cog switch and Simple's timeline) audited against DESIGN.md §6.1 on a COPY of 980-phase1-r3 ═════ */
+  test('AU24-1 the editor switch refuses while a finger is dragging a layer on the canvas (§6.1: "a timeline or canvas drag live")', { item: 'AU24' }, async function () {
+    if (!FM.editor || !FM.editor.request) throw new Error('FM.editor is not on this build');
+    const saved = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), mode0 = FM.editor.mode();
+    const cv = document.getElementById('preview');
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 300, shapeH: 300, fill: '#336699', start: 0, duration: 5, name: 'AU24 drag' });
+    const ev = function (t, x, y) { return new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 7, button: 0, buttons: t === 'pointerup' ? 0 : 1, isPrimary: true, pointerType: 'mouse' }); };
+    let r = null, cx = 0, cy = 0;
+    try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id); FM.requestRender && FM.requestRender();
+      r = cv.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+      cv.dispatchEvent(ev('pointerdown', cx, cy)); window.dispatchEvent(ev('pointermove', cx + 30, cy + 10)); document.dispatchEvent(ev('pointermove', cx + 40, cy + 12));
+      if (!(FM.canvasEdit && FM.canvasEdit.cancelDrag && FM.canvasEdit.gestureLive ? FM.canvasEdit.gestureLive() : true)) throw new Error('CONTROL: the canvas drag did not start');
+      const startX = typeof L.transform.x === 'number' ? L.transform.x : null;
+      if (startX === 270) throw new Error('CONTROL: the layer did not move, so no drag is live');
+      const ok = await FM.editor.request(mode0 === 'simple' ? 'full' : 'simple');
+      if (ok || FM.editor.mode() !== mode0) throw new Error('the editor switched to ' + FM.editor.mode() + ' while a finger was still dragging a layer on the canvas');
+    } finally {
+      window.dispatchEvent(ev('pointerup', cx, cy)); document.dispatchEvent(ev('pointerup', cx, cy)); cv.dispatchEvent(ev('pointerup', cx, cy));
+      if (FM.editor.mode() !== mode0) await FM.editor.request(mode0);
+      FM.scene.layers.length = 0; saved.forEach(function (l) { FM.scene.layers.push(l); }); FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
+    }
+  });
+
+  /* AU25: the two cases AU24-1 left. (1) a mouse release that never arrives must not leave the canvas drag live (the layer followed the
+     mouse and the editor switch shook "drag" on every tap); (2) a two-finger pinch on the selected layer is a canvas gesture too. */
+  async function au25Setup() {
+    const saved = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), mode0 = FM.editor.mode();
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 300, shapeH: 300, fill: '#336699', start: 0, duration: 5, name: 'AU25' });
+    FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id); FM.requestRender && FM.requestRender();
+    const cv = document.getElementById('preview'), r = cv.getBoundingClientRect();
+    return { saved: saved, sid: sid, sids: sids, mode0: mode0, L: L, cv: cv, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+  }
+  async function au25Restore(c) {
+    if (FM._resetVpPointers) FM._resetVpPointers();
+    if (FM.editor.mode() !== c.mode0) await FM.editor.request(c.mode0);
+    FM.scene.layers.length = 0; c.saved.forEach(function (l) { FM.scene.layers.push(l); }); FM.scene.selectedId = c.sid; FM.scene.selectedIds = c.sids;
+  }
+  test('AU25-1 a mouse release that never arrives does not leave a canvas drag live: the layer stops following, the editor switch is allowed', { item: 'AU25' }, async function () {
+    if (!FM.editor || !FM.editor.request || !FM.canvasGestureLive) throw new Error('FM.editor / FM.canvasGestureLive is not on this build');
+    const c = await au25Setup();
+    const ev = function (t, x, y, b) { return new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 11, pointerType: 'mouse', button: 0, buttons: b, isPrimary: true }); };
+    try {
+      c.cv.dispatchEvent(ev('pointerdown', c.cx, c.cy, 1)); window.dispatchEvent(ev('pointermove', c.cx + 20, c.cy, 1));
+      if (!FM.canvasGestureLive()) throw new Error('CONTROL: the drag did not start');
+      window.dispatchEvent(ev('pointermove', c.cx + 60, c.cy, 0));   // no pointerup ever came; the button is up
+      const x1 = c.L.transform.x;
+      window.dispatchEvent(ev('pointermove', c.cx + 140, c.cy, 0));
+      if (c.L.transform.x !== x1) throw new Error('the layer kept following the mouse with no button held (' + x1 + ' to ' + c.L.transform.x + ')');
+      if (FM.canvasGestureLive()) throw new Error('the canvas drag is still live after the button came up');
+      const ok = await FM.editor.request(c.mode0 === 'simple' ? 'full' : 'simple');
+      if (!ok) throw new Error('the editor switch still refused (' + FM.editor.mode() + ') after a lost mouse release');
+    } finally { await au25Restore(c); }
+  });
+  test('AU25-2 a two-finger pinch on the selected layer refuses the editor switch, and a lost touch (pointercancel) lets it through', { item: 'AU25' }, async function () {
+    if (!FM.editor || !FM.editor.request || !FM.canvasGestureLive) throw new Error('FM.editor / FM.canvasGestureLive is not on this build');
+    const c = await au25Setup();
+    const ev = function (t, id, x, y) { return new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: id, pointerType: 'touch', button: 0, buttons: t === 'pointerup' || t === 'pointercancel' ? 0 : 1, isPrimary: id === 21 }); };
+    try {
+      c.cv.dispatchEvent(ev('pointerdown', 21, c.cx - 40, c.cy)); c.cv.dispatchEvent(ev('pointerdown', 22, c.cx + 40, c.cy));
+      window.dispatchEvent(ev('pointermove', 22, c.cx + 80, c.cy)); window.dispatchEvent(ev('pointermove', 22, c.cx + 90, c.cy));
+      if (!FM.canvasGestureLive()) throw new Error('CONTROL: the pinch did not start');
+      const ok = await FM.editor.request(c.mode0 === 'simple' ? 'full' : 'simple');
+      if (ok || FM.editor.mode() !== c.mode0) throw new Error('the editor switched to ' + FM.editor.mode() + ' while two fingers were pinching the layer');
+      window.dispatchEvent(ev('pointercancel', 21, c.cx - 40, c.cy)); window.dispatchEvent(ev('pointercancel', 22, c.cx + 90, c.cy));
+      if (FM.canvasGestureLive()) throw new Error('the pinch is still live after both touches were cancelled');
+      const ok2 = await FM.editor.request(c.mode0 === 'simple' ? 'full' : 'simple');
+      if (!ok2) throw new Error('the editor switch still refused after the touches were cancelled');
+    } finally { await au25Restore(c); }
+  });
+
+  /* ═══ AU22: the Simple engine's read side (js/spine.js), audited against DESIGN.md §5.2 ═══════════════════════════════ */
+  function au22Clip(over) {
+    au22Clip.n = (au22Clip.n || 0) + 1;
+    return Object.assign({ id: 'au22_' + au22Clip.n, type: 'video', name: 'c.mp4', start: 0, duration: 2, visible: true, muted: false,
+      transform: { x: 540, y: 960, opacity: 1, scale: 1, rotation: 0 }, effects: [], masks: [], srcW: 1080, srcH: 1920, srcRev: 0, mediaRev: 0 }, over || {});
+  }
+  test('AU22-1 after adoption a main clip that is see-through for its whole length stays on the main track (§5.2: honoured, not a mainNoPicture), and a real audio-only one is still refused', { item: 'AU22' }, function () {
+    const P = { width: 1080, height: 1920, fps: 30, duration: 30, sm: { v: 1, adopted: true } };
+    const a = au22Clip({ start: 0, duration: 2, sm: { main: true } });
+    const b = au22Clip({ start: 2, duration: 2, sm: { main: true }, transform: { x: 540, y: 960, opacity: 0, scale: 1, rotation: 0 } });
+    const c = au22Clip({ start: 4, duration: 2, sm: { main: true } });
+    const R = FM.spine.classify({ project: P, layers: [c, b, a] });
+    const ids = R.main.map(function (e) { return e.id; });
+    if (ids.join() !== [a.id, b.id, c.id].join()) throw new Error('the main track is ' + ids.join() + ' (want ' + [a.id, b.id, c.id].join() + '): the faded clip left it, and its neighbours are now ' + R.anomalies.map(function (x) { return x.kind; }).join('/'));
+    if (R.anomalies.some(function (x) { return x.kind === 'mainNoPicture' || x.kind === 'gap'; })) throw new Error('a faded main clip was reported as ' + R.anomalies.map(function (x) { return x.kind; }).join(','));
+    // control: a stored sm.main on an audio-only layer is still ignored and named
+    const ao = au22Clip({ start: 6, duration: 2, sm: { main: true }, audioOnly: true });
+    const R2 = FM.spine.classify({ project: P, layers: [ao, c, b, a] });
+    if (R2.main.some(function (e) { return e.id === ao.id; }) || !R2.anomalies.some(function (x) { return x.kind === 'mainNoPicture' && x.ids[0] === ao.id; })) throw new Error('CONTROL: an audio-only layer carrying sm.main is no longer refused and named');
+  });
+  test('AU22-2 reading a scene whose layers have no transform (or are not layers at all) classifies what it can and never throws', { item: 'AU22' }, function () {
+    const P = { width: 1080, height: 1920, fps: 30, duration: 30 };
+    const noTr = au22Clip({ start: 0, duration: 2 }); delete noTr.transform;
+    const nullTr = au22Clip({ start: 2, duration: 2, transform: null });
+    const ok = au22Clip({ start: 4, duration: 2 });
+    let R;
+    try { R = FM.spine.classify({ project: P, layers: [null, {}, { id: 'bare' }, noTr, nullTr, ok] }); }
+    catch (e) { throw new Error('classify threw on a layer with no transform: ' + e.message + ' (the Simple timeline rebuilds from this, so one such layer would take the whole editor down)'); }
+    [noTr.id, nullTr.id, ok.id].forEach(function (id) { if (!R.units[id]) throw new Error('layer ' + id + ' was dropped from the read'); });
+  });
+
+  test('AU22-3 splitting a Stay-put item that ends with the video in Full: the head keeps staying put but no longer ends with the video, the tail half keeps both (§4.5, §12.2)', { item: 'AU22' }, async function () {
+    const saved = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), time = FM.time, sink = FM.history && FM.history.mute;
+    const seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
+    try {
+      const mark = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 40, fill: '#ffffff', start: 1, duration: 4 });
+      mark.sm = { stay: true, tail: true, tailEnd: 5 };
+      FM.scene.layers.length = 0; FM.scene.layers.push(mark);
+      FM.scene.selectedId = mark.id; FM.scene.selectedIds = [mark.id];
+      FM.seekVideosToTime = function () {}; if (FM.timeline) FM.timeline.rebuild = function () {}; FM.requestRender = function () {};
+      FM.history.reset(); FM.time = 3;
+      await FM.splitLayer(mark.id);
+      const tailHalf = FM.scene.layers.find(function (l) { return l.id !== mark.id; });
+      if (!tailHalf) throw new Error('CONTROL: the split did not happen');
+      if (!(mark.sm && mark.sm.stay === true)) throw new Error('the head lost Stay put: ' + JSON.stringify(mark.sm));
+      if (mark.sm.tail || 'tailEnd' in mark.sm) throw new Error('the head half still ends with the video (' + JSON.stringify(mark.sm) + '), so two items now claim the end of the track');
+      if (!(tailHalf.sm && tailHalf.sm.stay === true && tailHalf.sm.tail === true)) throw new Error('the tail half lost its end-of-video flag: ' + JSON.stringify(tailHalf.sm));
+    } finally {
+      FM.seekVideosToTime = seek; if (FM.timeline) FM.timeline.rebuild = rebuild; FM.requestRender = render; FM.time = time;
+      FM.scene.layers.length = 0; saved.forEach(function (l) { FM.scene.layers.push(l); }); FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
+    }
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
