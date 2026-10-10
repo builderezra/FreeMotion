@@ -60015,6 +60015,18 @@
     }
   });
 
+  test('690 malformed project dimensions recover to a usable canvas', { item: '1069' }, function () {
+    const hostile = { toString: 0, valueOf: 0 };
+    const p = { width: 'not a width', height: hostile, fps: hostile, duration: hostile };
+    FM.storage._clampProjectDims(p);
+    if (p.width !== 1080 || p.height !== 1920 || p.fps !== 30 || p.duration !== 0)
+      throw new Error('Malformed project fields did not recover: ' + JSON.stringify(p));
+    const valid = { width: '1279', height: 720, fps: 48, duration: 12 };
+    FM.storage._clampProjectDims(valid);
+    if (valid.width !== 1280 || valid.height !== 720 || valid.fps !== 48 || valid.duration !== 12)
+      throw new Error('Valid project fields were damaged: ' + JSON.stringify(valid));
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
