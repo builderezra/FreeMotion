@@ -1,0 +1,9 @@
+=== M6_offframe_ignored
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILPF2 a stack of Glows — shape off the frame x4: picture differs from the one-list filter, max 182 on 1160 px | shape off the frame x8: picture differs from the one-list filter, max 255 on 2768 px | shape off the frame + shadow x4: picture differs from the one-list filter, max 153 on 1049 px | s
+=== M7_pre_blur_ignored
+→ baseline: these titles were proven green on this exact tree already (cached)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+ALLDONE

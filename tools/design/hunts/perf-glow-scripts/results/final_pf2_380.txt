@@ -1,0 +1,2 @@
+380 Regression 1/1 ✓Pending 0/0 built
+   ok  PF2 a stack of Glows never puts more than one drop-shadow in a filter list, draws the same picture a
