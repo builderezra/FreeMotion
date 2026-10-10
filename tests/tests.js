@@ -29336,7 +29336,7 @@
       } else if (k === 'caption' && L && L.captions) {
         L.captions.push({ start: num(5, 6), end: num(6, 7), text: 'cue ' + r }); done.push('caption');
       } else if (k === 'comment') {
-        doc.project.comments.push({ id: 'c_' + seed.toString(36) + r.toString(36), by: { mid: 'g1', name: 'Sam', color: '#ff8800' }, at: 1700000000000 + r, text: 'c' + r, replies: [] });
+        doc.project.comments.push({ id: 'c_' + (tag || '') + seed.toString(36) + r.toString(36), by: { mid: 'g1', name: 'Sam', color: '#ff8800' }, at: 1700000000000 + r, text: 'c' + r, replies: [] });
         done.push('comment');
       } else if (k === 'parent' && doc.layers.length > 2) {
         const a = pickL(), b = pickL();
@@ -31141,8 +31141,8 @@
     convergenceFuzz921(q ? parseInt(q[1], 10) : 20260923);
   });
 
-  test('FZ1 the convergence fuzz holds for the seeds that once failed: ids minted by two devices, a tx whose ack died with the line, and a stale order statement in a replayed ack', { item: 'FZ1', budgetMs: 240000 }, function () {
-    [23, 28, 30, 32, 38, 39, 43, 68, 107, 117, 119, 138].forEach(function (seed) {
+  test('FZ1 the convergence fuzz holds for the seeds that once failed: ids minted by two devices, a tx whose ack died with the line, a stale order statement in a replayed ack, and a comment id minted twice', { item: 'FZ1', budgetMs: 300000 }, function () {
+    [23, 28, 30, 32, 38, 39, 43, 68, 107, 117, 119, 138, 142].forEach(function (seed) {
       try { convergenceFuzz921(seed); } catch (e) { throw new Error('seed ' + seed + ': ' + e.message); }
     });
   });
