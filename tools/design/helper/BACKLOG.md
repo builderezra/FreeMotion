@@ -415,3 +415,15 @@ ADDED 10 Oct 22:40 by the PM. PRE2 UPDATE from the builder. v17.36 (the Simple s
 - AU25 (the lost mouse release) moved to the next Full batch, after 2.1, because the FU gate refuses Full behaviour changes inside a Simple release.
 - Same method: full suite at 1280 and 380; every red alone, paired with its predecessor, and on main; one report per tree to hunt/preflight-<tree>, pushed the moment it is done.
 - If you are part-way through the OLD 7d4152c0 or 6a9e5efe runs, stop them. Their results no longer match what ships.
+
+ADDED 11 Oct 00:05 by the PM, from the builder. CLOUD-ONLY, because the laptop must stay cool for v17.37's relaunch (its bench read 12.6 ms against a 9.6 ms cut-off).
+- LR1 A LOCK REHEARSAL of Simple 2.1. Run it right AFTER the plain v17.38 suite run you are in now; never run two heavy jobs at once in your container, or the timings flake.
+      1. Make a worktree whose HEAD is wip/v17.37-tree (8878582a).
+      2. Apply `git diff wip/v17.37-tree wip/v17.38-tree` UNCOMMITTED, and set index.html's version label to v17.38.
+      3. Run `FU_JOBS=2 FU_KEEP=1 tools/full-unchanged.sh`.
+      4. Report every DIFFERENT line. The likely ones are the FU2/FU3 split and delete steps, because AU22's onSplit call is in FM.splitLayer.
+      If H.264 or numpy is missing in your container, say which FU runs or steps could not be measured, and report the rest. Never treat "could not measure" as same.
+      → hunt/preflight-v17.38 (add to that report), with a DONE line.
+- PRE2 continues: the plain suite on wip/v17.38-tree (797ea31a) at 1280 AND 380, then wip/v17.37-tree (8878582a).
+- **A note from the builder for any bisect you run:** a slice's FIRST test can fail on its own (Home is still open at boot). Count only the TARGET test's failure, not any red in the slice.
+- FYI, what v17.37's red was: `a tilt keyframe cannot turn the rotate diamond into a delete button (queue 419)` left the transform panel on Rotate (FM._mtMode), so Transform opened 240 tests later with no Position X. It is fixed, and the runner now restores FM._mtMode and the window stubs after every test. If you see that red, it is the old tree.
