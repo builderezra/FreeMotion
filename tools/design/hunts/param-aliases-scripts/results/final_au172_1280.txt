@@ -1,0 +1,2 @@
+1280 Regression 1/1 ✓Pending 0/0 built
+   ok  AU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by 

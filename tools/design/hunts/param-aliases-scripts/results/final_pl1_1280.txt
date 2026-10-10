@@ -1,0 +1,4 @@
+1280 Regression 3/3 ✓Pending 0/0 built
+   ok  PL1 the guard demands an alias for a rename and accepts one that exists, and a bad table is refused
+   ok  PL1 a saved effect whose parameter or type was renamed keeps its value, keyframes included
+   ok  PL1 an effect preset saved under the old names still loads under the new ones

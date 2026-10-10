@@ -1,0 +1,25 @@
+=== M1_sanitiser_no_migrate
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILPL1 a saved effect whose parameter — an aliased effect was dropped: 4 of 5 survived
+=== M2_new_key_loses
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILPL1 a saved effect whose parameter — when both the old and the new key are present the new one must win, got 3
+=== M3_live_names_rewritten
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILPL1 a saved effect whose parameter — an alias rewrote a parameter that still exists: [{"type":"blur","enabled":true,"params":{}}]
+=== M4_type_alias_ignored
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILPL1 a saved effect whose parameter — an aliased effect was dropped: 4 of 5 survived
+=== M5_presets_no_migrate
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILPL1 an effect preset — a preset saved under an old effect name did not load (save returned false)
+=== M6_guard_ignores_alias
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILPL1 the guard demands — with the alias the guard still failed: blur.radius
+ALLDONE

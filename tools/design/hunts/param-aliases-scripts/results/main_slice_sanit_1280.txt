@@ -1,0 +1,12 @@
+1280 Regression 11/11 ✓Pending 0/0 built
+   ok  560: the sanitiser keeps a valid mask marker in place, drops a dangling or duplicate one, refuses on
+   ok  effects: sanitising a fresh instance of every effect changes nothing
+   ok  921 S0 sanitizers keep a valid uid, drop an invalid one, uid-less output byte-identical
+   ok  921 S1 the host sanitises on a CLONE: the fix goes out and every live array keeps its identity
+   ok  921 S1 the sanitiser is a fixed point on the kitchen sink, on every registered effect and on the ope
+   ok  921 S1 an extra uid changes no effect comparison, no picture and no sanitiser answer
+   ok  effects: a keyframed parameter survives sanitising with its keyframes intact
+   ok  foreign layers are sanitised however they arrive, not just on import
+   ok  718: an animated Draw-from (trimStart) survives the timing sanitiser and one undo of an unrelated ed
+   ok  482 6.3 Drop Shadow - Spread, Smoothness and Shadow only are in the catalogue at defaults that draw 
+   ok  simple P1 · T7 sanitiser: layer.sm and project.sm come out canonical, keep plain unknown keys, and a
