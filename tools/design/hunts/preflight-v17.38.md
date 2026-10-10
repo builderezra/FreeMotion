@@ -78,3 +78,32 @@ Setup: a worktree at `8878582a` (v17.37), `git diff 8878582a 797ea31a` applied U
 3. `js/editor-mode.js` is changed by the 2.1 diff and the tool refuses to measure with its tag still at `?v=1` (`index.html's cache-busters are stale for js/editor-mode.js`): the restored tag needs `?v=2` or more.
 
 DONE: preflight-v17.38 — 2364 tests x 2 widths, 2 defects found (missing script tags; storage.js buster 60→59) plus the quoted test name; LR1 measured for FU1/3/5/6/7, FU2/FU4 NOT measurable here (no H.264).
+
+
+## 9. PRE3: the plain suite on wip/v17.38-tree 76f4a1b9 (Simple 2.1 rebuilt on v17.37; HEAD d55cabc8) — NO RED IS NEW ON THIS TREE
+
+**Verdict: nothing this tree adds is red. 2364 tests ran at 1280 and at 380; 51 red at each width, the same 51; 96 / 95 NOT RUN HERE; 2 driver hangs.** All three findings of section 1 and 2 are fixed on this tip: no script tag is missing or dropped (`editor-mode.js?v=2`, `spine-edit.js` added; `treecheck`-style static check by me: 0 tags dropped, 0 `?v=` lower than main's), the AU24-1 name guard is green, and `keyboard can edit numeric Volume…` (#1016) is green.
+
+Method as in section 7 (the tree's own `tests/_cdp.py`, slices, the tail in chunks of 40 with a stall watchdog). Triage at 1280 (the red sets are identical at 380): every red ALONE on this tree, PAIRED with its predecessor in front (`after=<the test two before>&upto=<the red>`, so the predecessor really runs; my first triage passed the predecessor itself to `after=`, which skips it, so those "paired" results in sections 3 and 5 were really "alone" and should be disregarded), and ALONE on main d55cabc8 (v17.37).
+
+| class | reds |
+|---|---|
+| C same on main (alone) | 45 |
+| D red only inside the full pass (green alone, paired, main) | 3 |
+| HANG | 2 |
+| P red only with its predecessor in front | 1 |
+
+**C. Red on main alone too (45): environment, not this tree.** No H.264/H.265 encoder or decoder (`NO_VIDEO_CODEC`, `VideoEncoder … closed codec`, `splash.mp4 did not decode`, `Could not load video`), a 4× CPU throttle and a real camera the driver cannot give, background-tab export, no layer to work from in three Presets tests, and so on. Each has the same first message on main.
+
+**P. `home push: the press answers the tap, survives the wait, and hands over without a pop` (1):** green alone on this tree and on main; **RED when its predecessor `home push: the editor’s body-level chrome travels with the editor, not with itself` runs in front of it** (`the parked editor sits at x=40 in a 900px viewport … fm-push-wait`). Bisected on main v17.36 in my container: the same predecessor is the polluter (`after #374` red, `after #375` green). The builder says this passes in the laptop's full pass; H56 tied it to my Chromium keeping paused animations. Not new on this tree.
+
+**D. Red only inside the full pass (3):**
+- `playhead: a rebuild during the return-to-home pop keeps --tl-panel-left honest` (`drifted 17.0px`): green alone, paired and on main alone, but RED in my full pass on main v17.36 too; bisected there: its polluter is the same `home push: the editor’s body-level chrome …` test (red when it is in the slice, green after it).
+- `921 S3 Stop sharing revokes the code…` (`the module is not holding the offer`): green alone, paired and on main alone; RED in the full pass on main v17.36 too; bisected there: the polluter is `921 S3 the Share panel and the Join sheet fit a 380px phone with no sideways scroll…` (red with it in the slice, green after it).
+- `981 review: with less motion the add menu arrives on its plain 220 ms slide` (`CONTROL: the menu is not arriving on the 220 ms reduced-motion slide`): green alone, paired and on main alone. I have NOT shown it red on main's own full pass, so by your rule it is not bisected; it sits with `981 review: a real double-tap…` and the two clapper tests (957, 974: `the clapper keeps animating behind Home`), which are also red on main alone (class C), so the same paused-animation explanation is likely.
+
+**Hangs (2), both widths:** `690 swiping the share sheet away after Save keeps the Export ready card…` and `690 an export holds the screen awake while it renders…`: the driver stalls inside them (export tests, no H.264 here); skipped and counted as red-by-hang. Not run on main.
+
+**Counts at a glance:** 2364 ran, 2364 − 51 − 96 NOT RUN = 2217 passed at 1280; at 380 2364 − 51 − 95 = 2218. **LR1 skipped on this tip, as asked (the laptop's lock is judging it).** What I could not measure here: every NOT RUN HERE test, H.264 export, and the 2 hangs.
+
+DONE: PRE3a preflight-v17.38 — 76f4a1b9 at 1280 and 380: 51 red, all explained (45 same on main, 1 predecessor-dependent, 3 full-pass-only that also show on main), 0 new; the three earlier findings are fixed.
