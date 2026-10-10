@@ -59830,7 +59830,7 @@
   });
 
   /* ═══ AU24: step 1.3 (the cog switch and Simple's timeline) audited against DESIGN.md §6.1 on a COPY of 980-phase1-r3 ═════ */
-  test('AU24-1 the editor switch refuses while a finger is dragging a layer on the canvas (§6.1: "a timeline or canvas drag live")', { item: 'AU24' }, async function () {
+  test('AU24-1 the editor switch refuses while a finger is dragging a layer on the canvas (§6.1: “a timeline or canvas drag live”)', { item: 'AU24' }, async function () {
     if (!FM.editor || !FM.editor.request) throw new Error('FM.editor is not on this build');
     const saved = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), mode0 = FM.editor.mode();
     const cv = document.getElementById('preview');
