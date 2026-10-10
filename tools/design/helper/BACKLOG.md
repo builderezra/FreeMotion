@@ -373,3 +373,10 @@ ADDED 10 Oct 13:45 by the PM. FZ2, AU23, AU24, INT2, P31 and P32 landed. AU24-1 
 - P33  Plans for the 5 oldest open items after P32's, callers traced. → plans/helper-33.
 - P34  Plans for the next 5 after P33's. → plans/helper-34.
 - INT3 When main moves to v17.36 (the live label reads v17.36), rebuild the integration on it, adding audit-simple-13 and audit-unread-2, and update landing-order.md. → hunt/audit-integrated-4.
+
+ADDED 10 Oct 14:50 by the PM. AU25, AU26, FZ3, P33 and P34 landed. AU25-1 is a real bug in Full too (the layer follows the mouse after a lost release), and it went to the builder. Do INT3 when v17.36 is live (~16:30), but do not idle until then: work these first and come back to it. Same proof rules. Keep your turn alive; push as you go; never push to main; never force-push. In order:
+- AU27 The next Simple releases before they ship: Phase 2's 2.1 and 2.2 as pushed (`980-p21-r3` and `980-p22-r3`; use a newer tip if one is on the remote). Audit them on a copy the way AU22/AU24 did, against DESIGN.md and #980: lost edits, undo across Simple and Full, a Simple save Full cannot open, phone-sized layouts at 380, and the refusals in §6.1. Repros must be red on the copy. → hunt/audit-simple-2x.
+- AU28 The rest of js/collab-signal.js (the ~670 lines AU26 did not read), then settings, sfx and addmenu in full, with repros red on main. → hunt/audit-unread-2 (new commits).
+- P35  Plans for the 5 oldest open items after P34's, callers traced. → plans/helper-35.
+- P36  Plans for the next 5 after P35's. → plans/helper-36.
+- (INT3, from the previous batch, is still owed once v17.36 is live: add audit-simple-13, audit-unread-2 and the new fuzz-seeds commits.)
