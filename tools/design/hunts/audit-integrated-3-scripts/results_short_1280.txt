@@ -1,0 +1,8 @@
+   ok  AU10-1 Align puts a layer's DRAWN box on the canvas edge or centre, also for a member of an offset /
+   ok  AU23-1 a member admitted after the owner has opened another project is filed under the room’s own pr
+   ok  AU23-2 the Share panel’s “When someone uses the link” switch saves the room under its own project ev
+   ok  AU23-3 a collaboration name is cut on a whole character and carries no direction overrides
+   ok  AU8-1 a project name is cut to 200 characters when it is given (Rename, Duplicate; New project alrea
+   ok  AU9-1 setTime and scrubTime ignore a time that is not a number instead of making the playhead NaN
+   ok  PF2 a stack of Glows never puts more than one drop-shadow in a filter list, draws the same picture a
+END

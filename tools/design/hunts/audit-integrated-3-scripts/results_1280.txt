@@ -1,0 +1,65 @@
+   ok  745: the featured carousel is derived from batch order, so the newest effects lead it
+   ok  913.8 Snow & Rain, the newest effect, leads the Effects browser NEW row
+   ok  921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, 
+   ok  921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, 
+   ok  AU1-1 dragging the LEFT grip of a REVERSED clip keeps its effect clock still (Drift, Spin, Orbit do 
+   ok  AU1-2 growing the HEAD of a REVERSED clip with a speed ramp never reaches past the end of its source
+
+   ok  AU11-1 an arrow key nudges a layer on the SCREEN, also for a member of a group that is turned or sca
+   ok  AU12-1 Tilt-Shift blurs a half-scale preview as much as the export, not twice as much
+   ok  AU17-1 saving a 121st effect preset is refused with a message, it does not delete the oldest one
+   ok  AU17-2 every effect type and parameter key a v17.32 project can hold still exists
+   ok  AU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by 
+   ok  AU17-2 every effect type and parameter key a v17.32 project can hold still exists, or is carried by 
+   ok  AU19-1 after Undo or Redo of a replaced video the timeline bar shows that clip’s frames, not the oth
+   ok  AU2-1 typing the number an effect slider is already showing leaves it alone (26 shipped defaults sit
+   ok  AU2-2 Paste look → Effects fits a copied filter to the layer it lands on (a text-only child is dropp
+   ok  AU2-3 the multi-select Align buttons (Start together, Chain, End together) leave a LOCKED clip where
+   ok  AU2-4 the multi-select Align buttons move a selected GROUP together with what is inside it
+   ok  AU20 a long unbroken preset name wraps inside its row instead of running under the delete button or 
+   ok  AU20 clearing the last tag while its chip is the filter does not leave the Presets card empty
+   ok  AU20 renaming a layer preset keeps the Update button of layers that were applied from it
+   ok  AU21 a guest that drops mid-upload and comes back finishes its clip on the host, from the bytes alre
+   ok  AU21 a member who leaves does not leave send loops running behind it
+   ok  AU21 files that end exactly on a chunk, a part and the send window arrive byte-identical, with no pa
+   ok  AU22-1 after adoption a main clip that is see-through for its whole length stays on the main track (
+   ok  AU22-2 reading a scene whose layers have no transform (or are not layers at all) classifies what it 
+   ok  AU22-3 splitting a Stay-put item that ends with the video in Full: the head keeps staying put but no
+
+
+   ok  AU23-3 a collaboration name is cut on a whole character and carries no direction overrides
+   ok  AU3-1 a stored project whose layers list holds a null (an undefined entry stringifies to null) still
+   ok  AU3-1b importing a project file whose layers list holds a null imports the real layers instead of th
+   ok  AU3-2 the boot sweep keeps the media a damaged project document still names (it used to read an unpa
+   ok  AU3-2b deleting a project keeps a clip that a damaged sibling document still names
+   ok  AU3-3 a stored project (and an imported file) whose layer lacks a transform, carries a non-object fi
+   ok  AU3-4 deleting a stored media record whose transaction aborts at commit still finishes (removeMedia 
+   ok  AU4-1 undo right after Add text / Add captions (the editor still open) can be REDONE; the redo is no
+   ok  AU4-2 Add group while the text editor is open is ONE undo step, not two (the first undo used to do n
+   ok  AU4-3 a random sequence of real commands: every undo and every redo lands byte for byte on the snaps
+   ok  AU5-1 lost edits, stale overwrites and duplicate layers: an owner and two real guests, cuts and heal
+   ok  AU5-2 a guest that reloads with a base persisted BEFORE a layer arrived does not hand that layer bac
+   ok  AU6-1 an MP4 export that fails part-way (a layer that will not draw, an encoder that throws) closes 
+   ok  AU6-2 a soundtrack encode that throws part-way closes its audio encoder and the AudioData in hand
+   ok  AU6-3 the pure export arithmetic: the mix limiter equals a plain reference across its block edges an
+1280 Regression 0/1 ✓ · NOT RUN HERE 1 Pending 0/0 built
+   RED AU7-1f a REAL finger: a quick drag that rests before the lift does not close the Add sheet
+   ok  AU8-1 a project name is cut to 200 characters when it is given (Rename, Duplicate; New project alrea
+   ok  AU9-1 setTime and scrubTime ignore a time that is not a number instead of making the playhead NaN
+   ok  E1 Censor: everything outside the box is byte-identical, each style changes the inside, Oval leaves 
+   ok  E1 Colour Cycle: at Speed 0 it is exactly the CSS hue rotation, it turns with the clip clock and rep
+   ok  E1 Glitter: the same instant is the same picture, it twinkles with the clock, stars sit only on brig
+   ok  E1 Oil Paint: flat colour stays, a hard edge stays hard, detail 1 is the input, a noisy patch become
+   ok  E1 Pop Art: four cells, each a different colour, same silhouette; three by three gives nine; the gap
+   ok  E1 Soften Skin: Amount 0 is the input, noise is smoothed and a hard edge is not, Skin tones leaves b
+   ok  E1 preview equals export: through the real compositor each new effect draws the same at half size, a
+   ok  E1 the six new effects are in the registry, in the right menus, findable by what a beginner types, a
+   ok  FZ1 a tx whose ack died with the line, replayed after somebody else changed the same value, does not
+   ok  FZ1 the convergence fuzz holds for the seeds that once failed: ids minted by two devices, a tx whose
+
+   ok  PF1 importing a project with a heavy effect stack draws its card at the card’s size, no full-size re
+   ok  PF2 a stack of Glows never puts more than one drop-shadow in a filter list, draws the same picture a
+   ok  PL1 a saved effect whose parameter or type was renamed keeps its value, keyframes included
+   ok  PL1 an effect preset saved under the old names still loads under the new ones
+   ok  PL1 the guard demands an alias for a rename and accepts one that exists, and a bad table is refused
+END
