@@ -59832,6 +59832,145 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* AU27: SEQUENCES. T2 proves one command at a time (one undo restores). This runs eight in a row, walks the whole stack back with
+     undo and forward with redo checking every document byte for byte, and flips to Full for the walk back (undo across editors). */
+  async function au27Seq(seed, full, cmdsN) {
+    const fails = [];
+    await smP2((W, H) => smTrack(seed * 7919, W, H), async function (v) {
+      const r = smRand(seed * 31 + 5), docs = [v.doc()], labels = ['start'];
+      const names = ['del', 'trimTail', 'trimHead', 'split', 'seam', 'dup'];
+      for (let n = 0; n < cmdsN; n++) {
+        const cmd = names[Math.floor(r() * names.length)];
+        const R = FM.spine.classify(FM.scene), clips = R.main.filter(e => !e.slot);
+        if (!clips.length) break;
+        const pick = clips[Math.floor(r() * clips.length)], L = FM.layerById(FM.scene, pick.id);
+        let ok;
+        if (cmd === 'del') ok = await FM.spine.cmd.del(pick.id);
+        else if (cmd === 'trimTail') ok = await FM.spine.cmd.trimTail(pick.id, L.start + L.duration * (0.3 + r() * 0.5), { typed: false });
+        else if (cmd === 'trimHead') ok = await FM.spine.cmd.trimHead(pick.id, L.start + L.duration * (0.1 + r() * 0.4), { typed: false });
+        else if (cmd === 'split') ok = await FM.spine.cmd.split(pick.id, L.start + L.duration * (0.3 + r() * 0.4));
+        else if (cmd === 'seam') { const e = R.main.find(x => x.seam && (x.seam.kind === 'gap' || x.seam.kind === 'overlap') && !x.seam.covered); if (!e) continue; ok = await FM.spine.cmd.closeSeam(e.id); }
+        else ok = await FM.spine.cmd.duplicate(pick.id);
+        if (!ok) continue;
+        await v.idle();
+        docs.push(v.doc()); labels.push(cmd);
+      }
+      if (docs.length < 4) { fails.push('seed ' + seed + ': only ' + (docs.length - 1) + ' commands ran'); return; }
+      if (full) { FM.editor.set('full'); await v.sleep(30); }
+      for (let i = docs.length - 1; i > 0; i--) {
+        FM.history.undo(); await v.sleep(8);
+        if (v.doc() !== docs[i - 1]) { fails.push('seed ' + seed + (full ? ' (in Full)' : '') + ': undo of step ' + i + ' (' + labels[i] + ') did not restore the document before it'); break; }
+      }
+      for (let i = 1; i < docs.length; i++) {
+        FM.history.redo(); await v.sleep(8);
+        if (v.doc() !== docs[i]) { fails.push('seed ' + seed + (full ? ' (in Full)' : '') + ': redo of step ' + i + ' (' + labels[i] + ') did not give the document back'); break; }
+      }
+    });
+    return fails;
+  }
+  test('AU27-1 eight Simple commands in a row walk back through undo and forward through redo, every document byte for byte, in Simple and from Full', { item: 'AU27', budgetMs: 240000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (let seed = 1; seed <= 6; seed++) { (await au27Seq(seed, false, 8)).forEach(f => fails.push(f)); (await au27Seq(seed, true, 8)).forEach(f => fails.push(f)); }
+    if (fails.length) throw new Error(fails.length + ' sequence failure(s): ' + fails.slice(0, 4).join(' | '));
+  });
+
+  /* AU27: "a Simple save Full cannot open". After every command, the document Simple wrote must be a fixed point of the loader's own
+     sanitiser (storage.js sanitizeSmLayer / sanitizeSmProject): if the loader would strip or change something Simple just wrote,
+     that edit is lost on the next open, or Full opens a different project than the one on screen. */
+  test('AU27-2 what a Simple command writes survives the loader: every layer\'s sm and the project\'s sm are unchanged by the sanitiser after each of ten commands', { item: 'AU27', budgetMs: 240000 }, async function () {
+    smNeedP2();
+    if (!FM.storage._sanitizeSm || !FM.storage._sanitizeSmProject) throw new Error('CONTROL: the storage sanitiser seams are missing');
+    const fails = [];
+    let checked = 0, smSeen = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      await smP2((W, H) => smTrack(seed * 7919, W, H), async function (v) {
+        const r = smRand(seed * 17 + 3), names = ['del', 'trimTail', 'trimHead', 'split', 'seam', 'dup'];
+        for (let n = 0; n < 10; n++) {
+          const cmd = names[Math.floor(r() * names.length)];
+          const R = FM.spine.classify(FM.scene), clips = R.main.filter(e => !e.slot);
+          if (!clips.length) break;
+          const pick = clips[Math.floor(r() * clips.length)], L = FM.layerById(FM.scene, pick.id);
+          let ok;
+          if (cmd === 'del') ok = await FM.spine.cmd.del(pick.id);
+          else if (cmd === 'trimTail') ok = await FM.spine.cmd.trimTail(pick.id, L.start + L.duration * (0.3 + r() * 0.5), { typed: false });
+          else if (cmd === 'trimHead') ok = await FM.spine.cmd.trimHead(pick.id, L.start + L.duration * (0.1 + r() * 0.4), { typed: false });
+          else if (cmd === 'split') ok = await FM.spine.cmd.split(pick.id, L.start + L.duration * (0.3 + r() * 0.4));
+          else if (cmd === 'seam') { const e = R.main.find(x => x.seam && (x.seam.kind === 'gap' || x.seam.kind === 'overlap') && !x.seam.covered); if (!e) continue; ok = await FM.spine.cmd.closeSeam(e.id); }
+          else ok = await FM.spine.cmd.duplicate(pick.id);
+          if (!ok) continue;
+          await v.idle();
+          checked++;
+          FM.scene.layers.forEach(function (l) {
+            if (!l.sm) return;
+            smSeen++;
+            const a = JSON.stringify(l.sm), c = JSON.parse(JSON.stringify(l)); FM.storage._sanitizeSm(c);
+            const b = JSON.stringify(c.sm === undefined ? null : c.sm);
+            if (a !== b) fails.push('seed ' + seed + ' after ' + cmd + ': ' + l.name + ' sm ' + a + ' becomes ' + b + ' on load');
+          });
+          const pc = JSON.parse(JSON.stringify(FM.scene.project)); FM.storage._sanitizeSmProject(pc);
+          if (JSON.stringify(FM.scene.project.sm === undefined ? null : FM.scene.project.sm) !== JSON.stringify(pc.sm === undefined ? null : pc.sm)) fails.push('seed ' + seed + ' after ' + cmd + ': project.sm ' + JSON.stringify(FM.scene.project.sm) + ' becomes ' + JSON.stringify(pc.sm) + ' on load');
+        }
+      });
+    }
+    if (checked < 20 || smSeen < 20) throw new Error('CONTROL: only ' + checked + ' commands / ' + smSeen + ' sm blocks were checked, which proves nothing');
+    if (fails.length) throw new Error(fails.length + ' write(s) the loader would change, first: ' + fails.slice(0, 3).join(' | '));
+  });
+
+  /* AU27: the 2.2 arranging plans (reorder, lift, into a row, stay, z, close all), run as sequences mixed with 2.1's commands:
+     every step undoes to the document before it and redoes to the one after, and what it wrote survives the loader. */
+  test('AU27-3 2.2 plans (reorder, lift, into row, stay, z, close all) mixed with 2.1 commands: undo and redo byte for byte, and the loader leaves each write alone', { item: 'AU27', budgetMs: 240000 }, async function () {
+    smNeedP2();
+    const fails = []; let ran = 0; const kinds = {};
+    for (let seed = 1; seed <= 8; seed++) {
+      await smP2((W, H) => smTrack(seed * 7919, W, H), async function (v) {
+        const r = smRand(seed * 13 + 1), docs = [v.doc()], labels = ['start'];
+        const names = ['reorder', 'lift', 'intoRow', 'stay', 'z', 'closeAll', 'split', 'dup', 'trimTail'];
+        for (let n = 0; n < 10; n++) {
+          const cmd = names[Math.floor(r() * names.length)];
+          const R = FM.spine.classify(FM.scene), clips = R.main.filter(e => !e.slot);
+          if (!clips.length) break;
+          const pick = clips[Math.floor(r() * clips.length)], L = FM.layerById(FM.scene, pick.id), S = FM.spine;
+          const any = FM.scene.layers[Math.floor(r() * FM.scene.layers.length)];
+          let ok; const st0 = v.steps(), d0 = v.doc();
+          try {
+            if (cmd === 'reorder') ok = await S.edit('Move clip', R2 => S.planReorder(R2, pick.id, Math.floor(r() * clips.length)));
+            else if (cmd === 'lift') ok = await S.edit('Lift', R2 => S.planLift(R2, pick.id));
+            else if (cmd === 'intoRow') ok = await S.edit('Into row', R2 => S.planIntoRow(R2, any.id));
+            else if (cmd === 'stay') ok = await S.edit('Stay', R2 => S.planStay(R2, any.id, r() < 0.5));
+            else if (cmd === 'z') ok = await S.edit('Layer order', R2 => S.planZ(R2, any.id, r() < 0.5 ? 1 : -1));
+            else if (cmd === 'closeAll') ok = await S.edit('Close gaps', R2 => S.planCloseAll(R2));
+            else if (cmd === 'split') ok = await S.cmd.split(pick.id, L.start + L.duration * (0.3 + r() * 0.4));
+            else if (cmd === 'dup') ok = await S.cmd.duplicate(pick.id);
+            else ok = await S.cmd.trimTail(pick.id, L.start + L.duration * (0.3 + r() * 0.5), { typed: false });
+          } catch (e) { fails.push('seed ' + seed + ' ' + cmd + ' threw: ' + (e && e.message)); break; }
+          if (!ok) continue;
+          await v.idle();
+          if (v.steps() === st0) { if (v.doc() !== d0) fails.push('seed ' + seed + ' ' + cmd + ': changed the document with NO undo step'); continue; }
+          ran++; kinds[cmd] = (kinds[cmd] || 0) + 1;
+          docs.push(v.doc()); labels.push(cmd);
+          FM.scene.layers.forEach(function (l) {
+            if (!l.sm) return;
+            const a = JSON.stringify(l.sm), c = JSON.parse(JSON.stringify(l)); FM.storage._sanitizeSm(c);
+            const b = JSON.stringify(c.sm === undefined ? null : c.sm);
+            if (a !== b) fails.push('seed ' + seed + ' after ' + cmd + ': ' + l.name + ' sm ' + a + ' becomes ' + b + ' on load');
+          });
+        }
+        for (let i = docs.length - 1; i > 0; i--) {
+          FM.history.undo(); await v.sleep(8);
+          if (v.doc() !== docs[i - 1]) { fails.push('seed ' + seed + ': undo of step ' + i + ' (' + labels[i] + ') did not restore the document before it'); break; }
+        }
+        for (let i = 1; i < docs.length; i++) {
+          FM.history.redo(); await v.sleep(8);
+          if (v.doc() !== docs[i]) { fails.push('seed ' + seed + ': redo of step ' + i + ' (' + labels[i] + ') did not give the document back'); break; }
+        }
+      });
+    }
+    window.__au27kinds = JSON.stringify(kinds);
+    if (ran < 25) throw new Error('CONTROL: only ' + ran + ' commands ran (' + JSON.stringify(kinds) + ')');
+    if (fails.length) throw new Error(fails.length + ' failure(s) over ' + JSON.stringify(kinds) + ', first: ' + fails.slice(0, 3).join(' | '));
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
