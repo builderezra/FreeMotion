@@ -1,0 +1,21 @@
+=== A1_no_drop_call
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU5-2 — the owner deleted Y and the reloaded guest handed it back: the owner has Y again (the guest owed 3 ops)
+=== A2_no_recovered_flag
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU5-2 — the owner deleted Y and the reloaded guest handed it back: the owner has Y again (the guest owed 3 ops)
+=== A3_never_matches
+BrokenPipeError: [Errno 32] Broken pipe
+✅ CAUGHT:
+FAILAU5-2 — the owner deleted Y and the reloaded guest handed it back: the owner has Y again (the guest owed 3 ops)
+=== A4_drops_every_li
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU5-2 — CONTROL: the guest's own offline layer reached the owner 0 times, not once
+=== B1_host_refuses_new_layers
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU5-1 — 30 problems; first: seed 100: au5_2_4 (added by actor 2) is on owner 0 times | seed 100: au5_2_4 (added by actor 2) is on g0 0 times | seed 100: au5_2_4 (added by actor 2) is on g1 0 times | seed 114: au5_2_4 (added by actor 2) is on owner 0 times
+ALLDONE
