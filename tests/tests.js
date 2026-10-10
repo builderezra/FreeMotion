@@ -60642,6 +60642,92 @@
     } finally { await au25Restore(c); }
   });
 
+  /* ═══ #996: THE ROOM NEVER WRITES INTO A PROJECT THAT IS NOT ITS OWN. Three times (5, 7, 11 Oct) a full phone pass found the
+     921 S6 copy's "Shared A"/"Shared B" under every later test, and only under load. A reconnect reads the linked copy's stored
+     base ASYNC, so he can open another project while it does; the session it then attached diffed THAT project against the
+     room's document and wrote the difference in place, autosave included. Both doors are tested: the reconnect that resolves
+     after the switch (it must attach nothing), and a session already up that hears from the room while another project is open
+     (it must keep the change in its base and leave the screen alone). A fake link stands in for the network: nothing leaves. */
+  function t996Link() {
+    return { sent: [], send: function (ch, m) { this.sent.push(m); }, close: function () {}, onmessage: null, onclose: null, onopen: null };
+  }
+  function t996Room(P) {
+    const room = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#00ff00', start: 0, duration: 2 });
+    room.name = '996 room only';
+    return { project: JSON.parse(JSON.stringify(P)), layers: [room] };
+  }
+  test('996 a reconnect whose stored base is still being read when he opens another project attaches to nothing, and the room never reaches that project', { item: '996', budgetMs: 60000 }, async function () {
+    const C = FM.collab;
+    if (!C || typeof C.reopen !== 'function') throw new Error('FM.collab.reopen is missing');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    let res = null;
+    try {
+      if (wasHome) FM.home.close();
+      const copy = await FM.projects.create({ name: '996 linked copy', width: 320, height: 240 }); made.push(copy);
+      let release = null;
+      const A2 = Object.create(C.bridge);
+      A2.readBase = function () { return new Promise(function (r) { release = r; }); };   // the read he outruns
+      const ep = t996Link();
+      const p = C.reopen({ gpid: copy, link: ep, adapter: A2, role: 'editor', mid: 'g' });
+      if (FM.projects.currentId() !== copy) throw new Error('control: the linked copy was not the open project when the reconnect began');
+      const other = await FM.projects.create({ name: '996 the other project', width: 320, height: 240 }); made.push(other);
+      const mine = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#ff00ff', start: 0, duration: 2 });
+      mine.name = '996 his own layer';
+      FM.scene.layers.push(mine);
+      if (typeof release !== 'function') throw new Error('control: the reconnect never asked for its stored base');
+      release({ D: t996Room(FM.scene.project), epoch: 1, seq: 0, cid: 0 });
+      res = await p;
+      /* whatever attached (nothing, with the fix), the room now answers with its document */
+      if (ep.onmessage) ep.onmessage('ctl', { t: 'snap', D: t996Room(FM.scene.project), epoch: 1, seq: 1 });
+      await sleep(50);
+      if (res && res.session) throw new Error('a session for the linked copy was attached while ANOTHER project was open (' + other + ') — its room would be written into that project');
+      const names = FM.scene.layers.map(function (l) { return l.name; });
+      if (names.indexOf('996 room only') >= 0) throw new Error('the room’s layer was written into the other project: ' + JSON.stringify(names));
+      if (names.indexOf('996 his own layer') < 0) throw new Error('the other project lost its own layer to the room: ' + JSON.stringify(names));
+    } finally {
+      try { if (res && res.session) { res.session.stop('left'); if (FM.collab.session === res.session) FM.collab.detach(); } } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+  });
+
+  test('996 a session that hears from the room while another project is open keeps the change in its base and leaves that project alone', { item: '996', budgetMs: 60000 }, async function () {
+    const C = FM.collab;
+    if (!C || typeof C.reopen !== 'function') throw new Error('FM.collab.reopen is missing');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const cur0 = FM.projects.currentId;
+    let res = null;
+    try {
+      if (wasHome) FM.home.close();
+      const copy = await FM.projects.create({ name: '996 linked copy B', width: 320, height: 240 }); made.push(copy);
+      const mine = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#ff00ff', start: 0, duration: 2 });
+      mine.name = '996 on screen';
+      FM.scene.layers.push(mine);
+      const A2 = Object.create(C.bridge);
+      const based = { project: JSON.parse(JSON.stringify(FM.scene.project)), layers: [JSON.parse(JSON.stringify(mine))] };
+      A2.readBase = function () { return Promise.resolve({ D: based, epoch: 1, seq: 0, cid: 0 }); };
+      const ep = t996Link();
+      res = await C.reopen({ gpid: copy, link: ep, adapter: A2, role: 'editor', mid: 'g' });
+      if (!res || !res.session || typeof ep.onmessage !== 'function') throw new Error('control: on its own project the reconnect did not attach (' + JSON.stringify(res && Object.keys(res)) + ')');
+      /* CONTROL: on its own project a snapshot DOES land — or the assertion below would prove nothing */
+      /* …and lands at once (no await): a snapshot that was QUEUED (an export, a held gesture) would make the immediate
+         off-project check below pass for the wrong reason, so the control is held to the same clock */
+      ep.onmessage('ctl', { t: 'snap', D: { project: based.project, layers: based.layers.concat([t996Room(based.project).layers[0]]) }, epoch: 1, seq: 1 });
+      if (!FM.scene.layers.some(function (l) { return l.name === '996 room only'; })) throw new Error('control: on its own project the room’s snapshot did not land at once — the off-project assertion would mean nothing');
+      FM.scene.layers = FM.scene.layers.filter(function (l) { return l.name !== '996 room only'; });
+      /* now the app is on another project (what projects.open() leaves for a moment, and a late message finds) */
+      FM.projects.currentId = function () { return 'p_996_elsewhere'; };
+      const before = JSON.stringify(FM.scene.layers.map(function (l) { return l.id; }));
+      ep.onmessage('ctl', { t: 'snap', D: t996Room(based.project), epoch: 1, seq: 2 });
+      const after = JSON.stringify(FM.scene.layers.map(function (l) { return l.id; }));
+      FM.projects.currentId = cur0;
+      if (after !== before) throw new Error('a snapshot heard while another project was open rewrote the open scene: ' + before + ' → ' + after + ' (' + FM.scene.layers.map(function (l) { return l.name; }).join(', ') + ')');
+    } finally {
+      FM.projects.currentId = cur0;
+      try { if (res && res.session) { res.session.stop('left'); if (FM.collab.session === res.session) FM.collab.detach(); } } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
