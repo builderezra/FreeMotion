@@ -59879,7 +59879,7 @@
     if (!(v1 < v0 * 0.5)) throw new Error('a noisy patch kept ' + Math.round(v1 / v0 * 100) + '% of its variance; it should lose more than half');
     // a hard edge keeps most of its step
     const edge = function () { return N.frame(W, H, function (x) { return x < 40 ? [40, 40, 40] : [210, 210, 210]; }); };
-    const e1 = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5, keep: 40 }), W, H, edge(), 0.5), row = 30 * W * 4;
+    const e1 = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5, keep: 60 }), W, H, edge(), 0.5), row = 30 * W * 4;
     const step = e1[row + 41 * 4] - e1[row + 38 * 4];
     if (step < 170 * 0.8) throw new Error('a hard 170-level edge kept only ' + Math.round(step) + ' of its step (it should keep over 80%)');
     // Skin tones: a blue noisy patch is not softened, a skin one is
@@ -59887,6 +59887,11 @@
     if (N.maxDiff(blue, bo) > 2) throw new Error('Skin tones softened a blue patch (' + N.maxDiff(blue, bo) + ')');
     const so = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5, only: 1 }), W, H, mk(3, [205, 150, 120]), 0.5);
     if (!(N.variance(so, W, 10, 10, 70, 45) < v0 * 0.7)) throw new Error('Skin tones did not soften a skin-coloured patch');
+    // Keep detail does what it says: a mid-contrast texture keeps more of its contrast at Keep detail 100 than at 0 (E2 found the slider running the wrong way)
+    const tex = function () { return N.frame(W, H, function (x, y) { const hi = ((x >> 3) + (y >> 3)) % 2; return [150 + (hi ? 20 : -20), 120 + (hi ? 20 : -20), 100 + (hi ? 20 : -20)]; }); };
+    const k0 = N.px('softskin', N.inst('softskin', { amount: 1, radius: 6, keep: 0 }), W, H, tex(), 0.5), k100 = N.px('softskin', N.inst('softskin', { amount: 1, radius: 6, keep: 100 }), W, H, tex(), 0.5);
+    const vt = N.variance(tex(), W, 10, 10, 70, 45), v0k = N.variance(k0, W, 10, 10, 70, 45), v100k = N.variance(k100, W, 10, 10, 70, 45);
+    if (!(v100k > v0k * 1.5) || !(v100k > vt * 0.8)) throw new Error('Keep detail runs the wrong way or does nothing: texture variance ' + Math.round(vt) + ' in, ' + Math.round(v0k) + ' at Keep 0, ' + Math.round(v100k) + ' at Keep 100 (want Keep 100 to keep most of it and Keep 0 to lose most)');
     // a transparent pixel is bit-for-bit what it was
     for (let i = 3; i < skin.length; i += 4) if (skin[i] === 0) for (let k = -3; k < 0; k++) if (skin[i + k] !== out[i + k]) throw new Error('a transparent pixel’s colour was rewritten at ' + (i - 3) / 4);
   });

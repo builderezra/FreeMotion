@@ -254,7 +254,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 838238482221358;   // E1 (SCHEMA_REV 9): six new effect types (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art); before: Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate`, re-checked on step 1.2 alone
+  C.SCHEMA_FP = 5698315735221935;   // E1 (SCHEMA_REV 9): six new effect types (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art); before: Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate`, re-checked on step 1.2 alone
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *
