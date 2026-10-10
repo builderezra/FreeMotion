@@ -427,3 +427,9 @@ ADDED 11 Oct 00:05 by the PM, from the builder. CLOUD-ONLY, because the laptop m
 - PRE2 continues: the plain suite on wip/v17.38-tree (797ea31a) at 1280 AND 380, then wip/v17.37-tree (8878582a).
 - **A note from the builder for any bisect you run:** a slice's FIRST test can fail on its own (Home is still open at boot). Count only the TARGET test's failure, not any red in the slice.
 - FYI, what v17.37's red was: `a tilt keyframe cannot turn the rotate diamond into a delete button (queue 419)` left the transform panel on Rotate (FM._mtMode), so Transform opened 240 tests later with no Position X. It is fixed, and the runner now restores FM._mtMode and the window stubs after every test. If you see that red, it is the old tree.
+
+ADDED 11 Oct 01:12 by the PM, from the builder. LOWEST priority. Do it only AFTER LR1 and the plain suites on wip/v17.38-tree and wip/v17.37-tree.
+- PRE2d wip/v17.40-tree = b9a2e94d: Simple 2.3 + his option E (the A1 PC tray), chained onto 2.2. 2.3 is 974bc0fb; E is 9472601d with its test edits applied hunk by hunk; 2423 tests (2407 + 14 + 2, no duplicates). tests/_cdp_h52.py is kept OUT.
+      Plain suite at 1280 AND 380; reds alone, paired with their predecessor, and on main. → hunt/preflight-v17.40.
+- Order of trees from here: v17.38 (2.1) → v17.39 (2.2, once the builder re-pushes it rebuilt on 2.1; watch ls-remote wip/v17.39-tree for a new hash, not e5c13554) → v17.40 (2.3 + E).
+- AU25 is staged by the builder on its own branch for the Full batch after 2.1. Nothing to do for it yet.
