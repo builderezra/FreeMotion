@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=755">
+<link rel="stylesheet" href="styles.css?v=756">
 <link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -265,7 +265,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.36</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.37</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1074,7 +1074,7 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=4"></script>
   <script src="js/gl-color.js?v=5"></script>
-  <script src="js/compositor.js?v=212"></script>
+  <script src="js/compositor.js?v=213"></script>
   <script src="js/fx-registry.js?v=25.31"></script>
   <script src="js/filters.js?v=19"></script>
   <script src="js/fx-presets.js?v=12"></script>
@@ -1084,7 +1084,7 @@
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
   <script src="js/addmenu.js?v=83"></script>
-  <script src="js/inspector.js?v=410"></script>
+  <script src="js/inspector.js?v=411"></script>
   <script src="js/fx-browser.js?v=98"></script>
   <script src="js/elements-browser.js?v=4"></script>
   <script src="js/color-wheel.js?v=53"></script>
@@ -1108,7 +1108,7 @@
   <script src="js/audio-fx-live.js?v=14"></script>
   <script src="js/audio-fx-browser.js?v=14"></script>
   <script src="js/history.js?v=38"></script>
-  <script src="js/storage.js?v=59"></script>
+  <script src="js/storage.js?v=60"></script>
   <script src="js/export-resume.js?v=7"></script>
   <script src="js/medialib.js?v=8"></script>
   <script src="js/template-fill.js?v=4"></script>
@@ -1123,10 +1123,10 @@
   <script src="js/ask.js?v=4"></script>
   <script src="js/shortcuts.js?v=85"></script>
   <script src="js/captions-vad.js?v=1"></script>
-  <script src="js/captions.js?v=60"></script>
+  <script src="js/captions.js?v=61"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=1"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=470"></script>
+  <script src="js/app.js?v=471"></script>
   <script src="js/audio-tools.js?v=7"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=19"></script>
@@ -1154,7 +1154,7 @@
        All three are inert until something hands a session a link, which in S2 only the test rig does. -->
   <script src="js/collab-signal.js?v=5"></script>
   <script src="js/collab-link.js?v=9"></script>
-  <script src="js/collab-session.js?v=12"></script>
+  <script src="js/collab-session.js?v=13"></script>
   <script src="js/collab-bridge.js?v=11"></script>
   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).

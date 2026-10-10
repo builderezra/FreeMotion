@@ -94,6 +94,30 @@ window.FM = window.FM || {};
        count as pending"). An entry is a tx we have applied to our own base and the host has not yet
        acknowledged — whether that is because it is in flight or because there is nothing to fly. */
     const outstanding = [];                       // [{cid, ops, sent}]
+    // A reconnect is not caught up when the link reopens; the host's tail/snapshot still has to land.
+    // New work in that interval was written against a stale base and must use the same CAS as the outbox.
+    let catchingUp = false;
+    let catchupCopySeen = false;
+    const catchupEcho = Object.create(null);         // latest local leaf value per path until the host settles it
+    function rememberCatchup(ops, cid) {
+      if (!catchingUp) return;
+      for (let i = 0; i < ops.length; i++) {
+        const op = ops[i];
+        if (op.o !== 's' && op.o !== 'd') continue;
+        const k = P.key(op.p), old = catchupEcho[k];
+        if (!old || old.cid <= cid) catchupEcho[k] = { cid: cid, op: op };
+      }
+    }
+    function isCatchupEcho(op) {
+      if (!catchingUp || (op.o !== 's' && op.o !== 'd')) return false;
+      const latest = catchupEcho[P.key(op.p)];
+      return !!(latest && latest.op.o === op.o && (op.o === 'd' || eq(latest.op.v, op.v)));
+    }
+    function endCatchup() {
+      catchingUp = false;
+      catchupCopySeen = false;
+      Object.keys(catchupEcho).forEach(function (k) { delete catchupEcho[k]; });
+    }
     const pending = Object.create(null);          // pathKey -> cid, for `s` and `d` ONLY (§8.1)
     const forceIds = Object.create(null);         // S7: layer ids whose next `lr` is a confirmed delete-anyway
     let refusedAt = 0;                            // S7: the §16.3 toast, said once rather than every tick
@@ -218,6 +242,16 @@ window.FM = window.FM || {};
       if (A.normalizeDerived) A.normalizeDerived();  // §11.1 — deterministic, so it is a no-op on peers
       P.stampIds(doc());                             // §5.4 — before every diff
       let res = diffNow(scope);
+      if (!isOwner && catchingUp && res.ops.length) {
+        // A rejected offline value can remain in live while an earlier cid still owns that path.
+        // Do not turn that unchanged value into a fresh tx with a new "before" from the host's
+        // newer base: CAS would then accept the echo and overwrite the owner's edit after all.
+        const keepOps = [], keepRecs = [];
+        for (let i = 0; i < res.ops.length; i++) if (!isCatchupEcho(res.ops[i])) {
+          keepOps.push(res.ops[i]); keepRecs.push(res.recs[i]);
+        }
+        res.ops = keepOps; res.recs = keepRecs;
+      }
       if (!res.ops.length) return 0;
       if (over) {                                    // the session has stopped — see the note above this function
         if (recording) record(res);
@@ -284,7 +318,8 @@ window.FM = window.FM || {};
       const ops = res.ops.map(function (op, i) { return withBefore(op, res.recs[i]); });
       for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
       S.cid += 1;
-      const entry = { cid: S.cid, ops: ops, sent: false };
+      const entry = { cid: S.cid, ops: ops, sent: false, queued: !S.online || catchingUp };
+      rememberCatchup(ops, S.cid);
       for (let i = 0; i < ops.length; i++) {
         const op = ops[i];
         /* §8.1 correction: ONLY `s` and `d`. A structural op's key is the whole layer, so recording it
@@ -827,6 +862,7 @@ window.FM = window.FM || {};
         case 'snap': return onSnap(msg);
         case 'tail': {
           for (let i = 0; i < msg.batches.length; i++) onBatch(msg.batches[i]);
+          catchupCopySeen = true;
           replayOutstanding();
           return;
         }
@@ -909,6 +945,7 @@ window.FM = window.FM || {};
     function onAck(ack) {
       const i = outstanding.findIndex(function (e) { return e.cid === ack.cid; });
       const entry = i >= 0 ? outstanding[i] : null;
+      if (entry) rememberCatchup(entry.ops, entry.cid);
       if (entry) {
         outboxOps -= entry.ops.length;
         outboxBytes -= canon(entry.ops).length;
@@ -927,6 +964,9 @@ window.FM = window.FM || {};
       /* S8 review: the host's repair of what it refused did not all fit its budget (collab-host.js FIX_OPS), so
          the rest of the truth comes as a copy — asked for once, and paced by the owner's `catchUp`. */
       if (ack.resync === 1) sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });
+      // Keep later local diffs on CAS until every reconnect-era tx has been acknowledged and its
+      // repair has reached live. Clearing on tail arrival alone lets flushBefore() send a stale q:0.
+      if (catchingUp && catchupCopySeen && !outstanding.length) endCatchup();
       persistSoon();
     }
 
@@ -1019,6 +1059,7 @@ window.FM = window.FM || {};
       keepIds = null;
       if (A.afterApply) A.afterApply(sum);
       if (A.autosave) { try { A.autosave(); } catch (e) {} }
+      catchupCopySeen = true;
       replayOutstanding();
       persistSoon();
       S.stats.snaps = (S.stats.snaps || 0) + 1;
@@ -1027,7 +1068,10 @@ window.FM = window.FM || {};
     /* §13.2 step 6: everything outstanding goes back out as q:1, in cid order. */
     function replayOutstanding() {
       for (let i = 0; i < outstanding.length; i++) { outstanding[i].sent = false; outstanding[i].replay = true; }
-      if (S.online) flushOutstanding();
+      if (S.online) {
+        flushOutstanding();
+        if (catchingUp && catchupCopySeen && !outstanding.length) endCatchup();
+      }
     }
 
     /* ═══ §11.4 — DIVERGENCE ════════════════════════════════════════════════════════════════════ */
@@ -1216,7 +1260,8 @@ window.FM = window.FM || {};
           for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
           S.cid += 1;
           for (let i = 0; i < ops.length; i++) if (ops[i].o === 's' || ops[i].o === 'd') pending[P.key(ops[i].p)] = S.cid;
-          outstanding.push({ cid: S.cid, ops: ops, sent: false });
+          outstanding.push({ cid: S.cid, ops: ops, sent: false, queued: !S.online || catchingUp });
+          rememberCatchup(ops, S.cid);
           if (S.online) flushOutstanding();
         }
         res.recs.forEach(function (r, i) { if (res.ops[i].o === 's') r.after = clone(res.ops[i].v); });
@@ -1367,7 +1412,10 @@ window.FM = window.FM || {};
     function markOffline() {
       if (!S.online) return;
       S.online = false;
+      catchingUp = true;
+      catchupCopySeen = false;
       for (let i = 0; i < outstanding.length; i++) { outstanding[i].sent = false; outstanding[i].queued = true; }
+      for (let i = 0; i < outstanding.length; i++) rememberCatchup(outstanding[i].ops, outstanding[i].cid);
       if (A.onOffline) try { A.onOffline(); } catch (e) {}
     }
     S.setOnline = function (on) {

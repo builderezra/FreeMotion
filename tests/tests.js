@@ -19941,6 +19941,34 @@
     if (a !== b) throw new Error('the same nested scene rendered ' + a + ' with the outer group first and ' + b + ' with the inner group first — group flattening is still sensitive to scene order');
   });
 
+  test('three and four styled group levels each draw once and keep every fade', { item: '1041' }, function () {
+    function render(depth, outerFirst) {
+      const groups = Array.from({ length: depth }, (_, i) => FM.makeLayer('group', { name: 'G' + i }));
+      groups.forEach((g, i) => { g.transform.opacity = 0.5; if (i) g.parent = groups[i - 1].id; });
+      const leaf = FM.makeLayer('shape', { shape: 'rect', name: 'white leaf', x: 60, y: 45, shapeW: 60, shapeH: 40, fill: '#ffffff' });
+      if (depth) leaf.parent = groups[depth - 1].id;
+      const layers = (outerFirst ? groups : groups.slice().reverse()).concat(leaf);
+      const sc = scene(layers); sc.project = { width: 120, height: 90, fps: 30, duration: 5, background: '#000000' };
+      const canvas = offscreen(120, 90), ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const original = FM.makeLayer; let builds = 0;
+      try {
+        FM.makeLayer = function (type, props) { if (type === '_flat') builds++; return original(type, props); };
+        FM.renderScene(ctx, sc, 0);
+      } finally { FM.makeLayer = original; }
+      return { red: ctx.getImageData(60, 45, 1, 1).data[0], builds };
+    }
+    for (const depth of [1, 2, 3, 4]) {
+      const want = Math.round(255 * Math.pow(0.5, depth));
+      for (const outerFirst of [true, false]) {
+        const got = render(depth, outerFirst);
+        if (Math.abs(got.red - want) > 2)
+          throw new Error(depth + ' styled groups (' + (outerFirst ? 'outer' : 'inner') + ' first) render ' + got.red + ', expected ' + want);
+        if (got.builds !== depth)
+          throw new Error(depth + ' styled groups built ' + got.builds + ' flattened units, expected exactly ' + depth);
+      }
+    }
+  });
+
   test('effects: Tiles “Whole clip” does not throw away the other effect on the layer', { item: 'tiles-scratch' }, function () {
     /* drawCanvasEffect renders the clean layer into scratch A, hands A to the effect fn to write
      * into B, then blits B into ctx. Those were module singletons, defended by a comment arguing a
@@ -32010,6 +32038,43 @@
         if (re.q !== 1) throw new Error('the offline tx went back out as q:' + re.q + ' — the host runs its compare-and-set only on q:1, so it is applied unconditionally and whatever was written while this device was away is silently overwritten, with rej:[], lost:[], no clash count and no toast');
       } finally { g.loop.b.send = orig; }
     });
+  });
+
+  test('offline guest edits made during reconnect still use clash checks, including Undo (batch2 1b.3)', { item: '1015', budgetMs: 60000 }, async function () {
+    for (const kind of ['edit', 'undo']) {
+      await withCollab921([layer921('A')], async function (c) {
+        const g = c.addGuest();
+        const sent = [];
+        const orig = g.loop.b.send;
+        g.loop.b.send = function (ch, msg) { if (msg && msg.t === 'tx') sent.push(msg); return orig.call(g.loop.b, ch, msg); };
+        try {
+          g.G.setOnline(false);
+          g.doc.layers[0].name = 'Sam offline';
+          g.G.tick('full');
+          if (kind === 'undo') g.G.afterCommit();
+          const offline = g.G._outstanding();
+          if (offline.length !== 1 || offline[0].sent) throw new Error(kind + ': the first change was not parked while offline');
+          FM.scene.layers[0].name = 'Ezra online';
+          FM.history.commit();
+          if (c.S.base.layers[0].name !== 'Ezra online') throw new Error(kind + ': the owner change did not reach the host');
+
+          g.G.setOnline(true); // hello is in flight; the tail/snapshot has not reached the guest
+          if (kind === 'edit') { g.doc.layers[0].name = 'Sam reconnect'; g.G.tick('full'); }
+          else if (!g.G.undo()) throw new Error('the offline change could not be undone before catch-up');
+          const pending = g.G._outstanding();
+          if (pending.length < 2) throw new Error(kind + ': no second transaction was made during catch-up');
+          const next = sent.find(m => m.cid === pending[pending.length - 1].cid);
+          if (!next) throw new Error(kind + ': the second transaction was never sent');
+          if (next.q !== 1) throw new Error(kind + ': the reconnect-time transaction went as q:' + next.q + ', bypassing the host clash check');
+          g.loop.settle(); g.loop.settle();
+          if (!sent.some(m => m.cid === offline[0].cid && m.q === 1))
+            throw new Error(kind + ': the first offline transaction was not replayed with a clash check');
+          if (c.S.base.layers[0].name !== 'Ezra online')
+            throw new Error(kind + ': the guest overwrote the owner during reconnect: ' + c.S.base.layers[0].name + ' / ' + JSON.stringify(sent.map(m => ({ cid: m.cid, q: m.q, ops: m.ops }))));
+          if (!g.G.lastClash) throw new Error(kind + ': the stale guest change was not reported as a clash');
+        } finally { g.loop.b.send = orig; }
+      });
+    }
   });
 
   test('921 S2 a persisted guest base answers for the WRITE, not for having asked for one', { item: '921', budgetMs: 45000 }, async function () {
@@ -46609,6 +46674,7 @@
      * why nothing caught this. This one sets the trap deliberately. */
     const layers0 = FM.scene.layers.slice(), t0 = FM.time;
     const sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const mode0 = FM._mtMode;   // this test puts the transform panel in Rotate; it must not leave it there (v17.37: #1016's Position X red, bisected here)
     const setup = async () => {
       FM.scene.layers.length = 0;
       const L = FM.makeLayer('shape', { name: 'S', shape: 'rect', x: 150, y: 150, shapeW: 60, shapeH: 40, fill: '#fff', start: 0, duration: 4 });
@@ -46648,6 +46714,7 @@
     } finally {
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
       FM.time = t0; FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM._mtMode = mode0;
       if (FM.syncSelectionChrome) FM.syncSelectionChrome();
       FM.inspector.refresh(); await sleep(120);
     }
@@ -57285,6 +57352,59 @@
     }
   });
 
+  test('keyboard can edit numeric Volume and Position values and effect inputs have names (batch2 1b.4)', { item: '1016', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), selected0 = FM.scene.selectedId;
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      await sleep(350);
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('video', { name: 'Keyboard values' });
+      L.start = 0; L.duration = 4; L.volume = 1;
+      L.effects = [FM.fxRegistry.makeInstance('blur')];
+      FM.scene.layers.push(L); FM.selectLayer(L.id);
+      FM.inspector.openCategory('volume'); await sleep(150);
+      const volume = document.querySelector('.vol-panel .mt-vbox-val');
+      if (!volume) throw new Error('setup: Volume value did not render');
+      if (volume.tabIndex !== 0 || volume.getAttribute('role') !== 'spinbutton' || volume.getAttribute('aria-label') !== 'Volume')
+        throw new Error('Volume cannot be reached and identified from the keyboard');
+      volume.focus(); volume.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      if (!volume.isContentEditable || document.activeElement !== volume) throw new Error('Enter did not open Volume editing');
+      volume.textContent = '50'; volume.focus(); volume.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      if (Math.abs(FM.evalProp(L.volume, FM.time) - 0.5) > 1e-6) throw new Error('typing 50 into Volume did not set 50%');
+      const fadeInputs = [...document.querySelectorAll('.vol-panel .fx-scrub-val')];
+      if (!fadeInputs.length || fadeInputs.some(v => !v.getAttribute('aria-label'))) throw new Error('the Volume fade inputs lack accessible names');
+
+      FM.inspector.openCategory('transform'); await sleep(150);
+      const xBox = [...document.querySelectorAll('.mt-vbox')].find(b => (b.querySelector('.mt-vbox-lab') || {}).textContent === 'X');
+      const x = xBox && xBox.querySelector('.mt-vbox-val');
+      if (!x || x.tabIndex !== 0 || x.getAttribute('aria-label') !== 'X') {
+        // what the panel held instead (v17.37's first ship: red only after "the add-menu drag handle…" ran before it)
+        const labs = [...document.querySelectorAll('.mt-vbox-lab')].map(b => b.textContent).slice(0, 12);
+        const ip = document.getElementById('inspector-panel');
+        throw new Error('Position X is not keyboard reachable [vbox labels ' + JSON.stringify(labs) + ', selected ' + FM.scene.selectedId + ' (ours ' + L.id + '), panel ' + (ip ? ip.className.slice(0, 80) + ' cards ' + ip.querySelectorAll('.cat-card').length + ' addmenu ' + !!ip.querySelector('.addmenu--panel') : 'none') + ', cat ' + (FM.inspector && FM.inspector.currentCategory ? FM.inspector.currentCategory() : '?') + ']');
+      }
+      x.focus(); x.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      if (!x.isContentEditable) throw new Error('Enter did not open Position X editing');
+      x.textContent = '42'; x.focus(); x.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      if (Math.abs(FM.evalProp(L.transform.x, FM.time) - 42) > 1e-6) throw new Error('typing Position X did not set it');
+      const xAfter = [...document.querySelectorAll('.mt-vbox')].find(b => (b.querySelector('.mt-vbox-lab') || {}).textContent === 'X').querySelector('.mt-vbox-val');
+      xAfter.focus(); xAfter.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      if (Math.abs(FM.evalProp(L.transform.x, FM.time) - 42.1) > 1e-6 || xAfter.getAttribute('aria-valuenow') !== '42.1')
+        throw new Error('ArrowUp did not step Position X or update its announced value');
+
+      FM.inspector.openCategory('effects'); await sleep(150);
+      const row = document.querySelector('.fx-row:not(.mask-item)');
+      if (row && !row.classList.contains('fx-open')) { const head = row.querySelector('.fx-head'); if (head) head.click(); await sleep(100); }
+      const effectInputs = [...document.querySelectorAll('.fx-row .fx-scrub-val')];
+      if (!effectInputs.length) throw new Error('setup: the blur effect has no numeric input');
+      if (effectInputs.some(v => !v.getAttribute('aria-label'))) throw new Error('an effect value input has no accessible name');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(selected0 || null); FM.refreshAll();
+    }
+  });
+
   /* ---------------- queue 184: speed to the playhead ----------------
    * "Go on the timeline to exactly where you want it to last to, then press a button and it will
    * change the speed to go exactly to that point." The whole value is that the number is EXACT, so
@@ -59822,6 +59942,9 @@
 
   async function run() {
     var results = [];
+    // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
+    var WIN_KEYS = ['innerHeight', 'innerWidth', 'outerHeight', 'outerWidth', 'devicePixelRatio', 'visualViewport', 'matchMedia'];
+    var winD0 = {}; WIN_KEYS.forEach(function (k) { try { winD0[k] = Object.getOwnPropertyDescriptor(window, k); } catch (e) {} });
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
      * the suite is injected, while #splash is still covering the app — a hit-test through it sees the splash,
      * and the #429 test failed three times for exactly that. The full suite never noticed because the tests
@@ -59878,7 +60001,7 @@
        * left behind. Nothing recorded who. Now every test's leftovers are listed against it: layers still in the scene
        * that were not there before it ran, an effects-sheet preview still set, an isolate still on. REPORT ONLY — the
        * driver prints the list after each run (sceneLeaks); nothing turns red for it until the list is understood. */
-      var _lk0 = null;
+      var _lk0 = null, _mt0 = FM._mtMode;
       try { _lk0 = { scene: FM.scene, ids: (FM.scene && FM.scene.layers || []).map(function (l) { return l.id; }), pv: FM._fxPreview || null, iso: FM.isolate || null }; } catch (e) {}
       var _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       /* A HUNG TEST IS A NAMED FAILURE, NOT A SILENT STALL (2 Sep). A throw inside a callback a test does not
@@ -59923,6 +60046,26 @@
          * with held pointers counted, each one would vouch for the next test's stale gesture as "still held". Cleared
          * silently, because a synthetic press with no release is ordinary fixture shorthand, not a leak. */
         if (FM._heldPointers && FM._heldPointers.clear) FM._heldPointers.clear();
+      } catch (e) {}
+      /* WINDOW STUBS ARE PUT BACK AFTER EVERY TEST, AND THE TEST THAT LEFT ONE IS NAMED (10 Oct, v17.36's three refused
+       * ships). "a short viewport caps the timeline band" restored window.innerHeight as a NUMBER, which pinned it at 760 for
+       * every later test — 921 blamed Chrome for a month, and the cog's T12 went red only deep in the full pass. The live
+       * descriptors are taken once, before the first test; any that a test left different are put back here and listed
+       * with the leaks below, so no later test can read a stub and the one that left it is on the list. */
+      try {
+        var _stubbed = [];
+        WIN_KEYS.forEach(function (k) {
+          var d = Object.getOwnPropertyDescriptor(window, k), d0 = winD0[k];
+          var same = d0 ? !!d && d.get === d0.get && d.set === d0.set && d.value === d0.value : !d;
+          if (!same) { _stubbed.push(k); try { if (d0) Object.defineProperty(window, k, d0); else delete window[k]; } catch (e) {} }
+        });
+        /* …and the transform panel's mode (v17.37's first ship: a queue-419 test left it on Rotate, and #1016's test, 240 tests
+           later, opened Transform to a panel with no Position X — bisected by slices). Put back, and named. */
+        if (FM._mtMode !== _mt0) { _stubbed.push('FM._mtMode (' + FM._mtMode + ')'); FM._mtMode = _mt0; }
+        if (_stubbed.length) {
+          var LS = window.__fmSceneLeaks = window.__fmSceneLeaks || [];
+          if (LS.length < 60) LS.push({ test: t.name.slice(0, 120), added: _stubbed.map(function (k) { return (k.indexOf('FM.') === 0 ? k + ' left changed' : 'window.' + k + ' left stubbed') + ' (put back)'; }), more: 0, preview: false, isolate: false });
+        }
       } catch (e) {}
       try {
         if (_lk0 && FM.scene === _lk0.scene) {
@@ -60335,6 +60478,35 @@
      Its Canvas settings resolution list tops out at 2160p, and until v9.27 the first import set the
      project to the file's pixel dimensions verbatim — so a phone photo (3024x4032 is a stock iPhone
      still) made a 12.2-MEGAPIXEL composition. That is the project in his measurement in queue 202. */
+  test('a project file without a layer transform survives import, save and reopen', { item: '1040', budgetMs: 30000 }, async function () {
+    const prior = FM.projects.currentId(), wasHome = FM.home && FM.home.isOpen && FM.home.isOpen(), made = [];
+    try {
+      for (const mode of ['missing', 'null']) {
+        const layer = FM.makeLayer('shape', { name: 'Missing transform ' + mode, x: 90, y: 70 });
+        if (mode === 'missing') delete layer.transform; else layer.transform = null;
+        const file = { app: 'freemotion', project: { name: 'Transform repair ' + mode, width: 180, height: 140, duration: 2, fps: 30 }, layers: [layer], media: {} };
+        if (!(await FM.storage.importObject(file, null, { quiet: true, confirmed: true })))
+          throw new Error('the ' + mode + '-transform project was refused');
+        made.push(FM.projects.currentId());
+        const check = where => {
+          const got = FM.scene.layers.find(l => l.name === layer.name);
+          if (!got || !got.transform || typeof got.transform !== 'object' ||
+              !Number.isFinite(got.transform.scale) || !Number.isFinite(got.transform.anchorX))
+            throw new Error(where + ': the ' + mode + ' transform was not rebuilt');
+          FM.animatedProps(got); // the old timeline crash was Object.keys(layer.transform)
+          FM.refreshAll();
+        };
+        check('import');
+        await FM.storage.save();
+        if (FM.storage.settled) await FM.storage.settled();
+        if (!(await FM.storage.load())) throw new Error('the saved ' + mode + '-transform project did not reopen');
+        check('reopen');
+      }
+    } finally {
+      await hfCleanup(made, prior, wasHome);
+    }
+  });
+
   test('the first import cannot create a project bigger than the biggest preset', { item: 'proj-cap' }, function () {
     if (!FM.fitProjectSize) throw new Error('FM.fitProjectSize is missing');
     var f = FM.fitProjectSize;
@@ -60385,6 +60557,59 @@
       FM.scene.project.width = w0; FM.scene.project.height = h0;
       if (FM.resizeCanvas) FM.resizeCanvas();
       FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+
+  test('a panorama import keeps its canvas and centred photo when reopened (batch2 1b.2)', { item: '1014', budgetMs: 30000 }, async function () {
+    if (!FM.fitProjectSize || !FM.storage.load || !FM.storage.autosave || !FM.projectIsOversize || !FM.projects)
+      throw new Error('the import/storage size boundary is unavailable');
+    const prior = FM.projects.currentId(), wasHome = FM.home && FM.home.isOpen && FM.home.isOpen();
+    const addToLibrary = FM.mediaLib && FM.mediaLib.add, toast = FM.toast;
+    let testProject = null;
+    const made = [];
+    try {
+      FM.toast = () => {};
+      if (FM.mediaLib) FM.mediaLib.add = () => {}; // the test clip is not a user's library tile
+      testProject = await FM.projects.create({ name: 'Panorama reopen check', width: 320, height: 240 });
+      if (!testProject) throw new Error('a temporary project could not be created for the reopen check');
+      const file = await q915aPng('panorama-reopen', '#4285b4');
+      for (const d of [[16000, 4000], [9000, 2000]]) {
+        const fit = FM.fitProjectSize(d[0], d[1]);
+        if (!fit.capped || fit.w > 7680 || fit.h > 7680)
+          throw new Error(d.join('×') + ' made a canvas ' + fit.w + '×' + fit.h + ' that storage will reshape on reopen');
+        const P = FM.scene.project;
+        FM.scene.layers.length = 0; P.sizePicked = false;
+        FM.addMediaLayer({ kind: 'image', width: d[0], height: d[1], file });
+        const layer = FM.scene.layers[0];
+        if (!layer) throw new Error('the panorama did not import');
+        made.push(layer.id);
+        if (P.width !== fit.w || P.height !== fit.h) throw new Error('the import bypassed the fit: ' + P.width + '×' + P.height);
+        const before = { width: P.width, height: P.height, transform: JSON.stringify(layer.transform) };
+        FM.storage.autosave(); await sleep(750); await FM.storage.settled();
+        const disk = JSON.parse(localStorage.getItem('fm.proj.' + testProject) || 'null');
+        if (!disk || !disk.layers.some(l => l.id === layer.id)) throw new Error('the import was not autosaved before reopening');
+        if (!(await FM.storage.load())) throw new Error('the saved project did not reopen');
+        const opened = FM.scene.project, reopened = FM.scene.layers.find(l => l.id === layer.id);
+        if (opened.width !== before.width || opened.height !== before.height)
+          throw new Error('reopening changes ' + before.width + '×' + before.height + ' into ' + opened.width + '×' + opened.height);
+        if (!reopened || JSON.stringify(reopened.transform) !== before.transform)
+          throw new Error('the photo transform changed across save and reopen');
+        if (reopened.transform.x !== opened.width / 2 || reopened.transform.y !== opened.height / 2)
+          throw new Error('the photo is no longer centred after reopen: ' + reopened.transform.x + ',' + reopened.transform.y);
+        if (!(reopened.transform.scale > 0) || d[0] * reopened.transform.scale > opened.width + 1 || d[1] * reopened.transform.scale > opened.height + 1)
+          throw new Error('the panorama no longer fits the reopened canvas');
+      }
+      if (FM.projectIsOversize({ width: 7680, height: 1920 }))
+        throw new Error('the new maximum panorama is incorrectly warned as oversized');
+    } finally {
+      if (FM.mediaLib) FM.mediaLib.add = addToLibrary;
+      FM.toast = toast;
+      if (testProject) {
+        try { await FM.projects.open(prior || null, { confirmed: true }); } catch (e) {}
+        try { await FM.projects.remove(testProject); } catch (e) {}
+      }
+      for (const id of made) { FM.media.remove(id); await FM.storage.removeMedia(id); }
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
     }
   });
 
@@ -121748,6 +121973,61 @@
       try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
       FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = sel0;
       FM.timeline.rebuild(); await sleep(40);
+    }
+  });
+
+  test('Detect speech skips silent B-roll and continues after a failed source', { item: '1059', budgetMs: 15000 }, async function () {
+    const C = FM.captions, A = { id: 'silent-a', name: 'Silent B-roll', type: 'video' }, B = { id: 'voice-b', name: 'Talking clip', type: 'video' };
+    const T = { id: 'caption-track', captions: [] }, saved = {
+      sources: C.audioSources, detect: C.detect, audio: FM.hasAudioTrack, toast: FM.toast,
+      scope: FM._capScope, src: FM._capSrcId, report: FM.reportError,
+      refresh: FM.inspector && FM.inspector.refresh, rebuild: FM.timeline && FM.timeline.rebuild,
+      changed: FM.textEdit && FM.textEdit.cuesChanged
+    };
+    const messages = [], called = [];
+    try {
+      C.audioSources = () => [A, B];
+      FM.toast = msg => messages.push(msg);
+      FM.reportError = () => {};
+      if (FM.inspector) FM.inspector.refresh = () => {};
+      if (FM.timeline) FM.timeline.rebuild = () => {};
+      if (FM.textEdit) FM.textEdit.cuesChanged = () => {};
+      FM._capScope = 'clip'; FM._capSrcId = null;
+      FM.hasAudioTrack = l => l.id === A.id ? false : true;
+      C.detect = async (layer, candidate) => {
+        called.push(candidate.id);
+        if (candidate.id === A.id) throw new Error('known-silent clip was decoded');
+        layer.captions = [{ a: 0, b: 1, text: '' }, { a: 2, b: 3, text: '' }];
+        return { count: 2, stats: {} };
+      };
+      let row = FM.captionsEditor.detectRow(T, () => {});
+      row.querySelector('.cap-detect-btn').click(); await sleep(80);
+      if (called.join(',') !== B.id || T.captions.length !== 2 || !messages.some(m => /2 cues.*Talking clip/.test(m)))
+        throw new Error('default scope did not use the talking clip after silent B-roll');
+
+      // A valid source with no speech followed by a failed decode should retain A's no-speech result.
+      called.length = 0; messages.length = 0; FM.hasAudioTrack = () => null;
+      C.detect = async (layer, candidate) => {
+        called.push(candidate.id);
+        if (candidate.id === B.id) throw new Error('no decodable audio in that clip');
+        return { count: 0, stats: { clipDbStd: 4 } };
+      };
+      FM._capScope = 'project'; row = FM.captionsEditor.detectRow(T, () => {});
+      row.querySelector('.cap-detect-btn').click(); await sleep(80);
+      if (called.join(',') !== A.id + ',' + B.id || !messages.some(m => /No speech found in.*Silent B-roll/.test(m)) || messages.some(m => /Speech detection failed/.test(m)))
+        throw new Error('a later silent clip turned a valid no-speech result into a generic failure');
+
+      called.length = 0; messages.length = 0; FM.hasAudioTrack = l => l.id === A.id ? false : true;
+      FM._capScope = 'source'; FM._capSrcId = A.id; row = FM.captionsEditor.detectRow(T, () => {});
+      row.querySelector('.cap-detect-btn').click(); await sleep(40);
+      if (called.length || !messages.some(m => /No sound in.*Silent B-roll/.test(m)))
+        throw new Error('a chosen silent source did not explain that the clip has no sound');
+    } finally {
+      C.audioSources = saved.sources; C.detect = saved.detect; FM.hasAudioTrack = saved.audio;
+      FM.toast = saved.toast; FM.reportError = saved.report; FM._capScope = saved.scope; FM._capSrcId = saved.src;
+      if (FM.inspector) FM.inspector.refresh = saved.refresh;
+      if (FM.timeline) FM.timeline.rebuild = saved.rebuild;
+      if (FM.textEdit) FM.textEdit.cuesChanged = saved.changed;
     }
   });
 
