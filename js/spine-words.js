@@ -91,7 +91,19 @@ window.FM = window.FM || {};
       newer: 'Made with a newer FreeMotion. Update to edit clips here',
       pro: 'Has moves and effects',
       moreInFull: 'More in Full ›',
-      noFootage: 'No footage'
+      noFootage: 'No footage',
+      /* release 2.3: speed, sound, replacing */
+      sped: (name, sp) => name + ' now plays at ' + sp + '×',
+      speedShort: 'Too short to speed up that much', speedRamp: 'This clip’s speed changes over time · Use one speed first',
+      speedBlock: 'Open in Full to change this speed', replaceBlock: 'Open in Full to replace this',
+      nothingChanged: 'Nothing changed', oneSpeed: 'One speed now, the same length',
+      volumeSet: pct => 'Volume ' + pct + '%', fadeSet: (which, s) => 'Fade ' + which + ' ' + s.toFixed(1) + ' s',
+      noReverse: 'Only a video can play backwards', reversed: 'Playing backwards', forwards: 'Playing forwards',
+      reverseSlow: 'Couldn’t prepare the reversed clip, it will play slowly',
+      soundTaken: 'Sound taken out · it sits on the clip as its own track', alreadyOut: 'Its sound is already out · Put sound back first',
+      noSound: 'This clip has no sound to take out', noTwin: 'No sound was taken out of this clip', soundBack: 'Sound back in the clip',
+      clipsMuted: 'Clip sound is off', clipsHeard: 'Clip sound is back on',
+      replaced: name => name + ' replaced'
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
@@ -102,7 +114,11 @@ window.FM = window.FM || {};
       lengthLabel: 'Length in seconds', addWhere: 'Add clips', atEnd: 'At the end', afterClip: 'After ', afterCard: 'After the card', beforeFirst: 'Before Clip 1',
       music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps', moreOpts: 'Loop and preview speed…',
       selected: n => n + ' selected', bandHint: 'Tap a clip to see its tools', bandHintSel: 'Its tools are below · More opens the rest',
-      bandHintSelPc: 'Its tools are below'   // PC (his pick B): every tool is on show there, More with them
+      bandHintSelPc: 'Its tools are below',   // PC (his pick B): every tool is on show there, More with them
+      /* release 2.3 */
+      speed: 'Speed', volume: 'Volume', replace: 'Replace', reverse: 'Reverse', forwards: 'Play forwards', takeSound: 'Take sound out', putSound: 'Put sound back',
+      fade: 'Fade', fadeIn: 'In', fadeOut: 'Out', useOneSpeed: 'Use one speed', speedRamped: 'Speed changes over the clip',
+      speedLabel: 'Speed', volumeLabel: 'Volume in percent', muteClips: 'Clip sound', muteOn: 'Mute clip sound', muteOff: 'Clip sound is off, tap to turn it on'
     },
     a11y: {
       timeline: 'Timeline',
