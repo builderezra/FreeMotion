@@ -365,3 +365,11 @@ ADDED 10 Oct 10:45 by the PM. FZ1 found a REAL host stale-ack replay, AU22 found
 - AU24 If the builder's step-1.3 Simple code (js/editor-mode.js, js/simple-timeline.js) is on main or a pushed branch by then (ls-remote for 980-phase1*), audit it against #980's spec, the same way as AU22. Otherwise skip it and say so. Never touch the builder's own branches: work on a copy. → hunt/audit-simple-13.
 - P31  Plans for the 5 oldest open items after P30's, callers traced. → plans/helper-31.
 - P32  Plans for the next 5 after P31's. → plans/helper-32.
+
+ADDED 10 Oct 13:45 by the PM. FZ2, AU23, AU24, INT2, P31 and P32 landed. AU24-1 is real: the PM confirmed `FM.canvasGestureLive` is still undefined in the builder's CURRENT step-1.3 tree (r10, `editor-mode.js:82`), and it went to the builder before its ship. Same proof rules. Keep your turn alive; push as you go; never push to main; never force-push. In order:
+- AU25 Your AU24 read `980-phase1-r3` (7 Oct). Find the builder's NEWEST pushed step-1.3 tip on the remote (ls-remote for 980-*; the newest r-number; or main itself once v17.36 is live, ~5pm) and re-audit it the same way, on a copy. Say which AU24 findings still apply. Then read what AU24 left: the cog block's own code, and the live-session switch (DESIGN §6.7). Also add the pinch case and the stuck-gesture recovery (`FM._resetVpPointers`) to your AU24-1 fix. → hunt/audit-simple-13 (new commits).
+- AU26 The next-largest js files no AU has read (continue AU23's list), with repros red on main. → hunt/audit-unread-2.
+- FZ3  The product gap FZ2 found: duplicate comment ids order differently on the host and the guest. Design the smallest fix (a deterministic tie-break, or refusing a duplicate id) and prove it: red on main, green with the fix, 1280+380, mutation-caught, seeds 1–150 still green. → hunt/fuzz-seeds (new commits).
+- P33  Plans for the 5 oldest open items after P32's, callers traced. → plans/helper-33.
+- P34  Plans for the next 5 after P33's. → plans/helper-34.
+- INT3 When main moves to v17.36 (the live label reads v17.36), rebuild the integration on it, adding audit-simple-13 and audit-unread-2, and update landing-order.md. → hunt/audit-integrated-4.
