@@ -353,3 +353,15 @@ ADDED 10 Oct 07:40 by the PM. E1, P27 and P28 landed, and the E1 sheet has gone 
       → hunt/new-effects-1 (new commits), sheets at tools/design/plans/new-effects-1/oil-compare.jpg and softskin.jpg.
 - P29  Plans for the 5 oldest open items after P28's, callers traced. → plans/helper-29.
 - P30  Plans for the next 5 after P29's. → plans/helper-30.
+
+ADDED 10 Oct 10:45 by the PM. FZ1 found a REAL host stale-ack replay, AU22 found 3 real bugs in the Simple engine, and E2's sheets have gone to Ezra. Good work. One correction: P29 said the `fm912-filters` branch is on no remote. It is backed up at `refs/mac-backup/2026-10-07/heads/fm912-filters` (ls-remote shows refs/mac-backup/*), so it is not at risk. Same proof rules. Keep your turn alive; push as you go; never push to main; never force-push. In order:
+- FZ2  Seed 142 (comments whole-list resend), the one seed in 1–150 that still fails. Find its root cause and say plainly whether it is a product bug or the fixture. If it is a product bug, fix it under the FZ1 rules (red on main, green with the fix, 1280+380, mutation-caught). → hunt/fuzz-seeds (new commits).
+- INT2 When main moves past v17.34 (v17.35 is shipping now; check `git ls-remote origin refs/heads/main` or the live label), rebuild the integration on it, now including hunt/fuzz-seeds, hunt/audit-spine and hunt/new-effects-1:
+      - re-pin `SCHEMA_FP` once, after all of them;
+      - give every `?v=` a distinct number against that main;
+      - run every new test alone at both widths.
+      Update landing-order.md: where the three new branches go, and what main has absorbed since. → hunt/audit-integrated-3.
+- AU23 The js/*.js files no AU has read yet. List js/*.js against tools/design/hunts/audit-*.md and audit the LARGEST unread file (the next one if time allows), with repros red on main. → hunt/audit-unread-1.
+- AU24 If the builder's step-1.3 Simple code (js/editor-mode.js, js/simple-timeline.js) is on main or a pushed branch by then (ls-remote for 980-phase1*), audit it against #980's spec, the same way as AU22. Otherwise skip it and say so. Never touch the builder's own branches: work on a copy. → hunt/audit-simple-13.
+- P31  Plans for the 5 oldest open items after P30's, callers traced. → plans/helper-31.
+- P32  Plans for the next 5 after P31's. → plans/helper-32.
