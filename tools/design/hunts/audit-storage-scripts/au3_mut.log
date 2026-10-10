@@ -1,0 +1,29 @@
+=== A1_load_keeps_nulls
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU3-1 — load() threw on a layers list holding one null: Cannot read properties of null (reading 'id') — the project cannot be opened, and neither can the others behind it (the boot .then never runs)
+=== A2_apply_keeps_nulls
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU3-1b — applyScene threw on a layers list holding one null: Cannot read properties of null (reading 'id')
+=== B1_sweep_reads_json
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU3-2 — the sweep deleted a clip that a damaged (unparseable) project document still names — the document is on the device, the project is listed, and its media is gone for good
+=== B2_remove_reads_json
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU3-2b — deleting project X removed a clip that project Y (its document is damaged but still on the device) names
+=== C1_gradient_guard
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILAU3-3 — open (fillGradient a string): Cannot create property 'angle' on string 'x'; import (fillGradient a string): Cannot create property 'angle' on string 'x'; open (fillGradient true): Cannot create property 'angle' on boolean 'true'; import (fillGradient true): Cannot create property 'angl
+=== C2_transform_norm
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU3-3 — open (no transform): Cannot read properties of undefined (reading 'opacity'); import (no transform): Cannot read properties of undefined (reading 'opacity'); open (transform null): Cannot read properties of null (reading 'opacity'); import (transform null): Cannot read properties of nu
+=== C3_cue_norm
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILAU3-3 — open (a caption cue with no times): Cannot read properties of undefined (reading 'toFixed'); import (a caption cue with no times): Cannot read properties of undefined (reading 'toFixed')
+ALLDONE

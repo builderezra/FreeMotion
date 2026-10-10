@@ -1,0 +1,7 @@
+1280 Regression 6/6 ✓Pending 0/0 built
+   ok  AU3-1 a stored project whose layers list holds a null (an undefined entry stringifies to null) still
+   ok  AU3-1b importing a project file whose layers list holds a null imports the real layers instead of th
+   ok  AU3-2 the boot sweep keeps the media a damaged project document still names (it used to read an unpa
+   ok  AU3-2b deleting a project keeps a clip that a damaged sibling document still names
+   ok  AU3-3 a stored project (and an imported file) whose layer lacks a transform, carries a non-object fi
+   ok  AU3-4 deleting a stored media record whose transaction aborts at commit still finishes (removeMedia 
