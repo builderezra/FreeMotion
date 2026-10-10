@@ -12,6 +12,9 @@ Against `origin/main` 1fa76385 (v17.34). **Measured** = I ran it here (headless 
 
 **AU22-3 (Measured): splitting a Stay-put item that ends with the video, in Full, leaves two items claiming the end of the track.** §4.5 and §12.2 say split heads do not carry `sm.tail` (the head keeps `stay`; the tail half keeps both). `FM.splitLayer` never looks at `sm`, so both halves keep `{stay, tail, tailEnd}`. Fix: `FM.spine.onSplit(head, tail)` (new, 7 lines in `spine.js`) called once from `FM.splitLayer` right after the lineage stamp. Busters: `spine.js` 1 to 3 (2 for the first two fixes, 3 for this), `app.js` 469 to 470.
 
+## Neighbours (Measured, 1280 and 380, identical to main)
+`simple P1` 11/11 and `split` 29/29 (main 28/28: the extra is AU22-3) at both widths.
+
 ## Probed and held (Measured unless said)
 - **Empty, null and junk scenes:** `classify(null)` and an empty project never threw; `{}` and `{id:'x'}`-style layers threw before AU22-2 and do not now; every garbage field I tried (NaN start, string duration, `effects: null`, `masks: [null]`, a layer that is its own parent, `sm: 'x'`, fps 0, negative, NaN or 1e9) classifies.
 - **Pure and deterministic:** `classify` does not change the scene (a JSON compare before and after) and two reads agree.
