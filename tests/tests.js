@@ -101018,13 +101018,22 @@
       await sleep(400);
       if (FM.home.refresh) FM.home.refresh();
       await sleep(200);
-      const ring = document.querySelector('#home-screen .hm-card .hm-glint i');
-      if (!ring) throw new Error('control: no travelling light on the open project card — nothing to judge');
-      const light = getComputedStyle(ring).backgroundImage;
+      /* THE RING THAT IS THERE NOW, at each read (v17.35's first ship, 10 Oct: red in the full pass, green alone — the dark read
+         came back '' , which getComputedStyle gives only for an element no longer in the page: on a Home busy with the projects
+         earlier tests left, the cards were rebuilt between the two reads and this test held the old ring). */
+      const ringNow = async function (where) {
+        for (let i = 0; i < 20; i++) {
+          const r = document.querySelector('#home-screen .hm-card .hm-glint i');
+          if (r && r.isConnected) return r;
+          await sleep(50);
+        }
+        throw new Error('control: no travelling light on the open project card ' + where + ' — nothing to judge');
+      };
+      const light = getComputedStyle(await ringNow('on the light Home')).backgroundImage;
       if (!/rgba\(16, 21, 31, 0\.85\)/.test(light)) throw new Error('on the light Home the light circling the open project is ' + light.slice(0, 120).replace(/"/g, "'") + ' — a near-white comet on a white card, which is his report exactly: it cannot be seen');
       html.setAttribute('data-home', 'dark');
       await sleep(80);
-      const dark = getComputedStyle(ring).backgroundImage;
+      const dark = getComputedStyle(await ringNow('on the dark Home')).backgroundImage;
       if (!/232, 251, 255/.test(dark)) throw new Error('control: on the dark Home the light is no longer the white comet (' + dark.slice(0, 100).replace(/"/g, "'") + ')');
     } finally {
       if (was == null) html.removeAttribute('data-home'); else html.setAttribute('data-home', was);

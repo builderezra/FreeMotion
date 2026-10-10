@@ -192,10 +192,32 @@ SWAP_PARTS = ('swapToFriends', 'swapBack')     # FU6's function: the swap, taken
 PX = re.compile(r'(-?\d+(?:\.\d+)?)px')
 
 
+# FU4's one record of the cog: the Friends panel after the friend leaves, at the run's own size (lock 6, 10 Oct: phase 1's
+# first PASS run read it 77 px lower at 380×800 — the same sanctioned 380×800 Friends-open price, in a live session, where
+# the panel is taller and the block pushes it its full height; FU6's own Friends at that size moves 61)
+FU4_COG = 'fu4-leave'
+
+
 def priced(size, part, run_size):
     if size == 'function':
         return part in SWAP_PARTS and run_size in PRICED
+    if size == FU4_COG:
+        return part == 'friends' and 'friends' in PRICED.get(run_size, ())
     return part in PRICED.get(size, ())
+
+
+def fu4_cog(rec):
+    """FU4's record of the cog (its leave step's Friends panel) as a cog record, or None where it was not on screen."""
+    l = (((rec or {}).get('fu4') or {}).get('leave') or {}).get('friends')
+    return {'layout': l} if isinstance(l, list) else None
+
+
+def without_fu4_cog(f4):
+    if not isinstance(f4, dict) or not isinstance(f4.get('leave'), dict):
+        return f4
+    f4 = dict(f4)
+    f4['leave'] = dict((k, v) for k, v in f4['leave'].items() if k != 'friends')
+    return f4
 
 
 def has_editor(f6):
@@ -355,6 +377,17 @@ def write_price(work, dest):
                 p['layout'] = lay
             if mot:
                 p['motion'] = mot
+        ca, cb = fu4_cog(A), fu4_cog(B)
+        if ca and cb:
+            lay, mot, other = part_deltas(ca, cb, [])
+            refused += ['%s FU4 leave friends: %s — %s' % (w, k, what) for k, what in other]
+            if lay and not priced(FU4_COG, 'friends', run_size):
+                refused.append('%s FU4 leave friends: %d elements moved at %s, and COG-DESIGN §6.4 prices no change there'
+                               % (w, len(lay), run_size))
+            elif lay:
+                out.setdefault(w, {}).setdefault(FU4_COG, {})['friends'] = {'layout': lay}
+        elif ca or cb:
+            refused.append('%s FU4 leave friends: on screen on one side only' % w)
     if refused:
         print('❌ NO PRICE WRITTEN — %d thing(s) are not a price:' % len(refused))
         for r in refused[:40]:
@@ -403,6 +436,33 @@ def price_selftest():
         fails.append('the block is not left out as it should be (or something else is): %s' % short(n, 200))
     if priced('1280x800', 'friends', '380x800') or not priced('function', 'swapBack', '380x800') or priced('function', 'swapBack', '1280x800'):
         fails.append('a size or part COG-DESIGN §6.4 does not price is priced (or the reverse)')
+    if not priced(FU4_COG, 'friends', '380x800') or priced(FU4_COG, 'friends', '1280x800') or priced(FU4_COG, 'canvas', '380x800'):
+        fails.append('FU4’s cog record is priced where 380×800 Friends-open is not (or the reverse)')
+    if fu4_cog({'fu4': {'leave': {'friends': 'not on screen'}}}) is not None or without_fu4_cog({'leave': {'friends': [1], 'doc': 2}}) != {'leave': {'doc': 2}}:
+        fails.append('FU4’s cog record is not taken out of FU4 cleanly')
+    # the preview as displayed: identical → 0; one pixel one level off inside its box → 1; outside it → 0; the box moved → None
+    import tempfile
+    import numpy as np
+    from PIL import Image
+    d = tempfile.mkdtemp(prefix='fu-pv-')
+    try:
+        base = np.zeros((40, 60, 4), dtype=np.uint8); base[..., 3] = 255; base[10:30, 20:40, 0] = 120
+        pa, pb = os.path.join(d, 'a.png'), os.path.join(d, 'b.png')
+        Image.fromarray(base).save(pa)
+        box = ['canvas#preview', 20, 10, 20, 20]
+
+        def shown(img, ra=box, rb=box):
+            Image.fromarray(img).save(pb)
+            return preview_shown_diff(pa, pb, ra, rb, 60)
+        one_in, one_out = base.copy(), base.copy()
+        one_in[15, 25, 1] = 1
+        one_out[2, 2, 1] = 200
+        if shown(base) != 0 or shown(one_in) != 1 or shown(one_out) != 0 or shown(base, box, ['canvas#preview', 21, 10, 20, 20]) is not None:
+            fails.append('the preview-as-displayed check does not see one pixel one level off in its box (or sees past it)')
+    finally:
+        for f in os.listdir(d):
+            os.remove(os.path.join(d, f))
+        os.rmdir(d)
     if fails:
         print('❌ THE FU6 PRICE CHECK IS BROKEN:')
         for f in fails:
@@ -591,6 +651,38 @@ def png_counts(pa, pb, chans, boxes=()):
             ys, xs = np.nonzero(m)
             box = (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))
     return counts, box
+
+
+def preview_shown_diff(pa, pb, row_a, row_b, view_w):
+    """THE PREVIEW AS DISPLAYED, for a screen whose preview hashed differently on the two sides (lock 6, 10 Oct: phase 1's
+    first PASS run at 320×568 — fu1-editor-idle's backing store hashed 1tjbtzabskl on HEAD and 2f09ibhsgni on the tree, the
+    same size, scale and tier, and the screenshots' preview boxes were identical at EVERY level, 0 of 26352 px; three
+    rehearsals of the same tree had matched there, and 1.2's run read the same flake on 9 Oct). The pixels the preview
+    shows, in its own box: how many differ at any level at all — or None when that cannot be read (no picture, the box moved,
+    pictures of different sizes), and the hash's difference stands."""
+    import math
+    import numpy as np
+    from PIL import Image
+    if not (os.path.exists(pa) and os.path.exists(pb)) or not row_a or not row_b or list(row_a[1:5]) != list(row_b[1:5]):
+        return None
+    A = np.asarray(Image.open(pa).convert('RGBA'), dtype=np.int16)
+    B = np.asarray(Image.open(pb).convert('RGBA'), dtype=np.int16)
+    if A.shape != B.shape:
+        return None
+    s = A.shape[1] / float(view_w or A.shape[1])
+    try:
+        x, y, w, h = [float(v) * s for v in row_a[1:5]]
+    except (TypeError, ValueError):
+        return None
+    # every device pixel the box touches, its edges included (a half-covered edge pixel must match too)
+    x0, y0, x1, y1 = max(0, int(math.floor(x))), max(0, int(math.floor(y))), min(A.shape[1], int(math.ceil(x + w))), min(A.shape[0], int(math.ceil(y + h)))
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return int((np.abs(A[y0:y1, x0:x1] - B[y0:y1, x0:x1]).max(axis=2) > 0).sum())
+
+
+def preview_row(layout):
+    return next((r for r in layout or [] if str(r[0]).endswith('canvas#preview')), None)
 
 
 def png_changed(pa, pb, chan, boxes=()):
@@ -844,6 +936,17 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                 layout_diff(sa.get('layout') or [], sb.get('layout') or [], '%s %s' % (w, name), out, limit, fields)
                 for k in ('focus', 'pv', 'pvHash'):
                     if sa.get(k) != sb.get(k):
+                        if k == 'pvHash' and sa.get('pv') and sa.get('pv') == sb.get('pv'):
+                            # the backing store hashed differently at the same size, scale and tier: what it SHOWS decides
+                            n = preview_shown_diff(os.path.join(ref_dir, 'shots-%s' % w, name + '.png'), os.path.join(cand_dir, 'shots-%s' % w, name + '.png'),
+                                                   preview_row(sa.get('layout')), preview_row(sb.get('layout')), B.get('w'))
+                            if n == 0:
+                                print('   ℹ︎ %s %s: the preview’s backing store hashed %s → %s, and it SHOWED the same — 0 px differ at any '
+                                      'level in its box (counted the same)' % (w, name, sa.get(k), sb.get(k)))
+                                continue
+                            out.append('%s %s: what the preview drew %s → %s (%s)' % (w, name, short(sa.get(k)), short(sb.get(k)),
+                                       'its box could not be read in the pictures' if n is None else '%d px of its box differ on screen' % n))
+                            continue
                         out.append('%s %s: %s %s → %s' % (w, name, {'pv': 'the preview’s backing store', 'pvHash': 'what the preview drew'}.get(k, k), short(sa.get(k)), short(sb.get(k))))
                 for k in ('toast', 'playing'):
                     if sa.get(k) != sb.get(k):
@@ -899,9 +1002,22 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                 if len(out) >= limit:
                     break
             sweep_diff(A, B, w, out, per_step)
+        # COG-DESIGN §6.4's price applies only where the TREE adds the Editor block and HEAD has none (the release that builds
+        # it); once it ships both sides have it and every size is exact again. The price is this machine's measured file — and
+        # a tree with the block and no price for this run cannot PASS (FU6 says so below; it must not skip the cog).
+        price = None
+        if has_editor(B.get('fu6')) and not has_editor(A.get('fu6')):
+            price = load_price().get(w) or {}
+        run_size = '%sx%s' % (B.get('w'), B.get('h'))
         if 'FU4' in groups:
             local = []
-            json_diff(A.get('fu4'), B.get('fu4'), 'FU4', local, limit)
+            fa4, fb4 = A.get('fu4'), B.get('fu4')
+            ca, cb = fu4_cog(A), fu4_cog(B)
+            if price is not None and ca and cb and priced(FU4_COG, 'friends', run_size):
+                # FU4's Friends panel in the session, held to its own measured price; the rest of FU4 exactly
+                price_diff(ca, cb, (price.get(FU4_COG) or {}).get('friends'), '%s FU4 leave: the cog’s Friends' % w, out, limit)
+                fa4, fb4 = without_fu4_cog(fa4), without_fu4_cog(fb4)
+            json_diff(fa4, fb4, 'FU4', local, limit)
             out += ['%s %s' % (w, x) for x in local]
         if 'FU5' in groups:
             local = []
@@ -910,17 +1026,9 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
             out += ['%s %s' % (w, x) for x in local]
         if 'FU6' in groups:
             f6a, f6b = A.get('fu6') or {}, B.get('fu6') or {}
-            # COG-DESIGN §6.4's price applies only where the TREE adds the Editor block and HEAD has none (the release that
-            # builds it); once it ships both sides have it and every size is exact again. The price is this machine's
-            # measured file — and a tree with the block and no price for this run cannot PASS (it must not skip FU6).
-            price = None
-            if has_editor(f6b) and not has_editor(f6a):
-                price = load_price().get(w)
-                if not price:
-                    out.append('%s FU6: the tree adds #cv-editor, and %s holds no measured price for this run — '
-                               '`_fu_compare.py price <kept run>` on this machine writes it' % (w, os.path.basename(PRICE_FILE)))
-                    price = {}
-            run_size = '%sx%s' % (B.get('w'), B.get('h'))
+            if price is not None and not price:
+                out.append('%s FU6: the tree adds #cv-editor, and %s holds no measured price for this run — '
+                           '`_fu_compare.py price <kept run>` on this machine writes it' % (w, os.path.basename(PRICE_FILE)))
             for size, va in f6a.items():
                 vb = f6b.get(size) or {}
                 if va.get('noCog') != vb.get('noCog'):
