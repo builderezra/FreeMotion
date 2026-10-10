@@ -1020,6 +1020,7 @@ window.FM = window.FM || {};
     return fonts.length + (fonts.length === 1 ? ' custom font' : ' custom fonts') + ' — ' + names +
       (fonts.length > 2 ? ' and more' : '');
   }
+  FM.storage.omittedFontSummary = omittedFontSummary;   // Home's template file says it the same way (B1, #1069)
 
   // Clamp untrusted project dimensions to sane bounds. An imported/AI/hand-crafted .fmotion.json with
   // width/height 16000 allocates ~1GB per canvas (main + ghost + ~10 compositor buffers) → OOM-crashes
@@ -1918,8 +1919,19 @@ window.FM = window.FM || {};
     return true;
   };
 
+  /* ⚠️ THE OPEN PROJECT'S FILES ARE ALSO IN IndexedDB (B1, #1069, the land list's fix for 2e5e0cf0). FM.media holds
+     only what has DECODED: a clip still loading, or one whose decode failed, has no entry there while its file sits
+     on this device — and 2e5e0cf0's warning then told him it was "no longer stored on this device", about a file that
+     is. Read the store as exportProjectFile does before naming anything as gone. */
   FM.storage.exportFile = async function () {
-    saveProjectFile(await FM.storage.serializeScene(FM.scene));
+    let db = null;
+    try {
+      saveProjectFile(await serializeWith(FM.scene, async function (layerId) {
+        const m = FM.media.get(layerId);
+        if (m && m.file) return m;
+        try { if (!db) db = await openDB(); return (await idbGetMedia(db, layerId)) || m || null; } catch (e) { return m || null; }
+      }));
+    } finally { try { if (db) db.close(); } catch (e) {} }
   };
   /* ═══ SAVE A PROJECT FILE FOR A PROJECT THAT IS NOT OPEN (queue 690, seventh hunt) ═════════════════════════════════
    * Home's ⋯ → Save project file… on another card used to OPEN that project, export it, and open his own again. The
@@ -2053,8 +2065,10 @@ window.FM = window.FM || {};
       /* The INDEX's name wins over the packed project's, for the same reason templates.exportFile
          gives: the doc's own name can be stale ("Untitled 3") while the card he recognises is right. */
       const project = Object.assign({}, pack.project, { name: p.name || pack.project.name || 'Untitled' });
-      // Whole-library backups carry fonts of any size; the small sharing-file limit does not apply.
-      const fontPack = await embedFonts(pack.layers, Infinity);
+      /* Whole-library backups carry big fonts; the small sharing-file limit does not apply. But not ANY size (B1, #1069,
+         the land list's fix for 70797f4c): each font is read and copied once per project that uses it, so a font of no
+         limit, in every project, is how an iPhone runs out of memory mid-backup. The backup's own clip limit holds. */
+      const fontPack = await embedFonts(pack.layers, FM.storage._backupEmbedLimit);
       fontPack.omitted.forEach(f => skippedFonts.push(Object.assign({ project: project.name }, f)));
       const entry = { app: 'freemotion', v: 1, project: project, layers: pack.layers, media: media, fonts: fontPack.fonts, omittedFonts: fontPack.omitted };
       /* ⚠️ queue 915 clause 8: SAY WHICH ONES ARE WORKSPACES. list() includes the hidden element and

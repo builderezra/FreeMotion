@@ -60212,7 +60212,10 @@
       await FM.storage.applyScene(JSON.parse(JSON.stringify(shared)));
       if (!said.some(message => message.includes('Large test') && message.includes('fallback')))
         throw new Error('Import did not identify the omitted font and possible fallback');
-      const backup = await FM.storage.buildBackup();
+      const plist = FM.projects.list;   // B1 (#1069): back up THIS project only, not every project the suite has made
+      FM.projects.list = function () { return plist.apply(FM.projects, arguments).filter(p => p.id === madeId); };
+      let backup;
+      try { backup = await FM.storage.buildBackup(); } finally { FM.projects.list = plist; }
       const entry = backup.projects.find(p => p.project.name === 'FX690 FONT SHARE');
       if (!entry || !entry.fonts.big690font || !entry.fonts.small690font ||
           (backup.notIncluded.fonts || []).some(f => f.project === 'FX690 FONT SHARE'))
@@ -60430,6 +60433,166 @@
     if (assetDone) throw new Error('The worker ended before the versioned asset was cached');
     asset.pending[0].reject(new Error('storage full'));
     await Promise.all(asset.lifetimes); // a failed cache write must not invalidate the good response
+  });
+
+  /* ═══ B1 (#1069): THE LAND LIST'S FIXES TO CHATGPT'S BATCH. Each was required before B1 could land (tools/design/
+     chatgpt-tasks/pile/LAND-LIST.md, the B1 table), and each test below fails with its fix taken back out. ═══ */
+  test('1069 B1: saving the open project reads a photo that has not decoded yet from the device, and never calls it no longer stored', { item: '1069' }, async function () {
+    const before = FM.scene.layers.slice(), project = FM.scene.project, sel = FM.scene.selectedId, sels = FM.scene.selectedIds;
+    const toast = FM.toast, said = [];
+    let id = null;
+    try {
+      const clip = FM.makeLayer('image', { start: 0, duration: 2 });
+      clip.name = 'B1 photo still loading'; id = clip.id;
+      const c = document.createElement('canvas'); c.width = c.height = 1;
+      const bytes = atob(c.toDataURL('image/png').split(',')[1]);
+      const file = new File([Uint8Array.from(bytes, ch => ch.charCodeAt(0))], 'b1-loading.png', { type: 'image/png' });
+      if (!(await FM.storage.writeMedia(id, { file: file, kind: 'image', rev: 0 }))) throw new Error('the fixture could not write the photo to this device');
+      const back = await FM.storage.readMedia(id);
+      if (!back || !back.file) throw new Error('control: the device store does not read the fixture photo back');
+      if (FM.media.get(id)) throw new Error('control: the fixture photo is already decoded, so this is not the still-loading case');
+      FM.scene.layers = [clip];
+      FM.toast = m => said.push(String(m));
+      await FM.storage.exportFile();
+      if (!said.length) throw new Error('saving the project file said nothing at all');
+      if (said.some(m => /not stored|no longer stored/.test(m)))
+        throw new Error('a photo that IS on this device was reported as gone because it had not decoded yet: ' + said.join(' | '));
+      if (!said.some(m => m === 'Project file saved')) throw new Error('the save did not report a whole file: ' + said.join(' | '));
+    } finally {
+      FM.toast = toast;
+      FM.scene.project = project; FM.scene.layers = before; FM.scene.selectedId = sel; FM.scene.selectedIds = sels;
+      if (id) { try { await FM.storage.removeMedia(id); } catch (e) {} }
+      FM.refreshAll();
+    }
+  });
+
+  test('1069 B1: a whole backup holds fonts to the backup size limit, not to no limit at all', { item: '1069' }, async function () {
+    const priorId = FM.projects.currentId(), list = FM.fonts.list, getFile = FM.fonts.getFile, plist = FM.projects.list;
+    const lim = FM.storage._backupEmbedLimit;
+    let madeId = null;
+    try {
+      await FM.projects.create({ name: 'B1 FONT CAP', width: 320, height: 240 });
+      madeId = FM.projects.currentId();
+      const big = new File([new Uint8Array(2 * 1024 * 1024)], 'b1cap.ttf', { type: 'font/ttf' });
+      const rec = { id: 'b1capfont', name: 'Cap test', family: 'FMFb1capfont', css: 'FMFb1capfont, sans-serif' };
+      FM.fonts.list = () => [rec];
+      FM.fonts.getFile = async () => big;
+      const tx = FM.makeLayer('text', { text: 'cap' }); tx.fontFamily = rec.css;
+      FM.scene.layers = [tx];
+      FM.storage.markDirty(); await FM.storage.save();
+      FM.projects.list = function () { return plist.apply(FM.projects, arguments).filter(p => p.id === madeId); };   // this project only
+      const kept = await FM.storage.buildBackup();
+      const k = kept.projects.find(p => p.project.name === 'B1 FONT CAP');
+      if (!k || !k.fonts || !k.fonts.b1capfont) throw new Error('control: under the real backup limit the 2 MB font was not in the backup');
+      FM.storage._backupEmbedLimit = 1024 * 1024;   // now the 2 MB font is over it
+      const capped = await FM.storage.buildBackup();
+      const e = capped.projects.find(p => p.project.name === 'B1 FONT CAP');
+      if (!e) throw new Error('control: the backup lost the project');
+      if (e.fonts && e.fonts.b1capfont) throw new Error('a font over the backup limit was still copied into the backup (once per project that uses it)');
+      if (!((capped.notIncluded && capped.notIncluded.fonts) || []).some(f => f.project === 'B1 FONT CAP' && f.tooBig))
+        throw new Error('the font left out of the backup is not named as too big');
+    } finally {
+      FM.storage._backupEmbedLimit = lim;
+      FM.projects.list = plist; FM.fonts.list = list; FM.fonts.getFile = getFile;
+      if (madeId) { try { await FM.projects.remove(madeId); } catch (e) {} }
+      if (priorId && FM.projects.list().some(p => p.id === priorId)) { try { await FM.projects.open(priorId); } catch (e) {} }
+    }
+  });
+
+  test('1069 B1: a template file names a font it could not read as could not be read, the way a project file does', { item: '1069' }, async function () {
+    if (!FM.home || typeof FM.home.templateFileMessage !== 'function') throw new Error('FM.home.templateFileMessage is missing');
+    const say = fonts => FM.home.templateFileMessage({ omitted: [], omittedFonts: fonts }).text;
+    const unread = say([{ name: 'Brush', css: 'FMFb1brush, sans-serif' }]);
+    if (!/Brush \(could not be read\)/.test(unread)) throw new Error('an unreadable font was labelled: ' + unread);
+    if (/not stored/.test(unread)) throw new Error('a font that IS on this device was called not stored: ' + unread);
+    const gone = say([{ name: 'Gone', css: 'FMFb1gone', missing: true }]);
+    if (!/Gone \(not stored\)/.test(gone)) throw new Error('control: a missing font was labelled: ' + gone);
+    const big = say([{ name: 'Huge', css: 'FMFb1huge', tooBig: true }]);
+    if (!/Huge \(too big\)/.test(big)) throw new Error('control: a too-big font was labelled: ' + big);
+    const pf = FM.storage.omittedFontSummary([{ name: 'Brush', css: 'FMFb1brush, sans-serif' }]);
+    if (unread.indexOf(pf) < 0) throw new Error('the template file and the project file word the same font differently: ' + unread + ' / ' + pf);
+  });
+
+  test('1069 B1: an embedded font whose data cannot be fetched is counted, and the import goes on to try the next font', { item: '1069' }, async function () {
+    const oldScene = FM.scene, oldToast = FM.toast, f0 = window.fetch, said = [];
+    let tried = 0;
+    try {
+      FM.scene = { project: Object.assign({}, oldScene.project), layers: [], selectedId: null, selectedIds: [] };
+      FM.toast = m => said.push(String(m));
+      window.fetch = function (u) {
+        if (typeof u === 'string' && /^data:font\/b1;/.test(u)) { tried++; return Promise.reject(new TypeError('Failed to fetch')); }
+        return f0.apply(this, arguments);
+      };
+      const file = { project: Object.assign({}, FM.scene.project), layers: [], fonts: {
+        a: { family: 'FMFb1fetchA', name: 'a.ttf', dataURL: 'data:font/b1;base64,AAAA' },
+        b: { family: 'FMFb1fetchB', name: 'b.ttf', dataURL: 'data:font/b1;base64,BBBB' }
+      } };
+      if (await FM.storage.applyScene(file) !== true) throw new Error('a font whose fetch rejected aborted the whole import');
+      if (tried !== 2) throw new Error('after the first font\'s fetch rejected, the second font was never tried (' + tried + ' fetch)');
+      if (!said.some(m => /^2 embedded fonts could not be restored/.test(m)))
+        throw new Error('the import did not count both unreadable fonts: ' + said.join(' | '));
+    } finally {
+      window.fetch = f0; FM.scene = oldScene; FM.toast = oldToast;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  /* Remove Vocals: the instrumental twin follows its song's clock (b69c5795) — but a split is not a retime, and a trim
+     moves no keyframe. One pair made the way toggleKaraoke makes it, with its own volume curve. */
+  function b1KaraokePair() {
+    const source = FM.makeLayer('video', { name: 'B1 Song' });
+    source.start = 1; source.duration = 4; source.trimStart = 0.5; source.speed = 1;
+    const twin = FM.makeLayer('video', { name: 'B1 Song (no vocals)' });
+    twin.karaokeOf = source.id; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
+    twin.volume = { kf: [{ t: 1.5, v: 0.2, e: 'linear' }, { t: 4.5, v: 0.8, e: 'linear' }] };
+    return { source, twin };
+  }
+  async function b1WithPair(fn) {
+    const original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), t0 = FM.time;
+    const seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
+    try {
+      const p = b1KaraokePair();
+      FM.scene.layers.push(p.source, p.twin);
+      FM.scene.selectedId = p.source.id; FM.scene.selectedIds = [p.source.id];
+      FM.seekVideosToTime = function () {};
+      if (FM.timeline) FM.timeline.rebuild = function () {};
+      FM.requestRender = function () {};
+      FM.history.reset();
+      await fn(p.source, p.twin);
+    } finally {
+      FM.seekVideosToTime = seek;
+      if (FM.timeline) FM.timeline.rebuild = rebuild;
+      FM.requestRender = render;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, original);
+      FM.scene.selectedId = sid; FM.scene.selectedIds = sids; FM.time = t0;
+      FM.history.reset();
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  }
+
+  test('1069 B1: Remove Vocals — splitting the song leaves the instrumental whole, so the song does not go silent after the cut', { item: '1069' }, async function () {
+    await b1WithPair(async function (source, twin) {
+      FM.time = 3;
+      await FM.splitLayer(source.id);
+      const tail = FM.scene.layers.find(l => l !== source && l.splitOf && l.splitOf === source.splitOf);
+      if (!tail || !(Math.abs(source.duration - 2) < 1e-6)) throw new Error('control: the split did not happen (head ' + source.duration + ', tail ' + !!tail + ')');
+      if (twin.start !== 1 || twin.duration !== 4 || twin.trimStart !== 0.5)
+        throw new Error('the instrumental was cut down to the head half (start ' + twin.start + ', length ' + twin.duration + ') — after the cut the muted song plays nothing');
+      if (Math.abs(twin.volume.kf[1].t - 4.5) > 1e-6) throw new Error('a split moved the instrumental\'s own volume keyframes');
+    });
+  });
+
+  test('1069 B1: Remove Vocals — a trim cuts the instrumental the same way and moves none of its keyframes; a move shifts them', { item: '1069' }, async function () {
+    await b1WithPair(async function (source, twin) {
+      source.duration = 3; FM.history.commit();   // drag the tail edge in by a second
+      if (twin.duration !== 3 || twin.start !== 1 || twin.trimStart !== 0.5) throw new Error('control: the instrumental did not follow the trim (length ' + twin.duration + ')');
+      if (Math.abs(twin.volume.kf[0].t - 1.5) > 1e-6 || Math.abs(twin.volume.kf[1].t - 4.5) > 1e-6)
+        throw new Error('a trim squeezed the instrumental\'s volume keyframes to ' + twin.volume.kf.map(k => k.t.toFixed(3)).join(', ') + ' — they should stay at 1.5, 4.5');
+      source.start = 2; FM.history.commit();      // move the clip a second later
+      if (twin.start !== 2) throw new Error('control: the instrumental did not follow the move (start ' + twin.start + ')');
+      if (Math.abs(twin.volume.kf[0].t - 2.5) > 1e-6 || Math.abs(twin.volume.kf[1].t - 5.5) > 1e-6)
+        throw new Error('a move did not carry the instrumental\'s volume keyframes with it: ' + twin.volume.kf.map(k => k.t.toFixed(3)).join(', '));
+    });
   });
 
   async function run() {
