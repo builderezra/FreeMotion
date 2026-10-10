@@ -29197,7 +29197,12 @@
      registered type is exercised without any one scene carrying 199 of them. */
   function kitchen921(seed) {
     const R = rng921(seed);
-    const reg = (FM.fxRegistry && FM.fxRegistry.all) ? FM.fxRegistry.all().map(function (e) { return e.type; }) : [];
+    /* FROZEN AT THE 205 BROWSABLE EFFECTS THAT EXISTED AT v17.33 (E1, hunt/new-effects-1). The fixture picks `reg[(start + i) % reg.length]`, so adding an effect
+       changed every layer's effects AND how many random numbers the document consumed, which re-rolled the whole 300-round scenario. That is not a
+       reason to be red, but it is a reason this test cannot be trusted to mean the same thing after an effect is added: six new effects turned the
+       pinned seed into one that does not converge (Measured: with the registry as it was, 7 of 36 other seeds do not converge either, see
+       tools/design/hunts/new-effects-1.md). New effects are appended to FM.EFFECTS, so the first 205 are the same list in the same order. */
+    const reg = (FM.fxRegistry && FM.fxRegistry.all) ? FM.fxRegistry.all().slice(0, 205).map(function (e) { return e.type; }) : [];
     let n = 0;
     const nid = function (p) { return p + '_' + seed.toString(36) + (++n).toString(36); };
     const num = function (lo, hi) { return Math.round((lo + R() * (hi - lo)) * 1000) / 1000; };
@@ -30842,7 +30847,7 @@
   test('921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, a disconnect, a rejoin and an epoch bump', { item: '921', budgetMs: 300000 }, function () {
     const C = need921('convergence');
     const P = C.path, D = C.diff;
-    const R = rng921(20260923);
+    const R = rng921((function () { try { return +new URLSearchParams((window.top || window).location.search).get('seed') || 20260923; } catch (e) { return 20260923; } })());
     let clock = 0;
 
     /* The document every device starts from, pre-sanitised — which is what §7.3 does when a share is
@@ -59811,6 +59816,204 @@
     if (nasty.effects[0].name) throw new Error('a 400-character filter name was stored and would be rendered into the row');
   });
 
+  /* ═══ E1: six new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) ═══ */
+  const E1 = (function () {
+    const T = function () { return FM._FX_TABLES; };
+    const frame = function (W, H, fn) { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c.length > 3 ? c[3] : 255; } return d; };
+    const noise = function (seed) { let x = seed | 0 || 1; return function () { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return ((x >>> 0) % 1000) / 1000; }; };
+    const inst = function (type, over) { const i = FM.fxRegistry.makeInstance(type); if (!i) throw new Error(type + ' is not in the effects registry'); return Object.assign(i.params, over || {}); };
+    const px = function (type, params, W, H, d, t, lay) { const f = T().PIXEL_FX[type]; if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable'); f(d, W, H, params, t == null ? 0.5 : t, 1, undefined, lay); return d; };
+    const cv = function (W, H, fn) { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); if (fn) fn(g, W, H); return c; };
+    const fromData = function (d, W, H) { const c = cv(W, H); const im = c.getContext('2d').createImageData(W, H); im.data.set(d); c.getContext('2d').putImageData(im, 0, 0); return c; };
+    const cfx = function (type, params, A, W, H, tl, ps) { const f = T().CANVAS_FX[type]; if (typeof f !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable'); const B = cv(W, H); f(A, B.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, 0.5, tl == null ? 1 : tl, null, ps == null ? 1 : ps); return B.getContext('2d').getImageData(0, 0, W, H).data; };
+    const maxDiff = function (a, b) { let m = 0; for (let i = 0; i < a.length; i++) { const q = Math.abs(a[i] - b[i]); if (q > m) m = q; } return m; };
+    const count = function (a, b, thr) { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]), Math.abs(a[i + 3] - b[i + 3])) > (thr || 0)) n++; return n; };
+    const variance = function (d, W, x0, y0, x1, y1) { let s = 0, s2 = 0, n = 0; for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * W + x) * 4, l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; s += l; s2 += l * l; n++; } return s2 / n - (s / n) * (s / n); };
+    return { frame: frame, noise: noise, inst: inst, px: px, cv: cv, fromData: fromData, cfx: cfx, maxDiff: maxDiff, count: count, variance: variance };
+  })();
+  test('E1 the six new effects are in the registry, in the right menus, findable by what a beginner types, and nothing in the first 205 moved', { item: 'E1', budgetMs: 30000 }, function () {
+    const want = { huecycle: ['color', 'rainbow'], softskin: ['blur', 'beauty'], oilpaint: ['stylize', 'painting'], glitter: ['stylize', 'sparkle'], censor: ['blur', 'privacy'], popart: ['color', 'warhol'] };
+    const bad = [];
+    Object.keys(want).forEach(function (t) {
+      const r = FM.fxRegistry.get(t);
+      if (!r) { bad.push(t + ' is missing'); return; }
+      if (r.category !== want[t][0]) bad.push(t + ' is in "' + r.category + '", not "' + want[t][0] + '"');
+      if (!(FM.fxSearchAliases && FM.fxSearchAliases[t] && FM.fxSearchAliases[t].indexOf(want[t][1]) >= 0)) bad.push(t + ' cannot be found by "' + want[t][1] + '"');
+      if (!r.desc || r.desc.length < 20) bad.push(t + ' has no description');
+      r.params.forEach(function (p) { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(t + '.' + p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+      if (!FM._FX_TABLES.POSTFX[t]) bad.push(t + ' is not routed (POSTFX)');
+    });
+    const types = FM.fxRegistry.all().map(function (e) { return e.type; });
+    if (types.slice(-6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six are not the newest six, in order: ' + types.slice(-7).join());
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  test('E1 Colour Cycle: at Speed 0 it is exactly the CSS hue rotation, it turns with the clip clock and repeats each turn, Stepped holds between steps, alpha is untouched', { item: 'E1', budgetMs: 30000 }, function () {
+    const W = 48, H = 32, N = E1, src = function () { return N.frame(W, H, function (x, y) { return [x * 5 % 256, y * 7 % 256, (x + y) * 3 % 256, (x < 4 ? 0 : 255)]; }); };
+    // 1. Speed 0, Boost 0, Start colour 90 against the browser's own hue-rotate(90deg)
+    const mine = N.px('huecycle', N.inst('huecycle', { speed: 0, boost: 0, phase: 90 }), W, H, src(), 0.5);
+    const ref = N.cv(W, H, function (g) { g.filter = 'hue-rotate(90deg)'; g.drawImage(N.fromData(src(), W, H), 0, 0); }).getContext('2d').getImageData(0, 0, W, H).data;
+    let worst = 0; for (let i = 0; i < mine.length; i += 4) { if (mine[i + 3] === 0) continue; for (let k = 0; k < 3; k++) worst = Math.max(worst, Math.abs(mine[i + k] - ref[i + k])); }
+    if (worst > 3) throw new Error('Speed 0 is ' + worst + ' levels from the browser’s hue-rotate(90deg); the two matrices are the same maths, so more than 3 is a wrong constant');
+    // 2. it turns, and a whole turn later it is the same picture
+    const a = N.px('huecycle', N.inst('huecycle', { speed: 90, boost: 0 }), W, H, src(), 1), b = N.px('huecycle', N.inst('huecycle', { speed: 90, boost: 0 }), W, H, src(), 2);
+    if (N.count(a, b, 6) < W * H / 2) throw new Error('a second later the colours have not moved');
+    const c = N.px('huecycle', N.inst('huecycle', { speed: 90, boost: 0 }), W, H, src(), 5);   // 4 s x 90 deg/s = one whole turn after t = 1
+    if (N.maxDiff(a, c) > 0) throw new Error('a whole turn later the picture is not the same one (differs by ' + N.maxDiff(a, c) + ')');
+    // 3. Stepped: six steps a turn at 60 deg/s changes once a second and is constant in between
+    const st = function (t) { return N.px('huecycle', N.inst('huecycle', { speed: 60, boost: 0, phase: 0, style: 1, steps: 6 }), W, H, src(), t); };
+    if (N.maxDiff(st(1.05), st(1.9)) > 0) throw new Error('Stepped changed colour inside one step');
+    if (N.count(st(1.05), st(2.05), 6) < W * H / 2) throw new Error('Stepped did not change colour at the step');
+    // 4. alpha untouched, and a transparent pixel is not written
+    const o = src(), r = N.px('huecycle', N.inst('huecycle'), W, H, src(), 0.5);
+    for (let i = 0; i < o.length; i += 4) { if (o[i + 3] !== r[i + 3]) throw new Error('alpha changed at pixel ' + i / 4); if (o[i + 3] === 0 && (o[i] !== r[i] || o[i + 1] !== r[i + 1] || o[i + 2] !== r[i + 2])) throw new Error('a transparent pixel was recoloured'); }
+    // 5. visible at its own defaults on the very first frame
+    if (N.count(o, N.px('huecycle', N.inst('huecycle'), W, H, src(), 0), 8) < W * H / 2) throw new Error('at its own defaults and t = 0 it changes almost nothing: a beginner would judge it broken');
+  });
+  test('E1 Soften Skin: Amount 0 is the input, noise is smoothed and a hard edge is not, Skin tones leaves blue alone, a transparent pixel is never touched', { item: 'E1', budgetMs: 30000 }, function () {
+    const W = 80, H = 60, N = E1;
+    const mk = function (seed, base) { const r = N.noise(seed); return N.frame(W, H, function (x, y) { const k = (r() - 0.5) * 24; return [base[0] + k, base[1] + k, base[2] + k, y > 50 ? 0 : 255]; }); };
+    const skin = mk(3, [205, 150, 120]), same = N.px('softskin', N.inst('softskin', { amount: 0 }), W, H, mk(3, [205, 150, 120]), 0.5);
+    if (N.maxDiff(skin, same) > 0) throw new Error('Amount 0 changed the picture');
+    const out = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5 }), W, H, mk(3, [205, 150, 120]), 0.5);
+    const v0 = N.variance(skin, W, 10, 10, 70, 45), v1 = N.variance(out, W, 10, 10, 70, 45);
+    if (!(v1 < v0 * 0.5)) throw new Error('a noisy patch kept ' + Math.round(v1 / v0 * 100) + '% of its variance; it should lose more than half');
+    // a hard edge keeps most of its step
+    const edge = function () { return N.frame(W, H, function (x) { return x < 40 ? [40, 40, 40] : [210, 210, 210]; }); };
+    const e1 = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5, keep: 60 }), W, H, edge(), 0.5), row = 30 * W * 4;
+    const step = e1[row + 41 * 4] - e1[row + 38 * 4];
+    if (step < 170 * 0.8) throw new Error('a hard 170-level edge kept only ' + Math.round(step) + ' of its step (it should keep over 80%)');
+    // Skin tones: a blue noisy patch is not softened, a skin one is
+    const blue = mk(5, [40, 80, 200]), bo = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5, only: 1 }), W, H, mk(5, [40, 80, 200]), 0.5);
+    if (N.maxDiff(blue, bo) > 2) throw new Error('Skin tones softened a blue patch (' + N.maxDiff(blue, bo) + ')');
+    const so = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5, only: 1 }), W, H, mk(3, [205, 150, 120]), 0.5);
+    if (!(N.variance(so, W, 10, 10, 70, 45) < v0 * 0.7)) throw new Error('Skin tones did not soften a skin-coloured patch');
+    // Keep detail does what it says: a mid-contrast texture keeps more of its contrast at Keep detail 100 than at 0 (E2 found the slider running the wrong way)
+    const tex = function () { return N.frame(W, H, function (x, y) { const hi = ((x >> 3) + (y >> 3)) % 2; return [150 + (hi ? 20 : -20), 120 + (hi ? 20 : -20), 100 + (hi ? 20 : -20)]; }); };
+    const k0 = N.px('softskin', N.inst('softskin', { amount: 1, radius: 6, keep: 0 }), W, H, tex(), 0.5), k100 = N.px('softskin', N.inst('softskin', { amount: 1, radius: 6, keep: 100 }), W, H, tex(), 0.5);
+    const vt = N.variance(tex(), W, 10, 10, 70, 45), v0k = N.variance(k0, W, 10, 10, 70, 45), v100k = N.variance(k100, W, 10, 10, 70, 45);
+    if (!(v100k > v0k * 1.5) || !(v100k > vt * 0.8)) throw new Error('Keep detail runs the wrong way or does nothing: texture variance ' + Math.round(vt) + ' in, ' + Math.round(v0k) + ' at Keep 0, ' + Math.round(v100k) + ' at Keep 100 (want Keep 100 to keep most of it and Keep 0 to lose most)');
+    // a transparent pixel is bit-for-bit what it was
+    for (let i = 3; i < skin.length; i += 4) if (skin[i] === 0) for (let k = -3; k < 0; k++) if (skin[i + k] !== out[i + k]) throw new Error('a transparent pixel’s colour was rewritten at ' + (i - 3) / 4);
+  });
+  test('E1 Oil Paint: flat colour stays, a hard edge stays hard, detail 1 is the input, a noisy patch becomes daubs, a transparent pixel is never touched', { item: 'E1', budgetMs: 30000 }, function () {
+    const W = 72, H = 56, N = E1;
+    const flat = N.frame(W, H, function () { return [90, 140, 200]; });
+    if (N.maxDiff(flat, N.px('oilpaint', N.inst('oilpaint', { punch: 0 }), W, H, N.frame(W, H, function () { return [90, 140, 200]; }), 0.5)) > 1) throw new Error('flat colour moved');
+    const edge = function () { return N.frame(W, H, function (x) { return x < 36 ? [30, 30, 30] : [220, 220, 220]; }); };
+    const eo = N.px('oilpaint', N.inst('oilpaint', { radius: 4, punch: 0 }), W, H, edge(), 0.5), row = 28 * W * 4;
+    if (eo[row + 38 * 4] - eo[row + 33 * 4] < 190 * 0.9) throw new Error('the edge went soft: Kuwahara must keep it (step ' + (eo[row + 38 * 4] - eo[row + 33 * 4]) + ' of 190)');
+    const src = function () { const r = N.noise(9); return N.frame(W, H, function (x, y) { return [r() * 255, r() * 255, r() * 255, y > 48 ? 0 : 255]; }); };
+    if (N.maxDiff(src(), N.px('oilpaint', N.inst('oilpaint', { detail: 1 }), W, H, src(), 0.5)) > 0) throw new Error('Detail 1 is not the input');
+    const s0 = src(), o = N.px('oilpaint', N.inst('oilpaint', { radius: 3, punch: 0 }), W, H, src(), 0.5);
+    if (!(N.variance(o, W, 8, 8, 64, 44) < N.variance(s0, W, 8, 8, 64, 44) * 0.35)) throw new Error('a noisy patch kept most of its variance: it is not painting');
+    for (let i = 3; i < s0.length; i += 4) { if (s0[i] === 0 && (s0[i - 1] !== o[i - 1] || s0[i - 2] !== o[i - 2] || s0[i - 3] !== o[i - 3])) throw new Error('a transparent pixel was recoloured at ' + (i - 3) / 4); if (s0[i] !== o[i]) throw new Error('alpha changed'); }
+  });
+  test('E1 Glitter: the same instant is the same picture, it twinkles with the clock, stars sit only on bright pixels, none on transparency, and a dark shot shows none until the bar is lowered', { item: 'E1', budgetMs: 30000 }, function () {
+    const W = 200, H = 160, N = E1;
+    const bright = N.cv(W, H, function (g) { g.fillStyle = '#202830'; g.fillRect(0, 0, W, H); g.fillStyle = '#f4f0e0'; g.fillRect(20, 20, 100, 100); });
+    const p = N.inst('glitter', { spacing: 30, size: 16, threshold: 55, speed: 1 });
+    const a = N.cfx('glitter', p, bright, W, H, 1.3), a2 = N.cfx('glitter', p, bright, W, H, 1.3), b = N.cfx('glitter', p, bright, W, H, 1.55);
+    if (N.maxDiff(a, a2) > 0) throw new Error('the same instant drew two different pictures: a scrub and an export would disagree');
+    const base = bright.getContext('2d').getImageData(0, 0, W, H).data;
+    if (N.count(base, a, 12) < 30) throw new Error('no stars on a bright patch at its settings');
+    if (N.count(a, b, 12) < 20) throw new Error('a quarter-second later the stars are the same: it does not twinkle');
+    // every changed pixel is on or beside the bright patch (stars are drawn only from bright points); none over the dark ground far from it
+    let far = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if ((x < 0 || x > 150 || y > 150) && Math.max(Math.abs(a[i] - base[i]), Math.abs(a[i + 1] - base[i + 1])) > 12) far++; }
+    if (far) throw new Error(far + ' changed pixels lie far from the bright patch: stars are being drawn on the dark ground');
+    // transparency: a layer with a bright patch and a transparent surround never lights the surround
+    const cut = N.cv(W, H, function (g) { g.fillStyle = '#f4f0e0'; g.fillRect(20, 20, 60, 60); });
+    const ca = N.cfx('glitter', p, cut, W, H, 1.3); let leak = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if ((x > 110 || y > 110) && ca[i + 3] > 12) leak++; }
+    if (leak) throw new Error(leak + ' pixels of sparkle were drawn well outside the layer’s own pixels');
+    // a dark shot shows none at 55 and some at 0
+    const dark = N.cv(W, H, function (g) { g.fillStyle = '#10141a'; g.fillRect(0, 0, W, H); }), dd = dark.getContext('2d').getImageData(0, 0, W, H).data;
+    if (N.count(dd, N.cfx('glitter', p, dark, W, H, 1.3), 12) > 0) throw new Error('stars on a dark picture at Brightness bar 55');
+    if (N.count(dd, N.cfx('glitter', N.inst('glitter', { spacing: 30, size: 16, threshold: 0, speed: 1 }), dark, W, H, 1.3), 12) < 20) throw new Error('lowering the bar to 0 shows no stars on a dark picture');
+  });
+  test('E1 Censor: everything outside the box is byte-identical, each style changes the inside, Oval leaves the corners, pixel blocks are on the layer’s own grid, Black bar keeps transparency', { item: 'E1', budgetMs: 30000 }, function () {
+    const W = 160, H = 120, N = E1;
+    const src = N.cv(W, H, function (g) { const im = g.createImageData(W, H), r = N.noise(4); for (let i = 0; i < im.data.length; i += 4) { im.data[i] = r() * 255; im.data[i + 1] = r() * 255; im.data[i + 2] = r() * 255; im.data[i + 3] = (i / 4 % W) > 140 ? 0 : 255; } g.putImageData(im, 0, 0); });
+    const base = src.getContext('2d').getImageData(0, 0, W, H).data;
+    const run = function (o) { return N.cfx('censor', N.inst('censor', Object.assign({ x: 50, y: 50, w: 40, h: 40, strength: 10 }, o || {})), src, W, H, 1); };
+    const inBox = function (x, y) { return x >= 48 && x < 112 && y >= 36 && y < 84; };
+    [0, 1, 2].forEach(function (style) {
+      const out = run({ style: style }); let outside = 0, inside = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, d = Math.max(Math.abs(out[i] - base[i]), Math.abs(out[i + 1] - base[i + 1]), Math.abs(out[i + 2] - base[i + 2]), Math.abs(out[i + 3] - base[i + 3])); if (inBox(x, y)) { if (d > 10) inside++; } else if (d > 0) outside++; }
+      if (outside) throw new Error('style ' + style + ': ' + outside + ' pixels outside the box changed');
+      if (inside < 800) throw new Error('style ' + style + ': only ' + inside + ' pixels inside the box changed');
+    });
+    // Pixelate: each 10 px block on the layer's grid is one colour
+    const px = run({ style: 0 }); const blockCol = function (bx, by) { const c = []; for (let y = by * 10; y < by * 10 + 10; y++) for (let x = bx * 10; x < bx * 10 + 10; x++) { const i = (y * W + x) * 4; c.push(px[i] + ',' + px[i + 1] + ',' + px[i + 2]); } return c; };
+    const blk = blockCol(7, 5); if (new Set(blk).size > 2) throw new Error('a block inside the pixelated box is ' + new Set(blk).size + ' colours, not one');
+    // Oval leaves the box corners alone
+    const ov = run({ shape: 1, style: 2 }); const ci = (38 * W + 50) * 4;
+    if (ov[ci] !== base[ci] || ov[ci + 1] !== base[ci + 1]) throw new Error('Oval blacked out the corner of its own box');
+    const mid = (60 * W + 80) * 4; if (ov[mid] > 5 || ov[mid + 1] > 5 || ov[mid + 2] > 5) throw new Error('Black bar is not black in the middle');
+    // Black bar keeps a transparent surround: put the box over the transparent strip
+    const tp = N.cfx('censor', N.inst('censor', { style: 2, x: 95, y: 50, w: 40, h: 40 }), src, W, H, 1); let bleed = 0;
+    for (let y = 0; y < H; y++) for (let x = 142; x < W; x++) if (tp[(y * W + x) * 4 + 3] > 0) bleed++;
+    if (bleed) throw new Error('Black bar painted ' + bleed + ' pixels where the layer is transparent');
+    // moving the box on keyframes: x moves the hidden patch
+    if (N.count(run({ x: 30 }), run({ x: 60 }), 10) < 1500) throw new Error('X does not move the box');
+    // the plate scale: the same picture at half size, drawn at ps 0.5, matches the full-size result shrunk, so a preview at any zoom hides the same patch
+    const stripes = function (S) { return N.cv(240 * S, 180 * S, function (g) { g.scale(S, S); for (let y = 0; y < 180; y += 14) for (let x = 0; x < 240; x += 14) { g.fillStyle = ((x + y) / 14) % 2 ? '#e03030' : '#2040e0'; g.fillRect(x, y, 14, 14); } }); };
+    const ramp = function (S) { return N.cv(240 * S, 180 * S, function (g) { const gr = g.createLinearGradient(0, 0, 240 * S, 0); gr.addColorStop(0, '#000000'); gr.addColorStop(1, '#ffffff'); g.fillStyle = gr; g.fillRect(0, 0, 240 * S, 180 * S); }); };
+    const steps = function (d, W, y, x0, x1) { const seen = new Set(); for (let x = x0; x < x1; x++) seen.add(d[(y * W + x) * 4]); return seen.size; };
+    const sb = steps(N.cfx('censor', N.inst('censor', { style: 0, strength: 24, w: 80, y: 50 }), ramp(1), 240, 180, 1, 1), 240, 90, 50, 190), ss = steps(N.cfx('censor', N.inst('censor', { style: 0, strength: 24, w: 80, y: 50 }), ramp(0.5), 120, 90, 1, 0.5), 120, 45, 25, 95);
+    if (Math.abs(sb - ss) > 1) throw new Error('at half size the pixelate has ' + ss + ' blocks across the box where full size has ' + sb + ': the block size does not follow the zoom');
+    [{ style: 0, strength: 24 }, { style: 1, strength: 12 }].forEach(function (o) {
+      const big = N.cfx('censor', N.inst('censor', o), stripes(1), 240, 180, 1, 1), sm = N.cfx('censor', N.inst('censor', o), stripes(0.5), 120, 90, 1, 0.5);
+      const shr = N.cv(120, 90, function (g) { g.imageSmoothingQuality = 'high'; g.drawImage(N.fromData(big, 240, 180), 0, 0, 120, 90); }).getContext('2d').getImageData(0, 0, 120, 90).data;
+      let ds = 0, dn = 0; for (let y = 30; y < 60; y++) for (let x = 40; x < 80; x++) { const i = (y * 120 + x) * 4; ds += Math.abs(sm[i] - shr[i]) + Math.abs(sm[i + 2] - shr[i + 2]); dn += 2; }
+      if (ds / dn > 22) throw new Error('style ' + o.style + ': at half size (plate scale 0.5) the hidden patch differs from the full-size one shrunk by a mean ' + (ds / dn).toFixed(1) + ' levels, so strength does not follow the zoom');
+    });
+  });
+  test('E1 Pop Art: four cells, each a different colour, same silhouette; three by three gives nine; the gap is empty; a cut-out stays a cut-out', { item: 'E1', budgetMs: 30000 }, function () {
+    const W = 120, H = 120, N = E1;
+    const src = N.cv(W, H, function (g) { const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#d03030'); gr.addColorStop(1, '#3090d0'); g.fillStyle = gr; g.beginPath(); g.arc(60, 60, 50, 0, Math.PI * 2); g.fill(); });
+    const cells = function (n, params) { const o = N.cfx('popart', N.inst('popart', params), src, W, H, 1), cw = W / n, cols = [], alph = []; for (let cy = 0; cy < n; cy++) for (let cx = 0; cx < n; cx++) { let r = 0, g = 0, b = 0, a = 0, k = 0; for (let y = Math.floor(cy * cw + cw * 0.4); y < cy * cw + cw * 0.6; y++) for (let x = Math.floor(cx * cw + cw * 0.4); x < cx * cw + cw * 0.6; x++) { const i = (y * W + x) * 4; r += o[i]; g += o[i + 1]; b += o[i + 2]; a += o[i + 3]; k++; } cols.push([r / k, g / k, b / k]); alph.push(a / k); } return { o: o, cols: cols, alph: alph }; };
+    [0, 1, 2].forEach(function (style) {
+      const c = cells(2, { style: style, gap: 0 });
+      for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) { const d = Math.abs(c.cols[i][0] - c.cols[j][0]) + Math.abs(c.cols[i][1] - c.cols[j][1]) + Math.abs(c.cols[i][2] - c.cols[j][2]); if (d < 25) throw new Error('style ' + style + ': cells ' + i + ' and ' + j + ' are the same colour (' + Math.round(d) + ' apart)'); }
+      c.alph.forEach(function (a) { if (a < 100) throw new Error('style ' + style + ': a cell lost its picture (alpha ' + Math.round(a) + ')'); });
+    });
+    const nine = cells(3, { layout: 1, style: 0 }); const seen = new Set(nine.cols.map(function (c) { return Math.round(c[0] / 20) + ',' + Math.round(c[1] / 20) + ',' + Math.round(c[2] / 20); }));
+    if (seen.size < 7) throw new Error('three by three gave only ' + seen.size + ' different colours in nine cells');
+    // the corners of each cell are transparent (a circle in a square), so the silhouette is the downscaled source
+    const o = cells(2, { style: 0 }).o; if (o[3] !== 0 || o[(W - 1) * 4 + 3] !== 0 || o[((H - 1) * W) * 4 + 3] !== 0) throw new Error('the corners of the cells are not transparent: the cut-out became a rectangle');
+    // a gap leaves the middle column empty
+    const g = N.cfx('popart', N.inst('popart', { gap: 20 }), src, W, H, 1); let filled = 0; for (let y = 0; y < H; y++) for (let x = 56; x < 64; x++) if (g[(y * W + x) * 4 + 3] > 0) filled++;
+    if (filled) throw new Error('the gap is not empty (' + filled + ' pixels)');
+  });
+  test('E1 preview equals export: through the real compositor each new effect draws the same at half size, and a seek lands on the same frame as playing to it', { item: 'E1', budgetMs: 120000 }, async function () {
+    const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    try {
+      const mk = function (type, params) { const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 240, shapeH: 180, fill: '#e8d8b0', start: 0, duration: 4 }); const T = FM.makeLayer('text', { text: 'Abc', fontSize: 70, color: '#f4f0e0', x: 160, y: 120, start: 0, duration: 4 }); T.stroke = { enabled: true, width: 8, color: '#2060ff' }; const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, params || {}); L.effects = [e]; return [L, T]; };
+      const render = function (layers, W, H, t) { FM.scene = scene(layers, { project: { width: 320, height: 240, fps: 30, duration: 4, background: '#1a2230' } }); const c = document.createElement('canvas'); c.width = W; c.height = H; c.__fmRS = W / 320; c.__fmOX = 0; c.__fmOY = 0; const g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, FM.scene, t); return g.getImageData(0, 0, W, H).data; };
+      const half = function (big, W, H) { const c = E1.fromData(big, W, H), s = E1.cv(W / 2, H / 2, function (g) { g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, W / 2, H / 2); }); return s.getContext('2d').getImageData(0, 0, W / 2, H / 2).data; };
+      const bad = [];
+      for (const [type, params] of [['huecycle', {}], ['softskin', {}], ['oilpaint', { radius: 4 }], ['glitter', {}], ['censor', {}], ['popart', {}]]) {
+        /* the plate scale is capped at 1, so a canvas LARGER than the project would not exercise `ps`: the full size is the project's own 320 wide (ps 1) and the small one is 160 wide (ps 0.5) */
+        const A = render(mk(type, params), 320, 240, 1.4), B = render(mk(type, params), 160, 120, 1.4), Ah = half(A, 320, 240);
+        let s = 0; for (let i = 0; i < B.length; i++) s += Math.abs(B[i] - Ah[i]);
+        const mad = s / B.length, over = E1.count(B, Ah, 40) / (B.length / 4);
+        /* a mean over the whole frame hides a small effect (a few stars, one box): so ALSO the mean difference over just the pixels the effect touched */
+        const none = function (W, H) { const ls = mk(type, params); ls[0].effects = []; ls[1].effects = []; return render(ls, W, H, 1.4); }, base = none(160, 120), baseBig = none(320, 240), baseHalf = half(baseBig, 320, 240);
+        let ts = 0, tn = 0; for (let i = 0; i < B.length; i += 4) if (Math.max(Math.abs(Ah[i] - baseHalf[i]), Math.abs(Ah[i + 1] - baseHalf[i + 1]), Math.abs(Ah[i + 2] - baseHalf[i + 2])) > 8 || Math.max(Math.abs(B[i] - base[i]), Math.abs(B[i + 1] - base[i + 1]), Math.abs(B[i + 2] - base[i + 2])) > 8) { ts += Math.abs(B[i] - Ah[i]) + Math.abs(B[i + 1] - Ah[i + 1]) + Math.abs(B[i + 2] - Ah[i + 2]); tn += 3; }
+        const tmad = tn ? ts / tn : 0;
+        if (tmad > (type === 'glitter' ? 22 : type === 'censor' ? 4 : 14)) bad.push(type + ': on the pixels it touches, half-size differs from the downscaled full-size by a mean ' + tmad.toFixed(1) + ' levels');
+        if (mad > 5 || over > 0.012) bad.push(type + ': half-size differs from the downscaled full-size by a mean ' + mad.toFixed(1) + ' levels and ' + (over * 100).toFixed(2) + '% of pixels by more than 40 (preview would not match export)');
+        const seek = render(mk(type, params), 160, 120, 1.4); render(mk(type, params), 160, 120, 3.0); const seek2 = render(mk(type, params), 160, 120, 1.4);
+        if (E1.maxDiff(seek, seek2) > 0) bad.push(type + ': the same instant drew differently after another time was rendered in between (it carries state)');
+        if (type !== 'softskin' && type !== 'censor' /* a flat shape and one text colour have nothing to smooth or to hide: those two are covered by the every-effect-visible test on a photo and by the kernel tests */ && E1.count(B, render(mk(type, params).map(function (l) { l.effects = []; return l; }), 160, 120, 1.4), 8) < 100) bad.push(type + ': it changes almost nothing at its own defaults');
+        await sleep(0);
+      }
+      if (bad.length) throw new Error(bad.join(' | '));
+    } finally { FM.scene = saved; FM.scene.selectedId = savedSel; try { FM.refreshAll(); } catch (e) {} if (hadHome && FM.home && FM.home.open) FM.home.open(); }
+  });
+
   async function run() {
     var results = [];
     /* THE FIRST TEST MUST NOT RACE THE BOOT INTRO (2 Sep). Under `?only=` the first test starts the moment
@@ -77679,7 +77882,9 @@
        queue 913) now leads, so what this test owns is the ORDER — batch 39 ahead of every batch-38 effect. Who leads
        today is 913.8's claim, just below. */
     if (feat.indexOf('squish') < 0) throw new Error('squish (batch 39) is not in the featured row: ' + feat.join(', '));
-    ['lensdistort', 'pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
+    /* E1 (hunt/new-effects-1): six new effects (batch 41) now take six of the twelve places, so lensdistort has left the row by the
+       rule this test owns (newest first); the other four batch-38 effects are still in it, still behind squish. */
+    ['pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
     if (feat.length > 12) throw new Error('the row holds ' + feat.length + ' — more than the twelve the rule allows');
     if (feat[0] === 'tunnel') throw new Error('control: a batch-26 effect still heads the row');
     feat.forEach(id => { const r = FM.fxRegistry.get(id); if (!r) throw new Error(id + ' is featured but not a real effect'); if (r.hidden) throw new Error(id + ' is featured but hidden'); });
@@ -77696,7 +77901,10 @@
     const reg = FM.fxRegistry.get('weather');
     if (!reg) throw new Error('Snow & Rain is not in the registry');
     const bad = [];
-    if (feat[0] !== 'weather') bad.push('the NEW row leads with ' + feat[0] + ' and Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in it at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ': ' + feat.join(', '));
+    /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first);
+       what this test still owns is that Snow & Rain is IN the row, right behind them, and drawn there. */
+    if (feat.indexOf('weather') < 0 || feat.indexOf('weather') > 6) bad.push('Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in the NEW row at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ', not right behind the six newest: ' + feat.join(', '));
+    if (feat[0] !== 'popart') bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is Pop Art: ' + feat.join(', '));
     if (feat.indexOf('squish') < 0) bad.push('control: squish (batch 39) fell out of the row');
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());

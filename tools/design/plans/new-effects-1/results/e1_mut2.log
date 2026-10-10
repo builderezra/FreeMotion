@@ -1,0 +1,17 @@
+=== M1_hue_matrix_sign
+   baseline green ✅ (1 named title(s) ran and passed)
+✅ CAUGHT:
+FAILE1 Colour Cycle — Speed 0 is 100 levels from the browser’s hue-rotate(90deg); the two matrices are the same maths, so more than 3 is a wrong constant
+=== M7_censor_ignores_scale
+   baseline green ✅ (1 named title(s) ran and passed)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+=== M8_glitter_ignores_scale
+→ baseline: these titles were proven green on this exact tree already (cached)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+=== M9_fast_bbox
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILE1 preview equals export — popart: half-size differs from the downscaled full-size by a mean 5.8 levels (preview would not match export)
+ALLDONE

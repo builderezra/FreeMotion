@@ -1,0 +1,5 @@
+1280 Regression 4/4 ✓Pending 0/0 built
+   ok  effects: nothing in the featured carousel is an effect most layers cannot take
+   ok  481: the PC effects browser fits its column — small featured cards, toggle in the header, labels tha
+   ok  745: the featured carousel is derived from batch order, so the newest effects lead it
+   ok  747: a featured effect that needs a setting shows exactly one 'Needs a setting' badge
