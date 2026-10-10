@@ -61,3 +61,20 @@ Notes. (i) `keyboard can edit numeric Volume…` (#1016): the builder's FYI says
 - Full suite = four slices (the tail in chunks of 40 with a 90 s stall watchdog), each width. Reds alone = `?only=<name>`; paired = `?after=<predecessor>&upto=<name>`; main = `origin/main` f7ec250c, v17.36, alone.
 - NOT measured here: every NOT RUN HERE test (real finger, AAC, H.264); H.264 export correctness; the 2 hangs. None of those is counted as same.
 - Not done yet: bisect of class D; the two hangs on main; the lock rehearsal (LR1) is running now, its report is a section 8 to be added.
+
+## 8. LR1: the lock rehearsal of 2.1 (`FU_JOBS=2 FU_KEEP=1 tools/full-unchanged.sh`)
+
+Setup: a worktree at `8878582a` (v17.37), `git diff 8878582a 797ea31a` applied UNCOMMITTED (25 files), version label set to v17.38. Container: numpy 2.4.6 and PIL present; **H.264 missing** (headless Chromium: `VideoEncoder … closed codec`). Each run measured both sides in 2169 s.
+
+**The tool never prints PASS here and never reaches the 49 plants:** it stops at `THE INSTRUMENT IS BROKEN — the probe could not drive the reference here`, because HEAD itself cannot do the video pick. So what follows comes from running its own comparer (`tools/_fu_compare.py`, the tolerances read from `tools/full-unchanged.sh` lines 56-138) over the recordings it kept, on the runs it could measure.
+
+**Could NOT be measured (not "same"):** FU2 and FU4 at both 380 and 1280, i.e. "one multi-file pick: an image, a video and a song", Extract Audio, Reverse, a Follow on a split target, a luma matte on a split source, delete Pick D, the MP4 export. They fail on HEAD (the reference) already, one after another, because the video pick fails (`Failed to execute 'encode' on 'VideoEncoder'`). **That is exactly where AU22's `onSplit` (in `FM.splitLayer`) would show, so the split/delete risk is unmeasured here; the laptop has to measure it.** The 49 plants were not run.
+
+**Measured (FU1, FU3, FU5, FU6, FU7 at 380 and 1280; FU1 at 440x956, 320x568, 956x440, 1280x720, 1024x600, 1680x1050 and both env runs):**
+1. **As pushed (797ea31a, the two tags missing): 1172 differences, ALL in FU6** (the Canvas / Friends / reopened screens), at 380 and at 1280: for example `380x800 friends: div#canvas-dialog.cv-fr-big.cv-pair>div.export-card — y 172 → 111` and the same −61 px for every row under it (`cv-mini`, its icon, text, sub-line). That is the cog's Editor block (and its switch) not being there, from the missing `editor-mode.js` tag. FU1, FU3, FU5 and FU7 had NO difference even so.
+2. **With the two tags restored (editor-mode.js?v=2, spine-edit.js?v=1): 6 differences**, and nothing in FU3 (split/delete, as far as FU3 reaches), FU5, FU6, FU7:
+   - five pictures, 380, `fu4-friend-2nopv.png` … `fu4-friend-6nopv.png`: 4 px differ by more than 24 levels (tolerance 3), all within the same 17x1 px strip (182,428)-(199,429): a 1 px line under the friend marker, 1 px apart. Same strip in all five, so it is one thing. It sits in an FU4 picture, a group whose own steps could not be driven, so I would not read it as a regression until the laptop measures it. (Crop of both pictures: no visible difference at ×5.)
+   - `956x440 fu1-home.png`: **3033 px differ** within (446,355)-(509,421): **the big `+` new-project orb is on v17.37's Home and absent on the tree's** (`preflight-v17.38-lr1-home956x440.png`, top = HEAD, bottom = tree). One run per side, so this may be timing (the orb arrives with an animation) rather than a change; I could not re-measure that single run without the tool's single-run mode. **Treat it as a real DIFFERENT until the laptop says otherwise.**
+3. `js/editor-mode.js` is changed by the 2.1 diff and the tool refuses to measure with its tag still at `?v=1` (`index.html's cache-busters are stale for js/editor-mode.js`): the restored tag needs `?v=2` or more.
+
+DONE: preflight-v17.38 — 2364 tests x 2 widths, 2 defects found (missing script tags; storage.js buster 60→59) plus the quoted test name; LR1 measured for FU1/3/5/6/7, FU2/FU4 NOT measurable here (no H.264).
