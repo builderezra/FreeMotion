@@ -643,7 +643,7 @@ fi
 # as "running" waits for ever. A few seconds in a temp directory, against a stub ship.sh; nothing there reaches GitHub.
 # `git status`, not `git diff`: a NEW file is untracked, and `git diff --quiet` says nothing changed.
 # tools/_platform.sh and tools/_testfloor.sh count too (6 Oct, the WSL merge): ship.sh and mutate.sh both source them now.
-if [ -n "$(git status --porcelain -- tools/ship-bg.sh tools/_shiplock.sh tools/test-ship-bg.sh tools/ship.sh tools/_platform.sh tools/_testfloor.sh 2>/dev/null)" ]; then
+if [ -n "$(git status --porcelain -- tools/ship-bg.sh tools/preflight.sh tools/_shiplock.sh tools/test-ship-bg.sh tools/ship.sh tools/_platform.sh tools/_testfloor.sh 2>/dev/null)" ]; then
   echo "→ the ship launcher or its lock changed — proving them before shipping"
   if ! ./tools/test-ship-bg.sh; then
     echo "❌ THE SHIP LAUNCHER OR ITS LOCK IS BROKEN — not committing, not pushing."
