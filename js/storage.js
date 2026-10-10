@@ -1003,17 +1003,25 @@ window.FM = window.FM || {};
   // ai-ops already clamps AI-set dims to [16,7680]; the human-import path must too.
   function clampProjectDims(p) {
     if (!p) return;
-    const ev = n => Math.max(16, Math.min(7680, Math.round((+n || 0) / 2) * 2));
-    if (p.width != null) p.width = ev(p.width) || 1080;
-    if (p.height != null) p.height = ev(p.height) || 1920;
+    // A malformed file can carry objects or non-numeric strings here. Coercing them through
+    // `+n || 0` made a recoverable project 16px wide, and an object with unusable conversion
+    // methods could throw before the rest of the document was repaired.
+    const numeric = n => (typeof n === 'number' || (typeof n === 'string' && n.trim())) ? Number(n) : NaN;
+    const ev = (n, fallback) => {
+      const v = numeric(n);
+      return isFinite(v) && v > 0 ? Math.max(16, Math.min(7680, Math.round(v / 2) * 2)) : fallback;
+    };
+    if (p.width != null) p.width = ev(p.width, 1080);
+    if (p.height != null) p.height = ev(p.height, 1920);
     if (!(p.width >= 16)) p.width = 1080;
     if (!(p.height >= 16)) p.height = 1920;
     // fps: an integer 1–120, the same range the editor's own Canvas settings and the New project
     // dialog offer. (This used to be a 24/25/30/50/60 WHITELIST, which silently reset every other
     // value to 30 — including 120, every Custom fps, and any 48fps project round-tripped through
     // an export/import. The bound is what protects us; the whitelist was just lossy.)
-    p.fps = Math.max(1, Math.min(120, Math.round(+p.fps) || 30));
-    p.duration = Math.max(0, Math.min(3600, +p.duration || 0));
+    const fps = numeric(p.fps), duration = numeric(p.duration);
+    p.fps = Math.max(1, Math.min(120, Math.round(fps) || 30));
+    p.duration = Math.max(0, Math.min(3600, duration || 0));
     sanitizeProjectFields(p);
   }
   /* ⚠️ THE REST OF THE PROJECT'S KEYS HAVE SHAPES THE APP ASSUMES (queue 921 S8 review). Only the four numbers
