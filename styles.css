@@ -5560,6 +5560,8 @@ body.hm-selecting .hm-pin { display: none; }
    only the numbered tile, the section heading and the reader are new. The light Home's inks are in theme-glass.css. */
 .hm-section { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); padding: 10px 4px 0; }
 .hm-thumb.tut-thumb { color: rgba(255, 255, 255, .94); }
+/* a lesson's title is the whole of what it teaches: two lines before it is cut, not one (the helper's TUT3 at 380: two cut) */
+.tut-card .hm-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; line-height: 1.3; }
 .tut-num { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .hm-thumb.tut-thumb.tut-g0 { background: linear-gradient(135deg, #2e7d6e, #1e4f6b); }   /* Start */
 .hm-thumb.tut-thumb.tut-g1 { background: linear-gradient(135deg, #6b4fa8, #2d3f7a); }   /* Look */

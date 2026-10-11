@@ -122197,6 +122197,13 @@
     try {
       await atPhoneWidth(async () => {
         if (!FM.home.isOpen()) { FM.home.open(); await sleep(400); }
+        // every card's title is read whole at 380 (the helper's TUT3 found two cut with an ellipsis on one line)
+        document.querySelector('#home-screen .hm-tab[data-tab="tutorials"]').click();
+        for (let i = 0; i < 40 && document.querySelectorAll('#home-screen .tut-card').length < all.length; i++) await sleep(50);
+        const cut = [...document.querySelectorAll('#home-screen .tut-card .hm-name')].filter(n => n.scrollHeight > n.clientHeight + 1 || n.scrollWidth > n.clientWidth + 1);
+        if (cut.length) throw new Error(cut.length + ' lesson title(s) are cut at phone width, e.g. "' + cut[0].textContent + '"');
+        const projTab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
+        if (projTab) projTab.click();
         const longest = all.reduce((a, e) => (e.file.indexOf('17-') === 0 ? e : a), all[0]);   // Work with friends: the longest lesson
         FM.tutorials.open(all.filter(e => e.mode === longest.mode), all.filter(e => e.mode === longest.mode).indexOf(longest));
         let rd = null;
