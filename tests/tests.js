@@ -60824,6 +60824,27 @@
     if (!same(later, stopped)) throw new Error('Orbit moved after keyframed Speed reached zero');
   });
 
+  /* A backwards orbit whose Speed eases to zero must not turn its rider 180 degrees at the stop. */
+  test('690 Orbit Face direction keeps its last travel direction after a reverse stop', { item: 'TBD' }, function () {
+    const orbit = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.orbit;
+    if (!orbit) throw new Error('Orbit canvas effect is unavailable');
+    const angle = (speed, time, local) => {
+      let facing = null;
+      const dst = { save() {}, translate() {}, rotate(r) { facing = r; }, drawImage() {}, restore() {} };
+      orbit({}, dst, 200, 160, { x: 80, y: 60, w: 20, h: 20 }, { radius: 40, speed, face: 1 }, time, local, null, 1);
+      if (facing == null) throw new Error('Orbit did not turn its rider');
+      return facing;
+    };
+    const facesSameWay = (a, b) => Math.cos(a - b) > 0.999;
+    const reverseStop = { kf: [{ t: 3, v: -0.5, e: 'linear' }, { t: 5, v: 0, e: 'linear' }] };
+    const moving = angle(reverseStop, 4.9, 1.9), stopped = angle(reverseStop, 5, 2), held = angle(reverseStop, 6, 3);
+    if (!facesSameWay(moving, stopped) || !facesSameWay(stopped, held)) throw new Error('reverse Orbit flipped its rider when Speed reached or held zero');
+    if (!facesSameWay(stopped, angle(-0.25, 5, 2))) throw new Error('reverse Orbit did not retain its backwards-facing tangent');
+    const forwardStop = { kf: [{ t: 3, v: 0.5, e: 'linear' }, { t: 5, v: 0, e: 'linear' }] };
+    if (!facesSameWay(angle(forwardStop, 5, 2), angle(forwardStop, 6, 3))) throw new Error('forward Orbit changed facing while stopped');
+    if (!facesSameWay(angle(0, 5, 2), angle(0, 6, 3))) throw new Error('an unkeyframed zero Speed changed its old facing');
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
