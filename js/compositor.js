@@ -2096,6 +2096,15 @@ window.FM = window.FM || {};
     const pv = FM._fxPreview;
     return (pv && layer && pv.id === layer.id && pv.list && pv.list.length) ? pv.list : null;
   };
+  /* HOLD TO COMPARE (#482 batch 4.2). While the ◐ is held, the layer it names renders with every filter container gone —
+     the ones on it and the ones being previewed — so he sees the original. A view-only override like FM._fxPreview: nothing
+     is written to the layer, so it cannot reach history, autosave or an export, and an export never reads it. */
+  FM.fxCompareFor = function (layer) {
+    if (FM._exporting) return false;
+    const c = FM._fxCompare;
+    return !!(c && layer && c.id === layer.id);
+  };
+  const sansFilters = list => list.filter(e => !(e && e.type === FM.FX_CONTAINER));
   FM.fxHealth = function () {
     const ctx = ctxFilterOK();
     const gl = !!(FM.glColor && FM.glColor.available && FM.glColor.available());
@@ -2179,6 +2188,7 @@ window.FM = window.FM || {};
      * disagree with the real stack about ordering or about anything else. */
     const pre = FM.fxPreviewListFor(layer);   // queue 729: one answer for both reads, and never during an export
     let base = pre ? own.concat(pre) : own;
+    if (FM.fxCompareFor(layer)) base = sansFilters(base);   // #482 4.2: the ◐ is held on this layer
     /* …and a MEDIA layer's Outline, which is the same alpha-outline effect a GROUP's border already
        becomes (queue 386 clause 1). Ezra: "Outlines should still be a toggle option on videos and clips,
        not just shadow".
@@ -17363,7 +17373,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        longer just about captions: effectiveFx now answers for both, and a layer being previewed has no
        captions in the ordinary case, so gating on captions alone meant the preview never reached the
        frame. `_cueFx` still guards the recursion for both. */
-    const _pvOn = !!FM.fxPreviewListFor(layer);   // queue 729: the same answer the stack above uses
+    const _pvOn = !!FM.fxPreviewListFor(layer) || FM.fxCompareFor(layer);   // queue 729: the same answer the stack above uses; #482 4.2 the ◐
     /* …AND A MEDIA LAYER WHOSE OUTLINE IS ON (queue 386 clause 1, fixed 22 Aug). `effectiveFx` has
        translated that toggle into the alpha `stroke` effect since v10.64 — but this gate is the ONLY
        render-path caller of it, and it only opened for a caption track or a live effect preview. An
@@ -18281,7 +18291,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          nothing on the canvas, because the preview is merged in drawLayer's effectiveFx and an adjustment layer never
          reaches it — then Add graded the frame. Same view-only override, same export guard (fxPreviewListFor). */
       const pv = FM.fxPreviewListFor(layer);
-      const own = pv ? (layer.effects || []).concat(pv) : (layer.effects || []);
+      let own = pv ? (layer.effects || []).concat(pv) : (layer.effects || []);
+      if (FM.fxCompareFor(layer)) own = sansFilters(own);   // #482 4.2: the ◐ held on an adjustment layer shows the frame ungraded by its filters
       if (own.some(adjLiveBox)) return applyAdjustmentFilters(ctx, layer, t, scene, own);
       effs = own;
     }
