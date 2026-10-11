@@ -275,6 +275,10 @@ window.FM = window.FM || {};
      never starts, and the test reports the feature as broken. Counting them was never enough. */
   FM._resetVpPointers = function () { vpPtrs.clear(); vpPinch = null; drag = null; };
   let vpPinch = null;
+  /* AU24-1: is a finger dragging a layer, or pinching it, on the canvas right now? The editor switch (js/editor-mode.js busyReason)
+     asks this and refuses with a shake while it is true (DESIGN §6.1: "a timeline or canvas drag live"); it read FM.canvasGestureLive,
+     which nothing defined, so a second finger could swap the whole editor out from under a drag. Read-only: it changes no Full behaviour. */
+  FM.canvasGestureLive = function () { return !!(drag || vpPinch); };
   function finishDrag() {   // commit an in-flight drag (second finger landed / pointer lost)
     if (!drag) return;
     const d = drag; drag = null;

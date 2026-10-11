@@ -50,7 +50,11 @@ FEATURES = [
     {"name": "the AAC export audio", "reason": r"needs an AAC audio encoder",
      "globs": ["js/exporter.js", "js/export-resume.js", "js/audio-*.js", "vendor/mp4-muxer.js"], "lines": {}},
     {"name": "the QR code (BarcodeDetector)", "reason": r"needs a working BarcodeDetector",
-     "globs": ["js/collab-qr.js", "js/collab-ui.js"], "lines": {"js/collab-ui.js": r"(?i)qr|barcode|jsqr|scan"}},
+     "globs": ["js/collab-qr.js", "js/collab-ui.js"],
+     # A WORD, not a run of letters (11 Oct): `(?i)…|scan` matched "otherS CAN Edit" inside FM.collab.othersCanEdit and refused
+     # v17.38, which touches no QR at all. The words count where a word starts, or where a camelCase name starts a new part
+     # (showQR, scanQR, jsQR, BarcodeDetector) — never in the middle of one.
+     "lines": {"js/collab-ui.js": r"(?<![A-Za-z0-9])(?i:qr|barcode|jsqr|scan)|(?<=[a-z0-9])(?:QR|Qr|Barcode|Scan)"}},
     {"name": "the app under a real finger (touch emulation)", "reason": r"needs real touch emulation",
      "globs": SHIPPED, "lines": {}},
     {"name": "the pictures and sounds pinned to the Mac (a per-OS baseline)", "reason": r"no baseline recorded for |the \S+ baseline for ",

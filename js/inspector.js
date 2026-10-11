@@ -4017,6 +4017,14 @@ window.FM = window.FM || {};
           }, 480);
         });
         ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => card.addEventListener(ev, clear));
+        /* S4d: IN SIMPLE a finger that starts a swipe on a card and moves past a tap's slop is no longer holding it: the 480 ms timer was only
+           cleared on up, cancel and leave, so a slow swipe raised "Reset <group>". Full's identical code is left as it is (DESIGN §0.4). */
+        let holdAt = null;
+        card.addEventListener('pointerdown', ev => { holdAt = { x: ev.clientX, y: ev.clientY }; });
+        card.addEventListener('pointermove', ev => {
+          if (!holdAt || !(FM.editor && FM.editor.isSimple && FM.editor.isSimple())) return;
+          if (Math.hypot(ev.clientX - holdAt.x, ev.clientY - holdAt.y) > 10) clear();
+        });
       }
       card.addEventListener('click', (ev) => {
         if (card._heldReset) { card._heldReset = false; if (ev) { ev.preventDefault(); ev.stopPropagation(); } return; }
@@ -6038,6 +6046,7 @@ window.FM = window.FM || {};
         spCenter.appendChild(sbar);
         spCenter.appendChild(el('div', 'insp-hint', 'Park the playhead, then press one of these — the speed is worked out so the clip begins or ends there.'));
       }
+      const smSpeed = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
       spCenter.appendChild(rangeRow('Speed %', () => Math.round((FM.evalProp(layer.speed, FM.time) || 1) * 100), v => {
         const sp = Math.max(SPD_MIN, v / 100);
         if (FM.isAnimated(layer.speed)) {
@@ -6073,7 +6082,7 @@ window.FM = window.FM || {};
         const m = FM.media.get(layer.id); if (m && m.el) { try { m.el.playbackRate = Math.min(16, Math.max(0.0625, FM.evalProp(layer.speed, FM.time) || 1)); } catch (e) {} }
         FM.seekVideosToTime();
         FM.timeline.rebuild();
-      }, SPD_MIN * 100, SPD_MAX * 100, 5, () => FM.inspector.refresh(), 5));
+      }, smSpeed ? 25 : SPD_MIN * 100, smSpeed ? 400 : SPD_MAX * 100, 5, () => FM.inspector.refresh(), 5));   // S4a: Simple's range is DESIGN's 0.25x to 4x; Full keeps 1 to 1000 %
       if (spAnim) spCenter.appendChild(el('div', 'insp-hint', 'Speed is keyframed (ramp): the clip length stays fixed while playback speeds up and slows down along the curve — use the curve button to shape the easing.'));
       spRow.appendChild(spCenter);
       body.appendChild(spRow);

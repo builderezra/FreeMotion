@@ -1308,6 +1308,13 @@ window.FM = window.FM || {};
   PZ.followLabel = function (short) { return following ? (short ? 'Watching ' : 'Watching along with ') + (knownName(following) ? cleanName(knownName(following)) : followName || 'them') : null; };
   /* Who holds a layer, by name, for the refusal toasts in collab-session.js — null when nobody else does
      or the name is unknown, so the caller can fall back to "Someone else" (S5 review). */
+  /* Simple mode P2 (DESIGN.md §3.7): WHO else holds a layer — their mid, or null — for the lease half of Simple's pre-flight.
+     holderName answers null for an unknown name too, which would read as "nobody holds it". Read-only. */
+  PZ.heldByOther = function (lid) {
+    if (!S || !isId(lid)) return null;
+    const h = holderOf(lid);
+    return (h && h !== myMid) ? h : null;
+  };
   PZ.holderName = function (lid) {
     if (!S || !isId(lid)) return null;
     const h = holderOf(lid);

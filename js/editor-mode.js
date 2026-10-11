@@ -239,15 +239,44 @@ window.FM = window.FM || {};
     /* KEYS (§8.3, §15.1). In Full this answers NOTHING (no E, §0.4 B14). In Simple, the arranging keys that have no Simple
        command yet say so instead of doing Full's thing to a clip on the main track. */
     onKey(e) {
+      /* PHASE 2 (DESIGN.md §8.3's table). A / D ripple-trim a main clip with the playhead inside it, else the main clip under
+         the playhead (selected first); S splits the selected item, else that main clip; Delete and ⌘D on one main clip are
+         Simple's delete and duplicate. An overlay, text or caption item keeps Full's own A / D / Delete / ⌘D (no ripple). */
       if (mode !== 'simple' || e.altKey) return false;
       const mod = e.metaKey || e.ctrlKey;
       const S = FM.spine;
+      if (!S || !S.cmd) return false;
+      const lines = (FM.spineWords && FM.spineWords.lines) || {};
       const ids = FM.selectionIds ? FM.selectionIds() : [];
-      const R = (S && S.read) ? S.read(FM.scene) : null;
-      const onMain = !!R && ids.some(id => R.isMain(id));
-      if (!mod && (e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD')) { e.preventDefault(); if (!e.repeat && S) S.say('splitNext', { full: true }); return true; }
-      if (!mod && (e.code === 'Backspace' || e.code === 'Delete') && onMain) { e.preventDefault(); if (S) S.say('deleteNext', { full: true }); return true; }
-      if (mod && (e.key === 'd' || e.key === 'D') && onMain) { e.preventDefault(); if (S) S.say('dupNext', { full: true }); return true; }
+      const R = S.read(FM.scene);
+      const one = ids.length === 1 ? ids[0] : null;
+      const t = FM.time || 0;
+      const inside = id => { const l = FM.layerById(FM.scene, id); return !!l && t > (+l.start || 0) + 1e-4 && t < (+l.start || 0) + (+l.duration || 0) - 1e-4; };
+      const mainTarget = () => {
+        if (one && R.isMain(one) && inside(one)) return one;
+        const m = S.mainAtTime(R, t);
+        if (m && FM.selectLayer && FM.scene.selectedId !== m.id) FM.selectLayer(m.id);
+        return m ? m.id : null;
+      };
+      if (!mod && (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'KeyS')) {
+        if (one && !R.isMain(one) && e.code !== 'KeyS') return false;
+        e.preventDefault();
+        if (e.repeat) return true;
+        if (e.code === 'KeyS' && one && !R.isMain(one)) { S.cmd.split(one); return true; }
+        const id = mainTarget();
+        if (!id) { S.say(lines.noClipHere || 'No clip at the playhead'); return true; }
+        if (e.code === 'KeyA') S.cmd.trimHead(id); else if (e.code === 'KeyD') S.cmd.trimTail(id); else S.cmd.split(id);
+        return true;
+      }
+      if (!mod && (e.code === 'Backspace' || e.code === 'Delete')) {
+        const mains = ids.filter(id => R.isMain(id));
+        if (!mains.length) return false;
+        e.preventDefault();
+        if (ids.length > 1) { S.say(lines.deleteOne || 'Delete one clip at a time'); return true; }
+        S.cmd.del(mains[0]);
+        return true;
+      }
+      if (mod && (e.key === 'd' || e.key === 'D') && one && R.isMain(one)) { e.preventDefault(); S.cmd.duplicate(one); return true; }
       return false;
     },
     _state: () => ({ mode: mode, lastPid: lastPid, pendingFx: pendingFx })   // suite seam
@@ -256,7 +285,8 @@ window.FM = window.FM || {};
   function wire() {
     if (GATED) body().classList.toggle('sm-on', enabled());
     const sp = document.getElementById('btn-sm-split');
-    if (sp && !sp._edWired) { sp._edWired = true; sp.addEventListener('click', () => { if (FM.spine) FM.spine.say('splitNext', { full: true }); }); }
+    /* Phase 2: ✂ splits the selected item, or the main clip under the playhead when nothing is selected (§8.5: one home) */
+    if (sp && !sp._edWired) { sp._edWired = true; sp.addEventListener('click', () => { if (!FM.spine || !FM.spine.cmd) return; const ids = FM.selectionIds ? FM.selectionIds() : []; FM.spine.cmd.split(ids.length === 1 ? ids[0] : null); }); }
     if (GATED && FM.settings && FM.settings.onChange) FM.settings.onChange(() => { if (!!enabled() !== body().classList.contains('sm-on')) FM.editor.onPreviewFlip(); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();

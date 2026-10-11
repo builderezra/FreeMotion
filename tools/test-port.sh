@@ -387,6 +387,15 @@ v="$(fg js/timeline.js "$TMP/empty.diff" "$AAC")"; rc=$?; [ "$rc" = 0 ] && ok "c
 v="$(fg js/collab-ui.js "$TMP/qr.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "js/collab-ui.js lines about QR + a QR test NOT RUN → refused" || bad "collab-ui qr: rc=$rc $v"
 v="$(fg js/collab-ui.js "$TMP/noqr.diff" "$BD")"; rc=$?; [ "$rc" = 0 ] && ok "js/collab-ui.js lines about something else → passes" || bad "collab-ui other: rc=$rc $v"
 v="$(fg js/collab-qr.js "$TMP/empty.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "js/collab-qr.js (all of it) + a QR test NOT RUN → refused" || bad "collab-qr: rc=$rc $v"
+# the words are WORDS (11 Oct): v17.38 was refused for "FM.collab.othersCanEdit" — "otherSCANedit" — and touches no QR at all
+for line in 'its one reader is FM.collab.othersCanEdit' 'const canScroll = true; // a scrollbar' 'the IQR of the times'; do
+  printf 'diff --git a/js/collab-ui.js b/js/collab-ui.js\n--- a/js/collab-ui.js\n+++ b/js/collab-ui.js\n@@ -1 +1 @@\n-var a = 1;\n+%s\n' "$line" > "$TMP/fp.diff"
+  v="$(fg js/collab-ui.js "$TMP/fp.diff" "$BD")"; rc=$?; [ "$rc" = 0 ] && ok "control: “$line” is not about QR → passes" || bad "false positive on “$line”: rc=$rc $v"
+done
+for line in 'showQR(link);' 'scanQR()' 'const d = new BarcodeDetector({ formats: [x] });' 'jsQR(img.data, w, h)' 'el.dataset.qr = 1' 'fm_qr_size' 'scanning = true'; do
+  printf 'diff --git a/js/collab-ui.js b/js/collab-ui.js\n--- a/js/collab-ui.js\n+++ b/js/collab-ui.js\n@@ -1 +1 @@\n-var a = 1;\n+%s\n' "$line" > "$TMP/tp.diff"
+  v="$(fg js/collab-ui.js "$TMP/tp.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "“$line” is about QR → refused" || bad "missed a QR line “$line”: rc=$rc $v"
+done
 v="$(fg js/exporter.js "$TMP/empty.diff" '?\tthe driver result carries no NOT RUN list\n')"; rc=$?; [ "$rc" = 1 ] && ok "an unknown NOT RUN list ('?') counts against the release — unknown is not 'ran'" || bad "unknown list: rc=$rc $v"
 # THE TWO REASONS THE GATE DID NOT KNOW (6 Oct, the port audit, MAJOR). Off the Mac ~80 real-finger tests say NOT RUN for want
 # of touch emulation and 22 pinned tests for want of a baseline — and what they prove is the whole app, not one file. They

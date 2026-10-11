@@ -29,9 +29,13 @@ window.FM = window.FM || {};
   /* ═══ THE ONE `sm` WRITER (§2.3). Merges into layer.sm, deletes the sub-key when off, deletes `sm` once empty. No code
      assigns `sm` whole (that would wipe a newer build's sub-keys). Refuses what the sanitiser would strip, so a write can
      never be undone by the next load. Returns whether the layer now carries the flag as asked. */
-  const FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit'];
+  /* Phase 2 adds `cut` (the de-click mark, §12.1) and `snd` (Simple's own sound-only fact, §0.4 B8). The sanitiser keeps both
+     as plain unknown keys (`true` is plain), so its output does not change and no SCHEMA_REV bump is needed for them. */
+  const FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'cut', 'snd'];
   S.setFlag = function (layer, key, on) {
     if (!layer || FLAGS.indexOf(key) < 0) return false;
+    /* D17 B (his pick): a sound never ends with the video — music, a voice-over, a recording run on in black as in Full */
+    if (on && key === 'tail' && (layer.audioOnly === true || (layer.sm && layer.sm.snd === true))) return false;
     if (on && key === 'main' && (layer.audioOnly === true || layer.type === 'group' || (layer.type === 'text' && Array.isArray(layer.captions)))) return false;
     if (on && key === 'unit' && layer.type !== 'group') return false;
     if (on) {
@@ -68,6 +72,15 @@ window.FM = window.FM || {};
     return copies;
   };
 
+  /* ═══ SPLIT (§12.2: a keep-route, with one exception, §4.5): both halves keep every byte of `sm`, except that the HEAD no longer ends with the
+     video. `sm.tail` and its `tailEnd` stay on the half that now ends where the clip ended (B); the head keeps `stay`. Without this a split
+     in Full left two items claiming the end of the track (AU22-3). Called by FM.splitLayer with the two halves. */
+  S.onSplit = function (head, tail) {
+    if (!head || !head.sm || typeof head.sm !== 'object') return;
+    delete head.sm.tail; delete head.sm.tailEnd;
+    if (!Object.keys(head.sm).length) delete head.sm;
+  };
+
   /* ═══ HOW A LINE NAMES AN ITEM (§8.9): "Clip N", a text's first words, else its kind — never layer.name. */
   S.itemWord = function (layer, R) {
     const w = words().items || {};
@@ -101,6 +114,10 @@ window.FM = window.FM || {};
   const PIC_EXT = /\.(mp4|mov|m4v|jpg|jpeg|png|gif|heic|webp)( copy( \d+)?)?$/i;
   const KEYING = /^(chromakey|lumakey|removecolor|colorkey)$/i;
 
+  // the keyframe containers of the effects Simple itself added (inst.sm === 1): they never earn the ✦
+  function smFxProps(l) { const s = new Set(); if (FM.fxListAnimatedProps && Array.isArray(l.effects)) FM.fxListAnimatedProps(l.effects.filter(f => f && f.sm === 1)).forEach(p => s.add(p)); return s; }
+  // FM.animatedProps walks layer.transform and throws without one; the read treats that layer as having nothing animated (AU22-2)
+  function animProps(l) { try { return FM.animatedProps ? FM.animatedProps(l) : []; } catch (e) { return []; } }
   function isAnim(p) { return !!(p && typeof p === 'object' && Array.isArray(p.kf) && p.kf.length); }
   function evalP(p, t) { return FM.evalProp ? FM.evalProp(p, t) : (typeof p === 'number' ? p : 0); }
 
@@ -171,7 +188,10 @@ window.FM = window.FM || {};
       }
       return 'unknown';
     }
-    function opacityAt(l, t) { return FM.layerOpacity ? FM.layerOpacity(l, t) : evalP(l.transform && l.transform.opacity, t); }
+    // a layer with no transform at all (a file from before one was required, or a half-made layer) reads as opaque: the read never throws on what Full would still open (AU22-2)
+    function opacityAt(l, t) {
+      try { return FM.layerOpacity ? FM.layerOpacity(l, t) : evalP(l.transform.opacity, t); } catch (e) { return 1; }
+    }
     function drawsPicture(l) {
       const s = +l.start || 0, d = Math.max(0, +l.duration || 0);
       const ts = [s, s + d / 2, s + Math.max(0, d - 1e-3)];
@@ -180,6 +200,7 @@ window.FM = window.FM || {};
       return ts.some(t => opacityAt(l, t) > 0.02);
     }
     const kinds = new Map(), states = new Map(), aoMap = new Map();
+    const faded = new Set();   // video units whose picture is see-through throughout: kind 'audio' by the opacity rule, not because the media is audio-only (§5.2)
     const referenced = new Set();   // ids something is transform-parented to
     L.forEach(l => { if (l && l.parent && byId.has(l.parent) && byId.get(l.parent).type !== 'group') referenced.add(l.parent); });
     units.forEach(u => {
@@ -195,7 +216,7 @@ window.FM = window.FM || {};
       else {
         const ao = audioOnlyOf(l, st); aoMap.set(u.id, ao);
         if (ao === true) k = 'audio';
-        else if (!drawsPicture(l)) k = (l.type === 'video' && !l.muted) ? 'audio' : 'overlay';
+        else if (!drawsPicture(l)) { k = (l.type === 'video' && !l.muted) ? 'audio' : 'overlay'; faded.add(u.id); }
         else if (ao === 'unknown') k = 'undecided';
         else k = 'overlay';
       }
@@ -254,8 +275,11 @@ window.FM = window.FM || {};
         const flagged = members.some(m => m.sm && m.sm.main === true);
         if (!flagged) return;
         const k = kinds.get(u.id);
-        if (k === 'audio') { anomalies.push({ kind: 'mainNoPicture', ids: [u.id] }); return; }
-        if (k === 'overlay' || k === 'text' || k === 'undecided' || k === 'block') mainUnits.push(u);
+        /* §5.2: "after adoption a stored sm.main on [an opacity-0 unit] is honoured (not a 'mainNoPicture' anomaly)": only a layer whose MEDIA is
+           audio-only is refused. A clip faded out for its whole length is still the clip he put on the track, and dropping it left a
+           hole in the main row that the seam pass then reported as a gap (AU22-1). */
+        if (k === 'audio' && !faded.has(u.id)) { anomalies.push({ kind: 'mainNoPicture', ids: [u.id] }); return; }
+        if (k === 'overlay' || k === 'text' || k === 'undecided' || k === 'block' || (k === 'audio' && faded.has(u.id))) mainUnits.push(u);
       });
     } else {
       const cand = units.filter(u => kinds.get(u.id) === 'overlay' && isMedia(u.l) && u.end - u.start > 0 && fillsFrame(u));
@@ -273,7 +297,7 @@ window.FM = window.FM || {};
       vis = vis.filter(u => !background.has(u.id));
       // (ii) IMPORT STACKS: 2+ with one pick, or 3+ unstamped, starting together, full-frame, normal, opaque, unkeyed
       const stackMember = new Set();
-      const plain = vis.filter(u => !seeThrough(u.l) && !FM.animatedProps(u.l).length);
+      const plain = vis.filter(u => !seeThrough(u.l) && !animProps(u.l).length);
       const groups = [];
       plain.slice().sort((a, b) => a.start - b.start).forEach(u => {
         const g = groups.length ? groups[groups.length - 1] : null;
@@ -408,7 +432,7 @@ window.FM = window.FM || {};
       }
       // what Simple cannot edit renders as it is, with a ✦ (§9.1)
       if (k === 'block') rec.pro = 'block';
-      else if (FM.animatedProps && FM.animatedProps(u.l).length) rec.pro = 'look';
+      else if (animProps(u.l).filter(p => !smFxProps(u.l).has(p)).length) rec.pro = 'look';   // S4b: keyframes on an effect made in Simple (sm = 1) are level none (DESIGN §8.5c, §9.1); AU22-2: a layer with no transform reads as nothing animated
       else if ((u.l.behaviors || []).some(b => b && b.enabled !== false)) rec.pro = 'look';
       if (states.get(u.id) === 'missing' && isMedia(u.l)) anomalies.push({ kind: 'missing', ids: [u.id] });
       if (k === 'undecided') anomalies.push({ kind: 'undecided', ids: [u.id] });

@@ -38,12 +38,41 @@ window.FM = window.FM || {};
       captions: 'Captions', text: 'Text', overlay: 'Overlay', effect: 'Effects', behind: 'Behind',
       main: 'Clip row', audio: 'Sound'
     },
-    lines: {
-      openFull: 'Open in Full',
-      deleteNext: 'Deleting clips comes next',
-      gapNext: 'Closing gaps comes in the next update',
-      splitNext: 'Splitting comes in the next update',
-      dupNext: 'Duplicating clips comes next',
+    lines: {   // Phase 2 (BUILD-PLAN-PHASE2.md): the Phase 1 "comes next" lines are gone with the commands they stood in for
+      openFull: 'Open in Full', undo: 'Undo', doAnyway: 'Do it anyway', someone: 'Someone else',
+      deleted: 'Deleted clip',
+      deletedWith: n => 'Deleted clip and ' + n + (n === 1 ? ' thing on it' : ' things on it'),
+      keptRunsOn: n => 'kept ' + n + (n === 1 ? ' item that runs on' : ' items that run on') + ', trimmed to match',
+      fadeWent: 'the fade went with it',
+      trimmed: name => 'Trimmed ' + name, split: 'Split', duplicated: 'Duplicated clip',
+      gapClosed: 'Gap closed', overlapFixed: 'Overlap fixed',
+      keepsLength: name => name + ' keeps the length you gave it',
+      wait: 'One moment — still finishing the last edit.',
+      skipped: 'Undo skipped — something else changed first',
+      lockedClip: 'That clip is locked', lockedMusic: 'The music is locked', lockedSound: 'That sound is locked',
+      lockedText: 'That text is locked', lockedBlock: 'That block is locked',
+      lockedClips: n => n + ' clips are locked', lockedItems: n => n + ' items are locked',
+      liveOwner1: name => name + ' can edit · clips stay put', liveOwnerN: n => n + ' others edit · clips stay put',
+      liveGuest: 'Clips stay put while you both edit',
+      offlineOwner: 'You’re offline · text, captions and looks still work', offlineCopy: 'Offline · text and looks still work',
+      view: 'View only', comment: 'You can comment here', outbox: 'Too many offline changes',
+      waiting: 'Waiting for clips to arrive',
+      busy: (name, item) => name + ' is editing ' + (item || 'that clip') + ' · try again soon',
+      attached: (a, b) => a + ' is attached to ' + b,
+      slip: via => '1 ' + ({ parent: 'parent', follow: 'follow', matte: 'matte', twin: 'sound' }[via] || 'link') + ' will slip',
+      ridersNext: 'Captions here move with clips in the next update',
+      cameraNext: 'The camera move here comes along in the next update',
+      cutKeysNext: name => name + ' has moves · trims around it come next',
+      fadeOwned: (a, b) => a + ' and ' + b + ' fade into each other',
+      cutShort: name => name + ' would be too short',
+      splitBlock: 'Open in Full to split this', trimBlock: 'Open in Full to trim this', splitOff: 'Move the playhead onto the clip to split',
+      splitEdge: 'Too close to the edge of the clip. Trim instead?', splitFade: 'Move the playhead out of the crossfade to split it',
+      trimEdge: 'Too close to the edge of the clip',
+      nothingMore: 'Nothing more to trim', videoStart: 'That’s the start of the video', shortSource: 'Not enough footage',
+      fadesNext: 'That clip fades into the next one', fadesBefore: 'That clip fades into the one before',
+      alreadyShort: 'This clip is already as short as it can go',
+      noClipHere: 'No clip at the playhead', gone: 'That clip was just deleted', noSeam: 'Nothing to close here',
+      deleteOne: 'Delete one clip at a time', failed: 'That didn’t work, so nothing changed',
       newer: 'Made with a newer FreeMotion. Update to edit clips here',
       pro: 'Has moves and effects',
       moreInFull: 'More in Full ›',
@@ -63,8 +92,8 @@ window.FM = window.FM || {};
       clip: 'Clip', sticker: 'the sticker', image: 'the image', videoTop: 'the video on top', song: 'the song',
       sound: 'the sound', effect: 'the effect', captions: 'the captions', block: 'the group', shape: 'the shape', text: 'the text'
     },
-    summary: function (clips, secs) {
-      const m = Math.floor(secs / 60), s = Math.round(secs - m * 60);
+    summary: function (clips, secs) {   // the total is rounded FIRST, then split: 59.6 s is 1:00, never 0:60 (review finding 31)
+      const t = Math.max(0, Math.round(+secs || 0)), m = Math.floor(t / 60), s = t % 60;
       return clips + (clips === 1 ? ' clip' : ' clips') + ' · ' + m + ':' + (s < 10 ? '0' : '') + s;
     }
   };

@@ -661,6 +661,13 @@ window.FM = window.FM || {};
     return true;
   }
   U._forgetRid = forgetRid;
+  /* Simple mode P2 (DESIGN.md §3.7 (b)): the room's REMEMBERED editors — a member keeps its row (and its offline changes) after
+     its connection drops, until it leaves or is removed. Read-only; FM.collab.othersCanEdit is its one reader. */
+  U.roomEditors = function () {
+    if (!hostRoom || !hostRoom.members) return [];
+    if (hostRoomPid && FM.projects && FM.projects.currentId && hostRoomPid !== FM.projects.currentId()) return [];
+    return Object.keys(hostRoom.members).filter(rid => { const m = hostRoom.members[rid]; return !!m && m.role === 'editor'; });
+  };
   /* A guest's `bye` (collab-session.js, through the bridge). ⚠️ ONLY `left`: a guest on `paused` switched to
      another project and is still a member. Leave throws the device's token away (the copy becomes its own, or
      is deleted), so its row could only ever read "offline", and a rejoin by link added a second one beside it. */
