@@ -19,7 +19,7 @@ window.FM = window.FM || {};
   const SECTIONS = ['captions', 'text', 'overlay', 'behind'];   // top → bottom inside the sections box (stacking order)
   const GLYPH = { captions: 'Cc', text: 'Aa', overlay: '◧', behind: '▤' };
   const RULER = 18, MAIN_H = 56, SOUND_H = 32, LANE = 32;
-  let root = null, scroller = null, inner = null, rulerEl = null, secEl = null, mainEl = null, soundEl = null, sayEl = null, liveEl = null;
+  let root = null, scroller = null, inner = null, trEl = null, rulerEl = null, secEl = null, mainEl = null, soundEl = null, sayEl = null, liveEl = null;
   let lastProg = -1, userScrollAt = 0, settleT = 0, R = null, strips = new Map();
 
   const pps = () => (FM.timeline && FM.timeline.pxPerSec) ? FM.timeline.pxPerSec() : 100;
@@ -35,7 +35,7 @@ window.FM = window.FM || {};
     root = document.getElementById('sm-timeline');
     if (!root) return false;
     scroller = root.querySelector('#sm-scroll'); inner = root.querySelector('#sm-inner');
-    rulerEl = root.querySelector('#sm-ruler'); secEl = root.querySelector('#sm-sections');
+    rulerEl = root.querySelector('#sm-ruler'); trEl = root.querySelector('#sm-trlane'); secEl = root.querySelector('#sm-sections');
     mainEl = root.querySelector('#sm-main'); soundEl = root.querySelector('#sm-sound');
     sayEl = document.getElementById('sm-say'); liveEl = document.getElementById('sm-live');
     // the playhead is FIXED at 50vw and the content scrolls under it, exactly as in Full
@@ -512,7 +512,7 @@ window.FM = window.FM || {};
       secEl.appendChild(stack);
 
       // ── the clip row ──
-      mainEl.textContent = '';
+      mainEl.textContent = ''; trEl.textContent = '';
       const clips = R.main.filter(e => !e.slot);
       clips.forEach((e, i) => {
         const l = byId.get(e.id); if (!l) return;
@@ -564,6 +564,34 @@ window.FM = window.FM || {};
         chip.setAttribute('aria-label', name); chip.title = name;
         chip.addEventListener('click', ev => { ev.stopPropagation(); if (FM.spine.cmd) FM.spine.cmd.closeSeam(e.id); });   // Phase 2: Close gap / Fix
         mainEl.appendChild(chip);
+      });
+      const trTop = mainEl.offsetTop - 36;   // the ◇s sit in their own lane above the clip row, clear of the trim grips
+      // 2.7 (DESIGN :522): a ◇ on a BLEND too; it selects the incoming clip, whose tray then offers Turn into a transition
+      R.main.forEach((e, i) => {
+        const l = byId.get(e.id), s = e.seam;
+        if (e.slot || i < 1 || !l || !s || s.kind !== 'blend') return;
+        const chip = el('button', 'sm-chip sm-chip-tr sm-chip-tr-blend', '◇');
+        chip.type = 'button'; chip.dataset.trBlend = e.id;
+        chip.style.left = xOf(e.start + s.amt / 2) + 'px';
+        chip.setAttribute('aria-label', 'Crossfade: turn into a transition'); chip.title = 'Crossfade: turn into a transition';
+        chip.addEventListener('click', ev => { ev.stopPropagation(); FM.selectLayer(e.id); });
+        chip.style.top = trTop + 'px'; trEl.appendChild(chip);
+      });
+      // 2.7 (DESIGN §8.2 "Transition ◇", Phase 6 "◇ at each cut"): a ◇ above every cut that is a clean join between two pictures, filled when the cut carries a
+      // transition. It sits ABOVE the clip row so it never covers a trim grip; tap it to select the incoming clip and open its Transition row.
+      R.main.forEach((e, i) => {
+        const l = byId.get(e.id);
+        if (e.slot || i < 1 || !l || !(FM.spine.joinInto && FM.spine.joinInto(R, e.id))) return;
+        const pl = byId.get(R.main[i - 1].id);
+        if (!pl || !(l.type === 'video' || l.type === 'image' || l.type === 'shape') || !(pl.type === 'video' || pl.type === 'image' || pl.type === 'shape')) return;
+        const chip = el('button', 'sm-chip sm-chip-tr' + (l.trIn ? ' sm-chip-tr-on' : ''), '◇');
+        chip.type = 'button'; chip.dataset.tr = e.id;
+        chip.style.left = xOf(e.start) + 'px';
+        const kind = l.trIn ? ({ crossfade: 'crossfade', dipblack: 'dip to black', dipwhite: 'dip to white' }[l.trIn.type] || '') + ' ' + l.trIn.d.toFixed(1) + ' s' : 'none';
+        const name = 'Transition: ' + kind;
+        chip.setAttribute('aria-label', name); chip.title = name;
+        chip.addEventListener('click', ev => { ev.stopPropagation(); FM.selectLayer(e.id); if (FM.simpleTools && FM.simpleTools.openRow) FM.simpleTools.openRow('transition', e.id); });
+        chip.style.top = trTop + 'px'; trEl.appendChild(chip);   // #sm-trlane comes BEFORE the sections in the document, so it paints UNDER them: a title or overlay at the cut is still what a press lands on
       });
       // + at the end of the clip row: pick files, laid END TO END from the end of the main track (§15.1)
       const add = el('button', 'sm-add', '+');
