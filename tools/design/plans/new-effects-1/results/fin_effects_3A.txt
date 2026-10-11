@@ -1,0 +1,140 @@
+1280 Regression 137/138 ✗Pending 0/0 built
+   ok  effects: a slider at 0 means zero, it does not quietly become the default
+   ok  effects: Voronoi Cells wander individually, and an old one stays frozen
+   ok  effects: Flash (darken) dims the picture without making the layer disappear
+   ok  effects: an effect can be copied off one layer and pasted onto another
+   ok  effects: an OPEN effect row can still be dragged to reorder
+   ok  effects: Magnify Background really magnifies, and Copy Background is untouched
+   ok  effects: Magnify Background below 1x fills its edges instead of punching a hole
+   ok  effects: Fill Behind fills the empty frame with a blown-up copy of the layer
+   ok  effects: Fill Behind leaves no bare corner on a layer that is not a rectangle
+   ok  effects: Fill Behind blurs the fill, and the radius scales with the plate
+   ok  effects: Fill Behind costs nothing when the layer already covers the canvas
+   ok  effects: Fill Behind still fills when the layer also carries a post-effect
+   ok  effects: Fill Behind’s Zoom and Dim each move only their own half of the picture
+   ok  effects: Fill Behind’s Blur softens the fill without zooming it
+   ok  effects: Fill Behind reaches the frame edge at every blur, with no vignette and no seam
+   ok  effects: Fill Behind’s 1/k working plate does not move the fill
+   ok  effects: Fill Behind does not erase the layer below it
+   ok  effects: Fill Behind spares the layer below however small the subject is
+   ok  effects: Fill Behind spares the layer below when it is stacked with other effects
+   ok  effects: Tiles “Whole clip” does not throw away the other effect on the layer
+   ok  effects: stacking two Mirrors does not resurrect what the first one removed
+   ok  effects: two Fill Behinds keep their z-order against each other
+   ok  effects: a Fill Behind inside a group stays inside that group
+   ok  effects: a Fill Behind that is not on screen paints no backdrop
+   ok  effects: a scene with no Fill Behind renders byte-identically
+   ok  effects: Edge Glow reads the LAYER, the MEDIA, or both — and each one only its own edges
+   ok  effects: Edge Glow lights a flat shape and a line of text — the case luminance alone cannot see
+   ok  effects: Edge Glow leaves the silhouette — a glow, not a rim painted inside the shape
+   ok  effects: Edge Glow’s radius is a PROJECT length, so the reduced preview matches the export
+   ok  effects: Edge Glow defaults to a white glow, on the layer and the media at once
+   ok  effects: a project saved before the Glow-on control still renders exactly as it did
+   ok  effects: one clipboard — copy one effect, paste one effect
+   ok  effects: a reduced preview shrinks the effect PLATE, not just the canvas
+   ok  effects: Letterbox bars the LAYER it is on and cannot erase what is under it
+   ok  effects: Border Frame frames the LAYER it is on and cannot erase what is under it
+   ok  effects: a framing effect paints nothing at all outside its layer’s box
+   ok  effects: on a FULL-FRAME layer both framing effects render exactly as they always did
+   ok  effects: a Letterbox saved before v6.35 keeps the bar thickness it was saved with
+   ok  effects: the framing effects stay inside their layer on a reduced preview plate too
+   ok  effects: a framing effect on a layer just INSIDE the frame still cannot touch the composite
+   ok  effects: a framing effect on a hairline layer must not delete it
+   RED effects: the Favourites browser sorts by recency, type and A–Z, each invertible
+   ok  effects: Squish at strength 0 is byte-identical to the effect not being there
+   ok  effects: Squish keeps a layer that crosses the wall inside the frame
+   ok  effects: Squish renders the same frame twice identically
+   ok  effects: Squish deforms the same at a reduced preview scale
+   ok  effects: Squish leaves a layer that has gone right off the canvas alone
+   ok  effects: Squish at the Wall inset slider's maximum squashes the layer to the firmness floor, not to 
+   ok  effects: Squish is continuous — a layer swept across a wall one pixel at a time never jumps
+   ok  effects: Squish is continuous — dragging the Wall inset slider with the layer standing still
+   ok  effects: Squish deforms wherever it sits in the effect stack
+   ok  effects: warp strength does not change with the preview scale
+   ok  effects: Particles lands in the same place at every preview scale
+   ok  effects: sanitising a fresh instance of every effect changes nothing
+   ok  effects: a param the file omits stays omitted, so old projects keep rendering as they did
+   ok  effects: a keyframed parameter survives sanitising with its keyframes intact
+   ok  effects: prototype keys are not effects — the render tables refuse them
+   ok  effects: every type-keyed render table is prototype-free, not just the ones we remembered
+   ok  effects: hasCopyBg says no to a junk effect type
+   ok  effects: a hand-shaped keyframe curve survives a reload
+   ok  effects: a text layer carrying a junk effect renders instead of throwing
+   ok  effects: junk types are stripped on the way in, real ones are kept
+   ok  effects: with no registry loaded the stack is left alone, not gutted
+   ok  effects: Spin can start at an angle and turn about an off-centre pivot
+   ok  effects: Flip Layer can hinge off-centre and keep the original
+   ok  effects: border and the contour effects still render an un-upgraded instance exactly as they did
+   ok  effects: Border can inset, round its corners and let the picture through
+   ok  effects: Contour Lines can smooth first and draw on clean paper
+   ok  effects: the pattern effects still render an un-upgraded instance exactly as they did
+   ok  effects: Dissolve can sweep, soften and boil
+   ok  effects: Mosaic can leave gaps and sample the centre pixel
+   ok  effects: the remaining colour effects still render an un-upgraded instance exactly as they did
+   ok  effects: the colour effects do the specific things they could not
+   ok  effects: the matte tools still render an un-upgraded instance exactly as they did
+   ok  effects: Matte Choker can feather in the same pass, and re-harden after
+   ok  effects: the Matte Fringe stops being a flat pasted-on band
+   ok  effects: Smooth Edges can push the edge back out and soften its falloff
+   ok  effects: the transform warps still map an un-upgraded instance to exactly the same points
+   ok  effects: Bend peaks where you put it, and can bow the other way
+   ok  effects: the Tunnel mouth can be resized and aimed
+   ok  effects: the colour grades still render an un-upgraded instance exactly as they did
+   ok  effects: Teal & Orange decides where the warm/cool split falls
+   ok  effects: Bleach Bypass can keep the colour and still bleach the contrast
+   ok  effects: Faded Film can be cool instead of warm, and milky without the rest
+   ok  effects: the blur family still renders an un-upgraded instance exactly as it did
+   ok  effects: Inner Blur can stop dragging transparent black in from outside the shape
+   ok  effects: Box Blur can smear on one axis and soften its boxy falloff
+   ok  effects: Sharpen can skip flat areas and sharpen brightness only
+   ok  effects: Stroke can be round, inside, centred and soft
+   ok  effects: an un-upgraded Stroke renders exactly as it did
+   ok  effects: round 20 still maps and renders an un-upgraded instance exactly as it did
+   ok  effects: Glass distorts in facets now, not per pixel
+   ok  effects: Fractal Warp can churn over time, and drop octaves
+   ok  effects: Channel Remap can be dialled in, and can keep the original brightness
+   ok  effects: the atmosphere effects still render an un-upgraded instance exactly as they did
+   ok  effects: Starfield twinkle gives every star its own phase, not one global flicker
+   ok  effects: Blink can flash briefly, dim instead of vanish, and alternate with another layer
+   ok  effects: Grunge has a grain size and a colour, Light Leak has a position
+   ok  effects: Text Progress can reveal by word and line, from either end
+   ok  effects: Timecode can start at an offset, count down, and read timeline time
+   ok  effects: Text Spacing can add to the layer instead of replacing it
+   ok  effects: Text Spacing does word spacing and line height, and defaults to changing neither
+   ok  effects: the repeat warps still map an un-upgraded instance to exactly the same points
+   ok  effects: mirroring Grid Repeat and Radial Repeat closes the hard seam
+   ok  effects: Grid Repeat rows and stagger break up the square wall of clones
+   ok  effects: Mirror Tile can move its seam and fold on one axis only
+   ok  effects: the relief effects still render an un-upgraded instance exactly as they did
+   ok  effects: Find Edges can invert, gate the mush, and lay the lines back over the picture
+   ok  effects: Emboss relights from any angle, and grey output has no colour fringing
+   ok  effects: Bump Map relief and ambient actually move the shading
+   ok  effects: the print effects still render an un-upgraded instance exactly as they did
+   ok  effects: Halftone can turn its screen and change its dot shape
+   ok  effects: Crosshatch ink density and stroke weight are controls now
+   ok  effects: Pencil Sketch can clear the grey mud out of smooth areas, and give the paper tooth
+   ok  effects: the pattern overlays still render an un-upgraded instance exactly as they did
+   ok  effects: Grid line weight is independent of spacing now
+   ok  effects: Stripes can run across and down, not only diagonally
+   ok  effects: nothing in the featured carousel is an effect most layers cannot take
+   ok  effects: Chroma Key softness ramps the edge, and survives the repaint cache
+   ok  effects: Luma Key can remove the bright end, and its edge width is a control now
+   ok  effects: Replace Colour can take the whole colour, not just its hue
+   ok  effects: the radial blurs still render an un-upgraded instance exactly as they did
+   ok  effects: Zoom Blur and Spin Blur spin around the centre you choose, not the frame centre
+   ok  effects: Lens Blur bloom keeps a specular bright instead of averaging it away
+   ok  effects: Lens Blur blades really cut the disc down to a polygon
+   ok  effects: press-hold to reorder is not stolen by the sheet-dismiss swipe
+   ok  effects: the Stroke Colour width slider works across its whole travel
+   ok  effects: no effect slider is completely inert
+   ok  effects: a pixel-sized setting means the same thing on a reduced preview plate
+   ok  effects: a canvas effect sized in pixels means the same thing on a reduced plate
+   ok  effects: no canvas effect has a pixel-sized setting it never scales to the plate
+   ok  effects: Motion Blur (Footage) reaches further than it used to, and every bit of it pays
+   ok  effects: Tilt Shift and Matte Choker bound to the layer without changing it
+   ok  effects: every bounded kernel is safe on the box the RENDERER actually computes
+   ok  effects: bounding the box blur to the layer changes NOTHING about the picture
+   ok  effects: bounding the drop shadow to the layer changes NOTHING about the picture
+   ok  effects: bounding the lens blur to the layer changes NOTHING about the picture
+   ok  effects: bounding the hex tiles to the layer changes NOTHING about the picture
+FAILeffects: the Favourites browser sorts by recency, type and A–Z, each invertible — Cannot read properties of undefined (reading 'appendChild')

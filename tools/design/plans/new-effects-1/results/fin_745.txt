@@ -1,0 +1,2 @@
+1280 Regression 1/1 ✓Pending 0/0 built
+   ok  745: the featured carousel is derived from batch order, so the newest effects lead it

@@ -110,6 +110,8 @@ window.FM = window.FM || {};
     // batch 40 (queue 911, Snow & Rain). It shipped written into batch 33's line above, and this object's ORDER is
     // the NEW row (FX_FEATURED reads it backwards), so the newest effect never appeared there (queue 913).
     weather: 'proc',
+    // batch 41 (hunt/new-effects-1, E1): six beginner favourites
+    huecycle: 'color', softskin: 'blur', oilpaint: 'stylize', glitter: 'stylize', censor: 'blur', popart: 'color',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -563,6 +565,12 @@ window.FM = window.FM || {};
     starfield:         ['simple starfield', 'stars'],
     lightning:         ['energy beam', 'laser beam', 'bolt'],
     weather:           ['snow', 'rain', 'weather', 'snowfall', 'rainfall', 'storm'],
+    huecycle:          ['rainbow', 'disco', 'strobe', 'colour flash', 'color cycle', 'hue cycle', 'colour change'],
+    softskin:          ['beauty', 'smooth', 'face', 'skin', 'retouch', 'blemish', 'airbrush'],
+    oilpaint:          ['painting', 'painterly', 'art', 'brush', 'watercolour', 'oil'],
+    glitter:           ['sparkle', 'shine', 'star', 'twinkle', 'glitter', 'bling'],
+    censor:            ['blur face', 'hide', 'mosaic', 'privacy', 'number plate', 'pixelate box', 'black bar', 'redact'],
+    popart:            ['warhol', 'four colour', 'grid', 'comic', 'pop art', 'poster', 'collage'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
