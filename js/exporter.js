@@ -922,6 +922,28 @@ window.FM = window.FM || {};
     });
   }
 
+  /* AX2 (#215/#604/#677, his words 11 Oct: "Export has no audio"): WHAT THE ENCODER ACTUALLY MADE, read back.
+     Everything the export report said about sound was a fact from BEFORE the encode (the mix's peak, "TRACK WRITTEN" because a
+     mix existed), so it printed the same for a file with 97 AAC frames and one with none, and his paste could not say which.
+     This decodes the written chunks with the platform's own AudioDecoder (as aacPriming does) and reports the loudest sample.
+     null = it could not be measured here (no AudioDecoder, no decoder config on the chunks, a decode error, or 15 s passed):
+     that is "unknown", never "silent", and it never delays or fails an export. */
+  async function decodedPeak(chunks) {
+    const Dec = window.AudioDecoder;
+    if (typeof Dec !== 'function' || !chunks || !chunks.length) return null;
+    const first = chunks.find(g => g.meta && g.meta.decoderConfig);
+    if (!first) return null;
+    let peak = 0, err = null, dec = null;
+    try {
+      dec = new Dec({ output: ad => { try { const n = ad.numberOfFrames; for (let c = 0; c < ad.numberOfChannels; c++) { const d = new Float32Array(n); ad.copyTo(d, { planeIndex: c, format: 'f32-planar' }); for (let i = 0; i < n; i++) { const v = Math.abs(d[i]); if (v > peak) peak = v; } } } finally { ad.close(); } }, error: e => { err = e; } });
+      dec.configure(first.meta.decoderConfig);
+      chunks.forEach(g => dec.decode(g.chunk));
+      await Promise.race([dec.flush(), new Promise((_, no) => setTimeout(() => no(new Error('decode timeout')), 15000))]);
+      return err ? null : peak;
+    } catch (e) { return null; }
+    finally { try { if (dec && dec.state !== 'closed') dec.close(); } catch (e) {} }
+  }
+
   /* `out` is where the encoded chunks go — the muxer, or an array. Taking a sink instead of the muxer
      is what lets the soundtrack be encoded BEFORE the muxer exists; see the call site for why that
      matters. */
@@ -1349,7 +1371,7 @@ window.FM = window.FM || {};
        * dropped BEFORE the muxer is built, so no audio track is declared at all.
        * The cost is holding the encoded audio in memory for the render — AAC at 160kbps is about
        * 1.2MB a minute, which is nothing beside the video, and it is freed as soon as it is muxed. */
-      let audioChunks = null;
+      let audioChunks = null, audioStats = null;   // AX2: what the encoder really produced (frames, bytes, seconds, decoded peak)
       if (mix) {
         audioChunks = [];
         try {
@@ -1362,6 +1384,24 @@ window.FM = window.FM || {};
           exportSay('The soundtrack failed to encode — exporting WITHOUT SOUND');
           if (FM.toast) FM.toast('The soundtrack failed to encode — exporting WITHOUT SOUND', 6000);
           mix = null; audioChunks = null;
+        }
+        /* AX2: AN ENCODER THAT SAYS NOTHING IS NOT A SOUNDTRACK. The throw above is the only way this path knew it had failed; an
+           encoder that accepts the whole mix and never calls `output` (and never errors) left an EMPTY chunk list, the muxer
+           still declared an audio track for it, and the report, the ready card and the paste all said "TRACK WRITTEN" / "Sound ✓"
+           for a file that was mute (the audio-only M4A path has refused exactly this since v9.x: `no-chunks`). Same treatment as
+           a throw: no track is declared at all. Whether his iPhone's encoder ever does this is unproven; the count below is how
+           the next paste will say. */
+        if (mix && audioChunks && !audioChunks.length) {
+          console.warn('[export] the audio encoder produced no chunks at all — exporting video only');
+          FM._audioTrackDropped = 'encode-empty';
+          exportSay('The soundtrack came out empty — exporting WITHOUT SOUND');
+          if (FM.toast) FM.toast('The soundtrack came out empty — exporting WITHOUT SOUND', 6000);
+          mix = null; audioChunks = null;
+        }
+        if (mix && audioChunks) {
+          let bytes = 0; audioChunks.forEach(g => { bytes += g.chunk.byteLength || 0; });
+          const lastC = audioChunks[audioChunks.length - 1].chunk;
+          audioStats = { frames: audioChunks.length, bytes: bytes, seconds: ((lastC.timestamp || 0) + (lastC.duration != null ? lastC.duration : AAC_FRAME / mix.sampleRate * 1e6)) / 1e6, peak: await decodedPeak(audioChunks) };
         }
         if (FM._exportCancel) throw new Error('CANCELLED');   // queue 916 — tapped while the soundtrack encoded
       }
@@ -1577,7 +1617,8 @@ window.FM = window.FM || {};
             'when       ' + new Date().toISOString(),
             'file       ' + outName + '  ' + Math.round(outBlob.size / 1024) + ' KB',
             'video      ' + outW + 'x' + outH + ' @' + fps + 'fps, ' + Math.max(0, end - start).toFixed(2) + 's',
-            'audio      ' + (mix ? 'TRACK WRITTEN' : 'NO TRACK'),
+            'audio      ' + (mix ? 'TRACK WRITTEN' + (audioStats ? ' · ' + audioStats.frames + ' frames · ' + (audioStats.bytes / 1024).toFixed(1) + ' KB · ' + audioStats.seconds.toFixed(2) + 's' : '') : 'NO TRACK'),
+            'decoded peak ' + (audioStats ? (audioStats.peak == null ? '- (could not be measured on this browser)' : audioStats.peak.toFixed(3)) : '-'),
             'dropped    ' + (FM._audioTrackDropped || 'no'),
             'mix peak   ' + (FM._lastMixRawPeak == null ? '-' : FM._lastMixRawPeak.toFixed(3)) +
               (FM._lastMixGain != null && FM._lastMixGain < 1 ? '  (limited: x' + FM._lastMixGain.toFixed(3) + ' at the loudest overlap only)' : ''),

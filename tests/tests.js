@@ -66562,6 +66562,107 @@
     return { bytes: blob.size, soun: find('soun') >= 0, mp4a: find('mp4a') >= 0, vide: find('vide') >= 0 };
   }
 
+  /* ═══ AX2 (#215/#604/#677, "Export has no audio"): the soundtrack the encoder really made. ═══
+     The real export is H.264 + AAC, which this suite's Linux Chromium cannot encode (so every AAC test is NOT RUN HERE and the
+     laptop never exercised the soundtrack path either). THE SEAM, test-only and never in the app: for the length of one run the
+     page's VideoEncoder / AudioEncoder / Mp4Muxer are wrapped so the app's own FM.exporter.run — the mix, the encode, the guard,
+     the muxer, the report — runs on VP9 + Opus, which every Chromium has. `silent` swaps the audio encoder for one that accepts
+     everything and never calls `output` (a browser that makes no sound without saying so). The real iPhone path (AAC) is untouched:
+     nothing here is reachable from the app. */
+  async function ax2WithOpusPath(silent, fn) {
+    const RV = window.VideoEncoder, RA = window.AudioEncoder, RM = window.Mp4Muxer;
+    if (typeof RV !== 'function' || typeof RA !== 'function' || !RM || !RM.Muxer) notRunHere('needs VideoEncoder, AudioEncoder and the muxer in this browser');
+    const vOk = await RV.isConfigSupported({ codec: 'vp09.00.10.08', width: 64, height: 64, bitrate: 1e6, framerate: 10 }).catch(function () { return { supported: false }; });
+    const aOk = await RA.isConfigSupported({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 160000 }).catch(function () { return { supported: false }; });
+    if (!vOk.supported || !aOk.supported) notRunHere('this browser has neither VP9 nor Opus encoding, so there is no codec path to run the export on');
+    const mapV = function (c) { return (c && /^avc/.test(c.codec)) ? { codec: 'vp09.00.10.08', width: c.width, height: c.height, bitrate: c.bitrate, framerate: c.framerate } : c; };
+    const mapA = function (c) { return (c && /^mp4a/.test(c.codec)) ? { codec: 'opus', sampleRate: c.sampleRate, numberOfChannels: c.numberOfChannels, bitrate: c.bitrate } : c; };
+    class VE extends RV { configure(c) { return super.configure(mapV(c)); } static isConfigSupported(c) { return RV.isConfigSupported(mapV(c)); } }
+    class AE extends RA { configure(c) { return super.configure(mapA(c)); } static isConfigSupported(c) { return RA.isConfigSupported(mapA(c)); } }
+    class SilentAE {
+      constructor() { this.state = 'unconfigured'; this.encodeQueueSize = 0; }
+      static isConfigSupported(c) { return Promise.resolve({ supported: true, config: c }); }
+      configure() { this.state = 'configured'; }
+      encode(d) { try { d.close(); } catch (e) {} }
+      flush() { return Promise.resolve(); }
+      close() { this.state = 'closed'; }
+      reset() {}
+    }
+    class Mux extends RM.Muxer {
+      constructor(o) {
+        if (o.video) o.video = Object.assign({}, o.video, { codec: 'vp9' });
+        if (o.audio) o.audio = Object.assign({}, o.audio, { codec: 'opus' });
+        super(o);
+      }
+    }
+    window.VideoEncoder = VE; window.AudioEncoder = silent ? SilentAE : AE;
+    window.Mp4Muxer = { Muxer: Mux, ArrayBufferTarget: RM.ArrayBufferTarget, StreamTarget: RM.StreamTarget, FileSystemWritableFileStreamTarget: RM.FileSystemWritableFileStreamTarget };
+    try { return await fn(); }
+    finally { window.VideoEncoder = RV; window.AudioEncoder = RA; window.Mp4Muxer = RM; }
+  }
+  async function ax2Export() {
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height, toast: FM.toast, rep: null };
+    try { saved.rep = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+    const toasts = [];
+    try {
+      FM.toast = function (m) { toasts.push(String(m)); };
+      P.duration = 0.5; P.width = 64; P.height = 64;
+      FM.scene.layers.length = 0;
+      const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+      box.start = 0; box.duration = 0.5; FM.scene.layers.push(box);
+      const song = FM.makeLayer('video', { name: 'song' });
+      song.start = 0; song.duration = 0.5; song.trimStart = 0; song.trimEnd = 0.5;
+      FM.scene.layers.push(song);
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = ac.createBuffer(2, Math.floor(48000 * 0.5), 48000);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 30) * 0.4; }
+      FM.media.set(song.id, { file: new Blob(['a']), duration: 0.5, audioBuffer: buf });
+      FM._audioTrackDropped = null;
+      let ready = null;
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'ax2', onReady: async function (r) { ready = r; } });
+      let report = ''; try { report = localStorage.getItem('fm.lastExportReport') || ''; } catch (e) {}
+      const bytes = ready && ready.blob ? new Uint8Array(await ready.blob.arrayBuffer()) : new Uint8Array(0);
+      const has = function (tag) { for (let i = 0; i + 4 <= bytes.length; i++) if (bytes[i] === tag.charCodeAt(0) && bytes[i + 1] === tag.charCodeAt(1) && bytes[i + 2] === tag.charCodeAt(2) && bytes[i + 3] === tag.charCodeAt(3)) return true; return false; };
+      return { ready: ready, report: report, toasts: toasts, dropped: FM._audioTrackDropped, soun: has('soun'), vide: has('vide'), bytes: bytes.length };
+    } finally {
+      FM.toast = saved.toast; FM.scene.layers = saved.layers; P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      try { if (saved.rep == null) localStorage.removeItem('fm.lastExportReport'); else localStorage.setItem('fm.lastExportReport', saved.rep); } catch (e) {}
+      FM._audioTrackDropped = null;
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+  }
+  test('AX2 an audio encoder that makes no sound and no error: the export drops the empty track, says so, and the report names it (encode-empty)', { item: 'AX2', budgetMs: 60000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const r = await ax2WithOpusPath(true, ax2Export);
+    if (!r.ready || !r.ready.blob) throw new Error('the export produced no file at all — a silent encoder must never sink the render');
+    if (!r.vide) throw new Error('the video track went missing too — losing the sound cost the picture');
+    if (r.soun) throw new Error('the file DECLARES an audio track (soun) that holds no sound — the encoder emitted nothing, and the muxer was still given an audio track to declare: a mute file that every witness in the app calls "Sound ✓"');
+    if (r.dropped !== 'encode-empty') throw new Error('the loss was flagged as "' + r.dropped + '", not encode-empty — the ready card and the paste key off this');
+    if (r.ready.hasAudio) throw new Error('the ready card is told hasAudio = true for a file with no sound');
+    if (r.ready.audioDropped !== 'encode-empty') throw new Error('the ready card got audioDropped "' + r.ready.audioDropped + '", not encode-empty');
+    if (!r.toasts.some(function (t) { return /WITHOUT SOUND/i.test(t); })) throw new Error('the export lost its sound and said nothing on screen: ' + JSON.stringify(r.toasts));
+    if (/TRACK WRITTEN/.test(r.report)) throw new Error('the export report still says TRACK WRITTEN for a file with no track:\n' + r.report);
+    if (!/dropped\s+encode-empty/.test(r.report)) throw new Error('the export report does not name the loss (dropped encode-empty):\n' + r.report);
+  });
+  test('AX2 a healthy soundtrack: the report counts the frames the encoder made, their size, and a decoded peak above 0.1', { item: 'AX2', budgetMs: 60000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const r = await ax2WithOpusPath(false, ax2Export);
+    if (!r.ready || !r.ready.blob) throw new Error('the control export produced no file');
+    if (!r.soun) throw new Error('CONTROL: a healthy export has no audio track (soun) — the codec path itself is broken here, so nothing below means anything');
+    if (r.dropped) throw new Error('a healthy export reported its audio as dropped (' + r.dropped + ')');
+    if (!r.ready.hasAudio) throw new Error('the ready card says no audio for a healthy export');
+    const m = /audio\s+TRACK WRITTEN · (\d+) frames · ([\d.]+) KB · ([\d.]+)s/.exec(r.report);
+    if (!m) throw new Error('the report has no "audio TRACK WRITTEN · N frames · X KB · Y.YYs" line — it cannot tell a track with frames from an empty one:\n' + r.report);
+    if (!(+m[1] > 0)) throw new Error('the report counts ' + m[1] + ' frames for a track that has sound');
+    if (!(+m[2] > 0)) throw new Error('the report gives ' + m[2] + ' KB for a track that has sound');
+    if (Math.abs(+m[3] - 0.5) > 0.15) throw new Error('the report says the track is ' + m[3] + ' s; the project is 0.5 s');
+    const pk = /decoded peak\s+([\d.]+)/.exec(r.report);
+    if (!pk) throw new Error('the report has no "decoded peak" line (or it says it could not be measured, where this browser can decode):\n' + r.report);
+    if (!(+pk[1] > 0.1)) throw new Error('the decoded peak is ' + pk[1] + ' for a 0.4-amplitude soundtrack — the written chunks are close to silent');
+  });
+
   test('export: a browser with no AAC encoder ships an honest silent file, not one promising a track (queue 215)', { item: '215' }, async function () {
     // its control needs a REAL AAC encode (measured 6 Oct: with AAC taken away it went red) — NOT RUN HERE without one (#1071)
     await needsAac();
