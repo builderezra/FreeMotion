@@ -61562,6 +61562,20 @@
       if (sum !== expected || d[center + 3] !== 255 || d[3] !== 0)
         throw new Error('Unsharp Mask changed its output: ' + JSON.stringify({ params, sum, center: Array.from(d.slice(center, center + 4)) }));
     }
+    /* THE MEMORY HALF (land-b3 fixes). The sums above are the same before and after ChatGPT dd2220fe — the change is
+       byte-identical by design — so they cannot tell the two apart. What it changed is one frame-sized 3-channel float
+       plane fewer per call: the vertical blur is finished per pixel instead of written to a second plane (umBlur). Count
+       the frame-sized Float32Array allocations one call makes: 1 now (the horizontal pass), 2 before. */
+    const Real = window.Float32Array, frame = W * H;
+    let big = 0, all = 0;
+    const Counting = function (n) { all++; if (typeof n === 'number' && n >= frame) big++; return new Real(...arguments); };
+    Counting.prototype = Real.prototype; Counting.BYTES_PER_ELEMENT = Real.BYTES_PER_ELEMENT; Counting.from = Real.from.bind(Real); Counting.of = Real.of.bind(Real);
+    const d = src.slice();
+    window.Float32Array = Counting;
+    try { FM._FX_TABLES.PIXEL_FX.unsharpmask(d, W, H, { amount: 1.2, radius: 2, threshold: 0, coloursafe: 0 }, 0); }
+    finally { window.Float32Array = Real; }
+    if (!all) throw new Error('CONTROL: the counting Float32Array saw no allocation at all, so the kernel does not reach the global and this half proves nothing');
+    if (big !== 1) throw new Error('One Unsharp Mask call allocated ' + big + ' frame-sized float planes, not 1 - the second 3-channel plane is back');
   });
 
   test('690 Light Glow and Soft Glow reuse their luminance planes across frames', { item: 'TBD' }, function () {
