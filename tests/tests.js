@@ -61366,6 +61366,32 @@
     });
   });
 
+  /* B2, the land list's required fix for 304f6370: v17.23's travelling sweep (Once / Wait) used speed(now) × time, so a
+     Speed keyed 1→0 made the band VANISH the moment speed reached 0 (or jump back). Driven through the production kernel
+     the way 304f6370's own test drives it: the band must be on screen and still, from the stop onwards, in both modes. */
+  test('690 B2 Glow Scan's travelling sweep (Once, or a Wait loop) holds the band where Speed keyed down to 0 leaves it', { item: 'TBD' }, function () {
+    const kernel = FM._FX_TABLES.PIXEL_FX.glowscan, W = 8, H = 40;
+    if (!kernel) throw new Error('The Glow Scan production kernel is unavailable');
+    const peakAt = function (extra, time) {
+      const data = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < data.length; i += 4) { data[i] = data[i + 1] = data[i + 2] = 64; data[i + 3] = 255; }
+      kernel(data, W, H, Object.assign({ width: 10, amount: 1, color: '#ffffff', direction: 0 }, extra), time, 1);
+      let row = -1, value = -1;
+      for (let y = 0; y < H; y++) { const v = data[(y * W + 4) * 4]; if (v > value) { value = v; row = y; } }
+      return { row, value };
+    };
+    const speed = { kf: [{ t: 0, v: 1 }, { t: 0.6, v: 0 }] };
+    [['Once with a 0.1 s wait', { speed: speed, loop: 1, pause: 0.1 }], ['a Loop with a 0.1 s wait', { speed: speed, loop: 0, pause: 0.1 }]].forEach(function (c) {
+      const at = peakAt(c[1], 0.6), later = peakAt(c[1], 0.9), latest = peakAt(c[1], 2);
+      if (at.value < 200) throw new Error(c[0] + ': with Speed keyed down to 0 the band is gone (peak ' + at.value + ' at 0.6 s) — it should hold where it stopped');
+      if (Math.abs(later.row - at.row) > 1 || Math.abs(latest.row - at.row) > 1 || later.value < 200 || latest.value < 200)
+        throw new Error(c[0] + ': after Speed reached 0 the band moved or went: ' + JSON.stringify({ at: at, later: later, latest: latest }));
+    });
+    /* CONTROL: an unkeyed Speed still sweeps (the old path), so a held band above is the keyed path, not a dead kernel */
+    const a = peakAt({ speed: 1, loop: 1, pause: 0.1 }, 0.3), b = peakAt({ speed: 1, loop: 1, pause: 0.1 }, 0.5);
+    if (a.value < 200 || b.value < 200 || a.row === b.row) throw new Error('CONTROL: an unkeyed Once sweep did not travel: ' + JSON.stringify({ a: a, b: b }));
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)

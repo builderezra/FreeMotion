@@ -8008,9 +8008,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         var gsTravel=!(gsSpan!==1&&gsWait===0&&gsOnce!==1), gsU=gsPhase;
         if(gsTravel){
           var gsLay=arguments[7], gsTl=gsLay?FM.fxLocalTime(gsLay,t):t;
+          /* A KEYED SPEED IS A RATE HERE TOO (B2, the land list's fix for 304f6370): the travelling sweep's progress is the
+             speed accumulated over the clip's own clock, not speed(now) × time — so Speed keyed down to 0 HOLDS the band where
+             it is (it used to vanish, or jump back). Once: the wait in seconds, then the accumulated sweeps. Loop with a wait:
+             both measured in sweeps, the wait converted at the clip's starting speed — at a constant speed that is exactly the
+             unkeyed timing below. An unkeyed Speed takes the old path unchanged. */
+          if(FM.isAnimated(p.speed)){
+            var gsRate=function(u){ var s=FM.evalProp(p.speed,u); return isFinite(s)?Math.max(0,Math.min(8,s)):0; }, gs0=t-gsTl;
+            if(gsOnce===1){ if(gsTl<gsWait) return; var gsKk=FM.integrateProp(p.speed,gs0+gsWait,t,gsRate); if(!(gsKk>=0&&gsKk<=1)) return; gsU=gsKk; }
+            else { var gsS0=gsRate(gs0), gsWu=gsWait*gsS0, gsP=FM.integrateProp(p.speed,gs0,t,gsRate), gsCu=1+gsWu, gsMu=gsP%gsCu; if(gsMu<0)gsMu+=gsCu; if(gsMu<gsWu) return; gsU=gsMu-gsWu; if(gsU>1)gsU=1; }
+          } else {
           if(!(gsSpeed>0)) return;
           if(gsOnce===1){ var gsK=(gsTl-gsWait)*gsSpeed; if(!(gsK>=0&&gsK<=1)) return; gsU=gsK; }
           else { var gsCyc=1/gsSpeed+gsWait, gsM=gsTl%gsCyc; if(gsM<0)gsM+=gsCyc; if(gsM<gsWait) return; gsU=(gsM-gsWait)*gsSpeed; if(gsU>1)gsU=1; }
+          }
         }
         var gsX0=0, gsY0=0, gsX1=W, gsY1=H;
         if(gsSpan===1){ var gsBox=fxBoundsScan(d,W,H); if(!gsBox) return; if(!gsBox.dirty){ gsX0=gsBox.x; gsY0=gsBox.y; gsX1=gsBox.x+gsBox.w; gsY1=gsBox.y+gsBox.h; } }
