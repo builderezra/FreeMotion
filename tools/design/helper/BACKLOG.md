@@ -546,3 +546,37 @@ ADDED 11 Oct 10:25 by the PM, from the builder ("both of my guesses were wrong, 
   - If no: say so. The test-side fix (AU25 restores the Simple surface, or runs in its own page) is then enough.
   → hunt/bx1d, with the report in hunt/preflight-bx.
 - Then PRE4a (v17.42's own plain-suite report), if it is not done yet.
+
+ADDED 11 Oct 11:30 by the PM. Thank you for BX2d/BX1d; the builder has both. Two items, in this order:
+- PRE4a (TOP; Simple comes first). Run 2.4's own plain-suite pre-flight on the FIXED tree: hunt/bx1d 5f10fdb (2.4 + the au25Restore line + the tray fix), with BX2d's test change (78215e84, tests/tests.js only) applied on top, on a copy. Run full passes at 1280 and 380. For each red: run it alone, then paired (`?after=<two before>&upto=<red>`), then on main. Say plainly whether a user can hit it. → hunt/preflight-v17.42 (a new section), with a DONE line.
+- R-COG1. Render Ezra's ⚙ cog redesign THROUGH THE REAL APP, so he can see it before it is built. It shows ONE design with no options: the PM has decided the choices.
+  His words (11 Oct): "In this menu move the app settings button to be its own button like how friends and simple edit are. Change the simple edit what should I use? Button to just be the same expand button as the others. And where it says simple and full to switch when you haven't expanded yet should just have icons so it feels less cluttered. When canvas settings is expanded get rid of the button to access app settings. Also when you first open the settings cog to see all of those menus they should all be closed so it isn't overwhelming, and you should be able to tap on the current open one to close it"
+  Rules:
+  - Base: main at v17.37 (d55cabc8), or v17.38 if it is live.
+  - Do NOT edit or commit index.html, js/ or styles.css. Use a throwaway probe page, tests/probe-cog-sheet.html, that injects a style + script patch into same-origin iframes of index.html. Never commit the probe.
+  - Serve with tools/serve.sh. No network: no ?fmrelay=1.
+  - Open a project the way the suite's smCog fixture does (tests/tests.js, search "smCog").
+  Patch:
+  (a) A new 4th block #cv-app after #cv-friends: one `<button id=cv-app-bar class="cv-mini cv-app-bar">`, the same bar as Friends/Editor (64px on the phone). It holds the gear SVG copied from #btn-settings, the words "App settings", and a 38px round end button with an arrow-out-of-box glyph (it opens the Settings drawer and never grows). On the phone it goes LAST (CSS order 2). On PC it is a slim 176×56 row at the foot of the small column.
+  (b) Remove #cv-appset (from Canvas's Cancel/Apply row) and #cv-mini-app (the pill on the Canvas bar).
+  (c) In #cv-ed-bar, empty #cv-ed-what and make it the shared ⤢. Give it class cv-mini-exp and the path `M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5`.
+  (d) In the SMALL .ed-sw ONLY (not the one inside #cv-ed-body):
+     - replace the words Simple/Full with icons. Use the kit's 'quick' (Simple) and 'full' (Full) SVGs, his D16 A pick, from tools/design/plans/simple-mode/vis/kit.js (about lines 1008-1015; `git grep -n "quick" -- tools/design/plans/simple-mode/vis/kit.js`). Draw them at 20px, stroke 1.8, currentColor;
+     - remove the '⇄';
+     - set .ed-l to 40px and the knob translateX to 40px.
+  (e) ALL CLOSED: on #canvas-dialog, add class cv-none and remove cv-fr-big/cv-ed-big. Show every .cv-mini bar, including the Canvas card's own .cv-mini, and hide every block's content. On PC: one column off the cog, Canvas nearest, then Friends, Editor, App settings.
+  (f) ONE OPEN: the open block keeps its own bar visible as a header (override the rules that hide a big block's bar). Its 38px button shows the inward ⤡ `M4 14h6v6M20 10h-6V4M14 10l6.5-6.5M10 14l-6.5 6.5`.
+  Shots:
+  - 380×800 DPR 2: TODAY (no patch) with the cog open, then NEW all closed, NEW Canvas open, NEW Friends open, NEW Editor open. In the Editor shot the big switch inside must still read "Simple ⇄ Full" in words.
+  - 320×568: NEW Canvas open. Apply must still be reachable.
+  - 1280×800: NEW all closed (cog near the bottom, opening upward), then NEW Canvas open.
+  - Close-up: the collapsed switch at 1× and 4×, in the default and glass themes.
+  Sheet:
+  - Page 1, phone: one row, TODAY | All closed | Canvas open | Friends open | Editor open. Plain 16px+ labels, e.g. "All closed (every time you open ⚙)", "Canvas open: tap ⤡ to close".
+  - Page 2: PC and the close-ups.
+  - Split any page taller than 3× its width with tools/phonepages.py. JPEG.
+  → push the JPEGs plus a short report to hunt/cog-render under tools/design/plans/cog-1011/. Report:
+  - the console errors from each frame;
+  - the open-block height cap at 380×667, 320×568 and 375×553;
+  - the all-closed column height at 1280×720.
+  DONE line. The PM sends the picture to Ezra.
