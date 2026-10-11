@@ -12,7 +12,7 @@ You'll be able to trim, split and move clips.
 
 Every cut leaves the playhead on the clip's edge, so the three buttons hide until you slide back inside the clip. Off the clip you see two others: move the clip to the playhead, or stretch its edge to it. <!-- js/inspector.js:3568-3603 -->
 
-On a computer: the cut buttons are three keys, A, S and D, near the top of the clip's panel. Click or press. With the playhead over the selected clip, A trims the start, S splits and D trims the end. Off the clip, S stretches the clip's edge out to the playhead, and A or D (whichever side the playhead is on) slides the clip to it. With a mouse, just drag: there is no hold and nothing turns teal. <!-- js/timeline.js:5758-5762 key rail A / S / D; styles.css:2477-2486; js/timeline.js:206-212 clipOpAction; js/app.js:9013; js/timeline.js:2305-2307 hold is "TOUCH ONLY" --> <!-- not walked: the walk was the 380 px phone layout only -->
+On a computer: the cut buttons are three keys, A, S and D, at the left end of the row with the time counter, just above the clip's panel. Click or press. With the playhead over the selected clip, A trims the start, S splits and D trims the end. Off the clip, S stretches the clip's edge out to the playhead, and A or D (whichever side the playhead is on) slides the clip to it. With a mouse, just drag: there is no hold and nothing turns teal. <!-- js/timeline.js:5758-5762 key rail A / S / D; styles.css:2477-2486; js/timeline.js:206-212 clipOpAction; js/app.js:9013; js/timeline.js:2305-2307 hold is "TOUCH ONLY" --> <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: Cuts land exactly where the playhead is, so park it first. <!-- js/inspector.js:3605-3610 -->
 

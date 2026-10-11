@@ -1,0 +1,16 @@
+# Bold names that are not a literal label in the source of the Simple tree (each with the reason).
+Apply … and switch                  # the editor-switch pop-up builds its button from the open tool's name
+scissors                            # describes the ✂ icon button, which has no text
+curved arrow                        # describes the undo icon
+skip-to-start                       # describes an icon button
+up-arrow                            # describes the Export icon
+1.5×                                # the speed presets are generated from an array (0.5, 1, 1.5, 2, 3) plus '×'
+In 0.0 s                            # an earlier build's fade row, 'In ' + seconds + ' s'
+Out 0.0 s                           # same
+Share “Project 1” live              # the card title is built from the project's own name
+Only the first half of this was walked. The second half needs two devices and the free online helpers, which my test browser cannot reach; every step from 7 on is marked NOT WALKED and comes from the code and the suite.   # a note, not a button
+What Simple cannot do (honest bit):  # a heading
+Length 0.5 s                        # 'Length ' + seconds + ' s' (the transition length row), built at run time
+# Dip to black, Dip to white, On every cut, Length 0.5 s, Turn into a transition (tutorials 10 and 14) are real labels of the
+# 2.7 transitions release, which is on hunt/simple-tip but in NO wip tree yet: they SHOULD fail against wip/v17.44-tree, and pass against
+# hunt/simple-tip (e52af508). Run both.

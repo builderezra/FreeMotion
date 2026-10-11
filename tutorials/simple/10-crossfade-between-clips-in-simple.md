@@ -2,7 +2,7 @@
 
 You'll be able to blend one clip into the next, dip to black or white between them, change how long it lasts, and use the same one on every cut.
 
-Before you start: a project in Simple with at least two clips next to each other (tutorials 01 and 02). This needs the 2.7 release; on an older build there is no ◇ and nothing to tap. <!-- walked 9 Oct at 380 with real touch on hunt/simple-transitions, label v17.24 (the branch has not bumped it); shots/10-01.jpg -->
+Before you start: a project in Simple with at least two clips next to each other (tutorials 01 and 02). This needs the 2.7 release; on an older build there is no ◇ and nothing to tap. (This tutorial also replaces the separate crossfade-only one: it covers the crossfade, the dips and **On every cut** in one go.) <!-- walked 9 Oct at 380 with real touch on hunt/simple-transitions, label v17.24 (the branch has not bumped it); shots/10-01.jpg -->
 
 1. Slide the timeline sideways until you see where two clips meet. Above that join there is a small dashed diamond **◇**. It is on every join between two clips, and only there (not before the first clip, not across a gap). <!-- walked: three 10 s clips, the first ◇ was 330 px off screen at the start, one swipe on the empty strip above the clips brought it to x=265; shots/10-01.jpg; js/simple-timeline.js (the ◇ lane) -->
 2. Tap the **◇**. The tools row turns into **Done, None, Crossfade, Dip to black, Dip to white**, with **None** lit. The clip after the join is selected. <!-- walked; shots/10-02.jpg; js/simple-tools.js transitionRow -->

@@ -1,0 +1,6 @@
+# Bold names that are not a literal label in the source (each with the reason). Everything else must be found.
+Add 2 effects                       # built as 'Add ' + n + ' effect(s)' (js/fx-browser.js), the number varies
+Ctrl+Shift+Z                        # the key hint is built from the platform (Cmd on a Mac), see the Undo/Redo labels
+Cue 1 / 2                           # the caption strip counts cues ('Cue ' + i + ' / ' + n)
+Share "your project name" live      # the card title is built from the project's own name
+Editing "name"                      # the toast is built from the template's own name
