@@ -60599,15 +60599,24 @@
      mouse and the editor switch shook "drag" on every tap); (2) a two-finger pinch on the selected layer is a canvas gesture too. */
   async function au25Setup() {
     const saved = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), mode0 = FM.editor.mode();
+    /* BX1 (the v17.43 pre-flight): the switch into Simple stamps the PROJECT (its sm record), and the restore below put back
+       the layers, the selection and the mode but never the project — five Simple 2.4 tests later in the pass inherited it */
+    const proj0 = JSON.stringify(FM.scene.project);
     const L = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 300, shapeH: 300, fill: '#336699', start: 0, duration: 5, name: 'AU25' });
     FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id); FM.requestRender && FM.requestRender();
     const cv = document.getElementById('preview'), r = cv.getBoundingClientRect();
-    return { saved: saved, sid: sid, sids: sids, mode0: mode0, L: L, cv: cv, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+    return { saved: saved, sid: sid, sids: sids, mode0: mode0, proj0: proj0, L: L, cv: cv, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
   }
   async function au25Restore(c) {
     if (FM._resetVpPointers) FM._resetVpPointers();
     if (FM.editor.mode() !== c.mode0) await FM.editor.request(c.mode0);
     FM.scene.layers.length = 0; c.saved.forEach(function (l) { FM.scene.layers.push(l); }); FM.scene.selectedId = c.sid; FM.scene.selectedIds = c.sids;
+    /* the project exactly as it was — in place, so nothing holding FM.scene.project loses it — and saved that way */
+    const P0 = JSON.parse(c.proj0), P = FM.scene.project;
+    Object.keys(P).forEach(function (k) { if (!(k in P0)) delete P[k]; });
+    Object.assign(P, P0);
+    if (FM.storage && FM.storage.markDirty) { FM.storage.markDirty(); if (FM.storage.save) await FM.storage.save(); }
+    if (FM.refreshAll) FM.refreshAll();
   }
   test('AU25-1 a mouse release that never arrives does not leave a canvas drag live: the layer stops following, the editor switch is allowed', { item: 'AU25' }, async function () {
     if (!FM.editor || !FM.editor.request || !FM.canvasGestureLive) throw new Error('FM.editor / FM.canvasGestureLive is not on this build');
