@@ -4697,6 +4697,10 @@ window.FM = window.FM || {};
     if (s && !s.isOwner && s.gpid && !(recon && recon.gpid === s.gpid && !recon.stopped)) dropLock(guestLock(s.gpid));
     if (!s || s.isOwner) {
       stopCkpt();
+      /* #921 clause 19: THE SWAP CODE GOES WITH THE SESSION THAT MINTED IT. Stop sharing dropped it (stopSharingNow), but a
+         project switch stands the session down here and left it held — so sharing the next project handed out the SAME
+         code, its peer connection still waiting, and an answer to it was admitted into a project never offered. */
+      dropOffer();
       stopHostRelay(); dropWake(); ridMid = Object.create(null); hostOlder = null;
       cancelKnocks(s && s.stopWhy === 'paused' ? 'paused' : 'ended');
     }

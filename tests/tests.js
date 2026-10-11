@@ -33267,6 +33267,97 @@
     });
   });
 
+  test('921 S3 opening another project takes the swap code with it — sharing that project mints a fresh one, and the old offer is closed', { item: '921', budgetMs: 180000 }, async function () {
+    /* #921 clause 19 put Work with friends on for every device, and with it a hole the Stop-sharing test above never
+       reached. A project SWITCH stands the owner's session down `paused` (C.onReset → C.detach → U.onDetach) — and that
+       door did not drop the outstanding offer the way Stop sharing does. So he shared A, opened Swap codes, went Home and
+       opened B, shared it, opened Swap codes — and was handed A's code again, its peer connection still waiting for an
+       answer. Measured on labs-on before the fix: the same code, the same offer object, A's connection still
+       'have-local-offer'. An answer pasted into it is then admitted into B, a project he never offered that person.
+       Driven through the real doors: U.share arms each project for real, and B is opened by Home's own card tap. */
+    const C = need921S3('the swap code across a project switch');
+    function settled(ms) { return new Promise(function (r) { setTimeout(r, ms || 60); }); }
+    async function codeOnScreen(what) {
+      for (let i = 0; i < 300; i++) {
+        const box = document.getElementById('collab-offer-code');
+        if (box && /^FM1-/.test(box.textContent)) return box.textContent;
+        await settled(100);
+      }
+      throw new Error('no swap code ever appeared ' + what + ' — the step shows ' +
+        JSON.stringify((document.getElementById('collab-offer-code') || {}).textContent || null).replace(/"/g, "'"));
+    }
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+      try {
+        if (wasHome) FM.home.close();
+        const B = await FM.projects.create({ name: 'FX921 swap B', width: 320, height: 240 });
+        if (!B) throw new Error('setup: project B could not be made');
+        made.push(B);
+        const A = await FM.projects.create({ name: 'FX921 swap A', width: 320, height: 240 });
+        if (!A) throw new Error('setup: project A could not be made');
+        made.push(A);
+        await settled(150);
+        if (C.session) throw new Error('setup: a session is attached before anything was shared (pid ' + C.session.pid + ')');
+
+        /* 1. he shares A and opens Swap codes */
+        await ui.share();
+        if (!C.session || !C.session.isOwner || C.session.pid !== A) throw new Error('setup: Share did not arm project A (session ' + (C.session && C.session.pid) + ')');
+        const addA = document.querySelector('.cs-add');
+        if (!addA) throw new Error('setup: the Share card on A has no Swap codes button');
+        addA.click();
+        const first = await codeOnScreen('while sharing A');
+        const link = ui._offer();
+        if (!link || link._code !== first) throw new Error('the module is not holding the offer whose code is on screen, so this test cannot see whether the switch takes it');
+        const pc = link.pc;
+        if (!pc || pc.signalingState !== 'have-local-offer') throw new Error('CONTROL: the offer is not a live peer connection waiting for an answer (signalingState ' + (pc && pc.signalingState) + '), so it was closed below would prove nothing');
+        ui.close();
+        await settled(150);
+
+        /* 2. Home, then B's card — the way he opens another project */
+        FM.home.open();
+        await settled(250);
+        await FM.home._openProject(B);
+        for (let i = 0; i < 40 && (FM.projects.currentId() !== B || FM.home.isOpen()); i++) await settled(100);
+        if (FM.projects.currentId() !== B) throw new Error('setup: tapping B on Home did not open it (open is ' + FM.projects.currentId() + ')');
+        await settled(300);
+        if (C.session && C.session.pid === A) throw new Error('setup: opening B left A’s session attached, so there was no switch to measure');
+
+        /* (a) the offer went with A's session — closed, not just forgotten */
+        if (pc.signalingState !== 'closed') throw new Error('after opening another project the peer connection behind A’s swap code is still ' + pc.signalingState + ' — it is open and waiting, and an answer to that code would still be accepted');
+        if (ui._offer()) throw new Error('after opening another project the module still holds the offer minted while sharing A');
+
+        /* (b) the half he would feel: B's Swap codes hands out a DIFFERENT code */
+        await ui.share();
+        if (!C.session || !C.session.isOwner || C.session.pid !== B) throw new Error('setup: Share did not arm project B (session ' + (C.session && C.session.pid) + ')');
+        const addB = document.querySelector('.cs-add');
+        if (!addB) throw new Error('sharing B did not open on its main view — it reopened on the code step of A’s session');
+        addB.click();
+        const second = await codeOnScreen('while sharing B');
+        if (second === first) throw new Error('sharing B handed out the SAME swap code as A (' + first.slice(0, 24) + '…) — whoever answers it is let into B, a project he never offered them');
+        ui.close();
+      } finally {
+        /* Rooms first, so nothing resumes or asks about a project about to be deleted; then the live session; then the save
+           points the two arms wrote (guarded — a cleanup that throws would blame this test on storage.js). */
+        made.forEach(function (id) { try { localStorage.removeItem('fm.collab.host.' + id); } catch (e) {} });
+        try { ui.close(); } catch (e) {}
+        try { C.end(); } catch (e) {}
+        try {
+          const q = document.getElementById('fm-ask'), t = q && q.querySelector('.fm-ask-title');
+          if (q && !q.classList.contains('hidden') && t && /^Carry on sharing/.test(t.textContent)) q.querySelector('.fm-ask-cancel').click();
+        } catch (e) {}
+        if (FM.storage.collabKeys) {
+          for (let m = 0; m < made.length; m++) {
+            try {
+              const left = await FM.storage.collabKeys('collab:ckpt:' + made[m] + ':');
+              for (let i = 0; i < left.length; i++) await FM.storage.collabDel(left[i]);
+            } catch (e) {}
+          }
+        }
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+      }
+    });
+  });
+
 
 
   /* ═══════════════════════════════════════════════════════════════════════════════════════════════
