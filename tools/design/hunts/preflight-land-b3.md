@@ -176,3 +176,15 @@ Environment / harness, not land-b3:
 - `?only=690 T16`: **matches no test on either tree** (Regression 0/0). No test title contains "690 T16"; if a different substring was meant, say which and it will be run.
 
 DONE: LAB2 land-b3 — code review (25 land, 15 land-after-fix, 0 drop) + full passes 1280/380 + ?only=482 both widths: 8 reds belong to land-b3 (7 from a73ab63 Unsharp Protect colour def 100 incl. the schema gate, 1 from the hard-wipe commit: Radial Wipe at Progress 0 erases the layer, needs a decision); hangs and the other reds are environment. A fix branch hunt/land-b3-fixes is being built.
+
+### ⚠️ SCHEMA_REV 9 is claimed by several unlanded branches with different fingerprints (found 11 Oct by the fix branch's check)
+
+main and live are on `C.SCHEMA_REV = 8` / `SCHEMA_FP 8673617696742561`. Three groups of unlanded branches each set REV 9, with three different fingerprints:
+- land-b3's fix (Unsharp Protect colour): FP 1932349802248846;
+- hunt/e1-land, new-effects-1, audit-integrated-3: FP 5698315735221935;
+- simple-tip, simple-transitions, p27-dry, p28-dry: FP 6484757361590586.
+
+**Whichever lands second must take REV 10 (and the third REV 11), and re-paste the FP the 921 S1 gate prints after the merge.** The gate cannot catch a reused REV by itself (the FP hashes the REV, so a new FP pasted at the same REV passes), and two released builds sharing REV 9 with different sanitisers could be let into the same live session.
+
+### Fix branch status
+`hunt/land-b3-fixes` (5 commits on 45a97e1, not yet pushed) clears the seven a73ab63 reds (Unsharp Protect colour def 0 + REV 9 / FP 1932349802248846), drops RGB Split's floor, adds FM.integrateCount for F1, and makes the Unsharp memory and Roughen tests real, each proven red-first with tools/mutate.sh --only. Its check found three more keyed-rate step sites (Shake hard jitter, Pulse Square, Scanlines Roll) and wrong 'queue 482' wording; a second round is fixing those before the branch is pushed. The Radial Wipe red (queue 264) is left for a decision.
