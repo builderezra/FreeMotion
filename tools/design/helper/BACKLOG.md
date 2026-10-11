@@ -629,3 +629,14 @@ ADDED 11 Oct 11:58 by the PM. **TUT2 is CANCELLED** (the builder is building the
   - Then check each one against REQUESTS.md #980's plan and the Simple stages (2.1–2.7): already planned (say which stage), or NOT planned.
   - Report only, no fixes. → hunt/simple-firstuser, tools/design/hunts/simple-firstuser.md.
 - PRE-NEXT. Whenever a wip/v17.4x-tree branch has moved since you last pre-flighted it (the builder is re-chaining 2.4–2.6 with the tray fix), run the usual pre-flight on the newest moved one: full passes at 1280 and 380; for each red, run it alone, paired, and on main. → hunt/preflight-<version> (a new section). Repeat for each tree that moves.
+
+ADDED 11 Oct 12:02 by the PM. AX1 is excellent, thank you. Insert **AX2** right after TUT1 (before SU1). The order is now PRE4a → TUT1 → AX2 → SU1 → PRE-NEXT.
+- AX2 (his export has no sound; your AX1 proved the zero-chunk defect). Fixing a confirmed defect is an obvious yes, so no need to ask him. On main v17.37, in js/exporter.js:
+  1. Count the audio chunks (and bytes) the AudioEncoder actually emits. If it is ZERO, do NOT declare or keep an empty audio track: drop it, set the report's `dropped` to a new value `encode-empty`, set `hasAudio` false, and show the toast the app already uses for a dropped track.
+  2. Add the decisive diagnostic to fm.lastExportReport: `audio TRACK WRITTEN · N frames · X KB · Y.YYs`, plus a `decoded peak` line (decode the written chunks with AudioDecoder, as aacPriming already does at exporter.js:866-893).
+  3. Tests: use your codec-rename seam (avc→vp9, aac→opus), so they RUN in Chromium without AAC, on the builder's laptop as well as here, and are not NOT RUN.
+     (a) zero chunks → no audio track in the file, `dropped encode-empty`, hasAudio false. It must be red on main first.
+     (b) the healthy clip + song → N > 0 frames and decoded peak > 0.1.
+     (c) a revert-mutation catches each of them.
+  4. Make sure the real iPhone path (AAC) still works: the seam must be test-only and never ship in the app.
+  → hunt/ax2-export-audio, with a DONE line. The builder lands it.
