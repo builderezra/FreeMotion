@@ -13337,7 +13337,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       // Strobe: the layer is only visible for the first `duty` of each quantum. Leaving B empty is
       // the point — the gap has to be a gap, not a dimmer frame.
-      if (mode === 1 && (irr > 0 ? (phase - qLo) / qLen : phase - q) > duty) return;
+      if (mode === 1 && (irr > 0 ? (phase - qLo) / qLen : phase - q) > (FM.isAnimated(p.rate) ? duty + 2e-9 : duty)) return;   // keyed: the phase's + 1e-9 serves the hold COUNT (a floor edge), but lit AT the duty is a ceiling edge — + 2e-9 undoes it and leaves 1e-9 the other way (land-b3 F1)
       if (mode === 2 && rec.prev) {
         const trail = p.trail == null ? 0.45 : clamp01(FM.evalProp(p.trail, t));   // Trail strength (#482 2.4) — 0.45 was welded
         if (trail > 0) { B.globalAlpha = trail; B.drawImage(rec.prev, 0, 0); B.globalAlpha = 1; }

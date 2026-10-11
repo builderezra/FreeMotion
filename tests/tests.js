@@ -61152,6 +61152,39 @@
     if (out.length) throw new Error('Frame Stutter keyed at a constant Rate 8 differs from the unkeyed Rate 8: ' + out.join('; '));
   });
 
+  test('690 Frame Stutter Strobe keyed at a constant Rate lights the same frames as the unkeyed Rate when the phase lands exactly on the Duty - Rate 12 and 6 at 24 fps, Rate 15 at 30 fps', { item: 'TBD' }, function () {
+    /* land-b3 F1, the other edge. The keyed hold phase carries + 1e-9 so its whole count never drops a frame (a floor edge).
+       Strobe then hides the layer when phase - q > Duty: lit AT the duty, a ceiling edge, so the same 1e-9 pushed a frame
+       that sits exactly on the duty into the dark. At the default Duty 0.5, a keyed Rate 12 in a 24 fps project (on twos)
+       went dark on every second frame where the unkeyed Rate 12 lights it. */
+    const stutter = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.framestutter;
+    if (!stutter || !FM.integrateProp || FM._mfGhost) throw new Error('Frame Stutter or its rate clock is unavailable');
+    let serial = 0;
+    const src = document.createElement('canvas'); src.width = src.height = 2;
+    const sg = src.getContext('2d'); sg.fillStyle = '#ffffff'; sg.fillRect(0, 0, 2, 2);
+    const run = duty => (rate, t) => {
+      const b = document.createElement('canvas'); b.width = b.height = 2;
+      stutter(src, b.getContext('2d'), 2, 2, { x: 0, y: 0, w: 2, h: 2 }, { rate, mode: 1, duty, blend: 0, offset: 0, random: 0 }, t, t, { id: '690-f1-duty-' + serial++ });
+      return [b.getContext('2d').getImageData(0, 0, 1, 1).data[3]];
+    };
+    const same = (a, b) => a[0] === b[0];
+    if (run(0.5)(12, 1 / 24)[0] !== 255 || run(0.25)(12, 1 / 24)[0] !== 0) throw new Error('CONTROL: an unkeyed Rate 12 at 1/24 s (half a hold in) is not lit at Duty 0.5 and dark at Duty 0.25');
+    const out = [];
+    [[12, 24, 240, 0.5], [12, 24, 240, undefined], [6, 24, 240, 0.25], [6, 24, 240, 0.75], [15, 30, 300, 0.5]].forEach(([rate, fps, frames, duty]) => {
+      const draw = run(duty);
+      _f1Tracks(rate).forEach((keyed, n) => {
+        // the unkeyed phase = elapsed × rate: BELOW a whole count it drops the hold; ABOVE a frame exactly on the duty it goes dark
+        const off = (t, f) => { const exact = rate * f / fps, got = t * rate;
+          if (got < exact && Number.isInteger(exact)) return 1e-8;
+          return got > exact && exact - Math.floor(exact) === (duty == null ? 0.5 : duty) ? -1e-8 : 0; };
+        const r = _f1EveryFrame({ fps, frames, keyed, rate, draw, same, off });
+        if (r.bad.length) out.push('Rate ' + rate + ' at ' + fps + ' fps, Duty ' + (duty == null ? 'default' : duty) + ', track ' + n + ': ' + r.bad.length + ' of ' + (frames + 1) +
+          ' frames (' + r.bad.slice(0, 8).join(', ') + '; alpha ' + draw(keyed, r.bad[0] / fps)[0] + ' where the unkeyed Rate gives ' + draw(rate, r.bad[0] / fps)[0] + ')');
+      });
+    });
+    if (out.length) throw new Error('Frame Stutter Strobe keyed at a constant Rate lights different frames from the unkeyed Rate: ' + out.join('; '));
+  });
+
   test('690 Noise keyframed Speed accumulates frames and holds its pattern at zero', { item: 'TBD' }, function () {
     const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.noise;
     if (!K || !FM.integrateProp) throw new Error('the Noise kernel or shared rate integrator is missing');
