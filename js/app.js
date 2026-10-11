@@ -6933,6 +6933,25 @@ window.FM = window.FM || {};
       if (FM.groupContext && FM.exitGroup) { FM.exitGroup(); return; }
       if (FM.home) FM.home.open();
     });
+    /* THE CORNER DOOR (#1083, his pick B). A glass "‹ Projects" pill at the stage's top-left that shows while the mouse is
+       in that corner, and presses the real back button, so it leaves a group first exactly as that does. No element sits
+       over the corner while it is hidden: a transparent hover zone would eat clicks meant for a layer up there, so the
+       reveal is read from the stage's own mousemove. Never while a button is held (a drag passing through), and only for
+       a real mouse (styles.css hides it on touch and on phones). */
+    const cornerBtn = document.getElementById('btn-back-corner'), stageEl = document.getElementById('stage');
+    if (cornerBtn && stageEl && backBtn) {
+      cornerBtn.addEventListener('click', () => backBtn.click());
+      const fine = window.matchMedia('(min-width: 701px) and (hover: hover) and (pointer: fine)');
+      let lit = false;
+      const light = (v) => { if (v !== lit) { lit = v; cornerBtn.classList.toggle('is-on', v); } };
+      stageEl.addEventListener('mousemove', (e) => {
+        if (!fine.matches || (e.buttons && !lit)) { light(false); return; }
+        const r = stageEl.getBoundingClientRect();
+        light(e.clientX - r.left < 180 && e.clientY - r.top < 120);
+      }, { passive: true });
+      stageEl.addEventListener('mouseleave', () => light(false));
+      FM._cornerBack = { lit: () => lit };   // suite seam
+    }
 
     // top bar
     const fileInput = document.getElementById('file-input');

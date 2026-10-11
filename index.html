@@ -402,6 +402,10 @@
 
     <div id="main">
       <section id="stage">
+        <!-- #1083, his pick B: on PC a second way out, a glass "‹ Projects" pill that appears when the mouse is over the
+             stage's top-left corner. Ezra: "on pc i often find myself looking for the back button … in the top left". The
+             real back button stays where it is ("its in a functionally better spot"); this one just presses it. -->
+        <button id="btn-back-corner" class="corner-back" type="button" tabindex="-1" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg><span class="cb-proj">Projects</span><span class="cb-grp">Back</span></button>
         <div id="canvas-wrap">
           <canvas id="preview"></canvas>
           <!-- The pause bloom (queue 538). Ezra: "make it have a nice pause animation and a little pause

@@ -334,6 +334,33 @@ body {
   background: var(--stage);
   min-width: 0; overflow: hidden;
 }
+/* THE CORNER DOOR (#1083, his pick B — tools/design/pc-back-hover/b-corner.png; the values are the ones it was drawn with).
+   A real mouse on a PC only: a touch screen never gets an invisible button, and phones never see it. Hidden it takes no
+   clicks; app.js lights it while the mouse is in the stage's top-left corner. In a group it says Back, because there it
+   leaves the group first, as the real back button does. */
+.corner-back { display: none; }
+@media (min-width: 701px) and (hover: hover) and (pointer: fine) {
+  .corner-back {
+    display: flex; align-items: center; gap: 6px;
+    position: absolute; left: 14px; top: 14px; z-index: 6;
+    height: 34px; padding: 0 14px 0 10px; border-radius: 17px;
+    font: inherit; font-size: 13px; font-weight: 600; line-height: 1; color: rgb(233, 244, 247);
+    background: rgba(233, 244, 247, .09); border: 1px solid rgba(233, 244, 247, .18);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+    cursor: pointer;
+    opacity: 0; transform: translateX(-6px); pointer-events: none;
+    transition: opacity 160ms ease-out, transform 160ms ease-out;
+  }
+  .corner-back .ico { width: 16px; height: 16px; flex: none; }
+  .corner-back .cb-grp { display: none; }
+  body.group-editing .corner-back .cb-proj { display: none; }
+  body.group-editing .corner-back .cb-grp { display: inline; }
+  .corner-back.is-on, .corner-back:focus-visible { opacity: 1; transform: none; pointer-events: auto; }
+  /* not while he is typing on the picture or drawing on it: those own the stage */
+  body.text-editing .corner-back, body.drawing .corner-back { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .corner-back { transform: none; transition: opacity 160ms ease-out; } }
 #stage::before {
   content: ""; position: absolute; inset: 0;
   background: radial-gradient(circle at 50% 38%, rgba(41,217,187,.05), transparent 60%);
