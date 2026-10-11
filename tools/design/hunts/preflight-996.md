@@ -41,3 +41,19 @@ With the fix reverted I ran the reconnect test with its early assertion switched
 The guard is right for the case it was written for. Before it ships, the join window needs an exception (for example: `offProject()` is false while a join/open is in flight and `S.pid` is the project being opened, or the gate only applies when the session's adapter document is `FM.scene`), and `921 S2 a batch broadcast during the join handshake…` is the test that will say it is fixed.
 
 DONE: preflight-996 — e87c7535: both 996 tests green and both fail on the r12 file; each half CAUGHT; theory confirmed (the room's layer lands in the other project); but 921 S2 "a batch broadcast during the join handshake" goes red with the fix (green on r12): a real regression.
+
+---
+
+# G996b: the new tip `hunt/996-guard` 469f82f3 (the gate applies only when `A.doc() === FM.scene`)
+
+**Verdict: the regression is fixed and nothing new is red. At 1280 and 380: 921 S2 "a batch broadcast during the join handshake" is GREEN, both 996 tests are GREEN, both halves are still CAUGHT, and `?only=921` has no red that 980-p21-r12 does not have.** The diff against e87c7535 is the one line `if (!A.doc || A.doc() !== FM.scene) return false;` at the top of `offProject()` (+4 lines with its comment). Same method as above.
+
+1. **`921 S2 a batch broadcast during the join handshake is kept and replayed, not read and dropped`: ok at 1280, ok at 380** (run alone; it was RED alone on e87c7535).
+2. **Both 996 tests: ok, ok at 1280 and at 380** (reconnect test and room-while-away test, with their on-project controls).
+3. **With `js/collab-session.js` from 980-p21-r12: both FAIL at both widths** (`a session for the linked copy was attached while ANOTHER project was open…` and `a snapshot heard while another project was open rewrote the open scene…`). So the new line did not blind the tests: the 996 tests use the app's own bridge, whose `doc()` is `FM.scene`, so the gate still applies to them.
+4. **Half reverts, each at both widths: both halves CAUGHT again.** Only the reopen re-check reverted: reconnect test RED, room test ok. Only the `offProject()` gate off (it returns false first): room test RED, reconnect test ok. Only the `applyLive` early return reverted: room test RED, reconnect test ok.
+5. **`?only=921` (253 tests), 469f82f3 against 980-p21-r12:**
+   - 380: **247 ok, 3 red, 3 NOT RUN HERE on both trees, the same 3** (`921 S3 Stop sharing…`, `921 S4 splash.mp4…`, `921 S6 a shared copy finds its owner by itself…`). No new red.
+   - 1280: 469f82f3 is 245 ok / 5 red, r12 is 247 ok / 3 red. The 2 extras: `921 S0 duplicateFrom copies independently and rolls back on failure` (the FIRST test of an `?only=921` run: red alone on both trees at both widths with `the fixture never had a project document to begin with`, the Home-open-at-boot artifact; count only the target, not a finding) and `921 S2 tier 3: the host reloads — a new epoch, a snapshot, and the guest's work made while it was gone is resent` (`timed out waiting for the guest to finish resending what it owed`): **green alone TWICE at 1280 and TWICE at 380 on 469f82f3 and on r12**, and green at 380 in the full 921 run, so a timing flake of a tier-3 test under four Chromes, not the gate.
+
+DONE: preflight-996 / G996b — 469f82f3: 921 S2 join-window green again, both 996 tests green and both fail on the r12 file, both halves CAUGHT, ?only=921 no new red (one tier-3 timing flake at 1280, green alone).
