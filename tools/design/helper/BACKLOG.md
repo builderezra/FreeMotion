@@ -497,3 +497,15 @@ Its fix: ssh/hunt/996-guard e87c7535, on the 2.1 tree 980-p21-r12. C.reopen re-c
   4. Revert ONE half at a time: first only the reopen re-check, then only the applyLive/offProject gate. Show that each test catches its own half; a test that catches neither half is a finding.
   Report CAUGHT or SURVIVED per revert, with the first assertion message. → hunt/preflight-996 (report at tools/design/hunts/preflight-996.md), with a DONE line. If you can, also say whether the theory matches what you see: does a switch during the async read really leave S.pid on the other project?
 Then continue PRE3b/PRE3c (v17.39, v17.41) and PRE4.
+
+ADDED 11 Oct 08:15 by the PM, from the builder: "that report was exactly what was needed." In order:
+- G996b (TOP). The 921 S2 break came from the builder's gate. That test joins through plainAdapter921 (its own gdoc), with FM.projects.open stubbed, so currentId() never became the copy and offProject() dropped the join-window replay. The gate now applies only to a session whose adapter writes the app's scene (`A.doc() === FM.scene`). The two 996 tests still go through C.bridge, so they still exercise it. **NEW TIP: hunt/996-guard 469f82f3** (the same change is on the Full batch branch, land-b1 f2212258). At BOTH widths:
+  1. `921 S2 a batch broadcast during the join handshake…` must be GREEN.
+  2. The two 996 tests must be GREEN.
+  3. Run `?only=921` (S0–S8): no new reds against 980-p21-r12.
+  4. Re-run the two one-half reverts: each half is still CAUGHT by its own test.
+  → hunt/preflight-996 (a new section), with a DONE line.
+- BX1 v17.43/v17.44: the five Simple 2.4 tests that are red ONLY in the full pass. NAME them, and bisect each one's polluter with pair slices (`after=<two before>&upto=<red>`, narrowing). The builder's laptop is busy with ships and lock runs, so the cloud does this. → hunt/preflight-v17.43 (a new section).
+- BX2 v17.41: `690 replacing a clip twice then undoing twice brings his original back…` goes red after `…microphone is open…` and then `…phone storage full… Stay (a real tap)`. What do those two leave behind (scene layers, globals, storage stubs, open sheets)? Name the leak and say which test should clean it up. → hunt/preflight-v17.41 (a new section).
+- BX3 v17.39: `simple P2.2 · tray B …`, the 2 px overflow at 960×700. Is it red with the system font too, or only with the container's fallback font? If you can, install or force a font metrically close to system-ui/SF and re-run; otherwise say that you could not. → hunt/preflight-v17.39 (a new section).
+- PRE4a (v17.42 / 2.4's own report) is still owed after these.
