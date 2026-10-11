@@ -52,10 +52,14 @@ window.FM = window.FM || {};
        collaboration DOM in the page but the two doors #967 batch 2 allows (the phone's person+ on the video and Home's
        worded Join — one button each, no network, no listeners; COLLAB-DESIGN.md §23) — no card — and nothing in
        js/collab-*.js runs beyond defining its namespace. It is the switch the whole feature hangs off,
-       so it starts where a solo user cannot feel it. The three sibling keys §4.2 lists —
+       so it started where a solo user cannot feel it. The three sibling keys §4.2 lists —
        collabCursors, collabSelections, collabCodesOnly — arrive with the stages that READ them (S5
-       presence, S6 the relay); a preference row that changes nothing is worse than no row. */
-    collabLabs: false,
+       presence, S6 the relay); a preference row that changes nothing is worse than no row.
+       🔓 ON BY DEFAULT SINCE 11 OCT (#921 clause 19). Ezra tried it between his own phone and computer: "Friends thing
+       worked" — and #921 always said that is when the Labs gate comes off "so it is part of the app". The switch stays
+       as a real OFF, and on still opens nothing: no socket, no listener, nothing sent until he shares or joins
+       (collab-signal.js: "NOTHING HERE RUNS UNTIL A SESSION ASKS FOR IT"). A device that saved a choice keeps it. */
+    collabLabs: true,
     /* S5 (§18.3, §19.8): whether the other people's pointers and taps, and their selections, are drawn
        on THIS device. Local preferences — nothing travels — and on by default, because seeing where the
        others are is the point of the feature. Each hides only its own half. */
@@ -549,11 +553,12 @@ window.FM = window.FM || {};
          the row, where he is looking. */
       const said = el('div', 'set-hint set-labs-said hidden');
       said.setAttribute('role', 'status');
-      /* #967 B4 (J5-6, J5-5): the feature's one name, and the ONE place that says it is still being tested; the hint is one
+      /* #967 B4 (J5-6, J5-5): the feature's one name, and the ONE place that said it was still being tested (until #921
+         clause 19 took it out of testing, 11 Oct); the hint is one
          line. The privacy facts are the block under it — one plain sentence, and every third party by name behind
          "What gets sent? ›" (collab-ui.js privacyBlock: the S6 review's rule, kept one tap down). */
       const labsRow = switchRow('Work with friends',
-          'Edit a project together, live, each on your own phone — still being tested.',
+          'Edit a project together, live, each on your own phone.',   // #921 clause 19: out of testing, so the hint stops saying so
           () => !!state.collabLabs,
           () => {
             const flip = () => { state.collabLabs = !state.collabLabs; save(); apply(); kids.classList.toggle('hidden', !state.collabLabs); footWords(); };

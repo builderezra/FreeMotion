@@ -123462,4 +123462,37 @@
     const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* #921 clause 19 (11 Oct): "Friends thing worked" between his own phone and computer, so the Labs gate comes off "so it
+     is part of the app". On for a device that never chose; a device that chose keeps its choice; and ON still opens
+     nothing — no socket, no peer connection — until he shares or joins (§23). */
+  test('921 clause 19 · Work with friends is part of the app: on for a new device, a saved choice is kept, and on opens no connection', { item: '921' }, async function () {
+    const KEY = 'fm.settings';
+    let saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    const C = FM.collab;
+    if (C && C.session) throw new Error('CONTROL: a live session is already running, so the settings cannot be reloaded safely');
+    const WS = window.WebSocket, PC = window.RTCPeerConnection;
+    let opened = 0;
+    try {
+      window.WebSocket = function () { opened++; throw new Error('socket opened'); };
+      window.RTCPeerConnection = function () { opened++; throw new Error('peer connection opened'); };
+      localStorage.removeItem(KEY);
+      FM.settings.init();
+      if (FM.settings.get('collabLabs') !== true) throw new Error('a device that never chose has Work with friends OFF — it is still gated as a Labs feature');
+      await sleep(400);
+      if (opened) throw new Error('with the feature on and nobody sharing, ' + opened + ' connection(s) were opened — on must still send nothing (§23)');
+      localStorage.setItem(KEY, JSON.stringify(Object.assign(JSON.parse(saved || '{}'), { collabLabs: false })));
+      FM.settings.init();
+      if (FM.settings.get('collabLabs') !== false) throw new Error('a device that turned it OFF came back with it on — the switch is a promise');
+      localStorage.setItem(KEY, JSON.stringify(Object.assign(JSON.parse(saved || '{}'), { collabLabs: true })));
+      FM.settings.init();
+      if (FM.settings.get('collabLabs') !== true) throw new Error('a device that turned it on came back with it off');
+    } finally {
+      window.WebSocket = WS; window.RTCPeerConnection = PC;
+      try { if (saved == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved); } catch (e) {}
+      FM.settings.init();
+      await sleep(100);
+    }
+  });
 })();
