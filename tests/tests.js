@@ -61678,7 +61678,25 @@
     const variance = function (d, W, x0, y0, x1, y1) { let s = 0, s2 = 0, n = 0; for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * W + x) * 4, l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; s += l; s2 += l * l; n++; } return s2 / n - (s / n) * (s / n); };
     return { frame: frame, noise: noise, inst: inst, px: px, cv: cv, fromData: fromData, cfx: cfx, maxDiff: maxDiff, count: count, variance: variance };
   })();
-  test('E1 the six new effects are in the registry, in the right menus, findable by what a beginner types, and nothing in the first 205 moved', { item: 'E1', budgetMs: 30000 }, function () {
+  /* #1116, his answer (11 Oct): Soften Skin starts stronger — the helper's proposal, Amount 0.85, 10 px, Keep detail 50, Soften:
+     Everything. Both places a default lives: the registry a new instance is made from, and the kernel's fallback for a param a
+     saved effect does not carry. */
+  test('1116 Soften Skin starts stronger — Amount 0.85, 10 px, Keep detail 50, Soften: Everything — in a new instance and in the kernel’s own fallback', { item: '1116', budgetMs: 30000 }, function () {
+    const i = E1.inst('softskin');
+    const want = { amount: 0.85, radius: 10, keep: 50, only: 0 };
+    const bad = Object.keys(want).filter(function (k) { return Number(i[k]) !== want[k]; }).map(function (k) { return k + ' starts at ' + i[k] + ', not ' + want[k]; });
+    if (bad.length) throw new Error('a new Soften Skin ' + bad.join(', '));
+    /* the fallback: a saved effect with NO params paints exactly what one with his defaults spelled out paints */
+    const W = 48, H = 36, n = E1.noise(7);
+    const pic = function () { return E1.frame(W, H, function (x, y) { const v = 150 + Math.round(n() * 40) + (x > W / 2 ? 30 : 0); return [v, v - 30, v - 50]; }); };
+    const bare = E1.px('softskin', {}, W, H, pic(), 0.5);
+    const n2 = E1.noise(7);
+    const pic2 = function () { return E1.frame(W, H, function (x, y) { const v = 150 + Math.round(n2() * 40) + (x > W / 2 ? 30 : 0); return [v, v - 30, v - 50]; }); };
+    const spelled = E1.px('softskin', { amount: 0.85, radius: 10, keep: 50, only: 0 }, W, H, pic2(), 0.5);
+    if (E1.maxDiff(bare, spelled) !== 0) throw new Error('a Soften Skin saved without params paints differently from one with his defaults (max ' + E1.maxDiff(bare, spelled) + ') — the kernel\'s fallback is not the registry\'s default');
+  });
+
+  test('E1 the six new effects are in the registry, in the right menus, findable by what a beginner types, and nothing in the first 205 moved', { item: '1114', budgetMs: 30000 }, function () {
     const want = { huecycle: ['color', 'rainbow'], softskin: ['blur', 'beauty'], oilpaint: ['stylize', 'painting'], glitter: ['stylize', 'sparkle'], censor: ['blur', 'privacy'], popart: ['color', 'warhol'] };
     const bad = [];
     Object.keys(want).forEach(function (t) {
@@ -61694,7 +61712,7 @@
     if (types.slice(-6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six are not the newest six, in order: ' + types.slice(-7).join());
     if (bad.length) throw new Error(bad.join(' | '));
   });
-  test('E1 Colour Cycle: at Speed 0 it is exactly the CSS hue rotation, it turns with the clip clock and repeats each turn, Stepped holds between steps, alpha is untouched', { item: 'E1', budgetMs: 30000 }, function () {
+  test('E1 Colour Cycle: at Speed 0 it is exactly the CSS hue rotation, it turns with the clip clock and repeats each turn, Stepped holds between steps, alpha is untouched', { item: '1114', budgetMs: 30000 }, function () {
     const W = 48, H = 32, N = E1, src = function () { return N.frame(W, H, function (x, y) { return [x * 5 % 256, y * 7 % 256, (x + y) * 3 % 256, (x < 4 ? 0 : 255)]; }); };
     // 1. Speed 0, Boost 0, Start colour 90 against the browser's own hue-rotate(90deg)
     const mine = N.px('huecycle', N.inst('huecycle', { speed: 0, boost: 0, phase: 90 }), W, H, src(), 0.5);
@@ -61716,7 +61734,7 @@
     // 5. visible at its own defaults on the very first frame
     if (N.count(o, N.px('huecycle', N.inst('huecycle'), W, H, src(), 0), 8) < W * H / 2) throw new Error('at its own defaults and t = 0 it changes almost nothing: a beginner would judge it broken');
   });
-  test('E1 Soften Skin: Amount 0 is the input, noise is smoothed and a hard edge is not, Skin tones leaves blue alone, a transparent pixel is never touched', { item: 'E1', budgetMs: 30000 }, function () {
+  test('E1 Soften Skin: Amount 0 is the input, noise is smoothed and a hard edge is not, Skin tones leaves blue alone, a transparent pixel is never touched', { item: '1114', budgetMs: 30000 }, function () {
     const W = 80, H = 60, N = E1;
     const mk = function (seed, base) { const r = N.noise(seed); return N.frame(W, H, function (x, y) { const k = (r() - 0.5) * 24; return [base[0] + k, base[1] + k, base[2] + k, y > 50 ? 0 : 255]; }); };
     const skin = mk(3, [205, 150, 120]), same = N.px('softskin', N.inst('softskin', { amount: 0 }), W, H, mk(3, [205, 150, 120]), 0.5);
@@ -61742,7 +61760,7 @@
     // a transparent pixel is bit-for-bit what it was
     for (let i = 3; i < skin.length; i += 4) if (skin[i] === 0) for (let k = -3; k < 0; k++) if (skin[i + k] !== out[i + k]) throw new Error('a transparent pixel’s colour was rewritten at ' + (i - 3) / 4);
   });
-  test('E1 Oil Paint: flat colour stays, a hard edge stays hard, detail 1 is the input, a noisy patch becomes daubs, a transparent pixel is never touched', { item: 'E1', budgetMs: 30000 }, function () {
+  test('E1 Oil Paint: flat colour stays, a hard edge stays hard, detail 1 is the input, a noisy patch becomes daubs, a transparent pixel is never touched', { item: '1114', budgetMs: 30000 }, function () {
     const W = 72, H = 56, N = E1;
     const flat = N.frame(W, H, function () { return [90, 140, 200]; });
     if (N.maxDiff(flat, N.px('oilpaint', N.inst('oilpaint', { punch: 0 }), W, H, N.frame(W, H, function () { return [90, 140, 200]; }), 0.5)) > 1) throw new Error('flat colour moved');
@@ -61755,7 +61773,7 @@
     if (!(N.variance(o, W, 8, 8, 64, 44) < N.variance(s0, W, 8, 8, 64, 44) * 0.35)) throw new Error('a noisy patch kept most of its variance: it is not painting');
     for (let i = 3; i < s0.length; i += 4) { if (s0[i] === 0 && (s0[i - 1] !== o[i - 1] || s0[i - 2] !== o[i - 2] || s0[i - 3] !== o[i - 3])) throw new Error('a transparent pixel was recoloured at ' + (i - 3) / 4); if (s0[i] !== o[i]) throw new Error('alpha changed'); }
   });
-  test('E1 Glitter: the same instant is the same picture, it twinkles with the clock, stars sit only on bright pixels, none on transparency, and a dark shot shows none until the bar is lowered', { item: 'E1', budgetMs: 30000 }, function () {
+  test('E1 Glitter: the same instant is the same picture, it twinkles with the clock, stars sit only on bright pixels, none on transparency, and a dark shot shows none until the bar is lowered', { item: '1114', budgetMs: 30000 }, function () {
     const W = 200, H = 160, N = E1;
     const bright = N.cv(W, H, function (g) { g.fillStyle = '#202830'; g.fillRect(0, 0, W, H); g.fillStyle = '#f4f0e0'; g.fillRect(20, 20, 100, 100); });
     const p = N.inst('glitter', { spacing: 30, size: 16, threshold: 55, speed: 1 });
@@ -61777,7 +61795,7 @@
     if (N.count(dd, N.cfx('glitter', p, dark, W, H, 1.3), 12) > 0) throw new Error('stars on a dark picture at Brightness bar 55');
     if (N.count(dd, N.cfx('glitter', N.inst('glitter', { spacing: 30, size: 16, threshold: 0, speed: 1 }), dark, W, H, 1.3), 12) < 20) throw new Error('lowering the bar to 0 shows no stars on a dark picture');
   });
-  test('E1 Censor: everything outside the box is byte-identical, each style changes the inside, Oval leaves the corners, pixel blocks are on the layer’s own grid, Black bar keeps transparency', { item: 'E1', budgetMs: 30000 }, function () {
+  test('E1 Censor: everything outside the box is byte-identical, each style changes the inside, Oval leaves the corners, pixel blocks are on the layer’s own grid, Black bar keeps transparency', { item: '1114', budgetMs: 30000 }, function () {
     const W = 160, H = 120, N = E1;
     const src = N.cv(W, H, function (g) { const im = g.createImageData(W, H), r = N.noise(4); for (let i = 0; i < im.data.length; i += 4) { im.data[i] = r() * 255; im.data[i + 1] = r() * 255; im.data[i + 2] = r() * 255; im.data[i + 3] = (i / 4 % W) > 140 ? 0 : 255; } g.putImageData(im, 0, 0); });
     const base = src.getContext('2d').getImageData(0, 0, W, H).data;
@@ -61815,7 +61833,7 @@
       if (ds / dn > 22) throw new Error('style ' + o.style + ': at half size (plate scale 0.5) the hidden patch differs from the full-size one shrunk by a mean ' + (ds / dn).toFixed(1) + ' levels, so strength does not follow the zoom');
     });
   });
-  test('E1 Pop Art: four cells, each a different colour, same silhouette; three by three gives nine; the gap is empty; a cut-out stays a cut-out', { item: 'E1', budgetMs: 30000 }, function () {
+  test('E1 Pop Art: four cells, each a different colour, same silhouette; three by three gives nine; the gap is empty; a cut-out stays a cut-out', { item: '1114', budgetMs: 30000 }, function () {
     const W = 120, H = 120, N = E1;
     const src = N.cv(W, H, function (g) { const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#d03030'); gr.addColorStop(1, '#3090d0'); g.fillStyle = gr; g.beginPath(); g.arc(60, 60, 50, 0, Math.PI * 2); g.fill(); });
     const cells = function (n, params) { const o = N.cfx('popart', N.inst('popart', params), src, W, H, 1), cw = W / n, cols = [], alph = []; for (let cy = 0; cy < n; cy++) for (let cx = 0; cx < n; cx++) { let r = 0, g = 0, b = 0, a = 0, k = 0; for (let y = Math.floor(cy * cw + cw * 0.4); y < cy * cw + cw * 0.6; y++) for (let x = Math.floor(cx * cw + cw * 0.4); x < cx * cw + cw * 0.6; x++) { const i = (y * W + x) * 4; r += o[i]; g += o[i + 1]; b += o[i + 2]; a += o[i + 3]; k++; } cols.push([r / k, g / k, b / k]); alph.push(a / k); } return { o: o, cols: cols, alph: alph }; };
@@ -61832,7 +61850,7 @@
     const g = N.cfx('popart', N.inst('popart', { gap: 20 }), src, W, H, 1); let filled = 0; for (let y = 0; y < H; y++) for (let x = 56; x < 64; x++) if (g[(y * W + x) * 4 + 3] > 0) filled++;
     if (filled) throw new Error('the gap is not empty (' + filled + ' pixels)');
   });
-  test('E1 preview equals export: through the real compositor each new effect draws the same at half size, and a seek lands on the same frame as playing to it', { item: 'E1', budgetMs: 120000 }, async function () {
+  test('E1 preview equals export: through the real compositor each new effect draws the same at half size, and a seek lands on the same frame as playing to it', { item: '1114', budgetMs: 120000 }, async function () {
     const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
     const saved = FM.scene, savedSel = FM.scene.selectedId;

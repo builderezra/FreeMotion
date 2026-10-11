@@ -18033,9 +18033,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'boost', label: 'Colour boost', min: 0, max: 1, step: 0.02, def: 0.2 },
     ] },
     { type: 'softskin', label: 'Soften Skin', desc: 'Smooths small blemishes and noise and keeps the edges sharp. It cannot find faces: on Everything it softens the whole picture, on Skin tones it follows skin-coloured pixels (and will also soften a wooden table).', params: [
-      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
-      { key: 'radius', label: 'Smoothing size', min: 1, max: 20, step: 1, def: 6, unit: 'px' },
-      { key: 'keep', label: 'Keep detail', min: 0, max: 100, step: 1, def: 60, unit: '%' },
+      /* #1116, his answer (11 Oct): "Soften Skin stronger by default" with the helper's proposal — Amount 0.85, 10 px, Keep detail
+         50, Soften: Everything (at E1's 0.6 / 6 / 60 it changed 8 levels at most on a face, nearly invisible) */
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
+      { key: 'radius', label: 'Smoothing size', min: 1, max: 20, step: 1, def: 10, unit: 'px' },
+      { key: 'keep', label: 'Keep detail', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'only', label: 'Soften', def: 0, options: [[0, 'Everything'], [1, 'Skin tones']] },
     ] },
     { type: 'oilpaint', label: 'Oil Paint', desc: 'Turns the picture into a painting: flat daubs of colour with the edges kept hard.', params: [
@@ -18120,9 +18122,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   /* ---- Soften Skin: blur, then let the blur through only where the picture is nearly the same as its blur ---- */
   PIXEL_FX.softskin = function (d, W, H, p, t) {
-    const amount = clamp01(fparam(p, 'amount', 0.6, t)); if (amount <= 0) return;
-    const radius = Math.max(0.5, Math.min(40, fparam(p, 'radius', 6, t)));
-    const keep = Math.max(0, Math.min(100, fparam(p, 'keep', 60, t))), skinOnly = Math.round(fparam(p, 'only', 0, t)) === 1;
+    const amount = clamp01(fparam(p, 'amount', 0.85, t)); if (amount <= 0) return;   // #1116: the registry's defaults, here too
+    const radius = Math.max(0.5, Math.min(40, fparam(p, 'radius', 10, t)));
+    const keep = Math.max(0, Math.min(100, fparam(p, 'keep', 50, t))), skinOnly = Math.round(fparam(p, 'only', 0, t)) === 1;
     const thr = 4 + (100 - keep) * 0.9, N = W * H;   // E2: Keep detail 100 means the LEAST smoothing (it ran the other way in E1, so the stronger the 'keep', the more it blurred)
     const pm = new Uint8ClampedArray(d.length);   // premultiplied copy: a transparent pixel adds nothing to its neighbours
     for (let i = 0; i < d.length; i += 4) { const a = d[i + 3]; if (a === 0) continue; const f = a / 255; pm[i] = d[i] * f; pm[i + 1] = d[i + 1] * f; pm[i + 2] = d[i + 2] * f; pm[i + 3] = a; }
