@@ -32926,6 +32926,7 @@
        with no last step, on a card that was sitting on screen waiting to be filled in. */
     C.ui.setProfile('Test Person', C.ui.PALETTE[0]);
     let bodyDone = false, leaks = [];
+    const held921 = heldNow921(C);           // an outer fixture's own session (withCollab921 around this) is not this test's leak
     try {
       const out = await fn(C.ui);
       bodyDone = true;
@@ -32938,7 +32939,7 @@
          carries from one project to the next, so a test that leaked it could never turn anything red. Now the test that
          leaves an owner-side link behind is the one that fails, by name; the pass through OFF runs only then, so the leak
          cannot spread into the tests after it. */
-      leaks = leaks921(C);
+      leaks = leaks921(C, held921);
       if (leaks.length) { FM.settings.set('collabLabs', false); try { C.ui.syncLabs(); } catch (e) {} }
       FM.settings.set('collabLabs', !!wasLabs);
       try { C.ui.syncLabs(); } catch (e) {}
@@ -32953,13 +32954,20 @@
     }
   }
   /* What a test may not leave behind on the owner's side once it has closed (withLabs921): a held swap code, a five-character
-     check still waiting, or an owner session still live. */
-  function leaks921(C) {
-    const out = [];
-    try { const o = C.ui._offer && C.ui._offer(); if (o) out.push('a swap code still held (made for project ' + o._pid + ')'); } catch (e) {}
-    try { if (C.ui._sasPending && C.ui._sasPending()) out.push('a five-character check still waiting to be answered'); } catch (e) {}
+     check still waiting, or an owner session still live — each counted only when it was not already there as withLabs921
+     began: a withCollab921 wrapped AROUND it owns its session and ends it in its own finally, after this one has run. */
+  function heldNow921(C) {
     const s = C.session;
-    if (s && s.isOwner && C.active && s.active !== false) out.push('an owner session still live on project ' + s.pid);
+    let o = null, sas = false;
+    try { o = (C.ui._offer && C.ui._offer()) || null; } catch (e) {}
+    try { sas = !!(C.ui._sasPending && C.ui._sasPending()); } catch (e) {}
+    return { offer: o, sas: sas, session: (s && s.isOwner && C.active && s.active !== false) ? s : null };
+  }
+  function leaks921(C, before) {
+    const b = before || {}, now = heldNow921(C), out = [];
+    if (now.offer && now.offer !== b.offer) out.push('a swap code still held (made for project ' + now.offer._pid + ')');
+    if (now.sas && !b.sas) out.push('a five-character check still waiting to be answered');
+    if (now.session && now.session !== b.session) out.push('an owner session still live on project ' + now.session.pid);
     return out;
   }
 
