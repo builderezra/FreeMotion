@@ -647,6 +647,20 @@ else
   [ -z "$_untrig" ] && ok "every script this test exercises is in ship.sh's trigger for it ($(printf '%s\n' "$TRIG" | tr ' ' '\n' | grep -cE '^(tools|tests)/') files)" || bad "ship.sh would ship a change to these WITHOUT running this test:$_untrig"
 fi
 
+echo "── while a ship runs the tick says what to build, and IDLE after 15 min with no worktree edit (11 Oct, \"slacking again\") ──"
+SI="$TMP/shipidle"; mkdir -p "$SI/tools" "$SI/.claude/worktrees/w1/js"
+cp "$REPO/tools/_shipidle.sh" "$REPO/tools/_classify.py" "$SI/tools/"
+printf '%s\n' '# Requests' '' '- [ ] **5 — Make the thing faster** (1 Oct)' '      **STATUS: 🟢 READY — nothing is stopping this**' '' > "$SI/REQUESTS.md"
+echo 'x' > "$SI/.claude/worktrees/w1/js/a.js"; touch -d '30 minutes ago' "$SI/.claude/worktrees/w1/js/a.js"
+o="$(bash "$SI/tools/_shipidle.sh" "$SI" 15 2>&1)"
+printf '%s' "$o" | grep -q '^⚠️ IDLE DURING SHIP: 3[0-9] min' && ok "a worktree untouched for 30 min → IDLE DURING SHIP, with the minutes" || bad "no IDLE line after 30 idle minutes: $o"
+printf '%s' "$o" | grep -q 'next workable (oldest first): .*5' && ok "…and it names the next workable item (next_up)" || bad "the next item is not named: $o"
+touch "$SI/.claude/worktrees/w1/js/a.js"
+o="$(bash "$SI/tools/_shipidle.sh" "$SI" 15 2>&1)"
+printf '%s' "$o" | grep -q 'IDLE DURING SHIP' && bad "control: a file edited just now still reads as idle: $o" || ok "control: a worktree edited just now is not idle"
+grep -q 'tools/_shipidle.sh' "$REPO/tools/tick.sh" && awk '/A SHIP IS RUNNING/{s=NR} /_shipidle.sh/{i=NR} /^  exit 0$/{if(s&&!e)e=NR} END{exit !(s && i && i > s && i < e)}' "$REPO/tools/tick.sh" \
+  && ok "tick.sh runs it inside the ship-running branch, before that branch exits" || bad "tick.sh does not run tools/_shipidle.sh while a ship runs"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"
