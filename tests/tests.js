@@ -61179,6 +61179,23 @@
     if (render(steady, 1.375) !== render(8, 1.375)) throw new Error('A constant keyframed Speed differs from the saved numeric Speed');
   });
 
+
+  test('690 Wiggle keeps its motion path through keyframed Speed changes', { item: 'TBD' }, function () {
+    const position = (speed, t) => {
+      const layer = box482b([_986fx('wiggle', { amount: 70, amounty: 50, speed, seed: 7 })]);
+      const ink = at482b([layer], t);
+      if (!ink.n) throw new Error('Control: Wiggle layer disappeared');
+      return ink;
+    };
+    const distance = (a, b) => Math.hypot(a.cx - b.cx, a.cy - b.cy);
+    const ramp = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 3, e: 'linear' }] };
+    const expected = position(1.9, 1.8), currentRate = position(2.8, 1.8);
+    if (distance(expected, currentRate) < 3) throw new Error('Control: the Wiggle path cannot distinguish accumulated from current Speed');
+    if (distance(position(ramp, 1.8), expected) > 1.5) throw new Error('Wiggle jumped to current Speed times elapsed time during a ramp');
+    const stepped = { kf: [{ t: 0, v: 1.5, e: 'hold' }, { t: 1.6, v: 3, e: 'hold' }] };
+    if (distance(position(stepped, 1.6), position(1.5, 1.6)) > 1.5) throw new Error('Wiggle jumped at a held Speed keyframe');
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
