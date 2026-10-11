@@ -445,6 +445,14 @@ wrong = [(r, k, G.claimed_by(r)) for r, k in want.items() if k not in (G.claimed
 if missing or wrong: print("   missing literals:", missing, "| claimed wrongly:", wrong); sys.exit(1)
 PY
 awk '/_shipgates.py feature-gate/{f=NR} /^ship_phase push/{p=NR} END{exit !(f && p && f < p)}' tools/ship.sh && ok "ship.sh asks it after the suite passes, before the commit" || bad "ship.sh does not run the feature gate before the push"
+# …and ASKED EARLY for the two features no pass here can ever run (11 Oct): AAC and QR only — never a finger test's NOT RUN
+TOUCHNR='690 a test\tneeds real touch emulation (a finger with the phone media state)\n'
+fge() { printf '%b' "$3" | python3 tools/_shipgates.py feature-gate --early --files "$1" --diff-file "$2" 2>&1; }
+v="$(fge js/exporter.js "$TMP/empty.diff" "$AAC")"; rc=$?; [ "$rc" = 1 ] && ok "early: js/exporter.js + an AAC test this machine never runs → refused before any suite" || bad "early AAC: rc=$rc $v"
+v="$(fge js/collab-qr.js "$TMP/empty.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "early: js/collab-qr.js + a QR test → refused before any suite" || bad "early QR: rc=$rc $v"
+v="$(fge js/app.js "$TMP/empty.diff" "$TOUCHNR")"; rc=$?; [ "$rc" = 0 ] && ok "early: a finger test's NOT RUN never refuses early (the finger pass clears it later)" || bad "early touch refused: rc=$rc $v"
+v="$(fge js/timeline.js "$TMP/empty.diff" "$AAC$BD")"; rc=$?; [ "$rc" = 0 ] && ok "early: control — a release touching neither feature passes" || bad "early unrelated: rc=$rc $v"
+awk '/feature-gate --early/{e=NR} /^ship_phase prove/{p=NR} END{exit !(e && p && e < p)}' tools/ship.sh && ok "ship.sh asks the early gate before the proof and the suites" || bad "ship.sh does not ask the early feature gate before the suites"
 
 echo "── tools/record-baselines.sh refuses where a recording would be wrong (#1071) ──"
 out="$(PATH="$(shim_os Darwin):$PATH" tools/record-baselines.sh 2>&1)"; rc=$?

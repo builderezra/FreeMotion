@@ -61,6 +61,10 @@ FEATURES = [
      "globs": SHIPPED, "lines": {}},
 ]
 
+# the features whose tests NO pass on a machine without them can run (the finger pass clears touch; heat clears 921 S8):
+# the only ones ship.sh asks about BEFORE the suites, from this machine's last ship (feature-gate --early)
+EARLY = ("the AAC export audio", "the QR code (BarcodeDetector)")
+
 
 def claimed_by(why):
     """the name of the feature whose NOT RUN reason `why` is: the first named entry that matches, else the catch-all"""
@@ -228,7 +232,12 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "feature-gate
         files = sorted(set(sh(['git', 'diff', '--name-only', 'HEAD']).split()
                            + sh(['git', 'ls-files', '--others', '--exclude-standard']).split()))
         diff_text = sh(['git', 'diff', 'HEAD'])
-    refusals = feature_gate(files, diff_text, sys.stdin.read().split('\n'))
+    nr_in = sys.stdin.read().split('\n')
+    if "--early" in args:
+        # ASKED BEFORE THE SUITES (11 Oct): only the features no pass on this machine can ever run — a finger test's NOT RUN
+        # is cleared by the finger pass, and a too-slow 921 S8 by a cooler run, so neither may refuse a release early
+        nr_in = [l for l in nr_in if '\t' in l and claimed_by(l.split('\t', 1)[1]) in EARLY]
+    refusals = feature_gate(files, diff_text, nr_in)
     def first(xs, k, sep):
         return sep.join(xs[:k]) + (' … and %d more' % (len(xs) - k) if len(xs) > k else '')
     for name, hit, missing in refusals:

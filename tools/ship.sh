@@ -751,6 +751,22 @@ if [ -n "$GONE" ] && ! grep -q 'DROPS TEST:' <<<"$MSG"; then
 fi
 # …and a declared drop must also lower the floor, said HERE rather than after the full desktop pass (tools/_testfloor.sh)
 floor_ahead_check || { echo "   Not committing, not pushing."; exit 1; }
+# ⚠️ THE FEATURE GATE, ASKED BEFORE THE SUITES (11 Oct, the PM's idea). v17.38 ran every pass green — two hours of this
+# machine — and was refused at the very end by the feature gate below (for a false match, othersCanEdit as "scan"). Whether
+# a release touches the AAC export audio or the QR code is known HERE, and off the Mac their tests NEVER run: this machine's
+# last ship left the list (.claude/ship/notrun-*.tsv — what stayed NOT RUN after the finger pass). Only those two features
+# are asked now (feature-gate --early); a finger test's NOT RUN is cleared by the finger pass and is never asked early. The
+# gate after the suites stays as it is — this one only makes a refusal that was coming anyway cost seconds.
+_EARLY_NR="$(cat .claude/ship/notrun-desktop.tsv .claude/ship/notrun-phone.tsv 2>/dev/null | sort -u)"
+if [ -n "$_EARLY_NR" ]; then
+  _EFG="$(printf '%s\n' "$_EARLY_NR" | python3 tools/_shipgates.py feature-gate --early)"; _EFGRC=$?
+  if [ "$_EFGRC" != 0 ]; then
+    [ -n "$_EFG" ] && echo "$_EFG" || echo "❌ the early feature gate could not run (git or its own error, above) — not shipping on a guess."
+    echo "   Asked BEFORE the suites, from this machine's last ship: these tests never run here. Ship this release from the Mac."
+    echo "   Nothing is committed or pushed."
+    exit 1
+  fi
+fi
 
 # ─── NO REQUEST MAY VANISH WITHOUT SAYING SO (2 Sep) ────────────────────────────────────────────
 # The twin of the gate above, and it exists because the thing it prevents ALREADY HAPPENED. On 1 Sep,
