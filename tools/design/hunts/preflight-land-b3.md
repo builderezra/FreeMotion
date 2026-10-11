@@ -169,3 +169,10 @@ Environment / harness, not land-b3:
 - The ~65 other reds are red on land-b1 too (codecs, real finger, CPU throttle, timing).
 
 `?only=690 T16` and `?only=482` at both widths on land-b3 (and land-b1 for comparison): running; their own section follows.
+
+### `?only=482` and `?only=690 T16` at both widths (land-b3 and land-b1)
+
+- `?only=482`: **land-b3 107/115 at 1280 and at 380; land-b1 113/115 at both.** land-b3's six extra reds are exactly the a73ab63 ones above (`482: every effect does something visible…`, `482 polish 1`, `482 5.3`, `482 6.0 Vignette…`, `482 6.3 Drop Shadow`, `482 6.0 Lens Flare…`). The two reds both trees share are environment here: `482 2.6 Motion Blur (Object) - Shutter phase…` and `482 3.0 Echo and Reverb - Tone, Low cut…` (the Motion Blur and Echo picture checks the earlier helper reports list as red on main too).
+- `?only=690 T16`: **matches no test on either tree** (Regression 0/0). No test title contains "690 T16"; if a different substring was meant, say which and it will be run.
+
+DONE: LAB2 land-b3 — code review (25 land, 15 land-after-fix, 0 drop) + full passes 1280/380 + ?only=482 both widths: 8 reds belong to land-b3 (7 from a73ab63 Unsharp Protect colour def 100 incl. the schema gate, 1 from the hard-wipe commit: Radial Wipe at Progress 0 erases the layer, needs a decision); hangs and the other reds are environment. A fix branch hunt/land-b3-fixes is being built.
