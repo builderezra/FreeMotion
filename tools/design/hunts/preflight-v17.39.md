@@ -85,3 +85,18 @@ Read only: no tests or browser were run. Every finding below was traced through 
   - Focus restore after a refill.
   - The `drain` re-arm: the poll ends when history unmutes, and the runner's `finally` drains.
 
+
+### Browser reproduction of the HIGH and MEDIUM (cloud, 11 Oct; Playwright, real clicks and taps, fresh profiles)
+
+**HIGH: REPRODUCED on 726bb6d and on wip/v17.44-tree; main v17.38 is correct.**
+- 1280, cog Simple -> Full with nothing selected: `#inspector` still holds only Simple's `.sm-band-hint` ("Tap a clip to see its tools") and no `.addmenu`, still so 2 s later; selecting and deselecting a clip in Full brings the Add menu back.
+- 1280, Open in Full (from a mask-include group): Full opens with the shape selected and the band says "Its tools are below · More opens the rest", no layer editor.
+- 380, Open in Full and cog with a clip selected: `#inspector-panel` has no `.open` and sits at top 800 (off-screen); in Full, ‹ then a tap opens it at 483 as normal.
+- Corrections to the code review: "opening a Full project after a Simple one" does NOT reproduce (the Home card path gives Full with the Add menu); the title is never blank (it reads "Inspector", rewritten by syncTopBar); the reverse also happens (Full -> Simple with nothing selected keeps Full's Add menu painted under Simple's row).
+- The review's one-line fix (`FM.inspector.refresh()` in the editor-change listener) is NOT enough: it leaves the title reading "Add" where Full reads "Inspector". `FM.refreshAll()` matched normal Full exactly in both checks.
+
+**MEDIUM: REPRODUCED at 380 on 726bb6d and v17.44 (not at PC sizes, where the tray recovers by itself).**
+- After Text the tray is [into, crop, forward, backward, stay, more, delete] instead of [editwords, stay, more, delete], still wrong after typing and the check button. Cause: the only refill after the add comes from mobile.js's refreshAll wrapper (syncSelectionChrome -> FM.simpleTools.sync) BEFORE the timeline rebuild, so the read lacks the new layer; the rebuild's own sync then computes an identical signature and returns.
+- Sound effects: the added Whoosh is type 'video' (no audioOnly, no sm.snd), spine kind 'audio', and gets the overlay tray. Into row commits (nothing refuses: the checks at spine-edit.js:1237-1238 both pass, correcting the review), clips ripple by 0.95 s, a 0.9 s gap chip appears and the preview at t=0.5 is a black frame.
+
+**Fix status:** a first fix (local branch hunt/v17.39-fixes 2882501, red-first tests at 1280 and 380) was checked adversarially and found to leave keyframe diamonds draggable after leaving Simple, and to close Full's open category on a Full -> Simple -> Full round trip. A second round is being built now; the branch is pushed only when its check passes, and a section here will say so. **Do not ship 2.2 without it, and do not hand-roll the review's one-line fix.**
