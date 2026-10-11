@@ -43,3 +43,46 @@ What in AU25-1 (on v17.43, the slice AU25-1 … `simple P2.4 · T3 Reorder…`, 
 SF Pro (the Mac's face) is nearer Helvetica/Arial in width than DejaVu Sans, which is why I read this as a fallback-font artifact, not a layout bug: the 2 px overflow comes from DejaVu's wider glyphs. SF Pro itself I cannot test here. (An earlier note of mine said the fallback was "narrower in some strings"; the suite's own font probe prints 446.45 for this container against 450.9 for the Mac, a different string; this table is the direct test.)
 
 DONE: preflight-bx — BX1: AU25-1's editor switch is the polluter of all five Simple 2.4 tests (v17.43 and v17.44; what it leaves not found); BX2: only the storage-full test is needed, residue not found (ruled out: stubs, ask, storage, input globals, selectMode); BX3: tray B overflows only with DejaVu Sans, passes with Liberation Sans, FreeSans and Loma.
+
+---
+
+# BX1b and BX2b (the builder's follow-ups)
+
+## BX1b: `hunt/bx1-v17.44` 4b0e3d46 (AU25's setup/restore now snapshot and put back `FM.scene.project`): **the five 2.4 tests are STILL RED**
+
+Slice `AU25-1 … simple P2.4b · S7 the tail fit counts` (31 tests, #1230 to #1260) on 4b0e3d46, at 1280 AND 380:
+- `AU25-1`: ok, ok. `AU25-2`: ok, ok. (They stay green.)
+- `simple P2.4 · T3 Reorder with a trimmed camera…`, `simple P2.4 · T3 a link whose two ends…`, `simple P2.4 · T2 Keep on the music…`, `simple P2.4b · S7 the camera's hull…`, `simple P2.4b · S7 the tail fit counts…`: **RED, RED** (all five, both widths).
+
+So the project snapshot is not the cause. The state diff you asked for, taken just before AU25-1 and just after AU25-2 on that tip (1280):
+- **`FM.scene.project`: NO difference** (your restore works; it is not in the diff at all).
+- localStorage: `fm.editor.last` undefined → `"full"`, `fm.editor.hint` undefined → `"1"`, `fm.projects` (the project's `modified` stamp moved), `fm.variantLog` (one `clapper.timing` entry added), `fm.lastError` (a `ResizeObserver loop completed with undelivered notifications` report), and one `fm.proj.*` document written (0 → 1 project keys).
+- `FM.scene`: a `selectedIds` property appears (`[]`, absent before).
+- Lazily created `FM` keys appear (the Simple/Full UI is built once): `selectMode`, `_fxPreview`, `_mtEasing`, `_volEasing`, `_spdEasing`, `_opaEasing`, `_fxEasing`, `_cropEasing`, `_camTab`, `_trimArmMs`.
+- **The DOM: +108 elements and the Simple timeline is still in the page after the switch back**: `#ed-live`, `#loading-dot`, `.sm-secstack` 0→1, `.sm-lane` 0→1, `.sm-item` 0→4, `.sm-clip` 0→3, `.sm-strip`, `.sm-band`, `.sm-tray-2`, `.sm-tool` 0→13, `.sm-grip` 0→2, `.sm-tick` 0→14, `.sm-pin`, `.sm-vh` 1→2, `.sb-rot-in`, `.vb-na`.
+
+Things I changed in `au25Restore` on copies, each run over the same 31-test slice (the five stayed RED every time): delete `FM.scene.selectedIds` when it did not exist before; remove every localStorage key AU25 created; delete the ten lazily made `FM` keys; (earlier, on v17.43) clear `fm.editor.last`/`hint`, `FM.refreshAll()` + 200 ms, re-open the open project, reset `FM.simpleTimeline`/`FM.spine`. And removing the Simple DOM nodes outright makes it WORSE (8 reds: `simple P2.3 · S9 option E …` x2 and `simple P2.4b · S7 Follow clips…` join the five), because the Simple UI is built once and reused.
+**What is left is the Simple DOM and its internal state, built once from AU25's own scene (3 clips, 4 items) and left standing in Full.** The five tests all work through the say line (`Do it anyway`, `Why? ›`, the tray); I could not show which node or field they read stale. The shortest practical fix I know is still to run AU25-1/2 after the 2.4 tests (or in a page of their own), not to restore more state.
+
+## BX2b: bisect INSIDE `690 with the phone storage full, leaving the project asks first — Stay (a real tap)…` on v17.41 (09358fd9)
+
+Pair `[storage test, 690 replacing a clip twice then undoing twice…]`, with the storage test cut short by a `throw` at each step (the real exit here is `needsTouch924()`, NOT RUN HERE):
+
+| the storage test stops… | target |
+|---|---|
+| natural (at `needsTouch924()`, after "back to A with new unsaved work") | RED |
+| after A and B are created and opened, before the full store | ok |
+| after the full store and the no-ask control, **before** "1 open → Leave anyway" | ok |
+| after "1 open → Leave anyway", before "back to A with new unsaved work" | **RED** |
+| after "back to A with new unsaved work" | RED |
+
+**The step that does it is `690 storage: 1 open → Leave anyway`**, and inside it, **the real mouse click** (`realInput924` mouseMove / mouseDown / mouseUp on the app's own `Leave anyway`): with that one call replaced by a synthetic `okb.click()` the target is GREEN. What I checked on the way:
+- storage and project state after that step are identical with and without it (a dump of every non-function `FM.storage` property, the open project, its layers, `fm.projects`, `fm.currentProject`, the `fm.proj.*` count): only the ids differ.
+- parking the real mouse afterwards (a real move to (2,2), or to the middle of the preview): still RED. So it is not where the mouse is left.
+- the one thing a dump of the page shows differently after the real click is **`document.hasFocus()` / the top window's: true after the real click, false after the synthetic one** (the active element, selection, hover, the frame's offsets, viewport size, pointer/hover media queries and the Ask dialog are the same).
+- I could NOT confirm focus as the cause: a stray real click on its own (placed in a hook before the target) did not give the page focus here and itself changed what the target saw (`setup: after two replaces the clip shows q915a-hfORIGINAL-….png, not the third file`), so that experiment says nothing.
+So: the leftover is "the page is the focused window after a real click", or something else a real click does that a synthetic one does not; the same pair is green on main and on v17.39 (the target's text is byte-identical there), so what reads it is v17.41's own Replace-media code. A grep for `focus` handlers in what 2.3 changed around Replace would be the next step.
+
+## BX3 (fixed by the builder, 0d34502e): not re-run.
+
+DONE: preflight-bx BX1b/BX2b — 4b0e3d46: the five stay RED at both widths, AU25-1/2 green, `FM.scene.project` is identical before and after (not the cause), what is left is the Simple DOM built from AU25's scene; BX2b: the step is "1 open → Leave anyway", its real mouse click (synthetic click = green), the visible difference is page focus.
