@@ -61008,6 +61008,113 @@
     if (fBad.length) throw new Error('Flash Random keyed at a constant Speed 10 flashes differently from an unkeyed 10 on frames ' + fBad.slice(0, 12).join(', '));
   });
 
+  /* land-b3 F1, the sites the first pass missed (adversarial check). Every frame of a keyed constant rate against the unkeyed
+     rate, through the production kernel. The unkeyed product (rate × time) is not always exact either: 15 × (123 / 30) is
+     61.49999999999999, so on a few frames the UNKEYED path is the one a hair off its own step. Such a frame is excused only
+     when `off(t, f)` says the exact value (rate × frame / fps) sits ON one of the effect's edges and the unkeyed product
+     missed it on the side that edge cares about — it then returns the 1e-8 s step that clears that rounding (edges here are
+     whole frames apart, so it crosses no other) — AND the keyed draw equals the unkeyed draw taken that step along. Anything
+     else that differs is a failure. */
+  function _f1EveryFrame(o) {
+    const bad = [], ownMiss = [];
+    for (let f = 0; f <= o.frames; f++) {
+      const t = f / o.fps, k = o.draw(o.keyed, t), u = o.draw(o.rate, t);
+      if (o.same(k, u)) continue;
+      const n = o.off(t, f), x = n ? o.draw(o.rate, t + n) : null;
+      if (x && o.same(k, x) && !o.same(u, x)) ownMiss.push(f); else bad.push(f);
+    }
+    return { bad, ownMiss };
+  }
+  const _f1Close = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= 1e-3);
+  const _f1Tracks = v => [{ kf: [{ t: 0.5, v, e: 'linear' }] }, { kf: [{ t: 0.25, v, e: 'linear' }, { t: 3, v, e: 'linear' }] }];
+
+  test('690 Shake keyed at a constant Speed takes the same Hardness steps as the unkeyed Speed on every frame - 15 Hz at 30 fps, 12 Hz at 24 fps with Smear, a new Shake at 30 fps', { item: 'TBD' }, function () {
+    /* Hardness holds a random level per half noise cycle, ihash(Math.floor(u * 2)), and the smear's trail reads the same u one
+       frame back. B2 made u a keyed integral, and Gauss-Legendre returns n - 1e-15 as often as n + 1e-15 on a whole half
+       cycle, so at Hardness 1 a keyed constant Speed 15 at 30 fps differed from the unkeyed Speed on 64 of 301 frames — on 61
+       the keyed count a step short; land-b1's rate(now) × t never differed. Read from the placements the production kernel
+       hands its canvas. */
+    const shake = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.shake;
+    if (!shake || !FM.integrateProp || !FM.fxRegistry) throw new Error('the Shake kernel, the rate integrator or the registry is missing');
+    const run = (params, fps) => (speed, t) => {
+      const calls = [], B = { globalAlpha: 1, save() {}, restore() {},
+        translate(x, y) { calls.push(x, y); }, rotate(r) { calls.push(r); }, scale(x, y) { calls.push(x, y); }, drawImage() { calls.push(B.globalAlpha); } };
+      shake({}, B, 320, 240, { x: 100, y: 80, w: 120, h: 80 }, Object.assign({}, params, { speed }), t, t, null, 1, null, { project: { width: 320, height: 240, fps } });
+      return calls;
+    };
+    const fresh = FM.fxRegistry.makeInstance('shake').params;
+    if (!(fresh.jitter > 0 && fresh.smear > 0)) throw new Error('CONTROL: a new Shake has no Hardness or Smear, so its row below tests nothing: ' + JSON.stringify(fresh));
+    const cases = [
+      ['Hardness 1, Speed 15, 30 fps', { amount: 70, twist: 4, zoom: 0, jitter: 1, smear: 0, seed: 0 }, 15, 30, 300],
+      ['Hardness 1, Smear 1, Speed 12, 24 fps', { amount: 70, twist: 4, zoom: 0, jitter: 1, smear: 1, seed: 0 }, 12, 24, 240],
+      ['a new Shake (Speed ' + fresh.speed + ', Hardness ' + fresh.jitter + ', Smear ' + fresh.smear + '), 30 fps', fresh, fresh.speed, 30, 300],
+    ];
+    const out = [];
+    cases.forEach(([what, params, rate, fps, frames]) => {
+      const draw = run(params, fps);
+      let steps = 0;
+      for (let f = 1; f <= frames; f++) if (!_f1Close(draw(rate, f / fps), draw(rate, (f - 1) / fps))) steps++;
+      if (steps < frames / 2) throw new Error('CONTROL: ' + what + ': the placements change on only ' + steps + ' of ' + frames + ' frames, so a step taken one frame late would not show');
+      _f1Tracks(rate).forEach((keyed, n) => {
+        if (!FM.isAnimated(keyed)) throw new Error('CONTROL: the keyed track does not count as keyed');
+        // the kernel's unkeyed u = tl × spd, and the smear's (tl - 1 / fps) × spd: a step is lost when either lands BELOW an exact half cycle
+        const below = (got, exact) => got < exact && Number.isInteger(exact * 2);
+        const off = (t, f) => below(t * rate, rate * f / fps) || (params.smear > 0 && below((t - 1 / fps) * rate, rate * (f - 1) / fps)) ? 1e-8 : 0;
+        const r = _f1EveryFrame({ fps, frames, keyed, rate, draw, same: _f1Close, off });
+        if (r.bad.length) out.push(what + ', track ' + n + ': ' + r.bad.length + ' of ' + (frames + 1) + ' frames (' + r.bad.slice(0, 10).join(', ') + ')');
+      });
+    });
+    if (out.length) throw new Error('A Shake keyed at a constant Speed jitters differently from the unkeyed Speed on: ' + out.join('; '));
+  });
+
+  test('690 Pulse Square keyed at a constant Speed flips on the same frames as the unkeyed Speed - Speed 2 and 1.5 at 24 fps, Speed 2 at 30 fps', { item: 'TBD' }, function () {
+    /* The Square wave is f < 0.5 ? 1 : -1 after f -= Math.floor(f): an edge at every whole and half cycle. Keyed, the cycle
+       count is ∫ Speed, which comes out n - 1e-15 on some whole and half cycles, and the layer drew the other size: Speed 2 at
+       24 fps showed it 1 + Amount where the unkeyed Speed shows 1 - Amount. Read from the production kernel's scale. */
+    const pulse = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.pulse;
+    if (!pulse || !FM.integrateProp) throw new Error('the Pulse kernel or the rate integrator is missing');
+    const draw = (speed, t) => {
+      const calls = [], B = { save() {}, restore() {}, drawImage() {}, translate(x, y) { calls.push(x, y); }, scale(x, y) { calls.push(x, y); } };
+      pulse({}, B, 200, 200, { x: 80, y: 80, w: 40, h: 40 }, { amount: 0.4, speed, phase: 0, wave: 3, stretch: 0, pivotx: 50, pivoty: 50 }, t, t, null, 1, null, null);
+      return calls;
+    };
+    const big = draw(2, 0.1), small = draw(2, 0.3);
+    if (Math.abs(big[2] - 1.4) > 1e-9 || Math.abs(small[2] - 0.6) > 1e-9) throw new Error('CONTROL: Square at Amount 0.4 does not scale 1.4 then 0.6: ' + big[2] + ' / ' + small[2]);
+    const out = [];
+    [[2, 24, 240], [1.5, 24, 240], [2, 30, 300]].forEach(([rate, fps, frames]) => _f1Tracks(rate).forEach((keyed, n) => {
+      const r = _f1EveryFrame({ fps, frames, keyed, rate, draw, same: _f1Close, off: (t, f) => rate * t < rate * f / fps && Number.isInteger(rate * f / fps * 2) ? 1e-8 : 0 });   // unkeyed cycles = spd × tl, below a whole or half cycle
+      if (r.bad.length) out.push('Speed ' + rate + ' at ' + fps + ' fps, track ' + n + ': frames ' + r.bad.slice(0, 10).join(', ') +
+        ' (scale ' + draw(keyed, r.bad[0] / fps)[2] + ' where the unkeyed Speed draws ' + draw(rate, r.bad[0] / fps)[2] + ')');
+    }));
+    if (out.length) throw new Error('A Pulse Square keyed at a constant Speed draws the other size from the unkeyed Speed on ' + out.join('; '));
+  });
+
+  test('690 Scanlines Roll keyed at a constant rate lands on the same rows as the unkeyed Roll on every frame - 24 and -24 px/s and pitch 4 at 24 fps, 30 px/s at 30 fps', { item: 'TBD' }, function () {
+    /* The roll offset is ∫ Roll, and a row is dark when ((y - off) % pitch + pitch) % pitch >= pitch - weight. That phase FALLS
+       as off grows, so a whole-px offset is the edge from ABOVE: off = n + 1e-15 moved every line one row, n - 1e-15 is
+       harmless. Integrated, a keyed constant 24 px/s at 24 fps put its lines a row over on 64 to 75 of 241 frames. */
+    const scanlines = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.scanlines;
+    if (!scanlines || !FM.integrateProp) throw new Error('the Scanlines kernel or the rate integrator is missing');
+    const H = 24;
+    const run = (spacing, thickness) => (roll, t) => {
+      const d = new Uint8ClampedArray(H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 200; d[i + 3] = 255; }
+      scanlines(d, 1, H, { amount: 1, roll, spacing, thickness }, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const out = [];
+    [[24, 24, 240, 2, 1], [-24, 24, 240, 2, 1], [48, 24, 240, 4, 2], [30, 30, 300, 2, 1]].forEach(([rate, fps, frames, spacing, thickness]) => {
+      const draw = run(spacing, thickness);
+      if (same(draw(rate, 0), draw(rate, 1 / fps))) throw new Error('CONTROL: Roll ' + rate + ' at pitch ' + spacing + ' draws the same rows one frame apart, so a row slip would not show');
+      _f1Tracks(rate).forEach((keyed, n) => {
+        const r = _f1EveryFrame({ fps, frames, keyed, rate, draw, same, off: (t, f) => rate * t > rate * f / fps && Number.isInteger(rate * f / fps) ? -1e-8 * Math.sign(rate) : 0 });   // unkeyed off = roll × t; ABOVE a whole px is the side that slips
+        if (r.bad.length) out.push('Roll ' + rate + ' at ' + fps + ' fps, pitch ' + spacing + '/' + thickness + ', track ' + n + ': ' + r.bad.length + ' of ' + (frames + 1) + ' frames (' + r.bad.slice(0, 10).join(', ') + ')');
+      });
+    });
+    if (out.length) throw new Error('Scanlines keyed at a constant Roll put its lines on different rows from the unkeyed Roll: ' + out.join('; '));
+  });
+
   test('690 Noise keyframed Speed accumulates frames and holds its pattern at zero', { item: 'TBD' }, function () {
     const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.noise;
     if (!K || !FM.integrateProp) throw new Error('the Noise kernel or shared rate integrator is missing');

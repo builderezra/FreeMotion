@@ -5958,7 +5958,7 @@ window.FM = window.FM || {};
       const sp = p.spacing == null ? 2 : Math.max(2, Math.round(FM.evalProp(p.spacing, t)));
       const th = p.thickness == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.thickness, t)));
       const roll = p.roll == null ? 0 : FM.evalProp(p.roll, t);
-      const off = FM.isAnimated(p.roll) ? FM.integrateProp(p.roll, 0, t) : roll ? roll * t : 0;
+      const off = FM.isAnimated(p.roll) ? FM.integrateProp(p.roll, 0, t) - 1e-9 : roll ? roll * t : 0;   // − 1e-9, the other sign (land-b3 F1): ph = (y − off) mod pitch FALLS as off grows, so a whole-px off is a ceiling edge — n + 1e-15 put every line a row over; n − 1e-9 draws n's rows
       const plain = sp === 2 && th === 1 && !roll && off === 0;
       /* A LINE NEVER FILLS ITS OWN PITCH (queue 904). Weight was clamped to Pitch, so at the default Pitch of 2, weights 2-20 — 19 of the
          slider's 20 stops — all darkened EVERY row: a flat wash, no lines. Now a weight at or past the pitch widens the pitch to keep a
@@ -14204,7 +14204,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const disp = function (u) { return [amt * noise(u, 0) * dampX, amt * noise(u, 55) * dampY]; };
       // Speed is a rate: keep the travelled noise phase when a keyframe slows or stops the shake.
       const keyedSpeed = FM.isAnimated(p.speed);
-      const u0 = keyedSpeed ? FM.integrateProp(p.speed, t - tl, t) : tl * spd;
+      const u0 = keyedSpeed ? FM.integrateProp(p.speed, t - tl, t) + 1e-9 : tl * spd;   // + 1e-9: Hardness steps at Math.floor(u * 2), a COUNT (land-b3 F1)
       const d0 = disp(u0);
       let px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;   // `let`: Hide edges re-centres on the layer's own middle below
       const rot = tw * noise(u0, 200) * Math.PI / 180;
@@ -14277,7 +14277,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (smear > 0) {
         // Thumbnail/template renders can pass a scene other than the editor's active FM.scene.
         const fps = (scene && scene.project && scene.project.fps) || 30;
-        const u1 = keyedSpeed ? FM.integrateProp(p.speed, t - tl, t - 1 / fps) : (tl - 1 / fps) * spd;
+        const u1 = keyedSpeed ? FM.integrateProp(p.speed, t - tl, t - 1 / fps) + 1e-9 : (tl - 1 / fps) * spd;   // + 1e-9 as u0's
         const d1 = disp(u1);   // the same pattern (it lives in `noise`) one frame ago
         const ddx = d0[0] - d1[0], ddy = d0[1] - d1[1];
         if (Math.hypot(ddx, ddy) > 1.5) {
@@ -14345,7 +14345,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const wave = Math.round(fparam(p, 'wave', 0, t));
       // A keyframed frequency advances the beat count through its changes. Using
       // speed(now) for the whole clip would jump every wave to a different beat.
-      const cycles = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) : spd * tl;
+      const cycles = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) + 1e-9 : spd * tl;   // + 1e-9: Square flips at whole and half cycles, floor-type edges (land-b3 F1)
       const s = wave >= 1 && wave <= 4 ? 1 + amt * pulseWave(wave, cycles + ph / (2 * Math.PI)) : 1 + amt * Math.sin(2 * Math.PI * cycles + ph);
       const fx = p.pivotx == null ? 50 : FM.evalProp(p.pivotx, t), fy = p.pivoty == null ? 50 : FM.evalProp(p.pivoty, t);
       /* An off-centre pivot is measured on the layer's EXACT edges: the box handed in is the fast scan's, up to ~20 px loose,
