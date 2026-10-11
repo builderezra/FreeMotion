@@ -12,7 +12,7 @@ You'll be able to share a project live, so a friend can edit it with you on thei
 
 No link? Your friend can type the short code instead (it stops working 30 minutes after you close the sharing card). On Home they tap the person icon at the top, then **Join a friend's project…**, type the code and tap **Join**.
 
-On a computer: the round button is hidden on wide screens. Click the cog (Canvas settings) at the top and open **Friends**. The same buttons are there. <!-- not walked: the walk was the 380 px phone layout only -->
+On a computer: the round button is hidden on wide screens. Click the cog (Canvas settings) in the row with the time counter, just left of the Export arrow, and open **Friends**: it is a small block there with a ⤢ button, and Canvas settings is the big one beside it. The same buttons are there. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: Nothing is shared until you tap **Start sharing**. The switch is labelled "still being tested" in Settings, so keep a copy of anything important.
 
@@ -42,7 +42,7 @@ If it doesn't work: If the link won't connect, tap **Link not working? Swap code
 | No link: Home person icon | index.html:687 | yes |
 | No link: Join a friend's project… in its menu | js/home.js:2957 | yes |
 | No link: type the short code | js/collab-ui.js:3357 | yes |
-| PC: cog opens Canvas settings | index.html:283 | yes |
+| PC: the cog is in the row with the time counter, left of Export (not at the top) | index.html:325 #btn-settings (index.html:283 #btn-canvas is hidden at 1280) | re-checked 11 Oct at 1280 |
 | PC: Friends row in Canvas settings | index.html:1043 | yes |
 | PC: the round button is hidden on wide screens | styles.css:11073 | yes |
 | Tip: nothing shared until Start sharing | js/collab-ui.js:1349 | yes |

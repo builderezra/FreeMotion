@@ -179,10 +179,11 @@
   "hidden": true
  },
  {
-  "file": "simple/10-add-a-crossfade-in-simple.md",
+  "file": "simple/10-crossfade-between-clips-in-simple.md",
   "title": "Add a crossfade between two clips",
   "group": "Look",
   "mode": "simple",
+  "needs": "On every cut",
   "hidden": true
  },
  {
@@ -202,10 +203,11 @@
   "hidden": true
  },
  {
-  "file": "simple/13-dip-to-black-in-simple.md",
+  "file": "simple/14-dip-to-black-in-simple.md",
   "title": "Dip to black",
   "group": "Look",
   "mode": "simple",
+  "needs": "On every cut",
   "hidden": true
  }
 ]

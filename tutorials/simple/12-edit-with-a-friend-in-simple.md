@@ -2,7 +2,7 @@
 
 You'll be able to share a project live, let a friend in, and keep working together without breaking each other's clips.
 
-Before you start: a project in Simple (tutorial 02) and a friend with FreeMotion on their own phone or computer. <!-- Only steps 1 to 6 were walked: the rest needs two devices and the relays, which the test browser cannot reach, so 7 to 11 come from the code and the suite (Ezra confirmed Friends works on his phone, 11 Oct). Walked 9 Oct at 380 with real touch on hunt/simple-transitions (2.6 live session), label v17.24, one browser, no network to the relays -->
+Before you start: a project in Simple (tutorial 02) and a friend with FreeMotion on their own phone or computer. <!-- Only the first half was walked. The second half needs two devices and the free online helpers, which my test browser cannot reach; every step from 7 on is marked NOT WALKED and comes from the code and the suite. (Ezra confirmed Friends works between his own devices, 11 Oct.) walked 9 Oct at 380 with real touch on hunt/simple-transitions (2.6 live session), label v17.24, one browser, no network to the relays -->
 
 1. Tap the small person icon at the top left of the picture. A panel opens with **Simple / Full**, the canvas size and a card called **Work with friends**, with three steps: turn it on, send the link, they tap it. It says **Off**. <!-- walked: the icon at (22,72); shots/12-01.jpg -->
 2. Tap the **Work with friends** switch at the bottom. The card becomes **Share “Project 1” live, Not sharing**, with you listed (a colour dot, "Pick the name and colour others will see") and a big **Start sharing** button. A line says nothing is shared until you tap it. <!-- walked: switch at (325,659); shots/12-02.jpg -->
