@@ -32915,12 +32915,21 @@
        so a test that awaits either one waits for a person. Found by exactly that: an 180-second timeout
        with no last step, on a card that was sitting on screen waiting to be filled in. */
     C.ui.setProfile('Test Person', C.ui.PALETTE[0]);
+    let bodyDone = false, leaks = [];
     try {
-      return await fn(C.ui);
+      const out = await fn(C.ui);
+      bodyDone = true;
+      return out;
     } finally {
       try { C.ui.close(); } catch (e) {}
-      FM.settings.set('collabLabs', false);   // #921 clause 19: the value restored below is ON now, and ON tears nothing down
-      try { C.ui.syncLabs(); } catch (e) {}
+      /* #921 clause 19: A LEAK DETECTOR, NOT AN ERASER. The value restored below is ON now (a device that never chose has
+         Work with friends on), and restoring ON tears nothing down — so for a while this passed through OFF first, which
+         ended every session and dropped every held offer between tests. That erased exactly the state a real Labs-ON user
+         carries from one project to the next, so a test that leaked it could never turn anything red. Now the test that
+         leaves an owner-side link behind is the one that fails, by name; the pass through OFF runs only then, so the leak
+         cannot spread into the tests after it. */
+      leaks = leaks921(C);
+      if (leaks.length) { FM.settings.set('collabLabs', false); try { C.ui.syncLabs(); } catch (e) {} }
       FM.settings.set('collabLabs', !!wasLabs);
       try { C.ui.syncLabs(); } catch (e) {}
       try {
@@ -32929,7 +32938,19 @@
         for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('fm.collab.host.') === 0) now.push(k); }
         now.forEach(function (k) { if (roomsBefore.indexOf(k) < 0) localStorage.removeItem(k); });
       } catch (e) {}
+      /* Only a test that otherwise passed is blamed for its leak: one that already failed keeps its own message. */
+      if (leaks.length && bodyDone) throw new Error('LEAK: this test left ' + leaks.join('; ') + ' after it closed — a real device carries that into the next project it opens, so the test has to end what it started');
     }
+  }
+  /* What a test may not leave behind on the owner's side once it has closed (withLabs921): a held swap code, a five-character
+     check still waiting, or an owner session still live. */
+  function leaks921(C) {
+    const out = [];
+    try { const o = C.ui._offer && C.ui._offer(); if (o) out.push('a swap code still held (made for project ' + o._pid + ')'); } catch (e) {}
+    try { if (C.ui._sasPending && C.ui._sasPending()) out.push('a five-character check still waiting to be answered'); } catch (e) {}
+    const s = C.session;
+    if (s && s.isOwner && C.active && s.active !== false) out.push('an owner session still live on project ' + s.pid);
+    return out;
   }
 
   test('921 S3 a name full of HTML is printed, never parsed — in the people list and in the knock card', { item: '921', budgetMs: 120000 }, async function () {
