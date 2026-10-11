@@ -139,3 +139,33 @@ The rest of the land list is done:
 - Smooth Bevel, Roughen and RGB Split change only the preview (ps < 1). After the #38 fix, RGB Split's exports are unchanged too.
 - No exporter, fx-registry.js or collab-core.js change exists in the chain. That absence is exactly what is wrong for #33.
 
+
+
+## Full passes (cloud, 11 Oct): land-b3 45a97e1 against land-b1 c3205c8, at 1280 and 380
+
+Note the base: land-b3 sits on land-b1 8017a0a; land-b1 has since moved to c3205c8 (#1131 glow burst, the speed-test re-run, the Windows AAC pass). Each red below was also run alone on c3205c8, so a red caused by the base's newer commits would show there.
+
+| run | result |
+|---|---|
+| land-b3 @1280 | {'PASS': 2245, 'FAIL': 69, 'NOTRUN': 93, 'HANG': 17} |
+| land-b3 @380 | {'PASS': 2248, 'FAIL': 68, 'NOTRUN': 93, 'HANG': 15} |
+| land-b1 @1280 | {'PASS': 2222, 'FAIL': 66, 'NOTRUN': 93, 'HANG': 4} |
+| land-b1 @380 | {'PASS': 2224, 'FAIL': 63, 'NOTRUN': 94, 'HANG': 4} |
+
+**Verdict: 8 reds belong to land-b3, from two commits; every other red is environment.** Each of the 8 is red alone AND paired on land-b3 and green alone on land-b1:
+
+From **a73ab63 (Unsharp Mask Protect colour, `def: 100`)**, the review's must-fix 1, now proven by the suite (7):
+- `921 S1 the schema fingerprint gate`: "The sync schema changed — bump FM.collab.SCHEMA_REV and set SCHEMA_FP to 7030805312103207 (it is 8673617696742561)".
+- `482 polish 1 …the 56 library filters and the seven effects render byte for byte as on v17.14`, `482 5.3 Teal & Orange, 5.4 Tint and 5.5 Duotone …`, `482 6.0 Vignette and the three Glows …`, `482 6.0 Lens Flare, Linear and Spin Streaks and Glow Scan …`: "2 pictures differ … a new control changed a look he already has: Cold Steel 1c0c3370/939023f0 -> 9cd3a048/b690cc17; Overdrive 6cf2492b/56809eb8 -> 41f126ed/698e8bd9".
+- `482 6.3 Drop Shadow …`: "the 56 library filters render 8becbc8a, not bc79cc6b as on v17.21".
+- `482: every effect does something visible at its own defaults`: "Unsharp Mask (3113px, p95 3)": Protect colour at 100 by default flattens the sharpening a new Unsharp Mask shows in the browser.
+→ The review's fix (`def: 0, legacy: 0`, schema bump REV 9 with the new SCHEMA_FP, collab-core.js ?v=) clears all seven.
+
+From **127cfd9 / ce7768ac (Fix hard wipe zero-progress visibility)** (1), NOT named by the code review:
+- `no effect erases the layer at a single parameter extreme (queue 264)`: "radialwipe:progress=min". At Progress 0 the Radial Wipe now hides the whole layer, which this guard (queue 264) forbids. **Needs a decision:** if ChatGPT's commit meant "0 progress = fully wiped" for a hard wipe, the guard needs a reasoned exception; if not, the commit is wrong at 0. The review called the wipes correct, so this is the suite's finding, not the review's.
+
+Environment / harness, not land-b3:
+- 17 / 15 HANGs: two runs of consecutive slices (#1340-1351 and #1992-1996) whose browser never booted after a killed slice. Every named one PASSES alone and paired on land-b3 (the Audio React sliders, both Squish tests, the preset save buttons, both filter-photo tests, 917.16, the shake cars); the two 690 ones are NOT RUN HERE (real finger). The runner now also kills a hung slice's whole Chromium process tree.
+- The ~65 other reds are red on land-b1 too (codecs, real finger, CPU throttle, timing).
+
+`?only=690 T16` and `?only=482` at both widths on land-b3 (and land-b1 for comparison): running; their own section follows.
