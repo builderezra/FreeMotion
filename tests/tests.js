@@ -61658,17 +61658,31 @@
   });
 
   test('690 Roughen Edges scales project-pixel controls on preview plates', { item: 'TBD' }, function () {
+    /* ChatGPT 746d53a8 clamps Amount and Scale in PROJECT px and then multiplies by the plate scale. Before it, the
+       dispatcher scaled them first and the kernel clamped the result at 2 plate px, so on a quarter-size preview Scale 2
+       (0.5) and Scale 8 (2) both landed on 2 and drew the same edge. (The test it replaces compared a direct call with
+       the dispatched one, which are identical by construction once the kernel names `ps`, so a kernel that ignored `ps`
+       passed it.) */
     const W = 32, H = 32, make = () => {
       const d = new Uint8ClampedArray(W * H * 4);
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
         d[(y * W + x) * 4 + 3] = (x + y) % 3 === 0 ? 255 : 0;
       return d;
     };
-    const params = { amount: 8, scale: 2 }, direct = make(), dispatched = make();
-    FM._FX_TABLES.PIXEL_FX.roughenedges(direct, W, H, params, 0, 0.25);
-    FM._applyPixelFx(dispatched, { type: 'roughenedges', params }, 0, W, H, 0.25);
-    if (direct.some((v, i) => v !== dispatched[i]))
-      throw new Error('Reduced-preview dispatch changed Roughen Edges scale or displacement');
+    const run = (params, ps) => { const d = make(); FM._applyPixelFx(d, { type: 'roughenedges', params }, 0, W, H, ps); return d; };
+    const alphaSum = d => { let n = 0; for (let i = 3; i < d.length; i += 4) n += d[i]; return n; };
+    /* CONTROL at the export scale: the kernel is byte-identical there before and after (alpha sum 90015 on this fixture) */
+    const full = alphaSum(run({ amount: 8, scale: 8 }, 1));
+    if (full !== 90015) throw new Error('At ps 1 (the export) Roughen Edges Amount 8 / Scale 8 changed: alpha sum ' + full + ', not 90015');
+    if (alphaSum(make()) === full) throw new Error('CONTROL: Roughen Edges did nothing to the fixture at ps 1, so the reduced-plate half proves nothing');
+    const s2 = run({ amount: 8, scale: 2 }, 0.25), s8 = run({ amount: 8, scale: 8 }, 0.25);
+    if (s2.every((v, i) => v === s8[i]))
+      throw new Error('On a quarter-size preview plate Scale 2 and Scale 8 draw the same rough edge - the scale was clamped after it was shrunk to the plate');
+    /* …and the plate scale is really applied: Amount 8 / Scale 8 at ps 0.25 is the export's Amount 2 / Scale 2 drawn on a
+       plate a quarter the size (a kernel that ignored `ps` would draw 8 / 8 here and pass the line above). */
+    const s22 = run({ amount: 2, scale: 2 }, 1);
+    if (!s8.every((v, i) => v === s22[i]))
+      throw new Error('On a quarter-size preview plate Amount 8 / Scale 8 is not the export\'s Amount 2 / Scale 2 - the plate scale is not applied to the project-pixel controls');
   });
 
   test('690 RGB Split keeps a green-only shift on reduced previews', { item: 'TBD' }, function () {
