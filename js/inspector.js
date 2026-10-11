@@ -4268,12 +4268,14 @@ window.FM = window.FM || {};
           }, 480);
         });
         ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => card.addEventListener(ev, clear));
-        /* S4d: IN SIMPLE a finger that starts a swipe on a card and moves past a tap's slop is no longer holding it: the 480 ms timer was only
-           cleared on up, cancel and leave, so a slow swipe raised "Reset <group>". Full's identical code is left as it is (DESIGN §0.4). */
+        /* S4d: a finger that starts a swipe on a card and moves past a tap's slop is no longer holding it: the 480 ms timer was only
+           cleared on up, cancel and leave, so a slow swipe raised "Reset <group>". Built for Simple first and left out of Full (DESIGN §0.4);
+           IN FULL TOO since #1122 — asked whether Full's same slow swipe should be fixed, his answer: "if an issue then fix". It is the
+           same card, the same 480 ms timer and the same swipe, so it was the same issue. */
         let holdAt = null;
         card.addEventListener('pointerdown', ev => { holdAt = { x: ev.clientX, y: ev.clientY }; });
         card.addEventListener('pointermove', ev => {
-          if (!holdAt || !(FM.editor && FM.editor.isSimple && FM.editor.isSimple())) return;
+          if (!holdAt) return;
           if (Math.hypot(ev.clientX - holdAt.x, ev.clientY - holdAt.y) > 10) clear();
         });
       }
