@@ -73,6 +73,7 @@ die() { printf '❌ %s\n' "$*" >&2; exit 1; }
 # back an empty number that then got written into the spend counter.
 calc() { ( trap '' INT HUP; exec python3 -c "import sys; print(round(float(eval(sys.argv[1], {'__builtins__': {}}, {})), 6))" "$1" ); }
 ge() { ( trap '' INT HUP; exec python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "$1" "$2" ); }
+putspent() { printf '%s\n' "$1" > "$STATE/spent.tmp" && mv -f "$STATE/spent.tmp" "$STATE/spent"; }
 isnum() { case "${1:-}" in ''|*[!0-9.eE+-]*) return 1 ;; *) return 0 ;; esac; }
 mn() { if ge "$1" "$2"; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 # sleep, but wake for a stop request; ends early at the stop time
@@ -155,13 +156,15 @@ KEY="$(cat "$KEYFILE")"
 
 # ---------- a run belongs to its stop time: a new stop time starts a fresh conversation ----------
 rm -f "$STATE/STOP"
-[ -f "$STATE/spent" ] || echo 0 > "$STATE/spent"
-SPENT="$(cat "$STATE/spent")"; isnum "$SPENT" || SPENT=0
+[ -f "$STATE/spent" ] || putspent 0
+SPENT="$(cat "$STATE/spent" 2>/dev/null)"
+# fail closed: an unreadable counter must never quietly become $0
+isnum "$SPENT" || die "the spend counter $STATE/spent is unreadable (${SPENT:-empty}), so nothing was started. Look up this cycle's spend on the Console's Usage page, write it in (for example: echo 120 > $STATE/spent) and start again."
 if [ "$(cat "$STATE/run_id" 2>/dev/null)" != "$STOP_EPOCH" ]; then
   rm -f "$STATE/session"; echo 0 > "$STATE/session_spent"
   if ! ge 0 "$SPENT"; then
     printf 'An earlier run counted $%s of spend. Reset the count to $0? Only say y if your monthly API credits have renewed since. [y/N] ' "$SPENT"
-    read -r yn; case "$yn" in y|Y) SPENT=0; echo 0 > "$STATE/spent";; esac
+    read -r yn; case "$yn" in y|Y) SPENT=0; putspent 0;; esac
   fi
   echo "$STOP_EPOCH" > "$STATE/run_id"
 fi
@@ -176,6 +179,9 @@ echo "               (the counter is an estimate; the hard limit is the Console'
 echo "  log:         $PROGRESS   (watch with: tail -f $PROGRESS)"
 echo "  stop early:  Ctrl-C here, or close this window"
 echo "  keep the laptop plugged in with the lid open"
+echo
+echo "  overnight, Windows Update can restart the laptop and nothing here can stop that: Settings > Windows Update >"
+echo "  Pause updates (1 week), or set Active hours to cover tonight, before you start"
 echo
 if [ -t 0 ]; then
   printf "Start? [y/N] "; read -r yn
@@ -249,7 +255,7 @@ while :; do
 
   # a fresh session once this one has cost ROTATE_USD: a long transcript makes every call dearer, and the repo is
   # built for a session with no memory (tick.sh, LOOP.md, REQUESTS.md). Only between turns, never mid-step.
-  if [ -n "$SID" ] && ge "$SESSION_SPENT" "$ROTATE_USD"; then
+  if [ -n "$SID" ] && [ ! -f "$STATE/STOP" ] && [ "$NOW" -lt "$WIND_EPOCH" ] && ge "$LEFT" "$(calc "$RESERVE + 2")" && ge "$SESSION_SPENT" "$ROTATE_USD"; then
     say "session $SID has cost ≈ \$$SESSION_SPENT; starting a fresh one"
     SID=""; SESSION_SPENT=0; rm -f "$STATE/session"; echo 0 > "$STATE/session_spent"
   fi
@@ -283,7 +289,7 @@ while :; do
   if [ "$WINDING" = 0 ] && [ "$((WIND_EPOCH + 900))" -lt "$END" ]; then END=$((WIND_EPOCH + 900)); fi
   LIMIT=$((END - T0)); [ "$LIMIT" -ge 1 ] || LIMIT=1
 
-  PRE="$(calc "$SPENT + $CAP * $OVERHEAD")"; isnum "$PRE" && echo "$PRE" > "$STATE/spent"   # nothing that kills this run can undercount
+  PRE="$(calc "$SPENT + $CAP * $OVERHEAD")"; isnum "$PRE" && putspent "$PRE"   # nothing that kills this run can undercount
   [ "$WINDING" = 1 ] && say "winding down ($WHY)"
   ANTHROPIC_API_KEY="$KEY" timeout --signal=TERM --kill-after=60 "$LIMIT" \
     claude -p "$PROMPT" "${SESSION_ARGS[@]}" \
@@ -341,7 +347,7 @@ PY
     STOTAL="$BASE"
   fi
   CHARGE="$(calc "$COST * $OVERHEAD")"; isnum "$CHARGE" || CHARGE="$(calc "$CAP * $OVERHEAD")"
-  NEWSPENT="$(calc "$SPENT + $CHARGE")"; isnum "$NEWSPENT" && SPENT="$NEWSPENT"; echo "$SPENT" > "$STATE/spent"
+  NEWSPENT="$(calc "$SPENT + $CHARGE")"; isnum "$NEWSPENT" && SPENT="$NEWSPENT"; putspent "$SPENT"
   if [ "$NEWSID" != "-" ]; then SID="$NEWSID"
   elif [ -n "$NEW_ID" ] && [ "$((T1 - T0))" -ge 60 ]; then SID="$NEW_ID"   # a killed fresh session may still be resumable
   fi
@@ -380,10 +386,14 @@ PY
     say "STOPPED: Claude answered as if it were using your subscription, not the API key. See $STATE/last.err."
     break
   fi
-  if printf '%s' "$ERRTEXT" | grep -qE 'too many classifier denials|no safety verdict|auto mode unavailable'; then
+  # when auto mode is unavailable at start, claude falls back SILENTLY to default mode, which in -p refuses every command
+  # and edit with rc 0; so a run that had actions refused and changed nothing counts like a classifier stop
+  FP1="$(fp)"; DENIED_IDLE=0
+  case "$NDENY" in ''|*[!0-9]*|0) ;; *) [ "$FP0" = "$FP1" ] && DENIED_IDLE=1 ;; esac
+  if [ "$DENIED_IDLE" = 1 ] || printf '%s' "$ERRTEXT" | grep -qE 'too many classifier denials|no safety verdict|auto mode (is )?unavailable'; then
     BLOCKS=$((BLOCKS + 1))
-    say "the safety classifier ended this run ($BLOCKS in a row)"
-    [ "$BLOCKS" -ge 2 ] && { say "STOPPED: two runs in a row were ended by the safety classifier (refusals, or it was unavailable). See $STATE/last.json."; break; }
+    say "actions were refused and nothing changed, or the safety classifier ended this run ($BLOCKS in a row)"
+    [ "$BLOCKS" -ge 2 ] && { say "STOPPED: two runs in a row had their actions refused (auto mode may be off: it falls back silently to default mode, which refuses every command and edit) or were ended by the safety classifier. See $STATE/last.json."; break; }
   else
     BLOCKS=0
   fi
@@ -394,12 +404,18 @@ PY
     SID=""; SESSION_SPENT=0; rm -f "$STATE/session"; echo 0 > "$STATE/session_spent"
   fi
   TRHIT=0
-  printf '%s' "$ERRTEXT" | grep -qE 'rate.?limit|overloaded|\b429\b|\b5[0-9][0-9]\b|econnreset|etimedout|enotfound|eai_again|econnrefused|socket hang up|fetch failed|network|connection (error|reset|refused)' && TRHIT=1
+  printf '%s' "$ERRTEXT" | grep -qE 'rate.?limit|overloaded|\b429\b|\b5[0-9][0-9]\b|econnreset|etimedout|enotfound|eai_again|econnrefused|socket hang up|fetch failed|network|connection (error|reset|refused)|can.t reach the api|no internet route|connection (dropped|lost|closed before|to the api was lost)|unable to connect to api([ .(]|$)|request timed out|no response from api|etimeout|failedtoopensocket|connectionclosed|enetunreach|enetdown|ehostunreach|ehostdown|epipe|econnaborted|err_socket_closed|und_err_socket' && TRHIT=1
   # a run that failed without starting work counts toward the three-strikes stop; network trouble, rate limits and
   # overloads cost nothing and pass by themselves, so they get a growing wait instead
-  if [ "$RC" != 0 ] && [ "$ISERR" = 1 ] && [ "$TRHIT" = 0 ] && ! ge "$COST" 0.01; then FAILS=$((FAILS + 1)); else FAILS=0; fi
+  if [ "$RC" != 0 ] && [ "$ISERR" = 1 ] && [ "$TRHIT" = 0 ] && ! ge "$COST" 0.01; then
+    FAILS=$((FAILS + 1))
+    if [ "$RESUMED" = 1 ] && [ -n "$SID" ]; then
+      say "the resumed session failed before doing any work; the next run starts a fresh one"
+      SID=""; SESSION_SPENT=0; rm -f "$STATE/session"; echo 0 > "$STATE/session_spent"
+    fi
+  else FAILS=0; fi
   if [ "$FAILS" -ge 3 ]; then
-    say "STOPPED: three runs in a row failed before doing any work. Last error: $(head -c 300 "$STATE/last.err" | tr '\n' ' ')"
+    say "STOPPED: three runs in a row failed before doing any work. Last error: $SUMMARY $(head -c 200 "$STATE/last.err" | tr '\n' ' ')"
     break
   fi
   [ "$STOPPING" = 1 ] && { say "stopping: asked to (Ctrl-C or the window closed)"; break; }
@@ -416,7 +432,6 @@ PY
   fi
   TR=0
   LAST_CALL="$T0"
-  FP1="$(fp)"
   if [ "$FP0" = "$FP1" ]; then LAST_IDLE=1; IDLE_STREAK=$((IDLE_STREAK + 1)); else LAST_IDLE=0; IDLE_STREAK=0; fi
   if [ "$RC" != 0 ] && [ "$ISERR" = 1 ]; then nap "$FAIL_SLEEP"
   elif [ "$LAST_IDLE" = 1 ]; then
