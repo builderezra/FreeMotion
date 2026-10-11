@@ -86,3 +86,32 @@ So: the leftover is "the page is the focused window after a real click", or some
 ## BX3 (fixed by the builder, 0d34502e): not re-run.
 
 DONE: preflight-bx BX1b/BX2b — 4b0e3d46: the five stay RED at both widths, AU25-1/2 green, `FM.scene.project` is identical before and after (not the cause), what is left is the Simple DOM built from AU25's scene; BX2b: the step is "1 open → Leave anyway", its real mouse click (synthetic click = green), the visible difference is page focus.
+
+---
+
+# BX2c: the Replace test and the `stillCurrent()` guard (v17.41 09358fd9, v17.42 0ea7e93a)
+
+**The guard theory does not hold: no "Media was not replaced" toast fires, v17.41 has no such guard at all, and keying the guard on `layer.id` on a tree that does have it changes nothing.**
+
+Method as before (own `_cdp.py` copy, 380 and 1280, slice `after=<microphone test>&upto=<690 replacing a clip twice…>` = `[storage-full test, target]`). Everything on copies of `tests/tests.js` / `js/app.js`, restored byte for byte (`git status` clean afterwards). FM.toast is wrapped at the START of the storage test and every call is recorded. The suite driver strips `<…>` and cuts failure text at ~300 characters, so the data is carried out through extra tests `Z0…Z13` placed after the target (each throws a 230-character slice, `<`/`>` swapped for `{`/`}`).
+
+**(1) The exact failure message (380, identical at 1280, identical on v17.41 and v17.42):**
+`control: ONE undo of a replace (the queue 829 case) no longer brings the previous file back — it shows q915a-hfORIGINAL-<timestamp>.png`
+Everything before it passed, including `setup: after two replaces the clip shows the third file`, so BOTH replaces landed. The break is at the first undo: it goes back to the ORIGINAL, not the second pick. (Earlier I saw the `setup:` message only in an experiment that changed what the target saw; the real red is this one.)
+
+**Every toast recorded (storage test start → target failure):** exactly one, `Storage full — autosave paused. Use ⚙ → Save project file to keep your work.` (from the storage test). Nothing during the target.
+
+**(2) Did "Media was not replaced — the project changed while it was opening" fire? NO.** Neither did the other guard toast (`…while the picker was open`), nor `Could not load that file`, on either tree.
+
+**Also: v17.41 (09358fd9) does not contain the guard.** `git grep stillCurrent` finds nothing in its `js/`; the guard (B1, `5e8337da`) is in v17.40 (f74966dd) and v17.42/43/44, not in v17.41's chain (2.3 sits on 2.2, not on the Full batch). So the pair is red on a tree without the code the theory blames. It is red identically on v17.42, which has it. Target alone (instrumented) is green on v17.42.
+
+**(3) The extra `<body>` children (taken against the body's children at the start of the storage test):** two, not one.
+- `DIV`, id `fm-ask`, class `hidden`: `<div class="hidden" id="fm-ask"><div class="fm-ask-card" aria-modal="true" aria-labelledby="fm-ask-title" aria-describedby="fm-ask-msg" role="alertdialog"><div class="fm-ask-title" id="fm-ask-title">` (200 chars, the app's own Ask dialog, built lazily the first time an ask is shown).
+- `DIV`, id `loading-dot`, no class: `<div id="loading-dot" aria-live="polite"><svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ld-track" cx="12" cy="12" r="9"></circle><circle class="ld-arc" cx="12" cy="12" r="9"></circle></svg` (200 chars, the loading spinner).
+These are ordinary lazily built UI, hidden; I have no evidence they are the cause (the earlier note that there was one extra child was a count from a different baseline).
+
+**(4) Keying the guard on `layer.id` (v17.42, the tree that has it):** both `FM.layerById(FM.scene, id) === layer` became `!!FM.layerById(FM.scene, id)`. The pair is **still RED**, same message, same toasts (380). Not pushed as a fix and not a fix.
+
+**What this leaves:** the storage test's real mouse click (BX2b) changes something that makes the first undo after two Replaces land on the original; the Replace guard is not involved. The thing to look at is the UNDO side of replace (the one-slot-per-layer stash from queue 829, `FM.history`), and whether the two replaces were recorded as two history entries when the pair runs. I did not measure the history depth; that is the next cheap step if the builder wants it.
+
+DONE: preflight-bx BX2c — the failure is the first-undo control (`ONE undo of a replace … shows q915a-hfORIGINAL`), not a refusal; NO "Media was not replaced" toast fires (only the storage-full toast is recorded), v17.41 has no such guard, keying it on layer.id on v17.42 stays RED, extra body children are `#fm-ask.hidden` and `#loading-dot` (both ordinary lazy UI).
