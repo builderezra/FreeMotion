@@ -60638,6 +60638,38 @@
     } finally { await au25Restore(c); }
   });
 
+  test('BX1d the tray on entering Simple belongs to what is selected NOW: a text added in Full gets Edit words, not a picture’s Crop and Into row', { item: 'BX1d', budgetMs: 60000 }, async function () {
+    /* Simple's tray refills only when its signature changes. Entering Simple runs the tray BEFORE the timeline is rebuilt, so it
+       is drawn from the previous Simple read, which has never heard of an item made in Full; the rebuild then draws the same
+       signature (an overlay is not on the main row, and the signature held neither its kind nor its row) and the tray stayed
+       the picture tools of the old selection under a TEXT. Driven as he would: Simple, back to Full, add a text, Simple again. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const tools = function () { return [].slice.call(document.querySelectorAll('#sm-tray [data-tool]')).map(function (n) { return n.dataset.tool; }); };
+    const go = async function (m) { const ok = await FM.editor.request(m); await sleep(350); return ok; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const a = await FM.projects.create({ name: 'BX1d tray', width: 320, height: 240 }); made.push(a);
+      for (const t of ['one', 'two', 'three']) { FM.addMediaLayer(await FM.loadImageFile(await q915aPng('bx1d' + t, '#d62828'))); await sleep(150); }
+      await sleep(300);
+      FM.selectLayer(FM.scene.layers[1].id); await sleep(100);
+      if (!(await go('simple'))) throw new Error('setup: could not enter Simple');
+      if (tools().indexOf('crop') < 0) throw new Error('CONTROL: a selected picture in Simple has no Crop tool (' + tools().join(',') + ')');
+      if (!(await go('full'))) throw new Error('setup: could not go back to Full');
+      FM.addTextLayer('hello'); await sleep(200);
+      const sel = FM.layerById(FM.scene, FM.scene.selectedId);
+      if (!sel || sel.type !== 'text') throw new Error('setup: adding a text in Full did not select it');
+      if (!(await go('simple'))) throw new Error('setup: could not re-enter Simple');
+      const t = tools();
+      if (t.indexOf('editwords') < 0 || t.indexOf('crop') >= 0 || t.indexOf('into') >= 0) {
+        throw new Error('he added a text in Full and came back to Simple: the tray shows ' + (t.join(', ') || 'nothing') + ' (the old picture’s tools) instead of Edit words, Stay put, More, Delete');
+      }
+    } finally {
+      try { await FM.editor.request('full'); } catch (e) {}
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
   /* ═══ S9 · OPTION E (his A1 sheet): one "Audio" tool for a main video clip. Three sizes: a PC window of 1280x800 and one of 1024x600 (smTrayBAt), and a phone at 380. ═══ */
   const SM9_SIZES = [[1280, 800], [1024, 600], [380, 0]];
   const sm9At = (w, h, fn) => w <= 700 ? atPhoneWidth(fn, w) : smTrayBAt(w, h, fn);
