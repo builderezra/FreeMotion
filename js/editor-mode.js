@@ -143,9 +143,13 @@ window.FM = window.FM || {};
     if (FM.groupContext && FM.exitGroup) { try { FM.exitGroup(true); } catch (e) {} }
     if (opts.from === 'cog') pendingFx = true; else if (!opts.quiet) crossfade();
     if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+    /* THE LISTENERS RUN BEFORE THE REBUILD (queue 980). simple-tools.js's listener redraws the left panel for the editor now on
+       screen, and that refresh can change which keyframes are armed: a clip picked in Simple drops Full's open category to the
+       grid. The timeline reads that once, at build time (FM.kfFocusProps), so it is built after it — the order refreshAll keeps
+       (inspector, then timeline). Built first, the diamonds stayed solid and draggable under an editor that had closed. */
+    listeners.forEach(f => { try { f(mode); } catch (e) {} });
     if (!opts.noRebuild && FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();   // syncProject runs INSIDE a rebuild: no second one
     if (FM._dockSheet) requestAnimationFrame(FM._dockSheet);
-    listeners.forEach(f => { try { f(mode); } catch (e) {} });
     /* focus never falls to <body> (§8.10 item 2): if what held it is gone from view, the cog it came from takes it */
     if (!opts.quiet && (!had || had === document.body || !had.isConnected || !had.getClientRects().length)) {
       const c = ['m-settings', 'btn-settings'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length);

@@ -7105,7 +7105,11 @@ window.FM = window.FM || {};
          one ("More"); otherwise it stays clear above the tray and the tools. bandIdle is false whenever Simple is not on
          screen, so Full's Add menu and layer editor are exactly today's. */
       if (FM.simpleTools && FM.simpleTools.bandIdle && FM.simpleTools.bandIdle(layer)) {
-        lastLayerId = null;
+        /* …and it forgets the clip only when the selection moved (queue 980). The switch into Simple redraws this band for the clip
+           Full had open; forgetting it there made the way back treat the same clip as a new pick, so a trip to Simple and back with
+           nothing done closed Full's category and reset its keyframe row, filter preview and tabs. A different clip, or none, is
+           forgotten exactly as before, and the refresh that leaves Simple resets the view for it as Full's own refresh does. */
+        if (!layer || layer.id !== lastLayerId) lastLayerId = null;
         if (title) title.textContent = '';
         /* the words come from FM.simpleTools: "Its tools are below" alone only while every tool is on show on the PC tray's two
            rows (his pick B), otherwise today's words; data-sel lets the tray put them right when its rows change (finding 3) */

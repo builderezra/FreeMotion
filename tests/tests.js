@@ -124287,6 +124287,202 @@
     }, 380);
   });
 
+  test('simple P2.2 · review leaving Simple arms exactly the keyframe diamonds Full would: a trip with nothing done keeps Position / Scale, its picked row and its live diamonds, and a clip picked in Simple comes back on the grid with every diamond an outline (verify medium-diamonds)', { item: '980', budgetMs: 180000 }, async function () {
+    /* Round one redrew Full's left panel on the switch AFTER editor-mode.js had rebuilt the timeline, and the timeline reads which
+       keyframes are armed once, at build time (FM.kfFocusProps). Its refresh also met a clip the band had forgotten (Simple's
+       refresh set lastLayerId to null) and dropped the open category to the grid. So Position / Scale open, Simple and straight
+       back, and the panel came back on the grid while two diamonds stayed solid and draggable under no editor. Each leg is held
+       to what Full ITSELF shows: where it left off (nothing was done in Simple), the same pick made in Full (a clip picked in
+       Simple), and FM.refreshAll() on the state the switch left. Every difference is collected, so a red run names them all. */
+    smNeedP2();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const settle = async ms => { await sleep(ms); document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} }); };
+    const kx = (a, b) => ({ kf: [{ t: a, v: 100, e: 'linear' }, { t: b, v: 220, e: 'linear' }] });
+    const look = function () {
+      const i = document.getElementById('inspector'), q = s => i.querySelector(s), n = s => document.querySelectorAll('#tl-tracks ' + s).length;
+      const back = q('.cat-back'), row = q('.kf-sel'), t = document.querySelector('#inspector-panel .panel-title-label');
+      return { view: FM.inspector.currentView(), back: back ? back.textContent.trim() : '', grid: !!q('.cat-wrap'), hint: !!q('.sm-band-hint'), row: row ? row.textContent.trim() : '',
+        live: n('.kf-dot.kf-live'), idle: n('.kf-dot.kf-idle'), sel: FM.selectionIds().join(','), title: t ? t.textContent : '', open: document.getElementById('inspector-panel').classList.contains('open') };
+    };
+    const differ = (a, b) => Object.keys(a).filter(k => a[k] !== b[k]);
+    const to = async function (ed, o) {
+      if (!(await FM.editor.request(ed, o))) throw new Error('setup: the switch to ' + ed + ' was refused');
+      await settle(220);
+      if (FM.editor.mode() !== ed) throw new Error('setup: the switch did not reach ' + ed + ' (mode ' + FM.editor.mode() + ')');
+    };
+    /* B selected in Full, Position / Scale open, its X name tapped: X's two keyframes live, Y's two outlines */
+    const openPS = async function (v, where) {
+      FM.selectLayer(null); FM.selectLayer(v.L('B').id); await settle(120);
+      FM._mtMode = 'move'; FM.inspector.openCategory('transform'); await settle(150);
+      const name = Array.from(document.querySelectorAll('#inspector .kf-selectable')).find(s => /^x$/i.test(s.textContent.trim()));
+      if (!name) throw new Error('setup ' + where + ': Position / Scale shows no tappable X name');
+      name.click(); await settle(150);
+      const s = look();
+      if (s.view !== 'transform' || !s.row || s.live !== 2 || s.idle !== 2) throw new Error('CONTROL ' + where + ': Position / Scale with X picked shows ' + JSON.stringify(s) + ' — want X’s 2 diamonds live and Y’s 2 outlines');
+      return s;
+    };
+    const fails = [];
+    const run = async function (where) {
+      await smP2((W, H) => {
+        const C = smV('C', 6, 3, W, H), B = smV('B', 3, 3, W, H), A = smV('A', 0, 3, W, H);
+        B.transform.x = kx(3.5, 5); B.transform.y = kx(4, 5.5); C.transform.x = kx(6.5, 8); C.transform.y = kx(7, 8.5);
+        return [C, B, A];
+      }, async function (v) {
+        /* 1. Simple and straight back, nothing done there */
+        const left = await openPS(v, where);
+        await to('simple'); await to('full');
+        const got = look(); FM.refreshAll(); await settle(150); const own = look();
+        /* the title is left out of THIS comparison only: in Full it reads Inspector after a panel's own refresh (opening a category,
+           tapping a name) and Layer after syncTopBar (every selection and refreshAll), so where he left off says Inspector while
+           Full's own refresh of the very same state says Layer. It is held to that refresh below. */
+        let d = differ(left, got).filter(k => k !== 'title');
+        if (d.length) fails.push(where + ', nothing done in Simple: Full came back as ' + JSON.stringify(got) + ' where it left off at ' + JSON.stringify(left) + ' (' + d.join(', ') + ' differ)');
+        d = differ(own, got);
+        if (d.length) fails.push(where + ', nothing done in Simple: straight after the switch Full shows ' + JSON.stringify(got) + ', where its own refresh draws ' + JSON.stringify(own) + ' (' + d.join(', ') + ' differ)');
+        /* 2. C picked in Simple, then Open in Full (the hop) — held to the same pick made in Full */
+        await openPS(v, where);
+        FM.selectLayer(v.L('C').id); await settle(150);
+        const fullPick = look();
+        if (fullPick.view !== 'home' || !fullPick.grid || fullPick.live !== 0 || fullPick.idle !== 4) throw new Error('CONTROL ' + where + ': picking C in Full shows ' + JSON.stringify(fullPick) + ' — want the grid and C’s 4 diamonds as outlines');
+        await openPS(v, where);
+        await to('simple');
+        FM.selectLayer(v.L('C').id); await settle(150);
+        await to('full', { hop: true });
+        const got2 = look(); FM.refreshAll(); await settle(150); const own2 = look();
+        d = differ(fullPick, got2);
+        if (d.length) fails.push(where + ', C picked in Simple: Full came back as ' + JSON.stringify(got2) + ' where the same pick made in Full shows ' + JSON.stringify(fullPick) + ' (' + d.join(', ') + ' differ)');
+        d = differ(own2, got2);
+        if (d.length) fails.push(where + ', C picked in Simple: straight after Open in Full the left panel and diamonds are ' + JSON.stringify(got2) + ', where Full’s own refresh draws ' + JSON.stringify(own2) + ' (' + d.join(', ') + ' differ)');
+      }, { full: true });
+    };
+    const mt0 = FM._mtMode;
+    try {
+      await atWideWidth(() => run('1280'), 1280);
+      await atPhoneWidth(() => run('380'), 380);
+    } finally { FM._mtMode = mt0; }
+    if (fails.length) throw new Error(fails.join(' ¦ '));
+  });
+
+  test('simple P2.2 · review a trip to Simple and back with nothing done there leaves Full’s open category as it was: Colouring stays open, and Effects stays on its Filters tab with the picked filter still previewing and the camera tab kept (verify low-roundtrip)', { item: '980', budgetMs: 180000 }, async function () {
+    /* Round one's refresh on the way INTO Simple forgot the selected clip (the band's lastLayerId = null), so the refresh on the
+       way back treated the same clip as a new pick: Full's open category closed to the grid, and the keyframe row, the filter
+       preview, FM._camTab and the Effects tab were reset with it. Base 726bb6d redrew nothing on the switch and kept them. Held
+       to where Full left off, and to FM.refreshAll() on the state the switch left; every difference is collected. */
+    smNeedP2();
+    if (!FM.filters || !FM.filters.all || !FM.filters.all().length) throw new Error('FM.filters has no filters — js/filters.js did not load');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const settle = async ms => { await sleep(ms); document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} }); };
+    const look = function () {
+      const i = document.getElementById('inspector'), q = s => i.querySelector(s), back = q('.cat-back'), tab = q('.fxmode-btn.on'), t = document.querySelector('#inspector-panel .panel-title-label');
+      const pv = FM._fxPreview;
+      return { view: FM.inspector.currentView(), back: back ? back.textContent.trim() : '', grid: !!q('.cat-wrap'), hint: !!q('.sm-band-hint'), tab: tab ? tab.textContent.trim() : '',
+        picked: i.querySelectorAll('.flt-tile.is-picked').length, preview: pv ? pv.id + ':' + ((pv.list && pv.list.length) || 0) : '', cam: String(FM._camTab),
+        sel: FM.selectionIds().join(','), title: t ? t.textContent : '', open: document.getElementById('inspector-panel').classList.contains('open') };
+    };
+    const differ = (a, b) => Object.keys(a).filter(k => a[k] !== b[k]);
+    const to = async function (ed) {
+      if (!(await FM.editor.request(ed))) throw new Error('setup: the switch to ' + ed + ' was refused');
+      await settle(220);
+      if (FM.editor.mode() !== ed) throw new Error('setup: the switch did not reach ' + ed + ' (mode ' + FM.editor.mode() + ')');
+    };
+    const fails = [];
+    const trip = async function (where, left) {
+      await to('simple'); await to('full');
+      const got = look(); FM.refreshAll(); await settle(150); const own = look();
+      /* the title is held to Full's own refresh below, not to where he left off: a panel's own refresh writes Inspector and
+         syncTopBar writes Layer, so in Full the same state reads either, depending on which ran last */
+      let d = differ(left, got).filter(k => k !== 'title');
+      if (d.length) fails.push(where + ': after Simple and back Full shows ' + JSON.stringify(got) + ' where it left off at ' + JSON.stringify(left) + ' (' + d.join(', ') + ' differ)');
+      d = differ(own, got);
+      if (d.length) fails.push(where + ': straight after the switch Full shows ' + JSON.stringify(got) + ', where its own refresh draws ' + JSON.stringify(own) + ' (' + d.join(', ') + ' differ)');
+    };
+    const run = async function (width) {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        /* Colouring open on B */
+        FM.selectLayer(null); FM.selectLayer(v.L('B').id); await settle(120);
+        FM.inspector.openCategory('color'); await settle(150);
+        const c0 = look();
+        if (c0.view !== 'color' || !c0.back || c0.grid) throw new Error('CONTROL ' + width + ': Colouring did not open on B (' + JSON.stringify(c0) + ')');
+        await trip(width + ', Colouring open', c0);
+        /* Effects › Filters on B, one filter tile picked (previewing on the canvas), the camera panel's last tab not the first */
+        FM.selectLayer(null); FM.selectLayer(v.L('B').id); await settle(120);
+        FM.inspector.openCategory('filters'); await settle(200);
+        const tile = document.querySelector('#inspector .flt-tile[data-fltid]');
+        if (!tile) throw new Error('setup ' + width + ': the Filters tab shows no filter tile');
+        tile.click(); await settle(150);
+        FM._camTab = 'focus';   // the transient tab the camera panel writes; the new-clip reset puts it back to 'view'
+        const f0 = look();
+        if (f0.view !== 'effects' || !/filters/i.test(f0.tab) || f0.picked !== 1 || !f0.preview || f0.cam !== 'focus') throw new Error('CONTROL ' + width + ': the Filters tab with a pick shows ' + JSON.stringify(f0));
+        await trip(width + ', Filters tab with a pick', f0);
+        FM.inspector.openCategory('home'); FM._camTab = 'view';   // drops the pick and its preview before the project goes
+      }, { full: true });
+    };
+    await atWideWidth(() => run('1280'), 1280);
+    await atPhoneWidth(() => run('380'), 380);
+    if (fails.length) throw new Error(fails.join(' ¦ '));
+  });
+
+  test('simple P2.2 · review entering Simple clears Full’s left panel from Simple’s band at once: no Add menu under the rows with nothing selected, no layer editor with a clip open in Colouring, only Simple’s own words (verify high-inspector, the way in)', { item: '980', budgetMs: 150000 }, async function () {
+    /* The reverse of the leaving case round one fixed: nothing on the switch redrew #inspector, so entering Simple kept Full's Add
+       menu (nothing selected) or Full's layer editor (a clip selected) in the band under Simple's rows until the selection
+       changed. Round two moves that redraw before the timeline rebuild and stops the band forgetting the clip; this holds the
+       way in to what Simple ITSELF draws (FM.refreshAll() in Simple) so neither change can quietly drop it. Through the ⚙ cog
+       where it is on screen (a phone's clip bar holds the top bar while a clip is selected in Full), else the one door. */
+    smNeedP2();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const settle = async ms => { await sleep(ms); document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} }); };
+    const look = function () {
+      const i = document.getElementById('inspector'), h = i.querySelector('.sm-band-hint'), t = document.querySelector('#inspector-panel .panel-title-label');
+      return { hint: h ? h.textContent : '', add: !!i.querySelector('.addmenu'), editor: !!i.querySelector('.quick-row, .cat-wrap, .cat-back, .cat-body'),
+        title: t ? t.textContent : '', open: document.getElementById('inspector-panel').classList.contains('open') };
+    };
+    const differ = (a, b) => Object.keys(a).filter(k => a[k] !== b[k]);
+    const toSimple = async function () {
+      const cog = ['m-settings', 'btn-settings'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length);
+      if (cog) {
+        cog.click(); await settle(320);
+        const sw = document.querySelector('#cv-ed-bar .ed-sw');
+        if (!sw || !sw.getClientRects().length) throw new Error('setup: the cog shows no Editor switch (#cv-ed-bar .ed-sw)');
+        sw.click(); await settle(600);
+        const dlg = document.getElementById('canvas-dialog');
+        if (dlg && !dlg.classList.contains('hidden')) { FM.closeCanvasDialog(); await settle(150); }
+      } else if (!(await FM.editor.request('simple'))) throw new Error('setup: the switch to Simple was refused');
+      await settle(200);
+      if (FM.editor.mode() !== 'simple') throw new Error('setup: the switch did not reach Simple (mode ' + FM.editor.mode() + ')');
+      return cog ? 'the cog' : 'the one door';
+    };
+    const fails = [];
+    const check = async function (where, sel, v) {
+      FM.selectLayer(null);
+      if (sel) { FM.selectLayer(v.L(sel).id); await settle(120); FM.inspector.openCategory('color'); }
+      await settle(150);
+      const before = look();
+      if (sel ? !before.editor : !before.add) throw new Error('CONTROL ' + where + ': Full shows ' + JSON.stringify(before) + ' — no ' + (sel ? 'layer editor' : 'Add menu') + ' to leave behind, so this proves nothing');
+      const how = await toSimple();
+      const got = look();
+      FM.refreshAll(); await settle(150);
+      const own = look();
+      if (!own.hint || own.add || own.editor) throw new Error('CONTROL ' + where + ': Simple’s own refresh draws ' + JSON.stringify(own) + ' — not its band words alone');
+      const d = differ(own, got);
+      if (d.length) fails.push(where + ': straight after entering Simple through ' + how + ' the band shows ' + JSON.stringify(got) + ', where Simple itself draws ' + JSON.stringify(own) + ' (' + d.join(', ') + ' differ)');
+      if (!(await FM.editor.request('full'))) throw new Error('setup: the way back to Full was refused');
+      await settle(200);
+    };
+    await atWideWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        await check('1280, nothing selected', null, v);
+        await check('1280, clip B in Colouring', 'B', v);
+      }, { full: true });
+    }, 1280);
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        await check('380, nothing selected', null, v);
+        await check('380, clip B in Colouring', 'B', v);
+      }, { full: true });
+    }, 380);
+    if (fails.length) throw new Error(fails.join(' ¦ '));
+  });
+
   test('980 2.2 merge: after a Simple visit on a PC, #sm-bar goes back home — Full\u2019s inspector band keeps no Simple element', { item: '980' }, async function () {
     /* The PM's merge-day note (7 Oct): place() parked #sm-bar at the bottom of #inspector-panel on a PC and nothing moved it
        back, so Full's band kept it after Simple closed. Leaving Simple runs no sync() in Full (app.js calls it only in Simple),
