@@ -3485,6 +3485,7 @@ window.FM = window.FM || {};
   // way their arrows point) has to be in this signature, or the row goes stale mid-scrub.
   let quickSideSig = null;
   let lastNavSig = null;   // layer+view the panel is currently scrolled for (see refresh)
+  let bandKept = null;     // queue 980: Full's scroll where Simple's band took its place, for that clip and view (see refresh)
   /* #912 clause 4 — "Any static menu that's doesnt have any animation when u open it up give it one."
      refresh() rebuilds the whole panel on EVERY edit (a slider drag is dozens a second), so an entrance
      cannot live on a class the builders always add — it would replay under his finger. Both of these
@@ -7093,6 +7094,18 @@ window.FM = window.FM || {};
       // dragging, the playhead crossing a clip edge) deliberately leave the scroll alone.
       const navSig = (layer ? layer.id : '-') + '/' + view;
       const navChanged = navSig !== lastNavSig; lastNavSig = navSig;
+      const band = !!(FM.simpleTools && FM.simpleTools.bandIdle && FM.simpleTools.bandIdle(layer));
+      /* …AND A TRIP TO SIMPLE IS NOT A NAVIGATION (queue 980). The switch into Simple draws the band's one line in place of the
+         editor Full had open, which drops the scroll to the top, and the way back is the same clip and view, so nothing above
+         puts it back. The band keeps Full's scroll as it takes over (only from Full's own panel, so a second band redraw cannot
+         overwrite it with its own 0), forgets it when the selection moves (below), and the next panel drawn in Full gives it
+         back if it is still that clip and view. bandIdle is false whenever Simple is not on screen, so Full alone is today's. */
+      let kept = null;
+      if (!band) { kept = bandKept; bandKept = null; }
+      else if (layer && !navChanged && layer.id === lastLayerId && !root.querySelector(':scope > .sm-band-hint')) {
+        const pe = document.getElementById('inspector-panel');
+        bandKept = { sig: navSig, top: root.scrollTop, sheet: pe ? pe.scrollTop : 0 };
+      }
       root.innerHTML = '';
       // The easing editor is the one sub-view that has to FIT rather than scroll — its graph shrinks
       // into whatever height is left (see #inspector-panel.insp-ease in styles.css). Cleared on every
@@ -7104,12 +7117,12 @@ window.FM = window.FM || {};
       /* SIMPLE MODE P2.2 (DESIGN.md §8.3, D10, his D20 A): in Simple the band shows a panel only when a tray tool asked for
          one ("More"); otherwise it stays clear above the tray and the tools. bandIdle is false whenever Simple is not on
          screen, so Full's Add menu and layer editor are exactly today's. */
-      if (FM.simpleTools && FM.simpleTools.bandIdle && FM.simpleTools.bandIdle(layer)) {
+      if (band) {
         /* …and it forgets the clip only when the selection moved (queue 980). The switch into Simple redraws this band for the clip
            Full had open; forgetting it there made the way back treat the same clip as a new pick, so a trip to Simple and back with
            nothing done closed Full's category and reset its keyframe row, filter preview and tabs. A different clip, or none, is
            forgotten exactly as before, and the refresh that leaves Simple resets the view for it as Full's own refresh does. */
-        if (!layer || layer.id !== lastLayerId) lastLayerId = null;
+        if (!layer || layer.id !== lastLayerId) { lastLayerId = null; bandKept = null; }
         if (title) title.textContent = '';
         /* the words come from FM.simpleTools: "Its tools are below" alone only while every tool is on show on the PC tray's two
            rows (his pick B), otherwise today's words; data-sel lets the tray put them right when its rows change (finding 3) */
@@ -7289,6 +7302,12 @@ window.FM = window.FM || {};
         root.appendChild(bodyEl);
       }
       if (panelEl && root.querySelector('.es-inline')) panelEl.classList.add('insp-ease');
+      /* Full back on the clip and view the band took over (queue 980, above): its scroll comes back, on #inspector at PC widths
+         and on the phone's sheet. A pick made in Simple was forgotten there, so it starts at the top as Full's own pick does. */
+      if (kept && kept.sig === layer.id + '/' + view && !(FM.editor && FM.editor.isSimple && FM.editor.isSimple())) {
+        root.scrollTop = kept.top;
+        if (panelEl) panelEl.scrollTop = kept.sheet;
+      }
       animateNav(root, layer);
     },
   };

@@ -124363,7 +124363,7 @@
     if (fails.length) throw new Error(fails.join(' ¦ '));
   });
 
-  test('simple P2.2 · review a trip to Simple and back with nothing done there leaves Full’s open category as it was: Colouring stays open, and Effects stays on its Filters tab with the picked filter still previewing and the camera tab kept (verify low-roundtrip)', { item: '980', budgetMs: 180000 }, async function () {
+  test('simple P2.2 · review a trip to Simple and back with nothing done there leaves Full’s open category as it was: Colouring stays open and scrolled where it was (a clip picked in Simple still starts at the top), and Effects stays on its Filters tab with the picked filter still previewing and the camera tab kept (verify low-roundtrip, low-scroll)', { item: '980', budgetMs: 180000 }, async function () {
     /* Round one's refresh on the way INTO Simple forgot the selected clip (the band's lastLayerId = null), so the refresh on the
        way back treated the same clip as a new pick: Full's open category closed to the grid, and the keyframe row, the filter
        preview, FM._camTab and the Effects tab were reset with it. Base 726bb6d redrew nothing on the switch and kept them. Held
@@ -124377,7 +124377,8 @@
       const pv = FM._fxPreview;
       return { view: FM.inspector.currentView(), back: back ? back.textContent.trim() : '', grid: !!q('.cat-wrap'), hint: !!q('.sm-band-hint'), tab: tab ? tab.textContent.trim() : '',
         picked: i.querySelectorAll('.flt-tile.is-picked').length, preview: pv ? pv.id + ':' + ((pv.list && pv.list.length) || 0) : '', cam: String(FM._camTab),
-        sel: FM.selectionIds().join(','), title: t ? t.textContent : '', open: document.getElementById('inspector-panel').classList.contains('open') };
+        sel: FM.selectionIds().join(','), title: t ? t.textContent : '', open: document.getElementById('inspector-panel').classList.contains('open'),
+        scroll: i.scrollTop + '/' + document.getElementById('inspector-panel').scrollTop };   // #inspector / the phone's sheet (queue 980, low-scroll)
     };
     const differ = (a, b) => Object.keys(a).filter(k => a[k] !== b[k]);
     const to = async function (ed) {
@@ -124404,6 +124405,25 @@
         const c0 = look();
         if (c0.view !== 'color' || !c0.back || c0.grid) throw new Error('CONTROL ' + width + ': Colouring did not open on B (' + JSON.stringify(c0) + ')');
         await trip(width + ', Colouring open', c0);
+        /* …scrolled down it (queue 980, verify low-scroll). The switch into Simple drew the band's one line in its place, which
+           drops the scroll to the top, and the way back is the same clip and view, so nothing put it back: Full came back at the
+           top of Colouring. Base 726bb6d kept it. At PC widths #inspector scrolls, at 380 the sheet #inspector-panel does. */
+        const sc = document.getElementById(width === '380' ? 'inspector-panel' : 'inspector'), want = width === '380' ? 150 : 200;
+        const scrollB = async function () { sc.scrollTop = want; await settle(80); if (sc.scrollTop !== want) throw new Error('CONTROL ' + width + ': Colouring on B does not scroll to ' + want + ' (scrollTop ' + sc.scrollTop + ', scrollHeight ' + sc.scrollHeight + ', clientHeight ' + sc.clientHeight + ')'); };
+        await scrollB();
+        const s0 = look();
+        await trip(width + ', Colouring open and scrolled', s0);
+        /* …and a clip picked in Simple is still a new pick: it starts where Full starts the same pick, at the top. Held to that
+           pick made in Full from the same scrolled Colouring on B. */
+        await scrollB();
+        await to('simple'); FM.selectLayer(v.L('C').id); await settle(150); await to('full');
+        const pS = look();
+        FM.selectLayer(null); FM.selectLayer(v.L('B').id); await settle(120);
+        FM.inspector.openCategory('color'); await settle(150); await scrollB();
+        FM.selectLayer(v.L('C').id); await settle(150);
+        const pF = look();
+        const dp = differ(pF, pS).filter(k => k !== 'title');
+        if (dp.length || pF.scroll !== '0/0') fails.push(width + ', C picked in Simple: Full shows ' + JSON.stringify(pS) + ' where the same pick made in Full shows ' + JSON.stringify(pF) + (dp.length ? ' (' + dp.join(', ') + ' differ)' : ' (and Full’s own pick is not at the top)'));
         /* Effects › Filters on B, one filter tile picked (previewing on the canvas), the camera panel's last tab not the first */
         FM.selectLayer(null); FM.selectLayer(v.L('B').id); await settle(120);
         FM.inspector.openCategory('filters'); await settle(200);
