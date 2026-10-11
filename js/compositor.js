@@ -2634,10 +2634,10 @@ window.FM = window.FM || {};
       // An animated rate advances through patterns; reaching zero holds the current
       // scramble instead of jumping back to the first pattern. Keep static timing exact.
       var frame = FM.isAnimated(p.speed)
-        ? Math.floor(FM.integrateProp(p.speed, 0, t, function (u) {
+        ? FM.integrateCount(p.speed, 0, t, function (u) {
             var rate = FM.evalProp(p.speed, u);
             return rate > 0 ? (rate < 30 ? rate : 30) : 0;
-          }))
+          })
         : Math.floor(t * spd);
       var s = st.text, n = Math.floor(s.length * pr), out = '';
       var mode = p.chars == null ? 0 : (Math.round(FM.evalProp(p.chars, t)) | 0);
@@ -5816,10 +5816,10 @@ window.FM = window.FM || {};
       // Keyframed Speed is a rate: accumulate frames so a ramp to zero holds its last grain pattern.
       // Keep the original multiplication for saved, unanimated effects.
       const frame = FM.isAnimated(p.speed)
-        ? (Math.floor(FM.integrateProp(p.speed, 0, t, function (u) {
+        ? (FM.integrateCount(p.speed, 0, t, function (u) {
             const rate = FM.evalProp(p.speed, u);
             return rate > 0 ? (rate < 60 ? rate : 60) : 0;
-          })) | 0)
+          }) | 0)
         : (Math.floor(t * spd) | 0);
       const size = p.size == null ? 1 : Math.max(1, FM.evalProp(p.size, t));
       const chroma = (p.color == null ? 0 : FM.evalProp(p.color, t)) / 100;
@@ -5885,7 +5885,7 @@ window.FM = window.FM || {};
          is integrated (FM.integrateProp), so easing it down slows the boil instead of jumping the pattern back in time. */
       const spd = p.speed == null ? 24 : FM.evalProp(p.speed, t);
       const frame = FM.isAnimated(p.speed)
-        ? Math.floor(FM.integrateProp(p.speed, 0, t, (u) => { const k = FM.evalProp(p.speed, u); return k > 0 ? (k < 60 ? k : 60) : 0; }))
+        ? FM.integrateCount(p.speed, 0, t, (u) => { const k = FM.evalProp(p.speed, u); return k > 0 ? (k < 60 ? k : 60) : 0; })
         : Math.floor(t * (spd > 0 ? (spd < 60 ? spd : 60) : 0));    // re-roll per frame: static grain reads as dirt on the lens
       /* PATTERN (#482 polish 1.1): two grained layers drew the same grain. 0 adds nothing to the hash, so the old field. */
       const seedK = (Math.round(fparam(p, 'seed', 0, t)) || 0) * 2654435761;
@@ -6431,7 +6431,7 @@ window.FM = window.FM || {};
       // multiplying zero by the whole elapsed time and jumping back to the first pattern.
       // Keep the numeric path unchanged for projects saved without speed keyframes.
       const roll = FM.isAnimated(p.speed)
-        ? FM.integrateProp(p.speed, 0, t, (u) => { const rate = FM.evalProp(p.speed, u); return Number.isFinite(rate) && rate > 0 ? rate : 0; })
+        ? FM.integrateProp(p.speed, 0, t, (u) => { const rate = FM.evalProp(p.speed, u); return Number.isFinite(rate) && rate > 0 ? rate : 0; }) + 1e-9   // + 1e-9: Math.floor(roll) below is a re-roll COUNT (FM.integrateCount, land-b3 F1)
         : t * speed;
       const s = d.slice(), bandH = Math.max(1, Math.floor(H / bands)), frame = Math.floor(roll);
       /* #482 polish 2.7. PATTERN salts every hash after the band/frame mix, so 0 is the old tear. UNEVEN SLICES moves each
@@ -7014,7 +7014,7 @@ window.FM = window.FM || {};
       for(sei=0;sei<seN;sei++){ var v=seA[sei];
         if(seK!==0){ v=(v-127.5)*(1+Math.abs(seK)*3)+127.5+seK*127.5; if(v<0)v=0; else if(v>255)v=255; }
         d[sei*4+3]=v; } },
-    blocknoise: function(d,W,H,p,t,ps){ var bnAmt = fparam(p, 'amount', 0.5, t); bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); /* A changing Speed is distance through noise frames, not speed(now) times all elapsed time. Keep the static path byte-identical. */ var bnFrame=FM.isAnimated(p.speed)?(Math.floor(FM.integrateProp(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<30?k:30):0; }))|0):(Math.floor(t*bnSpd)|0), bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
+    blocknoise: function(d,W,H,p,t,ps){ var bnAmt = fparam(p, 'amount', 0.5, t); bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); /* A changing Speed is distance through noise frames, not speed(now) times all elapsed time. Keep the static path byte-identical. */ var bnFrame=FM.isAnimated(p.speed)?(FM.integrateCount(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<30?k:30):0; })|0):(Math.floor(t*bnSpd)|0), bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
     starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t,sf_ps){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4;
       // Every star was a single pixel of one flat colour. At 1080p that is not a star, it is sensor
       // dirt, and a one-pixel highlight is exactly what an encoder throws away — so it also shimmered
@@ -7647,7 +7647,7 @@ window.FM = window.FM || {};
       var blkN = W * H;
       if (blkMin <= 0) { for (var blkI = 0; blkI < blkN; blkI++) { var blkA = blkI * 4 + 3; if (d[blkA] > 0) d[blkA] = 0; } }
       else { var blkK = blkMin / 100; for (var blkJ = 0; blkJ < blkN; blkJ++) { var blkB = blkJ * 4 + 3; if (d[blkB] > 0) d[blkB] = d[blkB] * blkK; } } },
-    flicker: function(d, W, H, p, t){ var fl_amt = FM.evalProp(p.amount, t); if(fl_amt===null||fl_amt===undefined||isNaN(fl_amt)) fl_amt = 0.7; if(fl_amt<0) fl_amt=0; if(fl_amt>1) fl_amt=1; var fl_spd = FM.evalProp(p.speed, t); if(fl_spd===null||fl_spd===undefined||isNaN(fl_spd)) fl_spd = 14; if(fl_spd<1) fl_spd=1; if(fl_spd>30) fl_spd=30; var fl_tt = (t<0)?0:t; var fl_step = FM.isAnimated(p.speed) ? Math.floor(FM.integrateProp(p.speed, 0, fl_tt, function(u){ var rate=FM.evalProp(p.speed,u); if(rate===null||rate===undefined||isNaN(rate))rate=14; return rate<1?1:(rate>30?30:rate); })) : Math.floor(fl_tt * fl_spd); /* PATTERN (queue 904): shifts which random sequence this layer runs, so two flickers can differ. 0 = the old sequence. */ var fl_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fl_seed) fl_step = (fl_step + Math.imul(fl_seed, 7919)) | 0; var fl_h = (fl_step ^ 0x9e3779b9) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = (fl_h ^ (fl_h >>> 16)) >>> 0; var fl_n = fl_h / 4294967295; var fl_k = 1 - fl_amt * fl_n; if(fl_k<0) fl_k=0; if(fl_k>1) fl_k=1; var fl_len = W * H * 4; for(var fl_i = 3; fl_i < fl_len; fl_i += 4){ var fl_a = d[fl_i]; if(fl_a > 0){ d[fl_i] = fl_a * fl_k; } } },
+    flicker: function(d, W, H, p, t){ var fl_amt = FM.evalProp(p.amount, t); if(fl_amt===null||fl_amt===undefined||isNaN(fl_amt)) fl_amt = 0.7; if(fl_amt<0) fl_amt=0; if(fl_amt>1) fl_amt=1; var fl_spd = FM.evalProp(p.speed, t); if(fl_spd===null||fl_spd===undefined||isNaN(fl_spd)) fl_spd = 14; if(fl_spd<1) fl_spd=1; if(fl_spd>30) fl_spd=30; var fl_tt = (t<0)?0:t; var fl_step = FM.isAnimated(p.speed) ? FM.integrateCount(p.speed, 0, fl_tt, function(u){ var rate=FM.evalProp(p.speed,u); if(rate===null||rate===undefined||isNaN(rate))rate=14; return rate<1?1:(rate>30?30:rate); }) : Math.floor(fl_tt * fl_spd); /* PATTERN (queue 904): shifts which random sequence this layer runs, so two flickers can differ. 0 = the old sequence. */ var fl_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fl_seed) fl_step = (fl_step + Math.imul(fl_seed, 7919)) | 0; var fl_h = (fl_step ^ 0x9e3779b9) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = (fl_h ^ (fl_h >>> 16)) >>> 0; var fl_n = fl_h / 4294967295; var fl_k = 1 - fl_amt * fl_n; if(fl_k<0) fl_k=0; if(fl_k>1) fl_k=1; var fl_len = W * H * 4; for(var fl_i = 3; fl_i < fl_len; fl_i += 4){ var fl_a = d[fl_i]; if(fl_a > 0){ d[fl_i] = fl_a * fl_k; } } },
     /* FLASH (DARKEN) — queue 349. His words: "there's like a black layer on top with not full opacity
        and has flickering… usually what I do is get a black shape that covers the screen, make opacity
        like 30% and put a flash or flicker filter on".
@@ -7753,7 +7753,7 @@ window.FM = window.FM || {};
         var fdClock = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, 0, fdT, function (u) {
           var k = FM.evalProp(p.speed, u); if (k == null || isNaN(k)) k = 10;
           return k < 1 ? 1 : (k > 30 ? 30 : k);
-        }) : fdT * fdS;
+        }) + 1e-9 : fdT * fdS;   // + 1e-9: fdStep is a flash COUNT (FM.integrateCount, land-b3 F1); the crossfade moves by 1e-9
         var fdStep = Math.floor(fdClock), fdFrac = fdClock - fdStep;
         var fdSeed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fdSeed) fdStep = (fdStep + Math.imul(fdSeed, 7919)) | 0;   // PATTERN (queue 904); 0 = the old sequence
         var fd0 = fdN(fdStep), fd1 = fdN(fdStep + 1);
@@ -7780,7 +7780,7 @@ window.FM = window.FM || {};
       var dsSpd=p.speed==null?0:FM.evalProp(p.speed,t); if(dsSpd<0)dsSpd=0; if(dsSpd>30)dsSpd=30;
       /* Boil is a rate: a keyframed slowdown must keep the pattern it reached. Keep the
          saved static-speed calculation, including zero, exactly as it was. */
-      var dsFr=FM.isAnimated(p.speed)?Math.floor(FM.integrateProp(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<30?k:30):0; })):(dsSpd===0?0:Math.floor(t*dsSpd));
+      var dsFr=FM.isAnimated(p.speed)?FM.integrateCount(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<30?k:30):0; }):(dsSpd===0?0:Math.floor(t*dsSpd));
       var dsPlain=dsDir===0&&dsSoft===0&&dsSpd===0;
       var dsThr=(dsAmt>=1)?4294967296:Math.floor(dsAmt*4294967296);
       for(var dsY=0;dsY<H;dsY++){ for(var dsX=0;dsX<W;dsX++){ var dsI=(dsY*W+dsX)<<2; if(d[dsI+3]===0)continue;
@@ -8028,7 +8028,7 @@ window.FM = window.FM || {};
       var hx_op=p.opacity==null?1:FM.evalProp(p.opacity,t); if(hx_op<0)hx_op=0; if(hx_op>1)hx_op=1; if(hx_op<=0)return;
       var hx_band=Math.max(1, hx_tP===0.12?hx_s*0.12:hx_s*hx_tP); for(var hx_y=0; hx_y<H; hx_y++){ var hx_brow=Math.round(hx_y/hx_rh); for(var hx_x=0; hx_x<W; hx_x++){ var hx_idx=(hx_y*W+hx_x)*4; if(d[hx_idx+3]===0) continue; var hx_d1=1e20, hx_d2=1e20; for(var hx_dr=-1; hx_dr<=1; hx_dr++){ var hx_r=hx_brow+hx_dr; var hx_ox=(hx_r&1)?(hx_s*0.5):0; var hx_bc=Math.round((hx_x-hx_ox)/hx_s); for(var hx_dc=-1; hx_dc<=1; hx_dc++){ var hx_c=hx_bc+hx_dc; var hx_px=hx_c*hx_s+hx_ox; var hx_py=hx_r*hx_rh; var hx_ex=hx_x-hx_px, hx_ey=hx_y-hx_py; var hx_dist=Math.sqrt(hx_ex*hx_ex+hx_ey*hx_ey); if(hx_dist<hx_d1){ hx_d2=hx_d1; hx_d1=hx_dist; } else if(hx_dist<hx_d2){ hx_d2=hx_dist; } } } var hx_diff=hx_d2-hx_d1; if(hx_diff<hx_band){ var hx_a=1-hx_diff/hx_band; if(hx_a<0) hx_a=0; if(hx_a>1) hx_a=1; if(hx_op!==1) hx_a*=hx_op; var hx_ia=1-hx_a; d[hx_idx]=d[hx_idx]*hx_ia+hx_cr*hx_a; d[hx_idx+1]=d[hx_idx+1]*hx_ia+hx_cg*hx_a; d[hx_idx+2]=d[hx_idx+2]*hx_ia+hx_cb*hx_a; } } } },
     // ---- batch 17 (drawing / blur / proc) ----
-    electricedges: function(d,W,H,p,t){ var eeAmt = fparam(p, 'amount', 0.6, t); if(eeAmt<0)eeAmt=0; if(eeAmt>1)eeAmt=1; var eeSpd = fparam(p, 'speed', 4, t); if(eeSpd<0)eeSpd=0; if(eeSpd>10)eeSpd=10; var eeCol=hexToRGB(p.color); var eeR=eeCol[0], eeG=eeCol[1], eeB=eeCol[2]; var eeSoft=Math.max(0,Math.min(1,fparam(p, 'soft', 0, t)/100)); /* absent key = 0 = the legacy render */ var ees=fxSrc(d); var eew4=W*4; /* A keyframed crackle rate advances through the pattern; zero holds the last pattern instead of rewinding to frame 0. */ var eeFrame=FM.isAnimated(p.speed)?Math.floor(FM.integrateProp(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<10?k:10):0; })):Math.floor(t*eeSpd); for(var eey=0;eey<H;eey++){ for(var eex=0;eex<W;eex++){ var eei=(eey*W+eex)*4; if(ees[eei+3]===0)continue; var eexm=eex>0?eex-1:0; var eexp=eex<W-1?eex+1:W-1; var eeym=eey>0?eey-1:0; var eeyp=eey<H-1?eey+1:H-1; var eeRow0=eeym*eew4, eeRow1=eey*eew4, eeRow2=eeyp*eew4; var eeXm4=eexm*4, eeX4=eex*4, eeXp4=eexp*4; var eeTL=ees[eeRow0+eeXm4]*0.299+ees[eeRow0+eeXm4+1]*0.587+ees[eeRow0+eeXm4+2]*0.114; var eeT=ees[eeRow0+eeX4]*0.299+ees[eeRow0+eeX4+1]*0.587+ees[eeRow0+eeX4+2]*0.114; var eeTR=ees[eeRow0+eeXp4]*0.299+ees[eeRow0+eeXp4+1]*0.587+ees[eeRow0+eeXp4+2]*0.114; var eeL=ees[eeRow1+eeXm4]*0.299+ees[eeRow1+eeXm4+1]*0.587+ees[eeRow1+eeXm4+2]*0.114; var eeRr=ees[eeRow1+eeXp4]*0.299+ees[eeRow1+eeXp4+1]*0.587+ees[eeRow1+eeXp4+2]*0.114; var eeBL=ees[eeRow2+eeXm4]*0.299+ees[eeRow2+eeXm4+1]*0.587+ees[eeRow2+eeXm4+2]*0.114; var eeBb=ees[eeRow2+eeX4]*0.299+ees[eeRow2+eeX4+1]*0.587+ees[eeRow2+eeX4+2]*0.114; var eeBR=ees[eeRow2+eeXp4]*0.299+ees[eeRow2+eeXp4+1]*0.587+ees[eeRow2+eeXp4+2]*0.114; var eeGx=(eeTR+2*eeRr+eeBR)-(eeTL+2*eeL+eeBL); var eeGy=(eeBL+2*eeBb+eeBR)-(eeTL+2*eeT+eeTR); var eeMag=Math.sqrt(eeGx*eeGx+eeGy*eeGy)/1442; if(eeMag<=0)continue; if(eeMag>1)eeMag=1; if(eeSoft>0) eeMag=eeMag+eeSoft*(Math.sqrt(eeMag)-eeMag); /* soft-edge response (queue 799): the root lifts a photograph's soft edges, a hard edge stays 1 */ var eeH=(eex*374761393+eey*668265263+eeFrame*2147483647)>>>0; eeH=(eeH^(eeH>>>13))*1274126177>>>0; eeH=(eeH^(eeH>>>16))>>>0; var eeFlick=0.45+(eeH/4294967295)*0.55; /* THIS EFFECT WAS THE FAINTEST IN THE APP BY A WIDE MARGIN (queue 482, round 2). Sweeping all 105
+    electricedges: function(d,W,H,p,t){ var eeAmt = fparam(p, 'amount', 0.6, t); if(eeAmt<0)eeAmt=0; if(eeAmt>1)eeAmt=1; var eeSpd = fparam(p, 'speed', 4, t); if(eeSpd<0)eeSpd=0; if(eeSpd>10)eeSpd=10; var eeCol=hexToRGB(p.color); var eeR=eeCol[0], eeG=eeCol[1], eeB=eeCol[2]; var eeSoft=Math.max(0,Math.min(1,fparam(p, 'soft', 0, t)/100)); /* absent key = 0 = the legacy render */ var ees=fxSrc(d); var eew4=W*4; /* A keyframed crackle rate advances through the pattern; zero holds the last pattern instead of rewinding to frame 0. */ var eeFrame=FM.isAnimated(p.speed)?FM.integrateCount(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<10?k:10):0; }):Math.floor(t*eeSpd); for(var eey=0;eey<H;eey++){ for(var eex=0;eex<W;eex++){ var eei=(eey*W+eex)*4; if(ees[eei+3]===0)continue; var eexm=eex>0?eex-1:0; var eexp=eex<W-1?eex+1:W-1; var eeym=eey>0?eey-1:0; var eeyp=eey<H-1?eey+1:H-1; var eeRow0=eeym*eew4, eeRow1=eey*eew4, eeRow2=eeyp*eew4; var eeXm4=eexm*4, eeX4=eex*4, eeXp4=eexp*4; var eeTL=ees[eeRow0+eeXm4]*0.299+ees[eeRow0+eeXm4+1]*0.587+ees[eeRow0+eeXm4+2]*0.114; var eeT=ees[eeRow0+eeX4]*0.299+ees[eeRow0+eeX4+1]*0.587+ees[eeRow0+eeX4+2]*0.114; var eeTR=ees[eeRow0+eeXp4]*0.299+ees[eeRow0+eeXp4+1]*0.587+ees[eeRow0+eeXp4+2]*0.114; var eeL=ees[eeRow1+eeXm4]*0.299+ees[eeRow1+eeXm4+1]*0.587+ees[eeRow1+eeXm4+2]*0.114; var eeRr=ees[eeRow1+eeXp4]*0.299+ees[eeRow1+eeXp4+1]*0.587+ees[eeRow1+eeXp4+2]*0.114; var eeBL=ees[eeRow2+eeXm4]*0.299+ees[eeRow2+eeXm4+1]*0.587+ees[eeRow2+eeXm4+2]*0.114; var eeBb=ees[eeRow2+eeX4]*0.299+ees[eeRow2+eeX4+1]*0.587+ees[eeRow2+eeX4+2]*0.114; var eeBR=ees[eeRow2+eeXp4]*0.299+ees[eeRow2+eeXp4+1]*0.587+ees[eeRow2+eeXp4+2]*0.114; var eeGx=(eeTR+2*eeRr+eeBR)-(eeTL+2*eeL+eeBL); var eeGy=(eeBL+2*eeBb+eeBR)-(eeTL+2*eeT+eeTR); var eeMag=Math.sqrt(eeGx*eeGx+eeGy*eeGy)/1442; if(eeMag<=0)continue; if(eeMag>1)eeMag=1; if(eeSoft>0) eeMag=eeMag+eeSoft*(Math.sqrt(eeMag)-eeMag); /* soft-edge response (queue 799): the root lifts a photograph's soft edges, a hard edge stays 1 */ var eeH=(eex*374761393+eey*668265263+eeFrame*2147483647)>>>0; eeH=(eeH^(eeH>>>13))*1274126177>>>0; eeH=(eeH^(eeH>>>16))>>>0; var eeFlick=0.45+(eeH/4294967295)*0.55; /* THIS EFFECT WAS THE FAINTEST IN THE APP BY A WIDE MARGIN (queue 482, round 2). Sweeping all 105
    pixel effects at the settings they ship with and taking the 95th-percentile pixel change: the
    median effect scores 131 and the first quartile 60. Electric Edges scored **2** — five times below
    the next weakest and about sixty-five times below the median. Edges you cannot see are not an
@@ -9048,10 +9048,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // Flicker is strikes per second. A keyed rate accumulates its strikes, so easing it to zero
       // holds the last bolt instead of jumping back to the first; plain rates keep their old phase.
       const phase = FM.isAnimated(p.flicker)
-        ? Math.floor(FM.integrateProp(p.flicker, 0, t, u => {
+        ? FM.integrateCount(p.flicker, 0, t, u => {
           const rate = FM.evalProp(p.flicker, u);
           return Number.isFinite(rate) ? Math.max(0, Math.min(24, rate)) : 8;
-        }))
+        })
         : (flick > 0 ? Math.floor(t * flick) : 0);
 
       /* Hashed, not random. Same integer mix the noise effect uses. */
@@ -13096,7 +13096,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const lt = tl == null ? t : tl;
       const boil = p.boil == null ? 0 : FM.evalProp(p.boil, t);
       const slFr = FM.isAnimated(p.boil)
-        ? Math.floor(FM.integrateProp(p.boil, t - lt, t, (u) => { const k = FM.evalProp(p.boil, u); return k > 0 ? (k < 30 ? k : 30) : 0; }))
+        ? FM.integrateCount(p.boil, t - lt, t, (u) => { const k = FM.evalProp(p.boil, u); return k > 0 ? (k < 30 ? k : 30) : 0; })
         : (boil > 0 ? Math.floor(lt * (boil < 30 ? boil : 30)) : 0);
       const slSalt = slFr > 0 ? Math.imul(slFr, 0x9E3779B1) : 0;
       const hash = slSalt ? function (n) { return hash0((n + slSalt) | 0); } : hash0;
@@ -13311,7 +13311,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const elapsed = Math.max(0, tl);
       // Rate changes move future hold boundaries; they must not renumber the holds already passed.
       let phase = FM.isAnimated(p.rate)
-        ? FM.integrateProp(p.rate, t - elapsed, t, u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u))))
+        ? FM.integrateProp(p.rate, t - elapsed, t, u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u)))) + 1e-9   // + 1e-9: the hold index is a COUNT (FM.integrateCount, land-b3 F1)
         : elapsed * rate;
       let q, qLo = 0, qLen = 1;
       if (offs > 0) phase += offs;

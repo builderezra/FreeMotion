@@ -60958,6 +60958,56 @@
       throw new Error('Constant and flat-keyframe Breathe instances changed their legacy phase');
   });
 
+  test('690 Noise keyed at a constant Speed 24 (and Glitch and Flash Random at 10) picks the same frame as the unkeyed rate on every frame - no frame dropped on an exact boundary', { item: 'TBD' }, function () {
+    /* land-b3 F1. B2 made every keyed rate an integral, and the frame index Math.floor(∫ speed). Gauss-Legendre returns
+       n - 1e-15 about as often as n + 1e-15 when the true count is the whole number n, so a keyed constant Speed 24 in a
+       24 fps project read 18.999999999999996 at frame 19 and showed frame 18's grain - 165 of 1441 frames over a minute
+       repeated, where the unkeyed path (Math.floor(t * 24), exact at 24/24) never does. FM.integrateCount adds 1e-9. */
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.noise;
+    if (!K || !FM.integrateProp) throw new Error('the Noise kernel or shared rate integrator is missing');
+    const W = 24, H = 16;
+    const run = (speed, t) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 100; d[i + 3] = 255; }
+      const p = Object.assign({}, FM.fxRegistry.makeInstance('noise').params, { amount: 100, speed });
+      K(d, W, H, p, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    if (same(run(24, 18 / 24), run(24, 19 / 24))) throw new Error('CONTROL: the fixture cannot tell grain frame 18 from frame 19');
+    const keyed = { kf: [{ t: 0.5, v: 24, e: 'linear' }] };
+    if (!FM.isAnimated(keyed)) throw new Error('CONTROL: a one-keyframe Speed does not count as keyed, so this tests the unkeyed path twice');
+    if (!same(run(keyed, 19 / 24), run(24, 19 / 24)))
+      throw new Error('At frame 19 (t = 19/24) a Speed keyed at a constant 24 shows a different grain from an unkeyed Speed 24 - the integrated count rounded 18.999999999999996 down to 18');
+    const bad = [];
+    [{ kf: [{ t: 0.5, v: 24, e: 'linear' }] }, { kf: [{ t: 0.25, v: 24, e: 'linear' }, { t: 3, v: 24, e: 'linear' }] }].forEach((sp, n) => {
+      for (let f = 0; f <= 120; f++) if (!same(run(sp, f / 24), run(24, f / 24))) bad.push('track ' + n + ' frame ' + f);
+    });
+    if (bad.length) throw new Error(bad.length + ' of 242 frames of a keyed constant Speed 24 show a different grain from the unkeyed Speed 24: ' + bad.slice(0, 12).join(', '));
+
+    /* The same count, kept inline where the integral is also used whole (Glitch's roll, Flash Random's clock): their keyed
+       branches add the 1e-9 themselves. Re-roll / Speed 10 at 24 fps lands on a whole count every 12 frames. */
+    const G = FM._FX_TABLES.PIXEL_FX.glitch, F = FM._FX_TABLES.PIXEL_FX.flashdark;
+    if (!G || !F) throw new Error('the Glitch or Flash (darken) kernel is missing');
+    const gsrc = () => { const d = new Uint8ClampedArray(32 * 24 * 4); for (let y = 0; y < 24; y++) for (let x = 0; x < 32; x++) { const i = (y * 32 + x) * 4; d[i] = (x * 7 + y * 3) & 255; d[i + 1] = (x * 2 + y * 11) & 255; d[i + 2] = (x * 13 + y * 5) & 255; d[i + 3] = 255; } return d; };
+    const glitch = (speed, t) => { const d = gsrc(); G(d, 32, 24, Object.assign({}, FM.fxRegistry.makeInstance('glitch').params, { amount: 1, bands: 8, speed, split: 0, jitter: 40, blocks: 0.25 }), t); return d; };
+    const flash = (speed, t, seed) => { const d = new Uint8ClampedArray([200, 200, 200, 255]); F(d, 1, 1, { amount: 1, speed, soft: 0, floor: 0, rhythm: 0, seed }, t); return d[0]; };
+    if (same(glitch(10, 0.95), glitch(10, 1))) throw new Error('CONTROL: the Glitch fixture cannot tell re-roll 9 from re-roll 10');
+    const k10 = { kf: [{ t: 0.5, v: 10, e: 'linear' }] }, gBad = [], fBad = [];
+    let fDiffers = 0;
+    for (let f = 0; f <= 240; f++) {
+      const t = f / 24;
+      if (!same(glitch(k10, t), glitch(10, t))) gBad.push(f);
+      for (let seed = 0; seed < 4; seed++) {
+        if (flash(k10, t, seed) !== flash(10, t, seed)) fBad.push(f + '/seed ' + seed);
+        if (f % 12 === 0 && f && flash(10, t, seed) !== flash(10, t - 1e-6, seed)) fDiffers++;
+      }
+    }
+    if (!fDiffers) throw new Error('CONTROL: no whole-count boundary changes the Flash Random fixture, so a dropped step would not show');
+    if (gBad.length) throw new Error('Glitch keyed at a constant Re-roll 10 tears differently from an unkeyed 10 on frames ' + gBad.slice(0, 12).join(', '));
+    if (fBad.length) throw new Error('Flash Random keyed at a constant Speed 10 flashes differently from an unkeyed 10 on frames ' + fBad.slice(0, 12).join(', '));
+  });
+
   test('690 Noise keyframed Speed accumulates frames and holds its pattern at zero', { item: 'TBD' }, function () {
     const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.noise;
     if (!K || !FM.integrateProp) throw new Error('the Noise kernel or shared rate integrator is missing');
