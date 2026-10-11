@@ -111,3 +111,25 @@ Read only: no tests or browser were run. Every finding below was traced through 
 - **Known, LOW, not fixed yet:** a Full -> Simple -> Full round trip scrolls Full's open category back to the top (base kept the scroll), and the panel label reads 'Layer' instead of 'Inspector' after it (what Full's own refreshAll draws for that state). A small third round for the scroll is in progress.
 
 **To land:** merge `hunt/v17.39-fixes` into the 2.2 tree (it sits directly on 726bb6d), then the usual ship. The full passes of 726bb6d itself are in the next section.
+
+### Full passes of 726bb6d at 1280 and 380, against main a77db17 (v17.38) at 1280 (cloud, 11 Oct)
+
+**Verdict: no red is new on this tree. The suite does not see the HIGH or the MEDIUM above** (its CONTROL selects a layer after switching, which redraws the panel), so the fix branch's tests are the only cover for them.
+
+| run | tests | pass | red | hang | NOT RUN HERE |
+|---|---|---|---|---|---|
+| 726bb6d @1280 | 2409 | 2254 | 58 | 3 | 94 |
+| 726bb6d @380 | 2409 | 2257 | 56 | 3 | 93 |
+| main a77db17 @1280 | 2364 | 2211 | 56 | 3 | 94 |
+
+Method: each tree's own tests/_cdp.py in slices of 60 (`?after=&upto=`), a fresh Chromium 141 per slice, three runs at once on a 4-CPU container, a watchdog that ends a slice whose page stops answering (the driver's own progress file goes quiet) and marks that test HANG. Because each slice starts a fresh browser, reds that only happen deep in one long browser (the laptop's single full pass) may not show here, and vice versa.
+
+Reds on 726bb6d @1280 that are not red on main @1280 (2), each run alone, paired (`after=` three tests before) and alone on main:
+- `every tile in the browser picks instead of applying, and Done adds what you picked (queue 333)`: alone PASS; paired RED (420 s budget, last step Done button); main alone RED (420 s budget). A slow test on this container, not this tree.
+- `a trim grip needs a hold on touch, arms visibly, and is instant on mouse (queue 336)`: RED alone and paired here ("no layer to work from"), RED alone on main the same way; in main's slice it passed only because an earlier test left a layer. Order-dependent, same on main.
+
+Reds on 726bb6d @380 not red at 1280 or on main: none. Red on main but green here: none.
+HANG at both widths and on main (the page stopped answering in the slice that starts after `690 a project renamed on Home…`): #1933 `690 the easing curve of an effect inside a filter…`, #1934, #1935. Run as a slice on its own the same stretch finished, so it is this container under load, not the tree.
+The other ~55 reds are red on main too (no H.264/AAC, no real finger, the 4x CPU throttle, clapper/animation timing, Presets tests with no layer): environment.
+
+DONE: PRE-NEXT v17.39 (726bb6d): static check clean; full passes 1280/380 show nothing new; code review + browser reproduction found 1 HIGH (Full's panel not redrawn after leaving Simple) and 1 MEDIUM (wrong tray / Into row black gap at 380); fix branch hunt/v17.39-fixes 8508a61 with red-first tests, two adversarial checks; one LOW (scroll) in a third round.
