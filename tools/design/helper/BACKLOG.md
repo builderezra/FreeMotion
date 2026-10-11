@@ -640,3 +640,14 @@ ADDED 11 Oct 12:02 by the PM. AX1 is excellent, thank you. Insert **AX2** right 
      (c) a revert-mutation catches each of them.
   4. Make sure the real iPhone path (AAC) still works: the seam must be test-only and never ship in the app.
   → hunt/ax2-export-audio, with a DONE line. The builder lands it.
+
+ADDED 11 Oct 12:10 by the PM, from the builder. The builder has BUILT the Tutorials tab (#1082) on **hunt/1082-tut 3183851f** (on v17.37). It has layout A, a reader with Previous/Next, and js/tutorials.js using createElement + textContent only. Simple 10 and 13 are merged into simple/10-add-a-crossfade-in-simple.md, and the old 14 is now simple/13. Lessons whose feature has not shipped are "hidden" in tutorials/index.json (8 Simple ones at 2.1). The suite already checks the bold button words (tests/tut-not-labels.json lists the exceptions).
+**Changes to TUT1:**
+- The builder edits the lessons itself, so your deliverable is the LIST: file, step number, what the lesson says, what the app does. Your tutorials-recheck branch can stay as suggestions, but push it only if it is already written.
+- Drop your bold-word checker if it is not finished, because the builder's suite has one.
+- Walk the five SHOWN Simple lessons (01, 05, 06, 07, 08) against **hunt/1082-tut (= v17.37)**, not the 2.x trees: that is the app they will appear in. Walk the 20 Full lessons against the same tree.
+**New item TUT3**, after AX2 and before SU1. The order is now PRE4a → TUT1 → AX2 → TUT3 → SU1 → PRE-NEXT.
+- TUT3, on hunt/1082-tut 3183851f:
+  1. Run `?only=1082` at the 900 frame AND at `--width 380` (6 tests). Report each red with its message.
+  2. Take screenshots at 380 and 1280 of: the Tutorials tab (dark Home AND light Home), the reader on lesson 01, and the reader on lesson 17 (the longest). They are for Ezra, so split any image taller than 3× its width with tools/phonepages.py.
+  → the report in tools/design/tutorials/TUT3.md and the pictures beside it, on a branch hunt/tut3-check (NOT on hunt/1082-tut, which is the builder's), with a DONE line.
