@@ -1644,8 +1644,11 @@ window.FM = window.FM || {};
       C.end();
     }
     /* …and the code he read out a minute ago really does stop working — the offer belongs to the live session (or to
-       none), never to a different project that is live right now. */
-    if (live || !s) dropOffer();
+       none), never to a different project that is live right now.
+       #921 clause 19: …and a code made for THIS project goes too, wherever he is. It waits through a switch with its paused
+       room (U.onDetach), so Stop sharing on A's Home card while B was live left it held: back on A, the new room handed out
+       the code he had just been told stops working. */
+    if (live || !s || (offerLink && offerLink._pid === pid)) dropOffer();
     dropRoom(pid);
     if (hostRoomPid === pid) { hostRoom = null; hostRoomPid = null; }
     U.syncBanner();
@@ -2645,8 +2648,16 @@ window.FM = window.FM || {};
     if (v) v.click();
   };
 
+  /* #921 clause 19: the project a swap code is made for, and the one an answer to it may enter — the owner's live session's. */
+  function offerPid() { const s = C.session; return (s && s.isOwner && s.pid) || currentPid(); }
+
   /* §14.5's three steps, in one card: his code out, their code in. */
   function drawCodeStep(body) {
+    /* #921 clause 19: A SWAP CODE BELONGS TO THE PROJECT IT WAS MADE FOR. Opening another project only pauses the room, and
+       the code he has just sent waits with it (U.onDetach), so a friend who answers it gets in when he comes back. But the
+       held offer is reused by every draw (the note below), and B's Swap codes handed out A's code, its answer admitted into
+       B. So a held offer made for another project is dropped here, before anything below can redraw or reuse it. */
+    if (offerLink && offerLink._pid !== offerPid()) { dropOffer(); shareStep = 'code'; }
     body.appendChild(el('div', 'cs-steplabel', 'Step 1 · send them this swap code'));
     const codeBox = el('div', 'cs-code', 'Making a swap code…');
     codeBox.id = 'collab-offer-code';
@@ -2713,6 +2724,7 @@ window.FM = window.FM || {};
     try { link = C.link.RtcLink({ self: 'host', peer: 'guest' }); }
     catch (e) { codeBox.textContent = 'This browser cannot make a direct connection.'; return; }
     offerLink = link;
+    link._pid = offerPid();                    // #921 clause 19: whose code this is (drawCodeStep, hostConnect, stopSharingNow)
     /* #921 clause 19: gathering takes up to three seconds and runs on after Stop sharing or a project switch drops the
        link — so both callbacks ask whether this is still the held offer before they touch the box on screen. */
     link.createOffer().then(function (code) {
@@ -2836,6 +2848,13 @@ window.FM = window.FM || {};
   function hostConnect(link, answerCode, status) {
     const s = C.session;
     if (!s) { status.textContent = 'Sharing stopped.'; return; }
+    /* #921 clause 19: AN ANSWER ENTERS ONLY THE PROJECT ITS CODE WAS MADE FOR. The Share card stays up across a project
+       open, so A's code step can still be on screen — its Connect live — after B has started sharing again (Carry on
+       sharing?): the answer to A's code was admitted into B. Refused, and A's code is kept for when he goes back to A. */
+    if (link._pid !== (s.pid || currentPid())) {
+      status.textContent = 'That swap code was made for another project — tap ‹ Back and swap codes again for this one.';
+      return;
+    }
     connecting = true;
     connectingCode = String(answerCode || '');
     const say = function (t) { liveCodeStatus(status).textContent = t; };
@@ -4701,10 +4720,13 @@ window.FM = window.FM || {};
     if (s && !s.isOwner && s.gpid && !(recon && recon.gpid === s.gpid && !recon.stopped)) dropLock(guestLock(s.gpid));
     if (!s || s.isOwner) {
       stopCkpt();
-      /* #921 clause 19: THE SWAP CODE GOES WITH THE SESSION THAT MINTED IT. Stop sharing dropped it (stopSharingNow), but a
-         project switch stands the session down here and left it held — so sharing the next project handed out the SAME
-         code, its peer connection still waiting, and an answer to it was admitted into a project never offered. */
-      dropOffer();
+      /* #921 clause 19: THE SWAP CODE LIVES AS LONG AS THE ROOM IT WAS MADE FOR. A project switch stands the session down
+         `paused` and keeps the room — so a code he has sent waits too, bound to its project (link._pid): a friend who
+         answers it while he looks at B gets in when he reopens A. Dropping it here (an earlier fix) closed the friend's
+         connection and his paste back on A sat on Connecting… and failed. B can never use it: drawCodeStep drops an offer
+         made for another project and hostConnect refuses one. An END takes the code with the room, and an exchange IN
+         FLIGHT goes with the session it was started in — it would admit into one that no longer exists. */
+      if (!(s && s.stopWhy === 'paused') || connecting || sasPending) dropOffer();
       stopHostRelay(); dropWake(); ridMid = Object.create(null); hostOlder = null;
       cancelKnocks(s && s.stopWhy === 'paused' ? 'paused' : 'ended');
     }
