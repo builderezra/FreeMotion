@@ -133,3 +133,12 @@ HANG at both widths and on main (the page stopped answering in the slice that st
 The other ~55 reds are red on main too (no H.264/AAC, no real finger, the 4x CPU throttle, clapper/animation timing, Presets tests with no layer): environment.
 
 DONE: PRE-NEXT v17.39 (726bb6d): static check clean; full passes 1280/380 show nothing new; code review + browser reproduction found 1 HIGH (Full's panel not redrawn after leaving Simple) and 1 MEDIUM (wrong tray / Into row black gap at 380); fix branch hunt/v17.39-fixes 8508a61 with red-first tests, two adversarial checks; one LOW (scroll) in a third round.
+
+### Fix branch final: `hunt/v17.39-fixes` 208aaec (four commits on 726bb6d)
+
+- **b856d63:** a Full -> Simple -> Full trip with nothing done keeps Full's inspector scroll (#inspector at PC widths, the sheet at 380), as base did; a clip picked in Simple still starts at the top, as Full's own pick does. inspector.js v414 -> v415.
+- **208aaec:** a category changed inside Simple and changed back is a navigation, so Full does not get the old scroll back (found by the adversarial check of b856d63). inspector.js v415 -> v416.
+- Both are legs of the round-trip test; each is red with its own change reverted at 1280 and 380 and green with it. `?only=simple P2.2` 48/48 and `?only=980 ` 23/23 green at 1280 and 380 on 208aaec.
+- Left as is (cosmetic, matches Full's own refreshAll): after a trip the panel label reads Layer instead of Inspector.
+
+**Merge `hunt/v17.39-fixes` (208aaec) into the 2.2 tree before shipping v17.39.**
