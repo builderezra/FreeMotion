@@ -671,7 +671,7 @@ fi
 # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
 # EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
 # that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
-if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_shipidle.sh tools/_classify.py tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tests/_slow_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
+if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_shipidle.sh tools/_classify.py tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tests/_slow_pass.py tests/_win_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
   echo "→ the port's gates or the driver changed — proving them before shipping"
   if ! ./tools/test-port.sh; then
     echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."
@@ -758,6 +758,10 @@ floor_ahead_check || { echo "   Not committing, not pushing."; exit 1; }
 # are asked now (feature-gate --early); a finger test's NOT RUN is cleared by the finger pass and is never asked early. The
 # gate after the suites stays as it is — this one only makes a refusal that was coming anyway cost seconds.
 _EARLY_NR="$(cat .claude/ship/notrun-desktop.tsv .claude/ship/notrun-phone.tsv 2>/dev/null | sort -u)"
+# …but not the AAC tests when Windows Chrome is reachable: the win pass after each suite runs them (tests/_win_pass.py)
+if [ "$(fm_os)" != Darwin ] && python3 tests/_win_pass.py --available >/dev/null 2>&1; then
+  _EARLY_NR="$(grep -v "$(printf '\t')needs an AAC audio encoder" <<<"$_EARLY_NR")"
+fi
 if [ -n "$_EARLY_NR" ]; then
   _EFG="$(printf '%s\n' "$_EARLY_NR" | python3 tools/_shipgates.py feature-gate --early)"; _EFGRC=$?
   if [ "$_EFGRC" != 0 ]; then
@@ -1080,6 +1084,23 @@ slow_pass() {   # $1 = width, $2 = a name for its files; reads and rewrites NOTR
   NOTRUN_PASS="$(cat ".claude/ship/notrun-$2.tsv")"
 }
 slow_pass 1280 desktop || { _WHY="a speed test was red at 1280px"; exit 1; }
+# ── THE AAC TESTS, IN WINDOWS CHROME ON THIS SAME LAPTOP (11 Oct, the PM's idea for #604) ─────────────────────────────────────
+# Linux Chrome has no AAC encoder, so the export-audio tests are NOT RUN in both passes here, and while they are the feature
+# gate refuses any change to the export code — the guard for his silent iPhone export could not leave this machine. Windows
+# Chrome here has the codecs: tests/_win_pass.py runs each of them alone in a headless Windows Chrome with a profile of its own
+# (never his), against this tree through WSL's localhost forwarding, and only an exact-name green clears its NOT RUN.
+win_pass() {   # $1 = width, $2 = a name for its files; reads and rewrites NOTRUN_PASS
+  [ "$(fm_os)" = Darwin ] && return 0
+  grep -q "$(printf '\t')needs an AAC audio encoder" <<<"$NOTRUN_PASS" || return 0
+  python3 tests/_win_pass.py --available >/dev/null 2>&1 || { echo "· the AAC tests stay NOT RUN at ${1}px — no Windows Chrome reachable from here"; return 0; }
+  ship_phase "win-$2"
+  printf '%s\n' "$NOTRUN_PASS" > ".claude/ship/notrun-$2.tsv"
+  echo "→ the AAC test(s) the ${1}px pass could not run, each alone in Windows Chrome on this laptop…"
+  python3 tests/_win_pass.py --width "$1" --remaining ".claude/ship/notrun-$2.tsv" --out ".claude/ship/win-$2.json" \
+    || { echo "❌ AN AAC TEST IS RED in Windows Chrome at ${1}px (run alone) — not committing, not pushing. The red one is above."; return 1; }
+  NOTRUN_PASS="$(cat ".claude/ship/notrun-$2.tsv")"
+}
+win_pass 1280 desktop || { _WHY="an AAC test was red in Windows Chrome at 1280px"; exit 1; }
 NOTRUN_ALL="$NOTRUN_PASS"
 
 # ── THE PHONE PASS (queue 353 clause 3, added 22 Aug) ────────────────────────────────────────────
@@ -1143,6 +1164,7 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
   notrun_report "$POUT" phone || { _WHY="a test is NOT RUN HERE on the Mac"; exit 1; }
   touch_pass 380 .claude/ship/suite-phone.out phone || { _WHY="a real-finger test was red at 380px"; exit 1; }
   slow_pass 380 phone || { _WHY="a speed test was red at 380px"; exit 1; }
+  win_pass 380 phone || { _WHY="an AAC test was red in Windows Chrome at 380px"; exit 1; }
   NOTRUN_ALL="$(printf '%s\n%s\n' "$NOTRUN_ALL" "$NOTRUN_PASS" | sed '/^$/d' | sort -u)"
   font_report "$POUT" phone
   echo "✅ phone $PSUM  $(printf "%s" "$POUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"

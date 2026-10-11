@@ -653,6 +653,49 @@ printf 'speed red\t%s\n' "$SR" > "$SPD/red.tsv"
 grep -q '^slow_pass 1280 desktop' tools/ship.sh && grep -q '^  slow_pass 380 phone' tools/ship.sh && ok "ship.sh runs it after the 1280 and the 380 pass" || bad "ship.sh does not run tests/_slow_pass.py after both passes"
 awk '/^slow_pass 1280/{t=NR} /_shipgates.py feature-gate/{f=NR} END{exit !(t && f && t < f)}' tools/ship.sh && ok "…before the feature gate reads the NOT RUN list" || bad "the slow pass runs after the feature gate — it cannot clear S8's NOT RUN"
 grep -q 'too slow to stand in for the phone' tests/tests.js && ok "…and the reason it looks for is the one 921 S8 writes" || bad "tests/tests.js no longer says 'too slow to stand in for the phone' — the slow pass would never fire"
+
+echo "── 11 Oct: the AAC tests run in Windows Chrome on the same laptop (tests/_win_pass.py, #604) ──"
+# A STUB 'chrome' (FM_WIN_CHROME) reads the wrapper URL it is handed and POSTs a crafted verdict back, so every judgement
+# the runner makes is seen without a browser; it logs each name it was asked for.
+WPD="$TMP/wp"; mkdir -p "$WPD/tests"; cp tests/_win_pass.py "$WPD/tests/"
+cat > "$WPD/stubchrome" <<'STUB'
+#!/usr/bin/env python3
+import json, os, sys, urllib.parse, urllib.request
+u = urllib.parse.urlparse(sys.argv[-1]); q = urllib.parse.parse_qs(u.query); name = q['only'][0]
+open(os.environ['WP_LOG'], 'a').write(name + '\n')
+post = lambda o: urllib.request.urlopen(urllib.request.Request('http://%s/__win/result?id=%s' % (u.netloc, q['id'][0]), data=json.dumps(o).encode(), method='POST'))
+ua = 'Mozilla/5.0 (Windows NT 10.0) HeadlessChrome/154 stub'
+if name == 'aac ok': post({'sum': 'Regression 2/2 ✓', 'fails': [], 'ran': [{'name': 'a neighbour', 'ok': True}, {'name': name, 'ok': True}], 'notRun': [], 'ua': ua})
+elif name == 'aac red': post({'sum': 'Regression 0/1', 'fails': ['FAILaac red — the track is silent'], 'ran': [{'name': name, 'ok': False}], 'notRun': [], 'ua': ua})
+elif name == 'aac still': post({'sum': 'Regression 0/0 ✓', 'fails': [], 'ran': [{'name': name, 'ok': True, 'notRun': 'needs an AAC audio encoder (still)'}], 'notRun': [], 'ua': ua})
+elif name == 'aac prefix': post({'sum': 'Regression 1/1 ✓', 'fails': [], 'ran': [{'name': name + ' and a longer one', 'ok': True}], 'notRun': [], 'ua': ua})
+# 'aac silent': never posts — a browser that loaded nothing
+STUB
+chmod +x "$WPD/stubchrome"
+AR="needs an AAC audio encoder (AudioEncoder mp4a.40.2) — this browser has none"
+printf 'aac ok\t%s\naac still\t%s\naac prefix\t%s\naac silent\t%s\na qr test\tneeds a working BarcodeDetector\n' "$AR" "$AR" "$AR" "$AR" > "$WPD/r.tsv"
+out="$(cd "$WPD" && WP_LOG="$WPD/log" FM_WIN_CHROME="$WPD/stubchrome" python3 tests/_win_pass.py --remaining r.tsv --timeout 1 --out o.json 2>&1)"; rc=$?
+[ "$rc" = 1 ] && ok "a run with no exact green (a prefix match, a silent browser) is RED → exit 1 (ship.sh refuses)" || bad "win pass: rc=$rc — $(printf '%s' "$out" | tail -3)"
+v="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(" ".join(x["name"].replace(" ","_") for x in d["pass"]), "|", " ".join(sorted(x["name"].replace(" ","_") for x in d["red"])), "|", " ".join(x["name"].replace(" ","_") for x in d["notRun"]))' "$WPD/o.json")"
+[ "$v" = "aac_ok | aac_prefix aac_silent | aac_still" ] && ok "verdicts: only the exact test's own green passes; a longer name and no verdict are RED; NOT RUN there stays NOT RUN" || bad "verdicts: $v"
+grep -q '^aac ok	' "$WPD/r.tsv" && bad "an AAC test that passed in Windows Chrome is still NOT RUN" || ok "an AAC test that passed in Windows Chrome leaves the NOT RUN list"
+grep -q '^aac still	needs an AAC audio encoder (still)$' "$WPD/r.tsv" && grep -q '^a qr test	needs a working BarcodeDetector$' "$WPD/r.tsv" && [ "$(wc -l < "$WPD/r.tsv" | tr -d ' ')" = 4 ] \
+  && ok "…a still-NOT-RUN one keeps its newest reason, and every other line is kept (4 remain)" || bad "remaining list: $(cat "$WPD/r.tsv")"
+! grep -q '^a qr test$' "$WPD/log" && [ "$(wc -l < "$WPD/log" | tr -d ' ')" = 4 ] && ok "only the AAC tests were run, once each" || bad "stub calls: $(tr '\n' '|' < "$WPD/log")"
+printf 'aac ok\t%s\n' "$AR" > "$WPD/g.tsv"
+(cd "$WPD" && WP_LOG="$WPD/log2" FM_WIN_CHROME="$WPD/stubchrome" python3 tests/_win_pass.py --remaining g.tsv --timeout 1 >/dev/null 2>&1); rc=$?
+[ "$rc" = 0 ] && [ ! -s "$WPD/g.tsv" ] && ok "control: every AAC test green → exit 0 and nothing left NOT RUN" || bad "all green: rc=$rc remaining=[$(cat "$WPD/g.tsv")]"
+printf 'aac ok\t%s\n' "$AR" > "$WPD/n.tsv"
+(cd "$WPD" && WP_LOG="$WPD/log3" FM_WIN_CHROME=none python3 tests/_win_pass.py --remaining n.tsv --timeout 1 >/dev/null 2>&1); rc=$?
+[ "$rc" = 0 ] && grep -q '^aac ok	' "$WPD/n.tsv" && [ ! -s "$WPD/log3" ] && ok "no Windows Chrome → the AAC tests stay NOT RUN (the gate decides), nothing launched" || bad "no chrome: rc=$rc list=[$(cat "$WPD/n.tsv")]"
+(cd "$WPD" && FM_WIN_CHROME=none python3 tests/_win_pass.py --available >/dev/null 2>&1); rc1=$?
+(cd "$WPD" && FM_WIN_CHROME="$WPD/stubchrome" python3 tests/_win_pass.py --available >/dev/null 2>&1); rc2=$?
+[ "$rc1" = 1 ] && [ "$rc2" = 0 ] && ok "--available says 1 with no Windows Chrome and 0 with one" || bad "--available: none=$rc1 stub=$rc2"
+grep -q '^win_pass 1280 desktop' tools/ship.sh && grep -q '^  win_pass 380 phone' tools/ship.sh && ok "ship.sh runs it after the 1280 and the 380 pass" || bad "ship.sh does not run tests/_win_pass.py after both passes"
+awk '/^win_pass 1280/{t=NR} /_shipgates.py feature-gate/{f=NR} END{exit !(t && f && t < f)}' tools/ship.sh && ok "…before the feature gate reads the NOT RUN list" || bad "the win pass runs after the feature gate — it cannot clear an AAC test's NOT RUN"
+grep -q '_win_pass.py --available' tools/ship.sh && awk '/_win_pass.py --available/ && !a {a=NR} /feature-gate --early/{e=NR} END{exit !(a && e && a < e)}' tools/ship.sh \
+  && ok "…and the early gate leaves the AAC tests to it when Windows Chrome is reachable" || bad "the early gate would refuse an export change before the win pass could run its tests"
+grep -q 'needs an AAC audio encoder' tests/tests.js && ok "…and the reason it looks for is the one the AAC tests write" || bad "tests/tests.js no longer says 'needs an AAC audio encoder' — the win pass would never fire"
 # prove.sh's finger NORUNs (7 Oct, v17.26 was refused for two finger tests that had passed with a real finger): the same pass
 # runs on both sides and tools/_spotjudge.py --merge-touch puts its verdicts in place of the NORUN lines
 printf 'NORUN\tfinger ok\tNOT RUN HERE: %s\nNORUN\tfinger red\tNOT RUN HERE: %s\nNORUN\tfinger aac\tNOT RUN HERE: %s\nNORUN\tan aac test\tNOT RUN HERE: needs an AAC audio encoder\nPASS\ta plain test\n' "$TR" "$TR" "$TR" > "$TPD/v"
