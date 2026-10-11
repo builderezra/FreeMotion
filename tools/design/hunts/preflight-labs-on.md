@@ -101,3 +101,23 @@ In the real app the trigger is `projects.open()`. With 3×120 MB of media in thi
 
 `921 S3 turning Labs off as a guest…` (tests.js:33788/33819) and `921 S7 with Labs on, a phone's top bar…` (39297/39350) also restore `wasLabs` without passing through OFF. They are not red now. The app fix covers the offer leak for them as well.
 
+
+## 380 comparison (labs-on @380 vs land-b1 @380)
+The same eight reds as at 1280 (all covered below), plus `482 6.7 Glow Scan …` which is red on land-b1 @1280 and on main alone too (flaky here). Nothing new at 380. `921 clause 19` PASSES at both widths.
+
+## FIX READY: branch `hunt/labs-on-fixes` c96f4849 (8 commits on hunt/labs-on 2d005a1), checked adversarially twice
+
+App (js/collab-ui.js, ?v=22):
+- **A swap code belongs to the project it was made for** (63001b34, replacing round one's unconditional drop): drawCodeStep tags the offer with the project (`link._pid`) and drops a held code from another project before making one; hostConnect refuses an answer to another project's code ("That swap code was made for another project — tap ‹ Back and swap codes again for this one.") and keeps it; U.onDetach keeps an idle code through a project switch (the room is only paused) but drops it on a real end or an exchange already in flight; stopSharingNow drops the code made for the project being stopped. → **B never shows or admits with A's code, and a friend who answered A's code still gets into A after a switch to B and back** (both verified with two real Chromes).
+- **A code dropped while still being made never lands on the next card** (b94a3446): its late code or late failure goes with its own link.
+
+Tests:
+- Five new 921 S3 tests, each RED with its own fix reverted (tools/mutate.sh --only CAUGHT at 1280 and 380): B gets a fresh code and A's answer cannot enter B; switch-back admits into A; an answer to one project's code never enters another, even from that code's own card; Stop sharing a project from its Home card drops that project's code; an exchange still connecting at a switch ends with its session. Plus the late-code test.
+- The six Labs-on-default test fixes (653ed44a), with **no eraser between tests**: withLabs921 now FAILS a test that leaves a swap code, a pending five-letter check or an owner session held ("LEAK: …"), counting only what appeared after it began (c54652f4, c96f4849).
+- 921 S2 inert runs its body with Work with friends OFF and ON-with-no-session (cc28ecef). 967 B4 1 retitled to what it asserts (61ac1d99).
+
+Results on c96f4849: `?only=921` 255/260 at 1280 (2 NOT RUN: no BarcodeDetector; 3 red, each also red or flaky alone on land-b1/labs-on: 921 S0 duplicateFrom, 921 S4 splash.mp4, 921 S6 re-offer timing); `921 S3` 33/33 at 1280 and 380; 967 61/68 + 7 NOT RUN (phone-only); 945 8/8; 983 2/2.
+
+Known, not fixed (pre-existing, labs-on behaves the same): ending or stopping ANOTHER project (Stop sharing on B's card, Not now on C's Carry on sharing?, Stop sharing on C's Home card) still drops A's waiting code, so a friend who answered must be sent a new code. And the Share card's refusal says "‹ Back and swap codes again", which then makes a fresh code for the current project (that card is no longer opened by any real button since #978).
+
+**To land:** take `hunt/labs-on-fixes` instead of `hunt/labs-on` (it contains it), re-chained with the Full batch as planned.
