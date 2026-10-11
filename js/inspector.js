@@ -7123,6 +7123,7 @@ window.FM = window.FM || {};
            nothing done closed Full's category and reset its keyframe row, filter preview and tabs. A different clip, or none, is
            forgotten exactly as before, and the refresh that leaves Simple resets the view for it as Full's own refresh does. */
         if (!layer || layer.id !== lastLayerId) { lastLayerId = null; bandKept = null; }
+        if (navChanged) bandKept = null;   // a category changed inside Simple is a navigation: Full's old scroll no longer belongs to it
         if (title) title.textContent = '';
         /* the words come from FM.simpleTools: "Its tools are below" alone only while every tool is on show on the PC tray's two
            rows (his pick B), otherwise today's words; data-sel lets the tray put them right when its rows change (finding 3) */

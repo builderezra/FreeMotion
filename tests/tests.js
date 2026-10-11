@@ -124424,6 +124424,17 @@
         const pF = look();
         const dp = differ(pF, pS).filter(k => k !== 'title');
         if (dp.length || pF.scroll !== '0/0') fails.push(width + ', C picked in Simple: Full shows ' + JSON.stringify(pS) + ' where the same pick made in Full shows ' + JSON.stringify(pF) + (dp.length ? ' (' + dp.join(', ') + ' differ)' : ' (and Full’s own pick is not at the top)'));
+        /* …and a category changed inside Simple and changed back is a navigation (the check of b856d63): Full comes back the way
+           the same two steps made in Full leave it, not at the scroll it had before Simple. */
+        FM.selectLayer(null); FM.selectLayer(v.L('B').id); await settle(120);
+        FM.inspector.openCategory('color'); await settle(150); await scrollB();
+        await to('simple'); FM.inspector.openCategory('transform'); await settle(120); FM.inspector.openCategory('color'); await settle(150); await to('full');
+        const nS = look();
+        FM.inspector.openCategory('color'); await settle(150); await scrollB();
+        FM.inspector.openCategory('transform'); await settle(120); FM.inspector.openCategory('color'); await settle(150);
+        const nF = look();
+        const dn = differ(nF, nS).filter(k => k !== 'title');
+        if (dn.length) fails.push(width + ', a category changed in Simple and back: Full shows ' + JSON.stringify(nS) + ' where the same steps made in Full show ' + JSON.stringify(nF) + ' (' + dn.join(', ') + ' differ)');
         /* Effects › Filters on B, one filter tile picked (previewing on the canvas), the camera panel's last tab not the first */
         FM.selectLayer(null); FM.selectLayer(v.L('B').id); await settle(120);
         FM.inspector.openCategory('filters'); await settle(200);
