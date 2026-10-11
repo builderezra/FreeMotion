@@ -60845,6 +60845,28 @@
     if (!facesSameWay(angle(0, 5, 2), angle(0, 6, 3))) throw new Error('an unkeyframed zero Speed changed its old facing');
   });
 
+  test('690 Fractal Ridges keeps its place when keyframed motion rates stop', { item: 'TBD' }, function () {
+    function ramp(a, b) { return { kf: [{ t: 0, v: a, e: 'linear' }, { t: 1, v: b, e: 'linear' }] }; }
+    function frame(changes, t) { return frScene(Object.assign({ amount: 1, scale: 48, speed: 0, driftX: 0, driftY: 0 }, changes), t); }
+    [
+      ['Speed', 'speed', 2, 1],
+      ['Drift X', 'driftX', 200, 100],
+      ['Drift Y', 'driftY', -200, -100],
+    ].forEach(function (which) {
+      var animated = {}, constant = {}, constantKeys = {};
+      animated[which[1]] = ramp(which[2], 0);
+      constant[which[1]] = which[3];
+      constantKeys[which[1]] = ramp(which[3], which[3]);
+      var start = frame({}, 0), stopped = frame(animated, 1), steady = frame(constant, 1);
+      var travelled = frMad(start, steady);
+      if (!(travelled > 2)) throw new Error('fixture: constant ' + which[0] + ' did not move the texture');
+      var mismatch = frMad(stopped, steady);
+      if (mismatch > travelled * 0.02) throw new Error(which[0] + ' ramped to zero rewound the texture instead of travelling at its average rate (difference ' + mismatch.toFixed(2) + ')');
+      if (frMad(stopped, frame(animated, 1.5)) > 0.05) throw new Error(which[0] + ' continued moving after reaching zero');
+      if (frMad(frame(constantKeys, 1), steady) > 0.05) throw new Error(which[0] + ' with unchanged keyframes differs from the original constant-rate path');
+    });
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
