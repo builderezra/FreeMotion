@@ -619,3 +619,5 @@ ADDED 11 Oct 11:40 by the PM. R-COG1 is perfect; Ezra has both sheets. Your two 
   - Use TUT1's corrected text if TUT1 is done, otherwise the drafts.
   - Render the list and a reader at 380 and 1280 for Ezra.
   → hunt/tut2-tab. (Home is Full: say which FU lock groups it would trip; the builder handles the lock.)
+
+ADDED 11 Oct 11:45 by the PM. CANCELLED, SKIP THESE: **TB1** and **GL1** from "ADDED 11 Oct 11:40". The builder already has both: TB1 is built on the Full batch (land-b1 8017a0a2), and GL1 is a ready patch (fxLap's .fx-meet circle removed). If you have started either, stop, push nothing for it, and say so in your next DONE line. The order is now: PRE4a → AX1 → TUT1 → TUT2.
