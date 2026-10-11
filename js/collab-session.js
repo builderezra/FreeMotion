@@ -176,6 +176,10 @@ window.FM = window.FM || {};
        test, 5, 7 and 11 Oct) and only ever under load. Off its own project the session keeps its BASE (so the
        protocol state stays true) and touches nothing on screen and nothing on disk. */
     function offProject() {
+      /* only a session that writes the APP's scene has a project to be off: an adapter with a document of its own (the
+         921 suites' plainAdapter, a test's stand-in) is never on screen, so the open project says nothing about it — the
+         first build of this gate dropped 921 S2's join-window replay that way (the cloud pre-flight, preflight-996) */
+      if (!A.doc || A.doc() !== FM.scene) return false;
       if (!S.pid || !FM.projects || !FM.projects.currentId) return false;
       if (FM.projects.currentId() === S.pid) return false;
       S.stats.offProject = (S.stats.offProject || 0) + 1;
