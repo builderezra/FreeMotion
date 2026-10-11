@@ -100,3 +100,14 @@ Read only: no tests or browser were run. Every finding below was traced through 
 - Sound effects: the added Whoosh is type 'video' (no audioOnly, no sm.snd), spine kind 'audio', and gets the overlay tray. Into row commits (nothing refuses: the checks at spine-edit.js:1237-1238 both pass, correcting the review), clips ripple by 0.95 s, a 0.9 s gap chip appears and the preview at t=0.5 is a black frame.
 
 **Fix status:** a first fix (local branch hunt/v17.39-fixes 2882501, red-first tests at 1280 and 380) was checked adversarially and found to leave keyframe diamonds draggable after leaving Simple, and to close Full's open category on a Full -> Simple -> Full round trip. A second round is being built now; the branch is pushed only when its check passes, and a section here will say so. **Do not ship 2.2 without it, and do not hand-roll the review's one-line fix.**
+
+### FIX READY: branch `hunt/v17.39-fixes` (8508a61 on 726bb6d), two commits, checked adversarially twice
+
+- **2882501:** the editor-change listener (js/simple-tools.js mount) redraws the inspector and the top bar on every switch, both ways; the tray signature gets 5f10fdb's `l.type`, `l.audioOnly` and the read's kind/host/isMain; planIntoRow refuses kind 'audio' (no more black gap from Into row on a sound).
+- **8508a61:** js/editor-mode.js apply() runs the listeners BEFORE the Full timeline rebuild (the order refreshAll uses), so the keyframe diamonds follow the inspector's view; js/inspector.js bandIdle keeps `lastLayerId` when the selection did not change, so a round trip with nothing done keeps Full's open category, picked row, filter preview, camera and fx tabs. No new rebuild anywhere; the project-open path is unchanged; someone who never opens Simple runs none of it.
+- **Tests (tests/tests.js, item 980, 'simple P2.2 · review …'), each red with its fix reverted at 1280 and 380:** leaving Simple gives Full its own panel; a Text or sound added in Simple at 380 gets its own tray and Into row refuses a sound; leaving Simple arms exactly the diamonds Full would; a round trip keeps the open category. A fifth (entering Simple clears Full's panel) is proved red by mutation against the base listener.
+- **Neighbours with the fix:** every `simple P*`, `980 *` and `S4a/S4d Simple` test (116) green at 1280 and 380.
+- **Busters:** inspector.js 413->414, editor-mode.js 4->5 (plus round one's simple-tools.js / spine-edit.js bumps).
+- **Known, LOW, not fixed yet:** a Full -> Simple -> Full round trip scrolls Full's open category back to the top (base kept the scroll), and the panel label reads 'Layer' instead of 'Inspector' after it (what Full's own refreshAll draws for that state). A small third round for the scroll is in progress.
+
+**To land:** merge `hunt/v17.39-fixes` into the 2.2 tree (it sits directly on 726bb6d), then the usual ship. The full passes of 726bb6d itself are in the next section.
