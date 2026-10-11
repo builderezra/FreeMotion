@@ -90423,6 +90423,13 @@
        hidden file input), not a copy of it. */
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
     const made = [];
+    /* The pick is answered here by assigning the input's files, never through a chooser. A page that was just given a REAL click
+       (the storage-full test above) still holds transient user activation, so the FIRST input.click() below opens a real file
+       chooser; the driver closes it with an empty 'change' that cancels the pick, and the first replace was silently lost (the
+       steps stayed at 2, the clip kept showing the original, two replaces made ONE undo step). A person cannot reach this: his
+       chooser is the only way a file gets in. So the test keeps the chooser shut. */
+    const realFileClick = HTMLInputElement.prototype.click;
+    HTMLInputElement.prototype.click = function () { if (this.type === 'file') return; return realFileClick.apply(this, arguments); };
     let id = null;
     async function replaceVia(layerId, file) {
       const before = new Set([].slice.call(document.querySelectorAll('input[type=file]')));
@@ -90467,6 +90474,7 @@
       if (shows() !== fA.name) throw new Error('two quick undos (no pause between) left the clip on ' + shows() + ' instead of his original');
       if ((await onDisk()) !== fA.name) throw new Error('two quick undos put the original on screen but the saved copy is not the original');
     } finally {
+      HTMLInputElement.prototype.click = realFileClick;
       if (id) { hfDropTiles(id); for (let r = 0; r < 4; r++) { try { await q915aDel('prev:' + id + ':' + r); } catch (e) {} } }
       await hfCleanup(made, orig, wasOpen);
     }
