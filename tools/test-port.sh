@@ -618,6 +618,41 @@ echo '{"ok": true, "summary": "x", "failures": []}' > "$TPD/nolist.json"
 grep -q 'touch_pass 1280 .claude/ship/suite-desktop.out' tools/ship.sh && grep -q 'touch_pass 380 .claude/ship/suite-phone.out' tools/ship.sh \
   && ok "ship.sh runs it after the 1280 and the 380 pass" || bad "ship.sh does not run tests/_touch_pass.py after both passes"
 awk '/^touch_pass 1280/{t=NR} /_shipgates.py feature-gate/{f=NR} END{exit !(t && f && t < f)}' tools/ship.sh && ok "…before the feature gate reads the NOT RUN list" || bad "the touch pass runs after the feature gate — it cannot clear a finger test's NOT RUN"
+
+echo "── 11 Oct: a speed test the pass called this machine too slow for runs again alone (tests/_slow_pass.py) ──"
+# v17.38 was refused after two green hours: 921 S8 read the hot laptop as too slow at 1280 and said NOT RUN. A STUB driver
+# answers by the ?only= name and logs each call, so every judgement is seen without a browser.
+SPD="$TMP/sp"; mkdir -p "$SPD/tests"; cp tests/_slow_pass.py "$SPD/tests/"
+cat > "$SPD/tests/_cdp.py" <<'STUB'
+import json, os, sys, urllib.parse
+url = sys.argv[sys.argv.index("--url") + 1]; name = urllib.parse.unquote(url.split("only=", 1)[1])
+log = os.environ["SP_LOG"]; open(log, "a").write(name + "\n")
+tries = sum(1 for l in open(log) if l.rstrip("\n") == name)
+SLOW = "this machine is too slow to stand in for the phone these budgets mean: its speed benchmark took 11.10 ms"
+r = lambda ran, fails=(): print(json.dumps({"ok": not fails, "summary": "x", "failures": list(fails), "notRun": [], "ran": ran}))
+if name == "speed cools": r([{"name": name, "ok": True, "notRun": SLOW}] if tries < 2 else [{"name": name, "ok": True}])
+elif name == "speed hot": r([{"name": name, "ok": True, "notRun": SLOW + " (try %d)" % tries}])
+elif name == "speed red": r([{"name": name, "ok": False}], ["FAILspeed red — the hot tick p90 was 12 ms"])
+else: r([{"name": "a neighbour", "ok": True}])
+STUB
+SR="this machine is too slow to stand in for the phone these budgets mean: its speed benchmark took 11.10 ms"
+printf 'speed cools\t%s\nspeed hot\t%s\nan aac test\tneeds an AAC audio encoder\nfinger x\tneeds real touch emulation\n' "$SR" "$SR" > "$SPD/r.tsv"
+out="$(cd "$SPD" && SP_LOG="$SPD/log" python3 tests/_slow_pass.py --remaining r.tsv --pause 0 --tries 3 --out o.json 2>&1)"; rc=$?
+[ "$rc" = 0 ] && ok "no red → exit 0" || bad "slow pass with no red: rc=$rc — $(printf '%s' "$out" | tail -2)"
+grep -q '^speed cools	' "$SPD/r.tsv" && bad "a speed test that ran green on its second try is still NOT RUN" || ok "a speed test that ran green alone (second try) leaves the NOT RUN list"
+grep -q '^speed hot	.*(try 3)$' "$SPD/r.tsv" && ok "…one still too slow after three tries stays, with its NEWEST reason" || bad "the still-slow test: $(grep '^speed hot' "$SPD/r.tsv")"
+grep -q '^an aac test	needs an AAC audio encoder$' "$SPD/r.tsv" && grep -q '^finger x	needs real touch emulation$' "$SPD/r.tsv" && [ "$(wc -l < "$SPD/r.tsv" | tr -d ' ')" = 3 ] \
+  && ok "…and every other NOT RUN line is kept unchanged (3 lines remain)" || bad "remaining list: $(cat "$SPD/r.tsv")"
+[ "$(grep -c '^speed cools$' "$SPD/log")" = 2 ] && [ "$(grep -c '^speed hot$' "$SPD/log")" = 3 ] && ! grep -qE '^(an aac test|finger x)$' "$SPD/log" \
+  && ok "it tries until green (2) or three times (3), and never runs a NOT RUN for another reason" || bad "driver calls: $(tr '\n' '|' < "$SPD/log")"
+printf 'speed red\t%s\n' "$SR" > "$SPD/red.tsv"
+(cd "$SPD" && SP_LOG="$SPD/log2" python3 tests/_slow_pass.py --remaining red.tsv --pause 0 >/dev/null 2>&1); rc=$?
+[ "$rc" = 1 ] && grep -q '^speed red	' "$SPD/red.tsv" && ok "a speed test that RAN and failed → exit 1 (ship.sh refuses), and it is not cleared" || bad "red: rc=$rc list=[$(cat "$SPD/red.tsv")]"
+(cd "$SPD" && SP_LOG="$SPD/log3" python3 tests/_slow_pass.py --remaining nothere.tsv >/dev/null 2>&1); rc=$?
+[ "$rc" = 2 ] && ok "no NOT RUN list → exit 2 (nothing judged), never 'all passed'" || bad "no list: rc=$rc"
+grep -q '^slow_pass 1280 desktop' tools/ship.sh && grep -q '^  slow_pass 380 phone' tools/ship.sh && ok "ship.sh runs it after the 1280 and the 380 pass" || bad "ship.sh does not run tests/_slow_pass.py after both passes"
+awk '/^slow_pass 1280/{t=NR} /_shipgates.py feature-gate/{f=NR} END{exit !(t && f && t < f)}' tools/ship.sh && ok "…before the feature gate reads the NOT RUN list" || bad "the slow pass runs after the feature gate — it cannot clear S8's NOT RUN"
+grep -q 'too slow to stand in for the phone' tests/tests.js && ok "…and the reason it looks for is the one 921 S8 writes" || bad "tests/tests.js no longer says 'too slow to stand in for the phone' — the slow pass would never fire"
 # prove.sh's finger NORUNs (7 Oct, v17.26 was refused for two finger tests that had passed with a real finger): the same pass
 # runs on both sides and tools/_spotjudge.py --merge-touch puts its verdicts in place of the NORUN lines
 printf 'NORUN\tfinger ok\tNOT RUN HERE: %s\nNORUN\tfinger red\tNOT RUN HERE: %s\nNORUN\tfinger aac\tNOT RUN HERE: %s\nNORUN\tan aac test\tNOT RUN HERE: needs an AAC audio encoder\nPASS\ta plain test\n' "$TR" "$TR" "$TR" > "$TPD/v"

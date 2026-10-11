@@ -671,7 +671,7 @@ fi
 # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
 # EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
 # that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
-if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_shipidle.sh tools/_classify.py tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
+if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_shipidle.sh tools/_classify.py tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tests/_slow_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
   echo "→ the port's gates or the driver changed — proving them before shipping"
   if ! ./tools/test-port.sh; then
     echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."
@@ -1064,6 +1064,22 @@ print("✅ finger tests at %spx: %d of %d RAN here, one browser each, and passed
 PYEOF
 }
 touch_pass 1280 .claude/ship/suite-desktop.out desktop || { _WHY="a real-finger test was red at 1280px"; exit 1; }
+# ── A SPEED TEST THE PASS CALLED THIS MACHINE TOO SLOW FOR, RUN AGAIN ALONE (11 Oct, v17.38's second refusal) ──────────────
+# 921 S8 benchmarks the machine and says NOT RUN when it reads too slow to stand in for the phone. Two hours in, that is the
+# laptop running hot, not the code — and the feature gate below then refused v17.38 for a test that passed alone and in its
+# own slice. tests/_slow_pass.py runs each such test again in a page of its own, up to three times two minutes apart: a green
+# one leaves the NOT RUN list (it RAN here), a red one refuses like any red, one still too slow stays and the gate decides.
+slow_pass() {   # $1 = width, $2 = a name for its files; reads and rewrites NOTRUN_PASS
+  [ "$(fm_os)" = Darwin ] && return 0
+  grep -q "too slow to stand in for the phone" <<<"$NOTRUN_PASS" || return 0
+  ship_phase "slow-$2"
+  printf '%s\n' "$NOTRUN_PASS" > ".claude/ship/notrun-$2.tsv"
+  echo "→ the speed test(s) the ${1}px pass called this machine too slow for, each alone in a page of its own…"
+  python3 tests/_slow_pass.py --port 8777 --width "$1" --remaining ".claude/ship/notrun-$2.tsv" --out ".claude/ship/slow-$2.json" \
+    || { echo "❌ A SPEED TEST IS RED at ${1}px (run alone) — not committing, not pushing. The red one is above."; return 1; }
+  NOTRUN_PASS="$(cat ".claude/ship/notrun-$2.tsv")"
+}
+slow_pass 1280 desktop || { _WHY="a speed test was red at 1280px"; exit 1; }
 NOTRUN_ALL="$NOTRUN_PASS"
 
 # ── THE PHONE PASS (queue 353 clause 3, added 22 Aug) ────────────────────────────────────────────
@@ -1126,6 +1142,7 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
   test_floor_check "$POUT" || { echo "   Not committing, not pushing."; exit 1; }
   notrun_report "$POUT" phone || { _WHY="a test is NOT RUN HERE on the Mac"; exit 1; }
   touch_pass 380 .claude/ship/suite-phone.out phone || { _WHY="a real-finger test was red at 380px"; exit 1; }
+  slow_pass 380 phone || { _WHY="a speed test was red at 380px"; exit 1; }
   NOTRUN_ALL="$(printf '%s\n%s\n' "$NOTRUN_ALL" "$NOTRUN_PASS" | sed '/^$/d' | sort -u)"
   font_report "$POUT" phone
   echo "✅ phone $PSUM  $(printf "%s" "$POUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"
