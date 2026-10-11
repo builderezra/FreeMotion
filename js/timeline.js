@@ -3067,7 +3067,9 @@ window.FM = window.FM || {};
     fxTeardown(host, FX_PULSE_MS + 150);
     return host;
   }
-  /* THE LAP ITSELF — two lit heads with drawn-on trails, one per half, and a soft flash where they meet. Shared by the
+  /* THE LAP ITSELF — two lit heads with drawn-on trails, one per half; where they meet they simply fade (queue 1131: Ezra,
+     11 Oct, "get rid of the little white glow burst thing that happens when the glow lines … touch another" — the soft
+     white flash that used to bloom there is gone). Shared by the
      area's outline and the add menu's rim (queue 981), so the two are the same light by construction: same colours,
      same glow, same speed. W x H is the box the halves were drawn in; the svg fills `host`. */
   function fxLap(host, W, H, halves) {
@@ -3077,9 +3079,7 @@ window.FM = window.FM || {};
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     // numbers and constants only — nothing user-supplied reaches this markup
     svg.innerHTML = '<defs><linearGradient id="' + id + 't" x1="' + halves.from[0] + '" y1="' + halves.from[1] + '" x2="' + mx + '" y2="' + my + '" gradientUnits="userSpaceOnUse">' +
-      '<stop offset="0" stop-color="#5ac7ed"/><stop offset=".55" stop-color="#96e8ff"/><stop offset="1" stop-color="#c9b8ff"/></linearGradient>' +
-      '<radialGradient id="' + id + 'm"><stop offset="0" stop-color="#fff"/><stop offset=".35" stop-color="#b9f1ff" stop-opacity=".8"/>' +
-      '<stop offset="1" stop-color="#96e8ff" stop-opacity="0"/></radialGradient></defs>';
+      '<stop offset="0" stop-color="#5ac7ed"/><stop offset=".55" stop-color="#96e8ff"/><stop offset="1" stop-color="#c9b8ff"/></linearGradient></defs>';
     host.appendChild(svg);   // attached BEFORE getTotalLength — detached paths measure 0 in some engines
     const ease = 'cubic-bezier(.33,0,.2,1)';
     const travelEnd = FX_PULSE_TRAVEL / FX_PULSE_MS;
@@ -3108,15 +3108,6 @@ window.FM = window.FM || {};
           { opacity: 0, offset: (FX_PULSE_TRAVEL + 140) / FX_PULSE_MS }, { opacity: 0 }], { duration: FX_PULSE_MS, fill: 'forwards' });
       });
     });
-    // where they meet: one soft flash on the far side, then nothing
-    const meet = document.createElementNS(SVGNS, 'circle');
-    meet.setAttribute('class', 'fx-meet'); meet.setAttribute('cx', mx); meet.setAttribute('cy', my); meet.setAttribute('r', 30);
-    meet.setAttribute('fill', 'url(#' + id + 'm)');
-    meet.style.transformBox = 'view-box'; meet.style.transformOrigin = mx + 'px ' + my + 'px';
-    svg.appendChild(meet);
-    meet.animate([{ opacity: 0, transform: 'scale(.2)' }, { opacity: 0, transform: 'scale(.2)', offset: (FX_PULSE_TRAVEL - 60) / FX_PULSE_MS },
-      { opacity: 1, transform: 'scale(1)', offset: (FX_PULSE_TRAVEL + 60) / FX_PULSE_MS }, { opacity: 0, transform: 'scale(1.6)' }],
-      { duration: FX_PULSE_MS, fill: 'forwards' });
     return svg;
   }
 

@@ -111768,6 +111768,9 @@
         if (rim.parentNode !== sheet) throw new Error('the lights are not part of the menu, so they cannot rise with it as it opens');
         if (rim.dataset.start !== 'bottom') throw new Error('the lights started ' + rim.dataset.start + ', not from the start this press drew (bottom)');
         if (getComputedStyle(rim).pointerEvents !== 'none') throw new Error('the lights can be hit - they would eat taps meant for the menu');
+        /* queue 1131: no white burst where the two lights meet — on the menu's rim, nor on the area's own outline under it */
+        if (rim.querySelector('.fx-meet, circle')) throw new Error('queue 1131: the menu\'s lights still bloom into a white burst where they meet (.fx-meet) — he asked for it to go');
+        if (c.panel.querySelector('.tl-areafx--pulse .fx-meet, .tl-areafx--pulse circle')) throw new Error('queue 1131: the area\'s outline still draws the white burst where its lights meet');
         // THE BOX HUGS THE MENU: seek the menu's swing to where it rests, then compare the two boxes
         land();
         const sr = sheet.getBoundingClientRect(), rr = rim.getBoundingClientRect();
