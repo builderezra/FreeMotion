@@ -3,35 +3,44 @@
 #
 # WHY THIS EXISTS. Max 20x comes with ~US$200 a month of API credits that expire at the end of each billing cycle and
 # cannot pay for interactive Claude Code, the desktop app, cloud sessions or Remote Control. The one thing they do pay
-# for is `claude -p` run with an API key. So when the subscription is out of usage, this script keeps the builder
+# for is `claude -p` run with an API key. So while the subscription is out of usage, this script keeps the builder
 # working on those credits: it runs `claude -p` in a loop, the way the cron loop runs the interactive builder.
 #
 # HOW TO START IT (WSL / Ubuntu terminal on the laptop, one paste):
 #   curl -fsSL https://raw.githubusercontent.com/builderezra/FreeMotion/refs/heads/claude/laughing-euler-5lq4ml/tools/api-builder.sh -o ~/fm-api-builder.sh && bash ~/fm-api-builder.sh
-# It asks for the API key once (console.anthropic.com > API keys) and keeps it in ~/.fm-api-builder/key (chmod 600).
-# Leave the window open (minimise it): closing it stops the builder. Ctrl-C stops it too.
+# It asks for the API key once (console.anthropic.com > API keys; they start sk-ant-api) and keeps it in
+# ~/.fm-api-builder/key (chmod 600). Keep the laptop PLUGGED IN with the LID OPEN; minimise the window. Closing the
+# window or pressing Ctrl-C stops it: the run in progress is told to stop, is counted, and nothing new starts.
+# Watch it from another terminal: tail -f ~/.fm-api-builder/progress.log
 #
 # WHAT KEEPS IT SAFE
-# - The key is passed to `claude` for each run only. It is never exported into your shell, because an exported
-#   ANTHROPIC_API_KEY takes over every Claude on the machine and knocks the Remote Control builder/logger offline.
-# - It stops by itself at FM_STOP_AT (default 15:45 AWST 12 Oct, 15 minutes before the subscription comes back), and
-#   from FM_WIND_DOWN (30 min earlier) it tells the builder to start nothing new and write a handover.
-# - It stops when the spend it has counted reaches FM_TOTAL_CAP (default $185), and each run is capped at FM_RUN_CAP
-#   (default $20) with --max-budget-usd. The count is an estimate from claude's own report; the Console's Usage page
-#   is the real number.
-# - It stops at once on a billing error ("credit balance too low" means the credits did not apply to this key).
+# - The key reaches `claude` only, as an environment variable set for that one command (never in a command line, where
+#   any process could read it, and never exported into your shell: an exported ANTHROPIC_API_KEY takes over every
+#   Claude on the machine and knocks the Remote Control builder/logger offline).
 # - Auto mode, never "skip all permissions": every action the headless builder takes still goes through Claude Code's
-#   safety classifier, which refuses the risky ones (deleting what it should not, leaking secrets, and the like). If it
-#   refuses something the builder needed, the builder logs it and the subscription builder picks it up at 16:00.
-# - Three failed runs in a row that cost nothing (claude would not start: a flag, the mode or the key) stop it.
-# - One copy at a time (a lock with its pid). `touch ~/.fm-api-builder/STOP` makes the builder wind down and stop.
-# - All its files live in ~/.fm-api-builder, OUTSIDE the repo: ship.sh ends with `git add -A`, which would sweep
-#   anything left in the tree into a release.
+#   safety classifier. If it refuses something, the refusal is logged; two headless aborts for refusals in a row stop it.
+# - It stops by itself at FM_STOP_AT (default 15:45 AWST 12 Oct, 15 minutes before the subscription is back). From
+#   FM_WIND_DOWN (30 min earlier) the builder is told to start nothing new and write a handover; ordinary turns are cut
+#   off 15 minutes into the wind-down so the handover turn always has room.
+# - Money: every run is capped with --max-budget-usd (FM_RUN_CAP, default $20) and PRE-CHARGED to the counter before it
+#   starts, so a crash, a kill or a reboot can only overcount. The counter stops it at FM_TOTAL_CAP (default $185).
+#   Claude reports a resumed session's cost as a running total, so only the rise is counted. The Console's Usage page
+#   is the real number.
+# - It stops at once on a billing or key error, or if Claude says it is using the subscription instead of the key.
+# - One copy at a time: the lock holds this script's pid AND the running claude's, and a new start refuses while either
+#   is alive (so a window closed mid-run can never leave two builders on one tree).
+# - While a ship is running and the builder has nothing to do, it is asked again only every 15 minutes, not every minute.
+# - Every file it writes lives in ~/.fm-api-builder, OUTSIDE the repo (ship.sh ends with `git add -A`), except the
+#   handover, which goes to the repo's gitignored .claude/api-handover.md and is printed when the script stops.
+# - Windows is asked not to sleep while it runs (best effort, via powershell.exe); closing the lid can still sleep it.
 #
 # Settings (environment variables, all optional): FM_REPO (default ~/FreeMotion), FM_STOP_AT, FM_WIND_DOWN,
-# FM_TOTAL_CAP, FM_RUN_CAP, FM_MODEL (default claude-opus-5-5), FM_EFFORT (default xhigh),
-# FM_ROTATE_USD (start a fresh session once one session has cost this much; default 35).
+# FM_TOTAL_CAP, FM_RUN_CAP, FM_MODEL (default claude-opus-5-5), FM_EFFORT (default xhigh), FM_ROTATE_USD (start a
+# fresh session once one has cost this much; default 35), FM_SHIP_POLL (seconds between idle calls while a ship runs;
+# default 900).
 set -u
+# ANTHROPIC_AUTH_TOKEN outranks ANTHROPIC_API_KEY. Unsetting it here affects this script and its children only.
+unset ANTHROPIC_AUTH_TOKEN
 
 STATE="$HOME/.fm-api-builder"
 REPO="${FM_REPO:-$HOME/FreeMotion}"
@@ -41,16 +50,21 @@ RUN_CAP="${FM_RUN_CAP:-20}"
 MODEL="${FM_MODEL:-claude-opus-5-5}"
 EFFORT="${FM_EFFORT:-xhigh}"
 ROTATE_USD="${FM_ROTATE_USD:-35}"
-IDLE_SLEEP="${FM_IDLE_SLEEP:-60}"   # (for tests) the pause after an idle turn, like the cron loop's minute
+SHIP_POLL="${FM_SHIP_POLL:-900}"
+IDLE_SLEEP="${FM_IDLE_SLEEP:-60}"   # (tests shorten these) the pause after an idle turn, like the cron loop's minute
 FAIL_SLEEP="${FM_FAIL_SLEEP:-30}"
+RL_SLEEP="${FM_RL_SLEEP:-180}"
+RL_MAX=5
 mkdir -p "$STATE"
 chmod 700 "$STATE"
 PROGRESS="$STATE/progress.log"
+STARTED_AT="$(date +%s)"
 
-say() { printf '%s  %s\n' "$(TZ=Australia/Perth date '+%a %H:%M:%S')" "$*" | tee -a "$PROGRESS"; }
-die() { echo "❌ $*" >&2; exit 1; }
+# the log file first, then the screen (a closed window must not stop the logging)
+say() { local l; l="$(TZ=Australia/Perth date '+%a %H:%M:%S')  $*"; printf '%s\n' "$l" >> "$PROGRESS"; printf '%s\n' "$l" 2>/dev/null || true; }
+die() { printf '❌ %s\n' "$*" >&2; exit 1; }
 # float arithmetic without bc (python3 is already a dependency of the repo's tools)
-calc() { python3 -c "import sys; print(eval(sys.argv[1], {'__builtins__': {}}, {}))" "$1"; }
+calc() { python3 -c "import sys; print(round(float(eval(sys.argv[1], {'__builtins__': {}}, {})), 6))" "$1"; }
 ge() { python3 -c "import sys; sys.exit(0 if float(sys.argv[1]) >= float(sys.argv[2]) else 1)" "$1" "$2"; }
 
 # ---------- checks before anything runs ----------
@@ -66,9 +80,7 @@ STOP_HUMAN="$(TZ=Australia/Perth date -d "@$STOP_EPOCH" '+%a %d %b %H:%M AWST')"
 WIND_HUMAN="$(TZ=Australia/Perth date -d "@$WIND_EPOCH" '+%a %d %b %H:%M AWST')"
 [ "$(date +%s)" -lt "$((STOP_EPOCH - 600))" ] || die "the stop time ($STOP_HUMAN) is less than 10 minutes away; set FM_STOP_AT to run later"
 
-if ! command -v claude >/dev/null; then
-  [ -x "$HOME/.local/bin/claude" ] && export PATH="$HOME/.local/bin:$PATH"
-fi
+if ! command -v claude >/dev/null && [ -x "$HOME/.local/bin/claude" ]; then export PATH="$HOME/.local/bin:$PATH"; fi
 if ! command -v claude >/dev/null; then
   echo "Claude Code is not installed inside WSL. Install it now with the official installer"
   printf "(curl -fsSL https://claude.ai/install.sh | bash)? [y/N] "
@@ -79,30 +91,65 @@ if ! command -v claude >/dev/null; then
   command -v claude >/dev/null || die "claude still not found after installing"
 fi
 
-# one copy at a time
+# ---------- one copy at a time: the lock names this script and its running claude ----------
 LOCK="$STATE/lock"
-if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
-  die "another copy is already running (pid $(cat "$LOCK")). Stop it first (Ctrl-C in its window, or touch $STATE/STOP)."
+lock_held() {
+  local p
+  [ -f "$LOCK" ] || return 1
+  for p in $(cat "$LOCK" 2>/dev/null); do
+    case "$p" in *[!0-9]*|'') continue ;; esac
+    [ "$p" != "$$" ] && kill -0 "$p" 2>/dev/null && return 0
+  done
+  return 1
+}
+if lock_held; then
+  die "another copy, or the claude its last run started, is still running (pids: $(cat "$LOCK")). Wait for it to finish, or stop it (Ctrl-C in its window). If you are sure nothing is running, delete $LOCK."
 fi
-echo $$ > "$LOCK"
-trap 'rm -f "$LOCK"; say "stopped (spent so far ≈ \$$(cat "$STATE/spent" 2>/dev/null || echo 0))"' EXIT
-trap 'echo; say "Ctrl-C: stopping after this point"; exit 130' INT TERM
+echo "$$" > "$LOCK"
 
-# the key: kept in a 600 file, never exported
+CHILD=""; STOPPING=0; AWAKE_PID=""
+cleanup() {
+  local i
+  if [ -n "$CHILD" ] && kill -0 "$CHILD" 2>/dev/null; then
+    kill -TERM "$CHILD" 2>/dev/null
+    for i in $(seq 1 90); do kill -0 "$CHILD" 2>/dev/null || break; sleep 1; done
+  fi
+  [ -n "$AWAKE_PID" ] && kill "$AWAKE_PID" 2>/dev/null
+  rm -f "$LOCK"
+  if [ -f "$REPO/.claude/api-handover.md" ] && [ "$(stat -c %Y "$REPO/.claude/api-handover.md")" -ge "$STARTED_AT" ]; then
+    printf '\n----- the builder'"'"'s handover (%s) -----\n' "$REPO/.claude/api-handover.md" 2>/dev/null
+    cat "$REPO/.claude/api-handover.md" 2>/dev/null
+  fi
+  say "stopped (counted spend ≈ \$$(cat "$STATE/spent" 2>/dev/null || echo 0))"
+}
+trap cleanup EXIT
+# a signal never exits before the run in progress is stopped and counted: it is passed on, and the loop ends after
+trap 'STOPPING=1; [ -n "$CHILD" ] && kill -TERM "$CHILD" 2>/dev/null' INT TERM HUP
+
+# ---------- the key: kept in a 600 file, never exported, never on a command line ----------
 KEYFILE="$STATE/key"
 if [ ! -s "$KEYFILE" ]; then
   echo "Paste your Anthropic API key (console.anthropic.com > API keys). It is stored only in $KEYFILE."
   printf "API key: "
   read -rs KEY; echo
-  case "$KEY" in sk-ant-*) ;; *) die "that does not look like an API key (they start with sk-ant-)";; esac
+  case "$KEY" in sk-ant-api*) ;; *) die "that is not a Console API key (they start with sk-ant-api; a setup-token or admin key will not work)";; esac
   ( umask 077; printf '%s' "$KEY" > "$KEYFILE" )
 fi
 chmod 600 "$KEYFILE"
 KEY="$(cat "$KEYFILE")"
 
+# ---------- a run belongs to its stop time: a new stop time starts a fresh conversation ----------
 rm -f "$STATE/STOP"
 [ -f "$STATE/spent" ] || echo 0 > "$STATE/spent"
 SPENT="$(cat "$STATE/spent")"
+if [ "$(cat "$STATE/run_id" 2>/dev/null)" != "$STOP_EPOCH" ]; then
+  rm -f "$STATE/session"; echo 0 > "$STATE/session_spent"
+  if ! ge 0 "$SPENT"; then
+    printf 'An earlier run counted $%s of spend. Reset the count to $0? Only say y if your monthly API credits have renewed since. [y/N] ' "$SPENT"
+    read -r yn; case "$yn" in y|Y) SPENT=0; echo 0 > "$STATE/spent";; esac
+  fi
+  echo "$STOP_EPOCH" > "$STATE/run_id"
+fi
 
 echo
 echo "FreeMotion headless builder"
@@ -111,33 +158,61 @@ echo "  model:       $MODEL (effort $EFFORT)"
 echo "  stops at:    $STOP_HUMAN (winds down from $WIND_HUMAN)"
 echo "  spend cap:   \$$TOTAL_CAP total (already counted: \$$SPENT), \$$RUN_CAP per run"
 echo "  log:         $PROGRESS   (watch with: tail -f $PROGRESS)"
-echo "  stop early:  Ctrl-C here, or: touch $STATE/STOP"
+echo "  stop early:  Ctrl-C here, or close this window"
+echo "  keep the laptop plugged in with the lid open"
 echo
 if [ -t 0 ]; then
   printf "Start? [y/N] "; read -r yn
   [ "$yn" = "y" ] || [ "$yn" = "Y" ] || die "not started"
 fi
 
+# ---------- keep Windows awake (best effort): WSL places no power request on Windows ----------
+if command -v powershell.exe >/dev/null 2>&1; then
+  AWAKE_SECS=$((STOP_EPOCH - $(date +%s) + 300))
+  PS_B64="$(python3 - "$AWAKE_SECS" <<'PY'
+import base64, sys
+ps = ("$t = Add-Type -PassThru -Name P -Namespace W -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint f);'; "
+      "[void]$t::SetThreadExecutionState([uint32]2147483649); "   # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+      "$end = (Get-Date).AddSeconds(%d); while ((Get-Date) -lt $end) { Start-Sleep -Seconds 60 }" % int(sys.argv[1]))
+print(base64.b64encode(ps.encode("utf-16-le")).decode())
+PY
+)"
+  powershell.exe -NoProfile -NonInteractive -EncodedCommand "$PS_B64" </dev/null >/dev/null 2>&1 &
+  AWAKE_PID=$!
+fi
+
 # ---------- what the builder is told ----------
-RULES="You are the FreeMotion BUILDER, running headless (claude -p) on Ezra's monthly API credits, started by ~/fm-api-builder.sh on his Windows laptop (WSL). Nobody is watching live; Ezra reads the log later. The wrapper calls you again about a minute after each turn ends, until $STOP_HUMAN, when the subscription builder takes over.
+mkdir -p "$REPO/.claude"
+RULES="You are the FreeMotion BUILDER, running headless (claude -p) on Ezra's monthly API credits, started by ~/fm-api-builder.sh on his Windows laptop (WSL). Nobody is watching live; Ezra reads the log later. The wrapper calls you again after each turn ends, until $STOP_HUMAN, when the subscription builder takes over.
 - Do NOT arm a loop (no CronCreate, no ScheduleWakeup): the wrapper is the loop. That is the only change to CLAUDE.md's first-message steps; tick.sh and the unshipped-release check still apply.
 - Nobody can answer a question in real time. Decide the way LOOP.md says to when he is silent, and log any question in REQUESTS.md the way the rules say.
-- Work exactly as CLAUDE.md and LOOP.md say: ./tools/tick.sh first, the oldest actionable item, prove before claiming, ship only with tools/ship-bg.sh (on this laptop with FM_SHIP_ALLOW_NON_MAC=1, as SWITCHOVER.md says), judge a ship only by its log. Never force-push, never rewrite history, never start a ship beside a running one.
+- Work exactly as CLAUDE.md and LOOP.md say: ./tools/tick.sh first, the oldest actionable item, prove before claiming, ship only with tools/ship-bg.sh (on this laptop with FM_SHIP_ALLOW_NON_MAC=1, as SWITCHOVER.md says), judge a ship only by its log. Never force-push, never rewrite history, never start a ship beside a running one. While a ship runs, build in a worktree as LOOP.md says; never edit this tree.
 - The next releases are already built on GitHub: wip/v17.39-tree (Simple 2.2) to wip/v17.44-tree, and the Full batch (hunt/land-b1, hunt/labs-on, hunt/land-b3). A cloud helper pre-flights them in the cloud: before you ship a tree, fetch and read the newest hunt/preflight-* report for it and helper/done (tools/design/helper/DONE.md), and fix what they found first.
 - End your turn when the current step is done or you are waiting on a ship or a suite; the wrapper calls you back. Finish each turn with at most 3 short lines: what you did, what is running, what is next.
-- From $WIND_HUMAN, or as soon as the file $STATE/STOP exists: start nothing new. Finish or park the current step, never leave a ship half-launched, and put a short dated handover at the top of HANDOVER.md (what shipped, what is in flight, the next item) for the subscription builder."
+- If an action is refused by the permission classifier, do not retry it in another form: note it in your 3 lines and move to work that does not need it.
+- From $WIND_HUMAN, or when told to wind down: start nothing new, finish or park the current step, never leave a ship half-launched, and write a short dated handover (what shipped, what is in flight, the next item) to .claude/api-handover.md in the repo. That file is gitignored, so no ship sweeps it in; edit no tracked file during the wind-down, because a ship may be running."
+RULES_TAG="$(printf '%s' "$RULES" | sha256sum | cut -c1-16)"
+if [ "$(cat "$STATE/session_rules" 2>/dev/null)" != "$RULES_TAG" ]; then
+  # a resumed conversation keeps the rules it started with (--system-prompt-snapshot), so new rules mean a new one
+  rm -f "$STATE/session"; echo 0 > "$STATE/session_spent"
+fi
+echo "$RULES_TAG" > "$STATE/session_rules"
 
 FIRST_PROMPT="Start: run ./tools/tick.sh, follow the rules at the top of LOOP.md, then work the oldest actionable item."
 NEXT_PROMPT="Continue the FreeMotion loop: run ./tools/tick.sh, follow the rules at the top of LOOP.md, then work the oldest actionable item."
+WIND_PROMPT="WIND DOWN NOW (it is past $WIND_HUMAN, or Ezra asked you to stop): start nothing new, finish or park the current step, and write the handover to .claude/api-handover.md as your rules say. Then end your turn."
 
 # ---------- the loop ----------
 SID="$(cat "$STATE/session" 2>/dev/null || true)"
-SESSION_SPENT="$(cat "$STATE/session_spent" 2>/dev/null || echo 0)"
-FAILS=0
-say "started: $MODEL, stops $STOP_HUMAN, cap \$$TOTAL_CAP, counted so far \$$SPENT${SID:+, resuming session $SID}"
+SESSION_SPENT="$(cat "$STATE/session_spent" 2>/dev/null || echo 0)"   # the running total claude last reported for $SID
+FAILS=0; RL=0; BLOCKS=0; LAST_IDLE=0; LAST_CALL=0
 cd "$REPO" || die "cannot cd to $REPO"
+HAVE_SHIPLOCK=""
+if [ -f tools/_shiplock.sh ] && . tools/_shiplock.sh 2>/dev/null; then HAVE_SHIPLOCK=1; fi
+say "started: $MODEL, stops $STOP_HUMAN, cap \$$TOTAL_CAP, counted so far \$$SPENT${SID:+, resuming session $SID}"
 
 while :; do
+  [ "$STOPPING" = 1 ] && { say "stopping: asked to (Ctrl-C or the window closed)"; break; }
   NOW="$(date +%s)"
   [ "$NOW" -lt "$STOP_EPOCH" ] || { say "stop time reached"; break; }
   LEFT="$(calc "$TOTAL_CAP - $SPENT")"
@@ -151,78 +226,151 @@ while :; do
     SID=""; SESSION_SPENT=0; rm -f "$STATE/session"; echo 0 > "$STATE/session_spent"
   fi
 
-  if [ -f "$STATE/STOP" ] || [ "$NOW" -ge "$WIND_EPOCH" ]; then
-    PROMPT="WIND DOWN NOW (it is past $WIND_HUMAN or Ezra asked you to stop): start nothing new, finish or park the current step, and write the handover at the top of HANDOVER.md as your rules say. Then end your turn."
-    WINDING=1
-  elif [ -n "$SID" ]; then PROMPT="$NEXT_PROMPT"; WINDING=0
-  else PROMPT="$FIRST_PROMPT"; WINDING=0
+  WINDING=0
+  if [ -f "$STATE/STOP" ] || [ "$NOW" -ge "$WIND_EPOCH" ]; then WINDING=1; PROMPT="$WIND_PROMPT"
+  elif [ -n "$SID" ]; then PROMPT="$NEXT_PROMPT"
+  else PROMPT="$FIRST_PROMPT"
   fi
 
-  SESSION_ARGS=()
-  [ -n "$SID" ] && SESSION_ARGS=(--resume "$SID")
+  # while a ship runs, an idle builder is asked again only every SHIP_POLL seconds (each call costs money)
+  if [ "$WINDING" = 0 ] && [ "$LAST_IDLE" = 1 ] && [ -n "$HAVE_SHIPLOCK" ] && [ "$((NOW - LAST_CALL))" -lt "$SHIP_POLL" ]; then
+    case "$(ship_lock_state .ship-in-progress 2>/dev/null)" in live*) sleep "$IDLE_SLEEP"; continue ;; esac
+  fi
+
+  NEW_ID=""; RESUMED=0; BASE=0
+  if [ -n "$SID" ]; then SESSION_ARGS=(--resume "$SID"); RESUMED=1; BASE="$SESSION_SPENT"
+  else NEW_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"; SESSION_ARGS=(--session-id "$NEW_ID")
+  fi
   T0="$(date +%s)"
-  # timeout: no run may outlive the stop time (TERM first, so claude saves its transcript; KILL a minute later)
-  timeout --signal=TERM --kill-after=60 "$((STOP_EPOCH - T0))" \
-    env -u ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY="$KEY" \
+  [ "$T0" -lt "$STOP_EPOCH" ] || { say "stop time reached"; break; }
+  # an ordinary turn ends 15 minutes into the wind-down, so the wind-down turn always has room before the stop
+  END="$STOP_EPOCH"
+  if [ "$WINDING" = 0 ] && [ "$((WIND_EPOCH + 900))" -lt "$END" ]; then END=$((WIND_EPOCH + 900)); fi
+  LIMIT=$((END - T0)); [ "$LIMIT" -ge 1 ] || LIMIT=1
+
+  echo "$(calc "$SPENT + $CAP")" > "$STATE/spent"   # pre-charge: nothing that kills this run can undercount
+  ANTHROPIC_API_KEY="$KEY" timeout --signal=TERM --kill-after=60 "$LIMIT" \
     claude -p "$PROMPT" "${SESSION_ARGS[@]}" \
       --append-system-prompt "$RULES" \
       --model "$MODEL" --effort "$EFFORT" \
       --permission-mode auto \
       --max-budget-usd "$CAP" \
       --output-format json \
-      > "$STATE/last.json" 2> "$STATE/last.err"
-  RC=$?
+      </dev/null > "$STATE/last.json" 2> "$STATE/last.err" &
+  CHILD=$!
+  echo "$$ $CHILD" > "$LOCK"
+  RC=0
+  # `wait` returns early when a signal arrives; keep waiting until claude has really finished
+  while kill -0 "$CHILD" 2>/dev/null; do wait "$CHILD"; RC=$?; done
+  CHILD=""
+  echo "$$" > "$LOCK"
   T1="$(date +%s)"
 
-  # read claude's own report: cost, session, result text. Unreadable → count the whole per-run cap (never undercount).
-  read -r COST NEWSID ISERR SUMMARY < <(python3 - "$STATE/last.json" "$CAP" <<'PY'
+  # claude's own report. On --resume, total_cost_usd is the session's running total, so only the rise is this run's.
+  read -r COST STOTAL NEWSID ISERR NDENY SUMMARY < <(python3 - "$STATE/last.json" "$CAP" "$BASE" "$RESUMED" <<'PY'
 import json, sys
-cap = sys.argv[2]
+path, cap, base, resumed = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), sys.argv[4] == "1"
 try:
-    d = json.load(open(sys.argv[1]))
-    cost = d.get("total_cost_usd")
-    cost = cap if cost is None else cost
-    sid = d.get("session_id") or "-"
-    err = "1" if d.get("is_error") else "0"
-    text = " ".join(str(d.get("result") or d.get("subtype") or "").split())[:300] or "-"
-    print(cost, sid, err, text)
+    d = json.load(open(path))
+    if isinstance(d, list):   # with verbose on, json output is every message; the result is the last one
+        d = next((m for m in reversed(d) if isinstance(m, dict) and m.get("type") == "result"), None)
+        if d is None:
+            raise ValueError("no result message")
+        json.dump(d, open(path, "w"))
+    tot = d.get("total_cost_usd")
+    if tot is None:
+        cost, stot = cap, base + cap
+    else:
+        tot = float(tot)
+        # a total below the base means the counter restarted (nothing was saved), so all of it is new;
+        # a zeroed error result (0) counts nothing and leaves the base alone
+        cost = tot - base if (resumed and tot >= base) else tot
+        stot = tot if tot > 0 else base
+    den = d.get("permission_denials") or []
+    text = d.get("result") or " ".join([str(d.get("subtype") or "")] + [str(e) for e in (d.get("errors") or [])])
+    if den:
+        text = str(text) + " | refused %d: %s" % (len(den), "; ".join(str(x.get("tool_name")) for x in den[:5]))
+    text = " ".join(str(text).split())[:300] or "-"
+    print("%.6f" % cost, "%.6f" % stot, d.get("session_id") or "-", "1" if d.get("is_error") else "0", len(den), text)
 except Exception:
-    print("NA", "-", "1", "(no readable result)")
+    print("NA", "NA", "-", "1", 0, "(no readable result)")
 PY
 )
-  # no readable report: a run that died within a minute cannot have spent much (claude did not start: a flag, the
-  # mode, the key); one that ran longer is counted at its whole cap, so the count never runs under the real spend
   UNREAD=0
   if [ "$COST" = NA ]; then
+    # no readable report: a run that died within a minute cannot have spent much (claude did not start: a flag, the
+    # mode, the key); one that ran longer is counted at its whole cap, so the count never runs under the real spend
     UNREAD=1
     if [ "$((T1 - T0))" -lt 60 ]; then COST=0; else COST="$CAP"; fi
+    STOTAL="$(calc "$BASE + $COST")"
   fi
   SPENT="$(calc "$SPENT + $COST")"; echo "$SPENT" > "$STATE/spent"
-  SESSION_SPENT="$(calc "$SESSION_SPENT + $COST")"; echo "$SESSION_SPENT" > "$STATE/session_spent"
-  if [ "$NEWSID" != "-" ]; then SID="$NEWSID"; echo "$SID" > "$STATE/session"; fi
+  if [ "$NEWSID" != "-" ]; then SID="$NEWSID"
+  elif [ -n "$NEW_ID" ] && [ "$((T1 - T0))" -ge 60 ]; then SID="$NEW_ID"   # a killed fresh session may still be resumable
+  fi
+  if [ -n "$SID" ]; then SESSION_SPENT="$STOTAL"; echo "$SID" > "$STATE/session"; echo "$SESSION_SPENT" > "$STATE/session_spent"; fi
   say "run: $((T1 - T0))s, rc $RC, ≈ \$$COST (total ≈ \$$SPENT) | $SUMMARY"
 
-  ERRTEXT="$(cat "$STATE/last.err" "$STATE/last.json" 2>/dev/null | tr '[:upper:]' '[:lower:]')"
-  if printf '%s' "$ERRTEXT" | grep -qE 'credit balance|insufficient (credit|fund)|billing|payment required|invalid x-api-key|authentication_error|invalid api key'; then
-    say "STOPPED: billing or key error. Either the key is wrong or the monthly credits do not apply to it. See $STATE/last.err and the Console's Billing page."
+  # errors are looked for only on a run that failed, and only in stderr and the report's error fields
+  ERRTEXT=""
+  if [ "$RC" != 0 ] || [ "$ISERR" = 1 ]; then
+    ERRTEXT="$( { cat "$STATE/last.err"; python3 - "$STATE/last.json" <<'PY'
+import json, sys
+raw = open(sys.argv[1], errors="replace").read()
+try:
+    d = json.loads(raw)
+except Exception:
+    print(raw); sys.exit()
+if isinstance(d, dict):
+    print(d.get("subtype") or "", d.get("result") or "", json.dumps(d.get("errors") or ""), d.get("api_error_status") or "")
+PY
+    } 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+  fi
+  if printf '%s' "$ERRTEXT" | grep -qE 'invalid x-api-key|authentication_error|invalid api key|api key.*(invalid|revoked)'; then
+    mv -f "$KEYFILE" "$KEYFILE.rejected"
+    say "STOPPED: the API key was refused. It was moved to $KEYFILE.rejected; run the script again and it will ask for a new key (Console > API keys)."
     break
   fi
-  if [ "$RC" = 124 ] || [ "$RC" = 137 ]; then say "the run hit the stop time"; break; fi
-  if [ "$NEWSID" = "-" ] && [ -n "$SID" ] && printf '%s' "$ERRTEXT" | grep -qE 'no conversation found|session.*not found'; then
-    say "the saved session could not be resumed; starting a fresh one"; SID=""; rm -f "$STATE/session"
+  if printf '%s' "$ERRTEXT" | grep -qE 'credit balance|insufficient (credit|fund)|payment required|billing'; then
+    say "STOPPED: a billing error. The monthly credits may not apply to this key, or they have run out. See $STATE/last.err and the Console's Billing page."
+    break
   fi
-  if printf '%s' "$ERRTEXT" | grep -qE 'rate.?limit|overloaded|\b429\b|\b529\b'; then
-    say "rate-limited or overloaded; waiting 3 minutes"; sleep 180; continue
+  if printf '%s' "$ERRTEXT" | grep -qE 'weekly limit|usage limit|hit your .*limit|claude\.ai subscription'; then
+    say "STOPPED: Claude answered as if it were using your subscription, not the API key. See $STATE/last.err."
+    break
   fi
-  if [ "$RC" != 0 ] && [ "$ISERR" = 1 ] && ! ge "$COST" 0.01; then FAILS=$((FAILS + 1)); else FAILS=0; fi
-  [ "$UNREAD" = 1 ] && [ "$COST" = 0 ] && [ "$FAILS" = 0 ] && FAILS=1
+  if printf '%s' "$ERRTEXT" | grep -qE 'too many classifier denials|no safety verdict|auto mode unavailable'; then
+    BLOCKS=$((BLOCKS + 1))
+    say "the safety classifier stopped this run ($BLOCKS in a row)"
+    [ "$BLOCKS" -ge 2 ] && { say "STOPPED: two runs in a row were stopped by the safety classifier. See $STATE/last.json for what it refused."; break; }
+  else
+    BLOCKS=0
+  fi
+  if { [ "$RC" = 124 ] || [ "$RC" = 137 ]; } && [ "$T1" -ge "$((STOP_EPOCH - 5))" ]; then say "the run hit the stop time"; break; fi
+  [ "$RC" = 137 ] && say "claude was killed (rc 137) before the stop time, probably out of memory; carrying on"
+  if [ "$NEWSID" = "-" ] && [ "$RESUMED" = 1 ] && printf '%s' "$ERRTEXT" | grep -qE 'no conversation found|session.*not found'; then
+    say "the saved session could not be resumed; starting a fresh one"
+    SID=""; SESSION_SPENT=0; rm -f "$STATE/session"; echo 0 > "$STATE/session_spent"
+  fi
+  RLHIT=0; printf '%s' "$ERRTEXT" | grep -qE 'rate.?limit|overloaded|\b429\b|\b529\b' && RLHIT=1
+  # a run that failed without starting work counts toward the three-strikes stop; a rate limit has its own backoff
+  if [ "$RC" != 0 ] && [ "$ISERR" = 1 ] && [ "$RLHIT" = 0 ] && ! ge "$COST" 0.01; then FAILS=$((FAILS + 1)); else FAILS=0; fi
   if [ "$FAILS" -ge 3 ]; then
     say "STOPPED: three runs in a row failed before doing any work. Last error: $(head -c 300 "$STATE/last.err" | tr '\n' ' ')"
     break
   fi
   [ "$WINDING" = 1 ] && { say "wind-down turn done; stopping"; break; }
+  [ "$STOPPING" = 1 ] && { say "stopping: asked to (Ctrl-C or the window closed)"; break; }
+  if [ "$RLHIT" = 1 ]; then
+    RL=$((RL + 1))
+    [ "$RL" -ge "$RL_MAX" ] && { say "STOPPED: rate-limited or overloaded $RL times in a row"; break; }
+    say "rate-limited or overloaded ($RL in a row); waiting $RL_SLEEP s"; sleep "$RL_SLEEP"; continue
+  fi
+  RL=0
+  LAST_CALL="$T0"
+  if [ "$((T1 - T0))" -lt 120 ]; then LAST_IDLE=1; else LAST_IDLE=0; fi
   # an idle turn (nothing to do, or waiting on a ship) comes back after a minute, like the cron loop; a crash after 30 s
   if [ "$RC" != 0 ] && [ "$ISERR" = 1 ]; then sleep "$FAIL_SLEEP"
-  elif [ "$((T1 - T0))" -lt 120 ]; then sleep "$IDLE_SLEEP"
+  elif [ "$LAST_IDLE" = 1 ]; then sleep "$IDLE_SLEEP"
   fi
 done
