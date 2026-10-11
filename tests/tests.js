@@ -61925,7 +61925,7 @@
     });
   });
 
-  test('simple P2.6 · S6f a whole-transaction refusal of a Simple step (host answers ["*", "bad"]) is no longer silent: one line, the screen put back at once, and the undo step dropped; a Full step keeps today’s handling', { item: '980', budgetMs: 150000 }, async function () {
+  test('simple P2.6 · S6f a whole-transaction refusal of a Simple step (host answers [“*”, “bad”]) is no longer silent: one line, the screen put back at once, and the undo step dropped; a Full step keeps today’s handling', { item: '980', budgetMs: 150000 }, async function () {
     const C = FM.collab;
     await sm6Live(async function (c) {
       const g = c.addGuest({ role: 'editor', name: 'Sam' });
