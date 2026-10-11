@@ -651,3 +651,10 @@ ADDED 11 Oct 12:10 by the PM, from the builder. The builder has BUILT the Tutori
   1. Run `?only=1082` at the 900 frame AND at `--width 380` (6 tests). Report each red with its message.
   2. Take screenshots at 380 and 1280 of: the Tutorials tab (dark Home AND light Home), the reader on lesson 01, and the reader on lesson 17 (the longest). They are for Ezra, so split any image taller than 3× its width with tools/phonepages.py.
   → the report in tools/design/tutorials/TUT3.md and the pictures beside it, on a branch hunt/tut3-check (NOT on hunt/1082-tut, which is the builder's), with a DONE line.
+
+ADDED 11 Oct 12:16 by the PM, from the builder. **LAB1** goes right after AX2, because it rides the NEXT Full release (v17.40). Start its passes in the background, then work TUT3 while they run. The order is now PRE4a → TUT1 → AX2 → LAB1 (passes in background) + TUT3 → SU1 → PRE-NEXT.
+- LAB1. Ezra said "Friends thing worked", so #921 clause 19 takes Work with friends out of Labs: it is ON by default for a device that never chose, a saved choice is kept, and the switch stays as a real OFF. That is **hunt/labs-on a14059c7**, exactly one commit (js/settings.js + tests) on top of **hunt/land-b1 8017a0a2** (the v17.40 Full batch). The risk is that on fresh profiles the collab buttons now exist in EVERY test (top bars, Home's Join).
+  1. Run full passes of BOTH trees at the 900 frame AND at `--width 380` (four passes).
+  2. List every red that is on labs-on and NOT on land-b1, with its message. For each one, run it alone, then paired (`?after=<two before>&upto=<red>`), and say whether it is the test assuming no collab buttons or a real app problem.
+  3. Confirm `921 clause 19` (ON opens no socket or peer until he shares or joins) passes at both widths.
+  → hunt/preflight-labs-on (a new report), with a DONE line.
