@@ -61144,6 +61144,23 @@
     if (Math.abs(beat(1, 0.25, 0) - beat(2, 0.125, 0)) > 1.01) throw new Error('Static Pulse no longer follows Speed times elapsed clip time');
   });
 
+  /* #690: the clip starts at 1 s; a 0.75 → 0 Hz ramp over two seconds carries 0.75 cycles.
+     Stopping must hold the reached angle, including when Damping is enabled. */
+  test('690 Swing keyframed Speed keeps the reached angle when the rate stops', { item: 'TBD' }, function () {
+    const swing = speed => { const L = box482b([_986fx('swing', { angle: 30, speed, pivotx: 50, pivoty: 50 })], { shapeW: 120, shapeH: 16 }); L.start = 1; return L; };
+    const angle = (speed, t, damping) => {
+      const L = swing(speed); if (damping != null) L.effects[0].params.damping = damping;
+      const r = at482b([L], t); if (!r.n) throw new Error('Swing drew no bar at ' + t + ' s'); return r.ang;
+    };
+    const ramp = { kf: [{ t: 1, v: 0.75, e: 'linear' }, { t: 3, v: 0, e: 'linear' }] };
+    const steady = angle(0.375, 3), stopped = angle(ramp, 3), held = angle(ramp, 3.25);
+    if (!(steady < -25 && steady > -35)) throw new Error('control: static 0.375 Hz Swing reached ' + steady.toFixed(1) + ' degrees, not -30');
+    if (Math.abs(stopped - steady) > 1.5) throw new Error('keyframed Speed rewound Swing to ' + stopped.toFixed(1) + ' degrees instead of keeping ' + steady.toFixed(1));
+    if (Math.abs(held - stopped) > 1.5) throw new Error('Swing moved after its keyframed Speed reached zero: ' + held.toFixed(1) + ' versus ' + stopped.toFixed(1));
+    const damped = angle(ramp, 3, 0.2);
+    if (!(damped < -17 && damped > -23)) throw new Error('Damping branch lost the keyed phase: ' + damped.toFixed(1) + ' degrees instead of about -20');
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
