@@ -30639,6 +30639,11 @@
 
   test('921 S2 the collab core is inert until a session is attached: no session, no listeners, no UI, no globals', { item: '921' }, function () {
     const C = need921('inertness');
+    /* #921 clause 19: Work with friends is ON for a device that never chose, and on installs comments by design. What this
+       test holds is the Labs-OFF promise (§23 as #967 batch 2 relaxed it), so it turns the switch off and puts it back. */
+    const wasLabs921 = FM.settings.get('collabLabs');
+    FM.settings.set('collabLabs', false);
+    try {
     if (C.active !== false) throw new Error('FM.collab.active is ' + C.active + ' on a page nobody shared — every S0 hook in history.js, storage.js and app.js reads that flag, and a test that left a session attached would make every later commit in this suite run the collab pipeline');
     if (C.session) throw new Error('a session is attached on a page nobody shared (role ' + C.role + ')');
     /* S2 gives the S0 hooks something to reach. Every one must EXIST — a half-present hook is how
@@ -30718,6 +30723,7 @@
     if (C.bridge.installed()) throw new Error('the bridge\'s document-wide pointer and key capture listeners are installed with no session running — §23 promises a solo user no listeners at all');
     /* CONTROL: the namespace really is there, so the emptiness above is emptiness and not absence. */
     if (typeof C.Host !== 'function' || typeof C.Session !== 'function' || typeof C.path.canon !== 'function' || typeof C.diff.diffDoc !== 'function' || typeof C.link.LoopLink !== 'function') throw new Error('CONTROL: the modules are not loaded at all');
+    } finally { FM.settings.set('collabLabs', wasLabs921); }
   });
 
   /* A guest reduced to the two trees and the receive rules — §8.1 (pending), §8.3 (structural wins),
@@ -32228,7 +32234,12 @@
       throw new Error('the agent in frame "' + tag + '" never announced itself — either tests/collab-agent.js is not being loaded (the gate in js/collab-core.js needs localhost AND fmtest=collab) or the instance did not boot');
     }
     async function boot(tag, host, w, h) {
-      return bootSrc(tag, 'http://' + host + ':' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag, w, h);
+      const r = await bootSrc(tag, 'http://' + host + ':' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag, w, h);
+      /* #921 clause 19: a fresh device has Work with friends ON. These instances drive FM.collab directly and were written
+         with the UI's resume-on-open off; with it on, the ENDED linked copy a test leaves open is detached (copied, deleted,
+         the copy opened) by the next test's setScene reset, racing that test's join. Off, as they always booted. */
+      await rpc(tag, 'settings', { key: 'collabLabs', value: false });
+      return r;
     }
     /* S6: an instance booted from an address the test writes — the only way to put a `#j=` fragment in
        front of a real boot, which is the thing §14.2's stash has to survive. */
@@ -32908,6 +32919,8 @@
       return await fn(C.ui);
     } finally {
       try { C.ui.close(); } catch (e) {}
+      FM.settings.set('collabLabs', false);   // #921 clause 19: the value restored below is ON now, and ON tears nothing down
+      try { C.ui.syncLabs(); } catch (e) {}
       FM.settings.set('collabLabs', !!wasLabs);
       try { C.ui.syncLabs(); } catch (e) {}
       try {
@@ -37244,9 +37257,10 @@
       const q = await R.rpc('jq', 'pendingJoin');
       if (q.pj) throw new Error('an invite in the QUERY was stashed at boot');
       await R.bootSrc('jf', 'http://jf.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=jf#j=' + j, 900, 700);
-      const a = await R.until('the booted app to have stashed the invite and put up the Labs card', async function () {
+      /* #921 clause 19: a fresh device has Work with friends ON, so the invite skips the Labs card and asks for a name. */
+      const a = await R.until('the booted app to have stashed the invite and put up the name prompt', async function () {
         const x = await R.rpc('jf', 'pendingJoin');
-        return x.pj && x.labsCard ? x : null;
+        return x.pj && !x.labsCard && await R.rpc('jf', 'dom', { sel: '#collab-profile' }) ? x : null;
       }, 20000);
       if (a.pj.j !== j) throw new Error('the boot stashed ' + JSON.stringify(a.pj));
       if (a.hash) throw new Error('the invite is still in the address bar after boot (' + a.hash.slice(0, 10) + '…) — a secret left in the URL is in the history list and in every screenshot');
@@ -106686,7 +106700,7 @@
           if (sw.getAttribute('aria-label') !== 'Work with friends') throw new Error('the switch is announced as “' + sw.getAttribute('aria-label') + '”');
           jargon967b4(g, 'Settings’ Work with friends group');
           const inPanel = tested(seen967b4(document.querySelector('.set-panel'))), onRow = tested(seen967b4(srow));
-          if (inPanel !== 1 || onRow !== 1) throw new Error('Settings says “still being tested” ' + inPanel + ' time(s), ' + onRow + ' on the switch’s own row — once, there');
+          if (inPanel || onRow) throw new Error('Settings says “still being tested” ' + inPanel + ' time(s), ' + onRow + ' on the switch’s own row — #921 clause 19 took Work with friends out of testing');
           const jr = Array.prototype.filter.call(g.querySelectorAll('.set-row'), function (r) { return /Join…/.test(r.textContent); })[0];
           const jl = jr && jr.querySelector('.set-label');
           if (!jl || jl.textContent.trim() !== 'Join a friend’s project') throw new Error('Settings’ Join row reads “' + (jl && jl.textContent) + '” — the other side is Join, and it is a friend’s project');
