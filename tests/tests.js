@@ -61459,11 +61459,16 @@
       throw new Error('Backdrop Clone measured text at the active project FPS instead of the rendered scene FPS: expected ' + shown + ', saw ' + JSON.stringify(seen));
   });
 
-  test('690 Unsharp Mask protects neutral detail from coloured edge fringes', { item: 'TBD' }, function () {
+  test('690 Unsharp Mask Protect colour is off by default and only neutralises the fringe when turned up', { item: 'TBD' }, function () {
+    /* ChatGPT ca35afb3 landed Protect colour with def 100, which changed every NEW Unsharp Mask and, because filters.js
+       builds its children through makeInstance, the Cold Steel and Overdrive filters too (the 482 byte-for-byte pins went
+       red). The land list asked for def 0: a fresh instance must render exactly as an Unsharp Mask did before the control
+       existed, and 100 must still give the neutral-colour path. */
     const fn = FM._FX_TABLES.PIXEL_FX.unsharpmask;
     const fresh = FM.fxRegistry.makeInstance('unsharpmask');
-    if (!fn || !fresh || fresh.params.coloursafe !== 100)
-      throw new Error('New Unsharp Mask instances do not enable colour protection');
+    if (!fn || !fresh) throw new Error('Unsharp Mask or its registry entry is missing');
+    if (fresh.params.coloursafe !== 0)
+      throw new Error('A new Unsharp Mask starts with Protect colour at ' + fresh.params.coloursafe + ', not 0 — every new one and the Cold Steel / Overdrive filters would change their look');
     const W = 5, H = 5, src = new Uint8ClampedArray(W * H * 4);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
@@ -61472,12 +61477,21 @@
       src[i + 3] = 255;
     }
     const render = params => { const d = src.slice(); fn(d, W, H, params, 0); return d; };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    /* the OLD bytes: the params an Unsharp Mask had before the control existed (no coloursafe key at all) */
+    const oldParams = {}; Object.keys(fresh.params).forEach(k => { if (k !== 'coloursafe') oldParams[k] = fresh.params[k]; });
+    if (!same(render(fresh.params), render(oldParams)))
+      throw new Error('A fresh Unsharp Mask does not render the bytes it rendered before Protect colour existed');
     const old = render({ amount: 2, radius: 1 });
-    const zero = render({ amount: 2, radius: 1, coloursafe: 0 });
-    if (!old.every((v, i) => v === zero[i])) throw new Error('Existing Unsharp Mask instances changed');
+    if (!same(render(Object.assign({}, fresh.params, { amount: 2, radius: 1 })), old))
+      throw new Error('A fresh Unsharp Mask at Amount 2 / Radius 1 does not render the old per-channel bytes');
+    if (!same(render({ amount: 2, radius: 1, coloursafe: 0 }), old)) throw new Error('Existing Unsharp Mask instances changed');
+    /* 100 is the neutral-colour path: the cyan fringe the per-channel sharpen puts beside the red edge becomes grey */
     const safe = render({ amount: 2, radius: 1, coloursafe: 100 });
     const at = (2 * W + 2) * 4;
-    if (!(old[at] < old[at + 2] && safe[at] === safe[at + 1] && safe[at + 1] === safe[at + 2] && safe[at + 3] === 255))
+    if (!(old[at] < old[at + 2]))
+      throw new Error('CONTROL: the fixture no longer makes a cyan fringe at Protect colour 0, so 100 neutralising it proves nothing: ' + Array.from(old.slice(at, at + 4)));
+    if (!(safe[at] === safe[at + 1] && safe[at + 1] === safe[at + 2] && safe[at + 3] === 255))
       throw new Error('Colour protection left a cyan fringe or changed alpha: ' + Array.from(safe.slice(at, at + 4)));
   });
 
