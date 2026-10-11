@@ -60606,6 +60606,9 @@
   }
   async function au25Restore(c) {
     if (FM._resetVpPointers) FM._resetVpPointers();
+    /* AU25's synthetic presses never end: no pointerup or pointercancel reaches the DOCUMENT (they go to the canvas or the window), so Simple's
+       say line keeps believing a finger is down, and its Do it anyway / Why? buttons never arm for every test after this one. */
+    ['pointerup', 'pointercancel'].forEach(function (t) { document.dispatchEvent(new PointerEvent(t, { bubbles: true, pointerId: 11, pointerType: 'mouse' })); });
     if (FM.editor.mode() !== c.mode0) await FM.editor.request(c.mode0);
     FM.scene.layers.length = 0; c.saved.forEach(function (l) { FM.scene.layers.push(l); }); FM.scene.selectedId = c.sid; FM.scene.selectedIds = c.sids;
   }
