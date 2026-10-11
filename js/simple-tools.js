@@ -90,7 +90,16 @@ window.FM = window.FM || {};
     tray = document.getElementById('sm-tray'); tools = document.getElementById('sm-tools');
     if (!bar || !tray || !tools) { bar = null; return false; }
     if (phone.addEventListener) phone.addEventListener('change', () => { lastSig = ''; FM.simpleTools.sync(); });   // sync places it, or sends it home
-    if (FM.editor && FM.editor.onChange) FM.editor.onChange(m => { if (m !== 'simple') home(); });   // nothing else runs sync() in Full
+    if (FM.editor && FM.editor.onChange) FM.editor.onChange(m => {
+      if (m !== 'simple') home();   // nothing else runs sync() in Full
+      /* …AND THE LEFT PANEL IS REDRAWN FOR THE EDITOR NOW ON SCREEN (queue 980, verify high-inspector). Nothing on the switch
+         path redrew #inspector, so Full kept Simple's band words ("Tap a clip to see its tools") in place of its Add menu or
+         layer editor, and a phone's sheet stayed shut, until the selection changed; entering Simple kept Full's Add menu
+         under Simple's rows the same way. The inspector's own refresh, then the title refreshAll gives it (syncTopBar), so
+         the panel is exactly what that editor draws. Runs only on a switch, so Full that never saw Simple is untouched. */
+      if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
+      if (FM.syncTopBar) FM.syncTopBar();
+    });
     /* a held second row goes when the line does (rows() below) */
     if (sayEl && window.MutationObserver) new MutationObserver(fitRows).observe(sayEl, { attributes: true, attributeFilter: ['class'] });
     /* …and the rows follow the band's height: a window resize, or the divider's drag (it writes --tl-h on <html>) */
@@ -386,7 +395,11 @@ window.FM = window.FM || {};
       if (lengthFor && (ids.length !== 1 || ids[0] !== lengthFor || !R.isMain(lengthFor))) lengthFor = null;
       const one = ids.length === 1 ? ids[0] : null, l = one && FM.layerById(FM.scene, one);
       roomy = !!one && roomForTwo();   // measured only for one item, the only tray that can take two rows
-      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null)].join('|') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
+      /* the selected item's KIND, HOST and ROW from this read (queue 980, verify medium-tray; ported from BX1d 5f10fdb): a layer
+         made in the same refresh (Text, Sound effects, Record voice) is synced first from the timeline's previous read, which
+         has never heard of it, and drew the overlay tray (Into row, Crop) under a text or a sound; the rebuild's own sync then
+         computed the same signature and kept it. Its kind from the fresh read differs, so the tray is drawn again. */
+      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
       if (sig === lastSig) return;
       lastSig = sig;
       /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the

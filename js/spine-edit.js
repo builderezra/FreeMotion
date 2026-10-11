@@ -1236,6 +1236,10 @@ window.FM = window.FM || {};
     if (u.host && String(u.host).indexOf('slot:') === 0) return refusePlan('slotIntoRow');
     if (!(o.type === 'video' || o.type === 'image' || o.type === 'shape' || (o.type === 'text' && !isCap(o)))) return refusePlan('cannotMain');
     if (o.audioOnly === true || (o.sm && o.sm.snd === true)) return refusePlan('cannotMain');
+    /* …nor anything the read hears as sound only (queue 980, verify medium-tray): a sound effect or a recorded voice is a
+       'video' layer with neither flag, so it passed both checks above, rippled the clips by its length and then read as a
+       sound under the row, leaving a black gap there */
+    if (u.kind === 'audio') return refusePlan('cannotMain');
     const j = S.insertIndexAt(R, +o.start || 0);
     if (j < R.main.length && R.main[j].seam && R.main[j].seam.kind === 'blend') return refusePlan('insertFade', { a: j, b: j + 1 });
     const seam = j === 0 ? (R.main[0] ? R.main[0].start : 0) : R.main[j - 1].end;

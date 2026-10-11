@@ -124188,6 +124188,105 @@
     }, 844);
   });
 
+  test('simple P2.2 · review leaving Simple through the cog gives Full its own left panel at once: the Add menu with nothing selected, the layer editor for a selected clip, and on a phone its raised sheet (verify high-inspector)', { item: '980', budgetMs: 120000 }, async function () {
+    /* Nothing on the switch path redrew #inspector: after the cog's Simple → Full, Full's band kept Simple's words (Tap a clip
+       to see its tools / Its tools are below) in place of its Add menu or layer editor, and a phone's sheet stayed shut, until
+       the selection changed. Driven as he does it: the ⚙ on screen, the Editor block's switch, the cog closing itself. What
+       Full shows straight after is compared with what Full ITSELF draws for the same selection (the refresh every Full edit
+       ends in), so the title counts too. */
+    smNeedP2();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const settle = async ms => { await sleep(ms); document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} }); };
+    const look = function () {
+      const i = document.getElementById('inspector'), p = document.getElementById('inspector-panel'), t = document.querySelector('#inspector-panel .panel-title-label');
+      return { hint: !!i.querySelector('.sm-band-hint'), add: !!i.querySelector('.addmenu'), editor: !!i.querySelector('.quick-row, .cat-wrap'), title: t ? t.textContent : '', open: p.classList.contains('open') };
+    };
+    const cogTo = async function (want) {
+      const cog = ['m-settings', 'btn-settings'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length);
+      if (!cog) throw new Error('setup: no cog on screen on the way to ' + want + ' (body ' + document.body.className + ')');
+      cog.click(); await settle(320);
+      const sw = document.querySelector('#cv-ed-bar .ed-sw');
+      if (!sw || !sw.getClientRects().length) throw new Error('setup: the cog shows no Editor switch (#cv-ed-bar .ed-sw)');
+      sw.click(); await settle(600);
+      const dlg = document.getElementById('canvas-dialog');
+      if (dlg && !dlg.classList.contains('hidden')) { FM.closeCanvasDialog(); await settle(150); }
+      if (FM.editor.mode() !== want) throw new Error('setup: the cog’s switch did not reach ' + want + ' (mode ' + FM.editor.mode() + ')');
+    };
+    const fullsOwn = async function () { FM.refreshAll(); await settle(150); return look(); };
+    const check = async function (where, sel, v) {
+      FM.selectLayer(null); if (sel) FM.selectLayer(v.L(sel).id);
+      await settle(150);
+      const before = look();
+      if (!before.hint) throw new Error('CONTROL ' + where + ': Simple’s band does not show its own words before the switch (' + JSON.stringify(before) + ') — so leaving could prove nothing');
+      await cogTo('full');
+      const got = look(), own = await fullsOwn();
+      if (sel ? !own.editor : !own.add) throw new Error('CONTROL ' + where + ': Full’s own refresh draws ' + JSON.stringify(own) + ' — no ' + (sel ? 'layer editor' : 'Add menu') + ' to compare with');
+      if (sel && innerWidth <= 700 && !own.open) throw new Error('CONTROL ' + where + ': Full’s own refresh does not raise the phone’s sheet for a selected clip');
+      const diff = Object.keys(own).filter(k => got[k] !== own[k]);
+      if (diff.length) throw new Error(where + ': straight after the cog’s switch to Full the left panel is ' + JSON.stringify(got) + ', where Full itself draws ' + JSON.stringify(own) + ' (' + diff.join(', ') + ' differ)');
+      FM.selectLayer(null); await settle(150);   // ‹ first: on a phone Full's clip bar holds the top bar, and the cog with it
+      await cogTo('simple');
+    };
+    await atWideWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        await check('1280, nothing selected', null, v);
+        await check('1280, clip B selected', 'B', v);
+      });
+    }, 1280);
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        await check('380, clip B selected', 'B', v);
+      });
+    }, 380);
+  });
+
+  test('simple P2.2 · review at 380 a Text or a sound effect added in Simple gets its own tray at once: Edit words for the text, no Into row for the sound, and Into row refuses a sound and moves nothing (verify medium-tray)', { item: '980', budgetMs: 120000 }, async function () {
+    /* The tray refills only when its signature changes. A layer made in the same refresh is synced first from the timeline's
+       PREVIOUS read, which has never heard of it, so it drew the overlay tray (Into row, Crop, Forward, Back); the rebuild's
+       own sync computed the same signature and kept it. On a phone nothing else redrew it: the new text kept Into row after
+       its ✓, and Into row on a sound effect rippled the clips by its length and left a black gap. Driven as he does it. */
+    smNeedP2();
+    if (!FM.sfx || !FM.sfx.open) throw new Error('FM.sfx is missing — js/sfx.js did not load');
+    const tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        /* TEXT: the project tool, then its ✓ */
+        FM.time = 1;
+        smTool('text').click(); await v.idle(); await v.sleep(150);
+        const t = FM.layerById(FM.scene, FM.scene.selectedId);
+        if (!t || t.type !== 'text') throw new Error('setup: Text did not add and select a text (it said “' + v.say() + '”)');
+        const want = 'editwords,stay,more,delete';
+        if (tools().join(',') !== want) throw new Error('a Text added in Simple shows the tray ' + JSON.stringify(tools()) + ', want ' + want + ' (Into row and Crop belong to a picture)');
+        const done = Array.from(document.querySelectorAll('.te-done')).find(b => b.getClientRects().length);
+        if (done) done.click(); else if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
+        await v.idle(); await v.sleep(150);
+        if (FM.scene.selectedId === t.id && tools().join(',') !== want) throw new Error('after the text’s ✓ the tray is ' + JSON.stringify(tools()) + ', want ' + want);
+        /* SOUND EFFECTS: Sound › Sound effects › Add on the first sound */
+        FM.selectLayer(null); await v.sleep(80);
+        FM.time = 1;
+        const n0 = FM.scene.layers.length;
+        smTool('sound').click(); await v.sleep(80);
+        const item = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).find(b => /sound effects/i.test(b.textContent));
+        if (!item) throw new Error('setup: Sound has no Sound effects choice');
+        item.click(); await v.sleep(250);
+        const add = document.querySelector('.sfx-scrim .sfx-add');
+        if (!add) throw new Error('setup: the sound effects list has no Add button');
+        add.click();
+        for (let i = 0; i < 300 && FM.scene.layers.length === n0; i++) await v.sleep(20);
+        await v.idle(); await v.sleep(200);
+        document.querySelectorAll('.sfx-scrim').forEach(n => n.remove());
+        const snd = FM.layerById(FM.scene, FM.scene.selectedId);
+        if (FM.scene.layers.length !== n0 + 1 || !snd || snd.type === 'text') throw new Error('setup: Add did not add and select the sound effect');
+        if (FM.spine.read(FM.scene).units[snd.id].kind !== 'audio') throw new Error('CONTROL: the sound effect does not read as a sound (' + FM.spine.read(FM.scene).units[snd.id].kind + ')');
+        if (tools().indexOf('into') >= 0 || tools().indexOf('crop') >= 0) throw new Error('a sound effect added in Simple shows the tray ' + JSON.stringify(tools()) + ' — Into row would ripple the clips by its length and leave a black gap');
+        /* …and the command itself refuses a sound, writing nothing */
+        const A = v.L('A'), B = v.L('B'), s0 = v.steps(), at = [A.start, B.start, snd.start];
+        await FM.spine.cmd.intoRow(snd.id); await v.idle();
+        if (v.steps() !== s0 || A.start !== at[0] || B.start !== at[1] || snd.start !== at[2] || (snd.sm && snd.sm.main)) throw new Error('Into row on a sound effect went through: A ' + at[0] + ' → ' + A.start + ', B ' + at[1] + ' → ' + B.start + ', the sound ' + at[2] + ' → ' + snd.start + ' ' + JSON.stringify(snd.sm || null) + ', steps ' + s0 + ' → ' + v.steps());
+      });
+    }, 380);
+  });
+
   test('980 2.2 merge: after a Simple visit on a PC, #sm-bar goes back home — Full\u2019s inspector band keeps no Simple element', { item: '980' }, async function () {
     /* The PM's merge-day note (7 Oct): place() parked #sm-bar at the bottom of #inspector-panel on a PC and nothing moved it
        back, so Full's band kept it after Simple closed. Leaving Simple runs no sync() in Full (app.js calls it only in Simple),
