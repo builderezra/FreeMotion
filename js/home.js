@@ -1701,7 +1701,7 @@ window.FM = window.FM || {};
    * against the list actually on screen — otherwise "Delete 3" on the Templates tab would have gone
    * looking for three template ids in the PROJECT store. */
   function selKind() {
-    if (tab === 'tutorials') return null;   // nothing selectable on the placeholder tab
+    if (tab === 'tutorials') return null;   // nothing selectable: a lesson has no actions (#1082)
     /* canDuplicate is true for all three now (queue 374). It was false here because only FM.projects had
        a duplicate() — and the bulk handler called FM.projects.duplicate() by name whatever tab was open,
        so had the button ever been shown on these two it would have looked up a template id in the project
@@ -2547,6 +2547,7 @@ window.FM = window.FM || {};
     // and its redraw carries the draw on from where it was, instead of starting it again from the middle of it
     if (FM.homeArrow) FM.homeArrow.clear({ soft: !root.classList.contains('hidden') });
     root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    if (tab !== 'tutorials' && FM.tutorials) FM.tutorials.close();   // #1082: an open lesson belongs to its tab
     // Keep the legacy programmatic Select control in sync; cards' menus are the visible entry.
     const selBtn = document.getElementById('hm-select-btn');
     if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.classList.toggle('on', selectMode); }
@@ -2599,10 +2600,10 @@ window.FM = window.FM || {};
       list.forEach(p => { shownIds.push(p.id); grid.appendChild(projectCard(p)); });
       pruneSelection();
     } else if (tab === 'tutorials') {
-      // Nothing here yet ON PURPOSE — the tab is a placeholder Ezra asked for so the lessons have
-      // somewhere to land later. The copy says "coming", not "none found", because an empty state that
-      // reads like a failure is worse than no tab at all.
-      grid.appendChild(emptyState('▷', 'Tutorials are coming', 'Short walkthroughs of the editor will live here.'));
+      // #1082: the lessons (js/tutorials.js). The list arrives by fetch, so the cards go in when it lands — and not at
+      // all if he has moved to another tab by then (still()). Search filters them by title and group.
+      if (FM.tutorials) FM.tutorials.fill(grid, query, { emptyState: emptyState, still: () => tab === 'tutorials' });
+      else grid.appendChild(emptyState('▷', 'Tutorials are coming', 'Short walkthroughs of the editor will live here.'));
     } else if (tab === 'templates') {
       let list = pinSort('templates', FM.templates.list(), t => t.id);
       if (query && list.length) {

@@ -1,0 +1,18 @@
+{
+ "_why": "#1082: the bold phrases in tutorials/*.md that are NOT words on a button, so the suite's 'every button a lesson names exists in the app' check skips them. Each says what it is instead. Lower case, quotes and ellipses plain.",
+ "add 2 effects": "03: the count in the button is live (Add N effects)",
+ "ctrl+shift+z": "10: a key combination, not a label",
+ "cue 1 / 2": "12: the counter is live (Cue N / M)",
+ "share \"your project name\" live": "17: the lesson's stand-in for his project's name",
+ "editing \"name\"": "18: the lesson's stand-in for the template's name",
+ "apply ... and switch": "Simple 01: the button names the size he picked (Apply 9:16 and switch)",
+ "scissors": "Simple 03: describes the split icon",
+ "curved arrow": "Simple 03: describes the undo icon",
+ "skip-to-start": "Simple 04: describes the icon beside the time counter",
+ "up-arrow": "Simple 07: describes the Export icon",
+ "1.5×": "Simple 09: a value on the speed row, live",
+ "in 0.0 s": "Simple 09: the fade-in length, live",
+ "out 0.0 s": "Simple 09: the fade-out length, live",
+ "length 0.5 s": "Simple 10: the transition length, live",
+ "share \"project 1\" live": "Simple 12: the card names the project (Share “Project 1” live)"
+}

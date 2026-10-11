@@ -122031,4 +122031,232 @@
     }
   });
 
+  /* ---------------- #1082: the lessons in Home's Tutorials tab ----------------
+   * Ezra, 11 Oct (through the logging chat): layout A, the checked drafts, Simple 10 and 13 merged, every step re-checked
+   * against the app, textContent only. js/tutorials.js draws tutorials/*.md, listed by tutorials/index.json.
+   * The risk D2 named is the one these guard hardest: a lesson names exact on-screen words, and a release that renames
+   * one makes the lesson wrong without anything failing. So every button a SHOWN lesson names must exist in the app's
+   * source, and a HIDDEN lesson (a feature not shipped yet) must still be waiting for something — the day its feature
+   * lands, the suite says to show it. tests/tut-not-labels.json lists the bold phrases that are not button words. */
+  const TUT_ALLOWED = ['H2', 'P', 'OL', 'LI', 'STRONG', 'DIV', 'SPAN'];
+  const tutFetch = async (u, how) => { const r = await fetch(u + (u.indexOf('?') < 0 ? '?' : '&') + 't=' + Date.now()); if (!r.ok) throw new Error(u + ' answered ' + r.status); return how === 'json' ? r.json() : r.text(); };
+  const tutNorm = s => String(s).replace(/\\u2019/g, '’').replace(/\\u2026/g, '…').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
+    .replace(/[’‘]/g, '\'').replace(/[“”]/g, '"').replace(/…/g, '...').replace(/ /g, ' ').toLowerCase();
+  function tutBadNodes(root) {
+    const bad = [];
+    root.querySelectorAll('*').forEach(n => {
+      if (TUT_ALLOWED.indexOf(n.tagName) < 0) bad.push('<' + n.tagName.toLowerCase() + '>');
+      [...n.attributes].forEach(a => { if (a.name !== 'class') bad.push(n.tagName.toLowerCase() + '[' + a.name + ']'); });
+    });
+    return bad;
+  }
+
+  test('1082 every tutorial renders clean — no reviewer notes, one step per numbered line, every bold kept, only text', { item: '1082' }, async function () {
+    if (!FM.tutorials) throw new Error('there is no FM.tutorials — js/tutorials.js is not loaded');
+    const all = await tutFetch('tutorials/index.json', 'json');
+    if (!Array.isArray(all) || all.length < 30) throw new Error('tutorials/index.json lists ' + (all && all.length) + ' lessons; the drafts were 20 for Full and 13 for Simple');
+    const seen = new Set();
+    for (const e of all) {
+      if (seen.has(e.file)) throw new Error(e.file + ' is listed twice');
+      seen.add(e.file);
+      if (!e.title || !/^(full|simple)$/.test(e.mode || '') || !e.group) throw new Error(e.file + ' is missing its title, mode or group in index.json');
+      const src = await tutFetch('tutorials/' + e.file);
+      const root = document.createElement('div');
+      const r = FM.tutorials.render(src, root);
+      const text = root.textContent;
+      const kept = FM.tutorials.clean(src);
+      if (/<!--|-->/.test(text)) throw new Error(e.file + ': a reviewer comment reached the reader');
+      if (/\*\*/.test(text)) throw new Error(e.file + ': a ** marker reached the reader');
+      if (/Verification|\|\s*-{3}|NOT WALKED|\bwalked\b|js\/[\w-]+\.js|hunt\/|\b2\.\d release\b/.test(text))
+        throw new Error(e.file + ': reviewer words reached the reader: "' + (text.match(/.{0,40}(Verification|\|\s*-{3}|NOT WALKED|\bwalked\b|js\/[\w-]+\.js|hunt\/|\b2\.\d release\b).{0,40}/) || [''])[0] + '"');
+      [...root.children].forEach(c => { if (/^\s*#/.test(c.textContent)) throw new Error(e.file + ': a # heading marker reached the reader: "' + c.textContent.slice(0, 60) + '"'); });
+      const steps = (kept.match(/^\d+\.\s/gm) || []).length, bolds = (kept.match(/\*\*[^*]+\*\*/g) || []).length;
+      if (root.querySelectorAll('li').length !== steps || r.steps !== steps) throw new Error(e.file + ': ' + steps + ' numbered lines became ' + root.querySelectorAll('li').length + ' steps');
+      if (root.querySelectorAll('strong').length !== bolds) throw new Error(e.file + ': ' + bolds + ' bold phrases became ' + root.querySelectorAll('strong').length);
+      if (!r.title || !root.querySelector('h2.tut-title')) throw new Error(e.file + ' has no title');
+      if (!r.intro || steps < 2) throw new Error(e.file + ' has no opening line or fewer than two steps');
+      const bad = tutBadNodes(root);
+      if (bad.length) throw new Error(e.file + ' put ' + bad.slice(0, 3).join(', ') + ' on the page; only text, steps and boxes are allowed');
+    }
+  });
+
+  test('1082 a hostile lesson cannot put markup on the page — it is shown as text and nothing runs', { item: '1082' }, async function () {
+    const savedAlert = window.alert;
+    let alerted = 0;
+    window.alert = () => { alerted++; };   // a real dialog would hang a headless run (the prototype's first mutation did)
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    try {
+      const src = '# <img src=x onerror="alert(1)">\n\n<script>alert(2)<\/script>\n\n1. **<iframe src="javascript:alert(3)">**\n2. an **unclosed bold\n\nTip: <a href="javascript:alert(4)">tap</a>\n\n<!-- closed --> after the closed one\n\nbefore <!-- never closed\n\nthe last line';
+      FM.tutorials.render(src, root);
+      await sleep(60);
+      const bad = tutBadNodes(root);
+      if (bad.length) throw new Error('hostile text became ' + bad.slice(0, 4).join(', '));
+      const t = root.textContent;
+      if (t.indexOf('<img src=x') < 0 || t.indexOf('<script>') < 0) throw new Error('the hostile text was dropped instead of shown as text: ' + t.slice(0, 120));
+      if (t.indexOf('the last line') < 0) throw new Error('an unclosed comment swallowed the rest of the lesson');
+      if (t.indexOf('after the closed one') < 0 || /closed -->|never closed/.test(t)) throw new Error('comments were not cut exactly: ' + t.slice(-120));
+    } finally { root.remove(); window.alert = savedAlert; }
+    if (alerted) throw new Error('a lesson ran script (' + alerted + ' alert)');
+    const js = await tutFetch('js/tutorials.js');
+    const reach = js.match(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function/);
+    if (reach) throw new Error('js/tutorials.js uses ' + reach[0] + ' — a lesson must only ever become text');
+  });
+
+  test('1082 every button a shown tutorial names is in the app, and a hidden one is still waiting for its feature', { item: '1082' }, async function () {
+    const all = await tutFetch('tutorials/index.json', 'json');
+    const notLabels = await tutFetch('tests/tut-not-labels.json', 'json');
+    const html = await tutFetch('index.html');
+    let src = html;
+    const scripts = [...html.matchAll(/<script src="(js\/[^"?]+)/g)].map(m => m[1]);
+    if (scripts.length < 40) throw new Error('found ' + scripts.length + ' scripts in index.html — the app source was not read, so this would prove nothing');
+    for (const s of scripts) src += await tutFetch(s);
+    src += await tutFetch('styles.css') + await tutFetch('theme-glass.css');
+    const low = tutNorm(src);
+    const problems = [];
+    let named = 0;
+    for (const e of all) {
+      const kept = FM.tutorials.clean(await tutFetch('tutorials/' + e.file));
+      const labels = [];
+      (kept.match(/\*\*[^*]+\*\*/g) || []).forEach(b => b.slice(2, -2).split(',').forEach(p => { const q = tutNorm(p).trim().replace(/[:.]+$/, '').trim(); if (q) labels.push(q); }));
+      const missing = labels.filter(q => low.indexOf(q) < 0 && !Object.prototype.hasOwnProperty.call(notLabels, q));
+      named += labels.length;
+      const waits = e.needs && low.indexOf(tutNorm(e.needs)) < 0;
+      const replaced = e.until && low.indexOf(tutNorm(e.until)) >= 0;
+      if (!e.hidden && missing.length) problems.push(e.file + ' names "' + missing.slice(0, 3).join('", "') + '", which is nowhere in the app — the lesson is wrong, or its feature has not shipped (mark it "hidden")');
+      if (!e.hidden && waits) problems.push(e.file + ' is shown but needs "' + e.needs + '", which is not in the app yet');
+      if (!e.hidden && replaced) problems.push(e.file + ' is shown but "' + e.until + '" has shipped, which replaces it');
+      if (e.hidden && !missing.length && !waits && !replaced) problems.push(e.file + ' is hidden, but everything it names is in the app now — show it (remove "hidden")');
+    }
+    if (named < 300) throw new Error('only ' + named + ' button words were read from the lessons — the check is not reading them');
+    if (problems.length) throw new Error(problems.length + ' lesson(s) out of step with the app: ' + problems.slice(0, 4).join(' | '));
+  });
+
+  test('1082 the Tutorials tab lists the lessons as Home cards, Start here first, and a card opens its lesson', { item: '1082' }, async function () {
+    const all = (await tutFetch('tutorials/index.json', 'json')).filter(e => !e.hidden);
+    const wasOpen = FM.home.isOpen();
+    const tabBtn = t => document.querySelector('#home-screen .hm-tab[data-tab="' + t + '"]');
+    const cards = () => [...document.querySelectorAll('#home-screen .hm-grid .tut-card')];
+    try {
+      if (!wasOpen) { FM.home.open(); await sleep(400); }
+      tabBtn('tutorials').click();
+      for (let i = 0; i < 40 && cards().length < all.length; i++) await sleep(50);
+      const cs = cards();
+      if (cs.length !== all.length) throw new Error('the tab shows ' + cs.length + ' lessons; index.json lists ' + all.length + ' to show');
+      if (cs.some(c => !c.classList.contains('hm-card') || !c.querySelector('.hm-thumb') || !c.querySelector('.hm-name'))) throw new Error('a lesson is not drawn as a Home card (hm-card, hm-thumb, hm-name)');
+      const ribbons = document.querySelectorAll('#home-screen .hm-grid .tut-ribbon');
+      if (ribbons.length !== 1 || !cs[0].contains(ribbons[0]) || !/start here/i.test(ribbons[0].textContent)) throw new Error('"Start here" should be on the first lesson only (found ' + ribbons.length + ')');
+      const modes = new Set(all.map(e => e.mode));
+      if (document.querySelectorAll('#home-screen .hm-grid .tut-section').length !== (modes.size > 1 ? modes.size : 0)) throw new Error('the Full and Simple lessons are not under their own headings');
+      const plus = document.getElementById('hm-new');
+      if (plus && getComputedStyle(plus).display !== 'none') throw new Error('the + shows on the Tutorials tab, where there is nothing to create');
+      const firstMode = all.filter(e => e.mode === all[0].mode);
+
+      cs[0].click();
+      let rd = null;
+      for (let i = 0; i < 40; i++) { rd = document.querySelector('#home-screen .tut-reader'); if (rd && rd.querySelector('.tut-steps li')) break; await sleep(50); }
+      if (!rd) throw new Error('tapping the first lesson opened no reader');
+      if (!rd.querySelector('.tut-steps li')) throw new Error('the reader never showed the lesson’s steps');
+      const want = (await tutFetch('tutorials/' + all[0].file)).match(/^#\s+(.*)$/m)[1];
+      if (rd.querySelector('.tut-title').textContent !== want) throw new Error('the reader shows "' + rd.querySelector('.tut-title').textContent + '", not "' + want + '"');
+      if (!/1 of /.test(rd.querySelector('.tut-where').textContent)) throw new Error('the reader does not say which lesson of how many: "' + rd.querySelector('.tut-where').textContent + '"');
+      if (!rd.querySelector('.tut-prev').disabled || rd.querySelector('.tut-next').disabled) throw new Error('on the first lesson Previous should be off and Next on');
+      rd.querySelector('.tut-next').click();
+      await sleep(50);
+      rd = document.querySelector('#home-screen .tut-reader');
+      if (document.querySelectorAll('#home-screen .tut-reader').length !== 1) throw new Error('Next left two readers on the page');
+      if (!rd || rd.dataset.tut !== firstMode[1].file) throw new Error('Next did not open the second lesson (' + (rd && rd.dataset.tut) + ')');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await sleep(30);
+      if (document.querySelector('#home-screen .tut-reader')) throw new Error('Escape did not close the lesson');
+      cards()[0].click();
+      await sleep(50);
+      document.querySelector('#home-screen .tut-reader .tut-back').click();
+      await sleep(30);
+      if (document.querySelector('#home-screen .tut-reader')) throw new Error('the back button did not close the lesson');
+      cards()[0].click();
+      await sleep(50);
+      tabBtn('projects').click();
+      await sleep(50);
+      if (document.querySelector('#home-screen .tut-reader')) throw new Error('a lesson stayed open over the Projects tab');
+    } finally {
+      try { FM.tutorials.close(); } catch (e) {}
+      try { const p = tabBtn('projects'); if (p && !p.classList.contains('active')) p.click(); } catch (e) {}
+      try { if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(150);
+    }
+  });
+
+  test('1082 on a phone the lesson fills the screen, reads in both Home looks, and never scrolls sideways', { item: '1082' }, async function () {
+    const all = (await tutFetch('tutorials/index.json', 'json')).filter(e => !e.hidden);
+    const wasOpen = FM.home.isOpen();
+    const de = document.documentElement, home0 = de.getAttribute('data-home');
+    const lum = c => { const m = (String(c).match(/[\d.]+/g) || []).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      return m.length === 3 ? 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2] : null; };
+    const contrast = (a, b) => { const x = lum(a), y = lum(b); return (x == null || y == null) ? 0 : (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    try {
+      await atPhoneWidth(async () => {
+        if (!FM.home.isOpen()) { FM.home.open(); await sleep(400); }
+        const longest = all.reduce((a, e) => (e.file.indexOf('17-') === 0 ? e : a), all[0]);   // Work with friends: the longest lesson
+        FM.tutorials.open(all.filter(e => e.mode === longest.mode), all.filter(e => e.mode === longest.mode).indexOf(longest));
+        let rd = null;
+        for (let i = 0; i < 40; i++) { rd = document.querySelector('#home-screen .tut-reader'); if (rd && rd.querySelector('.tut-steps li')) break; await sleep(50); }
+        if (!rd || !rd.querySelector('.tut-steps li')) throw new Error('the lesson did not open at phone width');
+        await sleep(260);   // past the arrival animation
+        const r = rd.getBoundingClientRect(), hs = document.getElementById('home-screen').getBoundingClientRect();
+        if (Math.abs(r.left - hs.left) > 1 || Math.abs(r.width - hs.width) > 1 || Math.abs(r.height - hs.height) > 1) throw new Error('the reader is ' + Math.round(r.width) + 'x' + Math.round(r.height) + ', not the whole Home screen (' + Math.round(hs.width) + 'x' + Math.round(hs.height) + ')');
+        const sc = rd.querySelector('.tut-scroll');
+        if (sc.scrollWidth > sc.clientWidth + 1) throw new Error('the lesson scrolls sideways: ' + sc.scrollWidth + ' wide in ' + sc.clientWidth);
+        const pn = rd.querySelector('.tut-pn').getBoundingClientRect();
+        if (pn.bottom > innerHeight + 0.5 || pn.top < r.top + 100) throw new Error('Previous / Next are not at the bottom of the screen (' + Math.round(pn.top) + '-' + Math.round(pn.bottom) + ' of ' + innerHeight + ')');
+        const back = rd.querySelector('.tut-back').getBoundingClientRect();
+        if (back.width < 40 || back.height < 40) throw new Error('the back button is ' + Math.round(back.width) + 'x' + Math.round(back.height) + ' — too small for a thumb');
+        for (const look of ['dark', 'light']) {
+          if (look === 'light') de.setAttribute('data-home', 'light'); else de.removeAttribute('data-home');
+          await sleep(30);
+          const ground = getComputedStyle(rd).backgroundColor, bar = getComputedStyle(rd.querySelector('.tut-bar')).backgroundColor;
+          [['.tut-title', ground], ['.tut-intro', ground], ['.tut-steps li', ground], ['.tut-article strong', ground], ['.tut-where', bar], ['.tut-callout', null]].forEach(([sel, bg]) => {
+            const n = rd.querySelector(sel);
+            if (!n) return;
+            let b = bg || getComputedStyle(n).backgroundColor;
+            if (/rgba\(.*,\s*0(\.\d+)?\)$/.test(b)) b = ground;   // a see-through box reads against the page
+            const c = contrast(getComputedStyle(n).color, b);
+            if (c < 4.5) throw new Error('on the ' + look + ' Home, ' + sel + ' is ' + c.toFixed(2) + ':1 against its ground — not readable');
+          });
+        }
+      }, 380);
+    } finally {
+      try { FM.tutorials.close(); } catch (e) {}
+      if (home0 == null) de.removeAttribute('data-home'); else de.setAttribute('data-home', home0);
+      try { if (!wasOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(150);
+    }
+  });
+
+  test('1082 the service worker drops a lesson an older release cached, and keeps this release’s', { item: '1082' }, async function () {
+    const src = await tutFetch('sw.js');
+    const O = location.origin, store = new Map();
+    [[O + '/tutorials/01-first-video.md?v=17.40', 'old'], [O + '/tutorials/index.json?v=17.40', 'old list'],
+     [O + '/tutorials/01-first-video.md?v=17.41', 'new'], [O + '/js/app.js?v=9', 'script']].forEach(([k, v]) => store.set(k, new Response(v)));
+    const key = k => (typeof k === 'string' ? k : k.url);
+    const cache = {
+      match: k => Promise.resolve(store.get(key(k))), put: (k, v) => { store.set(key(k), v); return Promise.resolve(); },
+      delete: k => { store.delete(key(k)); return Promise.resolve(true); }, keys: () => Promise.resolve([...store.keys()].map(u => ({ url: u }))),
+    };
+    const handlers = {};
+    const scope = { addEventListener: (t, fn) => { (handlers[t] = handlers[t] || []).push(fn); }, skipWaiting: () => {}, clients: { claim: () => Promise.resolve() }, location: { origin: O } };
+    const page = '<script src="js/app.js?v=9"></script><span class="ver" title="Tap">v17.41</span>';
+    const net = () => Promise.resolve(new Response(page, { status: 200 }));
+    // eslint-disable-next-line no-new-func
+    new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(scope, { open: () => Promise.resolve(cache), keys: () => Promise.resolve([]), delete: () => Promise.resolve(true) }, net, Response, URL);
+    let answered = null, pruning = null;
+    handlers.fetch[0]({ request: { method: 'GET', url: O + '/index.html', mode: 'navigate' }, respondWith: p => { answered = p; }, waitUntil: p => { pruning = p; } });
+    await answered;
+    if (!pruning) throw new Error('a good navigation started no clean-up at all');
+    await pruning;
+    if (store.has(O + '/tutorials/01-first-video.md?v=17.40') || store.has(O + '/tutorials/index.json?v=17.40')) throw new Error('lessons cached by v17.40 survived a v17.41 load — every release would leave its copies behind');
+    if (!store.has(O + '/tutorials/01-first-video.md?v=17.41')) throw new Error('the clean-up deleted this release’s own lesson — it would be fetched again offline and fail');
+    if (!store.has(O + '/js/app.js?v=9')) throw new Error('the clean-up deleted a script the page still uses');
+  });
+
 })();
