@@ -61115,6 +61115,43 @@
     if (out.length) throw new Error('Scanlines keyed at a constant Roll put its lines on different rows from the unkeyed Roll: ' + out.join('; '));
   });
 
+  test('690 Frame Stutter keyed at a constant Rate 8 strobes and holds on the same frames as the unkeyed Rate at 24 fps - the first frame of a hold is not dropped', { item: 'TBD' }, function () {
+    /* land-b3 F1. The hold index is Math.floor(∫ Rate), and ∫ of a keyed constant 8 at 24 fps comes out n - 1e-15 on some
+       hold starts: that frame took the previous hold's index, so in Strobe it sat at the END of the old hold (phase - q
+       = 0.999…, past the duty) and drew nothing where the unkeyed Rate lights it, and in Hold it kept showing the previous
+       hold's picture. The keyed branch adds 1e-9. Rate 8 at 24 fps puts the phase on thirds, never on the 0.5 duty edge. */
+    const stutter = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.framestutter;
+    if (!stutter || !FM.integrateProp || FM._mfGhost) throw new Error('Frame Stutter or its rate clock is unavailable');
+    let serial = 0;
+    const src = document.createElement('canvas'); src.width = src.height = 2;
+    const sg = src.getContext('2d');
+    const paint = f => { sg.clearRect(0, 0, 2, 2); sg.fillStyle = 'rgb(' + f + ',' + (255 - f) + ',0)'; sg.fillRect(0, 0, 2, 2); };
+    const draw = (rate, t, mode, id) => {
+      const b = document.createElement('canvas'); b.width = b.height = 2;
+      stutter(src, b.getContext('2d'), 2, 2, { x: 0, y: 0, w: 2, h: 2 }, { rate, mode, duty: 0.5, blend: 0, offset: 0, random: 0 }, t, t, { id });
+      const d = b.getContext('2d').getImageData(0, 0, 1, 1).data;
+      return [d[0], d[1], d[3]];
+    };
+    const lit = (rate, t) => { paint(0); return draw(rate, t, 1, '690-f1-strobe-' + serial++); };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    if (lit(8, 3 / 24)[2] !== 255 || lit(8, 2 / 24)[2] !== 0) throw new Error('CONTROL: Strobe at Rate 8 does not light the first frame of a hold and leave its last frame dark');
+    const out = [];
+    _f1Tracks(8).forEach((keyed, n) => {
+      const r = _f1EveryFrame({ fps: 24, frames: 240, keyed, rate: 8, draw: lit, same, off: (t, f) => t * 8 < 8 * f / 24 && Number.isInteger(8 * f / 24) ? 1e-8 : 0 });   // unkeyed phase = elapsed × rate, below a whole count
+      if (r.bad.length) out.push('Strobe, track ' + n + ': frames ' + r.bad.slice(0, 10).join(', ') + ' (' + r.bad.length + ' of 241; lit ' +
+        lit(keyed, r.bad[0] / 24)[2] + ' where the unkeyed Rate gives ' + lit(8, r.bad[0] / 24)[2] + ')');
+      // Hold, played frame by frame with a new picture on every frame: which frame each hold shows
+      const kid = '690-f1-hold-k' + serial++, uid = '690-f1-hold-u' + serial++, held = [];
+      for (let f = 0; f <= 240; f++) {
+        paint(f);
+        const k = draw(keyed, f / 24, 0, kid), u = draw(8, f / 24, 0, uid);
+        if (!same(k, u)) held.push(f + ' (shows frame ' + k[0] + ', not ' + u[0] + ')');
+      }
+      if (held.length) out.push('Hold, track ' + n + ': ' + held.length + ' of 241 frames, ' + held.slice(0, 6).join(', '));
+    });
+    if (out.length) throw new Error('Frame Stutter keyed at a constant Rate 8 differs from the unkeyed Rate 8: ' + out.join('; '));
+  });
+
   test('690 Noise keyframed Speed accumulates frames and holds its pattern at zero', { item: 'TBD' }, function () {
     const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.noise;
     if (!K || !FM.integrateProp) throw new Error('the Noise kernel or shared rate integrator is missing');
