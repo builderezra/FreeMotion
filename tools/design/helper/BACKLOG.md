@@ -509,3 +509,13 @@ ADDED 11 Oct 08:15 by the PM, from the builder: "that report was exactly what wa
 - BX2 v17.41: `690 replacing a clip twice then undoing twice brings his original back…` goes red after `…microphone is open…` and then `…phone storage full… Stay (a real tap)`. What do those two leave behind (scene layers, globals, storage stubs, open sheets)? Name the leak and say which test should clean it up. → hunt/preflight-v17.41 (a new section).
 - BX3 v17.39: `simple P2.2 · tray B …`, the 2 px overflow at 960×700. Is it red with the system font too, or only with the container's fallback font? If you can, install or force a font metrically close to system-ui/SF and re-run; otherwise say that you could not. → hunt/preflight-v17.39 (a new section).
 - PRE4a (v17.42 / 2.4's own report) is still owed after these.
+
+ADDED 11 Oct 09:05 by the PM, from the builder ("thank you for BX1–BX3"). In order:
+- BX1b (TOP). The builder's candidate cause: au25Setup/au25Restore saved the layers, the selection and the editor mode, but never FM.scene.project. A switch into Simple STAMPS the project (its sm record and the stored `ed`), and the stamp is autosaved, which also explains why re-opening the project did not clear it. The tests now snapshot the project at setup, put it back in place on restore, then save. **Tip: hunt/bx1-v17.44 4b0e3d46** (p26-dry + the fix; the same fix is on the Full batch as hunt/bx1-candidate 24381471). On 4b0e3d46 at 1280 (and at 380 if quick):
+  1. The bisect slice (from AU25-1 through each target) must now be GREEN for ALL FIVE 2.4 tests.
+  2. AU25-1 and AU25-2 themselves must stay GREEN.
+  3. If any of the five stays red, diff FM.scene.project and the localStorage keys before and after AU25-1, and name what differs.
+  → hunt/preflight-bx (a new section), with a DONE line.
+- BX2b. Bisect INSIDE `…phone storage full… Stay (a real tap)…` on v17.41: return early at each of its `__fmStep` markers, on a copy, and find the step after which `690 replacing a clip twice then undoing twice…` goes red. Name that step's leftover (the unidentified extra <body> child is a lead). → hunt/preflight-bx.
+- BX3 is fixed by the builder (980-p22-r12pre 0d34502e: the two-row PC tray uses 2 px a side under 1100 px), and the builder's laptop also uses DejaVu Sans, so it will run that test itself. Nothing for you, unless you want a quick check of `simple P2.2 · tray B …` on 0d34502e with DejaVu Sans.
+- Then PRE4a (v17.42 / 2.4's own report).
