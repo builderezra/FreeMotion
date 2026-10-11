@@ -1,0 +1,140 @@
+/* R-COG1 render patch — injected into the REAL app. __STATE__ is closed | canvas | friends | editor. Nothing here is committed. */
+const STATE = '__STATE__';
+const EXP = 'M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5', COL = 'M4 14h6v6M20 10h-6V4M14 10l6.5-6.5M10 14l-6.5 6.5';
+const svg = (inner, w) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (w || 2) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg>';
+if (!document.getElementById('cog-r1-style')) {
+  const css = document.createElement('style'); css.id = 'cog-r1-style';
+  css.textContent = `
+#cv-app { display: none; }
+#canvas-dialog.cv-r1.cv-pair > #cv-app { display: flex; flex: none; order: 2; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.6); overflow: hidden; position: relative; }
+#cv-app-bar { display: flex; width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; margin: 0; }
+#cv-app-bar .cv-mini-t { font-size: 15.5px; }
+#cv-app-bar .cv-mini-exp { pointer-events: none; }
+/* the Canvas card's own bar is a bar in every state; its words and its ⤢ are the same as Friends' */
+#canvas-dialog.cv-r1 .cv-mini-trow { display: block; }
+/* Editor bar: the ⤢ replaces "What should you use?" */
+#canvas-dialog.cv-r1 #cv-ed-bar .ed-what.cv-mini-exp { width: 38px; height: 38px; min-height: 38px; max-width: none; padding: 0; border-radius: 50%; display: grid; place-items: center; white-space: normal; flex: none; }
+#canvas-dialog.cv-r1 #cv-ed-bar .ed-what.cv-mini-exp svg { width: 17px; height: 17px; }
+/* the small switch: two icons, no words, no ⇄ */
+#canvas-dialog.cv-r1 #cv-editor .ed-sw:not(.big) { gap: 0; }
+#canvas-dialog.cv-r1 #cv-editor .ed-sw:not(.big) .ed-l { width: 40px; display: grid; place-items: center; }
+#canvas-dialog.cv-r1 #cv-editor .ed-sw:not(.big) .ed-l svg { width: 20px; height: 20px; }
+#canvas-dialog.cv-r1 #cv-editor .ed-sw:not(.big) .ed-k { width: 40px; }
+#canvas-dialog.cv-r1 #cv-editor .ed-sw:not(.big)[data-mode="full"] .ed-k { transform: translateX(40px); }
+/* ALL CLOSED: every block is its bar */
+#canvas-dialog.cv-r1.cv-none > .export-card { padding: 0; overflow: hidden; max-height: none; }
+#canvas-dialog.cv-r1.cv-none > .export-card > :not(.cv-mini) { display: none; }
+#canvas-dialog.cv-r1.cv-none > .export-card > .cv-mini { display: flex; }
+#canvas-dialog.cv-r1.cv-none > #cv-friends > #cv-fr-body, #canvas-dialog.cv-r1.cv-none > #cv-editor > #cv-ed-body { display: none; }
+#canvas-dialog.cv-r1.cv-none > #cv-friends > #cv-fr-bar, #canvas-dialog.cv-r1.cv-none > #cv-editor > #cv-ed-bar { display: flex; }
+#canvas-dialog.cv-r1.cv-none > #cv-editor, #canvas-dialog.cv-r1.cv-none > #cv-friends { order: auto; }
+/* ONE OPEN: its own bar stays as the header */
+#canvas-dialog.cv-r1.cv-pair:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card { display: flex; flex-direction: column; padding: 0 24px 0; overflow-y: auto; }
+#canvas-dialog.cv-r1.cv-pair:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini { display: flex; order: -1; margin: 0 -24px 12px; flex: none; }
+#canvas-dialog.cv-r1.cv-pair:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .export-title { display: none; }
+#canvas-dialog.cv-r1.cv-pair.cv-fr-big:not(.cv-flying) > #cv-friends > #cv-fr-bar { display: flex; }
+#canvas-dialog.cv-r1.cv-pair.cv-ed-big:not(.cv-flying) > #cv-editor > #cv-ed-bar { display: flex; }
+#canvas-dialog.cv-r1.cv-pair.cv-ed-big > #cv-editor { order: 1; }
+#canvas-dialog.cv-r1 > .export-card .dialog-actions { position: sticky; bottom: 0; background: var(--panel); margin: 0 -24px; padding: 14px 24px 18px; }
+@media (max-width: 700px) {
+  #canvas-dialog.cv-r1.cv-pair > #cv-app { width: min(420px, calc(100vw - 24px)); }
+  #canvas-dialog.cv-r1.cv-pair.cv-ed-on { justify-content: flex-start; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  /* the open block's cap: the top reserve 96, three bars 3 × (66 + 10), the bottom 12 */
+  #canvas-dialog.cv-r1.cv-pair.cv-ed-on > .export-card,
+  #canvas-dialog.cv-r1.cv-pair.cv-ed-on.cv-fr-big > #cv-friends,
+  #canvas-dialog.cv-r1.cv-pair.cv-ed-on.cv-ed-big > #cv-editor {
+    max-height: calc(100vh - 336px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100svh - 336px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  #canvas-dialog.cv-r1.cv-pair.cv-ed-on.cv-none > .export-card { max-height: none; }
+}
+
+@media (min-width: 701px) {
+  /* ONE KEY for every PC rule below: #canvas-dialog.cv-r1.cv-r1.cv-r1 out-ranks the app's own (1,6,1) grid rules */
+  body.cv-anchored #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side { grid-auto-flow: row; grid-template-rows: none; grid-auto-rows: auto; row-gap: 10px; column-gap: 10px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side > #cv-app { grid-area: ap; width: 176px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side > .export-card { grid-area: cv; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side > #cv-friends { grid-area: fr; order: 0; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side > #cv-editor { grid-area: ed; order: 0; width: 176px; }
+  /* the slim App row: 176 x 56, the gear, two short lines, the 38 px end button */
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side #cv-app-bar { flex-direction: row; align-items: center; height: 54px; padding: 8px 8px 8px 10px; gap: 8px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side #cv-app-bar .cv-mini-ico { width: 30px; height: 30px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side #cv-app-bar .cv-mini-ico svg { width: 18px; height: 18px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side #cv-app-bar .cv-mini-txt { flex: 1; width: auto; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side #cv-app-bar .cv-mini-t { font-size: 13.5px; line-height: 1.15; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side #cv-app-bar .cv-mini-exp { margin: 0; align-self: center; }
+  /* the Editor's bar is out-ranked by the app's own the app rule for #cv-ed-bar (two ids): same weight here */
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none #cv-ed-bar, #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big #cv-ed-bar { flex-direction: row; align-items: center; height: 64px; padding: 11px 12px 11px 14px; gap: 12px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none #cv-ed-bar .ed-gap, #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big #cv-ed-bar .ed-gap { display: block; flex: 1; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none #cv-ed-bar .ed-head, #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big #cv-ed-bar .ed-head { flex: none; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none #cv-ed-bar .cv-mini-exp, #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big #cv-ed-bar .cv-mini-exp { margin: 0; align-self: center; }
+  /* ALL CLOSED: one column of four, Canvas nearest the cog (the cog is below: the column grows upward) */
+  body.cv-anchored #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none { grid-template-columns: 176px; grid-template-areas: "ap" "ed" "fr" "cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none { grid-template-areas: "cv" "fr" "ed" "ap"; }
+  /* closed, the bars are ROWS in a 320 column (four tiles of ~165 px did not fit under the cog at 1280×720) */
+  body.cv-anchored #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none { grid-template-columns: 320px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none > .export-card, #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none > #cv-friends,
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none > #cv-editor, #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none > #cv-app { width: 320px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none .cv-mini { flex-direction: row; align-items: center; height: 64px; padding: 11px 12px 11px 14px; gap: 12px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none .cv-mini-txt { flex: 1; width: auto; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none .cv-mini-exp { margin-top: 0; align-self: center; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none #cv-app-bar { height: 54px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none #cv-app-bar .cv-mini-ico { width: 30px; height: 30px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none #cv-app-bar .cv-mini-t { font-size: 14.5px; white-space: nowrap; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-none .cv-mini-s { white-space: nowrap; }
+  /* ONE OPEN: the big block 360 wide beside a 176 column of three: Editor, Friends/Canvas, and App at the foot */
+  body.cv-anchored #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-columns: 176px 360px; grid-template-areas: "ed cv" "fr cv" "ap cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-areas: "fr cv" "ed cv" "ap cv"; }
+  /* the three small ones hug the cog's end of the column; the big block spans every row */
+  body.cv-anchored #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-fr-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto auto; grid-template-areas: "fr ." "fr ed" "fr cv" "fr ap"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-fr-big { grid-template-rows: auto auto auto 1fr; grid-template-areas: "fr cv" "fr ed" "fr ap" "fr ."; }
+  body.cv-anchored #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto auto; grid-template-areas: "ed ." "ed fr" "ed cv" "ed ap"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big { grid-template-rows: auto auto auto 1fr; grid-template-areas: "ed cv" "ed fr" "ed ap" "ed ."; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-fr-big > #cv-friends, #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big > #cv-editor { width: 360px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-fr-big > .export-card, #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big > .export-card { width: 176px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card { width: 360px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > #cv-friends, #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > #cv-editor { width: 176px; }
+  /* the open block's own bar is a ROW header, not a tile */
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini,
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-fr-big > #cv-friends > #cv-fr-bar,
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big > #cv-editor > #cv-ed-bar { flex-direction: row; align-items: center; height: 64px; padding: 11px 12px 11px 14px; gap: 12px; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini .cv-mini-exp,
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-fr-big > #cv-friends > #cv-fr-bar .cv-mini-exp,
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big > #cv-editor > #cv-ed-bar .cv-mini-exp { margin-top: 0; align-self: center; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini .cv-mini-txt,
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-fr-big > #cv-friends > #cv-fr-bar .cv-mini-txt { flex: 1; width: auto; }
+  #canvas-dialog.cv-r1.cv-r1.cv-r1.cv-pair.cv-side.cv-ed-big > #cv-editor > #cv-ed-bar .ed-head { flex: none; }
+}
+`;
+  document.head.appendChild(css);
+}
+if (!document.getElementById('cv-app')) {
+  const gear = document.getElementById('btn-settings').querySelector('svg').outerHTML.replace(/class="ico"/, '').replace(/<svg /, '<svg aria-hidden="true" ');
+  const app = document.createElement('div'); app.id = 'cv-app'; app.setAttribute('role', 'group'); app.setAttribute('aria-label', 'App settings');
+  app.innerHTML = '<button type="button" id="cv-app-bar" class="cv-mini cv-app-bar"><span class="cv-mini-ico" aria-hidden="true">' + gear + '</span><span class="cv-mini-txt"><span class="cv-mini-t">App settings</span></span><span class="cv-mini-exp" aria-hidden="true">' + svg('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10"/>') + '</span></button>';
+  document.getElementById('cv-friends').after(app);
+  ['cv-appset', 'cv-mini-app'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); });
+  const what = document.getElementById('cv-ed-what');
+  if (what) { what.textContent = ''; what.classList.add('cv-mini-exp'); what.innerHTML = svg('<path d="' + EXP + '"/>'); what.setAttribute('aria-label', 'Open Editor'); }
+  const quick = '<rect x="2" y="7.5" width="6" height="9" rx="1.6"/><rect x="9" y="7.5" width="6" height="9" rx="1.6"/><rect x="16" y="7.5" width="6" height="9" rx="1.6"/>';
+  const full = '<rect x="3" y="4" width="10" height="4" rx="1.3"/><rect x="8" y="10" width="13" height="4" rx="1.3"/><rect x="5" y="16" width="9" height="4" rx="1.3"/>';
+  document.querySelectorAll('#cv-ed-bar .ed-sw:not(.big)').forEach(sw => {
+    const s = sw.querySelector('.ed-l-s'), f = sw.querySelector('.ed-l-f'), x = sw.querySelector('.ed-x');
+    if (s) s.innerHTML = svg(quick, 1.8); if (f) f.innerHTML = svg(full, 1.8); if (x) x.remove();
+  });
+}
+d.classList.add('cv-r1');
+if (STATE === 'closed') d.classList.remove('cv-ed-short');
+d.classList.remove('cv-fr-big', 'cv-ed-big', 'cv-none');
+if (STATE === 'closed') d.classList.add('cv-none');
+if (STATE === 'friends') d.classList.add('cv-fr-big');
+if (STATE === 'editor') d.classList.add('cv-ed-big');
+/* the open block's button points inward */
+const setGlyph = (btn, p) => { const pa = btn && btn.querySelector('path'); if (pa) pa.setAttribute('d', p); };
+setGlyph(document.getElementById('cv-mini-exp'), STATE === 'canvas' ? COL : EXP);
+setGlyph(document.getElementById('cv-fr-exp'), STATE === 'friends' ? COL : EXP);
+setGlyph(document.getElementById('cv-ed-what'), STATE === 'editor' ? COL : EXP);
+await new Promise(r => setTimeout(r, 300));
+const rect = e => { if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; };
+const card = d.querySelector('.export-card');
+return { dbg: window.__dbg, cls: d.className, card: rect(card), cardMax: getComputedStyle(card).maxHeight, fr: rect(document.getElementById('cv-friends')), ed: rect(document.getElementById('cv-editor')), app: rect(document.getElementById('cv-app')), vh: innerHeight };
