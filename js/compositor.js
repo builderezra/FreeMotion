@@ -14659,7 +14659,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
     const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
-    const dd = d > 0 ? Math.max(1, Math.round(d * ps)) : 0;   // a positive project-pixel shift must survive a reduced preview plate
+    const dd = Math.round(Math.max(0, d) * ps);   // offset is PROJECT px, indexes the plate; × 1 on every export. NO 1-plate-px floor (land-b3, queue 482): ChatGPT 0f8ec39b's Math.max(1, …) made a small Amount ~3.6× stronger in the phone preview (ps 0.28) than in the export
     const pp = (fx && fx.params) || {};
     const gsh = (pp.green == null ? 0 : FM.evalProp(pp.green, t)) * ps;   // an independent shift, including when Amount is zero
     if (!_rgbA) _rgbA = document.createElement('canvas');
@@ -18058,7 +18058,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
     if (fx.type === 'rgbsplit') {
       const amount = FM.evalProp(p.amount, t) || 0;
-      const dd = amount > 0 ? Math.max(1, Math.round(amount * S)) : 0;   // project px → plate px (#691); preserve small positive preview shifts
+      const dd = Math.round(Math.max(0, amount) * S);   // project px → plate px (#691), rounded like the per-layer path — no 1-plate-px floor, so the preview shifts as far as the export (land-b3, queue 482)
       const gsh = (p.green == null ? 0 : FM.evalProp(p.green, t)) * S;
       if ((dd > 0 || gsh !== 0) && W && H) {
         // ANGLE frees the split from the horizontal axis (a vertical or diagonal tear was impossible),

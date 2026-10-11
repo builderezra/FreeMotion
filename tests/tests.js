@@ -61607,7 +61607,10 @@
       throw new Error('Reduced-preview dispatch changed Roughen Edges scale or displacement');
   });
 
-  test('690 RGB Split keeps a green-only shift and a small positive Amount on reduced previews', { item: 'TBD' }, function () {
+  test('690 RGB Split keeps a green-only shift on reduced previews', { item: 'TBD' }, function () {
+    /* ChatGPT 0f8ec39b also floored a positive Amount at 1 plate pixel, and asserted it here ("a small positive Amount").
+       That floor made the phone preview ~3.6x stronger than the export at ps 0.28 and was taken back out (land-b3 fixes);
+       the next test holds the preview to the export instead. The green-only halves stay. */
     const W = 40, H = 8, original = new Uint8ClampedArray(W * H * 4);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4, value = x < 20 ? 30 : 225;
@@ -61619,10 +61622,6 @@
     if (at(greenOnly, 19, 1) === at(original, 19, 1) ||
         at(greenOnly, 19, 0) !== at(original, 19, 0) || at(greenOnly, 19, 2) !== at(original, 19, 2))
       throw new Error('An adjustment RGB Split with Amount 0 did not independently shift only green');
-    const smallAmount = original.slice();
-    FM._applyPixelFx(smallAmount, { type: 'rgbsplit', params: { amount: 1, angle: 0, radial: 0, green: 0 } }, 0, W, H, 0.25);
-    if (at(smallAmount, 19, 0) === at(original, 19, 0))
-      throw new Error('A positive Amount vanished when the preview plate was one quarter size');
 
     const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 20, shapeW: 20, shapeH: 20, fill: '#ffffff' });
     const s = scene([layer], { project: { width: 40, height: 40, fps: 30, duration: 1, background: '#000000' } });
@@ -61633,15 +61632,54 @@
       return ctx.getImageData(0, 0, 10, 10).data;
     };
     const clean = render(null), green = render({ amount: 0, angle: 0, radial: 0, green: 8 });
-    const red = render({ amount: 1, angle: 0, radial: 0, green: 0 });
-    let greenDiff = 0, redDiff = 0;
-    for (let i = 0; i < clean.length; i += 4) {
-      if (green[i + 1] !== clean[i + 1]) greenDiff++;
-      if (red[i] !== clean[i]) redDiff++;
-    }
-    if (!greenDiff || !redDiff) throw new Error('A per-layer RGB Split lost its green-only or small positive red shift on the reduced plate');
+    let greenDiff = 0;
+    for (let i = 0; i < clean.length; i += 4) if (green[i + 1] !== clean[i + 1]) greenDiff++;
+    if (!greenDiff) throw new Error('A per-layer RGB Split lost its green-only shift on the reduced plate');
   });
 
+  test('690 RGB Split on a reduced preview plate shifts as far as the export, to within half a plate pixel, for a small Amount too', { item: 'TBD' }, function () {
+    /* The preview cannot be finer than its plate, but it must not be COARSER than rounding: the red edge's shift, read
+       back in project px, has to sit within half a plate pixel (plus the export's own half pixel) of the export's. ChatGPT
+       0f8ec39b floored a positive Amount at 1 plate pixel, so at ps 0.25 an Amount of 1 drew a 4 px fringe in the preview
+       against 1 px in the export (3.6x at the phone's 0.28). Both paths: the adjustment layer (FM._applyPixelFx) and a
+       layer's own RGB Split (drawRgbSplit, through FM.renderScene into a reduced canvas). */
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx seam is missing - the harness, not the feature');
+    const PW = 400, PH = 40;
+    const cross = (d, W, row, c) => { for (let x = 1; x < W; x++) { const a0 = d[((row * W + x - 1) << 2) + c], a1 = d[((row * W + x) << 2) + c]; if (Math.abs(a1 - a0) > 60) return x; } return -1; };
+    const shift = (d, W, row, ps, what) => {
+      const r = cross(d, W, row, 0), g = cross(d, W, row, 1);
+      if (r < 0 || g < 0) throw new Error(what + ': no edge to measure at ps ' + ps + ' - the harness, not the feature');
+      return Math.abs(r - g) / ps;   // back into project px
+    };
+    const adjShift = (amount, ps) => {
+      const W = Math.round(PW * ps), H = 8, d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const v = x < W / 2 ? 30 : 225; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+      FM._applyPixelFx(d, { type: 'rgbsplit', params: { amount: amount, angle: 0, radial: 0, green: 0 } }, 0, W, H, ps);
+      return shift(d, W, H >> 1, ps, 'adjustment RGB Split ' + amount);
+    };
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 300, y: PH / 2, shapeW: 200, shapeH: PH, fill: '#ffffff' });
+    const sc = scene([layer], { project: { width: PW, height: PH, fps: 30, duration: 1, background: '#000000' } });
+    const layerShift = (amount, ps) => {
+      layer.effects = [{ type: 'rgbsplit', enabled: true, params: { amount: amount, angle: 0, radial: 0, green: 0 } }];
+      const W = Math.round(PW * ps), H = Math.round(PH * ps), ctx = offscreen(W, H).getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, sc, 0);
+      return shift(ctx.getImageData(0, 0, W, H).data, W, H >> 1, ps, 'layer RGB Split ' + amount);
+    };
+    /* CONTROL: at the export scale both paths shift by the rounded Amount, so the measurement is live */
+    if (adjShift(12, 1) !== 12 || layerShift(12, 1) !== 12)
+      throw new Error('CONTROL: a 12 px RGB Split did not measure 12 px at the export scale (adjustment ' + adjShift(12, 1) + ', layer ' + layerShift(12, 1) + ') - the harness, not the feature');
+    const bad = [];
+    [0.25, 0.28].forEach(ps => {
+      const tol = 0.5 / ps + 0.5 + 1e-9;
+      [0.5, 1, 1.5, 2, 3, 5, 12].forEach(amount => {
+        [['adjustment layer', adjShift], ['layer', layerShift]].forEach(([what, fn]) => {
+          const exp = fn(amount, 1), pre = fn(amount, ps);
+          if (Math.abs(pre - exp) > tol) bad.push(what + ' Amount ' + amount + ' at ps ' + ps + ': preview ' + pre.toFixed(2) + ' px, export ' + exp + ' px (allowed ' + tol.toFixed(2) + ')');
+        });
+      });
+    });
+    if (bad.length) throw new Error('The reduced preview draws a different RGB Split from the export: ' + bad.join('; '));
+  });
 
   test('690 hard Wipe and Radial Wipe fully hide the first frame', { item: 'TBD' }, function () {
     const fx = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
