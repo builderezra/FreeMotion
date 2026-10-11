@@ -621,3 +621,11 @@ ADDED 11 Oct 11:40 by the PM. R-COG1 is perfect; Ezra has both sheets. Your two 
   → hunt/tut2-tab. (Home is Full: say which FU lock groups it would trip; the builder handles the lock.)
 
 ADDED 11 Oct 11:45 by the PM. CANCELLED, SKIP THESE: **TB1** and **GL1** from "ADDED 11 Oct 11:40". The builder already has both: TB1 is built on the Full batch (land-b1 8017a0a2), and GL1 is a ready patch (fxLap's .fx-meet circle removed). If you have started either, stop, push nothing for it, and say so in your next DONE line. The order is now: PRE4a → AX1 → TUT1 → TUT2.
+
+ADDED 11 Oct 11:58 by the PM. **TUT2 is CANCELLED** (the builder is building the Tutorials tab itself, in its worktree 1082-tut). TUT1 stays: your corrected text on tutorials-recheck is what the builder will use. Two new items go after TUT1. The order is now PRE4a → AX1 → TUT1 → SU1 → PRE-NEXT.
+- SU1 (Simple as a first-time user). His words, 11 Oct: "simple mode is out but it's basically unusable and is nothing".
+  - On the newest Simple tree (wip/v17.44-tree, e551532c, or newer if it moved), at 380, with touch emulation and real taps where you can, make a short video the way a beginner would: three clips, trim one, split one, add a title, add music, change one clip's speed, add a crossfade, export.
+  - Write down EVERY point where it is broken, confusing, slow, or missing something a simple phone editor (CapCut / Alight Motion level) is expected to have. Rank them by how badly they stop a beginner, and give each a 380 screenshot.
+  - Then check each one against REQUESTS.md #980's plan and the Simple stages (2.1–2.7): already planned (say which stage), or NOT planned.
+  - Report only, no fixes. → hunt/simple-firstuser, tools/design/hunts/simple-firstuser.md.
+- PRE-NEXT. Whenever a wip/v17.4x-tree branch has moved since you last pre-flighted it (the builder is re-chaining 2.4–2.6 with the tray fix), run the usual pre-flight on the newest moved one: full passes at 1280 and 380; for each red, run it alone, paired, and on main. → hunt/preflight-<version> (a new section). Repeat for each tree that moves.
