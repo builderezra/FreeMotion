@@ -61500,6 +61500,68 @@
     }
   });
 
+  test('690 Light Glow and Soft Glow reuse their luminance planes across frames', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES.PIXEL_FX, info = FM._glowScratchInfo;
+    if (!P.lightglow || !P.softglow || !info) throw new Error('Glow kernels or scratch check are unavailable');
+    const W = 19, H = 13, params = { amount: 0.8, radius: 6, threshold: 35, color: '#ff8844' };
+    function source() {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 3; y < 10; y++) for (let x = 5; x < 14; x++) {
+        const i = (y * W + x) * 4; d[i] = 240; d[i + 1] = 180; d[i + 2] = 120; d[i + 3] = 255;
+      }
+      return d;
+    }
+    const start = info();
+    const first = source(); P.lightglow(first, W, H, params, 0);
+    const warmed = info();
+    const middle = source(); P.softglow(middle, W, H, params, 0);
+    const again = source(); P.lightglow(again, W, H, params, 0);
+    const end = info();
+    if (warmed.pixels < W * H || end.uses !== start.uses + 3 || end.allocations !== warmed.allocations)
+      throw new Error('Glow reallocated its full-frame planes after they were warmed');
+    if (first.some((value, i) => value !== again[i]))
+      throw new Error('Sharing glow planes changed the result on a later frame');
+  });
+
+  test('690 Dark Glow clears and reuses its luminance planes', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES.PIXEL_FX, info = FM._glowScratchInfo;
+    if (!P.darkglow || !P.lightglow || !info) throw new Error('Glow kernels or scratch check are unavailable');
+    const W = 17, H = 13;
+    function source() {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < W * H; i++) {
+        const v = i % 7 === 0 ? 30 : 160, j = i * 4;
+        d[j] = d[j + 1] = d[j + 2] = v; d[j + 3] = 255;
+      }
+      return d;
+    }
+    const base = source(), first = source();
+    P.darkglow(first, W, H, { amount: 0.8, radius: 4, threshold: 40 }, 0);
+    const warmed = info();
+    const between = source(); P.lightglow(between, W, H, { amount: 0.8, radius: 4 }, 0);
+    const again = source(); P.darkglow(again, W, H, { amount: 0.8, radius: 4, threshold: 40 }, 0);
+    const end = info();
+    if (end.uses !== warmed.uses + 2 || end.allocations !== warmed.allocations)
+      throw new Error('Dark Glow allocated new full-frame planes after warm-up');
+    if (first.every((value, i) => value === base[i]) || first.some((value, i) => value !== again[i]))
+      throw new Error('Dark Glow failed to darken or retained luminance from the intervening glow');
+  });
+
+  test('690 glow scratch releases its largest frame after rendering stops', { item: 'TBD' }, function () {
+    const info = FM._glowScratchInfo, release = FM._releaseGlowScratch;
+    if (!info || !release) throw new Error('Glow idle-release controls are unavailable');
+    const W = 9, H = 9, d = new Uint8ClampedArray(W * H * 4);
+    const i = (4 * W + 4) * 4; d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 255;
+    try {
+      FM._FX_TABLES.PIXEL_FX.lightglow(d, W, H, { amount: 0.8, radius: 3 }, 0);
+      if (info().pixels < W * H || !info().releasePending)
+        throw new Error('Glow did not schedule an idle release for its cached frame');
+      release();
+      if (info().pixels !== 0 || info().releasePending)
+        throw new Error('The largest glow frame stayed pinned after idle release');
+    } finally { release(); }
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
