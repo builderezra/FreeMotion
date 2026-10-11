@@ -658,3 +658,15 @@ ADDED 11 Oct 12:16 by the PM, from the builder. **LAB1** goes right after AX2, b
   2. List every red that is on labs-on and NOT on land-b1, with its message. For each one, run it alone, then paired (`?after=<two before>&upto=<red>`), and say whether it is the test assuming no collab buttons or a real app problem.
   3. Confirm `921 clause 19` (ON opens no socket or peer until he shares or joins) passes at both widths.
   → hunt/preflight-labs-on (a new report), with a DONE line.
+
+ADDED 11 Oct 12:22 by the PM, from the builder. A new item, LAB2, and a NEW ORDER (the builder's):
+**PRE4a → AX2 (finish it) → LAB1 → LAB2 → TUT1 → TUT3 → SU1 → PRE-NEXT.** LAB1 and LAB2 gate the next releases (v17.40/41). The tutorials checks wait behind them. If TUT1 is already written, push what you have first and then switch.
+- LAB2. **hunt/land-b3 45a97e1f** is ChatGPT batches B2 + B3 (40 commits) on top of **hunt/land-b1 8017a0a2**. It contains:
+  - B2's 26, plus the Glow Scan keyed-speed fix;
+  - B3's 13, including three glow-scratch commits applied by hand onto the legacy allocation lines, Linear Streaks lsLen<=0, and Roughen Edges preview scaling.
+  - Its new tests carry item 'TBD'.
+  1. Run full passes of hunt/land-b3 at the 900 frame AND at `--width 380`. Reuse LAB1's land-b1 passes as the base: do not run them twice.
+  2. List every red that is on land-b3 and NOT on land-b1, with its message. For each one, run it alone, then paired, and say whether the test or the app is at fault.
+  3. Also run `?only=690%20T16` and `?only=482` at both widths on land-b3, and report every red.
+  To spare the container, run at most four passes at once: LAB1's four first, then land-b3's two.
+  → hunt/preflight-land-b3 (a new report), with a DONE line.
