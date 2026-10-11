@@ -580,3 +580,42 @@ ADDED 11 Oct 11:30 by the PM. Thank you for BX2d/BX1d; the builder has both. Two
   - the open-block height cap at 380×667, 320×568 and 375×553;
   - the all-closed column height at 1280×720.
   DONE line. The PM sends the picture to Ezra.
+
+ADDED 11 Oct 11:40 by the PM. R-COG1 is perfect; Ezra has both sheets. Your two PC calls (closed rows instead of tiles, and the sticky Cancel/Apply) go into the plan. Work these in order, after PRE4a. Each has its own branch, never main, never force-push. App fixes need a red-first test (red on the base, green with the fix, at 380 and 1280) plus a revert-mutation. Report → the branch named, with a DONE line on helper/done.
+- PRE4a (in progress): finish the triage of your two passes when they end. → hunt/preflight-v17.42.
+- AX1 (EXPORT HAS NO AUDIO on his iPhone, #215/#604/#677, his words 11 Oct: "Export has no audio"). Real and open, so this is the most important item here.
+  1. Read tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1a (on main).
+  2. In the container, export a project with a video clip that has sound AND a separate song, through the app's real export, on the codec path the container has.
+  3. Check the saved file for an audio track and non-silent samples (ffprobe/ffmpeg if available; otherwise decode it in the page with decodeAudioData).
+  4. For each §1a cause, say confirmed, refuted, or "cannot test here (needs iOS/AAC)".
+  5. Name the exact fields of fm.lastExportReport (Settings → Your last export → Copy) that would tell the remaining causes apart once his paste arrives.
+  No fix unless the cause is proven. → hunt/export-audio.
+- GL1 (his words, 11 Oct: "get rid of the little white glow burst thing that happens when the glow lines from the add menu opening up touch another"). On the phone Add sheet, the two glowing edge lines run from the bottom middle and meet at the TOP CENTRE, and a bright white flare shows where they touch. That is #964/#981's outline; look in styles.css and js/addmenu.js.
+  - Remove ONLY the flare. The lines still draw and still meet.
+  - Test: sample the meeting point mid-animation at 380 and assert no frame is brighter there than the lines themselves. It must be red on main first.
+  - Capture frames before and after at 380 for Ezra.
+  → hunt/gl1-no-burst.
+- TB1 (#920, top bar, DECIDED, so no options). His words: "It should be what it used to be where it is fluid all the way up" … "I don't want the buttons lower" … "just do what I asked".
+  - Go back to `apple-mobile-web-app-status-bar-style` black-translucent + `viewport-fit=cover`, as before v16.78. Find every change v16.78 made with `git log -S'black-translucent' -S'status-bar-style'`.
+  - Each screen's own colour runs up behind the clock. The header buttons are padded by env(safe-area-inset-top) only, with no extra shift.
+  - Remove the stale-install/reinstall prompt if it exists only for the old style.
+  - Tests: the meta values, and the header's top padding equals the safe-area inset.
+  - Screenshot 380 with a simulated 47 px inset (Home light, a project dark).
+  - Say plainly that the container cannot verify iOS.
+  → hunt/tb1-topbar.
+- TUT1 (#1082, tutorials in the app, he said yes; step 5 of the plan). Re-check every tutorial against the CURRENT app before it lands.
+  - The 20 Full tutorials in tutorials/ on branch tutorials-drafts (92258bc2) go against main v17.37, at 380 and with the "On a computer" paragraph at 1280.
+  - The 14 Simple ones in tutorials/simple/ go against the newest Simple tree (wip/v17.44-tree, or whichever has ◇ transitions; say which).
+  - Walk each step like a user and list every step that is wrong (a missing button, a renamed label, a wrong order). Fix the text on a new branch, tutorials-recheck, off 92258bc2.
+  - Merge Simple 13 into 10 (same title).
+  - Add a check that every **bold** button name in a tutorial still exists in the source.
+  → tutorials-recheck, with the report at tools/design/tutorials/RECHECK.md.
+- TUT2 (#1082, build the Tutorials tab, layout A, from design/tutorials-tab aefa599f's README + proto). On main v17.37:
+  - add tutorials/index.json and js/tutorials.js, rendering with textContent only, NEVER innerHTML, and stripping `<!-- -->` and `### Verification` down;
+  - replace the "Tutorials are coming" placeholder in js/home.js (the card grid, the reader with Previous/Next, and "Start here" on tutorial 1);
+  - fetch with ?v= so it works offline;
+  - show the Simple set when the editor is Simple.
+  - Tests: every listed file exists, no innerHTML in tutorials.js, the comments are stripped, and Previous/Next work.
+  - Use TUT1's corrected text if TUT1 is done, otherwise the drafts.
+  - Render the list and a reader at 380 and 1280 for Ezra.
+  → hunt/tut2-tab. (Home is Full: say which FU lock groups it would trip; the builder handles the lock.)
