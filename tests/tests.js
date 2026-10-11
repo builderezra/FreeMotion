@@ -107062,7 +107062,7 @@
   }
   function menuLabels967b4() { return Array.prototype.map.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return x.textContent.trim(); }); }
 
-  test('967 B4 1 one name — the Settings switch is “Work with friends” and is the one place that says it is still being tested; the Friends block, its bar, the Join sheet, the person+ on the video, the Share card and the turn-off question all use the same family; and no screen says session, preview, Labs or relay', { item: '967', budgetMs: 180000 }, async function () {
+  test('967 B4 1 one name — the Settings switch is “Work with friends” and no screen says it is still being tested any more; the Friends block, its bar, the Join sheet, the person+ on the video, the Share card and the turn-off question all use the same family; and no screen says session, preview, Labs or relay', { item: '967', budgetMs: 180000 }, async function () {
     /* J5-6 (major): "Live collaboration (preview)", "Work on this with friends", "Share it live with friends", "Join a live project",
        "Turn off live collaboration?", an aria-label of plain "Share", and "being tested" three times on the off card. */
     const C = need921S7('one name');
@@ -107100,7 +107100,7 @@
                 const off = jargon967b4(fr, 'the Friends block, off');
                 const t0 = fr.querySelector('.fm-ask-title');
                 if (!t0 || t0.textContent.trim() !== 'Work with friends') throw new Error('off, the block is titled “' + (t0 && t0.textContent) + '”');
-                if (tested(off)) throw new Error('off, the Friends block says “still being tested” ' + tested(off) + ' time(s) — it is said once, on the Settings switch: “' + off.slice(0, 220) + '”');
+                if (tested(off)) throw new Error('off, the Friends block says “still being tested” ' + tested(off) + ' time(s) — #921 clause 19 took Work with friends out of testing: “' + off.slice(0, 220) + '”');
                 if (bar.textContent.trim() !== 'Share live with friends') throw new Error('off, the Friends bar reads “' + bar.textContent + '” — the action is Share live');
                 fr.querySelector('.cs-offrow [role=switch]').click(); await settle921(200);
                 if (!FM.settings.get('collabLabs')) throw new Error('setup: the block’s switch did not turn it on');
