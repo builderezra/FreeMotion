@@ -532,3 +532,17 @@ The builder's guess (code-read, NOT proven):
   3. The extra <body> child: its tag, id, class and outerHTML cut to 200 characters.
   4. If (2) is yes: does keying the guard on layer.id (instead of the same object) make the pair green? Try it on a copy, report it, and do NOT push it as a fix.
   → hunt/preflight-bx (a new section), with a DONE line.
+
+ADDED 11 Oct 10:25 by the PM, from the builder ("both of my guesses were wrong, and both are withdrawn": the project-snapshot commit is reverted on land-b1 4374eeff and p26-dry bbbe083c; the stillCurrent theory is dropped). Two items, in the order they block releases. Both may be REAL bugs for Ezra, so prove first whether a real user can hit them:
+- BX2d (blocks 2.3, v17.41 09358fd9). After a REAL mouse click has given the page focus, two Replaces become ONE undo step. Find what merges them. Look at:
+  - window/document focus or blur listeners (app.js once redrew "Insert your Media" on window focus);
+  - the hidden file input's click / change / cancel handling in pickReplacement;
+  - anything that commits, mutes or unmutes history around a picker, or a text-edit flush on blur.
+  Log FM.history._steps() after each replace, real click vs synthetic click, and show where the extra merge or the missing commit is. If a real user can hit it (focus is normal for him), write the APP fix, with the 690 replace test as its red-first proof (red on the tree, green with the fix, at 1280 and 380, mutation-caught). → hunt/bx2d (on a copy of 09358fd9), with the report in hunt/preflight-bx.
+- BX1d (blocks 2.4, v17.42 0ea7e93a). The Simple timeline DOM, built from AU25's scene, stays in the page in Full and is read stale when 2.4's tests enter Simple. The question that matters: CAN EZRA HIT IT?
+  - Enter Simple, go back to Full, change the clips (or open another project), enter Simple again.
+  - Are the say line, the tray or "Do it anyway" stale? Drive it like a user, with real taps where possible.
+  - If yes: fix it in editor-mode.js / simple-timeline.js (rebuild on entry), with a red-first test.
+  - If no: say so. The test-side fix (AU25 restores the Simple surface, or runs in its own page) is then enough.
+  → hunt/bx1d, with the report in hunt/preflight-bx.
+- Then PRE4a (v17.42's own plain-suite report), if it is not done yet.
