@@ -62075,7 +62075,7 @@
       if (!/two clips that meet/.test((await sm7s(v)))) throw new Error('gap refusal line: ' + (await sm7s(v)));
     });
   });
-  test('simple P2.7 · T6 "same on every cut" copies one transition to every join, and the drop rule removes a transition whose cut changed (delete, split, duplicate, reorder) and says so', { item: '980', budgetMs: 120000 }, async function () {
+  test('simple P2.7 · T6 “same on every cut” copies one transition to every join, and the drop rule removes a transition whose cut changed (delete, split, duplicate, reorder) and says so', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
     await smP2(smClips3, async function (v) {
       await FM.spine.cmd.transition(v.L('B').id, 'dipwhite', 0.8);
@@ -62201,7 +62201,7 @@
     });
   });
 
-  test('simple P2.7 · T10 "Turn into a transition" on a blend seam: the clips meet in the middle of the overlap, nothing ripples, the fade keys go (never an empty list), a 1 s crossfade is set, one undo puts it all back; the tool shows only on a blend', { item: '980', budgetMs: 120000 }, async function () {
+  test('simple P2.7 · T10 “Turn into a transition” on a blend seam: the clips meet in the middle of the overlap, nothing ripples, the fade keys go (never an empty list), a 1 s crossfade is set, one undo puts it all back; the tool shows only on a blend', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
     const seamOf = (name, v) => { const R = FM.spine.classify(FM.scene), e = R.main.find(x => x.id === v.L(name).id); return e && e.seam ? e.seam.kind + ' ' + (+e.seam.amt).toFixed(2) : 'none'; };
     await smP2((W, H) => [(() => { const n = smV('N', 5, 6, W, H); n.transform.opacity = smKf([[5, 0], [6, 1]]); return n; })(), smV('C', 0, 6, W, H)], async function (v) {
