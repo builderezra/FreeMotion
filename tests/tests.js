@@ -60821,7 +60821,7 @@
       if (FM.timeline) FM.timeline.rebuild();
     }
   }
-  test('AX2 an audio encoder that makes no sound and no error: the export drops the empty track, says so, and the report names it (encode-empty)', { item: 'AX2', budgetMs: 60000 }, async function () {
+  test('AX2 an audio encoder that makes no sound and no error: the export drops the empty track, says so, and the report names it (encode-empty)', { item: '604', budgetMs: 60000 }, async function () {
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     const r = await ax2WithOpusPath(true, ax2Export);
     if (!r.ready || !r.ready.blob) throw new Error('the export produced no file at all — a silent encoder must never sink the render');
@@ -60834,7 +60834,7 @@
     if (/TRACK WRITTEN/.test(r.report)) throw new Error('the export report still says TRACK WRITTEN for a file with no track:\n' + r.report);
     if (!/dropped\s+encode-empty/.test(r.report)) throw new Error('the export report does not name the loss (dropped encode-empty):\n' + r.report);
   });
-  test('AX2 a healthy soundtrack: the report counts the frames the encoder made, their size, and a decoded peak above 0.1', { item: 'AX2', budgetMs: 60000 }, async function () {
+  test('AX2 a healthy soundtrack: the report counts the frames the encoder made, their size, and a decoded peak above 0.1', { item: '604', budgetMs: 60000 }, async function () {
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     const r = await ax2WithOpusPath(false, ax2Export);
     if (!r.ready || !r.ready.blob) throw new Error('the control export produced no file');
