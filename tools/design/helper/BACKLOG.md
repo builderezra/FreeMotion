@@ -519,3 +519,16 @@ ADDED 11 Oct 09:05 by the PM, from the builder ("thank you for BX1–BX3"). In o
 - BX2b. Bisect INSIDE `…phone storage full… Stay (a real tap)…` on v17.41: return early at each of its `__fmStep` markers, on a copy, and find the step after which `690 replacing a clip twice then undoing twice…` goes red. Name that step's leftover (the unidentified extra <body> child is a lead). → hunt/preflight-bx.
 - BX3 is fixed by the builder (980-p22-r12pre 0d34502e: the two-row PC tray uses 2 px a side under 1100 px), and the builder's laptop also uses DejaVu Sans, so it will run that test itself. Nothing for you, unless you want a quick check of `simple P2.2 · tray B …` on 0d34502e with DejaVu Sans.
 - Then PRE4a (v17.42 / 2.4's own report).
+
+ADDED 11 Oct 09:50 by the PM, from the builder. BX2 matters on the laptop too: there the storage-full test also stops at needsTouch924 (NOT RUN), so v17.41's ship would hit the same pair. Do this right after BX1b.
+The builder's guess (code-read, NOT proven):
+- B1's 5e8337da added a stillCurrent() guard to Replace. It requires the same project AND `FM.layerById(FM.scene, id) === layer`, the same OBJECT.
+- The storage test stops with unsaved work on a full store, so an autosave or retry is still pending as the cleanup switches projects.
+- If something later swaps the layer objects (a late save, a reload, a retry), Replace refuses with "Media was not replaced — the project changed while it was opening".
+- Only v17.41 has that guard together with 2.3's pick/swap split.
+- BX2c, on the v17.41 pair `[storage-full test, 690 replacing a clip twice then undoing twice…]` at 380 (and 1280 if quick):
+  1. The Replace test's EXACT failure message, and EVERY toast it saw. Stub FM.toast to record, on a copy.
+  2. Whether the toast "Media was not replaced — the project changed while it was opening" fired: yes or no.
+  3. The extra <body> child: its tag, id, class and outerHTML cut to 200 characters.
+  4. If (2) is yes: does keying the guard on layer.id (instead of the same object) make the pair green? Try it on a copy, report it, and do NOT push it as a fix.
+  → hunt/preflight-bx (a new section), with a DONE line.
