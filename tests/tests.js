@@ -60804,6 +60804,26 @@
       throw new Error('Speed zero rewinds Electric Edges to its first crackle frame');
   });
 
+  /* #690: Orbit's Speed is a rate. With a clip whose effect clock starts at composition time 3,
+     a 0.5 → 0 rev/s ramp over two seconds carries half a revolution, then stays there. */
+  test('690 Orbit keyframed Speed holds its reached angle when the rate stops', { item: 'TBD' }, function () {
+    const orbit = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.orbit;
+    if (!orbit || !FM.integrateProp) throw new Error('Orbit or the rate integrator is unavailable');
+    const at = (speed, t, local) => {
+      let move = null;
+      const dst = { save() {}, translate(x, y) { move = [x, y]; }, drawImage() {}, restore() {} };
+      orbit({}, dst, 200, 160, { x: 80, y: 60, w: 20, h: 20 }, { radius: 40, speed }, t, local, null, 1);
+      if (!move) throw new Error('Orbit did not move its layer');
+      return move;
+    };
+    const same = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.01;
+    const ramp = { kf: [{ t: 3, v: 0.5, e: 'linear' }, { t: 5, v: 0, e: 'linear' }] };
+    const steady = at(0.25, 5, 2), stopped = at(ramp, 5, 2), later = at(ramp, 6, 3);
+    if (!same(steady, [-40, 0])) throw new Error('control: static 0.25 rev/s did not make half a revolution');
+    if (!same(stopped, steady)) throw new Error('the speed ramp rewound Orbit instead of carrying its half revolution');
+    if (!same(later, stopped)) throw new Error('Orbit moved after keyframed Speed reached zero');
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
