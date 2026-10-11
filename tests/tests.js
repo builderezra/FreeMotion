@@ -30639,11 +30639,21 @@
 
   test('921 S2 the collab core is inert until a session is attached: no session, no listeners, no UI, no globals', { item: '921' }, function () {
     const C = need921('inertness');
-    /* #921 clause 19: Work with friends is ON for a device that never chose, and on installs comments by design. What this
-       test holds is the Labs-OFF promise (§23 as #967 batch 2 relaxed it), so it turns the switch off and puts it back. */
+    /* #921 clause 19: Work with friends is ON for a device that never chose. So the body runs in BOTH states: OFF, the
+       promise §23 made (as #967 batch 2 relaxed it); and ON with nobody sharing, which is now what every new device is —
+       still no session, no listener, no timer, no controller, no global and no door beyond the two. One thing differs by
+       design: ON installs the comments module (collab-ui.js install), so that check is OFF's alone. */
     const wasLabs921 = FM.settings.get('collabLabs');
-    FM.settings.set('collabLabs', false);
     try {
+      [false, true].forEach(function (on) {
+        FM.settings.set('collabLabs', on);   // Settings' own apply() runs the switch (collab-ui.js syncLabs)
+        if (FM.collab.ui && FM.collab.ui.labsOn() !== on) throw new Error('setup: Work with friends did not turn ' + (on ? 'on' : 'off'));
+        try { inert921(on); }
+        catch (e) { throw new Error((on ? 'Work with friends ON, nobody sharing: ' : 'Work with friends OFF: ') + e.message); }
+      });
+    } finally { FM.settings.set('collabLabs', wasLabs921); }
+
+    function inert921(on) {
     if (C.active !== false) throw new Error('FM.collab.active is ' + C.active + ' on a page nobody shared — every S0 hook in history.js, storage.js and app.js reads that flag, and a test that left a session attached would make every later commit in this suite run the collab pipeline');
     if (C.session) throw new Error('a session is attached on a page nobody shared (role ' + C.role + ')');
     /* S2 gives the S0 hooks something to reach. Every one must EXIST — a half-present hook is how
@@ -30697,7 +30707,7 @@
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
     if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S7 is the engine, its hooks, the connection codes and the relay, the UI, media, presence, roles and comments, and anything beyond that list belongs to a later stage');
     if (C.readOnly && (C.readOnly() !== false || C.myRole() !== 'owner' || C.canExport() !== true)) throw new Error('with no session this device reads as read-only, or not the owner — a solo user would be locked out of his own project');
-    if (C.comments && C.comments.installed && C.comments.installed()) throw new Error('the comments module is installed with Labs off — it would be painting ruler marks and listening to every timeline rebuild for a solo user');
+    if (!on && C.comments && C.comments.installed && C.comments.installed()) throw new Error('the comments module is installed with Labs off — it would be painting ruler marks and listening to every timeline rebuild for a solo user');
     /* Media is the stage most able to break §23's bargain, because everything it does is IndexedDB: a
        boot-time sweep, a manifest built at load, a progress card that exists before there is anything
        to report. None of it may happen until a session installs a controller. */
@@ -30716,14 +30726,14 @@
        see the decision note at the top of js/collab-ui.js. (queue 921 S3)
        📐 RELAXED BY #967 BATCH 2, on his pick ("one door, no network, no listeners"): with Labs off the page may hold the
        phone's person+ on the video and Home's worded Join — one button each — and nothing else. doors23 is that rule. */
-    doors23('the S2 inertness check');
+    doors23('the S2 inertness check', on);
     /* ⚠️ THE LISTENERS ARE THE POINT OF §23, and they are the one thing here a solo user could feel.
        The bridge installs capture listeners on document for pointer and key events; with no session
        there must be none, and `installed()` is how that is stated. */
     if (C.bridge.installed()) throw new Error('the bridge\'s document-wide pointer and key capture listeners are installed with no session running — §23 promises a solo user no listeners at all');
     /* CONTROL: the namespace really is there, so the emptiness above is emptiness and not absence. */
     if (typeof C.Host !== 'function' || typeof C.Session !== 'function' || typeof C.path.canon !== 'function' || typeof C.diff.diffDoc !== 'function' || typeof C.link.LoopLink !== 'function') throw new Error('CONTROL: the modules are not loaded at all');
-    } finally { FM.settings.set('collabLabs', wasLabs921); }
+    }
   });
 
   /* A guest reduced to the two trees and the receive rules — §8.1 (pending), §8.3 (structural wins),
@@ -105566,16 +105576,19 @@
      button that only opens the explanation and the switch, with no network and no listeners. With Labs off the page may hold
      the phone's person+ on the video (#btn-share, on #stage, shown only at a phone width) and Home's worded Join
      (#hm-join-btn) — one button each — and nothing else: no chip, no LIVE marker, no banner, no knock, no card, no scrim. */
-  function doors23(where) {
+  /* `idleOn`: the same promise with Work with friends ON and no session (#921 clause 19 made ON the default) — nothing open
+     means the same two doors and nothing else. */
+  function doors23(where, idleOn) {
+    const st = idleOn ? 'with Work with friends on and no session' : 'with Labs off';
     ['collab-people', 'collab-live', 'collab-banner', 'collab-knock', 'collab-share', 'collab-join', 'collab-profile'].forEach(function (id) {
-      if (document.getElementById(id)) throw new Error('#' + id + ' is in the page with Labs off (' + where + ') — §23 allows the two doors and nothing else');
+      if (document.getElementById(id)) throw new Error('#' + id + ' is in the page ' + st + ' (' + where + ') — §23 allows the two doors and nothing else');
     });
-    if (document.querySelector('.collab-scrim')) throw new Error('a collab scrim is in the page with Labs off (' + where + ')');
+    if (document.querySelector('.collab-scrim')) throw new Error('a collab scrim is in the page ' + st + ' (' + where + ')');
     if (document.querySelectorAll('#btn-share').length > 1 || document.querySelectorAll('#hm-join-btn').length > 1) throw new Error('a door is in the page twice (' + where + ')');
     const b = document.getElementById('btn-share');
     if (b) {
-      if (!b.parentNode || b.parentNode.id !== 'stage') throw new Error('with Labs off #btn-share is in ' + (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ' (' + where + ') — the one share door allowed is the person+ on the video');
-      if (!matchMedia('(max-width: 700px)').matches && b.getClientRects().length) throw new Error('with Labs off a PC shows the share door (' + where + ') — it is the phone’s door; a PC keeps its layout');
+      if (!b.parentNode || b.parentNode.id !== 'stage') throw new Error(st + ' #btn-share is in ' + (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ' (' + where + ') — the one share door allowed is the person+ on the video');
+      if (!matchMedia('(max-width: 700px)').matches && b.getClientRects().length) throw new Error(st + ' a PC shows the share door (' + where + ') — it is the phone’s door; a PC keeps its layout');
     }
     const j = document.getElementById('hm-join-btn');
     if (j && j.textContent.trim() !== 'Join') throw new Error('Home’s door reads “' + j.textContent.trim() + '” (' + where + ')');
