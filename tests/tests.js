@@ -33510,6 +33510,85 @@
     });
   });
 
+  test('921 S3 a swap code still being made when sharing stops never lands on the next card — its late code, or its late failure, goes with its link', { item: '921', budgetMs: 120000 }, async function () {
+    /* A real swap code takes up to three seconds to make (ICE gathering, collab-link.js gathered()). Stop sharing — or
+       opening another project, #921 clause 19 — drops the offer at once, but its gathering ran on: when it finished, the
+       code step's callback wrote that DEAD code into whichever swap-code box was on screen by then. So Stop sharing, Share,
+       Swap codes inside those three seconds showed the code he had just been told stops working, while the module held a
+       different offer. Found as an ordering red in ?only=921: 921 S3 Stop sharing revokes… (and the switch test after
+       it) read a code dropped by an earlier test and failed with the module is not holding the offer whose code is on
+       screen, on labs-on and on land-b1 alike. Driven with links whose gathering the test finishes by hand. */
+    const C = need921S3('the late swap code');
+    function lateLink() {
+      const l = fakeLink921({ code: 'LATE' });
+      const code = 'FM1-LATE-' + (++fakeCode921);
+      let fire = null, fail = null;
+      l.createOffer = function () { return new Promise(function (res, rej) { fire = function () { res(code); }; fail = function () { rej({ why: 'no-candidates' }); }; }); };
+      l._late = code;
+      l._fire = function () { fire(); };
+      l._fail = function () { fail(); };
+      return l;
+    }
+    function box() { const b = document.getElementById('collab-offer-code'); return b ? b.textContent : null; }
+    async function stopSharing(what) {
+      const stop = document.querySelector('.cs-stop');
+      if (!stop) throw new Error('setup: no Stop sharing button ' + what);
+      stop.click();
+      for (let i = 0; i < 60; i++) {
+        const ok = document.querySelector('#fm-ask .fm-ask-ok');
+        if (ok && !document.getElementById('fm-ask').classList.contains('hidden')) { ok.click(); await settle921(150); return; }
+        await settle921(40);
+      }
+      throw new Error('setup: the Stop sharing confirm never opened ' + what);
+    }
+    async function swapCodes(what) {
+      await ui921.share();
+      const add = document.querySelector('.cs-add');
+      if (!add) throw new Error('setup: no Swap codes button ' + what);
+      add.click();
+      await settle921(80);
+    }
+    let ui921 = null;
+    await withLabs921(async function (ui) {
+      ui921 = ui;
+      await withCollab921([layer921('A')], async function (ctx) {
+        try {
+          await withFakeLinks921(C, lateLink, async function (made) {
+            await swapCodes('on the first share');
+            if (made.length !== 1 || ui._offer() !== made[0]) throw new Error('setup: the first Swap codes did not start exactly one offer');
+            await stopSharing('while the first code was still being made');
+            if (ui._offer()) throw new Error('setup: Stop sharing left an offer held, so nothing below is about a DROPPED one');
+            await swapCodes('on the second share');
+            await stopSharing('while the second code was still being made');
+            await swapCodes('on the third share');
+            if (made.length !== 3 || ui._offer() !== made[2]) throw new Error('setup: the third Swap codes is not holding a fresh, third offer (' + made.length + ' made)');
+            const waiting = box();
+            if (!waiting || /^FM1-/.test(waiting)) throw new Error('setup: the third card already shows a code (' + waiting + ') before any gathering finished');
+
+            /* the first dropped offer finishes gathering, the second one fails — both after their links were dropped */
+            made[0]._fire();
+            made[1]._fail();
+            await settle921(120);
+            if (box() === made[0]._late) throw new Error('the swap code of an offer Stop sharing had DROPPED landed on the next card (' + made[0]._late + ') — he is shown the code he was just told stops working, and the answer to it is checked against a different offer');
+            if (box() !== waiting) throw new Error('a dropped offer wrote into the next card: it now reads ' + JSON.stringify(box()).replace(/"/g, "'") + ' instead of ' + JSON.stringify(waiting).replace(/"/g, "'"));
+
+            /* CONTROL: the live offer's code still lands, so the silence above is the guard and not a dead box */
+            made[2]._fire();
+            await settle921(120);
+            if (box() !== made[2]._late) throw new Error('CONTROL: the offer the card is holding finished and its code did not appear (' + JSON.stringify(box()).replace(/"/g, "'") + ')');
+            ui.close();
+          });
+        } finally {
+          /* two real arms wrote §12.1 save points under the throwaway project's id (guarded, as Stop sharing revokes… does) */
+          if (FM.storage.collabKeys) {
+            const left = await FM.storage.collabKeys('collab:ckpt:' + ctx.pid + ':');
+            for (let i = 0; i < left.length; i++) await FM.storage.collabDel(left[i]);
+          }
+        }
+      });
+    });
+  });
+
   test('921 S3 a peer that authenticated and never says hello cannot make the owner buffer without limit', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S3('the pre-admission buffer');
     await withLabs921(async function (ui) {

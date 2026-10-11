@@ -2713,8 +2713,11 @@ window.FM = window.FM || {};
     try { link = C.link.RtcLink({ self: 'host', peer: 'guest' }); }
     catch (e) { codeBox.textContent = 'This browser cannot make a direct connection.'; return; }
     offerLink = link;
+    /* #921 clause 19: gathering takes up to three seconds and runs on after Stop sharing or a project switch drops the
+       link — so both callbacks ask whether this is still the held offer before they touch the box on screen. */
     link.createOffer().then(function (code) {
       link._code = code;
+      if (offerLink !== link) return;          // dropped while gathering: its code must not land on a later card
       const live = document.getElementById('collab-offer-code');
       if (!live) return;
       live.textContent = code;
@@ -2722,6 +2725,7 @@ window.FM = window.FM || {};
       if (cp) cp.disabled = false;
       enableShare(live.parentNode);
     }).catch(function (e) {
+      if (offerLink !== link) return;
       const live = document.getElementById('collab-offer-code');
       if (!live) return;
       live.textContent = (e && e.why === 'no-candidates')
