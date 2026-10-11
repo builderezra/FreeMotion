@@ -124367,4 +124367,34 @@
     const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* #1056 (his answer 11 Oct: "FIX it. Old projects changing is fine"): Mosaic's Average mode averaged a block's colour WITHOUT
+     weighting by alpha, so a block half over a white cutout and half over transparent (black) came out grey — a dark fringe round
+     every cutout. An alpha-weighted mean keeps the edge block white and half see-through; an opaque picture is untouched. */
+  test('1056 Mosaic (Average) keeps a white cutout’s edge blocks white — half see-through, not grey — and leaves an opaque picture exactly as before', { item: '1056', budgetMs: 15000 }, function () {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.mosaic;
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.mosaic is not reachable');
+    const W = 16, H = 16;
+    const make = function (fn) { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c[3]; } return d; };
+    /* white where x < 12, transparent black beyond: the block [8,16) is half cutout, half nothing */
+    const d = make(function (x) { return x < 12 ? [255, 255, 255, 255] : [0, 0, 0, 0]; });
+    f(d, W, H, { size: 8 }, 0.5, 1);
+    const at = function (x, y) { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const edge = at(12, 4), inside = at(2, 4);
+    if (inside[0] !== 255 || inside[3] !== 255) throw new Error('CONTROL: the all-white block is not white and solid (' + inside + ')');
+    if (Math.min(edge[0], edge[1], edge[2]) < 250) throw new Error('the edge block came out ' + edge.slice(0, 3) + ' — grey, the dark fringe round a cutout (#1056)');
+    if (Math.abs(edge[3] - 128) > 2) throw new Error('the edge block is ' + edge[3] + ' solid, not half see-through (128)');
+    /* a block with nothing in it stays nothing */
+    const clear = make(function () { return [0, 0, 0, 0]; }); f(clear, W, H, { size: 8 }, 0.5, 1);
+    if (clear.some(function (v) { return v !== 0; })) throw new Error('a fully see-through picture got colour from Mosaic');
+    /* CONTROL: an opaque picture is exactly what the plain mean gives (old projects without see-through edges do not move) */
+    const n = function (x, y) { return [(x * 37 + y * 11) % 256, (x * 13 + y * 71) % 256, (x * 5 + y * 3) % 256, 255]; };
+    const o = make(n); f(o, W, H, { size: 8 }, 0.5, 1);
+    for (let by = 0; by < H; by += 8) for (let bx = 0; bx < W; bx += 8) {
+      const sum = [0, 0, 0];
+      for (let y = by; y < by + 8; y++) for (let x = bx; x < bx + 8; x++) { const c = n(x, y); sum[0] += c[0]; sum[1] += c[1]; sum[2] += c[2]; }
+      const got = (by * W + bx) * 4;
+      for (let k = 0; k < 3; k++) if (o[got + k] !== Math.round(sum[k] / 64) && Math.abs(o[got + k] - sum[k] / 64) > 0.51) throw new Error('an opaque block moved: channel ' + k + ' is ' + o[got + k] + ', the plain mean is ' + (sum[k] / 64).toFixed(2));
+    }
+  });
 })();
