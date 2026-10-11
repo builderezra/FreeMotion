@@ -784,7 +784,8 @@ window.FM = window.FM || {};
         { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay'], [4, 'Soft Light'], [5, 'Hard Light'], [6, 'Add'], [7, 'Difference']] },
         { key: 'mid', label: 'Midpoint', min: 0.05, max: 0.95, step: 0.01, def: 0.5 },
         { key: 'dither', label: 'Dither', def: 0, options: [[0, 'Off'], [1, 'On']] },
-        { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }
+        // #482, decided 11 Oct under his rule: a new one starts Gentler (0.5); a save without the setting still draws 0.8 (the kernel's)
+        { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5, legacy: 0.8 }
       ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
     /* #482 polish 6.5 (#966 "as much choice as possible"; answers the backlog's C38). The core was welded at W x 0.18 and the
        rays at six, flat, and the description promised "the streaks and ghosts a real one throws" while it drew neither. Core

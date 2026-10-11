@@ -124419,4 +124419,23 @@
       if (Math.abs(half) !== 3) throw new Error('a half-scale plate should draw a 3 px fringe (round(0.02 × 9 × 30 × 0.5) = 3), measured ' + Math.abs(half) + (dir ? ' (vertical)' : '') + ' — the preview shows a fringe twice as wide as the export');
     }
   });
+
+  /* #482 (decided 11 Oct under his rule: "Gradient Overlay starts Gentler (0.5)"): a new Gradient Overlay lets half the picture
+     through; a save made before, with no Amount stored, still draws the 0.8 it always did — and the inspector says so (legacy). */
+  test('482 a new Gradient Overlay starts Gentler (Amount 0.5); an old save with no Amount still draws 0.8, and its registry says so', { item: '482', budgetMs: 15000 }, function () {
+    const i = FM.fxRegistry.makeInstance('gradientoverlay');
+    if (!i) throw new Error('gradientoverlay is not in the registry');
+    if (Number(i.params.amount) !== 0.5) throw new Error('a new Gradient Overlay starts at Amount ' + i.params.amount + ', not Gentler 0.5');
+    const r = FM.fxRegistry.get('gradientoverlay'), pa = r && r.params.filter(function (p) { return p.key === 'amount'; })[0];
+    if (!pa || Number(pa.legacy) !== 0.8) throw new Error('the Amount param does not declare what an old save draws (legacy ' + (pa && pa.legacy) + ', want 0.8)');
+    const f = FM._pixelFx && FM._pixelFx.gradientoverlay;
+    if (typeof f !== 'function') throw new Error('FM._pixelFx.gradientoverlay is not reachable');
+    const W = 8, H = 8, grey = function () { const d = new Uint8ClampedArray(W * H * 4); for (let k = 0; k < d.length; k += 4) { d[k] = d[k + 1] = d[k + 2] = 128; d[k + 3] = 255; } return d; };
+    const base = Object.assign({}, i.params); delete base.amount;
+    const old = grey(); f(old, W, H, base, 0);
+    const at8 = grey(); f(at8, W, H, Object.assign({}, base, { amount: 0.8 }), 0);
+    const at5 = grey(); f(at5, W, H, Object.assign({}, base, { amount: 0.5 }), 0);
+    for (let k = 0; k < old.length; k++) if (old[k] !== at8[k]) throw new Error('a save with no Amount does not draw what 0.8 draws — old projects moved');
+    if (at5.every(function (v, k) { return v === at8[k]; })) throw new Error('CONTROL: 0.5 and 0.8 draw the same, so nothing above was measured');
+  });
 })();
