@@ -1468,6 +1468,21 @@ window.FM = window.FM || {};
         if (FM.toast) FM.toast(ok ? 'Copied ' + ((reg && reg.label) || fx.type) : 'Couldn’t copy this effect', 1600);
       } },
     ];
+    /* RESET TO ORIGINAL LOOK (#482 batch 4.4). A filter is a group he can open and retune — delete an ingredient, push a
+       slider — and until now the only way back was to delete it and add it again, losing its Strength, its keyframes and
+       its place in the stack. This puts back only the INSIDE: the ingredients as the look (or his saved filter) has them,
+       fitted to this layer, while the filter itself keeps its Strength and their keyframes, its on/off, its name and its
+       position. One step, so one undo returns his tuning. Plain Reset above still resets the filter's own Strength. */
+    const lookId = (FM.isFxContainer && FM.isFxContainer(fx) && FM.filters && FM.filters.idOfInstance) ? FM.filters.idOfInstance(fx) : null;
+    if (lookId) items.splice(1, 0, { label: 'Reset to original look', action: () => {
+      const fresh = FM.filters.makeInstance(lookId);
+      const fitted = fresh ? FM.fxRegistry.fitToLayer(fresh, layer) : null;
+      const nm = fx.name || (FM.filters.get(lookId) || {}).name || 'filter';
+      if (!fitted || !Array.isArray(fitted.effects) || !fitted.effects.length) { if (FM.toast) FM.toast('Couldn’t reset “' + nm + '” — its look does not suit this layer', 2200); return; }
+      fx.effects = fitted.effects;
+      done();
+      if (FM.toast) FM.toast('“' + nm + '” is back to its original look', 1800);
+    } });
     // Favourite from here too: you usually decide an effect is a keeper while you are USING it, not
     // while browsing for it — and until now the ★ existed only in the browser. (#62)
     if (FM.fxBrowser && FM.fxBrowser.toggleFav) {

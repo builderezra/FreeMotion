@@ -124643,4 +124643,46 @@
       return [1, 2].map(k => Object.assign(FM.makeLayer('image', { name: 'clip482 ' + k, x: P.width / 2, y: P.height / 2 }), { start: 0, duration: 4, effects: [] }));
     } });
   });
+
+  test('482 4.4 Reset to original look puts a retuned filter’s ingredients back and keeps its Strength keyframes, name, switch and place — one undo returns the tuning', { item: '482', budgetMs: 60000 }, async function () {
+    await filtersTab482(async function (o) {
+      const blur = FM.fxRegistry.makeInstance('blur');
+      const box = FM.fxRegistry.fitToLayer(FM.filters.makeInstance('tealorange'), o.L);
+      if (!blur || !box || (box.effects || []).length < 2) throw new Error('setup: need a blur and a Teal & Orange with two or more ingredients');
+      const fresh = FM.fxRegistry.fitToLayer(FM.filters.makeInstance('tealorange'), o.L).effects.map(e => ({ type: e.type, params: JSON.parse(JSON.stringify(e.params)) }));
+      /* the same ingredients in the same order, each holding every value want names (the renderer may fill keys the recipe leaves out) */
+      const sameLook = (list, want) => list.length === want.length && want.every((w, i) => list[i].type === w.type && Object.keys(w.params || {}).every(k => JSON.stringify(list[i].params[k]) === JSON.stringify(w.params[k])));
+      const show = list => JSON.stringify(list.map(e => e.type));
+      box.params.strength = { kf: [{ t: 0, v: 0.3 }, { t: 2, v: 0.9 }] };
+      box.name = 'My teal';   // renamed — the fid still knows which look it is
+      box.effects.splice(0, 1);                                  // he deleted an ingredient…
+      const k0 = box.effects[0]; k0.params = Object.assign({}, k0.params);
+      const pk = Object.keys(k0.params).filter(k => typeof k0.params[k] === 'number')[0];
+      if (pk) k0.params[pk] = k0.params[pk] + 0.123;              // …and pushed a slider on another
+      box._expanded = true;
+      o.L.effects.push(blur, box);
+      FM.inspector.back(); await o.sleep(200);
+      FM.inspector.openCategory('effects'); await o.sleep(350);
+      if (FM.history) FM.history.commit();
+      const tuned = box.effects.map(e => ({ type: e.type, params: JSON.parse(JSON.stringify(e.params)) }));
+      const more = document.querySelector('#inspector-panel .fx-list > .fx-row.fx-open .fx-icon-btn[title="More"]');
+      if (!more) throw new Error('setup: the open filter row has no ⋯');
+      more.click(); await o.sleep(250);
+      const menuEl = document.getElementById('ctx-menu');
+      const items = (menuEl && !menuEl.classList.contains('hidden')) ? [].slice.call(menuEl.querySelectorAll('.ctx-item')) : [];
+      const it = items.filter(i => /Reset to original look/.test(i.textContent || ''))[0];
+      if (!it) throw new Error('a retuned filter’s ⋯ offers no "Reset to original look" — menu reads [' + items.map(i => (i.textContent || '').trim()).join(', ') + ']');
+      it.click(); await o.sleep(350);
+      const now = FM.layerById(FM.scene, o.L.id);
+      const fb = now.effects[1];
+      if (!fb || !FM.isFxContainer(fb)) throw new Error('the filter is no longer second in the stack after Reset');
+      if (!sameLook(fb.effects, fresh)) throw new Error('after Reset the ingredients are ' + show(fb.effects) + (pk ? ' (' + pk + ' ' + JSON.stringify((fb.effects[1] || {}).params && fb.effects[1].params[pk]) + ')' : '') + ', not a fresh Teal & Orange ' + show(fresh));
+      if (JSON.stringify(fb.params.strength) !== JSON.stringify({ kf: [{ t: 0, v: 0.3 }, { t: 2, v: 0.9 }] })) throw new Error('Reset lost the Strength keyframes: ' + JSON.stringify(fb.params.strength));
+      if (fb.name !== 'My teal' || fb.enabled === false) throw new Error('Reset changed the filter itself (name "' + fb.name + '", enabled ' + fb.enabled + ')');
+      if (now.effects[0].type !== 'blur') throw new Error('Reset moved the blur above it');
+      FM.history.undo(); await o.sleep(350);
+      const back = FM.layerById(FM.scene, o.L.id).effects[1];
+      if (!sameLook(back.effects, tuned)) throw new Error('one undo did not bring his tuning back: ' + show(back.effects) + ' vs ' + show(tuned));
+    });
+  });
 })();
