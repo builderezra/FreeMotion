@@ -61369,7 +61369,7 @@
   /* B2, the land list's required fix for 304f6370: v17.23's travelling sweep (Once / Wait) used speed(now) × time, so a
      Speed keyed 1→0 made the band VANISH the moment speed reached 0 (or jump back). Driven through the production kernel
      the way 304f6370's own test drives it: the band must be on screen and still, from the stop onwards, in both modes. */
-  test('690 B2 Glow Scan's travelling sweep (Once, or a Wait loop) holds the band where Speed keyed down to 0 leaves it', { item: 'TBD' }, function () {
+  test('690 B2 Glow Scan’s travelling sweep (Once, or a Wait loop) holds the band where Speed keyed down to 0 leaves it', { item: 'TBD' }, function () {
     const kernel = FM._FX_TABLES.PIXEL_FX.glowscan, W = 8, H = 40;
     if (!kernel) throw new Error('The Glow Scan production kernel is unavailable');
     const peakAt = function (extra, time) {
