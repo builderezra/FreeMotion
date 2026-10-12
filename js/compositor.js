@@ -1676,6 +1676,22 @@ window.FM = window.FM || {};
       desc: 'A group of effects that act as one, with a single Strength that fades the whole group in and out.',
       params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01, def: 1 }] },
   ];
+  /* #482 polish 14.6 — THE FIFTEEN 3D SOLIDS share six more controls, appended here once rather than copied into fifteen
+     one-line entries (solidFx reads them for all of them): PERSPECTIVE (50 is the welded focal length the solids always
+     had), OFFSET X / Y (the solid moved by that share of the layer's box), AUTO-SPIN X / Y / Z (degrees a second on the
+     clip's own clock, added to Rotate). Every default is the old solid exactly; no library filter carries a 3D solid. */
+  ['cube3d', 'box3d', 'cylinder3d', 'sphere3d', 'ellipsoid3d', 'torus3d', 'ring3d', 'pyramid3d', 'octahedron3d', 'hexprism3d',
+   'starprism3d', 'starpoly3d', 'heart3d', 'hollowbox3d', 'axiscross3d'].forEach(type => {
+    const def = FM.EFFECTS.filter(d => d.type === type)[0];
+    if (!def) return;
+    def.params.push(
+      { key: 'persp', label: 'Perspective', min: 0, max: 100, step: 1, def: 50, unit: '%', note: '0 = flat, no perspective' },
+      { key: 'offx', label: 'Offset X', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'offy', label: 'Offset Y', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'spinx', label: 'Auto-spin X', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      { key: 'spiny', label: 'Auto-spin Y', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      { key: 'spinz', label: 'Auto-spin Z', min: -360, max: 360, step: 5, def: 0, unit: '°/s' });
+  });
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
   // recompute when the source frame and params are unchanged (static images, paused/scrub
@@ -12210,7 +12226,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const cX = Math.cos(o.rx), sX = Math.sin(o.rx);
     const cY = Math.cos(o.ry), sY = Math.sin(o.ry);
     const cZ = Math.cos(o.rz), sZ = Math.sin(o.rz);
-    const n = verts.length, F = 3.2;   // focal length in solid radii (weak perspective)
+    /* focal length in solid radii (weak perspective). #482 polish 14.6: o.F sets it (the solids' Perspective, Card Flip's);
+       absent it is the old 3.2, and Infinity is no perspective at all (f is 1). The denominator never falls under 0.2 — a
+       vertex level with the eye would project to infinity; nothing at F 3.2 or the solids' F 2 comes within 0.27. */
+    const n = verts.length, F = o.F > 0 ? o.F : 3.2, ortho = F === Infinity;
     const P = new Array(n), RZ = new Float32Array(n), RX3 = new Float32Array(n), RY3 = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       const v = verts[i];
@@ -12219,7 +12238,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       w = x * cY + z * sY; z = -x * sY + z * cY; x = w;         // rotate Y
       w = x * cZ - y * sZ; y = x * sZ + y * cZ; x = w;          // rotate Z
       RX3[i] = x; RY3[i] = y; RZ[i] = z;
-      const f = F / (F - z);                                    // z+ toward viewer
+      const f = ortho ? 1 : F / Math.max(0.2, F - z);           // z+ toward viewer
       P[i] = [o.cx + x * f * o.R, o.cy + y * f * o.R];
     }
     const order = [];
@@ -12413,7 +12432,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return pts;
   }
   // octahedron, optionally stellated (a pyramid raised on every face → Star Polyhedron)
-  function bOcta(spike) {
+  function bOcta(spike, tip) {
     const base = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
     const faces = [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]];
     const V = [], T = [];
@@ -12422,8 +12441,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the star outgrew the frame and past ~4.5 its tips crossed the camera and projected to infinity or
      * behind it — 80% of the slider (queue 904, starpoly3d). Past TIP the whole star shrinks so the tips
      * stay at TIP: Spike Length now changes how spiky it is, not how big. Below TIP (the 1.1 default
-     * included) sc is 1 and the mesh is untouched. */
-    const TIP = 1.25, rt = spike ? (1 + spike) / Math.sqrt(3) : 1, sc = rt > TIP ? TIP / rt : 1;
+     * included) sc is 1 and the mesh is untouched. `tip` (#482 14.6) is that cap re-derived for the Perspective in force
+     * (starTip); absent, it is the 1.25 above. */
+    const TIP = tip > 0 ? tip : 1.25, rt = spike ? (1 + spike) / Math.sqrt(3) : 1, sc = rt > TIP ? TIP / rt : 1;
     for (let fi = 0; fi < faces.length; fi++) {
       const f = faces[fi], A = base[f[0]], B = base[f[1]], C = base[f[2]], s = V.length;
       V.push([A[0], A[1], A[2], uv(A)[0], uv(A)[1]], [B[0], B[1], B[2], uv(B)[0], uv(B)[1]], [C[0], C[1], C[2], uv(C)[0], uv(C)[1]]);
@@ -12480,17 +12500,43 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
 
   // ---- the CANVAS_FX catalog ----
-  function solidFx(A, B, W, H, bb, p, t, type, buildMesh, defs) {
-    const rx = fparam(p, 'rotx', defs.rotx, t) * Math.PI / 180;
-    const ry = fparam(p, 'roty', defs.roty, t) * Math.PI / 180;
-    const rz = fparam(p, 'rotz', defs.rotz, t) * Math.PI / 180;
+  /* #482 polish 14.6 — PERSPECTIVE, as renderMesh's focal length F in solid radii. 50 IS the old welded 3.2, returned as that
+     literal; below 50 the strength (1/F) falls in a straight line to none at 0 (F Infinity, a flat orthographic view); above
+     50 it rises to F 2 at 100. Not 1.6 — the deepest solid reaches 1.73 radii toward the camera (Box at Depth 200), and a
+     vertex at or past F would project to infinity or behind the eye. */
+  function solidF(p, t) {
+    let v = Number(fparam(p, 'persp', 50, t)); v = isFinite(v) ? Math.max(0, Math.min(100, v)) : 50;
+    if (v === 50) return 3.2;
+    if (v <= 0) return Infinity;
+    return 1 / (v < 50 ? (v / 50) / 3.2 : 1 / 3.2 + (v - 50) / 50 * (1 / 2 - 1 / 3.2));
+  }
+  FM._solidF = solidF;   // suite seam (#482 14.6)
+  /* The Spiked Star's cap (bOcta's TIP), RE-DERIVED for any F: 1.25 radii at F 3.2 keeps its tips at F / (F - TIP) = 1.64x,
+     so the same ratio, TIP = F × 25/64, keeps them there at any perspective — never more than the 1.25 that keeps the star
+     inside its frame, which is also the whole story with no perspective. */
+  function starTip(F) { return (F === 3.2 || !isFinite(F)) ? 1.25 : Math.min(1.25, F * 0.390625); }
+  /* `tl`, the clip's own clock (14.6): AUTO-SPIN X / Y / Z turn the solid that many degrees a second on it, added to Rotate —
+     so Auto-spin Y 90 at 1 s is Rotate Y 90 exactly. OFFSET X / Y move the solid by that share of the layer's own width /
+     height. Every default leaves the old numbers untouched: a zero spin or offset is never added, and Perspective 50 is
+     the literal 3.2. */
+  function solidFx(A, B, W, H, bb, p, t, type, buildMesh, defs, tl) {
+    const clock = tl == null ? t : tl;
+    let rxD = fparam(p, 'rotx', defs.rotx, t), ryD = fparam(p, 'roty', defs.roty, t), rzD = fparam(p, 'rotz', defs.rotz, t);
+    const spx = fparam(p, 'spinx', 0, t), spy = fparam(p, 'spiny', 0, t), spz = fparam(p, 'spinz', 0, t);
+    if (spx) rxD += spx * clock;
+    if (spy) ryD += spy * clock;
+    if (spz) rzD += spz * clock;
+    const rx = rxD * Math.PI / 180;
+    const ry = ryD * Math.PI / 180;
+    const rz = rzD * Math.PI / 180;
     const size = fparam(p, 'size', defs.size, t) / 100;
     const shading = clamp01(fparam(p, 'shading', defs.shading, t));
+    const F = solidF(p, t), offx = fparam(p, 'offx', 0, t), offy = fparam(p, 'offy', 0, t);
     const tex = extractTex(A, bb);
-    const mesh = buildMesh();
+    const mesh = buildMesh(F);
     renderMesh(B, tex, bb.w, bb.h, mesh.v, mesh.t, {
-      cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: Math.max(bb.w, bb.h) / 2 * size,
-      rx, ry, rz, shading, light: p.light == null ? null : fparam(p, 'light', 53, t),
+      cx: offx ? bb.x + bb.w / 2 + offx / 100 * bb.w : bb.x + bb.w / 2, cy: offy ? bb.y + bb.h / 2 + offy / 100 * bb.h : bb.y + bb.h / 2, R: Math.max(bb.w, bb.h) / 2 * size,
+      rx, ry, rz, shading, light: p.light == null ? null : fparam(p, 'light', 53, t), F: F,
     });
   }
   // ---- Motion Blur (Content) — TEMPORAL blur driven by what moves INSIDE the plate ----
@@ -13679,15 +13725,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     },
 
     // ---- 3D solids ----
-    cube3d: function (A, B, W, H, bb, p, t) {
-      solidFx(A, B, W, H, bb, p, t, 'cube3d', () => meshFor('cube3d', 'u', () => bBox(0.72, 0.72, 0.72, 3)), { rotx: 25, roty: 35, rotz: 0, size: 70, shading: 0.6 });
+    cube3d: function (A, B, W, H, bb, p, t, tl) {
+      solidFx(A, B, W, H, bb, p, t, 'cube3d', () => meshFor('cube3d', 'u', () => bBox(0.72, 0.72, 0.72, 3)), { rotx: 25, roty: 35, rotz: 0, size: 70, shading: 0.6 }, tl);
     },
-    box3d: function (A, B, W, H, bb, p, t) {
+    box3d: function (A, B, W, H, bb, p, t, tl) {
       const d = fparam(p, 'depth', 60, t) / 100;
       const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;
-      solidFx(A, B, W, H, bb, p, t, 'box3d', () => meshFor('box3d', ax + '|' + ay + '|' + d, () => bBox(ax, ay, d * 0.5, 3)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'box3d', () => meshFor('box3d', ax + '|' + ay + '|' + d, () => bBox(ax, ay, d * 0.5, 3)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
-    cylinder3d: function (A, B, W, H, bb, p, t) {
+    cylinder3d: function (A, B, W, H, bb, p, t, tl) {
       const len = fparam(p, 'length', 150, t) / 100;
       solidFx(A, B, W, H, bb, p, t, 'cylinder3d', () => meshFor('cylinder3d', String(len), () => {
         const side = bParam(function (u, v) {
@@ -13707,71 +13753,72 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           capB.t.push([0, 1 + (i + 1) % capPts.length, 1 + i]);
         }
         return meshMerge([side, capF, capB]);
-      }), { rotx: 20, roty: 0, rotz: 75, size: 70, shading: 0.6 });
+      }), { rotx: 20, roty: 0, rotz: 75, size: 70, shading: 0.6 }, tl);
     },
-    sphere3d: function (A, B, W, H, bb, p, t) {
+    sphere3d: function (A, B, W, H, bb, p, t, tl) {
       solidFx(A, B, W, H, bb, p, t, 'sphere3d', () => meshFor('sphere3d', 'u', () => bParam(function (u, v) {
         const lon = (u - 0.5) * 2 * Math.PI, lat = (v - 0.5) * Math.PI;
         return [Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon)];
-      }, 22, 14)), { rotx: 15, roty: 0, rotz: 0, size: 85, shading: 0.55 });
+      }, 22, 14)), { rotx: 15, roty: 0, rotz: 0, size: 85, shading: 0.55 }, tl);
     },
-    ellipsoid3d: function (A, B, W, H, bb, p, t) {
+    ellipsoid3d: function (A, B, W, H, bb, p, t, tl) {
       /* Height / Depth (queue 904): the axis ratios were welded to 1.15 × 0.62 × 0.62, so the effect named for its
        * shape had one shape. Both are radii in % of the sphere's; 62 / 100 === 0.62, so saved ones are untouched. */
       const ey = fparam(p, 'height', 62, t) / 100, ez = fparam(p, 'depth', 62, t) / 100;
       solidFx(A, B, W, H, bb, p, t, 'ellipsoid3d', () => meshFor('ellipsoid3d', ey + '|' + ez, () => bParam(function (u, v) {
         const lon = (u - 0.5) * 2 * Math.PI, lat = (v - 0.5) * Math.PI;
         return [Math.cos(lat) * Math.sin(lon) * 1.15, Math.sin(lat) * ey, Math.cos(lat) * Math.cos(lon) * ez];
-      }, 22, 14)), { rotx: 25, roty: 0, rotz: 25, size: 85, shading: 0.55 });
+      }, 22, 14)), { rotx: 25, roty: 0, rotz: 25, size: 85, shading: 0.55 }, tl);
     },
-    torus3d: function (A, B, W, H, bb, p, t) {
+    torus3d: function (A, B, W, H, bb, p, t, tl) {
       const thk = Math.min(0.45, fparam(p, 'thickness', 30, t) / 100);
       solidFx(A, B, W, H, bb, p, t, 'torus3d', () => meshFor('torus3d', String(thk), () => bParam(function (u, v) {
         const lon = (u - 0.5) * 2 * Math.PI, tube = v * 2 * Math.PI, R0 = 1 - thk;
         return [(R0 + thk * Math.cos(tube)) * Math.sin(lon), thk * Math.sin(tube), (R0 + thk * Math.cos(tube)) * Math.cos(lon)];
-      }, 26, 12)), { rotx: 55, roty: 10, rotz: 0, size: 85, shading: 0.6 });
+      }, 26, 12)), { rotx: 55, roty: 10, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    ring3d: function (A, B, W, H, bb, p, t) {
+    ring3d: function (A, B, W, H, bb, p, t, tl) {
       const hole = Math.min(0.92, Math.max(0.1, fparam(p, 'hole', 62, t) / 100));
       const d = fparam(p, 'depth', 35, t) / 100;
-      solidFx(A, B, W, H, bb, p, t, 'ring3d', () => meshFor('ring3d', hole + '|' + d, () => bTube(circlePts(1, 24), circlePts(hole, 24), d)), { rotx: 60, roty: 8, rotz: 0, size: 85, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'ring3d', () => meshFor('ring3d', hole + '|' + d, () => bTube(circlePts(1, 24), circlePts(hole, 24), d)), { rotx: 60, roty: 8, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    pyramid3d: function (A, B, W, H, bb, p, t) {
-      solidFx(A, B, W, H, bb, p, t, 'pyramid3d', () => meshFor('pyramid3d', 'u', bPyramid), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 });
+    pyramid3d: function (A, B, W, H, bb, p, t, tl) {
+      solidFx(A, B, W, H, bb, p, t, 'pyramid3d', () => meshFor('pyramid3d', 'u', bPyramid), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 }, tl);
     },
-    octahedron3d: function (A, B, W, H, bb, p, t) {
-      solidFx(A, B, W, H, bb, p, t, 'octahedron3d', () => meshFor('octahedron3d', 'u', () => bOcta(0)), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 });
+    octahedron3d: function (A, B, W, H, bb, p, t, tl) {
+      solidFx(A, B, W, H, bb, p, t, 'octahedron3d', () => meshFor('octahedron3d', 'u', () => bOcta(0)), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 }, tl);
     },
-    hexprism3d: function (A, B, W, H, bb, p, t) {
+    hexprism3d: function (A, B, W, H, bb, p, t, tl) {
       const d = fparam(p, 'depth', 55, t) / 100;
-      solidFx(A, B, W, H, bb, p, t, 'hexprism3d', () => meshFor('hexprism3d', String(d), () => bPrism(circlePts(1, 6), d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'hexprism3d', () => meshFor('hexprism3d', String(d), () => bPrism(circlePts(1, 6), d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
-    starprism3d: function (A, B, W, H, bb, p, t) {
+    starprism3d: function (A, B, W, H, bb, p, t, tl) {
       const n = Math.max(4, Math.min(10, Math.round(fparam(p, 'points', 5, t))));
       const d = fparam(p, 'depth', 40, t) / 100;
       const inr = fparam(p, 'inner', 45, t) / 100;   // queue 904: point sharpness was welded to 0.45; 45 / 100 === 0.45, saved stars untouched
-      solidFx(A, B, W, H, bb, p, t, 'starprism3d', () => meshFor('starprism3d', n + '|' + d + '|' + inr, () => bPrism(starPts(n, inr), d)), { rotx: 25, roty: 30, rotz: 0, size: 85, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'starprism3d', () => meshFor('starprism3d', n + '|' + d + '|' + inr, () => bPrism(starPts(n, inr), d)), { rotx: 25, roty: 30, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    starpoly3d: function (A, B, W, H, bb, p, t) {
+    starpoly3d: function (A, B, W, H, bb, p, t, tl) {
       const spike = fparam(p, 'spike', 1.1, t);
-      solidFx(A, B, W, H, bb, p, t, 'starpoly3d', () => meshFor('starpoly3d', String(spike), () => bOcta(spike)), { rotx: 20, roty: 30, rotz: 0, size: 70, shading: 0.65 });
+      // 14.6: the spike cap follows Perspective (starTip) — at the default 50 it is the old 1.25 and the old cache key
+      solidFx(A, B, W, H, bb, p, t, 'starpoly3d', (F) => { const tip = starTip(F); return meshFor('starpoly3d', tip === 1.25 ? String(spike) : spike + '|' + tip, () => bOcta(spike, tip)); }, { rotx: 20, roty: 30, rotz: 0, size: 70, shading: 0.65 }, tl);
     },
-    heart3d: function (A, B, W, H, bb, p, t) {
+    heart3d: function (A, B, W, H, bb, p, t, tl) {
       const d = fparam(p, 'depth', 45, t) / 100;
-      solidFx(A, B, W, H, bb, p, t, 'heart3d', () => meshFor('heart3d', String(d), () => bPrism(heartPts(28), d)), { rotx: 15, roty: 30, rotz: 0, size: 85, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'heart3d', () => meshFor('heart3d', String(d), () => bPrism(heartPts(28), d)), { rotx: 15, roty: 30, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    hollowbox3d: function (A, B, W, H, bb, p, t) {
+    hollowbox3d: function (A, B, W, H, bb, p, t, tl) {
       const wall = Math.min(0.45, Math.max(0.08, fparam(p, 'wall', 22, t) / 100));
       const d = fparam(p, 'depth', 70, t) / 100;
       const inner = 1 - wall * 2;
       const sq = [[-1, -1], [1, -1], [1, 1], [-1, 1]], si = sq.map(q => [q[0] * inner, q[1] * inner]);
-      solidFx(A, B, W, H, bb, p, t, 'hollowbox3d', () => meshFor('hollowbox3d', wall + '|' + d, () => bTube(sq, si, d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'hollowbox3d', () => meshFor('hollowbox3d', wall + '|' + d, () => bTube(sq, si, d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
-    axiscross3d: function (A, B, W, H, bb, p, t) {
+    axiscross3d: function (A, B, W, H, bb, p, t, tl) {
       const arm = Math.min(0.6, Math.max(0.15, fparam(p, 'arm', 34, t) / 100));
       solidFx(A, B, W, H, bb, p, t, 'axiscross3d', () => meshFor('axiscross3d', String(arm), () => meshMerge([
         bBox(1, arm / 2, arm / 2, 2), bBox(arm / 2, 1, arm / 2, 2), bBox(arm / 2, arm / 2, 1, 2),
-      ])), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      ])), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
     pagecurl: function (A, B, W, H, bb, p, t) {
       const amount = clamp01(fparam(p, 'amount', 0.45, t));

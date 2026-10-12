@@ -125145,4 +125145,84 @@
       } finally { FM._noGL = was; FM.glWarp._reset(); }
     }
   });
+
+  /* 14.6 THE 3D SOLIDS: Perspective, Offset X / Y, Auto-spin X / Y / Z on all fifteen. Their pictures are renderMesh's calls —
+     a clip per triangle and the texture drawn through it — so the recorder pins them call for call, and the union of the
+     clips is the silhouette the behaviour test measures. */
+  const B14S3_TYPES = ['cube3d', 'box3d', 'cylinder3d', 'sphere3d', 'ellipsoid3d', 'torus3d', 'ring3d', 'pyramid3d', 'octahedron3d', 'hexprism3d', 'starprism3d', 'starpoly3d', 'heart3d', 'hollowbox3d', 'axiscross3d'];
+  const B14S3_NEW = { persp: 50, offx: 0, offy: 0, spinx: 0, spiny: 0, spinz: 0 };
+  const B14S3_CFG = { def: {}, turned: { rotx: b14Kf(0, 120), roty: 200, rotz: 33 }, lit: { shading: 1, light: 120, size: 140 } };
+  const B14S3_MORE = { box3d: { deep: { depth: 200, rotx: 70, roty: 10 } }, starpoly3d: { spiky: { spike: 6 }, max: { spike: 15, roty: 80 } } };
+  /* Four log hashes per config — two plates (the second with the layer's box off centre), two moments. A solid reads no plate
+     scale, so the half-size plate b14CShots also takes would only double a 15-solid sweep for nothing. */
+  function b14SShots(type, params) {
+    return [[160, 120, null], [200, 150, { x: 30, y: 22, w: 110, h: 80 }]].map(([W, H, bb]) => [0.37, 1.9].map(t => b14Cfx(type, params, { W: W, H: H, bb: bb, t: t, tl: t }).hash()).join('.')).join(' ');
+  }
+  const B14S3_PIN = {   // fc8866f1, before the edit: type -> config -> shots
+    cube3d: { def: 'f97c62eb.f97c62eb 3b103ba3.3b103ba3', turned: '7bd155d1.a671885e 9c075dd6.547c14e0', lit: '85b5749f.85b5749f abc8db17.abc8db17' },
+    box3d: { def: 'ebd877f0.ebd877f0 44cf6ffc.44cf6ffc', turned: 'b38f9616.72fb8365 0d0b0daa.84c402db', lit: '8402084b.8402084b 7f37c321.7f37c321', deep: '8fd937ab.8fd937ab 48930223.48930223' },
+    cylinder3d: { def: 'be4abd7b.be4abd7b c2fc5bf3.c2fc5bf3', turned: '0f57a463.f780f9ba 5c65829d.e76f59e0', lit: '1724f17d.1724f17d 4c16775e.4c16775e' },
+    sphere3d: { def: '04546d24.04546d24 0d1757d5.0d1757d5', turned: 'c4f6860b.3ceacbea 6ec73e8a.9f598161', lit: 'fff90c04.fff90c04 cbee80dd.cbee80dd' },
+    ellipsoid3d: { def: 'b44ae2a0.b44ae2a0 00e64591.00e64591', turned: '343d8149.673191b3 538cac5b.e46655a5', lit: 'df714ced.df714ced 4625b968.4625b968' },
+    torus3d: { def: 'd5d0b5e1.d5d0b5e1 417b9a29.417b9a29', turned: 'f896aa82.e2c90fdc af23b4cb.ca6e8735', lit: '13810cd1.13810cd1 82c29aac.82c29aac' },
+    ring3d: { def: '045ef77e.045ef77e 9527188b.9527188b', turned: '522d72b8.99def365 0d25ec32.8ccc8c69', lit: '4a1a0278.4a1a0278 5ff61222.5ff61222' },
+    pyramid3d: { def: '7c77859a.7c77859a 70564b57.70564b57', turned: 'eceddd41.41073f8b e97fdb59.e364f56a', lit: 'b65780e9.b65780e9 75430ff6.75430ff6' },
+    octahedron3d: { def: 'a451e838.a451e838 72b86ee7.72b86ee7', turned: 'c4183147.5c4b3c87 6c66a62b.2f2d86f5', lit: 'a349afda.a349afda e4e26f76.e4e26f76' },
+    hexprism3d: { def: 'cbd7addf.cbd7addf fc68ce13.fc68ce13', turned: '4912e949.67038f24 3ef345f5.c8a70134', lit: '51aa19e8.51aa19e8 4ffa4eca.4ffa4eca' },
+    starprism3d: { def: 'e00f4160.e00f4160 d5d9e948.d5d9e948', turned: '077e9418.141570ee 73fceeef.d02fb81f', lit: '8511eac6.8511eac6 10082b4c.10082b4c' },
+    starpoly3d: { def: 'e5856909.e5856909 843b13ad.843b13ad', turned: '9930246d.24f51330 825fc9f7.6a57fca1', lit: 'f10c1d57.f10c1d57 942eb45b.942eb45b', spiky: '13c63079.13c63079 3dabcbf0.3dabcbf0', max: '91e7fcf5.91e7fcf5 047e65f8.047e65f8' },
+    heart3d: { def: '6364eee0.6364eee0 430a220a.430a220a', turned: '942a92de.a7697cfa 1ca397de.652f84fc', lit: '001cc4c2.001cc4c2 cc1a1cfe.cc1a1cfe' },
+    hollowbox3d: { def: 'd9e77d10.d9e77d10 c8ae44f6.c8ae44f6', turned: 'ca8b9fdc.5c79dee1 3381ed6c.eb43a826', lit: '6122b697.6122b697 2a01d30a.2a01d30a' },
+    axiscross3d: { def: '80470f55.80470f55 ab51dba4.ab51dba4', turned: 'ac1048be.1ba57fd4 24334ffc.50ad67bd', lit: '4ddda121.4ddda121 437163b4.437163b4' },
+  };
+
+  test('482 14.6 3D solids - Perspective, Offset X and Y and Auto-spin X, Y and Z are on all fifteen solids at defaults that draw the old solid, and saved and new solids issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 180000 }, function () {
+    const moved = [];
+    B14S3_TYPES.forEach(type => {
+      b14Catalogue(type, B14S3_NEW, { persp: 80, offx: -25, offy: 40, spinx: 30, spiny: -90, spinz: 360 });
+      const pin = B14S3_PIN[type];
+      if (!pin) throw new Error('setup: no fc8866f1 pins for ' + type);
+      const cfg = Object.assign({}, B14S3_CFG, B14S3_MORE[type] || {});
+      if (Object.keys(cfg).length !== Object.keys(pin).length) throw new Error('setup: ' + type + ' has ' + Object.keys(cfg).length + ' configs against ' + Object.keys(pin).length + ' pins');
+      [].push.apply(moved, b14Pinned(type, B14S3_NEW, cfg, pin, b14SShots));
+    });
+    if (moved.length) throw new Error(moved.length + ' solids draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+    const per = b14Row('cube3d', 'persp'), sp = b14Row('cube3d', 'spiny');
+    if (per.min !== 0 || per.max !== 100 || sp.unit !== '°/s') throw new Error('Perspective is not 0-100 or Auto-spin is not in degrees a second (' + per.min + '..' + per.max + ', ' + sp.unit + ')');
+  });
+
+  test('482 14.6 3D solids - Auto-spin Y 90 at 1 s on the clip is Rotate Y 90, Perspective 0 is flat and 100 deepens it, Offset X 50 moves the solid half its width, and the Spiked Star keeps its tips at strong perspective', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, solid = (type, o, tl) => b14Cfx(type, Object.assign(b14Base(type, {}), o), { W: W, H: H, tl: tl == null ? 0.5 : tl, t: 3 });
+    /* AUTO-SPIN, on the clip's own clock (tl), not the timeline's (t 3 here throughout). CONTROL: at the clip's first moment it
+       has not turned. */
+    const spun = (o, tl) => solid('cube3d', Object.assign({ rotx: 25, roty: 0, rotz: 0 }, o), tl).hash();
+    if (spun({ spiny: 90 }, 0) !== spun({}, 0)) throw new Error('CONTROL: Auto-spin Y 90 turned the cube at the clip’s first moment');
+    if (spun({ spiny: 90 }, 1) !== spun({ roty: 90 }, 1)) throw new Error('Auto-spin Y 90 at 1 s on the clip does not draw Rotate Y 90');
+    if (spun({ spinx: -45, spinz: 30 }, 2) !== spun({ rotx: 25 - 90, rotz: 60 }, 2)) throw new Error('Auto-spin X -45 and Z 30 at 2 s do not draw Rotate X -65 and Z 60');
+    if (spun({ spiny: 90 }, 1) === spun({}, 1)) throw new Error('Auto-spin Y 90 did not turn the cube at all');
+    /* PERSPECTIVE, face on: the cube's front face sits 0.72 radii toward the eye, so its silhouette is the front face scaled by
+       F / (F - 0.72) — 1 flat (Perspective 0), 3.2 / 2.48 at the old 50, 2 / 1.28 at 100. */
+    if (FM._solidF({}, 0) !== 3.2 || FM._solidF({ persp: 50 }, 0) !== 3.2 || FM._solidF({ persp: 0 }, 0) !== Infinity || FM._solidF({ persp: 100 }, 0) !== 2) throw new Error('Perspective does not map 50 to the old F 3.2, 0 to none and 100 to F 2 (' + [FM._solidF({ persp: 0 }, 0), FM._solidF({ persp: 50 }, 0), FM._solidF({ persp: 100 }, 0)].join(', ') + ')');
+    const face = persp => b14Reach(solid('cube3d', { rotx: 0, roty: 0, rotz: 0, persp: persp })).w - 0.8;   // the clips are grown 0.4 px a side against seams
+    const f0 = face(0), f50 = face(50), f100 = face(100);
+    if (Math.abs(f0 - 2 * 0.72 * 56) > 0.5) throw new Error('CONTROL: flat, the cube’s face is ' + f0.toFixed(2) + ' px across, not 1.44 radii (80.6 px)');
+    if (Math.abs(f50 / f0 - 3.2 / 2.48) > 0.01) throw new Error('at Perspective 50 the face is ' + (f50 / f0).toFixed(3) + ' times its flat size, not the old 3.2 / 2.48 = 1.290');
+    if (Math.abs(f100 / f0 - 2 / 1.28) > 0.01) throw new Error('at Perspective 100 the face is ' + (f100 / f0).toFixed(3) + ' times its flat size, not 2 / 1.28 = 1.563');
+    /* OFFSET X 50: the same solid, half the layer's width to the right. CONTROL: no offset is centred on the layer (face on —
+       turned, perspective makes the near side bigger and the outline lopsided). */
+    const c0 = b14Reach(solid('cube3d', { rotx: 0, roty: 0 })), c1 = b14Reach(solid('cube3d', { rotx: 0, roty: 0, offx: 50, offy: -25 }));
+    if (Math.abs((c0.x0 + c0.x1) / 2 - W / 2) > 1) throw new Error('CONTROL: an unshifted cube is not centred on the layer');
+    if (Math.abs((c1.x0 + c1.x1) / 2 - (c0.x0 + c0.x1) / 2 - 80) > 1e-6 || Math.abs((c1.y0 + c1.y1) / 2 - (c0.y0 + c0.y1) / 2 + 30) > 1e-6 || Math.abs(c1.w - c0.w) > 1e-6) throw new Error('Offset X 50 / Y -25 moved the cube ' + ((c1.x0 + c1.x1 - c0.x0 - c0.x1) / 2).toFixed(2) + ', ' + ((c1.y0 + c1.y1 - c0.y0 - c0.y1) / 2).toFixed(2) + ' px - it should be 80 right and 30 up, the same size');
+    /* THE SPIKED STAR'S CAP, re-derived: at Perspective 100 a tip is magnified no more than the old cap let it be at 50 (1.64
+       times), so the star is no bigger than at 50. MEASURED at Spike 15: 78.3 px across at 100 against 124.9 at 50 — and with
+       the cap left at the old 1.25, 128.8. */
+    const star = persp => b14Reach(solid('starpoly3d', { spike: 15, persp: persp }));
+    const s50 = star(50), s100 = star(100);
+    if (!isFinite(s100.w) || s100.w > s50.w) throw new Error('at Perspective 100 the Spiked Star at Spike 15 is ' + s100.w.toFixed(1) + ' px across against ' + s50.w.toFixed(1) + ' at 50 - its tips are not held back for the stronger perspective');
+    /* The deepest solid at the strongest perspective: a corner 1.73 radii toward an eye 2 away is magnified about 7 times —
+       steep, and meant to be — but every point stays in front of the eye: finite, and the right way round. */
+    const deep = solid('box3d', { depth: 200, persp: 100, rotx: 45, roty: 45 }), box = b14Reach(deep);
+    if (!deep.clips.length || deep.clips.some(c => c.some(q => !isFinite(q[0]) || !isFinite(q[1])))) throw new Error('a Box at Depth 200 and Perspective 100 projects a corner to infinity - it has reached the eye');
+    if (!(box.w < 10 * W)) throw new Error('a Box at Depth 200 and Perspective 100 projects ' + box.w.toFixed(0) + ' px across - a corner has passed the eye');
+  });
 })();
