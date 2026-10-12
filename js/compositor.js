@@ -218,6 +218,9 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'vertical', label: 'Cross wave', min: 0, max: 100, step: 1, def: 40, unit: '%' },
       { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' },   // queue 904: welded to the horizontal/vertical axes
+      /* #482 polish 10.2: the waves only moved if Phase was keyframed by hand. Wave speed adds to Phase on the clip's clock
+         (wSpeedDeg); 0 is the old still wave. Same row on Circular Ripple and Curl. */
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },
     ] },
     { type: 'ripple', label: 'Circular Ripple', params: [
       { key: 'amount', label: 'Height', min: 0, max: 480, step: 1, def: 22, unit: 'px' },
@@ -225,6 +228,11 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },   // #482 polish 10.2 — + sends the rings outward
+      /* #482 polish 10.2 (C30): the rings ran at full height to the frame's corners. Falloff shrinks them away from the centre,
+         Radius stops them at a distance (% of the half-diagonal). Both 0 is the old ripple. Same rows on Curl. */
+      { key: 'decay', label: 'Falloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'reach', label: 'Radius', min: 0, max: 200, step: 1, def: 0, unit: '%', note: '0 reaches the whole frame' },
     ] },
     { type: 'twirl', label: 'Twirl', params: [
       { key: 'amount', label: 'Twist', min: -360, max: 360, step: 1, def: 140, unit: '°' },
@@ -536,6 +544,9 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },   // #482 polish 10.2, as on Wave and Ripple
+      { key: 'decay', label: 'Falloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },          // #482 polish 10.2 (C30), as on Ripple
+      { key: 'reach', label: 'Radius', min: 0, max: 200, step: 1, def: 0, unit: '%', note: '0 reaches the whole frame' },
     ] },
     // ---- batch 10 ----
     { type: 'bumpmap', label: 'Bump Map', params: [
@@ -9287,6 +9298,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function wCx(p, t, W, cx) { const v = p.centerx == null ? 50 : FM.evalProp(p.centerx, t); return v === 50 ? cx : W * (v / 100); }
   function wCy(p, t, H, cy) { const v = p.centery == null ? 50 : FM.evalProp(p.centery, t); return v === 50 ? cy : H * (v / 100); }
   function wR(p, t, maxR) { const v = p.radius == null ? 100 : FM.evalProp(p.radius, t); return v === 100 ? maxR : Math.max(1, maxR * (v / 100)); }
+  /* WAVE SPEED (#482 polish 10.2): degrees of phase per second on the clip's own clock `tl`, added to Phase, so Wave, Ripple and
+     Curl travel without keyframing Phase by hand. A keyframed speed is INTEGRATED over the clip (queue 913's rule — speed(now)
+     × time would rescale the whole history every frame and a slow-down would rewind the waves). Absent or 0 → exactly 0, and
+     the callers then leave Phase's own number untouched. `tl` absent (a kernel called without a prep) reads `t`. */
+  function wSpeedDeg(p, t, tl) {
+    if (p.speed == null) return 0;
+    if (tl == null || !isFinite(tl)) tl = t;
+    if (FM.isAnimated(p.speed)) { const v = FM.integrateProp(p.speed, t - tl, t); return isFinite(v) ? v : 0; }
+    const s = FM.evalProp(p.speed, t);
+    return (isFinite(s) && s !== 0) ? s * tl : 0;
+  }
+  /* RADIUS (`reach`, #482 polish 10.2): Ripple and Curl stop at R. Full strength out to three quarters of it, then a smoothstep
+     down to nothing at R, so the edge of the disturbed water is a fade and not a tear. A MATCHED PAIR with gl-warp.js wReach. */
+  function wReach(r, R) { let u = (R - r) / (0.25 * R); u = u < 0 ? 0 : (u > 1 ? 1 : u); return u * u * (3 - 2 * u); }
 
   /* ═══ EDGES AND SMOOTH SAMPLING, FOR EVERY WARP (#482 polish 10.1, backlog C26) ══════════════════════════════════════════
    * Every warp was point-sampled with clamped edges: the loop below truncated the mapped point and pinned it inside the plate,
@@ -9385,11 +9410,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
       const samp = warpSampling(pr, t);   // #482 polish 10.1: Edges and Smooth sampling — both 0 is the old sampler
+      /* THE CLIP'S OWN CLOCK, as a 9th argument to every prep (#482 polish 10.2). `t` is project time; a Wave speed or a flow
+         in px/s has to start at the clip's start (and carry across a split — fxTimeOffset), the rule every mover already
+         follows. A prep that does not take it ignores it; a kernel called without a prep (the suite's reference path) reads
+         `t` in its place. */
+      const tl = FM.fxLocalTime ? FM.fxLocalTime(layer, t) : t;
       function uniformsFor(k, params) {
         /* glslPrep first, then prep, then nothing — the same three-way the single-effect path uses.
            A kernel with nothing worth hoisting has no prep at all, and that is not an error. */
-        return (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps)
-                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps) : null)) || {};
+        return (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps, tl)
+                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps, tl) : null)) || {};
       }
       /* ═══ A RUN OF WARPS GOES THROUGH THE GPU IN ONE GO (the oldest entry's own named next step) ══
        * *"A CHAIN OF WARPS DOES NOT YET STAY ON THE GPU… worth roughly another 3x on a stacked layer
@@ -9440,7 +9470,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       } else {
         plate([fx]);
       }
-      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps) : null;
+      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps, tl) : null;
       /* ═══ THE GPU PATH (the oldest open item, "Editing lags, and gets bad fast") ══════════════════
        * That entry's own conclusion after three months: the cost is this loop, the gap is ~50x, and no
        * further kernel tuning closes it. A kernel that carries a `.glsl` twin runs as a fragment shader
@@ -9460,7 +9490,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          * A shader still needs those numbers. `glslPrep` is that, and it runs ONLY on this path, so the
          * CPU loop keeps exactly the shape that was measured — the finding above is not quietly undone
          * by the GPU port. */
-        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps) : pre;
+        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps, tl) : pre;
         warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {}, samp);
       }
       if (!warped) {
@@ -10722,13 +10752,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * below are per-pixel today as well. `prep` computes exactly the same `Math.sin` of exactly the
        * same argument once per row/column, so the result is BYTE-IDENTICAL, not within a bound. */
       if (pre && !pre.rot) return [x + pre.SX[y], y + pre.SY[x]];
+      /* A TURNED WAVE READS ITS NUMBERS FROM THE PREP (#482 polish 10.2). It used to re-resolve all of them per pixel from the
+         params, and Wave speed needs the clip's clock, which only the prep is handed. Same expressions, same order as the
+         lines below — the prep computes amp, wl, wl2, ph, cross, ca and sa exactly as they do — so a turned wave is unchanged. */
+      if (pre) { const xr = x * pre.ca + y * pre.sa, yr = -x * pre.sa + y * pre.ca;
+        const a1 = pre.amp * Math.sin(yr / pre.wl + pre.ph), a2 = pre.amp * pre.cross * Math.sin(xr / pre.wl2 + pre.ph);
+        return [x + a1 * pre.ca - a2 * pre.sa, y + a1 * pre.sa + a2 * pre.ca]; }
       const k = ps || 1;
       const amp = (FM.evalProp(p.amount, t) || 0) * k;
       // Legacy exactness: wavelength 38 reproduces `y / 38`, and the second axis kept its 46/38
       // ratio (46 = 38 * 1.2105…) so a single control moves both without changing the default look.
       const wl = (p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
       const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
-      const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+      const sd = wSpeedDeg(p, t), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed
+      const ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
       const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
       /* ANGLE (queue 904): the same two sines, in axes turned by the angle — the wave runs along the turned x, the cross wave along the
          turned y — so a flag or banner can wave on a diagonal. 0 is the line below, untouched; a turned wave is not separable, so its
@@ -10743,7 +10780,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     ripple: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
       const C = pre || WARP_FX.ripple.prep(W, H, cx, cy, maxR, p, t, ps);
       const dx = x - C.cx, dy = y - C.cy, r = Math.hypot(dx, dy) || 1e-6;
-      const off = C.amp * Math.sin(r / C.wl - C.ph);   // minus: rising phase sends the rings OUTWARD
+      let off = C.amp * Math.sin(r / C.wl - C.ph);   // minus: rising phase sends the rings OUTWARD
+      if (C.dk > 0) off *= Math.exp(-C.dk * r);        // #482 polish 10.2 Falloff (C30) — 0 skips it, so a saved ripple is untouched
+      if (C.rch > 0) off *= wReach(r, C.rch);          // #482 polish 10.2 Radius — 0 is no limit
       return [x + (dx / r) * off, y + (dy / r) * off];
     },
     _rippleLegacy: function (x, y, W, H, cx, cy, maxR, p, t, ps) {
@@ -10879,7 +10918,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the same point by different float arithmetic, 42 of 1365 sampled coordinates truncated to a
      * NEIGHBOURING source pixel. A 1-pixel resample across 3% of a warp is a fine price for twirl's
      * 1.89x and a poor one for 1.11x. The `prep` hoist below stays — that part is free and exact. */
-    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
+    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph);
+      if(C.dk>0)cuSw*=Math.exp(-C.dk*cuR); if(C.rch>0)cuSw*=wReach(cuR,C.rch);   /* #482 polish 10.2 Falloff and Radius (C30), as on Ripple — 0 skips each */
+      var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
     /* THE GENUINE PRE-PREP CURL (queue 779) — the kernel as it was before v13.28 hoisted its constants, resolving amount /
      * wavelength / phase per call. It is the reference the tol-0 equality row measures the prepped kernel against.
      * History, because it was got wrong twice: v13.29 added `_curlLegacy` as a copy of the ALREADY-prepped curl, so the
@@ -11211,12 +11252,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * frame constant becoming a multiply by its reciprocal, which is exact for the values involved.
    * These three were the 4th, 5th and 11th dearest effects of 198 (curl 33.9 ms, fractalwarp 28.3,
    * tunnel 21.0, measured at half resolution by `tools/_phoneprobe.py --sweep`). */
-  WARP_FX.curl.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  /* FALLOFF AND RADIUS for Ripple and Curl (#482 polish 10.2, backlog C30 — EFFECTS-PLAN.md listed a falloff as shipped and
+     there was none). Falloff `decay` 0–100 %: the strength × exp(−decay/25 · r/maxR), so 100 leaves e^-4 ≈ 2 % at the frame's
+     half-diagonal. Radius `reach` 0–200 % of that half-diagonal, 0 = no limit (see wReach). Both are folded into two numbers
+     here — `dk` per plate px and `rch` in plate px, both 0 when off — which double as the shader's uniforms. */
+  function wDecayReach(p, t, maxR) {
+    let dc = p.decay == null ? 0 : FM.evalProp(p.decay, t); if (!(dc > 0)) dc = 0; if (dc > 100) dc = 100;
+    let rc = p.reach == null ? 0 : FM.evalProp(p.reach, t); if (!(rc > 0)) rc = 0; if (rc > 200) rc = 200;
+    return { dk: dc > 0 && maxR > 0 ? dc / 25 / maxR : 0, rch: rc > 0 ? maxR * rc / 100 : 0 };
+  }
+  WARP_FX.curl.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     var ccx = wCx(p, t, W, cx), ccy = wCy(p, t, H, cy);
     var amt = fparam(p, 'amount', 0.5, t); if (amt < -1) amt = -1; if (amt > 1) amt = 1;
     var wl = Math.max(1, (p.wavelength == null ? 40 : Math.max(1, FM.evalProp(p.wavelength, t))) * (ps || 1));
-    var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph };
+    var sd = wSpeedDeg(p, t, tl), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed
+    var ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
+    var dr = wDecayReach(p, t, maxR);
+    return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph, dk: dr.dk, rch: dr.rch };
   };
 
   WARP_FX.innerpinch.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -11228,13 +11280,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { a: ip_a, cx: ipCx, cy: ipCy, rad: ip_rad };
   };
 
-  WARP_FX.ripple.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  WARP_FX.ripple.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     var k = ps || 1;
     var rcx = wCx(p, t, W, cx), rcy = wCy(p, t, H, cy);
     var amp = (FM.evalProp(p.amount, t) || 0) * k;
     var wl = (p.wavelength == null ? 20 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
-    var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: rcx, cy: rcy, amp: amp, wl: wl, ph: ph };
+    var sd = wSpeedDeg(p, t, tl), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed
+    var ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
+    var dr = wDecayReach(p, t, maxR);   // #482 polish 10.2: Falloff and Radius — maxR is the plate's, so they scale with it
+    return { cx: rcx, cy: rcy, amp: amp, wl: wl, ph: ph, dk: dr.dk, rch: dr.rch };
   };
 
   WARP_FX.kaleidoscope.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -11293,6 +11347,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'vec2 dxy = xy - vec2(u_cx, u_cy);',
     'float r = max(length(dxy), 1e-6);',
     'float off = u_amp * sin(r / u_wl - u_ph);',
+    'if (u_dk > 0.0) off *= exp(-u_dk * r);',      // #482 polish 10.2 Falloff — the kernel's line, transcribed
+    'if (u_rch > 0.0) off *= wReach(r, u_rch);',   // #482 polish 10.2 Radius (wReach is in gl-warp.js's prelude)
     'return xy + (dxy / r) * off;'
   ].join('\n');
 
@@ -11517,6 +11573,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'float r = length(dxy);',
     'if (r < 1e-6) return c;',
     'float sw = u_amt * 0.6 * sin(r / u_wl - u_ph);',
+    'if (u_dk > 0.0) sw *= exp(-u_dk * r);',       // #482 polish 10.2 Falloff and Radius, as the kernel
+    'if (u_rch > 0.0) sw *= wReach(r, u_rch);',
     'float a = atan(dxy.y, dxy.x) + sw;',
     'return c + vec2(cos(a), sin(a)) * r;'
   ].join('\n');
@@ -11599,12 +11657,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { a: tnA, ia: 1 - tnA, cx: tnCx, cy: tnCy, rad2: tnRad * tnRad };
   };
 
-  WARP_FX.wave.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  WARP_FX.wave.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     const k = ps || 1;
     const amp = (FM.evalProp(p.amount, t) || 0) * k;
     const wl = (p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
     const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
-    const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+    const sd = wSpeedDeg(p, t, tl), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed, on the clip clock
+    const ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
     const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
     const SX = new Float64Array(H), SY = new Float64Array(W);
     for (let y = 0; y < H; y++) SX[y] = amp * Math.sin(y / wl + ph);          // the x shift, by ROW

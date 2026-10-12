@@ -124,6 +124,11 @@
     '  float last = n - 1.0, m = 2.0 * last;',
     '  float q = mod(mod(v, m) + m, m);',
     '  return q > last ? m - q : q;',
+    '}',
+    // compositor.js wReach (#482 polish 10.2) — Ripple and Curl's Radius: full out to 3/4 of R, a smoothstep to nothing at R.
+    'float wReach(float r, float R){',
+    '  float u = clamp((R - r) / (0.25 * R), 0.0, 1.0);',
+    '  return u * u * (3.0 - 2.0 * u);',
     '}'
   ].join('\n');
 

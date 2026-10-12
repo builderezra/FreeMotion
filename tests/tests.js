@@ -124761,4 +124761,135 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* The GPU half of a warp item, shared by 10.2 and 10.3: each case on a 420×420 picture (over gl-warp's size floor) on the CPU
+     and on the GPU, at time t. The measure and the 0.5 % are the ported-warp test's. CONTROLS: stats prove which path ran, and
+     each case must draw differently on the GPU from the same warp without the case's new keys (`plainOf`), or a shader that
+     ignored them would pass by agreeing with a CPU that ignored them too. Returns the failures. */
+  function w10gpuCases(cases, t, plainOf) {
+    const R = FM.fxRegistry, W = 420, H = 420, made = [], keep = { noGL: FM._noGL, noCh: FM._noGLChain }, bad = [];
+    const fx = (type, p) => { const e = R.makeInstance(type); Object.assign(e.params, p || {}); return e; };
+    const pic = w10pic('_48210gpu2', W, H, (x, y) => [Math.round(x * 255 / (W - 1)), ((x >> 5) + (y >> 5)) & 1 ? 230 : 30, Math.round(y * 255 / (H - 1)), 255], made);
+    const shot = (effects, gl) => { FM._noGL = !gl; FM._noGLChain = true; FM.glWarp._reset(); const r = _986shot([pic(effects)], t, W, H); r.stats = FM.glWarp.stats(); return r; };
+    const big = (a, b) => { let n = 0; for (let i = 0; i < a.d.length; i += 4) { const e = Math.max(Math.abs(a.d[i] - b.d[i]), Math.abs(a.d[i + 1] - b.d[i + 1]), Math.abs(a.d[i + 2] - b.d[i + 2]), Math.abs(a.d[i + 3] - b.d[i + 3])); if (e > 24) n++; } return 100 * n / (a.d.length / 4); };
+    try {
+      for (const [type, p] of cases) {
+        const label = type + ' ' + JSON.stringify(p);
+        const cpu = shot([fx(type, p)], false);
+        if (cpu.stats.gpu !== 0) throw new Error('FM._noGL did not keep ' + label + ' on the CPU');
+        const gpu = shot([fx(type, p)], true);
+        if (!(gpu.stats.gpu > 0)) throw new Error('the GPU path did not run for ' + label + ' (' + gpu.stats.reason + ') - a shader that fails to compile falls back to the CPU and would pass this comparison');
+        const gpu0 = shot([fx(type, plainOf(p))], true);
+        if (w10same(gpu, gpu0)) bad.push('CONTROL: on the GPU ' + label + ' draws exactly what it draws without its new keys - the shader ignores them');
+        const pct = big(cpu, gpu);
+        if (pct > 0.5) bad.push(label + ': the GPU differs from the CPU on ' + pct.toFixed(3) + ' % of pixels');
+      }
+    } finally {
+      FM._noGL = keep.noGL; FM._noGLChain = keep.noCh; FM.glWarp._reset();
+      made.forEach(id => FM.media.remove(id));
+    }
+    return bad;
+  }
+
+  /* 10.2 WAVE, RIPPLE AND CURL (C30). The waves moved only if Phase was keyframed by hand, and Ripple and Curl ran at full height
+     to the frame's corners — EFFECTS-PLAN.md listed a falloff as shipped and there was none. Measured on the kernels under node
+     (200×200, half-diagonal 141.4): Ripple Height 20, Spacing 6 peaks at 20.0 both near the centre (r 4–44) and toward the corner
+     (the last 40 px of the half-diagonal) today; with Falloff 100, 15.5 and 1.08 — 7 %. Curl's swirl, 0.48 rad at both today,
+     goes to 0.345 and 0.020 (6 %). Radius 50 leaves exactly 0 past 71 px and the centre untouched. */
+  const W10_NEW2 = { wave: { speed: 0 }, ripple: { speed: 0, decay: 0, reach: 0 }, curl: { speed: 0, decay: 0, reach: 0 } };
+  test('482 10.2 Wave, Ripple and Curl - Ripple Falloff 100 leaves the corner under a tenth of the height near the centre where today they match, Curl the same, Radius stops the rings, Wave speed travels all three on the clip clock and a keyframed speed by its integral, and saved ones draw as before', { item: '482', budgetMs: 60000 }, function () {
+    const X = FM._warpFx, R = FM.fxRegistry, bad = [];
+    const W = 200, H = 200, cx = 100, cy = 100, maxR = Math.hypot(cx, cy);
+    const prep = (k, p, t, tl) => X[k].prep(W, H, cx, cy, maxR, p, t, 1, tl);
+    const map = (k, p, t, tl, x, y) => X[k](x, y, W, H, cx, cy, maxR, p, t, 1, prep(k, p, t, tl));
+    /* the largest move over a band of radii along the given angles — a ring's height is its peak, wherever the sine puts it */
+    const band = (k, p, r0, r1, angs, meas) => { let m = 0; const pre = prep(k, p, 0.5, 0.5);
+      angs.forEach(a => { for (let r = r0; r <= r1; r += 0.25) { const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a); m = Math.max(m, meas(x, y, X[k](x, y, W, H, cx, cy, maxR, p, 0.5, 1, pre))); } });
+      return m; };
+    const disp = (x, y, q) => Math.hypot(q[0] - x, q[1] - y);
+    const turn = (x, y, q) => { let d = Math.atan2(q[1] - cy, q[0] - cx) - Math.atan2(y - cy, x - cx); while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return Math.abs(d); };
+    const MID = [0, Math.PI / 4, Math.PI / 2, Math.PI], CORNER = [Math.PI / 4];
+    /* 1. THE ROWS, at the old look, filled at the old look, kept by the load sanitiser */
+    Object.keys(W10_NEW2).forEach(type => Object.keys(W10_NEW2[type]).forEach(k => {
+      const pd = (R.paramsOf(type) || []).filter(q => q.key === k)[0], want = W10_NEW2[type][k];
+      if (!pd) { bad.push(type + ' has no ' + k + ' row'); return; }
+      if (pd.default !== want || R.makeInstance(type).params[k] !== want) bad.push('a new ' + type + ' starts at ' + k + ' ' + R.makeInstance(type).params[k] + ', not ' + want);
+      if (FM._fxFillValue(type, k) !== want) bad.push('a saved ' + type + ' with no ' + k + ' is filled with ' + FM._fxFillValue(type, k));
+    }));
+    const lay = [{ id: 'l48210r', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'ripple', enabled: true, params: { amount: 20, speed: -90, decay: 40, reach: 120 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const kept = lay[0].effects[0].params;
+    if (kept.speed !== -90 || kept.decay !== 40 || kept.reach !== 120) bad.push('a saved Ripple speed, Falloff and Radius come back from the load sanitiser as ' + JSON.stringify(kept));
+    /* 2. FALLOFF — the backlog's test, on Ripple; and Curl's swirl */
+    const RP = { amount: 20, wavelength: 6, phase: 0 }, CP = { amount: 0.8, wavelength: 8, phase: 0 };
+    const r0c = band('ripple', RP, 4, 44, MID, disp), r0k = band('ripple', RP, maxR - 41, maxR - 1, CORNER, disp);
+    if (!(r0c > 18 && r0k > 0.9 * r0c)) throw new Error('CONTROL: without Falloff the ripple should peak alike near the centre and toward the corner (' + r0c.toFixed(2) + ', ' + r0k.toFixed(2) + ')');
+    const r1c = band('ripple', Object.assign({ decay: 100 }, RP), 4, 44, MID, disp), r1k = band('ripple', Object.assign({ decay: 100 }, RP), maxR - 41, maxR - 1, CORNER, disp);
+    if (!(r1k < 0.1 * r1c)) bad.push('Ripple Falloff 100 still lifts the corner ' + r1k.toFixed(2) + ' px against ' + r1c.toFixed(2) + ' near the centre - not under a tenth (C30)');
+    if (!(r1c > 10)) bad.push('Ripple Falloff 100 flattened the rings near the centre too (' + r1c.toFixed(2) + ' px)');
+    const c0c = band('curl', CP, 4, 44, MID, turn), c0k = band('curl', CP, maxR - 41, maxR - 1, CORNER, turn);
+    if (!(c0k > 0.9 * c0c)) throw new Error('CONTROL: without Falloff the curl should swirl alike near the centre and toward the corner (' + c0c.toFixed(3) + ', ' + c0k.toFixed(3) + ')');
+    const c1c = band('curl', Object.assign({ decay: 100 }, CP), 4, 44, MID, turn), c1k = band('curl', Object.assign({ decay: 100 }, CP), maxR - 41, maxR - 1, CORNER, turn);
+    if (!(c1k < 0.1 * c1c && c1c > 0.2)) bad.push('Curl Falloff 100 swirls the corner ' + c1k.toFixed(3) + ' rad against ' + c1c.toFixed(3) + ' near the centre (C30)');
+    /* 3. RADIUS 50 = 70.7 px: nothing at all beyond it, the full ripple inside three quarters of it */
+    const beyond = band('ripple', Object.assign({ reach: 50 }, RP), 71, maxR - 1, [0.3, Math.PI / 4], disp);
+    if (beyond !== 0) bad.push('Ripple Radius 50 still moves pixels ' + beyond.toFixed(3) + ' px beyond it');
+    const inner = band('ripple', Object.assign({ reach: 50 }, RP), 4, 52, MID, disp), inner0 = band('ripple', RP, 4, 52, MID, disp);
+    if (inner !== inner0) bad.push('Ripple Radius 50 changed the rings inside it (' + inner0 + ' -> ' + inner + ')');
+    /* (a turn of 0 still rebuilds the point through cos and sin, so the angle comes back within float error of 0, not 0) */
+    const cb = band('curl', Object.assign({ reach: 50 }, CP), 71, maxR - 1, [0.3, Math.PI / 4], turn);
+    if (!(cb < 1e-9)) bad.push('Curl Radius 50 still swirls ' + cb + ' rad beyond it');
+    /* 4. WAVE SPEED: 90 °/s one second into the clip is Phase 90 at its start, exactly; a speed keyframed 0 → 180 over two
+          seconds has run 180° by then, which is a steady 90 at two seconds; at the clip's first frame it has done nothing */
+    const pts = [[17, 23], [100, 100], [150, 40], [60, 170], [199, 0], [3, 120]];
+    const ramp = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 180, e: 'linear' }] };
+    ['wave', 'ripple', 'curl'].forEach(k => {
+      const base = o => Object.assign({}, k === 'wave' ? { amount: 25, wavelength: 20, vertical: 40 } : (k === 'ripple' ? RP : CP), o);
+      let still = 0, d1 = 0, d2 = 0, d3 = 0;
+      pts.forEach(([x, y]) => {
+        const s0 = map(k, base({}), 0.5, 0.5, x, y), s1 = map(k, base({}), 2.5, 2.5, x, y);
+        still = Math.max(still, Math.abs(s0[0] - s1[0]), Math.abs(s0[1] - s1[1]));
+        const a = map(k, base({ speed: 90 }), 3.7, 1, x, y), b = map(k, base({ phase: 90 }), 3.7, 0, x, y), z = map(k, base({}), 3.7, 1, x, y);
+        d1 = Math.max(d1, Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])); d3 = Math.max(d3, Math.abs(a[0] - z[0]), Math.abs(a[1] - z[1]));
+        const c = map(k, base({ speed: ramp }), 2, 2, x, y), d = map(k, base({ speed: 90 }), 2, 2, x, y);
+        d2 = Math.max(d2, Math.abs(c[0] - d[0]), Math.abs(c[1] - d[1]));
+        const f = map(k, base({ speed: 300 }), 1.2, 0, x, y), g = map(k, base({}), 1.2, 0, x, y);
+        if (f[0] !== g[0] || f[1] !== g[1]) bad.push(k + ': Wave speed moved the waves on the clip\'s first frame');
+      });
+      if (still !== 0) bad.push('CONTROL: ' + k + ' with no Wave speed moved between 0.5 s and 2.5 s');
+      if (!(d3 > 0.5)) bad.push(k + ': Wave speed 90 has not moved the waves one second into the clip (' + d3.toFixed(3) + ' px)');
+      if (d1 !== 0) bad.push(k + ': Wave speed 90 one second in is ' + d1 + ' px from Phase 90 at the start - it should be the same phase exactly');
+      if (d2 > 1e-6) bad.push(k + ': a Wave speed keyframed 0 -> 180 over 2 s is ' + d2 + ' px from a steady 90 at 2 s - it is not integrated');
+    });
+    /* 5. THE CLIP CLOCK, through the renderer: a Ripple with Wave speed on a clip starting at 1 s draws its first frame exactly as
+          one without; half a second later it has moved. */
+    const made = [], noGL = FM._noGL;
+    FM._noGL = true;
+    try {
+      const pic = w10pic('_48210rip', 160, 120, (x, y) => [((x >> 3) + (y >> 3)) & 1 ? 230 : 20, x, y, 255], made);
+      const on = (o, t) => { const e = R.makeInstance('ripple'); Object.assign(e.params, o); const L = pic([e]); L.start = 1; L.duration = 3; return _986shot([L], t, 160, 120); };
+      if (!w10same(on({ speed: 120 }, 1), on({}, 1))) bad.push('a Ripple with Wave speed on a clip that starts at 1 s has already moved on its first frame - it runs on the project clock');
+      if (w10same(on({ speed: 120 }, 1.5), on({}, 1.5))) bad.push('a Ripple with Wave speed 120 draws the same picture as a still one half a second into the clip');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    /* 6. SAVED ONES: a Ripple and a Curl with none of the new keys map every point exactly as the bodies kept from before their
+          preps (FM._warpRef) — the pre-10.2 arithmetic, bit for bit */
+    let off = 0;
+    for (let y = 0; y < H; y += 7) for (let x = 0; x < W; x += 7) {
+      const rp = { amount: 22, wavelength: 20, phase: 30 }, cp = { amount: 0.5, wavelength: 40, phase: 30 };
+      const a = map('ripple', rp, 0.5, 0.5, x, y), b = FM._warpRef.ripple(x, y, W, H, cx, cy, maxR, rp, 0.5, 1);
+      const c = map('curl', cp, 0.5, 0.5, x, y), d = FM._warpRef.curl(x, y, W, H, cx, cy, maxR, cp, 0.5, 1);
+      if (a[0] !== b[0] || a[1] !== b[1] || c[0] !== d[0] || c[1] !== d[1]) off++;
+    }
+    if (off) bad.push(off + ' points of a saved Ripple or Curl map differently from before');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('482 10.2 Wave, Ripple and Curl - the GPU draws Wave speed, Falloff and Radius as the CPU does', { item: '482', budgetMs: 90000 }, async function () {
+    if (!FM.glWarp || !FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU half is UNTESTED: ' + (FM.glWarp && FM.glWarp.stats().reason));
+    const bad = w10gpuCases([
+      ['ripple', { amount: 30, wavelength: 10, decay: 100 }], ['ripple', { amount: 30, wavelength: 10, reach: 60 }], ['ripple', { speed: 300 }],
+      ['curl', { decay: 80, reach: 120 }], ['curl', { speed: -150 }], ['wave', { speed: 200 }]
+    ], 1.3, p => { const q = Object.assign({}, p); delete q.speed; delete q.decay; delete q.reach; return q; });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
