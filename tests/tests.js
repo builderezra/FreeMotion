@@ -124985,4 +124985,71 @@
     if (tc({ mode: 3, decimals: 0 }, 12.25, 30) !== '12s' || tc({ mode: 3, decimals: 3 }, 12.5, 30) !== '12.500s') throw new Error('Seconds with Decimals 0 / 3 reads ' + tc({ mode: 3, decimals: 0 }, 12.25, 30) + ' / ' + tc({ mode: 3, decimals: 3 }, 12.5, 30));
     if (tc({ mode: 4, dir: 1, offset: 3600 }, 1.5, 30) !== '00:59:58:15') throw new Error('HH:MM:SS:FF counting down from an hour reads ' + tc({ mode: 4, dir: 1, offset: 3600 }, 1.5, 30) + ' at 1.5 s');
   });
+
+  /* 12.5 BORDER FRAME: Style (Solid / Dashed / Dotted) with Dash length and Gap, Draw on, Smooth corners. Pinned on the frame
+     (the adjustment path, no box) and on a layer's box (the per-layer path hands the kernel bb), at three plate scales. */
+  const B12BF_NEW = { style: 0, dash: 20, gap: 10, progress: 100, smooth: 0 };
+  const B12BF_CFG = { def: {}, wide: { width: 30 }, inset: { inset: 6 }, round: { radius: 12 }, faint: { opacity: 50 }, all: { radius: 20, inset: 3, opacity: 70, width: 14 }, kf: { width: b12Kf(2, 40) } };
+  const B12BF_PIN = {   // fc8866f1, before the edit: the frame | the box x 9, y 7, w W-23, h H-15
+    def: 'be7a6497.be7a6497/e8873f5f.e8873f5f/8f1e6cc1.8f1e6cc1 34d5a679.34d5a679/c0bbec45.c0bbec45/49edff49.49edff49 | b2540121.b2540121/98c2b705.98c2b705/9d0f42a5.9d0f42a5 68ce5a25.68ce5a25/495056e3.495056e3/6d74f546.6d74f546',
+    wide: '74237ae9.74237ae9/bcc8db3f.bcc8db3f/6db9b99e.6db9b99e 1dfadfad.1dfadfad/f84bd8fd.f84bd8fd/11949431.11949431 | d9bc5685.d9bc5685/485ccf20.485ccf20/d11b68f9.d11b68f9 d8ec31e2.d8ec31e2/f683840a.f683840a/a97ace36.a97ace36',
+    inset: '17aa32c4.17aa32c4/14160db6.14160db6/61c5894c.61c5894c f5fc56d4.f5fc56d4/2e1250cd.2e1250cd/206cf23a.206cf23a | 2d0fb85c.2d0fb85c/da89fa09.da89fa09/c8a86961.c8a86961 e802ed7f.e802ed7f/6aa307e9.6aa307e9/0cb368f6.0cb368f6',
+    round: '7084f1b9.7084f1b9/0e593d55.0e593d55/461e7760.461e7760 9fe12850.9fe12850/c118114c.c118114c/5b33dd11.5b33dd11 | 38525180.38525180/cb523705.cb523705/1ea52011.1ea52011 8c0f4a6c.8c0f4a6c/4f567f22.4f567f22/37dc6b9e.37dc6b9e',
+    faint: '866e70bd.866e70bd/d865ab98.d865ab98/bd9a61dd.bd9a61dd c5ca140b.c5ca140b/a384d79a.a384d79a/92a61b82.92a61b82 | af34e3a4.af34e3a4/43d357d1.43d357d1/f2dc50db.f2dc50db ca028749.ca028749/8843dd83.8843dd83/f25c3841.f25c3841',
+    all: 'f18ee7bb.f18ee7bb/4b603593.4b603593/17cca31e.17cca31e c02ccf94.c02ccf94/4c5b03db.4c5b03db/5125581f.5125581f | 62176669.62176669/972575f3.972575f3/5de14c5f.5de14c5f 9c133599.9c133599/4c3587a0.4c3587a0/fd7e60c0.fd7e60c0',
+    kf: '83252f4a.74237ae9/e8873f5f.29fbc8ae/8f1e6cc1.3c717721 5e448ca1.9b2c02ed/c0bbec45.249882bf/49edff49.96228ee5 | 037f6355.d9bc5685/98c2b705.42de46ec/9d0f42a5.f4c1cb21 ddeb0ac6.f817693f/495056e3.281018e9/6d74f546.30d146c2' };
+  const b12BorderShots = p => b12Shots((q, W, H, t, ps) => b12Run('border', q, W, H, t, ps), p) + ' | ' +
+    b12Shots((q, W, H, t, ps) => { const d = b12Plate(W, H); FM._FX_TABLES.PIXEL_FX.border(d, W, H, q, t, ps, { x: 9, y: 7, w: W - 23, h: H - 15 }); return d; }, p);
+
+  test('482 12.5 Border Frame - Style, Dash length, Gap, Draw on and Smooth corners are in the catalogue at defaults that draw the old frame, and saved and new frames draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('border', B12BF_NEW, { style: 2, dash: 40, gap: 6, progress: 35, smooth: 1 });
+    ['dash', 'gap'].forEach(k => { if (b12Row('border', k).unit !== 'px') throw new Error('Border Frame ' + k + ' is not declared in px'); });
+    if (JSON.stringify(b12Row('border', 'dash').liveWhen) !== '1' || JSON.stringify(b12Row('border', 'gap').liveWhen) !== '[1,2]') throw new Error('Dash length is not gated to Dashed, or Gap to Dashed and Dotted');
+    const moved = b12Pinned('border', B12BF_NEW, B12BF_CFG, B12BF_PIN, b12BorderShots);
+    if (moved.length) throw new Error(moved.length + ' Border Frames differ from fc8866f1 at the new defaults - a new control changed a frame he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.5 Border Frame - Draw on 50 leaves half the frame undrawn from where it starts, Dashed and Dotted break the band into dashes and round dots sized in project px, and Smooth corners anti-aliases a round corner and nothing else', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES.PIXEL_FX.border, GREY = [40, 40, 40];
+    const bf = (o, ps) => { const s = ps || 1, W = Math.round(200 * s), H = Math.round(120 * s), d = b12Flat(W, H, GREY);
+      K(d, W, H, Object.assign({ color: '#ffffff', width: 10, inset: 0, radius: 0, opacity: 100 }, o), 0, s, { x: Math.round(20 * s), y: Math.round(10 * s), w: Math.round(160 * s), h: Math.round(100 * s) }); return { d: d, W: W, H: H }; };
+    const white = r => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] === 255) n++; return n; };
+    const isW = (r, x, y) => r.d[(y * r.W + x) * 4] === 255;
+    /* CONTROL: the solid frame is the whole 10 px band round the 160 x 100 box: 160 x 100 - 140 x 80 = 4800 pixels. */
+    const n0 = white(bf({}));
+    if (n0 !== 4800) throw new Error('CONTROL: the solid frame draws ' + n0 + ' pixels, not 4800');
+    /* DRAW ON: the band is drawn clockwise from the top edge’s left end. At 50 about half of it; the top edge and the right are
+       there, the bottom’s left end and the left side are not. At 0 nothing, at 100 all of it. */
+    const half = bf({ progress: 50 }), nh = white(half);
+    if (Math.abs(nh - 2400) > 150) throw new Error('Draw on 50 drew ' + nh + ' of the frame’s 4800 pixels, not about half');
+    if (!(isW(half, 100, 14) && isW(half, 174, 60)) || isW(half, 40, 104) || isW(half, 24, 60)) throw new Error('Draw on 50 drew the wrong half: top ' + isW(half, 100, 14) + ', right ' + isW(half, 174, 60) + ', bottom-left ' + isW(half, 40, 104) + ', left ' + isW(half, 24, 60));
+    if (white(bf({ progress: 0 })) !== 0) throw new Error('Draw on 0 still drew ' + white(bf({ progress: 0 })) + ' pixels');
+    if (!b12Same(bf({ progress: 100, style: 0 }).d, bf({}).d)) throw new Error('Draw on 100 is not the plain frame');
+    let prev = -1; for (let q = 0; q <= 100; q += 10) { const n = white(bf({ progress: q })); if (n < prev) throw new Error('Draw on went backwards: ' + n + ' pixels at ' + q + ' after ' + prev); prev = n; }
+    /* DASHED, 20 on / 10 off: along the middle of the top edge the runs of white are 20 and the gaps 10. On a half-size plate
+       they are 10 and 5 - the dashes are project px. */
+    const runs = (r, y, x0, x1) => { const out = []; let c = null, n = 0; for (let x = x0; x < x1; x++) { const w = isW(r, x, y); if (w === c) n++; else { if (c !== null) out.push((c ? '+' : '-') + n); c = w; n = 1; } } return out.slice(1, -1); };
+    const r1 = runs(bf({ style: 1 }), 15, 22, 178), r2 = runs(bf({ style: 1 }, 0.5), 7, 11, 89);
+    const bad1 = r1.filter(v => !(v === '+20' || v === '-10')), bad2 = r2.filter(v => !(v === '+10' || v === '-5'));
+    if (r1.length < 6 || bad1.length) throw new Error('Dashed 20 / 10 along the top edge runs ' + r1.join(' ') + ' - not 20 on, 10 off');
+    if (r2.length < 6 || bad2.length) throw new Error('Dashed 20 / 10 on a half-size plate runs ' + r2.join(' ') + ' - not 10 on, 5 off');
+    const nd = white(bf({ style: 1 })) / n0;
+    if (Math.abs(nd - 2 / 3) > 0.05) throw new Error('Dashed 20 / 10 drew ' + (nd * 100).toFixed(1) + ' % of the band, not about two thirds');
+    /* DOTTED: round dots as wide as the band, one every band + gap (10 + 10). A dot’s middle is drawn and its bounding square’s
+       corner is not (it is round), and about pi/4 x 10/20 of the band is ink. */
+    const dot = bf({ style: 2 }), nt = white(dot) / n0;
+    if (Math.abs(nt - Math.PI / 8) > 0.06) throw new Error('Dotted drew ' + (nt * 100).toFixed(1) + ' % of the band, not about ' + (Math.PI / 8 * 100).toFixed(1) + ' %');
+    const tops = runs(dot, 15, 22, 178);
+    if (tops.length < 6 || tops.some(v => !(v === '+9' || v === '+10' || v === '+11' || v === '-9' || v === '-10' || v === '-11'))) throw new Error('Dotted along the top edge runs ' + tops.join(' ') + ' - not dots 10 wide 10 apart');
+    let cx = -1; for (let x = 60; x < 120; x++) if (isW(dot, x, 15) && !isW(dot, x - 1, 15)) { cx = x + 5; break; }
+    if (!(cx > 0 && isW(dot, cx, 11) && isW(dot, cx, 18) && !isW(dot, cx - 5, 10) && !isW(dot, cx + 4, 19))) throw new Error('a dot is not round: middle column ' + isW(dot, cx, 11) + '/' + isW(dot, cx, 18) + ', square corners ' + isW(dot, cx - 5, 10) + '/' + isW(dot, cx + 4, 19));
+    /* SMOOTH CORNERS. CONTROL: a hard round corner (radius 30) has no pixel between the layer and the frame. Smoothed, its
+       edges carry part-covered pixels, and only there: square corners smoothed are the old frame byte for byte. */
+    const mids = r => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] > 40 && r.d[i] < 255) n++; return n; };
+    if (mids(bf({ radius: 30 })) !== 0) throw new Error('CONTROL: the hard round corner already has ' + mids(bf({ radius: 30 })) + ' part-covered pixels');
+    const sm = bf({ radius: 30, smooth: 1 });
+    if (mids(sm) < 40) throw new Error('Smooth corners on a 30 px radius left only ' + mids(sm) + ' part-covered pixels - the corner is still stair-stepped');
+    for (let y = 0; y < sm.H; y++) for (let x = 0; x < sm.W; x++) { const v = sm.d[(y * sm.W + x) * 4]; if (v > 40 && v < 255 && x > 60 && x < 140) throw new Error('Smooth corners softened a straight edge at ' + x + ',' + y); }
+    if (!b12Same(bf({ smooth: 1, opacity: 99.999 }).d, bf({ opacity: 99.999 }).d)) throw new Error('Smooth corners changed a frame with square corners');
+  });
 })();

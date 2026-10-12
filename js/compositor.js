@@ -1044,6 +1044,13 @@ window.FM = window.FM || {};
       { key: 'inset', label: 'Inset', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'radius', label: 'Corner radius', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'opacity', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #482 12.5 — a dashed or dotted frame, a frame that draws itself on (keyframe Draw on 0 → 100), and anti-aliased round
+         corners. Solid, 100 % and Off are the old frame, drawn by the old loops. The kernel scales Dash and Gap by ps itself. */
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Solid'], [1, 'Dashed'], [2, 'Dotted']] },
+      { key: 'dash', label: 'Dash length', min: 2, max: 200, step: 1, def: 20, unit: 'px', overriddenBy: 'style', liveWhen: 1 },
+      { key: 'gap', label: 'Gap', min: 2, max: 200, step: 1, def: 10, unit: 'px', overriddenBy: 'style', liveWhen: [1, 2] },
+      { key: 'progress', label: 'Draw on', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'smooth', label: 'Smooth corners', def: 0, options: [[0, 'Off'], [1, 'On']] },
     ] },
     // ---- batch 21 ----
     { type: 'faded', label: 'Faded Film', params: [
@@ -8903,7 +8910,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var bdIn=p.inset==null?0:FM.evalProp(p.inset,t); if(bdIn<0)bdIn=0; if(bdIn>200)bdIn=200;
       var bdRad=p.radius==null?0:FM.evalProp(p.radius,t); if(bdRad<0)bdRad=0; if(bdRad>200)bdRad=200;
       var bdOp=p.opacity==null?100:FM.evalProp(p.opacity,t); if(bdOp<0)bdOp=0; if(bdOp>100)bdOp=100; if(bdOp<=0)return;
-      if(bdIn===0&&bdRad===0&&bdOp===100){
+      // #482 12.5: Style, Draw on, Smooth corners — any of them off its default goes to border12 below
+      var bdSty=p.style==null?0:(Math.round(FM.evalProp(p.style,t))|0);
+      var bdDraw=p.progress==null?100:FM.evalProp(p.progress,t); if(!(bdDraw>0))return; if(bdDraw>100)bdDraw=100;
+      var bdSm=(p.smooth==null?0:(Math.round(FM.evalProp(p.smooth,t))|0))===1;
+      var bdNew=(bdSty===1||bdSty===2)||bdDraw<100||bdSm;
+      if(bdIn===0&&bdRad===0&&bdOp===100&&!bdNew){
         for(var y=y0;y<y1;y++){ var ey=(y<y0+w||y>=y1-w); var row=y*W*4; for(var x=x0;x<x1;x++){ if(ey||x<x0+w||x>=x1-w){ var i=row+x*4; d[i]=cr; d[i+1]=cg; d[i+2]=cb; if(d[i+3]<255)d[i+3]=255; } } }
         return;
       }
@@ -8912,6 +8924,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var bmx=Math.floor(Math.min(bx1-bx0,by1-by0)/2); var bw=w>bmx?bmx:w; if(bw<1) return;
       var br=Math.round(bdRad*(ps||1)); var brMax=Math.floor(Math.min(bx1-bx0,by1-by0)/2); if(br>brMax)br=brMax;
       var bk=bdOp/100;
+      if(bdNew){
+        var bdDash=p.dash==null?20:FM.evalProp(p.dash,t); if(!(bdDash>=2))bdDash=2; if(bdDash>200)bdDash=200;
+        var bdGap=p.gap==null?10:FM.evalProp(p.gap,t); if(!(bdGap>=2))bdGap=2; if(bdGap>200)bdGap=200;
+        return border12(d,W,H,bx0,by0,bx1,by1,bw,br,bk,cr,cg,cb,bdSty,bdDash*(ps||1),bdGap*(ps||1),bdDraw/100,bdSm);
+      }
       /* Rounded corners come from a distance test against the inner corner circles, which is the same
          idea as the round stroke in round 21 — inside the outer radius and outside the inner one is
          the band, and everything else is left alone. */
@@ -9431,6 +9448,67 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let x0 = W, y0 = H, x1 = -1, y1 = -1;
     for (let y = 0; y < H; y++) { const row = y * W * 4; for (let x = 0; x < W; x++) { if (d[row + x * 4 + 3] === 0) continue; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
     return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  }
+  /* Border Frame's Style, Draw on and Smooth corners (#482 12.5), on the frame the old general loop draws — the same band
+     ([bx0,bx1) x [by0,by1), bw wide, corner radius br, the same integer corner test) at strength bk. Each band pixel finds
+     where it sits along the frame: s, the distance round the band's CENTRE LINE clockwise from the top edge's left end, and
+     nrm, how far off that line it is. Dashed keeps (s mod (dash + gap)) < dash; Dotted draws round dots as wide as the band,
+     one every (band + gap); Draw on keeps s below that share of the whole way round (a dot whole or not at all). Smooth
+     corners gives the round corners' two edges, and the dots, half a pixel of coverage either side instead of a hard step. */
+  function border12(d, W, H, bx0, by0, bx1, by1, bw, br, bk, cr, cg, cb, sty, dash, gap, draw, smooth) {
+    const h = bw / 2, L = bx0 + h, T = by0 + h, R = bx1 - h, B = by1 - h, rc = Math.max(0, br - h);
+    const lt = Math.max(0, R - L - 2 * rc), lr = Math.max(0, B - T - 2 * rc), qa = Math.PI / 2 * rc;
+    const s1 = lt, s2 = s1 + qa, s3 = s2 + lr, s4 = s3 + qa, s5 = s4 + lt, s6 = s5 + qa, s7 = s6 + lr, P = s7 + qa;
+    const lim = draw >= 1 ? Infinity : draw * P, per = sty === 1 ? dash + gap : bw + gap;   // 100 %: every pixel, the seam's included
+    const clamp01 = v => (v < 0 ? 0 : (v > 1 ? 1 : v));
+    for (let y = by0; y < by1; y++) {
+      for (let x = bx0; x < bx1; x++) {
+        let cov, dxc = 0, dyc = 0;
+        if (br > 0) {
+          if (x < bx0 + br) dxc = bx0 + br - x; else if (x >= bx1 - br) dxc = x - (bx1 - br - 1);
+          if (y < by0 + br) dyc = by0 + br - y; else if (y >= by1 - br) dyc = y - (by1 - br - 1);
+        }
+        if (br > 0 && dxc > 0 && dyc > 0) {
+          const dd = Math.sqrt(dxc * dxc + dyc * dyc);
+          if (smooth) cov = clamp01(br + 0.5 - dd) * clamp01(dd - (br - bw) + 0.5);
+          else cov = dd > br ? 0 : (dd > br - bw ? 1 : 0);
+        } else cov = (y < by0 + bw || y >= by1 - bw || x < bx0 + bw || x >= bx1 - bw) ? 1 : 0;
+        if (cov <= 0) continue;
+        const px = x + 0.5, py = y + 0.5;
+        let s, nrm;
+        const arc = (cx, cy, s0, a0) => { let a = Math.atan2(py - cy, px - cx); if (a < a0 - 1e-9) a += 2 * Math.PI; s = s0 + rc * Math.max(0, Math.min(Math.PI / 2, a - a0)); nrm = Math.abs(Math.hypot(px - cx, py - cy) - rc); };
+        if (px < L + rc && py < T + rc) arc(L + rc, T + rc, s7, Math.PI);
+        else if (px > R - rc && py < T + rc) arc(R - rc, T + rc, s1, -Math.PI / 2);
+        else if (px > R - rc && py > B - rc) arc(R - rc, B - rc, s3, 0);
+        else if (px < L + rc && py > B - rc) arc(L + rc, B - rc, s5, Math.PI / 2);
+        else {
+          nrm = Infinity;
+          if (px >= L + rc && px <= R - rc) {
+            const dt = Math.abs(py - T), db = Math.abs(py - B);
+            if (dt <= db) { nrm = dt; s = px - (L + rc); } else { nrm = db; s = s4 + (R - rc - px); }
+          }
+          if (py >= T + rc && py <= B - rc) {
+            const dl = Math.abs(px - L), dr = Math.abs(px - R);
+            if (dr < nrm && dr <= dl) { nrm = dr; s = s2 + (py - (T + rc)); }
+            else if (dl < nrm) { nrm = dl; s = s6 + (B - rc - py); }
+          }
+          if (nrm === Infinity) continue;
+        }
+        if (sty === 2) {
+          const k = Math.round((s - h) / per), along = s - (k * per + h);
+          if (k * per + h >= lim) continue;
+          const dist = Math.sqrt(along * along + nrm * nrm);
+          cov *= smooth ? clamp01(h + 0.5 - dist) : (dist <= h ? 1 : 0);
+          if (cov <= 0) continue;
+        } else {
+          if (s >= lim) continue;
+          if (sty === 1 && (s % per) >= dash) continue;
+        }
+        const a = cov * bk, i = (y * W + x) * 4;
+        if (a >= 1) { d[i] = cr; d[i + 1] = cg; d[i + 2] = cb; if (d[i + 3] < 255) d[i + 3] = 255; }
+        else { d[i] = d[i] + (cr - d[i]) * a; d[i + 1] = d[i + 1] + (cg - d[i + 1]) * a; d[i + 2] = d[i + 2] + (cb - d[i + 2]) * a; if (d[i + 3] < 255) d[i + 3] = d[i + 3] + (255 - d[i + 3]) * a; }
+      }
+    }
   }
   /* Radial Wipe with a Direction, Blades or Invert (#482 12.3). f is how far round from Start a pixel sits, 0..1, in the way
      the wedge grows; the wedge keeps f <= progress. Anticlockwise measures the other way round; Blades repeats the sweep in
