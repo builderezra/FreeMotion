@@ -124833,4 +124833,67 @@
     if (!(Math.min.apply(null, means) < steady - 5)) throw new Error('Flicker 1 never dimmed the screen by more than 5 levels: ' + means.map(v => v.toFixed(1)).join(' '));
     if (!b13Same(crt({ flicker: 1 }, grey(), 0.37), crt({ flicker: 1 }, grey(), 0.37))) throw new Error('Flicker draws the same moment differently each time - it must be a function of the moment');
   });
+
+  /* 13.3 VHS TAPE: Snow, Colour fade, Vertical hold. */
+  const B13VHS_NEW = { snow: 0, fade: 0, jitter: 0 };
+  const B13VHS_CFG = { def: {}, filter: { amount: 0.7, chromableed: 30, wobble: 4 }, still: { trackspeed: 0 }, hard: { amount: 1, tracking: 1, headswitch: 1, halo: 1, chromableed: 60 }, kf: { trackspeed: b13Kf(0.6, 2.4) } };
+  const B13VHS_PIN = {   // fc8866f1, before the edit
+    def: '527e42fe.656da5f0/ea6c4384.519fe3a8 576dbbfc.95e2fef8/fc01abe0.60b1c41b', filter: 'df71adfd.bd0a86de/81fbf02d.9bd054cc 48d4970e.454fbe67/4c621d93.e20c7a20',
+    still: '527e42fe.aa3aa6e0/ea6c4384.7804c988 576dbbfc.ad450fe7/fc01abe0.8cac39b7', hard: 'f2fa935f.3036876f/f639dd10.1efb58a2 8a90b10e.498c7baa/f249bd4d.7dae7ae4',
+    kf: '0cb309a0.7941fa6d/46768654.26603245 5e8f0727.63174f76/eb9394b6.84b84d00' };
+
+  test('482 13.3 VHS Tape - Snow, Colour fade and Vertical hold are in the catalogue at defaults that draw the old tape, and saved and new tapes and the VHS Tape recipe draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('vhstape', B13VHS_NEW, { snow: 0.4, fade: 70, jitter: 12 });
+    if (b13Row('vhstape', 'jitter').unit !== 'px' || b13Row('vhstape', 'fade').unit !== '%') throw new Error('Vertical hold is not in px or Colour fade not in % (' + b13Row('vhstape', 'jitter').unit + ', ' + b13Row('vhstape', 'fade').unit + ')');
+    b13Recipes('vhstape', B13VHS_NEW, ['vhs']);
+    const moved = b13Pinned('vhstape', B13VHS_NEW, B13VHS_CFG, B13VHS_PIN);
+    if (moved.length) throw new Error(moved.length + ' VHS Tape pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.3 VHS Tape - Colour fade 100 cuts the mean saturation by at least 30 percent, Snow fizzes a flat grey and drops out white streaks, Vertical hold jumps whole rows up or down by up to 20 px frame by frame, and each draws a moment the same way every time', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120;
+    const vhs = (over, d0, t, ps) => b13Run('vhstape', Object.assign(b13Base('vhstape', {}), over), W, H, t == null ? 0.37 : t, ps, d0);
+    /* COLOUR FADE, at the default Amount (0.7) and damage, on the colour fixture. CONTROL: Colour fade 0 is the default tape. */
+    const sat = d => { let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]); if (mx > 0) { s += (mx - mn) / mx; n++; } } return s / n; };
+    if (!b13Same(vhs({ fade: 0 }), vhs({}))) throw new Error('CONTROL: Colour fade 0 does not draw the default tape');
+    const s0 = sat(vhs({})), s100 = sat(vhs({ fade: 100 }));
+    if (!(s100 <= s0 * 0.7)) throw new Error('Colour fade 100 left the mean saturation at ' + s100.toFixed(3) + ' against ' + s0.toFixed(3) + ' - a cut of ' + (100 * (1 - s100 / s0)).toFixed(1) + ' percent, under 30');
+    if (!(sat(vhs({ fade: 50 })) < s0 && sat(vhs({ fade: 50 })) > s100)) throw new Error('Colour fade 50 does not sit between 0 and 100');
+    /* SNOW, on a flat grey with every other kind of damage off and Amount 1. CONTROL: with no Snow the grey stays flat. */
+    const clean = { amount: 1, chromableed: 0, halo: 0, wobble: 0, tracking: 0, headswitch: 0 };
+    const grey = () => b13Flat(W, H, [128, 128, 128]);
+    const spread = d => { let s = 0, s2 = 0, n = d.length / 4; for (let i = 0; i < d.length; i += 4) { s += d[i]; s2 += d[i] * d[i]; } return Math.sqrt(Math.max(0, s2 / n - (s / n) * (s / n))); };
+    if (spread(vhs(clean, grey())) > 1) throw new Error('CONTROL: a clean tape on a flat grey is not flat (spread ' + spread(vhs(clean, grey())).toFixed(2) + ')');
+    const sn = Object.assign({ snow: 1 }, clean);
+    if (!(spread(vhs(sn, grey())) > 15)) throw new Error('Snow 1 fizzed a flat grey by only ' + spread(vhs(sn, grey())).toFixed(2) + ' levels');
+    if (!b13Same(vhs(sn, grey(), 0.37), vhs(sn, grey(), 0.37))) throw new Error('Snow draws the same moment differently each time - it must be a hash of the moment');
+    if (b13Same(vhs(sn, grey(), 0.37), vhs(sn, grey(), 0.4))) throw new Error('Snow is frozen - the fizz does not change from one frame to the next');
+    /* a dropout is a run of white along a line: six pixels in a row all brighter than 215, which the fizz alone (at most +100
+       on 128, and above 215 for one pixel in fifteen) cannot make. Looked for over five frames. */
+    let runs = 0;
+    for (let f = 0; f < 5; f++) {
+      const d = vhs(sn, grey(), (f * 7 + 0.5) / 30);
+      for (let y = 0; y < H; y++) { let r = 0; for (let x = 0; x < W; x++) { r = d[(y * W + x) * 4] > 215 ? r + 1 : 0; if (r === 6) runs++; } }
+    }
+    if (!runs) throw new Error('Snow 1 dropped out no white streaks over five frames');
+    /* VERTICAL HOLD, on the colour fixture with every other kind of damage off: each frame's picture is the clean picture with
+       every row moved by the same whole number of rows (wrapping), up to 20 - and up to 10 on a half-size plate, where 20 px
+       of the picture is 10 plate rows. CONTROL: the clean tape matches itself at a move of 0. */
+    const rowsMovedBy = (d, base, w, h) => { for (let v = -20; v <= 20; v++) { let ok = true; for (let y = 0; y < h && ok; y++) { const sy = (((y - v) % h) + h) % h; for (let x = 0; x < w * 4 && ok; x++) ok = d[y * w * 4 + x] === base[sy * w * 4 + x]; } if (ok) return v; } return null; };
+    const base = vhs(clean);
+    if (rowsMovedBy(base, base, W, H) !== 0) throw new Error('CONTROL: the row matcher does not find the clean tape at a move of 0');
+    const jt = Object.assign({ jitter: 20 }, clean), moves = [];
+    for (let f = 0; f < 10; f++) {
+      const t = (f + 0.5) / 30, v = rowsMovedBy(vhs(jt, null, t), base, W, H);
+      if (v === null) throw new Error('Vertical hold at ' + t.toFixed(3) + ' s is not the clean picture moved by whole rows');
+      if (!b13Same(vhs(jt, null, t), vhs(jt, null, t))) throw new Error('Vertical hold draws the same moment differently each time');
+      moves.push(v);
+    }
+    if (new Set(moves).size < 3 || !moves.some(v => Math.abs(v) >= 5)) throw new Error('Vertical hold 20 moved the picture by ' + moves.join(', ') + ' rows over ten frames - it should jump about, by up to 20');
+    const hw = W / 2, hh = H / 2, hbase = b13Run('vhstape', Object.assign(b13Base('vhstape', {}), clean), hw, hh, 0.37, 0.5);
+    for (let f = 0; f < 10; f++) {
+      const v = rowsMovedBy(b13Run('vhstape', Object.assign(b13Base('vhstape', {}), jt), hw, hh, (f + 0.5) / 30, 0.5), hbase, hw, hh);
+      if (v === null || Math.abs(v) > 10) throw new Error('on a half-size plate Vertical hold 20 moved the picture by ' + v + ' plate rows - 20 px of the picture is 10 rows there');
+    }
+  });
 })();

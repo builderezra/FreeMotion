@@ -1582,6 +1582,13 @@ window.FM = window.FM || {};
       { key: 'tracking', label: 'Tracking band', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'trackspeed', label: 'Band speed', min: 0, max: 3, step: 0.05, def: 0.4, unit: 'Hz' },
       { key: 'headswitch', label: 'Head switch', min: 0, max: 1, step: 0.02, def: 0.6 },
+      /* #482 polish 13.3. Three more tells of a worn tape, each scaled by Amount like the rest: Snow is the grainy fizz and the
+         white dropout streaks of a tired tape; Colour fade drains the colour a tape loses over the years (towards a third of it
+         at 100 and full Amount); Vertical hold jumps the whole picture up or down by up to that many px, frame by frame, wrapping
+         like a rolling picture. All three are hashes of the 30 fps frame (no state), and all three at 0 run the old loop. */
+      { key: 'snow', label: 'Snow', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'fade', label: 'Colour fade', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'jitter', label: 'Vertical hold', min: 0, max: 20, step: 1, def: 0, unit: 'px' },
     ] },
     // ---- batch 37: the last two off the build table ----
     // Compression Crunch — what over-compression actually does: colour degrades into blocks and
@@ -5684,6 +5691,10 @@ window.FM = window.FM || {};
         return isFinite(speed) ? Math.max(0, Math.min(3, speed)) : 0;
       }) : t * trkSpd;
       const head = clamp01(p.headswitch == null ? 0.6 : FM.evalProp(p.headswitch, t)) * amt;
+      /* #482 polish 13.3 — Snow, Colour fade, Vertical hold (px, scaled to the plate here: this kernel takes `ps`). */
+      const snow = clamp01(p.snow == null ? 0 : FM.evalProp(p.snow, t)) * amt;
+      const fade = clamp01((p.fade == null ? 0 : FM.evalProp(p.fade, t)) / 100) * amt;
+      const jit = Math.max(0, Math.min(20, p.jitter == null ? 0 : FM.evalProp(p.jitter, t))) * s * amt;
       const src = fxSrc(d);
       const Y = new Float32Array(W), Cb = new Float32Array(W), Cr = new Float32Array(W);
       const k = Math.max(1, Math.round(bleed));
@@ -5692,6 +5703,15 @@ window.FM = window.FM || {};
         let h = ((yy * 7919 + frame * 104729) * 374761393) | 0;
         h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
         return ((h & 0xffff) / 65536) - 0.5;
+      };
+      // VERTICAL HOLD: this frame's jump, in whole plate rows (0 when the control is 0, so every row reads its own row)
+      let vj = 0;
+      if (jit > 0) { let h = Math.imul(frame + 7349, 374761393); h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; vj = Math.round((((h & 0xffff) / 65536) * 2 - 1) * jit); }
+      // SNOW: per-pixel luma fizz, hashed on (x, y, frame)
+      const snowAt = function (x, yy) {
+        let h = Math.imul((x * 73856093) ^ (yy * 19349663) ^ (frame * 83492791), 0x27d4eb2d); h ^= h >>> 15;
+        h = Math.imul(h, 0x165667b1); h ^= h >>> 13;
+        return (h & 0xffff) / 65536 - 0.5;
       };
       // The tracking band scrolls down and wraps well past the frame, so it is off-screen most of
       // the time — a band that is always visible reads as a stripe painted on, not as a fault.
@@ -5711,10 +5731,14 @@ window.FM = window.FM || {};
         }
         if (head > 0 && y >= headY) shift += head * W * 0.16 * (rowNoise(y + 9000) + 0.4);
         const sh = Math.round(shift);
+        const sy = vj === 0 ? y : (((y - vj) % H) + H) % H;   // the picture row this line shows (Vertical hold)
+        // a dropout: a short white streak on a few lines a frame, more of them the more Snow
+        let st0 = W, st1 = -1;
+        if (snow > 0 && rowNoise(y + 13000) + 0.5 < snow * 0.06) { st0 = Math.floor((rowNoise(y + 17000) + 0.5) * W); st1 = st0 + 2 + Math.floor((rowNoise(y + 19000) + 0.5) * W * 0.25); }
         // --- row -> YCbCr, already shifted
         for (let x = 0; x < W; x++) {
           let sx = x - sh; if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
-          const i = ((y * W) + sx) << 2;
+          const i = ((sy * W) + sx) << 2;
           const r = src[i], g = src[i + 1], b = src[i + 2];
           Y[x] = 0.299 * r + 0.587 * g + 0.114 * b;
           Cb[x] = -0.169 * r - 0.331 * g + 0.5 * b;
@@ -5731,12 +5755,14 @@ window.FM = window.FM || {};
           let yy = Y[x] + (Y[x] - s5 / n5) * halo * 1.6;   // overshoot at an edge = the tape's ringing
           let cb = sCb / nk, cr = sCr / nk;
           if (wash > 0) { yy = yy + (235 - yy) * wash * 0.35; cb *= 1 - wash * 0.8; cr *= 1 - wash * 0.8; }
+          if (fade > 0) { const fk = 1 - fade * 0.65; cb *= fk; cr *= fk; }
+          if (snow > 0) { yy += snowAt(x, y) * snow * 200; if (x >= st0 && x <= st1) yy += (250 - yy) * 0.85; }
           const o = ((y * W) + x) << 2;
           d[o] = yy + 1.402 * cr;
           d[o + 1] = yy - 0.344 * cb - 0.714 * cr;
           d[o + 2] = yy + 1.772 * cb;
           let ax = x - sh; if (ax < 0) ax = 0; else if (ax >= W) ax = W - 1;
-          d[o + 3] = src[((y * W) + ax) << 2 | 3];
+          d[o + 3] = src[((sy * W) + ax) << 2 | 3];
         }
       }
     },
