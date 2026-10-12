@@ -125079,6 +125079,10 @@
     if (b15Same(e1, e2)) throw new Error('CONTROL: Every frame draws the same at 1 s and 2.5 s although the reference changes - this test cannot see a hold');
     const h1 = shot({ sample: 1, at: 0.5 }, 1), h2 = shot({ sample: 1, at: 0.5 }, 2.5), e05 = shot({}, 0.5);
     if (!b15Same(h1, h2)) fails.push('Hold at 0.5 s draws differently at 1 s and 2.5 s (' + b15Diff(h1, h2) + ') - the transfer is not held');
+    // the backlog's own words: identical gains at t = 1 and t = 2 (the transfer the frame used, FM._mgLastGains)
+    const gainsAt = (over, t) => { shot(over, t); return JSON.stringify(FM._mgLastGains); };
+    if (gainsAt({ sample: 1, at: 0.5 }, 1) !== gainsAt({ sample: 1, at: 0.5 }, 2)) fails.push('Hold at 0.5 s applies different gains at 1 s and 2 s');
+    if (gainsAt({}, 1) === gainsAt({}, 2.5)) fails.push('CONTROL: Every frame applied the same gains at 1 s and 2.5 s');
     if (!b15Same(h1, e05)) fails.push('Hold at 0.5 s is not Every frame at 0.5 s (' + b15Diff(h1, e05) + ')');
     // an edit to the reference is a new measurement, not the old numbers — the SAME clip, drawn again after the edit
     const Lk = b15Plate(P), hold = ref => { Lk.effects = [b15Mg(ref, { sample: 1, at: 0.5 })]; return b15Px([Lk, ref], 2.5, P); };
