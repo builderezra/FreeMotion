@@ -125986,4 +125986,552 @@
     }
     if (bad.length) throw new Error('Limiter Output: ' + bad.join('; '));
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 13 — Stylize depth: Halftone, CRT, VHS Tape, Scanlines, Pixel Sort, Dither, HSL Bands ═══════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 13
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); 13.1 also answers hunt C32. The rule that makes it safe (§0.3):
+   * every new key's default is the old look, because a filter recipe gets every key it does not set from makeInstance, and a
+   * saved instance that lacks a key is filled at render time (queue 784) with the kernel's own fallback. Each item proves
+   * both against hashes of its kernel captured on fc8866f1 (the tree before the batch) BEFORE the first edit, on the fixture
+   * below, through FM._applyPixelFx. These are kernels on typed arrays — no canvas, no font, no rasteriser — so the bytes are
+   * the same on every OS and the pins are plain literals rather than pinned() tables. */
+  function b13Plate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  }
+  function b13Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b13Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b13Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  /* The kernel through FM._applyPixelFx: the same PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`, so a kernel that leaves its px params to the dispatcher is scaled as on a layer. */
+  function b13Run(type, params, W, H, t, ps, d0) { const d = d0 || b13Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out. (On fc8866f1 makeInstance has none of them, which is how
+     the pins were captured.) */
+  function b13Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Eight hashes per config: two plate sizes, the export (ps 1) and a half-size preview plate (ps 0.5), at two moments. */
+  function b13Shots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b13Hash(b13Run(type, JSON.parse(JSON.stringify(params)), W, H, t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys before the kernel runs (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new
+     instance, and every filter recipe), against the pins. */
+  function b13Pinned(type, NEW, CFG, PIN) {
+    const moved = [];
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b13Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: JSON.parse(JSON.stringify(abs)) }).params;
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = b13Shots(type, p); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default value comes
+     back from the load sanitiser as it was written. */
+  function b13Catalogue(type, NEW, SET) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l48213' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(SET)) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A library filter built on the effect carries every new key at its default (no recipe sets one). */
+  function b13Recipes(type, NEW, ids) {
+    ids.forEach(id => {
+      const box = FM.filters.makeInstance(id), kid = box && (box.effects || []).filter(e => e.type === type)[0];
+      if (!kid) throw new Error('CONTROL: the ' + id + ' filter has no ' + type + ' in it any more - this check sees nothing');
+      Object.keys(NEW).forEach(k => { if (kid.params[k] !== NEW[k]) throw new Error('the ' + id + ' filter’s ' + type + ' carries ' + k + ' = ' + kid.params[k] + ', not ' + NEW[k] + ' - a library filter would change its look'); });
+    });
+  }
+  const b13Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b13Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b13Colours = d => { const m = {}; for (let i = 0; i < d.length; i += 4) { const k = d[i] + ',' + d[i + 1] + ',' + d[i + 2]; m[k] = (m[k] || 0) + 1; } return m; };
+  const b13Mean = d => { const m = [0, 0, 0], n = d.length / 4; for (let i = 0; i < d.length; i += 4) { m[0] += d[i]; m[1] += d[i + 1]; m[2] += d[i + 2]; } return m.map(v => v / n); };
+
+  /* 13.1 HALFTONE (hunt C32): Print (Mono / Colour dots / CMYK), Ink, Paper, Smooth dots, Sample, Mix. */
+  const B13HT_NEW = { mode: 0, ink: '#000000', paper: '#ffffff', aa: 0, sample: 0, mix: 1 };
+  const B13HT_CFG = { def: {}, poster: { size: 6 }, riso: { size: 40 }, turned: { size: 9, angle: 45, gain: 1.2, shape: 2 }, odd: { size: 5, angle: 30, shape: 1 }, kf: { size: b13Kf(4, 12) } };
+  const B13HT_PIN = {   // fc8866f1, before the edit
+    def: '75f98955.75f98955/52966ff5.52966ff5 d3f9063c.d3f9063c/649be5bd.649be5bd', poster: '6838882c.6838882c/6566f04c.6566f04c 597db0ec.597db0ec/1cae4145.1cae4145',
+    riso: 'd05a00e4.d05a00e4/22cb472c.22cb472c ac42a55d.ac42a55d/1453347d.1453347d', turned: '22503145.22503145/87bdd0b4.87bdd0b4 ec41eff5.ec41eff5/b559abc4.b559abc4',
+    odd: '8e990d9d.8e990d9d/424eae7c.424eae7c 7c9eb5e5.7c9eb5e5/ad03985c.ad03985c', kf: 'c97d3e1c.ba60d9ad/6566f04c.6838882c 39cbb554.b0c62484/1cae4145.597db0ec' };
+
+  test('482 13.1 Halftone - Print, Ink, Paper, Smooth dots, Sample and Mix are in the catalogue at defaults that print the old dots, and saved and new Halftones and the Poster Print and Risograph recipes print byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('halftone', B13HT_NEW, { mode: 2, ink: '#2040a0', paper: '#f0e0c0', aa: 1.5, sample: 1, mix: 0.6 });
+    const ink = b13Row('halftone', 'ink'), paper = b13Row('halftone', 'paper');
+    if (ink.type !== 'color' || ink.overriddenBy !== 'mode' || ink.liveWhen !== 0) throw new Error('the Ink row does not say it only counts under Print Mono (type ' + ink.type + ', overriddenBy ' + ink.overriddenBy + ', liveWhen ' + ink.liveWhen + ')');
+    if (paper.type !== 'color' || paper.overriddenBy) throw new Error('the Paper row is not a plain colour row live in every Print (type ' + paper.type + ', overriddenBy ' + paper.overriddenBy + ')');
+    if (b13Row('halftone', 'aa').unit !== 'px') throw new Error('Smooth dots is not declared in px - it is a width on the picture, and the panel must say so');
+    b13Recipes('halftone', B13HT_NEW, ['poster', 'riso']);
+    const moved = b13Pinned('halftone', B13HT_NEW, B13HT_CFG, B13HT_PIN);
+    if (moved.length) throw new Error(moved.length + ' Halftone prints differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+    /* THE GENERAL PRINT AT THE OLD SETTINGS IS THE OLD PRINT: every non-default setting runs FM._halftone13, so its lattice,
+       centre, distance and radius must be the old loop's, straight and turned, round, square and diamond. */
+    if (typeof FM._halftone13 !== 'function') throw new Error('FM._halftone13 (the general print) is not reachable');
+    [[8, 0, 1.45, 0], [9, 45, 1.2, 2], [5, 30, 1.45, 1], [7, 0, 2, 1], [12, 75, 0.9, 0]].forEach(([size, angle, gain, shape]) => {
+      const want = b13Run('halftone', { size: size, angle: angle, gain: gain, shape: shape }, 97, 61, 0.5, 1), d = b13Plate(97, 61);
+      FM._halftone13(d, d.slice(), 97, 61, size, size / 2, angle, gain, shape, { mode: 0, aa: 0, avg: false, mix: 1, ink: [0, 0, 0], paper: [255, 255, 255] });
+      if (!b13Same(d, want)) throw new Error('the general print at pitch ' + size + ', angle ' + angle + ', gain ' + gain + ', shape ' + shape + ' with black ink on white paper is not the old print - its lattice has drifted from the old loop');
+    });
+  });
+
+  test('482 13.1 Halftone - Colour dots print a red picture in red dots where Mono prints black ones, CMYK builds it from coloured screens and a grey from black alone, Smooth dots soften the edge and keep the tone, Cell average stops one pixel deciding a dot, Ink and Paper recolour Mono, and Mix fades back', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64, red = [220, 40, 40], grey = [128, 128, 128];
+    const ht = (over, rgb, d0, ps) => b13Run('halftone', Object.assign(b13Base('halftone', {}), { size: 8, angle: 0, gain: 1.45, shape: 0 }, over), W, H, 0.5, ps, d0 || b13Flat(W, H, rgb));
+    const keys = m => Object.keys(m).sort().join(' ');
+    /* COLOUR DOTS. CONTROL: Mono prints a flat red picture in black dots on white - no red anywhere, which is the complaint. */
+    const mono = b13Colours(ht({}, red)), cd = b13Colours(ht({ mode: 1 }, red));
+    if (keys(mono) !== '0,0,0 255,255,255') throw new Error('CONTROL: Mono printed a flat red picture in ' + keys(mono) + ' - it should be black dots on white');
+    if (keys(cd) !== '220,40,40 255,255,255') throw new Error('Colour dots printed a flat red picture in ' + keys(cd) + ' - the dots should be the picture’s own red on white paper');
+    if (cd['220,40,40'] !== mono['0,0,0']) throw new Error('Colour dots inked ' + cd['220,40,40'] + ' pixels where Mono inks ' + mono['0,0,0'] + ' - Print must change what colour the dots are, not how big they are');
+    /* CMYK: a red is magenta and yellow (so it reads red), a cyan reads cyan, and a neutral grey takes black ink only. */
+    const cmR = b13Mean(ht({ mode: 2 }, red)), cmC = b13Mean(ht({ mode: 2 }, [40, 200, 220])), cmG = ht({ mode: 2 }, grey);
+    if (!(cmR[0] > cmR[1] + 60 && cmR[0] > cmR[2] + 60)) throw new Error('CMYK printed a flat red picture as ' + cmR.map(v => v.toFixed(0)) + ' on average - its magenta and yellow screens should make it red');
+    if (!(cmC[1] > cmC[0] + 40 && cmC[2] > cmC[0] + 40)) throw new Error('CMYK printed a flat cyan picture as ' + cmC.map(v => v.toFixed(0)) + ' on average - it should read cyan');
+    let blackDots = 0;
+    for (let i = 0; i < cmG.length; i += 4) { if (cmG[i] !== cmG[i + 1] || cmG[i] !== cmG[i + 2]) throw new Error('CMYK printed a neutral grey with coloured ink (' + cmG[i] + ',' + cmG[i + 1] + ',' + cmG[i + 2] + ') - a grey is black ink only'); if (cmG[i] < 128) blackDots++; }
+    if (!blackDots) throw new Error('CMYK printed a mid grey with no black dots at all');
+    /* SMOOTH DOTS. CONTROL: the hard print has nothing between ink and paper. 1.5 px puts the edge between them and keeps the
+       tone: the half-coverage contour stays at the old radius, so across nine greys it stays within 15 levels of the hard print
+       (MEASURED 2.2-11.9) and on average no further from the true area of the dot (pi R² of the cell) than the hard print, which
+       counts whole pixel centres (MEASURED mean error 5.8 against the hard print's 8.6) - and it prints no speck on white. */
+    const hard = ht({}, grey), soft = ht({ aa: 1.5 }, grey);
+    const mid = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 0 && d[i] < 255) n++; return n; };
+    if (mid(hard)) throw new Error('CONTROL: the hard print has ' + mid(hard) + ' pixels between ink and paper');
+    if (!(mid(soft) > W * H * 0.1)) throw new Error('Smooth dots 1.5 px left only ' + mid(soft) + ' edge pixels between ink and paper - the edge is still hard');
+    let errH = 0, errS = 0;
+    [10, 40, 70, 100, 128, 150, 180, 210, 240].forEach(v => {
+      const R = (1 - v / 255) * 4 * 1.45, area = 255 * (1 - Math.min(1, Math.PI * R * R / 64));
+      const mh = b13Mean(ht({}, [v, v, v]))[0], ms = b13Mean(ht({ aa: 1.5 }, [v, v, v]))[0];
+      if (Math.abs(mh - ms) > 15) throw new Error('Smooth dots moved the printed tone of grey ' + v + ' from ' + mh.toFixed(1) + ' to ' + ms.toFixed(1) + ' - a softer edge must not lighten or darken the picture');
+      errH += Math.abs(mh - area); errS += Math.abs(ms - area);
+    });
+    if (errS > errH) throw new Error('Smooth dots strays further from the true dot area (mean ' + (errS / 9).toFixed(1) + ' levels) than the hard print (' + (errH / 9).toFixed(1) + ')');
+    const white = ht({ aa: 2 }, [255, 255, 255]);
+    for (let i = 0; i < white.length; i += 4) if (white[i] !== 255) throw new Error('Smooth dots 2 px printed a speck (' + white[i] + ') on white paper at pixel ' + (i / 4));
+    /* …and it is a width on the picture: 2 px on a half-size plate is 1 px at the half pitch, byte for byte. */
+    const a = b13Run('halftone', Object.assign(b13Base('halftone', {}), { size: 16, aa: 2 }), W, H, 0.5, 0.5, b13Flat(W, H, grey));
+    const b = b13Run('halftone', Object.assign(b13Base('halftone', {}), { size: 8, aa: 1 }), W, H, 0.5, 1, b13Flat(W, H, grey));
+    if (!b13Same(a, b)) throw new Error('Smooth dots 2 px on a half-size plate is not Smooth dots 1 px at the half pitch - the edge does not shrink with the preview plate');
+    /* CELL AVERAGE (C32's shimmer). CONTROL: under Centre the cell [16,24)² is toned by the ONE pixel at (20,20) - a black
+       pixel there prints a full black dot, and the same pixel moved one to the right prints none. That flip is what made
+       the dots jump on footage. Under Cell average the cell is 63/64 white wherever the pixel sits: the same speck of a dot. */
+    const speck = (x, y) => { const d = b13Flat(W, H, [255, 255, 255]), i = (y * W + x) * 4; d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; return d; };
+    const inkIn = d => { let n = 0; for (let y = 16; y < 24; y++) for (let x = 16; x < 24; x++) if (d[(y * W + x) * 4] < 128) n++; return n; };
+    const cOn = inkIn(ht({}, null, speck(20, 20))), cOff = inkIn(ht({}, null, speck(21, 20)));
+    if (!(cOn > 30 && cOff === 0)) throw new Error('CONTROL: under Centre one black pixel at the cell centre printed ' + cOn + ' ink pixels and one pixel over ' + cOff + ' - this fixture does not show the flip');
+    const aOn = inkIn(ht({ sample: 1 }, null, speck(20, 20))), aOff = inkIn(ht({ sample: 1 }, null, speck(21, 20)));
+    if (aOn > 1 || aOn !== aOff) throw new Error('Cell average still lets one pixel decide a dot: ' + aOn + ' ink pixels with it at the centre, ' + aOff + ' one pixel over');
+    /* …and the cell table is the lattice's own cells on a turned screen and for every Print: a flat picture averages to itself. */
+    [{}, { angle: 30 }, { angle: 45, shape: 2 }, { mode: 1, angle: 20 }, { mode: 2 }, { mode: 2, angle: 10 }].forEach(o => {
+      const c = ht(o, [90, 140, 200]), v = ht(Object.assign({ sample: 1 }, o), [90, 140, 200]);
+      if (!b13Same(c, v)) throw new Error('Cell average on a flat picture prints differently from Centre (' + JSON.stringify(o) + ') - the cell table does not match the screen it averages');
+    });
+    /* INK AND PAPER recolour Mono: every pixel is the ink or the paper, and both are there. */
+    const ip = b13Colours(ht({ ink: '#2040a0', paper: '#f0e0c0' }, grey));
+    if (keys(ip) !== '240,224,192 32,64,160') throw new Error('Mono with a blue Ink on cream Paper printed ' + keys(ip) + ' - every pixel should be the ink or the paper');
+    if (keys(b13Colours(ht({ mode: 1, ink: '#2040a0' }, red))) !== '220,40,40 255,255,255') throw new Error('Ink changed a Colour dots print - the dots there are the picture’s own colours');
+    /* MIX: 0 is the picture untouched; 0.5 is halfway from the picture to the print (128 to 0 is 64, 128 to 255 is 191.5,
+       which the byte rounds to 192). */
+    const src = b13Plate(W, H);
+    if (!b13Same(ht({ mix: 0 }, null, src.slice()), src)) throw new Error('Mix 0 still prints over the picture');
+    const half = b13Colours(ht({ mix: 0.5 }, grey));
+    if (keys(half) !== '192,192,192 64,64,64') throw new Error('Mix 0.5 on a mid grey gave ' + keys(half) + ' - halfway between the picture and the print is 64 and 192');
+  });
+
+  /* 13.2 CRT: Tube curvature, Mask type (Stripes / Slot / Dots), Bloom, Flicker. */
+  const B13CRT_NEW = { curve: 0, masktype: 0, bloom: 0, flicker: 0 };
+  const B13CRT_CFG = { def: {}, monitor: { amount: 0.7, scanline: 0.5, mask: 0.22 }, chunky: { scale: 3, vignette: 0.2, amount: 1 }, kf: { amount: b13Kf(0.2, 0.9) } };
+  const B13CRT_PIN = {   // fc8866f1, before the edit
+    def: '0bd57fb2.0bd57fb2/0bd57fb2.0bd57fb2 0eb6675d.0eb6675d/0eb6675d.0eb6675d', monitor: 'ceeea910.ceeea910/ceeea910.ceeea910 b56b736c.b56b736c/b56b736c.b56b736c',
+    chunky: '92c4be4d.92c4be4d/13c09593.13c09593 141f282b.141f282b/4f2150c6.4f2150c6', kf: 'cac02614.4117ec91/cac02614.4117ec91 e3ddfd29.ea345525/e3ddfd29.ea345525' };
+
+  test('482 13.2 CRT - Tube curvature, Mask type, Bloom and Flicker are in the catalogue at defaults that draw the old flat steady screen, and saved and new CRTs and the CRT Monitor recipe draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('crt', B13CRT_NEW, { curve: 60, masktype: 2, bloom: 0.5, flicker: 0.3 });
+    const mt = b13Row('crt', 'masktype');
+    if (mt.type !== 'segment' || (mt.options || []).map(o => o[0]).join() !== '0,1,2') throw new Error('Mask type is not a three-way choice of Stripes, Slot and Dots (' + JSON.stringify(mt.options) + ')');
+    b13Recipes('crt', B13CRT_NEW, ['crt']);
+    const moved = b13Pinned('crt', B13CRT_NEW, B13CRT_CFG, B13CRT_PIN);
+    if (moved.length) throw new Error(moved.length + ' CRT pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.2 CRT - Tube curvature 60 blacks out the corners and bows a straight line, Slot and Dots break up the stripes, Bloom fills the dark lines and glows past a bright block, and Flicker dims the screen frame by frame the same way every time', { item: '482', budgetMs: 60000 }, function () {
+    const W = 120, H = 90;
+    const crt = (over, d0, t, w, h) => b13Run('crt', Object.assign(b13Base('crt', {}), over), w || W, h || H, t == null ? 0.5 : t, 1, d0);
+    const px = (d, x, y, w) => { const i = (y * (w || W) + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const white = () => b13Flat(W, H, [255, 255, 255]);
+    /* TUBE CURVATURE. CONTROL: the flat screen darkens its corners (the vignette) but never to black. At 60 the corners are
+       black glass (the layer still there, alpha 255), the middle is untouched and the middle of each edge is still picture. */
+    const flat = crt({}, white()), bent = crt({ curve: 60 }, white()), lit = c => Math.max(c[0], c[1], c[2]);
+    [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]].forEach(([x, y]) => {
+      if (!(lit(px(flat, x, y)) > 60)) throw new Error('CONTROL: the flat screen’s corner ' + x + ',' + y + ' is already black (' + px(flat, x, y) + ')');
+      const c = px(bent, x, y);
+      if (c[0] || c[1] || c[2] || c[3] !== 255) throw new Error('Tube curvature 60 left the corner ' + x + ',' + y + ' at ' + c + ' - it should be black glass');
+    });
+    if (px(bent, W >> 1, H >> 1).join() !== px(flat, W >> 1, H >> 1).join()) throw new Error('Tube curvature moved the middle of the picture (' + px(flat, W >> 1, H >> 1) + ' -> ' + px(bent, W >> 1, H >> 1) + ')');
+    [[0, H >> 1], [W - 1, H >> 1], [W >> 1, 0], [W >> 1, H - 1]].forEach(([x, y]) => { if (!(lit(px(bent, x, y)) > 60)) throw new Error('Tube curvature 60 blacked out the middle of an edge at ' + x + ',' + y + ' (' + px(bent, x, y) + ')'); });
+    const blackN = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (!d[i] && !d[i + 1] && !d[i + 2]) n++; return n; };
+    const b30 = blackN(crt({ curve: 30 }, white())), b60 = blackN(bent);
+    if (!(b30 > 0 && b30 < b60)) throw new Error('Tube curvature 30 blacked out ' + b30 + ' pixels and 60 blacked out ' + b60 + ' - more curvature must black out more of the corners');
+    /* …and it BENDS the picture: a straight red line near the left edge bows toward the middle at the top, and stays put on the
+       middle row. (Amount 0 takes the scanlines, mask and vignette away, so only the curve is left; the line is red so the
+       black glass in the corner cannot be mistaken for it.) */
+    const line = white(); for (let y = 0; y < H; y++) for (const x of [12, 13]) { const i = (y * W + x) * 4; line[i + 1] = 0; line[i + 2] = 0; }
+    const bow = crt({ curve: 60, amount: 0 }, line);
+    const darkest = y => { let bx = -1, bv = 999; for (let x = 0; x < W >> 1; x++) { const i = (y * W + x) * 4; if (bow[i] < 128) continue; if (bow[i + 1] < bv) { bv = bow[i + 1]; bx = x; } } return bx; };
+    if (!(darkest(3) > darkest(H >> 1) + 2 && Math.abs(darkest(H >> 1) - 12.5) <= 1)) throw new Error('Tube curvature 60 did not bow a straight line: it sits at x ' + darkest(3) + ' on the top rows and ' + darkest(H >> 1) + ' on the middle row (drawn at 12-13)');
+    /* MASK TYPE, on white with only the mask showing (Amount 1, Scanlines 0, Mask 0.5, Vignette 0). CONTROL: Stripes are the
+       same on every row and every pixel has one channel lit. Slot puts gaps where all three dim, on rows that move between
+       triad columns; Dots stagger the triads, so a row differs from the next and matches the one after. */
+    const mask = t => crt({ amount: 1, scanline: 0, mask: 0.5, vignette: 0, masktype: t }, white());
+    const rowSame = (d, a, b) => { for (let x = 0; x < W; x++) for (let c = 0; c < 3; c++) if (d[(a * W + x) * 4 + c] !== d[(b * W + x) * 4 + c]) return false; return true; };
+    const allDim = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (lit([d[i], d[i + 1], d[i + 2]]) < 200) n++; return n; };
+    const st = mask(0), slot = mask(1), dots = mask(2);
+    for (let y = 1; y < H; y++) if (!rowSame(st, 0, y)) throw new Error('CONTROL: the Stripes mask differs between rows 0 and ' + y);
+    if (allDim(st)) throw new Error('CONTROL: the Stripes mask dims all three channels of ' + allDim(st) + ' pixels');
+    if (!(allDim(slot) > W * H * 0.15)) throw new Error('the Slot mask put only ' + allDim(slot) + ' gap pixels where all three colours dim - it reads as stripes');
+    if (rowSame(slot, 1, 3) || rowSame(slot, 0, 1)) throw new Error('the Slot mask gaps do not move between triad columns like brickwork');
+    if (allDim(dots)) throw new Error('the Dots mask dimmed all three colours of ' + allDim(dots) + ' pixels - every pixel is one phosphor');
+    if (rowSame(dots, 0, 1) || !rowSame(dots, 0, 2)) throw new Error('the Dots mask does not stagger its triads on alternate lines');
+    if (b13Same(slot, st) || b13Same(dots, st) || b13Same(slot, dots)) throw new Error('two of the three masks draw the same picture');
+    /* BLOOM, on a white block in the dark, on a 400x300 plate (the glow reaches 1.5% of the short side, twice). CONTROL: without
+       it the dark 5 px outside the block is black. With it a glow sits there, and the dark scanline across the block fills in. */
+    const BW = 400, BH = 300, blk = () => { const d = b13Flat(BW, BH, [0, 0, 0]); for (let y = 120; y < 180; y++) for (let x = 160; x < 240; x++) { const i = (y * BW + x) * 4; d[i] = 255; d[i + 1] = 255; d[i + 2] = 255; } return d; };
+    const b0 = crt({}, blk(), 0.5, BW, BH), b1 = crt({ bloom: 1 }, blk(), 0.5, BW, BH), sum = c => c[0] + c[1] + c[2];
+    if (sum(px(b0, 155, 150, BW))) throw new Error('CONTROL: without Bloom the dark beside the block is ' + px(b0, 155, 150, BW));
+    if (!(sum(px(b1, 155, 150, BW)) > 30)) throw new Error('Bloom 1 put no glow 5 px outside a white block (' + px(b1, 155, 150, BW) + ')');
+    if (!(sum(px(b1, 200, 151, BW)) > sum(px(b0, 200, 151, BW)) + 60)) throw new Error('Bloom 1 did not fill the dark scanline across a white block (' + px(b0, 200, 151, BW) + ' -> ' + px(b1, 200, 151, BW) + ')');
+    /* FLICKER. CONTROL: a steady CRT is the same at every moment. Flicker 1 dims each 30 fps frame by its own amount - never
+       brighter than the steady screen - and draws a moment the same way however many times it is asked. */
+    const grey = () => b13Flat(W, H, [180, 180, 180]);
+    if (!b13Same(crt({}, grey(), 0.1), crt({}, grey(), 0.5))) throw new Error('CONTROL: a steady CRT changes between 0.1 s and 0.5 s');
+    const steady = b13Mean(crt({}, grey(), 0.5))[0], means = [];
+    for (let f = 0; f < 10; f++) means.push(b13Mean(crt({ flicker: 1 }, grey(), (f + 0.5) / 30))[0]);
+    if (new Set(means.map(v => v.toFixed(2))).size < 4) throw new Error('Flicker 1 gave only ' + new Set(means.map(v => v.toFixed(2))).size + ' brightnesses over ten frames');
+    if (means.some(v => v > steady + 0.01)) throw new Error('Flicker brightened a frame past the steady screen (' + steady.toFixed(1) + '): ' + means.map(v => v.toFixed(1)).join(' '));
+    if (!(Math.min.apply(null, means) < steady - 5)) throw new Error('Flicker 1 never dimmed the screen by more than 5 levels: ' + means.map(v => v.toFixed(1)).join(' '));
+    if (!b13Same(crt({ flicker: 1 }, grey(), 0.37), crt({ flicker: 1 }, grey(), 0.37))) throw new Error('Flicker draws the same moment differently each time - it must be a function of the moment');
+  });
+
+  /* 13.3 VHS TAPE: Snow, Colour fade, Vertical hold. */
+  const B13VHS_NEW = { snow: 0, fade: 0, jitter: 0 };
+  const B13VHS_CFG = { def: {}, filter: { amount: 0.7, chromableed: 30, wobble: 4 }, still: { trackspeed: 0 }, hard: { amount: 1, tracking: 1, headswitch: 1, halo: 1, chromableed: 60 }, kf: { trackspeed: b13Kf(0.6, 2.4) } };
+  const B13VHS_PIN = {   // fc8866f1, before the edit
+    def: '527e42fe.656da5f0/ea6c4384.519fe3a8 576dbbfc.95e2fef8/fc01abe0.60b1c41b', filter: 'df71adfd.bd0a86de/81fbf02d.9bd054cc 48d4970e.454fbe67/4c621d93.e20c7a20',
+    still: '527e42fe.aa3aa6e0/ea6c4384.7804c988 576dbbfc.ad450fe7/fc01abe0.8cac39b7', hard: 'f2fa935f.3036876f/f639dd10.1efb58a2 8a90b10e.498c7baa/f249bd4d.7dae7ae4',
+    kf: '0cb309a0.7941fa6d/46768654.26603245 5e8f0727.63174f76/eb9394b6.84b84d00' };
+
+  test('482 13.3 VHS Tape - Snow, Colour fade and Vertical hold are in the catalogue at defaults that draw the old tape, and saved and new tapes and the VHS Tape recipe draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('vhstape', B13VHS_NEW, { snow: 0.4, fade: 70, jitter: 12 });
+    if (b13Row('vhstape', 'jitter').unit !== 'px' || b13Row('vhstape', 'fade').unit !== '%') throw new Error('Vertical hold is not in px or Colour fade not in % (' + b13Row('vhstape', 'jitter').unit + ', ' + b13Row('vhstape', 'fade').unit + ')');
+    b13Recipes('vhstape', B13VHS_NEW, ['vhs']);
+    const moved = b13Pinned('vhstape', B13VHS_NEW, B13VHS_CFG, B13VHS_PIN);
+    if (moved.length) throw new Error(moved.length + ' VHS Tape pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.3 VHS Tape - Colour fade 100 cuts the mean saturation by at least 30 percent, Snow fizzes a flat grey and drops out white streaks, Vertical hold jumps whole rows up or down by up to 20 px frame by frame, and each draws a moment the same way every time', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120;
+    const vhs = (over, d0, t, ps) => b13Run('vhstape', Object.assign(b13Base('vhstape', {}), over), W, H, t == null ? 0.37 : t, ps, d0);
+    /* COLOUR FADE, at the default Amount (0.7) and damage, on the colour fixture. CONTROL: Colour fade 0 is the default tape. */
+    const sat = d => { let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]); if (mx > 0) { s += (mx - mn) / mx; n++; } } return s / n; };
+    if (!b13Same(vhs({ fade: 0 }), vhs({}))) throw new Error('CONTROL: Colour fade 0 does not draw the default tape');
+    const s0 = sat(vhs({})), s100 = sat(vhs({ fade: 100 }));
+    if (!(s100 <= s0 * 0.7)) throw new Error('Colour fade 100 left the mean saturation at ' + s100.toFixed(3) + ' against ' + s0.toFixed(3) + ' - a cut of ' + (100 * (1 - s100 / s0)).toFixed(1) + ' percent, under 30');
+    if (!(sat(vhs({ fade: 50 })) < s0 && sat(vhs({ fade: 50 })) > s100)) throw new Error('Colour fade 50 does not sit between 0 and 100');
+    /* SNOW, on a flat grey with every other kind of damage off and Amount 1. CONTROL: with no Snow the grey stays flat. */
+    const clean = { amount: 1, chromableed: 0, halo: 0, wobble: 0, tracking: 0, headswitch: 0 };
+    const grey = () => b13Flat(W, H, [128, 128, 128]);
+    const spread = d => { let s = 0, s2 = 0, n = d.length / 4; for (let i = 0; i < d.length; i += 4) { s += d[i]; s2 += d[i] * d[i]; } return Math.sqrt(Math.max(0, s2 / n - (s / n) * (s / n))); };
+    if (spread(vhs(clean, grey())) > 1) throw new Error('CONTROL: a clean tape on a flat grey is not flat (spread ' + spread(vhs(clean, grey())).toFixed(2) + ')');
+    const sn = Object.assign({ snow: 1 }, clean);
+    if (!(spread(vhs(sn, grey())) > 15)) throw new Error('Snow 1 fizzed a flat grey by only ' + spread(vhs(sn, grey())).toFixed(2) + ' levels');
+    if (!b13Same(vhs(sn, grey(), 0.37), vhs(sn, grey(), 0.37))) throw new Error('Snow draws the same moment differently each time - it must be a hash of the moment');
+    if (b13Same(vhs(sn, grey(), 0.37), vhs(sn, grey(), 0.4))) throw new Error('Snow is frozen - the fizz does not change from one frame to the next');
+    /* a dropout is a run of white along a line: six pixels in a row all brighter than 215, which the fizz alone (at most +100
+       on 128, and above 215 for one pixel in fifteen) cannot make. Looked for over five frames. */
+    let runs = 0;
+    for (let f = 0; f < 5; f++) {
+      const d = vhs(sn, grey(), (f * 7 + 0.5) / 30);
+      for (let y = 0; y < H; y++) { let r = 0; for (let x = 0; x < W; x++) { r = d[(y * W + x) * 4] > 215 ? r + 1 : 0; if (r === 6) runs++; } }
+    }
+    if (!runs) throw new Error('Snow 1 dropped out no white streaks over five frames');
+    /* VERTICAL HOLD, on the colour fixture with every other kind of damage off: each frame's picture is the clean picture with
+       every row moved by the same whole number of rows (wrapping), up to 20 - and up to 10 on a half-size plate, where 20 px
+       of the picture is 10 plate rows. CONTROL: the clean tape matches itself at a move of 0. */
+    const rowsMovedBy = (d, base, w, h) => { for (let v = -20; v <= 20; v++) { let ok = true; for (let y = 0; y < h && ok; y++) { const sy = (((y - v) % h) + h) % h; for (let x = 0; x < w * 4 && ok; x++) ok = d[y * w * 4 + x] === base[sy * w * 4 + x]; } if (ok) return v; } return null; };
+    const base = vhs(clean);
+    if (rowsMovedBy(base, base, W, H) !== 0) throw new Error('CONTROL: the row matcher does not find the clean tape at a move of 0');
+    const jt = Object.assign({ jitter: 20 }, clean), moves = [];
+    for (let f = 0; f < 10; f++) {
+      const t = (f + 0.5) / 30, v = rowsMovedBy(vhs(jt, null, t), base, W, H);
+      if (v === null) throw new Error('Vertical hold at ' + t.toFixed(3) + ' s is not the clean picture moved by whole rows');
+      if (!b13Same(vhs(jt, null, t), vhs(jt, null, t))) throw new Error('Vertical hold draws the same moment differently each time');
+      moves.push(v);
+    }
+    if (new Set(moves).size < 3 || !moves.some(v => Math.abs(v) >= 5)) throw new Error('Vertical hold 20 moved the picture by ' + moves.join(', ') + ' rows over ten frames - it should jump about, by up to 20');
+    const hw = W / 2, hh = H / 2, hbase = b13Run('vhstape', Object.assign(b13Base('vhstape', {}), clean), hw, hh, 0.37, 0.5);
+    for (let f = 0; f < 10; f++) {
+      const v = rowsMovedBy(b13Run('vhstape', Object.assign(b13Base('vhstape', {}), jt), hw, hh, (f + 0.5) / 30, 0.5), hbase, hw, hh);
+      if (v === null || Math.abs(v) > 10) throw new Error('on a half-size plate Vertical hold 20 moved the picture by ' + v + ' plate rows - 20 px of the picture is 10 rows there');
+    }
+  });
+
+  /* 13.4 SCANLINES: Softness, Direction, Line colour. */
+  const B13SL_NEW = { softness: 0, dir: 0, color: '#000000' };
+  const B13SL_CFG = { def: {}, vhs: { amount: 0.32, spacing: 3 }, oldfilm: { amount: 0.18, spacing: 6 }, nightvis: { amount: 0.22, spacing: 4 }, rolled: { spacing: 5, thickness: 7, roll: 12 }, kfroll: { roll: b13Kf(-5, 15) } };
+  const B13SL_PIN = {   // fc8866f1, before the edit
+    def: '2c450fe6.2c450fe6/2c450fe6.2c450fe6 cfc2e779.cfc2e779/cfc2e779.cfc2e779', vhs: 'd545a001.d545a001/a818a991.a818a991 233b000d.233b000d/c6d66c1e.c6d66c1e',
+    oldfilm: 'a8f7c509.a8f7c509/51ba6cc6.51ba6cc6 9da8fb93.9da8fb93/a4850d63.a4850d63', nightvis: 'd9de65f1.d9de65f1/1c60eef5.1c60eef5 72c2bd4b.72c2bd4b/563662b0.563662b0',
+    rolled: '04f5b2b0.dfbb4e2c/9ff1a8ff.0f5d2760 7eadb7bb.71953d32/628aafb0.b098ddfa', kfroll: '9efbfca8.9efbfca8/9efbfca8.9efbfca8 573cc277.573cc277/573cc277.573cc277' };
+
+  test('482 13.4 Scanlines - Softness, Direction and Line colour are in the catalogue at defaults that draw the old black lines, and saved and new Scanlines and the VHS Tape, Old Film and Night Vision recipes draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('scanlines', B13SL_NEW, { softness: 60, dir: 1, color: '#ff2050' });
+    const lc = b13Row('scanlines', 'color');
+    if (lc.type !== 'color' || lc.label !== 'Line colour') throw new Error('Scanlines has no Line colour row (type ' + lc.type + ', label ' + lc.label + ')');
+    b13Recipes('scanlines', B13SL_NEW, ['vhs', 'oldfilm', 'nightvis']);
+    const moved = b13Pinned('scanlines', B13SL_NEW, B13SL_CFG, B13SL_PIN);
+    if (moved.length) throw new Error(moved.length + ' Scanlines pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.4 Scanlines - Vertical darkens columns, not rows, and is the horizontal lines on their side, Line colour draws the lines in that colour, and Softness rounds them into a cosine profile without changing how dark they are on average', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 48;
+    const sl = (over, d0, t, w, h) => b13Run('scanlines', Object.assign(b13Base('scanlines', {}), over), w || W, h || H, t == null ? 0.37 : t, 1, d0);
+    const white = () => b13Flat(W, H, [255, 255, 255]);
+    const rowsAllSame = d => { for (let y = 1; y < H; y++) for (let x = 0; x < W * 4; x++) if (d[y * W * 4 + x] !== d[x]) return false; return true; };
+    const colsAllSame = d => { for (let y = 0; y < H; y++) for (let x = 1; x < W; x++) for (let c = 0; c < 4; c++) if (d[(y * W + x) * 4 + c] !== d[y * W * 4 + c]) return false; return true; };
+    const lines = { amount: 1, spacing: 4, thickness: 2 };
+    /* DIRECTION. CONTROL: Horizontal lines are the same in every column and differ between rows. Vertical: the reverse. */
+    const hz = sl(lines, white()), vt = sl(Object.assign({ dir: 1 }, lines), white());
+    if (!colsAllSame(hz) || rowsAllSame(hz)) throw new Error('CONTROL: horizontal scanlines are not rows on a white plate');
+    if (!rowsAllSame(vt)) throw new Error('Direction Vertical still darkens rows - every row should be the same');
+    if (colsAllSame(vt)) throw new Error('Direction Vertical darkens no columns');
+    let darkCols = 0; for (let x = 0; x < W; x++) if (vt[x * 4] === 0) darkCols++;
+    if (darkCols !== W / 2) throw new Error('Direction Vertical at a 4 px pitch and a 2 px weight darkened ' + darkCols + ' of ' + W + ' columns, not half');
+    /* …and they are the horizontal lines exactly, turned: lines on the plate turned on its side, rolled and at Amount 0.6. */
+    const tr = (d, w, h) => { const o = new Uint8ClampedArray(d.length); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const a = (y * w + x) * 4, b = (x * h + y) * 4; o[b] = d[a]; o[b + 1] = d[a + 1]; o[b + 2] = d[a + 2]; o[b + 3] = d[a + 3]; } return o; };
+    const rl = { amount: 0.6, spacing: 5, thickness: 2, roll: 3 };
+    const across = sl(rl, b13Plate(W, H)), down = sl(Object.assign({ dir: 1 }, rl), tr(b13Plate(W, H), W, H), 0.37, H, W);
+    if (!b13Same(tr(across, W, H), down)) throw new Error('Direction Vertical is not the horizontal lines turned on their side - same pitch, weight, roll and darkening');
+    /* LINE COLOUR: at Amount 1 a line IS the colour and a gap is the picture; at 0.5 it is halfway. */
+    const red = b13Colours(sl(Object.assign({ color: '#ff2050' }, lines), white()));
+    if (Object.keys(red).sort().join(' ') !== '255,255,255 255,32,80') throw new Error('Line colour #ff2050 at Amount 1 drew ' + Object.keys(red).sort().join(' ') + ' - the lines should be that colour on the white picture');
+    const half = b13Colours(sl({ amount: 0.5, spacing: 4, thickness: 2, color: '#0000ff' }, white()));
+    if (Object.keys(half).sort().join(' ') !== '128,128,255 255,255,255') throw new Error('Line colour blue at Amount 0.5 drew ' + Object.keys(half).sort().join(' ') + ' - halfway from white to blue is 128,128,255 (127.5 rounds to 128)');
+    /* SOFTNESS. CONTROL: the hard lines are two levels. At 100 the 8 px pitch with 4 px lines takes four levels, and the mean
+       darkening stays the hard lines' within 1 percent. */
+    const sw = { amount: 1, spacing: 8, thickness: 4 };
+    const hard = sl(sw, white()), soft = sl(Object.assign({ softness: 100 }, sw), white());
+    const levels = d => new Set(Array.from({ length: H }, (_, y) => d[y * W * 4])).size;
+    if (levels(hard) !== 2) throw new Error('CONTROL: the hard lines have ' + levels(hard) + ' levels down a column, not 2');
+    if (!(levels(soft) >= 4)) throw new Error('Softness 100 left only ' + levels(soft) + ' levels down a column - the lines are still hard-edged');
+    const mh = b13Mean(hard)[0], ms = b13Mean(soft)[0];
+    if (Math.abs(mh - ms) > 2.55) throw new Error('Softness 100 moved the mean brightness from ' + mh.toFixed(1) + ' to ' + ms.toFixed(1) + ' - softening must not darken or lighten the lines on average');
+    if (!(levels(sl(Object.assign({ softness: 50 }, sw), white())) >= 4)) throw new Error('Softness 50 left the lines hard');
+    if (!colsAllSame(soft)) throw new Error('Softness put a soft line out of true - it is not the same across the row');
+  });
+
+  /* 13.5 PIXEL SORT: Sort by, Pattern, Re-roll, and Direction ↘ / ↗. */
+  const B13PS_NEW = { by: 0, seed: 0, reroll: 0 };
+  const B13PS_CFG = { def: {}, dense: { density: 1, low: 0, high: 1, length: 40 }, vert: { direction: 1, order: 1, density: 0.6 }, short: { length: 8 } };
+  const B13PS_PIN = {   // fc8866f1, before the edit
+    def: '9e99e035.9e99e035/9e99e035.9e99e035 e6e90981.e6e90981/e6e90981.e6e90981', dense: 'afe16d01.afe16d01/fbb3d7d5.fbb3d7d5 99f348ad.99f348ad/38078635.38078635',
+    vert: '1692a095.1692a095/1692a095.1692a095 cbf1064d.cbf1064d/cbf1064d.cbf1064d', short: 'd446d949.d446d949/a861d395.a861d395 0fd83949.0fd83949/d517a5a9.d517a5a9' };
+
+  test('482 13.5 Pixel Sort - Sort by, Pattern, Re-roll and the two diagonal Directions are in the catalogue at defaults that sort as before, and saved and new Pixel Sorts sort byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('pixelsort', B13PS_NEW, { by: 1, seed: 42, reroll: 12, direction: 3 });
+    const dir = b13Row('pixelsort', 'direction');
+    if ((dir.options || []).map(o => o[0]).join() !== '0,1,2,3' || dir.default !== 0) throw new Error('Direction is not Horizontal, Vertical and the two diagonals with Horizontal the default (' + JSON.stringify(dir.options) + ', default ' + dir.default + ')');
+    if (b13Row('pixelsort', 'reroll').unit !== 'Hz') throw new Error('Re-roll is not a rate in Hz');
+    const moved = b13Pinned('pixelsort', B13PS_NEW, B13PS_CFG, B13PS_PIN);
+    if (moved.length) throw new Error(moved.length + ' Pixel Sort pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.5 Pixel Sort - Sort by Hue makes a sorted row run in hue order, Saturation and each channel sort by themselves, Pattern and Re-roll pick other lines, and the diagonals sort along their own diagonals', { item: '482', budgetMs: 60000 }, function () {
+    /* Every pixel in every row joins one run: Density 1, Dark cut 0, Bright cut 1, Max run past the width, all opaque. */
+    const all = { density: 1, low: 0, high: 1, length: 600 };
+    const ps = (over, d0, w, h, t) => b13Run('pixelsort', Object.assign(b13Base('pixelsort', {}), over), w, h, t == null ? 0.37 : t, 1, d0);
+    /* a row of 64 pure hues in a scrambled order (an LCG), so brightness and hue disagree about the order */
+    const W = 64, H = 8, hues = () => { const d = new Uint8ClampedArray(W * H * 4); let s = 12345;
+      for (let i = 0; i < W * H; i++) { s = (s * 1103515245 + 12345) & 0x7fffffff; const hh = (s % 3600) / 10, c = 1 - Math.abs(((hh / 60) % 2) - 1), seg = Math.floor(hh / 60);
+        const rgb = [[1, c, 0], [c, 1, 0], [0, 1, c], [0, c, 1], [c, 0, 1], [1, 0, c]][seg]; d[i * 4] = Math.round(rgb[0] * 255); d[i * 4 + 1] = Math.round(rgb[1] * 255); d[i * 4 + 2] = Math.round(rgb[2] * 255); d[i * 4 + 3] = 255; }
+      return d; };
+    const hueOf = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), dl = mx - mn; if (!dl) return 0; let h = mx === r ? ((g - b) / dl) % 6 : (mx === g ? (b - r) / dl + 2 : (r - g) / dl + 4); if (h < 0) h += 6; return h * 60; };
+    const along = (d, f) => { const out = []; for (let y = 0; y < H; y++) { const row = []; for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; row.push(f(d[i], d[i + 1], d[i + 2])); } out.push(row); } return out; };
+    const worstDrop = rows => { let w = 0; rows.forEach(r => { for (let x = 1; x < r.length; x++) w = Math.max(w, r[x - 1] - r[x]); }); return w; };
+    /* CONTROL: sorted by brightness (the old sort) the hues are out of order. 1.41 degrees is one step of the 256-step key. */
+    if (!(worstDrop(along(ps(all, hues(), W, H), hueOf)) > 30)) throw new Error('CONTROL: sorting by brightness left the hues in order - this fixture cannot tell the two sorts apart');
+    const byHue = worstDrop(along(ps(Object.assign({ by: 1 }, all), hues(), W, H), hueOf));
+    if (byHue > 1.41) throw new Error('Sort by Hue left a row whose hue drops by ' + byHue.toFixed(2) + ' degrees - a sorted row must run round the colour wheel in order');
+    const back = along(ps(Object.assign({ by: 1, order: 1 }, all), hues(), W, H), hueOf).map(r => r.map(v => -v));
+    if (worstDrop(back) > 1.41) throw new Error('Sort by Hue, Bright to dark, does not run the hues the other way');
+    /* SATURATION and the three CHANNELS, on the colour fixture made opaque: each sorted row is in order of its own key. */
+    const opaque = () => { const d = b13Plate(W, H); for (let i = 3; i < d.length; i += 4) d[i] = 255; return d; };
+    const satOf = (r, g, b) => { const mx = Math.max(r, g, b); return mx ? Math.floor((mx - Math.min(r, g, b)) * 255 / mx) : 0; };
+    [[2, 'Saturation', satOf], [3, 'Red', (r) => r], [4, 'Green', (r, g) => g], [5, 'Blue', (r, g, b) => b]].forEach(([by, name, f]) => {
+      const drop = worstDrop(along(ps(Object.assign({ by: by }, all), opaque(), W, H), f));
+      if (drop > 0) throw new Error('Sort by ' + name + ' left a row whose ' + name.toLowerCase() + ' drops by ' + drop);
+    });
+    /* PATTERN and RE-ROLL, at the default Density (about a third of the lines). CONTROL: with neither, the same lines at any
+       moment. Pattern 5 sorts other lines, the same ones every time; Re-roll 10 keeps its lines through a tenth of a second
+       and picks new ones in the next. */
+    const PW = 120, PH = 90, pat = (over, t) => ps(over, null, PW, PH, t);
+    if (!b13Same(pat({}, 0.1), pat({}, 2.3))) throw new Error('CONTROL: Pixel Sort with no Re-roll sorts different lines at 0.1 s and 2.3 s');
+    if (b13Same(pat({ seed: 5 }), pat({}))) throw new Error('Pattern 5 sorts exactly the lines Pattern 0 sorts');
+    if (!b13Same(pat({ seed: 5 }), pat({ seed: 5 }))) throw new Error('Pattern 5 sorts differently each time at the same moment');
+    if (!b13Same(pat({ reroll: 10 }, 0.12), pat({ reroll: 10 }, 0.18))) throw new Error('Re-roll 10 picked new lines inside one tenth of a second');
+    if (b13Same(pat({ reroll: 10 }, 0.12), pat({ reroll: 10 }, 0.25))) throw new Error('Re-roll 10 sorts the same lines a tenth of a second later - it does not re-roll');
+    /* THE DIAGONALS: every ↘ diagonal (x − y constant) is in brightness order going right, every ↗ one (x + y constant) going
+       right and up — and the rows are not (CONTROL: Horizontal sorts the rows). Diagonals of one or two pixels never sort. */
+    const DW = 40, DH = 30, lumOf = (d, x, y) => { const i = (y * DW + x) * 4; return (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0; };
+    const opq = () => { const d = b13Plate(DW, DH); for (let i = 3; i < d.length; i += 4) d[i] = 255; return d; };
+    const rowsSorted = d => { for (let y = 0; y < DH; y++) for (let x = 1; x < DW; x++) if (lumOf(d, x, y) < lumOf(d, x - 1, y)) return false; return true; };
+    if (!rowsSorted(ps(all, opq(), DW, DH))) throw new Error('CONTROL: Horizontal with every pixel in did not sort the rows');
+    const down = ps(Object.assign({ direction: 2 }, all), opq(), DW, DH), up = ps(Object.assign({ direction: 3 }, all), opq(), DW, DH);
+    if (rowsSorted(down) || rowsSorted(up)) throw new Error('a diagonal Direction sorted the rows');
+    let checked = 0;
+    for (let k = -(DH - 1); k < DW; k++) {
+      if (Math.min(DW - Math.max(k, 0), DH - Math.max(-k, 0)) < 3) continue;
+      for (let x = Math.max(1, k + 1); x < DW && x - k < DH; x++) { checked++; if (lumOf(down, x, x - k) < lumOf(down, x - 1, x - k - 1)) throw new Error('Diagonal ↘ left the diagonal x - y = ' + k + ' out of brightness order at x ' + x); }
+    }
+    for (let s = 0; s < DW + DH - 1; s++) {
+      const x0 = Math.max(0, s - (DH - 1)); if (Math.min(DW - x0, s - x0 + 1) < 3) continue;
+      for (let x = Math.max(1, s - DH + 2); x < DW && s - x >= 0; x++) { checked++; if (lumOf(up, x, s - x) < lumOf(up, x - 1, s - x + 1)) throw new Error('Diagonal ↗ left the diagonal x + y = ' + s + ' out of brightness order at x ' + x); }
+    }
+    if (checked < 2 * (DW - 1) * (DH - 1) - 8) throw new Error('CONTROL: only ' + checked + ' diagonal steps were checked');
+    const bag = d => JSON.stringify(Object.entries(b13Colours(d)).sort());
+    if (bag(down) !== bag(opq()) || bag(up) !== bag(opq())) throw new Error('a diagonal sort lost or invented pixels - a sort only moves them');
+  });
+
+  /* 13.6 DITHER: Method (Ordered / Floyd–Steinberg / Atkinson / Blue noise), Ink and Paper in Mono. */
+  const B13DI_NEW = { method: 0, ink: '#000000', paper: '#ffffff' };
+  const B13DI_CFG = { def: {}, filter: { levels: 2, scale: 2, mono: 1 }, coarse: { matrix: 0 }, fine: { matrix: 2, levels: 3, scale: 3 }, mono: { mono: 1, levels: 6 } };
+  const B13DI_PIN = {   // fc8866f1, before the edit
+    def: '97261836.97261836/97261836.97261836 3759d6ce.3759d6ce/3759d6ce.3759d6ce', filter: '5d99ec14.5d99ec14/a922532d.a922532d f3c9de5d.f3c9de5d/0abada7c.0abada7c',
+    coarse: '8758c407.8758c407/8758c407.8758c407 ac7148f8.ac7148f8/ac7148f8.ac7148f8', fine: '8fbfa90f.8fbfa90f/c519b775.c519b775 a1cd342a.a1cd342a/33fb499a.33fb499a',
+    mono: '58cd4da4.58cd4da4/58cd4da4.58cd4da4 ca524186.ca524186/ca524186.ca524186' };
+
+  test('482 13.6 Dither - Method, Ink and Paper are in the catalogue at defaults that draw the old ordered dither, Method says error diffusion shimmers on video, and saved and new Dithers and the Photocopy recipe draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('dither', B13DI_NEW, { method: 2, ink: '#1a2b3c', paper: '#f0e8d0', mono: 1 });
+    const m = b13Row('dither', 'method'), mx = b13Row('dither', 'matrix'), ink = b13Row('dither', 'ink'), paper = b13Row('dither', 'paper');
+    if ((m.options || []).map(o => o[0]).join() !== '0,1,2,3') throw new Error('Method is not Ordered, Floyd–Steinberg, Atkinson and Blue noise (' + JSON.stringify(m.options) + ')');
+    if (!/shimmers on video/i.test(m.note || '')) throw new Error('Method carries no note that error diffusion shimmers on video (note: ' + JSON.stringify(m.note) + ')');
+    if (mx.overriddenBy !== 'method' || mx.liveWhen !== 0) throw new Error('Pattern does not say it only counts under Method Ordered (overriddenBy ' + mx.overriddenBy + ', liveWhen ' + mx.liveWhen + ')');
+    [ink, paper].forEach(r => { if (r.type !== 'color' || r.overriddenBy !== 'mono' || r.liveWhen !== 1) throw new Error('the ' + r.label + ' row is not a colour that only counts under Output Mono (type ' + r.type + ', overriddenBy ' + r.overriddenBy + ', liveWhen ' + r.liveWhen + ')'); });
+    b13Recipes('dither', B13DI_NEW, ['xerox']);
+    const moved = b13Pinned('dither', B13DI_NEW, B13DI_CFG, B13DI_PIN);
+    if (moved.length) throw new Error(moved.length + ' Dither pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.6 Dither - Floyd–Steinberg on 50 percent grey has no 2x2 period and keeps the tone, Atkinson diffuses differently, Blue noise has no pattern inside its 32 px tile, error diffusion paints whole cells and keeps the average colour, and Ink and Paper recolour Mono', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64;
+    const di = (over, d0, w, h) => b13Run('dither', Object.assign(b13Base('dither', {}), { levels: 2 }, over), w || W, h || H, 0.5, 1, d0);
+    const grey = v => b13Flat(W, H, [v, v, v]);
+    const periodic = (d, P) => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = d[(y * W + x) * 4]; if (a !== d[(y * W + (x + P) % W) * 4] || a !== d[(((y + P) % H) * W + x) * 4]) return false; } return true; };
+    /* FLOYD–STEINBERG. CONTROL: the ordered dither repeats every 2 px on a 50 percent grey (Coarse 2x2 and Classic 4x4 both). */
+    if (!periodic(di({ matrix: 0 }, grey(128)), 2) || !periodic(di({}, grey(128)), 2)) throw new Error('CONTROL: the ordered dither does not repeat every 2 px on mid grey - this fixture cannot tell the methods apart');
+    const fs = di({ method: 1 }, grey(128));
+    if (periodic(fs, 2)) throw new Error('Floyd–Steinberg on 50 percent grey repeats every 2 px - it is drawing a fixed pattern, not diffusing');
+    if (periodic(fs, 4)) throw new Error('Floyd–Steinberg on 50 percent grey repeats every 4 px');
+    [64, 100, 128, 200].forEach(v => { const m = b13Mean(di({ method: 1 }, grey(v)))[0]; if (Math.abs(m - v) > 2) throw new Error('Floyd–Steinberg printed grey ' + v + ' at a mean of ' + m.toFixed(1) + ' - diffusing the error must keep the tone'); });
+    if (!b13Same(fs, di({ method: 1 }, grey(128)))) throw new Error('Floyd–Steinberg draws the same frame differently each time');
+    /* ATKINSON: its own pattern, and no period either. */
+    const atk = di({ method: 2 }, grey(100));
+    if (b13Same(atk, di({ method: 1 }, grey(100)))) throw new Error('Atkinson draws exactly what Floyd–Steinberg draws');
+    if (periodic(atk, 2) || periodic(atk, 4)) throw new Error('Atkinson on a grey repeats every 2 or 4 px');
+    /* BLUE NOISE: the tile is a full ranking of its 1024 cells; at an eighth it spreads over the 4x4 blocks far more evenly than
+       a shuffled tile does (MEASURED: spread 0.64 against 1.28); and the dither has no period of 2, 4, 8 or 16 px but repeats
+       every 32 (its tile) - CONTROL: Classic 4x4 repeats every 4. The tone holds within one level. */
+    const bn = FM._blueNoise13 && FM._blueNoise13();
+    if (!bn || bn.length !== 1024 || new Set(Array.from(bn)).size !== 1024 || Math.max.apply(null, Array.from(bn)) !== 1023) throw new Error('the blue-noise tile is not a ranking of 1024 cells');
+    const blocks = []; for (let by = 0; by < 8; by++) for (let bx = 0; bx < 8; bx++) { let n = 0; for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if (bn[(by * 4 + y) * 32 + bx * 4 + x] < 128) n++; blocks.push(n); }
+    const sd = Math.sqrt(blocks.reduce((s, n) => s + (n - 2) * (n - 2), 0) / 64);
+    if (!(sd < 1)) throw new Error('the blue-noise tile clumps: an eighth of it spreads over the 4x4 blocks with a spread of ' + sd.toFixed(2) + ' (a shuffled tile is about 1.3)');
+    if (!periodic(di({}, grey(100)), 4)) throw new Error('CONTROL: Classic 4x4 does not repeat every 4 px');
+    [64, 100, 128].forEach(v => {
+      const b = di({ method: 3 }, grey(v));
+      [2, 4, 8, 16].forEach(P => { if (periodic(b, P)) throw new Error('Blue noise on grey ' + v + ' repeats every ' + P + ' px - it shows a pattern'); });
+      if (!periodic(b, 32)) throw new Error('Blue noise on grey ' + v + ' does not repeat with its 32 px tile');
+      if (Math.abs(b13Mean(b)[0] - v) > 1) throw new Error('Blue noise printed grey ' + v + ' at a mean of ' + b13Mean(b)[0].toFixed(1));
+    });
+    /* ERROR DIFFUSION ON CELLS: at Cell size 4 every 4x4 cell is one flat colour (the chunky look). In colour at 4 levels every
+       channel is one of the four levels, and the picture's average colour holds within 3 levels. */
+    const src = b13Plate(W, H), cells = di({ method: 1, scale: 4, levels: 4 }, src.slice());
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, j = ((y & ~3) * W + (x & ~3)) * 4; if (cells[i] !== cells[j] || cells[i + 1] !== cells[j + 1] || cells[i + 2] !== cells[j + 2]) throw new Error('Floyd–Steinberg at Cell size 4 broke the cell at ' + (x & ~3) + ',' + (y & ~3) + ' - a cell must be one block'); }
+    const col = di({ method: 1, levels: 4 }, src.slice()), ms = b13Mean(src), mc = b13Mean(col);
+    for (let i = 0; i < col.length; i += 4) for (let c = 0; c < 3; c++) if ([0, 85, 170, 255].indexOf(col[i + c]) < 0) throw new Error('Floyd–Steinberg at 4 levels left a channel at ' + col[i + c]);
+    [0, 1, 2].forEach(c => { if (Math.abs(ms[c] - mc[c]) > 3) throw new Error('Floyd–Steinberg moved the average ' + ['red', 'green', 'blue'][c] + ' from ' + ms[c].toFixed(1) + ' to ' + mc[c].toFixed(1)); });
+    /* INK AND PAPER: in Mono at 2 levels every pixel is the ink or the paper, whatever the method. In Colour they are not read
+       (CONTROL: Colour with Ink set is the old dither). */
+    [0, 1, 2, 3].forEach(method => {
+      const k = Object.keys(b13Colours(di({ mono: 1, method: method, ink: '#1a2b3c', paper: '#f0e8d0' }, grey(110)))).sort().join(' ');
+      if (k !== '240,232,208 26,43,60') throw new Error('Mono with Ink and Paper, Method ' + method + ', printed ' + k + ' - every pixel should be the ink or the paper');
+    });
+    if (!b13Same(di({ ink: '#1a2b3c', paper: '#f0e8d0' }, src.slice()), di({}, src.slice()))) throw new Error('Ink and Paper changed a Colour dither - they only mean something in Mono');
+  });
+
+  /* 13.7 HSL BANDS: Ignore greys below, Lightness from / to, Show selection. */
+  const B13HSL_NEW = { satgate: 33, lumlow: 0, lumhigh: 100, view: 0 };
+  const B13HSL_CFG = { def: {}, red: { band: 0, hue: -30 }, custom: { band: 8, centre: 20, width: 60, sat: -50, lum: 30 }, green: { band: 3, range: 2.5, lum: -40 }, zero: { hue: 0, sat: 0, lum: 0 } };
+  const B13HSL_PIN = {   // fc8866f1, before the edit
+    def: 'f662dd15.f662dd15/f662dd15.f662dd15 926e1158.926e1158/926e1158.926e1158', red: 'b6b7670d.b6b7670d/b6b7670d.b6b7670d b20602e1.b20602e1/b20602e1.b20602e1',
+    custom: '4b923ab0.4b923ab0/4b923ab0.4b923ab0 407d0007.407d0007/407d0007.407d0007', green: '8ad5ee1b.8ad5ee1b/8ad5ee1b.8ad5ee1b 516db2b5.516db2b5/516db2b5.516db2b5',
+    zero: '3ef7846d.3ef7846d/3ef7846d.3ef7846d 60f20f35.60f20f35/60f20f35.60f20f35' };
+
+  test('482 13.7 HSL Bands - Ignore greys below, Lightness from and to, and Show selection are in the catalogue at defaults that retune the old band, Show selection says it reaches the export, and saved and new bands draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('hslbands', B13HSL_NEW, { satgate: 10, lumlow: 20, lumhigh: 60, view: 1 });
+    if (!/export/i.test(b13Row('hslbands', 'view').note || '')) throw new Error('Show selection does not say it shows in the export too (note: ' + JSON.stringify(b13Row('hslbands', 'view').note) + ')');
+    ['satgate', 'lumlow', 'lumhigh'].forEach(k => { if (b13Row('hslbands', k).unit !== '%') throw new Error('HSL Bands ' + k + ' is not in %'); });
+    const moved = b13Pinned('hslbands', B13HSL_NEW, B13HSL_CFG, B13HSL_PIN);
+    if (moved.length) throw new Error(moved.length + ' HSL Bands pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.7 HSL Bands - Lightness to 50 leaves a bright blue untouched and still retunes a dark one, Lightness from 50 the reverse, Ignore greys below takes more or less of a greyish blue, and Show selection paints what the band catches', { item: '482', budgetMs: 60000 }, function () {
+    const one = (rgb, over) => { const d = b13Flat(1, 1, rgb); b13Run('hslbands', Object.assign(b13Base('hslbands', {}), over), 1, 1, 0.5, 1, d); return [d[0], d[1], d[2]]; };
+    const bright = [100, 150, 255], dark = [20, 40, 120], dull = [120, 130, 160];
+    const moved = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    /* LIGHTNESS. CONTROL: the default Blue band (Hue +45, Saturation +40) retunes both blues. */
+    if (!(moved(one(bright, {}), bright) > 10 && moved(one(dark, {}), dark) > 10)) throw new Error('CONTROL: the default Blue band does not retune both blues (' + one(bright, {}) + ' / ' + one(dark, {}) + ')');
+    if (one(bright, { lumhigh: 50 }).join() !== bright.join()) throw new Error('Lightness to 50 still retuned a bright blue (lightness 0.70): ' + bright + ' -> ' + one(bright, { lumhigh: 50 }));
+    if (one(dark, { lumhigh: 50 }).join() !== one(dark, {}).join()) throw new Error('Lightness to 50 changed how a dark blue (lightness 0.27) is retuned - it is inside the range and must take the whole change');
+    if (one(dark, { lumlow: 50 }).join() !== dark.join()) throw new Error('Lightness from 50 still retuned a dark blue: ' + dark + ' -> ' + one(dark, { lumlow: 50 }));
+    if (one(bright, { lumlow: 50 }).join() !== one(bright, {}).join()) throw new Error('Lightness from 50 changed how a bright blue is retuned');
+    const edge = moved(one(bright, { lumhigh: 67 }), bright);
+    if (!(edge > 0 && edge < moved(one(bright, {}), bright))) throw new Error('a blue just past Lightness to (within the 5 percent feather) took ' + edge + ' of the change - it should take part of it');
+    /* IGNORE GREYS BELOW, on a greyish blue (HSL saturation 0.17): 0 takes it whole, 33 (the old gate) half or so, 100 least. A
+       grey is never touched, gate or none. */
+    const m0 = moved(one(dull, { satgate: 0 }), dull), m33 = moved(one(dull, {}), dull), m100 = moved(one(dull, { satgate: 100 }), dull);
+    if (!(m0 > m33 && m33 > m100 && m100 > 0)) throw new Error('Ignore greys below 0 / 33 / 100 moved a greyish blue by ' + m0 + ' / ' + m33 + ' / ' + m100 + ' - a lower gate must take more of it');
+    if (one(dull, { satgate: 33 }).join() !== one(dull, {}).join()) throw new Error('Ignore greys below 33 is not the old gate');
+    if (one([128, 128, 128], { satgate: 0 }).join() !== '128,128,128') throw new Error('Ignore greys below 0 moved a pure grey');
+    /* SHOW SELECTION: pure blue is the band's centre (white), red and grey are outside it (black), even with the band set to
+       change nothing; a transparent pixel is left alone. */
+    const view = (rgb, over) => one(rgb, Object.assign({ view: 1 }, over || {}));
+    if (view([0, 0, 255]).join() !== '255,255,255') throw new Error('Show selection painted pure blue (the Blue band’s centre) ' + view([0, 0, 255]) + ', not white');
+    if (view([255, 0, 0]).join() !== '0,0,0' || view([128, 128, 128]).join() !== '0,0,0') throw new Error('Show selection painted red ' + view([255, 0, 0]) + ' and grey ' + view([128, 128, 128]) + ' - outside the band is black');
+    if (view([0, 0, 255], { hue: 0, sat: 0, lum: 0 }).join() !== '255,255,255') throw new Error('Show selection drew nothing while the band changes nothing - it must still show what the band catches');
+    if (view(bright, { lumhigh: 50 }).join() !== '0,0,0') throw new Error('Show selection does not leave out a blue that Lightness to excludes');
+    const clear = b13Flat(1, 1, [0, 0, 255], 0); b13Run('hslbands', Object.assign(b13Base('hslbands', {}), { view: 1 }), 1, 1, 0.5, 1, clear);
+    if (Array.from(clear).join() !== '0,0,255,0') throw new Error('Show selection painted a transparent pixel');
+    /* …and what it shows is what the band changes: on the colour fixture, every pixel it paints black is left untouched. */
+    const W = 97, H = 61, src = b13Plate(W, H), sel = b13Run('hslbands', Object.assign(b13Base('hslbands', {}), { view: 1 }), W, H, 0.5, 1, src.slice()), out = b13Run('hslbands', b13Base('hslbands', {}), W, H, 0.5, 1, src.slice());
+    let black = 0;
+    for (let i = 0; i < src.length; i += 4) { if (!src[i + 3] || sel[i] !== 0) continue; black++; if (out[i] !== src[i] || out[i + 1] !== src[i + 1] || out[i + 2] !== src[i + 2]) throw new Error('Show selection painted pixel ' + (i / 4) + ' black, but the band changed it'); }
+    if (!(black > 100 && black < W * H - 100)) throw new Error('CONTROL: Show selection painted ' + black + ' of ' + (W * H) + ' pixels black - the fixture does not straddle the band');
+  });
 })();

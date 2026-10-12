@@ -180,7 +180,13 @@ window.FM = window.FM || {};
       { key: 'spacing', label: 'Pitch', min: 2, max: 40, step: 1, def: 2, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 1, max: 20, step: 1, def: 1, unit: 'px' },
       { key: 'roll', label: 'Roll', min: -20, max: 20, step: 1, def: 0, unit: 'px/s' },
-    ] },
+      /* #482 polish 13.4. The lines were hard-edged, black and horizontal only. Softness rounds each line's two edges into a
+         raised cosine (100 = as soft as the line and its gap allow) and keeps the same darkening on average; Direction turns
+         them into columns (Roll then crawls sideways); Line colour draws them in a colour instead of darkening (black IS the
+         old darkening). Every default runs the old loop untouched. */
+      { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'dir', label: 'Direction', def: 0, options: [[0, 'Horizontal'], [1, 'Vertical']] },
+    ], color: true, defColor: '#000000', colorLabel: 'Line colour' },
     // ---- batch 2 ----
     { type: 'vibrance', label: 'Vibrance', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 8, step: 0.02, def: 1.6 },
@@ -202,14 +208,35 @@ window.FM = window.FM || {};
     { type: 'dither', label: 'Dither', params: [
       { key: 'levels', label: 'Levels', min: 2, max: 32, step: 1, def: 4 },
       { key: 'scale', label: 'Cell size', min: 1, max: 64, step: 1, def: 1, unit: 'px' },
-      { key: 'matrix', label: 'Pattern', def: 1, options: [[0, 'Coarse 2×2'], [1, 'Classic 4×4'], [2, 'Fine 8×8']] },
+      { key: 'matrix', label: 'Pattern', def: 1, options: [[0, 'Coarse 2×2'], [1, 'Classic 4×4'], [2, 'Fine 8×8']], overriddenBy: 'method', liveWhen: 0 },   // #482 13.6: only Ordered reads a pattern
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Mono']] },
+      /* #482 polish 13.6. The only method was an ordered (Bayer) pattern, and Mono could only print black on white. Floyd–Steinberg
+         and Atkinson diffuse each pixel's rounding error onto the pixels after it (serpentine, so no diagonal worms) — the
+         organic newspaper-photo look, Atkinson lighter and crisper because it passes on only three quarters of the error; Blue
+         noise is ordered dither with a 32×32 blue-noise threshold (void-and-cluster, built once) instead of a Bayer grid, so
+         there is no visible pattern. Ink and Paper recolour Mono. Ordered with black on white is the old kernel exactly. */
+      { key: 'method', label: 'Method', def: 0, options: [[0, 'Ordered'], [1, 'Floyd–Steinberg'], [2, 'Atkinson'], [3, 'Blue noise']], note: 'Error diffusion (Floyd–Steinberg, Atkinson) shimmers on video' },
+      { key: 'ink', label: 'Ink', swatch: true, def: '#000000', overriddenBy: 'mono', liveWhen: 1 },
+      { key: 'paper', label: 'Paper', swatch: true, def: '#ffffff', overriddenBy: 'mono', liveWhen: 1 },
     ] },
     { type: 'halftone', label: 'Halftone Dots', params: [
       { key: 'size', label: 'Dot pitch', min: 2, max: 120, step: 1, def: 8, unit: 'px' },
       { key: 'angle', label: 'Screen angle', min: 0, max: 90, step: 1, def: 0, unit: '°' },
       { key: 'gain', label: 'Ink gain', min: 0.5, max: 2.5, step: 0.05, def: 1.45, unit: '×' },
       { key: 'shape', label: 'Dot shape', def: 0, options: [[0, 'Round'], [1, 'Square'], [2, 'Diamond']] },
+      /* #482 polish 13.1 (hunt C32). Every dot was black on white, hard-edged, and toned by ONE pixel at the cell's centre — so
+         a dot flipped size whenever that one pixel did (the shimmer on video), and the Poster Print filter could not print the
+         colour its description promises. Print: Colour dots ink each dot in its cell's own colour; CMYK lays four screens
+         (cyan 15°, magenta 75°, yellow 0°, black 45°, all turned by Screen angle) and mixes them like ink on paper. Ink and
+         Paper recolour Mono (Ink does nothing under the colour prints, which ink with the picture). Smooth dots fades the dot
+         edge over that many px. Sample Cell average tones each dot by its whole cell. Mix fades back to the picture. Every
+         default is the old print, so the kernel runs its old loop untouched there. */
+      { key: 'mode', label: 'Print', def: 0, options: [[0, 'Mono'], [1, 'Colour dots'], [2, 'CMYK']] },
+      { key: 'ink', label: 'Ink', swatch: true, def: '#000000', overriddenBy: 'mode', liveWhen: 0 },
+      { key: 'paper', label: 'Paper', swatch: true, def: '#ffffff' },
+      { key: 'aa', label: 'Smooth dots', min: 0, max: 2, step: 0.1, def: 0, unit: 'px' },
+      { key: 'sample', label: 'Sample', def: 0, options: [[0, 'Centre'], [1, 'Cell average']] },
+      { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
     ] },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
     { type: 'wave', label: 'Wave', params: [
@@ -328,6 +355,15 @@ window.FM = window.FM || {};
       { key: 'scanline', label: 'Scanlines', min: 0, max: 1, step: 0.02, def: 0.45 },
       { key: 'mask', label: 'Phosphor mask', min: 0, max: 1, step: 0.02, def: 0.18 },
       { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.02, def: 0.55 },   // queue 904: was a fixed 0.55 welded to Amount
+      /* #482 polish 13.2. The tube was flat, the mask was always an aperture grille's stripes, bright areas never bled over the
+         dark lines, and the picture held perfectly steady — four of the things that say "television". Tube curvature bulges the
+         picture and blacks out the corners; Mask type adds a slot mask and staggered dots; Bloom lets bright lines fill their own
+         gaps and glow into the dark round them; Flicker dips the brightness frame by frame (a hash of the frame, so the preview,
+         the export and a scrub agree). Every default is the old flat, steady screen, and the kernel runs its old loop there. */
+      { key: 'curve', label: 'Tube curvature', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'masktype', label: 'Mask type', def: 0, options: [[0, 'Stripes'], [1, 'Slot'], [2, 'Dots']] },
+      { key: 'bloom', label: 'Bloom', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'flicker', label: 'Flicker', min: 0, max: 1, step: 0.02, def: 0 },
     ] },
     // ---- batch 6 ----
     { type: 'boxblur', label: 'Box Blur', params: [
@@ -1504,6 +1540,15 @@ window.FM = window.FM || {};
       { key: 'range', label: 'Range', min: 0.2, max: 3, step: 0.05, def: 1 },
       { key: 'centre', label: 'Custom centre', min: 0, max: 359, step: 1, def: 200, unit: '°', overriddenBy: 'band', liveWhen: 8 },
       { key: 'width', label: 'Custom width', min: 5, max: 120, step: 1, def: 30, unit: '°', overriddenBy: 'band', liveWhen: 8 },
+      /* #482 polish 13.7. The saturation gate was a fixed S × 3 (a pixel at a third saturation or more takes the whole change),
+         every brightness of the band was retuned, and there was no way to see what the band had caught. Ignore greys below sets
+         that gate (33 is a third: the old S × 3 exactly; 0 takes even near-greys whole); Lightness from / to keep the change to
+         a band of lightness, with a 5% feather past each end; Show selection paints what the band catches, white = all of the
+         change, black = none. Every default is the old band. */
+      { key: 'satgate', label: 'Ignore greys below', min: 0, max: 100, step: 1, def: 33, unit: '%' },
+      { key: 'lumlow', label: 'Lightness from', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'lumhigh', label: 'Lightness to', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'view', label: 'Show selection', options: [[0, 'Off'], [1, 'On']], def: 0, note: 'It shows in the export too — turn it off when done' },
     ] },
     // ---- batch 34: the scan bar + a key that survives bad lighting ----
     // Time Warp Scan — a bar crosses the frame and everything it has passed stays frozen at the
@@ -1560,6 +1605,13 @@ window.FM = window.FM || {};
       { key: 'tracking', label: 'Tracking band', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'trackspeed', label: 'Band speed', min: 0, max: 3, step: 0.05, def: 0.4, unit: 'Hz' },
       { key: 'headswitch', label: 'Head switch', min: 0, max: 1, step: 0.02, def: 0.6 },
+      /* #482 polish 13.3. Three more tells of a worn tape, each scaled by Amount like the rest: Snow is the grainy fizz and the
+         white dropout streaks of a tired tape; Colour fade drains the colour a tape loses over the years (towards a third of it
+         at 100 and full Amount); Vertical hold jumps the whole picture up or down by up to that many px, frame by frame, wrapping
+         like a rolling picture. All three are hashes of the 30 fps frame (no state), and all three at 0 run the old loop. */
+      { key: 'snow', label: 'Snow', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'fade', label: 'Colour fade', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'jitter', label: 'Vertical hold', min: 0, max: 20, step: 1, def: 0, unit: 'px' },
     ] },
     // ---- batch 37: the last two off the build table ----
     // Compression Crunch — what over-compression actually does: colour degrades into blocks and
@@ -1596,13 +1648,21 @@ window.FM = window.FM || {};
     ] },
     // Pixel Sort — the datamosh look: runs of pixels re-ordered by brightness, which turns a frame
     // into vertical or horizontal smears of sorted colour. Nothing else here re-ORDERS pixels.
-    { type: 'pixelsort', label: 'Pixel Sort', desc: 'Re-orders runs of pixels by brightness, smearing the frame into sorted bands. Threshold picks which pixels qualify; Density is how much of the frame joins in.', params: [
+    { type: 'pixelsort', label: 'Pixel Sort', desc: 'Re-orders runs of pixels by brightness, hue, saturation or one colour, smearing the frame into sorted bands. Threshold picks which pixels qualify; Density is how much of the frame joins in.', params: [
       { key: 'density', label: 'Density', min: 0.02, max: 1, step: 0.02, def: 0.35 },
       { key: 'low', label: 'Dark cut', min: 0, max: 1, step: 0.01, def: 0.2 },
       { key: 'high', label: 'Bright cut', min: 0, max: 1, step: 0.01, def: 0.85 },
       { key: 'length', label: 'Max run', min: 8, max: 600, step: 4, def: 160, unit: 'px' },
-      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical']], def: 0 },
+      /* #482 polish 13.5: two diagonals, ↘ and ↗ — 0 and 1 are the old rows and columns, so a saved value means what it did. */
+      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Diagonal ↘'], [3, 'Diagonal ↗']], def: 0 },
       { key: 'order', label: 'Order', options: [[0, 'Dark → bright'], [1, 'Bright → dark']], def: 0 },
+      /* #482 polish 13.5. A run was always ordered by brightness, the same lines were sorted in every Pixel Sort, and they never
+         changed. Sort by orders each run by Hue (a rainbow smear), Saturation or one channel instead — Dark cut and Bright cut
+         still pick the runs by brightness, so the same pixels take part. Pattern picks a different set of lines; Re-roll picks
+         a new set that many times a second. Brightness, Pattern 0 and Re-roll 0 are the old sort exactly. */
+      { key: 'by', label: 'Sort by', options: [[0, 'Brightness'], [1, 'Hue'], [2, 'Saturation'], [3, 'Red'], [4, 'Green'], [5, 'Blue']], def: 0 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'reroll', label: 'Re-roll', min: 0, max: 30, step: 1, def: 0, unit: 'Hz' },
     ] },
     // Luma Matte — cut this layer out with ANOTHER layer's brightness. Alpha mattes already exist as
     // masking groups and the Cutout blend modes; what did not was reading the LUMA of a layer that
@@ -5204,6 +5264,328 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ═══ HALFTONE, THE GENERAL PRINT (#482 polish 13.1, hunt C32) ═════════════════════════════════════════════════════════
+   * The Halftone kernel hands everything that is not its old black-on-white print to here. Each screen is the old lattice
+   * exactly — the same rotation, the same cell, the same centre, the same distance, the same dot radius
+   * (1 − tone) × pitch/2 × Ink gain — so a screen differs from the old print only in what it inks:
+   *   · Mono        — Ink on Paper (the old print is black on white).
+   *   · Colour dots — each dot in its own cell's colour, on Paper.
+   *   · CMYK        — four screens at cyan +15°, magenta +75°, yellow +0° and black +45° from Screen angle (the classic set,
+   *                   so no two screens beat into a moire), separated by grey-component replacement (K = 1 − max(R,G,B),
+   *                   C = (max − R) / max, and so on), each multiplied down from Paper the way ink absorbs light.
+   * Smooth dots (`aa`, PLATE px — the kernel has scaled it) fades the dot edge across that width instead of a hard step, and
+   * fades a dot smaller than the ramp in proportion to its size, or a white cell would print a half-grey speck at its centre.
+   * Cell average (`avg`) tones a dot by the alpha-weighted mean of ITS cell — every pixel whose lattice cell it is, on a
+   * turned screen too — instead of the one pixel at the centre, which is what made the dots jump on moving footage. Mix fades
+   * the print back to the picture. Alpha is left alone, as the old print leaves it. */
+  function halftone13(d, s, W, H, size, r2, ang, gain, shape, o) {
+    const scr = o.mode === 2 ? [15, 75, 0, 45] : [0], nS = scr.length, aa = o.aa, ink = o.ink, paper = o.paper, mix = o.mix, colour = o.mode === 1;
+    const L = scr.map(function (off) {
+      const a = ang + off, rot = ((a % 360) + 360) % 360 !== 0, rad = a * Math.PI / 180;
+      const q = { rot: rot, ca: rot ? Math.cos(rad) : 1, sa: rot ? Math.sin(rad) : 0, u0: 0, v0: 0, nu: 1, nv: 1, tab: null };
+      if (!o.avg) return q;
+      // the cell a pixel belongs to, spelled exactly as the loop below spells it (so the table and the loop agree)
+      const cu = (x, y) => Math.floor((q.rot ? x * q.ca + y * q.sa : x) / size), cv = (x, y) => Math.floor((q.rot ? -x * q.sa + y * q.ca : y) / size);
+      let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+      [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]].forEach(c => { const a1 = cu(c[0], c[1]), b1 = cv(c[0], c[1]); if (a1 < u0) u0 = a1; if (a1 > u1) u1 = a1; if (b1 < v0) v0 = b1; if (b1 > v1) v1 = b1; });
+      const nu = u1 - u0 + 1, nv = v1 - v0 + 1, tab = new Float64Array(nu * nv * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, w = s[i + 3]; if (!w) continue;
+        const k = ((cv(x, y) - v0) * nu + (cu(x, y) - u0)) * 4;
+        tab[k] += s[i] * w; tab[k + 1] += s[i + 1] * w; tab[k + 2] += s[i + 2] * w; tab[k + 3] += w;
+      }
+      for (let k = 0; k < tab.length; k += 4) { const w = tab[k + 3]; if (w > 0) { tab[k] /= w; tab[k + 1] /= w; tab[k + 2] /= w; } }
+      q.u0 = u0; q.v0 = v0; q.nu = nu; q.nv = nv; q.tab = tab;
+      return q;
+    });
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        let oR = paper[0], oG = paper[1], oB = paper[2];
+        for (let k = 0; k < nS; k++) {
+          const q = L[k];
+          let dx, dy, fu, fv, sr, sg, sb, ccx, ccy;
+          if (q.rot) {
+            const u = x * q.ca + y * q.sa, v2 = -x * q.sa + y * q.ca;
+            fu = Math.floor(u / size); fv = Math.floor(v2 / size);
+            const cx0 = fu * size + r2, cy0 = fv * size + r2;
+            dx = u - cx0; dy = v2 - cy0;
+            if (!q.tab) { ccx = Math.min(W - 1, Math.max(0, Math.round(cx0 * q.ca - cy0 * q.sa))); ccy = Math.min(H - 1, Math.max(0, Math.round(cx0 * q.sa + cy0 * q.ca))); }
+          } else {
+            fu = Math.floor(x / size); fv = Math.floor(y / size);
+            dx = x - (fu * size + r2); dy = y - (fv * size + r2);
+            if (!q.tab) { ccx = Math.min(W - 1, fu * size + (size >> 1)); ccy = Math.min(H - 1, fv * size + (size >> 1)); }
+          }
+          if (q.tab) {
+            let ku = fu - q.u0, kv = fv - q.v0;
+            ku = ku < 0 ? 0 : (ku >= q.nu ? q.nu - 1 : ku); kv = kv < 0 ? 0 : (kv >= q.nv ? q.nv - 1 : kv);
+            const c = (kv * q.nu + ku) * 4; sr = q.tab[c]; sg = q.tab[c + 1]; sb = q.tab[c + 2];
+          } else { const ci = (ccy * W + ccx) * 4; sr = s[ci]; sg = s[ci + 1]; sb = s[ci + 2]; }
+          const dist = shape === 1 ? Math.max(Math.abs(dx), Math.abs(dy)) : shape === 2 ? Math.abs(dx) + Math.abs(dy) : Math.hypot(dx, dy);
+          let tone;
+          if (nS === 1) tone = 1 - (sr * 0.299 + sg * 0.587 + sb * 0.114) / 255;
+          else {
+            const mx = sr > sg ? (sr > sb ? sr : sb) : (sg > sb ? sg : sb);
+            tone = k === 3 ? 1 - mx / 255 : (mx > 0 ? (mx - (k === 0 ? sr : (k === 1 ? sg : sb))) / mx : 0);
+          }
+          const R = tone * r2 * gain;
+          let cov;
+          if (aa === 0) cov = dist < R ? 1 : 0;
+          else { cov = (R - dist) / aa + 0.5; cov = cov < 0 ? 0 : (cov > 1 ? 1 : cov); const z = 2 * R / aa; if (z < 1) cov *= z; }
+          if (nS === 1) {
+            const cr = colour ? sr : ink[0], cg = colour ? sg : ink[1], cb = colour ? sb : ink[2];
+            oR = paper[0] + (cr - paper[0]) * cov; oG = paper[1] + (cg - paper[1]) * cov; oB = paper[2] + (cb - paper[2]) * cov;
+          } else {
+            const f = 1 - cov;
+            if (k === 0) oR *= f; else if (k === 1) oG *= f; else if (k === 2) oB *= f; else { oR *= f; oG *= f; oB *= f; }
+          }
+        }
+        if (mix < 1) { oR = s[i] + (oR - s[i]) * mix; oG = s[i + 1] + (oG - s[i + 1]) * mix; oB = s[i + 2] + (oB - s[i + 2]) * mix; }
+        d[i] = oR; d[i + 1] = oG; d[i + 2] = oB;
+      }
+    }
+  }
+  FM._halftone13 = halftone13;   // suite seam: the general print, so a test can prove it draws the old print at the old settings
+
+  /* ═══ CRT, THE GENERAL TUBE (#482 polish 13.2) ════════════════════════════════════════════════════════════════════════════
+   * The CRT kernel hands anything that is not its old flat, steady screen to here. The scanline, the triad and the vignette are
+   * the old loop's arithmetic, so what changes is only what the new controls add:
+   *   · TUBE CURVATURE bulges the picture the way the glass does: each pixel at (nx, ny) in −1..1 reads the picture at
+   *     nx·(1 + k·ny²), ny·(1 + k·nx²) with k up to 0.3, so the middle stays put, the edges bow and the corners fall off the
+   *     picture — black glass there (the layer's own alpha, so nothing is painted where the layer is not). Read bilinear and
+   *     weighted by alpha, or a transparent neighbour would darken the edge.
+   *   · MASK TYPE: Stripes is the old aperture grille (one colour per column); Slot breaks each triad column into slots with a
+   *     dark gap every fourth line, offset in alternate columns like brickwork; Dots staggers the triads on alternate lines.
+   *   · BLOOM: a bright line on a real tube spreads over its own gaps, so the scanline and mask darkening is filled back in by
+   *     the pixel's brightness, and the bright parts (squared, so the darks hardly glow) are blurred — two box passes of 1.5% of
+   *     the frame's short side (16 px at 1080), the frame being what this kernel's vignette already measures, so a reduced
+   *     preview plate glows as far across the picture as the export — and screened back over the picture.
+   *   · FLICKER dims the whole screen by up to 30% by a hash of the 30 fps frame: no state, so preview, export and scrub agree. */
+  function crt13(d, W, H, t, amt, sc, sl, mk, vgS, curve, mtype, bloom, flick) {
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), one = sc === 1, m = 1 - amt * mk;
+    if (curve > 0) {
+      const s = fxSrc(d), k = curve / 100 * 0.3;
+      for (let y = 0; y < H; y++) {
+        const ny = (y + 0.5) / H * 2 - 1;
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, nx = (x + 0.5) / W * 2 - 1;
+          const ux = nx * (1 + k * ny * ny), uy = ny * (1 + k * nx * nx);
+          if (ux < -1 || ux > 1 || uy < -1 || uy > 1) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; continue; }   // past the tube's edge: black glass
+          const fx = (ux + 1) * 0.5 * W - 0.5, fy = (uy + 1) * 0.5 * H - 0.5;
+          let x0 = Math.floor(fx), y0 = Math.floor(fy);
+          const tx = fx - x0, ty = fy - y0;
+          let x1 = x0 + 1, y1 = y0 + 1;
+          if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0; if (x1 >= W) x1 = W - 1; if (y1 >= H) y1 = H - 1;
+          const i00 = (y0 * W + x0) * 4, i10 = (y0 * W + x1) * 4, i01 = (y1 * W + x0) * 4, i11 = (y1 * W + x1) * 4;
+          const w00 = (1 - tx) * (1 - ty) * s[i00 + 3], w10 = tx * (1 - ty) * s[i10 + 3], w01 = (1 - tx) * ty * s[i01 + 3], w11 = tx * ty * s[i11 + 3];
+          const a = w00 + w10 + w01 + w11;
+          if (!(a > 0)) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0; continue; }
+          d[i] = (s[i00] * w00 + s[i10] * w10 + s[i01] * w01 + s[i11] * w11) / a;
+          d[i + 1] = (s[i00 + 1] * w00 + s[i10 + 1] * w10 + s[i01 + 1] * w01 + s[i11 + 1] * w11) / a;
+          d[i + 2] = (s[i00 + 2] * w00 + s[i10 + 2] * w10 + s[i01 + 2] * w01 + s[i11 + 2] * w11) / a;
+          d[i + 3] = a;
+        }
+      }
+    }
+    let halo = null;
+    if (bloom > 0) {
+      const n = W * H; halo = new Float32Array(n * 3);
+      for (let j = 0, i = 0; j < n; j++, i += 4) { halo[j * 3] = d[i] * d[i] / 255; halo[j * 3 + 1] = d[i + 1] * d[i + 1] / 255; halo[j * 3 + 2] = d[i + 2] * d[i + 2] / 255; }
+      const r = Math.max(1, Math.round(Math.min(W, H) * 0.015));
+      crtBox13(halo, W, H, r); crtBox13(halo, W, H, r);
+    }
+    let fl = 1;
+    if (flick > 0) { let h = Math.imul(Math.floor(t * 30), 2654435761); h = Math.imul(h ^ (h >>> 15), 2246822519); h ^= h >>> 13; fl = 1 - flick * 0.3 * (((h >>> 0) % 1000) / 1000); }
+    const hk = bloom * 0.8 / 255;
+    for (let y = 0; y < H; y++) {
+      const gy = one ? y : Math.floor(y / sc);
+      const scan = (gy & 1) ? (1 - amt * sl) : 1, row = y * W;
+      for (let x = 0; x < W; x++) {
+        const j = row + x, i = j * 4, gx = one ? x : Math.floor(x / sc);
+        let ph = gx % 3, gap = false;
+        if (mtype === 1) gap = ((gy + ((Math.floor(gx / 3) & 1) << 1)) & 3) === 3;
+        else if (mtype === 2) ph = (gx + ((gy & 1) << 1)) % 3;
+        let kr = scan, kg = scan, kb = scan;
+        if (gap) { kr *= m; kg *= m; kb *= m; }
+        else if (ph === 0) { kg *= m; kb *= m; } else if (ph === 1) { kr *= m; kb *= m; } else { kr *= m; kg *= m; }
+        if (bloom > 0) { const fill = bloom * 0.85 * (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255; kr += (1 - kr) * fill; kg += (1 - kg) * fill; kb += (1 - kb) * fill; }
+        const r = Math.hypot(x - cx, y - cy) / maxR, vg = 1 - amt * vgS * Math.max(0, r - 0.4);
+        let R = d[i] * (kr * vg), G = d[i + 1] * (kg * vg), B = d[i + 2] * (kb * vg);
+        if (halo) { R += (255 - R) * halo[j * 3] * hk; G += (255 - G) * halo[j * 3 + 1] * hk; B += (255 - B) * halo[j * 3 + 2] * hk; }
+        if (fl !== 1) { R *= fl; G *= fl; B *= fl; }
+        d[i] = R; d[i + 1] = G; d[i + 2] = B;
+      }
+    }
+  }
+  /* ═══ SCANLINES, THE GENERAL LINES (#482 polish 13.4) ═════════════════════════════════════════════════════════════════════
+   * The pitch, the weight (a weight at or past the pitch widens the pitch to keep a one-row gap, queue 904), the roll and the
+   * rule that picks a line's rows — phase (q − roll) mod pitch at or past pitch − weight — are the old loop's. What is new:
+   *   · DIRECTION Vertical measures the phase along x, so the lines are columns; exactly the horizontal lines on their side.
+   *   · SOFTNESS gives every row of the pitch a weight instead of on/off: 1 in the line's core, 0 in the gap's, and a raised
+   *     cosine across each edge whose width is Softness × the narrower of the line and the gap, centred on the edge — so the
+   *     weight the line loses inside the edge it gains outside, and the average darkening stays the old line's.
+   *   · LINE COLOUR: a line moves the pixel toward the colour by Amount × weight. Black keeps the old multiply (d × (1 − Amount)),
+   *     so black lines here are byte for byte the old lines — only turned, or softened. */
+  function scanlines13(d, W, H, amt, sp, th, off, soft, vert, col) {
+    const spE = th >= sp ? th + 1 : sp, lo = spE - th, hw = th / 2, c = lo + hw, e = soft * Math.min(th, spE - th);
+    const n = vert ? W : H, wt = new Float64Array(n);
+    for (let q = 0; q < n; q++) {
+      const ph = ((q - off) % spE + spE) % spE;
+      if (e <= 0) { wt[q] = ph < lo ? 0 : 1; continue; }
+      let dd = Math.abs(ph + 0.5 - c); if (dd > spE / 2) dd = spE - dd;   // the pixel centre's distance from the line's middle
+      const a = hw - e / 2, b = hw + e / 2;
+      wt[q] = dd <= a ? 1 : (dd >= b ? 0 : 0.5 + 0.5 * Math.cos(Math.PI * (dd - a) / e));
+    }
+    for (let y = 0; y < H; y++) {
+      const row = y * W * 4;
+      for (let x = 0; x < W; x++) {
+        const w = wt[vert ? x : y]; if (w <= 0) continue;
+        const i = row + x * 4;
+        if (!col) { const k = 1 - amt * w; d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; }
+        else { const f = amt * w; d[i] += (col[0] - d[i]) * f; d[i + 1] += (col[1] - d[i + 1]) * f; d[i + 2] += (col[2] - d[i + 2]) * f; }
+      }
+    }
+  }
+
+  /* PIXEL SORT'S KEY (#482 polish 13.5): what a run is ordered by, as 0..255, for Sort by 1-5 — Brightness (0) stays inline
+     in the kernel, verbatim. Hue is the HSV hue around the circle from red, in 256 steps (a grey is 0, red); Saturation is
+     HSV (max − min) / max; Red, Green and Blue are the channel itself. */
+  function pixelSortKey13(by, r, g, b) {
+    if (by >= 3) return by === 3 ? r : (by === 4 ? g : b);
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), dl = mx - mn;
+    if (by === 2) return mx ? ((dl * 255 / mx) | 0) : 0;
+    if (!dl) return 0;
+    let h = mx === r ? ((g - b) / dl) % 6 : (mx === g ? (b - r) / dl + 2 : (r - g) / dl + 4);
+    if (h < 0) h += 6;
+    const k = (h * 256 / 6) | 0;
+    return k > 255 ? 255 : k;
+  }
+
+  /* ═══ DITHER, THE OTHER METHODS (#482 polish 13.6) ════════════════════════════════════════════════════════════════════════
+   * Levels, Cell size, Pattern and Output are the old kernel's, and each method quantises to the old levels (round(v / step)
+   * × step). Ordered reaches here only recoloured; Blue noise is Ordered with a blue-noise threshold. The error-diffusion
+   * methods work on CELLS (one pixel at Cell size 1, else the cell's mean, painted back as a block — the chunky 1-bit look),
+   * SERPENTINE (each row runs the other way, which keeps Floyd–Steinberg from drawing diagonal worms), with a rolling three-row
+   * error buffer rather than a whole-frame float copy. Floyd–Steinberg passes on 7/16 ahead, 3/16 behind-below, 5/16 below and
+   * 1/16 ahead-below; Atkinson 1/8 to six neighbours — three quarters of the error, so highlights and shadows clip cleaner.
+   * Mono quantises luma and, with Ink or Paper set, paints level v as Ink + (Paper − Ink) × v/255. Alpha is left alone. */
+  function dither13(d, W, H, step, sc, mx, mono, method, ink, paper, B, B2) {
+    const one = sc === 1;
+    const monoOut = (i, v) => {
+      if (!ink) { d[i] = v; d[i + 1] = v; d[i + 2] = v; return; }
+      const f = (v < 0 ? 0 : (v > 255 ? 255 : v)) / 255;
+      d[i] = ink[0] + (paper[0] - ink[0]) * f; d[i + 1] = ink[1] + (paper[1] - ink[1]) * f; d[i + 2] = ink[2] + (paper[2] - ink[2]) * f;
+    };
+    if (method !== 1 && method !== 2) {
+      const BN = method === 3 ? blueNoise13() : null;
+      for (let y = 0; y < H; y++) {
+        const gy = one ? y : Math.floor(y / sc);
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, gx = one ? x : Math.floor(x / sc);
+          const n = BN ? (BN[(gy & 31) * 32 + (gx & 31)] + 0.5) / 1024 : (mx === 0 ? B2[gy & 1][gx & 1] / 4 : mx === 2 ? BAYER8[(gy & 7) * 8 + (gx & 7)] : B[gy & 3][gx & 3] / 16);
+          const thr = (n - 0.5) * step;
+          if (mono) monoOut(i, Math.round(Math.round((d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 + thr) / step) * step));
+          else {
+            d[i] = Math.round(Math.round((d[i] + thr) / step) * step);
+            d[i + 1] = Math.round(Math.round((d[i + 1] + thr) / step) * step);
+            d[i + 2] = Math.round(Math.round((d[i + 2] + thr) / step) * step);
+          }
+        }
+      }
+      return;
+    }
+    const gw = one ? W : Math.ceil(W / sc), gh = one ? H : Math.ceil(H / sc), C = mono ? 1 : 3, top = Math.round(255 / step);
+    const row = new Float64Array(gw * C);
+    let E0 = new Float64Array(gw * C), E1 = new Float64Array(gw * C), E2 = new Float64Array(gw * C);
+    for (let gy = 0; gy < gh; gy++) {
+      const y0 = one ? gy : gy * sc, y1 = one ? gy + 1 : Math.min(H, y0 + sc);
+      row.fill(0);
+      for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, k = (one ? x : Math.floor(x / sc)) * C;
+        if (mono) row[k] += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114; else { row[k] += d[i]; row[k + 1] += d[i + 1]; row[k + 2] += d[i + 2]; }
+      }
+      if (!one) for (let gx = 0; gx < gw; gx++) { const n = (y1 - y0) * (Math.min(W, (gx + 1) * sc) - gx * sc); for (let c = 0; c < C; c++) row[gx * C + c] /= n; }
+      const ltr = (gy & 1) === 0, dir = ltr ? 1 : -1;
+      for (let k = 0; k < gw; k++) {
+        const gx = ltr ? k : gw - 1 - k, xa = gx + dir, xb = gx - dir, xc = gx + 2 * dir;
+        for (let c = 0; c < C; c++) {
+          const j = gx * C + c, v = row[j] + E0[j];
+          let qi = Math.round(v / step); qi = qi < 0 ? 0 : (qi > top ? top : qi);
+          const q = Math.round(qi * step), e = v - q;
+          row[j] = q;
+          if (method === 1) {
+            if (xa >= 0 && xa < gw) { E0[xa * C + c] += e * 7 / 16; E1[xa * C + c] += e / 16; }
+            if (xb >= 0 && xb < gw) E1[xb * C + c] += e * 3 / 16;
+            E1[j] += e * 5 / 16;
+          } else {
+            const e8 = e / 8;
+            if (xa >= 0 && xa < gw) { E0[xa * C + c] += e8; E1[xa * C + c] += e8; }
+            if (xc >= 0 && xc < gw) E0[xc * C + c] += e8;
+            if (xb >= 0 && xb < gw) E1[xb * C + c] += e8;
+            E1[j] += e8; E2[j] += e8;
+          }
+        }
+      }
+      for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, k = (one ? x : Math.floor(x / sc)) * C;
+        if (mono) monoOut(i, row[k]); else { d[i] = row[k]; d[i + 1] = row[k + 1]; d[i + 2] = row[k + 2]; }
+      }
+      const r0 = E0; E0 = E1; E1 = E2; E2 = r0; E2.fill(0);
+    }
+  }
+  /* A 32×32 BLUE-NOISE THRESHOLD TILE (#482 polish 13.6), by void-and-cluster (Ulichney 1993): a tenth of the cells from a fixed
+     seed, relaxed by moving the tightest cluster into the largest void until they coincide; those cells ranked tightest-first
+     downward, then every other cell ranked by largest void upward (the tightest cluster of zeros IS the largest void of ones —
+     their energies sum to a constant — so one rule serves both halves). Energy is a toroidal Gaussian, sigma 1.5, cut at 6.
+     Built once, on first use, from fixed numbers: the same tile in the preview, the export and every device. */
+  let _blueNoise13 = null;
+  function blueNoise13() {
+    if (_blueNoise13) return _blueNoise13;
+    const N = 32, S = N * N, R = 6, KW = 2 * R + 1, G = new Float64Array(KW * KW);
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) G[(dy + R) * KW + dx + R] = Math.exp(-(dx * dx + dy * dy) / 4.5);
+    const bit = new Uint8Array(S), E = new Float64Array(S);
+    const splat = (p, sgn) => { const px = p % N, py = (p - px) / N; for (let dy = -R; dy <= R; dy++) { const yy = (py + dy + N) % N; for (let dx = -R; dx <= R; dx++) E[yy * N + (px + dx + N) % N] += sgn * G[(dy + R) * KW + dx + R]; } };
+    const pick = (want, most) => { let b = -1, bv = 0; for (let p = 0; p < S; p++) { if (bit[p] !== want) continue; if (b < 0 || (most ? E[p] > bv : E[p] < bv)) { b = p; bv = E[p]; } } return b; };
+    let s = 0x9e3779b9;
+    const rnd = () => { s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) | 0; return (s >>> 0) / 4294967296; };
+    let ones = 0;
+    while (ones < S / 10) { const p = Math.floor(rnd() * S); if (!bit[p]) { bit[p] = 1; splat(p, 1); ones++; } }
+    for (let it = 0; it < 4 * S; it++) {
+      const c = pick(1, true); bit[c] = 0; splat(c, -1);
+      const v = pick(0, false); bit[v] = 1; splat(v, 1);
+      if (v === c) break;
+    }
+    const rank = new Uint16Array(S), proto = bit.slice(), E0 = E.slice();
+    for (let r = ones - 1; r >= 0; r--) { const c = pick(1, true); bit[c] = 0; splat(c, -1); rank[c] = r; }
+    bit.set(proto); E.set(E0);
+    for (let r = ones; r < S; r++) { const v = pick(0, false); bit[v] = 1; splat(v, 1); rank[v] = r; }
+    _blueNoise13 = rank;
+    return rank;
+  }
+  FM._blueNoise13 = blueNoise13;   // suite seam: the threshold tile, so a test can prove it is a full ranking with no low-frequency clumps
+
+  /* A box blur of radius r on a 3-channel float plane, in place, replicating the edge (CRT bloom). */
+  function crtBox13(b, W, H, r) {
+    const div = 2 * r + 1, tmp = new Float32Array(Math.max(W, H) * 3);
+    for (let y = 0; y < H; y++) {
+      const row = y * W * 3;
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let k = -r; k <= r; k++) sum += b[row + (k < 0 ? 0 : (k >= W ? W - 1 : k)) * 3 + c];
+        for (let x = 0; x < W; x++) { tmp[x * 3 + c] = sum / div; const ax = x + r + 1, sx = x - r; sum += b[row + (ax >= W ? W - 1 : ax) * 3 + c] - b[row + (sx < 0 ? 0 : sx) * 3 + c]; }
+      }
+      for (let x = 0; x < W * 3; x++) b[row + x] = tmp[x];
+    }
+    for (let x = 0; x < W; x++) {
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let k = -r; k <= r; k++) sum += b[((k < 0 ? 0 : (k >= H ? H - 1 : k)) * W + x) * 3 + c];
+        for (let y = 0; y < H; y++) { tmp[y * 3 + c] = sum / div; const ay = y + r + 1, sy = y - r; sum += b[((ay >= H ? H - 1 : ay) * W + x) * 3 + c] - b[((sy < 0 ? 0 : sy) * W + x) * 3 + c]; }
+      }
+      for (let y = 0; y < H; y++) { const o = (y * W + x) * 3; b[o] = tmp[y * 3]; b[o + 1] = tmp[y * 3 + 1]; b[o + 2] = tmp[y * 3 + 2]; }
+    }
+  }
+
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
@@ -5287,18 +5669,32 @@ window.FM = window.FM || {};
       const hi = clamp01(p.high == null ? 0.85 : FM.evalProp(p.high, t)) * 255;
       if (hi <= lo) return;
       const maxRun = Math.max(4, Math.round((p.length == null ? 160 : FM.evalProp(p.length, t)) * s));
-      const vert = Math.round(FM.evalProp(p.direction, t) || 0) === 1;
+      const dirn = Math.round(FM.evalProp(p.direction, t) || 0);
+      const vert = dirn === 1, diag = dirn === 2 || dirn === 3;
       const desc = Math.round(FM.evalProp(p.order, t) || 0) === 1;
-      const lines = vert ? W : H, span = vert ? H : W;
-      const stride = vert ? W : 1, lineStep = vert ? 1 : W;
-      const keys = new Uint32Array(span);
+      /* #482 polish 13.5 — Sort by, Pattern, Re-roll, and the two diagonals. A DIAGONAL is a line through the flat buffer with a
+         stride of W + 1 (↘, x − y constant) or 1 − W (↗, x + y constant, walked left to right and so upward), starting on the
+         top row or left column (↘) or the left column or bottom row (↗); its span is however many pixels it crosses. Pattern
+         and Re-roll mix into the per-line hash only when one of them is set, so Pattern 0 / Re-roll 0 pick the old lines. */
+      const by = p.by == null ? 0 : (Math.round(FM.evalProp(p.by, t)) | 0);
+      const seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0);
+      const rr = p.reroll == null ? 0 : FM.evalProp(p.reroll, t);
+      const mixH = seed !== 0 || rr > 0, epoch = rr > 0 ? Math.floor(t * rr) : 0;
+      const lines = diag ? W + H - 1 : (vert ? W : H);
+      let span = vert ? H : W;
+      const stride = diag ? (dirn === 2 ? W + 1 : 1 - W) : (vert ? W : 1), lineStep = vert ? 1 : W;
+      const keys = new Uint32Array(diag ? Math.max(W, H) : span);
       const src = fxSrc(d);
       for (let L = 0; L < lines; L++) {
         // deterministic per line: the same frame always sorts the same lines
         let h = ((L * 374761393) ^ 0x5bf03635) | 0;
+        if (mixH) h = (h + Math.imul(seed + 1, 0x27d4eb2f) + Math.imul(epoch + 1, 0x165667b1)) | 0;
         h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
         if ((h & 0xffff) / 65536 > density) continue;
-        const base = L * lineStep;
+        let base;
+        if (!diag) base = L * lineStep;
+        else if (dirn === 2) { const dd = L - (H - 1), x0 = dd >= 0 ? dd : 0, y0 = dd >= 0 ? 0 : -dd; base = y0 * W + x0; span = Math.min(W - x0, H - y0); }
+        else { const x0 = L > H - 1 ? L - (H - 1) : 0, y0 = L - x0; base = y0 * W + x0; span = Math.min(W - x0, y0 + 1); }
         let i = 0;
         while (i < span) {
           // find a run of pixels inside the brightness window
@@ -5321,7 +5717,7 @@ window.FM = window.FM || {};
           if (n > 2) {
             for (let j = 0; j < n; j++) {
               const o = (base + (a + j) * stride) << 2;
-              let lum = (0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2]) | 0;
+              let lum = by === 0 ? (0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2]) | 0 : pixelSortKey13(by, src[o], src[o + 1], src[o + 2]);
               if (desc) lum = 255 - lum;
               keys[j] = (lum << 20) | j;                  // brightness in the high bits, index in the low
             }
@@ -5487,6 +5883,10 @@ window.FM = window.FM || {};
         return isFinite(speed) ? Math.max(0, Math.min(3, speed)) : 0;
       }) : t * trkSpd;
       const head = clamp01(p.headswitch == null ? 0.6 : FM.evalProp(p.headswitch, t)) * amt;
+      /* #482 polish 13.3 — Snow, Colour fade, Vertical hold (px, scaled to the plate here: this kernel takes `ps`). */
+      const snow = clamp01(p.snow == null ? 0 : FM.evalProp(p.snow, t)) * amt;
+      const fade = clamp01((p.fade == null ? 0 : FM.evalProp(p.fade, t)) / 100) * amt;
+      const jit = Math.max(0, Math.min(20, p.jitter == null ? 0 : FM.evalProp(p.jitter, t))) * s * amt;
       const src = fxSrc(d);
       const Y = new Float32Array(W), Cb = new Float32Array(W), Cr = new Float32Array(W);
       const k = Math.max(1, Math.round(bleed));
@@ -5495,6 +5895,15 @@ window.FM = window.FM || {};
         let h = ((yy * 7919 + frame * 104729) * 374761393) | 0;
         h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
         return ((h & 0xffff) / 65536) - 0.5;
+      };
+      // VERTICAL HOLD: this frame's jump, in whole plate rows (0 when the control is 0, so every row reads its own row)
+      let vj = 0;
+      if (jit > 0) { let h = Math.imul(frame + 7349, 374761393); h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; vj = Math.round((((h & 0xffff) / 65536) * 2 - 1) * jit); }
+      // SNOW: per-pixel luma fizz, hashed on (x, y, frame)
+      const snowAt = function (x, yy) {
+        let h = Math.imul((x * 73856093) ^ (yy * 19349663) ^ (frame * 83492791), 0x27d4eb2d); h ^= h >>> 15;
+        h = Math.imul(h, 0x165667b1); h ^= h >>> 13;
+        return (h & 0xffff) / 65536 - 0.5;
       };
       // The tracking band scrolls down and wraps well past the frame, so it is off-screen most of
       // the time — a band that is always visible reads as a stripe painted on, not as a fault.
@@ -5514,10 +5923,14 @@ window.FM = window.FM || {};
         }
         if (head > 0 && y >= headY) shift += head * W * 0.16 * (rowNoise(y + 9000) + 0.4);
         const sh = Math.round(shift);
+        const sy = vj === 0 ? y : (((y - vj) % H) + H) % H;   // the picture row this line shows (Vertical hold)
+        // a dropout: a short white streak on a few lines a frame, more of them the more Snow
+        let st0 = W, st1 = -1;
+        if (snow > 0 && rowNoise(y + 13000) + 0.5 < snow * 0.06) { st0 = Math.floor((rowNoise(y + 17000) + 0.5) * W); st1 = st0 + 2 + Math.floor((rowNoise(y + 19000) + 0.5) * W * 0.25); }
         // --- row -> YCbCr, already shifted
         for (let x = 0; x < W; x++) {
           let sx = x - sh; if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
-          const i = ((y * W) + sx) << 2;
+          const i = ((sy * W) + sx) << 2;
           const r = src[i], g = src[i + 1], b = src[i + 2];
           Y[x] = 0.299 * r + 0.587 * g + 0.114 * b;
           Cb[x] = -0.169 * r - 0.331 * g + 0.5 * b;
@@ -5534,12 +5947,14 @@ window.FM = window.FM || {};
           let yy = Y[x] + (Y[x] - s5 / n5) * halo * 1.6;   // overshoot at an edge = the tape's ringing
           let cb = sCb / nk, cr = sCr / nk;
           if (wash > 0) { yy = yy + (235 - yy) * wash * 0.35; cb *= 1 - wash * 0.8; cr *= 1 - wash * 0.8; }
+          if (fade > 0) { const fk = 1 - fade * 0.65; cb *= fk; cr *= fk; }
+          if (snow > 0) { yy += snowAt(x, y) * snow * 200; if (x >= st0 && x <= st1) yy += (250 - yy) * 0.85; }
           const o = ((y * W) + x) << 2;
           d[o] = yy + 1.402 * cr;
           d[o + 1] = yy - 0.344 * cb - 0.714 * cr;
           d[o + 2] = yy + 1.772 * cb;
           let ax = x - sh; if (ax < 0) ax = 0; else if (ax >= W) ax = W - 1;
-          d[o + 3] = src[((y * W) + ax) << 2 | 3];
+          d[o + 3] = src[((sy * W) + ax) << 2 | 3];
         }
       }
     },
@@ -5612,7 +6027,15 @@ window.FM = window.FM || {};
       const hueSh = (p.hue == null ? 45 : FM.evalProp(p.hue, t));
       const satAdj = (p.sat == null ? 40 : FM.evalProp(p.sat, t)) / 100;
       const lumAdj = (p.lum == null ? 0 : FM.evalProp(p.lum, t)) / 100;
-      if (hueSh === 0 && satAdj === 0 && lumAdj === 0) return;
+      /* #482 polish 13.7 — Ignore greys below (the gate's multiplier: 33 % is a third, the old × 3 exactly; 0 means no gate),
+         Lightness from / to (a 5% feather past each end), Show selection (paints the weight: it draws even when the band
+         changes nothing, so the early return waits for it). */
+      const sg = p.satgate == null ? 33 : FM.evalProp(p.satgate, t);
+      const gm = sg === 33 ? 3 : (sg > 0 ? 100 / sg : 0);
+      const llo = (p.lumlow == null ? 0 : FM.evalProp(p.lumlow, t)) / 100, lhi = (p.lumhigh == null ? 100 : FM.evalProp(p.lumhigh, t)) / 100;
+      const lwin = llo > 0 || lhi < 1;
+      const view = (p.view == null ? 0 : (Math.round(FM.evalProp(p.view, t)) | 0)) === 1;
+      if (hueSh === 0 && satAdj === 0 && lumAdj === 0 && !view) return;
       const cut = halfW * 1.6;
       for (let i = 0; i < d.length; i += 4) {
         if (d[i + 3] === 0) continue;
@@ -5620,19 +6043,24 @@ window.FM = window.FM || {};
         const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
         const mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
         const dl = mx - mn;
-        if (dl === 0) continue;                       // pure neutral — no band owns it
+        if (dl === 0) { if (view) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } continue; }   // pure neutral — no band owns it
         let h;
         if (mx === r) h = 60 * (((g - b) / dl) % 6);
         else if (mx === g) h = 60 * ((b - r) / dl + 2);
         else h = 60 * ((r - g) / dl + 4);
         if (h < 0) h += 360;
         let dh = Math.abs(h - centre); if (dh > 180) dh = 360 - dh;
-        if (dh > cut) continue;                       // the early-out that keeps this cheap
+        if (dh > cut) { if (view) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } continue; }   // the early-out that keeps this cheap
         const L = (mx + mn) / 2;
         const S = L > 0.5 ? dl / (2 - mx - mn) : dl / (mx + mn);
         // smoothstep on hue distance, then gate by saturation so neutrals stay put
         const u = dh >= halfW ? 0 : 1 - dh / halfW;
-        let w = u * u * (3 - 2 * u) * (S * 3 > 1 ? 1 : S * 3);
+        let w = u * u * (3 - 2 * u) * (gm === 0 ? 1 : (S * gm > 1 ? 1 : S * gm));
+        if (lwin) {
+          if (L < llo) w *= llo - L >= 0.05 ? 0 : 1 - (llo - L) / 0.05;
+          else if (L > lhi) w *= L - lhi >= 0.05 ? 0 : 1 - (L - lhi) / 0.05;
+        }
+        if (view) { const v = w * 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; continue; }
         if (w <= 0.002) continue;
         let nh = h + hueSh * w; nh = ((nh % 360) + 360) % 360;
         let ns = S * (1 + satAdj * w); if (ns < 0) ns = 0; else if (ns > 1) ns = 1;
@@ -5960,6 +6388,13 @@ window.FM = window.FM || {};
       const roll = p.roll == null ? 0 : FM.evalProp(p.roll, t);
       const off = FM.isAnimated(p.roll) ? FM.integrateProp(p.roll, 0, t) : roll ? roll * t : 0;
       const plain = sp === 2 && th === 1 && !roll && off === 0;
+      /* #482 polish 13.4 — Softness, Direction, Line colour. Absent (a saved Scanlines) or at their defaults (black is the old
+         darkening) the loop below runs untouched; anything else takes scanlines13, which keeps this loop's pitch, weight, roll
+         and line-selection rule. */
+      let soft = p.softness == null ? 0 : FM.evalProp(p.softness, t) / 100; soft = !(soft > 0) ? 0 : (soft > 1 ? 1 : soft);
+      const vert = (p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0)) === 1;
+      const lcol = p.color == null ? null : hexToRGB(p.color), tinted = !!lcol && (lcol[0] !== 0 || lcol[1] !== 0 || lcol[2] !== 0);
+      if (soft > 0 || vert || tinted) { scanlines13(d, W, H, amt, sp, th, off, soft, vert, tinted ? lcol : null); return; }
       /* A LINE NEVER FILLS ITS OWN PITCH (queue 904). Weight was clamped to Pitch, so at the default Pitch of 2, weights 2-20 — 19 of the
          slider's 20 stops — all darkened EVERY row: a flat wash, no lines. Now a weight at or past the pitch widens the pitch to keep a
          one-row gap, so every stop draws visible scanlines, heavier as it goes. Weight below Pitch is untouched (byte-identical). */
@@ -6138,6 +6573,12 @@ window.FM = window.FM || {};
         const sc = p.scale == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.scale, t)));
         const mx = p.matrix == null ? 1 : (Math.round(FM.evalProp(p.matrix, t)) | 0);
         const mono = p.mono == null ? 0 : (Math.round(FM.evalProp(p.mono, t)) | 0);
+        /* #482 polish 13.6 — Method, Ink, Paper. Ordered with black ink on white paper (or the keys absent, a saved Dither) runs
+           the loop below untouched; anything else takes dither13. Ink and Paper only mean something in Mono. */
+        const method = p.method == null ? 0 : (Math.round(FM.evalProp(p.method, t)) | 0);
+        const ink = p.ink == null ? [0, 0, 0] : hexToRGB(FM.evalProp(p.ink, t)), paper = p.paper == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.paper, t));
+        const recol = !!mono && (ink[0] !== 0 || ink[1] !== 0 || ink[2] !== 0 || paper[0] !== 255 || paper[1] !== 255 || paper[2] !== 255);
+        if (method !== 0 || recol) { dither13(d, W, H, step, sc, mx, mono, method, recol ? ink : null, paper, B, B2); return; }
         const one = sc === 1;
         for (let y = 0; y < H; y++) {
           const gy = one ? y : Math.floor(y / sc);
@@ -6169,6 +6610,24 @@ window.FM = window.FM || {};
       let gain = p.gain == null ? 1.45 : FM.evalProp(p.gain, t);
       if (gain < 0.5) gain = 0.5; if (gain > 2.5) gain = 2.5;
       const shape = p.shape == null ? 0 : (Math.round(FM.evalProp(p.shape, t)) | 0);
+      /* #482 polish 13.1 (C32) — Print, Ink, Paper, Smooth dots, Sample, Mix. At their defaults (or absent, a saved Halftone)
+         the loop below runs untouched; anything else takes halftone13 further down. Smooth dots is project px, scaled to the
+         plate here because this kernel takes `ps` itself (pxToPlate leaves a 6-argument kernel alone). */
+      const ht13 = {
+        mode: p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0),
+        aa: p.aa == null ? 0 : FM.evalProp(p.aa, t),
+        avg: (p.sample == null ? 0 : (Math.round(FM.evalProp(p.sample, t)) | 0)) === 1,
+        mix: p.mix == null ? 1 : FM.evalProp(p.mix, t),
+        ink: p.ink == null ? [0, 0, 0] : hexToRGB(FM.evalProp(p.ink, t)),
+        paper: p.paper == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.paper, t)),
+      };
+      ht13.aa = !(ht13.aa > 0) ? 0 : (ht13.aa > 2 ? 2 : ht13.aa) * (ps || 1);
+      ht13.mix = !(ht13.mix > 0) ? 0 : (ht13.mix > 1 ? 1 : ht13.mix);
+      if (ht13.mode !== 0 || ht13.aa !== 0 || ht13.avg || ht13.mix !== 1 || ht13.ink[0] !== 0 || ht13.ink[1] !== 0 || ht13.ink[2] !== 0
+          || ht13.paper[0] !== 255 || ht13.paper[1] !== 255 || ht13.paper[2] !== 255) {
+        halftone13(d, s, W, H, size, r2, ang, gain, shape, ht13);
+        return;
+      }
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const i = (y * W + x) * 4;
@@ -6565,6 +7024,12 @@ window.FM = window.FM || {};
       // VIGNETTE (queue 904): the tube darkening was a fixed 0.55 × Amount, so the only way to lighten the corners was to
       // turn the whole effect down — scanlines and mask with it. Its siblings each got a slider; this is the third.
       const vgS = p.vignette == null ? 0.55 : clamp01(FM.evalProp(p.vignette, t));
+      /* #482 polish 13.2 — Tube curvature, Mask type, Bloom, Flicker. Absent (a saved CRT) or at their defaults the loop below runs
+         untouched; anything else takes crt13 further down, which keeps this loop's scanline, triad and vignette arithmetic. */
+      let curve = p.curve == null ? 0 : FM.evalProp(p.curve, t); curve = !(curve > 0) ? 0 : (curve > 100 ? 100 : curve);
+      const masktype = p.masktype == null ? 0 : (Math.round(FM.evalProp(p.masktype, t)) | 0);
+      const bloom = clamp01(p.bloom == null ? 0 : FM.evalProp(p.bloom, t)), flicker = clamp01(p.flicker == null ? 0 : FM.evalProp(p.flicker, t));
+      if (curve > 0 || masktype !== 0 || bloom > 0 || flicker > 0) { crt13(d, W, H, t, amt, sc, sl, mk, vgS, curve, masktype, bloom, flicker); return; }
       const one = sc === 1;
       for (let y = 0; y < H; y++) {
         const gy = one ? y : Math.floor(y / sc);
