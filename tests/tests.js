@@ -124914,4 +124914,75 @@
     if (!(startA({}) > 60 && startA({}) < 200)) throw new Error('CONTROL: a soft Clockwise wipe does not feather its Start line (alpha ' + startA({}) + ')');
     if (startA({ dir: 2 }) !== 255) throw new Error('a soft Both ways wipe feathered its Start line to ' + startA({ dir: 2 }) + ' - the line is the middle of the wedge');
   });
+
+  /* 12.4 TEXT: Type-On’s Caret blink and Hide caret when not typing, Scramble Text’s Resolves order, Timecode’s HH:MM:SS:FF,
+     Frames and MM:SS formats and Seconds’ Decimals. Text effects run on strings, so they are driven through FM.TEXT_FX
+     directly: every config over five texts, five progresses and three moments, hashed (Timecode’s readouts are pinned as
+     the strings themselves). */
+  const B12TO_NEW = { blink: 0, hidecaret: 1 }, B12SC_NEW = { order: 0 }, B12TC_NEW = { decimals: 1 };
+  const B12TO_CFG = { def: {}, word: { unit: 1 }, end: { dir: 1 }, middle: { dir: 2, unit: 1 }, caret: { cursor: 1 }, caretend: { cursor: 3, dir: 1 }, line: { unit: 2, cursor: 2 }, kf: { progress: b12Kf(0, 1), cursor: 2 } };
+  const B12TO_PIN = { def: 'bb01c625', word: 'da63f4cd', end: 'bd105359', middle: '0890250e', caret: '3ed9a5ec', caretend: 'f629e081', line: '7a3bc3e6', kf: '8aac375e' };   // fc8866f1
+  const B12SC_CFG = { any: { chars: 0 }, match: { chars: 1 }, digits: { chars: 2, speed: 30 }, letters: { chars: 3 }, still: { speed: 0 }, kf: { speed: b12Kf(0, 20) } };
+  const B12SC_PIN = { any: '5caa0236', match: '93c4fcfb', digits: '4f47a76d', letters: '30b11ddf', still: 'c104def1', kf: 'f2a99233' };   // fc8866f1
+  const B12TC_CFG = { m0: { mode: 0 }, m1: { mode: 1 }, m2: { mode: 2 }, m3: { mode: 3 }, off: { mode: 1, offset: 3600 }, down: { mode: 0, dir: 1, offset: 30 }, timeline: { mode: 3, source: 1 } };
+  const B12TC_PIN = {   // fc8866f1: the readouts at (t, clip time, fps) = (12.5, 12.5, 30) (3725.5, 3725.5, 30) (0.04, 0.04, 24) (59.999, 59.999, 25) (7.3, 2.1, 29.97) (100.25, 0, 60)
+    m0: '00:12:15 | 02:05:15 | 00:00:00 | 00:59:24 | 00:02:02 | 00:00:00', m1: '00:00:12 | 01:02:05 | 00:00:00 | 00:00:59 | 00:00:02 | 00:00:00',
+    m2: '12:15 | 05:15 | 00:00 | 59:24 | 02:02 | 00:00', m3: '12.5s | 3725.5s | 0.0s | 60.0s | 2.1s | 0.0s',
+    off: '01:00:12 | 02:02:05 | 01:00:00 | 01:00:59 | 01:00:02 | 01:00:00', down: '00:17:15 | 00:00:00 | 00:29:23 | 00:00:00 | 00:27:26 | 00:30:00',
+    timeline: '12.5s | 3725.5s | 0.0s | 60.0s | 7.3s | 100.3s' };
+
+  test('482 12.4 Text - Caret blink, Hide caret when not typing, Resolves and Decimals are in the catalogue at defaults that write the old text, Timecode offers HH:MM:SS:FF, Frames and MM:SS, and saved and new Type-On, Scramble Text and Timecode write character for character as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b12Catalogue('textprogress', B12TO_NEW, { blink: 2.5, hidecaret: 0, cursor: 2 }, 'text');
+    b12Catalogue('textrandomizer', B12SC_NEW, { order: 3 }, 'text');
+    b12Catalogue('timecode', B12TC_NEW, { decimals: 3, mode: 6 }, 'text');
+    const gated = (type, key, want) => { const r = b12Row(type, key); if (r.overriddenBy !== want[0] || JSON.stringify(r.liveWhen) !== JSON.stringify(want[1])) throw new Error(type + ' ' + key + ' is not gated to ' + want[0] + ' ' + JSON.stringify(want[1]) + ' (overriddenBy ' + r.overriddenBy + ', liveWhen ' + JSON.stringify(r.liveWhen) + ')'); };
+    gated('textprogress', 'blink', ['cursor', [1, 2, 3]]); gated('textprogress', 'hidecaret', ['cursor', [1, 2, 3]]); gated('timecode', 'decimals', ['mode', 3]);
+    const fm = (b12Row('timecode', 'mode').options || []).map(o => o[0] + ':' + o[1]).join();
+    if (fm !== '0:MM:SS:FF,1:HH:MM:SS,2:SS:FF,3:Seconds,4:HH:MM:SS:FF,5:Frames,6:MM:SS') throw new Error('Timecode Format is ' + fm);
+    if ((b12Row('textrandomizer', 'order').options || []).map(o => o[1]).join(' / ') !== 'Left to right / Right to left / Random / Centre out') throw new Error('Scramble Text Resolves is ' + JSON.stringify(b12Row('textrandomizer', 'order').options));
+    const moved = b12Pinned('textprogress', B12TO_NEW, B12TO_CFG, B12TO_PIN, b12TextShots('textprogress'))
+      .concat(b12Pinned('textrandomizer', B12SC_NEW, B12SC_CFG, B12SC_PIN, b12TextShots('textrandomizer')))
+      .concat(b12Pinned('timecode', B12TC_NEW, B12TC_CFG, B12TC_PIN, b12TimecodeShots));
+    if (moved.length) throw new Error(moved.length + ' text effects write differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.4 Text - the Type-On caret blinks on the clip’s clock and can stand before and after the typing, Scramble resolves right to left, from the centre or at random (the same letters on every frame), and Timecode reads 01:02:05:15 at 3725.5 s and 30 fps', { item: '482', budgetMs: 60000 }, function () {
+    const run = (type, p, s, t, lt, fps) => { const st = { text: s, letterSpacing: 0 }; FM.TEXT_FX[type](st, p, t, { localT: lt == null ? t : lt, fps: fps || 30 }); return st.text; };
+    const S = 'Hello brave new world';
+    const to = (o, lt) => run('textprogress', Object.assign({ progress: 0.5, cursor: 2 }, o), S, 9.0, lt);
+    /* BLINK. CONTROL: with no blink the caret is there at every moment. At 2 Hz it is lit for the first quarter second of each
+       half second on the CLIP’s clock (0.1 s in: lit; 0.3 s in: dark), whatever the timeline says (t is 9.0 throughout). */
+    const half = S.slice(0, Math.round(S.length * 0.5));
+    if (to({}, 0.1) !== half + '_' || to({}, 0.3) !== half + '_') throw new Error('CONTROL: the steady caret reads ' + JSON.stringify(to({}, 0.1)) + ' / ' + JSON.stringify(to({}, 0.3)));
+    if (to({ blink: 2 }, 0.1) !== half + '_') throw new Error('Caret blink 2 Hz at 0.1 s into the clip wrote ' + JSON.stringify(to({ blink: 2 }, 0.1)) + ' - the caret should be lit');
+    if (to({ blink: 2 }, 0.3) !== half) throw new Error('Caret blink 2 Hz at 0.3 s into the clip wrote ' + JSON.stringify(to({ blink: 2 }, 0.3)) + ' - the caret should be dark');
+    if (to({ blink: 2 }, 0.6) !== half + '_') throw new Error('Caret blink 2 Hz at 0.6 s wrote ' + JSON.stringify(to({ blink: 2 }, 0.6)) + ' - it should be lit again');
+    /* HIDE CARET WHEN NOT TYPING. CONTROL: On (a saved Type-On) shows no caret before the first letter or after the last. Off
+       leaves it standing there — at the end of the text, or at its start when typing from the End. */
+    if (to({ progress: 0 }, 0.1) !== '' || to({ progress: 1 }, 0.1) !== S) throw new Error('CONTROL: the default caret shows before or after the typing');
+    if (to({ progress: 0, hidecaret: 0 }, 0.1) !== '_') throw new Error('Hide caret Off at Progress 0 wrote ' + JSON.stringify(to({ progress: 0, hidecaret: 0 }, 0.1)) + ', not the caret alone');
+    if (to({ progress: 1, hidecaret: 0 }, 0.1) !== S + '_') throw new Error('Hide caret Off at Progress 1 wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0 }, 0.1)));
+    if (to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1) !== '_' + S) throw new Error('Hide caret Off typing from the End wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1)) + ' - the caret leads');
+    if (to({ progress: 1, hidecaret: 0, blink: 2 }, 0.3) !== S) throw new Error('a standing caret does not blink with the rest');
+    /* RESOLVES. Ten letters at Progress 0.3: three have settled. A position has SETTLED when it shows its own letter on every one
+       of six frames (a scrambling one changes from frame to frame). */
+    const T10 = 'ABCDEFGHIJ';
+    const settled = o => { const outs = [0.3, 0.71, 1.12, 1.9, 2.4, 3.05].map(t => run('textrandomizer', Object.assign({ progress: 0.3, speed: 12, chars: 3 }, o), T10, t)); const k = []; for (let i = 0; i < 10; i++) if (outs.every(x => x[i] === T10[i])) k.push(i); return k.join(','); };
+    if (settled({}) !== '0,1,2') throw new Error('CONTROL: Left to right settled positions ' + settled({}) + ', not 0,1,2');
+    if (settled({ order: 1 }) !== '7,8,9') throw new Error('Right to left settled positions ' + settled({ order: 1 }) + ', not 7,8,9');
+    if (settled({ order: 3 }) !== '3,4,5') throw new Error('Centre out settled positions ' + settled({ order: 3 }) + ', not 3,4,5 (the middle pair, then the left of the next pair)');
+    const rnd = settled({ order: 2 });
+    if (rnd.split(',').length !== 3 || rnd === '0,1,2' || rnd === '7,8,9') throw new Error('Random settled positions ' + rnd + ' - it should be three positions, not a run from either end');
+    /* …and a settled letter stays settled as Progress grows, in every order. */
+    [0, 1, 2, 3].forEach(ord => { let had = []; for (let k = 0; k <= 10; k++) { const now = settled({ order: ord, progress: k / 10 }).split(',').filter(Boolean); if (now.length !== k) throw new Error('Resolves ' + ord + ' at Progress ' + (k / 10) + ' has ' + now.length + ' settled letters, not ' + k); had.forEach(i => { if (now.indexOf(i) < 0) throw new Error('Resolves ' + ord + ': position ' + i + ' unsettled again at Progress ' + (k / 10)); }); had = now; } });
+    /* TIMECODE. CONTROL: MM:SS:FF wraps at the hour. */
+    const tc = (o, sec, fps) => run('timecode', o, 'x', sec, sec, fps);
+    if (tc({ mode: 0 }, 3725.5, 30) !== '02:05:15') throw new Error('CONTROL: MM:SS:FF at 3725.5 s reads ' + tc({ mode: 0 }, 3725.5, 30));
+    if (tc({ mode: 4 }, 3725.5, 30) !== '01:02:05:15') throw new Error('HH:MM:SS:FF at 3725.5 s and 30 fps reads ' + tc({ mode: 4 }, 3725.5, 30) + ', not 01:02:05:15');
+    if (tc({ mode: 5 }, 12.5, 30) !== '375' || tc({ mode: 5 }, 2, 24) !== '48') throw new Error('Frames reads ' + tc({ mode: 5 }, 12.5, 30) + ' at 12.5 s / 30 fps and ' + tc({ mode: 5 }, 2, 24) + ' at 2 s / 24 fps, not 375 and 48');
+    if (tc({ mode: 6 }, 3725.5, 30) !== '62:05' || tc({ mode: 6 }, 65, 30) !== '01:05') throw new Error('MM:SS reads ' + tc({ mode: 6 }, 3725.5, 30) + ' at 3725.5 s and ' + tc({ mode: 6 }, 65, 30) + ' at 65 s, not 62:05 and 01:05');
+    if (tc({ mode: 3 }, 12.5, 30) !== '12.5s') throw new Error('CONTROL: Seconds reads ' + tc({ mode: 3 }, 12.5, 30));
+    if (tc({ mode: 3, decimals: 0 }, 12.25, 30) !== '12s' || tc({ mode: 3, decimals: 3 }, 12.5, 30) !== '12.500s') throw new Error('Seconds with Decimals 0 / 3 reads ' + tc({ mode: 3, decimals: 0 }, 12.25, 30) + ' / ' + tc({ mode: 3, decimals: 3 }, 12.5, 30));
+    if (tc({ mode: 4, dir: 1, offset: 3600 }, 1.5, 30) !== '00:59:58:15') throw new Error('HH:MM:SS:FF counting down from an hour reads ' + tc({ mode: 4, dir: 1, offset: 3600 }, 1.5, 30) + ' at 1.5 s');
+  });
 })();

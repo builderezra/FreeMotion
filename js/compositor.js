@@ -931,8 +931,13 @@ window.FM = window.FM || {};
       { key: 'unit', label: 'Reveal by', def: 0, options: [[0, 'Letter'], [1, 'Word'], [2, 'Line']] },
       { key: 'dir', label: 'From', def: 0, options: [[0, 'Start'], [1, 'End'], [2, 'Middle']] },
       { key: 'cursor', label: 'Caret', def: 0, options: [[0, 'None'], [1, '/'], [2, '_'], [3, '\u258c']] },
+      /* #482 12.4 \u2014 a typewriter's caret blinks, and usually sits there before the typing starts and after it ends. Blink 0 is
+         the steady caret it has always drawn; Hide caret when not typing On is today's caret, shown only mid-way. */
+      { key: 'blink', label: 'Caret blink', min: 0, max: 6, step: 0.5, def: 0, unit: 'Hz', overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
+      { key: 'hidecaret', label: 'Hide caret when not typing', def: 1, options: [[0, 'Off'], [1, 'On']], overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
     ] },
-    { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }, { key: 'chars', label: 'Scrambles into', def: 1, legacy: 0, options: [[0, 'Any'], [1, 'Match'], [2, 'Digits'], [3, 'Letters']] }] },   // queue 904: the alphabet was one hardcoded CAPS+symbols string
+    { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }, { key: 'chars', label: 'Scrambles into', def: 1, legacy: 0, options: [[0, 'Any'], [1, 'Match'], [2, 'Digits'], [3, 'Letters']] },
+      { key: 'order', label: 'Resolves', def: 0, options: [[0, 'Left to right'], [1, 'Right to left'], [2, 'Random'], [3, 'Centre out']] }] },   // queue 904: the alphabet was one hardcoded CAPS+symbols string   // order: #482 12.4
     /* WORD SPACING AND LINE HEIGHT were named as "still open from that same request" in the oldest
        entry in REQUESTS.md and then left, because they are a LAYOUT change rather than a slider and I
        did not want to bolt them on badly. They are here now.
@@ -962,7 +967,9 @@ window.FM = window.FM || {};
     ] },
     { type: 'texttransform', label: 'Change Case', /* queue 904: was 'Per-Letter Motion', which promised animation it never does — it converts case */ param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
     { type: 'timecode', label: 'Timecode', params: [
-      { key: 'mode', label: 'Format', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds']] },
+      // #482 12.4: HH:MM:SS:FF (broadcast), Frames (a frame counter) and MM:SS (minutes not wrapped at the hour) join the list
+      { key: 'mode', label: 'Format', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds'], [4, 'HH:MM:SS:FF'], [5, 'Frames'], [6, 'MM:SS']] },
+      { key: 'decimals', label: 'Decimals', min: 0, max: 3, step: 1, def: 1, overriddenBy: 'mode', liveWhen: 3 },   // #482 12.4: Seconds was always one decimal
       { key: 'offset', label: 'Start at', min: 0, max: 3600, step: 1, def: 0, unit: 's' },
       { key: 'dir', label: 'Counts', def: 0, options: [[0, 'Up'], [1, 'Down']] },
       { key: 'source', label: 'Reads', def: 0, options: [[0, 'Clip time'], [1, 'Timeline time']] },
@@ -2631,7 +2638,7 @@ window.FM = window.FM || {};
         st.text = m ? src.slice(0, m.index) + num + src.slice(m.index + m[0].length) : num; return; }   // no number in the layer's text to keep a place for: the number is the text, as before
       st.text = num;
     },
-    textprogress: function (st, p, t) {
+    textprogress: function (st, p, t, info) {   // info: the clip clock for Caret blink (#482 12.4)
       var pr = clamp01(fparam(p, 'progress', 0.5, t));
       // A typewriter that could only run left-to-right one code unit at a time, with no caret.
       // UNIT matters most: a caption revealed character by character flickers half-words on screen,
@@ -2641,6 +2648,15 @@ window.FM = window.FM || {};
       var unit = p.unit == null ? 0 : (Math.round(FM.evalProp(p.unit, t)) | 0);
       var cur = p.cursor == null ? 0 : (Math.round(FM.evalProp(p.cursor, t)) | 0);
       if (dir === 0 && unit === 0 && cur === 0) { st.text = st.text.slice(0, Math.round(st.text.length * pr)); return; }
+      /* BLINK and HIDE CARET WHEN NOT TYPING (#482 12.4). Blink counts on the clip's own clock, so the caret is lit on the
+         clip's first frame: on for the first half of each beat, off for the second. Hide On (the default, and what a saved
+         Type-On draws) keeps the caret to the mid-way frames; Off leaves it standing before the first letter and after the
+         last, as a real typewriter's does. */
+      var bk = p.blink == null ? 0 : FM.evalProp(p.blink, t); if (!(bk > 0)) bk = 0; if (bk > 6) bk = 6;
+      var hideCur = (p.hidecaret == null ? 1 : (Math.round(FM.evalProp(p.hidecaret, t)) | 0)) !== 0;
+      var dark = false;   // a caret that is there but unlit this beat
+      if (cur && bk > 0) { var blt = (info && info.localT != null) ? info.localT : t; dark = Math.floor(blt * bk * 2) % 2 !== 0; }
+      var glyph = (!cur || dark) ? '' : (cur === 1 ? '/' : (cur === 2 ? '_' : '▌'));
       var src = st.text, toks, keep;
       if (unit === 2) toks = src.split('\n');
       else if (unit === 1) toks = src.match(/\s+|\S+/g) || [];
@@ -2651,17 +2667,14 @@ window.FM = window.FM || {};
       if (unit === 1) { for (var i = 0; i < toks.length; i++) if (/\S/.test(toks[i])) idx.push(i); }
       else { for (var j = 0; j < toks.length; j++) idx.push(j); }
       var total = idx.length, n = Math.round(total * pr);
-      if (n <= 0) { st.text = ''; return; }
-      if (n >= total) { st.text = src; return; }
+      if (n <= 0) { st.text = hideCur ? '' : glyph; return; }
+      if (n >= total) { st.text = hideCur ? src : (dir === 1 ? glyph + src : src + glyph); return; }
       var lo, hi;                                        // inclusive token-array bounds
       if (dir === 1) { lo = idx[total - n]; hi = toks.length - 1; }
       else if (dir === 2) { var st0 = Math.floor((total - n) / 2); lo = idx[st0]; hi = idx[st0 + n - 1]; }
       else { lo = 0; hi = idx[n - 1]; }
       keep = toks.slice(lo, hi + 1).join(unit === 2 ? '\n' : '');
-      if (cur) {
-        var glyph = cur === 1 ? '/' : (cur === 2 ? '_' : '\u258c');
-        keep = dir === 1 ? glyph + keep : keep + glyph;
-      }
+      if (glyph) keep = dir === 1 ? glyph + keep : keep + glyph;
       st.text = keep;
     },
     textrandomizer: function (st, p, t) {
@@ -2677,9 +2690,21 @@ window.FM = window.FM || {};
         : Math.floor(t * spd);
       var s = st.text, n = Math.floor(s.length * pr), out = '';
       var mode = p.chars == null ? 0 : (Math.round(FM.evalProp(p.chars, t)) | 0);
+      /* RESOLVES (#482 12.4): the order the letters settle in. Left to right is i < n, as it always was. The others rank
+         every position — Right to left from the end, Centre out by distance from the middle (left first on a tie), Random by
+         a fixed hash of the position, so the same letters settle at the same progress on every frame and in the export. */
+      var ord = p.order == null ? 0 : (Math.round(FM.evalProp(p.order, t)) | 0), rank = null;
+      if (ord >= 1 && ord <= 3) {
+        var L = s.length, pos = [];
+        for (var q = 0; q < L; q++) pos.push(q);
+        if (ord === 1) pos.reverse();
+        else if (ord === 3) pos.sort(function (a, b) { var da = Math.abs(a - (L - 1) / 2), db = Math.abs(b - (L - 1) / 2); return da - db || a - b; });
+        else { var hk = function (k) { var h = (k * 2246822519 + 3266489917) >>> 0; h = Math.imul(h ^ (h >>> 15), 2654435761) >>> 0; return (h ^ (h >>> 13)) >>> 0; }; pos.sort(function (a, b) { return hk(a) - hk(b) || a - b; }); }
+        rank = new Array(L); for (var r = 0; r < L; r++) rank[pos[r]] = r;
+      }
       for (var i = 0; i < s.length; i++) {
         var c = s[i];
-        if (i < n || c === ' ' || c === '\n' || c === '\t') { out += c; }
+        if ((rank ? rank[i] < n : i < n) || c === ' ' || c === '\n' || c === '\t') { out += c; }
         else { var h = (i * 2654435761 + frame * 40503) >>> 0; h = (h ^ (h >>> 13)) >>> 0;
           /* WHAT IT SCRAMBLES INTO (queue 904). 'Anything' is the old CAPS + digits + symbols set and is what a saved Scramble with no
              key draws, character for character. 'Match the text' keeps each character's kind — lowercase stays lowercase, a digit
@@ -2786,7 +2811,16 @@ window.FM = window.FM || {};
       if (m === 0) st.text = tpad(mm) + ':' + tpad(ss) + ':' + tpad(ff);
       else if (m === 1) st.text = tpad(hh) + ':' + tpad(mm) + ':' + tpad(ss);
       else if (m === 2) st.text = tpad(ss) + ':' + tpad(ff);
-      else st.text = lt.toFixed(1) + 's';
+      /* #482 12.4: HH:MM:SS:FF is the broadcast timecode; Frames counts every frame from zero; MM:SS keeps counting minutes past
+         the hour (62:05), because it has no hours field to carry them into. */
+      else if (m === 4) st.text = tpad(hh) + ':' + tpad(mm) + ':' + tpad(ss) + ':' + tpad(ff);
+      else if (m === 5) st.text = String(Math.floor(lt * fps));
+      else if (m === 6) st.text = tpad(Math.floor(totalS / 60)) + ':' + tpad(ss);
+      else {
+        // DECIMALS (#482 12.4) on Seconds, which was always one decimal
+        var dec = p.decimals == null ? 1 : Math.round(FM.evalProp(p.decimals, t)); if (!(dec >= 0)) dec = 0; if (dec > 3) dec = 3;
+        st.text = lt.toFixed(dec) + 's';
+      }
     },
   };
   // Own keys only — see POSTFX. This table was MISSED when the other four were cut off, and it is the
