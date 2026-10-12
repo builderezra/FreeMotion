@@ -1946,8 +1946,14 @@ window.FM = window.FM || {};
      * half that slide late — 25 ms at +7, 50 ms an octave up, 150 ms two octaves up. At Mix 100 % that is a small
      * lag behind the picture; below 100 % the dry sound plays on time beside it and the pair reads as a slap echo.
      * The hint line under the sliders says so in plain words. */
-    params: [P('semitones', 'Semitones', -24, 24, 1, 0, 'st', true), P('cents', 'Fine tune', -100, 100, 1, 0, '¢', true), MIX(1)],
-    hint: 'The shifted sound lands a little late (about 1/20 of a second an octave up). Keep Mix at 100% for a clean result: lower, the late copy sounds like an echo.',
+    params: [P('semitones', 'Semitones', -24, 24, 1, 0, 'st', true), P('cents', 'Fine tune', -100, 100, 1, 0, '¢', true),
+      /* #482 polish 8.8. Grain is how long each slice of sound is before the two read heads hand over (G below, 100 ms until
+         now): short grains (20–40 ms) keep drums and speech tight but buzz on a held note; long ones (150–200 ms) keep a sung
+         note smooth but smear a beat and land later (the lag is half a grain an octave up). A rebuild — it is the length of
+         the LFO buffers that drive the heads. 100 (the default, and every saved Pitch Shift) builds today's graph exactly. */
+      Object.assign(P('grain', 'Grain', 20, 200, 1, 100, 'ms', false), { rebuild: true }),
+      MIX(1)],
+    hint: 'The shifted sound lands a little late (about 1/20 of a second an octave up, half the Grain). Keep Mix at 100% for a clean result: lower, the late copy sounds like an echo.',
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1956,8 +1962,8 @@ window.FM = window.FM || {};
       /* Granular shift: a delay line read while its delayTime slides at exactly dτ/dt = 1 − ratio
        * resamples the signal by `ratio`. One line can only slide so far, so two run half a grain apart
        * and cross-fade, each windowed to silence at its own reset — that is where its delay jumps back.
-       * G is the grain: shorter combs the tone, longer smears it into an echo. */
-      const G = 0.1;
+       * G is the grain: shorter combs the tone, longer smears it into an echo — the Grain control (#482 8.8, 20–200 ms). */
+      const G = staticOf(inst, 'pitch', 'grain') / 1000;
       const gA = s.delay(0.2), gB = s.delay(0.2);
       const mA = s.gain(0), mB = s.gain(0);
       const rampA = s.lfo(1 / G, { wave: 'ramp', secs: G }), rampB = s.lfo(1 / G, { wave: 'ramp', secs: G, phase: 0.5 });
@@ -1983,8 +1989,11 @@ window.FM = window.FM || {};
        * keyframed, so a glide through +12 st crossfades between two lines reading the same delay. Down-shifts never
        * need it: their slide is at most one grain (0.1 s). */
       const LONG_AT = 12;   // above an octave up, the long pair plays
-      const SHORT_MAX = 0.2;
-      const gA2 = s.delay(0.5), gB2 = s.delay(0.5);
+      const SHORT_MAX = 0.2;   // an octave up slides one grain (D = G), and Grain stops at 200 ms, so these always hold it
+      /* The long lines hold two octaves and 100 cents up, a slide of 3.24 grains: 0.5 s up to a Grain of 150 ms (and at the
+         default, so a saved Pitch Shift reads the very lines it did), longer only for a longer Grain (#482 8.8). */
+      const LONG_LEN = Math.max(0.5, 3.25 * G);
+      const gA2 = s.delay(LONG_LEN), gB2 = s.delay(LONG_LEN);
       mA.connect(gA2.delayTime); mB.connect(gB2.delayTime);
       const lA2 = s.gain(0), lB2 = s.gain(0);
       const wA2 = s.gain(0), wB2 = s.gain(0);

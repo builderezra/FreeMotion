@@ -125877,4 +125877,44 @@
       if (p.layer().audioFx[0].params.note !== 2) throw new Error(p.where + ': one Undo after 1/8 leaves Note at ' + p.layer().audioFx[0].params.note);
     });
   });
+
+  /* 8.8 — PITCH SHIFT GRAIN. On a steady input of 1 at +12 st both read heads read 1, so what comes out IS the sum of the two
+     cross-fade windows: sin(pi j / L) + sin(pi ((j + L/2) mod L) / L), j the sample's place in a grain of L samples (the
+     windows are LFO buffers one grain long, read at rate 1, started on scene time - the second half a grain on). It dips
+     to exactly 1 every half grain and rises to sqrt 2 between, so its shape tells the grain: L = 1440 at Grain 30 ms, 4800
+     at 100 (today, and a saved Pitch Shift: the CONTROL), 9600 at 200. Read sample by sample from 0.3 s (once the heads
+     are past the start), in the export and the preview. Grain 200 also needs the long lines to hold two octaves and 100
+     cents up (0.65 s; a 0.5 s line would cut the slide short - checked in the worktree's mock graph, not here). And the
+     backlog's test: on a drum loop, +7 st at Grain 30 sounds different from 100 (today the key is ignored). Grain is a
+     rebuild (its buffers are the grain long). On the build before there is no grain key (first line). */
+  test('482 8.8 Pitch Shift - Grain sets the slice length, so the hand-over repeats every half Grain, 100 ms is today’s, and a drum loop sounds different at 30', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('pitch', 'grain');
+    if (!pd) throw new Error('Pitch Shift has no Grain (its params are ' + b7Keys('pitch') + ')');
+    if (pd.label !== 'Grain' || pd.min !== 20 || pd.max !== 200 || pd.def !== 100 || pd.unit !== 'ms' || pd.keyframable || !pd.rebuild) throw new Error('Grain is ' + JSON.stringify(pd));
+    const old = [{ type: 'video', audioFx: [{ type: 'pitch', enabled: true, params: { semitones: 12 } }] }];
+    FM.storage._sanitizeLayers(old);
+    if (old[0].audioFx[0].params.grain !== 100) throw new Error('a Pitch Shift saved before Grain opens at ' + old[0].audioFx[0].params.grain);
+    const win = (i, L) => { const j = i % L; return Math.sin(Math.PI * j / L) + Math.sin(Math.PI * ((j + L / 2) % L) / L); };
+    const off = (y, L) => { let w = 0; for (let i = Math.round(0.3 * B3.SR); i < y.length; i++) w = Math.max(w, Math.abs(y[i] - win(i, L))); return w; };
+    const bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const saved = await b3Render([{ type: 'pitch', enabled: true, params: old[0].audioFx[0].params }], () => 1, 1, { live: live });
+      if (off(saved, 4800) > 1e-4) throw new Error('CONTROL: a saved +12 st Pitch Shift on a steady input is up to ' + off(saved, 4800).toExponential(2) + ' from the two windows of a 100 ms grain (' + path + ') - the read-back is broken');
+      for (const [g, L] of [[30, 1440], [200, 9600]]) {
+        const y = await b3Render(b7Fx('pitch', { semitones: 12, grain: g }), () => 1, 1, { live: live });
+        /* 5e-3, not 1e-4: half a 30 ms grain is 720 frames, but its start offset (0.5 x 0.03 s) x 48000 lands a hair under
+           720 in floating point, and an engine that floors it starts the second window one frame early - at most pi / 1440 =
+           0.0022 off. The 100 ms windows are 0.4 away from these at their worst, so the measure still tells them apart. */
+        const w = off(y, L);
+        if (w > 5e-3) bad.push('at Grain ' + g + ' a +12 st shift of a steady input is up to ' + w.toExponential(2) + ' from the windows of a ' + g + ' ms grain (' + path + ')' + (off(y, 4800) < 1e-4 ? ' - it is still the 100 ms grain' : ''));
+      }
+    }
+    const loop = (t, i) => { const k = i % 12000; return k < 2400 ? 0.8 * Math.exp(-k / 400) * Math.sin(2 * Math.PI * (60 + 4000 * Math.exp(-k / 60)) * k / B3.SR) : 0; };
+    const a = await b3Render(b7Fx('pitch', { semitones: 7, grain: 30 }), loop, 1), b = await b3Render(b7Fx('pitch', { semitones: 7 }), loop, 1);
+    let d = 0; for (let i = 0; i < a.length; i++) d = Math.max(d, Math.abs(a[i] - b[i]));
+    if (!(d > 0.01)) bad.push('a drum loop at +7 st sounds the same at Grain 30 as at 100 (differ by ' + d.toExponential(2) + ')');
+    if (b8Sig('pitch', { grain: 100 }) === b8Sig('pitch', { grain: 30 })) bad.push('Grain 100 and 30 sign the same - the preview would not rebuild');
+    if (bad.length) throw new Error('Pitch Shift Grain: ' + bad.join('; '));
+  });
 })();
