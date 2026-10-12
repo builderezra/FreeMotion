@@ -613,7 +613,10 @@ window.FM = window.FM || {};
     // something that knew the movement would not need to be told the direction. The type id stays
     // 'motionblur' so saved projects, presets and the AI vocabulary all still resolve.
     { type: 'motionblur', label: 'Directional Blur', desc: 'A fixed smear along an angle you choose. It does not read movement — a still clip blurs exactly as much as a moving one.',
-      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' }] },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
+      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
+        /* #482 polish 14.3 (half of C25): both defaults are the old smear byte for byte. */
+        { key: 'side', label: 'Smear', def: 0, options: [[0, 'Both ways'], [1, 'Behind'], [2, 'Ahead']], note: 'Behind trails away from the Angle, like something moving toward it' },
+        { key: 'edges', label: 'Frame edges', def: 0, options: [[0, 'Fade'], [1, 'Repeat']], note: 'Repeat keeps a clip that fills the frame solid to its edge' }] },
     { type: 'colorbalance', label: 'Colour Balance', /* queue 904: Affects — it was one flat offset, no tonal range */ params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }, { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']] },
       /* #482 polish 1.7: a push of red also BRIGHTENED (about +17 levels on a grey ramp at Red 100), and the tonal ranges
          had one fixed width. Keep brightness puts every pixel back at its own luma; Range width is an exponent on the
@@ -12728,6 +12731,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
 
+  /* THE PLATE WITH ITS EDGES CARRIED OUTWARD (#482 polish 14.3, Directional Blur's Edges: Repeat — half of hunt C25). The
+     plate A drawn at (mx, my) on a canvas mx / my bigger on every side, its outermost columns stretched out to the left and
+     right and then its outermost rows — over the full width, which carries the corners — up and down: Backfill's clamp
+     (paintFillBehind), and what the GPU blur fallback already does at the frame edge. Smoothing is off for the strips so
+     a one-pixel column REPEATS rather than being interpolated. One pooled canvas: the caller blits from it before anything
+     can ask for it again. */
+  let _edgePad = null;
+  function edgePadPlate(A, W, H, mx, my) {
+    if (!_edgePad) _edgePad = document.createElement('canvas');
+    const PW = W + 2 * mx, PH = H + 2 * my;
+    if (_edgePad.width !== PW || _edgePad.height !== PH) { _edgePad.width = PW; _edgePad.height = PH; }
+    const c = _edgePad.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, PW, PH);
+    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.filter = 'none';
+    c.drawImage(A, mx, my);
+    c.imageSmoothingEnabled = false;
+    if (mx > 0) { c.drawImage(_edgePad, mx, my, 1, H, 0, my, mx, H); c.drawImage(_edgePad, mx + W - 1, my, 1, H, mx + W, my, mx, H); }
+    if (my > 0) { c.drawImage(_edgePad, 0, my, PW, 1, 0, 0, PW, my); c.drawImage(_edgePad, 0, my + H - 1, PW, 1, 0, my + H, PW, my); }
+    c.imageSmoothingEnabled = true;
+    return _edgePad;
+  }
+
   const CANVAS_FX = {
     /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
      * There were two. A video or photo drew an inline black radial gradient over its clip rect inside the media draw:
@@ -13967,14 +13992,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // QUALITY (queue 904): the tap count was welded at 9, so a 60px smear showed as nine separate ghosts. 9 is the old loop exactly.
       const N = p.samples == null ? 9 : Math.max(4, Math.min(32, Math.round(FM.evalProp(p.samples, t)) || 9)), half = (N - 1) / 2;
       const dx = Math.cos(rad), dy = Math.sin(rad), step = dist / (N - 1);
+      /* #482 polish 14.3 (half of C25). SMEAR Both is the old spread, half the Distance each way; Behind lays every tap
+         back from the picture, away from the Angle, so it trails like something moving toward the Angle; Ahead the other
+         way. EDGES Repeat draws the taps from a copy of the plate whose outermost rows and columns are carried outward past
+         the frame (the Backfill padded-plate trick), so a clip that fills the frame keeps its edge as solid as its middle
+         instead of fading where a shifted tap has nothing to bring in. Both defaults run the old loop untouched. */
+      const side = Math.round(fparam(p, 'side', 0, t)), rep = Math.round(fparam(p, 'edges', 0, t)) === 1;
+      const offAt = side === 1 ? (k => -k * step) : (side === 2 ? (k => k * step) : (k => (k - half) * step));
+      let pad = null, mx = 0, my = 0;
+      if (rep) {
+        let far = 0; for (let k = 0; k < N; k++) far = Math.max(far, Math.abs(offAt(k)));
+        mx = Math.ceil(Math.abs(dx) * far) + 1; my = Math.ceil(Math.abs(dy) * far) + 1;
+        pad = edgePadPlate(A, W, H, mx, my);
+      }
       // additive 'lighter' at 1/N each = true premultiplied MEAN of the N taps — successive-alpha
       // source-over skews partial-coverage edge pixels to full opacity (hard edge, no smear)
       B.save();
       B.globalCompositeOperation = 'lighter';
       B.globalAlpha = 1 / N;
       for (let k = 0; k < N; k++) {
-        const off = (k - half) * step;
-        B.drawImage(A, dx * off, dy * off);
+        const off = offAt(k);
+        if (pad) B.drawImage(pad, dx * off - mx, dy * off - my);
+        else B.drawImage(A, dx * off, dy * off);
       }
       B.restore();
     },

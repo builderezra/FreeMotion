@@ -124680,7 +124680,7 @@
     let st = { m: [1, 0, 0, 1, 0, 0], clip: [], globalAlpha: 1, globalCompositeOperation: 'source-over', filter: 'none', fillStyle: '#000000', strokeStyle: '#000000', imageSmoothingEnabled: true, imageSmoothingQuality: 'low', lineWidth: 1, lineJoin: 'miter', lineCap: 'butt' };
     let path = [], sub = null;
     const tag = o => { if (!ids.has(o)) ids.set(o, 'img' + ids.size); return ids.get(o); };
-    const fmt = v => typeof v === 'number' ? String(v) : typeof v === 'string' ? JSON.stringify(v) : (v && typeof v === 'object') ? (typeof v.a === 'number' && typeof v.f === 'number' ? 'M(' + [v.a, v.b, v.c, v.d, v.e, v.f].join(',') + ')' : tag(v)) : String(v);
+    const fmt = v => typeof v === 'number' ? String(v) : typeof v === 'string' ? JSON.stringify(v) : (v && (typeof v === 'object' || typeof v === 'function')) ? (typeof v.a === 'number' && typeof v.f === 'number' ? 'M(' + [v.a, v.b, v.c, v.d, v.e, v.f].join(',') + ')' : tag(v)) : String(v);
     const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
     const ap = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
     const box = pts => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; pts.forEach(q => { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }); return [x0, y0, x1, y1]; };
@@ -124873,5 +124873,57 @@
     if (!(ring(at10) > ring(at60) + 4)) throw new Error('Bloom threshold 10 lit the ring round a light-grey patch to ' + ring(at10).toFixed(1) + ' against ' + ring(at60).toFixed(1) + ' at 60 - lowering the threshold should let it bloom');
     const pt = b14Plate(W, H), all = lb({ radius: 10, bloom: 300, threshold: 100 }, pt.slice()), none = lb({ radius: 10 }, pt.slice());
     if (!b14Same(all, none)) throw new Error('Bloom threshold 100 with bloom 300 is not bloom off - nothing is brighter than white, so nothing should bloom');
+  });
+
+  /* A canvas that reads its pixels back: true in the browser the suite runs in. (The node harness these tests were proven in
+     before landing has none, so the pixel halves below ran there only in the browser; the recorded halves ran in both.) */
+  const b14RealCanvas = (function () { let ok = null; return function () { if (ok === null) { try { const c = document.createElement('canvas'); c.width = c.height = 2; const g = c.getContext('2d'); g.fillStyle = '#ff0000'; g.fillRect(0, 0, 2, 2); const im = g.getImageData(0, 0, 1, 1); ok = !!(im && im.data && im.data[0] === 255); } catch (e) { ok = false; } } return ok; }; })();
+
+  /* 14.3 DIRECTIONAL BLUR (half of hunt C25): Smear (Both / Behind / Ahead), Frame edges (Fade / Repeat). */
+  const B14MB_NEW = { side: 0, edges: 0 };
+  const B14MB_CFG = { def: {}, long: { distance: 60, samples: 32 }, diag: { angle: 135, distance: 33 }, few: { samples: 4, distance: 7 }, none: { distance: 0.5 }, kf: { distance: b14Kf(5, 40), angle: b14Kf(0, 90) } };
+  const B14MB_PIN = {   // fc8866f1, before the edit (the smear reads neither the box nor the plate size, so both plates log alike)
+    def: 'b4b0281a.b4b0281a/ec57ed9c.ec57ed9c b4b0281a.b4b0281a/ec57ed9c.ec57ed9c', long: '305a6d12.305a6d12/51b0211a.51b0211a 305a6d12.305a6d12/51b0211a.51b0211a',
+    diag: 'f36b5f54.f36b5f54/a8a9458e.a8a9458e f36b5f54.f36b5f54/a8a9458e.a8a9458e', few: '84d2ab16.84d2ab16/c082acac.c082acac 84d2ab16.84d2ab16/c082acac.c082acac',
+    none: 'cebbff2c.cebbff2c/cebbff2c.cebbff2c cebbff2c.cebbff2c/cebbff2c.cebbff2c', kf: '616b0f14.671cbb96/d6726d68.05d71cec 616b0f14.671cbb96/d6726d68.05d71cec' };
+
+  test('482 14.3 Directional Blur - Smear and Frame edges are in the catalogue at defaults that draw the old smear, and saved and new Directional Blurs issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b14Catalogue('motionblur', B14MB_NEW, { side: 1, edges: 1 });
+    const side = b14Row('motionblur', 'side'), edges = b14Row('motionblur', 'edges');
+    if (side.type !== 'segment' || JSON.stringify(side.options.map(o => o[0])) !== '[0,1,2]') throw new Error('Smear is not a three-way Both / Behind / Ahead choice (' + JSON.stringify(side.options) + ')');
+    if (edges.type !== 'segment' || JSON.stringify(edges.options.map(o => o[0])) !== '[0,1]') throw new Error('Frame edges is not a Fade / Repeat choice (' + JSON.stringify(edges.options) + ')');
+    const moved = b14Pinned('motionblur', B14MB_NEW, B14MB_CFG, B14MB_PIN, b14CShots);
+    if (moved.length) throw new Error(moved.length + ' Directional Blurs draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.3 Directional Blur - Behind lays the smear back from the Angle and Ahead toward it, and Repeat keeps a clip that fills the frame as solid at its edge as in its middle', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, mb = (o, extra) => b14Cfx('motionblur', Object.assign({ distance: 20, angle: 0, samples: 9 }, o), Object.assign({ W: W, H: H }, extra || {}));
+    const offs = (R, axis) => R.draws.filter(q => q.img === 'img0').map(q => +q.quad[0][axis].toFixed(6));
+    /* SMEAR. CONTROL: Both spreads the nine taps -10..10 px round the picture. Behind puts them all at or behind it (0..-20
+       along the Angle), Ahead at or ahead of it (0..20); at Angle 90 the same happens down the frame. */
+    const both = offs(mb({}), 0);
+    if (Math.min.apply(null, both) !== -10 || Math.max.apply(null, both) !== 10) throw new Error('CONTROL: Both spread the taps ' + Math.min.apply(null, both) + '..' + Math.max.apply(null, both) + ' px, not -10..10');
+    const behind = offs(mb({ side: 1 }), 0), ahead = offs(mb({ side: 2 }), 0), down = offs(mb({ side: 2, angle: 90 }), 1);
+    if (behind.length !== 9 || Math.max.apply(null, behind) !== 0 || Math.min.apply(null, behind) !== -20) throw new Error('Behind put the taps at ' + behind.join(', ') + ' - they should run from the picture back to 20 px behind it');
+    if (ahead.length !== 9 || Math.min.apply(null, ahead) !== 0 || Math.max.apply(null, ahead) !== 20) throw new Error('Ahead put the taps at ' + ahead.join(', ') + ' - they should run from the picture out to 20 px ahead of it');
+    if (Math.min.apply(null, down) < -1e-9 || Math.abs(Math.max.apply(null, down) - 20) > 1e-9) throw new Error('Ahead at Angle 90 put the taps at ' + down.join(', ') + ' down the frame - they should run 0..20');
+    /* REPEAT, as the calls show it: every tap is drawn from one plate padded past the frame, so every tap covers the whole frame,
+       and the padding is the plate's own outermost pixels carried outward with smoothing off. CONTROL: under Fade a tap shifted
+       right leaves the left edge uncovered. */
+    const fade = mb({ distance: 40 }), rep = mb({ distance: 40, edges: 1 });
+    if (!fade.draws.some(q => q.box[0] > 0.5)) throw new Error('CONTROL: under Fade no tap leaves the left edge uncovered - this cannot show what Repeat fixes');
+    const taps = rep.draws.filter(q => q.op === 'lighter');
+    if (taps.length !== 9) throw new Error('Repeat drew ' + taps.length + ' taps, not 9');
+    taps.forEach(q => { if (q.box[0] > 0 || q.box[1] > 0 || q.box[2] < W || q.box[3] < H) throw new Error('under Repeat a tap covers only ' + q.box.map(v => v.toFixed(1)).join(',') + ' of the ' + W + ' x ' + H + ' frame - its edge would fade'); });
+    if (taps.some(q => q.quad[1][0] - q.quad[0][0] <= W)) throw new Error('under Repeat a tap is still drawn from the bare plate, not one padded past the frame');
+    /* …and in the browser, the pixels: a frame-filling opaque clip blurred 40 px across keeps both edge columns as opaque as
+       its middle under Repeat; under Fade (CONTROL) the edge column is clearly see-through. */
+    if (b14RealCanvas()) {
+      const A = b14Canvas(W, H), ag = A.getContext('2d'); ag.fillStyle = '#3080c0'; ag.fillRect(0, 0, W, H);
+      const alphaAt = (o, x) => { const B = b14Canvas(W, H), g = B.getContext('2d', { willReadFrequently: true }); FM._FX_TABLES.CANVAS_FX.motionblur(A, g, W, H, { x: 0, y: 0, w: W, h: H }, Object.assign({ distance: 40, angle: 0 }, o), 0.5, 0.5, null, 1); return g.getImageData(x, H >> 1, 1, 1).data[3]; };
+      const mid = alphaAt({ edges: 1 }, W >> 1), left = alphaAt({ edges: 1 }, 0), right = alphaAt({ edges: 1 }, W - 1), fadeLeft = alphaAt({}, 0);
+      if (!(fadeLeft < mid - 40)) throw new Error('CONTROL: under Fade the left edge column is ' + fadeLeft + ' opaque against ' + mid + ' in the middle - nothing to repair');
+      if (Math.abs(left - mid) > 1 || Math.abs(right - mid) > 1 || mid < 250) throw new Error('under Repeat the edge columns are ' + left + ' and ' + right + ' opaque against ' + mid + ' in the middle - the edge still fades');
+    }
   });
 })();
