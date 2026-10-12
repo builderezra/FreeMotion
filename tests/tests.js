@@ -129817,4 +129817,87 @@
     } finally { FM.scene = saved.scene; FM.time = saved.time; FM.media.remove(clip.id); }
     if (fails.length) throw new Error(fails.join(' · '));
   });
+  /* ═══ #482 / #966 POLISH BATCH 9 — THE SOUND-EFFECT LIBRARY AND FOUR AUDIO EFFECTS ═══════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 9
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 9.1 (search + category chips) and 9.2 (the options drawer per
+   * row) are NEW UI and are drawn and shown to him first (#545) — not built. 9.3 / 9.4 are the sound engine those options
+   * will call (FM.sfx.renderBuffer(def, options), preview, add); 9.5–9.8 are controls on Lo-Fi, Flanger, Bit Crush and
+   * Reverb. The fix halves of 9.6 / 9.7 (C16, C18) shipped in queue 986 (v17.16): their checks here are CONTROLS. Measured
+   * the batch 7 / 8 way (FM.buildAudioFxChain on an OfflineAudioContext, both the export's schedule and the preview's
+   * applyAt) with their helpers. Written in a worktree with no browser: every body below was run in node against the app's
+   * own scripts on a small sample-accurate Web Audio renderer (biquads, delays, shapers, sources and the convolver by the
+   * spec's formulas), red on the build before (6f1d90b1) and green after, with the numbers it names; Chrome's own run is
+   * still owed. */
+  // RMS over [a, b) seconds of a sound-effect render (44.1 kHz), in dB.
+  const b9Db = (d, a, b, sr) => { sr = sr || 44100; let s = 0, n = 0; for (let i = Math.floor(a * sr); i < Math.min(d.length, Math.floor(b * sr)); i++) { s += d[i] * d[i]; n++; } return 20 * Math.log10(Math.max(1e-12, Math.sqrt(s / Math.max(1, n)))); };
+
+  /* 9.3 — NATURE BEDS AT USABLE LENGTHS. Wind, Rain, Fire crackle and Vinyl crackle were 2.2–2.6 s and faded to nothing at
+     both ends, so tiled copies dipped at every join (backlog C21). Each now renders as a BED: { length: 10 } is 10 s (plus
+     the 0.05 s tail every sound has) whose first and last 50 ms are faded (at least 10 dB under its middle; measured in
+     node about 17–20); { loop: true } has no fades and its last half second crossfaded into its start, so the clip is
+     exactly 10 s, its first and last 0.3 s are as loud as the quietest stretch in its middle (not more than 1 dB under it),
+     a loop-ready Rain's first and last 0.3 s are within 1 dB of its middle (the backlog's test; measured 0.05 / 0.03 dB),
+     and the seam is no bigger a step than the clip's own steps beside it. Wind's breath repeats, each one its own: over
+     30 s its level rises and falls at least six times, never by less than 2 dB from top to bottom, and never drops under
+     -12 dB of its loudest. The same options render the same samples twice (the queue 709 promise). A ▶ of a 30 s bed plays
+     its first 8 s (the backlog's cap), of the very buffer Add adds; a short sound starts as it always did. The clip is
+     named after its options. CONTROL: with no options, an empty options object or nonsense in one, every one of the 30
+     sounds renders exactly what it did (and a Whoosh, which has no bed, ignores a length). On the build before an options
+     object is ignored, so a 10 s Rain comes back 2.65 s long (first check). */
+  test('482 9.3 Nature beds - Wind, Rain, Fire crackle and Vinyl crackle hold for 10, 30 or 60 s with 0.3 s edges, Loop-ready has no fades and no seam, and with no options every sound is today’s', { item: '482', budgetMs: 240000 }, async function () {
+    const S = FM.sfx, SR = 44100;
+    if (!S || !S.renderBuffer || !S.byId || !S.list) throw new Error('FM.sfx seams (renderBuffer, byId, list) are missing');
+    const bad = [];
+    const ten = await S.renderBuffer(S.byId('rain'), { length: 10 });
+    if (Math.abs(ten.duration - 10.05) > 0.01) throw new Error('Rain asked for 10 s renders ' + ten.duration.toFixed(3) + ' s - the length option is not there');
+    for (const id of ['wind', 'rain', 'fire', 'vinyl']) {
+      const def = S.byId(id), name = def.name;
+      const a = (await S.renderBuffer(def, { length: 10 })).getChannelData(0);
+      if (Math.abs(a.length / SR - 10.05) > 0.01) bad.push(name + ' at 10 s is ' + (a.length / SR).toFixed(3) + ' s');
+      const mid = b9Db(a, 4.85, 5.15);
+      if (!(mid - b9Db(a, 0, 0.05) >= 10 && mid - b9Db(a, 9.95, 10) >= 10)) bad.push(name + ' at 10 s does not fade its edges: first / last 50 ms at ' + b9Db(a, 0, 0.05).toFixed(1) + ' / ' + b9Db(a, 9.95, 10).toFixed(1) + ' dB, middle ' + mid.toFixed(1));
+      const L = (await S.renderBuffer(def, { length: 10, loop: true })).getChannelData(0);
+      if (L.length !== 10 * SR) { bad.push(name + ' loop-ready at 10 s is ' + L.length + ' samples, not ' + 10 * SR); continue; }
+      let quiet = Infinity; for (let t = 0.3; t + 0.3 <= 9.7; t += 0.3) quiet = Math.min(quiet, b9Db(L, t, t + 0.3));
+      const f3 = b9Db(L, 0, 0.3), l3 = b9Db(L, 9.7, 10);
+      if (f3 < quiet - 1 || l3 < quiet - 1) bad.push(name + ' loop-ready fades: first / last 0.3 s at ' + f3.toFixed(2) + ' / ' + l3.toFixed(2) + ' dB, the quietest 0.3 s inside ' + quiet.toFixed(2));
+      if (id === 'rain') { const m = b9Db(L, 4.85, 5.15); if (Math.abs(f3 - m) > 1 || Math.abs(l3 - m) > 1) bad.push('a loop-ready 10 s Rain has first / last 0.3 s at ' + f3.toFixed(2) + ' / ' + l3.toFixed(2) + ' dB against ' + m.toFixed(2) + ' in the middle - not within 1 dB'); }
+      let step = 0; for (let i = L.length - 1000; i < L.length; i++) step = Math.max(step, Math.abs(L[i] - L[i - 1]));
+      const seam = Math.abs(L[0] - L[L.length - 1]);
+      if (seam > step || Math.abs(b9Db(L, 0, 0.05) - b9Db(L, 9.95, 10)) > 3) bad.push(name + ' loop-ready has a seam: a step of ' + seam.toFixed(4) + ' (its own steps up to ' + step.toFixed(4) + '), first / last 50 ms at ' + b9Db(L, 0, 0.05).toFixed(1) + ' / ' + b9Db(L, 9.95, 10).toFixed(1) + ' dB');
+      const L2 = (await S.renderBuffer(def, { length: 10, loop: true })).getChannelData(0);
+      let same = L2.length === L.length; for (let i = 0; same && i < L.length; i++) if (L[i] !== L2[i]) same = false;
+      if (!same) bad.push(name + ' loop-ready renders different samples twice - it is not seeded');
+    }
+    const W = (await S.renderBuffer(S.byId('wind'), { length: 30 })).getChannelData(0), env = [];
+    for (let t = 1; t + 0.25 <= 29; t += 0.25) env.push(b9Db(W, t, t + 0.25));
+    let tops = 0; for (let i = 2; i < env.length - 2; i++) if (env[i] >= env[i - 1] && env[i] >= env[i + 1] && env[i] >= env[i - 2] && env[i] >= env[i + 2]) tops++;
+    const hi = Math.max.apply(null, env), lo = Math.min.apply(null, env);
+    if (tops < 6 || hi - lo < 2 || hi - lo > 12) bad.push('30 s of Wind rises ' + tops + ' times between ' + lo.toFixed(1) + ' and ' + hi.toFixed(1) + ' dB - want at least 6 breaths, 2 to 12 dB deep');
+    const R60 = await S.renderBuffer(S.byId('rain'), { length: 60, loop: true });
+    if (R60.length !== 60 * SR) bad.push('a loop-ready 60 s Rain is ' + R60.length + ' samples');
+    for (const def of S.list()) {
+      const base = (await S.renderBuffer(def)).getChannelData(0);
+      for (const o of [{}, { length: 'long', loop: 'yes', nonsense: 3 }]) {
+        const got = (await S.renderBuffer(def, o)).getChannelData(0);
+        let same = got.length === base.length; for (let i = 0; same && i < base.length; i++) if (got[i] !== base[i]) same = false;
+        if (!same) bad.push('CONTROL: ' + def.name + ' renders differently when handed ' + JSON.stringify(o));
+      }
+    }
+    const wh = S.byId('whoosh'), w0 = (await S.renderBuffer(wh)).getChannelData(0), w1 = (await S.renderBuffer(wh, { length: 10 })).getChannelData(0);
+    if (w0.length !== w1.length || w0.some((v, i) => v !== w1[i])) bad.push('a Whoosh (no bed) asked for 10 s renders differently');
+    if (!S.optionsFor || JSON.stringify(S.optionsFor(S.byId('wind'))) !== '{"lengths":[2.5,10,30,60],"loop":true}' || S.optionsFor(wh) !== null) bad.push('optionsFor tells a drawer ' + (S.optionsFor ? JSON.stringify(S.optionsFor(S.byId('wind'))) + ' for Wind and ' + JSON.stringify(S.optionsFor(wh)) + ' for Whoosh' : 'nothing (missing)'));
+    if (!S.fileName || S.fileName(S.byId('rain'), { length: 30, loop: true }) !== 'Rain (30 s, loop-ready).wav' || S.fileName(S.byId('rain')) !== 'Rain.wav') bad.push('the clip is named ' + (S.fileName ? S.fileName(S.byId('rain'), { length: 30, loop: true }) + ' / ' + S.fileName(S.byId('rain')) : '(no fileName)'));
+    // The ▶ of a long bed: a stand-in for the shared context records how the source is started.
+    const realCtx = FM.audioCtx, calls = [];
+    const fake = { state: 'running', currentTime: 3, destination: {}, createBufferSource: () => ({ buffer: null, connect() {}, disconnect() {}, stop() {}, start(...a) { calls.push(a); } }) };
+    try {
+      FM.audioCtx = () => fake;
+      await S.preview(S.byId('rain'), { length: 30 }); S.stopPreview();
+      await S.preview(S.byId('click')); S.stopPreview();
+    } finally { FM.audioCtx = realCtx; }
+    if (calls.length !== 2 || calls[0].length !== 3 || calls[0][1] !== 0 || calls[0][2] !== 8 || calls[1].length !== 1) bad.push('the ▶ starts its sources with ' + JSON.stringify(calls) + ' - want a 30 s Rain heard from 0 for 8 s and a Click started as always (one argument)');
+    if (bad.length) throw new Error('Nature beds: ' + bad.join(' · '));
+  });
+  // ── end 482 9.3 ──
 })();
