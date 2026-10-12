@@ -54,6 +54,12 @@ if [ "$(head -1 "$MSGF")" = "$(git log -1 --format=%s 2>/dev/null)" ]; then
   exit 2
 fi
 
+# THE CLOUD PRE-FLIGHT (his #1124, 11 Oct): was THIS release pushed to wip/<version>-tree for the helper first? A
+# WARNING for now — printed, and the ship launches anyway. tools/preflight.sh says why it exists and what it compares.
+if [ -x tools/preflight.sh ]; then
+  tools/preflight.sh; [ $? = 4 ] && echo "   (a warning, not a refusal — launching anyway)"
+fi
+
 mkdir -p .claude/ship
 # Empty the log NOW, not inside the detached shell: until that shell gets round to its own `>`, a reader would still
 # see the PREVIOUS ship's "pushed and verified" and "SHIP EXIT 0" — a stale success read as this one's.

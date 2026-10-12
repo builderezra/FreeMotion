@@ -50,6 +50,8 @@ if [ -f .ship-in-progress ] && _SP="$(ship_lock_pid .ship-in-progress)" && [ -n 
   echo
   echo "⛔ A SHIP IS RUNNING (pid $_SP, phase $(ship_lock_field phase .ship-in-progress)) — the queue and the rest wait for its verdict"
   echo "   (.claude/ship/ship.log). Build in a worktree meanwhile; no browser runs beside it."
+  # …and SAYS WHAT, with an IDLE line past 15 min (11 Oct, "the builder looks like its slacking again"): tools/_shipidle.sh
+  tools/_shipidle.sh . 15 2>/dev/null || echo "⚠️ tools/_shipidle.sh could not say what to build — run tools/next.sh"
   exit 0
 fi
 

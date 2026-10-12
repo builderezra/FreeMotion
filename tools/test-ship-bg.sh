@@ -209,6 +209,38 @@ done
 grep -n 'Build during ships' "$REPO/LOOP.md" | grep -q 'PUSHED <hash>' \
   && ok "LOOP.md: the build-during-ships merge waits for .last-ship's PUSHED <hash> too, not the log's words alone" || bad "LOOP.md's build-during-ships merge condition does not name .last-ship's PUSHED <hash>"
 
+echo "── 8. the cloud pre-flight (his #1124): the launcher says whether THIS release was pushed to wip/<version>-tree first ──"
+# A local bare repo stands in for GitHub, under the name the real one has (ssh). Nothing here reaches the network.
+P="$TMP/pf"; mkdir -p "$P/tools" "$P/js"; git init -q --bare "$TMP/pf-remote.git"
+cp "$REPO/tools/preflight.sh" "$P/tools/"
+cd "$P"; git init -q -b main; git config user.email t@t; git config user.name t
+echo '<span class="ver">v2.0</span><script src="js/a.js?v=1"></script>' > index.html; echo 'a1' > js/a.js; echo 'r' > REQUESTS.md
+git add -A; git commit -qm v2.0
+pf() { tools/preflight.sh 2>&1; echo "rc=$?"; }
+o="$(pf)"; case "$o" in *"no 'ssh' remote"*"rc=0") ok "control: no ssh remote (a stub repo) → says so, exit 0";; *) bad "no remote: $o";; esac
+git remote add ssh "$TMP/pf-remote.git"
+# the release in progress: a.js edited, a new b.js, the label bumped, a doc edited
+echo 'a2' > js/a.js; echo 'b' > js/b.js
+echo '<span class="ver">v2.1</span><script src="js/a.js?v=2"></script><script src="js/b.js?v=1"></script>' > index.html; echo 'r2' > REQUESTS.md
+o="$(pf)"; case "$o" in *"no wip/v2.1-tree"*"rc=4") ok "nothing pushed for v2.1 → a warning naming wip/v2.1-tree, exit 4";; *) bad "nothing pushed: $o";; esac
+# the pre-release branch: the same app files at the OLD label (it is pushed before the bump), without the doc edit
+git stash -q -u; git checkout -q -b pre; git stash pop -q
+sed -i 's/>v2\.1</>v2.0</' index.html; git checkout -q REQUESTS.md; git add -A; git commit -qm pre
+git push -q ssh pre:refs/heads/wip/v2.1-tree; git checkout -q main; git checkout -q pre -- js index.html; git reset -q
+sed -i 's/>v2\.0</>v2.1</' index.html; echo 'r2' > REQUESTS.md
+o="$(pf)"; case "$o" in "✅ preflight: wip/v2.1-tree"*"same 3 app file"*"rc=0") ok "the pushed tree is this release (label blanked, docs ignored, a new file counted) → ✅, exit 0";; *) bad "matching tree: $o";; esac
+echo 'a3' > js/a.js
+o="$(pf)"; case "$o" in *"NOT this release"*"js/a.js"*"rc=4") ok "the release changed after the push → names js/a.js, exit 4";; *) bad "changed after push: $o";; esac
+echo 'a2' > js/a.js; rm js/b.js
+o="$(pf)"; case "$o" in *"js/b.js (not in this release)"*"rc=4") ok "a file the wip tree has and the release lost → named, exit 4";; *) bad "lost file: $o";; esac
+echo 'b' > js/b.js; sed -i 's/a\.js?v=2/a.js?v=1/' index.html
+o="$(pf)"; case "$o" in *"NOT this release"*"index.html"*"rc=4") ok "index.html differing beyond its label (a buster) → named, exit 4";; *) bad "buster differs: $o";; esac
+sed -i 's/a\.js?v=1/a.js?v=2/' index.html; echo 'c' > js/c.js
+o="$(pf)"; case "$o" in *"js/c.js (not in the wip tree)"*"rc=4") ok "a NEW file only the release has (never pushed) → named, exit 4";; *) bad "release-only new file: $o";; esac
+cd "$REPO"
+grep -q 'tools/preflight\.sh' tools/ship-bg.sh && ok "ship-bg.sh runs the pre-flight before it launches" || bad "ship-bg.sh does not run tools/preflight.sh"
+grep -q 'tools/preflight\.sh' tools/ship.sh && ok "ship.sh re-runs this self-test when preflight.sh changes" || bad "ship.sh's self-test trigger does not list tools/preflight.sh"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ ship-bg.sh: every check passed"; exit 0; fi
 echo "❌ ship-bg.sh: a check failed — see above"; exit 1

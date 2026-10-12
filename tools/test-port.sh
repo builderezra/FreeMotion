@@ -454,6 +454,14 @@ wrong = [(r, k, G.claimed_by(r)) for r, k in want.items() if k not in (G.claimed
 if missing or wrong: print("   missing literals:", missing, "| claimed wrongly:", wrong); sys.exit(1)
 PY
 awk '/_shipgates.py feature-gate/{f=NR} /^ship_phase push/{p=NR} END{exit !(f && p && f < p)}' tools/ship.sh && ok "ship.sh asks it after the suite passes, before the commit" || bad "ship.sh does not run the feature gate before the push"
+# …and ASKED EARLY for the two features no pass here can ever run (11 Oct): AAC and QR only — never a finger test's NOT RUN
+TOUCHNR='690 a test\tneeds real touch emulation (a finger with the phone media state)\n'
+fge() { printf '%b' "$3" | python3 tools/_shipgates.py feature-gate --early --files "$1" --diff-file "$2" 2>&1; }
+v="$(fge js/exporter.js "$TMP/empty.diff" "$AAC")"; rc=$?; [ "$rc" = 1 ] && ok "early: js/exporter.js + an AAC test this machine never runs → refused before any suite" || bad "early AAC: rc=$rc $v"
+v="$(fge js/collab-qr.js "$TMP/empty.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "early: js/collab-qr.js + a QR test → refused before any suite" || bad "early QR: rc=$rc $v"
+v="$(fge js/app.js "$TMP/empty.diff" "$TOUCHNR")"; rc=$?; [ "$rc" = 0 ] && ok "early: a finger test's NOT RUN never refuses early (the finger pass clears it later)" || bad "early touch refused: rc=$rc $v"
+v="$(fge js/timeline.js "$TMP/empty.diff" "$AAC$BD")"; rc=$?; [ "$rc" = 0 ] && ok "early: control — a release touching neither feature passes" || bad "early unrelated: rc=$rc $v"
+awk '/feature-gate --early/{e=NR} /^ship_phase prove/{p=NR} END{exit !(e && p && e < p)}' tools/ship.sh && ok "ship.sh asks the early gate before the proof and the suites" || bad "ship.sh does not ask the early feature gate before the suites"
 
 echo "── tools/record-baselines.sh refuses where a recording would be wrong (#1071) ──"
 out="$(PATH="$(shim_os Darwin):$PATH" tools/record-baselines.sh 2>&1)"; rc=$?
@@ -619,6 +627,84 @@ echo '{"ok": true, "summary": "x", "failures": []}' > "$TPD/nolist.json"
 grep -q 'touch_pass 1280 .claude/ship/suite-desktop.out' tools/ship.sh && grep -q 'touch_pass 380 .claude/ship/suite-phone.out' tools/ship.sh \
   && ok "ship.sh runs it after the 1280 and the 380 pass" || bad "ship.sh does not run tests/_touch_pass.py after both passes"
 awk '/^touch_pass 1280/{t=NR} /_shipgates.py feature-gate/{f=NR} END{exit !(t && f && t < f)}' tools/ship.sh && ok "…before the feature gate reads the NOT RUN list" || bad "the touch pass runs after the feature gate — it cannot clear a finger test's NOT RUN"
+
+echo "── 11 Oct: a speed test the pass called this machine too slow for runs again alone (tests/_slow_pass.py) ──"
+# v17.38 was refused after two green hours: 921 S8 read the hot laptop as too slow at 1280 and said NOT RUN. A STUB driver
+# answers by the ?only= name and logs each call, so every judgement is seen without a browser.
+SPD="$TMP/sp"; mkdir -p "$SPD/tests"; cp tests/_slow_pass.py "$SPD/tests/"
+cat > "$SPD/tests/_cdp.py" <<'STUB'
+import json, os, sys, urllib.parse
+url = sys.argv[sys.argv.index("--url") + 1]; name = urllib.parse.unquote(url.split("only=", 1)[1])
+log = os.environ["SP_LOG"]; open(log, "a").write(name + "\n")
+tries = sum(1 for l in open(log) if l.rstrip("\n") == name)
+SLOW = "this machine is too slow to stand in for the phone these budgets mean: its speed benchmark took 11.10 ms"
+r = lambda ran, fails=(): print(json.dumps({"ok": not fails, "summary": "x", "failures": list(fails), "notRun": [], "ran": ran}))
+if name == "speed cools": r([{"name": name, "ok": True, "notRun": SLOW}] if tries < 2 else [{"name": name, "ok": True}])
+elif name == "speed hot": r([{"name": name, "ok": True, "notRun": SLOW + " (try %d)" % tries}])
+elif name == "speed red": r([{"name": name, "ok": False}], ["FAILspeed red — the hot tick p90 was 12 ms"])
+else: r([{"name": "a neighbour", "ok": True}])
+STUB
+SR="this machine is too slow to stand in for the phone these budgets mean: its speed benchmark took 11.10 ms"
+printf 'speed cools\t%s\nspeed hot\t%s\nan aac test\tneeds an AAC audio encoder\nfinger x\tneeds real touch emulation\n' "$SR" "$SR" > "$SPD/r.tsv"
+out="$(cd "$SPD" && SP_LOG="$SPD/log" python3 tests/_slow_pass.py --remaining r.tsv --pause 0 --tries 3 --out o.json 2>&1)"; rc=$?
+[ "$rc" = 0 ] && ok "no red → exit 0" || bad "slow pass with no red: rc=$rc — $(printf '%s' "$out" | tail -2)"
+grep -q '^speed cools	' "$SPD/r.tsv" && bad "a speed test that ran green on its second try is still NOT RUN" || ok "a speed test that ran green alone (second try) leaves the NOT RUN list"
+grep -q '^speed hot	.*(try 3)$' "$SPD/r.tsv" && ok "…one still too slow after three tries stays, with its NEWEST reason" || bad "the still-slow test: $(grep '^speed hot' "$SPD/r.tsv")"
+grep -q '^an aac test	needs an AAC audio encoder$' "$SPD/r.tsv" && grep -q '^finger x	needs real touch emulation$' "$SPD/r.tsv" && [ "$(wc -l < "$SPD/r.tsv" | tr -d ' ')" = 3 ] \
+  && ok "…and every other NOT RUN line is kept unchanged (3 lines remain)" || bad "remaining list: $(cat "$SPD/r.tsv")"
+[ "$(grep -c '^speed cools$' "$SPD/log")" = 2 ] && [ "$(grep -c '^speed hot$' "$SPD/log")" = 3 ] && ! grep -qE '^(an aac test|finger x)$' "$SPD/log" \
+  && ok "it tries until green (2) or three times (3), and never runs a NOT RUN for another reason" || bad "driver calls: $(tr '\n' '|' < "$SPD/log")"
+printf 'speed red\t%s\n' "$SR" > "$SPD/red.tsv"
+(cd "$SPD" && SP_LOG="$SPD/log2" python3 tests/_slow_pass.py --remaining red.tsv --pause 0 >/dev/null 2>&1); rc=$?
+[ "$rc" = 1 ] && grep -q '^speed red	' "$SPD/red.tsv" && ok "a speed test that RAN and failed → exit 1 (ship.sh refuses), and it is not cleared" || bad "red: rc=$rc list=[$(cat "$SPD/red.tsv")]"
+(cd "$SPD" && SP_LOG="$SPD/log3" python3 tests/_slow_pass.py --remaining nothere.tsv >/dev/null 2>&1); rc=$?
+[ "$rc" = 2 ] && ok "no NOT RUN list → exit 2 (nothing judged), never 'all passed'" || bad "no list: rc=$rc"
+grep -q '^slow_pass 1280 desktop' tools/ship.sh && grep -q '^  slow_pass 380 phone' tools/ship.sh && ok "ship.sh runs it after the 1280 and the 380 pass" || bad "ship.sh does not run tests/_slow_pass.py after both passes"
+awk '/^slow_pass 1280/{t=NR} /_shipgates.py feature-gate/{f=NR} END{exit !(t && f && t < f)}' tools/ship.sh && ok "…before the feature gate reads the NOT RUN list" || bad "the slow pass runs after the feature gate — it cannot clear S8's NOT RUN"
+grep -q 'too slow to stand in for the phone' tests/tests.js && ok "…and the reason it looks for is the one 921 S8 writes" || bad "tests/tests.js no longer says 'too slow to stand in for the phone' — the slow pass would never fire"
+
+echo "── 11 Oct: the AAC tests run in Windows Chrome on the same laptop (tests/_win_pass.py, #604) ──"
+# A STUB 'chrome' (FM_WIN_CHROME) reads the wrapper URL it is handed and POSTs a crafted verdict back, so every judgement
+# the runner makes is seen without a browser; it logs each name it was asked for.
+WPD="$TMP/wp"; mkdir -p "$WPD/tests"; cp tests/_win_pass.py "$WPD/tests/"
+cat > "$WPD/stubchrome" <<'STUB'
+#!/usr/bin/env python3
+import json, os, sys, urllib.parse, urllib.request
+u = urllib.parse.urlparse(sys.argv[-1]); q = urllib.parse.parse_qs(u.query); name = q['only'][0]
+open(os.environ['WP_LOG'], 'a').write(name + '\n')
+post = lambda o: urllib.request.urlopen(urllib.request.Request('http://%s/__win/result?id=%s' % (u.netloc, q['id'][0]), data=json.dumps(o).encode(), method='POST'))
+ua = 'Mozilla/5.0 (Windows NT 10.0) HeadlessChrome/154 stub'
+if name == 'aac ok': post({'sum': 'Regression 2/2 ✓', 'fails': [], 'ran': [{'name': 'a neighbour', 'ok': True}, {'name': name, 'ok': True}], 'notRun': [], 'ua': ua})
+elif name == 'aac red': post({'sum': 'Regression 0/1', 'fails': ['FAILaac red — the track is silent'], 'ran': [{'name': name, 'ok': False}], 'notRun': [], 'ua': ua})
+elif name == 'aac still': post({'sum': 'Regression 0/0 ✓', 'fails': [], 'ran': [{'name': name, 'ok': True, 'notRun': 'needs an AAC audio encoder (still)'}], 'notRun': [], 'ua': ua})
+elif name == 'aac prefix': post({'sum': 'Regression 1/1 ✓', 'fails': [], 'ran': [{'name': name + ' and a longer one', 'ok': True}], 'notRun': [], 'ua': ua})
+# 'aac silent': never posts — a browser that loaded nothing
+STUB
+chmod +x "$WPD/stubchrome"
+AR="needs an AAC audio encoder (AudioEncoder mp4a.40.2) — this browser has none"
+printf 'aac ok\t%s\naac still\t%s\naac prefix\t%s\naac silent\t%s\na qr test\tneeds a working BarcodeDetector\n' "$AR" "$AR" "$AR" "$AR" > "$WPD/r.tsv"
+out="$(cd "$WPD" && WP_LOG="$WPD/log" FM_WIN_CHROME="$WPD/stubchrome" python3 tests/_win_pass.py --remaining r.tsv --timeout 1 --out o.json 2>&1)"; rc=$?
+[ "$rc" = 1 ] && ok "a run with no exact green (a prefix match, a silent browser) is RED → exit 1 (ship.sh refuses)" || bad "win pass: rc=$rc — $(printf '%s' "$out" | tail -3)"
+v="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(" ".join(x["name"].replace(" ","_") for x in d["pass"]), "|", " ".join(sorted(x["name"].replace(" ","_") for x in d["red"])), "|", " ".join(x["name"].replace(" ","_") for x in d["notRun"]))' "$WPD/o.json")"
+[ "$v" = "aac_ok | aac_prefix aac_silent | aac_still" ] && ok "verdicts: only the exact test's own green passes; a longer name and no verdict are RED; NOT RUN there stays NOT RUN" || bad "verdicts: $v"
+grep -q '^aac ok	' "$WPD/r.tsv" && bad "an AAC test that passed in Windows Chrome is still NOT RUN" || ok "an AAC test that passed in Windows Chrome leaves the NOT RUN list"
+grep -q '^aac still	needs an AAC audio encoder (still)$' "$WPD/r.tsv" && grep -q '^a qr test	needs a working BarcodeDetector$' "$WPD/r.tsv" && [ "$(wc -l < "$WPD/r.tsv" | tr -d ' ')" = 4 ] \
+  && ok "…a still-NOT-RUN one keeps its newest reason, and every other line is kept (4 remain)" || bad "remaining list: $(cat "$WPD/r.tsv")"
+! grep -q '^a qr test$' "$WPD/log" && [ "$(wc -l < "$WPD/log" | tr -d ' ')" = 4 ] && ok "only the AAC tests were run, once each" || bad "stub calls: $(tr '\n' '|' < "$WPD/log")"
+printf 'aac ok\t%s\n' "$AR" > "$WPD/g.tsv"
+(cd "$WPD" && WP_LOG="$WPD/log2" FM_WIN_CHROME="$WPD/stubchrome" python3 tests/_win_pass.py --remaining g.tsv --timeout 1 >/dev/null 2>&1); rc=$?
+[ "$rc" = 0 ] && [ ! -s "$WPD/g.tsv" ] && ok "control: every AAC test green → exit 0 and nothing left NOT RUN" || bad "all green: rc=$rc remaining=[$(cat "$WPD/g.tsv")]"
+printf 'aac ok\t%s\n' "$AR" > "$WPD/n.tsv"
+(cd "$WPD" && WP_LOG="$WPD/log3" FM_WIN_CHROME=none python3 tests/_win_pass.py --remaining n.tsv --timeout 1 >/dev/null 2>&1); rc=$?
+[ "$rc" = 0 ] && grep -q '^aac ok	' "$WPD/n.tsv" && [ ! -s "$WPD/log3" ] && ok "no Windows Chrome → the AAC tests stay NOT RUN (the gate decides), nothing launched" || bad "no chrome: rc=$rc list=[$(cat "$WPD/n.tsv")]"
+(cd "$WPD" && FM_WIN_CHROME=none python3 tests/_win_pass.py --available >/dev/null 2>&1); rc1=$?
+(cd "$WPD" && FM_WIN_CHROME="$WPD/stubchrome" python3 tests/_win_pass.py --available >/dev/null 2>&1); rc2=$?
+[ "$rc1" = 1 ] && [ "$rc2" = 0 ] && ok "--available says 1 with no Windows Chrome and 0 with one" || bad "--available: none=$rc1 stub=$rc2"
+grep -q '^win_pass 1280 desktop' tools/ship.sh && grep -q '^  win_pass 380 phone' tools/ship.sh && ok "ship.sh runs it after the 1280 and the 380 pass" || bad "ship.sh does not run tests/_win_pass.py after both passes"
+awk '/^win_pass 1280/{t=NR} /_shipgates.py feature-gate/{f=NR} END{exit !(t && f && t < f)}' tools/ship.sh && ok "…before the feature gate reads the NOT RUN list" || bad "the win pass runs after the feature gate — it cannot clear an AAC test's NOT RUN"
+grep -q '_win_pass.py --available' tools/ship.sh && awk '/_win_pass.py --available/ && !a {a=NR} /feature-gate --early/{e=NR} END{exit !(a && e && a < e)}' tools/ship.sh \
+  && ok "…and the early gate leaves the AAC tests to it when Windows Chrome is reachable" || bad "the early gate would refuse an export change before the win pass could run its tests"
+grep -q 'needs an AAC audio encoder' tests/tests.js && ok "…and the reason it looks for is the one the AAC tests write" || bad "tests/tests.js no longer says 'needs an AAC audio encoder' — the win pass would never fire"
 # prove.sh's finger NORUNs (7 Oct, v17.26 was refused for two finger tests that had passed with a real finger): the same pass
 # runs on both sides and tools/_spotjudge.py --merge-touch puts its verdicts in place of the NORUN lines
 printf 'NORUN\tfinger ok\tNOT RUN HERE: %s\nNORUN\tfinger red\tNOT RUN HERE: %s\nNORUN\tfinger aac\tNOT RUN HERE: %s\nNORUN\tan aac test\tNOT RUN HERE: needs an AAC audio encoder\nPASS\ta plain test\n' "$TR" "$TR" "$TR" > "$TPD/v"
@@ -647,6 +733,20 @@ else
   done
   [ -z "$_untrig" ] && ok "every script this test exercises is in ship.sh's trigger for it ($(printf '%s\n' "$TRIG" | tr ' ' '\n' | grep -cE '^(tools|tests)/') files)" || bad "ship.sh would ship a change to these WITHOUT running this test:$_untrig"
 fi
+
+echo "── while a ship runs the tick says what to build, and IDLE after 15 min with no worktree edit (11 Oct, \"slacking again\") ──"
+SI="$TMP/shipidle"; mkdir -p "$SI/tools" "$SI/.claude/worktrees/w1/js"
+cp "$REPO/tools/_shipidle.sh" "$REPO/tools/_classify.py" "$SI/tools/"
+printf '%s\n' '# Requests' '' '- [ ] **5 — Make the thing faster** (1 Oct)' '      **STATUS: 🟢 READY — nothing is stopping this**' '' > "$SI/REQUESTS.md"
+echo 'x' > "$SI/.claude/worktrees/w1/js/a.js"; touch -d '30 minutes ago' "$SI/.claude/worktrees/w1/js/a.js"
+o="$(bash "$SI/tools/_shipidle.sh" "$SI" 15 2>&1)"
+printf '%s' "$o" | grep -q '^⚠️ IDLE DURING SHIP: 3[0-9] min' && ok "a worktree untouched for 30 min → IDLE DURING SHIP, with the minutes" || bad "no IDLE line after 30 idle minutes: $o"
+printf '%s' "$o" | grep -q 'next workable (oldest first): .*5' && ok "…and it names the next workable item (next_up)" || bad "the next item is not named: $o"
+touch "$SI/.claude/worktrees/w1/js/a.js"
+o="$(bash "$SI/tools/_shipidle.sh" "$SI" 15 2>&1)"
+printf '%s' "$o" | grep -q 'IDLE DURING SHIP' && bad "control: a file edited just now still reads as idle: $o" || ok "control: a worktree edited just now is not idle"
+grep -q 'tools/_shipidle.sh' "$REPO/tools/tick.sh" && awk '/A SHIP IS RUNNING/{s=NR} /_shipidle.sh/{i=NR} /^  exit 0$/{if(s&&!e)e=NR} END{exit !(s && i && i > s && i < e)}' "$REPO/tools/tick.sh" \
+  && ok "tick.sh runs it inside the ship-running branch, before that branch exits" || bad "tick.sh does not run tools/_shipidle.sh while a ship runs"
 
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi

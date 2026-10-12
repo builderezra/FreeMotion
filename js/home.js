@@ -1982,6 +1982,27 @@ window.FM = window.FM || {};
     return !selectMode;   // caller uses this to decide whether to append its ⋯ button
   }
 
+  /* WHAT "Save template file…" SAYS (queue 888 for clips; ChatGPT's 70797f4c for fonts, landed in B1, #1069). The font
+     names come from storage's own omittedFontSummary, so a template file and a project file label a font the same way:
+     too big, not stored, or could not be read — the last was called "not stored" here, which sends him looking for a
+     font that IS on his device. One function so a test can read the words without packing a real template. */
+  function templateFileMessage(result) {
+    if (!result) return { text: 'Could not save that template file' };
+    const missing = result.omitted || [], fonts = result.omittedFonts || [];
+    const fontNote = fonts.length ? 'WITHOUT ' + FM.storage.omittedFontSummary(fonts) + '. Text may use a fallback on another device.' : '';
+    if (missing.length) {
+      const absent = missing.filter(m => m.missing);
+      const names = absent.concat(missing.filter(m => !m.missing)).slice(0, 2).map(m =>
+        m.missing ? m.layer + ' (not stored)' : m.file + ' (' + m.mb + ' MB, too big)').join(', ');
+      return { text: 'Template file saved WITHOUT ' + missing.length +
+        (missing.length === 1 ? ' media file — ' : ' media files — ') + names +
+        (missing.length > 2 ? ' and more' : '') + '. ' +
+        (absent.length ? 'Re-import or replace missing source media. ' : '') +
+        (missing.length > absent.length ? 'Use a smaller clip for files that are too big.' : '') + (fontNote ? ' Also ' + fontNote : ''), ms: 12000 };
+    }
+    return fonts.length ? { text: 'Template file saved ' + fontNote, ms: 12000 } : { text: 'Template file saved — send it to anyone' };
+  }
+
   function templateCard(t) {
     const card = el('div', 'hm-card');   // div not button — same nested-button fix as projectCard
     card.setAttribute('role', 'button'); card.tabIndex = 0;
@@ -2006,8 +2027,8 @@ window.FM = window.FM || {};
         // the same .fmotion.json a project saves, so whoever you send it to can already open it.
         { label: 'Save template file…', action: async () => {
           if (FM.toast) FM.toast('Packing…', 1200);
-          const ok = await FM.templates.exportFile(t.id);
-          if (FM.toast) FM.toast(ok ? 'Template file saved — send it to anyone' : 'Could not save that template file');
+          const result = await FM.templates.exportFile(t.id);
+          if (FM.toast) { const m = templateFileMessage(result); FM.toast(m.text, m.ms); }
         } },
         pinMenuItem('templates', t.id),
         { label: 'Select…', action: () => enterSelect(t.id) },
@@ -3482,6 +3503,7 @@ window.FM = window.FM || {};
   };
   FM.home._render = function (which) { if (which) tab = which; render(); };   // queue 828 suite seam: the render is where the pruning lives
   FM.home.refreshProfilePhoto = loadHomePhoto;
+  FM.home.templateFileMessage = templateFileMessage;
   FM.home._selectionState = selectionState;   // queue 828
   FM.home._setSelection = setSelectionForTest;   // queue 828
 
