@@ -127528,4 +127528,80 @@
       }, 380);
     });
   });
+
+  /* ═══ SU1 UNCONFIRMED (hunt/simple-firstuser, “Unconfirmed (seen once, not repeated)”): each mechanism was found by reading the code first ═══
+     THE EDGE AUTO-SCROLL (07f-music-trim-edge-scroll.jpg): the song’s tail grip held at the left edge took it from 20 s to 0.1 s, and the view ran
+     on to 0 s with the 0.1 s song off the right of the screen. js/simple-timeline.js’s copy of Full’s loop had brake 4 for a trim reading `G.atCap`,
+     which nothing ever set, and only for a rightward scroll — so a trim at its floor went on scrolling to the wall while its edge stood still.
+     Driven with a REAL mouse on the song’s tail grip held 6 px inside the left edge, with the loop’s own frame (_tick, one 60 Hz frame when called
+     by hand) called by hand as S8b does. Red on the old code at the scroll check after the floor: 60 more frames take the strip from about 430 px
+     (song end under the finger) to 0, and the song to x 430 on a 380 px screen. CONTROLS: the drag shortens the song to its floor at all; on the
+     way its end stays under the finger (the trim follows finger + scroll exactly once — true on the old code too, kept so it stays true); the strip
+     is far enough from its start at the floor that scrolling on would show; let go there, the song is 0.1 s. */
+  test('SU1 unconfirmed · at 380 the song’s tail grip held at the left edge shortens it under the finger and stops scrolling once the song is as short as it goes, so the song stays on the screen', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smDragEnv((W, H) => smClips3(W, H).concat([smSong('Song', 4, 20, W, H, { sm: { stay: true } })]), async function (v) {
+        const sc = document.getElementById('sm-scroll'), song = v.L('Song'), ml = FM.spine.minLen((FM.scene.project && FM.scene.project.fps) || 30);
+        FM.time = 23; FM.simpleTimeline.updatePlayhead(); FM.selectLayer(song.id); await v.sleep(150);
+        const grip = document.querySelector('#sm-timeline .sm-grip-tail');
+        if (!grip || grip.dataset.id !== song.id) throw new Error('setup: the selected song shows no tail grip');
+        const gc = smCtr(grip), rect = sc.getBoundingClientRect(), ex = Math.round(rect.left + 6);
+        if (!(gc.x > rect.left + 60 && gc.x < rect.right - 60)) throw new Error('setup: the song’s tail grip is at x ' + Math.round(gc.x) + ', not on the screen away from its edges');
+        await realInput924(smMS([['mouseMove', gc.x, gc.y], ['mouseDown', gc.x, gc.y, 60], ['mouseMove', gc.x - 6, gc.y, 30], ['mouseMove', ex, gc.y, 60]]), 'holding the song’s tail grip at the left edge');
+        const g = smG();
+        if (!g || g.kind !== 'trim' || g.id !== song.id) throw new Error('CONTROL: no trim of the song is live (' + JSON.stringify(smGest()) + ')');
+        const len = () => g.edge - song.start, tailX = () => smNode(song.id).getBoundingClientRect().right;
+        for (let k = 0; k < 4; k++) FM.simpleTimeline._tick();
+        if (!(len() > 1)) throw new Error('setup: the song is already ' + len().toFixed(2) + ' s after four frames at the edge');
+        if (Math.abs(tailX() - ex) > 4) throw new Error('CONTROL: on its way the song’s end is at x ' + tailX().toFixed(1) + ' with the finger at ' + ex + ': the trim does not follow the finger plus the scroll exactly once');
+        let k = 0;
+        while (k++ < 600 && len() > ml + 1e-6) FM.simpleTimeline._tick();
+        if (len() > ml + 1e-6) throw new Error('CONTROL: after ' + k + ' frames at the left edge the song is still ' + len().toFixed(2) + ' s');
+        FM.simpleTimeline._tick(); FM.simpleTimeline._tick();   // two frames of grace at the floor, so the reading below is of the hold, not of where it landed
+        const at = sc.scrollLeft;
+        if (!(at > 60)) throw new Error('CONTROL: the strip is at ' + at + ' px when the song reaches ' + ml + ' s, too near its start for scrolling on to show');
+        for (let n = 0; n < 60; n++) FM.simpleTimeline._tick();
+        await v.sleep(150);   // and the loop’s real frames
+        const r = smNode(song.id).getBoundingClientRect();
+        if (sc.scrollLeft < at - 0.5) throw new Error('with the song at its shortest (' + ml + ' s) the view went on scrolling left: ' + Math.round(at) + ' → ' + Math.round(sc.scrollLeft) + ' px, and the song is at x ' + Math.round(r.left) + '–' + Math.round(r.right) + ' on a ' + Math.round(rect.right) + ' px screen');
+        if (r.right < rect.left || r.left > rect.right) throw new Error('the song at its shortest is off the screen (x ' + Math.round(r.left) + '–' + Math.round(r.right) + ')');
+        await realInput924(smMS([['mouseUp', ex, gc.y, 40]]), 'letting go at the edge');
+        await v.idle();
+        if (Math.abs(v.L('Song').duration - ml) > 1e-6) throw new Error('CONTROL: let go at the edge, the song is ' + v.L('Song').duration + ' s, not ' + ml + ' (it said “' + v.say() + '”)');
+      }, { pps: 60 });
+    }, 380);
+  });
+  /* …AND ITS RATE. The step was px per animation FRAME (EDGE_MAX 22 at full depth), so a 120 Hz screen ran the edge scroll twice as fast as a
+     60 Hz one. It is px per 60 Hz frame scaled by each frame’s own length now. An overlay dragged in time to the left edge, then the loop’s frame
+     called by hand WITH a time stamp, as requestAnimationFrame calls it: half a second at 60 frames a second, then half a second at 120. The first
+     stamped frame closes whatever gap there was since the last real one, so it is not measured. Red on the old code: the stamp is ignored and
+     60 frames scroll twice as far as 30. CONTROLS: the 60 Hz half scrolls at all, and exactly as far as it always did (30 frames of the same
+     ramp, EDGE_MAX × depth into the zone); the strip still has room at the end, so the 120 Hz half was not cut short by its start. */
+  test('SU1 unconfirmed · at 380 the edge auto-scroll travels the same distance in the same time at 60 and at 120 frames a second, and at 60 exactly as far as it always did', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smDragEnv((W, H) => [smV('A', 0, 40, W, H), smShape('Rock', 38, 1, W, H)], async function (v) {
+        const sc = document.getElementById('sm-scroll');
+        FM.time = 39; FM.simpleTimeline.updatePlayhead(); await v.sleep(120);
+        const rect = sc.getBoundingClientRect(), R0 = smCtr(smNode(v.L('Rock').id)), ex = Math.round(rect.left + 6);
+        if (!(R0.x > rect.left + 40 && R0.x < rect.right - 40)) throw new Error('setup: the overlay is at x ' + Math.round(R0.x) + ', not on the screen away from its edges');
+        await realInput924(smMS([['mouseMove', R0.x, R0.y], ['mouseDown', R0.x, R0.y, 60], ['mouseMove', R0.x - 10, R0.y, 30], ['mouseMove', ex, R0.y, 60]]), 'holding the overlay at the left edge');
+        const g = smG();
+        if (!g || g.kind !== 'move' || g.mode !== 'time') throw new Error('CONTROL: no drag of the overlay in time is live (' + JSON.stringify(smGest()) + ', mode ' + (g && g.mode) + ')');
+        const F60 = 1000 / 60, F120 = 1000 / 120, T0 = performance.now() + 1000;
+        FM.simpleTimeline._tick(T0);   // the first stamped frame: whatever gap it closes is not measured
+        const s0 = sc.scrollLeft;
+        for (let k = 1; k <= 30; k++) FM.simpleTimeline._tick(T0 + k * F60);
+        const s1 = sc.scrollLeft, T1 = T0 + 30 * F60;
+        for (let k = 1; k <= 60; k++) FM.simpleTimeline._tick(T1 + k * F120);
+        const s2 = sc.scrollLeft, d60 = s0 - s1, d120 = s1 - s2;
+        const zone = Math.min(46, Math.max(12, Math.round(rect.width * 0.06))), was = 30 * Math.min(22, ((rect.left + zone) - ex) / zone * 22);
+        if (!(d60 > 100)) throw new Error('CONTROL: half a second at the left edge at 60 frames a second scrolled ' + d60 + ' px');
+        if (!(s2 > 1)) throw new Error('CONTROL: the strip reached its start (' + s2 + '), so the 120 Hz half may have been cut short');
+        if (Math.abs(d60 - was) > 0.15 * was) throw new Error('at 60 frames a second the edge scroll moved ' + d60.toFixed(1) + ' px in half a second, where it always moved ' + was.toFixed(1));
+        if (Math.abs(d120 - d60) > 0.1 * d60) throw new Error('the same half second at the edge scrolled ' + d60.toFixed(1) + ' px at 60 frames a second and ' + d120.toFixed(1) + ' px at 120: it is a speed per frame, so a 120 Hz phone runs it ' + (d120 / d60).toFixed(2) + '× as fast');
+      }, { pps: 60 });
+    }, 380);
+  });
 })();

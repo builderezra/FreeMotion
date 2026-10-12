@@ -219,7 +219,7 @@ window.FM = window.FM || {};
      FM.spine.cmd call, the same one its button makes, so every refusal, ask and Undo already exists. The arm gate (FM.spine.canArrange)
      is read when the gesture arms and again on release. The edge auto-scroll below is a COPY of Full's clipEdgeScroll / trimEdgeScroll
      with the same four brakes (§0.4 I9: Full's two loops are not touched). */
-  const HOLD_MS = 350, SLOP = 8, MOUSE_SLOP = 4, LIFT_PX = 24, LIFT_MS = 150, EDGE_MAX = 22, SCROLL_FRAMES_MAX = 1200, GRIP_HIT = 24, GRIP_CAP = 13, SNAP_PX = 7, STALE_MS = 4000;
+  const HOLD_MS = 350, SLOP = 8, MOUSE_SLOP = 4, LIFT_PX = 24, LIFT_MS = 150, EDGE_MAX = 22, FRAME_MS = 1000 / 60, DT_MAX_MS = 50, SCROLL_FRAMES_MAX = 1200, GRIP_HIT = 24, GRIP_CAP = 13, SNAP_PX = 7, STALE_MS = 4000;   // EDGE_MAX: px per 60 Hz frame (FRAME_MS), Full's speed
   let G = null, swallowUntil = 0, labelEl = null, pinch = null;
   const touches = new Map();
   const gateOf = (id, look) => (FM.spine && FM.spine.canArrange) ? FM.spine.canArrange(id, look ? { look: true } : null) : null;
@@ -357,19 +357,48 @@ window.FM = window.FM || {};
   function renderTrim(p, dx) {
     const e0 = G.entry, ml = (FM.spine && FM.spine.minLen) ? FM.spine.minLen((FM.scene.project && FM.scene.project.fps) || 30) : 0.1, node = G.node; if (!node) return;
     const fr = t => (FM.snapFrame ? FM.snapFrame(t) : t);
+    const want = fr((G.side === 'tail' ? e0.end : e0.start) + dx / p);   // the time under the finger: the scroll is already in dx, through the origin shift
     let a = e0.start, b = e0.end;
-    if (G.side === 'tail') b = Math.max(a + ml, fr(e0.end + dx / p)); else a = Math.min(b - ml, fr(e0.start + dx / p));
+    if (G.side === 'tail') b = Math.max(a + ml, want); else a = Math.min(b - ml, want);
+    /* An edge pulled OUT stops where the footage runs out, by the release's own pure maths (FM.trimClipEdge, the media's length), so the
+       preview never shows a length the command will not give, and brake 4 knows the edge is pinned (DESIGN §3.8: "a source-limited trim"). */
+    const L = FM.layerById(FM.scene, G.id);
+    if (L && FM.trimClipEdge && (G.side === 'tail' ? b > e0.end + 1e-9 : a < e0.start - 1e-9)) {
+      const m = FM.media && FM.media.get ? FM.media.get(L.id) : null, sd = (m && m.duration > 0) ? m.duration : Infinity;
+      const r = FM.trimClipEdge(L, G.side, G.side === 'tail' ? b - e0.end : a - e0.start, sd);
+      if (G.side === 'tail') { if (e0.end + r.landed < b - 1e-9) b = e0.end + r.landed; }
+      else if (e0.start + r.landed > a + 1e-9) a = e0.start + r.landed;
+    }
     G.edge = G.side === 'tail' ? b : a;
+    /* SU1 (unconfirmed, 07f): where the edge can go no further the way the finger asks — −1 to the left (a tail at its shortest, a head at the
+       start of its footage), +1 to the right (a head at its shortest, a tail at the end of its footage). "At its shortest" counts the finger
+       exactly ON the floor too: both are on the frame grid, so they meet exactly, and one more frame of scrolling there could only overshoot.
+       Brake 4 reads it in BOTH directions. */
+    const short = G.side === 'tail' ? want <= a + ml + 1e-6 : want >= b - ml - 1e-6;
+    G.pin = G.side === 'tail' ? (short ? -1 : want > G.edge + 1e-6 ? 1 : 0) : (short ? 1 : want < G.edge - 1e-6 ? -1 : 0);
     node.style.left = (origin() + a * p) + 'px'; node.style.width = Math.max(4, (b - a) * p) + 'px';
     const grip = G.capEl; if (grip) grip.style.left = (G.side === 'tail' ? origin() + b * p - (GRIP_HIT - GRIP_CAP) : origin() + a * p - GRIP_CAP) + 'px';
     setLabel((b - a).toFixed(1) + ' s', G.x, G.y);
   }
-  /* ── the edge auto-scroll: Full's four brakes, copied (frame cap, far limit frozen at the start, stop at the ceiling, origin shift) ── */
+  /* ── the edge auto-scroll: Full's four brakes, copied (frame cap, far limit frozen at the start, stop at the ceiling, origin shift) ──
+     SU1, unconfirmed (hunt/simple-firstuser 07f-music-trim-edge-scroll.jpg: the song's tail grip held at the left edge went from 20 s to 0.1 s
+     and the view ran on to 0 s, the song off the screen). Two holes in the copy, both fixed here:
+       · brake 4 never held a TRIM. It read `G.atCap`, which nothing ever set, and only for a rightward scroll, so a trim at its 0.1 s floor (or
+         at the end of its footage) went on scrolling to the wall while the edge stood still. It reads `G.pin` (renderTrim) both ways now;
+       · the step was px per animation FRAME, so a 120 Hz screen scrolled twice as fast as a 60 Hz one. It is px per 60 Hz frame scaled by the
+         frame's own length now: the same speed in time on every screen, and on a 60 Hz one exactly the speed it always had.
+     The trim itself was already applied once: the scrolled amount moves the drag's origin (G.x0) and nothing else. */
   function loop() { if (G && !G.raf) G.raf = requestAnimationFrame(tick); }
-  function tick() {
+  function tick(ts) {
     if (!G) return;
+    if (G.raf) cancelAnimationFrame(G.raf);   // ONE loop: a frame called by hand (the suite's _tick) replaces the queued one instead of starting a second chain beside it
     G.raf = 0;
     if (G.phase !== 'drag') return;
+    /* this frame's length: its own time stamp against the last one, at most three frames (a stall must not jump); a frame with no stamp — the
+       seam called by hand — is one 60 Hz frame, as every frame used to be */
+    const stamped = typeof ts === 'number' && isFinite(ts);
+    const dt = (stamped && G.lastTs != null) ? Math.max(0, Math.min(DT_MAX_MS, ts - G.lastTs)) : FRAME_MS;
+    G.lastTs = stamped ? ts : null;
     G.touchAt = nowMs();   // an edge-hold IS a live gesture: the finger stops moving and this loop does the travelling
     render();   // the hold for lift / drop mode is a clock, so a still finger still switches
     const rect = scroller.getBoundingClientRect(), zone = Math.min(46, Math.max(12, Math.round(rect.width * 0.06)));
@@ -377,15 +406,17 @@ window.FM = window.FM || {};
     if (G.x > rect.right - zone) v = Math.min(EDGE_MAX, ((G.x - (rect.right - zone)) / zone) * EDGE_MAX);
     else if (G.x < rect.left + zone) v = -Math.min(EDGE_MAX, (((rect.left + zone) - G.x) / zone) * EDGE_MAX);
     if (v !== 0 && ++G.scrollFrames <= SCROLL_FRAMES_MAX) {                                     // brake 2
-      const pinned = v > 0 && ((G.kind === 'move' && G.main && G.mode === 'reorder' && G.j >= R.main.length) || (G.kind === 'trim' && G.side === 'tail' && G.atCap));   // brake 4
+      const pinned = (v > 0 && ((G.kind === 'move' && G.main && G.mode === 'reorder' && G.j >= R.main.length) || (G.kind === 'trim' && G.pin > 0)))
+        || (v < 0 && G.kind === 'trim' && G.pin < 0);                                            // brake 4, a trim in both directions
       if (!pinned) {
-        if (v > 0) {                                                                              // brake 3: the limit from where it STARTED, never from where it is
+        const step = v * dt / FRAME_MS;
+        if (step > 0) {                                                                           // brake 3: the limit from where it STARTED, never from where it is
           const far = Math.max(G.projDur0, G.start0 + G.dur0, R.trackEnd + G.dur0), limit = origin() + far * pps() + scroller.clientWidth;
-          const need = Math.min(limit, scroller.scrollLeft + scroller.clientWidth + v + 120);
+          const need = Math.min(limit, scroller.scrollLeft + scroller.clientWidth + step + 120);
           if ((parseFloat(inner.style.width) || 0) < need) inner.style.width = need + 'px';
         }
         const before = scroller.scrollLeft;
-        scroller.scrollLeft = Math.max(0, before + v);
+        scroller.scrollLeft = Math.max(0, before + step);
         const moved = scroller.scrollLeft - before;
         if (moved) { G.edgeScrolled = true; G.x0 -= moved; lastProg = scroller.scrollLeft; render(); }   // brake 1: nothing moved, nothing re-armed
       }
