@@ -1910,6 +1910,7 @@ window.FM = window.FM || {};
       const P = FM.scene.project, c = S.clampToTrack(R, Math.max(0, FM.time || 0), FM.defaultLayerDuration());
       /* today's text defaults (js/app.js addTextLayer), placed by Simple: no commit, no editor opened mid-step */
       const t = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: FM.defaultTextSize(), start: c.start, duration: c.duration });
+      t._smFit = 1;   // SU1 #8: its first ✓ fits it to the frame (text-edit.js fitNewTitle); '_' keeps it out of saves and history
       const anchor = S.bandAnchor('text', c.start, c.start + c.duration, null);
       S.insertAt(t, anchor ? FM.scene.layers.findIndex(l => l.id === anchor) : 0);
       plan.selectId = t.id; plan.typeInto = t.id;

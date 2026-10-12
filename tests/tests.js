@@ -127080,4 +127080,37 @@
       });
     });
   });
+
+  /* SU1 #8 (3/3, the PM's call 12 Oct): the first title in a 9:16 project ran off both edges ("ly Summer Tri") — Text starts at
+     min(W, H) / 6.75 = 160 on 1080×1920. Its first ✓ in Simple now fits it inside the frame with a 6% margin each side. */
+  test('SU1 #8 · at 380 a long first title typed in Simple fits a 1080×1920 frame with a margin after its ✓, and a short one keeps the default size', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const typeTitle = async (v, words) => {
+      smTool('text').click(); await v.idle(); await v.sleep(150);
+      const t = FM.layerById(FM.scene, FM.scene.selectedId);
+      if (!t || t.type !== 'text') throw new Error('setup: Text did not add and select a text (it said “' + v.say() + '”)');
+      const input = document.getElementById('te-input');
+      if (!input) throw new Error('setup: the Text tool did not open the words field');
+      input.value = words; input.dispatchEvent(new Event('input', { bubbles: true })); await v.sleep(80);
+      const done = Array.from(document.querySelectorAll('.te-done')).find(b => b.getClientRects().length);
+      if (done) done.click(); else FM.textEdit.stop();
+      await v.idle(); await v.sleep(150);
+      return FM.layerById(FM.scene, t.id);
+    };
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('A', 0, 6, W, H)], async function (v) {
+        const dflt = FM.defaultTextSize();
+        if (dflt !== 160) throw new Error('setup: the default text size on 1080×1920 is ' + dflt + ', not 160');
+        FM.time = 1;
+        const t = await typeTitle(v, 'My Summer Trip');
+        const w = FM.layerSize(t).w;
+        if (!(w <= 1080 * 0.88 + 1)) throw new Error('the title “My Summer Trip” is ' + Math.round(w) + ' px wide at ' + t.fontSize + ' px in a 1080 px frame — it runs off the edges (wants at most ' + Math.round(1080 * 0.88) + ')');
+        if (!(t.fontSize >= 60)) throw new Error('the title was shrunk to ' + t.fontSize + ' px — far smaller than fitting needs');
+        /* CONTROL: a short title fits at the default size and is left at it */
+        FM.selectLayer(null); FM.time = 3; await v.sleep(60);
+        const s = await typeTitle(v, 'Hi');
+        if (s.fontSize !== dflt) throw new Error('CONTROL: a short title “Hi” was resized to ' + s.fontSize + ' px — it already fitted at ' + dflt);
+      }, { W: 1080, H: 1920 });
+    });
+  });
 })();
