@@ -124952,4 +124952,76 @@
     if (!(levels(sl(Object.assign({ softness: 50 }, sw), white())) >= 4)) throw new Error('Softness 50 left the lines hard');
     if (!colsAllSame(soft)) throw new Error('Softness put a soft line out of true - it is not the same across the row');
   });
+
+  /* 13.5 PIXEL SORT: Sort by, Pattern, Re-roll, and Direction ↘ / ↗. */
+  const B13PS_NEW = { by: 0, seed: 0, reroll: 0 };
+  const B13PS_CFG = { def: {}, dense: { density: 1, low: 0, high: 1, length: 40 }, vert: { direction: 1, order: 1, density: 0.6 }, short: { length: 8 } };
+  const B13PS_PIN = {   // fc8866f1, before the edit
+    def: '9e99e035.9e99e035/9e99e035.9e99e035 e6e90981.e6e90981/e6e90981.e6e90981', dense: 'afe16d01.afe16d01/fbb3d7d5.fbb3d7d5 99f348ad.99f348ad/38078635.38078635',
+    vert: '1692a095.1692a095/1692a095.1692a095 cbf1064d.cbf1064d/cbf1064d.cbf1064d', short: 'd446d949.d446d949/a861d395.a861d395 0fd83949.0fd83949/d517a5a9.d517a5a9' };
+
+  test('482 13.5 Pixel Sort - Sort by, Pattern, Re-roll and the two diagonal Directions are in the catalogue at defaults that sort as before, and saved and new Pixel Sorts sort byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('pixelsort', B13PS_NEW, { by: 1, seed: 42, reroll: 12, direction: 3 });
+    const dir = b13Row('pixelsort', 'direction');
+    if ((dir.options || []).map(o => o[0]).join() !== '0,1,2,3' || dir.default !== 0) throw new Error('Direction is not Horizontal, Vertical and the two diagonals with Horizontal the default (' + JSON.stringify(dir.options) + ', default ' + dir.default + ')');
+    if (b13Row('pixelsort', 'reroll').unit !== 'Hz') throw new Error('Re-roll is not a rate in Hz');
+    const moved = b13Pinned('pixelsort', B13PS_NEW, B13PS_CFG, B13PS_PIN);
+    if (moved.length) throw new Error(moved.length + ' Pixel Sort pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.5 Pixel Sort - Sort by Hue makes a sorted row run in hue order, Saturation and each channel sort by themselves, Pattern and Re-roll pick other lines, and the diagonals sort along their own diagonals', { item: '482', budgetMs: 60000 }, function () {
+    /* Every pixel in every row joins one run: Density 1, Dark cut 0, Bright cut 1, Max run past the width, all opaque. */
+    const all = { density: 1, low: 0, high: 1, length: 600 };
+    const ps = (over, d0, w, h, t) => b13Run('pixelsort', Object.assign(b13Base('pixelsort', {}), over), w, h, t == null ? 0.37 : t, 1, d0);
+    /* a row of 64 pure hues in a scrambled order (an LCG), so brightness and hue disagree about the order */
+    const W = 64, H = 8, hues = () => { const d = new Uint8ClampedArray(W * H * 4); let s = 12345;
+      for (let i = 0; i < W * H; i++) { s = (s * 1103515245 + 12345) & 0x7fffffff; const hh = (s % 3600) / 10, c = 1 - Math.abs(((hh / 60) % 2) - 1), seg = Math.floor(hh / 60);
+        const rgb = [[1, c, 0], [c, 1, 0], [0, 1, c], [0, c, 1], [c, 0, 1], [1, 0, c]][seg]; d[i * 4] = Math.round(rgb[0] * 255); d[i * 4 + 1] = Math.round(rgb[1] * 255); d[i * 4 + 2] = Math.round(rgb[2] * 255); d[i * 4 + 3] = 255; }
+      return d; };
+    const hueOf = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), dl = mx - mn; if (!dl) return 0; let h = mx === r ? ((g - b) / dl) % 6 : (mx === g ? (b - r) / dl + 2 : (r - g) / dl + 4); if (h < 0) h += 6; return h * 60; };
+    const along = (d, f) => { const out = []; for (let y = 0; y < H; y++) { const row = []; for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; row.push(f(d[i], d[i + 1], d[i + 2])); } out.push(row); } return out; };
+    const worstDrop = rows => { let w = 0; rows.forEach(r => { for (let x = 1; x < r.length; x++) w = Math.max(w, r[x - 1] - r[x]); }); return w; };
+    /* CONTROL: sorted by brightness (the old sort) the hues are out of order. 1.41 degrees is one step of the 256-step key. */
+    if (!(worstDrop(along(ps(all, hues(), W, H), hueOf)) > 30)) throw new Error('CONTROL: sorting by brightness left the hues in order - this fixture cannot tell the two sorts apart');
+    const byHue = worstDrop(along(ps(Object.assign({ by: 1 }, all), hues(), W, H), hueOf));
+    if (byHue > 1.41) throw new Error('Sort by Hue left a row whose hue drops by ' + byHue.toFixed(2) + ' degrees - a sorted row must run round the colour wheel in order');
+    const back = along(ps(Object.assign({ by: 1, order: 1 }, all), hues(), W, H), hueOf).map(r => r.map(v => -v));
+    if (worstDrop(back) > 1.41) throw new Error('Sort by Hue, Bright to dark, does not run the hues the other way');
+    /* SATURATION and the three CHANNELS, on the colour fixture made opaque: each sorted row is in order of its own key. */
+    const opaque = () => { const d = b13Plate(W, H); for (let i = 3; i < d.length; i += 4) d[i] = 255; return d; };
+    const satOf = (r, g, b) => { const mx = Math.max(r, g, b); return mx ? Math.floor((mx - Math.min(r, g, b)) * 255 / mx) : 0; };
+    [[2, 'Saturation', satOf], [3, 'Red', (r) => r], [4, 'Green', (r, g) => g], [5, 'Blue', (r, g, b) => b]].forEach(([by, name, f]) => {
+      const drop = worstDrop(along(ps(Object.assign({ by: by }, all), opaque(), W, H), f));
+      if (drop > 0) throw new Error('Sort by ' + name + ' left a row whose ' + name.toLowerCase() + ' drops by ' + drop);
+    });
+    /* PATTERN and RE-ROLL, at the default Density (about a third of the lines). CONTROL: with neither, the same lines at any
+       moment. Pattern 5 sorts other lines, the same ones every time; Re-roll 10 keeps its lines through a tenth of a second
+       and picks new ones in the next. */
+    const PW = 120, PH = 90, pat = (over, t) => ps(over, null, PW, PH, t);
+    if (!b13Same(pat({}, 0.1), pat({}, 2.3))) throw new Error('CONTROL: Pixel Sort with no Re-roll sorts different lines at 0.1 s and 2.3 s');
+    if (b13Same(pat({ seed: 5 }), pat({}))) throw new Error('Pattern 5 sorts exactly the lines Pattern 0 sorts');
+    if (!b13Same(pat({ seed: 5 }), pat({ seed: 5 }))) throw new Error('Pattern 5 sorts differently each time at the same moment');
+    if (!b13Same(pat({ reroll: 10 }, 0.12), pat({ reroll: 10 }, 0.18))) throw new Error('Re-roll 10 picked new lines inside one tenth of a second');
+    if (b13Same(pat({ reroll: 10 }, 0.12), pat({ reroll: 10 }, 0.25))) throw new Error('Re-roll 10 sorts the same lines a tenth of a second later - it does not re-roll');
+    /* THE DIAGONALS: every ↘ diagonal (x − y constant) is in brightness order going right, every ↗ one (x + y constant) going
+       right and up — and the rows are not (CONTROL: Horizontal sorts the rows). Diagonals of one or two pixels never sort. */
+    const DW = 40, DH = 30, lumOf = (d, x, y) => { const i = (y * DW + x) * 4; return (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0; };
+    const opq = () => { const d = b13Plate(DW, DH); for (let i = 3; i < d.length; i += 4) d[i] = 255; return d; };
+    const rowsSorted = d => { for (let y = 0; y < DH; y++) for (let x = 1; x < DW; x++) if (lumOf(d, x, y) < lumOf(d, x - 1, y)) return false; return true; };
+    if (!rowsSorted(ps(all, opq(), DW, DH))) throw new Error('CONTROL: Horizontal with every pixel in did not sort the rows');
+    const down = ps(Object.assign({ direction: 2 }, all), opq(), DW, DH), up = ps(Object.assign({ direction: 3 }, all), opq(), DW, DH);
+    if (rowsSorted(down) || rowsSorted(up)) throw new Error('a diagonal Direction sorted the rows');
+    let checked = 0;
+    for (let k = -(DH - 1); k < DW; k++) {
+      if (Math.min(DW - Math.max(k, 0), DH - Math.max(-k, 0)) < 3) continue;
+      for (let x = Math.max(1, k + 1); x < DW && x - k < DH; x++) { checked++; if (lumOf(down, x, x - k) < lumOf(down, x - 1, x - k - 1)) throw new Error('Diagonal ↘ left the diagonal x - y = ' + k + ' out of brightness order at x ' + x); }
+    }
+    for (let s = 0; s < DW + DH - 1; s++) {
+      const x0 = Math.max(0, s - (DH - 1)); if (Math.min(DW - x0, s - x0 + 1) < 3) continue;
+      for (let x = Math.max(1, s - DH + 2); x < DW && s - x >= 0; x++) { checked++; if (lumOf(up, x, s - x) < lumOf(up, x - 1, s - x + 1)) throw new Error('Diagonal ↗ left the diagonal x + y = ' + s + ' out of brightness order at x ' + x); }
+    }
+    if (checked < 2 * (DW - 1) * (DH - 1) - 8) throw new Error('CONTROL: only ' + checked + ' diagonal steps were checked');
+    const bag = d => JSON.stringify(Object.entries(b13Colours(d)).sort());
+    if (bag(down) !== bag(opq()) || bag(up) !== bag(opq())) throw new Error('a diagonal sort lost or invented pixels - a sort only moves them');
+  });
 })();

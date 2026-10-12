@@ -1631,13 +1631,21 @@ window.FM = window.FM || {};
     ] },
     // Pixel Sort — the datamosh look: runs of pixels re-ordered by brightness, which turns a frame
     // into vertical or horizontal smears of sorted colour. Nothing else here re-ORDERS pixels.
-    { type: 'pixelsort', label: 'Pixel Sort', desc: 'Re-orders runs of pixels by brightness, smearing the frame into sorted bands. Threshold picks which pixels qualify; Density is how much of the frame joins in.', params: [
+    { type: 'pixelsort', label: 'Pixel Sort', desc: 'Re-orders runs of pixels by brightness, hue, saturation or one colour, smearing the frame into sorted bands. Threshold picks which pixels qualify; Density is how much of the frame joins in.', params: [
       { key: 'density', label: 'Density', min: 0.02, max: 1, step: 0.02, def: 0.35 },
       { key: 'low', label: 'Dark cut', min: 0, max: 1, step: 0.01, def: 0.2 },
       { key: 'high', label: 'Bright cut', min: 0, max: 1, step: 0.01, def: 0.85 },
       { key: 'length', label: 'Max run', min: 8, max: 600, step: 4, def: 160, unit: 'px' },
-      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical']], def: 0 },
+      /* #482 polish 13.5: two diagonals, ↘ and ↗ — 0 and 1 are the old rows and columns, so a saved value means what it did. */
+      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Diagonal ↘'], [3, 'Diagonal ↗']], def: 0 },
       { key: 'order', label: 'Order', options: [[0, 'Dark → bright'], [1, 'Bright → dark']], def: 0 },
+      /* #482 polish 13.5. A run was always ordered by brightness, the same lines were sorted in every Pixel Sort, and they never
+         changed. Sort by orders each run by Hue (a rainbow smear), Saturation or one channel instead — Dark cut and Bright cut
+         still pick the runs by brightness, so the same pixels take part. Pattern picks a different set of lines; Re-roll picks
+         a new set that many times a second. Brightness, Pattern 0 and Re-roll 0 are the old sort exactly. */
+      { key: 'by', label: 'Sort by', options: [[0, 'Brightness'], [1, 'Hue'], [2, 'Saturation'], [3, 'Red'], [4, 'Green'], [5, 'Blue']], def: 0 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'reroll', label: 'Re-roll', min: 0, max: 30, step: 1, def: 0, unit: 'Hz' },
     ] },
     // Luma Matte — cut this layer out with ANOTHER layer's brightness. Alpha mattes already exist as
     // masking groups and the Cutout blend modes; what did not was reading the LUMA of a layer that
@@ -5422,6 +5430,20 @@ window.FM = window.FM || {};
     }
   }
 
+  /* PIXEL SORT'S KEY (#482 polish 13.5): what a run is ordered by, as 0..255, for Sort by 1-5 — Brightness (0) stays inline
+     in the kernel, verbatim. Hue is the HSV hue around the circle from red, in 256 steps (a grey is 0, red); Saturation is
+     HSV (max − min) / max; Red, Green and Blue are the channel itself. */
+  function pixelSortKey13(by, r, g, b) {
+    if (by >= 3) return by === 3 ? r : (by === 4 ? g : b);
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), dl = mx - mn;
+    if (by === 2) return mx ? ((dl * 255 / mx) | 0) : 0;
+    if (!dl) return 0;
+    let h = mx === r ? ((g - b) / dl) % 6 : (mx === g ? (b - r) / dl + 2 : (r - g) / dl + 4);
+    if (h < 0) h += 6;
+    const k = (h * 256 / 6) | 0;
+    return k > 255 ? 255 : k;
+  }
+
   /* A box blur of radius r on a 3-channel float plane, in place, replicating the edge (CRT bloom). */
   function crtBox13(b, W, H, r) {
     const div = 2 * r + 1, tmp = new Float32Array(Math.max(W, H) * 3);
@@ -5527,18 +5549,32 @@ window.FM = window.FM || {};
       const hi = clamp01(p.high == null ? 0.85 : FM.evalProp(p.high, t)) * 255;
       if (hi <= lo) return;
       const maxRun = Math.max(4, Math.round((p.length == null ? 160 : FM.evalProp(p.length, t)) * s));
-      const vert = Math.round(FM.evalProp(p.direction, t) || 0) === 1;
+      const dirn = Math.round(FM.evalProp(p.direction, t) || 0);
+      const vert = dirn === 1, diag = dirn === 2 || dirn === 3;
       const desc = Math.round(FM.evalProp(p.order, t) || 0) === 1;
-      const lines = vert ? W : H, span = vert ? H : W;
-      const stride = vert ? W : 1, lineStep = vert ? 1 : W;
-      const keys = new Uint32Array(span);
+      /* #482 polish 13.5 — Sort by, Pattern, Re-roll, and the two diagonals. A DIAGONAL is a line through the flat buffer with a
+         stride of W + 1 (↘, x − y constant) or 1 − W (↗, x + y constant, walked left to right and so upward), starting on the
+         top row or left column (↘) or the left column or bottom row (↗); its span is however many pixels it crosses. Pattern
+         and Re-roll mix into the per-line hash only when one of them is set, so Pattern 0 / Re-roll 0 pick the old lines. */
+      const by = p.by == null ? 0 : (Math.round(FM.evalProp(p.by, t)) | 0);
+      const seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0);
+      const rr = p.reroll == null ? 0 : FM.evalProp(p.reroll, t);
+      const mixH = seed !== 0 || rr > 0, epoch = rr > 0 ? Math.floor(t * rr) : 0;
+      const lines = diag ? W + H - 1 : (vert ? W : H);
+      let span = vert ? H : W;
+      const stride = diag ? (dirn === 2 ? W + 1 : 1 - W) : (vert ? W : 1), lineStep = vert ? 1 : W;
+      const keys = new Uint32Array(diag ? Math.max(W, H) : span);
       const src = fxSrc(d);
       for (let L = 0; L < lines; L++) {
         // deterministic per line: the same frame always sorts the same lines
         let h = ((L * 374761393) ^ 0x5bf03635) | 0;
+        if (mixH) h = (h + Math.imul(seed + 1, 0x27d4eb2f) + Math.imul(epoch + 1, 0x165667b1)) | 0;
         h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
         if ((h & 0xffff) / 65536 > density) continue;
-        const base = L * lineStep;
+        let base;
+        if (!diag) base = L * lineStep;
+        else if (dirn === 2) { const dd = L - (H - 1), x0 = dd >= 0 ? dd : 0, y0 = dd >= 0 ? 0 : -dd; base = y0 * W + x0; span = Math.min(W - x0, H - y0); }
+        else { const x0 = L > H - 1 ? L - (H - 1) : 0, y0 = L - x0; base = y0 * W + x0; span = Math.min(W - x0, y0 + 1); }
         let i = 0;
         while (i < span) {
           // find a run of pixels inside the brightness window
@@ -5561,7 +5597,7 @@ window.FM = window.FM || {};
           if (n > 2) {
             for (let j = 0; j < n; j++) {
               const o = (base + (a + j) * stride) << 2;
-              let lum = (0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2]) | 0;
+              let lum = by === 0 ? (0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2]) | 0 : pixelSortKey13(by, src[o], src[o + 1], src[o + 2]);
               if (desc) lum = 255 - lum;
               keys[j] = (lum << 20) | j;                  // brightness in the high bits, index in the low
             }
