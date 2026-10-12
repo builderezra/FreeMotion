@@ -125042,4 +125042,101 @@
     } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* 10.5 DISPLACEMENT MAP. It pushed both ways by one Amount from two fixed channel pairs, read a map layer wherever that layer
+     happened to sit, and a hard edge in the map tore the picture. Each picture below encodes where a pixel came from in its own
+     colours, so the output says exactly which pixel each one read. */
+  test('482 10.5 Displacement Map - Luma to X only moves pixels only sideways, Luma to Y only only up and down, Alpha pushes both ways, Vertical amount follows Amount until set, Map blur takes the tear out of a hard map edge, Stretch to this layer spreads a small map over the whole layer, and a saved one draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const R = FM.fxRegistry, bad = [], made = [], W = 160, H = 120;
+    const fx = p => { const e = R.makeInstance('displacemap'); Object.assign(e.params, p); return e; };
+    /* 1. THE ROWS */
+    const ps = R.paramsOf('displacemap') || [], row = k => ps.filter(q => q.key === k)[0];
+    const ch = row('channel');
+    if (!ch || (ch.options || []).map(o => o[1]).join('|') !== 'Red→X, Green→Y|Luminance|Luma→X only|Luma→Y only|Alpha→both') bad.push('Channel offers ' + JSON.stringify(ch && ch.options));
+    const ay = row('amounty');
+    if (!ay || ay.follows !== 'amount' || ay.default !== 40) bad.push('Displacement Map has no Vertical amount row that follows Amount (' + JSON.stringify(ay) + ')');
+    if ('amounty' in R.makeInstance('displacemap').params) bad.push('a new Displacement Map gets its own Vertical amount, so moving Amount would no longer move both ways');
+    if (!row('smooth') || row('smooth').default !== 0 || R.makeInstance('displacemap').params.smooth !== 0) bad.push('Displacement Map has no Map blur row at 0');
+    if (!row('fit') || row('fit').default !== 0 || R.makeInstance('displacemap').params.fit !== 0) bad.push('Displacement Map has no Map fit row at As placed');
+    const lay = [{ id: 'l48210d', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'displacemap', enabled: true, params: { amount: 30, channel: 3, amounty: -55, smooth: 12, fit: 1 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const dp = lay[0].effects[0].params;
+    if (dp.channel !== 3 || dp.amounty !== -55 || dp.smooth !== 12 || dp.fit !== 1) bad.push('a saved Displacement Map comes back from the load sanitiser as ' + JSON.stringify(dp));
+    const noGL = FM._noGL;
+    try {
+      /* 2. LUMA → X ONLY — the backlog's test. Luma varies along each row; blue is the row (2y). Every output pixel must keep its
+            own row's blue, while plenty have moved sideways. CONTROL: Luminance (both ways) does move rows. */
+      const lumaPic = w10pic('_48210dm1', W, H, (x, y) => { const v = (x * 37) & 255; return [v, v, 2 * y, 255]; }, made);
+      const flat1 = _986shot([lumaPic([])], 0.5, W, H);
+      const rowsOff = r => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (w10px(r, x, y)[2] !== 2 * y) n++; return n; };
+      const moved = (r, b, c) => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i + c] !== b.d[i + c]) n++; return n; };
+      const both = _986shot([lumaPic([fx({ amount: 40, channel: 1 })])], 0.5, W, H);
+      if (!(rowsOff(both) > 1000)) throw new Error('CONTROL: Luminance moved only ' + rowsOff(both) + ' pixels off their row - the fixture cannot see an up-down push');
+      const xo = _986shot([lumaPic([fx({ amount: 40, channel: 2 })])], 0.5, W, H);
+      if (rowsOff(xo) !== 0) bad.push('Luma→X only moved ' + rowsOff(xo) + ' pixels off their own row');
+      if (!(moved(xo, flat1, 0) > 1000)) bad.push('Luma→X only moved only ' + moved(xo, flat1, 0) + ' pixels sideways');
+      /* 3. LUMA → Y ONLY: red is the column (x), luma varies down each column through green. Every pixel keeps its column. */
+      const colPic = w10pic('_48210dm2', W, H, (x, y) => [x, (y * 37) & 255, 0, 255], made);
+      const flat2 = _986shot([colPic([])], 0.5, W, H), yo = _986shot([colPic([fx({ amount: 40, channel: 3 })])], 0.5, W, H);
+      let colsOff = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (w10px(yo, x, y)[0] !== x) colsOff++;
+      if (colsOff !== 0) bad.push('Luma→Y only moved ' + colsOff + ' pixels off their own column');
+      if (!(moved(yo, flat2, 1) > 1000)) bad.push('Luma→Y only moved only ' + moved(yo, flat2, 1) + ' pixels up or down');
+      /* 4. VERTICAL AMOUNT: green 255 pushes down by the whole Amount (y + 0.5·2·40 = y + 40); red 128 pushes sideways by 0.16 px,
+            which the truncation drops. Absent, it follows Amount (row y reads row y + 40); at -40 it reads row y - 40. */
+      const vPic = w10pic('_48210dm3', W, H, (x, y) => [128, 255, 2 * y, 255], made);
+      const v0 = _986shot([vPic([fx({ amount: 40, channel: 0 })])], 0.5, W, H), v1 = _986shot([vPic([fx({ amount: 40, channel: 0, amounty: -40 })])], 0.5, W, H);
+      if (w10px(v0, 50, 30)[2] !== 140) throw new Error('CONTROL: with Vertical amount following Amount, row 30 should read row 70 (blue 140), it reads blue ' + w10px(v0, 50, 30)[2]);
+      if (w10px(v1, 50, 70)[2] !== 60) bad.push('Vertical amount -40 should make row 70 read row 30 (blue 60), it reads blue ' + w10px(v1, 50, 70)[2]);
+      /* 5. MAP BLUR. Target: red is the column. Map (a separate layer, opacity 0 so only the effect sees it): black left of
+            x 80, white right of it, Luma→X only at Amount 20 — the left reads 20 px left, the right 20 px right, so at the seam
+            neighbouring pixels read columns 41 apart: a tear. Blurred 20 px, the push ramps over some 40 px instead; the
+            biggest step between neighbours in a row drops to about 3 columns. */
+      const tgt = w10pic('_48210dm4', W, H, (x, y) => [x, 100, 0, 255], made);
+      const mapMk = w10pic('_48210dm5', W, H, (x, y) => { const v = x < 80 ? 0 : 255; return [v, v, v, 255]; }, made);
+      const shotMap = (mk, p) => { const M = mk([]); M.transform.opacity = 0; const T = tgt([fx(Object.assign({ source: M.id }, p))]); return _986shot([M, T], 0.5, W, H); };
+      const step = r => { let m = 0; for (const y of [10, 60, 110]) for (let x = 1; x < W; x++) m = Math.max(m, Math.abs(w10px(r, x, y)[0] - w10px(r, x - 1, y)[0])); return m; };
+      const hard = step(shotMap(mapMk, { amount: 20, channel: 2 })), soft = step(shotMap(mapMk, { amount: 20, channel: 2, smooth: 20 }));
+      if (!(hard >= 30)) throw new Error('CONTROL: the hard map edge only steps ' + hard + ' columns between neighbours - there is no tear to soften');
+      if (!(soft <= 6)) bad.push('Map blur 20 still steps ' + soft + ' columns between neighbouring pixels at the map edge (' + hard + ' unblurred) - the tear is still there');
+      /* 6. MAP FIT. A 40×30 map in the top-left corner, all red 255 (push right by the whole Amount 20), green 128 (no push down).
+            As placed it drives only that corner: (10, 10) reads column 30, (100, 80) its own column 100. Stretched to this layer
+            (the whole frame) it drives everything: (100, 80) reads column 120. */
+      const small = w10pic('_48210dm6', 40, 30, () => [255, 128, 0, 255], made);
+      const ap = shotMap(small, { amount: 20, channel: 0 }), st = shotMap(small, { amount: 20, channel: 0, fit: 1 });
+      if (w10px(ap, 10, 10)[0] !== 30 || w10px(ap, 100, 80)[0] !== 100) throw new Error('CONTROL: as placed, the corner map should push (10,10) to column 30 and leave (100,80) alone; got ' + w10px(ap, 10, 10)[0] + ' and ' + w10px(ap, 100, 80)[0]);
+      if (w10px(st, 100, 80)[0] !== 120) bad.push('Stretch to this layer left (100, 80) reading column ' + w10px(st, 100, 80)[0] + ', not 120 - the corner map was not spread over the layer');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    /* 7. ALPHA → BOTH, and the old loop. On a synthetic plate through the seam: a map of alpha 255 pushes right and down by
+          Amount whatever its colour (black, which Red→X / Green→Y would read as a push up-left). Then channels 0 and 1 with no
+          Vertical amount and no blur against the loop as it was at fc8866f1, transcribed here — exactly. */
+    if (typeof FM._displaceResample !== 'function') bad.push('FM._displaceResample is missing - the resample is not the one this test measures');
+    else {
+      const w = 64, h = 48, src = new Uint8ClampedArray(w * h * 4), map = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; src[i] = x; src[i + 1] = y; src[i + 2] = 9; src[i + 3] = 255; map[i] = (x * 29 + y * 7) & 255; map[i + 1] = (x * 11 + y * 23) & 255; map[i + 2] = (x * y) & 255; map[i + 3] = x < 6 ? 0 : 255; }
+      const blackOpaque = new Uint8ClampedArray(w * h * 4); for (let i = 3; i < blackOpaque.length; i += 4) blackOpaque[i] = 255;
+      const o4 = new Uint8ClampedArray(w * h * 4); FM._displaceResample(src, blackOpaque, o4, w, h, 10, 10, 4, 0);
+      const pa = (10 * w + 10) * 4;
+      if (o4[pa] !== 20 || o4[pa + 1] !== 20) bad.push('Alpha→both on an opaque black map should push (10,10) to read (20,20), it reads (' + o4[pa] + ',' + o4[pa + 1] + ')');
+      const oldLoop = (chan, amount) => { const o = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const mi = (y * w + x) * 4; let dxn = 0, dyn = 0;
+          if (map[mi + 3] !== 0) {
+            if (chan === 1) { const l = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5; dxn = l; dyn = l; }
+            else { dxn = map[mi] / 255 - 0.5; dyn = map[mi + 1] / 255 - 0.5; }
+          }
+          let sx = (x + dxn * 2 * amount) | 0, sy = (y + dyn * 2 * amount) | 0;
+          if (sx < 0) sx = 0; else if (sx >= w) sx = w - 1; if (sy < 0) sy = 0; else if (sy >= h) sy = h - 1;
+          const di = (y * w + x) * 4, si = (sy * w + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+        return o; };
+      [[0, 40], [1, 40], [0, -73.5], [1, 12.25]].forEach(([chan, amt]) => {
+        const ref = oldLoop(chan, amt), o = new Uint8ClampedArray(w * h * 4);
+        FM._displaceResample(src, map, o, w, h, amt, amt, chan, 0);
+        let n = 0; for (let i = 0; i < o.length; i++) if (o[i] !== ref[i]) n++;
+        if (n) bad.push('a saved Displacement Map (channel ' + chan + ', amount ' + amt + ') samples ' + n + ' bytes differently from before');
+      });
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

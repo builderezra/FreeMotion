@@ -1358,7 +1358,14 @@ window.FM = window.FM || {};
     // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
     { type: 'displacemap', label: 'Displacement Map', layer: true, layerLabel: 'Map layer', params: [
       { key: 'amount', label: 'Amount', min: -200, max: 200, step: 1, def: 40, unit: 'px' },
-      { key: 'channel', label: 'Channel', def: 0, options: [[0, 'Red→X, Green→Y'], [1, 'Luminance']] },
+      /* #482 polish 10.5: one push along one axis, or a map's alpha as the push (see dispVec). 0 and 1 are the old two. */
+      { key: 'channel', label: 'Channel', def: 0, options: [[0, 'Red→X, Green→Y'], [1, 'Luminance'], [2, 'Luma→X only'], [3, 'Luma→Y only'], [4, 'Alpha→both']] },
+      /* #482 polish 10.5: the up-down push FOLLOWS Amount until he sets it (Wiggle's Vertical amount rule), so a saved map and a
+         new one push both ways alike; dead under Luma→X only, which the row says. Map blur eases the push; Map fit stretches a
+         chosen map layer over this one (no effect without a map layer — the layer then displaces itself). */
+      { key: 'amounty', label: 'Vertical amount', min: -200, max: 200, step: 1, def: 40, unit: 'px', follows: 'amount', overriddenBy: 'channel', liveWhen: [0, 1, 3, 4] },
+      { key: 'smooth', label: 'Map blur', min: 0, max: 40, step: 1, def: 0, unit: 'px' },
+      { key: 'fit', label: 'Map fit', def: 0, options: [[0, 'As placed'], [1, 'Stretch to this layer']], note: 'Needs a Map layer' },
     ] },
     { type: 'polardisplace', label: 'Polar Displacement', layer: true, layerLabel: 'Map layer', params: [
       { key: 'radius', label: 'Radius', min: -200, max: 200, step: 1, def: 40, unit: 'px' },
@@ -10669,6 +10676,101 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     } finally { _dspLvl--; }
   }
 
+  /* ═══ DISPLACEMENT MAP'S RESAMPLE (#482 polish 10.5) ═════════════════════════════════════════════════════════════════════
+   * The loop that was inline in drawDisplaceEffect, as a seam the suite can hold against the old one. What it adds:
+   *   CHANNELS 2 Luma→X only, 3 Luma→Y only (the other axis stays put — a ripple that only runs sideways), 4 Alpha→both (a
+   *     map's own soft edges push, whatever its colour);
+   *   VERTICAL AMOUNT — `amountY`, which the caller passes as Amount while the key is absent;
+   *   MAP BLUR — the PUSH is blurred, not the map's pixels: a transparent map pixel is a push of 0 and blurs as 0, so the field
+   *     eases out at a map's edge instead of the colour of its edge spreading outward at full strength. Two box passes each
+   *     way of radius blur/2 (a tent that reaches `blur` px), on a field of floats.
+   * Blur under 1 px is the old loop exactly — chosen once, never per pixel; channels 0 and 1 with amountY === amount are the old
+   * arithmetic, operation for operation. */
+  const _dv = [0, 0];
+  function dispVec(map, mi, chan) {
+    let dxn = 0, dyn = 0;
+    if (map[mi + 3] !== 0) {
+      if (chan === 1) { const l = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5; dxn = l; dyn = l; }
+      else if (chan === 2) dxn = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5;   // Luma→X only
+      else if (chan === 3) dyn = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5;   // Luma→Y only
+      else if (chan === 4) { const a = map[mi + 3] / 255 - 0.5; dxn = a; dyn = a; }                            // Alpha→both
+      else { dxn = map[mi] / 255 - 0.5; dyn = map[mi + 1] / 255 - 0.5; }   // Red→X, Green→Y
+    }
+    _dv[0] = dxn; _dv[1] = dyn;
+  }
+  function dispBoxH(a, b, W, H, r) {
+    const n = 2 * r + 1;
+    for (let y = 0; y < H; y++) {
+      const row = y * W; let s = 0;
+      for (let k = -r; k <= r; k++) s += a[row + (k < 0 ? 0 : (k >= W ? W - 1 : k))];
+      for (let x = 0; x < W; x++) {
+        b[row + x] = s / n;
+        const ad = x + r + 1, sb = x - r;
+        s += a[row + (ad >= W ? W - 1 : ad)] - a[row + (sb < 0 ? 0 : sb)];
+      }
+    }
+  }
+  function dispBoxV(a, b, W, H, r) {
+    const n = 2 * r + 1;
+    for (let x = 0; x < W; x++) {
+      let s = 0;
+      for (let k = -r; k <= r; k++) s += a[(k < 0 ? 0 : (k >= H ? H - 1 : k)) * W + x];
+      for (let y = 0; y < H; y++) {
+        b[y * W + x] = s / n;
+        const ad = y + r + 1, sb = y - r;
+        s += a[(ad >= H ? H - 1 : ad) * W + x] - a[(sb < 0 ? 0 : sb) * W + x];
+      }
+    }
+  }
+  function displaceResample(src, map, o, W, H, amount, amountY, chan, blur) {
+    if (!(blur >= 1)) {
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const mi = (y * W + x) * 4;
+          dispVec(map, mi, chan);
+          let sx = (x + _dv[0] * 2 * amount) | 0, sy = (y + _dv[1] * 2 * amountY) | 0;
+          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+      }
+      return;
+    }
+    const N = W * H, FX = new Float32Array(N), FY = new Float32Array(N), T = new Float32Array(N);
+    for (let i = 0; i < N; i++) { dispVec(map, i * 4, chan); FX[i] = _dv[0]; FY[i] = _dv[1]; }
+    const r = Math.max(1, Math.round(blur / 2));
+    for (let pass = 0; pass < 2; pass++) { dispBoxH(FX, T, W, H, r); dispBoxV(T, FX, W, H, r); dispBoxH(FY, T, W, H, r); dispBoxV(T, FY, W, H, r); }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        let sx = (x + FX[i] * 2 * amount) | 0, sy = (y + FY[i] * 2 * amountY) | 0;
+        if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+        const di = i * 4, si = (sy * W + sx) * 4;
+        o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+      }
+    }
+  }
+  /* MAP FIT "Stretch to this layer" (#482 polish 10.5): the map layer's own bounds (its alpha box) are stretched over THIS
+     layer's, nearest pixel, so a small map drawn anywhere drives the whole layer and follows it if either moves. Outside this
+     layer's box the fitted map is empty (no push), which is the layer's own transparent margin anyway. Null when either has
+     nothing drawn — the caller keeps the map as placed. */
+  function dispFitMap(map, src, W, H) {
+    const mb = alphaBBoxExact(map, W, H), tb = alphaBBoxExact(src, W, H);
+    if (!mb || !tb) return null;
+    const out = new Uint8ClampedArray(W * H * 4);
+    for (let y = tb.y; y < tb.y + tb.h; y++) {
+      let my = mb.y + Math.floor((y - tb.y + 0.5) * mb.h / tb.h); if (my > mb.y + mb.h - 1) my = mb.y + mb.h - 1;
+      for (let x = tb.x; x < tb.x + tb.w; x++) {
+        let mx = mb.x + Math.floor((x - tb.x + 0.5) * mb.w / tb.w); if (mx > mb.x + mb.w - 1) mx = mb.x + mb.w - 1;
+        const di = (y * W + x) * 4, si = (my * W + mx) * 4;
+        out[di] = map[si]; out[di + 1] = map[si + 1]; out[di + 2] = map[si + 2]; out[di + 3] = map[si + 3];
+      }
+    }
+    return out;
+  }
+  FM._displaceResample = displaceResample;   // suite seams (#482 polish 10.5)
+  FM._dispFitMap = dispFitMap;
+
   function drawDisplaceEffect(ctx, layer, t, scene, fx, polar) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -10711,19 +10813,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // rule drawPixelEffect hands its kernels as `ps`. × 1 on every export.
       const amt = FM.evalProp(pr.amount, t); const amount = (amt == null ? 40 : amt) * ps;
       const chan = Math.round(FM.evalProp(pr.channel, t) || 0);
-      for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
-          const mi = (y * W + x) * 4; let dxn = 0, dyn = 0;
-          if (map[mi + 3] !== 0) {
-            if (chan === 1) { const l = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5; dxn = l; dyn = l; }
-            else { dxn = map[mi] / 255 - 0.5; dyn = map[mi + 1] / 255 - 0.5; }   // Red→X, Green→Y
-          }
-          let sx = (x + dxn * 2 * amount) | 0, sy = (y + dyn * 2 * amount) | 0;
-          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
-          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
-          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
-        }
-      }
+      /* #482 polish 10.5 — Vertical amount (FOLLOWS Amount while it has no value of its own, so a saved map pushes both ways
+         alike, exactly as before), Map blur in px, and Map fit: a map layer stretched over THIS layer's own bounds instead of
+         read where it happens to sit. See displaceResample. */
+      const amountY = pr.amounty == null ? amount : (FM.evalProp(pr.amounty, t) || 0) * ps;
+      let blur = pr.smooth == null ? 0 : (FM.evalProp(pr.smooth, t) || 0); blur = blur < 0 ? 0 : (blur > 40 ? 40 : blur);
+      const fit = pr.fit == null ? 0 : (Math.round(FM.evalProp(pr.fit, t)) | 0);
+      if (fit === 1 && map !== src) map = dispFitMap(map, src, W, H) || map;
+      displaceResample(src, map, o, W, H, amount, amountY, chan, blur * ps);
     } else {
       const rAmt = FM.evalProp(pr.radius, t); const radius = (rAmt == null ? 40 : rAmt) * ps;   // PROJECT px → plate px
       const aAmt = FM.evalProp(pr.angle, t); const angAmt = ((aAmt == null ? 30 : aAmt)) * Math.PI / 180;   // an angle: scale-free
