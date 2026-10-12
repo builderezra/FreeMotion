@@ -1500,8 +1500,13 @@ window.FM = window.FM || {};
     // Snow & Rain (queue 911, his pick) — full-frame weather over the clip. Particles emits from one point;
     // this fills the frame. Flake count is independent of plate size, so the phone preview and the export
     // show the same weather; sizes scale with the plate.
-    { type: 'weather', label: 'Snow & Rain', desc: 'Falling snow or rain across the whole frame, with wind, speed and depth.', params: [
-      { key: 'kind', label: 'Type', options: [[0, 'Snow'], [1, 'Rain']], def: 0 },
+    /* #482 polish 11.2: five more things to fill the air with — Confetti (tumbling, flipping paper in six party colours),
+       Embers (rising, flickering sparks that glow), Dust / Ash (tiny motes drifting every way), Petals (big slow tumbling
+       ovals) and Bubbles (rising rings with a glint) — plus Pattern (the layer's own flakes) and Sway (how far each one drifts
+       side to side; rain falls straight, so it has none). Snow and Rain at Pattern 0 and Sway 1 are the old frames, call for
+       call. Confetti and Embers bring their own colours, so the Colour row says it is off for them. */
+    { type: 'weather', label: 'Snow & Rain', desc: 'Snow, rain, confetti, embers, dust, petals or bubbles across the whole frame, with wind, speed and depth.', colorGate: { by: 'kind', when: [0, 1, 4, 5, 6] }, params: [
+      { key: 'kind', label: 'Type', options: [[0, 'Snow'], [1, 'Rain'], [2, 'Confetti'], [3, 'Embers'], [4, 'Dust / Ash'], [5, 'Petals'], [6, 'Bubbles']], def: 0 },
       { key: 'amount', label: 'Amount', min: 10, max: 1500, step: 10, def: 300 },
       { key: 'size', label: 'Size', min: 1, max: 30, step: 0.5, def: 5, unit: 'px' },
       { key: 'speed', label: 'Speed', min: 0, max: 4, step: 0.05, def: 1, unit: '×' },
@@ -1509,6 +1514,8 @@ window.FM = window.FM || {};
       { key: 'length', label: 'Streak length', min: 5, max: 300, step: 1, def: 60, unit: 'px', overriddenBy: 'kind', liveWhen: 1 },
       { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.02, def: 0.85 },
+      { key: 'sway', label: 'Sway', min: 0, max: 3, step: 0.05, def: 1, unit: '×', overriddenBy: 'kind', liveWhen: [0, 2, 3, 4, 5, 6] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     // HSL Bands — push one colour band's hue, saturation and luminance. The saturation gate is the
     // whole trick: weighting by the pixel's own saturation is what leaves skin and neutrals alone
@@ -13222,7 +13229,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * edge. Snow sways; rain is a streak along its own velocity, so Wind slants it. */
     weather: function (A, B, W, H, bb, p, t, tl, layer, ps) {
       const ev = (k, d) => (p[k] == null ? d : FM.evalProp(p[k], t));
-      const rain = Math.round(ev('kind', 0)) === 1;
+      const kind = Math.round(ev('kind', 0)), rain = kind === 1;
+      const more = kind >= 2 && kind <= 6;   // #482 polish 11.2: Confetti, Embers, Dust / Ash, Petals, Bubbles
       const n = Math.max(0, Math.min(3000, Math.round(ev('amount', 300))));
       const sc = ps == null ? 1 : ps;
       const size = Math.max(0.2, ev('size', 5)) * sc;
@@ -13237,7 +13245,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!n || op <= 0) return;
       // murmur3's finaliser: the speed-lines hash on sequential i*4+k inputs left visible diagonal clumps in heavy snow
       const hash = function (k) { k = Math.imul(k + 1, 0x9e3779b1); k ^= k >>> 16; k = Math.imul(k, 0x85ebca6b); k ^= k >>> 13; k = Math.imul(k, 0xc2b2ae35); k ^= k >>> 16; return (k >>> 0) / 4294967296; };
-      let fall = (rain ? 1.4 : 0.12) * speed;            // frame heights per second, nearest layer
+      /* PATTERN and SWAY (#482 polish 11.2). Pattern mixes into every flake's hash, and 0 IS the old hash; Sway scales the
+         side-to-side drift, and 1 is the old 0.012 of a frame width exactly. */
+      const seed = Math.max(0, Math.min(999, Math.round(ev('seed', 0)))) | 0, seedK = Math.imul(seed, 0x2545f491);
+      const hs = seed ? (k => hash(k ^ seedK)) : hash;
+      const swayK = 0.012 * Math.max(0, Math.min(3, ev('sway', 1)));
+      // frame heights per second, nearest layer: Snow 0.12 and Rain 1.4 as they always were; Confetti, Embers, Dust, Petals, Bubbles
+      const base = rain ? 1.4 : (more ? [0, 0, 0.22, 0.1, 0.025, 0.07, 0.06][kind] : 0.12);
+      let fall = base * speed;
       /* A KEYFRAMED SPEED OR WIND IS INTEGRATED, NOT MULTIPLIED (queue 913). `fall * time` is only the distance
          fallen while the speed never changes; with Speed keyframed 1 → 0 it rewound every flake to its first-frame
          spot (the frame at 3 s was byte-identical to the frame at 0 s), and a Wind change late in the clip threw
@@ -13252,7 +13267,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const t0 = t - time, ks = [p.speed, p.wind];
         clock = FM.integrateProp(ks, t0, t, spAt);
         const carried = FM.integrateProp(ks, t0, t, (tau) => wiAt(tau) * spAt(tau));
-        fall = rain ? 1.4 : 0.12;
+        fall = base;
         drift = clock !== 0 ? carried / clock : wind;
       }
       const mY = rain ? (len / H + 0.02) : (size * 2 / H + 0.02), mX = 0.08;
@@ -13268,7 +13283,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           B.lineWidth = Math.max(0.6 * sc, size * 0.35 * nearness);
           B.beginPath();
           for (let i = band; i < n; i += 3) {
-            const h1 = hash(i * 4 + 1), h2 = hash(i * 4 + 2), h3 = hash(i * 4 + 3);
+            const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3);
             const v = nearness * (0.85 + 0.3 * h3);
             const dy = fall * v * clock;                     // in frame heights
             const y = wrap(h2 + dy, -mY, 1 + mY) * H;
@@ -13279,7 +13294,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           }
           B.stroke();
         }
-      } else {
+      } else if (!more || kind === 4) {
         const S = 32;
         if (!_wxSprite) { _wxSprite = document.createElement('canvas'); _wxSprite.width = _wxSprite.height = S; }
         if (_wxSpriteCol !== col) {
@@ -13291,16 +13306,66 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           g.fillStyle = gr; g.fillRect(0, 0, S, S);
           _wxSpriteCol = col;
         }
-        for (let i = 0; i < n; i++) {
-          const h1 = hash(i * 4 + 1), h2 = hash(i * 4 + 2), h3 = hash(i * 4 + 3), h4 = hash(i * 4 + 4);
+        if (kind !== 4) for (let i = 0; i < n; i++) {
+          const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3), h4 = hs(i * 4 + 4);
           const nearness = 1 - depth * h3 * 0.8;
           const dy = fall * nearness * (0.8 + 0.4 * h4) * clock;
-          const sway = 0.012 * Math.sin(time * (0.7 + h4) * 1.6 + h1 * 6.283);
+          const sway = swayK * Math.sin(time * (0.7 + h4) * 1.6 + h1 * 6.283);
           const y = wrap(h2 + dy, -mY, 1 + mY) * H;
           const x = wrap(h1 + (drift * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
           const d = size * 2 * nearness * (0.7 + 0.6 * h4);  // sprite's soft edge takes up half its width
           B.globalAlpha = op * (0.4 + 0.6 * nearness);
           B.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
+        }
+        // DUST / ASH (#482 polish 11.2): snow's soft sprite as small faint motes, sinking slowly and drifting on both axes
+        else for (let i = 0; i < n; i++) {
+          const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3), h4 = hs(i * 4 + 4), h5 = hs((i * 4 + 4) ^ 0x5bd1e995);
+          const nearness = 1 - depth * h3 * 0.8;
+          const dy = fall * nearness * (0.8 + 0.4 * h4) * clock, w1 = time * (0.5 + h4) * 0.9;
+          const y = wrap(h2 + dy + swayK * 0.8 * Math.sin(w1 * 0.77 + h5 * 6.283), -mY, 1 + mY) * H;
+          const x = wrap(h1 + (drift * dy * 0.6) * H / W + swayK * 1.5 * Math.sin(w1 + h1 * 6.283), -mX, 1 + mX) * W;
+          const d = size * 0.9 * nearness * (0.5 + h4);
+          B.globalAlpha = op * 0.6 * (0.35 + 0.65 * nearness) * (0.6 + 0.4 * h5);
+          B.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
+        }
+      } else {
+        /* CONFETTI, EMBERS, PETALS, BUBBLES (#482 polish 11.2). The snowflake's own clock, depth and wrap, so wind, speed,
+           depth and a keyframed speed all mean what they mean for snow; embers and bubbles go UP. Confetti and petals tumble
+           (a turn) and flip (their visible width breathes through edge-on); embers flicker hotter and cooler and add light;
+           bubbles are a thin ring with a glint. Confetti brings six party colours and embers a fire ramp of their own; petals
+           (each a shade of it) and bubbles take the Colour row. */
+        const TAU = 6.283185307179586, rise = kind === 3 || kind === 6, rgbS = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+        const CONF = ['#ff4d6d', '#ffd23f', '#3ec1ff', '#7bdc5a', '#b46cff', '#ff8c42'];
+        const amp = swayK * (kind === 5 ? 3 : (kind === 2 ? 1.8 : 1.2));   // petals swing widest, embers and bubbles wobble
+        if (kind === 3) B.globalCompositeOperation = 'lighter';           // an ember is light: it adds, it never darkens
+        for (let i = 0; i < n; i++) {
+          const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3), h4 = hs(i * 4 + 4), h5 = hs((i * 4 + 4) ^ 0x5bd1e995);
+          const nearness = 1 - depth * h3 * 0.8;
+          const dy = fall * nearness * (0.8 + 0.4 * h4) * clock;            // frame heights travelled
+          const sway = amp * Math.sin(time * (0.7 + h4) * 1.6 + h1 * TAU);
+          const y = wrap(h2 + (rise ? -dy : dy), -mY, 1 + mY) * H;
+          const x = wrap(h1 + (drift * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
+          const s = size * nearness * (0.7 + 0.6 * h4), a = op * (0.4 + 0.6 * nearness);
+          B.save(); B.translate(x, y);
+          if (kind === 2 || kind === 5) {
+            const turn = h5 * TAU + time * (kind === 2 ? 1.5 + 3 * h3 : 0.6 + 1.2 * h3) * (h4 < 0.5 ? -1 : 1);
+            const f = Math.cos(time * (kind === 2 ? 2.5 + 4 * h5 : 1.1 + 1.8 * h5) + h2 * TAU), fy = f >= 0 ? Math.max(0.12, f) : Math.min(-0.12, f);
+            B.rotate(turn); B.scale(1, fy); B.globalAlpha = a; B.beginPath();
+            if (kind === 2) { B.fillStyle = CONF[(h5 * 6) | 0]; B.rect(-s * 0.8, -s * 0.45, s * 1.6, s * 0.9); }
+            else { const k = 0.8 + 0.2 * h3; B.fillStyle = 'rgb(' + ((rgb[0] * k) | 0) + ',' + ((rgb[1] * k) | 0) + ',' + ((rgb[2] * k) | 0) + ')'; B.ellipse(0, 0, s * 1.1, s * 0.55, 0, 0, TAU); }
+            B.fill();
+          } else if (kind === 3) {   // a hot core in a soft halo; hotter is yellower
+            const heat = 0.5 + 0.5 * Math.sin(time * (6 + 8 * h5) + h1 * 40), r = s * 0.35;
+            B.fillStyle = 'rgb(255,' + ((90 + 130 * heat) | 0) + ',' + ((30 + 110 * heat * heat) | 0) + ')';
+            B.globalAlpha = a * (0.4 + 0.6 * heat) * 0.3; B.beginPath(); B.arc(0, 0, r * 2.6, 0, TAU); B.fill();
+            B.globalAlpha = a * (0.4 + 0.6 * heat); B.beginPath(); B.arc(0, 0, r, 0, TAU); B.fill();
+          } else {                   // a thin ring and a glint up and to the left
+            const r = s * 0.9;
+            B.globalAlpha = a; B.strokeStyle = rgbS; B.lineWidth = Math.max(0.6 * sc, r * 0.12);
+            B.beginPath(); B.arc(0, 0, r, 0, TAU); B.stroke();
+            B.globalAlpha = a * 0.75; B.fillStyle = rgbS; B.beginPath(); B.arc(-r * 0.38, -r * 0.38, r * 0.2, 0, TAU); B.fill();
+          }
+          B.restore();
         }
       }
       B.restore();

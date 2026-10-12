@@ -564,7 +564,7 @@ window.FM = window.FM || {};
     wiggle:            ['random jitter', 'jitter'],
     starfield:         ['simple starfield', 'stars'],
     lightning:         ['energy beam', 'laser beam', 'bolt'],
-    weather:           ['snow', 'rain', 'weather', 'snowfall', 'rainfall', 'storm'],
+    weather:           ['snow', 'rain', 'weather', 'snowfall', 'rainfall', 'storm', 'confetti', 'embers', 'ash', 'dust', 'petals', 'blossom', 'bubbles'],   // #482 polish 11.2: its new Types find it too
     huecycle:          ['rainbow', 'disco', 'strobe', 'colour flash', 'color cycle', 'hue cycle', 'colour change'],
     softskin:          ['beauty', 'smooth', 'face', 'skin', 'retouch', 'blemish', 'airbrush'],
     oilpaint:          ['painting', 'painterly', 'art', 'brush', 'watercolour', 'oil'],

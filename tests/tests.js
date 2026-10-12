@@ -124844,4 +124844,76 @@
     const bare = b11Draw('particles', Object.assign(b11Base('particles', {}), { behind: 1 }), 320, 180, 0.5, 0, { start: 0.5, transform: { x: 160, y: 90 } }, 1).marks.filter(m => m.m === 'layer').length;
     if (bare !== 1) throw new Error('Behind layer at the clip’s first instant drew the layer ' + bare + ' times - it must still draw it once');
   });
+
+  /* 11.2 SNOW & RAIN: Confetti, Embers, Dust / Ash, Petals and Bubbles; Pattern; Sway. */
+  const B11WX_NEW = { sway: 1, seed: 0 };
+  const B11WX_CFG = { def: {}, rain: { kind: 1 }, heavy: { amount: 900, size: 9, wind: -60, depth: 1 }, rainkf: { kind: 1, speed: b11Kf(2, 0), length: 120 },
+    snowkf: { wind: b11Kf(-50, 80) }, tint: { color: '#a0c0ff', opacity: 0.5 } };
+  const B11WX_PIN = {   // fc8866f1, before the edit
+    def: 'bbdb1462.7d2b64e6/7c703e11.8ddc5bee 6d8a365a.006f1e5b/c0908058.87e5d948', rain: '2441eccd.5e8be3c4/1a557811.3c84d0e5 36c605a6.6ec7c2f1/42b39be4.3c70e0f9',
+    heavy: '1ea123c8.64d17945/19b3bf7f.639a9471 89fa8af6.a129b68e/6acb0af4.a99ccff8', rainkf: 'e4d0b7e0.d7ff22ac/183fc31c.7e08b103 44723915.fc2586f5/35281495.d4a9dc81',
+    snowkf: 'a0b94072.247fa550/5685a643.d02b3a07 671dfd53.4f5a9ce2/1f1c8375.13ca94bc', tint: 'ad64cfcb.e4b28cf7/ea7220fc.d017c92b 3f9dc813.489c80b0/56137f13.d03ecaed' };
+  /* One frame of Snow & Rain on a 320 x 180 plate, `tl` seconds into the clip. */
+  const b11Wx = (over, tl, W, H, ps) => b11Draw('weather', Object.assign(b11Base('weather', {}), over), W || 320, H || 180, 0.5 + tl, tl, { start: 0.5, transform: { x: 160, y: 90 } }, ps == null ? 1 : ps);
+  /* Where each flake is: one paint per flake (an ember's core, after its halo; a bubble's ring). */
+  const b11Flakes = (kind, R) => R.marks.filter(m => m.m !== 'layer').filter((m, j) => kind === 3 ? j % 2 === 1 : (kind === 6 ? m.m === 'stroke' : true));
+  const b11Hue = s => { const v = /^#[0-9a-f]{6}$/i.test(s) ? [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16)) : (String(s).match(/\d+/g) || []).map(Number), r = v[0] / 255, g = v[1] / 255, b = v[2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), c = mx - mn;
+    if (c < 0.08) return -1; let h = mx === r ? ((g - b) / c) % 6 : (mx === g ? (b - r) / c + 2 : (r - g) / c + 4); h *= 60; return h < 0 ? h + 360 : h; };
+
+  test('482 11.2 Snow & Rain - Pattern and Sway are in the catalogue at defaults that draw the old snow and rain, the Type offers Confetti, Embers, Dust, Petals and Bubbles, and saved and new Snow & Rain draw call for call as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('weather', B11WX_NEW, { sway: 2.5, seed: 12, kind: 5 });
+    const kind = b11Row('weather', 'kind');
+    if ((kind.options || []).map(o => o[0]).join() !== '0,1,2,3,4,5,6') throw new Error('Type does not offer Snow, Rain, Confetti, Embers, Dust / Ash, Petals and Bubbles (' + JSON.stringify(kind.options) + ')');
+    const sw = b11Row('weather', 'sway'), col = b11Row('weather', 'color');
+    if (sw.overriddenBy !== 'kind' || String(sw.liveWhen) !== '0,2,3,4,5,6') throw new Error('Sway does not say it is off for Rain, which falls straight (overriddenBy ' + sw.overriddenBy + ', liveWhen ' + sw.liveWhen + ')');
+    if (col.overriddenBy !== 'kind' || String(col.liveWhen) !== '0,1,4,5,6') throw new Error('the Colour row does not say it is off for Confetti and Embers, which bring their own colours (overriddenBy ' + col.overriddenBy + ', liveWhen ' + col.liveWhen + ')');
+    b11Recipes('weather', B11WX_NEW);
+    const moved = b11Pinned('weather', B11WX_NEW, B11WX_CFG, B11WX_PIN, p => b11CanvasShots('weather', p));
+    if (moved.length) throw new Error(moved.length + ' Snow & Rain frames differ from fc8866f1 at the new defaults - a new control changed weather he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.2 Snow & Rain - Confetti falls in at least three colours, Embers and Bubbles rise, Petals and Dust drift down, Pattern gives the layer its own flakes, Sway sets how far snow swings and leaves rain straight', { item: '482', budgetMs: 30000 }, function () {
+    /* CONFETTI'S COLOURS. CONTROL: Rain in one pink draws one hue. Petals in it draw one too (each petal a shade of it). */
+    const hues = R => new Set(b11Flakes(0, R).map(m => b11Hue(m.style)).filter(h => h >= 0).map(h => Math.round(h / 20)));
+    const wet = hues(b11Wx({ kind: 1, color: '#ff80a0' }, 1)), conf = hues(b11Wx({ kind: 2 }, 1));
+    if (wet.size !== 1) throw new Error('CONTROL: Rain in one pink drew ' + wet.size + ' hues');
+    if (conf.size < 3) throw new Error('Confetti drew ' + conf.size + ' hues - it should fall in at least three colours');
+    const pet = hues(b11Wx({ kind: 5, color: '#ff80a0' }, 1));
+    if (pet.size !== 1) throw new Error('Petals in one pink drew ' + pet.size + ' hues - each petal should be a shade of the Colour');
+    /* UP OR DOWN. With no wind, over a twentieth of a second, nearly every flake that did not wrap moves the way its Type goes.
+       CONTROL: snow falls. */
+    const dir = kind => { const a = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, 1)), b = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, 1.05)); let up = 0, down = 0;
+      a.forEach((m, j) => { const d = b[j].y - m.y; if (Math.abs(d) > 20) return; if (d < 0) up++; else if (d > 0) down++; }); return { up: up, down: down, n: a.length }; };
+    const sn = dir(0);
+    if (!(sn.n === 300 && sn.down > 290)) throw new Error('CONTROL: of ' + sn.n + ' snowflakes only ' + sn.down + ' fell');
+    [[2, 'Confetti', 'down'], [5, 'Petals', 'down'], [3, 'Embers', 'up'], [6, 'Bubbles', 'up']].forEach(([k, name, way]) => {
+      const r = dir(k);
+      if (r.n !== 300) throw new Error(name + ' drew ' + r.n + ' pieces, not the 300 of Amount');
+      if (!(r[way] > 270)) throw new Error('only ' + r[way] + ' of 300 ' + name + ' went ' + way + ' (' + r.up + ' up, ' + r.down + ' down)');
+    });
+    const sink = (kind, a, b) => { const p = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, a)), q = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, b)); let s = 0, n = 0; p.forEach((m, j) => { const d = q[j].y - m.y; if (Math.abs(d) < 60) { s += d; n++; } }); return s / n; };
+    const dust = sink(4, 1, 3), snow = sink(0, 1, 3);
+    if (!(dust > 0.5 && dust < snow / 2)) throw new Error('Dust sank ' + dust.toFixed(2) + ' px on average over 2 s against snow’s ' + snow.toFixed(2) + ' - it should sink, slowly');
+    if (b11Wx({ kind: 3 }, 1).marks.filter(m => m.m === 'fill').some(m => m.gco !== 'lighter')) throw new Error('an ember was drawn without adding light');
+    /* PATTERN. CONTROL: Pattern 0 is the snow with no Pattern at all. */
+    const log = o => b11Wx(o, 1).log.join('\n');
+    if (log({}) !== log({ seed: 0 })) throw new Error('CONTROL: Pattern 0 changed the snow');
+    const at = o => b11Flakes(0, b11Wx(o, 1)).map(m => m.x.toFixed(3) + ',' + m.y.toFixed(3));
+    const p0 = at({}), p5 = at({ seed: 5 }), kept = p5.filter((s, j) => s === p0[j]).length;
+    if (kept > 3) throw new Error('Pattern 5 left ' + kept + ' of 300 snowflakes where Pattern 0 has them');
+    /* SWAY. With no wind a snowflake only moves sideways by its sway. CONTROL: Sway 1 swings it; 0 holds it on one line;
+       2 swings it twice as far. */
+    const xs = (o, tl) => b11Flakes(0, b11Wx(Object.assign({ wind: 0 }, o), tl)).map(m => m.x);
+    const x0a = xs({ sway: 0 }, 1), x0b = xs({ sway: 0 }, 2.3), x1 = xs({}, 2.3), x2 = xs({ sway: 2 }, 2.3);
+    if (x0a.some((x, j) => Math.abs(x - x0b[j]) > 1e-9)) throw new Error('Sway 0 still swung a snowflake sideways');
+    const inside = x1.map((x, j) => x0b[j] > 40 && x0b[j] < 280), d1 = x1.map((x, j) => x - x0b[j]), d2 = x2.map((x, j) => x - x0b[j]);
+    if (!(d1.filter((d, j) => inside[j] && Math.abs(d) > 0.5).length > 150)) throw new Error('CONTROL: Sway 1 hardly moved the snow sideways');
+    const off = d2.filter((d, j) => inside[j] && Math.abs(d - 2 * d1[j]) > 1e-6).length;
+    if (off) throw new Error('Sway 2 did not swing ' + off + ' snowflakes exactly twice as far as Sway 1');
+    if (log({ kind: 1 }) !== log({ kind: 1, sway: 3 })) throw new Error('Sway changed the rain - rain falls straight');
+    /* THE SAME FRAME FOR THE SAME INSTANT, and the export's frame at half size on a half-size preview plate. */
+    [2, 3, 4, 5, 6].forEach(k => { if (b11Wx({ kind: k }, 1.7).log.join('\n') !== b11Wx({ kind: k }, 1.7).log.join('\n')) throw new Error('Type ' + k + ' drew a different frame the second time'); });
+    const full = b11Flakes(2, b11Wx({ kind: 2 }, 1.3)), half = b11Flakes(2, b11Wx({ kind: 2 }, 1.3, 160, 90, 0.5));
+    if (half.length !== full.length || half.some((m, j) => Math.abs(m.x * 2 - full[j].x) > 1e-9 || Math.abs(m.y * 2 - full[j].y) > 1e-9)) throw new Error('Confetti on a half-size preview plate is not the export’s confetti at half size');
+  });
 })();
