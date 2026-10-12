@@ -124917,7 +124917,7 @@
     if (startA({ dir: 2 }) !== 255) throw new Error('a soft Both ways wipe feathered its Start line to ' + startA({ dir: 2 }) + ' - the line is the middle of the wedge');
   });
 
-  /* 12.4 TEXT: Type-On’s Caret blink and Hide caret when not typing, Scramble Text’s Resolves order, Timecode’s HH:MM:SS:FF,
+  /* 12.4 TEXT: Type-On’s Caret blink and Caret when idle, Scramble Text’s Resolves order, Timecode’s HH:MM:SS:FF,
      Frames and MM:SS formats and Seconds’ Decimals. Text effects run on strings, so they are driven through FM.TEXT_FX
      directly: every config over five texts, five progresses and three moments, hashed (Timecode’s readouts are pinned as
      the strings themselves). */
@@ -124933,7 +124933,7 @@
     off: '01:00:12 | 02:02:05 | 01:00:00 | 01:00:59 | 01:00:02 | 01:00:00', down: '00:17:15 | 00:00:00 | 00:29:23 | 00:00:00 | 00:27:26 | 00:30:00',
     timeline: '12.5s | 3725.5s | 0.0s | 60.0s | 7.3s | 100.3s' };
 
-  test('482 12.4 Text - Caret blink, Hide caret when not typing, Resolves and Decimals are in the catalogue at defaults that write the old text, Timecode offers HH:MM:SS:FF, Frames and MM:SS, and saved and new Type-On, Scramble Text and Timecode write character for character as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+  test('482 12.4 Text - Caret blink, Caret when idle, Resolves and Decimals are in the catalogue at defaults that write the old text, Timecode offers HH:MM:SS:FF, Frames and MM:SS, and saved and new Type-On, Scramble Text and Timecode write character for character as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
     b12Catalogue('textprogress', B12TO_NEW, { blink: 2.5, hidecaret: 0, cursor: 2 }, 'text');
     b12Catalogue('textrandomizer', B12SC_NEW, { order: 3 }, 'text');
     b12Catalogue('timecode', B12TC_NEW, { decimals: 3, mode: 6 }, 'text');
@@ -124959,12 +124959,12 @@
     if (to({ blink: 2 }, 0.1) !== half + '_') throw new Error('Caret blink 2 Hz at 0.1 s into the clip wrote ' + JSON.stringify(to({ blink: 2 }, 0.1)) + ' - the caret should be lit');
     if (to({ blink: 2 }, 0.3) !== half) throw new Error('Caret blink 2 Hz at 0.3 s into the clip wrote ' + JSON.stringify(to({ blink: 2 }, 0.3)) + ' - the caret should be dark');
     if (to({ blink: 2 }, 0.6) !== half + '_') throw new Error('Caret blink 2 Hz at 0.6 s wrote ' + JSON.stringify(to({ blink: 2 }, 0.6)) + ' - it should be lit again');
-    /* HIDE CARET WHEN NOT TYPING. CONTROL: On (a saved Type-On) shows no caret before the first letter or after the last. Off
-       leaves it standing there — at the end of the text, or at its start when typing from the End. */
+    /* CARET WHEN IDLE. CONTROL: Hide (a saved Type-On) shows no caret before the first letter or after the last. Show leaves
+       it standing there — at the end of the text, or at its start when typing from the End. */
     if (to({ progress: 0 }, 0.1) !== '' || to({ progress: 1 }, 0.1) !== S) throw new Error('CONTROL: the default caret shows before or after the typing');
-    if (to({ progress: 0, hidecaret: 0 }, 0.1) !== '_') throw new Error('Hide caret Off at Progress 0 wrote ' + JSON.stringify(to({ progress: 0, hidecaret: 0 }, 0.1)) + ', not the caret alone');
-    if (to({ progress: 1, hidecaret: 0 }, 0.1) !== S + '_') throw new Error('Hide caret Off at Progress 1 wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0 }, 0.1)));
-    if (to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1) !== '_' + S) throw new Error('Hide caret Off typing from the End wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1)) + ' - the caret leads');
+    if (to({ progress: 0, hidecaret: 0 }, 0.1) !== '_') throw new Error('Caret when idle Show at Progress 0 wrote ' + JSON.stringify(to({ progress: 0, hidecaret: 0 }, 0.1)) + ', not the caret alone');
+    if (to({ progress: 1, hidecaret: 0 }, 0.1) !== S + '_') throw new Error('Caret when idle Show at Progress 1 wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0 }, 0.1)));
+    if (to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1) !== '_' + S) throw new Error('Caret when idle Show typing from the End wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1)) + ' - the caret leads');
     if (to({ progress: 1, hidecaret: 0, blink: 2 }, 0.3) !== S) throw new Error('a standing caret does not blink with the rest');
     /* RESOLVES. Ten letters at Progress 0.3: three have settled. A position has SETTLED when it shows its own letter on every one
        of six frames (a scrambling one changes from frame to frame). */

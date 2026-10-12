@@ -940,9 +940,10 @@ window.FM = window.FM || {};
       { key: 'dir', label: 'From', def: 0, options: [[0, 'Start'], [1, 'End'], [2, 'Middle']] },
       { key: 'cursor', label: 'Caret', def: 0, options: [[0, 'None'], [1, '/'], [2, '_'], [3, '\u258c']] },
       /* #482 12.4 \u2014 a typewriter's caret blinks, and usually sits there before the typing starts and after it ends. Blink 0 is
-         the steady caret it has always drawn; Hide caret when not typing On is today's caret, shown only mid-way. */
+         the steady caret it has always drawn; Caret when idle: Hide is today's caret, shown only mid-way. (A short label: a
+         segment row's label column is narrow on the phone.) */
       { key: 'blink', label: 'Caret blink', min: 0, max: 6, step: 0.5, def: 0, unit: 'Hz', overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
-      { key: 'hidecaret', label: 'Hide caret when not typing', def: 1, options: [[0, 'Off'], [1, 'On']], overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
+      { key: 'hidecaret', label: 'Caret when idle', def: 1, options: [[0, 'Show'], [1, 'Hide']], overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
     ] },
     { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }, { key: 'chars', label: 'Scrambles into', def: 1, legacy: 0, options: [[0, 'Any'], [1, 'Match'], [2, 'Digits'], [3, 'Letters']] },
       { key: 'order', label: 'Resolves', def: 0, options: [[0, 'Left to right'], [1, 'Right to left'], [2, 'Random'], [3, 'Centre out']] }] },   // queue 904: the alphabet was one hardcoded CAPS+symbols string   // order: #482 12.4
@@ -2663,10 +2664,10 @@ window.FM = window.FM || {};
       var unit = p.unit == null ? 0 : (Math.round(FM.evalProp(p.unit, t)) | 0);
       var cur = p.cursor == null ? 0 : (Math.round(FM.evalProp(p.cursor, t)) | 0);
       if (dir === 0 && unit === 0 && cur === 0) { st.text = st.text.slice(0, Math.round(st.text.length * pr)); return; }
-      /* BLINK and HIDE CARET WHEN NOT TYPING (#482 12.4). Blink counts on the clip's own clock, so the caret is lit on the
-         clip's first frame: on for the first half of each beat, off for the second. Hide On (the default, and what a saved
-         Type-On draws) keeps the caret to the mid-way frames; Off leaves it standing before the first letter and after the
-         last, as a real typewriter's does. */
+      /* BLINK and CARET WHEN IDLE (#482 12.4). Blink counts on the clip's own clock, so the caret is lit on the clip's first
+         frame: on for the first half of each beat, off for the second. Hide (the default, and what a saved Type-On draws)
+         keeps the caret to the mid-way frames; Show leaves it standing before the first letter and after the last, as a real
+         typewriter's does. */
       var bk = p.blink == null ? 0 : FM.evalProp(p.blink, t); if (!(bk > 0)) bk = 0; if (bk > 6) bk = 6;
       var hideCur = (p.hidecaret == null ? 1 : (Math.round(FM.evalProp(p.hidecaret, t)) | 0)) !== 0;
       var dark = false;   // a caret that is there but unlit this beat
