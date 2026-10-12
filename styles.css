@@ -8756,8 +8756,10 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
    it"; App settings "its own button like how friends and simple edit are". Zero or one block open (cv-none = zero), and every
    block keeps its bar in both states: closed, the bar IS the block; open, the bar is its header and its ⤡ closes it.
    Ported from the cloud helper's R-COG1 render (tools/design/plans/cog-1011/, drawn through the real app, no console errors),
-   keyed on .cv-bars (set with .cv-pair at every open) so the cascade lands exactly as it did in those pictures: the rules
-   above that hid a block's own bar while it was big are out-ranked here, and the ones made dead were removed. */
+   keyed on .cv-bars (set with .cv-pair at every open) so the cascade lands as it did in those pictures: the rules above that
+   hid a block's own bar while it was big are out-ranked here, and the ones made dead were removed. Where the build departs
+   from the pictures, the rule says why: the flight, a PC's packed column, Friends or the Editor open on a PC, the open
+   Editor's cap, the stacked fall-back and short screens (none of which the render drew). */
 #cv-app { display: none; }
 #canvas-dialog.cv-bars.cv-pair > #cv-app { display: flex; flex: none; order: 2; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.6); overflow: hidden; position: relative; }
 #cv-app-bar { display: flex; width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; margin: 0; }
