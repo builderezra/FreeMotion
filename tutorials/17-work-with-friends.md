@@ -3,10 +3,10 @@
 You'll be able to share a project live, so a friend can edit it with you on their own phone.
 
 1. Open your project. On the video, tap the small round button with a person and a plus.
-2. A card called **Work with friends** says **Off**. At its foot, turn on the **Work with friends** switch.
+2. A card called **Work with friends** opens. Work with friends is on for everyone; if the card says **Off**, someone turned it off on this phone, so turn the **Work with friends** switch at its foot back on.
 3. The card now says **Share "your project name" live**. Tap **Start sharing**. The first time, a box asks **What should others see?** Type your name, pick a colour and tap **Continue**.
 4. You now have a link and a short code. The short code is blurred until you tap it, and **QR** shows a code your friend can scan. Tap **Copy link** and paste it into a message to your friend. On most phones **Share…** is next to it.
-5. Your friend opens the link. The first time, FreeMotion asks them to turn on Work with friends (they tap **Turn on**) and to pick a name and colour (they tap **Continue**). On an iPhone it may first offer to open the link in the FreeMotion app instead of Safari; they follow its steps. Then a sheet called **Join a friend's project** appears, and they tap **Join**. <!-- not walked: needs a second device on a real network; the container has no network -->
+5. Your friend opens the link. The first time, FreeMotion asks them to pick a name and colour (they tap **Continue**); if they had turned Work with friends off, it first asks them to turn it back on (they tap **Turn on**). On an iPhone it may first offer to open the link in the FreeMotion app instead of Safari; they follow its steps. Then a sheet called **Join a friend's project** appears, and they tap **Join**. <!-- not walked: needs a second device on a real network; the container has no network -->
 6. A card says your friend wants to join. Tap **Let in**. Answer within 2 minutes, or it turns them away and they have to try again. <!-- not walked: needs a second device on a real network; the container has no network -->
 7. You are both editing the same project. When you are done, tap the round button again (it now shows your friend's initials) and tap **Stop sharing**. A box asks you to confirm: tap **Stop sharing** again.
 
@@ -14,7 +14,7 @@ No link? Your friend can type the short code instead (it stops working 30 minute
 
 On a computer: the round button is hidden on wide screens. Click the cog (Canvas settings) in the row with the time counter, just left of the Export arrow, and open **Friends**: it is a small block there with a ⤢ button, and Canvas settings is the big one beside it. The same buttons are there. <!-- not walked: the walk was the 380 px phone layout only -->
 
-Tip: Nothing is shared until you tap **Start sharing**. The switch is labelled "still being tested" in Settings, so keep a copy of anything important.
+Tip: Nothing is shared until you tap **Start sharing**. To keep Work with friends out of the way altogether, turn it off in Settings.
 
 If it doesn't work: If the link won't connect, tap **Link not working? Swap codes instead** and follow the two steps it shows.
 
@@ -24,7 +24,7 @@ If it doesn't work: If the link won't connect, tap **Link not working? Swap code
 |---|---|---|
 | 1 round person-plus button on the video | js/collab-ui.js:5178 | yes |
 | 1 it opens the Friends block (phone only) | js/collab-ui.js:5192 | yes |
-| 2 card named Work with friends, Off | js/collab-ui.js:1367 | yes |
+| 2 card named Work with friends; Off only when the switch is off (on by default since #921 clause 19) | js/collab-ui.js:1375, js/settings.js:560 | yes |
 | 2 the switch row at the foot | js/collab-ui.js:1424 | yes |
 | 3 Share “name” live | js/collab-ui.js:1316 | yes |
 | 3 Start sharing | js/collab-ui.js:1338 | yes |
@@ -46,9 +46,9 @@ If it doesn't work: If the link won't connect, tap **Link not working? Swap code
 | PC: Friends row in Canvas settings | index.html:1043 | yes |
 | PC: the round button is hidden on wide screens | styles.css:11073 | yes |
 | Tip: nothing shared until Start sharing | js/collab-ui.js:1349 | yes |
-| Tip: still being tested | js/settings.js:551 | yes |
+| Tip: the Work with friends switch in Settings | js/settings.js:560 | yes |
 | If: Swap codes instead | js/collab-ui.js:1568 | yes |
 | 6 the card turns them away after 2 minutes | js/collab-ui.js (KNOCK_TIMEOUT 120000) | yes |
-| 5 first-time friend sees Turn on Work with friends, then What should others see?, then Join | js/collab-ui.js:5094, :5024 | yes |
+| 5 first-time friend sees What should others see?, then Join (Turn on Work with friends only if they turned it off) | js/collab-ui.js:5128, :5024 | yes |
 | 4 QR is a button; the short code is blurred until tapped; code lasts 30 min after close | js/collab-ui.js:2102-2131, js/collab-core.js:126 | yes |
 | 7 once live the round button shows initials | styles.css:11073, js/collab-presence.js:1150-1190 | yes |
