@@ -1643,7 +1643,15 @@ window.FM = window.FM || {};
      * respect, which is what lets the load path validate its strength like any other param. */
     { type: 'filter', label: 'Filter', hidden: true,
       desc: 'A group of effects that act as one, with a single Strength that fades the whole group in and out.',
-      params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01, def: 1 }] },
+      params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01, def: 1 },
+        /* TONAL RANGE and PROTECT SKIN (#482 15.1, his #966 "as much choice as possible"). Strength fades the whole group
+           evenly; these let it act on the shadows, the midtones or the highlights only, and hold it back on skin. Judged on
+           the picture WITHOUT the filter, and applied as a per-pixel weight on Strength's cross-fade (drawFilterContainer).
+           All three defaults are the old even fade, so every saved filter and all 56 library filters draw as they did. */
+        { key: 'range', label: 'Tonal range', def: 0, options: [[0, 'All'], [1, 'Shadows'], [2, 'Midtones'], [3, 'Highlights']] },
+        { key: 'rangesoft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
+        { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      ] },
   ];
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
@@ -1651,7 +1659,7 @@ window.FM = window.FM || {};
   // redraws, repeated renders of one frame). Stats exposed for verification.
   FM._chromaKey = function (src, w, h, keyHex, tol, filterStr, soft, spill, slot) { return chromaKey(src, w, h, keyHex, tol, filterStr, soft, spill, slot); };   // suite seam (queue 734; slot: queue 986)
   FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode, slot) { return lumaKey(src, w, h, threshold, filterStr, soft, mode, slot); };   // suite seam (queue 735; slot: queue 986)
-  FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them)
+  FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0, fcPixel: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them); fcPixel: filters mixed per pixel (#482 15.1)
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
   // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
   // memo downstream (e.g. key over a graded video, or grade over a frame-blend) would freeze on frame 1.
@@ -4497,6 +4505,52 @@ window.FM = window.FM || {};
    * Both ends skip the plates entirely, so they are byte-identical to the flat cases rather than
    * merely close to them: strength 0 draws the layer with the filter simply absent, and strength 1
    * draws it with the children standing exactly where the filter stood. */
+  /* ═══ A FILTER THAT ACTS ON PART OF THE PICTURE (#482 15.1) ═════════════════════════════════════════════════════════
+   * Tonal range and Protect skin turn Strength's one even cross-fade into a weight PER PIXEL:
+   *     out = A + (B − A) · strength · range(L) · (1 − skin guard)
+   * where A is the layer without the filter and B with it — the same two plates as the cross-fade above. The range
+   * weights are Tint's (TINT_W: (1−L)², 1−|2L−1|, L²) with Range width an exponent on them (100/width, as Tint and Colour
+   * Balance), and the skin guard is Vibrance's orange wedge. Both are judged on A, the picture WITHOUT the filter, so a
+   * filter that darkens cannot carry a pixel out of its own range half way through. Mixed premultiplied, as 'lighter'
+   * mixes, so a soft edge or a key among the children fades the way Strength fades it.
+   * It needs the plates as pixels — 2 getImageData + 1 putImageData — so it runs only when one of the controls is off its
+   * default (fcPixelOpts returns null at the defaults, and FM._fxStats.fcPixel counts the runs); a saved filter and every
+   * library filter take the old plates-and-'lighter' path untouched. */
+  function fcPixelOpts(fx, t) {
+    const p = (fx && fx.params) || {};
+    const range = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0);
+    const wf = TINT_W[range > 0 && range < TINT_W.length ? range : 0];
+    let soft = p.rangesoft == null ? 100 : FM.evalProp(p.rangesoft, t); if (!(soft >= 10)) soft = 10; if (soft > 200) soft = 200;
+    let skin = p.skin == null ? 0 : FM.evalProp(p.skin, t); skin = skin > 0 ? Math.min(100, skin) / 100 : 0;
+    if (!wf && !skin) return null;
+    return { wf: wf, ex: wf && soft !== 100 ? 100 / soft : 1, skin: skin };
+  }
+  // a, b: straight RGBA of the two plates (without / with the children). The mix lands in a. k is Strength.
+  function fcMixPixels(a, b, k, o) {
+    const wf = o.wf, ex = o.ex, skin = o.skin;
+    for (let i = 0; i < a.length; i += 4) {
+      const ar = a[i], ag = a[i + 1], ab = a[i + 2], aa = a[i + 3];
+      let w = k;
+      if (wf) { let wv = wf((ar * 0.299 + ag * 0.587 + ab * 0.114) / 255); if (ex !== 1) wv = wv > 0 ? Math.pow(wv, ex) : 0; w *= wv; }
+      if (skin > 0) {
+        const mx = ar > ag ? (ar > ab ? ar : ab) : (ag > ab ? ag : ab), mn = ar < ag ? (ar < ab ? ar : ab) : (ag < ab ? ag : ab);
+        if (mx > 0 && ar === mx && ab === mn) {                 // hue in the red→yellow wedge — Vibrance's skin test
+          const sw = 1 - Math.abs((ag - ab) / (mx - mn || 1) - 0.45) / 0.55;
+          if (sw > 0) w *= 1 - skin * (sw < 1 ? sw : 1);
+        }
+      }
+      if (w === 0) continue;
+      const ba = b[i + 3], fa = aa / 255, fb = ba / 255;
+      let oa = aa + (ba - aa) * w; oa = oa < 0 ? 0 : (oa > 255 ? 255 : oa);
+      if (oa <= 0) { a[i] = a[i + 1] = a[i + 2] = a[i + 3] = 0; continue; }
+      const un = 255 / oa;
+      a[i] = (ar * fa + (b[i] * fb - ar * fa) * w) * un;
+      a[i + 1] = (ag * fa + (b[i + 1] * fb - ag * fa) * w) * un;
+      a[i + 2] = (ab * fa + (b[i + 2] * fb - ab * fa) * w) * un;
+      a[i + 3] = oa;
+    }
+  }
+  FM._fcMixPixels = fcMixPixels; FM._fcPixelOpts = fcPixelOpts;   // suite seams (#482 15.1)
   const _fcPool = [];
   let _fcDepth = 0;
   const FC_MAX_DEPTH = 4;   // capped, unlike the older pools — see FILTERS-DESIGN.md §3
@@ -4519,7 +4573,8 @@ window.FM = window.FM || {};
     const s = clamp01(fx.params && fx.params.strength != null ? FM.evalProp(fx.params.strength, t) : 1);
 
     if (s <= 0 || !kids.length) return drawLayer(ctx, asLayer(rest), t, scene);
-    if (s >= 1 || _fcDepth >= FC_MAX_DEPTH) return drawLayer(ctx, asLayer(spliced), t, scene);
+    const pxo = _fcDepth < FC_MAX_DEPTH ? fcPixelOpts(fx, t) : null;   // #482 15.1: a range or skin guard mixes per pixel, at any Strength
+    if (!pxo && (s >= 1 || _fcDepth >= FC_MAX_DEPTH)) return drawLayer(ctx, asLayer(spliced), t, scene);
 
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = proj.width, PH = proj.height;
@@ -4548,8 +4603,14 @@ window.FM = window.FM || {};
       plate(P.B, spliced);     // …and as if its children were simply part of the stack
       const m = P.M.getContext('2d');
       m.setTransform(1, 0, 0, 1, 0, 0); m.clearRect(0, 0, W, H); m.filter = 'none';
-      m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - s; m.drawImage(P.A, 0, 0);
-      m.globalCompositeOperation = 'lighter';     m.globalAlpha = s;     m.drawImage(P.B, 0, 0);
+      if (pxo) {               // #482 15.1: the same mix, weighted per pixel
+        const ia = P.A.getContext('2d').getImageData(0, 0, W, H), ib = P.B.getContext('2d').getImageData(0, 0, W, H);
+        fcMixPixels(ia.data, ib.data, s, pxo);
+        m.putImageData(ia, 0, 0); FM._fxStats.fcPixel++;
+      } else {
+        m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - s; m.drawImage(P.A, 0, 0);
+        m.globalCompositeOperation = 'lighter';     m.globalAlpha = s;     m.drawImage(P.B, 0, 0);
+      }
       m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
       ctx.save();
       baseT(ctx);
@@ -18476,7 +18537,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const e = effs[i];
       if (!adjLiveBox(e) || !adjKids(e).length) continue;
       const s = adjStrength(e, t);
-      if (s > 0 && s < 1) { fi = i; fs = s; break; }
+      if (s > 0 && (s < 1 || fcPixelOpts(e, t))) { fi = i; fs = s; break; }   // #482 15.1: a range or skin guard mixes per pixel at full Strength too
     }
     if (fi < 0) { applyAdjustment(ctx, layer, t, scene, adjFlatten(effs, t), P.M); return P.M; }
     const box = effs[fi];
@@ -18488,13 +18549,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const B = adjFilterPlate(ctx, layer, t, scene, spliced, depth + 1);                                     // …and as if its children stood in its place
     const m = P.M.getContext('2d');
     m.setTransform(1, 0, 0, 1, 0, 0); m.filter = 'none'; m.clearRect(0, 0, cw, ch);
-    m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - fs; m.drawImage(P.A, 0, 0);
-    m.globalCompositeOperation = 'lighter';     m.globalAlpha = fs;     m.drawImage(B, 0, 0);
+    const pxo = fcPixelOpts(box, t);
+    if (pxo) {                 // #482 15.1: Tonal range / Protect skin, judged on the grade without the filter
+      const ia = a.getImageData(0, 0, cw, ch), ib = B.getContext('2d').getImageData(0, 0, cw, ch);
+      fcMixPixels(ia.data, ib.data, fs, pxo);
+      m.putImageData(ia, 0, 0); FM._fxStats.fcPixel++;
+    } else {
+      m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - fs; m.drawImage(P.A, 0, 0);
+      m.globalCompositeOperation = 'lighter';     m.globalAlpha = fs;     m.drawImage(B, 0, 0);
+    }
     m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
     return P.M;
   }
   function applyAdjustmentFilters(ctx, layer, t, scene, own) {
-    const frac = own.some(e => adjLiveBox(e) && adjKids(e).length && (s => s > 0 && s < 1)(adjStrength(e, t)));
+    const frac = own.some(e => adjLiveBox(e) && adjKids(e).length && (s => s > 0 && (s < 1 || !!fcPixelOpts(e, t)))(adjStrength(e, t)));
     if (!frac) { applyAdjustment(ctx, layer, t, scene, adjFlatten(own, t)); return; }
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;

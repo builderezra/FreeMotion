@@ -124593,4 +124593,158 @@
     const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 15 — Heavier filter & grade tools: the Filter’s Tonal range, Protect skin, finish sliders and
+   *     Over-drive; Levels on all four channels at once; Match Grade’s hold, smoothing and skin; Gaussian Blur’s edges,
+   *     direction and Orton mix ═══
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 15
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). The rule that makes it safe (§0.3): every new key's default is the
+   * old look — a library filter gets every key it does not set from makeInstance, and a saved instance that lacks a key is
+   * filled at render time (queue 784). A pure pixel kernel (Levels) is pinned by hashes of its bytes captured on fc8866f1,
+   * the tree before the batch. Anything that composites on a canvas (the Filter container, Match Grade, a blur) is pinned
+   * against an ORACLE the test builds from the old code's own canvas steps instead, because canvas bytes are not the same on
+   * every machine and a hash taken on one would be a lie on another. */
+  const b15P = (w, h) => ({ width: w || 48, height: h || 36, fps: 30, duration: 5, background: '#101820' });
+  const b15Copy = o => JSON.parse(JSON.stringify(o));
+  const b15Fx = (type, params) => { const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, params || {}); return e; };
+  function b15Box(params, kids) { const b = FM.fxRegistry.makeInstance('filter'); b.params = Object.assign({}, params); b.effects = kids; return b; }
+  // a full-frame, fully opaque layer running left to right from c0 to c1 (black to white unless told otherwise)
+  function b15Plate(P, c0, c1) {
+    const L = FM.makeLayer('shape', { name: 'b15 plate', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: '#ffffff', start: 0, duration: 5 });
+    L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: c0 || '#000000', c1: c1 || '#ffffff' };
+    return L;
+  }
+  function b15Flat(P, fill) { return FM.makeLayer('shape', { name: 'b15 flat', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: fill, start: 0, duration: 5 }); }
+  // a smaller, see-through, turned card: soft alpha is where a wrong mix shows
+  function b15Card() {
+    const L = FM.makeLayer('shape', { name: 'b15 card', shape: 'rect', x: 20, y: 16, shapeW: 26, shapeH: 18, fill: '#3fa0e0', start: 0, duration: 5 });
+    L.transform.opacity = 0.8; L.fillOpacity = 0.7; L.transform.rotation = 12;
+    return L;
+  }
+  function b15Draw(layers, t, P, rs) {   // a frame of these layers, on a canvas at render scale rs (0.5 = a half-size preview plate)
+    const k = rs || 1, c = document.createElement('canvas'); c.width = Math.round(P.width * k); c.height = Math.round(P.height * k);
+    FM.renderScene(c.getContext('2d'), { project: P, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return c;
+  }
+  const b15Px = (layers, t, P, rs) => { const c = b15Draw(layers, t, P, rs); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
+  const b15At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const b15Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b15Diff = (a, b) => { let n = 0, m = 0; for (let i = 0; i < a.length; i++) { const d = Math.abs(a[i] - b[i]); if (d) { n++; if (d > m) m = d; } } return n + ' bytes (max ' + m + ')'; };
+  function b15Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i] & 255; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  /* THE OLD FILTER, REBUILT FROM ITS OWN CANVAS STEPS (drawFilterContainer on fc8866f1): the frame without the filter at
+     alpha 1−s, the frame with its children added 'lighter' at alpha s, laid over the background. On a layer that covers the
+     frame opaquely the two frames ARE the container's two plates, so this is the old picture byte for byte on any machine. */
+  function b15Xfade(P, layersA, layersB, s, t, rs) {
+    const cA = b15Draw(layersA, t, P, rs), cB = b15Draw(layersB, t, P, rs), W = cA.width, H = cA.height;
+    const M = document.createElement('canvas'); M.width = W; M.height = H; const m = M.getContext('2d');
+    m.globalAlpha = 1 - s; m.drawImage(cA, 0, 0); m.globalCompositeOperation = 'lighter'; m.globalAlpha = s; m.drawImage(cB, 0, 0);
+    const O = document.createElement('canvas'); O.width = W; O.height = H; const o = O.getContext('2d');
+    o.fillStyle = P.background; o.fillRect(0, 0, W, H); o.drawImage(M, 0, 0);
+    return o.getImageData(0, 0, W, H).data;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default, and a saved non-default value comes back from the load sanitiser as written. */
+  function b15Catalogue(type, NEW, SET) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want && pd.legacy === undefined) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want);
+    });
+    const fx = { type: type, enabled: true, params: b15Copy(SET) };
+    if (type === 'filter') fx.effects = [b15Fx('invert')];
+    const lay = [{ id: 'l48215' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [fx] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A Filter with the new keys ABSENT (saved before the batch), FILLED the way the render fills a saved instance (queue 784),
+     and PRESENT at their defaults (a new filter, and every library filter). */
+  function b15Variants(box, NEW) {
+    const absent = b15Copy(box); Object.keys(NEW).forEach(k => { delete absent.params[k]; });
+    const filled = FM._fillFxParams(b15Copy(absent));
+    const present = b15Copy(absent); Object.assign(present.params, NEW);
+    return [['absent', absent], ['filled at render time', filled], ['present at the defaults', present]];
+  }
+  const B15_FC_NEW = { range: 0, rangesoft: 100, skin: 0 };
+
+  test('482 15.1 pin: the Filter’s Tonal range, Range width and Protect skin at their defaults leave every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    const P = b15P(), moved = [], px0 = FM._fxStats.fcPixel;
+    // (no blur among them: a blur pulls the frame's edge in from transparent, the plates stop being opaque there, and the
+    // oracle's two frames over the background are then no longer the container's two plates)
+    const KIDS = { thermal: () => [b15Fx('thermal')], posterize: () => [b15Fx('posterize', { levels: 4 }), b15Fx('temperature', { amount: 60 })], css: () => [b15Fx('invert', { amount: 0.7 }), b15Fx('saturate', { amount: 1.6 })] };
+    Object.keys(KIDS).forEach(kn => [0.35, 0.5, 1].forEach(s => [1, 0.5].forEach(rs => {
+      // the oracle: s < 1 is the old cross-fade; s = 1 is the children standing where the filter stood
+      const want = s < 1 ? b15Xfade(P, [b15Plate(P)], [Object.assign(b15Plate(P), { effects: KIDS[kn]() })], s, 0.5, rs)
+                         : b15Px([Object.assign(b15Plate(P), { effects: KIDS[kn]() })], 0.5, P, rs);
+      b15Variants(b15Box({ strength: s }, KIDS[kn]()), B15_FC_NEW).forEach(([how, box]) => {
+        const L = b15Plate(P); L.effects = [box];
+        const got = b15Px([L], 0.5, P, rs);
+        if (!b15Same(got, want)) moved.push(kn + ' at Strength ' + s + ', plate scale ' + rs + ', new keys ' + how + ': ' + b15Diff(got, want) + ' off the old filter');
+      });
+      // …and on a see-through card over the plate, where the three must agree with each other
+      const card = b15Variants(b15Box({ strength: s }, KIDS[kn]()), B15_FC_NEW).map(([how, box]) => { const C = b15Card(); C.effects = [box]; return [how, b15Px([C, b15Plate(P)], 0.5, P, rs)]; });
+      card.slice(1).forEach(([how, d]) => { if (!b15Same(d, card[0][1])) moved.push('card, ' + kn + ' at Strength ' + s + ', plate scale ' + rs + ': new keys ' + how + ' draw ' + b15Diff(d, card[0][1]) + ' off the saved filter'); });
+    })));
+    // a filter on an adjustment layer (#986 C1): the grade below at Strength 0.6 and 1
+    [0.6, 1].forEach(s => {
+      const pics = b15Variants(b15Box({ strength: s }, KIDS.posterize()), B15_FC_NEW).map(([how, box]) => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [box]; return [how, b15Px([A, b15Plate(P)], 0.5, P)]; });
+      pics.slice(1).forEach(([how, d]) => { if (!b15Same(d, pics[0][1])) moved.push('adjustment layer at Strength ' + s + ': new keys ' + how + ' draw ' + b15Diff(d, pics[0][1]) + ' off the saved filter'); });
+    });
+    // every library filter: makeInstance gives the new keys at their defaults (no recipe sets one), and the picture is the one without them
+    const lib = FM.filters.all(), undeclared = [];
+    if (lib.length < 40) throw new Error('CONTROL: the filter library lists ' + lib.length + ' recipes - this check sees nothing');
+    lib.forEach(f => {
+      const box = FM.filters.makeInstance(f.id);
+      Object.keys(B15_FC_NEW).forEach(k => { if (box.params[k] !== B15_FC_NEW[k]) undeclared.push('the ' + f.id + ' filter carries ' + k + ' = ' + box.params[k]); });
+      Object.assign(box.params, B15_FC_NEW);
+      const old = b15Copy(box); Object.keys(B15_FC_NEW).forEach(k => { delete old.params[k]; });
+      const La = b15Plate(P); La.effects = [old]; const Lb = b15Plate(P); Lb.effects = [box];
+      const a = b15Px([La], 0.7, P), b = b15Px([Lb], 0.7, P);
+      if (!b15Same(a, b)) moved.push('the ' + f.id + ' filter draws ' + b15Diff(b, a) + ' off its old look');
+    });
+    if (FM._fxStats.fcPixel !== px0) moved.push('the per-pixel mix ran ' + (FM._fxStats.fcPixel - px0) + ' times at the defaults - only a range or a skin guard may pay for the readback');
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 8).join(' · '));
+    // last, so a tree without the keys still shows the pictures held first
+    if (undeclared.length) throw new Error(undeclared.length + ' library filters lack the new keys: ' + undeclared.slice(0, 4).join(' · '));
+    b15Catalogue('filter', B15_FC_NEW, { range: 3, rangesoft: 150, skin: 60 });
+  });
+
+  test('482 15.1 the Filter’s Tonal range: Highlights leaves a black pixel unfiltered and inverts a white one, Shadows the reverse, Range width widens it, Protect skin holds a skin tone back, and it works on an adjustment layer (CONTROL: All inverts both ends)', { item: '482', budgetMs: 60000 }, function () {
+    const P = b15P(), W = P.width, y = P.height >> 1, xd = 0, xb = W - 1, xm = W >> 1, xq = Math.round(W * 0.75);
+    const flt = (over) => b15Box(Object.assign({ strength: 1 }, over), [b15Fx('invert', { amount: 1 })]);
+    const run = (box) => { const L = b15Plate(P); L.effects = box ? [box] : []; return b15Px([L], 0.5, P); };
+    const r = (d, x) => b15At(d, W, x, y)[0];
+    const bare = run(null), all = run(flt({})), hi = run(flt({ range: 3 })), sh = run(flt({ range: 1 }));
+    if (!(r(bare, xd) < 12 && r(bare, xb) > 243)) throw new Error('CONTROL: the plate does not run from black to white (' + r(bare, xd) + ' .. ' + r(bare, xb) + ')');
+    if (!(r(all, xd) - r(bare, xd) > 200 && r(bare, xb) - r(all, xb) > 200)) throw new Error('CONTROL: an Invert filter on All did not invert both ends (' + r(all, xd) + ', ' + r(all, xb) + ') - this test proves nothing');
+    const fails = [];
+    if (Math.abs(r(hi, xd) - r(bare, xd)) > 2) fails.push('Highlights moved the black pixel ' + r(bare, xd) + ' -> ' + r(hi, xd));
+    if (!(r(bare, xb) - r(hi, xb) > 150)) fails.push('Highlights left the white pixel at ' + r(hi, xb) + ' (was ' + r(bare, xb) + ')');
+    if (Math.abs(r(sh, xb) - r(bare, xb)) > 2) fails.push('Shadows moved the white pixel ' + r(bare, xb) + ' -> ' + r(sh, xb));
+    if (!(r(sh, xd) - r(bare, xd) > 150)) fails.push('Shadows left the black pixel at ' + r(sh, xd));
+    // Range width: an exponent on the weight — 200 % reaches further down from the highlights than 100 %, 50 % less far
+    const wide = run(flt({ range: 3, rangesoft: 200 })), narrow = run(flt({ range: 3, rangesoft: 50 }));
+    const mv = d => Math.abs(r(d, xq) - r(bare, xq));
+    if (!(mv(wide) > mv(hi) + 10 && mv(hi) > mv(narrow) + 10)) fails.push('Range width did not widen and narrow the highlights (a light grey moved ' + mv(narrow) + ' / ' + mv(hi) + ' / ' + mv(wide) + ' at 50 / 100 / 200 %)');
+    // Protect skin: a skin tone barely moves, a blue (CONTROL) moves as far as it does without the guard
+    const flat = (fill, box) => { const L = b15Flat(P, fill); L.effects = [box]; return b15At(b15Px([L], 0.5, P), W, xm, y); };
+    const skin0 = b15At(b15Px([b15Flat(P, '#e0a070')], 0.5, P), W, xm, y), blue0 = b15At(b15Px([b15Flat(P, '#4070d0')], 0.5, P), W, xm, y);
+    const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    const skinOff = dist(flat('#e0a070', flt({})), skin0), skinOn = dist(flat('#e0a070', flt({ skin: 100 })), skin0);
+    const blueOff = dist(flat('#4070d0', flt({})), blue0), blueOn = dist(flat('#4070d0', flt({ skin: 100 })), blue0);
+    if (!(skinOff > 200)) fails.push('CONTROL: the Invert filter barely moved the skin tone without the guard (' + skinOff + ')');
+    if (!(skinOn < skinOff * 0.25)) fails.push('Protect skin 100 % still moved the skin tone ' + skinOn + ' of ' + skinOff);
+    if (Math.abs(blueOn - blueOff) > 3) fails.push('Protect skin also held back a blue (' + blueOn + ' vs ' + blueOff + ') - it must spare skin only');
+    // on an adjustment layer: the black pixel of the layer below stays black under Highlights
+    const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [flt({ range: 3 })];
+    const adj = b15Px([A, b15Plate(P)], 0.5, P);
+    if (Math.abs(r(adj, xd) - r(bare, xd)) > 2 || !(r(bare, xb) - r(adj, xb) > 150)) fails.push('on an adjustment layer Highlights gave ' + r(adj, xd) + ' / ' + r(adj, xb) + ' at the black / white ends (want ' + r(bare, xd) + ' kept, ' + r(bare, xb) + ' inverted)');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();
