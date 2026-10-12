@@ -127277,4 +127277,33 @@
       if (!sameLook(back.effects, tuned)) throw new Error('one undo did not bring his tuning back: ' + show(back.effects) + ' vs ' + show(tuned));
     });
   });
+
+  /* #1122, his answer 3 ("if an issue then fix"): S4d's slow-swipe fix was Simple-only and Full kept the identical bug — a finger that starts a slow
+     swipe on a category card and takes over half a second to get going raised "Reset <group>". Same card, same timer, same swipe, now in Full too. */
+  test('1122 Full too: a slow swipe that starts on a category card does not raise its Reset menu, a still hold does', { item: '1122', budgetMs: 60000 }, async function () {
+    const menuOpen = function () { const m = document.getElementById('ctx-menu'); return !!(m && !m.classList.contains('hidden') && (m.textContent || '').indexOf('Reset') >= 0); };
+    const press = function (el, type, x, y, buttons) { el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: buttons })); };
+    for (const width of ['phone', 'wide']) {
+      await (width === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
+        await smView(async function (v) {
+          if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) throw new Error('setup: the editor is in Simple — this is the Full test');
+          FM.selectLayer(v.c2.id); FM.refreshAll(); await v.sleep(120);
+          if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+          await v.sleep(160);
+          const card = s4Card('Speed'); if (!card) throw new Error('setup: no Speed card in Full at ' + width + ': ' + [].map.call(document.querySelectorAll('#inspector .cat-card'), function (b) { return b.textContent.trim(); }).join(' | '));
+          card.scrollIntoView({ block: 'center' }); await v.sleep(60);
+          const r = card.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+          // CONTROL: a still hold of 700 ms does raise it, so the check can see the menu at all
+          press(card, 'pointerdown', x, y, 1); await v.sleep(700);
+          if (!menuOpen()) throw new Error('CONTROL at ' + width + ': a 700 ms still hold did not raise the Reset menu in Full');
+          press(card, 'pointerup', x, y, 0); try { FM.contextMenu.hide(); } catch (e) {} card._heldReset = false; await v.sleep(80);
+          // the slow swipe: down, 120 ms, a 28 px move, then the finger keeps going for 700 ms
+          press(card, 'pointerdown', x, y, 1); await v.sleep(120); press(card, 'pointermove', x, y - 28, 1); await v.sleep(700);
+          const raised = menuOpen();
+          press(card, 'pointercancel', x, y - 60, 0); try { FM.contextMenu.hide(); } catch (e) {} card._heldReset = false;
+          if (raised) throw new Error('at ' + width + ' in Full a slow swipe that started on the Speed card raised "Reset Speed" 480 ms after the touch');
+        });
+      });
+    }
+  });
 })();
