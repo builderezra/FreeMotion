@@ -8773,7 +8773,8 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 #canvas-dialog.cv-bars.cv-none > .export-card > .cv-mini { display: flex; }
 #canvas-dialog.cv-bars.cv-none > #cv-friends > #cv-fr-body, #canvas-dialog.cv-bars.cv-none > #cv-editor > #cv-ed-body { display: none; }
 #canvas-dialog.cv-bars.cv-none > #cv-friends > #cv-fr-bar, #canvas-dialog.cv-bars.cv-none > #cv-editor > #cv-ed-bar { display: flex; }
-#canvas-dialog.cv-bars.cv-none > #cv-editor, #canvas-dialog.cv-bars.cv-none > #cv-friends { order: auto; }
+/* (The render's `order: auto` for these two went: `order` takes an integer, so the browser dropped it — the column's order all
+   closed is the pair's own, Editor −2, Friends −1, Canvas 0, App settings 2.) */
 /* ONE OPEN: its own bar stays as the header */
 #canvas-dialog.cv-bars.cv-pair:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card { display: flex; flex-direction: column; padding: 0 24px 0; overflow-y: auto; }
 #canvas-dialog.cv-bars.cv-pair:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini { display: flex; order: -1; margin: 0 -24px 12px; flex: none; }

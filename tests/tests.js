@@ -16640,6 +16640,10 @@
       if (homeWasOpen && FM.home.close) { FM.home.close(); await frame(); }
       cog.click(); await frame(); await frame();
       if (dlg.classList.contains('hidden')) throw new Error('the dialog did not open');
+      /* #1132: the cog opens all closed — the menu that must not scroll is the Canvas card, opened by its own ⤢ as he would; measured
+         closed it is a 64 px bar and this would pass for nothing */
+      if (dlg.classList.contains('cv-none')) { document.getElementById('cv-mini-exp').click(); await new Promise(r => setTimeout(r, 600)); }
+      if (dlg.classList.contains('cv-none')) throw new Error('setup: the Canvas ⤢ did not open the card');
       const card = dlg.querySelector('.export-card');
       const cr = card.getBoundingClientRect(), kr = cog.getBoundingClientRect();
       // Only meaningful where there IS room above — see the note in the cv-anchored test.
@@ -16677,6 +16681,9 @@
       if (homeWasOpen && FM.home.close) { FM.home.close(); await frame(); }
       cog.click(); await frame();
       if (dlg.classList.contains('hidden')) throw new Error('the dialog did not open — the cog opened the wrong door');
+      /* #1132: the cog opens all closed — open the Canvas card by its ⤢, as he would, so the press inside and the pick are in it */
+      if (dlg.classList.contains('cv-none')) { document.getElementById('cv-mini-exp').click(); await new Promise(r => setTimeout(r, 600)); }
+      if (dlg.classList.contains('cv-none')) throw new Error('setup: the Canvas ⤢ did not open the card');
       const card = dlg.querySelector('.export-card'), cr = card.getBoundingClientRect();
       // a press INSIDE the card must not close it, or you cannot use the menu at all
       down(card, Math.round(cr.left + cr.width / 2), Math.round(cr.top + 20)); await frame();

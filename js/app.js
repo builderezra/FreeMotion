@@ -8406,8 +8406,9 @@ window.FM = window.FM || {};
       /* ═══ FRIENDS BESIDE CANVAS SETTINGS — the pair, phone and PC (queue 945, queue 978) ═════════════════════════
          His design, picked from drawn options (tools/design/945-options.html, "do everything u recommend"): on a phone the
          dialog opens with a Friends bar above the canvas card; ⤢ swaps them — the one opened becomes the big card, the other
-         shrinks to a bar, and the SMALL ONE ALWAYS SITS ON TOP (his words: "the canvas settings are small at the top"). The
-         cog comes back to whichever he had open last, per device.
+         shrinks to a bar, and the SMALL ONE ALWAYS SITS ON TOP (his words: "the canvas settings are small at the top"). (It
+         came back to whichever he had open last, per device, until #1132: the cog now opens ALL CLOSED every time, and a tap on
+         the open block's own bar closes it — zero or one block open.)
          A PC HAS IT TOO since #978 — his words: "on pc there isnt a way to access the friends invite menu like there is on
          mobile. - Settings cog then swap between them in a really clean way." There the pair hangs off the cog as the card
          alone did: side by side where there is room (Friends left, Canvas right by the cog, the small one a tile; ⤢ slides the
@@ -8567,7 +8568,7 @@ window.FM = window.FM || {};
         return [sz.w, sz.h, raw, cvBg, cvAspect, cw ? cw.value : '', ch ? ch.value : ''].join('|');
       };
       const friendsUnmount = () => { const U = cvUi(); if (U && U.friendsClosed) U.friendsClosed(); else if (cvFrBody) cvFrBody.textContent = ''; };
-      /* Put the pair in state `big` ('canvas' | 'friends'). Mounts the Friends content when Friends is big; never unmounts
+      /* Put the pair in state `big` ('none' | 'canvas' | 'friends' | 'editor'). Mounts the Friends content when Friends is big; never unmounts
          (a shrinking Friends stays drawn for the flight's cross-fade — the settle unmounts it). */
       const cvPairApply = (big) => {
         cvDialog.classList.toggle('cv-none', big === 'none');
@@ -8775,9 +8776,9 @@ window.FM = window.FM || {};
       };
       /* THE OPEN PATH ON ITS OWN (queue 762). The button below toggles; the oversize warning's tap (FM.warnOversizeProject)
          calls this directly so it always OPENS — a toggle there closed a dialog that was already up. */
-      /* `opts.block`: 'friends' (the person+ / people chip / LIVE / Home's Share live…), 'last' (the cog — his last block,
-         queue 945), or nothing (Canvas big: the oversize warning's tap is about the canvas size, and every bare call opens the
-         canvas).
+      /* `opts.block`: 'friends' (the person+ / people chip / LIVE / Home's Share live…), 'none' (the cog — all closed, #1132;
+         it was 'last', his last block, queue 945), or nothing (Canvas big: the oversize warning's tap is about the canvas size,
+         and every bare call opens the canvas).
          `opts.from` (#978): the control to hang the pair off on a PC; else the control that last opened it
          (FM.settings.lastCanvasOpener), else the cog. Since #983 no door on a PC passes one — the Share button beside Export
          was the only one — so on a PC the pair always hangs from the cog. */
