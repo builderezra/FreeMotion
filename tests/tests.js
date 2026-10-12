@@ -124625,13 +124625,15 @@
   function b13Shots(type, params) {
     return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b13Hash(b13Run(type, JSON.parse(JSON.stringify(params)), W, H, t, ps))).join('.')).join('/')).join(' ');
   }
-  /* Every config with the new keys ABSENT (a saved instance) and PRESENT at their defaults (a new instance, and every filter
-     recipe), against the pins. */
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys before the kernel runs (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new
+     instance, and every filter recipe), against the pins. */
   function b13Pinned(type, NEW, CFG, PIN) {
     const moved = [];
     Object.keys(CFG).forEach(name => {
       const abs = Object.assign(b13Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
-      [['absent', abs], ['present', pre]].forEach(([how, p]) => { const got = b13Shots(type, p); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: JSON.parse(JSON.stringify(abs)) }).params;
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = b13Shots(type, p); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
     });
     return moved;
   }
@@ -124895,5 +124897,59 @@
       const v = rowsMovedBy(b13Run('vhstape', Object.assign(b13Base('vhstape', {}), jt), hw, hh, (f + 0.5) / 30, 0.5), hbase, hw, hh);
       if (v === null || Math.abs(v) > 10) throw new Error('on a half-size plate Vertical hold 20 moved the picture by ' + v + ' plate rows - 20 px of the picture is 10 rows there');
     }
+  });
+
+  /* 13.4 SCANLINES: Softness, Direction, Line colour. */
+  const B13SL_NEW = { softness: 0, dir: 0, color: '#000000' };
+  const B13SL_CFG = { def: {}, vhs: { amount: 0.32, spacing: 3 }, oldfilm: { amount: 0.18, spacing: 6 }, nightvis: { amount: 0.22, spacing: 4 }, rolled: { spacing: 5, thickness: 7, roll: 12 }, kfroll: { roll: b13Kf(-5, 15) } };
+  const B13SL_PIN = {   // fc8866f1, before the edit
+    def: '2c450fe6.2c450fe6/2c450fe6.2c450fe6 cfc2e779.cfc2e779/cfc2e779.cfc2e779', vhs: 'd545a001.d545a001/a818a991.a818a991 233b000d.233b000d/c6d66c1e.c6d66c1e',
+    oldfilm: 'a8f7c509.a8f7c509/51ba6cc6.51ba6cc6 9da8fb93.9da8fb93/a4850d63.a4850d63', nightvis: 'd9de65f1.d9de65f1/1c60eef5.1c60eef5 72c2bd4b.72c2bd4b/563662b0.563662b0',
+    rolled: '04f5b2b0.dfbb4e2c/9ff1a8ff.0f5d2760 7eadb7bb.71953d32/628aafb0.b098ddfa', kfroll: '9efbfca8.9efbfca8/9efbfca8.9efbfca8 573cc277.573cc277/573cc277.573cc277' };
+
+  test('482 13.4 Scanlines - Softness, Direction and Line colour are in the catalogue at defaults that draw the old black lines, and saved and new Scanlines and the VHS Tape, Old Film and Night Vision recipes draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('scanlines', B13SL_NEW, { softness: 60, dir: 1, color: '#ff2050' });
+    const lc = b13Row('scanlines', 'color');
+    if (lc.type !== 'color' || lc.label !== 'Line colour') throw new Error('Scanlines has no Line colour row (type ' + lc.type + ', label ' + lc.label + ')');
+    b13Recipes('scanlines', B13SL_NEW, ['vhs', 'oldfilm', 'nightvis']);
+    const moved = b13Pinned('scanlines', B13SL_NEW, B13SL_CFG, B13SL_PIN);
+    if (moved.length) throw new Error(moved.length + ' Scanlines pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.4 Scanlines - Vertical darkens columns, not rows, and is the horizontal lines on their side, Line colour draws the lines in that colour, and Softness rounds them into a cosine profile without changing how dark they are on average', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 48;
+    const sl = (over, d0, t, w, h) => b13Run('scanlines', Object.assign(b13Base('scanlines', {}), over), w || W, h || H, t == null ? 0.37 : t, 1, d0);
+    const white = () => b13Flat(W, H, [255, 255, 255]);
+    const rowsAllSame = d => { for (let y = 1; y < H; y++) for (let x = 0; x < W * 4; x++) if (d[y * W * 4 + x] !== d[x]) return false; return true; };
+    const colsAllSame = d => { for (let y = 0; y < H; y++) for (let x = 1; x < W; x++) for (let c = 0; c < 4; c++) if (d[(y * W + x) * 4 + c] !== d[y * W * 4 + c]) return false; return true; };
+    const lines = { amount: 1, spacing: 4, thickness: 2 };
+    /* DIRECTION. CONTROL: Horizontal lines are the same in every column and differ between rows. Vertical: the reverse. */
+    const hz = sl(lines, white()), vt = sl(Object.assign({ dir: 1 }, lines), white());
+    if (!colsAllSame(hz) || rowsAllSame(hz)) throw new Error('CONTROL: horizontal scanlines are not rows on a white plate');
+    if (!rowsAllSame(vt)) throw new Error('Direction Vertical still darkens rows - every row should be the same');
+    if (colsAllSame(vt)) throw new Error('Direction Vertical darkens no columns');
+    let darkCols = 0; for (let x = 0; x < W; x++) if (vt[x * 4] === 0) darkCols++;
+    if (darkCols !== W / 2) throw new Error('Direction Vertical at a 4 px pitch and a 2 px weight darkened ' + darkCols + ' of ' + W + ' columns, not half');
+    /* …and they are the horizontal lines exactly, turned: lines on the plate turned on its side, rolled and at Amount 0.6. */
+    const tr = (d, w, h) => { const o = new Uint8ClampedArray(d.length); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const a = (y * w + x) * 4, b = (x * h + y) * 4; o[b] = d[a]; o[b + 1] = d[a + 1]; o[b + 2] = d[a + 2]; o[b + 3] = d[a + 3]; } return o; };
+    const rl = { amount: 0.6, spacing: 5, thickness: 2, roll: 3 };
+    const across = sl(rl, b13Plate(W, H)), down = sl(Object.assign({ dir: 1 }, rl), tr(b13Plate(W, H), W, H), 0.37, H, W);
+    if (!b13Same(tr(across, W, H), down)) throw new Error('Direction Vertical is not the horizontal lines turned on their side - same pitch, weight, roll and darkening');
+    /* LINE COLOUR: at Amount 1 a line IS the colour and a gap is the picture; at 0.5 it is halfway. */
+    const red = b13Colours(sl(Object.assign({ color: '#ff2050' }, lines), white()));
+    if (Object.keys(red).sort().join(' ') !== '255,255,255 255,32,80') throw new Error('Line colour #ff2050 at Amount 1 drew ' + Object.keys(red).sort().join(' ') + ' - the lines should be that colour on the white picture');
+    const half = b13Colours(sl({ amount: 0.5, spacing: 4, thickness: 2, color: '#0000ff' }, white()));
+    if (Object.keys(half).sort().join(' ') !== '128,128,255 255,255,255') throw new Error('Line colour blue at Amount 0.5 drew ' + Object.keys(half).sort().join(' ') + ' - halfway from white to blue is 128,128,255 (127.5 rounds to 128)');
+    /* SOFTNESS. CONTROL: the hard lines are two levels. At 100 the 8 px pitch with 4 px lines takes four levels, and the mean
+       darkening stays the hard lines' within 1 percent. */
+    const sw = { amount: 1, spacing: 8, thickness: 4 };
+    const hard = sl(sw, white()), soft = sl(Object.assign({ softness: 100 }, sw), white());
+    const levels = d => new Set(Array.from({ length: H }, (_, y) => d[y * W * 4])).size;
+    if (levels(hard) !== 2) throw new Error('CONTROL: the hard lines have ' + levels(hard) + ' levels down a column, not 2');
+    if (!(levels(soft) >= 4)) throw new Error('Softness 100 left only ' + levels(soft) + ' levels down a column - the lines are still hard-edged');
+    const mh = b13Mean(hard)[0], ms = b13Mean(soft)[0];
+    if (Math.abs(mh - ms) > 2.55) throw new Error('Softness 100 moved the mean brightness from ' + mh.toFixed(1) + ' to ' + ms.toFixed(1) + ' - softening must not darken or lighten the lines on average');
+    if (!(levels(sl(Object.assign({ softness: 50 }, sw), white())) >= 4)) throw new Error('Softness 50 left the lines hard');
+    if (!colsAllSame(soft)) throw new Error('Softness put a soft line out of true - it is not the same across the row');
   });
 })();

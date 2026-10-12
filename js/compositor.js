@@ -180,7 +180,13 @@ window.FM = window.FM || {};
       { key: 'spacing', label: 'Pitch', min: 2, max: 40, step: 1, def: 2, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 1, max: 20, step: 1, def: 1, unit: 'px' },
       { key: 'roll', label: 'Roll', min: -20, max: 20, step: 1, def: 0, unit: 'px/s' },
-    ] },
+      /* #482 polish 13.4. The lines were hard-edged, black and horizontal only. Softness rounds each line's two edges into a
+         raised cosine (100 = as soft as the line and its gap allow) and keeps the same darkening on average; Direction turns
+         them into columns (Roll then crawls sideways); Line colour draws them in a colour instead of darkening (black IS the
+         old darkening). Every default runs the old loop untouched. */
+      { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'dir', label: 'Direction', def: 0, options: [[0, 'Horizontal'], [1, 'Vertical']] },
+    ], color: true, defColor: '#000000', colorLabel: 'Line colour' },
     // ---- batch 2 ----
     { type: 'vibrance', label: 'Vibrance', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 8, step: 0.02, def: 1.6 },
@@ -5386,6 +5392,36 @@ window.FM = window.FM || {};
       }
     }
   }
+  /* ═══ SCANLINES, THE GENERAL LINES (#482 polish 13.4) ═════════════════════════════════════════════════════════════════════
+   * The pitch, the weight (a weight at or past the pitch widens the pitch to keep a one-row gap, queue 904), the roll and the
+   * rule that picks a line's rows — phase (q − roll) mod pitch at or past pitch − weight — are the old loop's. What is new:
+   *   · DIRECTION Vertical measures the phase along x, so the lines are columns; exactly the horizontal lines on their side.
+   *   · SOFTNESS gives every row of the pitch a weight instead of on/off: 1 in the line's core, 0 in the gap's, and a raised
+   *     cosine across each edge whose width is Softness × the narrower of the line and the gap, centred on the edge — so the
+   *     weight the line loses inside the edge it gains outside, and the average darkening stays the old line's.
+   *   · LINE COLOUR: a line moves the pixel toward the colour by Amount × weight. Black keeps the old multiply (d × (1 − Amount)),
+   *     so black lines here are byte for byte the old lines — only turned, or softened. */
+  function scanlines13(d, W, H, amt, sp, th, off, soft, vert, col) {
+    const spE = th >= sp ? th + 1 : sp, lo = spE - th, hw = th / 2, c = lo + hw, e = soft * Math.min(th, spE - th);
+    const n = vert ? W : H, wt = new Float64Array(n);
+    for (let q = 0; q < n; q++) {
+      const ph = ((q - off) % spE + spE) % spE;
+      if (e <= 0) { wt[q] = ph < lo ? 0 : 1; continue; }
+      let dd = Math.abs(ph + 0.5 - c); if (dd > spE / 2) dd = spE - dd;   // the pixel centre's distance from the line's middle
+      const a = hw - e / 2, b = hw + e / 2;
+      wt[q] = dd <= a ? 1 : (dd >= b ? 0 : 0.5 + 0.5 * Math.cos(Math.PI * (dd - a) / e));
+    }
+    for (let y = 0; y < H; y++) {
+      const row = y * W * 4;
+      for (let x = 0; x < W; x++) {
+        const w = wt[vert ? x : y]; if (w <= 0) continue;
+        const i = row + x * 4;
+        if (!col) { const k = 1 - amt * w; d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; }
+        else { const f = amt * w; d[i] += (col[0] - d[i]) * f; d[i + 1] += (col[1] - d[i + 1]) * f; d[i + 2] += (col[2] - d[i + 2]) * f; }
+      }
+    }
+  }
+
   /* A box blur of radius r on a 3-channel float plane, in place, replicating the edge (CRT bloom). */
   function crtBox13(b, W, H, r) {
     const div = 2 * r + 1, tmp = new Float32Array(Math.max(W, H) * 3);
@@ -6183,6 +6219,13 @@ window.FM = window.FM || {};
       const roll = p.roll == null ? 0 : FM.evalProp(p.roll, t);
       const off = FM.isAnimated(p.roll) ? FM.integrateProp(p.roll, 0, t) : roll ? roll * t : 0;
       const plain = sp === 2 && th === 1 && !roll && off === 0;
+      /* #482 polish 13.4 — Softness, Direction, Line colour. Absent (a saved Scanlines) or at their defaults (black is the old
+         darkening) the loop below runs untouched; anything else takes scanlines13, which keeps this loop's pitch, weight, roll
+         and line-selection rule. */
+      let soft = p.softness == null ? 0 : FM.evalProp(p.softness, t) / 100; soft = !(soft > 0) ? 0 : (soft > 1 ? 1 : soft);
+      const vert = (p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0)) === 1;
+      const lcol = p.color == null ? null : hexToRGB(p.color), tinted = !!lcol && (lcol[0] !== 0 || lcol[1] !== 0 || lcol[2] !== 0);
+      if (soft > 0 || vert || tinted) { scanlines13(d, W, H, amt, sp, th, off, soft, vert, tinted ? lcol : null); return; }
       /* A LINE NEVER FILLS ITS OWN PITCH (queue 904). Weight was clamped to Pitch, so at the default Pitch of 2, weights 2-20 — 19 of the
          slider's 20 stops — all darkened EVERY row: a flat wash, no lines. Now a weight at or past the pitch widens the pitch to keep a
          one-row gap, so every stop draws visible scanlines, heavier as it goes. Weight below Pitch is untouched (byte-identical). */
