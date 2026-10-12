@@ -48,7 +48,16 @@ window.FM = window.FM || {};
   // Effects implemented via canvas ctx.filter — covers a lot of Alight Motion's catalogue
   // cheaply, applies identically in preview and export, and is keyframe-able (evalProp).
   FM.EFFECTS = [
-    { type: 'blur', label: 'Gaussian Blur', param: 'radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
+    /* #482 15.7: Radius was the only control (the one-param shorthand, its row labelled with the effect's name). Repeat edges,
+       Direction, Mix and Blend are new; any of them off its default moves THIS blur out of the CSS filter into a plate pass in
+       stack order (blurPlate / blurPlateKernel). All four defaults keep the old CSS blur, byte for byte. */
+    { type: 'blur', label: 'Gaussian Blur', params: [
+      { key: 'radius', label: 'Radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
+      { key: 'edges', label: 'Repeat edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'dims', label: 'Direction', def: 0, options: [[0, 'Both'], [1, 'Horizontal'], [2, 'Vertical']] },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Screen'], [2, 'Soft light']] },
+    ] },
     { type: 'brightness', label: 'Brightness', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'contrast', label: 'Contrast', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'saturate', label: 'Saturation', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.6 },
@@ -1620,13 +1629,21 @@ window.FM = window.FM || {};
     // Levels — set a real black and white point, per channel. Everything else in Colouring
     // pushes the image around; this is the one that says where 0 and 255 actually are.
     { type: 'levels', label: 'Levels', desc: 'Sets where black and white actually fall. Pull the input points in to fill the range, or push the output points in to fade it.', params: [
+      /* #482 15.5: Channel picks which SET the sliders below edit — RGB is the master, Red / Green / Blue each keep their own
+         (`showWhen` shows only the chosen set). All four apply at once; see levelsMigrate for a Levels saved before this. */
       { key: 'channel', label: 'Channel', options: [[0, 'RGB'], [1, 'Red'], [2, 'Green'], [3, 'Blue']], def: 0 },
-      { key: 'inblack', label: 'Input black', min: 0, max: 254, step: 1, def: 14 },
-      { key: 'inwhite', label: 'Input white', min: 1, max: 255, step: 1, def: 236 },
-      { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1 },
-      { key: 'outblack', label: 'Output black', min: 0, max: 255, step: 1, def: 0 },
-      { key: 'outwhite', label: 'Output white', min: 0, max: 255, step: 1, def: 255 },
-    ] },
+      { key: 'inblack', label: 'Input black', min: 0, max: 254, step: 1, def: 14, showWhen: { key: 'channel', is: 0 } },
+      { key: 'inwhite', label: 'Input white', min: 1, max: 255, step: 1, def: 236, showWhen: { key: 'channel', is: 0 } },
+      { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1, showWhen: { key: 'channel', is: 0 } },
+      { key: 'outblack', label: 'Output black', min: 0, max: 255, step: 1, def: 0, showWhen: { key: 'channel', is: 0 } },
+      { key: 'outwhite', label: 'Output white', min: 0, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: 0 } },
+    ].concat(['r', 'g', 'b'].reduce((out, c, i) => out.concat([   // each channel's own set, identity by default (#482 15.5)
+      { key: 'inblack_' + c, label: 'Input black', min: 0, max: 254, step: 1, def: 0, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'inwhite_' + c, label: 'Input white', min: 1, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'gamma_' + c, label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'outblack_' + c, label: 'Output black', min: 0, max: 255, step: 1, def: 0, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'outwhite_' + c, label: 'Output white', min: 0, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: i + 1 } },
+    ]), [])) },
     // Halation — the warm bleed real film gets around clipped highlights, because light scatters off
     // the back of the base and re-exposes the emulsion. Two radii is the whole trick: a tight core
     // that hugs the highlight and a wide wash. Glow / Light Glow have one radius and can't do it.
@@ -1870,6 +1887,12 @@ window.FM = window.FM || {};
     { type: 'matchgrade', label: 'Match Grade', layer: true, layerLabel: 'Reference layer', desc: 'Pushes this clip\u2019s colour toward another one\u2019s — matches the average tone and the contrast. The quickest way to make two cameras agree; finish by hand with Levels or HSL Bands.', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'mode', label: 'Match', options: [[0, 'Colour + contrast'], [1, 'Colour only'], [2, 'Contrast only']], def: 0 },
+      /* #482 15.6: steadying the match (see mgHeldStats) and sparing skin. Every frame, no smoothing and no skin guard are the
+         old live match, byte for byte. */
+      { key: 'sample', label: 'Measure', options: [[0, 'Every frame'], [1, 'Hold at time']], def: 0 },
+      { key: 'at', label: 'Hold at', min: 0, max: 600, step: 0.1, def: 0, unit: 's', overriddenBy: 'sample', liveWhen: 1, note: 'Seconds into this clip — both clips are measured at that one frame.' },
+      { key: 'smooth', label: 'Smoothing', min: 0, max: 2, step: 0.05, def: 0, unit: 's', overriddenBy: 'sample', liveWhen: 0 },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
 
     /* ---- the FILTER CONTAINER (queue 113, step 3) ----------------------------------------------
@@ -1887,7 +1910,27 @@ window.FM = window.FM || {};
      * respect, which is what lets the load path validate its strength like any other param. */
     { type: 'filter', label: 'Filter', hidden: true,
       desc: 'A group of effects that act as one, with a single Strength that fades the whole group in and out.',
-      params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01, def: 1 }] },
+      params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01, def: 1 },
+        /* OVER-DRIVE (#482 15.3): Strength past 100 %. The same cross-fade carried on past the filtered picture —
+           out = A + (B − A) · Strength · (1 + Over-drive), clamped — so 100 % doubles whatever the filter does. 0 is the old fade. */
+        { key: 'boost', label: 'Over-drive', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+        /* TONAL RANGE and PROTECT SKIN (#482 15.1, his #966 "as much choice as possible"). Strength fades the whole group
+           evenly; these let it act on the shadows, the midtones or the highlights only, and hold it back on skin. Judged on
+           the picture WITHOUT the filter, and applied as a per-pixel weight on Strength's cross-fade (drawFilterContainer).
+           All three defaults are the old even fade, so every saved filter and all 56 library filters draw as they did. */
+        { key: 'range', label: 'Tonal range', def: 0, options: [[0, 'All'], [1, 'Shadows'], [2, 'Midtones'], [3, 'Highlights']] },
+        { key: 'rangesoft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
+        { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+        /* FINISH (#482 15.2): five sliders that finish the look without opening the group. Each is an ordinary effect added
+           after the children AT RENDER TIME (fcFinish) and never written into the filter's effects. 0 adds nothing, so every
+           saved filter and the library draw as they did. `adjNo`: an adjustment layer grades colour only (fx-registry ADJ_OK),
+           and these three read where a pixel sits or its neighbours — the row says it does nothing there. */
+        { key: 'warmth', label: 'Warmth', min: -100, max: 100, step: 1, def: 0 },
+        { key: 'fade', label: 'Fade', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+        { key: 'grain', label: 'Grain', min: 0, max: 100, step: 1, def: 0, unit: '%', adjNo: 1 },
+        { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.02, def: 0, adjNo: 1 },
+        { key: 'sharpen', label: 'Sharpen', min: 0, max: 3, step: 0.05, def: 0, adjNo: 1 },
+      ] },
   ];
   /* #482 polish 14.6 — THE FIFTEEN 3D SOLIDS share six more controls, appended here once rather than copied into fifteen
      one-line entries (solidFx reads them for all of them): PERSPECTIVE (50 is the welded focal length the solids always
@@ -1913,7 +1956,7 @@ window.FM = window.FM || {};
   FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode, slot, tol) { return lumaKey(src, w, h, threshold, filterStr, soft, mode, slot, tol); };   // suite seam (queue 735; slot: queue 986; tol: #482 12.2)
   // #482 12.2: the key's per-pixel loop on a bare buffer, with lumaKey's own argument rules — the canvas is only its carrier.
   FM._lumaKeyPx = function (d, threshold, soft, mode, tol) { const a = lumaKeyArgs(soft, mode, tol); lumaKeyPx(d, (threshold == null ? 0.25 : threshold) * 255, a[0], a[1], a[2] * 255); return d; };
-  FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them)
+  FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0, fcPixel: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them); fcPixel: filters mixed per pixel (#482 15.1)
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
   // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
   // memo downstream (e.g. key over a graded video, or grade over a frame-blend) would freeze on frame 1.
@@ -2060,7 +2103,11 @@ window.FM = window.FM || {};
   function levelsLUT(inB, inW, gam, outB, outW) {
     const sig = inB + '|' + inW + '|' + gam + '|' + outB + '|' + outW;
     if (_lvLUT && _lvSig === sig) return _lvLUT;
-    const lut = new Uint8ClampedArray(256);
+    const lut = levelsFill(new Uint8ClampedArray(256), inB, inW, gam, outB, outW);
+    _lvLUT = lut; _lvSig = sig; return lut;
+  }
+  // the table itself, into `lut` (a channel set of #482 15.5 builds its own, so it never evicts the master's memo)
+  function levelsFill(lut, inB, inW, gam, outB, outW) {
     // A collapsed or inverted input range would divide by ~0 and posterise to two values; clamp the
     // span to one code value so the control degrades to "hard clip" instead of to NaN.
     const span = (inW - inB) >= 1 ? (inW - inB) : 1;
@@ -2070,7 +2117,45 @@ window.FM = window.FM || {};
       n = n <= 0 ? 0 : (n >= 1 ? 1 : Math.pow(n, ig));
       lut[v] = Math.round(outB + n * rng);
     }
-    _lvLUT = lut; _lvSig = sig; return lut;
+    return lut;
+  }
+  /* ═══ LEVELS ON ALL FOUR CHANNELS AT ONCE (#482 15.5) ══════════════════════════════════════════════════════════════
+   * Channel used to say WHICH channel the one set of five sliders graded, so a red cast and a blue cast could not be fixed
+   * in one Levels. Now every channel keeps its own set (inblack_r … outwhite_b, identity by default) and Channel only picks
+   * which set the panel shows (`showWhen`): each channel goes through its own set, then the master (RGB) set grades all
+   * three — the order Photoshop applies them in.
+   * A SAVED Levels has no per-channel keys, and the kernel then runs its old loops untouched (the master set on the chosen
+   * channel, or on all three) — so it draws byte for byte as it did whether or not anything else has touched it.
+   * levelsMigrate gives such an instance the new shape before the panel or the render-time fill (queue 784) sees it: a
+   * saved one-channel set moves into that channel's keys, and the master and the other two become identity — the same
+   * picture, because a channel's set followed by an identity master IS the old one-channel table, byte for byte — so the
+   * panel opens on that channel showing the values that draw. A saved RGB one just gains identity channel sets, which
+   * under its master are its old picture too — and from then on tapping Red only changes what the panel shows (left on
+   * the old shape, Channel would still mean "grade only this channel" and the tap would change the picture). */
+  const LV_SETS = ['r', 'g', 'b'], LV_KEYS = ['inblack', 'inwhite', 'gamma', 'outblack', 'outwhite'];
+  const LV_ID = { inblack: 0, inwhite: 255, gamma: 1, outblack: 0, outwhite: 255 };
+  const LV_OLD = { inblack: 14, inwhite: 236, gamma: 1, outblack: 0, outwhite: 255 };   // the kernel's fallback for an absent master key
+  const LV_CH_KEYS = [];
+  LV_SETS.forEach(c => LV_KEYS.forEach(k => LV_CH_KEYS.push(k + '_' + c)));
+  function levelsHasSets(p) { for (let i = 0; i < LV_CH_KEYS.length; i++) if (p[LV_CH_KEYS[i]] != null) return true; return false; }
+  function levelsMigrate(fx) {
+    const p = fx && fx.type === 'levels' && fx.params;
+    if (!p || typeof p !== 'object' || levelsHasSets(p)) return fx;
+    const ch = Math.round(FM.evalProp(p.channel, 0) || 0);   // Channel is a segment — never keyframed
+    if (ch >= 1 && ch <= 3) {
+      const c = LV_SETS[ch - 1], copy = v => (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v;
+      LV_KEYS.forEach(k => { p[k + '_' + c] = copy(p[k] == null ? LV_OLD[k] : p[k]); p[k] = LV_ID[k]; });
+    }
+    LV_SETS.forEach(o => LV_KEYS.forEach(k => { if (p[k + '_' + o] == null) p[k + '_' + o] = LV_ID[k]; }));
+    return fx;
+  }
+  FM._levelsMigrate = levelsMigrate;   // the inspector runs it before showing a Levels row (#482 15.5)
+  // one channel's set as a table, or null when it is identity (the common case: nothing to do)
+  function levelsSetLUT(p, c, t) {
+    const v = (k) => { const x = p[k + '_' + c]; return x == null ? LV_ID[k] : FM.evalProp(x, t); };
+    const inB = v('inblack'), inW = v('inwhite'), gam = Math.max(0.05, v('gamma')), outB = v('outblack'), outW = v('outwhite');
+    if (inB === 0 && inW === 255 && gam === 1 && outB === 0 && outW === 255) return null;
+    return levelsFill(new Uint8ClampedArray(256), inB, inW, gam, outB, outW);
   }
 
   let _grCanvas = null, _grLast = null;
@@ -2250,6 +2335,74 @@ window.FM = window.FM || {};
     }
     g.putImageData(img, 0, 0);
   }
+  /* ═══ GAUSSIAN BLUR'S EDGES, DIRECTION AND ORTON MIX (#482 15.7) ═══════════════════════════════════════════════════
+   * Gaussian Blur is one of the nine CSS effects: a `blur()` in the layer's ctx.filter, applied BEFORE the layer is drawn,
+   * wherever its row sits. That filter cannot do any of the four new things — keep the frame's edge solid (it always pulls
+   * transparency in from past the edge), blur one way only, keep some of the sharp picture, or lay the blur over it in
+   * Screen or Soft light (the Orton glow). So an instance with any of them off its default leaves the filter string
+   * (effectFilter, cssColorOps) and runs as a plate pass in STACK ORDER (postFxOrder → drawPixelEffect; on an adjustment
+   * layer, applyPixelFx), like every other pixel effect — and its row says so (inspector). blurPlate judges the STORED
+   * values, never the moment, so a keyframed Mix cannot flip the path half way through a clip.
+   * The kernel is cpuBlurCanvas's three-box Gaussian (Kovesi's boxes, σ = Radius in plate pixels), premultiplied:
+   *   Repeat edges  Off — transparent past the frame, as blur() draws;  On — the edge pixels repeat, so the frame stays solid
+   *   Direction     Both / Horizontal / Vertical — which passes run
+   *   Mix, Blend    the blurred copy laid over the sharp layer: Normal, Screen or Soft light (W3C), at Mix
+   * At the defaults (Off, Both, 100 %, Normal) none of this runs and the blur is the CSS filter it always was, so every saved
+   * blur and every filter that carries one draws byte for byte as it did. One CPU kernel on every device, so there is no GPU
+   * twin to drift from; the default blur keeps its own GPU fallback (cssColorOps) untouched. */
+  function blurPlate(e) {
+    const p = e && e.type === 'blur' && e.params;
+    if (!p) return false;
+    const off = (k, def) => { const v = p[k]; if (v == null) return false; if (v && typeof v === 'object') return Array.isArray(v.kf) && v.kf.some(q => q && Number(q.v) !== def); return Number(v) !== def; };
+    return off('edges', 0) || off('dims', 0) || off('mix', 100) || off('blend', 0);
+  }
+  FM.blurInStackOrder = blurPlate;   // the inspector's row note, and a suite seam (#482 15.7)
+  const BLUR_BLEND = [null, (s, d) => s + d - s * d, (s, d) => { if (s <= 0.5) return d - (1 - 2 * s) * d * (1 - d); const D = d <= 0.25 ? ((16 * d - 12) * d + 4) * d : Math.sqrt(d); return d + (2 * s - 1) * (D - d); }];
+  function blurPlateKernel(d, W, H, p, t, ps) {
+    let r = p.radius == null ? 6 : FM.evalProp(p.radius, t); r = (Number.isFinite(r) && r > 0 ? r : 0) * (ps > 0 ? ps : 1);
+    const dims = p.dims == null ? 0 : (Math.round(FM.evalProp(p.dims, t)) | 0);
+    const rep = (p.edges == null ? 0 : (Math.round(FM.evalProp(p.edges, t)) | 0)) === 1;
+    let mix = p.mix == null ? 100 : FM.evalProp(p.mix, t); mix = !(mix > 0) ? 0 : (mix >= 100 ? 1 : mix / 100);
+    const bf = BLUR_BLEND[p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0)] || null;
+    if (!(r > 0.05) || !(mix > 0) || !(W > 0) || !(H > 0)) return;
+    const N = W * H;
+    let a = new Float32Array(N * 4), b = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) { const j = i * 4, al = d[j + 3] / 255; a[j] = d[j] * al; a[j + 1] = d[j + 1] * al; a[j + 2] = d[j + 2] * al; a[j + 3] = d[j + 3]; }
+    // one box pass along a row (horiz) or a column; past the end a tap reads nothing, or the end pixel when Repeat edges is on
+    const pass = (src, dst, rr, horiz) => {
+      const len = horiz ? W : H, lines = horiz ? H : W, step = horiz ? 4 : W * 4, inv = 1 / (2 * rr + 1);
+      for (let l = 0; l < lines; l++) {
+        const base = horiz ? l * W * 4 : l * 4;
+        for (let c = 0; c < 4; c++) {
+          const at = k => (k >= 0 && k < len) ? src[base + k * step + c] : (rep ? src[base + (k < 0 ? 0 : len - 1) * step + c] : 0);
+          let acc = 0;
+          for (let k = -rr; k <= rr; k++) acc += at(k);
+          for (let x = 0; x < len; x++) { dst[base + x * step + c] = acc * inv; acc += at(x + rr + 1) - at(x - rr); }
+        }
+      }
+    };
+    boxesForGauss(r).forEach(br => {
+      br = Math.round(br); if (br < 1) return;
+      if (dims !== 2) { pass(a, b, br, true); const s = a; a = b; b = s; }
+      if (dims !== 1) { pass(a, b, br, false); const s = a; a = b; b = s; }
+    });
+    for (let i = 0; i < N; i++) {
+      const j = i * 4, Aa = d[j + 3] / 255, Ba = a[j + 3] / 255;
+      let xr = a[j], xg = a[j + 1], xb = a[j + 2], xa = a[j + 3];          // Normal: the blurred copy itself
+      if (bf) {   // Screen / Soft light: the blurred copy (source) over the sharp layer (backdrop), W3C compositing
+        const ar = d[j] / 255, ag = d[j + 1] / 255, ab = d[j + 2] / 255, k = Ba > 0 ? 1 / a[j + 3] : 0;
+        const one = (bp, ac, bc) => (1 - Aa) * bp + (1 - Ba) * ac * Aa * 255 + Aa * Ba * 255 * bf(bc, ac);
+        xr = one(a[j], ar, a[j] * k); xg = one(a[j + 1], ag, a[j + 1] * k); xb = one(a[j + 2], ab, a[j + 2] * k);
+        xa = (Ba + Aa * (1 - Ba)) * 255;
+      }
+      const pr = d[j] * Aa, pg = d[j + 1] * Aa, pb = d[j + 2] * Aa, pa = d[j + 3];
+      const oa = pa + (xa - pa) * mix;
+      if (oa <= 0.001) { d[j] = d[j + 1] = d[j + 2] = d[j + 3] = 0; continue; }
+      const f = 255 / oa;
+      d[j] = (pr + (xr - pr) * mix) * f; d[j + 1] = (pg + (xg - pg) * mix) * f; d[j + 2] = (pb + (xb - pb) * mix) * f; d[j + 3] = oa;
+    }
+  }
+  FM._blurPlateKernel = blurPlateKernel;   // suite seam (#482 15.7)
   function drawBlurredNoFilter(dc, src, r, dx, dy, dw, dh, ops) {
     if (!src || !(dw > 0) || !(dh > 0)) return;
     const blur = r > 0.05, colour = !!(ops && ops.length);
@@ -2429,6 +2582,7 @@ window.FM = window.FM || {};
   FM._fxFillValue = fxFillValue;   // suite seam
   function fillFxParams(fx) {
     if (!fx || typeof fx !== 'object' || _fxFilled.has(fx)) return fx;
+    if (fx.type === 'levels') levelsMigrate(fx);   // #482 15.5: a saved one-channel Levels takes its channel's set BEFORE the fill below gives it identity ones
     let controls = null; try { controls = FM.fxRegistry && FM.fxRegistry.paramsOf ? FM.fxRegistry.paramsOf(fx.type) : null; } catch (e) { controls = null; }
     if (Array.isArray(controls) && controls.length) {   // the registry already knows every param whatever shape the catalog wrote it in
       if (!fx.params || typeof fx.params !== 'object') fx.params = {};
@@ -2553,7 +2707,7 @@ window.FM = window.FM || {};
       // hue-rotate is the one function here that legally takes any sign.
       const nn = (k, d) => { const x = v(k, d); return Number.isFinite(x) ? Math.max(0, x) : d; };
       switch (e.type) {
-        case 'blur': parts.push('blur(' + (nn('radius', 6) * S) + 'px)'); break;
+        case 'blur': if (blurPlate(e)) break; parts.push('blur(' + (nn('radius', 6) * S) + 'px)'); break;   // #482 15.7: off its defaults it is a plate pass instead
         case 'brightness': parts.push('brightness(' + nn('amount', 1) + ')'); break;
         case 'contrast': parts.push('contrast(' + nn('amount', 1) + ')'); break;
         case 'saturate': parts.push('saturate(' + nn('amount', 1) + ')'); break;
@@ -4146,7 +4300,7 @@ window.FM = window.FM || {};
    * wrong picture rather than an error. One function, both callers.
    */
   function postFxOrder(layer) {
-    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette') && e.enabled !== false   // vignette: every layer since #986 C8
+    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette' || blurPlate(e)) && e.enabled !== false   // vignette: every layer since #986 C8; a Gaussian Blur off its defaults (#482 15.7)
       && !(e.type === 'motionflow' && layer.type === '_flat'));
     /* VIGNETTE COMPOSITES INNERMOST, on every layer (#986 C8) — straight after the nine CSS effects, which already
        render before everything else whatever their row. That is where a video or photo has ALWAYS drawn it (inside the
@@ -4222,6 +4376,7 @@ window.FM = window.FM || {};
     if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
     if (fx.type === 'compoundblur') return drawCompoundBlur(ctx, layer, t, scene, fx);
     if (fx.type === 'matchgrade') return drawMatchGrade(ctx, layer, t, scene, fx);
+    if (fx.type === 'blur') return drawPixelEffect(ctx, layer, t, scene, fx, blurPlateKernel);   // only a blur off its defaults gets here (#482 15.7, postFxOrder)
     if (fx.type === 'displacemap') return drawDisplaceEffect(ctx, layer, t, scene, fx, false);
     if (fx.type === 'polardisplace') return drawDisplaceEffect(ctx, layer, t, scene, fx, true);
     // generic per-pixel colour/texture effects
@@ -4850,6 +5005,93 @@ window.FM = window.FM || {};
    * Both ends skip the plates entirely, so they are byte-identical to the flat cases rather than
    * merely close to them: strength 0 draws the layer with the filter simply absent, and strength 1
    * draws it with the children standing exactly where the filter stood. */
+  /* ═══ A FILTER THAT ACTS ON PART OF THE PICTURE (#482 15.1) ═════════════════════════════════════════════════════════
+   * Tonal range and Protect skin turn Strength's one even cross-fade into a weight PER PIXEL:
+   *     out = A + (B − A) · strength · range(L) · (1 − skin guard)
+   * where A is the layer without the filter and B with it — the same two plates as the cross-fade above. The range
+   * weights are Tint's (TINT_W: (1−L)², 1−|2L−1|, L²) with Range width an exponent on them (100/width, as Tint and Colour
+   * Balance), and the skin guard is Vibrance's orange wedge. Both are judged on A, the picture WITHOUT the filter, so a
+   * filter that darkens cannot carry a pixel out of its own range half way through. Mixed premultiplied, as 'lighter'
+   * mixes, so a soft edge or a key among the children fades the way Strength fades it.
+   * It needs the plates as pixels — 2 getImageData + 1 putImageData — so it runs only when one of the controls is off its
+   * default (fcPixelOpts returns null at the defaults, and FM._fxStats.fcPixel counts the runs); a saved filter and every
+   * library filter take the old plates-and-'lighter' path untouched. */
+  function fcPixelOpts(fx, t) {
+    const p = (fx && fx.params) || {};
+    const range = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0);
+    const wf = TINT_W[range > 0 && range < TINT_W.length ? range : 0];
+    let soft = p.rangesoft == null ? 100 : FM.evalProp(p.rangesoft, t); if (!(soft >= 10)) soft = 10; if (soft > 200) soft = 200;
+    let skin = p.skin == null ? 0 : FM.evalProp(p.skin, t); skin = skin > 0 ? Math.min(100, skin) / 100 : 0;
+    // Over-drive (#482 15.3): Strength past 100 % — the weight is multiplied by 1 + Over-drive, and the result clamped
+    let boost = p.boost == null ? 0 : FM.evalProp(p.boost, t); boost = boost > 0 ? Math.min(100, boost) / 100 : 0;
+    if (!wf && !skin && !boost) return null;
+    return { wf: wf, ex: wf && soft !== 100 ? 100 / soft : 1, skin: skin, over: 1 + boost };
+  }
+  // a, b: straight RGBA of the two plates (without / with the children). The mix lands in a. k is Strength.
+  function fcMixPixels(a, b, k, o) {
+    const wf = o.wf, ex = o.ex, skin = o.skin;
+    if (o.over > 1) k *= o.over;   // #482 15.3: past the filtered picture — clamped below, per channel
+    for (let i = 0; i < a.length; i += 4) {
+      const ar = a[i], ag = a[i + 1], ab = a[i + 2], aa = a[i + 3];
+      let w = k;
+      if (wf) { let wv = wf((ar * 0.299 + ag * 0.587 + ab * 0.114) / 255); if (ex !== 1) wv = wv > 0 ? Math.pow(wv, ex) : 0; w *= wv; }
+      if (skin > 0) {
+        const mx = ar > ag ? (ar > ab ? ar : ab) : (ag > ab ? ag : ab), mn = ar < ag ? (ar < ab ? ar : ab) : (ag < ab ? ag : ab);
+        if (mx > 0 && ar === mx && ab === mn) {                 // hue in the red→yellow wedge — Vibrance's skin test
+          const sw = 1 - Math.abs((ag - ab) / (mx - mn || 1) - 0.45) / 0.55;
+          if (sw > 0) w *= 1 - skin * (sw < 1 ? sw : 1);
+        }
+      }
+      if (w === 0) continue;
+      const ba = b[i + 3], fa = aa / 255, fb = ba / 255;
+      let oa = aa + (ba - aa) * w; oa = oa < 0 ? 0 : (oa > 255 ? 255 : oa);
+      if (oa <= 0) { a[i] = a[i + 1] = a[i + 2] = a[i + 3] = 0; continue; }
+      const un = 255 / oa;
+      a[i] = (ar * fa + (b[i] * fb - ar * fa) * w) * un;
+      a[i + 1] = (ag * fa + (b[i + 1] * fb - ag * fa) * w) * un;
+      a[i + 2] = (ab * fa + (b[i + 2] * fb - ab * fa) * w) * un;
+      a[i + 3] = oa;
+    }
+  }
+  FM._fcMixPixels = fcMixPixels; FM._fcPixelOpts = fcPixelOpts;   // suite seams (#482 15.1)
+  /* ═══ A FILTER'S FINISH (#482 15.2) ═════════════════════════════════════════════════════════════════════════════════
+   * Warmth, Fade, Grain, Vignette and Sharpen on the filter itself. Each is an ordinary effect appended after the filter's
+   * own children AT RENDER TIME and never written into fx.effects — so the child list, the save and every path that walks a
+   * filter's children see exactly what they did:
+   *   Warmth   → Colour Temperature with Method White balance (it multiplies, so black stays black: a finish must not tint
+   *              the blacks the way Shift does), Temperature = Warmth
+   *   Fade     → Faded Film at Amount Fade/100, no colour loss and no warm cast: milky blacks and a softer contrast
+   *   Sharpen  → Sharpen, Amount = Sharpen        Vignette → Vignette, Amount = Vignette        Grain → Film Grain, Amount = Grain
+   * every other control at a new instance's defaults. In that order — colour, tone, detail, then the vignette and the grain
+   * laid over the finished picture, the order a finish goes down. A slider at 0 adds no effect at all, so a filter whose
+   * finish is untouched builds the very stack it always did. The instances are kept on the filter (`_fin` — the underscore
+   * keeps them out of every save) so a kernel's own memo survives from frame to frame. On an adjustment layer (`adj`) only
+   * Warmth and Fade can run: the other three read where a pixel sits or its neighbours (fx-registry ADJ_OK), and their rows
+   * say so (FM.fxRegistry.deadRowWhy). */
+  const FC_FINISH = [
+    ['warmth', 'temperature', v => ({ amount: v, method: 1 }), true],
+    ['fade', 'faded', v => ({ amount: v / 100, desat: 0, tone: 0 }), true],
+    ['sharpen', 'sharpen', v => ({ amount: v }), false],
+    ['vignette', 'vignette', v => ({ amount: v }), false],
+    ['grain', 'filmgrain', v => ({ amount: v }), false],
+  ];
+  function fcFinish(fx, t, adj) {
+    const p = (fx && fx.params) || {};
+    let out = null;
+    for (let i = 0; i < FC_FINISH.length; i++) {
+      const f = FC_FINISH[i];
+      if (p[f[0]] == null || (adj && !f[3])) continue;
+      const v = FM.evalProp(p[f[0]], t);
+      if (!(Number.isFinite(v) && v !== 0)) continue;
+      const kept = fx._fin || (fx._fin = Object.create(null));
+      let e = kept[f[0]];
+      if (!e) { e = FM.fxRegistry.makeInstance(f[1]); if (!e) continue; kept[f[0]] = e; }
+      Object.assign(e.params, f[2](v));
+      (out || (out = [])).push(e);
+    }
+    return out;
+  }
+  FM._fcFinish = fcFinish;   // suite seam (#482 15.2)
   const _fcPool = [];
   let _fcDepth = 0;
   const FC_MAX_DEPTH = 4;   // capped, unlike the older pools — see FILTERS-DESIGN.md §3
@@ -4866,13 +5108,16 @@ window.FM = window.FM || {};
      * effects, so a switched-off child renders nothing either way. What this buys is the case where
      * EVERY child is off — kids is then empty, which takes the cheap early-out below instead of
      * building a spliced stack and walking it to draw the same pixels. */
-    const kids = (Array.isArray(fx.effects) ? fx.effects : []).filter(e => e && e.enabled !== false && e.type !== FM.FX_CONTAINER);
+    const own = (Array.isArray(fx.effects) ? fx.effects : []).filter(e => e && e.enabled !== false && e.type !== FM.FX_CONTAINER);
+    const fin = fcFinish(fx, t, false);   // #482 15.2: the finish sliders, after the children — never saved into fx.effects
+    const kids = fin ? own.concat(fin) : own;
     const spliced = idx < 0 ? rest.concat(kids) : all.slice(0, idx).concat(kids, all.slice(idx + 1));
     const asLayer = list => Object.assign({}, layer, { effects: list });
     const s = clamp01(fx.params && fx.params.strength != null ? FM.evalProp(fx.params.strength, t) : 1);
 
     if (s <= 0 || !kids.length) return drawLayer(ctx, asLayer(rest), t, scene);
-    if (s >= 1 || _fcDepth >= FC_MAX_DEPTH) return drawLayer(ctx, asLayer(spliced), t, scene);
+    const pxo = _fcDepth < FC_MAX_DEPTH ? fcPixelOpts(fx, t) : null;   // #482 15.1/15.3: a range, a skin guard or Over-drive mixes per pixel, at any Strength
+    if (!pxo && (s >= 1 || _fcDepth >= FC_MAX_DEPTH)) return drawLayer(ctx, asLayer(spliced), t, scene);
 
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = proj.width, PH = proj.height;
@@ -4901,8 +5146,14 @@ window.FM = window.FM || {};
       plate(P.B, spliced);     // …and as if its children were simply part of the stack
       const m = P.M.getContext('2d');
       m.setTransform(1, 0, 0, 1, 0, 0); m.clearRect(0, 0, W, H); m.filter = 'none';
-      m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - s; m.drawImage(P.A, 0, 0);
-      m.globalCompositeOperation = 'lighter';     m.globalAlpha = s;     m.drawImage(P.B, 0, 0);
+      if (pxo) {               // #482 15.1: the same mix, weighted per pixel
+        const ia = P.A.getContext('2d').getImageData(0, 0, W, H), ib = P.B.getContext('2d').getImageData(0, 0, W, H);
+        fcMixPixels(ia.data, ib.data, s, pxo);
+        m.putImageData(ia, 0, 0); FM._fxStats.fcPixel++;
+      } else {
+        m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - s; m.drawImage(P.A, 0, 0);
+        m.globalCompositeOperation = 'lighter';     m.globalAlpha = s;     m.drawImage(P.B, 0, 0);
+      }
       m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
       ctx.save();
       baseT(ctx);
@@ -6033,7 +6284,16 @@ window.FM = window.FM || {};
       const outB = p.outblack == null ? 0 : FM.evalProp(p.outblack, t);
       const outW = p.outwhite == null ? 255 : FM.evalProp(p.outwhite, t);
       const lut = levelsLUT(inB, inW, gam, outB, outW);
-      if (ch <= 0) {
+      if (levelsHasSets(p)) {
+        /* #482 15.5: each channel through its own set, then the master on all three; Channel only chooses which set the
+           panel shows. A channel's table is built fresh (levelsSetLUT), so the master's memo above stays put. */
+        const R = levelsSetLUT(p, 'r', t), G = levelsSetLUT(p, 'g', t), B = levelsSetLUT(p, 'b', t), M = lut;
+        for (let i = 0; i < d.length; i += 4) {
+          d[i] = M[R ? R[d[i]] : d[i]]; d[i + 1] = M[G ? G[d[i + 1]] : d[i + 1]]; d[i + 2] = M[B ? B[d[i + 2]] : d[i + 2]];
+        }
+        return;
+      }
+      if (ch <= 0) {   // a Levels saved before 15.5 (no channel sets) — its old loops, untouched
         for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; }
       } else {
         // One channel only — the move that kills a colour cast, because you can set that channel's
@@ -10842,6 +11102,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!FM.CSS_FX[e.type]) continue;
       const p = e.params || {};
       if (e.type === 'blur') {
+        if (blurPlate(e)) continue;   // #482 15.7: a plate pass in stack order, not part of the CSS chain
         const r = FM.evalProp(p.radius, t);
         blurs.push(Number.isFinite(r) ? r : 6);
         continue;
@@ -10970,7 +11231,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         .concat(ops.glows.length ? ['glow'] : []));
       const tmp = Object.assign({}, layer, {
         blendMode: 'normal',
-        effects: (layer.effects || []).filter(e => !(e && e.enabled !== false && keep.has(e.type) && FM.CSS_FX[e.type])),
+        effects: (layer.effects || []).filter(e => !(e && e.enabled !== false && keep.has(e.type) && FM.CSS_FX[e.type] && !blurPlate(e))),   // a plate blur (#482 15.7) was never in the chain
         behaviors: sansOpacityBehaviors(layer),
         transform: Object.assign({}, layer.transform, { opacity: 1 }),
       });
@@ -11873,6 +12134,106 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *
    * Statistics are gathered at QUARTER resolution: a mean and a sigma do not need every pixel, and
    * that is the difference between one cheap pass and two full-frame readbacks. */
+  /* ═══ HOLD AT TIME, SMOOTHING, PROTECT SKIN (#482 15.6) ═════════════════════════════════════════════════════════════
+   * Measured afresh every frame, the match breathes: anything that crosses either shot moves both averages and the grade
+   * pumps. Two ways to steady it, both on the statistics, never on the pixels:
+   *   Hold at time — measure both clips at ONE moment (seconds into this clip) and grade every frame with that transfer.
+   *   Smoothing    — measure across a window of that many seconds around the frame (five moments on the project's frame
+   *                  grid) and grade with the average.
+   * Every moment measured is remembered (_mgMemo) under a signature of both layers' saved content and the plate size, so a
+   * scrub or a replay pays nothing twice and an edit to either layer is a different key — the old numbers can never stand
+   * in for the new picture. Stateless: a moment's numbers depend on that moment alone, so preview, export and a scrub agree.
+   * A moment other than the one on screen is drawn with drawLayer at that time (_mgOff). Shapes, text, photos, GIFs and
+   * generated content draw any moment exactly; a VIDEO shows its element's current frame, so for a video the other moment
+   * comes from its decoded frame cache (the one Reverse uses) — asked for here (FM.wantFrameCache, app.js) and built before
+   * an export (exporter prepareCaches, FM.matchGradeFrameLayers). Until a video's frames are decoded the frame on screen is
+   * measured instead (counted in FM._fxStats.mgLive), so a held grade settles the moment its frames arrive.
+   * Protect skin holds the grade back on Vibrance's orange wedge (drawMatchGrade's apply loop). At the defaults — Every
+   * frame, no smoothing, no skin — none of this runs and the old code draws byte for byte. */
+  const _mgMemo = new Map(), _mgAsked = new Map();   // _mgAsked: clip id → when its frames were last asked for
+  let _mgOff = 0;
+  FM._fxStats.mgLive = 0;
+  function mgHash(s) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36) + '.' + s.length.toString(36); }
+  function mgDrawable(L) {   // can this layer be drawn at another moment and show THAT moment?
+    if (!L || L.type === '_flat') return false;   // a flattened group unit is one picture of now
+    if (L.type !== 'video') return true;
+    const m = FM.media && FM.media.get && FM.media.get(L.id);
+    return !!(m && m.frameCache && m.frameCache.count);
+  }
+  function mgAsk(L) {   // once per clip, and again after 15 s if the frames are still not there (an export frees its own copy)
+    if (!L || L.type !== 'video' || !FM.wantFrameCache) return;
+    const now = Date.now(), last = _mgAsked.get(L.id);
+    if (last && now - last < 15000) return;
+    _mgAsked.set(L.id, now);
+    try { FM.wantFrameCache(L.id); } catch (e) {}
+  }
+  const mgOn = v => v != null && (v && typeof v === 'object' ? Array.isArray(v.kf) && v.kf.some(q => q && Number(q.v) > 0) : Number(v) > 0);
+  // which video layers a Match Grade measures at other moments — the exporter decodes their frames first
+  FM.matchGradeFrameLayers = function (scene) {
+    const out = Object.create(null), ls = (scene && scene.layers) || [];
+    const walk = (L, effs) => (effs || []).forEach(e => {
+      if (!e || e.enabled === false) return;
+      if (Array.isArray(e.effects)) { walk(L, e.effects); return; }
+      if (e.type !== 'matchgrade' || !e.params || !(mgOn(e.params.sample) || mgOn(e.params.smooth))) return;
+      if (L.type === 'video') out[L.id] = 1;
+      const R = e.params.source && ls.find(l => l.id === e.params.source);
+      if (R && R.type === 'video') out[R.id] = 1;
+    });
+    ls.forEach(L => walk(L, L.effects));
+    return out;
+  };
+  function mgHeldStats(p, layer, clean, rLayer, t, scene, slot, A0, R0, W, H, OX, OY, PWp, PHp, stats) {
+    const sample = p.sample == null ? 0 : (Math.round(FM.evalProp(p.sample, t)) | 0);
+    let smooth = p.smooth == null ? 0 : FM.evalProp(p.smooth, t); smooth = smooth > 0 ? Math.min(2, smooth) : 0;
+    if (sample !== 1 && !smooth) return null;
+    const fps = (scene && scene.project && scene.project.fps) || 30;
+    let sig = '';
+    try { sig = JSON.stringify([clean, rLayer], FM.jsonReplacer); } catch (e) { return null; }
+    sig = layer.id + '|' + rLayer.id + '|' + W + 'x' + H + '|' + mgHash(sig);
+    const nowF = Math.round(t * fps), live = (A0 && R0) ? { A: A0, R: R0 } : null;
+    const keep = (f, v) => { if (_mgMemo.size > 4000) _mgMemo.clear(); _mgMemo.set(sig + '|' + f, v); };
+    if (live) keep(nowF, live);                     // the frame on screen is a moment the others can use
+    const at = f => {                               // the numbers of frame f: remembered, drawn now, or undefined (not drawable yet)
+      if (f === nowF) return live;
+      const k = sig + '|' + f;
+      if (_mgMemo.has(k)) return _mgMemo.get(k);
+      if (!mgDrawable(layer) || !mgDrawable(rLayer)) { mgAsk(layer); mgAsk(rLayer); return undefined; }
+      const tt = f / fps;
+      _mgOff++;
+      try {
+        const bc = slot.B.getContext('2d'), cc = slot.C.getContext('2d');
+        baseT(bc); bc.clearRect(OX, OY, PWp, PHp); bc.globalAlpha = 1; bc.globalCompositeOperation = 'source-over'; bc.filter = 'none';
+        drawLayer(bc, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), tt, scene);
+        baseT(cc); cc.clearRect(OX, OY, PWp, PHp); cc.globalAlpha = 1; cc.globalCompositeOperation = 'source-over'; cc.filter = 'none';
+        drawLayer(cc, Object.assign({}, rLayer, { blendMode: 'normal', effects: (rLayer.effects || []).filter(e => e.type !== 'matchgrade'), transform: Object.assign({}, rLayer.transform, { opacity: 1 }) }), tt, scene);
+      } finally { _mgOff--; }
+      const a = stats(slot.B), r = stats(slot.C), v = (a && r) ? { A: a, R: r } : null;
+      keep(f, v);
+      return v;
+    };
+    if (sample === 1) {
+      const st = layer.start || 0, du = layer.duration > 0 ? layer.duration : 0;
+      let hold = p.at == null ? 0 : FM.evalProp(p.at, t); hold = Number.isFinite(hold) && hold > 0 ? hold : 0;
+      if (du > 0) hold = Math.min(hold, Math.max(0, du - 1 / fps));   // inside the clip, where it has pixels
+      const got = at(Math.round((st + hold) * fps));
+      if (got === undefined) { FM._fxStats.mgLive++; return null; }   // a video not decoded yet: the frame on screen, for now
+      return got || live;
+    }
+    // Smoothing: the mean of five moments across the window, on the project's frame grid so neighbouring frames share them
+    const acc = { A: { mean: [0, 0, 0], sd: [0, 0, 0] }, R: { mean: [0, 0, 0], sd: [0, 0, 0] } };
+    let n = 0, missing = 0;
+    for (let k = -2; k <= 2; k++) {
+      const f = nowF + Math.round(k * smooth * fps / 4), v = at(f);
+      if (v === undefined) { missing++; continue; }
+      if (!v) continue;
+      for (let c = 0; c < 3; c++) { acc.A.mean[c] += v.A.mean[c]; acc.A.sd[c] += v.A.sd[c]; acc.R.mean[c] += v.R.mean[c]; acc.R.sd[c] += v.R.sd[c]; }
+      n++;
+    }
+    if (missing) FM._fxStats.mgLive++;
+    if (!n) return live;
+    for (let c = 0; c < 3; c++) { acc.A.mean[c] /= n; acc.A.sd[c] /= n; acc.R.mean[c] /= n; acc.R.sd[c] /= n; }
+    return acc;
+  }
   function drawMatchGrade(ctx, layer, t, scene, fx) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -11918,7 +12279,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         for (let k = 0; k < 3; k++) { mean[k] = s[k] / n; sd[k] = Math.sqrt(Math.max(0, s2[k] / n - mean[k] * mean[k])); }
         return { mean: mean, sd: sd };
       };
-      const A = stats(slot.A), R = stats(slot.M);
+      const A0 = stats(slot.A), R0 = stats(slot.M);
+      // #482 15.6: Hold at time and Smoothing measure other moments too; at their defaults this is null and A, R are the live ones
+      const held = mgHeldStats(p, layer, clean, rLayer, t, scene, slot, A0, R0, W, H, OX, OY, PWp, PHp, stats);
+      const A = held ? held.A : A0, R = held ? held.R : R0;
       if (!A || !R) { drawLayer(ctx, clean, t, scene); return; }
       let img;
       try { img = actx.getImageData(0, 0, W, H); } catch (e) { drawLayer(ctx, clean, t, scene); return; }
@@ -11931,7 +12295,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         gain[k] = 1 + (g - 1) * amount;
         off[k] = A.mean[k] + (target - A.mean[k]) * amount;
       }
-      for (let i = 0; i < d.length; i += 4) {
+      FM._mgLastGains = { gain: gain.slice(), off: off.slice(), mean: A.mean.slice() };   // suite seam (#482 15.6): the transfer this frame used
+      let skin = p.skin == null ? 0 : FM.evalProp(p.skin, t); skin = skin > 0 ? Math.min(100, skin) / 100 : 0;
+      if (skin > 0) {   // #482 15.6: Protect skin — the grade held back on Vibrance's orange skin wedge, judged on the clip's own colour
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] === 0) continue;
+          const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2];
+          let w = 1;
+          const mx = r0 > g0 ? (r0 > b0 ? r0 : b0) : (g0 > b0 ? g0 : b0), mn = r0 < g0 ? (r0 < b0 ? r0 : b0) : (g0 < b0 ? g0 : b0);
+          if (mx > 0 && r0 === mx && b0 === mn) { const sw = 1 - Math.abs((g0 - b0) / (mx - mn || 1) - 0.45) / 0.55; if (sw > 0) w = 1 - skin * (sw < 1 ? sw : 1); }
+          d[i] = r0 + (off[0] + (r0 - A.mean[0]) * gain[0] - r0) * w;
+          d[i + 1] = g0 + (off[1] + (g0 - A.mean[1]) * gain[1] - g0) * w;
+          d[i + 2] = b0 + (off[2] + (b0 - A.mean[2]) * gain[2] - b0) * w;
+        }
+      } else for (let i = 0; i < d.length; i += 4) {
         if (d[i + 3] === 0) continue;
         d[i] = off[0] + (d[i] - A.mean[0]) * gain[0];
         d[i + 1] = off[1] + (d[i + 1] - A.mean[1]) * gain[1];
@@ -19833,7 +20210,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // frame-blend slow-mo is on. With frame-blend + speed<1 we cross-dissolve the two
         // nearest source frames so slow motion looks smooth instead of stuttering on dupes.
         const slow = (FM.speedAt ? FM.speedAt(layer, t) : (layer.speed || 1)) < 1;   // ramped speed is an object — raw compare was always false, so frame-blend never engaged on ramps
-        if (m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow))) {
+        if (m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow) || _mgOff > 0)) {   // _mgOff: Match Grade measuring another moment (#482 15.6)
           const local = FM.layerLocalTime(layer, t);
           if (local != null) {
             const fc = m.frameCache, fpos = local * (fc.effFps || fc.fps);   // effFps spans the whole clip even past the 900-frame cap
@@ -20329,6 +20706,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // duotone and rgbsplit are not in PIXEL_FX — they have their own draw* functions; the twenty colour
     // grades #482 polish 5.1 added ARE in PIXEL_FX and take this line, exactly as Levels does.)
     if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
+    if (fx.type === 'blur') { blurPlateKernel(d, W, H, p, t, S); return; }   // a Gaussian Blur off its defaults on an adjustment layer (#482 15.7)
     if (fx.type === 'rgbsplit') {
       const amount = FM.evalProp(p.amount, t) || 0;
       const dd = amount > 0 ? Math.max(1, Math.round(amount * S)) : 0;   // project px → plate px (#691); preserve small positive preview shifts
@@ -20427,14 +20805,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * filter included, opacity not) into the canvas `into` rather than onto ctx. A plain call is unchanged. */
   const _adjFcPool = [];
   const adjLiveBox = (e) => !!(e && FM.isFxContainer && FM.isFxContainer(e) && e.enabled !== false);
-  const adjKids = (e) => (e.effects || []).filter(k => k && k.enabled !== false && k.type !== FM.FX_CONTAINER);
+  const adjKids = (e, t) => {   // …plus the finish sliders an adjustment layer can run, Warmth and Fade (#482 15.2, fcFinish)
+    const k = (e.effects || []).filter(c => c && c.enabled !== false && c.type !== FM.FX_CONTAINER);
+    const fin = fcFinish(e, t, true);
+    return fin ? k.concat(fin) : k;
+  };
   const adjStrength = (e, t) => clamp01(e.params && e.params.strength != null ? FM.evalProp(e.params.strength, t) : 1);
   function adjFlatten(effs, t) {                   // every container opened at full strength or dropped
     const out = [];
     for (const e of effs) {
       if (!(FM.isFxContainer && FM.isFxContainer(e))) { out.push(e); continue; }
       if (e.enabled === false) continue;
-      const k = adjKids(e);
+      const k = adjKids(e, t);
       if (k.length && adjStrength(e, t) > 0) for (const c of k) out.push(c);
     }
     return out;
@@ -20447,27 +20829,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let fi = -1, fs = 1;
     if (depth < FC_MAX_DEPTH) for (let i = 0; i < effs.length; i++) {
       const e = effs[i];
-      if (!adjLiveBox(e) || !adjKids(e).length) continue;
+      if (!adjLiveBox(e) || !adjKids(e, t).length) continue;
       const s = adjStrength(e, t);
-      if (s > 0 && s < 1) { fi = i; fs = s; break; }
+      if (s > 0 && (s < 1 || fcPixelOpts(e, t))) { fi = i; fs = s; break; }   // #482 15.1/15.3: a range, skin guard or Over-drive mixes per pixel at full Strength too
     }
     if (fi < 0) { applyAdjustment(ctx, layer, t, scene, adjFlatten(effs, t), P.M); return P.M; }
     const box = effs[fi];
     const rest = effs.slice(0, fi).concat(effs.slice(fi + 1));
-    const spliced = effs.slice(0, fi).concat(adjKids(box), effs.slice(fi + 1));
+    const spliced = effs.slice(0, fi).concat(adjKids(box, t), effs.slice(fi + 1));
     const a = P.A.getContext('2d');
     a.setTransform(1, 0, 0, 1, 0, 0); a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
     a.clearRect(0, 0, cw, ch); a.drawImage(adjFilterPlate(ctx, layer, t, scene, rest, depth + 1), 0, 0);   // the grade as if the filter were not there
     const B = adjFilterPlate(ctx, layer, t, scene, spliced, depth + 1);                                     // …and as if its children stood in its place
     const m = P.M.getContext('2d');
     m.setTransform(1, 0, 0, 1, 0, 0); m.filter = 'none'; m.clearRect(0, 0, cw, ch);
-    m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - fs; m.drawImage(P.A, 0, 0);
-    m.globalCompositeOperation = 'lighter';     m.globalAlpha = fs;     m.drawImage(B, 0, 0);
+    const pxo = fcPixelOpts(box, t);
+    if (pxo) {                 // #482 15.1: Tonal range / Protect skin, judged on the grade without the filter
+      const ia = a.getImageData(0, 0, cw, ch), ib = B.getContext('2d').getImageData(0, 0, cw, ch);
+      fcMixPixels(ia.data, ib.data, fs, pxo);
+      m.putImageData(ia, 0, 0); FM._fxStats.fcPixel++;
+    } else {
+      m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - fs; m.drawImage(P.A, 0, 0);
+      m.globalCompositeOperation = 'lighter';     m.globalAlpha = fs;     m.drawImage(B, 0, 0);
+    }
     m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
     return P.M;
   }
   function applyAdjustmentFilters(ctx, layer, t, scene, own) {
-    const frac = own.some(e => adjLiveBox(e) && adjKids(e).length && (s => s > 0 && s < 1)(adjStrength(e, t)));
+    const frac = own.some(e => adjLiveBox(e) && adjKids(e, t).length && (s => s > 0 && (s < 1 || !!fcPixelOpts(e, t)))(adjStrength(e, t)));
     if (!frac) { applyAdjustment(ctx, layer, t, scene, adjFlatten(own, t)); return; }
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -20553,7 +20942,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     const lay = effs === layer.effects ? layer : Object.assign({}, layer, { effects: effs });
     const filter = effectFilter(lay, t, renderScale(ctx)), hasCss = filter && filter !== 'none';   // applied to ctx (baseT-scaled) further down
-    const ppfx = effs.filter(e => PIXEL_ADJ[e.type] && e.enabled !== false);
+    const ppfx = effs.filter(e => (PIXEL_ADJ[e.type] || blurPlate(e)) && e.enabled !== false);   // blurPlate: #482 15.7 — left out of the filter string, so it grades here
     const pixFx = effs.find(e => e.type === 'pixelate' && e.enabled !== false);
     if (!into && !hasCss && !ppfx.length && !pixFx) return;   // (baking: an empty grade is still the snapshot, masked)
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
@@ -20587,7 +20976,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * on that, and the blit below carries no filter. A stack of only the six that could always go on an adjustment layer
      * (Posterize, Tint, Threshold, Duotone, RGB Split, Levels) keeps its old order: saved projects draw as they did.
      * `levels` is the one PIXEL_FX kernel among the six, which is why it is named. */
-    const cssFirst = hasCss && ppfx.some(e => e.type !== 'levels' && !!PIXEL_FX[e.type]);
+    const cssFirst = hasCss && ppfx.some(e => e.type !== 'levels' && (!!PIXEL_FX[e.type] || blurPlate(e)));   // a plate blur (#482 15.7) runs after the CSS half, as on a clip
     a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch); a.globalAlpha = 1; a.filter = 'none';
     if (cssFirst && ctxFilterOK()) { a.filter = filter; a.drawImage(ctx.canvas, 0, 0); a.filter = 'none'; }   // the snapshot, CSS-graded on the way in
     else {

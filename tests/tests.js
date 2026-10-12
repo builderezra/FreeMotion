@@ -129220,4 +129220,601 @@
       if (!(at90 < 0.1)) throw new Error('Flip 90 lights ' + (at90 * 100).toFixed(1) + ' percent of the plate - edge on, it should be a sliver');
     }
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 15 — Heavier filter & grade tools: the Filter’s Tonal range, Protect skin, finish sliders and
+   *     Over-drive; Levels on all four channels at once; Match Grade’s hold, smoothing and skin; Gaussian Blur’s edges,
+   *     direction and Orton mix ═══
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 15
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). The rule that makes it safe (§0.3): every new key's default is the
+   * old look — a library filter gets every key it does not set from makeInstance, and a saved instance that lacks a key is
+   * filled at render time (queue 784). A pure pixel kernel (Levels) is pinned by hashes of its bytes captured on fc8866f1,
+   * the tree before the batch. Anything that composites on a canvas (the Filter container, Match Grade, a blur) is pinned
+   * against an ORACLE the test builds from the old code's own canvas steps instead, because canvas bytes are not the same on
+   * every machine and a hash taken on one would be a lie on another. */
+  const b15P = (w, h) => ({ width: w || 48, height: h || 36, fps: 30, duration: 5, background: '#101820' });
+  const b15Copy = o => JSON.parse(JSON.stringify(o));
+  const b15Fx = (type, params) => { const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, params || {}); return e; };
+  function b15Box(params, kids) { const b = FM.fxRegistry.makeInstance('filter'); b.params = Object.assign({}, params); b.effects = kids; return b; }
+  // a full-frame, fully opaque layer running left to right from c0 to c1 (black to white unless told otherwise)
+  function b15Plate(P, c0, c1) {
+    const L = FM.makeLayer('shape', { name: 'b15 plate', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: '#ffffff', start: 0, duration: 5 });
+    L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: c0 || '#000000', c1: c1 || '#ffffff' };
+    return L;
+  }
+  function b15Flat(P, fill) { return FM.makeLayer('shape', { name: 'b15 flat', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: fill, start: 0, duration: 5 }); }
+  // a smaller, see-through, turned card: soft alpha is where a wrong mix shows
+  function b15Card() {
+    const L = FM.makeLayer('shape', { name: 'b15 card', shape: 'rect', x: 20, y: 16, shapeW: 26, shapeH: 18, fill: '#3fa0e0', start: 0, duration: 5 });
+    L.transform.opacity = 0.8; L.fillOpacity = 0.7; L.transform.rotation = 12;
+    return L;
+  }
+  function b15Draw(layers, t, P, rs) {   // a frame of these layers, on a canvas at render scale rs (0.5 = a half-size preview plate)
+    const k = rs || 1, c = document.createElement('canvas'); c.width = Math.round(P.width * k); c.height = Math.round(P.height * k);
+    FM.renderScene(c.getContext('2d'), { project: P, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return c;
+  }
+  const b15Px = (layers, t, P, rs) => { const c = b15Draw(layers, t, P, rs); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
+  const b15At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const b15Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b15Diff = (a, b) => { let n = 0, m = 0; for (let i = 0; i < a.length; i++) { const d = Math.abs(a[i] - b[i]); if (d) { n++; if (d > m) m = d; } } return n + ' bytes (max ' + m + ')'; };
+  function b15Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i] & 255; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  /* THE OLD FILTER, REBUILT FROM ITS OWN CANVAS STEPS (drawFilterContainer on fc8866f1): the frame without the filter at
+     alpha 1−s, the frame with its children added 'lighter' at alpha s, laid over the background. On a layer that covers the
+     frame opaquely the two frames ARE the container's two plates, so this is the old picture byte for byte on any machine. */
+  function b15Xfade(P, layersA, layersB, s, t, rs) {
+    const cA = b15Draw(layersA, t, P, rs), cB = b15Draw(layersB, t, P, rs), W = cA.width, H = cA.height;
+    const M = document.createElement('canvas'); M.width = W; M.height = H; const m = M.getContext('2d');
+    m.globalAlpha = 1 - s; m.drawImage(cA, 0, 0); m.globalCompositeOperation = 'lighter'; m.globalAlpha = s; m.drawImage(cB, 0, 0);
+    const O = document.createElement('canvas'); O.width = W; O.height = H; const o = O.getContext('2d');
+    o.fillStyle = P.background; o.fillRect(0, 0, W, H); o.drawImage(M, 0, 0);
+    return o.getImageData(0, 0, W, H).data;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default, and a saved non-default value comes back from the load sanitiser as written. */
+  function b15Catalogue(type, NEW, SET) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want && pd.legacy === undefined) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want);
+    });
+    const fx = { type: type, enabled: true, params: b15Copy(SET) };
+    if (type === 'filter') fx.effects = [b15Fx('invert')];
+    const lay = [{ id: 'l48215' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [fx] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A Filter with the new keys ABSENT (saved before the batch), FILLED the way the render fills a saved instance (queue 784),
+     and PRESENT at their defaults (a new filter, and every library filter). */
+  function b15Variants(box, NEW) {
+    const absent = b15Copy(box); Object.keys(NEW).forEach(k => { delete absent.params[k]; });
+    const filled = FM._fillFxParams(b15Copy(absent));
+    const present = b15Copy(absent); Object.assign(present.params, NEW);
+    return [['absent', absent], ['filled at render time', filled], ['present at the defaults', present]];
+  }
+  const B15_FC_NEW = { range: 0, rangesoft: 100, skin: 0 };
+  /* The Filter's new keys NEW at their defaults leave every filter as it was: saved (absent), filled and new (present), at
+     Strength 0.35 / 0.5 / 1 against the old filter's oracle, at plate scale 1 and 0.5, on a see-through card, on an adjustment
+     layer, and every library filter — then the catalogue, with SET as the saved non-default values the load sanitiser must keep. */
+  function b15FilterPins(NEW, SET) {
+    const P = b15P(), moved = [], px0 = FM._fxStats.fcPixel;
+    // (no blur among them: a blur pulls the frame's edge in from transparent, the plates stop being opaque there, and the
+    // oracle's two frames over the background are then no longer the container's two plates)
+    const KIDS = { thermal: () => [b15Fx('thermal')], posterize: () => [b15Fx('posterize', { levels: 4 }), b15Fx('temperature', { amount: 60 })], css: () => [b15Fx('invert', { amount: 0.7 }), b15Fx('saturate', { amount: 1.6 })] };
+    Object.keys(KIDS).forEach(kn => [0.35, 0.5, 1].forEach(s => [1, 0.5].forEach(rs => {
+      // the oracle: s < 1 is the old cross-fade; s = 1 is the children standing where the filter stood
+      const want = s < 1 ? b15Xfade(P, [b15Plate(P)], [Object.assign(b15Plate(P), { effects: KIDS[kn]() })], s, 0.5, rs)
+                         : b15Px([Object.assign(b15Plate(P), { effects: KIDS[kn]() })], 0.5, P, rs);
+      b15Variants(b15Box({ strength: s }, KIDS[kn]()), NEW).forEach(([how, box]) => {
+        const L = b15Plate(P); L.effects = [box];
+        const got = b15Px([L], 0.5, P, rs);
+        if (!b15Same(got, want)) moved.push(kn + ' at Strength ' + s + ', plate scale ' + rs + ', new keys ' + how + ': ' + b15Diff(got, want) + ' off the old filter');
+      });
+      // …and on a see-through card over the plate, where the three must agree with each other
+      const card = b15Variants(b15Box({ strength: s }, KIDS[kn]()), NEW).map(([how, box]) => { const C = b15Card(); C.effects = [box]; return [how, b15Px([C, b15Plate(P)], 0.5, P, rs)]; });
+      card.slice(1).forEach(([how, d]) => { if (!b15Same(d, card[0][1])) moved.push('card, ' + kn + ' at Strength ' + s + ', plate scale ' + rs + ': new keys ' + how + ' draw ' + b15Diff(d, card[0][1]) + ' off the saved filter'); });
+    })));
+    // a filter on an adjustment layer (#986 C1): the grade below at Strength 0.6 and 1
+    [0.6, 1].forEach(s => {
+      const pics = b15Variants(b15Box({ strength: s }, KIDS.posterize()), NEW).map(([how, box]) => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [box]; return [how, b15Px([A, b15Plate(P)], 0.5, P)]; });
+      pics.slice(1).forEach(([how, d]) => { if (!b15Same(d, pics[0][1])) moved.push('adjustment layer at Strength ' + s + ': new keys ' + how + ' draw ' + b15Diff(d, pics[0][1]) + ' off the saved filter'); });
+    });
+    // every library filter: makeInstance gives the new keys at their defaults (no recipe sets one), and the picture is the one without them
+    const lib = FM.filters.all(), undeclared = [];
+    if (lib.length < 40) throw new Error('CONTROL: the filter library lists ' + lib.length + ' recipes - this check sees nothing');
+    lib.forEach(f => {
+      const box = FM.filters.makeInstance(f.id);
+      Object.keys(NEW).forEach(k => { if (box.params[k] !== NEW[k]) undeclared.push('the ' + f.id + ' filter carries ' + k + ' = ' + box.params[k]); });
+      Object.assign(box.params, NEW);
+      const old = b15Copy(box); Object.keys(NEW).forEach(k => { delete old.params[k]; });
+      const La = b15Plate(P); La.effects = [old]; const Lb = b15Plate(P); Lb.effects = [box];
+      const a = b15Px([La], 0.7, P), b = b15Px([Lb], 0.7, P);
+      if (!b15Same(a, b)) moved.push('the ' + f.id + ' filter draws ' + b15Diff(b, a) + ' off its old look');
+    });
+    if (FM._fxStats.fcPixel !== px0) moved.push('the per-pixel mix ran ' + (FM._fxStats.fcPixel - px0) + ' times at the defaults - only a range or a skin guard may pay for the readback');
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 8).join(' · '));
+    // last, so a tree without the keys still shows the pictures held first
+    if (undeclared.length) throw new Error(undeclared.length + ' library filters lack the new keys: ' + undeclared.slice(0, 4).join(' · '));
+    b15Catalogue('filter', NEW, SET);
+  }
+
+  test('482 15.1 pin: the Filter’s Tonal range, Range width and Protect skin at their defaults leave every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    b15FilterPins(B15_FC_NEW, { range: 3, rangesoft: 150, skin: 60 });
+  });
+
+  test('482 15.1 the Filter’s Tonal range: Highlights leaves a black pixel unfiltered and inverts a white one, Shadows the reverse, Range width widens it, Protect skin holds a skin tone back, and it works on an adjustment layer (CONTROL: All inverts both ends)', { item: '482', budgetMs: 60000 }, function () {
+    const P = b15P(), W = P.width, y = P.height >> 1, xd = 0, xb = W - 1, xm = W >> 1, xq = Math.round(W * 0.75);
+    const flt = (over) => b15Box(Object.assign({ strength: 1 }, over), [b15Fx('invert', { amount: 1 })]);
+    const run = (box) => { const L = b15Plate(P); L.effects = box ? [box] : []; return b15Px([L], 0.5, P); };
+    const r = (d, x) => b15At(d, W, x, y)[0];
+    const bare = run(null), all = run(flt({})), hi = run(flt({ range: 3 })), sh = run(flt({ range: 1 }));
+    if (!(r(bare, xd) < 12 && r(bare, xb) > 243)) throw new Error('CONTROL: the plate does not run from black to white (' + r(bare, xd) + ' .. ' + r(bare, xb) + ')');
+    if (!(r(all, xd) - r(bare, xd) > 200 && r(bare, xb) - r(all, xb) > 200)) throw new Error('CONTROL: an Invert filter on All did not invert both ends (' + r(all, xd) + ', ' + r(all, xb) + ') - this test proves nothing');
+    const fails = [];
+    if (Math.abs(r(hi, xd) - r(bare, xd)) > 2) fails.push('Highlights moved the black pixel ' + r(bare, xd) + ' -> ' + r(hi, xd));
+    if (!(r(bare, xb) - r(hi, xb) > 150)) fails.push('Highlights left the white pixel at ' + r(hi, xb) + ' (was ' + r(bare, xb) + ')');
+    if (Math.abs(r(sh, xb) - r(bare, xb)) > 2) fails.push('Shadows moved the white pixel ' + r(bare, xb) + ' -> ' + r(sh, xb));
+    if (!(r(sh, xd) - r(bare, xd) > 150)) fails.push('Shadows left the black pixel at ' + r(sh, xd));
+    // Range width: an exponent on the weight — 200 % reaches further down from the highlights than 100 %, 50 % less far
+    const wide = run(flt({ range: 3, rangesoft: 200 })), narrow = run(flt({ range: 3, rangesoft: 50 }));
+    const mv = d => Math.abs(r(d, xq) - r(bare, xq));
+    if (!(mv(wide) > mv(hi) + 10 && mv(hi) > mv(narrow) + 10)) fails.push('Range width did not widen and narrow the highlights (a light grey moved ' + mv(narrow) + ' / ' + mv(hi) + ' / ' + mv(wide) + ' at 50 / 100 / 200 %)');
+    // Protect skin: a skin tone barely moves, a blue (CONTROL) moves as far as it does without the guard
+    const flat = (fill, box) => { const L = b15Flat(P, fill); L.effects = [box]; return b15At(b15Px([L], 0.5, P), W, xm, y); };
+    const skin0 = b15At(b15Px([b15Flat(P, '#e0a070')], 0.5, P), W, xm, y), blue0 = b15At(b15Px([b15Flat(P, '#4070d0')], 0.5, P), W, xm, y);
+    const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    const skinOff = dist(flat('#e0a070', flt({})), skin0), skinOn = dist(flat('#e0a070', flt({ skin: 100 })), skin0);
+    const blueOff = dist(flat('#4070d0', flt({})), blue0), blueOn = dist(flat('#4070d0', flt({ skin: 100 })), blue0);
+    if (!(skinOff > 200)) fails.push('CONTROL: the Invert filter barely moved the skin tone without the guard (' + skinOff + ')');
+    if (!(skinOn < skinOff * 0.25)) fails.push('Protect skin 100 % still moved the skin tone ' + skinOn + ' of ' + skinOff);
+    if (Math.abs(blueOn - blueOff) > 3) fails.push('Protect skin also held back a blue (' + blueOn + ' vs ' + blueOff + ') - it must spare skin only');
+    // on an adjustment layer: the black pixel of the layer below stays black under Highlights
+    const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [flt({ range: 3 })];
+    const adj = b15Px([A, b15Plate(P)], 0.5, P);
+    if (Math.abs(r(adj, xd) - r(bare, xd)) > 2 || !(r(bare, xb) - r(adj, xb) > 150)) fails.push('on an adjustment layer Highlights gave ' + r(adj, xd) + ' / ' + r(adj, xb) + ' at the black / white ends (want ' + r(bare, xd) + ' kept, ' + r(bare, xb) + ' inverted)');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  const B15_FC_FIN = { warmth: 0, fade: 0, grain: 0, vignette: 0, sharpen: 0 };
+  test('482 15.2 pin: the Filter’s finish sliders — Warmth, Fade, Grain, Vignette, Sharpen — at 0 leave every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    b15FilterPins(B15_FC_FIN, { warmth: -40, fade: 30, grain: 50, vignette: 0.6, sharpen: 1.5 });
+  });
+
+  test('482 15.2 a Filter’s Warmth warms the frame and leaves its effects list exactly as it was; Fade lifts the blacks, Sharpen, Vignette and Grain each change the picture, a filter with nothing in it but a finish works, and on an adjustment layer Warmth and Fade grade while Grain says it does nothing there (CONTROL: the finish at 0 is the filter’s own look)', { item: '482', budgetMs: 60000 }, function () {
+    const P = b15P(), W = P.width, H = P.height, y = H >> 1, xm = W >> 1;
+    const kids = () => [b15Fx('contrast', { amount: 1.1 })];
+    const run = (box, plate) => { const L = plate || b15Plate(P, '#202020', '#e0e0e0'); L.effects = box ? [box] : []; return b15Px([L], 0.5, P); };
+    const at = (d, x, yy) => b15At(d, W, x, yy == null ? y : yy);
+    const own = run(b15Box({ strength: 1 }, kids())), flat = (() => { const L = b15Plate(P, '#202020', '#e0e0e0'); L.effects = kids(); return b15Px([L], 0.5, P); })();
+    if (!b15Same(own, flat)) throw new Error('CONTROL: a filter at Strength 1 with its finish at 0 is not its own children (' + b15Diff(own, flat) + ')');
+    const fails = [];
+    // Warmth: redder and less blue at the centre, cooler when negative — and the filter's effects list is untouched
+    const box = b15Box({ strength: 1, warmth: 50 }, kids()), before = JSON.stringify(box.effects), n = box.effects.length, kid0 = box.effects[0];
+    const warm = run(box), cool = run(b15Box({ strength: 1, warmth: -50 }, kids()));
+    const c0 = at(own, xm), cw = at(warm, xm), cc = at(cool, xm);
+    if (!(cw[0] - c0[0] > 6 && c0[2] - cw[2] > 6)) fails.push('Warmth 50 did not warm the centre (rgb ' + c0.slice(0, 3) + ' -> ' + cw.slice(0, 3) + ')');
+    if (!(cc[2] - c0[2] > 6 && c0[0] - cc[0] > 6)) fails.push('Warmth -50 did not cool the centre (rgb ' + c0.slice(0, 3) + ' -> ' + cc.slice(0, 3) + ')');
+    if (box.effects.length !== n || box.effects[0] !== kid0 || JSON.stringify(box.effects) !== before) fails.push('the finish was written into the filter’s effects (' + n + ' -> ' + box.effects.length + ')');
+    if (/temperature/.test(JSON.stringify(box, FM.jsonReplacer))) fails.push('the finish’s Colour Temperature reaches the saved filter: ' + JSON.stringify(box, FM.jsonReplacer).slice(0, 200));
+    // Fade lifts the darkest pixel
+    const faded = run(b15Box({ strength: 1, fade: 60 }, kids()));
+    if (!(at(faded, 0)[0] - at(own, 0)[0] > 10)) fails.push('Fade 60 did not lift the blacks (' + at(own, 0)[0] + ' -> ' + at(faded, 0)[0] + ')');
+    // Vignette darkens a corner and leaves the centre
+    const vig = run(b15Box({ strength: 1, vignette: 0.8 }, kids()));
+    if (!(at(own, W - 1, 0)[0] - at(vig, W - 1, 0)[0] > 10)) fails.push('Vignette 0.8 did not darken the corner (' + at(own, W - 1, 0)[0] + ' -> ' + at(vig, W - 1, 0)[0] + ')');
+    if (Math.abs(at(vig, xm)[0] - at(own, xm)[0]) > 8) fails.push('Vignette 0.8 moved the centre ' + at(own, xm)[0] + ' -> ' + at(vig, xm)[0]);
+    // Grain speckles the frame
+    const grain = run(b15Box({ strength: 1, grain: 80 }, kids()));
+    let gn = 0; for (let i = 0; i < own.length; i += 4) if (own[i] !== grain[i]) gn++;
+    if (gn < W * H * 0.1) fails.push('Grain 80 changed only ' + gn + ' of ' + W * H + ' pixels');
+    // Sharpen hardens the edges a posterised plate has (CONTROL: the same filter without it)
+    const pk = () => [b15Fx('posterize', { levels: 3 })];
+    const soft = run(b15Box({ strength: 1 }, pk())), sharp = run(b15Box({ strength: 1, sharpen: 3 }, pk()));
+    if (b15Same(soft, sharp)) fails.push('Sharpen 3 changed nothing on a posterised ramp');
+    // a filter with no effects in it, only a finish
+    const empty = run(b15Box({ strength: 1, warmth: 60 }, [])), bare = run(null);
+    if (!(at(empty, xm)[0] - at(bare, xm)[0] > 6)) fails.push('an empty filter with Warmth 60 did not warm the frame (' + at(bare, xm)[0] + ' -> ' + at(empty, xm)[0] + ')');
+    // on an adjustment layer: Warmth and Fade grade the layer below; Grain cannot run there, and its row says so
+    const adjRun = over => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [b15Box(Object.assign({ strength: 1 }, over), [])]; return b15Px([A, b15Plate(P, '#202020', '#e0e0e0')], 0.5, P); };
+    const aw = adjRun({ warmth: 60 }), af = adjRun({ fade: 60 }), ag = adjRun({ grain: 80 });
+    if (!(at(aw, xm)[0] - at(bare, xm)[0] > 6)) fails.push('on an adjustment layer Warmth 60 did not warm the frame below (' + at(bare, xm)[0] + ' -> ' + at(aw, xm)[0] + ')');
+    if (!(at(af, 0)[0] - at(bare, 0)[0] > 10)) fails.push('on an adjustment layer Fade 60 did not lift the blacks below');
+    if (!b15Same(ag, bare)) fails.push('on an adjustment layer Grain changed the frame (' + b15Diff(ag, bare) + ') - it is meant to be skipped there, and its row to say so');
+    const rows = FM.fxRegistry.paramsOf('filter'), row = k => rows.filter(q => q.key === k)[0] || {};
+    const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }), S = b15Flat(P, '#808080');
+    ['grain', 'vignette', 'sharpen'].forEach(k => {
+      if (!FM.fxRegistry.deadRowWhy || !FM.fxRegistry.deadRowWhy(row(k), A)) fails.push('the Filter’s ' + k + ' row does not say it does nothing on an adjustment layer');
+      else if (FM.fxRegistry.deadRowWhy(row(k), S)) fails.push('the Filter’s ' + k + ' row says it does nothing on a clip');
+    });
+    if (FM.fxRegistry.deadRowWhy && (FM.fxRegistry.deadRowWhy(row('warmth'), A) || FM.fxRegistry.deadRowWhy(row('fade'), A))) fails.push('Warmth or Fade says it does nothing on an adjustment layer, where it grades');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('482 15.2 a saved filter keeps its finish: Save this effect as preset, then picking it from the Filters tab lands the Strength, Tonal range, Warmth and Fade it was saved with (CONTROL: a library filter lands at the defaults)', { item: '482', budgetMs: 30000 }, function () {
+    if (!FM.effectPresets || !FM.effectPresets.capture || !FM.effectPresets.save) throw new Error('FM.effectPresets is not loaded');
+    const box = b15Box({ strength: 0.8, range: 3, warmth: 40, fade: 20 }, [b15Fx('contrast', { amount: 1.2 })]);
+    const p = FM.effectPresets.capture(box, 'b15 finish zq');
+    if (!p || !FM.effectPresets.save(p)) throw new Error('could not save the filter as a preset');
+    try {
+      const got = FM.filters.makeInstance(p.id);
+      if (!got) throw new Error('the saved filter does not resolve from the Filters tab');
+      const want = { strength: 0.8, range: 3, warmth: 40, fade: 20 }, bad = Object.keys(want).filter(k => got.params[k] !== want[k]);
+      if (bad.length) throw new Error('the saved filter lands with ' + bad.map(k => k + ' ' + got.params[k] + ' (saved ' + want[k] + ')').join(', '));
+      if (!got.effects || got.effects.length !== 1 || got.effects[0].type !== 'contrast') throw new Error('the saved filter lost its children');
+      const lib = FM.filters.makeInstance(FM.filters.all()[0].id);
+      if (lib.params.warmth !== 0 || lib.params.strength !== 1) throw new Error('CONTROL: a library filter lands with warmth ' + lib.params.warmth + ', strength ' + lib.params.strength);
+    } finally { FM.effectPresets.remove(p.id); }
+  });
+
+  test('482 15.3 pin: the Filter’s Over-drive at 0 leaves every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    b15FilterPins({ boost: 0 }, { boost: 50 });
+  });
+
+  test('482 15.3 the Filter’s Over-drive 100 % doubles what the filter does to the mid-tones (|out − A| ≈ 2 |B − A|), Strength 0.5 with Over-drive 100 % is the filter at full Strength, and it clamps rather than wraps (CONTROL: Over-drive 0 is the filter at full Strength)', { item: '482', budgetMs: 60000 }, function () {
+    const P = b15P(), W = P.width, H = P.height;
+    const kids = () => [b15Fx('temperature', { amount: 30 })];
+    const run = box => { const L = b15Plate(P); L.effects = box ? [box] : []; return b15Px([L], 0.5, P); };
+    const A = run(null), B = run(b15Box({ strength: 1 }, kids()));
+    const B0 = run(b15Box({ strength: 1, boost: 0 }, kids())), O = run(b15Box({ strength: 1, boost: 100 }, kids())), H5 = run(b15Box({ strength: 0.5, boost: 100 }, kids()));
+    if (!b15Same(B0, B)) throw new Error('CONTROL: Over-drive 0 is not the filter at full Strength (' + b15Diff(B0, B) + ')');
+    let moved = 0, n = 0, bad = 0, worst = '';
+    for (let i = 0; i < A.length; i += 4) {
+      const L = (A[i] * 0.299 + A[i + 1] * 0.587 + A[i + 2] * 0.114) / 255;
+      if (L < 0.3 || L > 0.7) continue;                                  // mid-tones: nothing near a clamp
+      for (let c = 0; c < 3; c++) {
+        const d1 = B[i + c] - A[i + c], d2 = O[i + c] - A[i + c];
+        if (Math.abs(d1) < 4) continue;
+        n++; if (Math.abs(d2) > Math.abs(d1) * 1.5) moved++;
+        if (Math.abs(d2 - 2 * d1) > 1.5) { bad++; if (!worst) worst = 'channel ' + c + ': A ' + A[i + c] + ', filter ' + B[i + c] + ', over-driven ' + O[i + c]; }
+      }
+    }
+    if (n < 50) throw new Error('CONTROL: only ' + n + ' mid-tone channels are moved by the filter - nothing to measure');
+    const fails = [];
+    if (bad > n * 0.02) fails.push(bad + ' of ' + n + ' mid-tone channels are not twice the filter’s move (' + worst + ')');
+    if (moved < n * 0.95) fails.push('only ' + moved + ' of ' + n + ' mid-tone channels moved further than the filter does');
+    let off = 0; for (let i = 0; i < H5.length; i++) if (Math.abs(H5[i] - B[i]) > 1) off++;
+    if (off) fails.push('Strength 0.5 with Over-drive 100 % is ' + off + ' bytes off the filter at full Strength');
+    // it clamps: a filter that pushes the highlights up, over-driven, sits at 255 rather than wrapping round to dark
+    const hot = run(b15Box({ strength: 1, boost: 100 }, [b15Fx('brightness', { amount: 1.6 })]));
+    const xb = W - 1, y = H >> 1, ib = (y * W + xb) * 4;
+    if (!(hot[ib] >= 250)) fails.push('an over-driven brightening left the white end at ' + hot[ib] + ' - it wrapped or clamped low');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* LEVELS (#482 15.5) is a pure pixel kernel, so its pins are hashes of its bytes on a ramp that holds every level in every
+     channel (and see-through pixels), captured on fc8866f1 and the same on any machine. */
+  function b15Ramp(W, H) { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255; d[i + 3] = (x + y) % 17 === 0 ? 0 : ((x * y) % 9 === 0 ? 128 : 255); } return d; }
+  const b15Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  const b15LvRun = (p, W, H, t) => { const d = b15Ramp(W, H); FM._applyPixelFx(d, { type: 'levels', params: b15Copy(p) }, t, W, H, 1); return d; };
+  const b15LvShots = p => [[97, 61], [160, 120]].map(([W, H]) => [0.37, 1.9].map(t => b15Hash(b15LvRun(p, W, H, t))).join('.')).join(' ');
+  const B15_LV_MASTER = ['channel', 'inblack', 'inwhite', 'gamma', 'outblack', 'outwhite'];
+  const B15_LV_NEW = {};
+  ['r', 'g', 'b'].forEach(c => { B15_LV_NEW['inblack_' + c] = 0; B15_LV_NEW['inwhite_' + c] = 255; B15_LV_NEW['gamma_' + c] = 1; B15_LV_NEW['outblack_' + c] = 0; B15_LV_NEW['outwhite_' + c] = 255; });
+  const B15_LV_CFG = {
+    'saved default': {}, 'rgb': { inblack: 30, inwhite: 210, gamma: 1.3, outblack: 8, outwhite: 245 },
+    'red': { channel: 1, inblack: 30, inwhite: 200, gamma: 1.4, outblack: 10, outwhite: 240 }, 'green': { channel: 2, inblack: 50, gamma: 0.6 },
+    'blue': { channel: 3, inwhite: 180, outblack: 20 }, 'red keyed': { channel: 1, inblack: b15Kf(0, 60), gamma: b15Kf(0.7, 1.6) },
+    'library': { inblack: 12, inwhite: 244, gamma: 0.94 },
+  };
+  const B15_LV_PIN = {   // fc8866f1
+    'saved default': 'c4b984af.c4b984af a37f38e9.a37f38e9', 'rgb': '05d90a5d.05d90a5d a34ea98b.a34ea98b', 'red': 'a4e2591a.a4e2591a 91231718.91231718',
+    'green': '1541e351.1541e351 271ae000.271ae000', 'blue': '5bb6651a.5bb6651a b7a2b374.b7a2b374', 'red keyed': '94de6fb9.eafa8598 588fbacc.c5045da1',
+    'library': 'dec4c595.dec4c595 8259c9ff.8259c9ff', 'red bare': 'e46927b4.e46927b4 f3f022fc.f3f022fc', 'blue bare': 'c88ebcab.c88ebcab ce4d4d1c.ce4d4d1c',
+  };
+
+  test('482 15.5 pin: Levels saved before the channel sets draws exactly as it did — RGB, Red, Green and Blue, keyframed, with its master keys missing, filled at render time (which gives a one-channel Levels that channel’s set), and new (sets present at identity), and the library filters that carry one', { item: '482', budgetMs: 60000 }, function () {
+    const moved = [], inst = FM.fxRegistry.makeInstance('levels').params;
+    const saved = cfg => { const p = {}; B15_LV_MASTER.forEach(k => { if (inst[k] !== undefined) p[k] = inst[k]; }); return Object.assign(p, b15Copy(cfg)); };
+    const cases = Object.keys(B15_LV_CFG).map(n => [n, saved(B15_LV_CFG[n])]).concat([['red bare', { channel: 1 }], ['blue bare', { channel: 3, gamma: 2 }]]);
+    cases.forEach(([n, p]) => {
+      const variants = [['absent', p], ['filled at render time', FM._fillFxParams({ type: 'levels', enabled: true, params: b15Copy(p) }).params]];
+      if (!p.channel) variants.push(['present at identity', Object.assign(b15Copy(p), B15_LV_NEW)]);   // a new Levels: Channel RGB
+      variants.forEach(([how, q]) => { const got = b15LvShots(q); if (got !== B15_LV_PIN[n]) moved.push(n + ' (sets ' + how + ') ' + B15_LV_PIN[n] + ' -> ' + got); });
+    });
+    // the library filters that carry a Levels: their recipe draws the same with the sets present at identity
+    FM.filters.all().forEach(f => {
+      const box = FM.filters.makeInstance(f.id);
+      (box.effects || []).filter(e => e.type === 'levels').forEach(e => {
+        const old = b15Copy(e.params); Object.keys(B15_LV_NEW).forEach(k => { delete old[k]; });
+        if (b15LvShots(old) !== b15LvShots(Object.assign(b15Copy(old), B15_LV_NEW))) moved.push('the ' + f.id + ' filter’s Levels moves with its channel sets present');
+      });
+    });
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 6).join(' · '));
+    b15Catalogue('levels', B15_LV_NEW, { inwhite_r: 200, inblack_b: 50, gamma_g: 1.7, outblack_r: 12, outwhite_b: 230 });
+  });
+
+  test('482 15.5 Levels holds all four channels at once: Red Input white 200 and Blue Input black 50 in one instance both apply, the master set still grades all three on top, Channel only chooses the set the panel shows, and a saved Red-only Levels opens on Red holding its own values with the same picture (CONTROL: identity sets change nothing)', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 40, fails = [];
+    const fresh = over => Object.assign(FM.fxRegistry.makeInstance('levels').params, { inblack: 0, inwhite: 255, gamma: 1, outblack: 0, outwhite: 255 }, over || {});
+    const src = b15Ramp(W, H);
+    const id = b15LvRun(fresh(), W, H, 0.5);
+    if (!b15Same(id, src)) throw new Error('CONTROL: a Levels with every set at identity changed the picture (' + b15Diff(id, src) + ')');
+    const lut = (inB, inW, gam, outB, outW) => v => { let n = (v - inB) / Math.max(1, inW - inB); n = n <= 0 ? 0 : (n >= 1 ? 1 : Math.pow(n, 1 / gam)); return Math.round(outB + n * (outW - outB)); };
+    const fR = lut(0, 200, 1, 0, 255), fB = lut(50, 255, 1, 0, 255), fM = lut(20, 255, 1, 0, 255);
+    const both = b15LvRun(fresh({ inwhite_r: 200, inblack_b: 50 }), W, H, 0.5);
+    let bad = 0, ex = '';
+    for (let i = 0; i < src.length; i += 4) {
+      const want = [fR(src[i]), src[i + 1], fB(src[i + 2]), src[i + 3]];
+      for (let c = 0; c < 4; c++) if (both[i + c] !== want[c]) { bad++; if (!ex) ex = 'rgba ' + Array.from(src.slice(i, i + 4)) + ' -> ' + Array.from(both.slice(i, i + 4)) + ', want ' + want; }
+    }
+    if (bad) fails.push('Red Input white 200 + Blue Input black 50: ' + bad + ' bytes wrong (' + ex + ')');
+    // the master on top of both, on all three
+    const top = b15LvRun(fresh({ inwhite_r: 200, inblack_b: 50, inblack: 20 }), W, H, 0.5);
+    bad = 0; for (let i = 0; i < src.length; i += 4) { if (top[i] !== fM(fR(src[i])) || top[i + 1] !== fM(src[i + 1]) || top[i + 2] !== fM(fB(src[i + 2]))) bad++; }
+    if (bad) fails.push('the master Input black 20 on top of the channel sets is wrong on ' + bad + ' pixels');
+    // Channel is only the selector now: switching it changes nothing in the picture
+    const sel = b15LvRun(fresh({ inwhite_r: 200, inblack_b: 50, channel: 2 }), W, H, 0.5);
+    if (!b15Same(sel, both)) fails.push('choosing Green in the panel changed the picture (' + b15Diff(sel, both) + ')');
+    // a saved Red-only Levels: same picture, and it opens on Red with its values in Red's set
+    const old = { channel: 1, inblack: 30, inwhite: 200, gamma: 1.4, outblack: 10, outwhite: 240 };
+    const before = b15LvRun(old, W, H, 0.5), fx = FM._fillFxParams({ type: 'levels', enabled: true, params: b15Copy(old) }), q = fx.params;
+    if (!(q.inblack_r === 30 && q.inwhite_r === 200 && q.gamma_r === 1.4 && q.outblack_r === 10 && q.outwhite_r === 240)) fails.push('a saved Red-only Levels does not hold its values in Red’s set (' + ['inblack_r', 'inwhite_r', 'gamma_r', 'outblack_r', 'outwhite_r'].map(k => q[k]).join(', ') + ')');
+    if (!(q.inblack === 0 && q.inwhite === 255 && q.gamma === 1 && q.outblack === 0 && q.outwhite === 255 && q.inblack_g === 0 && q.inwhite_b === 255)) fails.push('a saved Red-only Levels’ master or other channels are not identity after the move');
+    if (!b15Same(b15LvRun(q, W, H, 0.5), before)) fails.push('a saved Red-only Levels draws differently once its set has moved to Red');
+    // the panel: Channel picks which set of rows shows
+    const rows = FM.fxRegistry.paramsOf('levels'), row = k => rows.filter(r => r.key === k)[0];
+    if (!FM.fxRegistry.rowShown) fails.push('FM.fxRegistry.rowShown is missing');
+    else {
+      const on = (p, k) => FM.fxRegistry.rowShown({ type: 'levels', params: p }, row(k));
+      if (!row('inwhite_r')) fails.push('Levels has no Red Input white row');
+      else if (!(on({ channel: 1 }, 'inwhite_r') && !on({ channel: 1 }, 'inwhite') && !on({ channel: 1 }, 'inwhite_b') && on({ channel: 0 }, 'inwhite') && !on({ channel: 0 }, 'inwhite_r') && on({}, 'inwhite') && on({ channel: 3 }, 'outwhite_b'))) fails.push('the rows Channel shows are not the chosen set');
+      if (!on({ channel: 2 }, 'channel')) fails.push('the Channel row itself is hidden');
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* GAUSSIAN BLUR (#482 15.7). At its defaults it is the CSS `blur()` it always was, so the pin is the filter string itself —
+     a literal, the same on any machine — and the pictures of a saved, filled and new instance agreeing with each other. */
+  const B15_BL_NEW = { edges: 0, dims: 0, mix: 100, blend: 0 };
+  test('482 15.7 pin: a Gaussian Blur with Repeat edges, Direction, Mix and Blend at their defaults is the same CSS blur — the same filter string at plate scale 1 and 0.5, keyframed too, saved, filled and new, the same picture, and every library filter that carries one', { item: '482', budgetMs: 120000 }, function () {
+    const P = b15P(), moved = [];
+    const CFG = { 'absent radius': {}, 'radius 3': { radius: 3 }, 'radius 0': { radius: 0 }, 'keyed': { radius: b15Kf(1, 9) } };
+    Object.keys(CFG).forEach(n => [1, 0.5].forEach(rs => {
+      const r = n === 'absent radius' ? 6 : (n === 'keyed' ? 3 : CFG[n].radius);   // keyed: 1 → 9 over 2 s, at 0.5 s
+      const want = 'blur(' + (r * rs) + 'px)';                                     // effectFilter on fc8866f1
+      const saved = { type: 'blur', enabled: true, params: b15Copy(CFG[n]) };
+      const pics = [['absent', saved], ['filled at render time', FM._fillFxParams(b15Copy(saved))], ['present at the defaults', Object.assign(b15Copy(saved), { params: Object.assign(b15Copy(CFG[n]), B15_BL_NEW) })]].map(([how, fx]) => {
+        const C = b15Card(); C.effects = [fx];
+        const got = FM.effectFilter(C, 0.5, rs);
+        if (got !== want) moved.push(n + ' at plate scale ' + rs + ', new keys ' + how + ': the filter string is ' + JSON.stringify(got) + ', not ' + JSON.stringify(want));
+        return [how, b15Px([C, b15Plate(P)], 0.5, P, rs)];
+      });
+      pics.slice(1).forEach(([how, d]) => { if (!b15Same(d, pics[0][1])) moved.push(n + ' at plate scale ' + rs + ': new keys ' + how + ' draw ' + b15Diff(d, pics[0][1]) + ' off the saved blur'); });
+    }));
+    // a blur inside a filter (none of the library recipes carries one on fc8866f1; a filter he builds can), at Strength 0.5 and 1
+    [0.5, 1].forEach(s => {
+      const box = () => b15Box({ strength: s }, [{ type: 'blur', enabled: true, params: { radius: 2 } }, b15Fx('invert', { amount: 0.6 })]);
+      const La = b15Plate(P); La.effects = [box()]; const b2 = box(); Object.assign(b2.effects[0].params, B15_BL_NEW); const Lb = b15Plate(P); Lb.effects = [b2];
+      if (!b15Same(b15Px([La], 0.7, P), b15Px([Lb], 0.7, P))) moved.push('a blur inside a filter at Strength ' + s + ' draws differently with the new keys present');
+    });
+    FM.filters.all().forEach(f => {   // …and should a library filter ever carry one, it is held the same way
+      const box = FM.filters.makeInstance(f.id);
+      if (!(box.effects || []).some(e => e.type === 'blur')) return;
+      const old = b15Copy(box); old.effects.forEach(e => { if (e.type === 'blur') Object.keys(B15_BL_NEW).forEach(k => { delete e.params[k]; }); });
+      const La = b15Plate(P); La.effects = [old]; const Lb = b15Plate(P); Lb.effects = [box];
+      if (!b15Same(b15Px([La], 0.7, P), b15Px([Lb], 0.7, P))) moved.push('the ' + f.id + ' filter’s blur draws differently with the new keys present');
+    });
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 6).join(' · '));
+    b15Catalogue('blur', Object.assign({ radius: 6 }, B15_BL_NEW), { edges: 1, dims: 2, mix: 40, blend: 2 });
+  });
+
+  test('482 15.7 Gaussian Blur: Direction Horizontal keeps a horizontal line sharp vertically and smears a vertical one sideways, Repeat edges keeps the frame’s edge solid, Mix 50 sits halfway, Screen only brightens (Orton), and off its defaults it leaves the CSS filter for a pass in stack order, on a clip and on an adjustment layer (CONTROL: Both blurs the horizontal line; a plain blur is still first)', { item: '482', budgetMs: 60000 }, function () {
+    if (typeof FM._blurPlateKernel !== 'function') throw new Error('FM._blurPlateKernel is missing - there is no plate pass for a blur off its defaults');
+    const W = 40, H = 30, fails = [];
+    const field = (fill, mark) => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = mark(x, y) ? 255 : fill; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const run = (d, p) => { FM._blurPlateKernel(d, W, H, Object.assign({ radius: 3 }, p), 0.5, 1); return d; };
+    const v = (d, x, y) => d[(y * W + x) * 4], al = (d, x, y) => d[(y * W + x) * 4 + 3];
+    const hline = () => field(0, (x, y) => y === 15), vline = () => field(0, (x, y) => x === 20);
+    const hH = run(hline(), { dims: 1 }), hB = run(hline(), { dims: 0 });
+    if (!(v(hB, 20, 13) > 15)) fails.push('CONTROL: Both did not spread a horizontal line vertically (' + v(hB, 20, 13) + ')');
+    if (v(hH, 20, 13) !== 0 || v(hH, 20, 15) < 250) fails.push('Horizontal moved a horizontal line vertically (above it ' + v(hH, 20, 13) + ', on it ' + v(hH, 20, 15) + ')');
+    const vH = run(vline(), { dims: 1 }), vV = run(vline(), { dims: 2 });
+    if (!(v(vH, 18, 10) > 15)) fails.push('Horizontal did not smear a vertical line sideways (' + v(vH, 18, 10) + ')');
+    if (v(vV, 18, 10) !== 0) fails.push('Vertical smeared a vertical line sideways (' + v(vV, 18, 10) + ')');
+    // Repeat edges: a solid white frame keeps its edge; off, transparency is pulled in from past the frame, as blur() does
+    const solid = () => field(255, () => true);
+    const eOff = run(solid(), { edges: 0, dims: 0 }), eOn = run(solid(), { edges: 1 });
+    if (!(al(eOff, 0, 15) < 230)) fails.push('CONTROL: with Repeat edges off the frame edge kept alpha ' + al(eOff, 0, 15));
+    if (al(eOn, 0, 15) !== 255 || v(eOn, 0, 15) < 254) fails.push('Repeat edges left the frame edge at rgba ' + v(eOn, 0, 15) + '/' + al(eOn, 0, 15));
+    // Mix 50 sits halfway between the sharp line and the full blur
+    const m50 = run(hline(), { mix: 50, dims: 0 });
+    if (Math.abs(v(m50, 20, 13) - v(hB, 20, 13) / 2) > 2 || Math.abs(v(m50, 20, 15) - (255 + v(hB, 20, 15)) / 2) > 2) fails.push('Mix 50 is not halfway (' + v(m50, 20, 13) + ' / ' + v(m50, 20, 15) + ' against full ' + v(hB, 20, 13) + ' / ' + v(hB, 20, 15) + ')');
+    // Screen: the Orton glow — never darker than the sharp picture, brighter beside the line; Soft light is a third look
+    const grey = () => field(110, (x, y) => y === 15), g0 = grey(), sc = run(grey(), { blend: 1, radius: 4 }), sl = run(grey(), { blend: 2, radius: 4 }), nm = run(grey(), { radius: 4, mix: 100, edges: 1 });
+    let darker = 0; for (let i = 0; i < g0.length; i += 4) if (sc[i] < g0[i] - 1) darker++;
+    if (darker) fails.push('Screen made ' + darker + ' pixels darker - it may only brighten');
+    if (!(v(sc, 20, 13) > v(g0, 20, 13) + 5)) fails.push('Screen did not glow beside the line (' + v(g0, 20, 13) + ' -> ' + v(sc, 20, 13) + ')');
+    if (b15Same(sl, sc) || b15Same(sl, nm)) fails.push('Soft light draws the same as Screen or Normal');
+    // on a clip: off its defaults it is in stack order — [blur, pixelate] and [pixelate, blur] now differ (CONTROL: a plain blur is first either way)
+    const P = b15P(), order = (blurP, first) => { const L = b15Plate(P); const bl = { type: 'blur', enabled: true, params: Object.assign({ radius: 4 }, blurP) }, px = b15Fx('pixelate', { size: 6 }); L.effects = first ? [bl, px] : [px, bl]; return b15Px([L], 0.5, P); };
+    if (!b15Same(order({}, true), order({}, false))) fails.push('CONTROL: a plain blur’s place in the stack changed the picture - it should still be first');
+    if (b15Same(order({ dims: 1 }, true), order({ dims: 1 }, false))) fails.push('a Horizontal blur draws the same above and below Pixelate - it is still first, not in stack order');
+    const Lf = b15Plate(P); Lf.effects = [{ type: 'blur', enabled: true, params: { radius: 4, dims: 1 } }];
+    if (FM.effectFilter(Lf, 0.5, 1) !== 'none') fails.push('a Horizontal blur is still in the CSS filter: ' + FM.effectFilter(Lf, 0.5, 1));
+    if (!FM.blurInStackOrder || !FM.blurInStackOrder(Lf.effects[0]) || FM.blurInStackOrder({ type: 'blur', params: { radius: 4, mix: 100 } })) fails.push('FM.blurInStackOrder does not say which blur runs in stack order (the row’s note reads it)');
+    // on an adjustment layer: the frame below is smeared one way only
+    const half = () => { const L = FM.makeLayer('shape', { name: 'b15 half', shape: 'rect', x: P.width / 4, y: P.height / 2, shapeW: P.width / 2, shapeH: P.height, fill: '#ffffff', start: 0, duration: 5 }); return L; };
+    const adj = p => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = p ? [{ type: 'blur', enabled: true, params: Object.assign({ radius: 4 }, p) }] : []; return b15Px([A, half()], 0.5, P); };
+    const a0 = adj(null), aH = adj({ dims: 1 }), aV = adj({ dims: 2 }), xe = P.width / 2 + 1, ye = P.height >> 1;
+    if (!(b15At(aH, P.width, xe, ye)[0] > b15At(a0, P.width, xe, ye)[0] + 15)) fails.push('a Horizontal blur on an adjustment layer did not smear the edge below sideways (' + b15At(a0, P.width, xe, ye)[0] + ' -> ' + b15At(aH, P.width, xe, ye)[0] + ')');
+    if (Math.abs(b15At(aV, P.width, xe, ye)[0] - b15At(a0, P.width, xe, ye)[0]) > 2) fails.push('a Vertical blur on an adjustment layer smeared a vertical edge sideways');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* MATCH GRADE (#482 15.6). The pin is the OLD algorithm rebuilt from its own canvas steps: the clip and the reference drawn
+     alone on a clear frame, each measured at quarter size (the same downscale onto a willReadFrequently canvas), the transfer
+     worked out and applied to the clip's own pixels. The clip covers the frame opaquely, so that IS the frame — on any machine. */
+  const B15_MG_NEW = { sample: 0, at: 0, smooth: 0, skin: 0 };
+  function b15MgOracle(P, L0, R0, t, amount, mode, rs) {
+    const Q = Object.assign({}, P, { background: null });
+    const cA = b15Draw([L0], t, Q, rs), cR = b15Draw([R0], t, Q, rs), W = cA.width, H = cA.height;
+    const qw = Math.max(1, W >> 2), qh = Math.max(1, H >> 2);
+    const q = document.createElement('canvas'); q.width = qw; q.height = qh;
+    const qc = q.getContext('2d', { willReadFrequently: true });
+    const stats = c => {
+      qc.clearRect(0, 0, qw, qh); qc.drawImage(c, 0, 0, qw, qh);
+      const d = qc.getImageData(0, 0, qw, qh).data, s = [0, 0, 0], s2 = [0, 0, 0]; let n = 0;
+      for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 8) continue; for (let k = 0; k < 3; k++) { s[k] += d[i + k]; s2[k] += d[i + k] * d[i + k]; } n++; }
+      const mean = [0, 0, 0], sd = [0, 0, 0];
+      for (let k = 0; k < 3; k++) { mean[k] = s[k] / n; sd[k] = Math.sqrt(Math.max(0, s2[k] / n - mean[k] * mean[k])); }
+      return { mean: mean, sd: sd };
+    };
+    const A = stats(cA), R = stats(cR), gain = [1, 1, 1], off = [0, 0, 0];
+    for (let k = 0; k < 3; k++) {
+      const g = (mode === 1 || A.sd[k] < 1) ? 1 : Math.max(0.25, Math.min(4, R.sd[k] / A.sd[k])), target = mode === 2 ? A.mean[k] : R.mean[k];
+      gain[k] = 1 + (g - 1) * amount; off[k] = A.mean[k] + (target - A.mean[k]) * amount;
+    }
+    const d = cA.getContext('2d').getImageData(0, 0, W, H).data;
+    for (let i = 0; i < d.length; i += 4) { if (d[i + 3] === 0) continue; for (let k = 0; k < 3; k++) d[i + k] = off[k] + (d[i + k] - A.mean[k]) * gain[k]; }
+    return d;
+  }
+  function b15MgRef(P, keyed) {   // a reference smaller than the frame, whose colour changes over the clip when keyed (a peak at 1.5 s)
+    const R = FM.makeLayer('shape', { name: 'b15 ref', shape: 'rect', x: P.width * 0.4, y: P.height / 2, shapeW: P.width * 0.6, shapeH: P.height * 0.7, fill: '#c04a20', start: 0, duration: 5 });
+    R.fillGradient = { enabled: true, type: 'linear', angle: 90, c0: keyed ? { kf: [{ t: 0, v: '#300810', e: 'linear' }, { t: 1.5, v: '#10c0f0', e: 'linear' }, { t: 3, v: '#300810', e: 'linear' }] } : '#200808', c1: '#f0a050' };
+    return R;
+  }
+  const b15Mg = (R, over) => { const e = FM.fxRegistry.makeInstance('matchgrade'); e.params = Object.assign({ amount: 1, mode: 0 }, over || {}); e.params.source = R.id; return e; };
+
+  test('482 15.6 pin: Match Grade with Measure, Hold at, Smoothing and Protect skin at their defaults is the old live match — the old algorithm rebuilt step by step, saved, filled and new, at full amount, half, Colour only and Contrast only, at two moments and plate scale 1 and 0.5', { item: '482', budgetMs: 120000 }, function () {
+    const P = b15P(), moved = [];
+    const CFG = { full: { amount: 1, mode: 0 }, half: { amount: 0.5, mode: 0 }, colour: { amount: 1, mode: 1 }, contrast: { amount: 1, mode: 2 } };
+    Object.keys(CFG).forEach(n => [0.5, 1.7].forEach(t => [1, 0.5].forEach(rs => {
+      const R = b15MgRef(P, true);
+      const want = b15MgOracle(P, b15Plate(P), R, t, CFG[n].amount, CFG[n].mode, rs);
+      const saved = { type: 'matchgrade', enabled: true, params: Object.assign({ source: R.id }, CFG[n]) };
+      [['absent', saved], ['filled at render time', FM._fillFxParams(b15Copy(saved))], ['present at the defaults', Object.assign(b15Copy(saved), { params: Object.assign({ source: R.id }, CFG[n], B15_MG_NEW) })]].forEach(([how, fx]) => {
+        const L = b15Plate(P); L.effects = [fx];
+        const got = b15Px([L, R], t, P, rs);
+        if (!b15Same(got, want)) moved.push(n + ' at ' + t + ' s, plate scale ' + rs + ', new keys ' + how + ': ' + b15Diff(got, want) + ' off the old match');
+      });
+    })));
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 6).join(' · '));
+    b15Catalogue('matchgrade', Object.assign({ amount: 1 }, B15_MG_NEW), { sample: 1, at: 2.5, smooth: 0.8, skin: 70 });
+  });
+
+  test('482 15.6 Match Grade Hold at time grades every frame with the transfer measured at that one moment — the same picture at 1 s and 2.5 s while the reference changes, equal to Every frame at the held moment — Smoothing averages a window, an edit to the reference re-measures, and Protect skin holds a skin tone back (CONTROL: Every frame changes between 1 s and 2.5 s)', { item: '482', budgetMs: 90000 }, function () {
+    const P = b15P(), fails = [];
+    const R = b15MgRef(P, true);
+    const shot = (over, t, ref) => { const L = b15Plate(P); L.effects = [b15Mg(ref || R, over)]; return b15Px([L, ref || R], t, P); };
+    const e1 = shot({}, 1), e2 = shot({}, 2.5);
+    if (b15Same(e1, e2)) throw new Error('CONTROL: Every frame draws the same at 1 s and 2.5 s although the reference changes - this test cannot see a hold');
+    const h1 = shot({ sample: 1, at: 0.5 }, 1), h2 = shot({ sample: 1, at: 0.5 }, 2.5), e05 = shot({}, 0.5);
+    if (!b15Same(h1, h2)) fails.push('Hold at 0.5 s draws differently at 1 s and 2.5 s (' + b15Diff(h1, h2) + ') - the transfer is not held');
+    // the backlog's own words: identical gains at t = 1 and t = 2 (the transfer the frame used, FM._mgLastGains)
+    const gainsAt = (over, t) => { shot(over, t); return JSON.stringify(FM._mgLastGains); };
+    if (gainsAt({ sample: 1, at: 0.5 }, 1) !== gainsAt({ sample: 1, at: 0.5 }, 2)) fails.push('Hold at 0.5 s applies different gains at 1 s and 2 s');
+    if (gainsAt({}, 1) === gainsAt({}, 2.5)) fails.push('CONTROL: Every frame applied the same gains at 1 s and 2.5 s');
+    if (!b15Same(h1, e05)) fails.push('Hold at 0.5 s is not Every frame at 0.5 s (' + b15Diff(h1, e05) + ')');
+    // an edit to the reference is a new measurement, not the old numbers — the SAME clip, drawn again after the edit
+    const Lk = b15Plate(P), hold = ref => { Lk.effects = [b15Mg(ref, { sample: 1, at: 0.5 })]; return b15Px([Lk, ref], 2.5, P); };
+    const k1 = hold(R), k2 = hold(R);
+    if (!b15Same(k1, k2)) fails.push('CONTROL: the same held grade drawn twice differs (' + b15Diff(k1, k2) + ')');
+    const R2 = b15MgRef(P, true); R2.id = R.id; R2.fillGradient.c1 = '#40ff40';
+    if (b15Same(hold(R2), k1)) fails.push('after the reference was edited the held grade did not change - the old measurement stood in for the new picture');
+    // Smoothing: across the peak at 1.5 s the window's average is gentler than the frame's own, and it is the same every time
+    const s15 = shot({ smooth: 1 }, 1.5), e15 = shot({}, 1.5), s15b = shot({ smooth: 1 }, 1.5);
+    if (b15Same(s15, e15)) fails.push('Smoothing 1 s at the reference’s peak draws exactly Every frame - nothing was averaged');
+    if (!b15Same(s15, s15b)) fails.push('Smoothing drew differently the second time at the same moment');
+    if (!b15Same(shot({ smooth: 0 }, 1.5), e15)) fails.push('CONTROL: Smoothing 0 is not Every frame');
+    // Protect skin: a skin-tone clip graded toward a blue reference barely moves; a blue clip graded toward skin moves the same either way
+    const flat = (fill, refFill, skin) => { const L = b15Flat(P, fill), Rf = b15Flat(P, refFill); Rf.shapeW = P.width * 0.5; L.effects = [b15Mg(Rf, { skin: skin })]; return b15At(b15Px([L, Rf], 0.5, P), P.width, P.width >> 1, P.height >> 1); };
+    const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    const skin0 = [224, 160, 112], sOff = dist(flat('#e0a070', '#2050c0', 0), skin0), sOn = dist(flat('#e0a070', '#2050c0', 100), skin0);
+    if (!(sOff > 150)) fails.push('CONTROL: the match barely moved the skin tone without the guard (' + sOff + ')');
+    if (!(sOn < sOff * 0.25)) fails.push('Protect skin 100 % still moved the skin tone ' + sOn + ' of ' + sOff);
+    const blue0 = [64, 112, 208], bOff = dist(flat('#4070d0', '#e0a070', 0), blue0), bOn = dist(flat('#4070d0', '#e0a070', 100), blue0);
+    if (!(bOff > 100) || Math.abs(bOn - bOff) > 3) fails.push('Protect skin changed how far a blue clip moves (' + bOff + ' -> ' + bOn + ') - it must spare skin only');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('482 15.6 Match Grade Hold at time on a VIDEO reference measures the clip’s decoded frame at that moment, not the frame the element is showing; without decoded frames it measures the frame on screen and asks for them, and the exporter is told to decode them (CONTROL: the frame on screen and the held frame differ)', { item: '482', budgetMs: 60000 }, function () {
+    if (!FM.media || !FM.media.set || !FM.media.get) throw new Error('FM.media is not loaded');
+    const P = b15P(), fails = [];
+    const solid = c => { const cv = document.createElement('canvas'); cv.width = P.width; cv.height = P.height; const g = cv.getContext('2d'); g.fillStyle = c; g.fillRect(0, 0, P.width, P.height); return cv; };
+    const V = FM.makeLayer('video', { name: 'b15 clip', x: P.width / 2, y: P.height / 2, start: 0, duration: 5 });
+    const frames = []; for (let i = 0; i < 50; i++) frames.push(solid(i < 10 ? '#20e040' : '#3050f0'));   // 10 fps: green for the first second, then blue
+    const rec = { kind: 'video', el: solid('#f03020'), width: P.width, height: P.height, frameCache: { fps: 10, effFps: 10, count: 50, frames: frames, decoded: 50, duration: 5 } };   // the element shows red
+    const asked = [], want0 = FM.wantFrameCache, live0 = FM._fxStats.mgLive;
+    FM.wantFrameCache = id => { asked.push(id); };
+    FM.media.set(V.id, rec);
+    try {
+      const shot = (src, over, t) => { const L = b15Plate(P); L.effects = [b15Mg(src, over)]; return b15Px([L, src], t, P); };
+      const asShape = c => b15Flat(P, c);
+      const greenRef = shot(asShape('#20e040'), {}, 2), redRef = shot(asShape('#f03020'), {}, 2);
+      if (b15Same(greenRef, redRef)) throw new Error('CONTROL: matching to green and to red draws the same - this test cannot tell the frames apart');
+      const held = shot(V, { sample: 1, at: 0.5 }, 2);
+      if (!b15Same(held, greenRef)) fails.push('Hold at 0.5 s on a video reference did not measure its decoded frame at 0.5 s (green): ' + b15Diff(held, greenRef) + ' off the green match' + (b15Same(held, redRef) ? ' - it measured the frame on screen' : ''));
+      // no decoded frames: the frame on screen, a note in the stats, and a request for the frames
+      delete rec.frameCache;
+      const live = shot(V, { sample: 1, at: 0.5 }, 2);
+      if (!b15Same(live, redRef)) fails.push('without decoded frames the held match did not fall back to the frame on screen (' + b15Diff(live, redRef) + ' off red)');
+      if (asked.indexOf(V.id) < 0) fails.push('without decoded frames nothing asked for them (FM.wantFrameCache was not called)');
+      if (!(FM._fxStats.mgLive > live0)) fails.push('the fallback to the frame on screen was not counted (FM._fxStats.mgLive)');
+      // the exporter decodes the frames of every clip a held or smoothed Match Grade reads, and of no other
+      const L = b15Plate(P); L.effects = [b15Mg(V, { sample: 1, at: 0.5 })];
+      const L2 = b15Plate(P); L2.effects = [b15Mg(V, {})];
+      const need = FM.matchGradeFrameLayers ? FM.matchGradeFrameLayers({ project: P, layers: [L, V] }) : null, none = FM.matchGradeFrameLayers ? FM.matchGradeFrameLayers({ project: P, layers: [L2, V] }) : null;
+      if (!need || !need[V.id]) fails.push('FM.matchGradeFrameLayers does not name the video a held Match Grade reads - the export would measure the wrong frame');
+      else if (Object.keys(none).length) fails.push('FM.matchGradeFrameLayers names a clip that an Every-frame Match Grade reads - it would decode for nothing');
+    } finally { FM.wantFrameCache = want0; FM.media.remove(V.id); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* THE FILTERS TAB ON HIS CLIP (#482 15.4 — "draw first": the switch on the tab is held for his pick, so this proves the
+     half that does not need him — the tile itself, and the switch's state, off by default). */
+  test('482 15.4 a filter tile On my clip is the selected clip at the playhead with that filter added — its own picture, not the stock photograph — keyed by the filter, the clip and the moment; a shape, a text or a camera keeps the stock tile; the switch is off by default (CONTROL: the stock tile is a different picture)', { item: '482', budgetMs: 60000 }, async function () {
+    if (!FM.fxThumbs || !FM.fxThumbs._filterTile) throw new Error('FM.fxThumbs._filterTile is missing - a filter tile cannot be his clip');
+    const P = b15P(64, 48), saved = { scene: FM.scene, time: FM.time }, fails = [];
+    const pic = document.createElement('canvas'); pic.width = 64; pic.height = 48;
+    const pg = pic.getContext('2d'), gr = pg.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, '#10ff60'); gr.addColorStop(1, '#10d0ff'); pg.fillStyle = gr; pg.fillRect(0, 0, 64, 48);   // a vivid green-cyan: nothing like a stock photograph
+    const clip = FM.makeLayer('image', { name: 'b15 photo', x: 32, y: 24, start: 0, duration: 4 });
+    const shape = b15Flat(P, '#808080'), text = FM.makeLayer('text', { name: 'b15 word', text: 'Hi', x: 32, y: 24, start: 0, duration: 4 }), cam = FM.makeLayer('camera', { name: 'b15 cam', start: 0, duration: 4 });
+    FM.media.set(clip.id, { kind: 'image', el: pic, width: 64, height: 48 });
+    try {
+      FM.scene = { project: P, layers: [clip], selectedId: clip.id, selectedIds: [clip.id] };
+      FM.time = 1;
+      // the clip's middle through a filter, the way Add adds it — and the filter picked is the first look that moves that
+      // middle a long way AND leaves it a colour, so neither the bare clip nor a grey stock photograph can pass for it
+      const L = FM.makeLayer('image', { name: 'b15 photo', x: 32, y: 24, start: 0, duration: 4 }); L.id = clip.id;
+      const d = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+      const bare = b15At(b15Px([L], 1, P), 64, 32, 24);
+      let id = null, want = null;
+      FM.filters.all().some(f => {
+        const box = FM.filters.makeInstance(f.id), fit = box && FM.fxRegistry.fitToLayer(box, clip); if (!fit) return false;
+        L.effects = [fit]; const w = b15At(b15Px([L], 1, P), 64, 32, 24);
+        if (d(bare, w) > 30 && Math.max(w[0], w[1], w[2]) - Math.min(w[0], w[1], w[2]) > 40) { id = f.id; want = w; return true; }
+        return false;
+      });
+      if (!id) throw new Error('CONTROL: no library filter moves the clip’s middle far and keeps it a colour - nothing here can tell the tiles apart');
+      const stock = FM.fxThumbs._filterTile(id, null), mine = FM.fxThumbs._filterTile(id, clip);
+      if (stock.onClip || !stock.frame) throw new Error('CONTROL: the stock tile did not render');
+      if (!mine.onClip || !mine.frame) fails.push('the tile for his clip fell back to the stock photograph');
+      else {
+        const mid = c => b15At(c.getContext('2d').getImageData(0, 0, c.width, c.height).data, c.width, c.width >> 1, c.height >> 1);
+        if (d(mid(mine.frame), want) > 16) fails.push('the tile’s middle is rgb ' + mid(mine.frame).slice(0, 3) + ', not his clip with the filter (rgb ' + want.slice(0, 3) + ')');
+        if (!(d(mid(stock.frame), want) > 30)) fails.push('CONTROL: the stock tile’s middle is his clip’s colour too (rgb ' + mid(stock.frame).slice(0, 3) + ') - this cannot tell them apart');
+        if (mine.key.indexOf(clip.id) < 0 || mine.key.indexOf('f:' + id) !== 0) fails.push('the tile is not keyed by the filter and the clip: ' + mine.key);
+        if (mine.frames !== 1) fails.push('the tile on his clip is a ' + mine.frames + '-frame strip - a filter tile is one still, like the stock one');
+        FM.time = 2;
+        await new Promise(r => setTimeout(r, 0));   // the scene signature is held for one task (fx-thumbs sceneRev) — a scrub is a later one
+        if (FM.fxThumbs._filterTile(id, clip).key === mine.key) fails.push('the tile is keyed the same at 1 s and 2 s - a scrub would show the old moment');
+      }
+      // each on its own, on screen — so it is the TYPE that sends it to the stock photograph, not having nothing to show
+      [['a shape', shape], ['a text', text], ['a camera', cam]].forEach(([what, L]) => {
+        FM.scene = { project: P, layers: [L], selectedId: L.id, selectedIds: [L.id] };
+        if (FM.fxThumbs._filterTile(id, L).onClip) fails.push(what + ' clip got a tile of its own instead of the stock photograph');
+      });
+      if (FM.filtersOnClip) {
+        try { localStorage.removeItem('fm.flt.onclip'); } catch (e) {}
+        if (FM.filtersOnClip.get() !== false) fails.push('On my clip is on by default - the Filters tab would change before he has seen the switch');
+      } else if (FM.inspector) fails.push('FM.filtersOnClip is missing - the switch has nothing to turn on');
+    } finally { FM.scene = saved.scene; FM.time = saved.time; FM.media.remove(clip.id); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();

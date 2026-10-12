@@ -1336,7 +1336,11 @@ window.FM = window.FM || {};
      NOT greyed, unlike a mode gate: the value is still stored and draws on a browser that can, so a project made on an
      old phone still looks right on the PC. Per control, never per effect — Line height works everywhere, and a false
      warning is the same defect as a false reassurance. */
-  function markUnsupported(row, p) {
+  function markUnsupported(row, p, layer) {
+    /* …and a control this LAYER cannot carry out (#482 15.2): a Filter's Grain, Vignette and Sharpen on an adjustment layer.
+       Same pill; the registry says when and why (FM.fxRegistry.deadRowWhy). */
+    const why = FM.fxRegistry && FM.fxRegistry.deadRowWhy ? FM.fxRegistry.deadRowWhy(p, layer) : null;
+    if (why) { const pt = el('span', 'fx-dead-tag', 'does nothing here'); pt.title = why; row.appendChild(pt); return; }
     if (!p.needs || !FM.textSpacingOK) return;
     const ok = FM.textSpacingOK();
     if (!ok || ok[p.needs] !== false) return;
@@ -1812,7 +1816,7 @@ window.FM = window.FM || {};
     const deadWhy = FM.fxDeadOnLayer ? FM.fxDeadOnLayer(fx, layer, FM.time) : null;
     if (deadWhy) {
       const dt = el('span', 'fx-dead-tag', 'does nothing here'); dt.title = deadWhy; head.appendChild(dt);
-    } else if (FM.CSS_FX && FM.CSS_FX[fx.type]) {
+    } else if (FM.CSS_FX && FM.CSS_FX[fx.type] && !(FM.blurInStackOrder && FM.blurInStackOrder(fx))) {   // a Gaussian Blur off its defaults is not first any more (#482 15.7)
       const tag = el('span', 'fx-first-tag', 'always first');
       tag.title = 'Blur, brightness, contrast, saturation, hue, greyscale, sepia, invert and glow are applied together before everything else — moving them up or down does not change the picture.';
       head.appendChild(tag);
@@ -1857,7 +1861,9 @@ window.FM = window.FM || {};
       const colourRows = {};   // colour rows by key, so a colour that follows another can listen to it (#482 polish 1.2)
       const rangeRows = {};    // …and slider rows, for a slider that follows another (#482 polish 2.1)
       const gatedRows = {};    // …and every row another control can grey, so a SLIDER that greys it re-judges it live (#482 6.3 review)
+      if (fx.type === 'levels' && FM._levelsMigrate) FM._levelsMigrate(fx);   // #482 15.5: a saved one-channel Levels shows its values in that channel's set
       reg.params.forEach(p => {
+        if (FM.fxRegistry.rowShown && !FM.fxRegistry.rowShown(fx, p)) return;   // #482 15.5: only the set Levels' Channel picks
         if (p.type === 'range') {
           const row = fxScrubber(fx, p, layer, idx);
           rangeRows[p.key] = row; gatedRows[p.key] = row;
@@ -1866,7 +1872,7 @@ window.FM = window.FM || {};
           // Dim and lock a slider whose value is currently being overridden by a tick box above it,
           // and say WHICH one — a greyed control with no explanation just reads as broken.
           markOverridden(row, fx, p, reg);
-          markUnsupported(row, p);
+          markUnsupported(row, p, layer);
           body.appendChild(row);
           // A slider's NOTE (queue 904): the only way to say what a special value means — Tile Grid's Rows 0 is 'same as columns'.
           if (p.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', p.note));
@@ -1916,6 +1922,9 @@ window.FM = window.FM || {};
         const gr = gatedRows[p.key]; if (!gr) return;
         [p.overriddenBy, p.alsoGate && p.alsoGate.by].forEach(k => { const lead = k && rangeRows[k]; if (lead) lead.addEventListener('fx-range-set', () => regate(gr, fx, p, reg)); });
       });
+      /* #482 15.7: Repeat edges, Direction, Mix or Blend off their defaults take this blur out of the CSS filter that runs before
+         everything else, so where its row sits now matters — the row says so, in the note style a slider already uses. */
+      if (FM.blurInStackOrder && FM.blurInStackOrder(fx)) body.appendChild(el('div', 'fx-tog-note fx-range-note fx-blur-order', 'With these settings it runs in stack order, like the effects around it — not first.'));
       // Remove Object: dragging a box on the canvas beats nudging four % sliders (esp. on a phone)
       if (fx.type === 'touchup' && FM.touchupTool) {
         const pick = el('button', 'fx-add-btn', 'Select area on canvas');
@@ -1955,6 +1964,15 @@ window.FM = window.FM || {};
     return row;
   }
 
+  /* "ON MY CLIP" (#482 15.4). The Filters tab's tiles show every look on a stock photograph; switched on, each tile is the
+     selected clip at the playhead with that filter added (FM.fxThumbs.mountFilter's layer path; a shape or text clip keeps the
+     stock photo). The state lives here, per device, OFF by default — so until the switch is drawn and he has picked how it
+     looks (#545, the backlog's "draw first"), nothing on the tab changes. The switch only has to call set(). */
+  const FLT_ONCLIP_KEY = 'fm.flt.onclip';
+  FM.filtersOnClip = {
+    get: function () { try { return localStorage.getItem(FLT_ONCLIP_KEY) === '1'; } catch (e) { return false; } },
+    set: function (on) { try { localStorage.setItem(FLT_ONCLIP_KEY, on ? '1' : '0'); } catch (e) {} if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); },
+  };
   /* The Filters subsection (queue 113, step 5). His words: "now I want a third subsection for filters.
    * It'll work the same as the others" and "You will make a Bunch of filters and section them, so that
    * people can find stuff organised, like how the effects are organised."
@@ -2178,7 +2196,8 @@ window.FM = window.FM || {};
         const cv = el('canvas', 'flt-thumb-cv');
         th.appendChild(cv);
         row.appendChild(th);
-        if (FM.fxThumbs && FM.fxThumbs.mountFilter) FM.fxThumbs.mountFilter(cv, f.id);
+        // #482 15.4: on his clip when "On my clip" is switched on (FM.filtersOnClip) — off, exactly the stock tile it always was
+        if (FM.fxThumbs && FM.fxThumbs.mountFilter) FM.fxThumbs.mountFilter(cv, f.id, FM.filtersOnClip && FM.filtersOnClip.get() ? layer : null);
         row.appendChild(el('div', 'flt-name', f.name));
         // What it is made of, in the app's own words for those effects — so the names match what you
         // will see inside the filter once it is added, not a second vocabulary invented here.
