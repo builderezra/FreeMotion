@@ -8868,6 +8868,11 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini .cv-mini-txt,
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big > #cv-friends > #cv-fr-bar .cv-mini-txt { flex: 1; width: auto; }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor > #cv-ed-bar .ed-head { flex: none; }
+  /* THE OPEN EDITOR BLOCK HAS THE CAP Canvas and Friends have (the pair's side-by-side rules capped only those two, and only a
+     short screen capped the Editor): the render measured it 488 px tall at 1280×720 with its top 4 px above the screen. Its
+     header stays; the explanation under it scrolls (#cv-ed-body is min-height 0, overflow auto). */
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px); }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px); }
   /* SHORT SCREENS (D24 B, cv-ed-short — his phone sideways): the Editor is the pill on the cog's own row, not a grid item, so the
      templates above lose their "ed" row and the pill keeps its own place and size. With an "ed" area in the template the pill — a
      fixed box whose containing block is the dialog (v17.36's lesson) — was placed INSIDE that area, and 176 px wide. */

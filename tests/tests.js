@@ -127690,4 +127690,33 @@
       });
     }); });
   });
+
+  /* #1132, the render's open question (R-COG1 item 4): on a PC the open Editor block measured 488 px at 1280×720, its top 4 px above
+     the screen — Canvas and Friends had a cap and it had none. It keeps the 16 px margin the other blocks keep from the top, its
+     header on screen, and its explanation scrolls inside it down to the last line. */
+  test('1132 on a PC the open Editor block stays on the screen with the 16 px margin the others keep — at 1280×720 — its header in view and its explanation scrolling inside it to the last line', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      await atSize921(1280, 720, async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        try {
+          await sleep(120);
+          const cog = document.getElementById('btn-settings');
+          if (!cog || !(cog.getBoundingClientRect().width > 0)) throw new Error('setup: no PC cog at 1280×720');
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          document.getElementById('cv-ed-what').click(); await land945();
+          if (!dlg.classList.contains('cv-ed-big')) throw new Error('setup: the Editor ⤢ did not open the Editor block (' + dlg.className + ')');
+          const ed = document.getElementById('cv-editor'), r = ed.getBoundingClientRect(), kr = cog.getBoundingClientRect();
+          const up = document.body.classList.contains('cv-up');
+          if (up ? r.top < 15.5 : r.bottom > innerHeight - 15.5) throw new Error('the open Editor block runs ' + (up ? Math.round(16 - r.top) + ' px into the top margin' : Math.round(r.bottom - innerHeight + 16) + ' px into the bottom margin') + ' (' + R978(r) + ' in ' + innerWidth + '×' + innerHeight + ')');
+          if (up ? r.bottom > kr.top + 0.5 : r.top < kr.bottom - 0.5) throw new Error('the open Editor block covers the cog (' + R978(r) + ' on ' + R978(kr) + ')');
+          const bar = document.getElementById('cv-ed-bar').getBoundingClientRect();
+          if (!(bar.height >= 44) || bar.top < r.top - 0.5 || bar.top < -0.5) throw new Error('the open Editor block’s header is not in view (' + R978(bar) + ')');
+          const body = document.getElementById('cv-ed-body'), last = body.lastElementChild && body.lastElementChild.getClientRects().length ? body.lastElementChild : body.querySelector('.ed-note');
+          body.scrollTop = body.scrollHeight; await sleep(40);
+          const br = body.getBoundingClientRect(), lr = last.getBoundingClientRect();
+          if (lr.bottom > br.bottom + 1 || lr.bottom > innerHeight + 0.5) throw new Error('scrolled to its end, the explanation’s last line is still cut off (' + R978(lr) + ' in ' + R978(br) + ')');
+        } finally { FM.closeCanvasDialog(); await sleep(60); }
+      });
+    }); });
+  });
 })();
