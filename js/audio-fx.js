@@ -109,6 +109,52 @@ window.FM = window.FM || {};
     const norm = Math.tanh(k);
     return curveFrom(x => Math.tanh(k * x) / norm);
   }
+  /* ═══ DISTORTION'S TYPE (#482 polish 7.3) ═══════════════════════════════════════════════════════════════════════════
+   * One curve, tanh, was the only distortion there was. Each Type is a transfer curve over −1…1 driven by the same
+   * k = 0.35 × Drive, and `gain0` is its small-signal gain (its slope at 0) — what Auto level divides back out:
+   *   0 Soft      tanh(kx) / tanh k                      — today's curve, the very same samples (driveCurve).
+   *   1 Hard clip (1 + k)·x held at ±1                      — a flat top: brighter, harsher.
+   *   2 Tube      tanh(kx + 0.2) − tanh 0.2, scaled       — leans to one side, so it adds the even harmonics (a warmer
+   *               so its larger (negative) peak is 1        grit); a smooth curve, no kink at 0. Driven hard its top
+   *                                                         half tops out at 0.67 of the bottom.
+   *   3 Fuzz      1 − e^(−gx) above 0, −0.75·(…1.6×…) below, g = 1 + 3k — far harder, and lopsided.
+   *   4 Wavefold  sin(π/2 · (1 + k/5) · x)                 — past full scale the wave folds back on itself (up to 4
+   *               times at Drive 100): a metallic, bell-like edge rather than a clip.
+   *   5 Rectify   |tanh(kx) / tanh k|                      — every negative half flipped up: the pitch an octave up.
+   * Tube, Fuzz and Rectify are lopsided, so they also make a steady offset (DC); the build puts a 10 Hz highpass after
+   * them (DIST_DC), and only after them, so Soft stays today's graph. Every curve is 4096 points like driveCurve, and a
+   * curve is never mutated. */
+  const DIST_TYPES = [[0, 'Soft'], [1, 'Hard clip'], [2, 'Tube'], [3, 'Fuzz'], [4, 'Wavefold'], [5, 'Rectify']];
+  const DIST_DC = [false, false, true, true, false, true];
+  const TUBE_B = 0.2;
+  function distCurve(type, drive) {
+    const k = clamp(drive, 0, 100) * 0.35;
+    switch (type) {
+      case 1: return curveFrom(x => clamp((1 + k) * x, -1, 1));
+      case 2: {
+        if (k < 1e-3) return curveFrom(x => x);
+        const f = x => Math.tanh(k * x + TUBE_B) - Math.tanh(TUBE_B), n = Math.max(Math.abs(f(1)), Math.abs(f(-1)));
+        return curveFrom(x => f(x) / n);
+      }
+      case 3: {
+        const g = 1 + 3 * k, np = 1 - Math.exp(-g), nn = 1 - Math.exp(-1.6 * g);
+        return curveFrom(x => (x >= 0 ? (1 - Math.exp(-g * x)) / np : -0.75 * (1 - Math.exp(1.6 * g * x)) / nn));
+      }
+      case 4: { const g = 1 + k / 5; return curveFrom(x => Math.sin(Math.PI / 2 * g * x)); }
+      case 5: { if (k < 1e-3) return curveFrom(x => Math.abs(x)); const n = Math.tanh(k); return curveFrom(x => Math.abs(Math.tanh(k * x) / n)); }
+      default: return driveCurve(drive);
+    }
+  }
+  function distGain0(type, drive) {
+    const k = clamp(drive, 0, 100) * 0.35;
+    switch (type) {
+      case 1: return 1 + k;
+      case 2: { if (k < 1e-3) return 1; const t = Math.tanh(TUBE_B), n = Math.max(Math.abs(Math.tanh(k + TUBE_B) - t), Math.abs(Math.tanh(-k + TUBE_B) - t)); return k * (1 - t * t) / n; }
+      case 3: { const g = 1 + 3 * k; return (g / (1 - Math.exp(-g)) + 0.75 * 1.6 * g / (1 - Math.exp(-1.6 * g))) / 2; }
+      case 4: return Math.PI / 2 * (1 + k / 5);
+      default: return k < 1e-3 ? 1 : k / Math.tanh(k);   // Soft, and Rectify (the curve it flips)
+    }
+  }
   /* ═══ BITS 13–16 WERE THE DRY SOUND (queue 986, hunt C18) ═══════════════════════════════════════════════
      A WaveShaper interpolates LINEARLY between its curve points, so a staircase only survives while each step
      spans several points. At 8192 points a 13-bit step is one point wide and the staircase interpolates back
@@ -1144,33 +1190,62 @@ window.FM = window.FM || {};
   /* ---- Character ---- */
   DEFS.push({
     type: 'distortion', label: 'Distortion', category: 'char',
-    params: [P('drive', 'Drive', 0, 100, 1, 30, '', true), MIX(1)],
+    params: [
+      P('drive', 'Drive', 0, 100, 1, 30, '', true),
+      /* #482 polish 7.3 (fixes C19: at the default Drive a quiet sound came out about 20 dB louder, with nothing to trim it).
+         Type picks the curve (DIST_TYPES above); Tone takes the fizz off the top of the distorted sound (a lowpass on the
+         wet, in a bypass pair); Auto level divides the curve's own small-signal gain back out, so turning Drive up adds
+         grit without turning quiet sound up; Output trims the whole effect. Every default is today's Distortion: Soft is the
+         same curve, Tone 20000 and Output 0 dB are x·1 + y·0 and a gain of 1, Auto level Off is no node at all. */
+      CHOICE('curve', 'Type', DIST_TYPES, 0, { rebuild: true }),
+      P('tone', 'Tone', 500, 20000, 10, 20000, 'Hz', true),
+      TOGGLE('autogain', 'Auto level', 0, { rebuild: true, note: 'Keeps quiet sound at its own level as Drive goes up, so Drive changes the grit, not the volume.' }),
+      P('output', 'Output', -24, 6, 0.5, 0, 'dB', true),
+      MIX(1),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
+      const ct = staticOf(inst, 'distortion', 'curve'), autoLvl = staticOf(inst, 'distortion', 'autogain') > 0;
+      const curveOf = v => distCurve(ct, v);
       let drive = initNum(inst, 'drive', 30, 0, 100);
-      const sh = s.shaper(driveCurve(drive), '4x');
+      const sh = s.shaper(curveOf(drive), '4x');
       const shg = s.gain(1);            // the static shaper's own level, so the bank can take over
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
-      input.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
-      const bank = curveBank(s, input, wd.wet, driveCurve, 0, 100);
+      /* THE WET PATH (#482 7.3): shaper (+ the animated-drive bank) → wetSum → [10 Hz DC block: Tube, Fuzz, Rectify only]
+         → [Auto level: only when on] → Tone (bypass pair) → wet. At the defaults every stage is ×1 or x·1 + y·0, exact. */
+      const wetSum = s.gain(1);
+      input.connect(sh); sh.connect(shg); shg.connect(wetSum);
+      let tail = wetSum;
+      if (DIST_DC[ct]) { const dc = s.biquad('highpass', 10, BUTTERWORTH_DB); tail.connect(dc); tail = dc; }
+      const ag = autoLvl ? s.gain(1 / distGain0(ct, drive)) : null;
+      if (ag) { tail.connect(ag); tail = ag; }
+      const tone0 = initNum(inst, 'tone', 20000, 500, 20000);
+      const lp = s.biquad('lowpass', tone0, BUTTERWORTH_DB);
+      const tone = bypassPair(s, tail, lp, lp, tone0 < 20000);
+      tone.out.connect(wd.wet); wd.wet.connect(out);
+      const bank = curveBank(s, input, wetSum, curveOf, 0, 100);
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { output: out.gain }, xf: { output: dbToLin },
         custom: {
           drive: function (v, when, ramp) {
             v = clamp(v, 0, 100);
+            // Auto level follows Drive, keyframed or not (a real gain, so it ramps with the bank's cross-fade).
+            if (ag) { const g = 1 / distGain0(ct, v); try { ramp ? ag.gain.linearRampToValueAtTime(g, when) : ag.gain.setValueAtTime(g, when); } catch (e) {} }
             /* STATIC MUST NEVER BUILD THE BANK. `when == null` is NOT the test — the static path calls
                set(key, value, 0), so `when` is 0 and not null, and an early version of this built a
                12-shaper bank for every plain Distortion in every project. The counter added for the
                suite caught it on the first measurement. The honest question is whether the PARAM is
                animated, so ask that. */
             if (!FM.isAnimated(inst.params && inst.params.drive)) {
-              if (v !== drive) { drive = v; sh.curve = driveCurve(v); }
+              if (v !== drive) { drive = v; sh.curve = curveOf(v); }
               return;
             }
             bank.at(v, when, ramp, shg.gain);
           },
+          tone: multi([[lp.frequency, null]].concat(pairTargets(tone, v => v < 20000))),
           mix: wd.set,
         },
       });

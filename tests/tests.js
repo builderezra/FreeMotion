@@ -124634,6 +124634,16 @@
   const b7Fx = (type, p) => [{ type: type, enabled: true, params: Object.assign(FM.audioFxRegistry.makeInstance(type).params, p || {}) }];
   const b7Pd = (type, key) => (FM.audioFxRegistry.paramsOf(type) || []).filter(p => p.key === key)[0] || null;
   const b7Keys = type => (FM.audioFxRegistry.paramsOf(type) || []).map(p => p.key).join(', ');
+  /* The amplitude (dB re full scale) of the component at f Hz in y[from … from+N), at 48 kHz. N must hold a WHOLE number of
+     cycles of f, so every other harmonic of the same tone is exactly orthogonal to it: no window, no leakage (an FFT of a
+     length that is not a whole number of cycles smears a loud fundamental 40 dB up into its neighbours). */
+  function b7Amp(y, from, N, f) {
+    let re = 0, im = 0; const w = 2 * Math.PI * f / B3.SR;
+    for (let n = 0; n < N; n++) { const v = y[from + n]; re += v * Math.cos(w * n); im -= v * Math.sin(w * n); }
+    return 20 * Math.log10(Math.max(1e-15, 2 * Math.hypot(re, im) / N));
+  }
+  // The harmonics m0…m1 of f0 together, as one level in dB.
+  function b7Harm(y, from, N, f0, m0, m1) { let e = 0; for (let m = m0; m <= m1; m++) { const a = Math.pow(10, b7Amp(y, from, N, f0 * m) / 20); e += a * a; } return 10 * Math.log10(Math.max(1e-30, e)); }
 
   /* 7.1 — AN ON/OFF IS A TICK BOX. On the build before, every audio param went through afxParam as a range, so there was no
      way to offer one, and neither the Limiter's Clip at ceiling nor the Compressor's Auto makeup exists (so this fails on its
@@ -124918,6 +124928,122 @@
       if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking Square did not move the preview signature - the live chain keeps the sine');
       FM.history.undo(); await sleep(150);
       if (p.layer().audioFx[0].params.shape !== 0) throw new Error(p.where + ': one Undo after the tap leaves Shape at ' + p.layer().audioFx[0].params.shape);
+    });
+  });
+
+  /* 7.3 — DISTORTION: AUTO LEVEL, OUTPUT, TONE (fixes C19). One tanh curve, k = 0.35 x Drive, with no trim: at the default
+     Drive 30 its small-signal gain is k / tanh k = 10.5, so a -30 dBFS sine came out at -9.9 (by the curve; the backlog's
+     "about -10"). Auto level divides the chosen Type's own small-signal gain back out (distGain0): -30 dBFS stays at
+     -30.3 by the same maths, and a -60 dBFS sine (small for every Type at Drive 60) stays within 1 dB for Soft, Hard clip,
+     Tube, Fuzz and Wavefold (Rectify has no fundamental to keep). Output is a gain of exactly that many dB; Tone is a
+     Butterworth lowpass on the wet, so at 2000 Hz the 8-24 kHz fizz of a driven 440 Hz tone falls by 24 dB or more (two
+     octaves at 12 dB each). On the build before none of these keys exist (first line) and a -30 dBFS sine comes out near
+     -10. CONTROL: a Distortion saved before them is today's (one 4x tanh shaper, its curve rebuilt here point for point). */
+  test('482 7.3 Distortion - Auto level keeps quiet sound at its own level as Drive goes up, Output trims it, Tone takes the fizz off, and a saved Distortion is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const W = { curve: ['Type', 0, 5, 0, false], tone: ['Tone', 500, 20000, 20000, true], autogain: ['Auto level', 0, 1, 0, false], output: ['Output', -24, 6, 0, true] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('distortion', k), w = W[k];
+      if (!pd) throw new Error('the Distortion has no ' + w[0] + ' (its params are ' + b7Keys('distortion') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Distortion ' + k + ' is ' + JSON.stringify(pd));
+    }
+    if (b7Pd('distortion', 'curve').options.map(o => o[1]).join('|') !== 'Soft|Hard clip|Tube|Fuzz|Wavefold|Rectify') throw new Error('Type offers ' + b7Pd('distortion', 'curve').options.map(o => o[1]).join(', '));
+    const old = [{ type: 'video', audioFx: [{ type: 'distortion', enabled: true, params: { drive: 50 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.curve !== 0 || op.tone !== 20000 || op.autogain !== 0 || op.output !== 0) throw new Error('a Distortion saved before Type, Tone, Auto level and Output opens with ' + JSON.stringify(op));
+    const today = oac => { const n = 4096, kk = Math.min(100, Math.max(0, 50)) * 0.35, norm = Math.tanh(kk), c = new Float32Array(n); for (let i = 0; i < n; i++) c[i] = Math.tanh(kk * ((i / (n - 1)) * 2 - 1)) / norm; const sh = oac.createWaveShaper(); sh.curve = c; sh.oversample = '4x'; return { input: sh, output: sh }; };
+    const same = await b3SameAsToday([{ type: 'distortion', enabled: true, params: op }], today, 'a saved Distortion');
+    if (same.length) throw new Error('CONTROL: a saved Distortion is not today’s sound - ' + same.join('; '));
+    const bad = [], lvl = (y, a, b) => b3Db(b3Rms(y, a || 0.5, b || 1));
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const s30 = b3Sine(Math.pow(10, -30 / 20)), base = lvl(Float32Array.from({ length: B3.SR }, (_, i) => s30(i / B3.SR)));
+      const off = lvl(await b3Render(b7Fx('distortion', { drive: 30 }), s30, 1, { live: live })) - base, on = lvl(await b3Render(b7Fx('distortion', { drive: 30, autogain: 1 }), s30, 1, { live: live })) - base;
+      if (!(off > 15)) bad.push('CONTROL: Drive 30 lifts a -30 dBFS sine by only ' + off.toFixed(1) + ' dB without Auto level (' + path + ')');
+      if (Math.abs(on) > 2) bad.push('with Auto level Drive 30 moves a -30 dBFS sine by ' + on.toFixed(2) + ' dB (' + path + ')');
+    }
+    const s60 = b3Sine(Math.pow(10, -60 / 20)), b60 = lvl(Float32Array.from({ length: B3.SR }, (_, i) => s60(i / B3.SR)));
+    for (const ct of [0, 1, 2, 3, 4]) {
+      const name = b7Pd('distortion', 'curve').options[ct][1];
+      const off = lvl(await b3Render(b7Fx('distortion', { drive: 60, curve: ct }), s60, 1)) - b60, on = lvl(await b3Render(b7Fx('distortion', { drive: 60, curve: ct, autogain: 1 }), s60, 1)) - b60;
+      if (!(off > 12)) bad.push('CONTROL: ' + name + ' at Drive 60 lifts a -60 dBFS sine by only ' + off.toFixed(1) + ' dB');
+      if (Math.abs(on) > 1) bad.push(name + ' with Auto level at Drive 60 moves a -60 dBFS sine by ' + on.toFixed(2) + ' dB');
+    }
+    const s5 = b3Sine(0.5, 440);
+    for (const live of [false, true]) {
+      const o0 = lvl(await b3Render(b7Fx('distortion', {}), s5, 1, { live: live })), o6 = lvl(await b3Render(b7Fx('distortion', { output: -6 }), s5, 1, { live: live }));
+      if (Math.abs(o6 - o0 + 6) > 0.05) bad.push('Output -6 dB moves the Distortion by ' + (o6 - o0).toFixed(3) + ' dB (' + (live ? 'preview' : 'export') + ')');
+    }
+    const okf = await b3Render(b7Fx('distortion', { output: { kf: [{ t: 0, v: 0 }, { t: 1, v: -12 }, { t: 2, v: -12 }] } }), s5, 2), oflat = await b3Render(b7Fx('distortion', {}), s5, 2);
+    if (Math.abs(lvl(okf, 1.4, 1.9) - lvl(oflat, 1.4, 1.9) + 12) > 0.2) bad.push('Output keyframed 0 -> -12 dB ends ' + (lvl(okf, 1.4, 1.9) - lvl(oflat, 1.4, 1.9)).toFixed(2) + ' dB from Output 0');
+    const s3 = b3Sine(0.3, 400), top = y => b7Harm(y, 24000, 24000, 400, 20, 59);   // the 8-24 kHz harmonics of a 400 Hz tone
+    const bright = await b3Render(b7Fx('distortion', {}), s3, 1), dark = await b3Render(b7Fx('distortion', { tone: 2000 }), s3, 1);
+    if (!(top(bright) - top(dark) >= 15)) bad.push('Tone 2000 takes only ' + (top(bright) - top(dark)).toFixed(1) + ' dB off the 8-24 kHz fizz');
+    const tx = await b3Render(b7Fx('distortion', { tone: 2500 }), s3, 1), tp = await b3Render(b7Fx('distortion', { tone: 2500 }), s3, 1, { live: true });
+    let tw = 0; for (let i = 0; i < tx.length; i++) tw = Math.max(tw, Math.abs(tx[i] - tp[i]));
+    if (tw > 1e-6) bad.push('with Tone 2500 the preview is up to ' + tw.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Distortion: ' + bad.join('; '));
+  });
+
+  /* 7.3 — EACH TYPE IS ITS OWN CURVE (worked out from the curves in js/audio-fx.js, measured on them in node — the engine's
+     4x oversampling only adds odd-harmonic aliases at whole multiples of 200 Hz, so even bins stay clean). On a 0.8 sine at
+     200 Hz, Drive 30: Soft's 2nd harmonic is nothing (symmetric curve), Tube's -32.6 dB and Fuzz's -38.8 under the
+     fundamental (lopsided curves); Rectify has no fundamental at all and lives on the octave. At Drive 5, Hard clip sits within
+     10 % of full scale for 73 % of the cycle, Soft for 31 %. At Drive 100 Wavefold puts more into 1-4 kHz than into its
+     fundamental (fold after fold), Soft 10 dB less. On the build before every Type is Soft. */
+  test('482 7.3 Distortion - each Type is its own sound: Hard clip flattens, Tube and Fuzz add the even harmonics Soft has none of, Rectify plays the octave, Wavefold folds', { item: '482', budgetMs: 120000 }, async function () {
+    if (!b7Pd('distortion', 'curve')) throw new Error('the Distortion has no Type (its params are ' + b7Keys('distortion') + ')');
+    const at = 24000, N = 24000, sin200 = b3Sine(0.8, 200);   // N = 100 whole cycles of 200 Hz: every harmonic is its own exact bin
+    const spec = async (ct, drive) => { const y = await b3Render(b7Fx('distortion', { curve: ct, drive: drive }), sin200, 1); return { f: b7Amp(y, at, N, 200), h2: b7Amp(y, at, N, 400), hi: b7Harm(y, at, N, 200, 5, 20), y: y }; };
+    const bad = [], soft = await spec(0, 30);
+    if (!(soft.h2 - soft.f < -60)) throw new Error('CONTROL: Soft’s 2nd harmonic is only ' + (soft.h2 - soft.f).toFixed(1) + ' dB under its fundamental - a symmetric curve has none, so the measure is broken');
+    for (const [ct, name] of [[2, 'Tube'], [3, 'Fuzz']]) {
+      const s = await spec(ct, 30);
+      if (!(s.h2 - s.f > -45 && s.h2 - soft.h2 > 25)) bad.push(name + '’s 2nd harmonic sits ' + (s.h2 - s.f).toFixed(1) + ' dB under its fundamental (Soft: ' + (soft.h2 - soft.f).toFixed(1) + ') - it does not lean to one side');
+    }
+    const rect = await spec(5, 30);
+    if (!(rect.h2 - rect.f > 20)) bad.push('Rectify puts its octave only ' + (rect.h2 - rect.f).toFixed(1) + ' dB over the fundamental');
+    let mean = 0; for (let i = at; i < at + 24000; i++) mean += rect.y[i]; mean /= 24000;
+    if (Math.abs(mean) > 0.01) bad.push('Rectify leaves a steady offset of ' + mean.toFixed(4) + ' - the DC block is missing');
+    const flat = async ct => { const y = (await spec(ct, 5)).y; let n = 0; for (let i = at; i < at + 24000; i++) if (Math.abs(y[i]) >= 0.9) n++; return n / 24000; };
+    const fs = await flat(0), fh = await flat(1);
+    if (!(fs <= 0.45)) throw new Error('CONTROL: Soft at Drive 5 sits near full scale for ' + (fs * 100).toFixed(0) + ' % of the cycle');
+    if (!(fh >= 0.55)) bad.push('Hard clip at Drive 5 sits near full scale for only ' + (fh * 100).toFixed(0) + ' % of the cycle (Soft ' + (fs * 100).toFixed(0) + ' %) - it does not flatten the top');
+    const s100 = await spec(0, 100), w100 = await spec(4, 100);
+    if (!(s100.hi < s100.f)) throw new Error('CONTROL: Soft at Drive 100 puts more into 1-4 kHz than its fundamental');
+    if (!(w100.hi > w100.f)) bad.push('Wavefold at Drive 100 puts ' + (w100.hi - w100.f).toFixed(1) + ' dB into 1-4 kHz against its fundamental - it does not fold');
+    if (bad.length) throw new Error('Distortion Type: ' + bad.join('; '));
+  });
+
+  /* 7.3 — ON SCREEN. Type is six buttons (Soft lit on a new Distortion), Auto level a tick box, Tone and Output sliders at
+     20000Hz and 0.0dB, all inside the panel at both widths; a tap on Rectify writes 5 in one undo step and moves the preview
+     signature (a rebuild). On the build before the open Distortion shows only Drive and Mix. */
+  test('482 7.3 Distortion panel - Type is six buttons, Auto level a tick box, Tone and Output sliders, all inside the panel at 390 and 1280 px, and a Type tap rebuilds the preview', { item: '482', budgetMs: 120000 }, async function () {
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('distortion')], 0, async p => {
+      const row = p.seg('Type');
+      if (!row) throw new Error(p.where + ': the open Distortion has no Type buttons');
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      if (btns.map(b => b.textContent).join('|') !== 'Soft|Hard clip|Tube|Fuzz|Wavefold|Rectify') throw new Error(p.where + ': Type offers ' + btns.map(b => b.textContent).join(', '));
+      if (!btns[0].classList.contains('on')) throw new Error(p.where + ': a new Distortion does not light Soft');
+      for (const b of btns) await p.fits(b, 'the Type button ' + b.textContent);
+      const ag = p.tog('Auto level');
+      if (!ag) throw new Error(p.where + ': no Auto level tick box');
+      if (ag.classList.contains('on')) throw new Error(p.where + ': Auto level starts ticked');
+      await p.fits(ag, 'the Auto level tick box');
+      for (const [label, want] of [['Tone', '20000Hz'], ['Output', '0.0dB']]) {
+        const r = p.slider(label);
+        if (!r) throw new Error(p.where + ': no ' + label + ' slider');
+        await p.fits(r, 'the ' + label + ' row');
+        const v = r.querySelector('.fx-scrub-val');
+        if (!v || v.value !== want) throw new Error(p.where + ': a new Distortion ' + label + ' reads ' + (v && v.value) + ', not ' + want);
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      FM.history.commit();
+      attached(btns[5], 'the Rectify button').click(); await sleep(150);
+      if (p.layer().audioFx[0].params.curve !== 5) throw new Error(p.where + ': a tap on Rectify left Type at ' + p.layer().audioFx[0].params.curve);
+      if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking Rectify did not move the preview signature');
+      FM.history.undo(); await sleep(150);
+      if (p.layer().audioFx[0].params.curve !== 0) throw new Error(p.where + ': one Undo leaves Type at ' + p.layer().audioFx[0].params.curve);
     });
   });
 })();
