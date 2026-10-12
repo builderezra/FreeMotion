@@ -171,7 +171,7 @@ window.FM = window.FM || {};
       if (e.detail >= 2 && lastPress && lastPress.fill !== fills && lastPress.key !== key) return;
       if (e.detail >= 1) lastPress = { key: key, fill: fills };
       if (b.getAttribute('aria-disabled') === 'true') { if (t.why && FM.spine) FM.spine.say(t.why); return; }
-      closeMenu(); t.run(b);
+      closeMenu(); t.run(b, e);
     });
     return b;
   }
@@ -221,7 +221,7 @@ window.FM = window.FM || {};
     const del = { id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (R.isMain(id)) S.cmd.del(id); else if (FM.deleteLayer) FM.deleteLayer(id); } };
     const stayOn = !!(l.sm && l.sm.stay);
     const stay = { id: 'stay', label: w.stay || 'Stay put', icon: 'pin', pressed: stayOn, run: () => S.cmd.stay(id, !stayOn) };
-    const more = { id: 'more', label: w.more || 'More', icon: 'more', title: w.moreTitle, run: () => FM.simpleTools.openPanel(id) };
+    const more = { id: 'more', label: w.more || 'More', icon: 'more', title: w.moreTitle, run: (b, e) => FM.simpleTools.togglePanel(id, e) };
     const crop = { id: 'crop', label: w.crop || 'Crop', icon: 'crop', run: () => { if (FM.cropTool && FM.cropTool.start) FM.cropTool.start(id); } };
     /* 2.3: the sound and speed tools. A video has all of them; a picture has only Replace; a sound has Volume, Fade and Speed. */
     const isVid = l.type === 'video' && !l.audioOnly && !(l.sm && l.sm.snd === true);
@@ -524,6 +524,14 @@ window.FM = window.FM || {};
     /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
     openPanel(id) { panelFor = id; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },   // a closed sheet comes back (finding 20)
     closePanel() { if (!panelFor) return; panelFor = null; lastSig = ''; FM.refreshAll(); },
+    /* More pressed again closes what it opened (first-user audit item 4: only a tap on empty timeline did). It is up when the
+       phone's sheet is open on this item (a grab-bar close leaves panelFor set, and More then raises it again, finding 20) or
+       the PC band shows it. The second click of a double click never closes it, so a double tap does not open and shut it. */
+    togglePanel(id, e) {
+      const sheet = document.getElementById('inspector-panel'), phone = FM.mobile && FM.mobile.isPhone ? FM.mobile.isPhone() : false;
+      if (!(panelFor === id && (!phone || (sheet && sheet.classList.contains('open'))))) return this.openPanel(id);
+      if (!(e && e.detail >= 2)) this.closePanel();
+    },
     openLength(id) { lengthFor = id; lengthEdge = 'end'; lastSig = ''; this.sync(); },
     openRow(kind, id, from) { if (!ROWS[kind]) return; rowFor = { kind: kind, id: id, from: from || null }; lastSig = ''; this.sync(); },   // 2.3: Speed, Volume, Fade; S9: Audio (and `from` = the row Done returns to)
     rowFor: () => rowFor,
