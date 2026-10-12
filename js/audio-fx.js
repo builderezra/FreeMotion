@@ -463,6 +463,11 @@ window.FM = window.FM || {};
      are the factors `multi` schedules onto the taps, and how many trips round each effect keeps (see Flanger and
      Phaser for what the rest of the tail is worth). */
   const FLANGE_TAPS = 16, PHASE_PASSES = 6;
+  /* Chorus Feedback (#482 7.8), unrolled the same way: 8 passes, so at its 0.6 maximum what is left out is 0.6^8 (1.7 %,
+     −35 dB). */
+  const CHORUS_TAPS = 8;
+  // Whether a Chorus builds its stereo Spread path: Spread in use at all — above 0, or keyframed (#482 7.8, rebuildIf).
+  function chorusSpreadOn(raw) { return (FM.isAnimated(raw) || (typeof raw === 'number' && raw > 0)) ? 1 : 0; }
   function powOf(k) { return function (v) { return Math.pow(v, k); }; }
 
   // A param's value at scene time t, guarded at every step: a missing/NaN/animated-object read falls back
@@ -1434,27 +1439,82 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'chorus', label: 'Chorus', category: 'char',
-    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.8, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.5, '', true), SHAPE(), MIX(0.5)],
+    params: [
+      P('rate', 'Rate', 0.05, 5, 0.01, 0.8, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.5, '', true), SHAPE(),
+      /* #482 polish 7.8. Voices is how many detuned copies sing together (1–6; 3 is today's three); Spread places them
+         across the speakers — the first hard left, the last hard right at 1, the rest between — where today all three sit in
+         the middle; Feedback sends each copy round again, a thicker, more metallic chorus. Feedback is a loop UNROLLED into
+         CHORUS_TAPS swept delays (the Flanger's C16 lesson: a real loop comes back a render quantum late). Defaults are
+         today's Chorus: Voices 3 builds the same three lines, Feedback 0 is a bypass pair on today's sum, and Spread 0 builds
+         no stereo path at all — Spread is a rebuild across the line between 0 and in use (rebuildIf), because the spread
+         path is stereo, and a mono Chorus turning stereo would change how an effect after it (a Pan) treats the sound. */
+      Object.assign(P('voices', 'Voices', 1, 6, 1, 3, '', false), { rebuild: true }),
+      Object.assign(P('spread', 'Spread', 0, 1, 0.01, 0, '', true), { rebuild: true, rebuildIf: chorusSpreadOn }),
+      P('feedback', 'Feedback', 0, 0.6, 0.01, 0, '', true),
+      MIX(0.5),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx), wave = waveOf(inst, 'chorus');
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.5);
       input.connect(wd.dry).connect(out);
-      const sum = s.gain(1 / 3);
-      const rates = [1, 1.31, 0.77], bases = [0.015, 0.021, 0.027];
-      const rateT = [], depthT = [];
-      for (let i = 0; i < 3; i++) {
+      const N = Math.round(staticOf(inst, 'chorus', 'voices')), spreadOn = chorusSpreadOn(inst.params && inst.params.spread);
+      const sum = s.gain(1 / N);
+      // The first three are today's voices, in today's order; three more for Voices 4–6.
+      const rates = [1, 1.31, 0.77, 1.13, 0.89, 1.21], bases = [0.015, 0.021, 0.027, 0.018, 0.024, 0.030];
+      const fb0 = initNum(inst, 'feedback', 0, 0, 0.6), sp0 = initNum(inst, 'spread', 0, 0, 1);
+      const rateT = [], depthT = [], tapT = [], spreadT = [];
+      const fbSum = s.gain(1 / N);          // every voice's feedback echoes (Spread off)
+      const ssum = spreadOn ? s.gain(1) : null;
+      for (let i = 0; i < N; i++) {
         const d = s.delay(0.08);
         d.delayTime.value = bases[i];   // ±4 ms of sweep never pushes these centres negative
         const lfo = s.lfo(0.8 * rates[i], { key: 'rate', mul: rates[i], wave: wave });
         const amp = s.gain(0.5 * 0.004);
         lfo.connect(amp); amp.connect(d.delayTime);
-        input.connect(d); d.connect(sum);
+        input.connect(d);
         rateT.push([lfo.playbackRate, rates[i]]);
         depthT.push([amp.gain, 0.004]);
+        // This voice's echoes: CHORUS_TAPS − 1 more passes through the same swept line, the k-th weighted Feedback^k.
+        let vo = null;
+        if (spreadOn) {
+          vo = s.gain(1 / N);
+          d.connect(vo);
+          // Where this voice sits: −1 (left) … +1 (right) by its place in the list, times Spread. A balance, not a pan law:
+          // the side it leans to keeps full level and the other side falls away, so a voice in the middle is untouched.
+          const pos = N > 1 ? -1 + 2 * i / (N - 1) : 0;
+          const up = s.gain(1);
+          up.channelCount = 2; up.channelCountMode = 'explicit'; up.channelInterpretation = 'speakers';
+          const split = s.splitter(2), merge = s.merger(2);
+          const gL = s.gain(Math.min(1, 1 - sp0 * pos)), gR = s.gain(Math.min(1, 1 + sp0 * pos));
+          vo.connect(up); up.connect(split); split.connect(gL, 0); split.connect(gR, 1);
+          gL.connect(merge, 0, 0); gR.connect(merge, 0, 1); merge.connect(ssum);
+          spreadT.push([gL.gain, v => Math.min(1, 1 - v * pos)], [gR.gain, v => Math.min(1, 1 + v * pos)]);
+        } else d.connect(sum);
+        let prev = d;
+        for (let k = 1; k < CHORUS_TAPS; k++) {
+          const dk = s.delay(0.08); dk.delayTime.value = bases[i];
+          amp.connect(dk.delayTime);
+          prev.connect(dk); prev = dk;
+          const g = s.gain(Math.pow(fb0, k));
+          dk.connect(g); g.connect(vo || fbSum);
+          tapT.push([g.gain, powOf(k)]);
+        }
       }
-      sum.connect(wd.wet); wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, custom: { rate: multi(rateT), depth: multi(depthT), mix: wd.set } });
+      if (spreadOn) ssum.connect(wd.wet);
+      else {
+        // FEEDBACK OFF IS TODAY'S SUM, EXACTLY: [sum] against [sum + echoes] in a bypass pair (x·1 + y·0 = x), so the sum
+        // keeps exactly today's three inputs.
+        const all = s.gain(1);
+        sum.connect(all); fbSum.connect(all);
+        const fbOn = s.gain(fb0 > 0 ? 1 : 0), fbOff = s.gain(fb0 > 0 ? 0 : 1), psum = s.gain(1);
+        sum.connect(fbOff); fbOff.connect(psum); all.connect(fbOn); fbOn.connect(psum);
+        psum.connect(wd.wet);
+        tapT.push.apply(tapT, pairTargets({ gOn: fbOn, gOff: fbOff }, v => v > 0));
+      }
+      wd.wet.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        custom: { rate: multi(rateT), depth: multi(depthT), feedback: multi(tapT), spread: multi(spreadT), mix: wd.set } });
     },
   }, {
     type: 'flanger', label: 'Flanger', category: 'char',
@@ -1966,7 +2026,13 @@ window.FM = window.FM || {};
       const d = inst && REG[inst.type];
       if (!d) return '';
       let s = '';
-      for (let i = 0; i < d.params.length; i++) { const p = d.params[i]; if (p.rebuild) s += ':' + p.key + '=' + valueAt(inst, p, 0); }
+      /* `rebuildIf` (#482 7.8, Chorus Spread): a keyframable control that only changes the graph across one line — being off
+         or being in use at all — maps its STORED value (a number or keyframes) to what the build branches on, so a drag
+         that stays on one side of the line never rebuilds. */
+      for (let i = 0; i < d.params.length; i++) {
+        const p = d.params[i];
+        if (p.rebuild) s += ':' + p.key + '=' + (p.rebuildIf ? p.rebuildIf(inst.params ? inst.params[p.key] : undefined) : valueAt(inst, p, 0));
+      }
       return s;
     },
   };

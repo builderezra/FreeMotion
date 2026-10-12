@@ -124888,10 +124888,13 @@
     const bad = [];
     for (const type of ['autopan', 'vibrato', 'chorus', 'flanger', 'phaser']) {
       if (!b7Pd(type, 'shape')) { bad.push(type + ' has no Shape (its params are ' + b7Keys(type) + ')'); continue; }
+      /* Saved against Sine to 1e-6, not by hash: Chorus, Flanger and Phaser sum 3, 16 and 6 lines into one node, and the
+         order an engine adds a node's inputs in is its own (two builds of the same graph may round the last bit apart). */
       const old = [{ type: type, enabled: true, params: {} }];
-      const h0 = hash482c(await afx482c(old, 'noise', 1, { chans: 2 })), hs = hash482c(await afx482c(b7Fx(type, { shape: 0 }), 'noise', 1, { chans: 2 }));
+      const r0 = await afx482c(old, 'noise', 1, { chans: 2 }), rs = await afx482c(b7Fx(type, { shape: 0 }), 'noise', 1, { chans: 2 });
       const ref = await afx482c(b7Fx(type, { shape: 0, depth: 1 }), 'noise', 1, { chans: 2 }), sq = await afx482c(b7Fx(type, { shape: 2, depth: 1 }), 'noise', 1, { chans: 2 });
-      if (h0 !== hs) bad.push('a ' + type + ' saved before Shape existed renders ' + h0 + ', Shape Sine ' + hs);
+      let s0 = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < r0[c].length; i++) s0 = Math.max(s0, Math.abs(r0[c][i] - rs[c][i]));
+      if (s0 > 1e-6) bad.push('a ' + type + ' saved before Shape existed renders up to ' + s0.toExponential(2) + ' away from Shape Sine');
       let d = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ref[c].length; i++) d = Math.max(d, Math.abs(ref[c][i] - sq[c][i]));
       if (!(d > 1e-3)) bad.push(type + ' sounds the same with Shape Square as with Sine (differ by ' + d.toExponential(2) + ')');
     }
@@ -125224,8 +125227,10 @@
     FM.storage._sanitizeLayers(old);
     const op = old[0].audioFx[0].params;
     if (op.stages !== 4 || op.centre !== 1 || op.mix !== 0.5 || op.stereo !== 0) throw new Error('a Phaser saved before these controls opens with ' + JSON.stringify(op));
-    const hs = hash482c(await afx482c([{ type: 'phaser', enabled: true, params: { rate: 0.5, depth: 0.7, feedback: 0.4 } }], 'noise', 1, { chans: 2 })), hn = hash482c(await afx482c(b7Fx('phaser'), 'noise', 1, { chans: 2 }));
-    if (hs !== hn) throw new Error('CONTROL: a saved Phaser renders ' + hs + ' and a new one ' + hn);
+    // to 1e-6, not by hash: six passes summed into one node are added in the engine's own order (see the 7.2 test)
+    const ra = await afx482c([{ type: 'phaser', enabled: true, params: { rate: 0.5, depth: 0.7, feedback: 0.4 } }], 'noise', 1, { chans: 2 }), rb = await afx482c(b7Fx('phaser'), 'noise', 1, { chans: 2 });
+    let sv = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ra[c].length; i++) sv = Math.max(sv, Math.abs(ra[c][i] - rb[c][i]));
+    if (sv > 1e-6) throw new Error('CONTROL: a saved Phaser is up to ' + sv.toExponential(2) + ' from a new one');
     const freqs = []; for (let f = 40; f <= 16000; f *= 1.01) freqs.push(f);
     const resp = async p => {
       const y = await afx986(b7Fx('phaser', Object.assign({ depth: 0, feedback: 0 }, p)), t => (Math.round(t * 48000) === 0 ? 1 : 0), 0.5);
@@ -125291,5 +125296,73 @@
       if (!(up > 1350 && down < 650)) bad.push('at Sweep rate 1 Hz and depth 1 the carrier runs at ' + up.toFixed(0) + ' Hz around 0.25 s and ' + down.toFixed(0) + ' around 0.75 - want about 1500 and 500 (' + path + ')');
     }
     if (bad.length) throw new Error('Ring Mod: ' + bad.join('; '));
+  });
+
+  /* 7.8 — CHORUS: SPREAD, VOICES, FEEDBACK. Read on a click at Depth 0, where every voice is a still delay: the three voices
+     answer at 15 / 21 / 27 ms (whole samples at 48 kHz), each 1/N of the wet times Mix 0.5 — 1/6 at three. Spread 1 sends
+     the first hard left and the last hard right, the middle one to both (the backlog: L differs from R on a mono clip, today
+     they are the same); at Spread 0 a mono clip's left and right are the same samples. Voices 1 answers once, at 15 ms with
+     the whole 0.5; Voices 6 six times (15, 21, 27, 18, 24, 30 ms), each 1/12. Feedback 0.5 sends each voice round again:
+     the first comes back at 30 ms at half its answer (1/12) and at 45 ms at a quarter (1/24) — no other voice lands there.
+     Each answer is summed over +-4 samples. On the build before none of these keys exist (first line). CONTROL: a saved
+     Chorus renders what a new one does (to 1e-6 — three voices summed is the engine's own order, not bit-promised). */
+  test('482 7.8 Chorus - Spread places the voices across the speakers, Voices sets how many sing, Feedback sends them round again, and a saved Chorus is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const W = { voices: ['Voices', 1, 6, 3, false], spread: ['Spread', 0, 1, 0, true], feedback: ['Feedback', 0, 0.6, 0, true] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('chorus', k), w = W[k];
+      if (!pd) throw new Error('the Chorus has no ' + w[0] + ' (its params are ' + b7Keys('chorus') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Chorus ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'chorus', enabled: true, params: { rate: 0.8, depth: 0.5, mix: 0.5 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.voices !== 3 || op.spread !== 0 || op.feedback !== 0) throw new Error('a Chorus saved before these controls opens with ' + JSON.stringify(op));
+    const a = await afx482c([{ type: 'chorus', enabled: true, params: { rate: 0.8, depth: 0.5, mix: 0.5 } }], 'noise', 1, { chans: 2 }), b = await afx482c(b7Fx('chorus'), 'noise', 1, { chans: 2 });
+    let sd = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < a[c].length; i++) sd = Math.max(sd, Math.abs(a[c][i] - b[c][i]));
+    if (sd > 1e-6) throw new Error('CONTROL: a saved Chorus is up to ' + sd.toExponential(2) + ' from a new one');
+    const click = (t, i) => (i === 0 ? 1 : 0);
+    const at = (y, ms) => { const c = Math.round(ms * 48); let s = 0; for (let i = c - 4; i <= c + 4; i++) s += Math.abs(y[i] || 0); return s; };
+    const near = (got, want) => Math.abs(got - want) <= Math.max(0.005, 0.05 * want);
+    const run = p => afx482c(b7Fx('chorus', Object.assign({ depth: 0 }, p)), click, 0.1, { chans: 1 });
+    const bad = [];
+    const [L0, R0] = await run({});
+    if (!near(at(L0, 15), 1 / 6) || !near(at(L0, 21), 1 / 6) || !near(at(L0, 27), 1 / 6)) throw new Error('CONTROL: today’s Chorus answers a click with ' + [15, 21, 27].map(ms => at(L0, ms).toFixed(4)).join(' / ') + ' at 15 / 21 / 27 ms, not 1/6 each - the probe is broken');
+    let lr = 0; for (let i = 0; i < L0.length; i++) lr = Math.max(lr, Math.abs(L0[i] - R0[i]));
+    if (lr !== 0) bad.push('at Spread 0 a mono clip comes out with left and right up to ' + lr.toExponential(2) + ' apart');
+    for (const live of [false, true]) {
+      const [L, R] = await afx482c(b7Fx('chorus', { depth: 0, spread: 1 }), click, 0.1, { chans: 1, live: live });
+      const got = [at(L, 15), at(R, 15), at(L, 21), at(R, 21), at(L, 27), at(R, 27)], want = [1 / 6, 0, 1 / 6, 1 / 6, 0, 1 / 6];
+      if (got.some((g, i) => !near(g, want[i]))) bad.push('at Spread 1 the voices answer (L/R) ' + got.map(g => g.toFixed(4)).join(' ') + ' at 15 / 21 / 27 ms - want the first left only, the middle both, the last right only (' + (live ? 'preview' : 'export') + ')');
+    }
+    const [V1] = await run({ voices: 1 });
+    if (!near(at(V1, 15), 0.5) || at(V1, 21) > 0.005 || at(V1, 27) > 0.005) bad.push('Voices 1 answers ' + [15, 21, 27].map(ms => at(V1, ms).toFixed(4)).join(' / ') + ' at 15 / 21 / 27 ms - want 0.5 at 15 alone');
+    const [V6] = await run({ voices: 6 });
+    const v6 = [15, 21, 27, 18, 24, 30].map(ms => at(V6, ms));
+    if (v6.some(g => !near(g, 1 / 12))) bad.push('Voices 6 answers ' + v6.map(g => g.toFixed(4)).join(' / ') + ' at 15 / 21 / 27 / 18 / 24 / 30 ms - want 1/12 each');
+    const [F0] = await run({}), [F5] = await run({ feedback: 0.5 });
+    if (at(F0, 30) > 1e-6 || at(F0, 45) > 1e-6) throw new Error('CONTROL: at Feedback 0 something answers at 30 or 45 ms (' + at(F0, 30).toExponential(2) + ', ' + at(F0, 45).toExponential(2) + ')');
+    if (!near(at(F5, 30), 1 / 12) || !near(at(F5, 45), 1 / 24)) bad.push('Feedback 0.5 brings the first voice back with ' + at(F5, 30).toFixed(4) + ' at 30 ms and ' + at(F5, 45).toFixed(4) + ' at 45 - want 1/12 and 1/24');
+    const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('chorus', p); return FM.audioFxLive.signatureOf(l); };
+    if (sig({ voices: 3 }) === sig({ voices: 4 })) bad.push('Voices 3 and 4 sign the same - the preview would not rebuild');
+    if (sig({ spread: 0 }) === sig({ spread: 0.3 })) bad.push('Spread 0 and 0.3 sign the same - the preview would not build the stereo path');
+    if (sig({ spread: 0.3 }) !== sig({ spread: 0.8 })) bad.push('Spread 0.3 and 0.8 sign differently - every drag of Spread would rebuild the chain');
+    if (bad.length) throw new Error('Chorus: ' + bad.join('; '));
+  });
+
+  /* 7.8 — ON SCREEN: Voices, Spread and Feedback rows in the open Chorus (with Shape above them), inside the panel at both
+     widths, reading 3, 0.00 and 0.00 on a new one; Voices has no keyframe diamond (it cannot be animated) and Spread does.
+     On the build before the open Chorus shows Rate, Depth and Mix only. */
+  test('482 7.8 Chorus panel - Voices, Spread and Feedback fit at 390 and 1280 px and read their defaults, and only Spread and Feedback can be keyframed', { item: '482', budgetMs: 120000 }, async function () {
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('chorus')], 0, async p => {
+      for (const [label, want, kf] of [['Voices', '3', false], ['Spread', '0.00', true], ['Feedback', '0.00', true]]) {
+        const r = p.slider(label);
+        if (!r) throw new Error(p.where + ': the open Chorus has no ' + label + ' row');
+        await p.fits(r, 'the ' + label + ' row');
+        const v = r.querySelector('.fx-scrub-val');
+        if (!v || v.value !== want) throw new Error(p.where + ': a new Chorus ' + label + ' reads ' + (v && v.value) + ', not ' + want);
+        if (!!r.querySelector('.fx-kf') !== kf) throw new Error(p.where + ': ' + label + (kf ? ' cannot' : ' can') + ' be keyframed');
+      }
+      if (!p.seg('Shape')) throw new Error(p.where + ': the open Chorus has no Shape buttons');
+    });
   });
 })();

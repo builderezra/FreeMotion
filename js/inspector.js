@@ -2601,6 +2601,10 @@ window.FM = window.FM || {};
           // A `rebuild` SLIDER (a voice count, a stereo phase) asks the same as each value lands: sync() rebuilds only if the
           // value really moved the signature, so dragging within one whole voice rebuilds nothing.
           if (p.rebuild) row.addEventListener('fx-range-set', () => { if (FM.reconcileAudio) FM.reconcileAudio(); });
+          // …and a keyframable one (Chorus Spread, #482 7.8) when its diamond adds or removes a keyframe: being animated at all
+          // can be what decides the graph. This runs after the diamond's own handler, which has already stored the change.
+          const kfb = p.rebuild && row.querySelector('.fx-kf');
+          if (kfb) kfb.addEventListener('click', () => { if (FM.reconcileAudio) FM.reconcileAudio(); });
         }
         rows[p.key] = row;
         if (ap.type !== 'toggle') markOverridden(row, fx, ap, areg);
