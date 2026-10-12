@@ -294,6 +294,8 @@ def hook_lines(root, files):
         diff = sh(['git', 'diff', '-U0', 'HEAD', '--', f], root)
         for t in diff.splitlines():
             if (t.startswith('+') and not t.startswith('+++')) or (t.startswith('-') and not t.startswith('---')):
+                if t[0] == '-' and f == 'js/collab-core.js' and SCHEMA_STAMP.match(t[1:]):
+                    continue   # a schema stamp being replaced is nobody's (SCHEMA_STAMP above)
                 h = hook_of(f, t[1:])
                 if h:
                     hits.append((f, t[0], t[1:], h))
@@ -323,6 +325,14 @@ _SIMPLE_SHA = {}
 # hunt fix would have stopped the day Simple shipped. So a line whose only change is the version label or a buster's number
 # is nobody's: a hunk that only re-numbers is skipped, and a line a Simple commit only re-numbered is not Simple's.
 _BUMP = [(re.compile(r'>v\d+(?:\.\d+)*<'), '>v#<'), (re.compile(r'\?v=[0-9][0-9.]*'), '?v=#')]
+# ⚠️ THE SCHEMA STAMP IS NOBODY'S EITHER (13 Oct, hunt HIGH #24). `C.SCHEMA_REV = N;` and `C.SCHEMA_FP = N;` in js/collab-core.js are
+# re-stamped by every release that changes what the sanitiser keeps — every #482 polish batch, every #966 fx batch — and this
+# file's own docstring promises such a bump is NOT a hook. But Simple 1.2 (v17.33) and 1.3 (v17.36) were the last to stamp them,
+# so provenance credited both lines to Simple and the old FP line's "Simple mode P1" comment matched a hook as it was REMOVED:
+# every later schema bump fired the gate and, since such a batch changes Full on purpose, could never get its PASS. So a stamp
+# line being REPLACED is nobody's (provenance and a removed hook line both skip it). A stamp line ADDED is still read like any
+# other — a Simple release that stamps "Simple mode" fires on it, and on the sanitiser lines it travels with.
+SCHEMA_STAMP = re.compile(r'^\s*C\.SCHEMA_(?:REV|FP)\s*=\s*\d+\s*;')
 
 
 def bump_mask(s):
@@ -455,7 +465,11 @@ def simple_owned_lines(root, f, diff, head_text):
         return []
     who = blame_lines(root, f, want, nmax)
 
+    head_lines = head_text.split('\n')
+
     def simple_line(x):
+        if f == 'js/collab-core.js' and 1 <= x <= len(head_lines) and SCHEMA_STAMP.match(head_lines[x - 1]):
+            return None   # a schema stamp is re-stamped by every schema bump: nobody's (SCHEMA_STAMP above)
         w = who.get(x)
         if not w or not is_simple_commit(root, w[0]):
             return None
@@ -1196,6 +1210,9 @@ def selftest_repo():
              'function after() {', '  return 2;', '}']
         write('POLISH-LOG.md', LOG0)
         write('js/app.js', '\n'.join(A) + '\n')
+        CC1 = ['(function () {', '  C.SCHEMA_REV = 7;   // #482 polish batch 6: four more effects gained controls', '  function keep(l) {',
+               '    return l;', '  }', '  C.SCHEMA_FP = 836365476955739;   // #482 polish batch 5 (SCHEMA_REV 6)', '})();']
+        write('js/collab-core.js', '\n'.join(CC1) + '\n')
         write('styles.css', '.a { color: red; }\n')
         IX = ['<!doctype html>', '<div class="brand">FreeMotion <span class="ver" title="x">v1.0</span></div>',
               '<script src="js/scene.js?v=10"></script>', '<script src="js/app.js?v=20"></script>',
@@ -1236,6 +1253,12 @@ def selftest_repo():
         LOG0 = LOG0 + '- v2 — queue 980 (partial): the engine\n'
         write('POLISH-LOG.md', LOG0)
         write('js/app.js', '\n'.join(B) + '\n')
+        CC2 = list(CC1)
+        CC2[1] = '  C.SCHEMA_REV = 8;'
+        CC2[3] = '    if (l.sm) l.sm = keepSm(l.sm);   // Simple mode P1: the sanitiser keeps layer.sm'
+        CC2[5] = '  C.SCHEMA_FP = 8673617696742561;   // Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm'
+        CC2[4:4] = ['    return l;']
+        write('js/collab-core.js', '\n'.join(CC2) + '\n')
         IX2 = list(IX)
         IX2[1] = IX[1].replace('v1.0', 'v1.1')
         IX2[3] = IX[3].replace('?v=20', '?v=21')
@@ -1298,6 +1321,30 @@ def selftest_repo():
             fails.append('provenance CONTROL: a change to a line the Simple release really wrote in index.html did not fire (%s)' % msg[:200])
         write('index.html', '\n'.join(IX2) + '\n')
         write('styles.css', '.a { color: red; }\n')
+        # (3e) THE NEXT SCHEMA BUMP (13 Oct, hunt HIGH #24): an effects batch re-stamps SCHEMA_REV and SCHEMA_FP, both last stamped by
+        #      the Simple release (the FP line with its "Simple mode" comment) — nobody's, so quiet
+        CC3 = list(CC2)
+        CC3[1] = '  C.SCHEMA_REV = 9;   // #482 polish batch 3: Unsharp Mask protects colour'
+        CC3[6] = '  C.SCHEMA_FP = 1932349802248846;   // #482 polish batch 3 (SCHEMA_REV 9)'
+        write('js/collab-core.js', '\n'.join(CC3) + '\n')
+        code, msg = gate('- v3 — queue 482 (partial): effects polish batch 3')
+        if (code, msg) != (0, 'NOT-TRIGGERED'):
+            fails.append('schema stamp: an effects batch re-stamping SCHEMA_REV/SCHEMA_FP a Simple release last stamped fired (%s)' % msg[:200])
+        # (3f) CONTROL: the sanitiser line the Simple release wrote beside them is still Simple's
+        CC4 = list(CC3)
+        CC4[3] = '    if (l.sm) l.sm = keepSm(l.sm, 1);   // the sanitiser keeps layer.sm'
+        write('js/collab-core.js', '\n'.join(CC4) + '\n')
+        code, msg = gate('- v3 — queue 482 (partial): effects polish batch 3')
+        if code != 1:
+            fails.append('schema stamp CONTROL: a change to the sanitiser line a Simple release wrote, beside the stamps, did not fire (%s)' % msg[:200])
+        # (3g) CONTROL: a stamp ADDED with Simple's marker is still read — only a stamp being replaced is nobody's
+        CC5 = list(CC2)
+        CC5[1] = '  C.SCHEMA_REV = 9;   // Simple mode P3: the sanitiser keeps sm.ride'
+        write('js/collab-core.js', '\n'.join(CC5) + '\n')
+        code, msg = gate('- v3 — (hunt HIGH #3) a one-line fix')
+        if code != 1:
+            fails.append('schema stamp CONTROL: a stamp added with a "Simple mode" comment did not fire (%s)' % msg[:200])
+        write('js/collab-core.js', '\n'.join(CC2) + '\n')
         # (4) the instrument: a Simple release that also changes the comparer is refused for THAT; the lock's own
         # release (queue 980, the instrument and nothing in the app) is not — it needs its declaration and its own PASS
         write('tools/_fu_compare.py', "# the comparer, tightened\nif 'FU2' in groups:\n    pass\n")
