@@ -39,8 +39,8 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=762">
-<link rel="stylesheet" href="theme-glass.css?v=67">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=763">
+<link rel="stylesheet" href="theme-glass.css?v=68">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -1023,13 +1023,9 @@
            row is shown only when there is actually something to move (see cvUpdate). -->
       <label class="field hidden" id="cv-scale-row"><span>Scale the layers to fit</span><input id="cv-scale" type="checkbox" checked aria-label="Move and resize the existing layers to match the new canvas size"></label>
       <div class="dialog-actions">
-        <!-- The door to the APP's settings (v6.13). The cog now opens THIS dialog on desktop as well as
-             on the phone — before, the same gear icon meant "canvas" on a phone and "app preferences" on
-             a PC, which is what Ezra was reporting as the cog opening the wrong menu. One icon, one
-             destination, and the app-wide preferences keep a labelled way in from here (plus the home
-             screen's own cog). Left-aligned and plain, because it LEAVES this dialog — it is not a third
-             way to answer Cancel/Apply. -->
-        <button id="cv-appset" class="btn cv-appset">App settings…</button>
+        <!-- #1132: the door to the APP's settings left this row (v6.13 put it here) for a block of its own, the App settings
+             bar under the cog's other blocks. His words: "When canvas settings is expanded get rid of the button to access app
+             settings." -->
         <button id="cv-cancel" class="btn">Cancel</button>
         <button id="cv-go" class="btn btn-accent">Apply</button>
       </div>
@@ -1038,10 +1034,8 @@
            purpose: code and tests find this card's first button, and the ⤢ here must never be it. -->
       <div class="cv-mini" id="cv-mini">
         <span class="cv-mini-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8a1.5 1.5 0 0 1 1.5 1.5v15A1.5 1.5 0 0 1 16 21H8a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 8 3z"/></svg></span>
-        <!-- #967 batch 2: while Friends is the big card the dialog's own "App settings…" is set aside with the rest of this card
-             (0×0), and from the editor on a phone that was the only door to Settings — so the bar carries one (js/app.js), on
-             the title's line, so the canvas summary under it keeps its full width. -->
-        <span class="cv-mini-txt"><span class="cv-mini-trow"><span class="cv-mini-t">Canvas</span><button type="button" class="cv-mini-app" id="cv-mini-app">App settings…</button></span><span class="cv-mini-s" id="cv-mini-sub"></span></span>
+        <!-- (#967 batch 2's App settings chip on this bar went with #1132: the App settings bar is there in every state.) -->
+        <span class="cv-mini-txt"><span class="cv-mini-trow"><span class="cv-mini-t">Canvas</span></span><span class="cv-mini-s" id="cv-mini-sub"></span></span>
         <button type="button" class="cv-mini-exp" id="cv-mini-exp" aria-label="Open Canvas settings" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg></button>
       </div>
     </div>
@@ -1058,6 +1052,12 @@
         <button type="button" class="cv-mini-exp" id="cv-fr-exp" aria-label="Open Friends" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg></button>
       </div>
       <div id="cv-fr-body"></div>
+    </div>
+    <!-- #1132, his words (11 Oct): "In this menu move the app settings button to be its own button like how friends and simple
+         edit are." A block of its own, the LAST bar (furthest from the cog: it is the one that leaves it). It never grows, so its
+         end shows an "opens elsewhere" arrow, not ⤢; the whole bar is the one button (js/app.js: closes the cog, opens Settings). -->
+    <div id="cv-app" role="group" aria-label="App settings">
+      <button type="button" class="cv-mini cv-app-bar" id="cv-app-bar"><span class="cv-mini-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="cv-mini-txt"><span class="cv-mini-t">App settings</span></span><span class="cv-mini-exp cv-app-go" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10"/></svg></span></button>
     </div>
   </div>
 
@@ -1134,7 +1134,7 @@
   <script src="js/captions.js?v=62"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=6"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=477"></script>
+  <script src="js/app.js?v=478"></script>
   <script src="js/audio-tools.js?v=8"></script>
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=19"></script>
