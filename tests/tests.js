@@ -127409,4 +127409,39 @@
       });
     });
   });
+
+  /* #1132 clause 4, his words: "When canvas settings is expanded get rid of the button to access app settings." The door is
+     found by its WORDS, so a renamed or re-id'd copy inside the card is still caught; the CONTROL is that the same search finds
+     the one door that is meant to be there, the App settings bar — a single <button>, its end glyph a span (no button in a
+     button). */
+  test('1132 with Canvas settings open there is no App settings button inside it — its row is Cancel and Apply — and the one door left is the App settings bar outside the card, one button with none inside it, at 380 and 1280', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+        const check = async function (label) {
+          FM.openCanvasDialog(); await entranceDone(dlg); await land945();
+          try {
+            if (dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-ed-big')) throw new Error(label + ': setup: Canvas settings is not the open block (' + dlg.className + ')');
+            if (!document.getElementById('cv-go').getClientRects().length) throw new Error(label + ': setup: the open Canvas card shows no Apply');
+            const words = function (b) { return /^App settings/.test((b.textContent || '').trim()) || /^(Open )?App settings/.test(b.getAttribute('aria-label') || ''); };
+            const doors = Array.prototype.filter.call(dlg.querySelectorAll('button, a, [role=button]'), words);
+            const inCard = doors.filter(function (b) { return card.contains(b); });
+            if (inCard.length) throw new Error(label + ': with Canvas settings open its card still holds ' + inCard.map(function (b) { return '#' + (b.id || b.className); }).join(', ') + ' — his words: “get rid of the button to access app settings”');
+            if (document.getElementById('cv-appset') || document.getElementById('cv-mini-app')) throw new Error(label + ': #cv-appset or #cv-mini-app is still in the page');
+            const ids = Array.prototype.map.call(card.querySelectorAll('.dialog-actions button'), function (b) { return b.id; }).join(',');
+            if (ids !== 'cv-cancel,cv-go') throw new Error(label + ': the card’s action row holds ' + ids + ', not Cancel and Apply');
+            const bar = document.getElementById('cv-app-bar');
+            if (!bar || doors.indexOf(bar) < 0) throw new Error(label + ': CONTROL: the search for an App settings door does not find the App settings bar');
+            if (doors.length !== 1) throw new Error(label + ': ' + doors.length + ' App settings doors in the cog, not the one bar: ' + doors.map(function (b) { return '#' + (b.id || b.className); }).join(', '));
+            if (bar.tagName !== 'BUTTON' || bar.querySelector('button, a, [role=button]')) throw new Error(label + ': the App settings bar is not one button (a ' + bar.tagName + ', ' + bar.querySelectorAll('button, a, [role=button]').length + ' button(s) inside it)');
+            const br = bar.getBoundingClientRect(), cr = card.getBoundingClientRect();
+            if (!(br.height > 0) || br.top < -0.5 || br.bottom > innerHeight + 0.5) throw new Error(label + ': with Canvas open the App settings bar is not on the screen ' + R978(br));
+            if (br.top < cr.bottom - 0.5 && br.right > cr.left + 0.5 && br.left < cr.right - 0.5) throw new Error(label + ': the App settings bar overlaps the open Canvas card (' + R978(br) + ' on ' + R978(cr) + ')');
+          } finally { FM.closeCanvasDialog(); await sleep(60); }
+        };
+        await atPhoneWidth(function () { return check('380'); }, 380);
+        await atWideWidth(function () { return check('1280'); }, 1280);
+      });
+    });
+  });
 })();
