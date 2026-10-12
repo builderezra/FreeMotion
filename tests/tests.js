@@ -30639,6 +30639,21 @@
 
   test('921 S2 the collab core is inert until a session is attached: no session, no listeners, no UI, no globals', { item: '921' }, function () {
     const C = need921('inertness');
+    /* #921 clause 19: Work with friends is ON for a device that never chose. So the body runs in BOTH states: OFF, the
+       promise §23 made (as #967 batch 2 relaxed it); and ON with nobody sharing, which is now what every new device is —
+       still no session, no listener, no timer, no controller, no global and no door beyond the two. One thing differs by
+       design: ON installs the comments module (collab-ui.js install), so that check is OFF's alone. */
+    const wasLabs921 = FM.settings.get('collabLabs');
+    try {
+      [false, true].forEach(function (on) {
+        FM.settings.set('collabLabs', on);   // Settings' own apply() runs the switch (collab-ui.js syncLabs)
+        if (FM.collab.ui && FM.collab.ui.labsOn() !== on) throw new Error('setup: Work with friends did not turn ' + (on ? 'on' : 'off'));
+        try { inert921(on); }
+        catch (e) { throw new Error((on ? 'Work with friends ON, nobody sharing: ' : 'Work with friends OFF: ') + e.message); }
+      });
+    } finally { FM.settings.set('collabLabs', wasLabs921); }
+
+    function inert921(on) {
     if (C.active !== false) throw new Error('FM.collab.active is ' + C.active + ' on a page nobody shared — every S0 hook in history.js, storage.js and app.js reads that flag, and a test that left a session attached would make every later commit in this suite run the collab pipeline');
     if (C.session) throw new Error('a session is attached on a page nobody shared (role ' + C.role + ')');
     /* S2 gives the S0 hooks something to reach. Every one must EXIST — a half-present hook is how
@@ -30692,7 +30707,7 @@
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
     if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S7 is the engine, its hooks, the connection codes and the relay, the UI, media, presence, roles and comments, and anything beyond that list belongs to a later stage');
     if (C.readOnly && (C.readOnly() !== false || C.myRole() !== 'owner' || C.canExport() !== true)) throw new Error('with no session this device reads as read-only, or not the owner — a solo user would be locked out of his own project');
-    if (C.comments && C.comments.installed && C.comments.installed()) throw new Error('the comments module is installed with Labs off — it would be painting ruler marks and listening to every timeline rebuild for a solo user');
+    if (!on && C.comments && C.comments.installed && C.comments.installed()) throw new Error('the comments module is installed with Labs off — it would be painting ruler marks and listening to every timeline rebuild for a solo user');
     /* Media is the stage most able to break §23's bargain, because everything it does is IndexedDB: a
        boot-time sweep, a manifest built at load, a progress card that exists before there is anything
        to report. None of it may happen until a session installs a controller. */
@@ -30711,13 +30726,14 @@
        see the decision note at the top of js/collab-ui.js. (queue 921 S3)
        📐 RELAXED BY #967 BATCH 2, on his pick ("one door, no network, no listeners"): with Labs off the page may hold the
        phone's person+ on the video and Home's worded Join — one button each — and nothing else. doors23 is that rule. */
-    doors23('the S2 inertness check');
+    doors23('the S2 inertness check', on);
     /* ⚠️ THE LISTENERS ARE THE POINT OF §23, and they are the one thing here a solo user could feel.
        The bridge installs capture listeners on document for pointer and key events; with no session
        there must be none, and `installed()` is how that is stated. */
     if (C.bridge.installed()) throw new Error('the bridge\'s document-wide pointer and key capture listeners are installed with no session running — §23 promises a solo user no listeners at all');
     /* CONTROL: the namespace really is there, so the emptiness above is emptiness and not absence. */
     if (typeof C.Host !== 'function' || typeof C.Session !== 'function' || typeof C.path.canon !== 'function' || typeof C.diff.diffDoc !== 'function' || typeof C.link.LoopLink !== 'function') throw new Error('CONTROL: the modules are not loaded at all');
+    }
   });
 
   /* A guest reduced to the two trees and the receive rules — §8.1 (pending), §8.3 (structural wins),
@@ -32228,7 +32244,12 @@
       throw new Error('the agent in frame "' + tag + '" never announced itself — either tests/collab-agent.js is not being loaded (the gate in js/collab-core.js needs localhost AND fmtest=collab) or the instance did not boot');
     }
     async function boot(tag, host, w, h) {
-      return bootSrc(tag, 'http://' + host + ':' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag, w, h);
+      const r = await bootSrc(tag, 'http://' + host + ':' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=' + tag, w, h);
+      /* #921 clause 19: a fresh device has Work with friends ON. These instances drive FM.collab directly and were written
+         with the UI's resume-on-open off; with it on, the ENDED linked copy a test leaves open is detached (copied, deleted,
+         the copy opened) by the next test's setScene reset, racing that test's join. Off, as they always booted. */
+      await rpc(tag, 'settings', { key: 'collabLabs', value: false });
+      return r;
     }
     /* S6: an instance booted from an address the test writes — the only way to put a `#j=` fragment in
        front of a real boot, which is the thing §14.2's stash has to survive. */
@@ -32904,10 +32925,22 @@
        so a test that awaits either one waits for a person. Found by exactly that: an 180-second timeout
        with no last step, on a card that was sitting on screen waiting to be filled in. */
     C.ui.setProfile('Test Person', C.ui.PALETTE[0]);
+    let bodyDone = false, leaks = [];
+    const held921 = heldNow921(C);           // an outer fixture's own session (withCollab921 around this) is not this test's leak
     try {
-      return await fn(C.ui);
+      const out = await fn(C.ui);
+      bodyDone = true;
+      return out;
     } finally {
       try { C.ui.close(); } catch (e) {}
+      /* #921 clause 19: A LEAK DETECTOR, NOT AN ERASER. The value restored below is ON now (a device that never chose has
+         Work with friends on), and restoring ON tears nothing down — so for a while this passed through OFF first, which
+         ended every session and dropped every held offer between tests. That erased exactly the state a real Labs-ON user
+         carries from one project to the next, so a test that leaked it could never turn anything red. Now the test that
+         leaves an owner-side link behind is the one that fails, by name; the pass through OFF runs only then, so the leak
+         cannot spread into the tests after it. */
+      leaks = leaks921(C, held921);
+      if (leaks.length) { FM.settings.set('collabLabs', false); try { C.ui.syncLabs(); } catch (e) {} }
       FM.settings.set('collabLabs', !!wasLabs);
       try { C.ui.syncLabs(); } catch (e) {}
       try {
@@ -32916,7 +32949,26 @@
         for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('fm.collab.host.') === 0) now.push(k); }
         now.forEach(function (k) { if (roomsBefore.indexOf(k) < 0) localStorage.removeItem(k); });
       } catch (e) {}
+      /* Only a test that otherwise passed is blamed for its leak: one that already failed keeps its own message. */
+      if (leaks.length && bodyDone) throw new Error('LEAK: this test left ' + leaks.join('; ') + ' after it closed — a real device carries that into the next project it opens, so the test has to end what it started');
     }
+  }
+  /* What a test may not leave behind on the owner's side once it has closed (withLabs921): a held swap code, a five-character
+     check still waiting, or an owner session still live — each counted only when it was not already there as withLabs921
+     began: a withCollab921 wrapped AROUND it owns its session and ends it in its own finally, after this one has run. */
+  function heldNow921(C) {
+    const s = C.session;
+    let o = null, sas = false;
+    try { o = (C.ui._offer && C.ui._offer()) || null; } catch (e) {}
+    try { sas = !!(C.ui._sasPending && C.ui._sasPending()); } catch (e) {}
+    return { offer: o, sas: sas, session: (s && s.isOwner && C.active && s.active !== false) ? s : null };
+  }
+  function leaks921(C, before) {
+    const b = before || {}, now = heldNow921(C), out = [];
+    if (now.offer && now.offer !== b.offer) out.push('a swap code still held (made for project ' + now.offer._pid + ')');
+    if (now.sas && !b.sas) out.push('a five-character check still waiting to be answered');
+    if (now.session && now.session !== b.session) out.push('an owner session still live on project ' + now.session.pid);
+    return out;
   }
 
   test('921 S3 a name full of HTML is printed, never parsed — in the people list and in the knock card', { item: '921', budgetMs: 120000 }, async function () {
@@ -33267,6 +33319,369 @@
     });
   });
 
+  /* ═══ #921 clause 19 · A SWAP CODE BELONGS TO THE PROJECT IT WAS MADE FOR ════════════════════════════════════════════
+   * Work with friends is on for every device now, and with it a hole the Stop-sharing test above never reached. A project
+   * SWITCH stands the owner's session down `paused` (C.onReset → C.detach → U.onDetach) while the swap code he has just sent
+   * is still held. First it was handed out again on the next project — B's Swap codes showed A's code, and the answer to it
+   * was admitted into B. The first fix dropped it at the switch, which broke the friend who answered it while he looked at
+   * B: back on A his paste sat on Connecting… and failed. Now the code is bound to its project: it waits with the paused
+   * room, B never shows it or admits an answer to it, and a stopped room or an exchange in flight takes it.
+   * Driven through the real doors — U.share arms for real, projects are opened by Home's own card tap — and where a friend
+   * has to get in, the friend is a real RtcLink in this page answering the real code (no network: iceServers is empty). */
+  async function swapCodeOnScreen921(what) {
+    /* A real code is minted by ICE gathering (up to three seconds), so it arrives a beat after the step is drawn. */
+    for (let i = 0; i < 300; i++) {
+      const box = document.getElementById('collab-offer-code');
+      if (box && /^FM1-/.test(box.textContent)) return box.textContent;
+      await settle921(100);
+    }
+    throw new Error('no swap code ever appeared ' + what + ' — the step shows ' +
+      JSON.stringify((document.getElementById('collab-offer-code') || {}).textContent || null).replace(/"/g, "'"));
+  }
+  async function swapCodes921(ui, C, pid, what) {
+    await ui.share();
+    if (!C.session || !C.session.isOwner || C.session.pid !== pid) throw new Error('setup: Share did not arm ' + what + ' (session ' + (C.session && C.session.pid) + ')');
+    const add = document.querySelector('.cs-add');
+    if (!add) throw new Error('setup: the Share card on ' + what + ' has no Swap codes button — it opened on another step');
+    add.click();
+    await settle921(80);
+  }
+  async function homeOpen921(id, what) {
+    if (!FM.home.isOpen()) FM.home.open();
+    await settle921(250);
+    await FM.home._openProject(id);
+    for (let i = 0; i < 40 && (FM.projects.currentId() !== id || FM.home.isOpen()); i++) await settle921(100);
+    if (FM.projects.currentId() !== id) throw new Error('setup: tapping ' + what + ' on Home did not open it (open is ' + FM.projects.currentId() + ')');
+    await settle921(300);
+  }
+  /* Carry on sharing? → Share again: how he takes a paused room back when he reopens its project. */
+  async function carryOn921(C, pid, what) {
+    for (let i = 0; i < 80; i++) {
+      const q = document.getElementById('fm-ask'), t = q && q.querySelector('.fm-ask-title');
+      if (q && !q.classList.contains('hidden') && t && /^Carry on sharing/.test(t.textContent)) { q.querySelector('.fm-ask-ok').click(); break; }
+      await settle921(100);
+    }
+    for (let i = 0; i < 60 && !(C.session && C.session.isOwner && C.session.pid === pid); i++) await settle921(100);
+    if (!(C.session && C.session.isOwner && C.session.pid === pid)) throw new Error('setup: reopening ' + what + ' never shared it again through Carry on sharing? (session ' + (C.session && C.session.pid) + ')');
+  }
+  /* The friend: a real RtcLink answering the real code — and, once the paste connects them, the guest half of the handshake
+     and the hello, as collab-ui.js's own join does them. */
+  async function swapFriend921(C, code) {
+    const g = C.link.RtcLink({ self: 'guest', peer: 'host' });
+    const answer = await g.acceptOffer(code);
+    const shook = g.opened.then(function () {
+      return C.signal.handshake(g, { side: 'guest', key: g.mk, mode: 'conn', fpLocal: g.fpLocal, fpRemote: g.fpRemote });
+    }).then(function (res) {
+      g.send('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: C.ui.PALETTE[2], have: { epoch: null, seq: 0 }, proto: C.PROTO, schema: C.SCHEMA_REV });
+      return res;
+    });
+    shook.catch(function () {});
+    return { link: g, answer: answer, shook: shook };
+  }
+  /* Paste an answer into the code step on screen and press Connect. A five-character check that comes up is answered They
+     match — it IS his friend, so the characters do match. Waits until somebody is in, or the attempt has settled. */
+  async function pasteAnswer921(C, answer, ms) {
+    const input = document.querySelector('.cs-answer'), go = document.getElementById('collab-code-connect');
+    if (!input || !go) throw new Error('setup: there is no code step on screen to paste the answer into');
+    input.value = answer;
+    go.click();
+    const out = { tapped: false, sas: null, status: null };
+    const end = Date.now() + (ms || 20000);
+    while (Date.now() < end) {
+      const s = C.session;
+      if (s && s.peerIds && s.peerIds().length) break;
+      const yes = document.querySelector('.cs-sasyes');
+      if (yes && !out.tapped) { out.sas = (document.querySelector('.cs-sas') || {}).textContent; out.tapped = true; yes.click(); await settle921(100); continue; }
+      const st = document.getElementById('collab-code-status');
+      out.status = st ? st.textContent : null;
+      if (!yes && (!st || !/Connecting|Checking|Waiting/.test(st.textContent))) break;
+      await settle921(100);
+    }
+    return out;
+  }
+  async function swapCleanup921(C, ui, made, orig, wasHome, links) {
+    /* Rooms first, so nothing resumes or asks about a project about to be deleted; then the live session (its end takes any
+       held swap code with it); then the save points the arms wrote (guarded — a cleanup that throws would blame this test
+       on storage.js). */
+    (links || []).forEach(function (l) { try { if (l) l.close(); } catch (e) {} });
+    made.forEach(function (id) { try { localStorage.removeItem('fm.collab.host.' + id); } catch (e) {} });
+    try { ui.close(); } catch (e) {}
+    try { C.end(); } catch (e) {}
+    try {
+      const q = document.getElementById('fm-ask'), t = q && q.querySelector('.fm-ask-title');
+      if (q && !q.classList.contains('hidden') && t && /^(Carry on sharing|Stop sharing)/.test(t.textContent)) q.querySelector('.fm-ask-cancel').click();
+    } catch (e) {}
+    if (FM.storage.collabKeys) {
+      for (let m = 0; m < made.length; m++) {
+        try {
+          const left = await FM.storage.collabKeys('collab:ckpt:' + made[m] + ':');
+          for (let i = 0; i < left.length; i++) await FM.storage.collabDel(left[i]);
+        } catch (e) {}
+      }
+    }
+    await q915aCleanup(made, orig, wasHome, [], [], []);
+  }
+  async function twoProjects921(C, made) {
+    const B = await FM.projects.create({ name: 'FX921 swap B', width: 320, height: 240 });
+    if (!B) throw new Error('setup: project B could not be made');
+    made.push(B);
+    const A = await FM.projects.create({ name: 'FX921 swap A', width: 320, height: 240 });
+    if (!A) throw new Error('setup: project A could not be made');
+    made.push(A);
+    await settle921(150);
+    if (C.session) throw new Error('setup: a session is attached before anything was shared (pid ' + C.session.pid + ')');
+    return { A: A, B: B };
+  }
+
+  test('921 S3 opening another project and sharing it hands out a fresh swap code — the code made for the first is closed, and the answer to it cannot get into the second', { item: '921', budgetMs: 180000 }, async function () {
+    /* Measured on labs-on before any fix, with two real Chromes: B's Swap codes showed A's code — the same offer object, A's
+       connection still have-local-offer — and the friend's answer to it, pasted there, was ADMITTED INTO B, a project he
+       never offered them. Now B's Swap codes drops the offer made for A (drawCodeStep) and makes B its own. */
+    const C = need921S3('the swap code across a project switch');
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+      let friend = null;
+      try {
+        if (wasHome) FM.home.close();
+        const P = await twoProjects921(C, made);
+
+        /* 1. he shares A, opens Swap codes and sends the code; his friend answers it */
+        await swapCodes921(ui, C, P.A, 'project A');
+        const first = await swapCodeOnScreen921('while sharing A');
+        const link = ui._offer();
+        if (!link || link._code !== first) throw new Error('the module is not holding the offer whose code is on screen, so this test cannot see what happens to it');
+        const pc = link.pc;
+        if (!pc || pc.signalingState !== 'have-local-offer') throw new Error('CONTROL: the offer is not a live peer connection waiting for an answer (signalingState ' + (pc && pc.signalingState) + '), so it was closed below would prove nothing');
+        friend = await swapFriend921(C, first);
+        ui.close();
+        await settle921(150);
+
+        /* 2. Home, then B's card — the way he opens another project — and he shares B and opens Swap codes there */
+        await homeOpen921(P.B, 'project B');
+        if (C.session && C.session.pid === P.A) throw new Error('setup: opening B left A’s session attached, so there was no switch to measure');
+        await swapCodes921(ui, C, P.B, 'project B');
+        const second = await swapCodeOnScreen921('while sharing B');
+
+        /* (a) B hands out a code of its own, and A's is closed — nothing on B can take an answer to it */
+        if (second === first) throw new Error('sharing B handed out the SAME swap code as A (' + first.slice(0, 24) + '…) — whoever answers it is let into B, a project he never offered them');
+        if (ui._offer() === link) throw new Error('B’s Swap codes is holding the offer made while sharing A');
+        if (pc.signalingState !== 'closed') throw new Error('B’s Swap codes is up and the peer connection behind A’s code is still ' + pc.signalingState + ' — the code made for A is still waiting for an answer while B is the project being shared');
+
+        /* (b) the half he would feel: the friend's answer to A's code, pasted on B's card, lets nobody into B */
+        ui._connectWait(4000);
+        const r = await pasteAnswer921(C, friend.answer, 15000);
+        if (C.session && C.session.peerIds().length) throw new Error('the friend’s answer to A’s swap code, pasted on B’s card, was LET INTO B' + (r.tapped ? ' (once the five characters ' + r.sas + ' were confirmed)' : '') + ' — a project he never offered them');
+        if (!C.session || C.session.pid !== P.B) throw new Error('setup: B stopped being the project shared while the answer was tried (session ' + (C.session && C.session.pid) + ')');
+        if (friend.link.pc.connectionState === 'connected') throw new Error('the friend’s connection to A’s code came up while B was the project being shared');
+        ui.close();
+      } finally {
+        try { ui._connectWait(null); } catch (e) {}
+        await swapCleanup921(C, ui, made, orig, wasHome, [friend && friend.link]);
+      }
+    });
+  });
+
+  test('921 S3 a friend who answered the swap code gets into that project when he opens another one and comes back — the code waits with the paused room', { item: '921', budgetMs: 180000 }, async function () {
+    /* The switch-back, as the adversarial check drove it with two real Chromes: he shares A and sends the code; the friend
+       answers; he opens B, reopens A (Carry on sharing? → Share again), opens Swap codes and pastes the answer. On labs-on
+       the friend got into A. With the first fix (the switch dropped the code) A's card showed a NEW code, the friend's
+       connection had been closed under them, the paste sat on Connecting… and then said They did not answer, and the friend
+       was shown Lost touch and connection-dropped lines. The code now waits with A's paused room, bound to A. */
+    const C = need921S3('a swap code across a switch and back');
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+      let friend = null;
+      try {
+        if (wasHome) FM.home.close();
+        const P = await twoProjects921(C, made);
+        await swapCodes921(ui, C, P.A, 'project A');
+        const first = await swapCodeOnScreen921('while sharing A');
+        const link = ui._offer();
+        if (!link || link._code !== first) throw new Error('the module is not holding the offer whose code is on screen, so this test cannot see what happens to it');
+        const pc = link.pc;
+        friend = await swapFriend921(C, first);
+        ui.close();
+        await settle921(150);
+
+        /* 1. he looks at B — and the code he sent waits with A's paused room */
+        await homeOpen921(P.B, 'project B');
+        if (C.session && C.session.pid === P.A) throw new Error('setup: opening B left A’s session attached, so there was no switch to measure');
+        if (pc.signalingState !== 'have-local-offer') throw new Error('opening another project CLOSED the swap code he had just sent (its connection is ' + pc.signalingState + ') — A’s room is only paused, and the friend who answered that code can no longer get in when he comes back');
+
+        /* 2. back on A: Carry on sharing? → Share again, then Swap codes — the card shows the code he sent */
+        await homeOpen921(P.A, 'project A');
+        await carryOn921(C, P.A, 'project A');
+        await swapCodes921(ui, C, P.A, 'project A again');
+        const again = await swapCodeOnScreen921('back on A');
+        if (again !== first) throw new Error('back on A the card shows a different swap code (' + again.slice(0, 24) + '…) from the one he sent (' + first.slice(0, 24) + '…) — the friend’s answer is checked against an offer they never saw');
+
+        /* 3. he pastes the friend's answer: the five characters come up, they match, and the friend is in — in A */
+        const r = await pasteAnswer921(C, friend.answer, 25000);
+        if (!r.tapped) throw new Error('the friend’s answer never reached the five-character check on A’s card (the step says ' + JSON.stringify(r.status).replace(/"/g, "'") + ')');
+        const s = C.session;
+        if (!s || s.pid !== P.A) throw new Error('setup: A is not the project being shared once the friend was checked (session ' + (s && s.pid) + ')');
+        if (s.peerIds().length !== 1) throw new Error('confirming the five characters did not let the friend into A (' + s.peerIds().length + ' people in)');
+        const theirs = await friend.shook;
+        if (!theirs || theirs.sas !== r.sas) throw new Error('CONTROL: the friend’s five characters (' + (theirs && theirs.sas) + ') are not the ones his card showed (' + r.sas + ')');
+        ui.close();
+      } finally {
+        await swapCleanup921(C, ui, made, orig, wasHome, [friend && friend.link]);
+      }
+    });
+  });
+
+  test('921 S3 an answer to one project’s swap code is never let into another — not from that code’s own card either, still on screen when the other project shares again', { item: '921', budgetMs: 180000 }, async function () {
+    /* The Share card stays up across a project open — measured: projects.open with A's code step on screen leaves it there,
+       Connect and all — and a paused room asks Carry on sharing? when its project is reopened. So A's code step was still
+       under his thumb after B started sharing again, and on labs-on the friend's answer to A's code, pasted there, was
+       ADMITTED INTO B (two real Chromes). hostConnect refuses a code made for another project, and keeps it for A. */
+    const C = need921S3('a swap code card left on screen');
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+      let friend = null;
+      try {
+        if (wasHome) FM.home.close();
+        const B = await FM.projects.create({ name: 'FX921 swap B', width: 320, height: 240 });
+        if (!B) throw new Error('setup: project B could not be made');
+        made.push(B);
+        await ui.share();                          // B is shared once, so its room is kept (paused) when he opens A
+        if (!C.session || C.session.pid !== B) throw new Error('setup: Share did not arm project B');
+        ui.close();
+        await settle921(150);
+        const A = await FM.projects.create({ name: 'FX921 swap A', width: 320, height: 240 });
+        if (!A) throw new Error('setup: project A could not be made');
+        made.push(A);
+        await settle921(300);
+        if (C.session && C.session.pid === B) throw new Error('setup: opening A left B’s session attached');
+        await swapCodes921(ui, C, A, 'project A');
+        const first = await swapCodeOnScreen921('while sharing A');
+        const link = ui._offer();
+        if (!link || link._code !== first) throw new Error('the module is not holding the offer whose code is on screen, so this test cannot see what happens to it');
+        friend = await swapFriend921(C, first);
+
+        /* 1. A's code step stays on screen while B opens and shares again */
+        await FM.projects.open(B, { confirmed: true });
+        await carryOn921(C, B, 'project B');
+        const box = document.getElementById('collab-offer-code');
+        if (!box || box.textContent !== first || !document.getElementById('collab-code-connect')) throw new Error('setup: A’s code step did not stay on screen across the switch, so this case cannot be measured (the card shows ' + JSON.stringify(box && box.textContent.slice(0, 24)).replace(/"/g, "'") + ')');
+
+        /* 2. he pastes the friend's answer into it */
+        const r = await pasteAnswer921(C, friend.answer, 20000);
+        const s = C.session;
+        if (s && s.peerIds().length) throw new Error('the friend’s answer to A’s swap code, pasted into A’s code step still on screen, was LET INTO B' + (r.tapped ? ' (once the five characters ' + r.sas + ' were confirmed)' : '') + ' — a project he never offered them');
+        if (!s || s.pid !== B) throw new Error('setup: B stopped being the project shared while the answer was tried (session ' + (s && s.pid) + ')');
+        const st = document.getElementById('collab-code-status');
+        if (!st || !/another project/.test(st.textContent)) throw new Error('the card does not say why nothing happened (it reads ' + JSON.stringify(st && st.textContent).replace(/"/g, "'") + ')');
+        /* …and the refusal keeps A's code for A, where the friend can still get in */
+        if (ui._offer() !== link || link.pc.signalingState !== 'have-local-offer') throw new Error('refusing the answer on B threw away A’s swap code (' + (link.pc && link.pc.signalingState) + ') — the friend who answered it could no longer get in when he goes back to A');
+        ui.close();
+      } finally {
+        await swapCleanup921(C, ui, made, orig, wasHome, [friend && friend.link]);
+      }
+    });
+  });
+
+  test('921 S3 Stop sharing a project from its Home card while another project is live takes that project’s swap code with it — sharing it again hands out a fresh one', { item: '921', budgetMs: 180000 }, async function () {
+    /* The swap code waits with its paused room (the switch-back test above), so Stop sharing has to take it from wherever he
+       is. stopSharingNow dropped the offer only for the live project, or with nothing live: share A and open Swap codes,
+       open B and share it, Stop sharing on A's Home card — and A's code stayed held. Back on A, Share made a new room and
+       Swap codes handed out the old code, the one the Stop-sharing question had just told him stops working. */
+    const C = need921S3('Stop sharing a paused project');
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+      try {
+        if (wasHome) FM.home.close();
+        await withFakeLinks921(C, function () { return fakeLink921({ code: 'STOP' }); }, async function (fl) {
+          const P = await twoProjects921(C, made);
+          await swapCodes921(ui, C, P.A, 'project A');
+          const first = (document.getElementById('collab-offer-code') || {}).textContent;
+          if (fl.length !== 1 || ui._offer() !== fl[0] || !/^FM1-/.test(first)) throw new Error('setup: Swap codes on A did not make and show exactly one swap code (' + fl.length + ' made)');
+          ui.close();
+          await settle921(150);
+          await homeOpen921(P.B, 'project B');
+          await ui.share();
+          if (!C.session || C.session.pid !== P.B) throw new Error('setup: Share did not arm project B');
+          ui.close();
+          await settle921(150);
+          if (fl[0].closed) throw new Error('setup: the switch already closed A’s swap code, so there is nothing here for Stop sharing to revoke');
+
+          /* Stop sharing on A's Home card — home.js's menu item calls exactly this — and the question confirmed */
+          FM.home.open();
+          await settle921(250);
+          const stopped = FM.collab.ui.stopSharing(P.A);
+          for (let i = 0; i < 80; i++) {
+            const q = document.getElementById('fm-ask'), t = q && q.querySelector('.fm-ask-title');
+            if (q && !q.classList.contains('hidden') && t && /^Stop sharing/.test(t.textContent)) { q.querySelector('.fm-ask-ok').click(); break; }
+            await settle921(50);
+          }
+          if (await stopped !== true) throw new Error('setup: Stop sharing on A’s Home card did not stop it');
+          if (!C.session || C.session.pid !== P.B) throw new Error('setup: stopping A from Home took B’s live session with it (session ' + (C.session && C.session.pid) + ')');
+          if (!fl[0].closed || ui._offer() === fl[0]) throw new Error('Stop sharing A from its Home card, with B live, left the swap code he had sent for A open and held — the question had just told him any swap code you sent stops working');
+
+          /* the half he would feel: back on A, sharing again hands out a fresh code */
+          await homeOpen921(P.A, 'project A');
+          await swapCodes921(ui, C, P.A, 'project A again');
+          const again = (document.getElementById('collab-offer-code') || {}).textContent;
+          if (again === first) throw new Error('back on A, sharing again handed out the swap code Stop sharing had revoked (' + first + ')');
+          if (fl.length !== 2) throw new Error('back on A, Swap codes did not make a fresh swap code (' + fl.length + ' made)');
+          ui.close();
+        });
+      } finally {
+        await swapCleanup921(C, ui, made, orig, wasHome, []);
+      }
+    });
+  });
+
+  test('921 S3 a swap code exchange still connecting when he opens another project ends with the session it started in — nothing is left waiting to let the friend in', { item: '921', budgetMs: 180000 }, async function () {
+    /* The adversarial check's mid-connect repro (two real Chromes): he pastes the answer, taps Connect, closes the card while
+       it still says Connecting…, opens B and shares it. On labs-on B's Swap codes then showed the FRIEND'S five characters
+       for A, and They match there would have let them in. The code itself may wait for a switch-back (above); an exchange in
+       flight may not — it was started in a session that stood down, and it ends with it. */
+    const C = need921S3('an exchange in flight across a switch');
+    await withLabs921(async function (ui) {
+      const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+      try {
+        if (wasHome) FM.home.close();
+        await withFakeLinks921(C, function () { return fakeLink921({ code: 'MID' }); }, async function (fl) {
+          /* The handshake holds until the test lets it finish — and fails, as a real one does, on a link closed meanwhile. */
+          let release = null;
+          C.signal.handshake = function (l) {
+            return new Promise(function (res, rej) { release = function () { if (l.closed) rej({ why: 'closed' }); else res({ mode: 'conn', sas: 'H7K2M' }); }; });
+          };
+          const P = await twoProjects921(C, made);
+          await swapCodes921(ui, C, P.A, 'project A');
+          if (fl.length !== 1 || ui._offer() !== fl[0]) throw new Error('setup: Swap codes on A did not make exactly one swap code (' + fl.length + ' made)');
+          document.querySelector('.cs-answer').value = 'FM1-ANSWER';
+          document.getElementById('collab-code-connect').click();
+          await settle921(150);
+          if (typeof release !== 'function') throw new Error('setup: Connect never reached the handshake, so nothing is in flight');
+          ui.close();                              // still checking the swap code: no check is up, so the close answers nothing
+          await settle921(150);
+          if (fl[0].closed) throw new Error('setup: closing the card already ended the exchange, so the switch has nothing to end');
+
+          await homeOpen921(P.B, 'project B');
+          if (!fl[0].closed) throw new Error('opening another project left the exchange started on A connecting — its link is still open, and it goes on to ask him to let the friend in to a session that no longer exists');
+          /* the friend's side finishes its half and says hello: nothing may come of it */
+          release();
+          if (typeof fl[0].onmessage === 'function') fl[0].onmessage('ctl', { t: 'hello', role: 'editor', name: 'Sam', color: '#ff9f43' });
+          await settle921(200);
+          if (ui._sasPending()) throw new Error('after he opened B, the five-character check of the exchange started on A is waiting to be answered');
+
+          /* back on A (Carry on sharing? → Share again): Swap codes shows a fresh code, never that exchange's check */
+          await homeOpen921(P.A, 'project A');
+          await carryOn921(C, P.A, 'project A');
+          await swapCodes921(ui, C, P.A, 'project A again');
+          if (document.querySelector('.cs-sasyes')) throw new Error('back on A, the code step asks him to confirm the five characters of the exchange started before he left — They match would let the friend in to the session that ended');
+          if (fl.length !== 2) throw new Error('back on A, Swap codes did not make a fresh swap code (' + fl.length + ' made)');
+          if (C.session.peerIds().length) throw new Error('somebody was let in: ' + C.session.peerIds().length + ' people are in A');
+          ui.close();
+        });
+      } finally {
+        await swapCleanup921(C, ui, made, orig, wasHome, []);
+      }
+    });
+  });
+
 
 
   /* ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -33402,6 +33817,85 @@
           if (ctx.S.peerIds().length !== 1) throw new Error('CONTROL: confirming the letters did not admit the peer (' + ctx.S.peerIds().length + ' peers), so "nobody was admitted" above is not a measurement of the gate');
           ui.close();
         });
+      });
+    });
+  });
+
+  test('921 S3 a swap code still being made when sharing stops never lands on the next card — its late code, or its late failure, goes with its link', { item: '921', budgetMs: 120000 }, async function () {
+    /* A real swap code takes up to three seconds to make (ICE gathering, collab-link.js gathered()). Stop sharing — or
+       opening another project, #921 clause 19 — drops the offer at once, but its gathering ran on: when it finished, the
+       code step's callback wrote that DEAD code into whichever swap-code box was on screen by then. So Stop sharing, Share,
+       Swap codes inside those three seconds showed the code he had just been told stops working, while the module held a
+       different offer. Found as an ordering red in ?only=921: 921 S3 Stop sharing revokes… (and the switch test after
+       it) read a code dropped by an earlier test and failed with the module is not holding the offer whose code is on
+       screen, on labs-on and on land-b1 alike. Driven with links whose gathering the test finishes by hand. */
+    const C = need921S3('the late swap code');
+    function lateLink() {
+      const l = fakeLink921({ code: 'LATE' });
+      const code = 'FM1-LATE-' + (++fakeCode921);
+      let fire = null, fail = null;
+      l.createOffer = function () { return new Promise(function (res, rej) { fire = function () { res(code); }; fail = function () { rej({ why: 'no-candidates' }); }; }); };
+      l._late = code;
+      l._fire = function () { fire(); };
+      l._fail = function () { fail(); };
+      return l;
+    }
+    function box() { const b = document.getElementById('collab-offer-code'); return b ? b.textContent : null; }
+    async function stopSharing(what) {
+      const stop = document.querySelector('.cs-stop');
+      if (!stop) throw new Error('setup: no Stop sharing button ' + what);
+      stop.click();
+      for (let i = 0; i < 60; i++) {
+        const ok = document.querySelector('#fm-ask .fm-ask-ok');
+        if (ok && !document.getElementById('fm-ask').classList.contains('hidden')) { ok.click(); await settle921(150); return; }
+        await settle921(40);
+      }
+      throw new Error('setup: the Stop sharing confirm never opened ' + what);
+    }
+    async function swapCodes(what) {
+      await ui921.share();
+      const add = document.querySelector('.cs-add');
+      if (!add) throw new Error('setup: no Swap codes button ' + what);
+      add.click();
+      await settle921(80);
+    }
+    let ui921 = null;
+    await withLabs921(async function (ui) {
+      ui921 = ui;
+      await withCollab921([layer921('A')], async function (ctx) {
+        try {
+          await withFakeLinks921(C, lateLink, async function (made) {
+            await swapCodes('on the first share');
+            if (made.length !== 1 || ui._offer() !== made[0]) throw new Error('setup: the first Swap codes did not start exactly one offer');
+            await stopSharing('while the first code was still being made');
+            if (ui._offer()) throw new Error('setup: Stop sharing left an offer held, so nothing below is about a DROPPED one');
+            await swapCodes('on the second share');
+            await stopSharing('while the second code was still being made');
+            await swapCodes('on the third share');
+            if (made.length !== 3 || ui._offer() !== made[2]) throw new Error('setup: the third Swap codes is not holding a fresh, third offer (' + made.length + ' made)');
+            const waiting = box();
+            if (!waiting || /^FM1-/.test(waiting)) throw new Error('setup: the third card already shows a code (' + waiting + ') before any gathering finished');
+
+            /* the first dropped offer finishes gathering, the second one fails — both after their links were dropped */
+            made[0]._fire();
+            made[1]._fail();
+            await settle921(120);
+            if (box() === made[0]._late) throw new Error('the swap code of an offer Stop sharing had DROPPED landed on the next card (' + made[0]._late + ') — he is shown the code he was just told stops working, and the answer to it is checked against a different offer');
+            if (box() !== waiting) throw new Error('a dropped offer wrote into the next card: it now reads ' + JSON.stringify(box()).replace(/"/g, "'") + ' instead of ' + JSON.stringify(waiting).replace(/"/g, "'"));
+
+            /* CONTROL: the live offer's code still lands, so the silence above is the guard and not a dead box */
+            made[2]._fire();
+            await settle921(120);
+            if (box() !== made[2]._late) throw new Error('CONTROL: the offer the card is holding finished and its code did not appear (' + JSON.stringify(box()).replace(/"/g, "'") + ')');
+            ui.close();
+          });
+        } finally {
+          /* two real arms wrote §12.1 save points under the throwaway project's id (guarded, as Stop sharing revokes… does) */
+          if (FM.storage.collabKeys) {
+            const left = await FM.storage.collabKeys('collab:ckpt:' + ctx.pid + ':');
+            for (let i = 0; i < left.length; i++) await FM.storage.collabDel(left[i]);
+          }
+        }
       });
     });
   });
@@ -37153,9 +37647,10 @@
       const q = await R.rpc('jq', 'pendingJoin');
       if (q.pj) throw new Error('an invite in the QUERY was stashed at boot');
       await R.bootSrc('jf', 'http://jf.localhost:' + location.port + '/index.html?fmtest=collab&fmwipe=1&tag=jf#j=' + j, 900, 700);
-      const a = await R.until('the booted app to have stashed the invite and put up the Labs card', async function () {
+      /* #921 clause 19: a fresh device has Work with friends ON, so the invite skips the Labs card and asks for a name. */
+      const a = await R.until('the booted app to have stashed the invite and put up the name prompt', async function () {
         const x = await R.rpc('jf', 'pendingJoin');
-        return x.pj && x.labsCard ? x : null;
+        return x.pj && !x.labsCard && await R.rpc('jf', 'dom', { sel: '#collab-profile' }) ? x : null;
       }, 20000);
       if (a.pj.j !== j) throw new Error('the boot stashed ' + JSON.stringify(a.pj));
       if (a.hash) throw new Error('the invite is still in the address bar after boot (' + a.hash.slice(0, 10) + '…) — a secret left in the URL is in the history list and in every screenshot');
@@ -105203,16 +105698,19 @@
      button that only opens the explanation and the switch, with no network and no listeners. With Labs off the page may hold
      the phone's person+ on the video (#btn-share, on #stage, shown only at a phone width) and Home's worded Join
      (#hm-join-btn) — one button each — and nothing else: no chip, no LIVE marker, no banner, no knock, no card, no scrim. */
-  function doors23(where) {
+  /* `idleOn`: the same promise with Work with friends ON and no session (#921 clause 19 made ON the default) — nothing open
+     means the same two doors and nothing else. */
+  function doors23(where, idleOn) {
+    const st = idleOn ? 'with Work with friends on and no session' : 'with Labs off';
     ['collab-people', 'collab-live', 'collab-banner', 'collab-knock', 'collab-share', 'collab-join', 'collab-profile'].forEach(function (id) {
-      if (document.getElementById(id)) throw new Error('#' + id + ' is in the page with Labs off (' + where + ') — §23 allows the two doors and nothing else');
+      if (document.getElementById(id)) throw new Error('#' + id + ' is in the page ' + st + ' (' + where + ') — §23 allows the two doors and nothing else');
     });
-    if (document.querySelector('.collab-scrim')) throw new Error('a collab scrim is in the page with Labs off (' + where + ')');
+    if (document.querySelector('.collab-scrim')) throw new Error('a collab scrim is in the page ' + st + ' (' + where + ')');
     if (document.querySelectorAll('#btn-share').length > 1 || document.querySelectorAll('#hm-join-btn').length > 1) throw new Error('a door is in the page twice (' + where + ')');
     const b = document.getElementById('btn-share');
     if (b) {
-      if (!b.parentNode || b.parentNode.id !== 'stage') throw new Error('with Labs off #btn-share is in ' + (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ' (' + where + ') — the one share door allowed is the person+ on the video');
-      if (!matchMedia('(max-width: 700px)').matches && b.getClientRects().length) throw new Error('with Labs off a PC shows the share door (' + where + ') — it is the phone’s door; a PC keeps its layout');
+      if (!b.parentNode || b.parentNode.id !== 'stage') throw new Error(st + ' #btn-share is in ' + (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ' (' + where + ') — the one share door allowed is the person+ on the video');
+      if (!matchMedia('(max-width: 700px)').matches && b.getClientRects().length) throw new Error(st + ' a PC shows the share door (' + where + ') — it is the phone’s door; a PC keeps its layout');
     }
     const j = document.getElementById('hm-join-btn');
     if (j && j.textContent.trim() !== 'Join') throw new Error('Home’s door reads “' + j.textContent.trim() + '” (' + where + ')');
@@ -106686,7 +107184,7 @@
   }
   function menuLabels967b4() { return Array.prototype.map.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return x.textContent.trim(); }); }
 
-  test('967 B4 1 one name — the Settings switch is “Work with friends” and is the one place that says it is still being tested; the Friends block, its bar, the Join sheet, the person+ on the video, the Share card and the turn-off question all use the same family; and no screen says session, preview, Labs or relay', { item: '967', budgetMs: 180000 }, async function () {
+  test('967 B4 1 one name — the Settings switch is “Work with friends” and no screen says it is still being tested any more; the Friends block, its bar, the Join sheet, the person+ on the video, the Share card and the turn-off question all use the same family; and no screen says session, preview, Labs or relay', { item: '967', budgetMs: 180000 }, async function () {
     /* J5-6 (major): "Live collaboration (preview)", "Work on this with friends", "Share it live with friends", "Join a live project",
        "Turn off live collaboration?", an aria-label of plain "Share", and "being tested" three times on the off card. */
     const C = need921S7('one name');
@@ -106709,7 +107207,7 @@
           if (sw.getAttribute('aria-label') !== 'Work with friends') throw new Error('the switch is announced as “' + sw.getAttribute('aria-label') + '”');
           jargon967b4(g, 'Settings’ Work with friends group');
           const inPanel = tested(seen967b4(document.querySelector('.set-panel'))), onRow = tested(seen967b4(srow));
-          if (inPanel !== 1 || onRow !== 1) throw new Error('Settings says “still being tested” ' + inPanel + ' time(s), ' + onRow + ' on the switch’s own row — once, there');
+          if (inPanel || onRow) throw new Error('Settings says “still being tested” ' + inPanel + ' time(s), ' + onRow + ' on the switch’s own row — #921 clause 19 took Work with friends out of testing');
           const jr = Array.prototype.filter.call(g.querySelectorAll('.set-row'), function (r) { return /Join…/.test(r.textContent); })[0];
           const jl = jr && jr.querySelector('.set-label');
           if (!jl || jl.textContent.trim() !== 'Join a friend’s project') throw new Error('Settings’ Join row reads “' + (jl && jl.textContent) + '” — the other side is Join, and it is a friend’s project');
@@ -106724,7 +107222,7 @@
                 const off = jargon967b4(fr, 'the Friends block, off');
                 const t0 = fr.querySelector('.fm-ask-title');
                 if (!t0 || t0.textContent.trim() !== 'Work with friends') throw new Error('off, the block is titled “' + (t0 && t0.textContent) + '”');
-                if (tested(off)) throw new Error('off, the Friends block says “still being tested” ' + tested(off) + ' time(s) — it is said once, on the Settings switch: “' + off.slice(0, 220) + '”');
+                if (tested(off)) throw new Error('off, the Friends block says “still being tested” ' + tested(off) + ' time(s) — #921 clause 19 took Work with friends out of testing: “' + off.slice(0, 220) + '”');
                 if (bar.textContent.trim() !== 'Share live with friends') throw new Error('off, the Friends bar reads “' + bar.textContent + '” — the action is Share live');
                 fr.querySelector('.cs-offrow [role=switch]').click(); await settle921(200);
                 if (!FM.settings.get('collabLabs')) throw new Error('setup: the block’s switch did not turn it on');
@@ -125212,5 +125710,38 @@
       const r = inp.getBoundingClientRect();
       if (r.height < 44 || r.width < 44) throw new Error('the Length box is ' + r.width.toFixed(0) + 'x' + r.height.toFixed(0) + ' px — under the 44 px a finger needs');
     });
+  });
+
+  /* #921 clause 19 (11 Oct): "Friends thing worked" between his own phone and computer, so the Labs gate comes off "so it
+     is part of the app". On for a device that never chose; a device that chose keeps its choice; and ON still opens
+     nothing — no socket, no peer connection — until he shares or joins (§23). */
+  test('921 clause 19 · Work with friends is part of the app: on for a new device, a saved choice is kept, and on opens no connection', { item: '921' }, async function () {
+    const KEY = 'fm.settings';
+    let saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    const C = FM.collab;
+    if (C && C.session) throw new Error('CONTROL: a live session is already running, so the settings cannot be reloaded safely');
+    const WS = window.WebSocket, PC = window.RTCPeerConnection;
+    let opened = 0;
+    try {
+      window.WebSocket = function () { opened++; throw new Error('socket opened'); };
+      window.RTCPeerConnection = function () { opened++; throw new Error('peer connection opened'); };
+      localStorage.removeItem(KEY);
+      FM.settings.init();
+      if (FM.settings.get('collabLabs') !== true) throw new Error('a device that never chose has Work with friends OFF — it is still gated as a Labs feature');
+      await sleep(400);
+      if (opened) throw new Error('with the feature on and nobody sharing, ' + opened + ' connection(s) were opened — on must still send nothing (§23)');
+      localStorage.setItem(KEY, JSON.stringify(Object.assign(JSON.parse(saved || '{}'), { collabLabs: false })));
+      FM.settings.init();
+      if (FM.settings.get('collabLabs') !== false) throw new Error('a device that turned it OFF came back with it on — the switch is a promise');
+      localStorage.setItem(KEY, JSON.stringify(Object.assign(JSON.parse(saved || '{}'), { collabLabs: true })));
+      FM.settings.init();
+      if (FM.settings.get('collabLabs') !== true) throw new Error('a device that turned it on came back with it off');
+    } finally {
+      window.WebSocket = WS; window.RTCPeerConnection = PC;
+      try { if (saved == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, saved); } catch (e) {}
+      FM.settings.init();
+      await sleep(100);
+    }
   });
 })();
