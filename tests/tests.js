@@ -124593,4 +124593,179 @@
     const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+  /* ═══ #482 / #966 POLISH BATCH 12 — Keying, wipes, text, drawing: Chroma Key Pro, Luma Key, Wipe and Radial Wipe, Type-On,
+   * Scramble Text and Timecode, Border Frame, Find Edges, Emboss ═══════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 12
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); 12.3 answers hunt C36, 12.6/12.7 take C60 on to a width. The rule
+   * that makes it safe (§0.3): every new key's default is the old look, because a filter recipe gets every key it does not set
+   * from makeInstance, and a saved instance that lacks a key is filled at render time (queue 784) with the kernel's own
+   * fallback. Each item proves both against hashes captured on fc8866f1 (the tree before the batch) BEFORE the first edit.
+   * Pixel kernels run on typed arrays and text effects on strings — no canvas, no font, no rasteriser — so the bytes are the
+   * same on every OS and the pins are plain literals rather than pinned() tables. */
+  function b12Plate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  }
+  function b12Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b12Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  function b12StrHash(s) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b12Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  /* The kernel through FM._applyPixelFx: the same PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`, so a kernel that leaves its px params to the dispatcher is scaled as on a layer. */
+  function b12Run(type, params, W, H, t, ps, d0) { const d = d0 || b12Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out. (On fc8866f1 makeInstance has none of them, which is how
+     the pins were captured.) */
+  function b12Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Twelve hashes per config: two plate sizes; the export (ps 1), a half-size preview and his phone's 0.28 plate; two moments. */
+  function b12Shots(run, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5, 0.28].map(ps => [0.37, 1.9].map(t => b12Hash(run(JSON.parse(JSON.stringify(params)), W, H, t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys before the kernel runs (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new
+     instance, and every filter recipe), against the pins. `shots` turns params into the pinned string. */
+  function b12Pinned(type, NEW, CFG, PIN, shots) {
+    const moved = [];
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b12Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: JSON.parse(JSON.stringify(abs)) }).params;
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = shots(p); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  const b12PixelShots = type => p => b12Shots((q, W, H, t, ps) => b12Run(type, q, W, H, t, ps), p);
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default value comes
+     back from the load sanitiser as it was written. */
+  function b12Catalogue(type, NEW, SET, layerType) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l48212' + type, type: layerType || 'shape', shape: 'rect', text: 'Hi', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(SET)) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A library filter built on the effect carries every new key at its default (no recipe sets one). */
+  function b12Recipes(type, NEW, ids) {
+    ids.forEach(id => {
+      const box = FM.filters.makeInstance(id), kid = box && (box.effects || []).filter(e => e.type === type)[0];
+      if (!kid) throw new Error('CONTROL: the ' + id + ' filter has no ' + type + ' in it any more - this check sees nothing');
+      Object.keys(NEW).forEach(k => { if (kid.params[k] !== NEW[k]) throw new Error('the ' + id + ' filter’s ' + type + ' carries ' + k + ' = ' + kid.params[k] + ', not ' + NEW[k] + ' - a library filter would change its look'); });
+    });
+  }
+  const b12Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b12Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b12Alpha = d => { const a = []; for (let i = 3; i < d.length; i += 4) a.push(d[i]); return a; };
+  /* Text effects run on strings: every config over a spread of texts, progresses and moments, joined and hashed. */
+  const B12_TEXTS = ['Hello brave new world', 'two lines\nof caption text', 'a', '', 'Mixed CASE 2026 & co!'];
+  function b12TextShots(type) {
+    return p => {
+      const out = [];
+      B12_TEXTS.forEach(s => [0, 0.21, 0.5, 0.87, 1].forEach(pr => [[0.37, 0.37], [1.9, 1.3], [12.5, 3.2]].forEach(([t, lt]) => {
+        const q = JSON.parse(JSON.stringify(p)); if (q.progress === undefined) q.progress = pr;
+        const st = { text: s, letterSpacing: 7 }; FM.TEXT_FX[type](st, q, t, { localT: lt, fps: 30 }); out.push(st.text);
+      })));
+      return b12StrHash(out.join('\u0001'));
+    };
+  }
+  const B12_TIMES = [[12.5, 12.5, 30], [3725.5, 3725.5, 30], [0.04, 0.04, 24], [59.999, 59.999, 25], [7.3, 2.1, 29.97], [100.25, 0, 60]];
+  function b12TimecodeShots(p) {
+    const out = [];
+    B12_TIMES.forEach(([t, lt, fps]) => { const st = { text: 'x', letterSpacing: 0 }; FM.TEXT_FX.timecode(st, JSON.parse(JSON.stringify(p)), t, { localT: lt, fps: fps }); out.push(st.text); });
+    return out.join(' | ');
+  }
+
+  /* 12.1 CHROMA KEY PRO: Clip black, Clip white, Shrink / grow, Despill from, and a View that lays the key over grey. (Hunt C3,
+     which the backlog files under this item, was fixed by queue 986: Despill already pulls the key colour, and '986 C3 …'
+     pins it. Despill from keeps that as its default and adds Green and Blue.) */
+  const B12CK_NEW = { clipblack: 0, clipwhite: 100, shrink: 0, spillfrom: 0 };
+  const B12CK_CFG = { def: {}, blue: { color: '#1e3cff', tolerance: 0.5, despill: 1 }, matte: { view: 1 }, hard: { softness: 0, despill: 0, edgedesat: 0 },
+    kf: { tolerance: b12Kf(0.1, 0.6), despill: b12Kf(1, 0) }, teal: { color: '#30b0a0', softness: 0.6, edgedesat: 1 } };
+  const B12CK_PIN = {   // fc8866f1, before the edit
+    def: 'b3dd5d60.b3dd5d60/b3dd5d60.b3dd5d60/b3dd5d60.b3dd5d60 6423ecd1.6423ecd1/6423ecd1.6423ecd1/6423ecd1.6423ecd1',
+    blue: '1b2f8aca.1b2f8aca/1b2f8aca.1b2f8aca/1b2f8aca.1b2f8aca 7b2ed0dc.7b2ed0dc/7b2ed0dc.7b2ed0dc/7b2ed0dc.7b2ed0dc',
+    matte: 'd4220b7e.d4220b7e/d4220b7e.d4220b7e/d4220b7e.d4220b7e 34a516f1.34a516f1/34a516f1.34a516f1/34a516f1.34a516f1',
+    hard: '70eb43a7.70eb43a7/70eb43a7.70eb43a7/70eb43a7.70eb43a7 d4cc567a.d4cc567a/d4cc567a.d4cc567a/d4cc567a.d4cc567a',
+    kf: 'b80ed3fd.aa234a3d/b80ed3fd.aa234a3d/b80ed3fd.aa234a3d 51d8e11d.74468ea5/51d8e11d.74468ea5/51d8e11d.74468ea5',
+    teal: '543a0342.543a0342/543a0342.543a0342/543a0342.543a0342 41e2d002.41e2d002/41e2d002.41e2d002/41e2d002.41e2d002' };
+
+  test('482 12.1 Chroma Key Pro - Clip black, Clip white, Shrink / grow and Despill from are in the catalogue at defaults that key the old matte, View offers On grey, and saved and new keys come out byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('chromakeypro', B12CK_NEW, { clipblack: 20, clipwhite: 80, shrink: -3, spillfrom: 2, view: 2 });
+    if (b12Row('chromakeypro', 'shrink').unit !== 'px') throw new Error('Shrink / grow is not declared in px - it is a width on the picture, so a reduced preview must scale it');
+    const vw = b12Row('chromakeypro', 'view');
+    if ((vw.options || []).map(o => o[0] + ':' + o[1]).join() !== '0:Result,1:Matte,2:On grey') throw new Error('View is not Result / Matte / On grey (' + JSON.stringify(vw.options) + ')');
+    const moved = b12Pinned('chromakeypro', B12CK_NEW, B12CK_CFG, B12CK_PIN, b12PixelShots('chromakeypro'));
+    if (moved.length) throw new Error(moved.length + ' Chroma Key Pro results differ from fc8866f1 at the new defaults - a new control changed a key he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.1 Chroma Key Pro - Clip black and Clip white re-level the matte, Shrink and Grow move the edge by project px (not past the layer’s own edge), Despill from Green or Blue pulls that channel whatever the key, and On grey lays the key over grey', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64, KEY = [0, 194, 60], SUBJ = [230, 120, 40];
+    const P = o => Object.assign({ color: '#00c23c', tolerance: 0.3, softness: 0.28, despill: 0, edgedesat: 0, view: 0 }, o);
+    const ck = (o, d0, ps) => b12Run('chromakeypro', P(o), W, H, 0.5, ps, d0);
+    /* CLIP. A ramp from the key colour to the subject across each row, so every matte level turns up. CONTROL: under the
+       defaults the Matte view has levels between clear and solid on both sides of 30 % and 70 %. Clip black 30 / white 70 must
+       then be exactly the level map: at or below 0.3 clear, at or above 0.7 solid, linear in between (a byte either way). */
+    const ramp = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, f = x / (W - 1); for (let c = 0; c < 3; c++) d[i + c] = Math.round(KEY[c] + (SUBJ[c] - KEY[c]) * f); d[i + 3] = 255; } return d; };
+    const m0 = ck({ view: 1 }, ramp()), mc = ck({ view: 1, clipblack: 30, clipwhite: 70 }, ramp());
+    let lo = 0, mid = 0, hi = 0;
+    for (let i = 0; i < m0.length; i += 4) { const v = m0[i] / 255; if (v > 0 && v <= 0.3) lo++; else if (v > 0.3 && v < 0.7) mid++; else if (v >= 0.7 && v < 1) hi++; }
+    if (!(lo && mid && hi)) throw new Error('CONTROL: the ramp’s matte has ' + lo + ' / ' + mid + ' / ' + hi + ' pixels in the three bands - the fixture cannot see the clip');
+    for (let i = 0; i < m0.length; i += 4) {
+      const v = m0[i] / 255, want = v >= 0.7 ? 255 : (v <= 0.3 ? 0 : (v - 0.3) / 0.4 * 255);
+      if (Math.abs(mc[i] - want) > 1.5) throw new Error('Clip black 30 / Clip white 70 turned a matte of ' + v.toFixed(3) + ' into ' + mc[i] + ', not ' + want.toFixed(1) + ' (pixel ' + (i / 4) + ')');
+    }
+    /* SHRINK / GROW. A 20 px subject square on the screen. CONTROL: 400 solid pixels. Shrink 3 leaves the 14 px square and Grow 3
+       makes it 26 px; the matte is a hard step here, so the counts are exact. */
+    const block = (x0, y0, n) => { const d = b12Flat(W, H, KEY); for (let y = y0; y < y0 + n; y++) for (let x = x0; x < x0 + n; x++) { const i = (y * W + x) * 4; d[i] = SUBJ[0]; d[i + 1] = SUBJ[1]; d[i + 2] = SUBJ[2]; } return d; };
+    const solid = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] === 255) n++; return n; };
+    const n0 = solid(ck({}, block(20, 20, 20))), nS = solid(ck({ shrink: -3 }, block(20, 20, 20))), nG = solid(ck({ shrink: 3 }, block(20, 20, 20)));
+    if (n0 !== 400) throw new Error('CONTROL: the subject square keys to ' + n0 + ' solid pixels, not 400');
+    if (nS !== 196) throw new Error('Shrink 3 px left ' + nS + ' solid pixels of a 20 px square, not 196 (a 14 px square)');
+    if (nG !== 676) throw new Error('Grow 3 px made ' + nG + ' solid pixels from a 20 px square, not 676 (a 26 px square)');
+    /* …in project px: Shrink 4 on a half-size preview plate is Shrink 2 at full size, on the same plate, byte for byte. */
+    if (!b12Same(ck({ shrink: -4 }, block(20, 20, 20), 0.5), ck({ shrink: -2 }, block(20, 20, 20), 1))) throw new Error('Shrink 4 px on a half-size preview is not Shrink 2 px on the full plate - the choke does not follow the preview’s scale');
+    /* …and never past the layer’s own edge. The left half is not the layer at all (alpha 0), and carries the WORST colour
+       under it: the screen’s beside a subject (a choke that read it would eat 3 columns off the subject), the subject’s beside
+       a screen (a spread that read it would grow a 3-column rim onto the screen). */
+    const half = (under, over) => { const d = b12Flat(W, H, over); for (let y = 0; y < H; y++) for (let x = 0; x < 32; x++) { const i = (y * W + x) * 4; d[i] = under[0]; d[i + 1] = under[1]; d[i + 2] = under[2]; d[i + 3] = 0; } return d; };
+    const hS = ck({ shrink: -3 }, half(KEY, SUBJ)), hG = ck({ shrink: 3 }, half(SUBJ, KEY));
+    if (solid(hS) !== 32 * 64) throw new Error('Shrink ate into a subject from the side where the LAYER ends (' + solid(hS) + ' solid pixels, not ' + 32 * 64 + ') - only the key’s own matte may be choked');
+    if (solid(hG) !== 0) throw new Error('Grow spread a rim onto the keyed screen from where the layer is not (' + solid(hG) + ' solid pixels, not 0)');
+    /* DESPILL FROM. CONTROL: on a BLUE screen, Key colour leaves a leaf’s green alone (queue 986). Green takes it down to the
+       larger of the other two, as despill does; on a GREEN screen, Blue pulls a blue rim that Key colour leaves. */
+    const px = (rgb, o) => { const d = b12Flat(1, 1, rgb); FM._FX_TABLES.PIXEL_FX.chromakeypro(d, 1, 1, P(Object.assign({ tolerance: 0.1, softness: 0, despill: 1 }, o)), 0); return Array.from(d); };
+    const LEAF = [60, 140, 50], SPILL = [150, 150, 200];
+    if (px(LEAF, { color: '#1e3cff' }).join() !== '60,140,50,255') throw new Error('CONTROL: a blue-screen key with Despill from Key colour changed a leaf: ' + px(LEAF, { color: '#1e3cff' }));
+    if (px(LEAF, { color: '#1e3cff', spillfrom: 1 }).join() !== '60,60,50,255') throw new Error('Despill from Green on a blue-screen key left a leaf at ' + px(LEAF, { color: '#1e3cff', spillfrom: 1 }) + ', not 60,60,50');
+    if (px(SPILL, {}).join() !== '150,150,200,255') throw new Error('CONTROL: a green-screen key with Despill from Key colour changed a blue-rim pixel: ' + px(SPILL, {}));
+    if (px(SPILL, { spillfrom: 2 }).join() !== '150,150,150,255') throw new Error('Despill from Blue on a green-screen key left a blue-rim pixel at ' + px(SPILL, { spillfrom: 2 }) + ', not 150,150,150');
+    /* ON GREY. CONTROL: Result clears the screen pixel. On grey keeps the layer’s alpha, paints the screen mid grey and leaves
+       the subject alone; a half-keyed pixel is its colour over grey by its matte. */
+    const b = block(20, 20, 20), res = ck({}, b.slice()), gr = ck({ view: 2 }, b.slice());
+    if (res[3] !== 0) throw new Error('CONTROL: Result left the screen at alpha ' + res[3]);
+    if (Array.from(gr.slice(0, 4)).join() !== '128,128,128,255') throw new Error('On grey drew the keyed-out screen as ' + Array.from(gr.slice(0, 4)) + ', not solid mid grey');
+    const c = ((30 * W) + 30) * 4;
+    if (Array.from(gr.slice(c, c + 4)).join() !== SUBJ.concat(255).join()) throw new Error('On grey changed the subject: ' + Array.from(gr.slice(c, c + 4)));
+    const rm = ck({ view: 1 }, ramp()), rg = ck({ view: 2 }, ramp()), rr = ck({}, ramp());
+    for (let i = 0; i < rm.length; i += 4) {
+      const a = rm[i] / 255; if (!(a > 0.05 && a < 0.95)) continue;
+      for (let ch = 0; ch < 3; ch++) { const want = rr[i + ch] * a + 128 * (1 - a); if (Math.abs(rg[i + ch] - want) > 1.5) throw new Error('On grey drew a half-keyed pixel (matte ' + a.toFixed(2) + ') channel ' + ch + ' as ' + rg[i + ch] + ', not ' + want.toFixed(1) + ' (its colour over grey)'); }
+      if (rg[i + 3] !== 255) throw new Error('On grey changed a solid layer’s alpha to ' + rg[i + 3]);
+    }
+  });
 })();

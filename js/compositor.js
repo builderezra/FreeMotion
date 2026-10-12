@@ -1523,9 +1523,17 @@ window.FM = window.FM || {};
     { type: 'chromakeypro', label: 'Chroma Key Pro', desc: 'A green screen key that survives uneven lighting: it measures colour only and ignores brightness, so a shadowed corner keys like a lit one. Despill removes the green rim.', params: [
       { key: 'tolerance', label: 'Tolerance', min: 0.02, max: 1, step: 0.02, def: 0.3 },
       { key: 'softness', label: 'Edge softness', min: 0, max: 1, step: 0.02, def: 0.28 },
+      /* #482 12.1 — the matte tools every keyer has. Clip black / Clip white are levels on the matte (a half-keyed shadow
+         goes fully clear, a see-through shirt goes fully solid); Shrink / grow chokes or spreads it in project px. All three
+         at their defaults leave the matte as it was, and the kernel skips them there. */
+      { key: 'clipblack', label: 'Clip black', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'clipwhite', label: 'Clip white', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'shrink', label: 'Shrink / grow', min: -10, max: 10, step: 1, def: 0, unit: 'px' },
       { key: 'despill', label: 'Despill', min: 0, max: 1, step: 0.02, def: 0.7 },
+      // #482 12.1: which channel Despill pulls. Key colour is what it has done since queue 986 (hunt C3), so it is the default.
+      { key: 'spillfrom', label: 'Despill from', def: 0, options: [[0, 'Key colour'], [1, 'Green'], [2, 'Blue']] },
       { key: 'edgedesat', label: 'Edge desaturate', min: 0, max: 1, step: 0.02, def: 0.35 },
-      { key: 'view', label: 'View', options: [[0, 'Result'], [1, 'Matte']], def: 0 },
+      { key: 'view', label: 'View', options: [[0, 'Result'], [1, 'Matte'], [2, 'On grey']], def: 0 },   // On grey: #482 12.1
     ], color: true, defColor: '#00c23c', colorLabel: 'Key colour' },
     // ---- batch 35: Light Wrap — the shot that makes a key look composited rather than pasted ----
     // Every glow here blooms the layer's OWN pixels. This one reads the layers underneath and wraps
@@ -5011,6 +5019,28 @@ window.FM = window.FM || {};
     _sfCand = { cols: cols, rows: rows, n: n, X: X, Y: Y, R: R };
     return _sfCand;
   }
+  /* Chroma Key Pro's Shrink / grow (#482 12.1): a square min (shrink) or max (grow) of radius r over a matte of 0..1 values,
+     one row pass and one column pass, in place. r is at most 10 plate px, so a plain window scan is cheap enough. */
+  function matteMorph12(A, W, H, r, grow) {
+    const T = new Float64Array(A.length);
+    for (let y = 0; y < H; y++) {
+      const row = y * W;
+      for (let x = 0; x < W; x++) {
+        const lo = x - r < 0 ? 0 : x - r, hi = x + r > W - 1 ? W - 1 : x + r;
+        let m = A[row + lo];
+        for (let k = lo + 1; k <= hi; k++) { const v = A[row + k]; if (grow ? v > m : v < m) m = v; }
+        T[row + x] = m;
+      }
+    }
+    for (let x = 0; x < W; x++) {
+      for (let y = 0; y < H; y++) {
+        const lo = y - r < 0 ? 0 : y - r, hi = y + r > H - 1 ? H - 1 : y + r;
+        let m = T[lo * W + x];
+        for (let k = lo + 1; k <= hi; k++) { const v = T[k * W + x]; if (grow ? v > m : v < m) m = v; }
+        A[y * W + x] = m;
+      }
+    }
+  }
   /* ═══ HOW MUCH OF A REDUCED PLATE PIXEL THE EXPORT'S LINE FILLS (#986 batch 2 review) ═══════════════════════════════
    * Find Edges and Emboss on a reduced plate (see Find Edges). `R` holds every plate pixel's raw reading in slot `c` of
    * each 4; `v` is this pixel's, (ux, uy) is the direction across the line with its larger component 1. A reading that
@@ -5557,31 +5587,58 @@ window.FM = window.FM || {};
       const soft = (p.softness == null ? 0.28 : clamp01(FM.evalProp(p.softness, t))) * 180;
       const spill = clamp01(p.despill == null ? 0.7 : FM.evalProp(p.despill, t));
       const eDesat = clamp01(p.edgedesat == null ? 0.35 : FM.evalProp(p.edgedesat, t));
-      const matte = Math.round(FM.evalProp(p.view, t) || 0) === 1;
+      const vw = Math.round(FM.evalProp(p.view, t) || 0), matte = vw === 1, grey = vw === 2;
       const hi = tol + (soft < 1 ? 1 : soft);            // never a zero-width step — that hard-edges the matte
       /* DESPILL PULLS THE KEY'S OWN COLOUR (queue 986, hunt C3). It pulled GREEN whatever the key was, so a BLUE screen
          took the green out of skin and leaves and left its own blue rim on the subject. The spill is the screen's
          strongest channel, the one the basic Chroma Key already reads (chromaKey's `kc`). For a green key this is the
          very same arithmetic: channel 1 against the larger of the other two. */
-      const kc = k[1] >= k[0] && k[1] >= k[2] ? 1 : (k[2] >= k[0] ? 2 : 0);
+      /* DESPILL FROM (#482 12.1): Green or Blue pulls that channel whatever the key colour is — the spill off a teal or
+         cyan-ish screen, or a screen picked with the eyedropper off a shadow, is not always the key's own strongest one. */
+      const sfrom = p.spillfrom == null ? 0 : (Math.round(FM.evalProp(p.spillfrom, t)) | 0);
+      const kc = sfrom === 1 ? 1 : (sfrom === 2 ? 2 : (k[1] >= k[0] && k[1] >= k[2] ? 1 : (k[2] >= k[0] ? 2 : 0)));
       const kc1 = (kc + 1) % 3, kc2 = (kc + 2) % 3;
-      for (let i = 0; i < d.length; i += 4) {
-        const r = d[i], g = d[i + 1], b = d[i + 2];
+      const keyA = (r, g, b) => {
         const cb = -0.169 * r - 0.331 * g + 0.5 * b;
         const cr = 0.5 * r - 0.419 * g - 0.081 * b;
         const dcb = cb - kcb, dcr = cr - kcr;
         const dist = Math.sqrt(dcb * dcb + dcr * dcr);
-        let a;
-        if (dist <= tol) a = 0;
-        else if (dist >= hi) a = 1;
-        else { const u = (dist - tol) / (hi - tol); a = u * u * (3 - 2 * u); }
+        if (dist <= tol) return 0;
+        if (dist >= hi) return 1;
+        const u = (dist - tol) / (hi - tol); return u * u * (3 - 2 * u);
+      };
+      /* #482 12.1 — CLIP BLACK / CLIP WHITE / SHRINK-GROW work on the whole matte first, because a choke needs every
+         neighbour's matte before any pixel can be written. A pixel the LAYER does not cover (alpha 0) is never subject,
+         so it takes the value that leaves its neighbours alone (1 under a shrink, 0 under a grow): a clip smaller than
+         the frame is not eaten from its own edge, and does not grow a rim into it. All three at their defaults: no
+         matte array, and the loop below is the old loop. */
+      const cbk = (p.clipblack == null ? 0 : Math.max(0, Math.min(100, FM.evalProp(p.clipblack, t)))) / 100;
+      const cwh = (p.clipwhite == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.clipwhite, t)))) / 100;
+      let shr = p.shrink == null ? 0 : Math.round(FM.evalProp(p.shrink, t) || 0);   // plate px: pxToPlate has scaled it
+      if (shr < -10) shr = -10; if (shr > 10) shr = 10;
+      let A = null;
+      if (cbk !== 0 || cwh !== 1 || shr !== 0) {
+        A = new Float64Array(W * H);
+        const clip = cbk !== 0 || cwh !== 1, out = shr > 0 ? 0 : 1;
+        for (let i = 0, n = 0; i < d.length; i += 4, n++) {
+          if (d[i + 3] === 0 && shr !== 0) { A[n] = out; continue; }
+          let a = keyA(d[i], d[i + 1], d[i + 2]);
+          if (clip) a = a >= cwh ? 1 : (a <= cbk ? 0 : (a - cbk) / (cwh - cbk));   // white first: Clip black 100 still keeps a solid pixel
+          A[n] = a;
+        }
+        if (shr !== 0) matteMorph12(A, W, H, shr < 0 ? -shr : shr, shr > 0);
+      }
+      for (let i = 0; i < d.length; i += 4) {
+        const a = A ? A[i >> 2] : keyA(d[i], d[i + 1], d[i + 2]);
         /* VIEW: MATTE KEEPS THE LAYER'S OWN ALPHA (#986 C40). It wrote 255 into every pixel it was handed, including
            the transparent ones round a clip smaller than the frame — and the kernel is handed the clip's box PLUS a crop
            margin, so a light-grey opaque band (measured 220,220,220) framed the clip exactly as far as that margin
            reached and no further. Where the layer is solid (every keyed shot) this is the same byte as before. */
         if (matte) { const v = a * 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; continue; }
-        if (a <= 0) { d[i + 3] = 0; continue; }
-        d[i + 3] = d[i + 3] * a;
+        /* VIEW: ON GREY (#482 12.1) — the result laid over mid grey inside the layer, so a fringe or a hole that hides
+           against the shot's own background shows up. Like Matte it keeps the layer's own alpha. */
+        if (a <= 0) { if (grey) { d[i] = 128; d[i + 1] = 128; d[i + 2] = 128; } else d[i + 3] = 0; continue; }
+        if (!grey) d[i + 3] = d[i + 3] * a;
         if (spill > 0) {
           // The key's channel above both neighbours is spill, not colour. Pull it down to their maximum.
           const v = d[i + kc], o1 = d[i + kc1], o2 = d[i + kc2], mx = o1 > o2 ? o1 : o2;
@@ -5593,6 +5650,7 @@ window.FM = window.FM || {};
           const l = 0.299 * rr + 0.587 * gg + 0.114 * bb;
           d[i] = rr + (l - rr) * w; d[i + 1] = gg + (l - gg) * w; d[i + 2] = bb + (l - bb) * w;
         }
+        if (grey && a < 1) { const g0 = 128 * (1 - a); d[i] = d[i] * a + g0; d[i + 1] = d[i + 1] * a + g0; d[i + 2] = d[i + 2] * a + g0; }
       }
     },
     /* HSL Bands — the CapCut/Lightroom HSL panel: retune ONE colour band and leave the rest alone.
