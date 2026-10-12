@@ -124963,4 +124963,83 @@
     ], 1.3, p => { const q = Object.assign({}, p); ['zoom', 'srcx', 'srcy', 'flow', 'mirror'].forEach(k => delete q[k]); return q; });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* 10.4 TURBULENT DISPLACE. The field boiled in place: with Boil speed 0 it froze, and nothing could carry it anywhere. Flow Y
+     -100 must carry the frozen field 100 px UP in a second — the push at (x, y) one second in is the push that was at (x, y+100)
+     at the start. On the reference path that is the same arithmetic, so it holds to float error; on the fast lattice (step 4 at
+     Amount 30, Detail 60 — 100 is 25 whole cells) it holds too, inside the half-pixel bound the 904 test already gives the
+     lattice. Stretch 200 reads the field at x/2: the swirls are twice as wide. No GPU twin exists for this warp. */
+  test('482 10.4 Turbulent Displace - Flow Y -100 carries the frozen field 100 px up in a second where today it stays put, Flow X carries it across, Stretch 200 makes the swirls twice as wide, on the fast lattice and its reference alike, and a saved one draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._warpFx.turbulentdisplace, R = FM.fxRegistry, bad = [];
+    const W = 240, H = 300, cx = 120, cy = 150, maxR = Math.hypot(cx, cy);
+    const P = o => Object.assign({ amount: 30, scale: 60, evolve: 0 }, o);
+    /* the push at (x, y): through the prep's lattice (what the app draws), or the kernel's own reference path.
+       ⚠️ The lattice lives in ONE grow-only buffer the next prep overwrites (_tdGrid — right for a renderer, which uses a prep
+       and drops it), so each field here keeps its own copy, or every comparison would be a field against itself. */
+    const fast = (p, t, tl) => { const pre = K.prep(W, H, cx, cy, maxR, p, t, 1, tl); if (pre.DX) { pre.DX = Float32Array.from(pre.DX); pre.DY = Float32Array.from(pre.DY); }
+      return (x, y) => { const m = K(x, y, W, H, cx, cy, maxR, p, t, 1, pre); return [m[0] - x, m[1] - y]; }; };
+    const ref = (p, t) => (x, y) => { const m = K(x, y, W, H, cx, cy, maxR, p, t, 1); return [m[0] - x, m[1] - y]; };
+    const far = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const pts = []; for (let y = 5; y < 190; y += 17) for (let x = 50; x < 230; x += 23) pts.push([x, y]);
+    const worst = (f, g, dx, dy) => { let m = 0; pts.forEach(([x, y]) => { m = Math.max(m, far(f(x, y), g(x + dx, y + dy))); }); return m; };
+    /* 1. THE ROWS */
+    const want = { flowx: 0, flowy: 0, stretch: 100 };
+    Object.keys(want).forEach(k => {
+      const pd = (R.paramsOf('turbulentdisplace') || []).filter(q => q.key === k)[0];
+      if (!pd) { bad.push('Turbulent Displace has no ' + k + ' row'); return; }
+      if (pd.default !== want[k] || R.makeInstance('turbulentdisplace').params[k] !== want[k]) bad.push('a new Turbulent Displace starts at ' + k + ' ' + R.makeInstance('turbulentdisplace').params[k]);
+      if (FM._fxFillValue('turbulentdisplace', k) !== want[k]) bad.push('a saved Turbulent Displace with no ' + k + ' draws it as ' + FM._fxFillValue('turbulentdisplace', k));
+    });
+    const lay = [{ id: 'l48210t', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'turbulentdisplace', enabled: true, params: { amount: 30, flowx: 120, flowy: -60, stretch: 250 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const tp = lay[0].effects[0].params;
+    if (tp.flowx !== 120 || tp.flowy !== -60 || tp.stretch !== 250) bad.push('a saved Flow X / Y and Stretch come back from the load sanitiser as ' + JSON.stringify(tp));
+    /* 2. FLOW Y — the backlog's test. CONTROLS: frozen, the field is the same at 0 s and 1 s; and it is not flat (a shift is
+          visible: the push 100 px lower is a different push) */
+    const f0 = fast(P({}), 0, 0), f1 = fast(P({}), 1, 1);
+    if (worst(f0, f1, 0, 0) !== 0) throw new Error('CONTROL: with Boil speed 0 the field still moved between 0 s and 1 s');
+    if (!(worst(f0, f0, 0, 100) > 3)) throw new Error('CONTROL: the push 100 px lower is the same push - the field is too flat to show a shift');
+    const up = fast(P({ flowy: -100 }), 1, 1), up0 = fast(P({ flowy: -100 }), 0, 0);
+    const dUp = worst(up, f0, 0, 100);
+    if (!(dUp <= 0.5)) bad.push('Flow Y -100, one second in, is ' + dUp.toFixed(2) + ' px from the field as it stood 100 px lower at the start - it did not carry the field up 100 px');
+    if (worst(up0, f0, 0, 0) !== 0) bad.push('Flow Y -100 moved the field on the clip\'s first frame');
+    const dUpRef = worst(ref(P({ flowy: -100 }), 1), ref(P({}), 0), 0, 100);
+    if (!(dUpRef <= 1e-9)) bad.push('on the reference path Flow Y -100 one second in is ' + dUpRef + ' px from the field 100 px lower at the start');
+    /* 3. FLOW X 80, half a second in: 40 px to the right */
+    const right = worst(fast(P({ flowx: 80 }), 0.5, 0.5), f0, -40, 0);
+    if (!(right <= 0.5)) bad.push('Flow X 80 half a second in is ' + right.toFixed(2) + ' px from the field 40 px to its left at the start');
+    /* 4. STRETCH 200 reads the field at x/2 — exactly on the reference path; and the swirls really are wider (CONTROL) */
+    const s2 = ref(P({ stretch: 200 }), 0.7), s1 = ref(P({}), 0.7);
+    let dS = 0, moved = 0;
+    pts.forEach(([x, y]) => { const a = s2(x, y), b = s1(x / 2, y); dS = Math.max(dS, far(a, b)); if (far(a, s1(x, y)) > 1) moved++; });
+    if (!(dS <= 1e-9)) bad.push('Stretch 200 at x is ' + dS + ' px from the unstretched field at x/2 - the swirls are not twice as wide');
+    if (!(moved > pts.length / 2)) bad.push('Stretch 200 changed the push at only ' + moved + ' of ' + pts.length + ' points');
+    /* 5. THE LATTICE AGREES WITH ITS REFERENCE under the new controls (the 904 test's bound) */
+    [{ flowx: 70, flowy: -40, stretch: 160 }, { stretch: 40 }, { flowy: 250, evolve: 1.5 }].forEach(o => {
+      const a = fast(P(o), 1.3, 1.3), b = ref(P(o), 1.3), d = worst(a, b, 0, 0);
+      if (!(d <= 0.5)) bad.push('the fast lattice and the reference disagree by ' + d.toFixed(2) + ' px with ' + JSON.stringify(o));
+    });
+    /* 6. SAVED: the reference path with none of the new keys is the formula as it was, transcribed here from fc8866f1 (Boil
+          speed absent = 0.6 per second, no Pattern) — exactly; and the lattice with the keys absent equals the lattice with them
+          spelled out at 0, 0, 100 */
+    const n = (u, v) => Math.sin(u) * Math.cos(v * 1.3) + Math.sin(u * 2.1 + v) * 0.5 + Math.cos(u * 0.5 - v * 1.7) * 0.35;
+    const old = (x, y, t) => { const sc = 60, a = 30, ph = t * 0.6; const wx = n(x / sc + ph, y / sc), wy = n(x / sc, y / sc - ph * 0.8);
+      return [x + n(x / sc + wx + 5.2, y / sc + wy) * a, y + n(x / sc - wy, y / sc + wx + 1.7) * a]; };
+    let offOld = 0;
+    pts.forEach(([x, y]) => { const a = K(x, y, W, H, cx, cy, maxR, { amount: 30, scale: 60 }, 1.3, 1), b = old(x, y, 1.3); if (a[0] !== b[0] || a[1] !== b[1]) offOld++; });
+    if (offOld) bad.push(offOld + ' points of a saved Turbulent Displace push differently from before on the reference path');
+    const sa = fast({ amount: 30, scale: 60 }, 1.3, 1.3), sb = fast({ amount: 30, scale: 60, flowx: 0, flowy: 0, stretch: 100 }, 1.3, 1.3);
+    if (worst(sa, sb, 0, 0) !== 0) bad.push('a saved Turbulent Displace draws differently from one at Flow 0, 0 and Stretch 100');
+    /* 7. THE CLIP CLOCK, through the renderer: Flow Y on a frozen field, on a clip starting at 1 s */
+    const made = [], noGL = FM._noGL;
+    FM._noGL = true;
+    try {
+      const pic = w10pic('_48210tur', 160, 120, (x, y) => [((x >> 3) + (y >> 3)) & 1 ? 230 : 20, x, y, 255], made);
+      const on = (o, t) => { const e = R.makeInstance('turbulentdisplace'); Object.assign(e.params, { evolve: 0 }, o); const L = pic([e]); L.start = 1; L.duration = 3; return _986shot([L], t, 160, 120); };
+      if (!w10same(on({}, 1), on({}, 2))) throw new Error('CONTROL: a frozen Turbulent Displace draws differently at 1 s and 2 s');
+      if (!w10same(on({ flowy: -100 }, 1), on({}, 1))) bad.push('Flow Y on a clip that starts at 1 s has already moved on its first frame - it runs on the project clock');
+      if (w10same(on({ flowy: -100 }, 2), on({ flowy: -100 }, 1))) bad.push('Flow Y -100 draws the same picture one second into the clip as at its start');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

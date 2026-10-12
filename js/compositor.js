@@ -1307,6 +1307,11 @@ window.FM = window.FM || {};
       { key: 'scale', label: 'Detail', min: 10, max: 400, step: 1, def: 60 },
       { key: 'evolve', label: 'Boil speed', min: 0, max: 5, step: 0.05, def: 1, unit: '×' },   // queue 904: it boiled at a fixed, unstoppable rate
       { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 },
+      /* #482 polish 10.4: it boiled in place, with round swirls only. Flow X / Y carry the whole field (heat haze rising, water
+         drifting) and Stretch widens or heightens its swirls — see tdDomain. 0, 0 and 100 are the old field exactly. */
+      { key: 'flowx', label: 'Flow X', min: -300, max: 300, step: 1, def: 0, unit: 'px/s' },
+      { key: 'flowy', label: 'Flow Y', min: -300, max: 300, step: 1, def: 0, unit: 'px/s' },
+      { key: 'stretch', label: 'Stretch', min: 25, max: 400, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'stretchseg', label: 'Stretch Segment', params: [
       { key: 'y', label: 'Position', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -11153,8 +11158,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var td_sc = fparam(p, 'scale', 60, t); if(td_sc<10)td_sc=10;
       td_a*=(ps||1); td_sc=Math.max(1,td_sc*(ps||1));
       var td_ph=tdPhase(p,t);   // queue 904: Boil speed and Pattern — the same helper the prep uses, so the two cannot drift
-      var td_wx=td_noise(x/td_sc+td_ph, y/td_sc), td_wy=td_noise(x/td_sc, y/td_sc-td_ph*0.8);
-      var td_dx=td_noise(x/td_sc+td_wx+5.2, y/td_sc+td_wy), td_dy=td_noise(x/td_sc-td_wy, y/td_sc+td_wx+1.7);
+      /* #482 polish 10.4: Flow X / Y slide the field (the point it is read at is x - flow·tl), Stretch widens it — the same
+         helper the prep uses. This path has no clip clock, so it reads `t` as one. Unset: x, y and the scale exactly. */
+      var td_d=tdDomain(p,t,undefined,ps), td_x=td_d.ox===0?x:x-td_d.ox, td_y=td_d.oy===0?y:y-td_d.oy, td_scx=td_d.st===100?td_sc:td_sc*td_d.st/100;
+      var td_wx=td_noise(td_x/td_scx+td_ph, td_y/td_sc), td_wy=td_noise(td_x/td_scx, td_y/td_sc-td_ph*0.8);
+      var td_dx=td_noise(td_x/td_scx+td_wx+5.2, td_y/td_sc+td_wy), td_dy=td_noise(td_x/td_scx-td_wy, td_y/td_sc+td_wx+1.7);
       return [x+td_dx*td_a, y+td_dy*td_a];
     },
     // Stretch Segment: grab a horizontal band and pull it vertically — content inside the band is
@@ -11736,11 +11744,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (p.seed != null) { const sd = Math.round(FM.evalProp(p.seed, t)) | 0; if (sd) ph += sd * 17.31; }
     return ph;
   }
+  /* FLOW X / Y AND STRETCH (#482 polish 10.4). The field only ever boiled in place: there was no wind to carry it, so heat haze
+     or water could not drift, and its swirls were always round. Flow is px/s on the clip clock (integrated when keyframed, like
+     Wave speed) and moves the WHOLE field: the displacement at (x, y) a second later is what it was at (x - flowX, y - flowY).
+     Stretch scales the field across (200 % = swirls twice as wide; 50 % = twice as tall). ox / oy come back in PLATE px; st is
+     the percentage. All three unset are 0, 0 and 100, and both callers then use their old expressions untouched. */
+  function tdDomain(p, t, tl, ps) {
+    var fx = p.flowx == null ? 0 : wClipIntegral(p.flowx, t, tl), fy = p.flowy == null ? 0 : wClipIntegral(p.flowy, t, tl);
+    var st = p.stretch == null ? 100 : FM.evalProp(p.stretch, t); if (!(st > 0)) st = 100; if (st < 25) st = 25; if (st > 400) st = 400;
+    return { ox: fx === 0 ? 0 : fx * (ps || 1), oy: fy === 0 ? 0 : fy * (ps || 1), st: st };
+  }
   function fwPhase(p, t, ev) {
     if (!FM.isAnimated(p.evolve)) return ev === 0 ? 0 : t * ev;   // the old phase, to the bit
     return FM.integrateProp(p.evolve, 0, t, (u) => { const k = FM.evalProp(p.evolve, u); return k < 0 ? 0 : (k > 5 ? 5 : k); });
   }
-  WARP_FX.turbulentdisplace.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  WARP_FX.turbulentdisplace.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     let a = FM.evalProp(p.amount, t);
     if (a == null) a = 30; if (a < 0) a = 0; if (a > 80) a = 80;
     if (a <= 0) return { off: 1 };                       // disabled — the kernel returns the pixel untouched
@@ -11748,11 +11766,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (sc == null) sc = 60; if (sc < 10) sc = 10;
     a *= (ps || 1); sc = Math.max(1, sc * (ps || 1));
     const ph = tdPhase(p, t);
+    /* #482 polish 10.4: Flow X / Y and Stretch (see tdDomain). The lattice is built at the points the field is READ at —
+       x - ox across, y - oy down — with the across scale `scx`; unset, ox and oy are 0 and scx is sc, the old lattice exactly. */
+    const dm = tdDomain(p, t, tl, ps), ox = dm.ox, oy = dm.oy, scx = dm.st === 100 ? sc : sc * dm.st / 100;
 
     /* The step comes from the noise scale, not from the raster: a coarse churn can be sampled coarsely,
        a fine crawl cannot. Capped at 6 because past that the win is already ~36x and the error starts
-       to be worth arguing about; floored at 1, where the lattice is every pixel and this is exact. */
-    let step = Math.floor(sc / (14 * Math.pow(Math.max(a, 1) / 30, 0.25)));
+       to be worth arguing about; floored at 1, where the lattice is every pixel and this is exact.
+       (#482 polish 10.4: the FINER of the two scales once Stretch makes them differ — min(sc, sc) is sc.) */
+    let step = Math.floor(Math.min(sc, scx) / (14 * Math.pow(Math.max(a, 1) / 30, 0.25)));
     if (step < 1) step = 1; else if (step > 8) step = 8;
     /* One cell of MARGIN on every side, because a cubic tap reaches to gx-1 and gx+2. Lattice index k
        holds the sample at pixel (k-1)*step, so the kernel's `gx` indexes straight into the window. */
@@ -11763,16 +11785,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const X = new Float64Array(GW * 5), Y = new Float64Array(GH * 5);
     const Xb = new Float64Array(GW * 5), Yb = new Float64Array(GH * 5);
     for (let gx = 0; gx < GW; gx++) {
-      const i = gx * 5, x = (gx - 1) * step;
-      const u = x / sc + ph;                             // td_wx's u — same expression as the kernel's
+      const i = gx * 5, x = (gx - 1) * step - ox;        // - ox: Flow X (#482 polish 10.4); x - 0 is x
+      const u = x / scx + ph;                            // td_wx's u — same expression as the kernel's (scx: Stretch)
       X[i] = Math.sin(u); X[i + 1] = Math.sin(u * 2.1); X[i + 2] = Math.cos(u * 2.1);
       X[i + 3] = Math.cos(u * 0.5); X[i + 4] = Math.sin(u * 0.5);
-      const ub = x / sc;                                 // td_wy's u
+      const ub = x / scx;                                // td_wy's u
       Xb[i] = Math.sin(ub); Xb[i + 1] = Math.sin(ub * 2.1); Xb[i + 2] = Math.cos(ub * 2.1);
       Xb[i + 3] = Math.cos(ub * 0.5); Xb[i + 4] = Math.sin(ub * 0.5);
     }
     for (let gy = 0; gy < GH; gy++) {
-      const j = gy * 5, y = (gy - 1) * step;
+      const j = gy * 5, y = (gy - 1) * step - oy;        // - oy: Flow Y
       const v = y / sc;                                  // td_wx's v
       Y[j] = Math.cos(v * 1.3); Y[j + 1] = Math.cos(v); Y[j + 2] = Math.sin(v);
       Y[j + 3] = Math.cos(v * 1.7); Y[j + 4] = Math.sin(v * 1.7);
@@ -11793,11 +11815,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        displacement in pixels. `a` is constant over the frame, so interpolating a*d and a*interpolating
        d are the same number. */
     for (let gy = 0; gy < GH; gy++) {
-      const jj = gy * 5, ysc = ((gy - 1) * step) / sc, row = gy * GW;
+      const jj = gy * 5, ysc = ((gy - 1) * step - oy) / sc, row = gy * GW;
       const y0 = Y[jj], y1 = Y[jj + 1], y2 = Y[jj + 2], y3 = Y[jj + 3], y4 = Y[jj + 4];
       const b0 = Yb[jj], b1 = Yb[jj + 1], b2 = Yb[jj + 2], b3 = Yb[jj + 3], b4 = Yb[jj + 4];
       for (let gx = 0; gx < GW; gx++) {
-        const ii = gx * 5, xsc = ((gx - 1) * step) / sc;
+        const ii = gx * 5, xsc = ((gx - 1) * step - ox) / scx;
         const wx = X[ii] * y0 + (X[ii + 1] * y1 + X[ii + 2] * y2) * 0.5 + (X[ii + 3] * y3 + X[ii + 4] * y4) * 0.35;
         const wy = Xb[ii] * b0 + (Xb[ii + 1] * b1 + Xb[ii + 2] * b2) * 0.5 + (Xb[ii + 3] * b3 + Xb[ii + 4] * b4) * 0.35;
         const k = row + gx;
