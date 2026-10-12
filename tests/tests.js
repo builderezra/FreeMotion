@@ -127314,4 +127314,90 @@
       });
     }, 380);
   });
+
+  /* SU1 #6 follow-up (the PM's call 12 Oct: "Gaps close up by themselves" is Simple's promise): with the playhead OFF the selected
+     clip, the panel's quick row swaps its trims for Move to the playhead and Extend to the playhead, and both wrote time straight
+     onto a clip of the row in Simple. These two tests press them as he would at 380: the clip selected, the playhead parked, More,
+     the button. Pictures, so neither side runs out of footage and Full's own Extend has nothing to clamp. One helper for both. */
+  async function su1QuickRowPress(v, name, t, title) {
+    FM.selectLayer(v.L(name).id); FM.time = t; await v.idle(); await smSettle(150);
+    if (FM.editor.isSimple()) { smTool('more').click(); await smSettle(250); }
+    else { FM.inspector.refresh(); await smSettle(60); }
+    const b = Array.from(document.querySelectorAll('#inspector .quick-row .qr-btn')).find(x => x.title === title);
+    if (!b) throw new Error('CONTROL: with ' + name + ' selected and the playhead at ' + t + ' s the panel has no “' + title + '” (quick row: ' + Array.from(document.querySelectorAll('#inspector .quick-row .qr-btn')).map(x => x.title).join(', ') + ')');
+    const n0 = v.steps();
+    b.click(); await v.idle(); await smSettle(150);
+    return v.steps() - n0;
+  }
+  const su1Spans = (v, names) => names.map(n => n + ' ' + v.L(n).start + '–' + (v.L(n).start + v.L(n).duration)).join(', ');
+  const su1Seams = () => FM.spine.read(FM.scene).main.filter(e => e.seam && (e.seam.kind === 'gap' || e.seam.kind === 'overlap')).map(e => e.seam.kind + ' ' + e.seam.amt.toFixed(2));
+  const su1Near = (a, b) => Math.abs(a - b) <= 1e-6;
+
+  /* MOVE. Red on the old inspector.js: the button ran Full's FM.moveClipTo, so A (0–3) with the playhead at 8 slid to 5–8 — a 3 s
+     gap where it was and an overlap over C — and the assertion that A is now third, at 6–9, fails. In Simple it is the reorder to
+     the cut nearest the playhead (9, so A goes last), then C with the playhead at 1 goes to the cut at 0 (first). CONTROL: in Full
+     the same button still slides A to end at 8 and C to start at 1, nothing else moving (today's Full, DESIGN §0.4). */
+  test('SU1 #6 · at 380 the panel’s Move clip to the playhead on a clip in Simple moves it to the cut nearest the playhead, one step, no gap and no overlap; in Full it still slides the clip to the playhead', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const build = (W, H) => [smPic('C', 6, 3, W, H), smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)];
+    await atPhoneWidth(async function () {
+      await smP2(build, async function (v) {
+        if (!FM.editor.isSimple()) throw new Error('setup: the project is not in Simple');
+        let steps = await su1QuickRowPress(v, 'A', 8, 'Move clip right to the playhead');
+        if (!su1Near(v.L('A').start, 6) || !su1Near(v.L('B').start, 0) || !su1Near(v.L('C').start, 3)) throw new Error('Move clip right to the playhead in Simple left ' + su1Spans(v, ['A', 'B', 'C']) + ' — want B 0–3, C 3–6, A 6–9 (it said “' + v.say() + '”)');
+        if (su1Seams().length) throw new Error('after Move right the clip row has ' + su1Seams().join(', '));
+        if (steps !== 1) throw new Error('Move right took ' + steps + ' undo steps, not one');
+        steps = await su1QuickRowPress(v, 'C', 1, 'Move clip left to the playhead');
+        if (!su1Near(v.L('C').start, 0) || !su1Near(v.L('B').start, 3) || !su1Near(v.L('A').start, 6)) throw new Error('Move clip left to the playhead in Simple left ' + su1Spans(v, ['A', 'B', 'C']) + ' — want C 0–3, B 3–6, A 6–9 (it said “' + v.say() + '”)');
+        if (su1Seams().length) throw new Error('after Move left the clip row has ' + su1Seams().join(', '));
+        if (steps !== 1) throw new Error('Move left took ' + steps + ' undo steps, not one');
+      });
+    }, 380);
+    /* CONTROL — Full: the clip slides until its near edge meets the playhead, and nothing else moves */
+    await atPhoneWidth(async function () {
+      await smP2(build, async function (v) {
+        if (FM.editor.isSimple()) FM.editor.set('full');
+        if (FM.editor.isSimple()) throw new Error('CONTROL: could not leave Simple for the Full half');
+        await su1QuickRowPress(v, 'A', 8, 'Move clip right to the playhead');
+        if (!su1Near(v.L('A').start, 5) || v.L('B').start !== 3 || v.L('C').start !== 6) throw new Error('Full’s Move right changed: ' + su1Spans(v, ['A', 'B', 'C']) + ' — want A 5–8 with B and C where they were (DESIGN §0.4)');
+        await su1QuickRowPress(v, 'C', 1, 'Move clip left to the playhead');
+        if (!su1Near(v.L('C').start, 1) || !su1Near(v.L('A').start, 5) || v.L('B').start !== 3) throw new Error('Full’s Move left changed: ' + su1Spans(v, ['A', 'B', 'C']) + ' — want C 1–4 (DESIGN §0.4)');
+      }, { full: true });
+    }, 380);
+  });
+
+  /* EXTEND. Red on the old inspector.js: the button ran Full's FM.extendClipTo, so B (3–6) with the playhead at 7.5 grew to 3–7.5
+     over C, which stayed at 6 — the assertion that C now starts at 7.5 fails. In Simple it is the grip trim: B grows to end at the
+     playhead and C moves along (trimTail), then C with the playhead 1 s before it grows 1 s at its head and keeps its slot after B
+     (trimHead). CONTROL: in Full the same button still stretches B over C, and C's start back to the playhead over B. */
+  test('SU1 #6 · at 380 the panel’s Extend to the playhead on a clip in Simple lengthens it and moves the row along, one step, no gap and no overlap; in Full it still stretches the edge to the playhead', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const build = (W, H) => [smPic('C', 6, 3, W, H), smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)];
+    await atPhoneWidth(async function () {
+      await smP2(build, async function (v) {
+        if (!FM.editor.isSimple()) throw new Error('setup: the project is not in Simple');
+        let steps = await su1QuickRowPress(v, 'B', 7.5, 'Extend the end of the clip to the playhead');
+        if (v.L('B').start !== 3 || !su1Near(v.L('B').duration, 4.5)) throw new Error('CONTROL: Extend the end did not grow B to the playhead: ' + su1Spans(v, ['A', 'B', 'C']) + ' (it said “' + v.say() + '”)');
+        if (!su1Near(v.L('C').start, 7.5)) throw new Error('Extend the end of the clip to the playhead in Simple left C at ' + v.L('C').start + ' under B, which now ends at 7.5 — ' + su1Spans(v, ['A', 'B', 'C']));
+        if (su1Seams().length) throw new Error('after Extend the end the clip row has ' + su1Seams().join(', '));
+        if (steps !== 1) throw new Error('Extend the end took ' + steps + ' undo steps, not one');
+        steps = await su1QuickRowPress(v, 'C', 6.5, 'Extend the start of the clip to the playhead');
+        if (!su1Near(v.L('C').start, 7.5) || !su1Near(v.L('C').duration, 4)) throw new Error('Extend the start of the clip to the playhead in Simple left ' + su1Spans(v, ['A', 'B', 'C']) + ' — want C to keep its place after B (7.5) and grow by the 1 s to the playhead (it said “' + v.say() + '”)');
+        if (v.L('B').start !== 3 || !su1Near(v.L('B').duration, 4.5) || v.L('A').start !== 0) throw new Error('Extend the start of C moved A or B: ' + su1Spans(v, ['A', 'B', 'C']));
+        if (su1Seams().length) throw new Error('after Extend the start the clip row has ' + su1Seams().join(', '));
+        if (steps !== 1) throw new Error('Extend the start took ' + steps + ' undo steps, not one');
+      });
+    }, 380);
+    /* CONTROL — Full: the near edge stretches to the playhead and nothing else moves */
+    await atPhoneWidth(async function () {
+      await smP2(build, async function (v) {
+        if (FM.editor.isSimple()) FM.editor.set('full');
+        if (FM.editor.isSimple()) throw new Error('CONTROL: could not leave Simple for the Full half');
+        await su1QuickRowPress(v, 'B', 7.5, 'Extend the end of the clip to the playhead');
+        if (!su1Near(v.L('B').duration, 4.5) || v.L('C').start !== 6) throw new Error('Full’s Extend the end changed: ' + su1Spans(v, ['A', 'B', 'C']) + ' — want B 3–7.5 over C at 6 (DESIGN §0.4)');
+        await su1QuickRowPress(v, 'C', 4.5, 'Extend the start of the clip to the playhead');
+        if (!su1Near(v.L('C').start, 4.5) || !su1Near(v.L('C').duration, 4.5) || v.L('B').start !== 3) throw new Error('Full’s Extend the start changed: ' + su1Spans(v, ['A', 'B', 'C']) + ' — want C 4.5–9 (DESIGN §0.4)');
+      }, { full: true });
+    }, 380);
+  });
 })();
