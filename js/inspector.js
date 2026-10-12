@@ -1778,7 +1778,7 @@ window.FM = window.FM || {};
     const deadWhy = FM.fxDeadOnLayer ? FM.fxDeadOnLayer(fx, layer, FM.time) : null;
     if (deadWhy) {
       const dt = el('span', 'fx-dead-tag', 'does nothing here'); dt.title = deadWhy; head.appendChild(dt);
-    } else if (FM.CSS_FX && FM.CSS_FX[fx.type]) {
+    } else if (FM.CSS_FX && FM.CSS_FX[fx.type] && !(FM.blurInStackOrder && FM.blurInStackOrder(fx))) {   // a Gaussian Blur off its defaults is not first any more (#482 15.7)
       const tag = el('span', 'fx-first-tag', 'always first');
       tag.title = 'Blur, brightness, contrast, saturation, hue, greyscale, sepia, invert and glow are applied together before everything else — moving them up or down does not change the picture.';
       head.appendChild(tag);
@@ -1884,6 +1884,9 @@ window.FM = window.FM || {};
         const gr = gatedRows[p.key]; if (!gr) return;
         [p.overriddenBy, p.alsoGate && p.alsoGate.by].forEach(k => { const lead = k && rangeRows[k]; if (lead) lead.addEventListener('fx-range-set', () => regate(gr, fx, p, reg)); });
       });
+      /* #482 15.7: Repeat edges, Direction, Mix or Blend off their defaults take this blur out of the CSS filter that runs before
+         everything else, so where its row sits now matters — the row says so, in the note style a slider already uses. */
+      if (FM.blurInStackOrder && FM.blurInStackOrder(fx)) body.appendChild(el('div', 'fx-tog-note fx-range-note fx-blur-order', 'With these settings it runs in stack order, like the effects around it — not first.'));
       // Remove Object: dragging a box on the canvas beats nudging four % sliders (esp. on a phone)
       if (fx.type === 'touchup' && FM.touchupTool) {
         const pick = el('button', 'fx-add-btn', 'Select area on canvas');

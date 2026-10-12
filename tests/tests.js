@@ -124941,4 +124941,82 @@
     }
     if (fails.length) throw new Error(fails.join(' · '));
   });
+
+  /* GAUSSIAN BLUR (#482 15.7). At its defaults it is the CSS `blur()` it always was, so the pin is the filter string itself —
+     a literal, the same on any machine — and the pictures of a saved, filled and new instance agreeing with each other. */
+  const B15_BL_NEW = { edges: 0, dims: 0, mix: 100, blend: 0 };
+  test('482 15.7 pin: a Gaussian Blur with Repeat edges, Direction, Mix and Blend at their defaults is the same CSS blur — the same filter string at plate scale 1 and 0.5, keyframed too, saved, filled and new, the same picture, and every library filter that carries one', { item: '482', budgetMs: 120000 }, function () {
+    const P = b15P(), moved = [];
+    const CFG = { 'absent radius': {}, 'radius 3': { radius: 3 }, 'radius 0': { radius: 0 }, 'keyed': { radius: b15Kf(1, 9) } };
+    Object.keys(CFG).forEach(n => [1, 0.5].forEach(rs => {
+      const r = n === 'absent radius' ? 6 : (n === 'keyed' ? 3 : CFG[n].radius);   // keyed: 1 → 9 over 2 s, at 0.5 s
+      const want = 'blur(' + (r * rs) + 'px)';                                     // effectFilter on fc8866f1
+      const saved = { type: 'blur', enabled: true, params: b15Copy(CFG[n]) };
+      const pics = [['absent', saved], ['filled at render time', FM._fillFxParams(b15Copy(saved))], ['present at the defaults', Object.assign(b15Copy(saved), { params: Object.assign(b15Copy(CFG[n]), B15_BL_NEW) })]].map(([how, fx]) => {
+        const C = b15Card(); C.effects = [fx];
+        const got = FM.effectFilter(C, 0.5, rs);
+        if (got !== want) moved.push(n + ' at plate scale ' + rs + ', new keys ' + how + ': the filter string is ' + JSON.stringify(got) + ', not ' + JSON.stringify(want));
+        return [how, b15Px([C, b15Plate(P)], 0.5, P, rs)];
+      });
+      pics.slice(1).forEach(([how, d]) => { if (!b15Same(d, pics[0][1])) moved.push(n + ' at plate scale ' + rs + ': new keys ' + how + ' draw ' + b15Diff(d, pics[0][1]) + ' off the saved blur'); });
+    }));
+    // a blur inside a filter (none of the library recipes carries one on fc8866f1; a filter he builds can), at Strength 0.5 and 1
+    [0.5, 1].forEach(s => {
+      const box = () => b15Box({ strength: s }, [{ type: 'blur', enabled: true, params: { radius: 2 } }, b15Fx('invert', { amount: 0.6 })]);
+      const La = b15Plate(P); La.effects = [box()]; const b2 = box(); Object.assign(b2.effects[0].params, B15_BL_NEW); const Lb = b15Plate(P); Lb.effects = [b2];
+      if (!b15Same(b15Px([La], 0.7, P), b15Px([Lb], 0.7, P))) moved.push('a blur inside a filter at Strength ' + s + ' draws differently with the new keys present');
+    });
+    FM.filters.all().forEach(f => {   // …and should a library filter ever carry one, it is held the same way
+      const box = FM.filters.makeInstance(f.id);
+      if (!(box.effects || []).some(e => e.type === 'blur')) return;
+      const old = b15Copy(box); old.effects.forEach(e => { if (e.type === 'blur') Object.keys(B15_BL_NEW).forEach(k => { delete e.params[k]; }); });
+      const La = b15Plate(P); La.effects = [old]; const Lb = b15Plate(P); Lb.effects = [box];
+      if (!b15Same(b15Px([La], 0.7, P), b15Px([Lb], 0.7, P))) moved.push('the ' + f.id + ' filter’s blur draws differently with the new keys present');
+    });
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 6).join(' · '));
+    b15Catalogue('blur', Object.assign({ radius: 6 }, B15_BL_NEW), { edges: 1, dims: 2, mix: 40, blend: 2 });
+  });
+
+  test('482 15.7 Gaussian Blur: Direction Horizontal keeps a horizontal line sharp vertically and smears a vertical one sideways, Repeat edges keeps the frame’s edge solid, Mix 50 sits halfway, Screen only brightens (Orton), and off its defaults it leaves the CSS filter for a pass in stack order, on a clip and on an adjustment layer (CONTROL: Both blurs the horizontal line; a plain blur is still first)', { item: '482', budgetMs: 60000 }, function () {
+    if (typeof FM._blurPlateKernel !== 'function') throw new Error('FM._blurPlateKernel is missing - there is no plate pass for a blur off its defaults');
+    const W = 40, H = 30, fails = [];
+    const field = (fill, mark) => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = mark(x, y) ? 255 : fill; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const run = (d, p) => { FM._blurPlateKernel(d, W, H, Object.assign({ radius: 3 }, p), 0.5, 1); return d; };
+    const v = (d, x, y) => d[(y * W + x) * 4], al = (d, x, y) => d[(y * W + x) * 4 + 3];
+    const hline = () => field(0, (x, y) => y === 15), vline = () => field(0, (x, y) => x === 20);
+    const hH = run(hline(), { dims: 1 }), hB = run(hline(), { dims: 0 });
+    if (!(v(hB, 20, 13) > 15)) fails.push('CONTROL: Both did not spread a horizontal line vertically (' + v(hB, 20, 13) + ')');
+    if (v(hH, 20, 13) !== 0 || v(hH, 20, 15) < 250) fails.push('Horizontal moved a horizontal line vertically (above it ' + v(hH, 20, 13) + ', on it ' + v(hH, 20, 15) + ')');
+    const vH = run(vline(), { dims: 1 }), vV = run(vline(), { dims: 2 });
+    if (!(v(vH, 18, 10) > 15)) fails.push('Horizontal did not smear a vertical line sideways (' + v(vH, 18, 10) + ')');
+    if (v(vV, 18, 10) !== 0) fails.push('Vertical smeared a vertical line sideways (' + v(vV, 18, 10) + ')');
+    // Repeat edges: a solid white frame keeps its edge; off, transparency is pulled in from past the frame, as blur() does
+    const solid = () => field(255, () => true);
+    const eOff = run(solid(), { edges: 0, dims: 0 }), eOn = run(solid(), { edges: 1 });
+    if (!(al(eOff, 0, 15) < 230)) fails.push('CONTROL: with Repeat edges off the frame edge kept alpha ' + al(eOff, 0, 15));
+    if (al(eOn, 0, 15) !== 255 || v(eOn, 0, 15) < 254) fails.push('Repeat edges left the frame edge at rgba ' + v(eOn, 0, 15) + '/' + al(eOn, 0, 15));
+    // Mix 50 sits halfway between the sharp line and the full blur
+    const m50 = run(hline(), { mix: 50, dims: 0 });
+    if (Math.abs(v(m50, 20, 13) - v(hB, 20, 13) / 2) > 2 || Math.abs(v(m50, 20, 15) - (255 + v(hB, 20, 15)) / 2) > 2) fails.push('Mix 50 is not halfway (' + v(m50, 20, 13) + ' / ' + v(m50, 20, 15) + ' against full ' + v(hB, 20, 13) + ' / ' + v(hB, 20, 15) + ')');
+    // Screen: the Orton glow — never darker than the sharp picture, brighter beside the line; Soft light is a third look
+    const grey = () => field(110, (x, y) => y === 15), g0 = grey(), sc = run(grey(), { blend: 1, radius: 4 }), sl = run(grey(), { blend: 2, radius: 4 }), nm = run(grey(), { radius: 4, mix: 100, edges: 1 });
+    let darker = 0; for (let i = 0; i < g0.length; i += 4) if (sc[i] < g0[i] - 1) darker++;
+    if (darker) fails.push('Screen made ' + darker + ' pixels darker - it may only brighten');
+    if (!(v(sc, 20, 13) > v(g0, 20, 13) + 5)) fails.push('Screen did not glow beside the line (' + v(g0, 20, 13) + ' -> ' + v(sc, 20, 13) + ')');
+    if (b15Same(sl, sc) || b15Same(sl, nm)) fails.push('Soft light draws the same as Screen or Normal');
+    // on a clip: off its defaults it is in stack order — [blur, pixelate] and [pixelate, blur] now differ (CONTROL: a plain blur is first either way)
+    const P = b15P(), order = (blurP, first) => { const L = b15Plate(P); const bl = { type: 'blur', enabled: true, params: Object.assign({ radius: 4 }, blurP) }, px = b15Fx('pixelate', { size: 6 }); L.effects = first ? [bl, px] : [px, bl]; return b15Px([L], 0.5, P); };
+    if (!b15Same(order({}, true), order({}, false))) fails.push('CONTROL: a plain blur’s place in the stack changed the picture - it should still be first');
+    if (b15Same(order({ dims: 1 }, true), order({ dims: 1 }, false))) fails.push('a Horizontal blur draws the same above and below Pixelate - it is still first, not in stack order');
+    const Lf = b15Plate(P); Lf.effects = [{ type: 'blur', enabled: true, params: { radius: 4, dims: 1 } }];
+    if (FM.effectFilter(Lf, 0.5, 1) !== 'none') fails.push('a Horizontal blur is still in the CSS filter: ' + FM.effectFilter(Lf, 0.5, 1));
+    if (!FM.blurInStackOrder || !FM.blurInStackOrder(Lf.effects[0]) || FM.blurInStackOrder({ type: 'blur', params: { radius: 4, mix: 100 } })) fails.push('FM.blurInStackOrder does not say which blur runs in stack order (the row’s note reads it)');
+    // on an adjustment layer: the frame below is smeared one way only
+    const half = () => { const L = FM.makeLayer('shape', { name: 'b15 half', shape: 'rect', x: P.width / 4, y: P.height / 2, shapeW: P.width / 2, shapeH: P.height, fill: '#ffffff', start: 0, duration: 5 }); return L; };
+    const adj = p => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = p ? [{ type: 'blur', enabled: true, params: Object.assign({ radius: 4 }, p) }] : []; return b15Px([A, half()], 0.5, P); };
+    const a0 = adj(null), aH = adj({ dims: 1 }), aV = adj({ dims: 2 }), xe = P.width / 2 + 1, ye = P.height >> 1;
+    if (!(b15At(aH, P.width, xe, ye)[0] > b15At(a0, P.width, xe, ye)[0] + 15)) fails.push('a Horizontal blur on an adjustment layer did not smear the edge below sideways (' + b15At(a0, P.width, xe, ye)[0] + ' -> ' + b15At(aH, P.width, xe, ye)[0] + ')');
+    if (Math.abs(b15At(aV, P.width, xe, ye)[0] - b15At(a0, P.width, xe, ye)[0]) > 2) fails.push('a Vertical blur on an adjustment layer smeared a vertical edge sideways');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();

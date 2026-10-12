@@ -48,7 +48,16 @@ window.FM = window.FM || {};
   // Effects implemented via canvas ctx.filter — covers a lot of Alight Motion's catalogue
   // cheaply, applies identically in preview and export, and is keyframe-able (evalProp).
   FM.EFFECTS = [
-    { type: 'blur', label: 'Gaussian Blur', param: 'radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
+    /* #482 15.7: Radius was the only control (the one-param shorthand, its row labelled with the effect's name). Repeat edges,
+       Direction, Mix and Blend are new; any of them off its default moves THIS blur out of the CSS filter into a plate pass in
+       stack order (blurPlate / blurPlateKernel). All four defaults keep the old CSS blur, byte for byte. */
+    { type: 'blur', label: 'Gaussian Blur', params: [
+      { key: 'radius', label: 'Radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
+      { key: 'edges', label: 'Repeat edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'dims', label: 'Direction', def: 0, options: [[0, 'Both'], [1, 'Horizontal'], [2, 'Vertical']] },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Screen'], [2, 'Soft light']] },
+    ] },
     { type: 'brightness', label: 'Brightness', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'contrast', label: 'Contrast', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'saturate', label: 'Saturation', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.6 },
@@ -2038,6 +2047,74 @@ window.FM = window.FM || {};
     }
     g.putImageData(img, 0, 0);
   }
+  /* ═══ GAUSSIAN BLUR'S EDGES, DIRECTION AND ORTON MIX (#482 15.7) ═══════════════════════════════════════════════════
+   * Gaussian Blur is one of the nine CSS effects: a `blur()` in the layer's ctx.filter, applied BEFORE the layer is drawn,
+   * wherever its row sits. That filter cannot do any of the four new things — keep the frame's edge solid (it always pulls
+   * transparency in from past the edge), blur one way only, keep some of the sharp picture, or lay the blur over it in
+   * Screen or Soft light (the Orton glow). So an instance with any of them off its default leaves the filter string
+   * (effectFilter, cssColorOps) and runs as a plate pass in STACK ORDER (postFxOrder → drawPixelEffect; on an adjustment
+   * layer, applyPixelFx), like every other pixel effect — and its row says so (inspector). blurPlate judges the STORED
+   * values, never the moment, so a keyframed Mix cannot flip the path half way through a clip.
+   * The kernel is cpuBlurCanvas's three-box Gaussian (Kovesi's boxes, σ = Radius in plate pixels), premultiplied:
+   *   Repeat edges  Off — transparent past the frame, as blur() draws;  On — the edge pixels repeat, so the frame stays solid
+   *   Direction     Both / Horizontal / Vertical — which passes run
+   *   Mix, Blend    the blurred copy laid over the sharp layer: Normal, Screen or Soft light (W3C), at Mix
+   * At the defaults (Off, Both, 100 %, Normal) none of this runs and the blur is the CSS filter it always was, so every saved
+   * blur and every filter that carries one draws byte for byte as it did. One CPU kernel on every device, so there is no GPU
+   * twin to drift from; the default blur keeps its own GPU fallback (cssColorOps) untouched. */
+  function blurPlate(e) {
+    const p = e && e.type === 'blur' && e.params;
+    if (!p) return false;
+    const off = (k, def) => { const v = p[k]; if (v == null) return false; if (v && typeof v === 'object') return Array.isArray(v.kf) && v.kf.some(q => q && Number(q.v) !== def); return Number(v) !== def; };
+    return off('edges', 0) || off('dims', 0) || off('mix', 100) || off('blend', 0);
+  }
+  FM.blurInStackOrder = blurPlate;   // the inspector's row note, and a suite seam (#482 15.7)
+  const BLUR_BLEND = [null, (s, d) => s + d - s * d, (s, d) => { if (s <= 0.5) return d - (1 - 2 * s) * d * (1 - d); const D = d <= 0.25 ? ((16 * d - 12) * d + 4) * d : Math.sqrt(d); return d + (2 * s - 1) * (D - d); }];
+  function blurPlateKernel(d, W, H, p, t, ps) {
+    let r = p.radius == null ? 6 : FM.evalProp(p.radius, t); r = (Number.isFinite(r) && r > 0 ? r : 0) * (ps > 0 ? ps : 1);
+    const dims = p.dims == null ? 0 : (Math.round(FM.evalProp(p.dims, t)) | 0);
+    const rep = (p.edges == null ? 0 : (Math.round(FM.evalProp(p.edges, t)) | 0)) === 1;
+    let mix = p.mix == null ? 100 : FM.evalProp(p.mix, t); mix = !(mix > 0) ? 0 : (mix >= 100 ? 1 : mix / 100);
+    const bf = BLUR_BLEND[p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0)] || null;
+    if (!(r > 0.05) || !(mix > 0) || !(W > 0) || !(H > 0)) return;
+    const N = W * H;
+    let a = new Float32Array(N * 4), b = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) { const j = i * 4, al = d[j + 3] / 255; a[j] = d[j] * al; a[j + 1] = d[j + 1] * al; a[j + 2] = d[j + 2] * al; a[j + 3] = d[j + 3]; }
+    // one box pass along a row (horiz) or a column; past the end a tap reads nothing, or the end pixel when Repeat edges is on
+    const pass = (src, dst, rr, horiz) => {
+      const len = horiz ? W : H, lines = horiz ? H : W, step = horiz ? 4 : W * 4, inv = 1 / (2 * rr + 1);
+      for (let l = 0; l < lines; l++) {
+        const base = horiz ? l * W * 4 : l * 4;
+        for (let c = 0; c < 4; c++) {
+          const at = k => (k >= 0 && k < len) ? src[base + k * step + c] : (rep ? src[base + (k < 0 ? 0 : len - 1) * step + c] : 0);
+          let acc = 0;
+          for (let k = -rr; k <= rr; k++) acc += at(k);
+          for (let x = 0; x < len; x++) { dst[base + x * step + c] = acc * inv; acc += at(x + rr + 1) - at(x - rr); }
+        }
+      }
+    };
+    boxesForGauss(r).forEach(br => {
+      br = Math.round(br); if (br < 1) return;
+      if (dims !== 2) { pass(a, b, br, true); const s = a; a = b; b = s; }
+      if (dims !== 1) { pass(a, b, br, false); const s = a; a = b; b = s; }
+    });
+    for (let i = 0; i < N; i++) {
+      const j = i * 4, Aa = d[j + 3] / 255, Ba = a[j + 3] / 255;
+      let xr = a[j], xg = a[j + 1], xb = a[j + 2], xa = a[j + 3];          // Normal: the blurred copy itself
+      if (bf) {   // Screen / Soft light: the blurred copy (source) over the sharp layer (backdrop), W3C compositing
+        const ar = d[j] / 255, ag = d[j + 1] / 255, ab = d[j + 2] / 255, k = Ba > 0 ? 1 / a[j + 3] : 0;
+        const one = (bp, ac, bc) => (1 - Aa) * bp + (1 - Ba) * ac * Aa * 255 + Aa * Ba * 255 * bf(bc, ac);
+        xr = one(a[j], ar, a[j] * k); xg = one(a[j + 1], ag, a[j + 1] * k); xb = one(a[j + 2], ab, a[j + 2] * k);
+        xa = (Ba + Aa * (1 - Ba)) * 255;
+      }
+      const pr = d[j] * Aa, pg = d[j + 1] * Aa, pb = d[j + 2] * Aa, pa = d[j + 3];
+      const oa = pa + (xa - pa) * mix;
+      if (oa <= 0.001) { d[j] = d[j + 1] = d[j + 2] = d[j + 3] = 0; continue; }
+      const f = 255 / oa;
+      d[j] = (pr + (xr - pr) * mix) * f; d[j + 1] = (pg + (xg - pg) * mix) * f; d[j + 2] = (pb + (xb - pb) * mix) * f; d[j + 3] = oa;
+    }
+  }
+  FM._blurPlateKernel = blurPlateKernel;   // suite seam (#482 15.7)
   function drawBlurredNoFilter(dc, src, r, dx, dy, dw, dh, ops) {
     if (!src || !(dw > 0) || !(dh > 0)) return;
     const blur = r > 0.05, colour = !!(ops && ops.length);
@@ -2342,7 +2419,7 @@ window.FM = window.FM || {};
       // hue-rotate is the one function here that legally takes any sign.
       const nn = (k, d) => { const x = v(k, d); return Number.isFinite(x) ? Math.max(0, x) : d; };
       switch (e.type) {
-        case 'blur': parts.push('blur(' + (nn('radius', 6) * S) + 'px)'); break;
+        case 'blur': if (blurPlate(e)) break; parts.push('blur(' + (nn('radius', 6) * S) + 'px)'); break;   // #482 15.7: off its defaults it is a plate pass instead
         case 'brightness': parts.push('brightness(' + nn('amount', 1) + ')'); break;
         case 'contrast': parts.push('contrast(' + nn('amount', 1) + ')'); break;
         case 'saturate': parts.push('saturate(' + nn('amount', 1) + ')'); break;
@@ -3864,7 +3941,7 @@ window.FM = window.FM || {};
    * wrong picture rather than an error. One function, both callers.
    */
   function postFxOrder(layer) {
-    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette') && e.enabled !== false   // vignette: every layer since #986 C8
+    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette' || blurPlate(e)) && e.enabled !== false   // vignette: every layer since #986 C8; a Gaussian Blur off its defaults (#482 15.7)
       && !(e.type === 'motionflow' && layer.type === '_flat'));
     /* VIGNETTE COMPOSITES INNERMOST, on every layer (#986 C8) — straight after the nine CSS effects, which already
        render before everything else whatever their row. That is where a video or photo has ALWAYS drawn it (inside the
@@ -3940,6 +4017,7 @@ window.FM = window.FM || {};
     if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
     if (fx.type === 'compoundblur') return drawCompoundBlur(ctx, layer, t, scene, fx);
     if (fx.type === 'matchgrade') return drawMatchGrade(ctx, layer, t, scene, fx);
+    if (fx.type === 'blur') return drawPixelEffect(ctx, layer, t, scene, fx, blurPlateKernel);   // only a blur off its defaults gets here (#482 15.7, postFxOrder)
     if (fx.type === 'displacemap') return drawDisplaceEffect(ctx, layer, t, scene, fx, false);
     if (fx.type === 'polardisplace') return drawDisplaceEffect(ctx, layer, t, scene, fx, true);
     // generic per-pixel colour/texture effects
@@ -9631,6 +9709,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!FM.CSS_FX[e.type]) continue;
       const p = e.params || {};
       if (e.type === 'blur') {
+        if (blurPlate(e)) continue;   // #482 15.7: a plate pass in stack order, not part of the CSS chain
         const r = FM.evalProp(p.radius, t);
         blurs.push(Number.isFinite(r) ? r : 6);
         continue;
@@ -9759,7 +9838,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         .concat(ops.glows.length ? ['glow'] : []));
       const tmp = Object.assign({}, layer, {
         blendMode: 'normal',
-        effects: (layer.effects || []).filter(e => !(e && e.enabled !== false && keep.has(e.type) && FM.CSS_FX[e.type])),
+        effects: (layer.effects || []).filter(e => !(e && e.enabled !== false && keep.has(e.type) && FM.CSS_FX[e.type] && !blurPlate(e))),   // a plate blur (#482 15.7) was never in the chain
         behaviors: sansOpacityBehaviors(layer),
         transform: Object.assign({}, layer.transform, { opacity: 1 }),
       });
@@ -18532,6 +18611,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // duotone and rgbsplit are not in PIXEL_FX — they have their own draw* functions; the twenty colour
     // grades #482 polish 5.1 added ARE in PIXEL_FX and take this line, exactly as Levels does.)
     if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
+    if (fx.type === 'blur') { blurPlateKernel(d, W, H, p, t, S); return; }   // a Gaussian Blur off its defaults on an adjustment layer (#482 15.7)
     if (fx.type === 'rgbsplit') {
       const amount = FM.evalProp(p.amount, t) || 0;
       const dd = amount > 0 ? Math.max(1, Math.round(amount * S)) : 0;   // project px → plate px (#691); preserve small positive preview shifts
@@ -18767,7 +18847,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     const lay = effs === layer.effects ? layer : Object.assign({}, layer, { effects: effs });
     const filter = effectFilter(lay, t, renderScale(ctx)), hasCss = filter && filter !== 'none';   // applied to ctx (baseT-scaled) further down
-    const ppfx = effs.filter(e => PIXEL_ADJ[e.type] && e.enabled !== false);
+    const ppfx = effs.filter(e => (PIXEL_ADJ[e.type] || blurPlate(e)) && e.enabled !== false);   // blurPlate: #482 15.7 — left out of the filter string, so it grades here
     const pixFx = effs.find(e => e.type === 'pixelate' && e.enabled !== false);
     if (!into && !hasCss && !ppfx.length && !pixFx) return;   // (baking: an empty grade is still the snapshot, masked)
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
@@ -18801,7 +18881,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * on that, and the blit below carries no filter. A stack of only the six that could always go on an adjustment layer
      * (Posterize, Tint, Threshold, Duotone, RGB Split, Levels) keeps its old order: saved projects draw as they did.
      * `levels` is the one PIXEL_FX kernel among the six, which is why it is named. */
-    const cssFirst = hasCss && ppfx.some(e => e.type !== 'levels' && !!PIXEL_FX[e.type]);
+    const cssFirst = hasCss && ppfx.some(e => e.type !== 'levels' && (!!PIXEL_FX[e.type] || blurPlate(e)));   // a plate blur (#482 15.7) runs after the CSS half, as on a clip
     a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch); a.globalAlpha = 1; a.filter = 'none';
     if (cssFirst && ctxFilterOK()) { a.filter = filter; a.drawImage(ctx.canvas, 0, 0); a.filter = 'none'; }   // the snapshot, CSS-graded on the way in
     else {
