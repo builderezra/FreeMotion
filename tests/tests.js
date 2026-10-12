@@ -124761,4 +124761,53 @@
       }, { W: 1080, H: 1920 });
     });
   });
+
+  /* SU1 #4, its second half only (the PM, 12 Oct: "More pressed again closes it, as its own small fix"): More opened today's panel and
+     nothing but a tap on empty timeline shut it. More is a toggle now; the docking half (hunt/simple-more-dock) waits on Ezra's pick.
+     Adapted from that branch's test (6722860f), its docking checks left out. At 380 More must still be the thing under the finger
+     while the panel is up, or "press it again" is not something a finger can do. */
+  test('SU1 #4 · More pressed again closes the panel it opened, at 380 and 1280, a double tap only opens it, and the grab bar still closes it', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const more = () => smTool('more');
+    const tap = (el, n) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); };
+    const onTop = el => { const r = el.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!(h && el.contains(h)); };
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const insp = document.getElementById('inspector-panel'), fails = [];
+        FM.selectLayer(v.L('A').id); await smSettle(150);
+        if (insp.classList.contains('open')) throw new Error('CONTROL: selecting a clip raised the panel without More');
+        tap(more(), 1); await smSettle(250);
+        if (!insp.classList.contains('open')) throw new Error('CONTROL: More did not raise the panel');
+        if (!onTop(more())) fails.push('with the panel up, More is not the thing under the finger');
+        tap(more(), 1); await smSettle(250);
+        if (insp.classList.contains('open')) fails.push('More pressed again left the panel open (panelFor ' + FM.simpleTools.panelFor() + ')');
+        if (FM.scene.selectedId !== v.L('A').id) fails.push('More closing the panel dropped the selection');
+        tap(more(), 1); await smSettle(250);
+        if (!insp.classList.contains('open')) fails.push('a third press of More did not raise the panel again');
+        tap(more(), 1); await smSettle(250);
+        if (insp.classList.contains('open')) throw new Error('CONTROL: More did not close the panel before the double tap (' + fails.join(' · ') + ')');
+        tap(more(), 1); await smSettle(60); tap(more(), 2); await smSettle(250);
+        if (!insp.classList.contains('open')) fails.push('a double tap on More opened the panel and shut it again');
+        document.getElementById('insp-grab').click(); await smSettle(250);
+        if (insp.classList.contains('open')) throw new Error('CONTROL: the grab bar did not close the panel');
+        tap(more(), 1); await smSettle(250);
+        if (!insp.classList.contains('open')) fails.push('More did not raise the panel after the grab bar closed it');
+        if (fails.length) throw new Error('380 px: ' + fails.join(' · '));
+      });
+    }, 380);
+    await atWideWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const hint = () => !!document.querySelector('#inspector .sm-band-hint');
+        FM.selectLayer(v.L('B').id); await smSettle(150);
+        if (!hint()) throw new Error('CONTROL 1280: the band shows Full’s editor before More');
+        tap(more(), 1); await smSettle(200);
+        if (hint()) throw new Error('CONTROL 1280: More did not open the panel in the band');
+        tap(more(), 1); await smSettle(200);
+        if (!hint()) throw new Error('1280 px: More pressed again left the panel open in the band');
+        if (FM.scene.selectedId !== v.L('B').id) throw new Error('1280 px: More closing the panel dropped the selection');
+        tap(more(), 1); await smSettle(200);
+        if (hint()) throw new Error('1280 px: a third press of More did not open the panel again');
+      });
+    }, 1280);
+  });
 })();
