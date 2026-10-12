@@ -127603,4 +127603,91 @@
       });
     });
   });
+
+  /* #1132 on a PC, side by side with Canvas open: the small column (Editor, Friends, and App settings at its foot — the render he was
+     sent) stands PACKED at the cog's end, 10 px between its tiles, whichever way the pair hangs. The open card is made taller than
+     the column (a min-height, taken off after) so a column spread down the card's height would show: that is what three auto rows
+     did, sharing the card's extra height out among them. Hung off two stand-in buttons, as 978's stacked test does. */
+  test('1132 on a PC with Canvas open the small column is packed at the cog’s end — Editor, Friends and App settings 10 px apart, App at the foot — opening upward and downward, not spread down the open card', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      await atWideWidth(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+        const made = [];
+        const mk = function (top) {
+          const b = document.createElement('button');
+          b.type = 'button'; b.textContent = '·';
+          b.style.cssText = 'position:fixed;left:900px;top:' + top + 'px;width:30px;height:30px;z-index:1';
+          document.body.appendChild(b); made.push(b); return b;
+        };
+        try {
+          for (const [dir, top] of [['upward', 600], ['downward', 60]]) {
+            FM.openCanvasDialog({ block: 'canvas', from: mk(top) }); await entranceDone(dlg); await land945();
+            if (!dlg.classList.contains('cv-side')) throw new Error(dir + ': setup: with the button’s right edge at 930 the pair did not go side by side');
+            if (document.body.classList.contains('cv-up') !== (dir === 'upward')) throw new Error(dir + ': setup: the pair opened the other way (' + document.body.className + ')');
+            if (dlg.classList.contains('cv-ed-short')) throw new Error(dir + ': setup: the short-screen layout is on — this measures the full column');
+            card.style.minHeight = '540px'; await sleep(40);
+            const cr = card.getBoundingClientRect();
+            const ed = document.getElementById('cv-editor').getBoundingClientRect(), fr = document.getElementById('cv-friends').getBoundingClientRect(), ap = document.getElementById('cv-app').getBoundingClientRect();
+            const col = dir === 'upward' ? [ed, fr, ap] : [fr, ed, ap];
+            const colH = col[2].bottom - col[0].top;
+            if (!(cr.height >= 539)) throw new Error(dir + ': CONTROL: the open card is ' + Math.round(cr.height) + ' px, not taller than the column — a spread column could not show');
+            for (let i = 1; i < col.length; i++) {
+              const gap = col[i].top - col[i - 1].bottom;
+              if (Math.abs(gap - 10) > 2) throw new Error(dir + ': the small column has a ' + Math.round(gap) + ' px gap between its tiles, not 10 — spread down the open card (' + col.map(R978).join(' / ') + ' beside ' + R978(cr) + ')');
+            }
+            if (dir === 'upward' && Math.abs(ap.bottom - cr.bottom) > 4) throw new Error(dir + ': App settings (' + Math.round(ap.bottom) + ') is not at the foot, on the open card’s line (' + Math.round(cr.bottom) + ')');
+            if (dir === 'downward' && Math.abs(fr.top - cr.top) > 4) throw new Error(dir + ': the small column (' + Math.round(fr.top) + ') does not start at the open card’s top (' + Math.round(cr.top) + ')');
+            if (!(colH < cr.height - 40)) throw new Error(dir + ': the small column is ' + Math.round(colH) + ' px beside a ' + Math.round(cr.height) + ' px card — stretched to it');
+            card.style.minHeight = '';
+            FM.closeCanvasDialog(); await sleep(60);
+          }
+        } finally {
+          card.style.minHeight = '';
+          FM.closeCanvasDialog();
+          made.forEach(function (b) { b.remove(); });
+        }
+      }, 1280);
+    }); });
+  });
+
+  /* #1132 on a short PC screen (D24 B — his phone sideways is 956×440): with a block open the Editor is the pill on the cog's row,
+     10 px left of the cog and centred on it, its two controls and no more; the new grid must not take it in as a tile. Friends and
+     App settings stand packed beside the open Canvas card. All closed, the Editor is a row of the closed column instead. */
+  test('1132 on a short PC screen (956×440) the Editor stays the pill on the cog’s row with Canvas open — 10 px left of the cog, centred on it, no wider than its two controls — and Friends and App settings stand packed beside the card', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      await atSize921(956, 440, async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        try {
+          await sleep(120);
+          const cog = document.getElementById('btn-settings');
+          if (!cog || !(cog.getBoundingClientRect().width > 0)) throw new Error('setup: no PC cog at 956×440');
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          if (!dlg.classList.contains('cv-none')) throw new Error('setup: the cog did not open all closed');
+          if (dlg.classList.contains('cv-ed-short')) throw new Error('all closed, the Editor is still the short screen’s pill — closed, it is a row of the column');
+          document.getElementById('cv-mini-exp').click(); await land945();
+          if (dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big')) throw new Error('setup: the Canvas ⤢ did not open the card');
+          const kr = cog.getBoundingClientRect();
+          if (!dlg.classList.contains('cv-side') || !dlg.classList.contains('cv-ed-short')) throw new Error('setup: at 956×440 with Canvas open this is not the short side-by-side layout (' + dlg.className + ', cog ' + R978(kr) + ')');
+          const ed = document.getElementById('cv-editor').getBoundingClientRect();
+          if (ed.width > 160) throw new Error('the Editor pill is ' + Math.round(ed.width) + ' px wide — a tile, not its two controls');
+          if (Math.abs((kr.left - ed.right) - 10) > 3) throw new Error('the Editor pill’s right edge is ' + Math.round(kr.left - ed.right) + ' px left of the cog, not 10 (' + R978(ed) + ' beside ' + R978(kr) + ')');
+          if (Math.abs((ed.top + ed.bottom) / 2 - (kr.top + kr.bottom) / 2) > 3) throw new Error('the Editor pill is not centred on the cog’s row (' + R978(ed) + ' beside ' + R978(kr) + ')');
+          [document.querySelector('#cv-ed-bar .ed-sw:not(.big)'), document.getElementById('cv-ed-what')].forEach(function (b) {
+            const r = b && b.getBoundingClientRect();
+            if (!r || !(r.width > 0)) throw new Error('the pill has no ' + (b ? (b.id || b.className) : 'control'));
+            const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            if (!at || !b.contains(at)) throw new Error('the pill’s ' + (b.id || b.className) + ' is covered by ' + (at && (at.id || at.className)));
+          });
+          const card = dlg.querySelector('.export-card').getBoundingClientRect(), fr = document.getElementById('cv-friends').getBoundingClientRect(), ap = document.getElementById('cv-app').getBoundingClientRect();
+          if (Math.abs((ap.top - fr.bottom) - 10) > 2) throw new Error('Friends and App settings are ' + Math.round(ap.top - fr.bottom) + ' px apart, not packed (' + R978(fr) + ' / ' + R978(ap) + ')');
+          const up = document.body.classList.contains('cv-up');
+          if (up ? Math.abs(ap.bottom - card.bottom) > 4 : Math.abs(fr.top - card.top) > 4) throw new Error('the small column does not stand on the open card’s ' + (up ? 'foot' : 'top') + ' (' + R978(fr) + ' / ' + R978(ap) + ' beside ' + R978(card) + ')');
+          [['the card', card], ['Friends', fr], ['App settings', ap], ['the Editor pill', ed]].forEach(function (p) {
+            const r = p[1];
+            if (r.top < -0.5 || r.left < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) throw new Error(p[0] + ' is off the 956×440 screen: ' + R978(r));
+          });
+        } finally { FM.closeCanvasDialog(); await sleep(60); }
+      });
+    }); });
+  });
 })();

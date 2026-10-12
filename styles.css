@@ -8845,9 +8845,11 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none #cv-app-bar .cv-mini-ico { width: 30px; height: 30px; }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none #cv-app-bar .cv-mini-t { font-size: 14.5px; white-space: nowrap; }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none .cv-mini-s { white-space: nowrap; }
-  /* ONE OPEN: the open block 360 wide beside a 176 column of three — the other two and App at the foot */
-  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-columns: 176px 360px; grid-template-areas: "ed cv" "fr cv" "ap cv"; }
-  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-areas: "fr cv" "ed cv" "ap cv"; }
+  /* ONE OPEN: the open block 360 wide beside a 176 column of three — the other two and App at the foot. The row away from the
+     cog is 1fr, as in the pair's own S2 grid: it takes what the open card leaves, so the column stands packed at the cog's end.
+     With three auto rows the card's extra height was shared out among them and the tiles stood apart. */
+  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-columns: 176px 360px; grid-template-rows: 1fr auto auto; grid-template-areas: "ed cv" "fr cv" "ap cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: auto auto 1fr; grid-template-areas: "fr cv" "ed cv" "ap cv"; }
   body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto auto; grid-template-areas: "fr ." "fr ed" "fr cv" "fr ap"; }
   body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big { grid-template-rows: auto auto auto 1fr; grid-template-areas: "fr cv" "fr ed" "fr ap" "fr ."; }
   body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto auto; grid-template-areas: "ed ." "ed fr" "ed cv" "ed ap"; }
@@ -8866,6 +8868,14 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini .cv-mini-txt,
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big > #cv-friends > #cv-fr-bar .cv-mini-txt { flex: 1; width: auto; }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor > #cv-ed-bar .ed-head { flex: none; }
+  /* SHORT SCREENS (D24 B, cv-ed-short — his phone sideways): the Editor is the pill on the cog's own row, not a grid item, so the
+     templates above lose their "ed" row and the pill keeps its own place and size. With an "ed" area in the template the pill — a
+     fixed box whose containing block is the dialog (v17.36's lesson) — was placed INSIDE that area, and 176 px wide. */
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: 1fr auto; grid-template-areas: "fr cv" "ap cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: auto 1fr; grid-template-areas: "fr cv" "ap cv"; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short.cv-fr-big { grid-template-rows: 1fr auto auto; grid-template-areas: "fr ." "fr cv" "fr ap"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short.cv-fr-big { grid-template-rows: auto auto 1fr; grid-template-areas: "fr cv" "fr ap" "fr ."; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-on.cv-ed-short.cv-ed-short:not(.cv-ed-big) > #cv-editor { grid-area: auto; width: auto; }
 }
 
 /* ---- Canvas presets (queue 183) --------------------------------------------------------------

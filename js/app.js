@@ -8530,7 +8530,9 @@ window.FM = window.FM || {};
          time. A key left on a device from before is harmless.) */
       const cvPhoneMq = window.matchMedia ? window.matchMedia('(max-width: 700px)') : null;
       let cvFlight = [];
-      const CV_ED_COL = 159 + 10 + 216;   // Simple mode P1, D24 B: the small column's tallest state — the Editor tile, the gap, the S2 Canvas tile (DESIGN §6.5)
+      /* Simple mode P1, D24 B: the small column's tallest state — the Editor tile, the gap, the S2 Canvas tile (DESIGN §6.5) — and
+         since #1132 the App settings row (56) and its gap at the column's foot, which a short screen must hold as well. */
+      const CV_ED_COL = 159 + 10 + 216 + 10 + 56;
       const CV_SIDE_NEED = 546 + 16;   // side by side needs Friends 360 + gap 10 + tile 176 left of the button's right edge, and 16 of margin
       let cvSrc = null;                // the control the pair hangs from on a PC (the cog — the Share button beside Export went with #983)
       /* The block next to the button: side by side it is always Canvas; stacked it is the big one (the small one sits away). */
