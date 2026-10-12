@@ -112,6 +112,10 @@ window.FM = window.FM || {};
     { type: 'mirror', label: 'Mirror', params: [
       { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Left → Right'], [1, 'Right → Left'], [2, 'Top → Bottom'], [3, 'Bottom → Top']] },
       { key: 'position', label: 'Seam', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      /* #482 polish 10.6: the mirror line turns about the seam (+ clockwise), and the folds past the first reflection can be
+         switched off. 0° and On are the old mirror; a saved one without the key is folded (`legacy: 1`). See mirrorAngled. */
+      { key: 'angle', label: 'Reflection angle', min: -180, max: 180, step: 1, def: 0, unit: '°' },
+      { key: 'repeat', label: 'Repeat folds', def: 1, legacy: 1, options: [[0, 'Off'], [1, 'On']] },
     ] },
     { type: 'tint', label: 'Tint', color: true, defColor: '#ff3366', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -15412,6 +15416,50 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * plate, which makes source and destination different canvases by construction. */
   const _miPool = [];
   let _miDepth = 0;
+  /* ═══ A TURNED MIRROR LINE (#482 polish 10.6) ═══════════════════════════════════════════════════════════════════════════
+   * The seam point is where it always was — (Seam, middle) for Left/Right, (middle, Seam) for Top/Bottom — and the line turns
+   * about it by the Reflection angle (+ clockwise). `n` is the line's normal pointing into the mirrored side, `u` a point's
+   * distance along it. The kept side is u < 0, out to the frame corner furthest behind the line (`aw`, the kept width — at 0°
+   * exactly the strip the loops below keep). Beyond the line the folds alternate as the strips do: band k = 1, 3… is the kept
+   * side reflected, k = 2, 4… the kept side repeated; Repeat folds Off keeps band 1 only.
+   * A turned strip cannot be cut with drawImage rectangles, so this is a pull: every plate pixel asks where it reads from, and
+   * warpResample (10.1) reads it bilinearly with Transparent edges. The point is the PIXEL CENTRE in project units, so a pixel
+   * and its mirror image land on each other the way the strips' pixels do (pixel 80 ↔ 79 across a seam at 80). The kept side
+   * maps to itself on whole pixels, which a bilinear read copies exactly. Returns false when there is nothing to mirror. */
+  const _miOut = [];
+  function mirrorFold(np, nx, ny, P0x, P0y, aw, rep, LIM) {
+    const ps = np.ps, OX = np.OX, OY = np.OY, FAR = [-1e9, -1e9];   // FAR: off every plate, i.e. transparent
+    return function (x, y) {
+      const px = (x + 0.5) / ps + OX, py = (y + 0.5) / ps + OY;
+      const u = (px - P0x) * nx + (py - P0y) * ny;
+      if (u < 0) return [x, y];
+      const k = Math.floor(u / aw) + 1;
+      if ((!rep && k >= 2) || k > LIM) return FAR;
+      const du = ((k & 1) ? (k - 1) * aw - u : u - k * aw) - u;
+      return [(px + du * nx - OX) * ps - 0.5, (py + du * ny - OY) * ps - 0.5];
+    };
+  }
+  function mirrorAngled(ctx, plate, np, mode, angDeg, rep, ax, ay, W, H, LIM, d) {
+    if (!(mode >= 0 && mode <= 3)) mode = 3;   // the strip code's `else` is Bottom → Top
+    const th = angDeg * Math.PI / 180, c = Math.cos(th), s = Math.sin(th);
+    const n0x = mode === 0 ? 1 : (mode === 1 ? -1 : 0), n0y = mode === 2 ? 1 : (mode === 3 ? -1 : 0);
+    const nx = n0x * c - n0y * s, ny = n0x * s + n0y * c;
+    const P0x = mode <= 1 ? ax : W / 2, P0y = mode <= 1 ? H / 2 : ay;
+    let umin = Infinity, umax = -Infinity;
+    [[0, 0], [W, 0], [0, H], [W, H]].forEach(q => { const u = (q[0] - P0x) * nx + (q[1] - P0y) * ny; if (u < umin) umin = u; if (u > umax) umax = u; });
+    const aw = -umin;
+    if (!(aw >= 0.5) || !(umax > 0)) return false;
+    const Wp = plate.width, Hp = plate.height;
+    if (!_miOut[d]) _miOut[d] = document.createElement('canvas');
+    const B = _miOut[d];
+    if (B.width !== Wp || B.height !== Hp) { B.width = Wp; B.height = Hp; }
+    const bc = B.getContext('2d'), src = plate.getContext('2d').getImageData(0, 0, Wp, Hp).data, img = bc.createImageData(Wp, Hp);
+    warpResample(src, img.data, Wp, Hp, mirrorFold(np, nx, ny, P0x, P0y, aw, rep, LIM), 0, 0, 0, null, 0, np.ps, null, 1, 1);
+    bc.putImageData(img, 0, 0);
+    ctx.drawImage(B, np.OX, np.OY, np.PWp, np.PHp);   // ctx is already at the layer's opacity and blend
+    return true;
+  }
+  FM._mirrorFold = mirrorFold;   // suite seam (#482 polish 10.6)
   function drawMirror(ctx, layer, t, scene, mode, fx, position) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -15451,27 +15499,39 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const ax = W * pos, ay = H * pos, LIM = 64;
     let k;
     const pass = () => ctx.drawImage(_miA, OX, OY, _np.PWp, _np.PHp);   // the plate, back where it came from
+    /* #482 polish 10.6 — REFLECTION ANGLE and REPEAT FOLDS. The mirror line could only be upright or level, and past the first
+       reflection it always mirror-tiled to the frame's edge. Repeat folds Off stops after ONE reflection (the kept strip and
+       its mirror image; beyond that the frame is left empty) — the strips below just stop at two. A turned seam is drawn by
+       mirrorAngled. Angle 0 and Repeat On (an absent key: legacy) are the strip loops exactly as they were. */
+    const mpr = (fx && fx.params) || {};
+    const mAng = mpr.angle == null ? 0 : (FM.evalProp(mpr.angle, t) || 0);
+    const mRep = mpr.repeat == null ? 1 : (Math.round(FM.evalProp(mpr.repeat, t)) | 0);
+    const LIM2 = mRep === 0 ? 2 : LIM;
+    if (mAng !== 0) {
+      if (!mirrorAngled(ctx, _miA, _np, mode, mAng, mRep !== 0, ax, ay, W, H, LIM, _d)) pass();
+      ctx.restore(); return;
+    }
     if (mode === 0) {           // Left → Right
       const aw = ax; if (aw < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; k * aw < W && k < LIM; k++) {
+      for (k = 0; k * aw < W && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(0), sl(aw), sl(H), k * aw, 0, aw, H);
         else { ctx.save(); ctx.translate((k + 1) * aw, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, sx(0), sy(0), sl(aw), sl(H), 0, 0, aw, H); ctx.restore(); }
       }
     } else if (mode === 1) {    // Right → Left
       const aw = W - ax; if (aw < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; ax - k * aw + aw > 0 && k < LIM; k++) {
+      for (k = 0; ax - k * aw + aw > 0 && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(ax), sy(0), sl(aw), sl(H), ax - k * aw, 0, aw, H);
         else { ctx.save(); ctx.translate(ax - k * aw + W, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, sx(ax), sy(0), sl(aw), sl(H), ax, 0, aw, H); ctx.restore(); }
       }
     } else if (mode === 2) {    // Top → Bottom
       const ah = ay; if (ah < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; k * ah < H && k < LIM; k++) {
+      for (k = 0; k * ah < H && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(0), sl(W), sl(ah), 0, k * ah, W, ah);
         else { ctx.save(); ctx.translate(0, (k + 1) * ah); ctx.scale(1, -1); ctx.drawImage(_miA, sx(0), sy(0), sl(W), sl(ah), 0, 0, W, ah); ctx.restore(); }
       }
     } else {                    // Bottom → Top
       const ah = H - ay; if (ah < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; ay - k * ah + ah > 0 && k < LIM; k++) {
+      for (k = 0; ay - k * ah + ah > 0 && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(ay), sl(W), sl(ah), 0, ay - k * ah, W, ah);
         else { ctx.save(); ctx.translate(0, ay - k * ah + H); ctx.scale(1, -1); ctx.drawImage(_miA, sx(0), sy(ay), sl(W), sl(ah), 0, ay, W, ah); ctx.restore(); }
       }

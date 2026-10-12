@@ -125139,4 +125139,74 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* 10.6 MIRROR (C39's plate fix shipped with #986 — its own test, '986 C39 Mirror renders its layer on the preview plate', stays).
+     The mirror line could only stand upright or lie level through the Seam, and past the first reflection it always folded on to
+     the frame's edge. On a 160×160 frame, Left → Right at Seam 50 and Reflection angle 45 turns the line about (80, 80) onto the
+     diagonal from the top-right corner to the bottom-left one; pixel centres reflect across it as (x, y) ↔ (159 - y, 159 - x),
+     so the picture must read the same at both. */
+  test('482 10.6 Mirror - Reflection angle 45 gives a picture symmetric about the diagonal through the seam where today it is not, Repeat folds Off stops after one reflection with the line upright or turned, the half-size preview matches the export, and a saved mirror draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const R = FM.fxRegistry, bad = [], made = [], N = 160;
+    const fx = p => { const e = R.makeInstance('mirror'); Object.assign(e.params, p); return e; };
+    /* 1. THE ROWS */
+    const row = k => (R.paramsOf('mirror') || []).filter(q => q.key === k)[0];
+    if (!row('angle') || row('angle').default !== 0 || R.makeInstance('mirror').params.angle !== 0 || FM._fxFillValue('mirror', 'angle') !== 0) bad.push('Mirror has no Reflection angle row at 0 (' + JSON.stringify(row('angle')) + ')');
+    const rp = row('repeat');
+    if (!rp || rp.default !== 1 || rp.legacy !== 1 || R.makeInstance('mirror').params.repeat !== 1) bad.push('Mirror has no Repeat folds row, On by default and for a saved mirror (' + JSON.stringify(rp) + ')');
+    const lay = [{ id: 'l48210m', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'mirror', enabled: true, params: { mode: 2, position: 40, angle: -35, repeat: 0 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const mp = lay[0].effects[0].params;
+    if (mp.angle !== -35 || mp.repeat !== 0) bad.push('a saved Reflection angle and Repeat folds come back from the load sanitiser as ' + JSON.stringify(mp));
+    const noGL = FM._noGL;
+    try {
+      /* 2. THE BACKLOG'S TEST. A picture with no symmetry of its own (red the column, green the row, blue their product). */
+      const pic = w10pic('_48210mi1', N, N, (x, y) => [x, y, (x * y) & 255, 255], made);
+      const asym = (r) => { let n = 0; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { if (Math.abs(x + y - 159) <= 1) continue; const a = w10px(r, x, y), b = w10px(r, 159 - y, 159 - x); if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2]) n++; } return n; };
+      const a0 = _986shot([pic([fx({ mode: 0, position: 50 })])], 0.5, N, N), a45 = _986shot([pic([fx({ mode: 0, position: 50, angle: 45 })])], 0.5, N, N);
+      if (!(asym(a0) > 1000)) throw new Error('CONTROL: the upright mirror is already symmetric about that diagonal at all but ' + asym(a0) + ' pixels');
+      if (asym(a45) !== 0) bad.push('Reflection angle 45 leaves ' + asym(a45) + ' pixels that do not match their mirror image across the diagonal through the seam');
+      let keptOff = 0; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (x + y < 157) { const p = w10px(a45, x, y); if (p[0] !== x || p[1] !== y) keptOff++; }
+      if (keptOff) bad.push('Reflection angle 45 changed ' + keptOff + ' pixels on the kept side of the line');
+      /* 3. REPEAT FOLDS OFF, upright: Seam 30 on 160 keeps columns 0-47 and reflects them onto 48-95; past that it used to repeat
+            (column 130 shows column 34) and now shows nothing — the black frame. Column 70 still shows its reflection (25).
+            (These strips are drawImage copies, so a level either way is allowed rather than assumed away.) */
+      const near = (v, w) => Math.abs(v - w) <= 1;
+      const on = _986shot([pic([fx({ mode: 0, position: 30 })])], 0.5, N, N), off = _986shot([pic([fx({ mode: 0, position: 30, repeat: 0 })])], 0.5, N, N);
+      if (!near(w10px(on, 130, 60)[0], 34) || !near(w10px(on, 70, 60)[0], 25)) throw new Error('CONTROL: with Repeat folds On, columns 130 and 70 should show 34 and 25, they show ' + w10px(on, 130, 60)[0] + ' and ' + w10px(on, 70, 60)[0]);
+      if (w10px(off, 130, 60).slice(0, 3).join() !== '0,0,0') bad.push('Repeat folds Off still fills column 130 with ' + w10px(off, 130, 60).slice(0, 3) + ' past the first reflection');
+      if (!near(w10px(off, 70, 60)[0], 25)) bad.push('Repeat folds Off lost the first reflection (column 70 shows ' + w10px(off, 70, 60)[0] + ', not 25)');
+      /* …and turned 20° at Seam 30 (line through (48, 80)): the kept side reaches 72.5 px behind the line, so (60, 80) is 11.9 px
+         past it — the first reflection, kept either way — and (150, 80) is 96.5 px past it, the second fold: empty when Off. */
+      const ton = _986shot([pic([fx({ mode: 0, position: 30, angle: 20 })])], 0.5, N, N), toff = _986shot([pic([fx({ mode: 0, position: 30, angle: 20, repeat: 0 })])], 0.5, N, N);
+      if (w10px(ton, 150, 80)[3] !== 255 || w10px(ton, 150, 80).slice(0, 3).join() === '0,0,0') throw new Error('CONTROL: turned 20° with Repeat folds On, (150, 80) should show the picture, it shows ' + w10px(ton, 150, 80));
+      if (w10px(toff, 150, 80).slice(0, 3).join() !== '0,0,0') bad.push('turned 20° with Repeat folds Off, (150, 80) past the first reflection still shows ' + w10px(toff, 150, 80).slice(0, 3));
+      if (w10px(toff, 60, 80).join() !== w10px(ton, 60, 80).join()) bad.push('turned 20° with Repeat folds Off, the first reflection at (60, 80) changed: ' + w10px(ton, 60, 80) + ' -> ' + w10px(toff, 60, 80));
+      /* 4. THE PREVIEW IS THE EXPORT for a turned line, on a smooth picture (a bilinear read of a linear ramp is the ramp, on
+            either plate): each 2×2 block of the export, averaged, against the half-size preview's pixel. Top → Bottom at Seam 60,
+            25°: the line passes (80, 96), the kept side reaches 120.8 px behind it and the far side only 91.8 px past it, so every
+            mirrored pixel is the first reflection, p - 2u·n. Compared away from the line, the frame edge, and any pixel whose read
+            lands near or past the frame edge — there a transparent edge meets the picture and the two plate sizes blend that
+            step differently, which is resolution, not a fault. */
+      const ramp = w10pic('_48210mi2', N, N, (x, y) => [x, y, 100, 255], made);
+      const ex = _986shot([ramp([fx({ mode: 2, position: 60, angle: 25 })])], 0.5, N, N), pv = _986shot([ramp([fx({ mode: 2, position: 60, angle: 25 })])], 0.5, N, N, 0.5);
+      const th = 25 * Math.PI / 180, nx = -Math.sin(th), ny = Math.cos(th);   // Top → Bottom's normal (0, 1) turned 25°
+      let worst = 0, seen = 0;
+      for (let y = 4; y < pv.h - 4; y++) for (let x = 4; x < pv.w - 4; x++) {
+        const px0 = 2 * x + 1, py0 = 2 * y + 1, u = (px0 - 80) * nx + (py0 - 96) * ny; if (Math.abs(u) < 4) continue;
+        const rx = u < 0 ? px0 : px0 - 2 * u * nx, ry = u < 0 ? py0 : py0 - 2 * u * ny;
+        if (rx < 8 || ry < 8 || rx > N - 8 || ry > N - 8) continue;
+        seen++;
+        for (let c = 0; c < 3; c++) { const e = (ex.d[((2 * y) * N + 2 * x) * 4 + c] + ex.d[((2 * y) * N + 2 * x + 1) * 4 + c] + ex.d[((2 * y + 1) * N + 2 * x) * 4 + c] + ex.d[((2 * y + 1) * N + 2 * x + 1) * 4 + c]) / 4; worst = Math.max(worst, Math.abs(e - pv.d[(y * pv.w + x) * 4 + c])); }
+      }
+      if (seen < 1500) throw new Error('setup: only ' + seen + ' preview pixels were comparable');
+      if (worst > 3) bad.push('turned 25°, the half-size preview differs from the export by up to ' + worst.toFixed(1) + ' levels away from the line');
+      /* 5. SAVED: no Reflection angle and no Repeat folds is the upright folding mirror — the same bytes as both spelled out at
+            0° and On, and symmetric about the seam column by column (79 ↔ 80) as it has always been. */
+      const sv = _986shot([pic([{ type: 'mirror', enabled: true, params: { mode: 0, position: 50 } }])], 0.5, N, N), ex0 = _986shot([pic([fx({ mode: 0, position: 50, angle: 0, repeat: 1 })])], 0.5, N, N);
+      if (!w10same(sv, ex0)) bad.push('a saved Mirror with no Reflection angle or Repeat folds draws differently from one at 0° and On');
+      let lr = 0; for (let y = 0; y < N; y++) for (let x = 0; x < 80; x++) { const a = w10px(sv, x, y), b = w10px(sv, 159 - x, y); if (a.some((v, i) => Math.abs(v - b[i]) > 1)) lr++; }
+      if (lr) bad.push('a saved Left → Right mirror at Seam 50 is no longer symmetric about its seam at ' + lr + ' pixels');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
