@@ -124593,4 +124593,172 @@
     const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 10 — WARPS ═══════════════════════════════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 10
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). Every new key's default is the old look (§0.3), so the library
+   * filters and every saved warp draw as before. These were written where the suite could not be run (a helper worktree, no
+   * browser): every expectation below is derived in the comment beside it, and the kernel-level numbers were checked by
+   * running the kernels themselves under node. */
+  /* A W×H picture as an image layer filling a W×H frame at scale 1, so the warp's plate holds it pixel for pixel. `paint(x, y)`
+     returns [r, g, b, a]. Returns a maker: effects → a fresh layer. */
+  function w10pic(id, W, H, paint, made) {
+    const cv = offscreen(W, H), g = cv.getContext('2d'), img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = paint(x, y), i = (y * W + x) * 4; img.data[i] = c[0]; img.data[i + 1] = c[1]; img.data[i + 2] = c[2]; img.data[i + 3] = c[3]; }
+    g.putImageData(img, 0, 0);
+    if (made) made.push(id);
+    FM.media.set(id, { kind: 'image', el: cv, width: W, height: H, duration: 0 });
+    return fx => { const L = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); L.id = id; L.start = 0; L.duration = 4; L.transform.scale = 1; L.effects = fx || []; return L; };
+  }
+  const w10px = (r, x, y) => { const i = (y * r.w + x) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2], r.d[i + 3]]; };
+  const w10same = (a, b) => { if (a.d.length !== b.d.length) return false; for (let i = 0; i < a.d.length; i++) if (a.d[i] !== b.d[i]) return false; return true; };
+  /* THE SAMPLER AS IT WAS BEFORE 10.1, transcribed from compositor.js drawWarpEffect at fc8866f1: truncate the mapped point,
+     pin it inside the plate, copy that pixel. A warp with no Edges or Smooth sampling key must still be exactly this. */
+  function w10oldSampler(src, W, H, mapFn, p, t, ps, pre) {
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), o = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const m = mapFn(x, y, W, H, cx, cy, maxR, p, t, ps, pre);
+      let sx = m[0] | 0, sy = m[1] | 0;
+      if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+      if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+      const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+      o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+    }
+    return o;
+  }
+  // the warps whose Edges row would be dead (they never read past the frame) — compositor.js WARP_NO_EDGES says why
+  const W10_NO_EDGES = ['kaleidoscope', 'wrapshift', 'tileshift', 'gridrepeat', 'mirrortile', 'stretchseg'];
+
+  /* 10.1 EDGES AND SMOOTH SAMPLING (C26). Every warp was point-sampled and clamped: a twirled hard edge came out as a staircase
+     of its own two colours, and a warp that reached past the frame smeared the edge pixel outward. */
+  test('482 10.1 Every warp - Smooth sampling gives a twirled hard edge in-between shades where today it has only its two, Transparent, Wrap and Mirror fill what Stretch smears, every warp that can use them has both rows at the old sampler, and a warp without them draws byte for byte as before', { item: '482', budgetMs: 90000 }, function () {
+    const bad = [], X = FM._warpFx, R = FM.fxRegistry, made = [], noGL = FM._noGL;
+    if (!X || !X.twirl || !X.wave) throw new Error('FM._warpFx is not reachable');
+    const W = 160, H = 120;   // 19,200 px: under gl-warp's 40,000 px floor, and the GPU is switched off besides — this is the CPU sampler
+    const fx = (type, p) => { const e = R.makeInstance(type); Object.assign(e.params, p || {}); return e; };
+    const mids = r => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] > 8 && r.d[i] < 247) n++; return n; };
+    FM._noGL = true;
+    try {
+      /* 1. THE BACKLOG'S OWN TEST. A hard diagonal of exactly two values (0 and 255, nothing between), twirled at its default
+            140°. The twirl bends the edge into a curve, so the point each output pixel reads lands between pixels all along it.
+            Nearest takes one of the two neighbours — still only 0 and 255. Smooth sampling blends the two across the curve, so
+            every pixel the curve passes through gets an in-between shade: a curve some 200 px long in a 160×120 frame. Under
+            node the kernel itself gave 0 in-between pixels nearest and 248 smoothed on this same picture. */
+      const diag = w10pic('_48210diag', W, H, (x, y) => { const v = (x * H > y * W + 37) ? 255 : 0; return [v, v, v, 255]; }, made);
+      const flat = _986shot([diag([])], 0.5, W, H), near = _986shot([diag([fx('twirl')])], 0.5, W, H), smooth = _986shot([diag([fx('twirl', { smooth: 1 })])], 0.5, W, H);
+      if (mids(flat) !== 0) throw new Error('CONTROL: the diagonal itself has ' + mids(flat) + ' in-between pixels — it is not a hard edge, so in-between shades would prove nothing');
+      let moved = 0; for (let i = 0; i < flat.d.length; i += 4) if (flat.d[i] !== near.d[i]) moved++;
+      if (!(moved > 500)) throw new Error('CONTROL: the twirl moved only ' + moved + ' pixels of the diagonal — the fixture is not warping');
+      if (mids(near) !== 0) throw new Error('CONTROL: the twirl with Smooth sampling Off already has ' + mids(near) + ' in-between pixels — nearest should only ever copy the two source values');
+      if (!(mids(smooth) > 100)) bad.push('Smooth sampling On left the twirled edge with ' + mids(smooth) + ' in-between pixels - it is still a staircase of its own two colours (C26)');
+      /* 2. EDGES. A picture whose red is its own column (R = x) and blue its own row, under a Wave of 30 px with Phase -90 and
+            no Cross wave: on row 0 the wave is a pure shift of exactly -30 (sin(-90°) = -1), so pixel (5, 0) reads column -25,
+            off the left edge. Stretch pins it to column 0 (R 0, as today); Transparent leaves nothing there, so the black frame
+            shows (G 0); Wrap brings round column 160 - 25 = 135; Mirror reflects it to column 24 (… 1 0 | 0 1 …, so -25 → 24).
+            Smooth sampling reads the same: the point is a whole column, so the blend is that one pixel. Pixel (80, 60) reads
+            inside the frame and must not change with Edges at all. */
+      const gp = w10pic('_48210grad', W, H, (x, y) => [x, 200, y, 255], made);
+      const WV = { amount: 30, wavelength: 38, phase: -90, vertical: 0 };
+      const want = { 0: [0, 200, 0], 1: [0, 0, 0], 2: [135, 200, 0], 3: [24, 200, 0] }, names = ['Stretch', 'Transparent', 'Wrap', 'Mirror'];
+      const inside = w10px(_986shot([gp([fx('wave', WV)])], 0.5, W, H), 80, 60);
+      [0, 1].forEach(sm => [0, 1, 2, 3].forEach(e => {
+        const r = _986shot([gp([fx('wave', Object.assign({ edges: e, smooth: sm }, WV))])], 0.5, W, H), got = w10px(r, 5, 0);
+        if (got[0] !== want[e][0] || got[1] !== want[e][1] || got[2] !== want[e][2]) bad.push('Edges ' + names[e] + (sm ? ' with Smooth sampling' : '') + ': the pixel whose wave reads 25 px off the left edge is ' + got.slice(0, 3) + ', not ' + want[e]);
+        if (!sm && w10px(r, 80, 60).join() !== inside.join()) bad.push('Edges ' + names[e] + ' changed a pixel that reads inside the frame: ' + inside + ' -> ' + w10px(r, 80, 60));
+      }));
+      /* 3. THE ROWS. On every warp that can use them, at the old sampler, kept by the load sanitiser — and absent where the row
+            could not change the picture (a dead control is a defect). */
+      const types = Object.keys(X);
+      if (types.length < 20) throw new Error('setup: only ' + types.length + ' warps in FM._warpFx');
+      types.forEach(type => {
+        const ps = R.paramsOf(type) || [], e = ps.filter(q => q.key === 'edges')[0], s = ps.filter(q => q.key === 'smooth')[0], inst = R.makeInstance(type);
+        if (W10_NO_EDGES.indexOf(type) >= 0) { if (e) bad.push(type + ' has an Edges row, but it never reads past the frame, so the row would do nothing'); }
+        else if (!e || e.type !== 'segment' || e.default !== 0 || (e.options || []).map(o => o[1]).join('/') !== 'Stretch/Transparent/Wrap/Mirror') bad.push(type + ' has no Edges row of Stretch / Transparent / Wrap / Mirror defaulting to Stretch (' + JSON.stringify(e) + ')');
+        else if (inst.params.edges !== 0 || FM._fxFillValue(type, 'edges') !== 0) bad.push('a new or a saved ' + type + ' does not start at Edges Stretch');
+        if (type === 'wrapshift') { if (s) bad.push('Wrap Shift has a Smooth sampling row, but it slides by whole pixels, so the row would do nothing'); }
+        else if (!s || s.type !== 'segment' || s.default !== 0 || (s.options || []).length !== 2) bad.push(type + ' has no Smooth sampling row (Off / On, Off by default)');
+        else if (inst.params.smooth !== 0 || FM._fxFillValue(type, 'smooth') !== 0) bad.push('a new or a saved ' + type + ' does not start with Smooth sampling Off');
+      });
+      const lay = [{ id: 'l48210s', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'twirl', enabled: true, params: { amount: 90, edges: 2, smooth: 1 } }] }];
+      FM.storage._sanitizeLayers(lay);
+      const kept = lay[0].effects[0] && lay[0].effects[0].params;
+      if (!kept || kept.edges !== 2 || kept.smooth !== 1) bad.push('a saved Twirl with Edges Wrap and Smooth sampling On comes back from the load sanitiser as ' + JSON.stringify(kept));
+      /* 4. BYTE FOR BYTE. A warp saved before 10.1 has neither key. Every one of the 22, at its own defaults, through the seam the
+            driver now calls, against the sampler transcribed above — exactly equal, on a picture with a hard edge and a soft
+            alpha rim. Then through the whole renderer: a saved Twirl (no keys) and a new one (both at 0) draw the same bytes. */
+      if (typeof FM._warpResample !== 'function' || typeof FM._warpSampling !== 'function') bad.push('FM._warpResample / FM._warpSampling are missing - the sampler is not the one this test measures');
+      else {
+        const w = 64, h = 48, src = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4, d = Math.hypot(x - 30, y - 22); src[i] = (x * 4) & 255; src[i + 1] = x + y > 50 ? 230 : 20; src[i + 2] = (y * 5) & 255; src[i + 3] = d < 18 ? 255 : (d < 21 ? 128 : 0); }
+        types.forEach(type => {
+          const k = X[type], p = R.makeInstance(type).params; delete p.edges; delete p.smooth;
+          const pre = k.prep ? k.prep(w, h, w / 2, h / 2, Math.hypot(w / 2, h / 2), p, 0.7, 1) : null;
+          const ref = w10oldSampler(src, w, h, k, p, 0.7, 1, pre), o = new Uint8ClampedArray(w * h * 4), sm = FM._warpSampling(p, 0.7);
+          if (sm.edges !== 0 || sm.smooth !== 0) bad.push('a saved ' + type + ' with no Edges or Smooth sampling key reads as ' + JSON.stringify(sm));
+          FM._warpResample(src, o, w, h, k, w / 2, h / 2, Math.hypot(w / 2, h / 2), p, 0.7, 1, pre, sm.edges, sm.smooth);
+          let n = 0; for (let i = 0; i < o.length; i++) if (o[i] !== ref[i]) n++;
+          if (n) bad.push('a saved ' + type + ' samples ' + n + ' bytes differently from the old sampler');
+        });
+      }
+      const saved = { type: 'twirl', enabled: true, params: { amount: 140 } };
+      if (!w10same(_986shot([diag([saved])], 0.5, W, H), near)) bad.push('a saved Twirl with no Edges or Smooth sampling key draws differently from a new one at Stretch and Off');
+    } finally {
+      FM._noGL = noGL;
+      made.forEach(id => FM.media.remove(id));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.1 ON THE GPU. The shader is the CPU sampler's matched pair (js/gl-warp.js fmTap), so it must draw what the CPU draws.
+     Same measure and threshold as 'every ported warp draws the same picture on the GPU as on the CPU': a pixel counts only if a
+     channel differs by more than 24, and at most 0.5 % may. CONTROLS: stats prove which path ran; and every case must differ
+     from the same warp at Stretch and Off ON THE GPU, or a shader that ignored both keys would pass by agreeing with a CPU
+     that ignored them too. */
+  test('482 10.1 Every warp - the GPU draws the same Edges and Smooth sampling as the CPU, one warp at a time and as a chain', { item: '482', budgetMs: 120000 }, async function () {
+    if (!FM.glWarp || !FM.glWarp.runChain) throw new Error('FM.glWarp is missing');
+    if (!FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU sampler is UNTESTED: ' + FM.glWarp.stats().reason);
+    const R = FM.fxRegistry, W = 420, H = 420, made = [], keep = { noGL: FM._noGL, noCh: FM._noGLChain }, bad = [];
+    const fx = (type, p) => { const e = R.makeInstance(type); Object.assign(e.params, p || {}); return e; };
+    // colour ramps, a hard checker and a half-transparent band, so a blend has colour, edges and alpha to get wrong
+    const pic = w10pic('_48210gpu', W, H, (x, y) => [Math.round(x * 255 / (W - 1)), ((x >> 5) + (y >> 5)) & 1 ? 230 : 30, Math.round(y * 255 / (H - 1)), (y > 300 && y < 340) ? 128 : 255], made);
+    const shot = (effects, gl, chain) => {
+      FM._noGL = !gl; FM._noGLChain = !chain; FM.glWarp._reset();
+      const r = _986shot([pic(effects)], 0.5, W, H);
+      r.stats = FM.glWarp.stats(); return r;
+    };
+    const big = (a, b) => { let n = 0; for (let i = 0; i < a.d.length; i += 4) { const e = Math.max(Math.abs(a.d[i] - b.d[i]), Math.abs(a.d[i + 1] - b.d[i + 1]), Math.abs(a.d[i + 2] - b.d[i + 2]), Math.abs(a.d[i + 3] - b.d[i + 3])); if (e > 24) n++; } return 100 * n / (a.d.length / 4); };
+    const cases = [
+      ['twirl', { smooth: 1 }], ['twirl', { amount: 300, edges: 1, smooth: 1 }],
+      ['wave', { amount: 60, edges: 1 }], ['wave', { amount: 60, edges: 2 }], ['wave', { amount: 60, edges: 3, smooth: 1 }],
+      ['bulge', { amount: -0.9, edges: 3 }], ['tunnel', { edges: 2, smooth: 1 }], ['ripple', { amount: 40, edges: 1, smooth: 1 }],
+      ['kaleidoscope', { smooth: 1 }]
+    ];
+    try {
+      for (const [type, p] of cases) {
+        const label = type + ' ' + JSON.stringify(p);
+        const cpu = shot([fx(type, p)], false, false);
+        if (cpu.stats.gpu !== 0) throw new Error('FM._noGL did not keep ' + label + ' on the CPU');
+        const gpu = shot([fx(type, p)], true, false);
+        if (!(gpu.stats.gpu > 0)) throw new Error('the GPU path did not run for ' + label + ' (' + gpu.stats.reason + ') - a shader that fails to compile falls back to the CPU and would pass this comparison');
+        const plain = Object.assign({}, p); delete plain.edges; delete plain.smooth;
+        const gpu0 = shot([fx(type, plain)], true, false);
+        if (w10same(gpu, gpu0)) bad.push('CONTROL: on the GPU ' + label + ' draws exactly what the same warp at Stretch and Off draws - the shader ignores the keys');
+        const pct = big(cpu, gpu);
+        if (pct > 0.5) bad.push(label + ': the GPU differs from the CPU on ' + pct.toFixed(3) + ' % of pixels');
+      }
+      /* A CHAIN: each pass carries its own effect's keys. Collapsed into one chain against the same two warps run one at a time
+         on the GPU, and against the CPU. */
+      const two = () => [fx('wave', { amount: 40, edges: 1, smooth: 1 }), fx('twirl', { edges: 3, smooth: 1 })];
+      const per = shot(two(), true, false), ch = shot(two(), true, true), cpu2 = shot(two(), false, false);
+      if (!(ch.stats.chains > 0)) bad.push('the two warps did not chain on the GPU (' + ch.stats.reason + ')');
+      if (per.stats.chains !== 0) throw new Error('FM._noGLChain did not stop the chain');
+      const pc = big(per, ch), pcc = big(cpu2, ch);
+      if (pc > 0.5) bad.push('the chained Wave (Transparent, Smooth) then Twirl (Mirror, Smooth) differs from the same two run one at a time on ' + pc.toFixed(3) + ' % of pixels - a pass is not using its own keys');
+      if (pcc > 0.5) bad.push('the chained pair differs from the CPU on ' + pcc.toFixed(3) + ' % of pixels');
+    } finally {
+      FM._noGL = keep.noGL; FM._noGLChain = keep.noCh; FM.glWarp._reset();
+      made.forEach(id => FM.media.remove(id));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

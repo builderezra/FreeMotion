@@ -9254,7 +9254,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   Object.setPrototypeOf(PIXEL_FX, null);   // own keys only — see POSTFX
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
-  // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Nearest-neighbour sampling.
+  // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Nearest-neighbour sampling, clamped at the
+  // edges — unless the effect's Edges / Smooth sampling say otherwise (#482 polish 10.1, see warpResample).
   // Depth-indexed pool (like _pfPool): stacking two warps re-enters this fn (the inner warp runs
   // inside the outer's drawLayer). Shared singletons made the inner pass composite onto the SAME
   // canvas the outer then read as its source → an un-warped ghost of the layer bled through.
@@ -9287,6 +9288,75 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function wCy(p, t, H, cy) { const v = p.centery == null ? 50 : FM.evalProp(p.centery, t); return v === 50 ? cy : H * (v / 100); }
   function wR(p, t, maxR) { const v = p.radius == null ? 100 : FM.evalProp(p.radius, t); return v === 100 ? maxR : Math.max(1, maxR * (v / 100)); }
 
+  /* ═══ EDGES AND SMOOTH SAMPLING, FOR EVERY WARP (#482 polish 10.1, backlog C26) ══════════════════════════════════════════
+   * Every warp was point-sampled with clamped edges: the loop below truncated the mapped point and pinned it inside the plate,
+   * and the shader (js/gl-warp.js) did the same with NEAREST + clamp. So a twirl stair-stepped every edge it bent, and a warp
+   * that reached past the frame smeared the edge pixel outward in streaks — there was no other answer to "what is out there".
+   *   EDGES (`edges`): 0 Stretch — the old clamp; 1 Transparent — nothing out there; 2 Wrap — the far side comes round;
+   *     3 Mirror — the picture reflects at the frame (GL's mirrored repeat: … 2 1 0 | 0 1 2 … W-1 | W-1 …).
+   *   SMOOTH SAMPLING (`smooth`): 0 the old nearest pixel; 1 bilinear across the four pixels round the mapped point, weighted in
+   *     PREMULTIPLIED alpha, so a transparent neighbour fades the alpha without dragging black into the colour.
+   * The point is taken on the PIXEL-INDEX lattice (pixel i sits at i, not i + 0.5) — the lattice the kernels already speak:
+   * the loop walks integer x and y, and an identity map returns them exactly, so an untouched region stays sharp with Smooth
+   * on instead of going soft by half a pixel. Nearest is the floor of that point, which is what the shader has always taken.
+   * ⚠️ Both 0 is the loop as it was, line for line, chosen once per frame and never per pixel: every saved warp is this case
+   * (an absent key reads 0), and it must draw byte for byte and at the old speed. warpResample is a seam for the suite. */
+  function warpSampling(p, t) {
+    const e = p.edges == null ? 0 : (Math.round(FM.evalProp(p.edges, t)) | 0);
+    const s = p.smooth == null ? 0 : (Math.round(FM.evalProp(p.smooth, t)) | 0);
+    return { edges: (e >= 1 && e <= 3) ? e : 0, smooth: s === 1 ? 1 : 0 };
+  }
+  // An integer pixel index → an index inside [0, n-1] under the edge mode, or -1 for "nothing there" (Transparent).
+  function warpIdx(i, n, edges) {
+    if (edges === 1) return (i < 0 || i >= n) ? -1 : i;
+    if (edges === 2) { i %= n; return i < 0 ? i + n : i; }
+    if (edges === 3) { const p2 = 2 * n; i %= p2; if (i < 0) i += p2; return i >= n ? p2 - 1 - i : i; }
+    return i < 0 ? 0 : (i >= n ? n - 1 : i);
+  }
+  function warpResample(src, o, W, H, mapFn, cx, cy, maxR, pr, t, ps, pre, edges, smooth) {
+    if (!edges && !smooth) {
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
+          let sx = m[0] | 0, sy = m[1] | 0;
+          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+          if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+      }
+      return;
+    }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
+        let mx = m[0], my = m[1];
+        if (!isFinite(mx)) mx = 0;   // `NaN | 0` is 0 in the old loop; a non-finite point reads the same pixel here
+        if (!isFinite(my)) my = 0;
+        const di = (y * W + x) * 4, x0 = Math.floor(mx), y0 = Math.floor(my);
+        if (!smooth) {
+          const ix = warpIdx(x0, W, edges), iy = warpIdx(y0, H, edges);
+          if (ix < 0 || iy < 0) { o[di] = 0; o[di + 1] = 0; o[di + 2] = 0; o[di + 3] = 0; continue; }
+          const si = (iy * W + ix) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+          continue;
+        }
+        const fx = mx - x0, fy = my - y0;
+        const ix0 = warpIdx(x0, W, edges), ix1 = warpIdx(x0 + 1, W, edges), iy0 = warpIdx(y0, H, edges), iy1 = warpIdx(y0 + 1, H, edges);
+        let A = 0, R = 0, G = 0, B = 0, w, a, si;
+        // the four taps, each weighted by its share and by its own alpha (premultiplied)
+        if (ix0 >= 0 && iy0 >= 0) { w = (1 - fx) * (1 - fy); si = (iy0 * W + ix0) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (ix1 >= 0 && iy0 >= 0) { w = fx * (1 - fy); si = (iy0 * W + ix1) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (ix0 >= 0 && iy1 >= 0) { w = (1 - fx) * fy; si = (iy1 * W + ix0) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (ix1 >= 0 && iy1 >= 0) { w = fx * fy; si = (iy1 * W + ix1) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (A > 0) { o[di] = R / A; o[di + 1] = G / A; o[di + 2] = B / A; o[di + 3] = A; }
+        else { o[di] = 0; o[di + 1] = 0; o[di + 2] = 0; o[di + 3] = 0; }
+      }
+    }
+  }
+  FM._warpResample = warpResample;   // suite seam (#482 polish 10.1)
+  FM._warpSampling = warpSampling;
+
   function drawWarpEffect(ctx, layer, t, scene, fx, mapFn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -9314,6 +9384,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         drawLayer(actx, tmp, t, scene);
       }
       const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
+      const samp = warpSampling(pr, t);   // #482 polish 10.1: Edges and Smooth sampling — both 0 is the old sampler
       function uniformsFor(k, params) {
         /* glslPrep first, then prep, then nothing — the same three-way the single-effect path uses.
            A kernel with nothing worth hoisting has no prep at all, and that is not an error. */
@@ -9359,7 +9430,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       let warped = null;
       if (chain) {
         plate(chain.map(c => c.fx));
-        warped = FM.glWarp.runChain(wA, W, H, chain.map(c => ({ body: c.k.glsl, uniforms: uniformsFor(c.k, c.fx.params || {}) })));
+        // each pass carries its OWN Edges and Smooth sampling (#482 polish 10.1) — they are the effect's, not the chain's
+        warped = FM.glWarp.runChain(wA, W, H, chain.map(c => Object.assign({ body: c.k.glsl, uniforms: uniformsFor(c.k, c.fx.params || {}) }, warpSampling(c.fx.params || {}, t))));
         /* A chain that could not run has left the WRONG plate in wA — the inner warps are missing
            from it. Re-render the single-effect plate so the paths below are exactly what they would
            have been had the chain never been attempted. Costs one render on a path that only happens
@@ -9389,21 +9461,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          * CPU loop keeps exactly the shape that was measured — the finding above is not quietly undone
          * by the GPU port. */
         const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps) : pre;
-        warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {});
+        warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {}, samp);
       }
       if (!warped) {
         const src = actx.getImageData(0, 0, W, H).data;
         const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
-        for (let y = 0; y < H; y++) {
-          for (let x = 0; x < W; x++) {
-            const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
-            let sx = m[0] | 0, sy = m[1] | 0;
-            if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
-            if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
-            const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
-            o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
-          }
-        }
+        warpResample(src, o, W, H, mapFn, cx, cy, maxR, pr, t, ps, pre, samp.edges, samp.smooth);   // both 0: the loop that was here, verbatim
         bctx.putImageData(outImg, 0, 0);
         warped = wB;
       }
@@ -11101,6 +11164,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   FM._warpFx = WARP_FX;   // suite seam — same reason as FM._pixelFx: the kernels are module-local,
                           // and a test cannot otherwise check a fast path against its own reference.
+
+  /* EDGES AND SMOOTH SAMPLING ON EVERY WARP'S PANEL (#482 polish 10.1). The driver reads them for every WARP_FX entry (see
+   * warpSampling), so the rows are declared HERE, off this table, rather than copied into 22 catalogue entries: a warp added
+   * later gets them without anyone remembering, and the load sanitiser keeps them because they are in its catalogue row.
+   * Defaults are the old sampler, so every library filter and every saved warp draws as before.
+   * ⚠️ NOT on a warp where the row could not change the picture — a dead control is a defect, not a choice:
+   *   Edges: Kaleidoscope folds every point back inside the frame (reflectInto); Wrap Shift and Tile Shift wrap with their own
+   *   mod; Grid Repeat and Mirror Tile read a fraction of the frame; Stretch Segment only pulls toward its band. None can read
+   *   past the frame, so there is nothing for Edges to decide.
+   *   Smooth: Wrap Shift slides by WHOLE pixels (its prep rounds the shift), so every point lands on a pixel. */
+  const WARP_NO_EDGES = { kaleidoscope: 1, wrapshift: 1, tileshift: 1, gridrepeat: 1, mirrortile: 1, stretchseg: 1 };
+  const WARP_NO_SMOOTH = { wrapshift: 1 };
+  Object.keys(WARP_FX).forEach(type => {
+    const def = FM.EFFECTS.find(d => d && d.type === type);
+    if (!def || !Array.isArray(def.params)) return;
+    const has = k => def.params.some(q => q && q.key === k);
+    if (!WARP_NO_EDGES[type] && !has('edges')) def.params.push({ key: 'edges', label: 'Edges', def: 0, options: [[0, 'Stretch'], [1, 'Transparent'], [2, 'Wrap'], [3, 'Mirror']] });
+    if (!WARP_NO_SMOOTH[type] && !has('smooth')) def.params.push({ key: 'smooth', label: 'Smooth sampling', def: 0, options: [[0, 'Off'], [1, 'On']] });
+  });
 
   /* ═══ TURBULENT DISPLACE: the per-frame half of its noise, hoisted out of the pixel loop.
    * (queue 474 — it was the last effect over 150ms at his 1080×1350, 11 of the top 15 being warps.)
