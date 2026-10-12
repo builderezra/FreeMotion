@@ -90,7 +90,10 @@ window.FM = window.FM || {};
     { type: 'lumakey', label: 'Luma Key', params: [
       { key: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.02, def: 0.25 },
       { key: 'softness', label: 'Edge softness', min: 0, max: 128, step: 1, def: 28 },
-      { key: 'mode', label: 'Removes', def: 0, options: [[0, 'Dark'], [1, 'Bright']] },
+      /* #482 12.2 — Similar removes the brightness AT the threshold (a grey card, a mid-tone backdrop) and keeps both ends;
+         Dissimilar keeps only that band. Tolerance is the band's half-width; Edge softness ramps outside it as before. */
+      { key: 'mode', label: 'Removes', def: 0, options: [[0, 'Dark'], [1, 'Bright'], [2, 'Similar'], [3, 'Dissimilar']] },
+      { key: 'tolerance', label: 'Tolerance', min: 0, max: 0.5, step: 0.01, def: 0.1, overriddenBy: 'mode', liveWhen: [2, 3] },
     ] },
     { type: 'rgbsplit', label: 'RGB Split', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
@@ -1658,7 +1661,9 @@ window.FM = window.FM || {};
   // recompute when the source frame and params are unchanged (static images, paused/scrub
   // redraws, repeated renders of one frame). Stats exposed for verification.
   FM._chromaKey = function (src, w, h, keyHex, tol, filterStr, soft, spill, slot) { return chromaKey(src, w, h, keyHex, tol, filterStr, soft, spill, slot); };   // suite seam (queue 734; slot: queue 986)
-  FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode, slot) { return lumaKey(src, w, h, threshold, filterStr, soft, mode, slot); };   // suite seam (queue 735; slot: queue 986)
+  FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode, slot, tol) { return lumaKey(src, w, h, threshold, filterStr, soft, mode, slot, tol); };   // suite seam (queue 735; slot: queue 986; tol: #482 12.2)
+  // #482 12.2: the key's per-pixel loop on a bare buffer, with lumaKey's own argument rules — the canvas is only its carrier.
+  FM._lumaKeyPx = function (d, threshold, soft, mode, tol) { const a = lumaKeyArgs(soft, mode, tol); lumaKeyPx(d, (threshold == null ? 0.25 : threshold) * 255, a[0], a[1], a[2] * 255); return d; };
   FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them)
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
   // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
@@ -1727,12 +1732,19 @@ window.FM = window.FM || {};
   // Key out by luminance → transparency (removes dark/black areas below threshold). One canvas + memo per SLOT, as chromaKey.
   const _lkCanvases = [], _lkLasts = [];
   // SOFT and MODE join the cache key for the same reason chromaKey's softness does.
-  function lumaKey(src, w, h, threshold, filterStr, soft, mode, slot) {
-    const tok = srcToken(src);
+  /* [soft, mode, tol] as the key reads them. TOLERANCE (#482 12.2) only means something under Similar / Dissimilar; under Dark
+     and Bright it is normalised to 0, so dragging it there is not a recompute. */
+  function lumaKeyArgs(soft, mode, tol) {
     soft = soft == null ? 28 : soft; mode = mode || 0;
     if (soft <= 0) soft = 0.0001;   // a zero-wide ramp would divide by zero — normalised BEFORE the memo compare (queue 735: the stored 0.0001 never equalled an incoming 0, so Softness 0 recomputed every redraw)
+    tol = (mode === 2 || mode === 3) ? (tol == null ? 0.1 : (tol < 0 ? 0 : (tol > 0.5 ? 0.5 : tol))) : 0;
+    return [soft, mode, tol];
+  }
+  function lumaKey(src, w, h, threshold, filterStr, soft, mode, slot, tol) {
+    const tok = srcToken(src);
+    const la = lumaKeyArgs(soft, mode, tol); soft = la[0]; mode = la[1]; tol = la[2];
     const sl = slot > 0 ? slot | 0 : 0, _lkLast = _lkLasts[sl];
-    if (_lkLast && _lkCanvases[sl] && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode) return _lkCanvases[sl];
+    if (_lkLast && _lkCanvases[sl] && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode && _lkLast.tol === tol) return _lkCanvases[sl];
     if (!_lkCanvases[sl]) _lkCanvases[sl] = document.createElement('canvas');
     const oc = _lkCanvases[sl]; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
@@ -1744,10 +1756,18 @@ window.FM = window.FM || {};
     try { img = octx.getImageData(0, 0, w, h); } catch (e) { return src; }  // tainted-canvas guard
     const d = img.data;
     const t = (threshold == null ? 0.25 : threshold) * 255;
-    // SOFTNESS was welded to 28 luma units, which is a hard edge on a smoke or glow plate — those need
-    // a wide ramp to hand over gradually instead of terminating on a line. MODE was the bigger gap:
-    // the key could only ever remove the DARK end, so a subject shot against WHITE could not be keyed
-    // at all, however the threshold was set. Removing the bright end is the same ramp, mirrored.
+    lumaKeyPx(d, t, soft, mode, tol * 255);
+    octx.putImageData(img, 0, 0);
+    _lkLasts[sl] = { tok, w, h, thr: threshold, filter: filterStr, soft, mode, tol }; FM._fxStats.lkCompute++;
+    oc._fmGen = ++_gen;
+    return oc;
+  }
+  // SOFTNESS was welded to 28 luma units, which is a hard edge on a smoke or glow plate — those need
+  // a wide ramp to hand over gradually instead of terminating on a line. MODE was the bigger gap:
+  // the key could only ever remove the DARK end, so a subject shot against WHITE could not be keyed
+  // at all, however the threshold was set. Removing the bright end is the same ramp, mirrored.
+  // (#482 12.2: the loop moved out of lumaKey unchanged, so FM._lumaKeyPx can run it without a canvas.)
+  function lumaKeyPx(d, t, soft, mode, tol) {
     for (let i = 0; i < d.length; i += 4) {
       const luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
       if (mode === 1) {
@@ -1755,13 +1775,18 @@ window.FM = window.FM || {};
         else if (luma > t - soft) d[i + 3] = Math.round(d[i + 3] * (t - luma) / soft);
         continue;
       }
+      /* SIMILAR / DISSIMILAR (#482 12.2) measure how far the brightness is from the threshold, either way. Similar removes
+         within Tolerance and ramps back in over the softness; Dissimilar is the same band kept and everything else removed. */
+      if (mode === 2 || mode === 3) {
+        const e = luma > t ? luma - t : t - luma;
+        if (mode === 2) { if (e <= tol) d[i + 3] = 0; else if (e < tol + soft) d[i + 3] = Math.round(d[i + 3] * (e - tol) / soft); }
+        else if (e >= tol + soft) d[i + 3] = 0;
+        else if (e > tol) d[i + 3] = Math.round(d[i + 3] * (tol + soft - e) / soft);
+        continue;
+      }
       if (luma <= t) d[i + 3] = 0;
       else if (luma < t + soft) d[i + 3] = Math.round(d[i + 3] * (luma - t) / soft);
     }
-    octx.putImageData(img, 0, 0);
-    _lkLasts[sl] = { tok, w, h, thr: threshold, filter: filterStr, soft, mode }; FM._fxStats.lkCompute++;
-    oc._fmGen = ++_gen;
-    return oc;
   }
 
   // Lift / Gamma / Gain color grading via a 256-entry LUT: out = gain * in^(1/gamma) + lift.
@@ -18019,7 +18044,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const thr = p.threshold == null ? 0.25 : FM.evalProp(p.threshold, t);
           const lksoft = p.softness == null ? 28 : Math.max(0, Math.min(128, FM.evalProp(p.softness, t)));
           const lkm = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
-          src = lumaKey(src, w, h, thr, keyed ? 'none' : keyFilter, lksoft, lkm, n); keyed = true;
+          const lktol = p.tolerance == null ? 0.1 : FM.evalProp(p.tolerance, t);   // #482 12.2: Similar / Dissimilar's band
+          src = lumaKey(src, w, h, thr, keyed ? 'none' : keyFilter, lksoft, lkm, n, lktol); keyed = true;
         }
         if (keyed) ctx.filter = 'none';                   // filter already applied to the keyed source
         try {

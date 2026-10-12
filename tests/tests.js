@@ -124768,4 +124768,52 @@
       if (rg[i + 3] !== 255) throw new Error('On grey changed a solid layer’s alpha to ' + rg[i + 3]);
     }
   });
+
+  /* 12.2 LUMA KEY: Similar and Dissimilar, with a Tolerance. The key runs on a canvas in the media path (it is media-only), so
+     its loop is reached through FM._lumaKeyPx — the same loop, on a bare buffer, with lumaKey’s own argument rules — and one
+     check proves the canvas function draws exactly what the loop does. The pins were captured on fc8866f1 by running the OLD
+     lumaKey on a byte-exact stand-in canvas: they are what its loop wrote. */
+  const b12LumaArgs = (p, t) => [p.threshold == null ? 0.25 : FM.evalProp(p.threshold, t), p.softness == null ? 28 : Math.max(0, Math.min(128, FM.evalProp(p.softness, t))), p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0), p.tolerance == null ? 0.1 : Math.max(0, Math.min(0.5, FM.evalProp(p.tolerance, t)))];
+  const b12LumaShots = p => [[97, 61], [160, 120]].map(([W, H]) => [0.37, 1.9].map(t => { const d = b12Plate(W, H), a = b12LumaArgs(p, t); FM._lumaKeyPx(d, a[0], a[1], a[2], a[3]); return b12Hash(d); }).join('.')).join(' ');
+  const B12LK_NEW = { tolerance: 0.1 };
+  const B12LK_CFG = { def: {}, bright: { mode: 1 }, nosoft: { softness: 0 }, wide: { threshold: 0.6, softness: 100 }, kf: { threshold: b12Kf(0.1, 0.9) } };
+  const B12LK_PIN = {   // fc8866f1, before the edit
+    def: '14f1ca77.14f1ca77 934092dc.934092dc', bright: 'dc9cce9d.dc9cce9d a08cd47f.a08cd47f', nosoft: 'cf80c9c4.cf80c9c4 955dbb39.955dbb39',
+    wide: 'f6b0f488.f6b0f488 f8e785b8.f8e785b8', kf: '10380d2c.b68c2f8e ed43efad.4bec84dc' };
+
+  test('482 12.2 Luma Key - Removes offers Similar and Dissimilar, Tolerance is in the catalogue and only live under them, and saved and new Dark and Bright keys key byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    if (typeof FM._lumaKeyPx !== 'function') throw new Error('FM._lumaKeyPx (the Luma Key loop on a bare buffer) is not reachable');
+    b12Catalogue('lumakey', B12LK_NEW, { mode: 3, tolerance: 0.35 }, 'image');
+    const md = b12Row('lumakey', 'mode'), tl = b12Row('lumakey', 'tolerance');
+    if ((md.options || []).map(o => o[0] + ':' + o[1]).join() !== '0:Dark,1:Bright,2:Similar,3:Dissimilar') throw new Error('Removes is not Dark / Bright / Similar / Dissimilar (' + JSON.stringify(md.options) + ')');
+    if (tl.overriddenBy !== 'mode' || JSON.stringify(tl.liveWhen) !== '[2,3]') throw new Error('Tolerance does not say it only counts under Similar and Dissimilar (overriddenBy ' + tl.overriddenBy + ', liveWhen ' + JSON.stringify(tl.liveWhen) + ')');
+    const moved = b12Pinned('lumakey', B12LK_NEW, B12LK_CFG, B12LK_PIN, b12LumaShots);
+    if (moved.length) throw new Error(moved.length + ' Luma Key mattes differ from fc8866f1 - a new control changed a key he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.2 Luma Key - Similar at 0.5 removes mid grey and keeps black and white, Dissimilar keeps only mid grey, Tolerance widens the band, and the canvas key draws what the loop does and redraws when only Tolerance moves', { item: '482', budgetMs: 60000 }, function () {
+    const W = 256, H = 2;
+    const ramp = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = x; d[i + 1] = x; d[i + 2] = x; d[i + 3] = 255; } return d; };
+    const key = (mode, tol) => b12Alpha(FM._lumaKeyPx(ramp(), 0.5, 28, mode, tol)).slice(0, W);
+    /* CONTROL: Dark at 0.5 cannot keep both ends - it clears black along with every shadow. */
+    const dark = key(0, 0.1);
+    if (!(dark[0] === 0 && dark[100] === 0 && dark[255] === 255)) throw new Error('CONTROL: Removes Dark at 0.5 gave black ' + dark[0] + ', a dark grey ' + dark[100] + ', white ' + dark[255]);
+    const sim = key(2, 0.1), dis = key(3, 0.1);
+    if (!(sim[0] === 255 && sim[255] === 255 && sim[128] === 0)) throw new Error('Similar at 0.5 gave black ' + sim[0] + ', mid grey ' + sim[128] + ', white ' + sim[255] + ' - it should clear mid grey and keep both ends');
+    if (!(dis[0] === 0 && dis[255] === 0 && dis[128] === 255)) throw new Error('Dissimilar at 0.5 gave black ' + dis[0] + ', mid grey ' + dis[128] + ', white ' + dis[255] + ' - it should keep only mid grey');
+    /* The band is Tolerance either side of 127.5, exactly: 0.1 is 25.5 levels (102..153, 52 levels), 0.3 is 76.5 (51..204, 154). */
+    const clear = a => a.filter(v => v === 0).length;
+    if (clear(sim) !== 52) throw new Error('Similar with Tolerance 0.1 cleared ' + clear(sim) + ' levels, not the 52 within 25.5 of the threshold');
+    if (clear(key(2, 0.3)) !== 154) throw new Error('Similar with Tolerance 0.3 cleared ' + clear(key(2, 0.3)) + ' levels, not 154 - Tolerance does not widen the band');
+    for (let x = 0; x < W; x++) if (sim[x] + dis[x] < 254 || sim[x] + dis[x] > 256) throw new Error('Similar and Dissimilar are not each other’s opposite at level ' + x + ' (' + sim[x] + ' + ' + dis[x] + ')');
+    /* THE CANVAS KEY IS THAT LOOP: the media path’s lumaKey on a canvas holding the same ramp gives the same alpha, and a change
+       of Tolerance alone redraws it (the memo must know Tolerance, or dragging it would show nothing). */
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d'), img = g.createImageData(W, H); img.data.set(ramp()); g.putImageData(img, 0, 0);
+    const viaCanvas = tol => b12Alpha(FM._lumaKey(cv, W, H, 0.5, 'none', 28, 2, 9, tol).getContext('2d').getImageData(0, 0, W, H).data).slice(0, W);
+    const c1 = viaCanvas(0.1);
+    if (c1.join() !== sim.join()) throw new Error('the canvas Luma Key under Similar differs from FM._lumaKeyPx - the media path is not running this loop');
+    const c3 = viaCanvas(0.3);
+    if (clear(c3) !== 154) throw new Error('moving only Tolerance from 0.1 to 0.3 left the canvas key clearing ' + clear(c3) + ' levels - the cache handed back the old key');
+  });
 })();
