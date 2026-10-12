@@ -2670,9 +2670,14 @@ window.FM = window.FM || {};
          typewriter's does. */
       var bk = p.blink == null ? 0 : FM.evalProp(p.blink, t); if (!(bk > 0)) bk = 0; if (bk > 6) bk = 6;
       var hideCur = (p.hidecaret == null ? 1 : (Math.round(FM.evalProp(p.hidecaret, t)) | 0)) !== 0;
-      var dark = false;   // a caret that is there but unlit this beat
+      /* A DARK CARET IS STILL LAID OUT (#482 12.4 review). Taking it out of the string on the off beat moved centred and
+         right-aligned text by half a caret, and the layer's box with it, every beat. So it stays in the string — wrapping,
+         measuring and centring see the same text on both beats — and `st.ghost` tells the painter to leave that one glyph
+         unpainted (paintGhost and its callers). Blink 0 never sets it: the text is the old text and nothing else changes. */
+      var dark = false;
       if (cur && bk > 0) { var blt = (info && info.localT != null) ? info.localT : t; dark = Math.floor(blt * bk * 2) % 2 !== 0; }
-      var glyph = (!cur || dark) ? '' : (cur === 1 ? '/' : (cur === 2 ? '_' : '▌'));
+      var glyph = !cur ? '' : (cur === 1 ? '/' : (cur === 2 ? '_' : '▌'));
+      if (dark) st.ghost = { at: dir === 1 ? 'start' : 'end', ch: glyph };   // dropped again below wherever no caret is written
       var src = st.text, toks, keep;
       if (unit === 2) toks = src.split('\n');
       else if (unit === 1) toks = src.match(/\s+|\S+/g) || [];
@@ -2683,8 +2688,8 @@ window.FM = window.FM || {};
       if (unit === 1) { for (var i = 0; i < toks.length; i++) if (/\S/.test(toks[i])) idx.push(i); }
       else { for (var j = 0; j < toks.length; j++) idx.push(j); }
       var total = idx.length, n = Math.round(total * pr);
-      if (n <= 0) { st.text = hideCur ? '' : glyph; return; }
-      if (n >= total) { st.text = hideCur ? src : (dir === 1 ? glyph + src : src + glyph); return; }
+      if (n <= 0) { st.text = hideCur ? '' : glyph; if (hideCur) delete st.ghost; return; }
+      if (n >= total) { st.text = hideCur ? src : (dir === 1 ? glyph + src : src + glyph); if (hideCur) delete st.ghost; return; }
       var lo, hi;                                        // inclusive token-array bounds
       if (dir === 1) { lo = idx[total - n]; hi = toks.length - 1; }
       else if (dir === 2) { var st0 = Math.floor((total - n) / 2); lo = idx[st0]; hi = idx[st0 + n - 1]; }
@@ -2865,7 +2870,13 @@ window.FM = window.FM || {};
     var fx = layer && layer.effects;
     if (fx && fx.length) {
       var info = { localT: FM.fxLocalTime(layer, t), fps: (scene && scene.project && scene.project.fps) || 30 };   // _clipStart: a flattened group's proxy start is synthetic (t-1)
-      for (var i = 0; i < fx.length; i++) { var e = fx[i]; if (e.enabled === false) continue; var fn = TEXT_FX[e.type]; if (fn) fn(st, e.params || {}, t, info); }
+      for (var i = 0; i < fx.length; i++) { var e = fx[i]; if (e.enabled === false) continue; var fn = TEXT_FX[e.type]; if (!fn) continue;
+        /* A dark caret (st.ghost, #482 12.4 review) names a glyph at one end of the string; an effect further down the stack
+           that rewrites the string and no longer leaves it there has moved or removed it, so the mark is dropped and nothing
+           is left unpainted (Change Case keeps it; Text Reverse does not). */
+        var g0 = st.ghost, s0 = st.text;
+        fn(st, e.params || {}, t, info);
+        if (g0 && st.ghost === g0 && st.text !== s0 && (g0.at === 'end' ? st.text.slice(-1) : st.text.charAt(0)) !== g0.ch) delete st.ghost; }
     }
     return st;
   };
@@ -3006,6 +3017,27 @@ window.FM = window.FM || {};
     const a = ctx.globalAlpha;
     ctx.globalAlpha = a * fa; ctx.fillText(str, x, y); ctx.globalAlpha = a;
   }
+  /* A LINE WITHOUT ITS DARK CARET (#482 12.4 review). Type-On's blinking caret stays in the string on its dark beat (see
+     textprogress), so the line is laid out exactly as on the lit beat; this is what to PAINT instead: the line less that
+     one glyph, LEFT-aligned from where the whole line starts under the context's own alignment (the whole line's measured
+     width decides that, as fillText's centring does on the lit beat) — so every other glyph lands on the x it has when the
+     caret shows. A caret at the start pushes the rest on by its own advance. null when the line does not carry the caret
+     at that end: paint it as it is. */
+  function ghostLine(ctx, line, ghost) {
+    if (!ghost || !line || !ghost.ch) return null;
+    const atEnd = ghost.at !== 'start';
+    if ((atEnd ? line.slice(-1) : line.charAt(0)) !== ghost.ch) return null;
+    const W = ctx.measureText(line).width, al = ctx.textAlign, rest = atEnd ? line.slice(0, -1) : line.slice(1);
+    const x0 = al === 'center' ? -W / 2 : (al === 'right' || al === 'end') ? -W : 0;
+    return { s: rest, x: x0 + (atEnd ? 0 : W - ctx.measureText(rest).width) };
+  }
+  FM._ghostLine = ghostLine;   // suite seam
+  // …and for the paths that place glyph by glyph (a curve, an Animate preset): which character is the dark caret, or -1
+  function ghostIndex(chars, ghost) {
+    if (!ghost || !ghost.ch || !chars.length) return -1;
+    const k = ghost.at === 'start' ? 0 : chars.length - 1;
+    return chars[k] === ghost.ch ? k : -1;
+  }
 
   /* ═══ WHEN EACH LINE ENTERS AND LEAVES (queue 690, fourth hunt) ═══════════════════════════════════════════════════
    * An Animate preset used to be timed from the start and end of the whole LAYER — `t - layer.start` in, and
@@ -3068,7 +3100,7 @@ window.FM = window.FM || {};
   // The regex alone, for the suite: Chrome always has Intl.Segmenter, so the fallback is held against it directly.
   FM._graphemesFallback = function (s) { return String(s == null ? '' : s).match(GRAPHEME_RE) || []; };
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg) {
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost) {   // ghost: Type-On's dark caret (#482 12.4 review)
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -3184,6 +3216,7 @@ window.FM = window.FM || {};
       const prevBase = ctx.textBaseline;
       const done = () => { if (prevLS != null) ctx.letterSpacing = prevLS; if (prevWS != null) ctx.wordSpacing = prevWS; ctx.textAlign = prevAlign; ctx.textBaseline = prevBase; };
       const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
+      const gskip = ghostIndex(chars, ghost);
       const cw = chars.map(c => ctx.measureText(c).width + (c === ' ' ? wsp : 0));
       const tw = cw.reduce((a, b) => a + b, 0) + lsp * Math.max(0, chars.length - 1);
       if (tw <= 0) { done(); return; }
@@ -3223,6 +3256,7 @@ window.FM = window.FM || {};
         if (A.sc !== 1 || A.scx !== 1 || A.scy !== 1) ctx.scale(A.sc * A.scx, A.sc * A.scy);
         const ca = Math.cos(-sign * U.a), sa = Math.sin(-sign * U.a);
         for (let i = rg[0]; i < rg[1]; i++) {
+          if (i === gskip) continue;   // the dark caret keeps its place in the unit and on the arc, unpainted
           const C = arcAt(cMid[i]), rx = C.x - U.x, ry = C.y - U.y;
           ctx.save();
           ctx.translate(rx * ca - ry * sa, rx * sa + ry * ca);   // the character's place, in the unit's own turned frame
@@ -3247,10 +3281,17 @@ window.FM = window.FM || {};
       const sp = parseFloat(ctx.letterSpacing) || 0;   // global spacing is active; measureText over-counts one trailing gap per unit (#5)
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;
+      /* #482 12.4 review: on the caret's line, the unit holding Type-On's dark caret (the last, or the first when typing from
+         the End) is laid out and animated whole and painted without it — the caret alone paints nothing; a word or a line
+         ending in it paints the rest from the same left edge (left-aligned here), shifted by the caret's advance when it leads. */
+      const gU = (ghost && ghost.ch && li === (ghost.at === 'start' ? 0 : lines.length - 1) && units.length) ? (ghost.at === 'start' ? 0 : units.length - 1) : -1;
       units.forEach((u, ui) => {
         const w = widths[ui];
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
         const { alpha, dx, dy, sc, scx, scy, rot, outA } = animFor(ck.n++, ck);
+        let paint = u, px = -wDraw / 2;
+        if (ui === gU && (ghost.at === 'start' ? u.charAt(0) : u.slice(-1)) === ghost.ch) { paint = ghost.at === 'start' ? u.slice(1) : u.slice(0, -1); if (ghost.at === 'start') px += w - ctx.measureText(paint).width; }
+        if (ui === gU && !paint) { x += w; return; }
         ctx.save();
         ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, alpha)) * outA;
         ctx.translate(x + wDraw / 2 + dx, yy + dy);
@@ -3258,8 +3299,8 @@ window.FM = window.FM || {};
         if (sc !== 1 || scx !== 1 || scy !== 1) ctx.scale(sc * scx, sc * scy);
         // the text's own gradient box, seen from where this unit settles (its centre, with no animation offset)
         if (grad) ctx.fillStyle = buildGradient(ctx, grad, { x: gbox.x - (x + wDraw / 2), y: gbox.y - yy, w: gbox.w, h: gbox.h }, t);
-        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(u, -wDraw / 2, 0); }
-        fillTextA(ctx, u, -wDraw / 2, 0, fillA);
+        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
+        fillTextA(ctx, paint, px, 0, fillA);
         ctx.restore();
         x += w;
       });
@@ -3269,8 +3310,10 @@ window.FM = window.FM || {};
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
-  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
+  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
     const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
+    // #482 12.4 review: Type-On's dark caret keeps its place on the arc (it is measured with the rest) and is not painted
+    const gskip = ghostIndex(chars, ghost);
     // Glyphs are drawn one at a time, so neutralise the global letterSpacing during measurement (it
     // would otherwise add a trailing gap to every single-char measureText, inflating the radius/spacing)
     // and add the spacing back explicitly as inter-char advance. No-op when spacing is 0. (#5)
@@ -3303,6 +3346,7 @@ window.FM = window.FM || {};
     let s = 0;
     chars.forEach((ch, i) => {
       const w = widths[i];
+      if (i === gskip) { s += w + sp; return; }
       const a = ((s + w / 2) / tw - 0.5) * aa;
       ctx.save();
       ctx.translate(R * Math.sin(a), sign * (R - R * Math.cos(a)));
@@ -17128,7 +17172,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (textSpacingOK().letter) a.letterSpacing = te.letterSpacing + 'px';
       if (textSpacingOK().word) a.wordSpacing = (te.wordSpacing || 0) + 'px';
       const lines = FM.textLines(a, layer, textSrc), lh = (layer.fontSize || 96) * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
-      lines.forEach((ln, i) => a.fillText(ln, 0, i * lh - total / 2));
+      lines.forEach((ln, i) => {
+        // Type-On's dark caret is not on screen, so it is not in the footprint either (#482 12.4 review, ghostLine)
+        const gl = (te.ghost && i === (te.ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(a, ln, te.ghost) : null;
+        if (gl) { const pa = a.textAlign; a.textAlign = 'left'; a.fillText(gl.s, gl.x, i * lh - total / 2); a.textAlign = pa; return; }
+        a.fillText(ln, 0, i * lh - total / 2);
+      });
     } else {
       // footprint = the VISIBLE frame (crop), not the full source — else Copy Background on a cropped
       // clip covers the whole frame instead of just the crop.
@@ -17981,8 +18030,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // The curve the EFFECTS resolved, not the layer's raw field (queue 664) — resolved ONCE here so the animated
       // path gets it too; it used to be computed inside the static branch only (queue 904, textcurve).
       const curve = (_tEff && _tEff.curve != null) ? _tEff.curve : (layer.textCurve || 0);
+      const ghost = _tEff && _tEff.ghost;   // Type-On's dark caret: laid out, not painted (#482 12.4 review, ghostLine)
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
@@ -17997,9 +18047,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
         // `curve` is resolved above the branch (queue 664, 904). Identical when no curve effect is present,
         // because applyTextEffects seeds it from exactly the layer's own field.
-        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol);   // text on a curve
+        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost);   // text on a curve
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;
+          const gl = (ghost && i === (ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(ctx, line, ghost) : null;
+          if (gl) {   // the caret's line on its dark beat: the rest, where it stands when the caret is lit
+            const pa = ctx.textAlign; ctx.textAlign = 'left';
+            if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(gl.s, gl.x, yy); ctx.restore(); }
+            fillTextA(ctx, gl.s, gl.x, yy, textFillAlpha(layer));
+            ctx.textAlign = pa;
+            return;
+          }
           if (drawStroke) {
             // strokeText centres on the glyph edge (half hidden by the fill on top). Outside/inside →
             // double the width so the visible outline ≈ bw; center → native width. (Inside on glyphs

@@ -124955,17 +124955,22 @@
     /* BLINK. CONTROL: with no blink the caret is there at every moment. At 2 Hz it is lit for the first quarter second of each
        half second on the CLIP’s clock (0.1 s in: lit; 0.3 s in: dark), whatever the timeline says (t is 9.0 throughout). */
     const half = S.slice(0, Math.round(S.length * 0.5));
-    if (to({}, 0.1) !== half + '_' || to({}, 0.3) !== half + '_') throw new Error('CONTROL: the steady caret reads ' + JSON.stringify(to({}, 0.1)) + ' / ' + JSON.stringify(to({}, 0.3)));
-    if (to({ blink: 2 }, 0.1) !== half + '_') throw new Error('Caret blink 2 Hz at 0.1 s into the clip wrote ' + JSON.stringify(to({ blink: 2 }, 0.1)) + ' - the caret should be lit');
-    if (to({ blink: 2 }, 0.3) !== half) throw new Error('Caret blink 2 Hz at 0.3 s into the clip wrote ' + JSON.stringify(to({ blink: 2 }, 0.3)) + ' - the caret should be dark');
-    if (to({ blink: 2 }, 0.6) !== half + '_') throw new Error('Caret blink 2 Hz at 0.6 s wrote ' + JSON.stringify(to({ blink: 2 }, 0.6)) + ' - it should be lit again');
+    /* A DARK caret stays in the string (so the layout does not move — see the next test) and is marked for the painter to
+       skip: `dk` writes the text and, when there is one, the mark. */
+    const dk = (o, lt) => { const st = { text: S, letterSpacing: 0 }; FM.TEXT_FX.textprogress(st, Object.assign({ progress: 0.5, cursor: 2 }, o), 9.0, { localT: lt, fps: 30 }); return st.text + (st.ghost ? ' [dark ' + st.ghost.at + ' ' + st.ghost.ch + ']' : ''); };
+    if (dk({}, 0.1) !== half + '_' || dk({}, 0.3) !== half + '_') throw new Error('CONTROL: the steady caret reads ' + JSON.stringify(dk({}, 0.1)) + ' / ' + JSON.stringify(dk({}, 0.3)));
+    if (dk({ blink: 2 }, 0.1) !== half + '_') throw new Error('Caret blink 2 Hz at 0.1 s into the clip wrote ' + JSON.stringify(dk({ blink: 2 }, 0.1)) + ' - the caret should be lit');
+    if (dk({ blink: 2 }, 0.3) !== half + '_ [dark end _]') throw new Error('Caret blink 2 Hz at 0.3 s into the clip wrote ' + JSON.stringify(dk({ blink: 2 }, 0.3)) + ' - the caret should be laid out and marked dark');
+    if (dk({ blink: 2 }, 0.6) !== half + '_') throw new Error('Caret blink 2 Hz at 0.6 s wrote ' + JSON.stringify(dk({ blink: 2 }, 0.6)) + ' - it should be lit again');
+    if (dk({ blink: 2, dir: 1 }, 0.3) !== '_' + S.slice(S.length - Math.round(S.length * 0.5)) + ' [dark start _]') throw new Error('a dark caret typing from the End is marked ' + JSON.stringify(dk({ blink: 2, dir: 1 }, 0.3)) + ' - it leads the text');
+    if (dk({ blink: 2, progress: 1 }, 0.3) !== S) throw new Error('a finished Type-On with the idle caret hidden wrote ' + JSON.stringify(dk({ blink: 2, progress: 1 }, 0.3)) + ' - no caret, so nothing to mark');
     /* CARET WHEN IDLE. CONTROL: Hide (a saved Type-On) shows no caret before the first letter or after the last. Show leaves
        it standing there — at the end of the text, or at its start when typing from the End. */
     if (to({ progress: 0 }, 0.1) !== '' || to({ progress: 1 }, 0.1) !== S) throw new Error('CONTROL: the default caret shows before or after the typing');
     if (to({ progress: 0, hidecaret: 0 }, 0.1) !== '_') throw new Error('Caret when idle Show at Progress 0 wrote ' + JSON.stringify(to({ progress: 0, hidecaret: 0 }, 0.1)) + ', not the caret alone');
     if (to({ progress: 1, hidecaret: 0 }, 0.1) !== S + '_') throw new Error('Caret when idle Show at Progress 1 wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0 }, 0.1)));
     if (to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1) !== '_' + S) throw new Error('Caret when idle Show typing from the End wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1)) + ' - the caret leads');
-    if (to({ progress: 1, hidecaret: 0, blink: 2 }, 0.3) !== S) throw new Error('a standing caret does not blink with the rest');
+    if (dk({ progress: 1, hidecaret: 0, blink: 2 }, 0.3) !== S + '_ [dark end _]') throw new Error('a standing caret does not blink with the rest: ' + JSON.stringify(dk({ progress: 1, hidecaret: 0, blink: 2 }, 0.3)));
     /* RESOLVES. Ten letters at Progress 0.3: three have settled. A position has SETTLED when it shows its own letter on every one
        of six frames (a scrambling one changes from frame to frame). */
     const T10 = 'ABCDEFGHIJ';
@@ -125164,6 +125169,46 @@
       const f = b12Flat(30, 10, [90, 140, 200]); b12Run('emboss', Object.assign(b12Base('emboss', {}), { relief: 3 }, o), 30, 10, 0.5, 1, f);
       const want = o.mono ? null : (o.blend ? null : '128,128,128');
       if (want && Array.from(f.slice((5 * 30 + 15) * 4, (5 * 30 + 15) * 4 + 3)).join() !== want) throw new Error('Height 3 put relief on a flat picture under ' + JSON.stringify(o) + ': ' + Array.from(f.slice((5 * 30 + 15) * 4, (5 * 30 + 15) * 4 + 3)));
+    });
+  });
+
+  /* 12.4 review — A BLINKING CARET MUST NOT MOVE THE TEXT. Taking the caret out of the string on its dark beat re-centred
+     the rest: centred text jumped half a caret sideways every beat (right-aligned a whole caret), and the layer's box with
+     it. The caret now stays in the string and only its painting is skipped. Read through the RENDERER: FM.renderScene on a
+     canvas whose fillText is watched, each call turned into one origin per glyph — its x from the call's alignment, the
+     width of the string before that glyph (measureText, the canvas's own metric) and the transform in force — so every
+     paint path is covered as the app runs it: a line, two lines, from the End (the caret leads), on a curve, and under an
+     Animate preset by word and by character (Fade: it moves nothing, so a moved glyph can only be the caret's doing). */
+  test('482 12.4 Text - a blinking Type-On caret does not move centred or right-aligned text: every other glyph is drawn at the same place on a lit and a dark beat, on one line or two, from the End, on a curve and under an Animate preset, and only the caret comes and goes', { item: '482', budgetMs: 60000 }, function () {
+    const PW = 640, PH = 240;
+    const glyphs = (o, t) => {
+      const L = FM.makeLayer('text', { text: 'Hello brave new world', x: PW / 2, y: PH / 2, start: 0, duration: 4 });
+      L.start = 0; L.duration = 4; Object.assign(L, o.layer || {});
+      const e = FM.fxRegistry.makeInstance('textprogress'); Object.assign(e.params, { progress: 0.5, cursor: 2, blink: 2 }, o.fx || {}); L.effects = [e];
+      const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+      const x = cv.getContext('2d'), out = [], f0 = x.fillText;
+      x.fillText = function (s, X, Y) {
+        const m = x.getTransform(), str = String(s), W = x.measureText(str).width, al = x.textAlign;
+        const x0 = X - (al === 'center' ? W / 2 : (al === 'right' || al === 'end') ? W : 0);
+        let k = 0;
+        for (const ch of str) { const gx = x0 + x.measureText(str.slice(0, k)).width; out.push({ ch: ch, X: m.a * gx + m.c * Y + m.e, Y: m.b * gx + m.d * Y + m.f }); k += ch.length; }
+        return f0.apply(x, arguments);
+      };
+      FM.renderScene(x, { project: { width: PW, height: PH, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return out;
+    };
+    const say = g => g.ch + '@' + g.X.toFixed(3) + ',' + g.Y.toFixed(3);
+    [['centred text', {}], ['right-aligned text', { layer: { align: 'right' } }], ['centred text typed from the End', { fx: { dir: 1 } }],
+     ['centred text on two lines', { layer: { text: 'Hello brave\nnew world' }, fx: { progress: 0.75 } }], ['centred text on a curve', { layer: { textCurve: 50 } }],
+     ['centred text under Fade by word', { layer: { textAnim: { preset: 'fade', unit: 'word' } } }], ['centred text under Fade by character', { layer: { textAnim: { preset: 'fade', unit: 'char' } } }]].forEach(([name, o]) => {
+      /* 2 Hz on the clip's clock: lit 0.1 s in, dark 0.3 s in. CONTROL: the caret really is drawn on the lit beat and not on
+         the dark one — and nothing else is drawn on either beat that the other lacks. */
+      const lit = glyphs(o, 0.1), dark = glyphs(o, 0.3);
+      const nLit = lit.filter(g => g.ch === '_').length, nDark = dark.filter(g => g.ch === '_').length;
+      if (nLit !== 1 || nDark !== 0) throw new Error('CONTROL: ' + name + ' draws ' + nLit + ' caret(s) on the lit beat and ' + nDark + ' on the dark one - it should be one and none');
+      const a = lit.filter(g => g.ch !== '_'), b = dark;
+      if (a.length !== b.length || a.length < 8) throw new Error(name + ': ' + a.length + ' other glyphs on the lit beat, ' + b.length + ' on the dark one');
+      a.forEach((g, i) => { const h = b[i]; if (g.ch !== h.ch || Math.abs(g.X - h.X) > 1e-6 || Math.abs(g.Y - h.Y) > 1e-6) throw new Error(name + ': glyph ' + i + ' is drawn at ' + say(g) + ' on the lit beat and ' + say(h) + ' on the dark one - the blinking caret moves the text'); });
     });
   });
 })();
