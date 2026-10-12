@@ -245,8 +245,10 @@ window.FM = window.FM || {};
        hashed the same as the build before it — and the two would have joined one session while their sanitisers
        normalised the same effects differently (the older one strips Fine tune and clamps Semitones 20 to 12). The audio
        sanitiser keeps exactly these five facts per param (storage.js sanitizeAudioFx), so these are what can disagree. */
+    /* …and `legacy` since #482 polish 7.1: the sanitiser now fills a missing key with it where a control declares one, so two
+       builds whose legacy differ normalise the same old project to different values. */
     const adefs = FM.audioFxRegistry ? (FM.audioFxRegistry.all() || []).map(function (e) {
-      return [e.type, (e.params || []).map(function (p) { return [p.key, p.min, p.max, p.def, p.keyframable !== false ? 1 : 0]; })];
+      return [e.type, (e.params || []).map(function (p) { return [p.key, p.min, p.max, p.def, p.keyframable !== false ? 1 : 0, p.legacy]; })];
     }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }) : null;
     return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV +
                     '|p' + P.canon(PJ) + '|smv' + (FM.SM_V || 0));   // SM_V moves only with a SCHEMA_REV bump (§2.3)

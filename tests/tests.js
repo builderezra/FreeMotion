@@ -124593,4 +124593,208 @@
     const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 7 — AUDIO CHOICES ════════════════════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 7
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 7.1 is the enabler: an audio control can be a CHOICE (the
+   * visual effects' segmented buttons) or an ON/OFF (their tick box), can be marked `rebuild` (it changes the graph, so the
+   * live preview's signature carries it) and can declare `legacy`. Sound is measured through FM.buildAudioFxChain on an
+   * OfflineAudioContext (b3Render / afx482c / afx986 above) — the builder both the export (schedule) and the preview
+   * (applyAt) use. None of these were run before landing (written in a worktree with no browser): every threshold below
+   * is reasoned from the maths it names, and each test says what it expects on the build before. */
+  /* The open audio effect row at 390 and 1280 px. `make` returns FRESH instances (each width builds its own scene). */
+  async function b7Panel(make, openIdx, check) {
+    const saved = FM.scene;
+    const run = async where => {
+      const song = await hbAudScene([], 4), list = make();
+      list.forEach((f, i) => { f._expanded = i === openIdx; });
+      FM.layerById(FM.scene, song.id).audioFx = list;
+      FM.refreshAll(); FM.selectLayer(song.id); await sleep(200);
+      FM.inspector.openCategory('audiofx'); await sleep(500);
+      const panel = document.getElementById('inspector-panel');
+      const open = () => panel && panel.querySelector('.fx-row.fx-open');
+      if (!open()) throw new Error(where + ': the audio effect row did not open');
+      const named = (sel, lab) => label => [].slice.call(open().querySelectorAll(sel)).filter(r => ((r.querySelector(lab) || {}).textContent || '').trim() === label)[0] || null;
+      const fits = async (elm, what) => {
+        elm.scrollIntoView({ block: 'nearest' }); await sleep(20);
+        const r = elm.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0) || r.left < pr.left - 1 || r.right > pr.right + 1) throw new Error(where + ': ' + what + ' is at ' + Math.round(r.left) + '-' + Math.round(r.right) + ' px in a panel at ' + Math.round(pr.left) + '-' + Math.round(pr.right) + ' (window ' + window.innerWidth + ')');
+        if (elm.scrollWidth > elm.clientWidth + 1) throw new Error(where + ': ' + what + ' is cut off (' + elm.scrollWidth + ' px of content in ' + elm.clientWidth + ')');
+      };
+      await check({ where: where, song: song, layer: () => FM.layerById(FM.scene, song.id), open: open, fits: fits,
+        tog: named('.fx-tog-row', '.fx-tog-label'), seg: named('.fx-seg-row', '.fx-scrub-label'), slider: named('.fx-scrub-row', '.fx-scrub-label') });
+    };
+    try {
+      await atPhoneWidth(() => run('at 390 px'), 390);
+      await atWideWidth(() => run('at 1280 px'), 1280);
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  }
+  const b7Fx = (type, p) => [{ type: type, enabled: true, params: Object.assign(FM.audioFxRegistry.makeInstance(type).params, p || {}) }];
+  const b7Pd = (type, key) => (FM.audioFxRegistry.paramsOf(type) || []).filter(p => p.key === key)[0] || null;
+  const b7Keys = type => (FM.audioFxRegistry.paramsOf(type) || []).map(p => p.key).join(', ');
+
+  /* 7.1 — AN ON/OFF IS A TICK BOX. On the build before, every audio param went through afxParam as a range, so there was no
+     way to offer one, and neither the Limiter's Clip at ceiling nor the Compressor's Auto makeup exists (so this fails on its
+     first line there). Checked: drawn as the visual effects' tick box (never a slider), inside the panel at both widths,
+     starting where the effect starts (Clip Off, Auto makeup On), and a tap writes 1 / 0 as ONE undo step. */
+  test('482 7.1 Audio effects - an on/off control is a tick box, not a slider, at 390 and 1280 px, and a tap flips it in one undo step', { item: '482', budgetMs: 120000 }, async function () {
+    for (const [type, key, label, def] of [['limiter', 'clip', 'Clip at ceiling', 0], ['compressor', 'automakeup', 'Auto makeup', 1]]) {
+      const pd = b7Pd(type, key);
+      if (!pd) throw new Error('the ' + type + ' has no ' + label + ' control (its params are ' + b7Keys(type) + ')');
+      if (!pd.toggle || pd.keyframable || pd.def !== def || pd.min !== 0 || pd.max !== 1 || pd.label !== label) throw new Error(label + ' is ' + JSON.stringify(pd) + ' - not an on/off called ' + label + ' that starts at ' + def);
+      await b7Panel(() => [FM.audioFxRegistry.makeInstance(type)], 0, async p => {
+        if (p.slider(label)) throw new Error(p.where + ': ' + label + ' is drawn as a slider');
+        let row = p.tog(label);
+        if (!row) throw new Error(p.where + ': the open ' + type + ' has no ' + label + ' tick box');
+        await p.fits(row, 'the ' + label + ' tick box');
+        if (row.classList.contains('on') !== !!def) throw new Error(p.where + ': a new ' + type + ' shows ' + label + ' ' + (row.classList.contains('on') ? 'ticked' : 'clear') + ' - it starts ' + (def ? 'On' : 'Off'));
+        FM.history.commit();
+        attached(row.querySelector('.fx-tog'), 'the ' + label + ' tick box').click(); await sleep(120);
+        if (p.layer().audioFx[0].params[key] !== 1 - def) throw new Error(p.where + ': a tap on ' + label + ' left it at ' + p.layer().audioFx[0].params[key]);
+        row = p.tog(label);
+        if (!row || row.classList.contains('on') === !!def) throw new Error(p.where + ': after the tap the ' + label + ' box still shows ' + (def ? 'ticked' : 'clear'));
+        FM.history.undo(); await sleep(150);
+        const back = p.layer() && p.layer().audioFx && p.layer().audioFx[0];
+        if (!back || back.params[key] !== def) throw new Error(p.where + ': one Undo after the tap leaves ' + label + ' at ' + (back && back.params[key]) + ', not ' + def);
+      });
+    }
+  });
+
+  /* 7.1 — A CONTROL THAT CHANGES THE GRAPH REBUILDS THE PREVIEW. The live chain is rebuilt only when audio-fx-live.js's
+     signature moves, and that was type + on/off only — so a control that picks a different graph (Auto makeup Off adds the
+     cancelling gain) would have gone on playing the old one. On the build before there is no signatureOf and no Auto makeup.
+     CONTROL: sliders and a live on/off (Clip at ceiling, a bypass pair) still ride the running chain, and an effect without
+     such a control keeps exactly its old signature (the v5.09 test pins 'reverb1|'). */
+  test('482 7.1 Audio effects - a control marked rebuild (Auto makeup) moves the preview signature so the live chain is rebuilt, while sliders and Clip at ceiling still ride the running chain', { item: '482' }, function () {
+    const AL = FM.audioFxLive, reg = FM.audioFxRegistry;
+    if (!AL || !AL.isChainCurrent) throw new Error('FM.audioFxLive.isChainCurrent is missing');
+    if (!AL.signatureOf) throw new Error('FM.audioFxLive.signatureOf is missing - nothing says what a rebuild is decided on');
+    const pd = b7Pd('compressor', 'automakeup');
+    if (!pd || !pd.rebuild) throw new Error('the Compressor has no Auto makeup marked rebuild (' + JSON.stringify(pd) + ')');
+    const layer = FM.makeLayer('video', { name: 'clip' });
+    layer.audioFx = [reg.makeInstance('compressor'), reg.makeInstance('limiter'), { type: 'reverb', enabled: true, params: { mix: 0.3 } }];
+    const m = { _afxChain: { fake: true }, _afxSig: AL.signatureOf(layer), _afxInsts: layer.audioFx.slice() };
+    if (!AL.isChainCurrent(m, layer)) throw new Error('CONTROL: a chain built from this very layer reports stale');
+    layer.audioFx[0].params.threshold = -40; layer.audioFx[0].params.knee = 6; layer.audioFx[1].params.clip = 1; layer.audioFx[2].params.mix = 0.9;
+    if (!AL.isChainCurrent(m, layer)) throw new Error('moving Threshold, Knee, Clip at ceiling or a Reverb Mix forces a rebuild - a slider drag would cut the sound');
+    layer.audioFx[0].params.automakeup = 0;
+    if (AL.isChainCurrent(m, layer)) throw new Error('turning Auto makeup off leaves the running chain current - the preview goes on playing with the makeup');
+    m._afxSig = AL.signatureOf(layer);
+    if (!AL.isChainCurrent(m, layer)) throw new Error('a chain rebuilt with Auto makeup off reports stale');
+    const sig = list => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = list; return AL.signatureOf(l); };
+    if (sig([{ type: 'compressor', enabled: true, params: { threshold: -24 } }]) !== sig([reg.makeInstance('compressor')])) throw new Error('a Compressor saved before Auto makeup existed signs ' + sig([{ type: 'compressor', enabled: true, params: {} }]) + ', a new one ' + sig([reg.makeInstance('compressor')]) + ' - they play the same graph');
+    if (sig([{ type: 'reverb', enabled: true, params: { mix: 0.3 } }]) !== 'reverb1|') throw new Error('a Reverb (no rebuild control) now signs ' + sig([{ type: 'reverb', enabled: true, params: { mix: 0.3 } }]) + ', not reverb1|');
+  });
+
+  /* 7.1 — AUTO MAKEUP. A DynamicsCompressorNode lifts everything it outputs by (1 / its curve at 0 dBFS)^0.6, which follows
+     Threshold, Knee and Ratio (js/audio-fx.js makeupCancel, the engine's own knee search): by the maths 2.39 dB at the
+     defaults (-24 / 30 / 4:1), 16.85 at -40 / 6 / 4:1, 12.28 at -30 / 12 / 6:1, 27.5 at -50 / 0 / 12:1 (the hard-knee case
+     is the C2 formula, -0.6 x (1 - 1/R) x T, measured in queue 986). A -60 dBFS sine is under every one of those thresholds,
+     so the node does not compress it at all and its level out IS the lift. Off must leave it at its own level (0 dB, within
+     0.1); On must lift it by the lift the maths says (within 0.25 dB — this checks the maths against the engine, and fails
+     if the replica is wrong). On the build before there is no automakeup: a saved Compressor has no such key and the
+     first line fails. CONTROL: On is today's Compressor sample for sample (b3SameAsToday, as the 3.7 test). */
+  test('482 7.1 Compressor - Auto makeup Off keeps a quiet sound at its own level at any Threshold, Knee and Ratio, keyframed too, and On (the default) is today’s Compressor', { item: '482', budgetMs: 150000 }, async function () {
+    const pd = b7Pd('compressor', 'automakeup');
+    if (!pd) throw new Error('the Compressor has no Auto makeup (its params are ' + b7Keys('compressor') + ')');
+    if (typeof FM._compMakeupCancel !== 'function') throw new Error('FM._compMakeupCancel is missing');
+    const old = [{ type: 'video', audioFx: [{ type: 'compressor', enabled: true, params: { threshold: -30, ratio: 6, attack: 0.005, release: 0.2, knee: 12 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.automakeup !== 1) throw new Error('a Compressor saved before Auto makeup existed opens with it at ' + op.automakeup + ' - it would lose the lift it always had');
+    const P = { threshold: -30, ratio: 6, attack: 0.005, release: 0.2, knee: 12 };
+    const today = oac => { const c = oac.createDynamicsCompressor(); Object.keys(P).forEach(k => c[k].setValueAtTime(P[k], 0)); return { input: c, output: c }; };
+    const same = await b3SameAsToday([{ type: 'compressor', enabled: true, params: op }], today, 'a saved Compressor');
+    if (same.length) throw new Error('CONTROL: a Compressor with Auto makeup On is not today’s sound - ' + same.join('; '));
+    const quiet = b3Sine(Math.pow(10, -60 / 20), 440), N = B3.SR;
+    const inRms = b3Rms(Float32Array.from({ length: N }, (_, i) => quiet(i / N)), 0.4, 1);
+    const lift = async (p, live) => b3Db(b3Rms(await b3Render(b7Fx('compressor', p), quiet, 1, { live: live }), 0.4, 1) / inRms);
+    const bad = [];
+    for (const [T, K, R] of [[-24, 30, 4], [-40, 6, 4], [-30, 12, 6], [-50, 0, 12]]) {
+      const want = -b3Db(FM._compMakeupCancel(T, K, R));
+      for (const live of [false, true]) {
+        const path = live ? 'preview' : 'export', at = 'at ' + T + ' dB / knee ' + K + ' / ' + R + ':1 (' + path + ')';
+        const on = await lift({ threshold: T, knee: K, ratio: R }, live), off = await lift({ threshold: T, knee: K, ratio: R, automakeup: 0 }, live);
+        if (!(on > 1.5)) bad.push('CONTROL: ' + at + ' Auto makeup On lifts a -60 dBFS sine by only ' + on.toFixed(2) + ' dB - there is no makeup to take away');
+        if (Math.abs(on - want) > 0.25) bad.push(at + ' the node lifts a quiet sine by ' + on.toFixed(2) + ' dB where makeupCancel says ' + want.toFixed(2) + ' - its knee maths is not the engine’s');
+        if (Math.abs(off) > 0.1) bad.push(at + ' with Auto makeup Off a quiet sine comes out ' + off.toFixed(2) + ' dB from its own level');
+      }
+    }
+    // Keyframed: Threshold -10 -> -45 dB over the first second (knee 6, 4:1). The lift moves from 3.4 to 18.9 dB; Off holds 0 throughout.
+    const kfT = { kf: [{ t: 0, v: -10 }, { t: 1, v: -45 }, { t: 2, v: -45 }] };
+    const win = async (p, a, b) => b3Db(b3Rms(await b3Render(b7Fx('compressor', p), quiet, 2), a, b) / inRms);
+    const offA = await win({ threshold: kfT, knee: 6, ratio: 4, automakeup: 0 }, 0.1, 0.25), offB = await win({ threshold: kfT, knee: 6, ratio: 4, automakeup: 0 }, 1.4, 1.9);
+    const onA = await win({ threshold: kfT, knee: 6, ratio: 4 }, 0.1, 0.25), onB = await win({ threshold: kfT, knee: 6, ratio: 4 }, 1.4, 1.9);
+    if (!(onB - onA > 8)) bad.push('CONTROL: with Threshold keyframed -10 -> -45 dB the lift only moves from ' + onA.toFixed(2) + ' to ' + onB.toFixed(2) + ' dB with Auto makeup On');
+    if (Math.abs(offA) > 0.3 || Math.abs(offB) > 0.3) bad.push('with Threshold keyframed -10 -> -45 dB and Auto makeup Off a quiet sine sits at ' + offA.toFixed(2) + ' dB, then ' + offB.toFixed(2) + ' - the cancelling gain does not follow the threshold');
+    if (bad.length) throw new Error('Auto makeup: ' + bad.join('; '));
+  });
+
+  /* 7.1 — CLIP AT CEILING. The node stops at 20:1, so a full-scale sine leaves a Limiter at 0.95 x Ceiling plus its gain ripple:
+     about -11.4 dBFS under a -12 ceiling (the 986 C2 numbers: -5.54 under -6, -22.32 under -24). With Clip at ceiling the
+     rest is cut AT the ceiling: peak within 0.15 dB of it (a 4x oversampled clip of a 0.6 dB overshoot leaves well under
+     that), and a quiet sine under the ceiling passes at its level (the oversampling filters are flat at 1 kHz). On the build
+     before the key does not exist (first line). CONTROL: Off is today's Limiter sample for sample (as the 3.8 test builds it),
+     and without the clip the full-scale peak really is over the ceiling (>= +0.3 dB). */
+  test('482 7.1 Limiter - Clip at ceiling holds a full-scale sine at the ceiling where the node lets it over, leaves quiet sound alone, and Off (the default) is today’s Limiter', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('limiter', 'clip');
+    if (!pd) throw new Error('the Limiter has no Clip at ceiling (its params are ' + b7Keys('limiter') + ')');
+    const old = [{ type: 'video', audioFx: [{ type: 'limiter', enabled: true, params: { ceiling: -9 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.clip !== 0) throw new Error('a Limiter saved before Clip at ceiling existed opens with it at ' + op.clip);
+    const today = oac => { const c = oac.createDynamicsCompressor(); c.ratio.value = 20; c.knee.value = 0; c.attack.value = 0.001; c.release.value = 0.05; c.threshold.value = -9; const g = oac.createGain(); g.gain.value = FM._hardKneeMakeupCancel(-9, 20); c.connect(g); return { input: c, output: g }; };
+    const same = await b3SameAsToday([{ type: 'limiter', enabled: true, params: op }], today, 'a saved Limiter');
+    if (same.length) throw new Error('CONTROL: a Limiter with Clip at ceiling Off is not today’s sound - ' + same.join('; '));
+    const bad = [], full = b3Sine(1), quiet = b3Sine(Math.pow(10, -30 / 20));
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const pk = async p => b3Db(b3Peak(await b3Render(b7Fx('limiter', p), full, 1, { live: live }), 0.3, 1));
+      for (const C of [-12, -6]) {
+        const off = await pk({ ceiling: C }), on = await pk({ ceiling: C, clip: 1 });
+        if (!(off >= C + 0.3)) bad.push('CONTROL: under a ' + C + ' dB ceiling a full-scale sine already peaks at ' + off.toFixed(2) + ' dBFS without the clip (' + path + ') - nothing to cut');
+        if (!(on <= C + 0.15)) bad.push('with Clip at ceiling a full-scale sine under a ' + C + ' dB ceiling still peaks at ' + on.toFixed(2) + ' dBFS (' + path + ')');
+        if (!(on >= C - 0.5)) bad.push('with Clip at ceiling a full-scale sine under a ' + C + ' dB ceiling peaks at only ' + on.toFixed(2) + ' dBFS (' + path + ') - it turned the sound down instead of cutting the top');
+      }
+      const lv = async p => b3Db(b3Rms(await b3Render(b7Fx('limiter', p), quiet, 1, { live: live }), 0.3, 1));
+      const q0 = await lv({ ceiling: -12 }), q1 = await lv({ ceiling: -12, clip: 1 });
+      if (Math.abs(q1 - q0) > 0.1) bad.push('a -30 dBFS sine under a -12 dB ceiling comes out ' + (q1 - q0).toFixed(3) + ' dB different with Clip at ceiling on (' + path + ') - it should not touch sound under the ceiling');
+    }
+    if (bad.length) throw new Error('Clip at ceiling: ' + bad.join('; '));
+  });
+
+  /* 7.1 — LEGACY. No control in this batch needs one (every new default IS the old sound), so the rule is proven by giving
+     Clip at ceiling a legacy of 1 for the length of this test (restored in finally): a Limiter saved before the control must
+     then open clipped in the load sanitiser, play clipped in the kernel even unsanitised (valueAt), show the box ticked in
+     the panel (fxToggle), and the collab door must see the difference (two builds that open an old project differently).
+     A new Limiter still starts at def 0. On the build before, the sanitiser filled def, valueAt read def, fxToggle read the
+     default and the fingerprint hashed five facts without legacy. */
+  test('482 7.1 Audio effects - a control that declares legacy opens a project saved before it at legacy, plays it so, shows it so, and the collab fingerprint sees it', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('limiter', 'clip');
+    if (!pd) throw new Error('setup: the Limiter has no Clip at ceiling to declare a legacy on (its params are ' + b7Keys('limiter') + ')');
+    if (pd.legacy !== undefined) throw new Error('setup: Clip at ceiling already declares legacy ' + pd.legacy);
+    const C = FM.collab, fp0 = C && C.schemaFingerprint ? C.schemaFingerprint() : null;
+    const bad = [];
+    pd.legacy = 1;
+    try {
+      const old = [{ type: 'video', audioFx: [{ type: 'limiter', enabled: true, params: { ceiling: -12 } }] }];
+      FM.storage._sanitizeLayers(old);
+      if (old[0].audioFx[0].params.clip !== 1) bad.push('the sanitiser opens a Limiter saved before the control with clip ' + old[0].audioFx[0].params.clip + ', not its legacy 1');
+      if (FM.audioFxRegistry.makeInstance('limiter').params.clip !== 0) bad.push('a new Limiter starts at clip ' + FM.audioFxRegistry.makeInstance('limiter').params.clip + ', not its def 0');
+      const pk = async p => b3Db(b3Peak(await b3Render([{ type: 'limiter', enabled: true, params: p }], b3Sine(1), 1), 0.3, 1));
+      const absent = await pk({ ceiling: -12 }), on = await pk({ ceiling: -12, clip: 1 }), off = await pk({ ceiling: -12, clip: 0 });
+      if (!(off - on > 0.3)) throw new Error('CONTROL: Clip at ceiling on and off peak at ' + on.toFixed(2) + ' and ' + off.toFixed(2) + ' dBFS - the two cannot be told apart');
+      if (Math.abs(absent - on) > 0.01) bad.push('an unsanitised saved Limiter (no clip key) peaks at ' + absent.toFixed(2) + ' dBFS - clip 1 gives ' + on.toFixed(2) + ' and 0 gives ' + off.toFixed(2) + '; the kernel does not read legacy');
+      if (fp0 !== null && C.schemaFingerprint() === fp0) bad.push('the sync schema fingerprint did not move when a control’s legacy did - two builds that open an old Limiter differently would share a session');
+      await b7Panel(() => [{ type: 'limiter', enabled: true, params: { ceiling: -12, input: 0, release: 0.05 } }], 0, async p => {
+        const row = p.tog('Clip at ceiling');
+        if (!row) throw new Error(p.where + ': no Clip at ceiling tick box');
+        if (!row.classList.contains('on')) bad.push(p.where + ': a saved Limiter with no clip key shows Clip at ceiling clear while it plays clipped (legacy 1)');
+      });
+    } finally { delete pd.legacy; }
+    if (fp0 !== null && C.schemaFingerprint() !== fp0) bad.push('setup: the fingerprint did not come back after the legacy was removed');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

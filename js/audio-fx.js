@@ -68,6 +68,26 @@ window.FM = window.FM || {};
     return dbToLin(0.6 * (1 - 1 / r) * Math.min(0, thresholdDb));
   }
   FM._hardKneeMakeupCancel = hardKneeMakeupCancel;   // one definition: the boost limiter (audio-fx-live.js) uses it too
+  /* ═══ …AND WITH A SOFT KNEE (#482 polish 7.1, the Compressor's Auto makeup) ═════════════════════════════════════════
+   * The same hidden gain for ANY knee: (1 / the curve's gain at 0 dBFS) ^ 0.6, where the curve is the spec engine's —
+   * linear up to the threshold, then an exponential knee x ↦ T + (1 − e^(−k(x − T))) / k (linear units) whose k is found by
+   * the engine's own 15-step search for the point where the knee's slope reaches 1/ratio, then the ratio's straight line.
+   * Chromium's DynamicsCompressorKernel (KneeCurve / KAtSlope / Saturate) and WebKit's, the same code. Returned as the gain
+   * that CANCELS it. With knee 0 it is exactly hardKneeMakeupCancel. At the Compressor's defaults (−24 dB, knee 30, 4:1)
+   * the node lifts everything by 2.39 dB; at −40 dB, knee 6, 4:1 by 16.85 dB — that lift is "Auto makeup". */
+  function makeupCancel(thresholdDb, kneeDb, ratio) {
+    const lt = dbToLin(thresholdDb), slope = 1 / (ratio > 1 ? ratio : 1);
+    const lin2db = x => 20 * Math.log10(x);
+    const knee = (x, k) => (x < lt ? x : lt + (1 - Math.exp(-k * (x - lt))) / k);
+    const slopeAt = (x, k) => { if (x < lt) return 1; const x2 = x * 1.001; return (lin2db(knee(x2, k)) - lin2db(knee(x, k))) / (lin2db(x2) - lin2db(x)); };
+    const kneeEnd = dbToLin(thresholdDb + kneeDb);
+    let lo = 0.1, hi = 10000, k = 5;
+    for (let i = 0; i < 15; i++) { if (slopeAt(kneeEnd, k) < slope) hi = k; else lo = k; k = Math.sqrt(lo * hi); }
+    const yEnd = lin2db(knee(kneeEnd, k));
+    const full = 1 < kneeEnd ? knee(1, k) : dbToLin(yEnd + slope * (0 - (thresholdDb + kneeDb)));
+    return Math.pow(full, 0.6);
+  }
+  FM._compMakeupCancel = makeupCancel;   // suite seam
   /* The level of the Limiter's safety clip under a ceiling of `ceilingDb`, as a linear gain (#482 batch 3 review; the
      reasons are at the Limiter). 1 dB above where its 20:1 line puts a full-scale sound (0.95·C), and never above full
      scale: exactly 0 dBFS at the default -1 dB ceiling. */
@@ -349,12 +369,31 @@ window.FM = window.FM || {};
 
   // A param's value at scene time t, guarded at every step: a missing/NaN/animated-object read falls back
   // to the default. NaN reaching an AudioParam throws and takes the whole chain down with it.
+  /* …to `legacy` where the param declares one (#482 polish 7.1): the value a saved effect that lacks the key is played
+     at, which the load sanitiser fills in the same way (storage.js sanitizeAudioFx). A choice reads as the nearest of its
+     options and an on/off as 0 or 1, so a file carrying 1.4 or a slope of 30 plays as something the panel can show. */
   function valueAt(inst, p, t) {
     const raw = inst && inst.params ? inst.params[p.key] : undefined;
     let v = FM.isAnimated(raw) ? FM.evalProp(raw, t) : raw;
-    if (typeof v !== 'number' || !isFinite(v)) v = p.def;
-    return clamp(v, p.min, p.max);
+    if (typeof v !== 'number' || !isFinite(v)) v = p.legacy !== undefined ? p.legacy : p.def;
+    v = clamp(v, p.min, p.max);
+    if (p.options) {
+      let best = p.options[0][0];
+      for (let i = 1; i < p.options.length; i++) if (Math.abs(p.options[i][0] - v) < Math.abs(best - v)) best = p.options[i][0];
+      return best;
+    }
+    if (p.toggle) return v >= 0.5 ? 1 : 0;
+    return v;
   }
+  /* The build-time value of a control that is not keyframable (a choice, an on/off, a `rebuild` slider), read exactly as
+     the chain reads it (valueAt). REG is filled below; builds only ever run after it is. */
+  function staticOf(inst, type, key) {
+    const ps = (REG[type] && REG[type].params) || [];
+    for (let i = 0; i < ps.length; i++) if (ps[i].key === key) return valueAt(inst, ps[i], 0);
+    return 0;
+  }
+  // The registry entry of one param, for a setter that has to read another key at the same scene moment.
+  function paramOf(type, key) { return ((REG[type] && REG[type].params) || []).filter(p => p.key === key)[0]; }
   // Build-time read for a rebuild-style (keyframable:false) param — static is the whole story there.
   function initNum(inst, key, dflt, lo, hi) {
     let v = inst && inst.params ? inst.params[key] : undefined;
@@ -427,6 +466,25 @@ window.FM = window.FM || {};
 
   function P(key, label, min, max, step, def, unit, kf) {
     return { key: key, label: label, min: min, max: max, step: step, def: def, unit: unit || '', keyframable: !!kf };
+  }
+  /* ═══ A CHOICE, OR AN ON/OFF, IN AN AUDIO EFFECT (#482 polish 7.1 — the enabler the rest of batch 7 needs) ═══════════
+   * Every audio control was a slider (inspector.js afxParam made each one a range), so "Sine or Square", "12 or 48 dB",
+   * "Soft or Hard clip" had nowhere to live. Both new kinds are stored as plain whole numbers, like every other audio
+   * value: a choice is the value of the option picked (options: [[value, label], …]) and an on/off is 0 or 1. So a saved
+   * file and the load sanitiser see nothing new — min and max are the range of the option values — and neither can be
+   * keyframed (a glide halfway between Sine and Square means nothing). The panel draws a choice with the visual effects'
+   * own segmented control (inspector.js fxSegment) and an on/off with their tick box (fxToggle): one implementation each.
+   * `rebuild: true` marks a control that changes the GRAPH rather than a value on it (which curve, how many voices). The
+   * live preview rebuilds a chain only when its signature moves (audio-fx-live.js signature), and these values are now
+   * part of it (audioFxRegistry.rebuildKey); everything else still rides applyAt, so a slider drag never rebuilds.
+   * `legacy` (any kind) is what a saved effect that LACKS the key is played at, where that differs from what a new one
+   * starts at (`def`): the sanitiser fills the key with it and valueAt reads it — the visual effects' rule. */
+  function CHOICE(key, label, options, def, o) {
+    const vals = options.map(x => x[0]);
+    return Object.assign({ key: key, label: label, min: Math.min.apply(null, vals), max: Math.max.apply(null, vals), step: 1, def: def, unit: '', keyframable: false, options: options }, o || {});
+  }
+  function TOGGLE(key, label, def, o) {
+    return Object.assign({ key: key, label: label, min: 0, max: 1, step: 1, def: def, unit: '', keyframable: false, toggle: true }, o || {});
   }
   const MIX = def => P('mix', 'Mix', 0, 1, 0.01, def, '', true);
   /* A CONTROL THAT DOES NOTHING WHILE ANOTHER IS AT 0 SAYS SO (#482 3.6 review). A shelf's or a band's corner moves a
@@ -874,6 +932,13 @@ window.FM = window.FM || {};
          saved Compressor (the sanitiser fills a missing key with def) renders sample for sample as before. */
       P('output', 'Output', -24, 24, 0.5, 0, 'dB', true),
       MIX(1),
+      /* #482 polish 7.1 (backlog 3.7 left it for the enabler). The node turns everything it outputs up by a hidden amount
+         that follows Threshold, Knee and Ratio (makeupCancel above): +2.4 dB at the defaults, +17 dB at −40 / 6 / 4:1, so
+         lowering the threshold makes the quiet parts LOUDER, which is not what anyone expects a compressor to do. On (the
+         default, and every saved Compressor) is today's sound — the graph is not touched at all. Off puts the cancelling
+         gain after the node, so below the threshold the sound stays exactly at its own level and Output is the only lift.
+         A rebuild: the on and off graphs differ (the setters below), and a toggle is not keyframed. */
+      TOGGLE('automakeup', 'Auto makeup', 1, { rebuild: true, note: 'On: the Compressor turns the result back up by the amount it squashes the loudest sound. Off: quiet parts stay at their own level, and Output is the only boost.' }),
     ],
     /* A live meter: the Compressor row in the Audio effects panel draws how far this node is turning the sound
        down while the clip plays or is heard (inspector.js reductionMeter, read through audioFxLive.reductionOf). */
@@ -882,6 +947,7 @@ window.FM = window.FM || {};
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       const c = s.comp();
+      const autoMakeup = staticOf(inst, 'compressor', 'automakeup') !== 0;
       /* THE UNTOUCHED PATH WAITS FOR THE SQUASHED ONE. A DynamicsCompressorNode looks ahead: its output is its
          input floor(0.006 × rate) samples late — but never more than 1023, the engine's pre-delay buffer (1024
          frames, minus one). MEASURED in the suite's Chrome by cross-correlation: 132 frames at 22.05 kHz, 264 at
@@ -895,11 +961,31 @@ window.FM = window.FM || {};
       const lag = s.delay(0.05);
       lag.delayTime.value = Math.min(1023, Math.floor(0.006 * ctx.sampleRate)) / ctx.sampleRate;
       const wd = wetDry(s, inst, 'mix', 1);
-      input.connect(c); c.connect(wd.wet); wd.wet.connect(out);
+      if (autoMakeup) {   // today's graph, node for node
+        input.connect(c); c.connect(wd.wet); wd.wet.connect(out);
+        input.connect(lag); lag.connect(wd.dry); wd.dry.connect(out);
+        return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: { node: c, dry: wd.dry.gain, wet: wd.wet.gain },
+          params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee, output: out.gain },
+          xf: { output: dbToLin }, custom: { mix: wd.set } });
+      }
+      /* AUTO MAKEUP OFF: a gain after the node that cancels its lift. The lift follows THREE keys, and the chain hands
+         each key its values separately (static ones once, keyframed ones every step), so each of the three setters works
+         the gain out from all three read at the SAME scene moment (sceneT): whichever writes last at a given time writes
+         the same number, and a keyframed threshold stays cancelled at every step. */
+      const mk = s.gain(makeupCancel(staticOf(inst, 'compressor', 'threshold'), staticOf(inst, 'compressor', 'knee'), staticOf(inst, 'compressor', 'ratio')));
+      input.connect(c); c.connect(mk); mk.connect(wd.wet); wd.wet.connect(out);
       input.connect(lag); lag.connect(wd.dry); wd.dry.connect(out);
+      const curveKey = function (key) {
+        return function (v, when, ramp, sceneT) {
+          const at = k => (k === key ? v : valueAt(inst, paramOf('compressor', k), isFinite(sceneT) ? sceneT : 0));
+          const g = makeupCancel(at('threshold'), at('knee'), at('ratio'));
+          if (ramp) { c[key].linearRampToValueAtTime(v, when); mk.gain.linearRampToValueAtTime(g, when); }
+          else { c[key].setValueAtTime(v, when); mk.gain.setValueAtTime(g, when); }
+        };
+      };
       return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: { node: c, dry: wd.dry.gain, wet: wd.wet.gain },
-        params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee, output: out.gain },
-        xf: { output: dbToLin }, custom: { mix: wd.set } });
+        params: { attack: c.attack, release: c.release, output: out.gain },
+        xf: { output: dbToLin }, custom: { threshold: curveKey('threshold'), knee: curveKey('knee'), ratio: curveKey('ratio'), mix: wd.set } });
     },
   }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
@@ -910,8 +996,14 @@ window.FM = window.FM || {};
          defs are today's graph (see build) — so a saved Limiter renders sample for sample as before. */
       P('input', 'Input gain', 0, 24, 0.5, 0, 'dB', true),
       P('release', 'Release', 0.01, 1, 0.01, 0.05, 's', true),
+      /* #482 polish 7.1 (backlog 3.8 left it for the enabler). The node's ratio stops at 20:1, so a full-scale sound still
+         lands 1/20 of the way over the ceiling (0.95 × Ceiling: −11.4 dBFS under −12) and the first moments of a hit get
+         past a 1 ms detector. Clip at ceiling cuts whatever is left over the ceiling itself — a hard clip, 4× oversampled so
+         the cut does not fold back down as aliasing. Off (the default, and every saved Limiter) is today's graph exactly:
+         a bypass pair (backlog §0.3), so switching it while the preview plays fades rather than clicks. */
+      TOGGLE('clip', 'Clip at ceiling', 0, { note: 'Nothing gets past the ceiling, not even the start of a hit. Pushed hard it can sound crunchy.' }),
     ],
-    build: function (ctx) {
+    build: function (ctx, inst) {
       const s = shop(ctx);
       const pre = s.gain(1);
       const c = s.comp();
@@ -958,13 +1050,21 @@ window.FM = window.FM || {};
       pre.connect(c); c.connect(trim); trim.connect(post);
       post.connect(clipIn); clipIn.connect(clip); clip.connect(clipOut); clipOut.connect(gOn); gOn.connect(out);
       post.connect(gOff); gOff.connect(out);
-      return unit({ input: pre, output: out, nodes: s.nodes, oscs: s.oscs,
+      // Clip at ceiling (#482 7.1): out → [÷ceiling → hard clip (4×) → ×ceiling] in a bypass pair, after everything above.
+      const ceil0 = staticOf(inst, 'limiter', 'ceiling');
+      const cIn = s.gain(1 / dbToLin(ceil0)), cOut = s.gain(dbToLin(ceil0));
+      const cClip = s.shaper(HARD_CLIP, '4x');
+      cIn.connect(cClip); cClip.connect(cOut);
+      const atCeil = bypassPair(s, out, cIn, cOut, staticOf(inst, 'limiter', 'clip') > 0);
+      return unit({ input: pre, output: atCeil.out, nodes: s.nodes, oscs: s.oscs,
         params: { release: c.release },
         custom: {
           ceiling: multi([[c.threshold, null], [trim.gain, v => hardKneeMakeupCancel(v, 20)],
-            [clipIn.gain, v => 1 / limHoldLin(v)], [clipOut.gain, limHoldLin]]),
+            [clipIn.gain, v => 1 / limHoldLin(v)], [clipOut.gain, limHoldLin],
+            [cIn.gain, v => 1 / dbToLin(v)], [cOut.gain, dbToLin]]),
           input: multi([[pre.gain, v => dbToLin(v * 20 / 19)], [post.gain, v => dbToLin(-v / 19)],
             [gOn.gain, v => (v > 0 ? 1 : 0)], [gOff.gain, v => (v > 0 ? 0 : 1)]]),
+          clip: multi(pairTargets(atCeil, v => v > 0)),
         } });
     },
   }, {
@@ -1560,6 +1660,16 @@ window.FM = window.FM || {};
     },
     // Audio rides ONLY on video layers — an mp3/wav is a video layer with a 0×0 picture.
     supportsLayer: function (id, layer) { return !!(REG[id] && layer && layer.type === 'video'); },
+    /* The values of an instance's `rebuild` controls (#482 polish 7.1), for the live preview's signature: a chain built
+       with one curve or one voice count is a different graph from another, so moving one must rebuild it. Read exactly as
+       the build reads them (valueAt). '' for an effect with none, so every other effect's signature is what it was. */
+    rebuildKey: function (inst) {
+      const d = inst && REG[inst.type];
+      if (!d) return '';
+      let s = '';
+      for (let i = 0; i < d.params.length; i++) { const p = d.params[i]; if (p.rebuild) s += ':' + p.key + '=' + valueAt(inst, p, 0); }
+      return s;
+    },
   };
 
   // Unknown types are excluded here as well as in buildAudioFxChain, so "has effects" can never disagree

@@ -1188,8 +1188,13 @@ window.FM = window.FM || {};
   // A tick box for a param that switches a whole behaviour on, rather than picking between two equal
   // options. `note` explains what it does to the controls under it — which is the point of using a
   // tick box here at all: a segmented control implies "one of these two", a tick implies "this takes over".
-  function fxToggle(fx, p) {
-    const on = !!(fx.params[p.key] == null ? p.default : fx.params[p.key]);
+  /* `after` (#482 polish 7.1): what a flip commits through — the audio rows pass afterAudioFx, so the live preview re-syncs
+     (a toggle can change the audio graph). The visual rows pass nothing and keep their own three lines below. */
+  function fxToggle(fx, p, after) {
+    /* An ABSENT key shows its `legacy` where it has one, as fxSegment and markOverridden already read it (#482 polish 7.1):
+       this read the default, so a Squircle Corners saved before Continuous curve existed (legacy 0, drawn without it)
+       showed the box ticked. */
+    const on = !!(fx.params[p.key] == null ? (p.legacy != null ? p.legacy : p.default) : fx.params[p.key]);
     const row = el('div', 'fx-tog-row' + (on ? ' on' : ''));
     const btn = el('button', 'fx-tog');
     btn.setAttribute('role', 'switch');
@@ -1199,6 +1204,7 @@ window.FM = window.FM || {};
     btn.querySelector('.fx-tog-label').textContent = p.label;
     btn.addEventListener('click', () => {
       fx.params[p.key] = on ? 0 : 1;
+      if (after) { after(); return; }
       FM.requestRender(); FM.inspector.refresh(); if (FM.history) FM.history.commit();
     });
     row.appendChild(btn);
@@ -1312,7 +1318,8 @@ window.FM = window.FM || {};
     row.appendChild(dt);
   }
 
-  function fxSegment(fx, p) {
+  // `after`: as fxToggle's (#482 polish 7.1) — the audio rows commit through afterAudioFx.
+  function fxSegment(fx, p, after) {
     const row = el('div', 'fx-seg-row');
     row.appendChild(el('span', 'fx-scrub-label', p.label));
     const seg = el('div', 'fx-seg');
@@ -1326,6 +1333,7 @@ window.FM = window.FM || {};
       b.addEventListener('click', () => {
         const v = parseFloat(opt[0]);
         fx.params[p.key] = isNaN(v) ? opt[0] : v;   // never write NaN — it reads back as "not this option, and not any other"
+        if (after) { after(); return; }
         FM.requestRender(); FM.inspector.refresh(); if (FM.history) FM.history.commit();
       });
       seg.appendChild(b);
@@ -2393,10 +2401,16 @@ window.FM = window.FM || {};
   // audio-fx.js param descriptors carry `def` and no `type`; fxScrubber reads `default` and dispatches
   // on `type`. Bridge them rather than teaching either side about the other.
   function afxParam(p) {
+    /* A CHOICE OR AN ON/OFF (#482 polish 7.1): `options` is a segmented control and `toggle` a tick box, the visual rows'
+       own (fxSegment / fxToggle) — this bridge made every audio param a range, so there was no way to offer one. `legacy`
+       rides every kind, so an absent key shows what the kernel plays (audio-fx.js valueAt). */
+    if (p.options) return { type: 'segment', key: p.key, label: p.label, options: p.options, default: p.def, legacy: p.legacy, keyframable: false,
+      overriddenBy: p.overriddenBy || '', liveWhen: p.liveWhen, deadAt: p.deadAt, note: p.note || '' };
+    if (p.toggle) return { type: 'toggle', key: p.key, label: p.label, default: p.def, legacy: p.legacy, keyframable: false, note: p.note || '' };
     // overriddenBy/deadAt ride along since the #482 3.6 review: this bridge used to drop them, so no audio row could say
     // "Not used when Bass is 0" however the effect declared it.
-    return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, unit: p.unit, keyframable: p.keyframable,
-      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt };
+    return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, legacy: p.legacy, unit: p.unit, keyframable: p.keyframable,
+      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt, liveWhen: p.liveWhen, liveAbove: p.liveAbove };
   }
   /* A per-PARAM warning, shown only once the param is actually animated. Reverb's Size and Decay are the
      only two that carry one, and it is the warning Ezra asked for by name — *"if audio key frames break
@@ -2573,10 +2587,22 @@ window.FM = window.FM || {};
       // the controller's label and default, so it gets the bridged descriptors, not the audio registry's own.
       const areg = { params: reg.params.map(afxParam) }, rows = {};
       reg.params.forEach(p => {
-        const ap = afxParam(p), row = fxScrubber(fx, ap, layer, idx);
+        const ap = afxParam(p);
+        let row;
+        // A choice and an on/off commit through afterAudioFx (#482 polish 7.1), which re-syncs the live chain: either can be a
+        // `rebuild` control, and the preview only rebuilds when it is asked to.
+        if (ap.type === 'segment') row = fxSegment(fx, ap, afterAudioFx);
+        else if (ap.type === 'toggle') row = fxToggle(fx, ap, afterAudioFx);
+        else {
+          row = fxScrubber(fx, ap, layer, idx);
+          // A `rebuild` SLIDER (a voice count, a stereo phase) asks the same as each value lands: sync() rebuilds only if the
+          // value really moved the signature, so dragging within one whole voice rebuilds nothing.
+          if (p.rebuild) row.addEventListener('fx-range-set', () => { if (FM.reconcileAudio) FM.reconcileAudio(); });
+        }
         rows[p.key] = row;
-        markOverridden(row, fx, ap, areg);
+        if (ap.type !== 'toggle') markOverridden(row, fx, ap, areg);
         body.appendChild(row);
+        if (ap.type === 'segment' && ap.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', ap.note));
         const w = afxWarnFor(reg, fx, p);
         if (w) body.appendChild(el('div', 'insp-hint afx-kf-warn', w));
       });
