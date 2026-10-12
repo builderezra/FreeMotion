@@ -1415,13 +1415,21 @@ window.FM = window.FM || {};
     // Levels — set a real black and white point, per channel. Everything else in Colouring
     // pushes the image around; this is the one that says where 0 and 255 actually are.
     { type: 'levels', label: 'Levels', desc: 'Sets where black and white actually fall. Pull the input points in to fill the range, or push the output points in to fade it.', params: [
+      /* #482 15.5: Channel picks which SET the sliders below edit — RGB is the master, Red / Green / Blue each keep their own
+         (`showWhen` shows only the chosen set). All four apply at once; see levelsMigrate for a Levels saved before this. */
       { key: 'channel', label: 'Channel', options: [[0, 'RGB'], [1, 'Red'], [2, 'Green'], [3, 'Blue']], def: 0 },
-      { key: 'inblack', label: 'Input black', min: 0, max: 254, step: 1, def: 14 },
-      { key: 'inwhite', label: 'Input white', min: 1, max: 255, step: 1, def: 236 },
-      { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1 },
-      { key: 'outblack', label: 'Output black', min: 0, max: 255, step: 1, def: 0 },
-      { key: 'outwhite', label: 'Output white', min: 0, max: 255, step: 1, def: 255 },
-    ] },
+      { key: 'inblack', label: 'Input black', min: 0, max: 254, step: 1, def: 14, showWhen: { key: 'channel', is: 0 } },
+      { key: 'inwhite', label: 'Input white', min: 1, max: 255, step: 1, def: 236, showWhen: { key: 'channel', is: 0 } },
+      { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1, showWhen: { key: 'channel', is: 0 } },
+      { key: 'outblack', label: 'Output black', min: 0, max: 255, step: 1, def: 0, showWhen: { key: 'channel', is: 0 } },
+      { key: 'outwhite', label: 'Output white', min: 0, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: 0 } },
+    ].concat(['r', 'g', 'b'].reduce((out, c, i) => out.concat([   // each channel's own set, identity by default (#482 15.5)
+      { key: 'inblack_' + c, label: 'Input black', min: 0, max: 254, step: 1, def: 0, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'inwhite_' + c, label: 'Input white', min: 1, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'gamma_' + c, label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'outblack_' + c, label: 'Output black', min: 0, max: 255, step: 1, def: 0, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'outwhite_' + c, label: 'Output white', min: 0, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: i + 1 } },
+    ]), [])) },
     // Halation — the warm bleed real film gets around clipped highlights, because light scatters off
     // the back of the base and re-exposes the emulsion. Two radii is the whole trick: a tight core
     // that hugs the highlight and a wide wash. Glow / Light Glow have one radius and can't do it.
@@ -1798,7 +1806,11 @@ window.FM = window.FM || {};
   function levelsLUT(inB, inW, gam, outB, outW) {
     const sig = inB + '|' + inW + '|' + gam + '|' + outB + '|' + outW;
     if (_lvLUT && _lvSig === sig) return _lvLUT;
-    const lut = new Uint8ClampedArray(256);
+    const lut = levelsFill(new Uint8ClampedArray(256), inB, inW, gam, outB, outW);
+    _lvLUT = lut; _lvSig = sig; return lut;
+  }
+  // the table itself, into `lut` (a channel set of #482 15.5 builds its own, so it never evicts the master's memo)
+  function levelsFill(lut, inB, inW, gam, outB, outW) {
     // A collapsed or inverted input range would divide by ~0 and posterise to two values; clamp the
     // span to one code value so the control degrades to "hard clip" instead of to NaN.
     const span = (inW - inB) >= 1 ? (inW - inB) : 1;
@@ -1808,7 +1820,45 @@ window.FM = window.FM || {};
       n = n <= 0 ? 0 : (n >= 1 ? 1 : Math.pow(n, ig));
       lut[v] = Math.round(outB + n * rng);
     }
-    _lvLUT = lut; _lvSig = sig; return lut;
+    return lut;
+  }
+  /* ═══ LEVELS ON ALL FOUR CHANNELS AT ONCE (#482 15.5) ══════════════════════════════════════════════════════════════
+   * Channel used to say WHICH channel the one set of five sliders graded, so a red cast and a blue cast could not be fixed
+   * in one Levels. Now every channel keeps its own set (inblack_r … outwhite_b, identity by default) and Channel only picks
+   * which set the panel shows (`showWhen`): each channel goes through its own set, then the master (RGB) set grades all
+   * three — the order Photoshop applies them in.
+   * A SAVED Levels has no per-channel keys, and the kernel then runs its old loops untouched (the master set on the chosen
+   * channel, or on all three) — so it draws byte for byte as it did whether or not anything else has touched it.
+   * levelsMigrate gives such an instance the new shape before the panel or the render-time fill (queue 784) sees it: a
+   * saved one-channel set moves into that channel's keys, and the master and the other two become identity — the same
+   * picture, because a channel's set followed by an identity master IS the old one-channel table, byte for byte — so the
+   * panel opens on that channel showing the values that draw. A saved RGB one just gains identity channel sets, which
+   * under its master are its old picture too — and from then on tapping Red only changes what the panel shows (left on
+   * the old shape, Channel would still mean "grade only this channel" and the tap would change the picture). */
+  const LV_SETS = ['r', 'g', 'b'], LV_KEYS = ['inblack', 'inwhite', 'gamma', 'outblack', 'outwhite'];
+  const LV_ID = { inblack: 0, inwhite: 255, gamma: 1, outblack: 0, outwhite: 255 };
+  const LV_OLD = { inblack: 14, inwhite: 236, gamma: 1, outblack: 0, outwhite: 255 };   // the kernel's fallback for an absent master key
+  const LV_CH_KEYS = [];
+  LV_SETS.forEach(c => LV_KEYS.forEach(k => LV_CH_KEYS.push(k + '_' + c)));
+  function levelsHasSets(p) { for (let i = 0; i < LV_CH_KEYS.length; i++) if (p[LV_CH_KEYS[i]] != null) return true; return false; }
+  function levelsMigrate(fx) {
+    const p = fx && fx.type === 'levels' && fx.params;
+    if (!p || typeof p !== 'object' || levelsHasSets(p)) return fx;
+    const ch = Math.round(FM.evalProp(p.channel, 0) || 0);   // Channel is a segment — never keyframed
+    if (ch >= 1 && ch <= 3) {
+      const c = LV_SETS[ch - 1], copy = v => (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v;
+      LV_KEYS.forEach(k => { p[k + '_' + c] = copy(p[k] == null ? LV_OLD[k] : p[k]); p[k] = LV_ID[k]; });
+    }
+    LV_SETS.forEach(o => LV_KEYS.forEach(k => { if (p[k + '_' + o] == null) p[k + '_' + o] = LV_ID[k]; }));
+    return fx;
+  }
+  FM._levelsMigrate = levelsMigrate;   // the inspector runs it before showing a Levels row (#482 15.5)
+  // one channel's set as a table, or null when it is identity (the common case: nothing to do)
+  function levelsSetLUT(p, c, t) {
+    const v = (k) => { const x = p[k + '_' + c]; return x == null ? LV_ID[k] : FM.evalProp(x, t); };
+    const inB = v('inblack'), inW = v('inwhite'), gam = Math.max(0.05, v('gamma')), outB = v('outblack'), outW = v('outwhite');
+    if (inB === 0 && inW === 255 && gam === 1 && outB === 0 && outW === 255) return null;
+    return levelsFill(new Uint8ClampedArray(256), inB, inW, gam, outB, outW);
   }
 
   let _grCanvas = null, _grLast = null;
@@ -2167,6 +2217,7 @@ window.FM = window.FM || {};
   FM._fxFillValue = fxFillValue;   // suite seam
   function fillFxParams(fx) {
     if (!fx || typeof fx !== 'object' || _fxFilled.has(fx)) return fx;
+    if (fx.type === 'levels') levelsMigrate(fx);   // #482 15.5: a saved one-channel Levels takes its channel's set BEFORE the fill below gives it identity ones
     let controls = null; try { controls = FM.fxRegistry && FM.fxRegistry.paramsOf ? FM.fxRegistry.paramsOf(fx.type) : null; } catch (e) { controls = null; }
     if (Array.isArray(controls) && controls.length) {   // the registry already knows every param whatever shape the catalog wrote it in
       if (!fx.params || typeof fx.params !== 'object') fx.params = {};
@@ -5329,7 +5380,16 @@ window.FM = window.FM || {};
       const outB = p.outblack == null ? 0 : FM.evalProp(p.outblack, t);
       const outW = p.outwhite == null ? 255 : FM.evalProp(p.outwhite, t);
       const lut = levelsLUT(inB, inW, gam, outB, outW);
-      if (ch <= 0) {
+      if (levelsHasSets(p)) {
+        /* #482 15.5: each channel through its own set, then the master on all three; Channel only chooses which set the
+           panel shows. A channel's table is built fresh (levelsSetLUT), so the master's memo above stays put. */
+        const R = levelsSetLUT(p, 'r', t), G = levelsSetLUT(p, 'g', t), B = levelsSetLUT(p, 'b', t), M = lut;
+        for (let i = 0; i < d.length; i += 4) {
+          d[i] = M[R ? R[d[i]] : d[i]]; d[i + 1] = M[G ? G[d[i + 1]] : d[i + 1]]; d[i + 2] = M[B ? B[d[i + 2]] : d[i + 2]];
+        }
+        return;
+      }
+      if (ch <= 0) {   // a Levels saved before 15.5 (no channel sets) — its old loops, untouched
         for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; }
       } else {
         // One channel only — the move that kills a colour cast, because you can set that channel's

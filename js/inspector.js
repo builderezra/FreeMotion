@@ -1823,7 +1823,9 @@ window.FM = window.FM || {};
       const colourRows = {};   // colour rows by key, so a colour that follows another can listen to it (#482 polish 1.2)
       const rangeRows = {};    // …and slider rows, for a slider that follows another (#482 polish 2.1)
       const gatedRows = {};    // …and every row another control can grey, so a SLIDER that greys it re-judges it live (#482 6.3 review)
+      if (fx.type === 'levels' && FM._levelsMigrate) FM._levelsMigrate(fx);   // #482 15.5: a saved one-channel Levels shows its values in that channel's set
       reg.params.forEach(p => {
+        if (FM.fxRegistry.rowShown && !FM.fxRegistry.rowShown(fx, p)) return;   // #482 15.5: only the set Levels' Channel picks
         if (p.type === 'range') {
           const row = fxScrubber(fx, p, layer, idx);
           rangeRows[p.key] = row; gatedRows[p.key] = row;

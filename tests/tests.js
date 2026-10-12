@@ -124859,4 +124859,86 @@
     if (!(hot[ib] >= 250)) fails.push('an over-driven brightening left the white end at ' + hot[ib] + ' - it wrapped or clamped low');
     if (fails.length) throw new Error(fails.join(' · '));
   });
+
+  /* LEVELS (#482 15.5) is a pure pixel kernel, so its pins are hashes of its bytes on a ramp that holds every level in every
+     channel (and see-through pixels), captured on fc8866f1 and the same on any machine. */
+  function b15Ramp(W, H) { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255; d[i + 3] = (x + y) % 17 === 0 ? 0 : ((x * y) % 9 === 0 ? 128 : 255); } return d; }
+  const b15Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  const b15LvRun = (p, W, H, t) => { const d = b15Ramp(W, H); FM._applyPixelFx(d, { type: 'levels', params: b15Copy(p) }, t, W, H, 1); return d; };
+  const b15LvShots = p => [[97, 61], [160, 120]].map(([W, H]) => [0.37, 1.9].map(t => b15Hash(b15LvRun(p, W, H, t))).join('.')).join(' ');
+  const B15_LV_MASTER = ['channel', 'inblack', 'inwhite', 'gamma', 'outblack', 'outwhite'];
+  const B15_LV_NEW = {};
+  ['r', 'g', 'b'].forEach(c => { B15_LV_NEW['inblack_' + c] = 0; B15_LV_NEW['inwhite_' + c] = 255; B15_LV_NEW['gamma_' + c] = 1; B15_LV_NEW['outblack_' + c] = 0; B15_LV_NEW['outwhite_' + c] = 255; });
+  const B15_LV_CFG = {
+    'saved default': {}, 'rgb': { inblack: 30, inwhite: 210, gamma: 1.3, outblack: 8, outwhite: 245 },
+    'red': { channel: 1, inblack: 30, inwhite: 200, gamma: 1.4, outblack: 10, outwhite: 240 }, 'green': { channel: 2, inblack: 50, gamma: 0.6 },
+    'blue': { channel: 3, inwhite: 180, outblack: 20 }, 'red keyed': { channel: 1, inblack: b15Kf(0, 60), gamma: b15Kf(0.7, 1.6) },
+    'library': { inblack: 12, inwhite: 244, gamma: 0.94 },
+  };
+  const B15_LV_PIN = {   // fc8866f1
+    'saved default': 'c4b984af.c4b984af a37f38e9.a37f38e9', 'rgb': '05d90a5d.05d90a5d a34ea98b.a34ea98b', 'red': 'a4e2591a.a4e2591a 91231718.91231718',
+    'green': '1541e351.1541e351 271ae000.271ae000', 'blue': '5bb6651a.5bb6651a b7a2b374.b7a2b374', 'red keyed': '94de6fb9.eafa8598 588fbacc.c5045da1',
+    'library': 'dec4c595.dec4c595 8259c9ff.8259c9ff', 'red bare': 'e46927b4.e46927b4 f3f022fc.f3f022fc', 'blue bare': 'c88ebcab.c88ebcab ce4d4d1c.ce4d4d1c',
+  };
+
+  test('482 15.5 pin: Levels saved before the channel sets draws exactly as it did — RGB, Red, Green and Blue, keyframed, with its master keys missing, filled at render time (which gives a one-channel Levels that channel’s set), and new (sets present at identity), and the library filters that carry one', { item: '482', budgetMs: 60000 }, function () {
+    const moved = [], inst = FM.fxRegistry.makeInstance('levels').params;
+    const saved = cfg => { const p = {}; B15_LV_MASTER.forEach(k => { if (inst[k] !== undefined) p[k] = inst[k]; }); return Object.assign(p, b15Copy(cfg)); };
+    const cases = Object.keys(B15_LV_CFG).map(n => [n, saved(B15_LV_CFG[n])]).concat([['red bare', { channel: 1 }], ['blue bare', { channel: 3, gamma: 2 }]]);
+    cases.forEach(([n, p]) => {
+      const variants = [['absent', p], ['filled at render time', FM._fillFxParams({ type: 'levels', enabled: true, params: b15Copy(p) }).params]];
+      if (!p.channel) variants.push(['present at identity', Object.assign(b15Copy(p), B15_LV_NEW)]);   // a new Levels: Channel RGB
+      variants.forEach(([how, q]) => { const got = b15LvShots(q); if (got !== B15_LV_PIN[n]) moved.push(n + ' (sets ' + how + ') ' + B15_LV_PIN[n] + ' -> ' + got); });
+    });
+    // the library filters that carry a Levels: their recipe draws the same with the sets present at identity
+    FM.filters.all().forEach(f => {
+      const box = FM.filters.makeInstance(f.id);
+      (box.effects || []).filter(e => e.type === 'levels').forEach(e => {
+        const old = b15Copy(e.params); Object.keys(B15_LV_NEW).forEach(k => { delete old[k]; });
+        if (b15LvShots(old) !== b15LvShots(Object.assign(b15Copy(old), B15_LV_NEW))) moved.push('the ' + f.id + ' filter’s Levels moves with its channel sets present');
+      });
+    });
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 6).join(' · '));
+    b15Catalogue('levels', B15_LV_NEW, { inwhite_r: 200, inblack_b: 50, gamma_g: 1.7, outblack_r: 12, outwhite_b: 230 });
+  });
+
+  test('482 15.5 Levels holds all four channels at once: Red Input white 200 and Blue Input black 50 in one instance both apply, the master set still grades all three on top, Channel only chooses the set the panel shows, and a saved Red-only Levels opens on Red holding its own values with the same picture (CONTROL: identity sets change nothing)', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 40, fails = [];
+    const fresh = over => Object.assign(FM.fxRegistry.makeInstance('levels').params, { inblack: 0, inwhite: 255, gamma: 1, outblack: 0, outwhite: 255 }, over || {});
+    const src = b15Ramp(W, H);
+    const id = b15LvRun(fresh(), W, H, 0.5);
+    if (!b15Same(id, src)) throw new Error('CONTROL: a Levels with every set at identity changed the picture (' + b15Diff(id, src) + ')');
+    const lut = (inB, inW, gam, outB, outW) => v => { let n = (v - inB) / Math.max(1, inW - inB); n = n <= 0 ? 0 : (n >= 1 ? 1 : Math.pow(n, 1 / gam)); return Math.round(outB + n * (outW - outB)); };
+    const fR = lut(0, 200, 1, 0, 255), fB = lut(50, 255, 1, 0, 255), fM = lut(20, 255, 1, 0, 255);
+    const both = b15LvRun(fresh({ inwhite_r: 200, inblack_b: 50 }), W, H, 0.5);
+    let bad = 0, ex = '';
+    for (let i = 0; i < src.length; i += 4) {
+      const want = [fR(src[i]), src[i + 1], fB(src[i + 2]), src[i + 3]];
+      for (let c = 0; c < 4; c++) if (both[i + c] !== want[c]) { bad++; if (!ex) ex = 'rgba ' + Array.from(src.slice(i, i + 4)) + ' -> ' + Array.from(both.slice(i, i + 4)) + ', want ' + want; }
+    }
+    if (bad) fails.push('Red Input white 200 + Blue Input black 50: ' + bad + ' bytes wrong (' + ex + ')');
+    // the master on top of both, on all three
+    const top = b15LvRun(fresh({ inwhite_r: 200, inblack_b: 50, inblack: 20 }), W, H, 0.5);
+    bad = 0; for (let i = 0; i < src.length; i += 4) { if (top[i] !== fM(fR(src[i])) || top[i + 1] !== fM(src[i + 1]) || top[i + 2] !== fM(fB(src[i + 2]))) bad++; }
+    if (bad) fails.push('the master Input black 20 on top of the channel sets is wrong on ' + bad + ' pixels');
+    // Channel is only the selector now: switching it changes nothing in the picture
+    const sel = b15LvRun(fresh({ inwhite_r: 200, inblack_b: 50, channel: 2 }), W, H, 0.5);
+    if (!b15Same(sel, both)) fails.push('choosing Green in the panel changed the picture (' + b15Diff(sel, both) + ')');
+    // a saved Red-only Levels: same picture, and it opens on Red with its values in Red's set
+    const old = { channel: 1, inblack: 30, inwhite: 200, gamma: 1.4, outblack: 10, outwhite: 240 };
+    const before = b15LvRun(old, W, H, 0.5), fx = FM._fillFxParams({ type: 'levels', enabled: true, params: b15Copy(old) }), q = fx.params;
+    if (!(q.inblack_r === 30 && q.inwhite_r === 200 && q.gamma_r === 1.4 && q.outblack_r === 10 && q.outwhite_r === 240)) fails.push('a saved Red-only Levels does not hold its values in Red’s set (' + ['inblack_r', 'inwhite_r', 'gamma_r', 'outblack_r', 'outwhite_r'].map(k => q[k]).join(', ') + ')');
+    if (!(q.inblack === 0 && q.inwhite === 255 && q.gamma === 1 && q.outblack === 0 && q.outwhite === 255 && q.inblack_g === 0 && q.inwhite_b === 255)) fails.push('a saved Red-only Levels’ master or other channels are not identity after the move');
+    if (!b15Same(b15LvRun(q, W, H, 0.5), before)) fails.push('a saved Red-only Levels draws differently once its set has moved to Red');
+    // the panel: Channel picks which set of rows shows
+    const rows = FM.fxRegistry.paramsOf('levels'), row = k => rows.filter(r => r.key === k)[0];
+    if (!FM.fxRegistry.rowShown) fails.push('FM.fxRegistry.rowShown is missing');
+    else {
+      const on = (p, k) => FM.fxRegistry.rowShown({ type: 'levels', params: p }, row(k));
+      if (!row('inwhite_r')) fails.push('Levels has no Red Input white row');
+      else if (!(on({ channel: 1 }, 'inwhite_r') && !on({ channel: 1 }, 'inwhite') && !on({ channel: 1 }, 'inwhite_b') && on({ channel: 0 }, 'inwhite') && !on({ channel: 0 }, 'inwhite_r') && on({}, 'inwhite') && on({ channel: 3 }, 'outwhite_b'))) fails.push('the rows Channel shows are not the chosen set');
+      if (!on({ channel: 2 }, 'channel')) fails.push('the Channel row itself is hidden');
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();
