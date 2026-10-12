@@ -124514,6 +124514,61 @@
     if (fails.length) throw new Error(fails.join(' ¦ '));
   });
 
+  /* ─── THE FIRST-USER AUDIT (tools/design/hunts/simple-firstuser.md, on branch hunt/simple-firstuser): a beginner's own path at
+     380 — the ⚙'s switch, the project tools, the tray — never a command called straight. ─── */
+  // Every file input the app clicks while `fn` runs is handed `files`, as the phone's picker would (h3aPicker hands one file).
+  async function smPicker(files, fn) {
+    const realClick = HTMLInputElement.prototype.click, seen = { n: 0 };
+    HTMLInputElement.prototype.click = function () {
+      if (this.type !== 'file') return realClick.apply(this, arguments);
+      seen.n++;
+      const dt = new DataTransfer(); files.forEach(f => dt.items.add(f)); this.files = dt.files;
+      this.dispatchEvent(new Event('change'));
+    };
+    try { await fn(); } finally { HTMLInputElement.prototype.click = realClick; }
+    return seen;
+  }
+  const smSettle = async ms => { await new Promise(r => setTimeout(r, ms)); document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} }); };
+  // The ⚙ on screen, the Editor block's switch, the cog closing itself (as 'review leaving Simple through the cog' drives it)
+  async function smCogTo(want) {
+    const cog = ['m-settings', 'btn-settings'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length);
+    if (!cog) throw new Error('setup: no cog on screen on the way to ' + want + ' (body ' + document.body.className + ')');
+    cog.click(); await smSettle(320);
+    const sw = document.querySelector('#cv-ed-bar .ed-sw');
+    if (!sw || !sw.getClientRects().length) throw new Error('setup: the cog shows no Editor switch (#cv-ed-bar .ed-sw)');
+    sw.click(); await smSettle(600);
+    const dlg = document.getElementById('canvas-dialog');
+    if (dlg && !dlg.classList.contains('hidden')) { FM.closeCanvasDialog(); await smSettle(150); }
+    if (FM.editor.mode() !== want) throw new Error('setup: the cog’s switch did not reach ' + want + ' (mode ' + FM.editor.mode() + ')');
+  }
+
+  test('simple P2.2 · review at 380 the playhead line shows once Clips adds the first clips to a project that was empty when the cog switched it to Simple, as it does in Full (DESIGN §7.3, first-user audit 1)', { item: '980', budgetMs: 90000 }, async function () {
+    /* The class Full puts on an empty project (tl-empty-start, which hides #tl-centerline) was written only by Full's buildTracks,
+       which Simple never runs: after + → Create → ⚙ Simple → Clips the line stayed hidden with three clips on screen, through a
+       swipe and a trip Home, until a reload. Every "at the line" action (✂, Text, Music) was then blind. */
+    smNeedP2();
+    const files = await Promise.all(['#ff0000', '#00ff00', '#0000ff'].map(c => smPng(c)));
+    await atPhoneWidth(async function () {
+      await smP2(() => [], async function (v) {
+        const panel = document.getElementById('timeline-panel'), line = document.getElementById('tl-centerline');
+        const shows = () => getComputedStyle(line).display !== 'none' && line.getBoundingClientRect().height > 0;
+        const state = () => 'tl-empty-start ' + panel.classList.contains('tl-empty-start') + ', display ' + getComputedStyle(line).display + ', ' + FM.scene.layers.length + ' layer(s)';
+        if (FM.editor.mode() !== 'full' || !panel.classList.contains('tl-empty-start') || shows()) throw new Error('CONTROL: Full’s new empty project at 380 does not hide the playhead line (mode ' + FM.editor.mode() + ', ' + state() + '), so this measures nothing');
+        await smCogTo('simple');
+        if (shows()) throw new Error('the still empty project shows the playhead line in Simple, where Full hides it (' + state() + ')');
+        const seen = await smPicker(files, async function () { smTool('clips').click(); await v.idle(); });
+        await smSettle(150);
+        if (seen.n !== 1 || FM.scene.layers.length !== 3) throw new Error('setup: Clips added ' + FM.scene.layers.length + ' layer(s) through ' + seen.n + ' picker(s) (it said “' + v.say() + '”)');
+        if (!shows()) throw new Error('with three clips on screen the playhead line is hidden (' + state() + ') — only a reload brought it back');
+        const lr = line.getBoundingClientRect(), sr = document.getElementById('sm-scroll').getBoundingClientRect();
+        if (lr.height < 100 || lr.left < sr.left || lr.right > sr.right || lr.top > sr.top + 1) throw new Error('the playhead line is not across the clip rows: ' + JSON.stringify([lr.left, lr.top, lr.width, lr.height]) + ' in ' + JSON.stringify([sr.left, sr.top, sr.width, sr.height]));
+        /* CONTROL — Full: the same project in Full shows its line too */
+        await smCogTo('full');
+        if (!shows()) throw new Error('CONTROL: Full hides the playhead line over three clips (' + state() + ')');
+      }, { full: true });
+    }, 380);
+  });
+
   test('980 2.2 merge: after a Simple visit on a PC, #sm-bar goes back home — Full\u2019s inspector band keeps no Simple element', { item: '980' }, async function () {
     /* The PM's merge-day note (7 Oct): place() parked #sm-bar at the bottom of #inspector-panel on a PC and nothing moved it
        back, so Full's band kept it after Simple closed. Leaving Simple runs no sync() in Full (app.js calls it only in Simple),
