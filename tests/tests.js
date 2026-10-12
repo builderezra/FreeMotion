@@ -127272,4 +127272,46 @@
       }, { full: true });
     }, 380);
   });
+
+  /* SU1 #21, its first half (hunt/simple-firstuser, the PM's call 12 Oct): "Music is called “the sound” (DESIGN §8.9 says “the
+     song”)." Sound › Music pins the song (Stay put, D17 B) and the classifier never measures `long` for a pinned item, so the one
+     road to “the song” was shut for every song Simple added. Driven as he did it: Sound › Music's command with a real 4 s WAV at
+     4 s over clips that end at 6, so it also runs 2 s into black, as his did — and a sound effect added the way js/sfx.js adds one
+     (FM.loadVideoFile, then Full's FM.addMediaLayer). Red on the old spine.js: the song's label, title, aria-label and the black
+     band's line all say “the sound”; the test asserts that word is GONE from the song (the CONTROL that it is the word this
+     replaces) and still on the sound effect (the CONTROL that a sound effect is not renamed). */
+  test('SU1 #21 · at 380 a song added through Sound › Music is “the song” on the timeline, in its title and in the black band’s line, while a sound effect is still “the sound”', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const node = id => document.querySelector('#sm-timeline .sm-item[data-id="' + id + '"]');
+    const label = n => { const s = n && n.querySelector('.sm-name'); return s ? s.textContent : '(no label)'; };
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        FM.time = 4; await FM.spine.cmd.addMusic([q921wav(4, 440, 'song.wav')]); await v.idle(); await v.sleep(100);
+        const song = v.L('song');
+        if (!song) throw new Error('setup: Sound › Music added nothing (it said “' + v.say() + '”)');
+        FM.selectLayer(null); FM.time = 1;
+        FM.addMediaLayer(await FM.loadVideoFile(q921wav(0.5, 880, 'Whoosh.wav'))); await v.idle();
+        const fx = v.L('Whoosh');
+        if (!fx) throw new Error('setup: the sound effect was not added');
+        FM.selectLayer(null); FM.refreshAll(); await v.sleep(150);
+        const R = FM.spine.read(FM.scene), us = R.units[song.id], ux = R.units[fx.id];
+        if (!us || us.kind !== 'audio' || !(song.sm && song.sm.stay)) throw new Error('CONTROL: the song is not a pinned sound (' + (us && us.kind) + ', sm ' + JSON.stringify(song.sm || null) + ')');
+        if (!ux || ux.kind !== 'audio' || ux.long) throw new Error('CONTROL: the sound effect is not a short sound (' + (ux && ux.kind) + ', long ' + (ux && ux.long) + ')');
+        const fails = [];
+        if (FM.spine.itemWord(song, R) !== 'the song') fails.push('Simple names the song “' + FM.spine.itemWord(song, R) + '”');
+        if (FM.spine.itemWord(fx, R) !== 'the sound') fails.push('CONTROL: the sound effect is named “' + FM.spine.itemWord(fx, R) + '”, not “the sound”');
+        const n = node(song.id);
+        if (!n) throw new Error('CONTROL: the timeline draws no item for the song · ' + fails.join(' · '));
+        if (/the sound/.test(label(n)) || label(n) !== 'the song') fails.push('its label on the timeline says “' + label(n) + '”');
+        if (n.title !== 'the song' || n.getAttribute('aria-label') !== 'the song') fails.push('its title / aria-label say “' + n.title + '” / “' + n.getAttribute('aria-label') + '”');
+        const nx = node(fx.id);
+        if (nx && label(nx) !== 'the sound') fails.push('CONTROL: the sound effect’s label says “' + label(nx) + '”');
+        const band = document.querySelector('#sm-main .sm-band');
+        if (!band) throw new Error('CONTROL: no black band while the song runs 2 s past the last clip · ' + fails.join(' · '));
+        band.click(); await v.sleep(60);
+        if (!/^the song runs 2\.0 s past the last clip/.test(v.say())) fails.push('the black band says “' + v.say() + '”');
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    }, 380);
+  });
 })();

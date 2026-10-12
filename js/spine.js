@@ -92,12 +92,29 @@ window.FM = window.FM || {};
     if (layer.type === 'text') { const t = String(layer.text || '').trim().replace(/\s+/g, ' '); return t ? '“' + (t.length > 16 ? t.slice(0, 16) + '…' : t) + '”' : (w.text || 'the text'); }
     const u = R && R.units && R.units[layer.id];
     const k = u ? u.kind : '';
-    if (k === 'audio') return u.long ? (w.song || 'the song') : (w.sound || 'the sound');
+    if (k === 'audio') return S.isSong(layer, u) ? (w.song || 'the song') : (w.sound || 'the sound');
     if (k === 'effect') return w.effect || 'the effect';
     if (k === 'block') return w.block || 'the group';
     if (layer.type === 'shape') return w.shape || 'the shape';
     if (layer.type === 'image') return w.image || 'the image';
     return w.videoTop || 'the video on top';
+  };
+  /* A SOUND IS "THE SONG" (§8.9) when it runs long — the sound rule's `long`, as before — OR when Simple put it in AS MUSIC
+     (SU1 #21, first half: the first-user audit's 20 s song was "the sound" on the timeline, in its title and in the black band's
+     "the sound runs 13.8 s past the last clip"). Music is pinned (Stay put, D17 B) the moment Sound › Music or the Clips picker
+     adds it (js/spine-edit.js planAddMusic, and the sounds of planAppend / planInsert), and the classifier never measures `long`
+     for a pinned item — its host does not matter — so every song Simple added fell through to "the sound". Simple tells music
+     apart by how it arrived: `sm.snd` (§0.4 B8) is written only by Simple's own adds, its Take sound out and its Replace, and of
+     those only the music adds pin the sound in the same step. A sound effect (js/sfx.js) and a voice recording
+     (js/voice-rec.js) arrive through Full's FM.addMediaLayer and carry no `sm.snd`, and the sound taken out of a clip carries
+     `sm.twin` — so all three keep "the sound" (unless they run long, as before). Reading the two flags already on disk, rather
+     than a new one, names the songs of projects made before this too. The one stretch: a sound replaced in Simple by a
+     sound-only file and then pinned by hand reads as a song as well. */
+  S.isSong = function (layer, u) {
+    if (!u || u.kind !== 'audio') return false;
+    if (u.long) return true;
+    const sm = layer && layer.sm;
+    return !!(sm && sm.snd === true && sm.stay === true && sm.twin !== true);
   };
 
   /* ═══ WHERE SIMPLE SPEAKS (§3.12): one sink, set by the Simple timeline. FM.toast is banned for Simple's lines. */

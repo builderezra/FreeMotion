@@ -1172,7 +1172,7 @@ window.FM = window.FM || {};
     if (ids.length > 1) return R && ids.every(id => R.isMain(id)) ? line('lockedClips', ids.length) : line('lockedItems', ids.length);
     const id = ids[0], u = R && R.units[id], l = map.get(id);
     if (R && R.isMain(id)) return line('lockedClip');
-    if (u && u.kind === 'audio') return u.long ? line('lockedMusic') : line('lockedSound');
+    if (u && u.kind === 'audio') return S.isSong(l, u) ? line('lockedMusic') : line('lockedSound');   // SU1 #21: a song Simple added is the music here too, as itemWord names it
     if (u && (u.kind === 'text' || u.kind === 'captions')) return line('lockedText');
     if (u && u.kind === 'block') return line('lockedBlock');
     return l ? line('lockedClip') : line('lockedItems', 1);
