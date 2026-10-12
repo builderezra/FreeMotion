@@ -127444,4 +127444,34 @@
       });
     });
   });
+
+  /* #1132, taken from the render he was sent (R-COG1, REPORT item 2): open, the Canvas card's own bar is its header — "Canvas",
+     the size, and ⤡ to close it — so the old "Canvas settings" title goes rather than say it twice. */
+  test('1132 open, the Canvas card starts with its own bar — Canvas and its size, with ⤡ to close it — and the old Canvas settings title is gone, at 380 and 1280', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+        const check = async function (label) {
+          FM.openCanvasDialog(); await entranceDone(dlg); await land945();
+          try {
+            if (dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-ed-big')) throw new Error(label + ': setup: Canvas settings is not the open block (' + dlg.className + ')');
+            card.scrollTop = 0; await sleep(20);
+            const title = card.querySelector('.export-title');
+            if (title && title.getClientRects().length) throw new Error(label + ': the open card still shows its title “' + title.textContent.trim() + '” — its own bar says Canvas now');
+            const mini = document.getElementById('cv-mini'), mr = mini.getBoundingClientRect(), cr = card.getBoundingClientRect();
+            if (!(mr.height > 40)) throw new Error(label + ': open, the Canvas card has no bar to close it by');
+            const shown = Array.prototype.filter.call(card.children, function (c) { return c.getClientRects().length && c.getBoundingClientRect().height > 0; });
+            const top = shown.reduce(function (a, c) { return c.getBoundingClientRect().top < a.getBoundingClientRect().top ? c : a; }, shown[0]);
+            if (top !== mini || Math.abs(mr.top - cr.top) > 2) throw new Error(label + ': the card does not start with its bar (the top is ' + (top && (top.id || top.className)) + ' at ' + Math.round(top.getBoundingClientRect().top) + ', the card at ' + Math.round(cr.top) + ')');
+            const t = mini.querySelector('.cv-mini-t'), sub = document.getElementById('cv-mini-sub');
+            if (!t || t.textContent.trim() !== 'Canvas' || !/ × /.test(sub.textContent) || !/fps/.test(sub.textContent)) throw new Error(label + ': the bar reads “' + mini.textContent.trim() + '”, not Canvas and its size');
+            const exp = document.getElementById('cv-mini-exp');
+            if (exp.querySelector('path').getAttribute('d') !== COL1132 || !/^Close /.test(exp.getAttribute('aria-label') || '')) throw new Error(label + ': open, the bar’s button is not the ⤡ that closes it (' + exp.getAttribute('aria-label') + ')');
+          } finally { FM.closeCanvasDialog(); await sleep(60); }
+        };
+        await atPhoneWidth(function () { return check('380'); }, 380);
+        await atWideWidth(function () { return check('1280'); }, 1280);
+      });
+    });
+  });
 })();
