@@ -125582,4 +125582,83 @@
     if (lr !== 0) bad.push('at Width 0 left and right differ by up to ' + lr.toExponential(2) + ' - not folded to the middle');
     if (bad.length) throw new Error('Ping-Pong: ' + bad.join('; '));
   });
+
+  /* 8.4 — STEREO WIDTH: KEEP BASS CENTRED, AUTO TRIM. A pure side tone (left = +0.5 sin, right = -0.5 sin, S = 0.5 sin) comes
+     out of a Width of 2 as S' = 2 x 0.5 = 1 (S' = (L' - R') / 2, read at its own frequency by exact-bin DFT, b7Amp). With
+     Keep bass centred at 150 Hz, S runs through two Butterworth highpasses first: at 60 Hz each keeps (0.4)^2 / sqrt(1 +
+     0.4^4) = 0.158, both 0.025 (-32 dB), so 60 Hz side comes out at least 24 dB under the same Width without it (the
+     backlog: "near-zero side content at 60 Hz", today it is widened); at 1 kHz both keep 0.998, so the 1 kHz side is still
+     widened to within 0.2 dB (CONTROL). Auto trim: on noise whose left and right are unrelated, Width 2 alone comes out
+     10 log10((1 + 4) / 2) = +4.0 dB (CONTROL: at least +3), and with Auto trim within 0.5 dB of the clip's own level
+     (L'^2 + R'^2 = 2 M^2 + 2 w^2 S^2 has no cross term, so this is exact up to how equal M and S are). On the build before
+     neither key exists (first line). CONTROL: a saved Width is today's graph sample for sample. */
+  test('482 8.4 Stereo Width - Keep bass centred takes the width out of the bass only, Auto trim holds the level as it widens, and a saved Width is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const mb = b7Pd('width', 'monobass'), tr = b7Pd('width', 'trim');
+    if (!mb || !tr) throw new Error('Stereo Width has no Keep bass centred or no Auto trim (its params are ' + b7Keys('width') + ')');
+    if (mb.label !== 'Keep bass centred' || mb.min !== 0 || mb.max !== 300 || mb.def !== 0 || !mb.keyframable || mb.unit !== 'Hz') throw new Error('Keep bass centred is ' + JSON.stringify(mb));
+    if (tr.label !== 'Auto trim' || !tr.toggle || tr.def !== 0 || !tr.rebuild || tr.keyframable) throw new Error('Auto trim is ' + JSON.stringify(tr));
+    const old = [{ type: 'video', audioFx: [{ type: 'width', enabled: true, params: { width: 1.7 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.monobass !== 0 || op.trim !== 0) throw new Error('a Stereo Width saved before these controls opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const g = v => { const n = oac.createGain(); n.gain.value = v; return n; };
+      const input = g(1), out = g(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
+      const split = oac.createChannelSplitter(2), merge = oac.createChannelMerger(2);
+      const mid = g(0.5); split.connect(mid, 0); split.connect(mid, 1);
+      const sP = g(0.5), sN = g(-0.5), side = g(1); split.connect(sP, 0); split.connect(sN, 1); sP.connect(side); sN.connect(side);
+      const w = g(1.5), wN = g(-1); w.gain.setValueAtTime(1.7, 0); side.connect(w); w.connect(wN);
+      mid.connect(merge, 0, 0); w.connect(merge, 0, 0); mid.connect(merge, 0, 1); wN.connect(merge, 0, 1);
+      input.connect(split); merge.connect(out);
+      return { input: input, output: out };
+    };
+    const same = await b3SameAsToday([{ type: 'width', enabled: true, params: op }], today, 'a saved Stereo Width');
+    if (same.length) throw new Error('CONTROL: a saved Stereo Width is not today’s sound - ' + same.join('; '));
+    const bad = [];
+    const sideAt = async (f, p, live) => {
+      const [L, R] = await afx482c(b7Fx('width', Object.assign({ width: 2 }, p)), (t, i, c) => (c ? -0.5 : 0.5) * Math.sin(2 * Math.PI * f * t), 1, { chans: 2, live: live });
+      return b7Amp(Float32Array.from(L, (v, i) => (v - R[i]) / 2), 24000, 24000, f);
+    };
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const lo0 = await sideAt(60, {}, live), lo1 = await sideAt(60, { monobass: 150 }, live), hi0 = await sideAt(1000, {}, live), hi1 = await sideAt(1000, { monobass: 150 }, live);
+      if (Math.abs(lo0) > 0.2 || Math.abs(hi0) > 0.2) throw new Error('CONTROL: Width 2 makes a side tone of 0.5 come out at ' + lo0.toFixed(2) + ' / ' + hi0.toFixed(2) + ' dB at 60 Hz / 1 kHz, not 0 dB (1.0) (' + path + ')');
+      if (!(lo0 - lo1 >= 24)) bad.push('Keep bass centred 150 Hz takes only ' + (lo0 - lo1).toFixed(1) + ' dB off the 60 Hz side (' + path + ')');
+      if (Math.abs(hi1 - hi0) > 0.2) bad.push('Keep bass centred 150 Hz moves the 1 kHz side by ' + (hi1 - hi0).toFixed(2) + ' dB (' + path + ')');
+    }
+    const pw = (chs, n) => { let e = 0; for (const d of chs) for (let i = Math.round(0.2 * SR482C); i < n; i++) e += d[i] * d[i]; return e; };
+    const n = SR482C, src = [SIG482C.noise(n, 0), SIG482C.noise(n, 1)], e0 = pw(src, n);
+    const wide = pw(await afx482c(b7Fx('width', { width: 2 }), 'noise', 1, { chans: 2 }), n), trimmed = pw(await afx482c(b7Fx('width', { width: 2, trim: 1 }), 'noise', 1, { chans: 2 }), n);
+    if (!(10 * Math.log10(wide / e0) > 3)) throw new Error('CONTROL: Width 2 on unrelated left and right comes out only ' + (10 * Math.log10(wide / e0)).toFixed(2) + ' dB louder');
+    if (Math.abs(10 * Math.log10(trimmed / e0)) > 0.5) bad.push('with Auto trim, Width 2 comes out ' + (10 * Math.log10(trimmed / e0)).toFixed(2) + ' dB from the clip’s own level');
+    const kfT = pw(await afx482c(b7Fx('width', { width: { kf: [{ t: 0, v: 2 }, { t: 1, v: 2 }] }, trim: 1 }), 'noise', 1, { chans: 2 }), n);
+    if (Math.abs(10 * Math.log10(kfT / trimmed)) > 0.05) bad.push('with Auto trim a keyframed Width held at 2 comes out ' + (10 * Math.log10(kfT / trimmed)).toFixed(3) + ' dB from a plain 2');
+    if (b8Sig('width', { trim: 0 }) === b8Sig('width', { trim: 1 })) bad.push('Auto trim on and off sign the same - the preview would not rebuild');
+    if (bad.length) throw new Error('Stereo Width: ' + bad.join('; '));
+  });
+
+  /* 8.4 — ON SCREEN: Auto trim is a tick box (clear on a new Stereo Width) and Keep bass centred a slider reading 0Hz with a
+     keyframe diamond, both inside the panel at 390 and 1280 px; a tap ticks Auto trim in one undo step. On the build before
+     the open Stereo Width shows Width, Output and Mix only. */
+  test('482 8.4 Stereo Width panel - Auto trim is a tick box and Keep bass centred a slider, inside the panel at 390 and 1280 px', { item: '482', budgetMs: 120000 }, async function () {
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('width')], 0, async p => {
+      const r = p.slider('Keep bass centred');
+      if (!r) throw new Error(p.where + ': the open Stereo Width has no Keep bass centred row');
+      await p.fits(r, 'the Keep bass centred row');
+      const v = r.querySelector('.fx-scrub-val');
+      if (!v || v.value !== '0Hz') throw new Error(p.where + ': a new Stereo Width reads Keep bass centred ' + (v && v.value) + ', not 0Hz');
+      if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': Keep bass centred has no keyframe diamond');
+      if (p.slider('Auto trim')) throw new Error(p.where + ': Auto trim is drawn as a slider');
+      const t = p.tog('Auto trim');
+      if (!t) throw new Error(p.where + ': no Auto trim tick box');
+      await p.fits(t, 'the Auto trim tick box');
+      if (t.classList.contains('on')) throw new Error(p.where + ': a new Stereo Width shows Auto trim ticked');
+      FM.history.commit();
+      attached(t.querySelector('.fx-tog'), 'the Auto trim tick box').click(); await sleep(120);
+      if (p.layer().audioFx[0].params.trim !== 1) throw new Error(p.where + ': a tap on Auto trim left it at ' + p.layer().audioFx[0].params.trim);
+      FM.history.undo(); await sleep(150);
+      if (p.layer().audioFx[0].params.trim !== 0) throw new Error(p.where + ': one Undo after the tap leaves Auto trim at ' + p.layer().audioFx[0].params.trim);
+    });
+  });
 })();

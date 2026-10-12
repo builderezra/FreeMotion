@@ -1088,8 +1088,18 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'width', label: 'Stereo Width', category: 'space',
-    params: [P('width', 'Width', 0, 2, 0.01, 1.5, '', true)],
-    build: function (ctx) {
+    params: [P('width', 'Width', 0, 2, 0.01, 1.5, '', true),
+      /* #482 polish 8.4. Widening pushes the bass apart too, and wide bass is what makes a mix sound hollow on a phone
+         speaker and lopsided in headphones. Keep bass centred takes the difference between the sides (S) away below the
+         frequency given — two Butterworth highpasses on S, 24 dB an octave, so 60 Hz under a 150 Hz setting keeps 1/40 of
+         its width — and leaves everything above it as wide as Width says. 0 is off; 1–39 act as 40 Hz, the lowest it
+         reaches. Auto trim turns the sound down as Width goes past 1 by √(2 / (1 + Width²)), which holds the level of an
+         ordinary stereo sound (left and right unrelated) where it was: at 2 it would otherwise come out 4 dB louder. Both
+         default to today's Width: Keep bass centred 0 is a bypass pair, Auto trim Off builds nothing (a rebuild). */
+      P('monobass', 'Keep bass centred', 0, 300, 1, 0, 'Hz', true),
+      TOGGLE('trim', 'Auto trim', 0, { rebuild: true, note: 'Turns the sound down as it gets wider, so wider is not also louder.' }),
+    ],
+    build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       // A ChannelSplitter is "explicit"/"discrete" by spec and immutably so: a MONO input reaches it as
@@ -1103,12 +1113,27 @@ window.FM = window.FM || {};
       const sP = s.gain(0.5), sN = s.gain(-0.5), side = s.gain(1);
       split.connect(sP, 0); split.connect(sN, 1);
       sP.connect(side); sN.connect(side);                           // S = (L−R)/2
+      // Keep bass centred (8.4): S → [two highpasses → on] + [off] → width, a bypass pair at 0.
+      const mbHz = v => clamp(v, 40, 300), mb0 = initNum(inst, 'monobass', 0, 0, 300);
+      const hp1 = s.biquad('highpass', mbHz(mb0), BUTTERWORTH_DB), hp2 = s.biquad('highpass', mbHz(mb0), BUTTERWORTH_DB);
+      hp1.connect(hp2);
+      const mb = bypassPair(s, side, hp1, hp2, mb0 > 0);
       const w = s.gain(1.5), wN = s.gain(-1);
-      side.connect(w); w.connect(wN);
+      mb.out.connect(w); w.connect(wN);
       mid.connect(merge, 0, 0); w.connect(merge, 0, 0);             // L = M + S×width
       mid.connect(merge, 0, 1); wN.connect(merge, 0, 1);            // R = M − S×width
-      input.connect(split); merge.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { width: w.gain } });
+      input.connect(split);
+      const custom = { monobass: multi([[hp1.frequency, mbHz], [hp2.frequency, mbHz]].concat(pairTargets(mb, v => v > 0))) };
+      if (!(staticOf(inst, 'width', 'trim') > 0)) {
+        merge.connect(out);
+        return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { width: w.gain }, custom: custom });
+      }
+      // Auto trim (8.4): one gain after the merge, following Width (keyframed too).
+      const trimOf = v => (v > 1 ? Math.sqrt(2 / (1 + v * v)) : 1);
+      const tg = s.gain(trimOf(initNum(inst, 'width', 1.5, 0, 2)));
+      merge.connect(tg); tg.connect(out);
+      custom.width = multi([[w.gain, null], [tg.gain, trimOf]]);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, custom: custom });
     },
   }, {
     type: 'pan', label: 'Pan', category: 'space',
