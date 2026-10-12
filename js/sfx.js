@@ -112,6 +112,8 @@ window.FM = window.FM || {};
     return Object.keys(o).length ? o : null;
   }
   const BED_EXTRAS = { intensity: ['light', 'medium', 'heavy'], surface: ['open', 'roof'] };   // the values each extra takes (9.4)
+  // Rain's Intensity (9.4): drops a second, the wash's level under them, and its top (Hz). Reasoned numbers, not yet heard.
+  const RAIN_DROPS = { light: { rate: 20, bed: 0.2, top: 6000 }, medium: { rate: 60, bed: 0.28, top: 7000 }, heavy: { rate: 120, bed: 0.38, top: 8000 } };
   /* LOOP-READY: `buf` was rendered `secs` + LOOP_XFADE long with no fades. The first LOOP_XFADE of the result is the
      render's own start fading in under the half second that followed `secs` fading out — equal power (sin / cos), because
      the two are unrelated noise — so sample 0 IS the render's sample at `secs`, the very next one after the result's last.
@@ -643,13 +645,29 @@ window.FM = window.FM || {};
         env(g.gain, t0, [[0, 0], [0.3, 0.6], [d - 0.3, 0.6], [d, 0]]);
         n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
       },
-      // The bed (9.3): the same band of noise held level for `d` (its 0.3 s fades were already the bed's edges).
-      bed(ctx, t0, d, out) {
+      /* The bed (9.3): the same band of noise held level for `d` (its 0.3 s fades were already the bed's edges).
+         RAIN WITH DROPS (9.4; backlog C21's first half, "Rain is flat static"): with an Intensity the bed is quieter and
+         drops fall on it — 20, 60 or 120 a second (Light / Medium / Heavy), each a 3–8 ms tick of noise band-passed
+         somewhere between 2 and 6 kHz, at a seeded moment and level (most small, a few close). On a roof the wash is
+         darker (500 Hz – 3.5 kHz) and the drops land as duller 8–18 ms taps at 0.7–2.5 kHz. A roof with no Intensity is
+         Medium. Without either, the bed is the plain Rain above, held. */
+      bedExtras: ['intensity', 'surface'],
+      bed(ctx, t0, d, out, o) {
+        const roof = !!(o && o.surface === 'roof'), inten = (o && o.intensity) || (roof ? 'medium' : null);
+        const k = inten ? RAIN_DROPS[inten] : null;
         const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'white');
-        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1100;
-        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 7000;
-        const g = ctx.createGain(); g.gain.value = 0.6;
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = roof ? 500 : 1100;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = roof ? 3500 : (k ? k.top : 7000);
+        const g = ctx.createGain(); g.gain.value = k ? k.bed : 0.6;
         n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        if (!k) return;
+        const r = seeded(roof ? 0x2f00f : 0xd2095);
+        playTrack(ctx, t0, d, out, (buf, sr) => eventTimes(r, 0.02, d - 0.03, 1 / k.rate, 0.002).forEach(at => {
+          const len = roof ? 0.008 + 0.01 * r() : 0.003 + 0.005 * r();
+          const f = roof ? 700 * Math.pow(2500 / 700, r()) : 2000 * Math.pow(3, r());
+          // `len` is how long it is heard: it falls ~40 dB by then and is written out to twice that, so nothing is cut off
+          burst(buf, sr, r, at, { len: 2 * len, f: f, q: roof ? 0.8 : 0.9, peak: 1 + 2 * r() * r(), atk: roof ? 0.0008 : 0.0004, dec: 2 * len });
+        }));
       },
     },
     {

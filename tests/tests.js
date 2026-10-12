@@ -129900,4 +129900,60 @@
     if (bad.length) throw new Error('Nature beds: ' + bad.join(' · '));
   });
   // ── end 482 9.3 ──
+  /* 9.4 — RAIN WITH DROPS. Rain was flat static (backlog C21). With an Intensity the wash drops under falling drops: 20 / 60
+     / 120 a second for Light / Medium / Heavy, each a 3–8 ms tick of seeded noise band-passed between 2 and 6 kHz. Counted
+     as transients over 1–9 s of a 10 s render: 1 ms RMS frames, a transient where a frame climbs past twice the quietest
+     fifth of the 100 ms around it (a rising edge, so one drop counts once). Medium shows at least 20 a second (the
+     backlog's test; measured in node 46), Light at least 10 (19.8), Heavy more than Medium (56), and the plain bed — Rain
+     held with no Intensity, today's sound — under one (0.0: the CONTROL that the count does not find drops in static).
+     On a roof the wash is darker and the drops duller: the energy above 4 kHz against 0.2–2 kHz is at least 6 dB lower than
+     in the open (measured 9.7). The same options render the same samples twice; the clip says what it is ("Rain (10 s,
+     heavy, on a roof).wav"); optionsFor offers Intensity and Surface on Rain only. On the build before the options are
+     ignored, so Medium counts no drops at all (first check). */
+  const b9Hits = (d, a, b, sr) => {
+    sr = sr || 44100;
+    const F = Math.round(sr / 1000), env = [];
+    for (let i = 0; i + F <= d.length; i += F) { let s = 0; for (let j = 0; j < F; j++) s += d[i + j] * d[i + j]; env.push(Math.sqrt(s / F)); }
+    const f0 = Math.round(a * 1000), f1 = Math.round(b * 1000);
+    let n = 0, prev = false;
+    for (let i = f0; i < f1; i++) {
+      const w = env.slice(Math.max(0, i - 50), i + 51).sort((x, y) => x - y), on = env[i] > 2 * w[Math.floor(w.length * 0.2)];
+      if (on && !prev) n++; prev = on;
+    }
+    return n / (b - a);
+  };
+  // Energy (dB) of d between f0 and f1 Hz at 44.1 kHz, summed over 4096-sample frames from a to b seconds.
+  const b9Band = (d, a, b, f0, f1) => {
+    const N = 4096, SR = 44100; let e = 0;
+    for (let s = Math.floor(a * SR); s + N <= b * SR; s += N) {
+      const re = new Float64Array(N), im = new Float64Array(N);
+      for (let i = 0; i < N; i++) re[i] = d[s + i];
+      fft482c(re, im);
+      for (let k = Math.ceil(f0 * N / SR); k <= Math.floor(f1 * N / SR); k++) e += re[k] * re[k] + im[k] * im[k];
+    }
+    return 10 * Math.log10(Math.max(1e-30, e));
+  };
+  test('482 9.4 Rain with drops - Light, Medium and Heavy drops fall on the wash (at least 20 a second at Medium), a roof is darker and duller, and plain Rain is still static', { item: '482', budgetMs: 180000 }, async function () {
+    const S = FM.sfx, rain = S && S.byId && S.byId('rain');
+    if (!rain || !S.renderBuffer) throw new Error('FM.sfx.renderBuffer / byId missing');
+    const r = async o => (await S.renderBuffer(rain, Object.assign({ length: 10 }, o))).getChannelData(0);
+    const med = await r({ intensity: 'medium' }), nMed = b9Hits(med, 1, 9);
+    if (!(nMed >= 20)) throw new Error('Medium rain shows ' + nMed.toFixed(1) + ' drops a second over its wash - want at least 20');
+    const bad = [];
+    const nFlat = b9Hits(await r({}), 1, 9);
+    if (!(nFlat < 1)) throw new Error('CONTROL: plain Rain (static, no drops) counts ' + nFlat.toFixed(1) + ' transients a second - the count is finding drops in static');
+    const nLight = b9Hits(await r({ intensity: 'light' }), 1, 9), nHeavy = b9Hits(await r({ intensity: 'heavy' }), 1, 9);
+    if (!(nLight >= 10)) bad.push('Light rain shows ' + nLight.toFixed(1) + ' drops a second - want at least 10');
+    if (!(nHeavy > nMed)) bad.push('Heavy rain shows ' + nHeavy.toFixed(1) + ' drops a second, Medium ' + nMed.toFixed(1) + ' - Heavy should show more');
+    const tilt = d => b9Band(d, 1, 9, 4000, 12000) - b9Band(d, 1, 9, 200, 2000);
+    const roof = await r({ intensity: 'medium', surface: 'roof' }), tOpen = tilt(med), tRoof = tilt(roof);
+    if (!(tOpen - tRoof >= 6)) bad.push('rain on a roof has its top (4–12 kHz against 0.2–2 kHz) at ' + tRoof.toFixed(1) + ' dB, in the open ' + tOpen.toFixed(1) + ' - not 6 dB duller');
+    const again = await r({ intensity: 'medium' });
+    if (again.length !== med.length || again.some((v, i) => v !== med[i])) bad.push('Medium rain renders different samples twice - the drops are not seeded');
+    if (S.fileName(rain, { length: 10, intensity: 'heavy', surface: 'roof' }) !== 'Rain (10 s, heavy, on a roof).wav') bad.push('the clip is named ' + S.fileName(rain, { length: 10, intensity: 'heavy', surface: 'roof' }));
+    const of = S.optionsFor(rain), ow = S.optionsFor(S.byId('wind'));
+    if (!of || (of.intensity || []).join('|') !== 'light|medium|heavy' || (of.surface || []).join('|') !== 'open|roof' || 'intensity' in ow || 'surface' in ow) bad.push('optionsFor offers ' + JSON.stringify(of) + ' on Rain and ' + JSON.stringify(ow) + ' on Wind');
+    if (bad.length) throw new Error('Rain: ' + bad.join(' · '));
+  });
+  // ── end 482 9.4 ──
 })();
