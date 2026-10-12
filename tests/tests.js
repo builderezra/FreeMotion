@@ -125137,4 +125137,71 @@
       if (back.style !== 0 || back.lowcut !== 300 || back.highcut !== 3400 || back.grit !== 30) throw new Error(p.where + ': one Undo after Megaphone leaves ' + JSON.stringify(back));
     });
   });
+
+  /* 7.5 — SLOPE. A 2nd-order low-pass is down 1/sqrt((1 - r^2)^2 + (r/Q)^2) at r = f / corner: at two octaves (r = 4) about
+     24 dB whatever its Q, so a stack of N is about 24 x N — by the spec's biquad formulas at 48 kHz, 24.5 / 48.9 / 73.4 /
+     97.8 dB at 12 / 24 / 36 / 48 dB/oct (the backlog: 4 kHz at least 80 down at 48, today about 24). Two octaves under the corner every stack passes (a 250 Hz tone within 1 dB). A
+     Band-Pass or Notch stacks the same filter, so its dB multiply by N exactly: at 48 a Band-Pass (Q 2, 1200 Hz) is 4x as
+     far down at 300 Hz and still 0 dB at its centre; a Notch (Q 8, 1000 Hz) is 4x as deep 100 Hz off its centre and
+     untouched at 3 kHz. On the build before there is no slope key (first line) and every stack is one biquad. CONTROL: a
+     saved filter is today's single biquad, sample for sample. */
+  test('482 7.5 Low-Pass, High-Pass, Band-Pass and Notch - Slope stacks the filter: a 1 kHz Low-Pass at 48 dB has 4 kHz at least 80 dB down, the passband stays, and 12 is today’s filter', { item: '482', budgetMs: 150000 }, async function () {
+    for (const type of ['lowpass', 'highpass', 'bandpass', 'notch']) {
+      const pd = b7Pd(type, 'slope');
+      if (!pd) throw new Error('the ' + type + ' has no Slope (its params are ' + b7Keys(type) + ')');
+      if (pd.options.map(o => o[0]).join() !== '12,24,36,48' || pd.def !== 12 || !pd.rebuild) throw new Error(type + ' Slope is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'lowpass', enabled: true, params: { freq: 2000, q: 3 } }] }];
+    FM.storage._sanitizeLayers(old);
+    if (old[0].audioFx[0].params.slope !== 12) throw new Error('a Low-Pass saved before Slope existed opens at ' + old[0].audioFx[0].params.slope);
+    const today = oac => { const b = oac.createBiquadFilter(); b.type = 'lowpass'; b.frequency.value = 2000; b.Q.value = 3; return { input: b, output: b }; };
+    const same = await b3SameAsToday([{ type: 'lowpass', enabled: true, params: old[0].audioFx[0].params }], today, 'a saved Low-Pass');
+    if (same.length) throw new Error('CONTROL: a saved Low-Pass is not today’s filter - ' + same.join('; '));
+    const lv = async (type, p, f, live) => b3Db(b3Rms(await b3Render(b7Fx(type, p), b3Sine(0.5, f), 1, { live: live }), 0.5, 1));
+    const bad = [];
+    for (const [type, corner, pass, stop] of [['lowpass', 1000, 250, 4000], ['highpass', 1000, 4000, 250]]) {
+      const att = {};
+      for (const sl of [12, 24, 36, 48]) {
+        const pv = await lv(type, { freq: corner, slope: sl }, pass), sv = await lv(type, { freq: corner, slope: sl }, stop);
+        att[sl] = pv - sv;
+        if (Math.abs(pv - b3Db(0.5 / Math.SQRT2)) > 1) bad.push(type + ' at ' + sl + ' dB moves its passband (' + pass + ' Hz) by ' + (pv - b3Db(0.5 / Math.SQRT2)).toFixed(2) + ' dB');
+      }
+      if (!(att[12] > 18 && att[12] < 30)) throw new Error('CONTROL: a single ' + type + ' at ' + corner + ' Hz has ' + stop + ' Hz ' + att[12].toFixed(1) + ' dB down - not the 23.5 dB of one biquad two octaves out');
+      if (!(att[24] >= 40 && att[36] >= 60 && att[48] >= 80)) bad.push(type + ' at ' + corner + ' Hz has ' + stop + ' Hz down ' + [12, 24, 36, 48].map(s => s + ': ' + att[s].toFixed(1)).join(', ') + ' dB - want at least 40 / 60 / 80 for 24 / 36 / 48');
+    }
+    const bp1 = await lv('bandpass', { freq: 1200, q: 2, slope: 12 }, 300), bp4 = await lv('bandpass', { freq: 1200, q: 2, slope: 48 }, 300), bpc = await lv('bandpass', { freq: 1200, q: 2, slope: 48 }, 1200), ref = b3Db(0.5 / Math.SQRT2);
+    if (!((ref - bp4) >= 3.5 * (ref - bp1))) bad.push('Band-Pass Steepest is ' + (ref - bp4).toFixed(1) + ' dB down at 300 Hz where one stage is ' + (ref - bp1).toFixed(1) + ' - not about 4x');
+    if (Math.abs(bpc - ref) > 1) bad.push('Band-Pass Steepest moves its centre by ' + (bpc - ref).toFixed(2) + ' dB');
+    const n1 = await lv('notch', { freq: 1000, q: 8, slope: 12 }, 1100), n4 = await lv('notch', { freq: 1000, q: 8, slope: 48 }, 1100), np = await lv('notch', { freq: 1000, q: 8, slope: 48 }, 3000);
+    if (!((ref - n4) >= 3 * (ref - n1))) bad.push('Notch Steepest is ' + (ref - n4).toFixed(2) + ' dB down 100 Hz off its centre where one stage is ' + (ref - n1).toFixed(2));
+    if (Math.abs(np - ref) > 0.5) bad.push('Notch Steepest moves 3 kHz by ' + (np - ref).toFixed(2) + ' dB');
+    const ex = await b3Render(b7Fx('lowpass', { freq: 1500, q: 4, slope: 36 }), B3_SIGNALS.noise, 1), pr = await b3Render(b7Fx('lowpass', { freq: 1500, q: 4, slope: 36 }), B3_SIGNALS.noise, 1, { live: true });
+    let pw = 0; for (let i = 0; i < ex.length; i++) pw = Math.max(pw, Math.abs(ex[i] - pr[i]));
+    if (pw > 1e-6) bad.push('a 36 dB Low-Pass in the preview is up to ' + pw.toExponential(2) + ' from the export');
+    const kf = await lv('lowpass', { freq: { kf: [{ t: 0, v: 4000 }, { t: 0.4, v: 1000 }, { t: 1, v: 1000 }] }, slope: 48 }, 4000), st = await lv('lowpass', { freq: 1000, slope: 48 }, 4000);
+    if (Math.abs(kf - st) > 3) bad.push('a 48 dB Low-Pass with Frequency keyframed 4000 -> 1000 leaves 4 kHz at ' + kf.toFixed(1) + ' dBFS after the key, a static 1000 at ' + st.toFixed(1) + ' - the keyframe does not reach every stage');
+    if (bad.length) throw new Error('Slope: ' + bad.join('; '));
+  });
+
+  /* 7.5 — ON SCREEN: Slope is four buttons, in dB on Low-Pass, in words on Band-Pass (a band's skirts are not 12 dB/oct), all
+     inside the panel at both widths; a tap on 48 dB writes 48 in one undo step and moves the preview signature. */
+  test('482 7.5 Filter panels - Slope is four buttons, 12 dB to 48 dB on Low-Pass and Gentle to Steepest on Band-Pass, that fit at 390 and 1280 px, and a tap rebuilds the preview', { item: '482', budgetMs: 120000 }, async function () {
+    for (const [type, words] of [['lowpass', '12 dB|24 dB|36 dB|48 dB'], ['bandpass', 'Gentle|Steep|Steeper|Steepest']]) {
+      await b7Panel(() => [FM.audioFxRegistry.makeInstance(type)], 0, async p => {
+        const row = p.seg('Slope');
+        if (!row) throw new Error(p.where + ': the open ' + type + ' has no Slope buttons');
+        const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+        if (btns.map(b => b.textContent).join('|') !== words) throw new Error(p.where + ': ' + type + ' Slope offers ' + btns.map(b => b.textContent).join(', '));
+        if (!btns[0].classList.contains('on')) throw new Error(p.where + ': a new ' + type + ' does not light its first Slope');
+        for (const b of btns) await p.fits(b, 'the Slope button ' + b.textContent);
+        const sig0 = FM.audioFxLive.signatureOf(p.layer());
+        FM.history.commit();
+        attached(btns[3], 'the steepest Slope button').click(); await sleep(150);
+        if (p.layer().audioFx[0].params.slope !== 48) throw new Error(p.where + ': a tap on ' + btns[3].textContent + ' left Slope at ' + p.layer().audioFx[0].params.slope);
+        if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': a new Slope did not move the preview signature');
+        FM.history.undo(); await sleep(150);
+        if (p.layer().audioFx[0].params.slope !== 12) throw new Error(p.where + ': one Undo leaves Slope at ' + p.layer().audioFx[0].params.slope);
+      });
+    }
+  });
 })();

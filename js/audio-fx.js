@@ -605,14 +605,41 @@ window.FM = window.FM || {};
 
   /* ---- EQ & Filter ---- */
   // The four plain filters differ only in biquad type and ranges.
+  /* ═══ SLOPE (#482 polish 7.5) ═══════════════════════════════════════════════════════════════════════════════════════
+   * Each was one biquad: a Low-/High-Pass falls 12 dB an octave past its corner, so "cut everything over 1 kHz" still let
+   * 4 kHz through only 24 dB down. Slope stacks 1–4 biquads on the same Frequency (a rebuild; the value is the dB per
+   * octave, 12 a stage). For Low-/High-Pass the inner stages carry the Butterworth Qs of the whole order — the flat,
+   * peak-free ones (bwStageDb) — and the LAST carries the Resonance slider, so the corner's bump is still his to set; at 48
+   * dB a 1 kHz Low-Pass has 4 kHz about 98 dB down by the spec's biquad formulas (24.5 at 12). A Band-Pass or Notch stacks the same filter on itself:
+   * steeper skirts, a wider and deeper notch (its buttons say how steep in words — a band's skirts are not 12 dB/oct).
+   * 12 (the default, and every saved filter) is today's single biquad, the very node it always was. */
+  const SLOPES_DB = [[12, '12 dB'], [24, '24 dB'], [36, '36 dB'], [48, '48 dB']];
+  const SLOPES_WORDS = [[12, 'Gentle'], [24, 'Steep'], [36, 'Steeper'], [48, 'Steepest']];
+  // The Butterworth stage Qs of a 2N-order low/high-pass, lowest first, in the dB a lowpass/highpass biquad's Q is read in.
+  function bwStageDb(N) {
+    const out = [];
+    for (let k = 1; k <= N; k++) out.push(20 * Math.log10(1 / (2 * Math.cos((2 * k - 1) * Math.PI / (4 * N)))));
+    return out;
+  }
   function filterDef(type, label, biq, fMin, fMax, fDef, qMin, qMax, qDef) {
+    const lphp = biq === 'lowpass' || biq === 'highpass';
     return {
       type: type, label: label, category: 'eq',
-      params: [P('freq', 'Frequency', fMin, fMax, 1, fDef, 'Hz', true), P('q', 'Resonance', qMin, qMax, 0.1, qDef, '', true)],
-      build: function (ctx) {
+      params: [P('freq', 'Frequency', fMin, fMax, 1, fDef, 'Hz', true), P('q', 'Resonance', qMin, qMax, 0.1, qDef, '', true),
+        CHOICE('slope', 'Slope', lphp ? SLOPES_DB : SLOPES_WORDS, 12, { rebuild: true })],
+      build: function (ctx, inst) {
         const s = shop(ctx);
-        const n = s.biquad(biq, fDef, qDef);
-        return unit({ input: n, output: n, nodes: s.nodes, oscs: s.oscs, params: { freq: n.frequency, q: n.Q } });
+        const N = Math.max(1, Math.round(staticOf(inst, type, 'slope') / 12));
+        if (N === 1) {
+          const n = s.biquad(biq, fDef, qDef);
+          return unit({ input: n, output: n, nodes: s.nodes, oscs: s.oscs, params: { freq: n.frequency, q: n.Q } });
+        }
+        const bw = bwStageDb(N), st = [];
+        for (let i = 0; i < N; i++) st.push(s.biquad(biq, fDef, (lphp && i < N - 1) ? bw[i] : qDef));
+        for (let i = 1; i < N; i++) st[i - 1].connect(st[i]);
+        const qOf = lphp ? [st[N - 1]] : st;   // the stages the Resonance slider drives
+        return unit({ input: st[0], output: st[N - 1], nodes: s.nodes, oscs: s.oscs,
+          custom: { freq: multi(st.map(n => [n.frequency, null])), q: multi(qOf.map(n => [n.Q, null])) } });
       },
     };
   }
