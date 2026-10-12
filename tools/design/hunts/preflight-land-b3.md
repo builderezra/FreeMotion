@@ -188,3 +188,37 @@ main and live are on `C.SCHEMA_REV = 8` / `SCHEMA_FP 8673617696742561`. Three gr
 
 ### Fix branch status
 `hunt/land-b3-fixes` (5 commits on 45a97e1, not yet pushed) clears the seven a73ab63 reds (Unsharp Protect colour def 0 + REV 9 / FP 1932349802248846), drops RGB Split's floor, adds FM.integrateCount for F1, and makes the Unsharp memory and Roughen tests real, each proven red-first with tools/mutate.sh --only. Its check found three more keyed-rate step sites (Shake hard jitter, Pulse Square, Scanlines Roll) and wrong 'queue 482' wording; a second round is fixing those before the branch is pushed. The Radial Wipe red (queue 264) is left for a decision.
+
+### ✅ Fix branch pushed: `hunt/fix-land-b3` (12 Oct, f3116e64): take it instead of hunt/land-b3
+
+(Named `hunt/fix-land-b3`, not `hunt/land-b3-fixes`, so it can never be mistaken for a builder `hunt/land-*` branch.) 8 commits on origin/hunt/land-b3 45a97e1f. Subjects say `(#1068 B2/B3, refers to #482)` and `(#1068 B3, schema refers to #921)`: none CLAIMS queue 482 or 921, so the POLISH line will not trip ship.sh's queue-claim gate. The first five are the earlier commits reworded only (their final tree is byte-identical to the unpushed 3f6bd1a).
+
+| commit | what |
+|---|---|
+| d13eeb7d | Unsharp Mask Protect colour defaults to 0; SCHEMA_REV 9 / FP 1932349802248846 (see the REV warning above) |
+| d82a374a | RGB Split drops the 1-plate-pixel floor (0f8ec39b) |
+| b8156975 | F1: `FM.integrateCount` at the nine floor sites (Scramble Text, Noise, Film Grain, Chunk Noise, Flicker, Dissolve, Electric Edges, Lightning, Speed Lines boil) |
+| 47519d9f | Unsharp Mask memory test catches the second float plane |
+| 2d4e316a | Roughen Edges test replaced (it was tautological) |
+| c025b5ca | F1 at the three sites the first pass missed: Shake Hardness + Smear (+1e-9), Pulse Square (+1e-9), Scanlines Roll (−1e-9: a ceiling edge) |
+| 550b18a8 | a test that catches Frame Stutter's keyed +1e-9 (Strobe and Hold, Rate 8 at 24 fps) |
+| f3116e64 | Frame Stutter Strobe keeps a frame exactly on the Duty lit with a keyed Rate (`duty + 2e-9` when keyed) |
+
+**Proof (adversarial check, 12 Oct):** every new epsilon removed with `tools/mutate.sh --only` is CAUGHT (Shake u0 61/301 frames, Shake smear 33/241, Pulse 5 frames per track, Scanlines 75/241 and the wrong sign 241/241, Frame Stutter phase 11/241 dark, Duty threshold 120/241). The five new tests are green at 1280 and 380. Every test the branch adds or changes fails against land-b3's source (or, for the three whose subject is already in land-b3, against land-b1's): no test passes without its fix. Every B2/F1 edit sits inside an `FM.isAnimated(...)` branch; the only unkeyed changes are the two intended B3 ones (RGB Split rounding, Unsharp Protect default for NEW instances). Busters vs land-b3: compositor 215→218, scene 119→120, collab-core 25→26. `node --check` clean.
+**Slices on the branch:** `?only=482` at 1280: 113/115, the same two reds with identical hashes on land-b1 (2.6 Motion Blur Object and 3.0 Echo and Reverb are this machine's pinned/audio baselines). `?only=690%20`: 150 pass, 63 NOT RUN HERE, 16 FAIL, all 16 video-codec failures that fail identically alone on land-b1; every keyed-rate and B3 test passes.
+
+**Non-blocking notes:**
+- Frame Stutter `duty + 2e-9` with Irregular holds (irr > 0): the margin becomes 2e-9 − 1e-9/qLen, so below qLen 0.5 a frame EXACTLY on the duty would go dark. That needs a frame within ~1e-8 of a hashed edge, practically impossible. A cleaner form if you want it: `(phase - 1e-9 - qLo) / qLen > duty + 1e-9` (identical when irr = 0).
+- Code comments still say "queue 482" in a few places (scene.js integrateCount, both RGB Split dd lines, the Unsharp param, collab-core's SCHEMA_REV). Only the POLISH line is gated, so this is cosmetic.
+- Test environment, not the branch: here `?only=690%20` cannot finish in one pass. Tests "690 swiping the share sheet away after Save…" and "690 an export holds the screen awake…" freeze the page on land-b1 too (likely an `alert()` for NO_VIDEO_CODEC that tests/_cdp.py never dismisses). The laptop has H.264, so it should not see this.
+
+**Suggested POLISH-LOG wording** (plain words; say B2's line as how it behaves NOW, since land-b1 never had a boundary miss for Shake/Pulse/Scanlines/Frame Stutter):
+1. Effects with a keyframed Speed or Rate now move the way the same value does without keyframes, and carry on from where they are when the speed changes. Slowing the speed to 0 holds the picture where it got to, instead of jumping back to the start.
+2. VHS Tape: when a keyframed tracking speed comes down to 0, the tracking band freezes where it is. It used to vanish.
+3. RGB Split: the Green shift fringe shows past the edge of the layer. An Amount between 0 and 0.5 (for example while a keyframe eases in from 0) draws no shift in an export again, and the phone preview shifts as far as the export does.
+4. Film Grain and Speed Lines (Boil) with a keyframed speed: frames that land exactly on a step show the right grain or lines, the same as that speed without keyframes. A saved project with a keyed speed on either effect changes on those frames only.
+5. Shake (Hardness and Smear), Pulse (Square), Scanlines (Roll) and Frame Stutter (Hold and Strobe) with a keyframed speed or rate: frames that land exactly on a step match the same value without keyframes.
+6. Unsharp Mask: Protect colour starts at 0 (off) on a new Unsharp Mask and in the Cold Steel and Overdrive filters, so they keep their usual look.
+(Lines 4 and 5 were checked in the browser; 2 and 3 against the code only.)
+
+**Still needs Ezra:** Radial Wipe at Progress 0 erases the layer (queue 264), the one land-b3 red the fix branch does not touch.
