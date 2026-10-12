@@ -569,7 +569,7 @@ window.FM = window.FM || {};
           /* THROUGH THE SESSION, not straight into the host's table (queue 921 S3 review): `H.setRole`
              moves a number here and tells nobody, so a demoted guest kept the full editing UI and found
              out one refused edit at a time. `setPeerRole` does both halves or neither. */
-          return { label: roleItem(p), action: function () { s.setPeerRole(mid, p[0]); noteRole(mid, p[0]); redrawShare(); } };
+          return { label: roleItem(p), action: function () { U.setMemberRole(mid, p[0]); } };
         });
         items.push({ sep: true });
         /* §19.1: Follow sits in the same menu, between the roles and Remove. */
@@ -663,10 +663,59 @@ window.FM = window.FM || {};
   U._forgetRid = forgetRid;
   /* Simple mode P2 (DESIGN.md §3.7 (b)): the room's REMEMBERED editors — a member keeps its row (and its offline changes) after
      its connection drops, until it leaves or is removed. Read-only; FM.collab.othersCanEdit is its one reader. */
+  /* Release 2.6 (DESIGN.md §3.7): ARRANGE ANYWAY. A remembered editor whose connection dropped keeps arranging off until they leave, are
+     removed, or the owner confirms once from the Simple line. `waived` holds those rids for THIS session only (emptied at every arm and at
+     the end), and a waived member who reconnects leaves it, so the gate shuts again (pruned lazily by whoever asks, so no event is needed). */
+  let waived = Object.create(null);
+  function pruneWaived() {
+    const s = C.session;
+    Object.keys(waived).forEach(function (rid) {
+      if (!memberByRid(rid)) { delete waived[rid]; return; }
+      if (s && ridMid[rid] && s.peerIds && s.peerIds().indexOf(ridMid[rid]) >= 0) delete waived[rid];
+    });
+  }
+  function hereRid(rid) { const s = C.session; return !!(s && ridMid[rid] && s.peerIds && s.peerIds().indexOf(ridMid[rid]) >= 0); }
   U.roomEditors = function () {
     if (!hostRoom || !hostRoom.members) return [];
     if (hostRoomPid && FM.projects && FM.projects.currentId && hostRoomPid !== FM.projects.currentId()) return [];
-    return Object.keys(hostRoom.members).filter(rid => { const m = hostRoom.members[rid]; return !!m && m.role === 'editor'; });
+    pruneWaived();
+    return Object.keys(hostRoom.members).filter(rid => { const m = hostRoom.members[rid]; return !!m && m.role === 'editor' && !waived[rid]; });
+  };
+  /* The ones the gate is waiting for that are NOT here right now: [{ rid, name }], the Simple line's "Sam is offline" and what Arrange anyway waives. */
+  U.offlineEditors = function () {
+    return U.roomEditors().filter(function (rid) { return !hereRid(rid); }).map(function (rid) { return { rid: rid, name: cleanName(hostRoom.members[rid].name) || 'Someone' }; });
+  };
+  U.waiveOffline = function (rids) {
+    if (!hostRoom) return 0;
+    let n = 0;
+    (rids || U.offlineEditors().map(function (e) { return e.rid; })).forEach(function (rid) {
+      if (memberByRid(rid) && !hereRid(rid) && !waived[rid]) { waived[rid] = 1; n++; }
+    });
+    return n;
+  };
+  U._waived = function () { pruneWaived(); return Object.keys(waived); };
+  /* suite seam (2.6): stand a member table in for a room the sheet would have made, and say which engine mid each rid has right now; returns what to hand back. */
+  U._testRoom = function (room, pid, map) {
+    const was = { room: hostRoom, pid: hostRoomPid, map: ridMid, waived: waived };
+    hostRoom = room; hostRoomPid = pid; ridMid = map || Object.create(null); waived = Object.create(null);
+    return was;
+  };
+  U._testRoomBack = function (was) { hostRoom = was.room; hostRoomPid = was.pid; ridMid = was.map; waived = was.waived; };
+  /* ONE PATH for a role change (DESIGN §3.11): the People menu and the Simple line's Make Sam a Viewer both come here. `setPeerRole` alone left the
+     persisted role at editor (the gate stayed shut and Sam came back an Editor), so it is always followed by `noteRole`. A member who is not
+     connected has no mid, so `setPeerRole` refuses it: that one is a row (`rid`) and only the persisted role changes, which is what the gate and
+     the reconnect read. */
+  U.setMemberRole = function (who, role) {
+    const s = C.session;
+    if (!hostRoom || !s || ['editor', 'commenter', 'viewer'].indexOf(role) < 0) return false;
+    const m = memberByRid(who);
+    if (m) {
+      if (hereRid(who)) { const mid = ridMid[who]; s.setPeerRole(mid, role); noteRole(mid, role); }
+      else { m.role = role; saveRoom(currentPid(), hostRoom); }
+    } else if (s.setPeerRole && s.setPeerRole(who, role) !== false) noteRole(who, role);
+    else return false;
+    redrawShare();
+    return true;
   };
   /* A guest's `bye` (collab-session.js, through the bridge). ⚠️ ONLY `left`: a guest on `paused` switched to
      another project and is still a member. Leave throws the device's token away (the copy becomes its own, or
@@ -1280,7 +1329,7 @@ window.FM = window.FM || {};
     forgetPeerNotes();                       // #967: notes from a session that ended are not this one's
     /* #967 B3: live again — the room no longer carries the mark of the switch that paused it (see U.onDetach). */
     if (hostRoom && (hostRoom.paused || hostRoom.coded != null)) { delete hostRoom.paused; delete hostRoom.coded; saveRoom(hostRoomPid || currentPid(), hostRoom); }
-    ridMid = Object.create(null);
+    ridMid = Object.create(null); waived = Object.create(null);
     hostOlder = null;
     startHostRelay();
     /* S7: the room's switches reach every member from the first hello (collab-session.js sends them with
@@ -3272,6 +3321,32 @@ window.FM = window.FM || {};
   /* A shared copy that has no session right now — reopened, and finding its owner, or with nothing to
      find it through (S6 review). The same card a guest gets, saying what is true, and a Leave that works
      without a session: the copy becomes his own, exactly as Leave does in a session. */
+  /* Release 2.6 (DESIGN §3.11, the `offline` row): THE LEAVE ROUTE OF A LINKED COPY, one function. The Friends card's Leave and Simple's "Make it my own"
+     both call it, so a copy whose owner closed the app, paused or never came back (gated for good otherwise) has a way out that is the same
+     confirm, the same `ended: 'left'` mark BEFORE the copy is made (a copy that cannot be finished, a full device, is still never dialled
+     again), the same `detachLinked`, and the same two sentences. `onConfirm` runs once the person has said yes (the card closes then).
+     Resolves true when it went ahead, false when they said no. */
+  U.leaveKeep = function (pid, onConfirm) {
+    pid = pid || currentPid();
+    const s = C.session;
+    return FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device as a project of your own.', ok: LEAVE_KEEP, cancel: 'Cancel' })
+      .then(function (yes) {
+        if (!yes) return false;
+        if (onConfirm) { try { onConfirm(); } catch (e) {} }
+        if (s && !s.isOwner && C.active && pid === currentPid()) { leaveKeeping(s); return true; }   // a live session: the full route (room check, "Leaving…")
+        if (recon && recon.gpid === pid) stopRecon();
+        if (!FM.projects || !FM.projects.detachLinked) return true;
+        try { if (FM.projects.patchCollab) FM.projects.patchCollab(pid, { ended: 'left' }); } catch (e) {}
+        joinBusy++;
+        carryUnread(FM.projects.detachLinked(pid)).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
+          joinBusy = Math.max(0, joinBusy - 1); U.syncBanner();
+          if (nid) { if (FM.toast) FM.toast('You left — this is now your own copy', 2600); return; }
+          FM.ask({ title: 'Your copy could not be made your own', ok: 'OK', single: true,
+            message: 'This device could not finish copying the project — it may be full. The copy stays as it is and will not reconnect; free some space and open it to try again, or delete it from Home.' });
+        });
+        return true;
+      });
+  };
   function drawLinkedPanel(pc, host) {
     const pid = pc.id;
     const who = hostNameFor(pid);
@@ -3298,23 +3373,7 @@ window.FM = window.FM || {};
     c.appendChild(offRow(host));   // #967 batch 2: the switch that stays, on a shared copy too
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-stop', 'Leave', function () {
-      FM.ask({ title: 'Leave this project?', message: 'You stop getting their changes. Your copy stays on this device as a project of your own.', ok: LEAVE_KEEP, cancel: 'Cancel' })
-        .then(function (yes) {
-          if (!yes) return;
-          if (recon && recon.gpid === pid) stopRecon();
-          if (host) closeAny(); else closeCard();
-          if (!FM.projects || !FM.projects.detachLinked) return;
-          /* S8 review: marked left FIRST, so a copy that cannot be finished (a full device) is still never dialled
-             again — and the result is said either way. */
-          try { if (FM.projects.patchCollab) FM.projects.patchCollab(pid, { ended: 'left' }); } catch (e) {}
-          joinBusy++;
-          carryUnread(FM.projects.detachLinked(pid)).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
-            joinBusy = Math.max(0, joinBusy - 1); U.syncBanner();
-            if (nid) { if (FM.toast) FM.toast('You left — this is now your own copy', 2600); return; }
-            FM.ask({ title: 'Your copy could not be made your own', ok: 'OK', single: true,
-              message: 'This device could not finish copying the project — it may be full. The copy stays as it is and will not reconnect; free some space and open it to try again, or delete it from Home.' });
-          });
-        });
+      U.leaveKeep(pid, function () { if (host) closeAny(); else closeCard(); });
     }));
     foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
     c.appendChild(foot);
@@ -4697,7 +4756,7 @@ window.FM = window.FM || {};
     if (s && !s.isOwner && s.gpid && !(recon && recon.gpid === s.gpid && !recon.stopped)) dropLock(guestLock(s.gpid));
     if (!s || s.isOwner) {
       stopCkpt();
-      stopHostRelay(); dropWake(); ridMid = Object.create(null); hostOlder = null;
+      stopHostRelay(); dropWake(); ridMid = Object.create(null); waived = Object.create(null); hostOlder = null;
       cancelKnocks(s && s.stopWhy === 'paused' ? 'paused' : 'ended');
     }
     if (recon && (!s || recon.gpid === s.gpid || recon.mode === 'live')) stopRecon();
