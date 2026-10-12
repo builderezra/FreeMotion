@@ -894,6 +894,13 @@ window.FM = window.FM || {};
   }
   FM._scrubGesture = scrubGesture;
 
+  /* Where a value in a row's gap lands (#482 batch 8 review; fxScrubber `offUntil`): 0 is Off and nothing rests in 1…gap−1.
+     Coming down from the gap's top or above → 0; otherwise (coming up from Off, or typed: `from` null) → the gap's top. */
+  function offGapSnap(gap, v, from) {
+    if (!(v > 0 && v < gap)) return v;
+    return (from != null && from >= gap) ? 0 : gap;
+  }
+  FM._offGapSnap = offGapSnap;   // suite seam
   // re-scrolls the ruler (call after a typed value).
   function tickStrip(o) {
     const strip = el('div', 'fx-scrub');
@@ -991,10 +998,17 @@ window.FM = window.FM || {};
       const before = cur;
       cur = Math.max(o.min, Math.min(o.max, cur - dx * q / TICK));
       const grid = scrubGrid(fine, o.step, q);
-      const v = Math.max(o.min, Math.min(o.max, o.min + Math.round((cur - o.min) / grid) * grid));   // land ON a notch (the grid can overshoot an off-grid max)
+      let v = Math.max(o.min, Math.min(o.max, o.min + Math.round((cur - o.min) / grid) * grid));   // land ON a notch (the grid can overshoot an off-grid max)
+      /* A ROW WITH A GAP (#482 batch 8 review: Tempo, Keep bass centred — 0 is Off, nothing rests in 1–39). o.snap moves a
+         value that lands in the gap across it, judged against where the row stood; the ruler's own position jumps with it,
+         or the next notch would land back in the gap and the value would flick between the two ends. */
+      if (o.snap) { const s = o.snap(v, lastApplied != null ? lastApplied : o.read()); if (s !== v) { v = s; cur = s; } }
       if (v !== lastApplied) { lastApplied = v; o.apply(v); sync(v); }
       return Math.abs(cur - before) > 1e-9;   // false at a wall → the glide stops rather than spinning
     };
+    /* Suite seam: one drag of the ruler, moved by each of `dxs` screen px in turn — starting as a pointerdown does (re-read the
+       value, nothing applied yet). Synthetic pointer drags are unreliable on this control (queue 455's note). */
+    strip._drag = dxs => { cur = o.read(); lastApplied = null; dxs.forEach(dx => applyDx(dx, false)); };
     const glide = attachGlide(strip, applyDx, () => { o.release(); });
     /* DIRECTIONAL LOCK on touch (v6.19). Ezra: "sometimes when scrolling through an effect with lots
      * of sliders it doesn't let me scroll up because I placed my finger on the slider, which is
@@ -1161,11 +1175,19 @@ window.FM = window.FM || {};
        the pill's INSET, not the pill: there is nothing to select until it has a value. Only where its neighbours are pills. */
     if (!nameEl.classList.contains('kf-selectable') && fx.params && fx.params[p.key] == null && layer && Object.keys(fx.params).some(k => kfInScope(layer, 'fx:' + k))) nameEl.classList.add('kf-inset');
     row.appendChild(nameEl);
-    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.setAttribute('aria-label', p.label || p.key); valBox.value = read().toFixed(prec) + (p.unit || ''); typeInBox(valBox, p.min);
+    /* 0 IS OFF, AND NOTHING RESTS IN THE GAP (#482 batch 8 review). `offUntil` (Tempo 40, Keep bass centred 40): the box says
+       Off at 0, and a value in 1…offUntil−1 lands across the gap — on offUntil when it comes up from below or is typed (a
+       typed number other than 0 asks for that setting, as near as it goes; type 0 or "off" for Off), on 0 when it comes down
+       from offUntil or above. A slider's NOTE (queue 904, Tile Grid's "0 = same as columns") explains a special value under
+       the row; this one has a word for it in the box instead, so it needs no line. */
+    const gap = p.offUntil > 0 ? p.offUntil : 0;
+    const shown = v => (gap && v === 0 ? 'Off' : v.toFixed(prec) + (p.unit || ''));
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.setAttribute('aria-label', p.label || p.key); valBox.value = shown(read()); typeInBox(valBox, p.min);
     function apply(v, commit) {
       v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
+      if (gap) v = offGapSnap(gap, v, null);   // a typed value; the ruler has already moved its own across (o.snap)
       FM.setProp(fx.params, p.key, v, FM.time);
-      valBox.value = v.toFixed(prec) + (p.unit || '');
+      valBox.value = shown(v);
       FM.requestRender();
       if (commit && FM.history) FM.history.commit();
       row.dispatchEvent(new CustomEvent('fx-range-set'));   // a slider that follows this one re-reads it (#482 polish 2.1)
@@ -1173,14 +1195,18 @@ window.FM = window.FM || {};
     const strip = tickStrip({
       min: p.min, max: p.max, step: p.step, unit: p.unit, dflt: p.default, read: read, q: p.q,
       apply: v => apply(v, false),
+      snap: gap ? (v, from) => offGapSnap(gap, v, from) : null,
       // animated param: rebuild timeline + inspector so the just-made keyframe is visible/selectable (afterFx includes commit)
       release: () => { if (FM.isAnimated(fx.params[p.key])) afterFx(); else if (FM.history) FM.history.commit(); },
     });
-    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + (p.unit || ''); });
+    valBox.addEventListener('change', () => {
+      const v = (gap && /^\s*off\s*$/i.test(valBox.value)) ? 0 : parseFloat(valBox.value);
+      if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = shown(read());
+    });
     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
     row.appendChild(strip); row.appendChild(valBox);
     // A following slider with no value of its own shows its leader's new value the moment the leader moves.
-    if (followed) row._resync = () => { if (fx.params[p.key] != null) return; strip._sync(read()); valBox.value = read().toFixed(prec) + (p.unit || ''); };
+    if (followed) row._resync = () => { if (fx.params[p.key] != null) return; strip._sync(read()); valBox.value = shown(read()); };
     return row;
   }
 
@@ -1188,8 +1214,13 @@ window.FM = window.FM || {};
   // A tick box for a param that switches a whole behaviour on, rather than picking between two equal
   // options. `note` explains what it does to the controls under it — which is the point of using a
   // tick box here at all: a segmented control implies "one of these two", a tick implies "this takes over".
-  function fxToggle(fx, p) {
-    const on = !!(fx.params[p.key] == null ? p.default : fx.params[p.key]);
+  /* `after` (#482 polish 7.1): what a flip commits through — the audio rows pass afterAudioFx, so the live preview re-syncs
+     (a toggle can change the audio graph). The visual rows pass nothing and keep their own three lines below. */
+  function fxToggle(fx, p, after) {
+    /* An ABSENT key shows its `legacy` where it has one, as fxSegment and markOverridden already read it (#482 polish 7.1):
+       this read the default, so a Squircle Corners saved before Continuous curve existed (legacy 0, drawn without it)
+       showed the box ticked. */
+    const on = !!(fx.params[p.key] == null ? (p.legacy != null ? p.legacy : p.default) : fx.params[p.key]);
     const row = el('div', 'fx-tog-row' + (on ? ' on' : ''));
     const btn = el('button', 'fx-tog');
     btn.setAttribute('role', 'switch');
@@ -1199,6 +1230,7 @@ window.FM = window.FM || {};
     btn.querySelector('.fx-tog-label').textContent = p.label;
     btn.addEventListener('click', () => {
       fx.params[p.key] = on ? 0 : 1;
+      if (after) { after(); return; }
       FM.requestRender(); FM.inspector.refresh(); if (FM.history) FM.history.commit();
     });
     row.appendChild(btn);
@@ -1260,7 +1292,8 @@ window.FM = window.FM || {};
         }
         return String(v);
       }).join(' or ');
-      why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + lbl;
+      // liveWhenText (#482 polish 8.7): a word for the live value where its number would say nothing ("Tempo is Off").
+      why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + (p.liveWhenText != null ? p.liveWhenText : lbl);
       /* EVERY OPTION BUT ONE (#482 2.3 review): "Only used when Rhythm is Steady or Double hit or Build-up" was a 382 px
          pill that cannot wrap, cut off at '…OR BUIL' on the phone and '…OR DOU' on the PC — in the DEFAULT state of every
          Flash (darken). Three or more live options with one that ignores the row: name that one instead. */
@@ -1303,7 +1336,11 @@ window.FM = window.FM || {};
      NOT greyed, unlike a mode gate: the value is still stored and draws on a browser that can, so a project made on an
      old phone still looks right on the PC. Per control, never per effect — Line height works everywhere, and a false
      warning is the same defect as a false reassurance. */
-  function markUnsupported(row, p) {
+  function markUnsupported(row, p, layer) {
+    /* …and a control this LAYER cannot carry out (#482 15.2): a Filter's Grain, Vignette and Sharpen on an adjustment layer.
+       Same pill; the registry says when and why (FM.fxRegistry.deadRowWhy). */
+    const why = FM.fxRegistry && FM.fxRegistry.deadRowWhy ? FM.fxRegistry.deadRowWhy(p, layer) : null;
+    if (why) { const pt = el('span', 'fx-dead-tag', 'does nothing here'); pt.title = why; row.appendChild(pt); return; }
     if (!p.needs || !FM.textSpacingOK) return;
     const ok = FM.textSpacingOK();
     if (!ok || ok[p.needs] !== false) return;
@@ -1312,7 +1349,8 @@ window.FM = window.FM || {};
     row.appendChild(dt);
   }
 
-  function fxSegment(fx, p) {
+  // `after`: as fxToggle's (#482 polish 7.1) — the audio rows commit through afterAudioFx.
+  function fxSegment(fx, p, after) {
     const row = el('div', 'fx-seg-row');
     row.appendChild(el('span', 'fx-scrub-label', p.label));
     const seg = el('div', 'fx-seg');
@@ -1326,6 +1364,10 @@ window.FM = window.FM || {};
       b.addEventListener('click', () => {
         const v = parseFloat(opt[0]);
         fx.params[p.key] = isNaN(v) ? opt[0] : v;   // never write NaN — it reads back as "not this option, and not any other"
+        /* A choice that SETS other controls (#482 polish 7.4: Telephone's Style writes its Low cut, High cut, Grit and Noise):
+           written in the same tap, so it is one undo step and the sliders under it show the new values at once. */
+        if (p.sets && p.sets[fx.params[p.key]]) Object.assign(fx.params, p.sets[fx.params[p.key]]);
+        if (after) { after(); return; }
         FM.requestRender(); FM.inspector.refresh(); if (FM.history) FM.history.commit();
       });
       seg.appendChild(b);
@@ -1790,7 +1832,7 @@ window.FM = window.FM || {};
     const deadWhy = FM.fxDeadOnLayer ? FM.fxDeadOnLayer(fx, layer, FM.time) : null;
     if (deadWhy) {
       const dt = el('span', 'fx-dead-tag', 'does nothing here'); dt.title = deadWhy; head.appendChild(dt);
-    } else if (FM.CSS_FX && FM.CSS_FX[fx.type]) {
+    } else if (FM.CSS_FX && FM.CSS_FX[fx.type] && !(FM.blurInStackOrder && FM.blurInStackOrder(fx))) {   // a Gaussian Blur off its defaults is not first any more (#482 15.7)
       const tag = el('span', 'fx-first-tag', 'always first');
       tag.title = 'Blur, brightness, contrast, saturation, hue, greyscale, sepia, invert and glow are applied together before everything else — moving them up or down does not change the picture.';
       head.appendChild(tag);
@@ -1835,7 +1877,9 @@ window.FM = window.FM || {};
       const colourRows = {};   // colour rows by key, so a colour that follows another can listen to it (#482 polish 1.2)
       const rangeRows = {};    // …and slider rows, for a slider that follows another (#482 polish 2.1)
       const gatedRows = {};    // …and every row another control can grey, so a SLIDER that greys it re-judges it live (#482 6.3 review)
+      if (fx.type === 'levels' && FM._levelsMigrate) FM._levelsMigrate(fx);   // #482 15.5: a saved one-channel Levels shows its values in that channel's set
       reg.params.forEach(p => {
+        if (FM.fxRegistry.rowShown && !FM.fxRegistry.rowShown(fx, p)) return;   // #482 15.5: only the set Levels' Channel picks
         if (p.type === 'range') {
           const row = fxScrubber(fx, p, layer, idx);
           rangeRows[p.key] = row; gatedRows[p.key] = row;
@@ -1844,7 +1888,7 @@ window.FM = window.FM || {};
           // Dim and lock a slider whose value is currently being overridden by a tick box above it,
           // and say WHICH one — a greyed control with no explanation just reads as broken.
           markOverridden(row, fx, p, reg);
-          markUnsupported(row, p);
+          markUnsupported(row, p, layer);
           body.appendChild(row);
           // A slider's NOTE (queue 904): the only way to say what a special value means — Tile Grid's Rows 0 is 'same as columns'.
           if (p.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', p.note));
@@ -1863,7 +1907,7 @@ window.FM = window.FM || {};
            The row is asked for the value through evalProp and writes through setProp, so a static colour
            stays a plain string and only becomes a keyframe object when he presses the ◆. */
         else if (p.type === 'color') {
-          const crow = kfColorRow(fx.params, p.key, p.label, p.follows ? () => (FM.evalProp(fx.params[p.follows], FM.time) || p.default) : p.default);   // follows: #482 polish 1.2
+          const crow = kfColorRow(fx.params, p.key, p.label, p.follows ? () => FM.fxRegistry.followedColour(fx.type, p.key, fx.params, FM.time) : p.default);   // follows: #482 polish 1.2; followedColour also mixes it as the kernel does (Lightning's Core, polish 11.6 review)
           colourRows[p.key] = crow;
           /* …and a following row re-reads as he changes the colour it follows: the leader's swatch and hex box fire input/change,
              which bubble to its row AFTER the row has written the new value (review of polish 1.2 — the edge stayed orange). */
@@ -1894,6 +1938,9 @@ window.FM = window.FM || {};
         const gr = gatedRows[p.key]; if (!gr) return;
         [p.overriddenBy, p.alsoGate && p.alsoGate.by].forEach(k => { const lead = k && rangeRows[k]; if (lead) lead.addEventListener('fx-range-set', () => regate(gr, fx, p, reg)); });
       });
+      /* #482 15.7: Repeat edges, Direction, Mix or Blend off their defaults take this blur out of the CSS filter that runs before
+         everything else, so where its row sits now matters — the row says so, in the note style a slider already uses. */
+      if (FM.blurInStackOrder && FM.blurInStackOrder(fx)) body.appendChild(el('div', 'fx-tog-note fx-range-note fx-blur-order', 'With these settings it runs in stack order, like the effects around it — not first.'));
       // Remove Object: dragging a box on the canvas beats nudging four % sliders (esp. on a phone)
       if (fx.type === 'touchup' && FM.touchupTool) {
         const pick = el('button', 'fx-add-btn', 'Select area on canvas');
@@ -1935,6 +1982,15 @@ window.FM = window.FM || {};
     return row;
   }
 
+  /* "ON MY CLIP" (#482 15.4). The Filters tab's tiles show every look on a stock photograph; switched on, each tile is the
+     selected clip at the playhead with that filter added (FM.fxThumbs.mountFilter's layer path; a shape or text clip keeps the
+     stock photo). The state lives here, per device, OFF by default — so until the switch is drawn and he has picked how it
+     looks (#545, the backlog's "draw first"), nothing on the tab changes. The switch only has to call set(). */
+  const FLT_ONCLIP_KEY = 'fm.flt.onclip';
+  FM.filtersOnClip = {
+    get: function () { try { return localStorage.getItem(FLT_ONCLIP_KEY) === '1'; } catch (e) { return false; } },
+    set: function (on) { try { localStorage.setItem(FLT_ONCLIP_KEY, on ? '1' : '0'); } catch (e) {} if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); },
+  };
   /* The Filters subsection (queue 113, step 5). His words: "now I want a third subsection for filters.
    * It'll work the same as the others" and "You will make a Bunch of filters and section them, so that
    * people can find stuff organised, like how the effects are organised."
@@ -2170,9 +2226,20 @@ window.FM = window.FM || {};
   /* STRENGTH BEFORE ADD (#482 batch 4.1). The picks preview at the bar's Strength and land at it, so "this look, but
      gentler" is one drag before Add instead of Add, open the row, find its Strength. It is the container's own `strength`
      — the cross-fade drawFilterContainer already does — so nothing new renders; at 100 % it is the 1 a new filter has. */
+  /* …AND ONE OF HIS OWN FILTERS KEEPS THE STRENGTH HE SAVED IT WITH (the fx landing on fb2, where #482 15.2 met 4.1). Since
+     15.2 a saved filter comes out of FM.filters.makeInstance with its own Strength and finish; 4.1 then OVERWROTE that
+     Strength with the bar's, so with the bar untouched (100 %) a filter he had saved at 60 % previewed and landed at 100 %.
+     The bar now SCALES the filter's own Strength: a library look's own is 1, so it lands at the bar exactly as 4.1 has it;
+     his own lands as he saved it at 100 %, and gentler as the bar comes down. Its own value is read once per container (the
+     bar re-applies this to the previewed containers while the finger moves); keyframes are scaled key by key, untouched at
+     100 %. */
+  const _fltOwnStrength = new WeakMap();
   function atStrength(box) {
     if (!box.params || typeof box.params !== 'object') box.params = {};
-    box.params.strength = Math.max(0, Math.min(1, _fltStrength));
+    if (!_fltOwnStrength.has(box)) _fltOwnStrength.set(box, box.params.strength);
+    const own = _fltOwnStrength.get(box), k = Math.max(0, Math.min(1, _fltStrength));
+    if (FM.isAnimated(own)) box.params.strength = k === 1 ? own : Object.assign({}, own, { kf: own.kf.map(f => (f && typeof f.v === 'number') ? Object.assign({}, f, { v: f.v * k }) : f) });
+    else box.params.strength = (typeof own === 'number' && isFinite(own) ? Math.max(0, Math.min(1, own)) : 1) * k;
     return box;
   }
   function restartFilterPreview() {
@@ -2222,7 +2289,8 @@ window.FM = window.FM || {};
         const cv = el('canvas', 'flt-thumb-cv');
         th.appendChild(cv);
         row.appendChild(th);
-        if (FM.fxThumbs && FM.fxThumbs.mountFilter) FM.fxThumbs.mountFilter(cv, f.id);
+        // #482 15.4: on his clip when "On my clip" is switched on (FM.filtersOnClip) — off, exactly the stock tile it always was
+        if (FM.fxThumbs && FM.fxThumbs.mountFilter) FM.fxThumbs.mountFilter(cv, f.id, FM.filtersOnClip && FM.filtersOnClip.get() ? layer : null);
         row.appendChild(el('div', 'flt-name', f.name));
         // What it is made of, in the app's own words for those effects — so the names match what you
         // will see inside the filter once it is added, not a second vocabulary invented here.
@@ -2639,10 +2707,19 @@ window.FM = window.FM || {};
   // audio-fx.js param descriptors carry `def` and no `type`; fxScrubber reads `default` and dispatches
   // on `type`. Bridge them rather than teaching either side about the other.
   function afxParam(p) {
+    /* A CHOICE OR AN ON/OFF (#482 polish 7.1): `options` is a segmented control and `toggle` a tick box, the visual rows'
+       own (fxSegment / fxToggle) — this bridge made every audio param a range, so there was no way to offer one. `legacy`
+       rides every kind, so an absent key shows what the kernel plays (audio-fx.js valueAt). */
+    // deadAtText / liveWhenText (#482 polish 8.7): the Tempo gate reads "Off", not "0".
+    if (p.options) return { type: 'segment', key: p.key, label: p.label, options: p.options, default: p.def, legacy: p.legacy, keyframable: false,
+      overriddenBy: p.overriddenBy || '', liveWhen: p.liveWhen, deadAt: p.deadAt, deadAtText: p.deadAtText, liveWhenText: p.liveWhenText, note: p.note || '', sets: p.sets };   // sets: #482 7.4
+    if (p.toggle) return { type: 'toggle', key: p.key, label: p.label, default: p.def, legacy: p.legacy, keyframable: false, note: p.note || '' };
     // overriddenBy/deadAt ride along since the #482 3.6 review: this bridge used to drop them, so no audio row could say
     // "Not used when Bass is 0" however the effect declared it.
-    return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, unit: p.unit, keyframable: p.keyframable,
-      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt };
+    // alsoGate (#482 polish 8.5): Vocal Remove's Keep bass below is dead in Centre only AND while Keep Bass is 0.
+    return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, legacy: p.legacy, unit: p.unit, keyframable: p.keyframable,
+      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt, deadAtText: p.deadAtText, liveWhen: p.liveWhen, liveWhenText: p.liveWhenText, liveAbove: p.liveAbove, alsoGate: p.alsoGate,
+      offUntil: p.offUntil };   // batch 8 review: 0 = Off, nothing rests below this (Tempo, Keep bass centred)
   }
   /* A per-PARAM warning, shown only once the param is actually animated. Reverb's Size and Decay are the
      only two that carry one, and it is the warning Ezra asked for by name — *"if audio key frames break
@@ -2813,22 +2890,50 @@ window.FM = window.FM || {};
     wrap.appendChild(head);
     if (expanded) {
       const body = el('div', 'fx-ed-body');
-      if (AFX_MONO_HINT[fx.type] && layerIsMono(layer)) body.appendChild(el('div', 'insp-hint', AFX_MONO_HINT[fx.type]));
+      // …not in Vocal Remove's Centre only (#482 polish 8.5), which hands a mono clip back whole.
+      if (AFX_MONO_HINT[fx.type] && layerIsMono(layer) && !(fx.type === 'vocalremove' && fx.params && fx.params.mode === 1)) body.appendChild(el('div', 'insp-hint', AFX_MONO_HINT[fx.type]));
       if (reg.meter === 'reduction') body.appendChild(reductionMeter(layer, fx));
       // A control another control switches off says so, as the visual rows do (#482 3.6 review). markOverridden reads
       // the controller's label and default, so it gets the bridged descriptors, not the audio registry's own.
-      const areg = { params: reg.params.map(afxParam) }, rows = {};
+      const areg = { params: reg.params.map(afxParam) }, rows = {}, readouts = {};
       reg.params.forEach(p => {
-        const ap = afxParam(p), row = fxScrubber(fx, ap, layer, idx);
+        const ap = afxParam(p);
+        let row;
+        // A choice and an on/off commit through afterAudioFx (#482 polish 7.1), which re-syncs the live chain: either can be a
+        // `rebuild` control, and the preview only rebuilds when it is asked to.
+        if (ap.type === 'segment') row = fxSegment(fx, ap, afterAudioFx);
+        else if (ap.type === 'toggle') row = fxToggle(fx, ap, afterAudioFx);
+        else {
+          row = fxScrubber(fx, ap, layer, idx);
+          // A `rebuild` SLIDER (a voice count, a stereo phase) asks the same as each value lands: sync() rebuilds only if the
+          // value really moved the signature, so dragging within one whole voice rebuilds nothing.
+          if (p.rebuild) row.addEventListener('fx-range-set', () => { if (FM.reconcileAudio) FM.reconcileAudio(); });
+          // …and a keyframable one (Chorus Spread, #482 7.8) when its diamond adds or removes a keyframe: being animated at all
+          // can be what decides the graph. This runs after the diamond's own handler, which has already stored the change.
+          const kfb = p.rebuild && row.querySelector('.fx-kf');
+          if (kfb) kfb.addEventListener('click', () => { if (FM.reconcileAudio) FM.reconcileAudio(); });
+        }
         rows[p.key] = row;
-        markOverridden(row, fx, ap, areg);
+        if (ap.type !== 'toggle') markOverridden(row, fx, ap, areg);
         body.appendChild(row);
+        if (ap.type === 'segment' && ap.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', ap.note));
+        /* WHAT IT WORKS OUT TO (#482 polish 8.7): a control whose value is a musical note shows the time or rate it gives at
+           the tempo set ("= 250 ms"), under its row; empty, and hidden, while Tempo is off. Re-read as Tempo moves (below). */
+        if (p.readout) {
+          const rd = el('div', 'fx-tog-note fx-range-note afx-readout');
+          const upd = () => { const t = p.readout(fx); rd.textContent = t; rd.style.display = t ? '' : 'none'; };
+          upd(); body.appendChild(rd); readouts[p.key] = upd;
+        }
         const w = afxWarnFor(reg, fx, p);
         if (w) body.appendChild(el('div', 'insp-hint afx-kf-warn', w));
       });
+      reg.params.forEach(p => (p.readoutBy || []).forEach(k => { if (rows[k] && readouts[p.key]) rows[k].addEventListener('fx-range-set', readouts[p.key]); }));
+      // Both gates re-read when either controller moves (#482 polish 8.5's alsoGate, as the visual rows wire it).
       reg.params.forEach(p => {
-        const lead = p.overriddenBy && rows[p.overriddenBy];
-        if (lead) lead.addEventListener('fx-range-set', () => regate(rows[p.key], fx, afxParam(p), areg));
+        [p.overriddenBy, p.alsoGate && p.alsoGate.by].forEach(k => {
+          const lead = k && rows[k];
+          if (lead) lead.addEventListener('fx-range-set', () => regate(rows[p.key], fx, afxParam(p), areg));
+        });
       });
       if (!reg.params.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
       // One plain line about how the effect behaves, under its sliders (#482 3.5: Pitch Shift's late copy, hunt C20).

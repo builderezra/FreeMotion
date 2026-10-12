@@ -68,10 +68,34 @@ window.FM = window.FM || {};
     return dbToLin(0.6 * (1 - 1 / r) * Math.min(0, thresholdDb));
   }
   FM._hardKneeMakeupCancel = hardKneeMakeupCancel;   // one definition: the boost limiter (audio-fx-live.js) uses it too
+  /* ═══ …AND WITH A SOFT KNEE (#482 polish 7.1, the Compressor's Auto makeup) ═════════════════════════════════════════
+   * The same hidden gain for ANY knee: (1 / the curve's gain at 0 dBFS) ^ 0.6, where the curve is the spec engine's —
+   * linear up to the threshold, then an exponential knee x ↦ T + (1 − e^(−k(x − T))) / k (linear units) whose k is found by
+   * the engine's own 15-step search for the point where the knee's slope reaches 1/ratio, then the ratio's straight line.
+   * Chromium's DynamicsCompressorKernel (KneeCurve / KAtSlope / Saturate) and WebKit's, the same code. Returned as the gain
+   * that CANCELS it. With knee 0 it is exactly hardKneeMakeupCancel. At the Compressor's defaults (−24 dB, knee 30, 4:1)
+   * the node lifts everything by 2.39 dB; at −40 dB, knee 6, 4:1 by 16.85 dB — that lift is "Auto makeup". */
+  function makeupCancel(thresholdDb, kneeDb, ratio) {
+    const lt = dbToLin(thresholdDb), slope = 1 / (ratio > 1 ? ratio : 1);
+    const lin2db = x => 20 * Math.log10(x);
+    const knee = (x, k) => (x < lt ? x : lt + (1 - Math.exp(-k * (x - lt))) / k);
+    const slopeAt = (x, k) => { if (x < lt) return 1; const x2 = x * 1.001; return (lin2db(knee(x2, k)) - lin2db(knee(x, k))) / (lin2db(x2) - lin2db(x)); };
+    const kneeEnd = dbToLin(thresholdDb + kneeDb);
+    let lo = 0.1, hi = 10000, k = 5;
+    for (let i = 0; i < 15; i++) { if (slopeAt(kneeEnd, k) < slope) hi = k; else lo = k; k = Math.sqrt(lo * hi); }
+    const yEnd = lin2db(knee(kneeEnd, k));
+    const full = 1 < kneeEnd ? knee(1, k) : dbToLin(yEnd + slope * (0 - (thresholdDb + kneeDb)));
+    return Math.pow(full, 0.6);
+  }
+  FM._compMakeupCancel = makeupCancel;   // suite seam
   /* The level of the Limiter's safety clip under a ceiling of `ceilingDb`, as a linear gain (#482 batch 3 review; the
      reasons are at the Limiter). 1 dB above where its 20:1 line puts a full-scale sound (0.95·C), and never above full
      scale: exactly 0 dBFS at the default -1 dB ceiling. */
   function limHoldLin(ceilingDb) { return dbToLin(Math.min(0, (1 - 1 / 20) * Math.min(0, ceilingDb) + 1)); }
+  /* How late a DynamicsCompressorNode's output is: floor(0.006 × rate) frames, never more than 1023 (the Compressor's note on
+     its untouched path says how it was measured). The Compressor's dry copy and, since #482 polish 8.1, the Limiter's Mix
+     wait this long, so a blend of the two lines up instead of combing. */
+  function lookaheadSecs(ctx) { return Math.min(1023, Math.floor(0.006 * ctx.sampleRate)) / ctx.sampleRate; }
   // A WaveShaper that is the identity inside ±1 and holds ±1 outside it: a hard clip, no oversampling, no delay.
   const HARD_CLIP = new Float32Array([-1, 1]);
 
@@ -88,6 +112,52 @@ window.FM = window.FM || {};
     if (k < 1e-3) return curveFrom(x => x);
     const norm = Math.tanh(k);
     return curveFrom(x => Math.tanh(k * x) / norm);
+  }
+  /* ═══ DISTORTION'S TYPE (#482 polish 7.3) ═══════════════════════════════════════════════════════════════════════════
+   * One curve, tanh, was the only distortion there was. Each Type is a transfer curve over −1…1 driven by the same
+   * k = 0.35 × Drive, and `gain0` is its small-signal gain (its slope at 0) — what Auto level divides back out:
+   *   0 Soft      tanh(kx) / tanh k                      — today's curve, the very same samples (driveCurve).
+   *   1 Hard clip (1 + k)·x held at ±1                      — a flat top: brighter, harsher.
+   *   2 Tube      tanh(kx + 0.2) − tanh 0.2, scaled       — leans to one side, so it adds the even harmonics (a warmer
+   *               so its larger (negative) peak is 1        grit); a smooth curve, no kink at 0. Driven hard its top
+   *                                                         half tops out at 0.67 of the bottom.
+   *   3 Fuzz      1 − e^(−gx) above 0, −0.75·(…1.6×…) below, g = 1 + 3k — far harder, and lopsided.
+   *   4 Wavefold  sin(π/2 · (1 + k/5) · x)                 — past full scale the wave folds back on itself (up to 4
+   *               times at Drive 100): a metallic, bell-like edge rather than a clip.
+   *   5 Rectify   |tanh(kx) / tanh k|                      — every negative half flipped up: the pitch an octave up.
+   * Tube, Fuzz and Rectify are lopsided, so they also make a steady offset (DC); the build puts a 10 Hz highpass after
+   * them (DIST_DC), and only after them, so Soft stays today's graph. Every curve is 4096 points like driveCurve, and a
+   * curve is never mutated. */
+  const DIST_TYPES = [[0, 'Soft'], [1, 'Hard clip'], [2, 'Tube'], [3, 'Fuzz'], [4, 'Wavefold'], [5, 'Rectify']];
+  const DIST_DC = [false, false, true, true, false, true];
+  const TUBE_B = 0.2;
+  function distCurve(type, drive) {
+    const k = clamp(drive, 0, 100) * 0.35;
+    switch (type) {
+      case 1: return curveFrom(x => clamp((1 + k) * x, -1, 1));
+      case 2: {
+        if (k < 1e-3) return curveFrom(x => x);
+        const f = x => Math.tanh(k * x + TUBE_B) - Math.tanh(TUBE_B), n = Math.max(Math.abs(f(1)), Math.abs(f(-1)));
+        return curveFrom(x => f(x) / n);
+      }
+      case 3: {
+        const g = 1 + 3 * k, np = 1 - Math.exp(-g), nn = 1 - Math.exp(-1.6 * g);
+        return curveFrom(x => (x >= 0 ? (1 - Math.exp(-g * x)) / np : -0.75 * (1 - Math.exp(1.6 * g * x)) / nn));
+      }
+      case 4: { const g = 1 + k / 5; return curveFrom(x => Math.sin(Math.PI / 2 * g * x)); }
+      case 5: { if (k < 1e-3) return curveFrom(x => Math.abs(x)); const n = Math.tanh(k); return curveFrom(x => Math.abs(Math.tanh(k * x) / n)); }
+      default: return driveCurve(drive);
+    }
+  }
+  function distGain0(type, drive) {
+    const k = clamp(drive, 0, 100) * 0.35;
+    switch (type) {
+      case 1: return 1 + k;
+      case 2: { if (k < 1e-3) return 1; const t = Math.tanh(TUBE_B), n = Math.max(Math.abs(Math.tanh(k + TUBE_B) - t), Math.abs(Math.tanh(-k + TUBE_B) - t)); return k * (1 - t * t) / n; }
+      case 3: { const g = 1 + 3 * k; return (g / (1 - Math.exp(-g)) + 0.75 * 1.6 * g / (1 - Math.exp(-1.6 * g))) / 2; }
+      case 4: return Math.PI / 2 * (1 + k / 5);
+      default: return k < 1e-3 ? 1 : k / Math.tanh(k);   // Soft, and Rectify (the curve it flips)
+    }
   }
   /* ═══ BITS 13–16 WERE THE DRY SOUND (queue 986, hunt C18) ═══════════════════════════════════════════════
      A WaveShaper interpolates LINEARLY between its curve points, so a staircase only survives while each step
@@ -115,6 +185,26 @@ window.FM = window.FM || {};
     return curveFrom(x => { const q = Math.round(x / step) * step; return k < 1e-3 ? q : Math.tanh(k * q) / norm; }, 8192);
   }
   const BITE = curveFrom(x => Math.tanh(1.8 * x) / Math.tanh(1.8));   // the little bit of grit that sells a phone line
+  /* Telephone's Grit (#482 polish 7.4): the same curve with k = 0.06 × Grit, so Grit 30 IS the bite above (and returns that
+     very array: 30 × 6 / 100 is exactly 1.8, but the build must not depend on it). 0 is a straight line. */
+  function gritCurve(grit) {
+    const g = clamp(grit, 0, 100);
+    if (g === 30) return BITE;
+    const k = g * 6 / 100;
+    if (k < 1e-3) return curveFrom(x => x);
+    const n = Math.tanh(k);
+    return curveFrom(x => Math.tanh(k * x) / n);
+  }
+  /* Seeded white noise for an effect's hiss (#482 polish 7.4, Telephone's Noise), one buffer per (length, seed, rate),
+     looped and started at the scene time's place in it (shop.noise), so the preview and every export hear the same hiss. */
+  const _noiseCache = {};
+  function noiseBuffer(ctx, secs, seed) {
+    const sr = ctx.sampleRate, key = secs + '|' + seed + '|' + sr;
+    if (_noiseCache[key]) return _noiseCache[key];
+    const len = Math.max(2, Math.round(sr * secs)), buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0), r = rng(seed);
+    for (let i = 0; i < len; i++) d[i] = r() * 2 - 1;
+    return (_noiseCache[key] = buf);
+  }
 
   /* ---- reverb impulse ---- */
   // Deterministic noise: a Math.random IR would differ between the preview build and the export build,
@@ -158,11 +248,42 @@ window.FM = window.FM || {};
   // a real PHASE control, which an oscillator has none of; and `ramp` is an EXACT linear ramp, where an
   // oscillator's sawtooth is a truncated Fourier series that reads 0.424 at quarter-phase (measured)
   // against a true ramp's 0.5 — a warp the granular pitch shifter cannot absorb.
+  /* THE SHAPES (#482 polish 7.2): what the six modulation effects swing by besides a sine. Each runs −1…1, and all but
+     Random start where the sine does — 0 at phase 0, rising, at the top a quarter of the way in (the saws half way) — so a
+     change of Shape keeps the swing's timing and only changes its form. NOTHING JUMPS IN ONE SAMPLE, because a jump in a delay time (Vibrato, Chorus,
+     Flanger) is a click: Square is tanh(6·sin)/tanh 6 (backlog 7.2), whose edges take about 8 % of a cycle; a Saw falls
+     back across 2 % of the cycle (SAW_FALL) instead of resetting at once; Random's eight seeded steps each glide in over the
+     first fifth of the step. Random is the same eight every time, so the preview and every export hear the same pattern. */
+  const RND8 = (function () { const r = rng(0x5eed8); const v = []; for (let i = 0; i < 8; i++) v.push(r() * 2 - 1); return v; })();
+  const SAW_FALL = 0.02;
+  function sawUp(p) {
+    const u = (p + 0.5) - Math.floor(p + 0.5) - 0.5, edge = 0.5 - SAW_FALL / 2;   // u: −½…½, 0 at phase 0
+    if (u >= -edge && u <= edge) return u / edge;                                  // the rise, through 0 at phase 0
+    const d = u > edge ? u - edge : u + 0.5 + SAW_FALL / 2;                       // 0…SAW_FALL into the fall
+    return 1 - 2 * d / SAW_FALL;
+  }
   const LFO_WAVE = {
     sine: p => Math.sin(2 * Math.PI * p),
     ramp: p => p,
     win: p => Math.sin(Math.PI * p),   // w(p)² + w(p+½)² = 1, and exactly 0 where `ramp` resets
+    tri: p => (p < 0.25 ? 4 * p : (p < 0.75 ? 2 - 4 * p : 4 * p - 4)),
+    square: p => Math.tanh(6 * Math.sin(2 * Math.PI * p)) / Math.tanh(6),
+    sawup: sawUp,
+    sawdown: p => -sawUp(p),
+    random: p => {
+      const x = p * 8, j = Math.min(7, Math.floor(x)), f = x - j, prev = RND8[(j + 7) % 8];
+      return f < 0.2 ? prev + (RND8[j] - prev) * (0.5 - 0.5 * Math.cos(Math.PI * f / 0.2)) : RND8[j];
+    },
   };
+  /* HOW FAR BEHIND (#482 polish 8.6, Auto-Pan's Realism). `back:<shape>` turns a pan swing into how far behind the listener
+     the sound is: started a quarter of a cycle on, it reads the swing's other axis — for a sine pan sin(2πp) that is
+     −cos(2πp), 0 straight ahead, 1 straight behind — and doubles and clips it to 0…1, so the sound is fully "behind" from a
+     third of the way round to two thirds and untouched across the front half. */
+  function waveFn(name) {
+    if (name.indexOf('back:') !== 0) return LFO_WAVE[name];
+    const f = LFO_WAVE[name.slice(5)] || LFO_WAVE.sine;
+    return p => Math.min(1, Math.max(0, -2 * f(p)));
+  }
   const _lfoCache = {};   // "wave|secs|rate" -> AudioBuffer, shared by every LFO of a kind in a context
   function lfoBuffer(ctx, wave, secs) {
     const sr = ctx.sampleRate;
@@ -170,7 +291,7 @@ window.FM = window.FM || {};
     if (_lfoCache[key]) return _lfoCache[key];
     const len = Math.max(2, Math.round(sr * secs));
     const buf = ctx.createBuffer(1, len, sr);
-    const d = buf.getChannelData(0), fn = LFO_WAVE[wave];
+    const d = buf.getChannelData(0), fn = waveFn(wave);
     for (let i = 0; i < len; i++) d[i] = fn(i / len);   // i/len, not i/(len−1): sample `len` must BE sample 0
     const keys = Object.keys(_lfoCache);
     if (keys.length > 12) delete _lfoCache[keys[0]];
@@ -207,7 +328,18 @@ window.FM = window.FM || {};
         n.loop = true;
         n.playbackRate.value = hz * secs;
         nodes.push(n); oscs.push(n);
-        lfos.push({ n: n, hz: hz, key: spec.key || null, mul: spec.mul || 1, phase: spec.phase || 0 });
+        // spec.hzOf(rateFor): the rate when it is not simply a param's value — a rate synced to a tempo (#482 8.7).
+        lfos.push({ n: n, hz: hz, key: spec.key || null, mul: spec.mul || 1, phase: spec.phase || 0, hzOf: spec.hzOf || null });
+        return n;
+      },
+      // A looping seeded noise (#482 7.4). Armed like an LFO of one cycle per `secs`, so it starts at the place in the
+      // buffer that scene time implies: the hiss an export from 1:00 hears is the hiss the whole render has there.
+      noise: function (secs, seed) {
+        const n = ctx.createBufferSource();
+        n.buffer = noiseBuffer(ctx, secs, seed);
+        n.loop = true;
+        nodes.push(n); oscs.push(n);
+        lfos.push({ n: n, hz: 1 / n.buffer.duration, key: null, mul: 1, phase: 0 });
         return n;
       },
     };
@@ -258,7 +390,7 @@ window.FM = window.FM || {};
         const list = o.lfos || [];
         for (let i = 0; i < list.length; i++) {
           const l = list[i];
-          const hz = l.key ? rateFor(l.key) * l.mul : l.hz;
+          const hz = l.hzOf ? l.hzOf(rateFor) * l.mul : (l.key ? rateFor(l.key) * l.mul : l.hz);
           const cyc = (isFinite(hz) ? hz : 0) * sceneAtStart + l.phase;
           const ph = isFinite(cyc) ? cyc - Math.floor(cyc) : 0;
           try { l.n.start(l.n.context.currentTime, ph * l.n.buffer.duration); } catch (e) {}
@@ -340,21 +472,69 @@ window.FM = window.FM || {};
      filter with a +1.25 dB bump (the node's own default Q of 1) at Feedback 0.9 is a loop gain of 1.04 at the
      bump, and the repeats would grow into a howl instead of dying away. */
   const BUTTERWORTH_DB = 20 * Math.log10(Math.SQRT1_2);
+  /* Mid/side width on a stereo signal (Reverb's Width, #482 3.4; Ping-Pong's, 8.3): L = M + w·S, R = M − w·S. The M/S sum is
+     NOT exact at w = 1 in floats ((L+R)/2 + (L−R)/2 can land an ulp off L), so a caller switches it in with a bypass pair.
+     The splitter is discrete, so the input is up-mixed to two channels first, as the Stereo Width effect does. */
+  function msWidth(s, w0) {
+    const msIn = s.gain(1);
+    msIn.channelCount = 2; msIn.channelCountMode = 'explicit'; msIn.channelInterpretation = 'speakers';
+    const split = s.splitter(2), merge = s.merger(2);
+    const mid = s.gain(0.5);
+    split.connect(mid, 0); split.connect(mid, 1);
+    const sP = s.gain(0.5), sN = s.gain(-0.5), side = s.gain(1);
+    split.connect(sP, 0); split.connect(sN, 1); sP.connect(side); sN.connect(side);
+    const wG = s.gain(w0), wN = s.gain(-1);
+    side.connect(wG); wG.connect(wN);
+    mid.connect(merge, 0, 0); wG.connect(merge, 0, 0);
+    mid.connect(merge, 0, 1); wN.connect(merge, 0, 1);
+    msIn.connect(split);
+    return { input: msIn, output: merge, w: wG };
+  }
+  // A value written at once or ramped to, onto one AudioParam (a setter that works one out from several keys).
+  function put(ap, x, when, ramp) { if (ramp) ap.linearRampToValueAtTime(x, when); else ap.setValueAtTime(x, when); }
 
   /* A FEEDBACK LOOP, UNROLLED (queue 986, hunts C16/C17). A loop's k-th time round is weighted fb^(k−1); these
      are the factors `multi` schedules onto the taps, and how many trips round each effect keeps (see Flanger and
      Phaser for what the rest of the tail is worth). */
   const FLANGE_TAPS = 16, PHASE_PASSES = 6;
+  /* Chorus Feedback (#482 7.8), unrolled the same way: 8 passes, so at its 0.6 maximum what is left out is 0.6^8 (1.7 %,
+     −35 dB). */
+  const CHORUS_TAPS = 8;
+  /* Auto-Pan's Realism (#482 8.6): fully behind, the two lowpasses sit log2(20000 / 4000) octaves under 20 kHz (2786 cents),
+     and the room is mixed in at Realism × 0.15. */
+  const AUTOPAN_BEHIND_CENTS = 1200 * Math.log2(20000 / 4000), AUTOPAN_ROOM = 0.15;
+  /* Whether a control is in use at all — above 0, or keyframed (#482 7.8, rebuildIf): a Chorus builds its stereo Spread path
+     only then, and an Auto-Pan its Realism (8.6). */
+  function inUse(raw) { return (FM.isAnimated(raw) || (typeof raw === 'number' && raw > 0)) ? 1 : 0; }
   function powOf(k) { return function (v) { return Math.pow(v, k); }; }
 
   // A param's value at scene time t, guarded at every step: a missing/NaN/animated-object read falls back
   // to the default. NaN reaching an AudioParam throws and takes the whole chain down with it.
+  /* …to `legacy` where the param declares one (#482 polish 7.1): the value a saved effect that lacks the key is played
+     at, which the load sanitiser fills in the same way (storage.js sanitizeAudioFx). A choice reads as the nearest of its
+     options and an on/off as 0 or 1, so a file carrying 1.4 or a slope of 30 plays as something the panel can show. */
   function valueAt(inst, p, t) {
     const raw = inst && inst.params ? inst.params[p.key] : undefined;
     let v = FM.isAnimated(raw) ? FM.evalProp(raw, t) : raw;
-    if (typeof v !== 'number' || !isFinite(v)) v = p.def;
-    return clamp(v, p.min, p.max);
+    if (typeof v !== 'number' || !isFinite(v)) v = p.legacy !== undefined ? p.legacy : p.def;
+    v = clamp(v, p.min, p.max);
+    if (p.options) {
+      let best = p.options[0][0];
+      for (let i = 1; i < p.options.length; i++) if (Math.abs(p.options[i][0] - v) < Math.abs(best - v)) best = p.options[i][0];
+      return best;
+    }
+    if (p.toggle) return v >= 0.5 ? 1 : 0;
+    return v;
   }
+  /* The build-time value of a control that is not keyframable (a choice, an on/off, a `rebuild` slider), read exactly as
+     the chain reads it (valueAt). REG is filled below; builds only ever run after it is. */
+  function staticOf(inst, type, key) {
+    const ps = (REG[type] && REG[type].params) || [];
+    for (let i = 0; i < ps.length; i++) if (ps[i].key === key) return valueAt(inst, ps[i], 0);
+    return 0;
+  }
+  // The registry entry of one param, for a setter that has to read another key at the same scene moment.
+  function paramOf(type, key) { return ((REG[type] && REG[type].params) || []).filter(p => p.key === key)[0]; }
   // Build-time read for a rebuild-style (keyframable:false) param — static is the whole story there.
   function initNum(inst, key, dflt, lo, hi) {
     let v = inst && inst.params ? inst.params[key] : undefined;
@@ -428,7 +608,83 @@ window.FM = window.FM || {};
   function P(key, label, min, max, step, def, unit, kf) {
     return { key: key, label: label, min: min, max: max, step: step, def: def, unit: unit || '', keyframable: !!kf };
   }
+  /* ═══ A CHOICE, OR AN ON/OFF, IN AN AUDIO EFFECT (#482 polish 7.1 — the enabler the rest of batch 7 needs) ═══════════
+   * Every audio control was a slider (inspector.js afxParam made each one a range), so "Sine or Square", "12 or 48 dB",
+   * "Soft or Hard clip" had nowhere to live. Both new kinds are stored as plain whole numbers, like every other audio
+   * value: a choice is the value of the option picked (options: [[value, label], …]) and an on/off is 0 or 1. So a saved
+   * file and the load sanitiser see nothing new — min and max are the range of the option values — and neither can be
+   * keyframed (a glide halfway between Sine and Square means nothing). The panel draws a choice with the visual effects'
+   * own segmented control (inspector.js fxSegment) and an on/off with their tick box (fxToggle): one implementation each.
+   * `rebuild: true` marks a control that changes the GRAPH rather than a value on it (which curve, how many voices). The
+   * live preview rebuilds a chain only when its signature moves (audio-fx-live.js signature), and these values are now
+   * part of it (audioFxRegistry.rebuildKey); everything else still rides applyAt, so a slider drag never rebuilds.
+   * `legacy` (any kind) is what a saved effect that LACKS the key is played at, where that differs from what a new one
+   * starts at (`def`): the sanitiser fills the key with it and valueAt reads it — the visual effects' rule. */
+  function CHOICE(key, label, options, def, o) {
+    const vals = options.map(x => x[0]);
+    return Object.assign({ key: key, label: label, min: Math.min.apply(null, vals), max: Math.max.apply(null, vals), step: 1, def: def, unit: '', keyframable: false, options: options }, o || {});
+  }
+  function TOGGLE(key, label, def, o) {
+    return Object.assign({ key: key, label: label, min: 0, max: 1, step: 1, def: def, unit: '', keyframable: false, toggle: true }, o || {});
+  }
+  /* ═══ THE SWING'S SHAPE (#482 polish 7.2) ═════════════════════════════════════════════════════════════════════════════
+   * Tremolo, Auto-Pan, Vibrato, Chorus, Flanger and Phaser could only swing in a sine. Shape picks the LFO's wave (LFO_WAVE):
+   * a Triangle sweeps at an even speed, a Square jumps between two states (a choppy tremolo, a pan that snaps side to side),
+   * a Saw rises (or falls) and resets, Random wanders between eight steps. A rebuild — the wave is the LFO's buffer — and
+   * Sine (0, the default and every saved effect) builds the very buffer it always did, so nothing already made changes. */
+  const LFO_SHAPES = [[0, 'Sine'], [1, 'Triangle'], [2, 'Square'], [3, 'Saw up'], [4, 'Saw down'], [5, 'Random']];
+  const SHAPE_WAVES = ['sine', 'tri', 'square', 'sawup', 'sawdown', 'random'];
+  const SHAPE = () => CHOICE('shape', 'Shape', LFO_SHAPES, 0, { rebuild: true });
+  function waveOf(inst, type) { return SHAPE_WAVES[staticOf(inst, type, 'shape')] || 'sine'; }
   const MIX = def => P('mix', 'Mix', 0, 1, 0.01, def, '', true);
+  /* ═══ TEMPO SYNC (#482 polish 8.7) ══════════════════════════════════════════════════════════════════════════════════════
+   * An echo that repeats on the beat, a tremolo that pulses in time: Tempo (BPM, 0 = off) and Note set the Echo's and the
+   * Ping-Pong's Time, and the Tremolo's and the Auto-Pan's Rate, as (60 / BPM) × 4 × the note's share of a whole note
+   * (one bar of four beats), a rate being one swing per that time — 120 BPM, 1/8 is 0.25 s, or 4 Hz. While Tempo is on,
+   * Time / Rate is not used and says so; the panel shows what the note works out to under the Note buttons (`readout`),
+   * kept to the control's own range (an Echo stops at 2 s). Not keyframable (the backlog: static only) and not a rebuild:
+   * the synced value rides the same AudioParam the slider drives, so a drag never rebuilds, and an LFO's starting phase
+   * reads the synced rate (shop.lfo hzOf), so the beat lands where scene time says, export and preview alike. Tempo 0 (the
+   * default, and every saved effect) is today's Time / Rate. Any Tempo above 0 syncs, and the panel only offers 40–240. */
+  const NOTES = [[0, '1/1'], [1, '1/2'], [2, '1/4'], [3, '1/8'], [4, '1/8·'], [5, '1/8T'], [6, '1/16']];
+  const NOTE_OF_BAR = [1, 1 / 2, 1 / 4, 1 / 8, 3 / 16, 1 / 12, 1 / 16];   // 1/8· dotted, 1/8T a triplet
+  /* Tempo is 0 (Off) or 40–240 (batch 8 review): `offUntil` makes the panel say Off at 0 and never rest in 1–39 — a value
+     moved into that gap lands on 40 coming up (or typed) and on Off coming down (inspector.js offGapSnap). */
+  const TEMPO_MIN = 40;
+  // The synced time in seconds, or null while Tempo is off. A file carrying 1–39 (the panel cannot) plays it at 40.
+  function syncSecs(inst, type) {
+    const bpm = staticOf(inst, type, 'bpm');
+    return bpm > 0 ? (60 / Math.max(TEMPO_MIN, bpm)) * 4 * NOTE_OF_BAR[staticOf(inst, type, 'note')] : null;
+  }
+  /* Tempo and Note for an effect whose `key` is a time ('s', lo…hi seconds) or a rate ('Hz'). The Note row carries the
+     readout the panel shows under it; Time / Rate is marked as switched off while Tempo is on. */
+  function TEMPO(type, key, lo, hi) {
+    const rate = key === 'rate';
+    const readout = function (inst) {
+      const s = syncSecs(inst, type);
+      if (s == null) return '';
+      const raw = rate ? 1 / s : s, v = clamp(raw, lo, hi), lim = Math.abs(v - raw) > 1e-9 ? ' (as far as it goes)' : '';
+      return '= ' + (rate ? v.toFixed(2) + ' Hz' : (v < 1 ? Math.round(v * 1000) + ' ms' : v.toFixed(2) + ' s')) + lim;
+    };
+    return [Object.assign(P('bpm', 'Tempo', 0, 240, 1, 0, 'BPM', false), { offUntil: TEMPO_MIN }),
+      CHOICE('note', 'Note', NOTES, 2, { overriddenBy: 'bpm', deadAt: 0, deadAtText: 'Off', readout: readout, readoutBy: ['bpm'] })];
+  }
+  const SYNCED = p => Object.assign(p, { overriddenBy: 'bpm', liveWhen: 0, liveWhenText: 'Off' });
+  /* The setters of a synced key and of Tempo and Note: each works out the value from all three read at the same scene
+     moment (the Compressor's Auto makeup rule) and hands it to write(value, when, ramp, sceneT). `now(sceneT)` is that
+     value, for a setter of another key that needs it (Ping-Pong's Right-side timing). */
+  function tempoSync(inst, type, key, lo, hi, write) {
+    const pd = paramOf(type, key), rate = key === 'rate';
+    const now = function (sceneT, own) {
+      const s = syncSecs(inst, type);
+      if (s != null) return clamp(rate ? 1 / s : s, lo, hi);
+      return own !== undefined ? own : valueAt(inst, pd, isFinite(sceneT) ? sceneT : 0);
+    };
+    const o = { now: now, hzOf: rf => { const s = syncSecs(inst, type); return s != null ? clamp(1 / s, lo, hi) : rf(key); } };
+    o[key] = function (v, when, ramp, sceneT) { write(now(sceneT, v), when, ramp, sceneT); };
+    o.bpm = o.note = function (v, when, ramp, sceneT) { write(now(sceneT), when, ramp, sceneT); };
+    return o;
+  }
   /* A CONTROL THAT DOES NOTHING WHILE ANOTHER IS AT 0 SAYS SO (#482 3.6 review). A shelf's or a band's corner moves a
      boost or a cut, and at 0 dB there is none: a Bass & Treble whose Bass at is dragged with Bass at 0 plays the clip
      bit for bit (measured on noise through the export chain) — and 0 dB is the default of every new and every saved
@@ -440,14 +696,41 @@ window.FM = window.FM || {};
 
   /* ---- EQ & Filter ---- */
   // The four plain filters differ only in biquad type and ranges.
+  /* ═══ SLOPE (#482 polish 7.5) ═══════════════════════════════════════════════════════════════════════════════════════
+   * Each was one biquad: a Low-/High-Pass falls 12 dB an octave past its corner, so "cut everything over 1 kHz" still let
+   * 4 kHz through only 24 dB down. Slope stacks 1–4 biquads on the same Frequency (a rebuild; the value is the dB per
+   * octave, 12 a stage). For Low-/High-Pass the inner stages carry the Butterworth Qs of the whole order — the flat,
+   * peak-free ones (bwStageDb) — and the LAST carries the Resonance slider, so the corner's bump is still his to set; at 48
+   * dB a 1 kHz Low-Pass has 4 kHz about 98 dB down by the spec's biquad formulas (24.5 at 12). A Band-Pass or Notch stacks the same filter on itself:
+   * steeper skirts, a wider and deeper notch (its buttons say how steep in words — a band's skirts are not 12 dB/oct).
+   * 12 (the default, and every saved filter) is today's single biquad, the very node it always was. */
+  const SLOPES_DB = [[12, '12 dB'], [24, '24 dB'], [36, '36 dB'], [48, '48 dB']];
+  const SLOPES_WORDS = [[12, 'Gentle'], [24, 'Steep'], [36, 'Steeper'], [48, 'Steepest']];
+  // The Butterworth stage Qs of a 2N-order low/high-pass, lowest first, in the dB a lowpass/highpass biquad's Q is read in.
+  function bwStageDb(N) {
+    const out = [];
+    for (let k = 1; k <= N; k++) out.push(20 * Math.log10(1 / (2 * Math.cos((2 * k - 1) * Math.PI / (4 * N)))));
+    return out;
+  }
   function filterDef(type, label, biq, fMin, fMax, fDef, qMin, qMax, qDef) {
+    const lphp = biq === 'lowpass' || biq === 'highpass';
     return {
       type: type, label: label, category: 'eq',
-      params: [P('freq', 'Frequency', fMin, fMax, 1, fDef, 'Hz', true), P('q', 'Resonance', qMin, qMax, 0.1, qDef, '', true)],
-      build: function (ctx) {
+      params: [P('freq', 'Frequency', fMin, fMax, 1, fDef, 'Hz', true), P('q', 'Resonance', qMin, qMax, 0.1, qDef, '', true),
+        CHOICE('slope', 'Slope', lphp ? SLOPES_DB : SLOPES_WORDS, 12, { rebuild: true })],
+      build: function (ctx, inst) {
         const s = shop(ctx);
-        const n = s.biquad(biq, fDef, qDef);
-        return unit({ input: n, output: n, nodes: s.nodes, oscs: s.oscs, params: { freq: n.frequency, q: n.Q } });
+        const N = Math.max(1, Math.round(staticOf(inst, type, 'slope') / 12));
+        if (N === 1) {
+          const n = s.biquad(biq, fDef, qDef);
+          return unit({ input: n, output: n, nodes: s.nodes, oscs: s.oscs, params: { freq: n.frequency, q: n.Q } });
+        }
+        const bw = bwStageDb(N), st = [];
+        for (let i = 0; i < N; i++) st.push(s.biquad(biq, fDef, (lphp && i < N - 1) ? bw[i] : qDef));
+        for (let i = 1; i < N; i++) st[i - 1].connect(st[i]);
+        const qOf = lphp ? [st[N - 1]] : st;   // the stages the Resonance slider drives
+        return unit({ input: st[0], output: st[N - 1], nodes: s.nodes, oscs: s.oscs,
+          custom: { freq: multi(st.map(n => [n.frequency, null])), q: multi(qOf.map(n => [n.Q, null])) } });
       },
     };
   }
@@ -508,17 +791,60 @@ window.FM = window.FM || {};
     filterDef('notch', 'Notch', 'notch', 40, 12000, 1000, 0.1, 30, 8),
   {
     type: 'telephone', label: 'Telephone', category: 'eq',
-    params: [MIX(1)],
+    /* ═══ WHICH LINE (#482 polish 7.4) ═══════════════════════════════════════════════════════════════════════════════
+     * One sound, a phone: a fixed 300–3400 Hz band and a fixed bite. Low cut and High cut are the band's two edges (the
+     * same Q-1 biquads, now with their own sliders), Grit is the bite (k = 0.06 × Grit, so 30 is today's tanh 1.8, a
+     * keyframed Grit cross-fading a bank of curves like Distortion's Drive) and Noise is a seeded hiss mixed in ahead of
+     * the band, so it is narrowed and bitten like the voice. Style is a set of starting points: a tap writes the four
+     * values below it (inspector.js fxSegment `sets`) and the sound is those four — the kernel reads nothing else from
+     * it, so moving a slider afterwards is heard at once. Every default is today's Telephone: Phone writes the numbers
+     * the build always used, Noise 0 is a gain of 0 into the band (x + 0 = x).
+     * The backlog's Walkie-talkie also wants a squelch — a burst of noise as a transmission ends — which is a gate on the
+     * voice's level, not one of these four; it is not built (the batch report says so). */
+    params: [
+      CHOICE('style', 'Style', [[0, 'Phone'], [1, 'Radio'], [2, 'Megaphone'], [3, 'Walkie-talkie'], [4, 'Old radio']], 0, { sets: {
+        0: { lowcut: 300, highcut: 3400, grit: 30, noise: 0 },
+        1: { lowcut: 150, highcut: 5000, grit: 20, noise: 0 },
+        2: { lowcut: 500, highcut: 2800, grit: 70, noise: 0 },
+        3: { lowcut: 400, highcut: 2600, grit: 55, noise: 0.1 },
+        4: { lowcut: 200, highcut: 4000, grit: 25, noise: 0.35 },
+      } }),
+      P('lowcut', 'Low cut', 100, 1000, 1, 300, 'Hz', true),
+      P('highcut', 'High cut', 1500, 8000, 10, 3400, 'Hz', true),
+      P('grit', 'Grit', 0, 100, 1, 30, '', true),
+      P('noise', 'Noise', 0, 1, 0.01, 0, '', true),
+      MIX(1),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
-      const hp = s.biquad('highpass', 300, 1);
-      const lp = s.biquad('lowpass', 3400, 1);
-      const bite = s.shaper(BITE, '2x');
+      const hp = s.biquad('highpass', initNum(inst, 'lowcut', 300, 100, 1000), 1);
+      const lp = s.biquad('lowpass', initNum(inst, 'highcut', 3400, 1500, 8000), 1);
+      let grit = initNum(inst, 'grit', 30, 0, 100);
+      const bite = s.shaper(gritCurve(grit), '2x');
+      const bg = s.gain(1);              // the static bite's own level, so a keyframed Grit's bank can take over
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
-      input.connect(hp); hp.connect(lp); lp.connect(bite); bite.connect(wd.wet); wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, custom: { mix: wd.set } });
+      input.connect(hp); hp.connect(lp); lp.connect(bite); bite.connect(bg); bg.connect(wd.wet); wd.wet.connect(out);
+      const hiss = s.noise(2, 0x7e1e), nG = s.gain(initNum(inst, 'noise', 0, 0, 1) * 0.12);   // Noise 1 ≈ −25 dBFS of hiss in the band
+      hiss.connect(nG); nG.connect(hp);
+      const bank = curveBank(s, lp, wd.wet, gritCurve, 0, 100, 12, '2x');
+      return unit({
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        params: { lowcut: hp.frequency, highcut: lp.frequency },
+        custom: {
+          grit: function (v, when, ramp) {
+            v = clamp(v, 0, 100);
+            if (!FM.isAnimated(inst.params && inst.params.grit)) {   // see the note on distortion's drive
+              if (v !== grit) { grit = v; bite.curve = gritCurve(v); }
+              return;
+            }
+            bank.at(v, when, ramp, bg.gain);
+          },
+          noise: multi([[nG.gain, 0.12]]),
+          mix: wd.set,
+        },
+      });
     },
   });
 
@@ -567,22 +893,9 @@ window.FM = window.FM || {};
       const hc = bypassPair(s, wetBus, lp, lp, hc0 < 20000);
       const hp = s.biquad('highpass', lc0, BUTTERWORTH_DB);
       const lc = bypassPair(s, hc.out, hp, hp, lc0 > 20);
-      /* Width is mid/side on the wet: L = M + w·S, R = M − w·S. The M/S sum is NOT exact at w = 1 in floats
-         ((L+R)/2 + (L−R)/2 can land an ulp off L), which is exactly why it too is switched in by a pair. The
-         splitter is discrete, so the wet is up-mixed to two channels first, as the Stereo Width effect does. */
-      const msIn = s.gain(1);
-      msIn.channelCount = 2; msIn.channelCountMode = 'explicit'; msIn.channelInterpretation = 'speakers';
-      const split = s.splitter(2), merge = s.merger(2);
-      const mid = s.gain(0.5);
-      split.connect(mid, 0); split.connect(mid, 1);
-      const sP = s.gain(0.5), sN = s.gain(-0.5), side = s.gain(1);
-      split.connect(sP, 0); split.connect(sN, 1); sP.connect(side); sN.connect(side);
-      const wG = s.gain(w0), wN = s.gain(-1);
-      side.connect(wG); wG.connect(wN);
-      mid.connect(merge, 0, 0); wG.connect(merge, 0, 0);
-      mid.connect(merge, 0, 1); wN.connect(merge, 0, 1);
-      msIn.connect(split);
-      const wp = bypassPair(s, lc.out, msIn, merge, w0 < 1);
+      // Width is mid/side on the wet (msWidth), switched in by a pair because the M/S sum is not exact at w = 1.
+      const ms = msWidth(s, w0), wG = ms.w;
+      const wp = bypassPair(s, lc.out, ms.input, ms.output, w0 < 1);
       pre.out.connect(conv); conv.connect(convG); convG.connect(wetBus);
       wp.out.connect(wd.wet); wd.wet.connect(out);
       let size = initNum(inst, 'size', 0.5, 0, 1), decay = initNum(inst, 'decay', 2, 0.1, 8);
@@ -726,7 +1039,8 @@ window.FM = window.FM || {};
   }, {
     type: 'delay', label: 'Echo / Delay', category: 'space',
     params: [
-      P('time', 'Time', 0.01, 2, 0.01, 0.35, 's', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.35, '', true),
+      SYNCED(P('time', 'Time', 0.01, 2, 0.01, 0.35, 's', true)), ...TEMPO('delay', 'time', 0.01, 2),   // Tempo, Note: #482 8.7
+      P('feedback', 'Feedback', 0, 0.9, 0.01, 0.35, '', true),
       /* #482 polish 3.3, his #966 steer (*"this is the complex version we want as much choice as possible"*). Every
          repeat used to be a perfect copy of the one before, so a long Feedback piled up into a bright metallic smear.
          Tone and Low cut sit INSIDE the loop, so each trip round loses a little more top (or bottom) — the way a
@@ -766,10 +1080,12 @@ window.FM = window.FM || {};
       const tap = low.out;                  // every repeat, darkened and thinned: it goes round again and out
       tap.connect(fb); fb.connect(d); fb.connect(dw);
       tap.connect(wd.wet); wd.wet.connect(out);
+      // Time, or the Tempo and Note it is synced to (#482 8.7), onto both lines.
+      const ts = tempoSync(inst, 'delay', 'time', 0.01, 2, (x, when, ramp) => { put(d.delayTime, x, when, ramp); put(dw.delayTime, x, when, ramp); });
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { feedback: fb.gain },
         custom: {
-          time: multi([[d.delayTime, null], [dw.delayTime, null]]),
+          time: ts.time, bpm: ts.bpm, note: ts.note,
           tone: multi([[lp.frequency, null]].concat(pairTargets(tone, v => v < 20000))),
           lowcut: multi([[hp.frequency, null]].concat(pairTargets(low, v => v > 20))),
           wobble: multi([[wAmp.gain, 0.002]].concat(pairTargets({ gOn: wOn, gOff: wOff }, v => v > 0))),
@@ -779,31 +1095,79 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'pingpong', label: 'Ping-Pong Delay', category: 'space',
-    params: [P('time', 'Time', 0.01, 1.5, 0.01, 0.3, 's', true), P('feedback', 'Feedback', 0, 0.85, 0.01, 0.4, '', true), MIX(0.35)],
+    params: [SYNCED(P('time', 'Time', 0.01, 1.5, 0.01, 0.3, 's', true)), ...TEMPO('pingpong', 'time', 0.01, 1.5),   // Tempo, Note: #482 8.7
+      P('feedback', 'Feedback', 0, 0.85, 0.01, 0.4, '', true),
+      /* #482 polish 8.3. Right-side timing stretches (or shortens) the right side's half of every bounce, so the echoes stop
+         landing on an even left-right-left grid — at 1.5 the first right echo comes 2.5 × Time after the sound instead of
+         2 ×. Tone takes the top off each side's line, so every bounce is darker than the one before (the Echo's Tone, 3.3);
+         Width folds the bounces from full left-right towards the middle (Reverb's Width, 3.4). Every default is today's
+         Ping-Pong: the right line at 1 × is today's line (a longer twin takes over off 1, a bypass pair — a delay's length
+         changes how it rounds, the Pitch Shift lesson), Tone 20000 and Width 1 are bypass pairs. */
+      P('offset', 'Right-side timing', 0.5, 2, 0.01, 1, '×', true),
+      P('tone', 'Tone', 500, 20000, 10, 20000, 'Hz', true),
+      P('width', 'Width', 0, 1, 0.01, 1, '', true),
+      MIX(0.35)],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.35);
       input.connect(wd.dry).connect(out);
-      const dL = s.delay(1.7), dR = s.delay(1.7);
-      dL.delayTime.value = 0.3; dR.delayTime.value = 0.3;
+      const off0 = initNum(inst, 'offset', 1, 0.5, 2), tone0 = initNum(inst, 'tone', 20000, 500, 20000), w0 = initNum(inst, 'width', 1, 0, 1);
+      const dL = s.delay(1.7), dR = s.delay(1.7), dR2 = s.delay(3.2);
+      dL.delayTime.value = 0.3; dR.delayTime.value = 0.3; dR2.delayTime.value = 0.3 * off0;
       const xL = s.gain(0.4), xR = s.gain(0.4);   // each cross-feed is one tap, so a round trip = feedback²
       const merge = s.merger(2);
       input.connect(dL);
-      dL.connect(xR).connect(dR);
-      dR.connect(xL).connect(dL);
-      dL.connect(merge, 0, 0);
-      dR.connect(merge, 0, 1);
-      merge.connect(wd.wet); wd.wet.connect(out);
+      /* THE LOOP (8.3): dL → [Tone] → left out, and → xR → the right line (today's, or the twin when Right-side timing is off
+         1) → [Tone] → right out, and → xL → dL. Each Tone sits on a line's output, so the first echo is darkened too and a
+         drag is heard at Feedback 0 (the Echo's rule). */
+      const lpL = s.biquad('lowpass', tone0, BUTTERWORTH_DB), lpR = s.biquad('lowpass', tone0, BUTTERWORTH_DB);
+      const tL = bypassPair(s, dL, lpL, lpL, tone0 < 20000);
+      tL.out.connect(merge, 0, 0); tL.out.connect(xR);
+      xR.connect(dR); xR.connect(dR2);
+      const offOn = Math.abs(off0 - 1) > 1e-9;
+      const rOff = s.gain(offOn ? 0 : 1), rOn = s.gain(offOn ? 1 : 0), rSum = s.gain(1);
+      dR.connect(rOff); rOff.connect(rSum); dR2.connect(rOn); rOn.connect(rSum);
+      const tR = bypassPair(s, rSum, lpR, lpR, tone0 < 20000);
+      tR.out.connect(merge, 0, 1); tR.out.connect(xL); xL.connect(dL);
+      const ms = msWidth(s, w0);
+      const wp = bypassPair(s, merge, ms.input, ms.output, w0 < 1);
+      wp.out.connect(wd.wet); wd.wet.connect(out);
+      /* Time (or the Tempo it is synced to, 8.7) and Right-side timing both drive the twin (Time × it), so each setter works
+         it out from both read at the SAME scene moment (sceneT), the Compressor's Auto makeup rule: whichever writes last at
+         a moment writes the same number. */
+      const pO = paramOf('pingpong', 'offset');
+      const offSwitch = pairTargets({ gOn: rOn, gOff: rOff }, v => Math.abs(v - 1) > 1e-9)[0];
+      const ts = tempoSync(inst, 'pingpong', 'time', 0.01, 1.5, function (t, when, ramp, sceneT) {
+        put(dL.delayTime, t, when, ramp); put(dR.delayTime, t, when, ramp);
+        put(dR2.delayTime, t * valueAt(inst, pO, isFinite(sceneT) ? sceneT : 0), when, ramp);
+      });
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
-        custom: { time: multi([[dL.delayTime, null], [dR.delayTime, null]]), feedback: multi([[xL.gain, null], [xR.gain, null]]), mix: wd.set },
+        custom: {
+          time: ts.time, bpm: ts.bpm, note: ts.note,
+          offset: function (v, when, ramp, sceneT) { put(dR2.delayTime, ts.now(sceneT) * v, when, ramp); offSwitch(v, when, ramp); },
+          feedback: multi([[xL.gain, null], [xR.gain, null]]),
+          tone: multi([[lpL.frequency, null], [lpR.frequency, null]].concat(pairTargets(tL, v => v < 20000), pairTargets(tR, v => v < 20000))),
+          width: multi([[ms.w.gain, null]].concat(pairTargets(wp, v => v < 1))),
+          mix: wd.set,
+        },
       });
     },
   }, {
     type: 'width', label: 'Stereo Width', category: 'space',
-    params: [P('width', 'Width', 0, 2, 0.01, 1.5, '', true)],
-    build: function (ctx) {
+    params: [P('width', 'Width', 0, 2, 0.01, 1.5, '', true),
+      /* #482 polish 8.4. Widening pushes the bass apart too, and wide bass is what makes a mix sound hollow on a phone
+         speaker and lopsided in headphones. Keep bass centred takes the difference between the sides (S) away below the
+         frequency given — two Butterworth highpasses on S, 24 dB an octave, so 60 Hz under a 150 Hz setting keeps 1/40 of
+         its width — and leaves everything above it as wide as Width says. 0 is Off, then 40–300 Hz: the panel says Off at 0
+         and never rests in 1–39 (`offUntil`, the batch 8 review; a file that carries one plays it at 40). Auto trim turns the sound down as Width goes past 1 by √(2 / (1 + Width²)), which holds the level of an
+         ordinary stereo sound (left and right unrelated) where it was: at 2 it would otherwise come out 4 dB louder. Both
+         default to today's Width: Keep bass centred 0 is a bypass pair, Auto trim Off builds nothing (a rebuild). */
+      Object.assign(P('monobass', 'Keep bass centred', 0, 300, 1, 0, 'Hz', true), { offUntil: 40 }),
+      TOGGLE('trim', 'Auto trim', 0, { rebuild: true, note: 'Turns the sound down as it gets wider, so wider is not also louder.' }),
+    ],
+    build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       // A ChannelSplitter is "explicit"/"discrete" by spec and immutably so: a MONO input reaches it as
@@ -817,12 +1181,27 @@ window.FM = window.FM || {};
       const sP = s.gain(0.5), sN = s.gain(-0.5), side = s.gain(1);
       split.connect(sP, 0); split.connect(sN, 1);
       sP.connect(side); sN.connect(side);                           // S = (L−R)/2
+      // Keep bass centred (8.4): S → [two highpasses → on] + [off] → width, a bypass pair at 0.
+      const mbHz = v => clamp(v, 40, 300), mb0 = initNum(inst, 'monobass', 0, 0, 300);
+      const hp1 = s.biquad('highpass', mbHz(mb0), BUTTERWORTH_DB), hp2 = s.biquad('highpass', mbHz(mb0), BUTTERWORTH_DB);
+      hp1.connect(hp2);
+      const mb = bypassPair(s, side, hp1, hp2, mb0 > 0);
       const w = s.gain(1.5), wN = s.gain(-1);
-      side.connect(w); w.connect(wN);
+      mb.out.connect(w); w.connect(wN);
       mid.connect(merge, 0, 0); w.connect(merge, 0, 0);             // L = M + S×width
       mid.connect(merge, 0, 1); wN.connect(merge, 0, 1);            // R = M − S×width
-      input.connect(split); merge.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { width: w.gain } });
+      input.connect(split);
+      const custom = { monobass: multi([[hp1.frequency, mbHz], [hp2.frequency, mbHz]].concat(pairTargets(mb, v => v > 0))) };
+      if (!(staticOf(inst, 'width', 'trim') > 0)) {
+        merge.connect(out);
+        return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { width: w.gain }, custom: custom });
+      }
+      // Auto trim (8.4): one gain after the merge, following Width (keyframed too).
+      const trimOf = v => (v > 1 ? Math.sqrt(2 / (1 + v * v)) : 1);
+      const tg = s.gain(trimOf(initNum(inst, 'width', 1.5, 0, 2)));
+      merge.connect(tg); tg.connect(out);
+      custom.width = multi([[w.gain, null], [tg.gain, trimOf]]);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, custom: custom });
     },
   }, {
     type: 'pan', label: 'Pan', category: 'space',
@@ -834,14 +1213,44 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'autopan', label: 'Auto-Pan (8D)', category: 'space',
-    params: [P('rate', 'Rate', 0.05, 8, 0.01, 0.4, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 1, '', true)],
-    build: function (ctx) {
-      const s = shop(ctx);
-      const p = s.panner(0);   // base stays centred; the LFO swings ±depth around it
-      const lfo = s.lfo(0.4, { key: 'rate' });
+    params: [SYNCED(P('rate', 'Rate', 0.05, 8, 0.01, 0.4, 'Hz', true)), ...TEMPO('autopan', 'rate', 0.05, 8),   // Tempo, Note: #482 8.7
+      P('depth', 'Depth', 0, 1, 0.01, 1, '', true), SHAPE(),
+      /* #482 polish 8.6. Centre moves the middle of the swing (−1 left … +1 right), so the sound can circle off to one side;
+         the swing is clipped at the speaker it reaches. Realism is what makes "8D" sound like it goes round the head rather
+         than from ear to ear: while the sound is behind, its top is taken off (two lowpasses dipping from 20 kHz to 4 kHz,
+         the head's shadow), driven by a second scene-pinned LFO a quarter-cycle on from the pan (waveFn `back:`), and a
+         little room is mixed in under it (Realism × 0.15 of a short reverb, the backlog's number). Both defaults are
+         today's Auto-Pan: Centre 0 is the pan's own value, and Realism builds nothing until it is in use (rebuildIf, the
+         Chorus Spread rule) — 20 kHz is not a lowpass that leaves a sound exactly alone. */
+      P('centre', 'Centre', -1, 1, 0.01, 0, '', true),
+      Object.assign(P('realism', 'Realism', 0, 1, 0.01, 0, '', true), { rebuild: true, rebuildIf: inUse }),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), wave = waveOf(inst, 'autopan');
+      // Rate, or the Tempo and Note it is synced to (#482 8.7), onto every LFO's rate — and into where each one starts.
+      const rates = [], ts = tempoSync(inst, 'autopan', 'rate', 0.05, 8, (x, when, ramp) => rates.forEach(ap => put(ap, x, when, ramp)));
+      const p = s.panner(0);   // base stays centred (Centre moves it); the LFO swings ±depth around it
+      const lfo = s.lfo(0.4, { key: 'rate', wave: wave, hzOf: ts.hzOf });
+      rates.push(lfo.playbackRate);
       const amp = s.gain(1);
       lfo.connect(amp); amp.connect(p.pan);
-      return unit({ input: p, output: p, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate, depth: amp.gain } });
+      const custom = { rate: ts.rate, bpm: ts.bpm, note: ts.note };
+      if (!inUse(inst.params && inst.params.realism)) {
+        return unit({ input: p, output: p, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { depth: amp.gain, centre: p.pan }, custom: custom });
+      }
+      // REALISM (8.6): in → two lowpasses (detuned down while behind) → the panner → out, plus in → a small room → out.
+      const input = s.gain(1), out = s.gain(1), r0 = initNum(inst, 'realism', 0, 0, 1);
+      const lp1 = s.biquad('lowpass', 20000, BUTTERWORTH_DB), lp2 = s.biquad('lowpass', 20000, BUTTERWORTH_DB);
+      const back = s.lfo(0.4, { key: 'rate', wave: 'back:' + wave, phase: 0.25, hzOf: ts.hzOf });
+      rates.push(back.playbackRate);
+      const bd = s.gain(-AUTOPAN_BEHIND_CENTS * r0);
+      back.connect(bd); bd.connect(lp1.detune); bd.connect(lp2.detune);
+      input.connect(lp1); lp1.connect(lp2); lp2.connect(p); p.connect(out);
+      const room = s.convolver(); room.buffer = impulse(ctx, 0.35, 1.2);
+      const send = s.gain(AUTOPAN_ROOM * r0);
+      input.connect(room); room.connect(send); send.connect(out);
+      custom.realism = multi([[bd.gain, -AUTOPAN_BEHIND_CENTS], [send.gain, AUTOPAN_ROOM]]);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { depth: amp.gain, centre: p.pan }, custom: custom });
     },
   });
 
@@ -874,6 +1283,13 @@ window.FM = window.FM || {};
          saved Compressor (the sanitiser fills a missing key with def) renders sample for sample as before. */
       P('output', 'Output', -24, 24, 0.5, 0, 'dB', true),
       MIX(1),
+      /* #482 polish 7.1 (backlog 3.7 left it for the enabler). The node turns everything it outputs up by a hidden amount
+         that follows Threshold, Knee and Ratio (makeupCancel above): +2.4 dB at the defaults, +17 dB at −40 / 6 / 4:1, so
+         lowering the threshold makes the quiet parts LOUDER, which is not what anyone expects a compressor to do. On (the
+         default, and every saved Compressor) is today's sound — the graph is not touched at all. Off puts the cancelling
+         gain after the node, so below the threshold the sound stays exactly at its own level and Output is the only lift.
+         A rebuild: the on and off graphs differ (the setters below), and a toggle is not keyframed. */
+      TOGGLE('automakeup', 'Auto makeup', 1, { rebuild: true, note: 'On: the Compressor turns the result back up by the amount it squashes the loudest sound. Off: quiet parts stay at their own level, and Output is the only boost.' }),
     ],
     /* A live meter: the Compressor row in the Audio effects panel draws how far this node is turning the sound
        down while the clip plays or is heard (inspector.js reductionMeter, read through audioFxLive.reductionOf). */
@@ -882,6 +1298,7 @@ window.FM = window.FM || {};
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       const c = s.comp();
+      const autoMakeup = staticOf(inst, 'compressor', 'automakeup') !== 0;
       /* THE UNTOUCHED PATH WAITS FOR THE SQUASHED ONE. A DynamicsCompressorNode looks ahead: its output is its
          input floor(0.006 × rate) samples late — but never more than 1023, the engine's pre-delay buffer (1024
          frames, minus one). MEASURED in the suite's Chrome by cross-correlation: 132 frames at 22.05 kHz, 264 at
@@ -893,16 +1310,42 @@ window.FM = window.FM || {};
          rate, so a Mac on a 192 kHz interface heard it). So the untouched copy is delayed by the same frames,
          cap included, and the two line up at every rate. */
       const lag = s.delay(0.05);
-      lag.delayTime.value = Math.min(1023, Math.floor(0.006 * ctx.sampleRate)) / ctx.sampleRate;
+      lag.delayTime.value = lookaheadSecs(ctx);
       const wd = wetDry(s, inst, 'mix', 1);
-      input.connect(c); c.connect(wd.wet); wd.wet.connect(out);
+      if (autoMakeup) {   // today's graph, node for node
+        input.connect(c); c.connect(wd.wet); wd.wet.connect(out);
+        input.connect(lag); lag.connect(wd.dry); wd.dry.connect(out);
+        return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: { node: c, dry: wd.dry.gain, wet: wd.wet.gain },
+          params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee, output: out.gain },
+          xf: { output: dbToLin }, custom: { mix: wd.set } });
+      }
+      /* AUTO MAKEUP OFF: a gain after the node that cancels its lift. The lift follows THREE keys, and the chain hands
+         each key its values separately (static ones once, keyframed ones every step), so each of the three setters works
+         the gain out from all three read at the SAME scene moment (sceneT): whichever writes last at a given time writes
+         the same number, and a keyframed threshold stays cancelled at every step. */
+      const mk = s.gain(makeupCancel(staticOf(inst, 'compressor', 'threshold'), staticOf(inst, 'compressor', 'knee'), staticOf(inst, 'compressor', 'ratio')));
+      input.connect(c); c.connect(mk); mk.connect(wd.wet); wd.wet.connect(out);
       input.connect(lag); lag.connect(wd.dry); wd.dry.connect(out);
+      const curveKey = function (key) {
+        return function (v, when, ramp, sceneT) {
+          const at = k => (k === key ? v : valueAt(inst, paramOf('compressor', k), isFinite(sceneT) ? sceneT : 0));
+          const g = makeupCancel(at('threshold'), at('knee'), at('ratio'));
+          if (ramp) { c[key].linearRampToValueAtTime(v, when); mk.gain.linearRampToValueAtTime(g, when); }
+          else { c[key].setValueAtTime(v, when); mk.gain.setValueAtTime(g, when); }
+        };
+      };
       return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: { node: c, dry: wd.dry.gain, wet: wd.wet.gain },
-        params: { threshold: c.threshold, ratio: c.ratio, attack: c.attack, release: c.release, knee: c.knee, output: out.gain },
-        xf: { output: dbToLin }, custom: { mix: wd.set } });
+        params: { attack: c.attack, release: c.release, output: out.gain },
+        xf: { output: dbToLin }, custom: { threshold: curveKey('threshold'), knee: curveKey('knee'), ratio: curveKey('ratio'), mix: wd.set } });
     },
   }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
+    // Its Mix (#482 polish 8.1) blends a dry copy held back by the node's look-ahead, as the Compressor's is (mixOutput).
+    dryLag: lookaheadSecs,
+    /* …and its Output only turns it down (batch 8 review): above 0 dB it would lift a limited sound past the Ceiling the
+       effect exists to hold. Capped, not moved before the ceiling (that would be Input gain again), and Output only came
+       with 8.1, so no saved Limiter carries a value above 0. */
+    outputMax: 0,
     params: [
       P('ceiling', 'Ceiling', -24, 0, 0.5, -1, 'dB', true),
       /* #482 polish 3.8. Input gain pushes the sound INTO the ceiling (louder, with the peaks held at it);
@@ -910,8 +1353,14 @@ window.FM = window.FM || {};
          defs are today's graph (see build) — so a saved Limiter renders sample for sample as before. */
       P('input', 'Input gain', 0, 24, 0.5, 0, 'dB', true),
       P('release', 'Release', 0.01, 1, 0.01, 0.05, 's', true),
+      /* #482 polish 7.1 (backlog 3.8 left it for the enabler). The node's ratio stops at 20:1, so a full-scale sound still
+         lands 1/20 of the way over the ceiling (0.95 × Ceiling: −11.4 dBFS under −12) and the first moments of a hit get
+         past a 1 ms detector. Clip at ceiling cuts whatever is left over the ceiling itself — a hard clip, 4× oversampled so
+         the cut does not fold back down as aliasing. Off (the default, and every saved Limiter) is today's graph exactly:
+         a bypass pair (backlog §0.3), so switching it while the preview plays fades rather than clicks. */
+      TOGGLE('clip', 'Clip at ceiling', 0, { note: 'Nothing gets past the ceiling, not even the start of a hit. Pushed hard it can sound crunchy.' }),
     ],
-    build: function (ctx) {
+    build: function (ctx, inst) {
       const s = shop(ctx);
       const pre = s.gain(1);
       const c = s.comp();
@@ -958,28 +1407,67 @@ window.FM = window.FM || {};
       pre.connect(c); c.connect(trim); trim.connect(post);
       post.connect(clipIn); clipIn.connect(clip); clip.connect(clipOut); clipOut.connect(gOn); gOn.connect(out);
       post.connect(gOff); gOff.connect(out);
-      return unit({ input: pre, output: out, nodes: s.nodes, oscs: s.oscs,
+      // Clip at ceiling (#482 7.1): out → [÷ceiling → hard clip (4×) → ×ceiling] in a bypass pair, after everything above.
+      const ceil0 = staticOf(inst, 'limiter', 'ceiling');
+      const cIn = s.gain(1 / dbToLin(ceil0)), cOut = s.gain(dbToLin(ceil0));
+      const cClip = s.shaper(HARD_CLIP, '4x');
+      cIn.connect(cClip); cClip.connect(cOut);
+      const atCeil = bypassPair(s, out, cIn, cOut, staticOf(inst, 'limiter', 'clip') > 0);
+      return unit({ input: pre, output: atCeil.out, nodes: s.nodes, oscs: s.oscs,
         params: { release: c.release },
         custom: {
           ceiling: multi([[c.threshold, null], [trim.gain, v => hardKneeMakeupCancel(v, 20)],
-            [clipIn.gain, v => 1 / limHoldLin(v)], [clipOut.gain, limHoldLin]]),
+            [clipIn.gain, v => 1 / limHoldLin(v)], [clipOut.gain, limHoldLin],
+            [cIn.gain, v => 1 / dbToLin(v)], [cOut.gain, dbToLin]]),
           input: multi([[pre.gain, v => dbToLin(v * 20 / 19)], [post.gain, v => dbToLin(-v / 19)],
             [gOn.gain, v => (v > 0 ? 1 : 0)], [gOff.gain, v => (v > 0 ? 0 : 1)]]),
+          clip: multi(pairTargets(atCeil, v => v > 0)),
         } });
     },
   }, {
     type: 'tremolo', label: 'Tremolo', category: 'dyn',
-    params: [P('rate', 'Rate', 0.1, 20, 0.1, 5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true)],
-    build: function (ctx) {
-      const s = shop(ctx);
-      const carrier = s.gain(1);
-      const lfo = s.lfo(5, { key: 'rate' });
-      const amp = s.gain(0.35);
-      lfo.connect(amp); amp.connect(carrier.gain);
-      // depth 0 → base 1, no swing (unity). depth 1 → base 0.5 ± 0.5, dipping to silence.
+    params: [
+      SYNCED(P('rate', 'Rate', 0.1, 20, 0.1, 5, 'Hz', true)), ...TEMPO('tremolo', 'rate', 0.1, 20),   // Tempo, Note: #482 8.7
+      P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), SHAPE(),
+      /* #482 polish 7.2. The right channel's swing runs this far round the cycle from the left's: at 180° one side dips while
+         the other swells, so the sound rocks between the speakers instead of pulsing in the middle. A rebuild (an LFO's
+         phase is set when it starts) and not keyframable; 0 (the default, every saved Tremolo) builds today's one carrier. */
+      Object.assign(P('stereo', 'Stereo phase', 0, 180, 5, 0, '°', false), { rebuild: true }),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), wave = waveOf(inst, 'tremolo'), st = staticOf(inst, 'tremolo', 'stereo');
+      // Rate, or the Tempo and Note it is synced to (#482 8.7), onto every LFO's rate — and into where each one starts.
+      const rates = [], ts = tempoSync(inst, 'tremolo', 'rate', 0.1, 20, (x, when, ramp) => rates.forEach(ap => put(ap, x, when, ramp)));
+      if (!(st > 0)) {
+        const carrier = s.gain(1);
+        const lfo = s.lfo(5, { key: 'rate', wave: wave, hzOf: ts.hzOf });
+        rates.push(lfo.playbackRate);
+        const amp = s.gain(0.35);
+        lfo.connect(amp); amp.connect(carrier.gain);
+        // depth 0 → base 1, no swing (unity). depth 1 → base 0.5 ± 0.5, dipping to silence.
+        return unit({
+          input: carrier, output: carrier, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+          custom: { rate: ts.rate, bpm: ts.bpm, note: ts.note, depth: multi([[carrier.gain, v => 1 - v / 2], [amp.gain, v => v / 2]]) },
+        });
+      }
+      // STEREO PHASE: a carrier per channel, the right one's LFO started st/360 of a cycle on. A mono clip is up-mixed to
+      // both sides first (a splitter is discrete, so its right output would otherwise be silence — see Stereo Width).
+      const input = s.gain(1), out = s.gain(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
+      const split = s.splitter(2), merge = s.merger(2);
+      const cL = s.gain(1), cR = s.gain(1);
+      const lfoL = s.lfo(5, { key: 'rate', wave: wave, hzOf: ts.hzOf }), lfoR = s.lfo(5, { key: 'rate', wave: wave, phase: st / 360, hzOf: ts.hzOf });
+      rates.push(lfoL.playbackRate, lfoR.playbackRate);
+      const aL = s.gain(0.35), aR = s.gain(0.35);
+      lfoL.connect(aL); aL.connect(cL.gain); lfoR.connect(aR); aR.connect(cR.gain);
+      input.connect(split); split.connect(cL, 0); split.connect(cR, 1);
+      cL.connect(merge, 0, 0); cR.connect(merge, 0, 1); merge.connect(out);
       return unit({
-        input: carrier, output: carrier, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate },
-        custom: { depth: multi([[carrier.gain, v => 1 - v / 2], [amp.gain, v => v / 2]]) },
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        custom: {
+          rate: ts.rate, bpm: ts.bpm, note: ts.note,
+          depth: multi([[cL.gain, v => 1 - v / 2], [aL.gain, v => v / 2], [cR.gain, v => 1 - v / 2], [aR.gain, v => v / 2]]),
+        },
       });
     },
   });
@@ -987,33 +1475,62 @@ window.FM = window.FM || {};
   /* ---- Character ---- */
   DEFS.push({
     type: 'distortion', label: 'Distortion', category: 'char',
-    params: [P('drive', 'Drive', 0, 100, 1, 30, '', true), MIX(1)],
+    params: [
+      P('drive', 'Drive', 0, 100, 1, 30, '', true),
+      /* #482 polish 7.3 (fixes C19: at the default Drive a quiet sound came out about 20 dB louder, with nothing to trim it).
+         Type picks the curve (DIST_TYPES above); Tone takes the fizz off the top of the distorted sound (a lowpass on the
+         wet, in a bypass pair); Auto level divides the curve's own small-signal gain back out, so turning Drive up adds
+         grit without turning quiet sound up; Output trims the whole effect. Every default is today's Distortion: Soft is the
+         same curve, Tone 20000 and Output 0 dB are x·1 + y·0 and a gain of 1, Auto level Off is no node at all. */
+      CHOICE('curve', 'Type', DIST_TYPES, 0, { rebuild: true }),
+      P('tone', 'Tone', 500, 20000, 10, 20000, 'Hz', true),
+      TOGGLE('autogain', 'Auto level', 0, { rebuild: true, note: 'Keeps quiet sound at its own level as Drive goes up, so Drive changes the grit, not the volume.' }),
+      P('output', 'Output', -24, 6, 0.5, 0, 'dB', true),
+      MIX(1),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
+      const ct = staticOf(inst, 'distortion', 'curve'), autoLvl = staticOf(inst, 'distortion', 'autogain') > 0;
+      const curveOf = v => distCurve(ct, v);
       let drive = initNum(inst, 'drive', 30, 0, 100);
-      const sh = s.shaper(driveCurve(drive), '4x');
+      const sh = s.shaper(curveOf(drive), '4x');
       const shg = s.gain(1);            // the static shaper's own level, so the bank can take over
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
-      input.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
-      const bank = curveBank(s, input, wd.wet, driveCurve, 0, 100);
+      /* THE WET PATH (#482 7.3): shaper (+ the animated-drive bank) → wetSum → [10 Hz DC block: Tube, Fuzz, Rectify only]
+         → [Auto level: only when on] → Tone (bypass pair) → wet. At the defaults every stage is ×1 or x·1 + y·0, exact. */
+      const wetSum = s.gain(1);
+      input.connect(sh); sh.connect(shg); shg.connect(wetSum);
+      let tail = wetSum;
+      if (DIST_DC[ct]) { const dc = s.biquad('highpass', 10, BUTTERWORTH_DB); tail.connect(dc); tail = dc; }
+      const ag = autoLvl ? s.gain(1 / distGain0(ct, drive)) : null;
+      if (ag) { tail.connect(ag); tail = ag; }
+      const tone0 = initNum(inst, 'tone', 20000, 500, 20000);
+      const lp = s.biquad('lowpass', tone0, BUTTERWORTH_DB);
+      const tone = bypassPair(s, tail, lp, lp, tone0 < 20000);
+      tone.out.connect(wd.wet); wd.wet.connect(out);
+      const bank = curveBank(s, input, wetSum, curveOf, 0, 100);
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { output: out.gain }, xf: { output: dbToLin },
         custom: {
           drive: function (v, when, ramp) {
             v = clamp(v, 0, 100);
+            // Auto level follows Drive, keyframed or not (a real gain, so it ramps with the bank's cross-fade).
+            if (ag) { const g = 1 / distGain0(ct, v); try { ramp ? ag.gain.linearRampToValueAtTime(g, when) : ag.gain.setValueAtTime(g, when); } catch (e) {} }
             /* STATIC MUST NEVER BUILD THE BANK. `when == null` is NOT the test — the static path calls
                set(key, value, 0), so `when` is 0 and not null, and an early version of this built a
                12-shaper bank for every plain Distortion in every project. The counter added for the
                suite caught it on the first measurement. The honest question is whether the PARAM is
                animated, so ask that. */
             if (!FM.isAnimated(inst.params && inst.params.drive)) {
-              if (v !== drive) { drive = v; sh.curve = driveCurve(v); }
+              if (v !== drive) { drive = v; sh.curve = curveOf(v); }
               return;
             }
             bank.at(v, when, ramp, shg.gain);
           },
+          tone: multi([[lp.frequency, null]].concat(pairTargets(tone, v => v < 20000))),
           mix: wd.set,
         },
       });
@@ -1102,31 +1619,86 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'chorus', label: 'Chorus', category: 'char',
-    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.8, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.5, '', true), MIX(0.5)],
+    params: [
+      P('rate', 'Rate', 0.05, 5, 0.01, 0.8, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.5, '', true), SHAPE(),
+      /* #482 polish 7.8. Voices is how many detuned copies sing together (1–6; 3 is today's three); Spread places them
+         across the speakers — the first hard left, the last hard right at 1, the rest between — where today all three sit in
+         the middle; Feedback sends each copy round again, a thicker, more metallic chorus. Feedback is a loop UNROLLED into
+         CHORUS_TAPS swept delays (the Flanger's C16 lesson: a real loop comes back a render quantum late). Defaults are
+         today's Chorus: Voices 3 builds the same three lines, Feedback 0 is a bypass pair on today's sum, and Spread 0 builds
+         no stereo path at all — Spread is a rebuild across the line between 0 and in use (rebuildIf), because the spread
+         path is stereo, and a mono Chorus turning stereo would change how an effect after it (a Pan) treats the sound. */
+      Object.assign(P('voices', 'Voices', 1, 6, 1, 3, '', false), { rebuild: true }),
+      Object.assign(P('spread', 'Spread', 0, 1, 0.01, 0, '', true), { rebuild: true, rebuildIf: inUse }),
+      P('feedback', 'Feedback', 0, 0.6, 0.01, 0, '', true),
+      MIX(0.5),
+    ],
     build: function (ctx, inst) {
-      const s = shop(ctx);
+      const s = shop(ctx), wave = waveOf(inst, 'chorus');
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.5);
       input.connect(wd.dry).connect(out);
-      const sum = s.gain(1 / 3);
-      const rates = [1, 1.31, 0.77], bases = [0.015, 0.021, 0.027];
-      const rateT = [], depthT = [];
-      for (let i = 0; i < 3; i++) {
+      const N = Math.round(staticOf(inst, 'chorus', 'voices')), spreadOn = inUse(inst.params && inst.params.spread);
+      const sum = s.gain(1 / N);
+      // The first three are today's voices, in today's order; three more for Voices 4–6.
+      const rates = [1, 1.31, 0.77, 1.13, 0.89, 1.21], bases = [0.015, 0.021, 0.027, 0.018, 0.024, 0.030];
+      const fb0 = initNum(inst, 'feedback', 0, 0, 0.6), sp0 = initNum(inst, 'spread', 0, 0, 1);
+      const rateT = [], depthT = [], tapT = [], spreadT = [];
+      const fbSum = s.gain(1 / N);          // every voice's feedback echoes (Spread off)
+      const ssum = spreadOn ? s.gain(1) : null;
+      for (let i = 0; i < N; i++) {
         const d = s.delay(0.08);
         d.delayTime.value = bases[i];   // ±4 ms of sweep never pushes these centres negative
-        const lfo = s.lfo(0.8 * rates[i], { key: 'rate', mul: rates[i] });
+        const lfo = s.lfo(0.8 * rates[i], { key: 'rate', mul: rates[i], wave: wave });
         const amp = s.gain(0.5 * 0.004);
         lfo.connect(amp); amp.connect(d.delayTime);
-        input.connect(d); d.connect(sum);
+        input.connect(d);
         rateT.push([lfo.playbackRate, rates[i]]);
         depthT.push([amp.gain, 0.004]);
+        // This voice's echoes: CHORUS_TAPS − 1 more passes through the same swept line, the k-th weighted Feedback^k.
+        let vo = null;
+        if (spreadOn) {
+          vo = s.gain(1 / N);
+          d.connect(vo);
+          // Where this voice sits: −1 (left) … +1 (right) by its place in the list, times Spread. A balance, not a pan law:
+          // the side it leans to keeps full level and the other side falls away, so a voice in the middle is untouched.
+          const pos = N > 1 ? -1 + 2 * i / (N - 1) : 0;
+          const up = s.gain(1);
+          up.channelCount = 2; up.channelCountMode = 'explicit'; up.channelInterpretation = 'speakers';
+          const split = s.splitter(2), merge = s.merger(2);
+          const gL = s.gain(Math.min(1, 1 - sp0 * pos)), gR = s.gain(Math.min(1, 1 + sp0 * pos));
+          vo.connect(up); up.connect(split); split.connect(gL, 0); split.connect(gR, 1);
+          gL.connect(merge, 0, 0); gR.connect(merge, 0, 1); merge.connect(ssum);
+          spreadT.push([gL.gain, v => Math.min(1, 1 - v * pos)], [gR.gain, v => Math.min(1, 1 + v * pos)]);
+        } else d.connect(sum);
+        let prev = d;
+        for (let k = 1; k < CHORUS_TAPS; k++) {
+          const dk = s.delay(0.08); dk.delayTime.value = bases[i];
+          amp.connect(dk.delayTime);
+          prev.connect(dk); prev = dk;
+          const g = s.gain(Math.pow(fb0, k));
+          dk.connect(g); g.connect(vo || fbSum);
+          tapT.push([g.gain, powOf(k)]);
+        }
       }
-      sum.connect(wd.wet); wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, custom: { rate: multi(rateT), depth: multi(depthT), mix: wd.set } });
+      if (spreadOn) ssum.connect(wd.wet);
+      else {
+        // FEEDBACK OFF IS TODAY'S SUM, EXACTLY: [sum] against [sum + echoes] in a bypass pair (x·1 + y·0 = x), so the sum
+        // keeps exactly today's three inputs.
+        const all = s.gain(1);
+        sum.connect(all); fbSum.connect(all);
+        const fbOn = s.gain(fb0 > 0 ? 1 : 0), fbOff = s.gain(fb0 > 0 ? 0 : 1), psum = s.gain(1);
+        sum.connect(fbOff); fbOff.connect(psum); all.connect(fbOn); fbOn.connect(psum);
+        psum.connect(wd.wet);
+        tapT.push.apply(tapT, pairTargets({ gOn: fbOn, gOff: fbOff }, v => v > 0));
+      }
+      wd.wet.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        custom: { rate: multi(rateT), depth: multi(depthT), feedback: multi(tapT), spread: multi(spreadT), mix: wd.set } });
     },
   }, {
     type: 'flanger', label: 'Flanger', category: 'char',
-    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.3, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.6, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.5, '', true), MIX(0.5)],
+    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.3, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.6, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.5, '', true), SHAPE(), MIX(0.5)],
     /* ═══ THE FEEDBACK CAME BACK ONE RENDER QUANTUM LATE (queue 986, hunt C16) ═══════════════════════════════
      * The feedback was a loop through the swept delay itself (d → fb → d). Web Audio only allows a cycle with a
      * DelayNode in it, and an engine pays for the cycle with one render quantum (128 frames) on every trip:
@@ -1150,7 +1722,7 @@ window.FM = window.FM || {};
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.5);
       input.connect(wd.dry).connect(out);
-      const lfo = s.lfo(0.3, { key: 'rate' });
+      const lfo = s.lfo(0.3, { key: 'rate', wave: waveOf(inst, 'flanger') });
       const amp = s.gain(0.6 * 0.003);   // 1–7 ms sweep around 4 ms, the same swing on every delay in the chain
       lfo.connect(amp);
       const fb0 = initNum(inst, 'feedback', 0.5, 0, 0.9);
@@ -1172,7 +1744,19 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'phaser', label: 'Phaser', category: 'char',
-    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.4, '', true)],
+    params: [
+      P('rate', 'Rate', 0.05, 5, 0.01, 0.5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.4, '', true), SHAPE(),
+      /* #482 polish 7.6. Stages is how many allpasses the sound goes through (each a 2nd-order allpass, so each adds one
+         notch: 4 is today's four, 8 a denser, more liquid sweep, 2 a gentle one); Centre moves the whole sweep up or down
+         (the four stages at 200–1600 Hz × Centre); Mix was welded at half and half — it is the depth of the notches, 0.5
+         the deepest; Stereo phase starts the right channel's sweep that far round the cycle from the left's, so the swirl
+         moves across the speakers. Every default is today's Phaser: four stages at 200/400/800/1600 Hz, Centre ×1 (a
+         gain of exactly 1 on every sweep), Mix 0.5 (the same 0.5 / 0.5 pair), Stereo 0 (one chain for both sides). */
+      CHOICE('stages', 'Stages', [[2, '2'], [4, '4'], [6, '6'], [8, '8']], 4, { rebuild: true }),
+      P('centre', 'Centre', 0.25, 4, 0.01, 1, '×', true),
+      MIX(0.5),
+      Object.assign(P('stereo', 'Stereo phase', 0, 180, 5, 0, '°', false), { rebuild: true }),
+    ],
     /* ═══ FEEDBACK WAS A FIXED COMB, NOT A SHARPER PHASER (queue 986, hunt C17) ══════════════════════════════
      * The feedback ran round a loop — the four allpasses, then back through a 1 ms DelayNode, because Web Audio
      * mutes a cycle without one — and the engine adds a render quantum to every trip round a cycle. MEASURED at
@@ -1194,45 +1778,82 @@ window.FM = window.FM || {};
      * Feedback 0 is the first copy alone — the same four nodes, the same wiring — so it renders sample-for-sample
      * what it did at 768c83d0, and Feedback schedules as real gains, keyframed or not. */
     build: function (ctx, inst) {
-      const s = shop(ctx);
+      const s = shop(ctx), wave = waveOf(inst, 'phaser');
       const input = s.gain(1), out = s.gain(1);
-      const dry = s.gain(0.5), wet = s.gain(0.5);   // the notches ARE dry + allpass summed — no mix knob
-      input.connect(dry).connect(out);
-      const lfo = s.lfo(0.5, { key: 'rate' });
-      const bases = [200, 400, 800, 1600];
-      // each stage sweeps in proportion to its own centre; one amp per stage drives that stage in every copy
-      const amps = bases.map(function (b) { const a = s.gain(0.7 * b * 0.7); lfo.connect(a); return a; });
-      const depthT = bases.map(function (b, i) { return [amps[i].gain, b * 0.7]; });
-      const fb0 = initNum(inst, 'feedback', 0.4, 0, 0.9);
-      const sum = s.gain(1), tapT = [];
-      let prev = input;
-      for (let k = 0; k < PHASE_PASSES; k++) {
-        bases.forEach(function (b, i) {
-          const ap = s.biquad('allpass', b, 1);
-          amps[i].connect(ap.frequency);
-          prev.connect(ap); prev = ap;
+      const wd = wetDry(s, inst, 'mix', 0.5);   // the notches ARE dry + allpass summed: 0.5 / 0.5 is today's pair exactly
+      input.connect(wd.dry).connect(out);
+      const n = staticOf(inst, 'phaser', 'stages'), st = staticOf(inst, 'phaser', 'stereo');
+      // Four stages are today's literal centres; any other count spreads the same 200–1600 Hz span evenly in octaves.
+      const bases = n === 4 ? [200, 400, 800, 1600] : Array.from({ length: n }, (_, i) => 200 * Math.pow(8, i / (n - 1)));
+      const c0 = initNum(inst, 'centre', 1, 0.25, 4), fb0 = initNum(inst, 'feedback', 0.4, 0, 0.9);
+      const rateT = [], depthT = [], centreT = [], tapT = [];
+      /* One swept chain fed from `src` with its own LFO (`phase` round the cycle). Each stage sweeps in proportion to its
+         own centre: one amp per stage (Depth) then one gain (Centre, exactly 1 by default) drives that stage in every pass. */
+      const lane = function (src, phase) {
+        const lfo = s.lfo(0.5, { key: 'rate', wave: wave, phase: phase });
+        rateT.push([lfo.playbackRate, null]);
+        const amps = bases.map(function (b) {
+          const a = s.gain(0.7 * b * 0.7), cg = s.gain(c0);
+          lfo.connect(a); a.connect(cg);
+          depthT.push([a.gain, b * 0.7]); centreT.push([cg.gain, null]);
+          return cg;
         });
-        const g = s.gain(Math.pow(fb0, k));   // pass k+1 carries fb^k
-        prev.connect(g); g.connect(sum);
-        if (k) tapT.push([g.gain, powOf(k)]);
+        const sum = s.gain(1);
+        let prev = src;
+        for (let k = 0; k < PHASE_PASSES; k++) {
+          bases.forEach(function (b, i) {
+            const ap = s.biquad('allpass', b * c0, 1);
+            amps[i].connect(ap.frequency);
+            centreT.push([ap.frequency, b]);
+            prev.connect(ap); prev = ap;
+          });
+          const g = s.gain(Math.pow(fb0, k));   // pass k+1 carries fb^k
+          prev.connect(g); g.connect(sum);
+          if (k) tapT.push([g.gain, powOf(k)]);
+        }
+        return sum;
+      };
+      if (!(st > 0)) lane(input, 0).connect(wd.wet);
+      else {
+        // STEREO PHASE: a chain per channel (a mono clip up-mixed to both first — a splitter is discrete).
+        const up = s.gain(1);
+        up.channelCount = 2; up.channelCountMode = 'explicit'; up.channelInterpretation = 'speakers';
+        const split = s.splitter(2), merge = s.merger(2), gl = s.gain(1), gr = s.gain(1);
+        input.connect(up); up.connect(split); split.connect(gl, 0); split.connect(gr, 1);
+        lane(gl, 0).connect(merge, 0, 0); lane(gr, st / 360).connect(merge, 0, 1);
+        merge.connect(wd.wet);
       }
-      sum.connect(wet); wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate }, custom: { depth: multi(depthT), feedback: multi(tapT) } });
+      wd.wet.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        custom: { rate: multi(rateT), depth: multi(depthT), feedback: multi(tapT), centre: multi(centreT), mix: wd.set } });
     },
   }, {
     type: 'vibrato', label: 'Vibrato', category: 'char',
-    params: [P('rate', 'Rate', 0.1, 12, 0.1, 5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.3, '', true)],
-    build: function (ctx) {
+    params: [P('rate', 'Rate', 0.1, 12, 0.1, 5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.3, '', true), SHAPE()],
+    build: function (ctx, inst) {
       const s = shop(ctx);
       const d = s.delay(0.05); d.delayTime.value = 0.005;   // 2–8 ms around a 5 ms centre, 100% wet
-      const lfo = s.lfo(5, { key: 'rate' });
+      const lfo = s.lfo(5, { key: 'rate', wave: waveOf(inst, 'vibrato') });
       const amp = s.gain(0.3 * 0.003);
       lfo.connect(amp); amp.connect(d.delayTime);
       return unit({ input: d, output: d, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate }, custom: { depth: multi([[amp.gain, 0.003]]) } });
     },
   }, {
     type: 'ringmod', label: 'Ring Mod', category: 'char',
-    params: [P('freq', 'Frequency', 10, 2000, 1, 220, 'Hz', true), MIX(1)],
+    params: [
+      P('freq', 'Frequency', 10, 2000, 1, 220, 'Hz', true),
+      /* #482 polish 7.7. Shape is the carrier's wave: a Square carrier adds sidebands round its odd harmonics too (a harsher,
+         buzzier robot), a Triangle a softer version of that. Sweep rate and Sweep depth glide the carrier's pitch up and
+         down — up to half its Frequency either way at depth 1, at the rate given — the classic wobbling sci-fi voice. The
+         backlog's fix half (the carrier stopping at 1024 Hz, hunt C15) shipped in queue 986: the carrier already runs on a
+         0.1 s cycle, its test (986 C15) passes, so only the controls are added. Defaults: Sine is today's buffer, and the
+         sweep rides a TWIN carrier switched in by a bypass pair when Sweep depth leaves 0 — the default plays the very
+         carrier it always did (nothing promises an engine plays a connected rate exactly like an unconnected one). */
+      CHOICE('shape', 'Shape', [[0, 'Sine'], [1, 'Square'], [2, 'Triangle']], 0, { rebuild: true }),
+      P('sweep', 'Sweep rate', 0, 5, 0.01, 0, 'Hz', true),
+      P('sweepdepth', 'Sweep depth', 0, 1, 0.01, 0, '', true),
+      MIX(1),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1243,16 +1864,45 @@ window.FM = window.FM || {};
          top half of the Frequency slider did nothing. At 0.1 s the rate is Hz / 10 (≤ 200 at 2000 Hz),
          and 0.1 s is a whole number of samples at 44.1, 48 and 96 kHz, so the cycle is exact. */
       const RING_SECS = 0.1;
-      const lfo = s.lfo(220, { key: 'freq', secs: RING_SECS });
+      const wave = ['sine', 'square', 'tri'][staticOf(inst, 'ringmod', 'shape')] || 'sine';
+      const lfo = s.lfo(220, { key: 'freq', secs: RING_SECS, wave: wave });
       lfo.connect(ring.gain);
+      // THE SWEPT TWIN (#482 7.7): the same carrier, its rate pushed by a scene-pinned sine of Sweep rate Hz, ±Sweep depth × ½.
+      const f0 = initNum(inst, 'freq', 220, 10, 2000), sd0 = initNum(inst, 'sweepdepth', 0, 0, 1);
+      const ringB = s.gain(0);
+      const lfoB = s.lfo(220, { key: 'freq', secs: RING_SECS, wave: wave });
+      lfoB.connect(ringB.gain);
+      const sw = s.lfo(0, { key: 'sweep' });                    // 1 s cycle: its rate IS Sweep rate in Hz
+      const swDepth = s.gain(sd0 * 0.5), swRate = s.gain(f0 * RING_SECS);
+      sw.connect(swDepth); swDepth.connect(swRate); swRate.connect(lfoB.playbackRate);
+      const rOff = s.gain(sd0 > 0 ? 0 : 1), rOn = s.gain(sd0 > 0 ? 1 : 0), rSum = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
-      input.connect(ring); ring.connect(wd.wet); wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, custom: { freq: multi([[lfo.playbackRate, RING_SECS]]), mix: wd.set } });
+      input.connect(ring); ring.connect(rOff); rOff.connect(rSum);
+      input.connect(ringB); ringB.connect(rOn); rOn.connect(rSum);
+      rSum.connect(wd.wet); wd.wet.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        params: { sweep: sw.playbackRate },
+        custom: {
+          freq: multi([[lfo.playbackRate, RING_SECS], [lfoB.playbackRate, RING_SECS], [swRate.gain, RING_SECS]]),
+          sweepdepth: multi([[swDepth.gain, 0.5]].concat(pairTargets({ gOn: rOn, gOff: rOff }, v => v > 0))),
+          mix: wd.set,
+        } });
     },
   }, {
     type: 'vocalremove', label: 'Vocal Remove', category: 'char',
-    params: [P('amount', 'Amount', 0, 1, 0.01, 1, '', true), P('bassKeep', 'Keep Bass', 0, 1, 0.01, 1, '', true)],
+    params: [P('amount', 'Amount', 0, 1, 0.01, 1, '', true), Object.assign(P('bassKeep', 'Keep Bass', 0, 1, 0.01, 1, '', true), { overriddenBy: 'mode', liveWhen: 0 }),
+      /* #482 polish 8.5. Cancelling the centre takes the kick and the bass with the voice, so the build hands back the sum of
+         the two sides under 180 Hz — Keep bass below moves that line (60–400 Hz: up to 400 keeps a bass guitar's body, a
+         voice's lowest notes come back with it). Keep highs hands back the shared sound above 8 kHz the same way (cymbals and
+         air, which a cancel also hollows out; a voice has little up there). Mode turns it round: Centre only keeps what both
+         speakers share — mostly the voice, but also anything else mixed to the middle, so it is labelled approximate. Every
+         default is today's Vocal Remove: 180 Hz is the line it always used, Keep highs 0 adds a gain of 0, Remove vocals
+         is today's graph (Mode is a rebuild). In Centre only the three keep controls do nothing, and say so. */
+      Object.assign(P('bassFreq', 'Keep bass below', 60, 400, 1, 180, 'Hz', true), { overriddenBy: 'mode', liveWhen: 0, alsoGate: { by: 'bassKeep', deadAt: 0 } }),
+      Object.assign(P('highKeep', 'Keep highs', 0, 1, 0.01, 0, '', true), { overriddenBy: 'mode', liveWhen: 0 }),
+      CHOICE('mode', 'Mode', [[0, 'Remove vocals'], [1, 'Centre only']], 0, { rebuild: true, note: 'Centre only is approximate: it keeps what both speakers share, which is mostly the voice, but also the bass and anything else mixed to the middle.' }),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1265,17 +1915,27 @@ window.FM = window.FM || {};
       input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
       const split = s.splitter(2);
       input.connect(split);
+      if (staticOf(inst, 'vocalremove', 'mode') === 1) {
+        // CENTRE ONLY (8.5): (L + R) / 2, up-mixed to both channels — a sound panned hard to one side comes out at half.
+        const mid = s.gain(0.5);
+        split.connect(mid, 0); split.connect(mid, 1);
+        mid.connect(wd.wet); wd.wet.connect(out);
+        return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, custom: { amount: wd.set } });
+      }
       const sP = s.gain(1), sN = s.gain(-1), side = s.gain(1);
       split.connect(sP, 0); split.connect(sN, 1);
       sP.connect(side); sN.connect(side);            // L − R cancels the centred lead
       const mono = s.gain(0.5);
       split.connect(mono, 0); split.connect(mono, 1);
-      const lp = s.biquad('lowpass', 180, 0.5);
+      const lp = s.biquad('lowpass', initNum(inst, 'bassFreq', 180, 60, 400), 0.5);
       const bass = s.gain(1);
       mono.connect(lp); lp.connect(bass);            // hand the kick/bass back — the cancel eats them too
       side.connect(wd.wet); bass.connect(wd.wet);    // mono result, up-mixed to both channels
+      // Keep highs (8.5): the shared sound above 8 kHz, added at its own gain (0 by default: + 0, today's sum).
+      const hp = s.biquad('highpass', 8000, BUTTERWORTH_DB), highs = s.gain(initNum(inst, 'highKeep', 0, 0, 1));
+      mono.connect(hp); hp.connect(highs); highs.connect(wd.wet);
       wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { bassKeep: bass.gain }, custom: { amount: wd.set } });
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { bassKeep: bass.gain, bassFreq: lp.frequency, highKeep: highs.gain }, custom: { amount: wd.set } });
     },
   }, {
     type: 'pitch', label: 'Pitch Shift', category: 'char',
@@ -1293,8 +1953,14 @@ window.FM = window.FM || {};
      * half that slide late — 25 ms at +7, 50 ms an octave up, 150 ms two octaves up. At Mix 100 % that is a small
      * lag behind the picture; below 100 % the dry sound plays on time beside it and the pair reads as a slap echo.
      * The hint line under the sliders says so in plain words. */
-    params: [P('semitones', 'Semitones', -24, 24, 1, 0, 'st', true), P('cents', 'Fine tune', -100, 100, 1, 0, '¢', true), MIX(1)],
-    hint: 'The shifted sound lands a little late (about 1/20 of a second an octave up). Keep Mix at 100% for a clean result: lower, the late copy sounds like an echo.',
+    params: [P('semitones', 'Semitones', -24, 24, 1, 0, 'st', true), P('cents', 'Fine tune', -100, 100, 1, 0, '¢', true),
+      /* #482 polish 8.8. Grain is how long each slice of sound is before the two read heads hand over (G below, 100 ms until
+         now): short grains (20–40 ms) keep drums and speech tight but buzz on a held note; long ones (150–200 ms) keep a sung
+         note smooth but smear a beat and land later (the lag is half a grain an octave up). A rebuild — it is the length of
+         the LFO buffers that drive the heads. 100 (the default, and every saved Pitch Shift) builds today's graph exactly. */
+      Object.assign(P('grain', 'Grain', 20, 200, 1, 100, 'ms', false), { rebuild: true }),
+      MIX(1)],
+    hint: 'The shifted sound lands a little late (about 1/20 of a second an octave up, half the Grain). Keep Mix at 100% for a clean result: lower, the late copy sounds like an echo.',
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1303,8 +1969,8 @@ window.FM = window.FM || {};
       /* Granular shift: a delay line read while its delayTime slides at exactly dτ/dt = 1 − ratio
        * resamples the signal by `ratio`. One line can only slide so far, so two run half a grain apart
        * and cross-fade, each windowed to silence at its own reset — that is where its delay jumps back.
-       * G is the grain: shorter combs the tone, longer smears it into an echo. */
-      const G = 0.1;
+       * G is the grain: shorter combs the tone, longer smears it into an echo — the Grain control (#482 8.8, 20–200 ms). */
+      const G = staticOf(inst, 'pitch', 'grain') / 1000;
       const gA = s.delay(0.2), gB = s.delay(0.2);
       const mA = s.gain(0), mB = s.gain(0);
       const rampA = s.lfo(1 / G, { wave: 'ramp', secs: G }), rampB = s.lfo(1 / G, { wave: 'ramp', secs: G, phase: 0.5 });
@@ -1330,8 +1996,11 @@ window.FM = window.FM || {};
        * keyframed, so a glide through +12 st crossfades between two lines reading the same delay. Down-shifts never
        * need it: their slide is at most one grain (0.1 s). */
       const LONG_AT = 12;   // above an octave up, the long pair plays
-      const SHORT_MAX = 0.2;
-      const gA2 = s.delay(0.5), gB2 = s.delay(0.5);
+      const SHORT_MAX = 0.2;   // an octave up slides one grain (D = G), and Grain stops at 200 ms, so these always hold it
+      /* The long lines hold two octaves and 100 cents up, a slide of 3.24 grains: 0.5 s up to a Grain of 150 ms (and at the
+         default, so a saved Pitch Shift reads the very lines it did), longer only for a longer Grain (#482 8.8). */
+      const LONG_LEN = Math.max(0.5, 3.25 * G);
+      const gA2 = s.delay(LONG_LEN), gB2 = s.delay(LONG_LEN);
       mA.connect(gA2.delayTime); mB.connect(gB2.delayTime);
       const lA2 = s.gain(0), lB2 = s.gain(0);
       const wA2 = s.gain(0), wB2 = s.gain(0);
@@ -1490,6 +2159,70 @@ window.FM = window.FM || {};
     },
   });
 
+  /* ═══ MIX AND OUTPUT ON EVERY EFFECT (#482 polish 8.1) ══════════════════════════════════════════════════════════════
+   * Thirteen effects could be blended with the untouched sound and two could set their own level; the rest were all or
+   * nothing at whatever level they came out. So every effect now ends in Output (−24…+12 dB, a gain after everything,
+   * the Compressor's own control) and blends through Mix (0–1, untouched sound under the effect), both keyframable.
+   * The effects that already have them keep their own — their Mix sits inside the effect, and the Compressor's ±24 dB and
+   * the Distortion's −24…+6 dB Output keep their ranges, so nothing saved is clamped; the Limiter's stops at 0 dB
+   * (`outputMax`, batch 8 review — above it Output would undo the Ceiling). Two do not get one: Gain / Boost,
+   * whose one control IS its output (a Mix on a gain is only another gain), and Vocal Remove's Mix, which is its Amount.
+   * HOW: around the effect's own build, never inside it (mixOutput): in → [the effect → wet] + [dry] → out, out's gain the
+   * Output. The defaults are today's sound exactly: Mix 1 is wet × 1 + dry × 0 and Output 0 dB is × 1 (x·1 + y·0 = x in
+   * IEEE floats), so a saved effect — the sanitiser fills both keys with def — renders the samples it always did. Three
+   * gains and a sum for an effect that gains a Mix, one gain for an effect that only gains Output.
+   * A DRY COPY THAT ARRIVES EARLY COMBS. Blending a sound with a copy of itself a few ms late notches it every 1 / (the
+   * gap); the Limiter's node looks ahead 6 ms, so its Mix holds the dry copy back by the same frames (`dryLag`), exactly as
+   * the Compressor's own Mix does. (Clip at ceiling's 4× oversampling adds a few frames of its own to the limited copy.)
+   * Vibrato's 5 ms line is not lined up on purpose: a Vibrato blended with the dry sound IS a chorus, which is the point of
+   * turning its Mix down. */
+  // `outputMax` (batch 8 review): the Limiter's stops at 0 dB, so it cannot lift a sound past its own Ceiling.
+  const outMax = d => (typeof d.outputMax === 'number' ? d.outputMax : 12);
+  const OUTPUT_P = d => P('output', 'Output', -24, outMax(d), 0.5, 0, 'dB', true);
+  const NO_MIX = { gain: 1, vocalremove: 1 }, NO_OUTPUT = { gain: 1 };
+  function mixOutput(ctx, inst, d, u, addMix, addOut) {
+    if (!u) return u;
+    const nodes = [];
+    const g = v => { const n = ctx.createGain(); n.gain.value = v; nodes.push(n); return n; };
+    const out = g(addOut ? dbToLin(initNum(inst, 'output', 0, -24, outMax(d))) : 1);
+    let input = u.input, mixSet = null;
+    if (addMix) {
+      const m0 = initNum(inst, 'mix', 1, 0, 1);
+      const inG = g(1), wet = g(m0), dry = g(1 - m0);
+      inG.connect(u.input); u.output.connect(wet); wet.connect(out);
+      let from = inG;
+      if (d.dryLag) { const lag = ctx.createDelay(0.05); lag.delayTime.value = d.dryLag(ctx); nodes.push(lag); inG.connect(lag); from = lag; }
+      from.connect(dry); dry.connect(out);
+      input = inG;
+      mixSet = multi([[wet.gain, null], [dry.gain, x => 1 - x]]);
+    } else u.output.connect(out);
+    const own = key => (addMix && key === 'mix') || (addOut && key === 'output');
+    const drive = function (key, v, when, ramp) {
+      if (key === 'mix') { mixSet(v, when, ramp); return; }
+      const x = dbToLin(v);
+      if (ramp) out.gain.linearRampToValueAtTime(x, when); else out.gain.setValueAtTime(x, when);
+    };
+    return {
+      input: input, output: out, window: u.window, meter: u.meter, arm: u.arm,
+      param: function (key) { return own(key) ? null : u.param(key); },
+      set: function (key, v, when, sceneT) { if (own(key)) drive(key, v, when, false); else u.set(key, v, when, sceneT); },
+      ramp: function (key, v, when, sceneT) { if (own(key)) drive(key, v, when, true); else u.ramp(key, v, when, sceneT); },
+      dispose: function () { u.dispose(); nodes.forEach(n => { try { n.disconnect(); } catch (e) {} }); },
+    };
+  }
+  DEFS.forEach(function (d) {
+    const has = k => d.params.some(p => p.key === k);
+    const addMix = !has('mix') && !NO_MIX[d.type], addOut = !has('output') && !NO_OUTPUT[d.type];
+    if (addOut) {   // just above Mix where the effect has one, as on the Compressor and the Distortion
+      const mi = d.params.findIndex(p => p.key === 'mix');
+      if (mi >= 0) d.params.splice(mi, 0, OUTPUT_P(d)); else d.params.push(OUTPUT_P(d));
+    }
+    if (addMix) d.params.push(MIX(1));
+    if (!addMix && !addOut) return;
+    const build = d.build;
+    d.build = function (ctx, inst) { return mixOutput(ctx, inst, d, build.call(d, ctx, inst), addMix, addOut); };
+  });
+
   /* ---- registry ---- */
   // Null prototype, not {}: every lookup below takes an id straight off an imported .fmproj, and on a
   // plain object REG['constructor'] would answer with an inherited function — truthy enough to pass
@@ -1536,6 +2269,51 @@ window.FM = window.FM || {};
   };
   DEFS.forEach(d => { d.tags = TAGS[d.type] || []; });
 
+  /* ═══ STARTING POINTS INSIDE AN EFFECT (#482 polish 8.2) ═══════════════════════════════════════════════════════════════
+   * The backlog's table: a few named settings per effect, each a set of values written in ONE go — the rule Telephone's
+   * Style already follows (fxSegment `sets`: one tap, one undo step). Each names every control that shapes the character,
+   * so the result does not depend on what was set before; Output is never in one, so a preset does not jump the level.
+   * The numbers are reasoned, not yet heard (a small room is short and close, a cathedral long and late; a slapback is
+   * one quick repeat): Ezra hears them and adjusts before they ship. THE CHIPS THAT OFFER THEM ARE NOT BUILT:
+   * a new row of buttons at the top of an open effect is drawn and picked first (#545); this is the half they will call
+   * (FM.audioFxPresets.apply) and "Save as my preset" (FM.audioFxPresets.save / mine). One table, read in one place. */
+  const PRESETS = {
+    reverb: [
+      ['Small room', { size: 0.25, decay: 0.6, predelay: 0.005, highcut: 9000, lowcut: 120, width: 0.7, mix: 0.2 }],
+      ['Bathroom', { size: 0.15, decay: 1.2, predelay: 0.002, highcut: 12000, lowcut: 150, width: 0.6, mix: 0.35 }],
+      ['Hall', { size: 0.75, decay: 2.8, predelay: 0.03, highcut: 8000, lowcut: 80, width: 1, mix: 0.3 }],
+      ['Cathedral', { size: 1, decay: 6.5, predelay: 0.06, highcut: 6000, lowcut: 60, width: 1, mix: 0.4 }],
+      ['Plate', { size: 0.55, decay: 1.8, predelay: 0.01, highcut: 14000, lowcut: 200, width: 0.9, mix: 0.3 }],
+    ],
+    delay: [   // Tempo 0 in each: a preset's Time is meant to be heard, not overridden by a tempo set earlier (8.7)
+      ['Slapback', { time: 0.09, bpm: 0, feedback: 0.1, tone: 20000, lowcut: 20, wobble: 0, mix: 0.3 }],
+      ['Tape', { time: 0.35, bpm: 0, feedback: 0.45, tone: 4500, lowcut: 150, wobble: 0.4, mix: 0.35 }],
+      ['Canyon', { time: 1.2, bpm: 0, feedback: 0.6, tone: 6000, lowcut: 100, wobble: 0, mix: 0.4 }],
+    ],
+    compressor: [
+      ['Voice', { threshold: -20, ratio: 3, attack: 0.01, release: 0.15, knee: 6 }],
+      ['Glue', { threshold: -12, ratio: 2, attack: 0.03, release: 0.3, knee: 10 }],
+      ['Squash', { threshold: -35, ratio: 10, attack: 0.002, release: 0.1, knee: 3 }],
+    ],
+    eq3: [
+      ['Voice clarity', { low: -4, mid: 3, high: 3, lowFreq: 120, midFreq: 3000, midWidth: 1.2, highFreq: 8000 }],
+      ['Bass boost', { low: 6, mid: 0, high: 0, lowFreq: 100, midFreq: 1000, midWidth: 1, highFreq: 4000 }],
+      ['De-mud', { low: 0, mid: -5, high: 1, lowFreq: 250, midFreq: 350, midWidth: 1.2, highFreq: 6000 }],
+    ],
+    distortion: [   // Auto level on in all three, so picking one changes the grit and not the volume (batch 7, C19)
+      ['Warm', { drive: 15, curve: 2, tone: 8000, autogain: 1 }],
+      ['Crunch', { drive: 45, curve: 1, tone: 6000, autogain: 1 }],
+      ['Fuzz', { drive: 80, curve: 3, tone: 5000, autogain: 1 }],
+    ],
+    pitch: [
+      ['Chipmunk', { semitones: 7, cents: 0 }],
+      ['Helium', { semitones: 12, cents: 0 }],
+      ['Deep', { semitones: -5, cents: 0 }],
+      ['Monster', { semitones: -12, cents: 0 }],
+    ],
+  };
+  DEFS.forEach(d => { d.presets = PRESETS[d.type] || []; });
+
   FM.AUDIO_EFFECTS = DEFS;
   DEFS.forEach(d => { REG[d.type] = d; });
   FM.AFX_CATEGORIES = CATEGORY_ORDER
@@ -1560,6 +2338,85 @@ window.FM = window.FM || {};
     },
     // Audio rides ONLY on video layers — an mp3/wav is a video layer with a 0×0 picture.
     supportsLayer: function (id, layer) { return !!(REG[id] && layer && layer.type === 'video'); },
+    /* The values of an instance's `rebuild` controls (#482 polish 7.1), for the live preview's signature: a chain built
+       with one curve or one voice count is a different graph from another, so moving one must rebuild it. Read exactly as
+       the build reads them (valueAt). '' for an effect with none, so every other effect's signature is what it was. */
+    rebuildKey: function (inst) {
+      const d = inst && REG[inst.type];
+      if (!d) return '';
+      let s = '';
+      /* `rebuildIf` (#482 7.8, Chorus Spread): a keyframable control that only changes the graph across one line — being off
+         or being in use at all — maps its STORED value (a number or keyframes) to what the build branches on, so a drag
+         that stays on one side of the line never rebuilds. */
+      for (let i = 0; i < d.params.length; i++) {
+        const p = d.params[i];
+        if (p.rebuild) s += ':' + p.key + '=' + (p.rebuildIf ? p.rebuildIf(inst.params ? inst.params[p.key] : undefined) : valueAt(inst, p, 0));
+      }
+      return s;
+    },
+    // The shipped starting points of one effect (#482 polish 8.2), as fresh copies: [{ name, params }].
+    presetsOf: function (id) { return ((REG[id] && REG[id].presets) || []).map(p => ({ name: p[0], params: Object.assign({}, p[1]) })); },
+  };
+
+  /* ═══ APPLYING ONE, AND THE ONES HE SAVES (#482 polish 8.2) ═══════════════════════════════════════════════════════════
+   * apply(inst, preset) writes a preset's values into an effect in one go and returns the keys it wrote (null if nothing
+   * fitted): each value is read the way the chain reads it (valueAt — clamped into its range, a choice snapped to an
+   * option, an on/off to 0/1), so a preset from an older build or a hand-edited store cannot put a value on an effect that
+   * the effect cannot play; a key the effect does not have is skipped. A keyframed control it names is replaced by the
+   * plain value, as Telephone's Style replaces its four. The caller commits once (afterAudioFx), so it is one undo step.
+   * "Save as my preset" keeps the effect's plain values under a name, per effect, in localStorage (fx-presets.js's
+   * pattern): a keyframed control is left out — a starting point is one setting, not a move. Every read re-checks the
+   * store (type, name, keys, numbers), because anything can be in localStorage. */
+  const AFX_PRESET_KEY = 'fm.afx.userpresets', AFX_PRESET_MAX = 120;
+  function cleanValues(type, raw) {
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    ((REG[type] && REG[type].params) || []).forEach(p => {
+      if (!Object.prototype.hasOwnProperty.call(raw, p.key)) return;
+      const v = raw[p.key];
+      if (typeof v === 'number' && isFinite(v)) out[p.key] = valueAt({ params: { [p.key]: v } }, p, 0);
+    });
+    return out;
+  }
+  function readMine() {
+    let a = [];
+    try { a = JSON.parse(localStorage.getItem(AFX_PRESET_KEY) || '[]'); } catch (e) { a = []; }
+    return Array.isArray(a) ? a : [];
+  }
+  FM.audioFxPresets = {
+    apply: function (inst, preset) {
+      if (!inst || !REG[inst.type] || !preset) return null;
+      const vals = cleanValues(inst.type, preset.params), keys = Object.keys(vals);
+      if (!keys.length) return null;
+      if (!inst.params || typeof inst.params !== 'object') inst.params = {};
+      keys.forEach(k => { inst.params[k] = vals[k]; });
+      return keys;
+    },
+    // His saved ones for one effect, newest first, each checked: [{ name, params }].
+    mine: function (id) {
+      if (!REG[id]) return [];
+      return readMine().filter(x => x && x.type === id && typeof x.name === 'string' && x.name.trim())
+        .map(x => ({ name: x.name.trim().slice(0, 40), params: cleanValues(id, x.params) }))
+        .filter(x => Object.keys(x.params).length);
+    },
+    // Saves `inst`'s plain values as `name` (replacing one of the same name on the same effect). True only if it is on disk.
+    save: function (inst, name) {
+      const nm = String(name || '').trim().slice(0, 40);
+      if (!inst || !REG[inst.type] || !nm) return false;
+      const params = cleanValues(inst.type, inst.params);
+      if (!Object.keys(params).length) return false;
+      // The raw list, not mine(): an entry this build cannot read (an effect it does not have) is kept, never dropped.
+      const arr = readMine().filter(x => !(x && x.type === inst.type && typeof x.name === 'string' && x.name.trim() === nm)).slice(0, AFX_PRESET_MAX - 1);
+      arr.unshift({ type: inst.type, name: nm, params: params });
+      try { localStorage.setItem(AFX_PRESET_KEY, JSON.stringify(arr)); return true; }
+      catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved', 3200); return false; }
+    },
+    remove: function (id, name) {
+      const nm = String(name || '').trim();
+      const arr = readMine().filter(x => !(x && x.type === id && typeof x.name === 'string' && x.name.trim() === nm));
+      try { localStorage.setItem(AFX_PRESET_KEY, JSON.stringify(arr)); return true; } catch (e) { return false; }
+    },
+    _storageKey: AFX_PRESET_KEY,   // suite seam
   };
 
   // Unknown types are excluded here as well as in buildAudioFxChain, so "has effects" can never disagree
