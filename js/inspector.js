@@ -1926,6 +1926,15 @@ window.FM = window.FM || {};
     return row;
   }
 
+  /* "ON MY CLIP" (#482 15.4). The Filters tab's tiles show every look on a stock photograph; switched on, each tile is the
+     selected clip at the playhead with that filter added (FM.fxThumbs.mountFilter's layer path; a shape or text clip keeps the
+     stock photo). The state lives here, per device, OFF by default — so until the switch is drawn and he has picked how it
+     looks (#545, the backlog's "draw first"), nothing on the tab changes. The switch only has to call set(). */
+  const FLT_ONCLIP_KEY = 'fm.flt.onclip';
+  FM.filtersOnClip = {
+    get: function () { try { return localStorage.getItem(FLT_ONCLIP_KEY) === '1'; } catch (e) { return false; } },
+    set: function (on) { try { localStorage.setItem(FLT_ONCLIP_KEY, on ? '1' : '0'); } catch (e) {} if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); },
+  };
   /* The Filters subsection (queue 113, step 5). His words: "now I want a third subsection for filters.
    * It'll work the same as the others" and "You will make a Bunch of filters and section them, so that
    * people can find stuff organised, like how the effects are organised."
@@ -2149,7 +2158,8 @@ window.FM = window.FM || {};
         const cv = el('canvas', 'flt-thumb-cv');
         th.appendChild(cv);
         row.appendChild(th);
-        if (FM.fxThumbs && FM.fxThumbs.mountFilter) FM.fxThumbs.mountFilter(cv, f.id);
+        // #482 15.4: on his clip when "On my clip" is switched on (FM.filtersOnClip) — off, exactly the stock tile it always was
+        if (FM.fxThumbs && FM.fxThumbs.mountFilter) FM.fxThumbs.mountFilter(cv, f.id, FM.filtersOnClip && FM.filtersOnClip.get() ? layer : null);
         row.appendChild(el('div', 'flt-name', f.name));
         // What it is made of, in the app's own words for those effects — so the names match what you
         // will see inside the filter once it is added, not a second vocabulary invented here.

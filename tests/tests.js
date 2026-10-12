@@ -125138,4 +125138,56 @@
     } finally { FM.wantFrameCache = want0; FM.media.remove(V.id); }
     if (fails.length) throw new Error(fails.join(' · '));
   });
+
+  /* THE FILTERS TAB ON HIS CLIP (#482 15.4 — "draw first": the switch on the tab is held for his pick, so this proves the
+     half that does not need him — the tile itself, and the switch's state, off by default). */
+  test('482 15.4 a filter tile On my clip is the selected clip at the playhead with that filter added — its own picture, not the stock photograph — keyed by the filter, the clip and the moment; a shape, a text or a camera keeps the stock tile; the switch is off by default (CONTROL: the stock tile is a different picture)', { item: '482', budgetMs: 60000 }, async function () {
+    if (!FM.fxThumbs || !FM.fxThumbs._filterTile) throw new Error('FM.fxThumbs._filterTile is missing - a filter tile cannot be his clip');
+    const P = b15P(64, 48), saved = { scene: FM.scene, time: FM.time }, fails = [];
+    const pic = document.createElement('canvas'); pic.width = 64; pic.height = 48;
+    const pg = pic.getContext('2d'), gr = pg.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, '#10ff60'); gr.addColorStop(1, '#10d0ff'); pg.fillStyle = gr; pg.fillRect(0, 0, 64, 48);   // a vivid green-cyan: nothing like a stock photograph
+    const clip = FM.makeLayer('image', { name: 'b15 photo', x: 32, y: 24, start: 0, duration: 4 });
+    const shape = b15Flat(P, '#808080'), text = FM.makeLayer('text', { name: 'b15 word', text: 'Hi', x: 32, y: 24, start: 0, duration: 4 }), cam = FM.makeLayer('camera', { name: 'b15 cam', start: 0, duration: 4 });
+    FM.media.set(clip.id, { kind: 'image', el: pic, width: 64, height: 48 });
+    try {
+      FM.scene = { project: P, layers: [clip], selectedId: clip.id, selectedIds: [clip.id] };
+      FM.time = 1;
+      // the clip's middle through a filter, the way Add adds it — and the filter picked is the first look that moves that
+      // middle a long way AND leaves it a colour, so neither the bare clip nor a grey stock photograph can pass for it
+      const L = FM.makeLayer('image', { name: 'b15 photo', x: 32, y: 24, start: 0, duration: 4 }); L.id = clip.id;
+      const d = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+      const bare = b15At(b15Px([L], 1, P), 64, 32, 24);
+      let id = null, want = null;
+      FM.filters.all().some(f => {
+        const box = FM.filters.makeInstance(f.id), fit = box && FM.fxRegistry.fitToLayer(box, clip); if (!fit) return false;
+        L.effects = [fit]; const w = b15At(b15Px([L], 1, P), 64, 32, 24);
+        if (d(bare, w) > 30 && Math.max(w[0], w[1], w[2]) - Math.min(w[0], w[1], w[2]) > 40) { id = f.id; want = w; return true; }
+        return false;
+      });
+      if (!id) throw new Error('CONTROL: no library filter moves the clip’s middle far and keeps it a colour - nothing here can tell the tiles apart');
+      const stock = FM.fxThumbs._filterTile(id, null), mine = FM.fxThumbs._filterTile(id, clip);
+      if (stock.onClip || !stock.frame) throw new Error('CONTROL: the stock tile did not render');
+      if (!mine.onClip || !mine.frame) fails.push('the tile for his clip fell back to the stock photograph');
+      else {
+        const mid = c => b15At(c.getContext('2d').getImageData(0, 0, c.width, c.height).data, c.width, c.width >> 1, c.height >> 1);
+        if (d(mid(mine.frame), want) > 16) fails.push('the tile’s middle is rgb ' + mid(mine.frame).slice(0, 3) + ', not his clip with the filter (rgb ' + want.slice(0, 3) + ')');
+        if (!(d(mid(stock.frame), want) > 30)) fails.push('CONTROL: the stock tile’s middle is his clip’s colour too (rgb ' + mid(stock.frame).slice(0, 3) + ') - this cannot tell them apart');
+        if (mine.key.indexOf(clip.id) < 0 || mine.key.indexOf('f:' + id) !== 0) fails.push('the tile is not keyed by the filter and the clip: ' + mine.key);
+        if (mine.frames !== 1) fails.push('the tile on his clip is a ' + mine.frames + '-frame strip - a filter tile is one still, like the stock one');
+        FM.time = 2;
+        await new Promise(r => setTimeout(r, 0));   // the scene signature is held for one task (fx-thumbs sceneRev) — a scrub is a later one
+        if (FM.fxThumbs._filterTile(id, clip).key === mine.key) fails.push('the tile is keyed the same at 1 s and 2 s - a scrub would show the old moment');
+      }
+      // each on its own, on screen — so it is the TYPE that sends it to the stock photograph, not having nothing to show
+      [['a shape', shape], ['a text', text], ['a camera', cam]].forEach(([what, L]) => {
+        FM.scene = { project: P, layers: [L], selectedId: L.id, selectedIds: [L.id] };
+        if (FM.fxThumbs._filterTile(id, L).onClip) fails.push(what + ' clip got a tile of its own instead of the stock photograph');
+      });
+      if (FM.filtersOnClip) {
+        try { localStorage.removeItem('fm.flt.onclip'); } catch (e) {}
+        if (FM.filtersOnClip.get() !== false) fails.push('On my clip is on by default - the Filters tab would change before he has seen the switch');
+      } else if (FM.inspector) fails.push('FM.filtersOnClip is missing - the switch has nothing to turn on');
+    } finally { FM.scene = saved.scene; FM.time = saved.time; FM.media.remove(clip.id); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();
