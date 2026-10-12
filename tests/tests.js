@@ -124593,4 +124593,255 @@
     const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 11 — Generators & particles: Particles, Snow & Rain, Starfield, Clouds, Voronoi, Lightning, Roughen Edges ═══
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 11
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). The rule that makes it safe (§0.3): every new key's default is
+   * the old look, because a filter recipe gets every key it does not set from makeInstance, and a saved instance that lacks
+   * a key is filled at render time (queue 784) with the kernel's own fallback. Each item proves both against pins captured
+   * on fc8866f1 (the tree before the batch) BEFORE the first edit.
+   * Two kinds of kernel, two kinds of pin. The pixel generators (Starfield, Clouds, Voronoi, Lightning, Roughen Edges) run on
+   * a typed array through FM._applyPixelFx — no canvas, no rasteriser — so the pin is a hash of the bytes. Particles and Snow
+   * & Rain DRAW on a 2D context; the pin is a hash of every call they make on it, with every argument and the alpha, blend
+   * and style in force at each paint (b11Rec below): the same calls with the same numbers in the same order is the same
+   * picture on any rasteriser, and it is a stricter pin than pixels, which a tiny move can round away. */
+  function b11Plate(W, H) {   // colour ramps that wrap (every hue and level), an oval of layer with a soft rim, and a scatter of holes in it
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, ex = (x + 0.5 - W / 2) / (W * 0.42), ey = (y + 0.5 - H / 2) / (H * 0.42), r = ex * ex + ey * ey;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = r > 1 ? 0 : (r > 0.85 ? 128 : ((x + y) % 23 === 0 ? 0 : 255));
+    }
+    return d;
+  }
+  function b11Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b11Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i] & 255; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  function b11HashStr(s) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i) & 0xffff; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b11Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  const b11Copy = o => JSON.parse(JSON.stringify(o));
+  /* The kernel through FM._applyPixelFx: the same PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`. */
+  function b11Run(type, params, W, H, t, ps, d0) { const d = d0 || b11Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out. (On fc8866f1 makeInstance has none of them, which is how
+     the pins were captured.) */
+  function b11Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Eight hashes per pixel config: two plate sizes, the export (ps 1) and a half-size preview plate (ps 0.5), at two moments. */
+  function b11Shots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b11Hash(b11Run(type, b11Copy(params), Math.round(W * ps), Math.round(H * ps), t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* A RECORDING 2D CONTEXT for the drawn generators. Every call is written down with its arguments; every paint (fill, stroke,
+     drawImage) also with the alpha, blend and style in force, which save/restore keep exactly as a canvas does. `marks` is the
+     same paints as data — where each one landed (the translation in force, or the centre of a drawn image) — for the
+     behaviour tests. */
+  function b11Rec(A) {
+    const log = [], marks = [], stack = [];
+    const R = { log: log, marks: marks, globalAlpha: 1, globalCompositeOperation: 'source-over', fillStyle: '#000000', strokeStyle: '#000000', lineWidth: 1, lineCap: 'butt', filter: 'none', _tx: 0, _ty: 0, _rot: 0 };
+    const keep = ['globalAlpha', 'globalCompositeOperation', 'fillStyle', 'strokeStyle', 'lineWidth', 'lineCap', 'filter', '_tx', '_ty', '_rot'];
+    const arg = a => typeof a === 'number' ? String(a) : (a === A ? 'A' : (a && typeof a === 'object' ? 'img' : String(a)));
+    const put = (m, args) => log.push(m + '(' + Array.prototype.map.call(args, arg).join(',') + ')');
+    ['beginPath', 'moveTo', 'lineTo', 'closePath', 'scale', 'quadraticCurveTo', 'bezierCurveTo', 'clearRect', 'arcTo'].forEach(m => { R[m] = function () { put(m, arguments); }; });
+    R.arc = function (x, y, r) { put('arc', arguments); R._geo = r * 2; };          // the size of the last shape traced, for the marks
+    R.rect = function (x, y, w) { put('rect', arguments); R._geo = w; };
+    R.ellipse = function (x, y, rx) { put('ellipse', arguments); R._geo = rx * 2; };
+    R.translate = function (x, y) { put('translate', arguments); R._tx += x; R._ty += y; };
+    R.rotate = function (a) { put('rotate', arguments); R._rot += a; };
+    R.save = function () { log.push('save'); stack.push(keep.map(k => R[k])); };
+    R.restore = function () { log.push('restore'); const s = stack.pop(); if (s) keep.forEach((k, i) => { R[k] = s[i]; }); };
+    const paint = (m, style, extra) => { log.push(m + ' ' + style + ' a' + R.globalAlpha + ' ' + R.globalCompositeOperation + (m === 'stroke' ? ' w' + R.lineWidth + ' ' + R.lineCap : '')); marks.push(Object.assign({ m: m, x: R._tx, y: R._ty, style: style, alpha: R.globalAlpha, gco: R.globalCompositeOperation, w: R.lineWidth, geo: R._geo, rot: R._rot }, extra || {})); };
+    R.fill = function () { paint('fill', R.fillStyle); };
+    R.stroke = function () { paint('stroke', R.strokeStyle); };
+    R.fillRect = function (x, y, w, h) { put('fillRect', arguments); paint('fill', R.fillStyle, { x: R._tx + x + w / 2, y: R._ty + y + h / 2 }); };
+    R.drawImage = function (img) { put('drawImage', arguments); log.push(' a' + R.globalAlpha + ' ' + R.globalCompositeOperation);
+      marks.push({ m: img === A ? 'layer' : 'image', x: arguments.length >= 5 ? arguments[1] + arguments[3] / 2 : arguments[1], y: arguments.length >= 5 ? arguments[2] + arguments[4] / 2 : arguments[2], size: arguments[3], alpha: R.globalAlpha, gco: R.globalCompositeOperation }); };
+    R.createRadialGradient = R.createLinearGradient = function () { put('gradient', arguments); return { addColorStop: function () { put('stop', arguments); } }; };
+    return R;
+  }
+  /* One frame of a CANVAS_FX generator on a W x H plate at plate scale ps, on the clip's clock tl, into a recording context.
+     The arguments are drawCanvasEffect's: (A, B, W, H, bbox, params, t, tl, layer, ps) — and like it, the colours arrive
+     resolved. */
+  function b11Draw(type, params, W, H, t, tl, layer, ps) {
+    const A = { b11: 'layer' }, R = b11Rec(A);
+    FM._FX_TABLES.CANVAS_FX[type](A, R, W, H, { x: 0, y: 0, w: W, h: H }, b11Copy(params), t, tl, layer || null, ps == null ? 1 : ps);
+    return R;
+  }
+  /* Eight hashes per drawn config: two project sizes, the export (ps 1) and a half-size preview plate (ps 0.5), two moments of a
+     clip that starts at 0.5 s. `lay(PW, PH)` is the layer the effect sits on, in project units. */
+  function b11CanvasShots(type, params, lay) {
+    return [[320, 180], [200, 300]].map(([PW, PH]) => [1, 0.5].map(ps => [1.37, 3.1].map(t => {
+      const layer = lay ? lay(PW, PH) : { start: 0.5, transform: { x: PW * 0.5, y: PH * 0.5 } };
+      return b11HashStr(b11Draw(type, params, Math.round(PW * ps), Math.round(PH * ps), t, t - (layer.start || 0), layer, ps).log.join('\n'));
+    }).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys before the kernel runs (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new
+     instance, and every filter recipe), against the pins. */
+  function b11Pinned(type, NEW, CFG, PIN, shots) {
+    const moved = [], shoot = shots || (p => b11Shots(type, p));
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b11Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      Object.keys(CFG[name]).forEach(k => { pre[k] = CFG[name][k]; });   // a config that sets a new key keeps its own value
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: b11Copy(abs) }).params;
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = shoot(p, name); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default value comes
+     back from the load sanitiser as it was written. A key in FOLLOW is a following colour: makeInstance and the fill leave
+     it absent, which is its old look. */
+  function b11Catalogue(type, NEW, SET, FOLLOW) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    (FOLLOW || []).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0];
+      if (!pd || !pd.follows) throw new Error(type + ' ' + k + ' is not a following row in the catalogue');
+      if (k in inst.params) throw new Error('a new ' + type + ' carries ' + k + ' = ' + inst.params[k] + ' - a following colour must stay absent so it keeps following');
+      const f = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+      if (k in f) throw new Error('the render-time fill gives an absent ' + type + ' ' + k + ' the value ' + f[k] + ' - absent is its old look');
+    });
+    const lay = [{ id: 'l48211' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: b11Copy(SET) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A library filter built on the effect carries every new key at its default (no recipe sets one; on fc8866f1 none of the
+     56 recipes uses any of these seven, and this keeps it honest if one ever does). */
+  function b11Recipes(type, NEW) {
+    const lib = (FM.filters && FM.filters.all ? FM.filters.all() : []) || [];
+    if (lib.length < 40) throw new Error('CONTROL: the filter library lists ' + lib.length + ' recipes - this check sees nothing');
+    lib.forEach(f => {
+      const box = FM.filters.makeInstance(f.id), kids = ((box && box.effects) || []).filter(e => e.type === type);
+      kids.forEach(kid => Object.keys(NEW).forEach(k => { if (kid.params[k] !== NEW[k]) throw new Error('the ' + f.id + ' filter’s ' + type + ' carries ' + k + ' = ' + kid.params[k] + ', not ' + NEW[k] + ' - a library filter would change its look'); }));
+    });
+  }
+  const b11Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b11Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b11Diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+
+  /* 11.1 PARTICLES: Emit from (Point / Line / Box / Circle / Whole frame) with its width and height, All at once, Pattern, Drag,
+     Turbulence, Size / Colour / Lifetime variation, Behind layer. */
+  const B11PT_NEW = { emitter: 0, ew: 50, eh: 50, burst: 0, seed: 0, drag: 0, turb: 0, sizevar: 0, colorvar: 0, lifevar: 30, behind: 0 };
+  const B11PT_CFG = { def: {}, fountain: { rate: 120, lifetime: 3, spread: 60, speed: 600, gravity: 900, shape: 1, blend: 1, spin: 90 },
+    stars: { shape: 3, sizeStart: 30, sizeEnd: 0, opacityEnd: 0.5, gravity: -200, color: '#40c0ff', color2: '#ffffff' }, streak: { shape: 4, speed: 900, spread: 360 },
+    tri: { shape: 2, spin: -200, rate: 15 }, kf: { rate: b11Kf(10, 150) }, moving: { rate: 60 } };
+  const B11PT_LAY = { moving: (PW, PH) => ({ start: 0.5, transform: { x: b11Kf(PW * 0.2, PW * 0.8), y: PH * 0.6 } }) };
+  const B11PT_PIN = {   // fc8866f1, before the edit
+    def: 'c6d1e5f4.db3fd079/01f5aa40.d03d146b 5081934d.47de9063/61ec5646.2fa9006f', fountain: 'c410cf54.f03db758/7dbd6dbb.57a36bb4 6b2ae55d.5c784dfd/f612f77c.1be676ae',
+    stars: '5cf40a3b.4e9fe00b/6612c12e.61eb24a6 4d0fc0c6.a3b3b907/8f0d9493.3cd3e544', streak: '799b4fe8.f3eacca9/9ef42050.5d98e0ff ab901ab7.e7865167/97d7b463.3cb8e37c',
+    tri: '712e6882.3f1e6bb0/2791a7e8.5d035c94 6b33150e.79e850cc/0cc09499.f04766fc', kf: 'ad574ceb.7f3d9e3b/0c64a9d1.3dd69a73 093f2f38.7fc1d769/10cdf618.f420bd16',
+    moving: '8fa96362.ee6efa4f/d4bfd745.8019f82b 2c7e6210.226ae922/f8763c0e.243015ec' };
+  /* One frame of Particles on a 320 x 180 plate from an emitter at (160, 90), `tl` seconds into the clip: the paints only. */
+  function b11Pt(over, tl, layer) {
+    const p = Object.assign(b11Base('particles', {}), over);
+    return b11Draw('particles', p, 320, 180, 0.5 + tl, tl, layer || { start: 0.5, transform: { x: 160, y: 90 } }, 1).marks.filter(m => m.m === 'fill' || m.m === 'stroke');
+  }
+  const b11Span = (ms, k) => { let lo = Infinity, hi = -Infinity; ms.forEach(m => { lo = Math.min(lo, m[k]); hi = Math.max(hi, m[k]); }); return hi - lo; };
+
+  test('482 11.1 Particles - Emit from, its width and height, All at once, Pattern, Drag, Turbulence, the three variations and Behind layer are in the catalogue at defaults that draw the old emitter, and saved and new emitters draw call for call as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('particles', B11PT_NEW, { emitter: 3, ew: 120, eh: 40, burst: 1, seed: 7, drag: 1.5, turb: 200, sizevar: 60, colorvar: 40, lifevar: 0, behind: 1 });
+    const em = b11Row('particles', 'emitter');
+    if (em.type !== 'segment' || (em.options || []).map(o => o[0]).join() !== '0,1,2,3,4') throw new Error('Emit from is not a five-way choice of Point, Line, Box, Circle and Whole frame (' + JSON.stringify(em.options) + ')');
+    const ew = b11Row('particles', 'ew'), eh = b11Row('particles', 'eh');
+    if (ew.overriddenBy !== 'emitter' || String(ew.liveWhen) !== '1,2,3') throw new Error('Emitter width does not say it only counts for a Line, a Box or a Circle (overriddenBy ' + ew.overriddenBy + ', liveWhen ' + ew.liveWhen + ')');
+    if (eh.overriddenBy !== 'emitter' || String(eh.liveWhen) !== '2,3') throw new Error('Emitter height does not say it only counts for a Box or a Circle (overriddenBy ' + eh.overriddenBy + ', liveWhen ' + eh.liveWhen + ')');
+    b11Recipes('particles', B11PT_NEW);
+    const moved = b11Pinned('particles', B11PT_NEW, B11PT_CFG, B11PT_PIN, (p, name) => b11CanvasShots('particles', p, B11PT_LAY[name]));
+    if (moved.length) throw new Error(moved.length + ' Particles frames differ from fc8866f1 at the new defaults - a new control changed an emitter he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.1 Particles - All at once lets Rate particles out together at the clip’s start and none after, and Emit from spreads the births along a line, through a box, round a rim or over the whole frame', { item: '482', budgetMs: 30000 }, function () {
+    /* ALL AT ONCE. CONTROL: one at a time, 0.05 s in at 40/s there are three (born at 0, 0.025 and 0.05). On, all 40 are there,
+       and 3 s in — past the longest life, 2.6 s — they are gone and no more came. */
+    const still = { speed: 0, gravity: 0 };
+    const off = b11Pt(still, 0.05).length, on = b11Pt(Object.assign({ burst: 1 }, still), 0.05).length;
+    if (off !== 3) throw new Error('CONTROL: one at a time, 0.05 s into the clip at 40/s drew ' + off + ' particles, not 3');
+    if (on !== 40) throw new Error('All at once drew ' + on + ' particles at the clip’s start - it should let out all 40 (Rate) together');
+    const late = b11Pt(Object.assign({ burst: 1 }, still), 3).length, lateOff = b11Pt(still, 3).length;
+    if (!(lateOff > 40)) throw new Error('CONTROL: one at a time, 3 s in drew only ' + lateOff + ' particles');
+    if (late !== 0) throw new Error('All at once still drew ' + late + ' particles 3 s in - the burst should have died and nothing come after it');
+    /* EMIT FROM. With no speed or gravity a particle stays where it was born, 1 s of 200/s at 8 s lives. CONTROL: a Point
+       births every one on the emitter at (160, 90). */
+    const born = o => b11Pt(Object.assign({ rate: 200, lifetime: 8, sizeStart: 6, sizeEnd: 6 }, still, o), 1);
+    const pt = born({});
+    if (pt.length < 150 || pt.some(m => m.x !== 160 || m.y !== 90)) throw new Error('CONTROL: a Point emitter births ' + pt.length + ' particles, not all of them on (160, 90)');
+    const line = born({ emitter: 1, ew: 50 });
+    if (line.some(m => m.y !== 90 || Math.abs(m.x - 160) > 80 + 1e-9)) throw new Error('a Line 50 % wide births a particle off the level line through the emitter, or past its ±80 px ends');
+    if (!(b11Span(line, 'x') > 140)) throw new Error('a Line 50 % of a 320 px frame spreads its births over only ' + b11Span(line, 'x').toFixed(1) + ' px - it should be about 160');
+    const box = born({ emitter: 2, ew: 50, eh: 50 });
+    if (box.some(m => Math.abs(m.x - 160) > 80 + 1e-9 || Math.abs(m.y - 90) > 45 + 1e-9)) throw new Error('a Box 50 % x 50 % births a particle outside the 160 x 90 box about the emitter');
+    if (!(b11Span(box, 'x') > 140 && b11Span(box, 'y') > 78)) throw new Error('a Box 50 % x 50 % spreads its births over ' + b11Span(box, 'x').toFixed(1) + ' x ' + b11Span(box, 'y').toFixed(1) + ' px - it should fill about 160 x 90');
+    const ring = born({ emitter: 3, ew: 50, eh: 50 }), off1 = ring.filter(m => Math.abs(Math.pow((m.x - 160) / 80, 2) + Math.pow((m.y - 90) / 45, 2) - 1) > 1e-6);
+    if (off1.length) throw new Error('a Circle 50 % x 50 % births ' + off1.length + ' particles off the rim of its 160 x 90 oval');
+    if (!(b11Span(ring, 'x') > 150 && b11Span(ring, 'y') > 84)) throw new Error('a Circle births only part of its rim (' + b11Span(ring, 'x').toFixed(1) + ' x ' + b11Span(ring, 'y').toFixed(1) + ' px)');
+    const all = born({ emitter: 4 }), moved = b11Pt(Object.assign({ rate: 200, lifetime: 8, sizeStart: 6, sizeEnd: 6, emitter: 4 }, still), 1, { start: 0.5, transform: { x: 30, y: 20 } });
+    if (all.some(m => m.x < 0 || m.x > 320 || m.y < 0 || m.y > 180) || !(b11Span(all, 'x') > 280 && b11Span(all, 'y') > 150)) throw new Error('Whole frame does not spread its births over the whole 320 x 180 frame');
+    if (JSON.stringify(all.map(m => [m.x, m.y])) !== JSON.stringify(moved.map(m => [m.x, m.y]))) throw new Error('Whole frame births in other places when the layer moves - it is the frame, not the layer');
+    /* …and the size is % of the FRAME, the same picture on a half-size preview plate: every birth at half the place. */
+    const half = b11Draw('particles', Object.assign(b11Base('particles', {}), { rate: 200, lifetime: 8, emitter: 2, ew: 50, eh: 50 }, still), 160, 90, 1.5, 1, { start: 0.5, transform: { x: 160, y: 90 } }, 0.5).marks.filter(m => m.m === 'fill');
+    if (half.length !== box.length || half.some((m, j) => Math.abs(m.x * 2 - box[j].x) > 1e-9 || Math.abs(m.y * 2 - box[j].y) > 1e-9)) throw new Error('a Box on a half-size preview plate is not the export’s box at half size');
+  });
+
+  test('482 11.1 Particles - Pattern gives the layer its own particles, Drag slows them toward a stop, Turbulence wanders them off their path, Size, Colour and Lifetime variation vary them one by one, and Behind layer draws the layer over them', { item: '482', budgetMs: 30000 }, function () {
+    const key = ms => JSON.stringify(ms.map(m => [m.x, m.y, m.style, m.alpha, m.geo]));
+    /* PATTERN. CONTROL: Pattern 0 is the emitter with no Pattern at all, every particle in the same place. */
+    const base = { rate: 60, lifetime: 3 }, p0 = b11Pt(base, 1.5), pz = b11Pt(Object.assign({ seed: 0 }, base), 1.5), p7 = b11Pt(Object.assign({ seed: 7 }, base), 1.5);
+    if (key(p0) !== key(pz)) throw new Error('CONTROL: Pattern 0 moved the particles - it should be the old emitter');
+    const same = p7.filter((m, j) => p0[j] && m.x === p0[j].x && m.y === p0[j].y).length;
+    if (!(p7.length > 40) || same > p7.length / 10) throw new Error('Pattern 7 left ' + same + ' of ' + p7.length + ' particles where Pattern 0 has them - it should be a different spray');
+    /* DRAG. Straight up at 600 px/s (±40 %) with no gravity, 3 s after a burst. CONTROL: with no drag the fastest has gone
+       about 840 x 3 px. Drag 2 /s brings each to a stop at its speed / 2, so none is past 840 / 2 px from the emitter. */
+    const up = { burst: 1, speed: 600, spread: 0, gravity: 0, lifetime: 8, sizeStart: 6, sizeEnd: 6 }, far = ms => Math.max.apply(null, ms.map(m => Math.hypot(m.x - 160, m.y - 90)));
+    const free = far(b11Pt(up, 3)), dragged = b11Pt(Object.assign({ drag: 2 }, up), 3);
+    if (!(free > 1400)) throw new Error('CONTROL: with no Drag the fastest particle is only ' + free.toFixed(0) + ' px out after 3 s');
+    if (!(far(dragged) <= 420 + 1e-6 && far(dragged) > 300)) throw new Error('Drag 2 /s left the fastest particle ' + far(dragged).toFixed(1) + ' px out after 3 s - it should coast to a stop short of 420 px');
+    if (dragged.some(m => Math.abs(m.x - 160) > 1e-6 || !(m.y < 90))) throw new Error('Drag turned a particle off its straight-up path');
+    /* …and with gravity it settles to the speed gravity holds (g / k): 3 s more than 6 s falls nearly g/k x 3 further. */
+    const fall = tl => b11Pt({ burst: 1, speed: 0, gravity: 400, drag: 2, lifetime: 9, sizeStart: 6, sizeEnd: 6 }, tl)[0].y;
+    const v = (fall(7) - fall(6));
+    if (Math.abs(v - 200) > 1) throw new Error('Drag 2 /s under 400 px/s² gravity falls ' + v.toFixed(2) + ' px a second once settled - it should fall at 200 (gravity / drag)');
+    /* TURBULENCE. With no speed or gravity a particle sits on the emitter. CONTROL: Turbulence 0 leaves every one there; 200 px
+       wanders them off it, none further than 200 px on either axis. */
+    const calm = b11Pt({ speed: 0, gravity: 0, rate: 80, lifetime: 3 }, 2), rough = b11Pt({ speed: 0, gravity: 0, rate: 80, lifetime: 3, turb: 200 }, 2);
+    if (calm.some(m => m.x !== 160 || m.y !== 90)) throw new Error('CONTROL: Turbulence 0 moved a particle off the emitter');
+    const wandered = rough.filter(m => Math.hypot(m.x - 160, m.y - 90) > 5).length;
+    if (!(wandered > rough.length * 0.6)) throw new Error('Turbulence 200 px moved only ' + wandered + ' of ' + rough.length + ' particles more than 5 px off the emitter');
+    if (rough.some(m => Math.abs(m.x - 160) > 200 || Math.abs(m.y - 90) > 200)) throw new Error('Turbulence 200 px threw a particle more than 200 px off its path');
+    const r2 = b11Pt({ speed: 0, gravity: 0, rate: 80, lifetime: 3, turb: 200 }, 2);
+    if (key(r2) !== key(rough)) throw new Error('Turbulence drew a different frame the second time - it must be the same frame for the same instant');
+    /* SIZE VARIATION. Squares held at 20 px. CONTROL: 0 % draws every one 20 px; 100 % draws them anywhere from nothing to 40. */
+    const sq = { shape: 1, sizeStart: 20, sizeEnd: 20, rate: 80, lifetime: 3 }, s0 = b11Pt(sq, 2), s1 = b11Pt(Object.assign({ sizevar: 100 }, sq), 2);
+    if (s0.some(m => m.geo !== 20)) throw new Error('CONTROL: Size variation 0 drew a square that is not 20 px');
+    const sizes = s1.map(m => m.geo);
+    if (sizes.some(s => !(s >= 0.35 && s <= 40)) || !(Math.max.apply(null, sizes) > 34 && Math.min.apply(null, sizes) < 6)) throw new Error('Size variation 100 % drew squares from ' + Math.min.apply(null, sizes).toFixed(1) + ' to ' + Math.max.apply(null, sizes).toFixed(1) + ' px - it should run from nothing to 40');
+    /* COLOUR VARIATION. One red start and end. CONTROL: 0 % draws them all the one red; 100 % turns their hues every way. */
+    const red = { color: '#ff4040', color2: '#ff4040', rate: 80, lifetime: 3 };
+    const c0 = new Set(b11Pt(red, 2).map(m => m.style)), c1 = new Set(b11Pt(Object.assign({ colorvar: 100 }, red), 2).map(m => m.style));
+    if (c0.size !== 1) throw new Error('CONTROL: Colour variation 0 drew ' + c0.size + ' colours from one red');
+    if (!(c1.size > 20)) throw new Error('Colour variation 100 % drew only ' + c1.size + ' colours');
+    const greenish = Array.from(c1).filter(s => { const v = s.match(/\d+/g).map(Number); return v[1] > v[0] + 40; }).length, blueish = Array.from(c1).filter(s => { const v = s.match(/\d+/g).map(Number); return v[2] > v[0] + 40; }).length;
+    if (!(greenish && blueish)) throw new Error('Colour variation 100 % only nudged the red (' + greenish + ' greenish, ' + blueish + ' bluish) - its hues should turn all the way round');
+    /* LIFETIME VARIATION. A burst fading from 1 to 0 over its life, 1 s into a 2 s life. CONTROL: the old ±30 % gives each its own
+       fade. 0 % gives every particle the same life, so all are half faded at once and all are gone at 2 s. */
+    const fade = { burst: 1, opacityStart: 1, opacityEnd: 0, lifetime: 2, speed: 0, gravity: 0 };
+    const a30 = new Set(b11Pt(fade, 1).map(m => m.alpha)), a0 = b11Pt(Object.assign({ lifevar: 0 }, fade), 1).map(m => m.alpha);
+    if (!(a30.size > 20)) throw new Error('CONTROL: Lifetime variation 30 % faded the burst in only ' + a30.size + ' steps');
+    if (a0.length !== 40 || a0.some(a => a !== 0.5)) throw new Error('Lifetime variation 0 did not fade the whole burst together: ' + Array.from(new Set(a0)).slice(0, 5).join(', '));
+    if (b11Pt(Object.assign({ lifevar: 0 }, fade), 2.001).length !== 0 || !(b11Pt(fade, 2.001).length > 0)) throw new Error('Lifetime variation 0 kept a particle past its 2 s life, or the ±30 % control lost every one');
+    /* BEHIND LAYER. CONTROL: Off draws the layer first and the particles over it; On draws the particles and then the layer. */
+    const order = o => b11Draw('particles', Object.assign(b11Base('particles', {}), o), 320, 180, 1.5, 1, { start: 0.5, transform: { x: 160, y: 90 } }, 1).marks.map(m => m.m === 'layer' ? 'L' : 'p').join('').replace(/p+/g, 'p');
+    if (order({}) !== 'Lp') throw new Error('CONTROL: with Behind layer Off the layer is not drawn first and once (' + order({}) + ')');
+    if (order({ behind: 1 }) !== 'pL') throw new Error('Behind layer did not draw the particles first and the layer once over them (' + order({ behind: 1 }) + ')');
+    const bare = b11Draw('particles', Object.assign(b11Base('particles', {}), { behind: 1 }), 320, 180, 0.5, 0, { start: 0.5, transform: { x: 160, y: 90 } }, 1).marks.filter(m => m.m === 'layer').length;
+    if (bare !== 1) throw new Error('Behind layer at the clip’s first instant drew the layer ' + bare + ' times - it must still draw it once');
+  });
 })();

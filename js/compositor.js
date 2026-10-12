@@ -1410,6 +1410,23 @@ window.FM = window.FM || {};
       { key: 'spin', label: 'Spin', min: -720, max: 720, step: 5, def: 0, unit: '°/s' },
       { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Square'], [2, 'Triangle'], [3, 'Star'], [4, 'Streak']], def: 0 },
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
+      /* #482 polish 11.1. The emitter was a point that let particles out one at a time, the same particles on every layer, with
+         nothing to slow them, stir them or vary their size and colour. Emit from spreads the births over a line, a box, the rim
+         of a circle (the width and height are % of the frame) or the whole frame; All at once lets out Rate particles together
+         at the clip's start and no more; Pattern gives the layer its own particles; Drag slows them toward a stop (and toward
+         the speed gravity can hold); Turbulence wanders each one off its path; Lifetime variation is the old ±30 %. Every
+         default is the old emitter, number for number. */
+      { key: 'emitter', label: 'Emit from', def: 0, options: [[0, 'Point'], [1, 'Line'], [2, 'Box'], [3, 'Circle'], [4, 'Whole frame']] },
+      { key: 'ew', label: 'Emitter width', min: 0, max: 200, step: 1, def: 50, unit: '%', overriddenBy: 'emitter', liveWhen: [1, 2, 3] },
+      { key: 'eh', label: 'Emitter height', min: 0, max: 200, step: 1, def: 50, unit: '%', overriddenBy: 'emitter', liveWhen: [2, 3] },
+      { key: 'burst', label: 'All at once', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'drag', label: 'Drag', min: 0, max: 5, step: 0.05, def: 0, unit: '/s' },
+      { key: 'turb', label: 'Turbulence', min: 0, max: 500, step: 5, def: 0, unit: 'px' },
+      { key: 'sizevar', label: 'Size variation', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'colorvar', label: 'Colour variation', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'lifevar', label: 'Lifetime variation', min: 0, max: 100, step: 1, def: 30, unit: '%' },
+      { key: 'behind', label: 'Behind layer', def: 0, options: [[0, 'Off'], [1, 'On']] },
     ], color: true, defColor: '#ffd23f', colorLabel: 'Start', color2: true, defColor2: '#ff5e5e', color2Label: 'End' },
     // ---- batch 31: the two grading gaps ----
     // Levels — set a real black and white point, per channel. Everything else in Colouring
@@ -14515,8 +14532,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * At ps === 1 every multiplication below is a no-op, so exports and 1:1 previews are unchanged. */
     particles: function (A, B, W, H, bb, p, t, tl, layer, ps) {
       const pk = ps || 1;   // PROJECT units -> PLATE px
-      B.drawImage(A, 0, 0);   // emitter layer stays visible; particles composite on top
-      if (!(tl > 0)) return;
+      /* BEHIND LAYER (#482 polish 11.1): Off draws the layer and then the particles over it, as it always has; On lays the
+         particles down first and draws the layer over them, so a logo sheds sparks from behind itself. */
+      const behind = (p.behind == null ? 0 : Math.round(FM.evalProp(p.behind, t))) === 1;
+      const under = () => { if (behind) B.drawImage(A, 0, 0); };
+      if (!behind) B.drawImage(A, 0, 0);   // emitter layer stays visible; particles composite on top
+      if (!(tl > 0)) return under();
       const pHash = function (n) {   // integer avalanche → [0,1); same n → same value, forever
         n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
         n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
@@ -14537,8 +14558,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const add = Math.round(rd('blend', 0, 0, 1)) === 1;
       const cs = hexToRGB(p.color || '#ffd23f'), ce = hexToRGB(p.color2 || '#ff5e5e');
       const cr = cs[0], cg = cs[1], cb = cs[2], dcr = ce[0] - cr, dcg = ce[1] - cg, dcb = ce[2] - cb;
+      /* THE REST OF THE EMITTER (#482 polish 11.1). Every default is the old emitter: a Point, one particle at a time, Pattern
+         0 (the old hash, untouched), no drag, no turbulence, no size or colour variation, and lifetimes ±30 % — kept as the old
+         `0.7 + 0.6·h` expression itself at 30, so a saved emitter computes the very same numbers. Each new choice is still a
+         closed form in (i, age): no state carries from frame to frame, so a scrub, the preview and the export agree. */
+      const emitter = Math.round(rd('emitter', 0, 0, 4));
+      const ewP = rd('ew', 50, 0, 200) / 100 * W, ehP = rd('eh', 50, 0, 200) / 100 * H;   // % of the frame, in plate px
+      const burst = Math.round(rd('burst', 0, 0, 1)) === 1;
+      const seed = Math.round(rd('seed', 0, 0, 999));
+      const drag = rd('drag', 0, 0, 5);
+      const turb = rd('turb', 0, 0, 500) * pk;
+      const sizeVar = rd('sizevar', 0, 0, 100) / 100, colVar = rd('colorvar', 0, 0, 100) / 100;
+      const lifeVarPct = rd('lifevar', 30, 0, 100), lifeVar = lifeVarPct / 100, oldLife = lifeVarPct === 30;
+      const seedK = Math.imul(seed, 0x2545f491);
+      const hsh = seed ? (n => pHash(n ^ seedK)) : pHash;   // Pattern 0 IS the old hash
+      // New per-particle channels, hashed far from the old i*4+k inputs so no particle's new number is a neighbour's old one.
+      const hx = (i, k) => hsh(Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(k, 0x85ebca6b));
+      const hz = (i, j, k) => hsh(Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(j + 7, 0xc2b2ae35) ^ Math.imul(k, 0x27d4eb2d));
 
-      const maxLife = lifetime * 1.3;   // life_i = lifetime*(0.7..1.3) → the longest a particle can live
+      const maxLife = lifetime * (oldLife ? 1.3 : 1 + lifeVar);   // life_i = lifetime*(1 ± variation) → the longest a particle can live
       const keyedRate = FM.isAnimated(p.rate), effectStart = t - tl;
       const rateAt = function (when) {
         let v = FM.evalProp(p.rate, when);
@@ -14547,11 +14585,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       };
       const phaseAt = when => FM.integrateProp(p.rate, effectStart, when, rateAt);
       const windowStart = Math.max(effectStart, t - maxLife);
-      const windowPhase = keyedRate ? phaseAt(windowStart) : 0;
-      const hi = Math.floor(keyedRate ? phaseAt(t) + 1e-9 : tl * rate);
-      if (hi < 0) return;
-      let lo = keyedRate ? Math.ceil(windowPhase - 1e-9) : Math.ceil((tl - maxLife) * rate);
-      if (lo < 0) lo = 0;
+      let windowPhase, hi, lo;
+      if (burst) {   // All at once: particles 0 … Rate-1, every one born at the clip's start, and no more after them
+        if (tl > maxLife) return under();
+        windowPhase = 0; lo = 0; hi = Math.round(keyedRate ? rateAt(effectStart) : rate) - 1;
+      } else {
+        windowPhase = keyedRate ? phaseAt(windowStart) : 0;
+        hi = Math.floor(keyedRate ? phaseAt(t) + 1e-9 : tl * rate);
+        if (hi < 0) return under();
+        lo = keyedRate ? Math.ceil(windowPhase - 1e-9) : Math.ceil((tl - maxLife) * rate);
+        if (lo < 0) lo = 0;
+      }
       const CAP = 2000; let step = 1; const count = hi - lo + 1;
       if (count > CAP) step = Math.ceil(count / CAP);   // thin the loop so we never draw > CAP sprites
 
@@ -14589,22 +14633,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (add) B.globalCompositeOperation = 'lighter';
       B.lineCap = 'round';
       for (let i = lo; i <= hi; i += step) {
-        const bornT = keyedRate ? keyedBirth(i) : i / rate, age = tl - bornT;
+        const bornT = burst ? 0 : (keyedRate ? keyedBirth(i) : i / rate), age = tl - bornT;
         if (age < 0) continue;
-        const life = lifetime * (0.7 + 0.6 * pHash(i * 4 + 2));
-        if (age > life) continue;   // already dead this frame
+        const life = oldLife ? lifetime * (0.7 + 0.6 * hsh(i * 4 + 2)) : lifetime * (1 - lifeVar + 2 * lifeVar * hsh(i * 4 + 2));
+        if (age > life || !(life > 0)) continue;   // already dead this frame (or born dead: Lifetime variation 100 % can reach 0)
         const frac = age / life;    // 0 at birth → 1 at death
-        const size = sizeS + (sizeE - sizeS) * frac;
+        let size = sizeS + (sizeE - sizeS) * frac;
+        if (sizeVar > 0) size *= 1 + sizeVar * (2 * hx(i, 1) - 1);   // 100 % runs from nothing to twice the size
         if (size < 0.35) continue;
         const alpha = opS + (opE - opS) * frac;
         if (alpha <= 0.003) continue;
 
-        const ang = dirR + (pHash(i * 4) - 0.5) * spreadR;
-        const sp = speed * (0.6 + 0.8 * pHash(i * 4 + 1));
+        const ang = dirR + (hsh(i * 4) - 0.5) * spreadR;
+        const sp = speed * (0.6 + 0.8 * hsh(i * 4 + 1));
         const vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp;
 
-        let ox = ox0, oy = oy0;
-        if (needsWorld) {   // parented / behavior-driven emitter: full world-position resolve at birth
+        let ox = ox0, oy = oy0, ex = 0, ey = 0;
+        if (emitter === 4) { ox = hx(i, 2) * W; oy = hx(i, 3) * H; }   // Whole frame: born anywhere on the plate, wherever the layer is
+        else if (needsWorld) {   // parented / behavior-driven emitter: full world-position resolve at birth
           const wp = emitterWorldPos(layer, start + bornT, cx / pk, cy / pk);   /* it works in PROJECT units, so hand it the fallback in those too */
           ox = wp.x * pk; oy = wp.y * pk;
         } else if (!statX || !statY) {
@@ -14612,10 +14658,31 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (!statX) { const v = FM.evalProp(trx, bt); ox = isFinite(v) ? v * pk : cx; }
           if (!statY) { const v = FM.evalProp(trY, bt); oy = isFinite(v) ? v * pk : cy; }
         }
-        const px = ox + vx * age, py = oy + vy * age + 0.5 * gravity * age * age;
+        // Line, Box and Circle place the birth about the emitter: across a level line, inside a box, on the rim of an oval.
+        if (emitter === 1) ex = (hx(i, 2) - 0.5) * ewP;
+        else if (emitter === 2) { ex = (hx(i, 2) - 0.5) * ewP; ey = (hx(i, 3) - 0.5) * ehP; }
+        else if (emitter === 3) { const ea = hx(i, 2) * TAU; ex = Math.cos(ea) * ewP * 0.5; ey = Math.sin(ea) * ehP * 0.5; }
+        let px, py;
+        if (drag > 0) {   // v' = g - k·v: the speed dies away toward the one gravity holds, closed form in age
+          const f = (1 - Math.exp(-drag * age)) / drag;
+          px = ox + ex + vx * f; py = oy + ey + vy * f + gravity / drag * (age - f);
+        } else {
+          px = ox + vx * age; py = oy + vy * age + 0.5 * gravity * age * age;
+          if (ex || ey) { px += ex; py += ey; }
+        }
+        if (turb > 0) {   // each particle wanders on its own smooth noise, more the older it gets, so it still leaves the emitter
+          const s = age * 1.5 + hx(i, 4) * 64, s0 = Math.floor(s), u = s - s0, w = u * u * (3 - 2 * u);
+          const nx = hz(i, s0, 1) + (hz(i, s0 + 1, 1) - hz(i, s0, 1)) * w, ny = hz(i, s0, 2) + (hz(i, s0 + 1, 2) - hz(i, s0, 2)) * w;
+          px += turb * frac * (nx * 2 - 1); py += turb * frac * (ny * 2 - 1);
+        }
         if (!isFinite(px) || !isFinite(py)) continue;
 
-        const col = 'rgb(' + ((cr + dcr * frac) | 0) + ',' + ((cg + dcg * frac) | 0) + ',' + ((cb + dcb * frac) | 0) + ')';
+        let col = 'rgb(' + ((cr + dcr * frac) | 0) + ',' + ((cg + dcg * frac) | 0) + ',' + ((cb + dcb * frac) | 0) + ')';
+        if (colVar > 0) {   // each particle's hue turned by up to ±180° at 100 %, about the grey axis so its brightness holds
+          const a = (2 * hx(i, 5) - 1) * colVar * Math.PI, c = Math.cos(a), k = (1 - c) / 3, q = Math.sin(a) * 0.5773502691896258;
+          const r0 = cr + dcr * frac, g0 = cg + dcg * frac, b0 = cb + dcb * frac, cl = v => (v < 0 ? 0 : (v > 255 ? 255 : v)) | 0;
+          col = 'rgb(' + cl(r0 * (c + k) + g0 * (k - q) + b0 * (k + q)) + ',' + cl(r0 * (k + q) + g0 * (c + k) + b0 * (k - q)) + ',' + cl(r0 * (k - q) + g0 * (k + q) + b0 * (c + k)) + ')';
+        }
         const rad = size * 0.5;
         B.save();
         B.globalAlpha = alpha;
@@ -14626,7 +14693,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const L = size * 0.8;
           B.beginPath(); B.moveTo(-L, 0); B.lineTo(L, 0); B.stroke();
         } else {
-          B.rotate(spinR * age + pHash(i * 4 + 3) * TAU);   // per-particle phase so shapes don't align
+          B.rotate(spinR * age + hsh(i * 4 + 3) * TAU);   // per-particle phase so shapes don't align
           B.fillStyle = col; B.beginPath();
           if (shape === 1) { B.rect(-rad, -rad, size, size); }
           else if (shape === 2) { B.moveTo(0, -rad); B.lineTo(rad * 0.8660254, rad * 0.5); B.lineTo(-rad * 0.8660254, rad * 0.5); }
@@ -14642,6 +14709,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         B.restore();
       }
       B.restore();
+      under();
     },
   };
   Object.setPrototypeOf(CANVAS_FX, null);   // own keys only — see POSTFX
