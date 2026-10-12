@@ -481,6 +481,14 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'scale', label: 'Scale', min: 20, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'drift', label: 'Drift', min: -200, max: 200, step: 5, def: 0, unit: 'px/s' },
+      /* #482 polish 11.4. The clouds could only slide sideways, always three layers of detail at one contrast. Boil makes
+         them churn in place (from the clouds you had: at 0 s a boiling sky is the still one); Octaves sets how many layers
+         of finer detail (1 is soft blobs, 6 is crisp wisps); Contrast pulls the grey apart or together; Vertical drift slides
+         them up (as Drift slides them left). Boil 0, 3 octaves, 100 % and 0 are the old clouds, byte for byte. */
+      { key: 'evolve', label: 'Boil', min: 0, max: 5, step: 0.05, def: 0, unit: '×' },
+      { key: 'detail', label: 'Octaves', min: 1, max: 6, step: 1, def: 3 },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 300, step: 5, def: 100, unit: '%' },
+      { key: 'drifty', label: 'Vertical drift', min: -200, max: 200, step: 5, def: 0, unit: 'px/s' },
     ] },
     { type: 'rays', label: 'Sunburst', color: true, defColor: '#ffffff', colorLabel: 'Colour', params: [
       { key: 'count', label: 'Rays', min: 3, max: 64, step: 1, def: 16 },
@@ -576,6 +584,16 @@ window.FM = window.FM || {};
       { key: 'variation', label: 'Brightness spread', min: 0, max: 1, step: 0.05, def: 0 },
       { key: 'twinkle', label: 'Twinkle', min: 0, max: 1, step: 0.05, def: 0 },
       { key: 'twinklespeed', label: 'Twinkle speed', min: 0.1, max: 5, step: 0.1, def: 1, unit: '×', overriddenBy: 'twinkle', liveAbove: 0 },   // queue 904: the rate was a fixed 3 rad/s — and it does nothing while Twinkle is 0
+      /* #482 polish 11.3. The stars could only sit still. Fly-through streams them out of a focus point, the warp-speed
+         look; Drift slides the whole field (it wraps, so it never runs out); Glint gives a few of the stars four fading
+         spikes; Pattern gives the layer its own sky. All 0 is the old field, byte for byte. */
+      { key: 'speed', label: 'Fly-through', min: 0, max: 5, step: 0.05, def: 0, unit: '×' },
+      { key: 'x', label: 'Focus X', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'speed', liveAbove: 0 },
+      { key: 'y', label: 'Focus Y', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'speed', liveAbove: 0 },
+      { key: 'driftx', label: 'Drift X', min: -300, max: 300, step: 5, def: 0, unit: 'px/s' },
+      { key: 'drifty', label: 'Drift Y', min: -300, max: 300, step: 5, def: 0, unit: 'px/s' },
+      { key: 'glint', label: 'Glint', min: 0, max: 1, step: 0.05, def: 0 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ] },
     { type: 'curl', label: 'Curl', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -849,7 +867,14 @@ window.FM = window.FM || {};
       { key: 'ghosts', label: 'Ghosts', min: 0, max: 8, step: 1, def: 0 },
       { key: 'halo', label: 'Ring', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'streak', label: 'Anamorphic streak', min: 0, max: 1, step: 0.02, def: 0 }] },
-    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }] },
+    /* #482 polish 11.7 (hunt C37: static, one tear for every layer). Boil makes the tear crawl; Pattern gives the layer its
+       own tear; Complexity adds finer tears on top of the big ones; Erode eats the layer in by that many px before tearing,
+       so the torn edge sits inside the old outline. Boil 0, Pattern 0, 1 and 0 are the old edge, byte for byte. */
+    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' },
+      { key: 'evolve', label: 'Boil', min: 0, max: 5, step: 0.05, def: 0, unit: '×' },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'complexity', label: 'Complexity', min: 1, max: 4, step: 1, def: 1 },
+      { key: 'border', label: 'Erode', min: 0, max: 20, step: 1, def: 0, unit: 'px' }] },
     { type: 'hexarray', label: 'Honeycomb', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 8, max: 80, step: 1, def: 24, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 0.02, max: 0.5, step: 0.01, def: 0.12 },
@@ -1341,7 +1366,15 @@ window.FM = window.FM || {};
       { key: 'motion', label: 'Motion', min: 0, max: 1, step: 0.02, def: 0.4, legacy: 0 },   // queue 756: an instance saved before motion existed is frozen (0), and the inspector says so
       { key: 'speed', label: 'Speed', min: 0, max: 2, step: 0.02, def: 0.5 },
       { key: 'wall', label: 'Wall thickness', min: 1, max: 40, step: 1, def: 8, unit: '%' },   // queue 904: was welded to 8% of the cell — Edge only ever set how DARK
-    ] },
+      /* #482 polish 11.5. Every Voronoi was the same crackle, each cell took the colour under its seed, the walls could only
+         darken, and the seeds were always scattered as far as they go. Pattern deals another crackle; Fill paints a cell its
+         seed's colour (as ever), the average of the picture under it, a random colour of its own, or leaves the picture alone
+         and draws only the walls; Wall colour is what the walls fade to (black is the old darkening); Randomness 0 lines the
+         seeds up into a grid of squares. Pattern 0, Seed colour, black and 1 are the old cells, byte for byte. */
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'fill', label: 'Fill', def: 0, options: [[0, 'Seed colour'], [1, 'Cell average'], [2, 'Random colour'], [3, 'Original (walls only)']] },
+      { key: 'jitter', label: 'Randomness', min: 0, max: 1, step: 0.02, def: 1 },
+    ], color: true, defColor: '#000000', colorLabel: 'Wall colour' },
     { type: 'tunnel', label: 'Tunnel', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'radius', label: 'Mouth size', min: 5, max: 100, step: 1, def: 30, unit: '%' },
@@ -1394,8 +1427,21 @@ window.FM = window.FM || {};
       { key: 'forks', label: 'Branches', min: 0, max: 8, step: 1, def: 3 },
       { key: 'flicker', label: 'Flicker', min: 0, max: 24, step: 1, def: 8, unit: '/s' },
       { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 },
-      { key: 'angle', label: 'Strikes from', min: -180, max: 180, step: 1, def: 0, unit: '°' },   // queue 904: it could only strike straight down
-    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour' },
+      { key: 'angle', label: 'Strikes from', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'mode', liveWhen: 0 },   // queue 904: it could only strike straight down
+      /* #482 polish 11.6 (hunt C34: it only ever struck down the layer, and only where the layer was). Strike Point to point
+         runs every bolt between two points you place (% of the frame), its ends pinned and its body bowed; Glow is the halo
+         round the core; Core is the core's own colour (ABSENT it is the bolt colour pushed 80 % to white, as it always was);
+         Segments is how many kinks the channel has; Draw on Everywhere lights empty frame too, raising its alpha. Down the
+         layer, 100 %, no Core, 20 and Layer pixels are the old bolts, byte for byte. */
+      { key: 'mode', label: 'Strike', def: 0, options: [[0, 'Down the layer'], [1, 'Point to point']] },
+      { key: 'x1', label: 'From X', min: 0, max: 100, step: 1, def: 25, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'y1', label: 'From Y', min: 0, max: 100, step: 1, def: 15, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'x2', label: 'To X', min: 0, max: 100, step: 1, def: 75, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'y2', label: 'To Y', min: 0, max: 100, step: 1, def: 85, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'glow', label: 'Glow', min: 0, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'segments', label: 'Segments', min: 8, max: 60, step: 1, def: 20 },
+      { key: 'drawon', label: 'Draw on', def: 0, options: [[0, 'Layer pixels'], [1, 'Everywhere']] },
+    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour', color2: true, defColor2: '#eaf4ff', color2Label: 'Core', color2Follows: 'color', color2FollowMix: 0.8 },   // review: unset, the Core row SHOWS the bolt colour 80 % to white — what the kernel draws (fxRegistry.followedColour)
     // ---- batch 29: Displacement maps — warp this layer by ANOTHER layer's pixels (the "Map layer").
     // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
     { type: 'displacemap', label: 'Displacement Map', layer: true, layerLabel: 'Map layer', params: [
@@ -1475,6 +1521,23 @@ window.FM = window.FM || {};
       { key: 'spin', label: 'Spin', min: -720, max: 720, step: 5, def: 0, unit: '°/s' },
       { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Square'], [2, 'Triangle'], [3, 'Star'], [4, 'Streak']], def: 0 },
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
+      /* #482 polish 11.1. The emitter was a point that let particles out one at a time, the same particles on every layer, with
+         nothing to slow them, stir them or vary their size and colour. Emit from spreads the births over a line, a box, the rim
+         of a circle (the width and height are % of the frame) or the whole frame; All at once lets out Rate particles together
+         at the clip's start and no more; Pattern gives the layer its own particles; Drag slows them toward a stop (and toward
+         the speed gravity can hold); Turbulence wanders each one off its path; Lifetime variation is the old ±30 %. Every
+         default is the old emitter, number for number. */
+      { key: 'emitter', label: 'Emit from', def: 0, options: [[0, 'Point'], [1, 'Line'], [2, 'Box'], [3, 'Circle'], [4, 'Whole frame']] },
+      { key: 'ew', label: 'Emitter width', min: 0, max: 200, step: 1, def: 50, unit: '%', overriddenBy: 'emitter', liveWhen: [1, 2, 3] },
+      { key: 'eh', label: 'Emitter height', min: 0, max: 200, step: 1, def: 50, unit: '%', overriddenBy: 'emitter', liveWhen: [2, 3] },
+      { key: 'burst', label: 'All at once', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'drag', label: 'Drag', min: 0, max: 5, step: 0.05, def: 0, unit: '/s' },
+      { key: 'turb', label: 'Turbulence', min: 0, max: 500, step: 5, def: 0, unit: 'px' },
+      { key: 'sizevar', label: 'Size variation', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'colorvar', label: 'Colour variation', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'lifevar', label: 'Lifetime variation', min: 0, max: 100, step: 1, def: 30, unit: '%' },
+      { key: 'behind', label: 'Behind layer', def: 0, options: [[0, 'Off'], [1, 'On']] },
     ], color: true, defColor: '#ffd23f', colorLabel: 'Start', color2: true, defColor2: '#ff5e5e', color2Label: 'End' },
     // ---- batch 31: the two grading gaps ----
     // Levels — set a real black and white point, per channel. Everything else in Colouring
@@ -1548,8 +1611,13 @@ window.FM = window.FM || {};
     // Snow & Rain (queue 911, his pick) — full-frame weather over the clip. Particles emits from one point;
     // this fills the frame. Flake count is independent of plate size, so the phone preview and the export
     // show the same weather; sizes scale with the plate.
-    { type: 'weather', label: 'Snow & Rain', desc: 'Falling snow or rain across the whole frame, with wind, speed and depth.', params: [
-      { key: 'kind', label: 'Type', options: [[0, 'Snow'], [1, 'Rain']], def: 0 },
+    /* #482 polish 11.2: five more things to fill the air with — Confetti (tumbling, flipping paper in six party colours),
+       Embers (rising, flickering sparks that glow), Dust / Ash (tiny motes drifting every way), Petals (big slow tumbling
+       ovals) and Bubbles (rising rings with a glint) — plus Pattern (the layer's own flakes) and Sway (how far each one drifts
+       side to side; rain falls straight, so it has none). Snow and Rain at Pattern 0 and Sway 1 are the old frames, call for
+       call. Confetti and Embers bring their own colours, so the Colour row says it is off for them. */
+    { type: 'weather', label: 'Snow & Rain', desc: 'Snow, rain, confetti, embers, dust, petals or bubbles across the whole frame, with wind, speed and depth.', colorGate: { by: 'kind', when: [0, 1, 4, 5, 6] }, params: [
+      { key: 'kind', label: 'Type', options: [[0, 'Snow'], [1, 'Rain'], [2, 'Confetti'], [3, 'Embers'], [4, 'Dust / Ash'], [5, 'Petals'], [6, 'Bubbles']], def: 0 },
       { key: 'amount', label: 'Amount', min: 10, max: 1500, step: 10, def: 300 },
       { key: 'size', label: 'Size', min: 1, max: 30, step: 0.5, def: 5, unit: 'px' },
       { key: 'speed', label: 'Speed', min: 0, max: 4, step: 0.05, def: 1, unit: '×' },
@@ -1557,6 +1625,8 @@ window.FM = window.FM || {};
       { key: 'length', label: 'Streak length', min: 5, max: 300, step: 1, def: 60, unit: 'px', overriddenBy: 'kind', liveWhen: 1 },
       { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.02, def: 0.85 },
+      { key: 'sway', label: 'Sway', min: 0, max: 3, step: 0.05, def: 1, unit: '×', overriddenBy: 'kind', liveWhen: [0, 2, 3, 4, 5, 6] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     // HSL Bands — push one colour band's hue, saturation and luminance. The saturation gate is the
     // whole trick: weighting by the pixel's own saturation is what leaves skin and neutrals alone
@@ -4892,6 +4962,10 @@ window.FM = window.FM || {};
     return _fxScratch;
   }
   FM._fxScratchInfo = function () { return { bytes: _fxScratch ? _fxScratch.length : 0 }; };   // suite seam
+  /* Plate-sized scratch the #482 batch 11 generators keep between frames instead of allocating each one (Voronoi's Cell
+     average map and Roughen Edges' Erode are 4–8 MB a frame at 1080x1920). One per key, grown only; callers index [0, W*H). */
+  const _genBufs = Object.create(null);
+  function genScratch(key, Type, n) { let b = _genBufs[key]; if (!b || !(b instanceof Type) || b.length < n) b = _genBufs[key] = new Type(n); return b; }
 
   // Glow kernels run synchronously and fill both planes before reading them; Dark Glow
   // clears its sparse first plane. Sharing avoids 8 bytes of allocation per plate pixel.
@@ -5291,6 +5365,125 @@ window.FM = window.FM || {};
       let s = acc[j];
       if (f > 1) { s /= f; f = 1; }
       const keep = (1 - f) * a0, A = f + keep;              // premultiplied: the star covers f of the pixel at alpha 1
+      d[i] = (col[0] * s + d[i] * keep) / A;
+      d[i + 1] = (col[1] * s + d[i + 1] * keep) / A;
+      d[i + 2] = (col[2] * s + d[i + 2] * keep) / A;
+      d[i + 3] = A * 255;
+    }
+  }
+
+  /* ═══ A STARFIELD THAT DRIFTS, FLIES THROUGH, GLINTS, OR HAS ITS OWN PATTERN (#482 polish 11.3) ═══════════════════════
+   * Each of these places stars somewhere other than their cell, so they are laid down the way starfieldReduced lays them:
+   * as squares in PROJECT pixels, each covering whatever share of each plate pixel it covers. That is the same arithmetic
+   * at every plate scale, so a reduced preview is the export averaged down (at ps 1 a square on whole pixels is the old
+   * block exactly). The stars are still the old cells (same hash, size, brightness and twinkle) — Pattern only mixes a
+   * number into the hash, with its own cached candidate list (four patterns deep), and 0 never comes here.
+   *   · DRIFT moves every star by (Drift X, Drift Y) × t project px. The field WRAPS on its own cell grid, so stars that
+   *     leave one edge come back at the other and a drift never runs out of sky.
+   *   · FLY-THROUGH is an endless zoom about the focus: the stars are dealt into three depths, each depth's field grows
+   *     from 1× to 2× about the focus and starts again, a third of a pass apart, fading in from nothing and out to nothing
+   *     (sin of the pass), dealt to a new spot in the field each pass so no star comes round twice. The nearer a star is to
+   *     the edge, the faster it streams outward and the bigger it grows — the warp-speed look. 1× is a pass every 4 s.
+   *   · GLINT gives a fifth of the stars four spikes that fade along their length, eight stars long at 1.
+   * sfEachStar is the one place a star's position is decided; the renderer and the suite both read it. */
+  const _sfSeeded = [];                                    // seeded candidate lists, most recent first
+  function sfCandidatesFor(seed, cols, rows) {
+    if (!seed) return sfCandidates(cols, rows);
+    let k = 0, had = null;
+    for (; k < _sfSeeded.length; k++) if (_sfSeeded[k].seed === seed) { had = _sfSeeded[k]; break; }
+    if (had && cols <= had.cols && rows <= had.rows) { if (k) { _sfSeeded.splice(k, 1); _sfSeeded.unshift(had); } return had; }
+    if (had) { cols = Math.max(cols, had.cols); rows = Math.max(rows, had.rows); _sfSeeded.splice(k, 1); }
+    const sk = Math.imul(seed, 0x2545f491);
+    let cap = Math.ceil(cols * rows * 0.035) + 64, n = 0;
+    let X = new Int32Array(cap), Y = new Int32Array(cap), R = new Float64Array(cap);
+    for (let cy = 0; cy < rows; cy++) for (let cx = 0; cx < cols; cx++) {
+      let h = (cx * 374761393 + cy * 668265263 + sk) | 0; h = (h ^ (h >>> 13)) * 1274126177; h = h ^ (h >>> 16);
+      const r = (h >>> 0) / 4294967295;
+      if (!(r < 0.03)) continue;
+      if (n >= cap) { cap *= 2; const x2 = new Int32Array(cap), y2 = new Int32Array(cap), r2 = new Float64Array(cap); x2.set(X); y2.set(Y); r2.set(R); X = x2; Y = y2; R = r2; }
+      X[n] = cx; Y[n] = cy; R[n] = r; n++;
+    }
+    const c = { seed: seed, cols: cols, rows: rows, n: n, X: X, Y: Y, R: R };
+    _sfSeeded.unshift(c); if (_sfSeeded.length > 4) _sfSeeded.pop();
+    return c;
+  }
+  /* o: PW/PH the frame in project px, t, thr, sz, vari, tw, twPh, tws (the kernel's own), seed, ox/oy (the drift so far, project
+     px), fly (passes so far, or null when Fly-through is off), fx/fy (the focus, project px). fn(x, y, side, b, w, r, Pw, Ph):
+     the square's corner and side in project px, its brightness, its weight (the fly-through fade), its hash, the wrap. */
+  function sfEachStar(o, fn) {
+    const sz = o.sz, cols = Math.ceil(o.PW / sz), rows = Math.ceil(o.PH / sz), C = sfCandidatesFor(o.seed, cols, rows);
+    const Pw = cols * sz, Ph = rows * sz, wrapP = (v, P) => ((v % P) + P) % P;
+    for (let k = 0; k < C.n; k++) {
+      const cy = C.Y[k];
+      if (cy >= rows) break;                                // the list ascends by row
+      const cx = C.X[k];
+      if (cx >= cols) continue;
+      const r = C.R[k];
+      if (!(r < o.thr)) continue;                           // the kernel's own density test
+      let b = 1;                                            // brightness: the kernel's arithmetic, line for line
+      if (o.vari > 0) { let hv = ((cx * 83492791) ^ (cy * 2654435761)) >>> 0; hv = (hv ^ (hv >>> 15)) >>> 0; b *= 1 - o.vari * ((hv >>> 8) / 16777216) * 0.9; }
+      if (o.tw > 0) { let ht = ((cx * 40503) ^ (cy * 12289)) | 0; ht = (ht ^ (ht >>> 13)) * 1274126177 | 0; ht = (ht ^ (ht >>> 16)) >>> 0;
+        b *= 1 - o.tw * 0.5 * (1 - Math.sin((o.twPh === null ? o.t * 3 * o.tws : o.twPh) + (ht / 4294967295) * 6.283)); }
+      if (b < 0) b = 0;
+      let x = cx * sz + o.ox, y = cy * sz + o.oy, side = sz, w = 1;
+      if (o.fly !== null) {
+        let hl = ((cx * 2246822519) ^ (cy * 3266489917)) | 0; hl = Math.imul(hl ^ (hl >>> 15), 0x2c1b3c6d); hl = (hl ^ (hl >>> 12)) >>> 0;
+        const L = hl % 3, ph = o.fly + L / 3, pass = Math.floor(ph), f = ph - pass;
+        let hc = Math.imul(pass * 3 + L + 1, 0x9e3779b1); hc ^= hc >>> 15; hc = Math.imul(hc, 0x85ebca6b); hc ^= hc >>> 13;
+        x = wrapP(x + ((hc >>> 0) % cols) * sz, Pw); y = wrapP(y + (Math.imul(hc, 0xc2b2ae35) >>> 0) % rows * sz, Ph);
+        const s = Math.pow(2, f);
+        side = sz * s; x = o.fx + (x + sz / 2 - o.fx) * s - side / 2; y = o.fy + (y + sz / 2 - o.fy) * s - side / 2;
+        w = Math.sin(Math.PI * f);
+      } else { x = wrapP(x, Pw); y = wrapP(y, Ph); }
+      fn(x, y, side, b, w, r, Pw, Ph);
+    }
+  }
+  FM._sfEachStar = sfEachStar;                             // suite seam: where every star of a moving field is
+  function starfieldMoving(d, W, H, ps, col, o) {
+    const N = W * H;
+    if (!_sfCov || _sfCov.length < N) { _sfCov = new Float32Array(N); _sfAcc = new Float32Array(N); }
+    const cov = _sfCov, acc = _sfAcc;
+    cov.fill(0, 0, N); acc.fill(0, 0, N);
+    const splat = (X0, Y0, w0, h0, a, b) => {            // a project-px rectangle at weight a and brightness b
+      const x0 = X0 * ps, x1 = (X0 + w0) * ps, y0 = Y0 * ps, y1 = (Y0 + h0) * ps;
+      const px0 = Math.max(0, Math.floor(x0)), px1 = Math.min(W - 1, Math.ceil(x1) - 1), py0 = Math.max(0, Math.floor(y0)), py1 = Math.min(H - 1, Math.ceil(y1) - 1);
+      for (let py = py0; py <= py1; py++) {
+        const oy = Math.min(y1, py + 1) - Math.max(y0, py);
+        if (!(oy > 0)) continue;
+        for (let px = px0; px <= px1; px++) {
+          const ox = Math.min(x1, px + 1) - Math.max(x0, px);
+          if (!(ox > 0)) continue;
+          const wgt = ox * oy * a, j = py * W + px;
+          cov[j] += wgt; acc[j] += wgt * b;
+        }
+      }
+    };
+    const gl = o.glint, glThr = o.thr * 0.2;
+    sfEachStar(o, (x, y, side, b, w, r, Pw, Ph) => {
+      if (!(w > 0)) return;
+      splat(x, y, side, side, w, b);
+      if (o.fly === null) {                                 // a star across the wrap shows on both edges
+        if (x + side > Pw) splat(x - Pw, y, side, side, w, b);
+        if (y + side > Ph) splat(x, y - Ph, side, side, w, b);
+        if (x + side > Pw && y + side > Ph) splat(x - Pw, y - Ph, side, side, w, b);
+      }
+      if (gl > 0 && r < glThr) {
+        const L = gl * 8 * side, len = L / 8, th = side < 1 ? side : 1, cx = x + side / 2, cy = y + side / 2;
+        for (let q = 0; q < 8; q++) {
+          const a = gl * w * 0.9 * (1 - (q + 0.5) / 8), s0 = side / 2 + q * len;
+          splat(cx + s0, cy - th / 2, len, th, a, b); splat(cx - s0 - len, cy - th / 2, len, th, a, b);
+          splat(cx - th / 2, cy + s0, th, len, a, b); splat(cx - th / 2, cy - s0 - len, th, len, a, b);
+        }
+      }
+    });
+    for (let j = 0; j < N; j++) {
+      let f = cov[j];
+      if (!(f > 0)) continue;
+      const i = j * 4, a0 = d[i + 3] / 255;
+      if (a0 <= 0) continue;                                // a star only where the layer is, as ever
+      let s = acc[j];
+      if (f > 1) { s /= f; f = 1; }
+      const keep = (1 - f) * a0, A = f + keep;
       d[i] = (col[0] * s + d[i] * keep) / A;
       d[i + 1] = (col[1] * s + d[i + 1] * keep) / A;
       d[i + 2] = (col[2] * s + d[i + 2] * keep) / A;
@@ -7647,7 +7840,14 @@ window.FM = window.FM || {};
        space; at ps 1 that centre is the pixel itself, so every export is the very same arithmetic.
        Animated Drift is a speed: accumulate its distance so easing to zero parks the clouds instead
        of jumping to their first-frame pattern. The numeric path retains its original arithmetic. */
-    clouds: function(d,W,H,p,t,ps){ var cl_ps=(ps>0&&ps<1)?ps:1; var cl_amt = fparam(p, 'amount', 0.6, t); cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; var cl_wts=[0.5715,0.2857,0.1428]; var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=FM.isAnimated(p.drift)?FM.integrateProp(p.drift,0,t):cl_dr*t; var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=(cl_ps===1?cl_x:(cl_x+0.5)/cl_ps-0.5)+cl_ox, cl_ys=cl_ps===1?cl_y:(cl_y+0.5)/cl_ps-0.5; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_ys/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_ys-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
+    clouds: function(d,W,H,p,t,ps){ var cl_ps=(ps>0&&ps<1)?ps:1; var cl_amt = fparam(p, 'amount', 0.6, t); cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_D=p.detail==null?3:Math.round(FM.evalProp(p.detail,t)); if(!(cl_D>=1))cl_D=1; if(cl_D>6)cl_D=6; var cl_cells, cl_wts; if(cl_D===3){ cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; cl_wts=[0.5715,0.2857,0.1428]; } else { /* #482 polish 11.4 Octaves: each layer half the size of the one before at half its weight, the weights summing to 1 (3 keeps the old literals) */ cl_cells=[]; cl_wts=[]; for(var cl_k=0;cl_k<cl_D;cl_k++){ cl_cells.push(64/Math.pow(2,cl_k)*cl_sc/100); cl_wts.push(Math.pow(2,cl_D-1-cl_k)/(Math.pow(2,cl_D)-1)); } } var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=FM.isAnimated(p.drift)?FM.integrateProp(p.drift,0,t):cl_dr*t;
+      /* #482 polish 11.4. BOIL walks every octave through a third dimension of the same noise, the finer octaves faster; slice 0
+         IS the still lattice, so a boiling sky at 0 s (and any sky at Boil 0) is the old one. A keyframed Boil is a rate: its
+         distance so far. CONTRAST stretches the grey about its middle. VERTICAL DRIFT is Drift's twin on y. */
+      var cl_ev=p.evolve==null?0:FM.evalProp(p.evolve,t); if(!(cl_ev>0))cl_ev=0; if(cl_ev>5)cl_ev=5; var cl_z=FM.isAnimated(p.evolve)?FM.integrateProp(p.evolve,0,t,function(u){ var k=FM.evalProp(p.evolve,u); return k>0?(k<5?k:5):0; }):cl_ev*t; if(!isFinite(cl_z))cl_z=0;
+      var cl_ct=p.contrast==null?100:FM.evalProp(p.contrast,t); if(!(cl_ct>=0))cl_ct=0; if(cl_ct>300)cl_ct=300; cl_ct/=100;
+      var cl_dy=p.drifty==null?0:FM.evalProp(p.drifty,t); var cl_oy=FM.isAnimated(p.drifty)?FM.integrateProp(p.drifty,0,t):cl_dy*t; if(!isFinite(cl_oy))cl_oy=0;
+      function cl_h3(cx,cy,zi){ return zi===0?cl_hash(cx,cy):cl_hash(cx+zi*7919,cy-zi*104729); } var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<cl_cells.length;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=(cl_ps===1?cl_x:(cl_x+0.5)/cl_ps-0.5)+cl_ox, cl_ys=cl_ps===1?cl_y:(cl_y+0.5)/cl_ps-0.5; if(cl_oy!==0)cl_ys+=cl_oy; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_ys/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_ys-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); if(cl_z!==0){ var cl_zo=cl_z*(1+0.5*cl_o), cl_zi=Math.floor(cl_zo), cl_zf=cl_smooth(cl_zo-cl_zi), cl_a; cl_a=cl_h3(cl_gx,cl_gy,cl_zi); cl_v00=cl_a+(cl_h3(cl_gx,cl_gy,cl_zi+1)-cl_a)*cl_zf; cl_a=cl_h3(cl_gx+1,cl_gy,cl_zi); cl_v10=cl_a+(cl_h3(cl_gx+1,cl_gy,cl_zi+1)-cl_a)*cl_zf; cl_a=cl_h3(cl_gx,cl_gy+1,cl_zi); cl_v01=cl_a+(cl_h3(cl_gx,cl_gy+1,cl_zi+1)-cl_a)*cl_zf; cl_a=cl_h3(cl_gx+1,cl_gy+1,cl_zi); cl_v11=cl_a+(cl_h3(cl_gx+1,cl_gy+1,cl_zi+1)-cl_a)*cl_zf; } var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_ct!==1)cl_g=127.5+(cl_g-127.5)*cl_ct; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
     rays: function(d,W,H,p,t){ var raysCount = fparam(p, 'count', 16, t); raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100; var raysPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
     stripes: function(d,W,H,p,t,ps){ var stp_size = fparam(p, 'size', 16, t); stp_size=Math.max(4,Math.min(80,stp_size)); var stp_period=Math.max(2,Math.round(stp_size*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var stp_c=hexToRGB(p.color); var stp_r=stp_c[0],stp_g=stp_c[1],stp_b=stp_c[2];
       // Locked to a 45-degree diagonal at a 50% duty cycle mixed at a fixed 0.6 — the only thing you
@@ -7746,6 +7946,20 @@ window.FM = window.FM || {};
          clip on every frame, so a ramp played as a burst of frantic flicker. Unkeyframed: the old phase, to the bit. */
       var sf_twPh=FM.isAnimated(sf_p.twinklespeed)?3*FM.integrateProp(sf_p.twinklespeed,0,sf_t,function(u){ var k=FM.evalProp(sf_p.twinklespeed,u); return !(k>0.1)?0.1:(k>5?5:k); }):null;
       var sf_plain=sf_szP===1&&sf_tw===0&&sf_var===0;
+      /* #482 polish 11.3: Fly-through, Drift, Glint and Pattern lay the stars down in project px (starfieldMoving). With all four
+         at 0 nothing here is used, so every saved field is the code below, byte for byte. */
+      var sf_fly=sf_p.speed==null?0:FM.evalProp(sf_p.speed,sf_t); if(!(sf_fly>0))sf_fly=0; if(sf_fly>5)sf_fly=5;
+      var sf_dx=sf_p.driftx==null?0:FM.evalProp(sf_p.driftx,sf_t), sf_dy=sf_p.drifty==null?0:FM.evalProp(sf_p.drifty,sf_t); if(!isFinite(sf_dx))sf_dx=0; if(!isFinite(sf_dy))sf_dy=0;
+      var sf_gl=sf_p.glint==null?0:FM.evalProp(sf_p.glint,sf_t); if(!(sf_gl>0))sf_gl=0; if(sf_gl>1)sf_gl=1;
+      var sf_sd=sf_p.seed==null?0:Math.round(FM.evalProp(sf_p.seed,sf_t)); if(!(sf_sd>0))sf_sd=0; if(sf_sd>999)sf_sd=999;
+      var sf_flyK=FM.isAnimated(sf_p.speed), sf_dxK=FM.isAnimated(sf_p.driftx), sf_dyK=FM.isAnimated(sf_p.drifty);
+      if(sf_fly>0||sf_flyK||sf_dx!==0||sf_dy!==0||sf_dxK||sf_dyK||sf_gl>0||sf_sd>0){
+        var sf_mps=(sf_ps>0&&sf_ps<1)?sf_ps:1, sf_fxp=sf_p.x==null?50:FM.evalProp(sf_p.x,sf_t), sf_fyp=sf_p.y==null?50:FM.evalProp(sf_p.y,sf_t);
+        starfieldMoving(sf_d,sf_W,sf_H,sf_mps,sf_col,{ PW:sf_W/sf_mps, PH:sf_H/sf_mps, t:sf_t, thr:sf_thr, sz:sf_szP, vari:sf_var, tw:sf_tw, twPh:sf_twPh, tws:sf_tws, seed:sf_sd,
+          ox:sf_dxK?FM.integrateProp(sf_p.driftx,0,sf_t):sf_dx*sf_t, oy:sf_dyK?FM.integrateProp(sf_p.drifty,0,sf_t):sf_dy*sf_t,   // a keyframed drift is a speed: its distance so far
+          fly:(sf_fly>0||sf_flyK)?(sf_flyK?0.25*FM.integrateProp(sf_p.speed,0,sf_t,function(u){ var k=FM.evalProp(sf_p.speed,u); return k>0?(k<5?k:5):0; }):sf_fly*sf_t*0.25):null,
+          fx:sf_fxp/100*sf_W/sf_mps, fy:sf_fyp/100*sf_H/sf_mps, glint:sf_gl });
+        return; }
       if(sf_ps>0&&sf_ps<1){ starfieldReduced(sf_d,sf_W,sf_H,sf_ps,sf_t,sf_thr,sf_szP,sf_col,sf_plain,sf_var,sf_tw,sf_twPh,sf_tws); return; }   // #986 C7b: a reduced plate shows the export's stars, shrunk (Star size is project px here — pxToPlate leaves a 6-argument kernel alone)
       for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue;
         var sf_cx=sf_szP===1?sf_x:Math.floor(sf_x/sf_szP), sf_cy=sf_szP===1?sf_y:Math.floor(sf_y/sf_szP);
@@ -8751,7 +8965,29 @@ window.FM = window.FM || {};
           if(lfSA>0){ var lfsy2=lfDY*lfDY; if(lfsy2<lfSD2*9){ var lfsv=lfSA*(190*lfS1A*Math.exp(-lfsy2/lfSD1)+55*lfS2A*Math.exp(-lfsy2/lfSD2))*Math.exp(-(lfDX<0?-lfDX:lfDX)/lfSL); lfEr+=lfRR*lfsv/255; lfEg+=lfRG*lfsv/255; lfEb+=lfRB*lfsv/255; } }
         }
         if(lfAmt<=0&&!(lfEr>0||lfEg>0||lfEb>0)) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } if(lfX){ lfAddR+=lfEr; lfAddG+=lfEg; lfAddB+=lfEb; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
-    roughenedges: function(d,W,H,p,t,ps){ var re_ps=(ps>0)?ps:1; var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt))*re_ps; var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl))*re_ps; if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
+    roughenedges: function(d,W,H,p,t,ps){ var re_ps=(ps>0)?ps:1; var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt))*re_ps; var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl))*re_ps; var re_br=p.border==null?0:FM.evalProp(p.border,t); if(!(re_br>0))re_br=0; if(re_br>20)re_br=20; re_br=Math.round(re_br*re_ps); if(re_amt<=0&&re_br<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; }
+      /* #482 polish 11.7. PATTERN moves both noise channels to numbers of their own (0 keeps the old 11 and 29). BOIL walks the
+         noise through time slices, smoothly (slice 0 IS the still noise, so a boiling edge at 0 s is the old one; a keyframed
+         Boil is a rate). COMPLEXITY adds octaves ON TOP of the old tear, each twice as fine at 0.6 of the strength (scaled back
+         into range they would flatten the big tear, and the fine ones would round away under a whole-pixel shift). ERODE
+         takes the layer's alpha in by that many PROJECT px (a min over the square, the plate edge repeated) before the tear
+         reads it — the torn edge moves inside the old outline. Complexity 1 with no Boil is the old noise, call for call. */
+      var re_sd=p.seed==null?0:Math.round(FM.evalProp(p.seed,t)); if(!(re_sd>0))re_sd=0; if(re_sd>999)re_sd=999; var re_sx0=11+re_sd*101, re_sy0=29+re_sd*101;
+      var re_ev=p.evolve==null?0:FM.evalProp(p.evolve,t); if(!(re_ev>0))re_ev=0; if(re_ev>5)re_ev=5; var re_z=FM.isAnimated(p.evolve)?FM.integrateProp(p.evolve,0,t,function(u){ var k=FM.evalProp(p.evolve,u); return k>0?(k<5?k:5):0; }):re_ev*t; if(!isFinite(re_z))re_z=0;
+      var re_zi=Math.floor(re_z), re_zf=re_z-re_zi; re_zf=re_zf*re_zf*(3-2*re_zf);
+      var re_C=p.complexity==null?1:Math.round(FM.evalProp(p.complexity,t)); if(!(re_C>=1))re_C=1; if(re_C>4)re_C=4;
+      function re_field(fx,fy,sd){ if(re_C===1&&re_z===0)return re_noise(fx,fy,sd); var s=0.5, w=1, f=1;
+        for(var o=0;o<re_C;o++){ var so=sd+o*7, v=re_noise(fx*f,fy*f,so+re_zi*1009); if(re_z!==0)v+=(re_noise(fx*f,fy*f,so+(re_zi+1)*1009)-v)*re_zf; s+=(v-0.5)*w; w*=0.6; f*=2; }
+        return s<0?0:(s>1?1:s); }
+      var re_A=null;
+      if(re_br>0){ var re_n=Math.max(W,H)+2*re_br, re_P=new Uint8Array(re_n), re_G=new Uint8Array(re_n), re_Hm=new Uint8Array(re_n), re_k=2*re_br+1; re_A=genScratch('reA',Uint8Array,W*H); var re_T=genScratch('reT',Uint8Array,W*H);
+        // van Herk / Gil-Werman: the min over every window of 2r+1 in three passes of a line, the line padded with its own end values
+        var re_min=function(src,dst,n,at,step){ var m=n+2*re_br, j; for(j=0;j<m;j++){ var q=j-re_br; q=q<0?0:(q>=n?n-1:q); re_P[j]=src(at+q*step); }
+          for(j=0;j<m;j++)re_G[j]=(j%re_k===0)?re_P[j]:Math.min(re_G[j-1],re_P[j]); for(j=m-1;j>=0;j--)re_Hm[j]=(j===m-1||(j+1)%re_k===0)?re_P[j]:Math.min(re_Hm[j+1],re_P[j]);
+          for(j=0;j<n;j++)dst[at+j*step]=Math.min(re_Hm[j],re_G[j+2*re_br]); };
+        for(var re_r=0;re_r<H;re_r++)re_min(function(i){ return re_s[i*4+3]; },re_T,W,re_r*W,1);
+        for(var re_c=0;re_c<W;re_c++)re_min(function(i){ return re_T[i]; },re_A,H,re_c,W); }
+      for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_field(re_fx,re_fy,re_sx0)*2-1)*re_amt; var re_dy=(re_field(re_fx,re_fy,re_sy0)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_A?re_A[re_sy*W+re_sx]:re_s[(re_sy*W+re_sx)*4+3]; } } },
     /* ⚠️ THE CLAMP IS IN PLATE PIXELS (queue 913). pxToPlate has already multiplied `size` by the plate scale, so the
        catalogue's 8..80 has to be too — `arguments[5]`, because naming `ps` would lift the arity past pxToPlate's check
        and silently drop the scaling (#691). Clamping at a flat 8 turned the default 24 (6.72 plate px at the 28%
@@ -9647,7 +9883,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.
-    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcWall=(p.wall==null?8:FM.evalProp(p.wall,t))/100; if(!(vcWall>=0.01))vcWall=0.01; if(vcWall>0.4)vcWall=0.4;   /* queue 904: the wall was a fixed 8% of the cell; 8/100 === 0.08 exactly, so a saved instance is byte-identical */ var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
+    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcWall=(p.wall==null?8:FM.evalProp(p.wall,t))/100; if(!(vcWall>=0.01))vcWall=0.01; if(vcWall>0.4)vcWall=0.4;   /* queue 904: the wall was a fixed 8% of the cell; 8/100 === 0.08 exactly, so a saved instance is byte-identical */ var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); var vcSdK=(p.seed==null?0:Math.max(0,Math.min(999,Math.round(FM.evalProp(p.seed,t))||0)))*17.17; /* #482 polish 11.5 Pattern: a number added to every seed's hash, nothing at 0 */ function vcH(ix,iy,k){ var a=ix*127.1+iy*311.7+k*74.7; if(vcSdK)a+=vcSdK; var n=Math.sin(a)*43758.5453; return n-Math.floor(n); }
       /* MOTION (queue 350). Ezra: "Voronoi cells needs the ability to make them move, and I want it to
          actually move in a cool way and not just a drag it up and down, like they're alive."
          "Not just a drag it up and down" rules out the cheap answer — scrolling the whole field, which
@@ -9674,12 +9910,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var vcR=vcM*0.34, vcW=(FM.isAnimated(p.speed)?FM.integrateProp(p.speed,0,vcTime,function(u){ var k=FM.evalProp(p.speed,u); return k<0?0:(k>2?2:k); }):vcTime*vcSp)*6.2831853, vcTAU=6.2831853;
       var vcGX=Math.ceil(W/vcG)+2, vcGY=Math.ceil(H/vcG)+2;
       var vcPX=new Float64Array(vcGX*vcGY), vcPY=new Float64Array(vcGX*vcGY);
+      /* #482 polish 11.5 (Pattern is mixed into vcH above). RANDOMNESS pulls each seed toward the middle of its cell — 0 is a
+         grid of squares, 1 the old scatter, kept as the very same number. FILL: Seed colour is the old cell; Cell average
+         paints each cell the mean of the picture under it (a second pass, once every cell is summed); Random colour gives each
+         cell a rich colour of its own from its own hash; Original (walls only) leaves the picture and draws just the walls.
+         WALL COLOUR is what a wall fades to: black (or none, a saved instance) is the old multiply, exactly. */
+      var vcJt=p.jitter==null?1:FM.evalProp(p.jitter,t); if(!(vcJt>=0))vcJt=0; if(vcJt>1)vcJt=1;
+      var vcFill=p.fill==null?0:(Math.round(FM.evalProp(p.fill,t))|0); if(vcFill<0||vcFill>3)vcFill=0;
+      var vcWc=p.color?hexToRGB(p.color):null; if(vcWc&&!vcWc[0]&&!vcWc[1]&&!vcWc[2])vcWc=null;
+      var vcRC=vcFill===2?new Uint8ClampedArray(vcGX*vcGY*3):null;
+      function vcWallAt(o,f){ if(vcWc){ var g=1-f; d[o]=d[o]*f+vcWc[0]*g; d[o+1]=d[o+1]*f+vcWc[1]*g; d[o+2]=d[o+2]*f+vcWc[2]*g; } else { d[o]*=f; d[o+1]*=f; d[o+2]*=f; } }
       for(var vcgy=0;vcgy<vcGY;vcgy++)for(var vcgx=0;vcgx<vcGX;vcgx++){
         var vcCx=vcgx-1, vcCy=vcgy-1, vcIdx=vcgy*vcGX+vcgx;
         var vcOx=vcH(vcCx,vcCy,1), vcOy=vcH(vcCx,vcCy,2);
+        if(vcJt!==1){ vcOx=0.5+(vcOx-0.5)*vcJt; vcOy=0.5+(vcOy-0.5)*vcJt; }
         if(vcR){ vcOx+=vcR*Math.cos(vcW+vcH(vcCx,vcCy,3)*vcTAU); vcOy+=vcR*Math.sin(vcW*0.73+vcH(vcCx,vcCy,4)*vcTAU); }
         vcPX[vcIdx]=(vcCx+vcOx)*vcG; vcPY[vcIdx]=(vcCy+vcOy)*vcG;
-      } for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcJ=(vccy+1)*vcGX+(vccx+1), vcpx=vcPX[vcJ], vcpy=vcPY[vcJ]; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; } else if(vcdd<vcD2){ vcD2=vcdd; } } var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1); if(vcE>0 && vcEw<vcG*vcWall){ var vcF=1-vcE*(1-vcEw/(vcG*vcWall)); d[vci]*=vcF; d[vci+1]*=vcF; d[vci+2]*=vcF; } } } },
+        if(vcRC){ var vcHh=vcH(vcCx,vcCy,5), vcSs=0.55+0.35*vcH(vcCx,vcCy,6), vcLl=0.4+0.25*vcH(vcCx,vcCy,7);   // any hue, fairly rich, mid-light (HSL)
+          var vcQ=vcLl<0.5?vcLl*(1+vcSs):vcLl+vcSs-vcLl*vcSs, vcP=2*vcLl-vcQ;
+          for(var vck=0;vck<3;vck++){ var vcT=vcHh+(1-vck)/3; vcT-=Math.floor(vcT); vcRC[vcIdx*3+vck]=255*(vcT<1/6?vcP+(vcQ-vcP)*6*vcT:(vcT<0.5?vcQ:(vcT<2/3?vcP+(vcQ-vcP)*(2/3-vcT)*6:vcP))); } }
+      }
+      var vcCell=vcFill===1?genScratch('vcCell',Int32Array,W*H).fill(-1,0,W*H):null, vcWallF=vcFill===1?genScratch('vcWall',Float32Array,W*H):null, vcSum=vcFill===1?new Float64Array(vcGX*vcGY*4):null;
+      for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy, vcB=0; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcJ=(vccy+1)*vcGX+(vccx+1), vcpx=vcPX[vcJ], vcpy=vcPY[vcJ]; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; vcB=vcJ; } else if(vcdd<vcD2){ vcD2=vcdd; } }
+        var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1), vcIsWall=vcE>0 && vcEw<vcG*vcWall;
+        if(vcFill===1){ var vcPi=vcRow+vcx; vcCell[vcPi]=vcB; vcWallF[vcPi]=vcIsWall?1-vcE*(1-vcEw/(vcG*vcWall)):1; vcSum[vcB*4]+=vcS[vci]; vcSum[vcB*4+1]+=vcS[vci+1]; vcSum[vcB*4+2]+=vcS[vci+2]; vcSum[vcB*4+3]++; continue; }
+        if(vcFill===0){ var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } }
+        else if(vcFill===2){ d[vci]=vcRC[vcB*3]; d[vci+1]=vcRC[vcB*3+1]; d[vci+2]=vcRC[vcB*3+2]; }
+        if(vcIsWall){ var vcF=1-vcE*(1-vcEw/(vcG*vcWall)); vcWallAt(vci,vcF); } } }
+      if(vcFill===1) for(var vcq=0;vcq<W*H;vcq++){ var vcb=vcCell[vcq]; if(vcb<0)continue; var vcn=vcSum[vcb*4+3], vco=vcq*4; d[vco]=vcSum[vcb*4]/vcn; d[vco+1]=vcSum[vcb*4+1]/vcn; d[vco+2]=vcSum[vcb*4+2]/vcn; if(vcWallF[vcq]!==1)vcWallAt(vco,vcWallF[vcq]); } },
     // ---- batch 27: Remove Object — content-aware fill of a rectangular region (watermark/subtitle
     // removal). Patch = ffmpeg-delogo: each region pixel is the 1/distance-weighted mix of the four
     // border samples just OUTSIDE the rect — all four channels incl. alpha, so on a transparent plate
@@ -9791,7 +10049,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const col = hexToRGB(p.color) || [150, 200, 255];
       // The core is the layer's colour pushed most of the way to white. A real bolt's channel is
       // blown out; the tint lives in the glow around it, which is what this keeps.
-      const core = [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
+      // …unless a Core colour is set (#482 polish 11.6): absent, it follows the bolt colour as above. The 0.8 is the catalogue's
+      // color2FollowMix, which is how the Core row shows this very colour while it is unset (fxRegistry.followedColour).
+      const core = p.color2 ? hexToRGB(p.color2) : [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
+      /* #482 polish 11.6 — Strike, Glow, Segments, Draw on. Each default is a no-op on the old arithmetic: Glow 100 % multiplies
+         the halo by exactly 1, 20 segments is the old 20, and Down the layer / Layer pixels take the old branches. */
+      const p2p = Math.round(_num(p.mode, 0)) === 1, every = Math.round(_num(p.drawon, 0)) === 1;
+      const glow = Math.max(0, Math.min(4, _num(p.glow, 100) / 100)), glowR = 0.5 + 0.5 * glow;
+      const SEGN = Math.max(8, Math.min(60, Math.round(_num(p.segments, 20))));
       // Flicker is strikes per second. A keyed rate accumulates its strikes, so easing it to zero
       // holds the last bolt instead of jumping back to the first; plain rates keep their old phase.
       const phase = FM.isAnimated(p.flicker)
@@ -9816,7 +10081,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          pixel is scaled by the alpha ALREADY THERE, so nothing is painted outside the layer's coverage.
          Scaling by the existing alpha (rather than merely clipping to the box) is what makes it strike the
          SHAPE — a bolt across a circle stops at the circle, not at its bounding square. */
-      const bb = alphaBBox(d, W, H);
+      // An empty layer has no box at all (alphaBBox is null), and reading `.w` off it threw before anything drew; it strikes
+      // the whole frame instead, which on Layer pixels lights nothing and on Everywhere (#482 polish 11.6) is the point.
+      const bb = alphaBBox(d, W, H) || { x: 0, y: 0, w: 0, h: 0 };
       const BX = bb.w > 2 ? bb.x : 0, BY = bb.h > 2 ? bb.y : 0;
       const BW = bb.w > 2 ? bb.w : W, BH = bb.h > 2 ? bb.h : H;
       const unit = Math.max(1, Math.min(BW, BH));
@@ -9836,6 +10103,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             if (g <= 0.004) continue;
             const i = (y * W + x) * 4;
             const a0 = d[i + 3];
+            if (every) {                           // EVERYWHERE (#482 polish 11.6): the light is screened into the layer where
+              const A0 = a0 / 255, A = A0 + (1 - A0) * g;   // there is one, and over empty frame it IS the bolt, at alpha g
+              if (!(A > 0)) continue;
+              for (let c = 0; c < 3; c++) d[i + c] = ((255 - (255 - d[i + c]) * (1 - rgb[c] / 255 * g)) * A0 + rgb[c] * g * (1 - A0)) / A;
+              d[i + 3] = A * 255;
+              continue;
+            }
             if (!a0) continue;                     // outside the layer: not ours to light (queue 403)
             g *= a0 / 255;                         // …and fade with the layer's own edge, so it strikes the SHAPE
             d[i]     = 255 - (255 - d[i])     * (1 - rgb[0] / 255 * g);
@@ -9847,7 +10121,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
       /* STRIKES FROM (queue 904): the whole bolt — channel and forks — is turned about the middle of the layer's box, so 0 is the
          old straight-down strike exactly (the rotation is skipped), 90 strikes from the right, -90 from the left, 180 from below. */
-      const angD = _num(p.angle, 0), rotOn = (angD % 360) !== 0, rA = -angD * Math.PI / 180, rCos = Math.cos(rA), rSin = Math.sin(rA);
+      const angD = _num(p.angle, 0), rotOn = !p2p && (angD % 360) !== 0, rA = -angD * Math.PI / 180, rCos = Math.cos(rA), rSin = Math.sin(rA);   // point to point places its own ends
       const RCX = BX + BW / 2, RCY = BY + BH / 2;
       // Walk a path, stamping along it. `taper` fades width and brightness toward the far end, which
       // is what makes a fork read as dying out rather than as being cut off.
@@ -9862,21 +10136,31 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             let x = a[0] + (b[0] - a[0]) * (k / steps);
             let y = a[1] + (b[1] - a[1]) * (k / steps);
             if (rotOn) { const ux = x - RCX, uy = y - RCY; x = RCX + ux * rCos - uy * rSin; y = RCY + ux * rSin + uy * rCos; }
-            stamp(x, y, unit * 0.016 * wScale * thick * taper, 0.16 * intensity * aScale * taper, col);
+            if (glow > 0) stamp(x, y, unit * 0.016 * wScale * thick * taper * glowR, 0.16 * intensity * aScale * taper * glow, col);   // the halo: Glow scales its strength and, half as much, its reach
             stamp(x, y, unit * 0.0035 * wScale * thick * taper + 0.6, 0.95 * intensity * aScale * taper, core);
           }
         }
       };
 
+      // POINT TO POINT (#482 polish 11.6): the two ends in % of the frame, the channel's kinks across the line between them
+      const X1 = _num(p.x1, 25) / 100 * W, Y1 = _num(p.y1, 15) / 100 * H, X2 = _num(p.x2, 75) / 100 * W, Y2 = _num(p.y2, 85) / 100 * H;
+      const pdx = X2 - X1, pdy = Y2 - Y1, plen = Math.max(1, Math.hypot(pdx, pdy)), pnx = -pdy / plen, pny = pdx / plen;
       for (let b = 0; b < n; b++) {
         const seed = (b * 131 + phase * 977 + seed0 * 7919) | 0;
         const startX = BX + (0.12 + 0.76 * rnd(seed, 1)) * BW;
         const lean = (rnd(seed, 2) - 0.5) * BW * 0.4;
-        const SEGS = 20;
+        const SEGS = SEGN;
         const main = [];
-        for (let s = 0; s <= SEGS; s++) {
+        const kink = s => rnd(seed, s <= 20 ? 10 + s : 1000 + s);   // past the old 20, channels clear of the forks' own
+        if (p2p) {   // the lean becomes a bow, and both ends stay where they were put
+          const bow = (rnd(seed, 2) - 0.5) * plen * 0.4;
+          for (let s = 0; s <= SEGS; s++) {
+            const f = s / SEGS, off = bow * 4 * f * (1 - f) + (s === 0 || s === SEGS ? 0 : (kink(s) - 0.5) * plen * 0.1 * jag);
+            main.push([X1 + pdx * f + pnx * off, Y1 + pdy * f + pny * off]);
+          }
+        } else for (let s = 0; s <= SEGS; s++) {
           const f = s / SEGS;
-          main.push([startX + lean * f + (rnd(seed, 10 + s) - 0.5) * BW * 0.1 * jag, BY + BH * f]);
+          main.push([startX + lean * f + (kink(s) - 0.5) * BW * 0.1 * jag, BY + BH * f]);
         }
         draw(main, 1, 1);
 
@@ -9890,6 +10174,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const fp = [main[at]];
           for (let s = 1; s <= len; s++) {
             const prev = fp[s - 1];
+            if (p2p) {   // a fork leaves sideways and runs on toward the far end, as one does down the layer
+              const side = dir * plen * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05) * jag, on = (plen / SEGS) * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7);
+              fp.push([prev[0] + pnx * side + pdx / plen * on, prev[1] + pny * side + pdy / plen * on]);
+              continue;
+            }
             fp.push([prev[0] + dir * BW * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05) * jag,
                      prev[1] + (BH / SEGS) * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7)]);
           }
@@ -14048,7 +14337,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * edge. Snow sways; rain is a streak along its own velocity, so Wind slants it. */
     weather: function (A, B, W, H, bb, p, t, tl, layer, ps) {
       const ev = (k, d) => (p[k] == null ? d : FM.evalProp(p[k], t));
-      const rain = Math.round(ev('kind', 0)) === 1;
+      const kind = Math.round(ev('kind', 0)), rain = kind === 1;
+      const more = kind >= 2 && kind <= 6;   // #482 polish 11.2: Confetti, Embers, Dust / Ash, Petals, Bubbles
       const n = Math.max(0, Math.min(3000, Math.round(ev('amount', 300))));
       const sc = ps == null ? 1 : ps;
       const size = Math.max(0.2, ev('size', 5)) * sc;
@@ -14063,7 +14353,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!n || op <= 0) return;
       // murmur3's finaliser: the speed-lines hash on sequential i*4+k inputs left visible diagonal clumps in heavy snow
       const hash = function (k) { k = Math.imul(k + 1, 0x9e3779b1); k ^= k >>> 16; k = Math.imul(k, 0x85ebca6b); k ^= k >>> 13; k = Math.imul(k, 0xc2b2ae35); k ^= k >>> 16; return (k >>> 0) / 4294967296; };
-      let fall = (rain ? 1.4 : 0.12) * speed;            // frame heights per second, nearest layer
+      /* PATTERN and SWAY (#482 polish 11.2). Pattern mixes into every flake's hash, and 0 IS the old hash; Sway scales the
+         side-to-side drift, and 1 is the old 0.012 of a frame width exactly. */
+      const seed = Math.max(0, Math.min(999, Math.round(ev('seed', 0)))) | 0, seedK = Math.imul(seed, 0x2545f491);
+      const hs = seed ? (k => hash(k ^ seedK)) : hash;
+      const swayK = 0.012 * Math.max(0, Math.min(3, ev('sway', 1)));
+      // frame heights per second, nearest layer: Snow 0.12 and Rain 1.4 as they always were; Confetti, Embers, Dust, Petals, Bubbles
+      const base = rain ? 1.4 : (more ? [0, 0, 0.22, 0.1, 0.025, 0.07, 0.06][kind] : 0.12);
+      let fall = base * speed;
       /* A KEYFRAMED SPEED OR WIND IS INTEGRATED, NOT MULTIPLIED (queue 913). `fall * time` is only the distance
          fallen while the speed never changes; with Speed keyframed 1 → 0 it rewound every flake to its first-frame
          spot (the frame at 3 s was byte-identical to the frame at 0 s), and a Wind change late in the clip threw
@@ -14078,7 +14375,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const t0 = t - time, ks = [p.speed, p.wind];
         clock = FM.integrateProp(ks, t0, t, spAt);
         const carried = FM.integrateProp(ks, t0, t, (tau) => wiAt(tau) * spAt(tau));
-        fall = rain ? 1.4 : 0.12;
+        fall = base;
         drift = clock !== 0 ? carried / clock : wind;
       }
       const mY = rain ? (len / H + 0.02) : (size * 2 / H + 0.02), mX = 0.08;
@@ -14094,7 +14391,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           B.lineWidth = Math.max(0.6 * sc, size * 0.35 * nearness);
           B.beginPath();
           for (let i = band; i < n; i += 3) {
-            const h1 = hash(i * 4 + 1), h2 = hash(i * 4 + 2), h3 = hash(i * 4 + 3);
+            const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3);
             const v = nearness * (0.85 + 0.3 * h3);
             const dy = fall * v * clock;                     // in frame heights
             const y = wrap(h2 + dy, -mY, 1 + mY) * H;
@@ -14105,7 +14402,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           }
           B.stroke();
         }
-      } else {
+      } else if (!more || kind === 4) {
         const S = 32;
         if (!_wxSprite) { _wxSprite = document.createElement('canvas'); _wxSprite.width = _wxSprite.height = S; }
         if (_wxSpriteCol !== col) {
@@ -14117,16 +14414,66 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           g.fillStyle = gr; g.fillRect(0, 0, S, S);
           _wxSpriteCol = col;
         }
-        for (let i = 0; i < n; i++) {
-          const h1 = hash(i * 4 + 1), h2 = hash(i * 4 + 2), h3 = hash(i * 4 + 3), h4 = hash(i * 4 + 4);
+        if (kind !== 4) for (let i = 0; i < n; i++) {
+          const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3), h4 = hs(i * 4 + 4);
           const nearness = 1 - depth * h3 * 0.8;
           const dy = fall * nearness * (0.8 + 0.4 * h4) * clock;
-          const sway = 0.012 * Math.sin(time * (0.7 + h4) * 1.6 + h1 * 6.283);
+          const sway = swayK * Math.sin(time * (0.7 + h4) * 1.6 + h1 * 6.283);
           const y = wrap(h2 + dy, -mY, 1 + mY) * H;
           const x = wrap(h1 + (drift * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
           const d = size * 2 * nearness * (0.7 + 0.6 * h4);  // sprite's soft edge takes up half its width
           B.globalAlpha = op * (0.4 + 0.6 * nearness);
           B.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
+        }
+        // DUST / ASH (#482 polish 11.2): snow's soft sprite as small faint motes, sinking slowly and drifting on both axes
+        else for (let i = 0; i < n; i++) {
+          const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3), h4 = hs(i * 4 + 4), h5 = hs((i * 4 + 4) ^ 0x5bd1e995);
+          const nearness = 1 - depth * h3 * 0.8;
+          const dy = fall * nearness * (0.8 + 0.4 * h4) * clock, w1 = time * (0.5 + h4) * 0.9;
+          const y = wrap(h2 + dy + swayK * 0.8 * Math.sin(w1 * 0.77 + h5 * 6.283), -mY, 1 + mY) * H;
+          const x = wrap(h1 + (drift * dy * 0.6) * H / W + swayK * 1.5 * Math.sin(w1 + h1 * 6.283), -mX, 1 + mX) * W;
+          const d = size * 0.9 * nearness * (0.5 + h4);
+          B.globalAlpha = op * 0.6 * (0.35 + 0.65 * nearness) * (0.6 + 0.4 * h5);
+          B.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
+        }
+      } else {
+        /* CONFETTI, EMBERS, PETALS, BUBBLES (#482 polish 11.2). The snowflake's own clock, depth and wrap, so wind, speed,
+           depth and a keyframed speed all mean what they mean for snow; embers and bubbles go UP. Confetti and petals tumble
+           (a turn) and flip (their visible width breathes through edge-on); embers flicker hotter and cooler and add light;
+           bubbles are a thin ring with a glint. Confetti brings six party colours and embers a fire ramp of their own; petals
+           (each a shade of it) and bubbles take the Colour row. */
+        const TAU = 6.283185307179586, rise = kind === 3 || kind === 6, rgbS = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+        const CONF = ['#ff4d6d', '#ffd23f', '#3ec1ff', '#7bdc5a', '#b46cff', '#ff8c42'];
+        const amp = swayK * (kind === 5 ? 3 : (kind === 2 ? 1.8 : 1.2));   // petals swing widest, embers and bubbles wobble
+        if (kind === 3) B.globalCompositeOperation = 'lighter';           // an ember is light: it adds, it never darkens
+        for (let i = 0; i < n; i++) {
+          const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3), h4 = hs(i * 4 + 4), h5 = hs((i * 4 + 4) ^ 0x5bd1e995);
+          const nearness = 1 - depth * h3 * 0.8;
+          const dy = fall * nearness * (0.8 + 0.4 * h4) * clock;            // frame heights travelled
+          const sway = amp * Math.sin(time * (0.7 + h4) * 1.6 + h1 * TAU);
+          const y = wrap(h2 + (rise ? -dy : dy), -mY, 1 + mY) * H;
+          const x = wrap(h1 + (drift * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
+          const s = size * nearness * (0.7 + 0.6 * h4), a = op * (0.4 + 0.6 * nearness);
+          B.save(); B.translate(x, y);
+          if (kind === 2 || kind === 5) {
+            const turn = h5 * TAU + time * (kind === 2 ? 1.5 + 3 * h3 : 0.6 + 1.2 * h3) * (h4 < 0.5 ? -1 : 1);
+            const f = Math.cos(time * (kind === 2 ? 2.5 + 4 * h5 : 1.1 + 1.8 * h5) + h2 * TAU), fy = f >= 0 ? Math.max(0.12, f) : Math.min(-0.12, f);
+            B.rotate(turn); B.scale(1, fy); B.globalAlpha = a; B.beginPath();
+            if (kind === 2) { B.fillStyle = CONF[(h5 * 6) | 0]; B.rect(-s * 0.8, -s * 0.45, s * 1.6, s * 0.9); }
+            else { const k = 0.8 + 0.2 * h3; B.fillStyle = 'rgb(' + ((rgb[0] * k) | 0) + ',' + ((rgb[1] * k) | 0) + ',' + ((rgb[2] * k) | 0) + ')'; B.ellipse(0, 0, s * 1.1, s * 0.55, 0, 0, TAU); }
+            B.fill();
+          } else if (kind === 3) {   // a hot core in a soft halo; hotter is yellower
+            const heat = 0.5 + 0.5 * Math.sin(time * (6 + 8 * h5) + h1 * 40), r = s * 0.35;
+            B.fillStyle = 'rgb(255,' + ((90 + 130 * heat) | 0) + ',' + ((30 + 110 * heat * heat) | 0) + ')';
+            B.globalAlpha = a * (0.4 + 0.6 * heat) * 0.3; B.beginPath(); B.arc(0, 0, r * 2.6, 0, TAU); B.fill();
+            B.globalAlpha = a * (0.4 + 0.6 * heat); B.beginPath(); B.arc(0, 0, r, 0, TAU); B.fill();
+          } else {                   // a thin ring and a glint up and to the left
+            const r = s * 0.9;
+            B.globalAlpha = a; B.strokeStyle = rgbS; B.lineWidth = Math.max(0.6 * sc, r * 0.12);
+            B.beginPath(); B.arc(0, 0, r, 0, TAU); B.stroke();
+            B.globalAlpha = a * 0.75; B.fillStyle = rgbS; B.beginPath(); B.arc(-r * 0.38, -r * 0.38, r * 0.2, 0, TAU); B.fill();
+          }
+          B.restore();
         }
       }
       B.restore();
@@ -15358,8 +15705,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * At ps === 1 every multiplication below is a no-op, so exports and 1:1 previews are unchanged. */
     particles: function (A, B, W, H, bb, p, t, tl, layer, ps) {
       const pk = ps || 1;   // PROJECT units -> PLATE px
-      B.drawImage(A, 0, 0);   // emitter layer stays visible; particles composite on top
-      if (!(tl > 0)) return;
+      /* BEHIND LAYER (#482 polish 11.1): Off draws the layer and then the particles over it, as it always has; On lays the
+         particles down first and draws the layer over them, so a logo sheds sparks from behind itself. */
+      const behind = (p.behind == null ? 0 : Math.round(FM.evalProp(p.behind, t))) === 1;
+      const under = () => { if (behind) B.drawImage(A, 0, 0); };
+      if (!behind) B.drawImage(A, 0, 0);   // emitter layer stays visible; particles composite on top
+      if (!(tl > 0)) return under();
       const pHash = function (n) {   // integer avalanche → [0,1); same n → same value, forever
         n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
         n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
@@ -15380,8 +15731,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const add = Math.round(rd('blend', 0, 0, 1)) === 1;
       const cs = hexToRGB(p.color || '#ffd23f'), ce = hexToRGB(p.color2 || '#ff5e5e');
       const cr = cs[0], cg = cs[1], cb = cs[2], dcr = ce[0] - cr, dcg = ce[1] - cg, dcb = ce[2] - cb;
+      /* THE REST OF THE EMITTER (#482 polish 11.1). Every default is the old emitter: a Point, one particle at a time, Pattern
+         0 (the old hash, untouched), no drag, no turbulence, no size or colour variation, and lifetimes ±30 % — kept as the old
+         `0.7 + 0.6·h` expression itself at 30, so a saved emitter computes the very same numbers. Each new choice is still a
+         closed form in (i, age): no state carries from frame to frame, so a scrub, the preview and the export agree. */
+      const emitter = Math.round(rd('emitter', 0, 0, 4));
+      const ewP = rd('ew', 50, 0, 200) / 100 * W, ehP = rd('eh', 50, 0, 200) / 100 * H;   // % of the frame, in plate px
+      const burst = Math.round(rd('burst', 0, 0, 1)) === 1;
+      const seed = Math.round(rd('seed', 0, 0, 999));
+      const drag = rd('drag', 0, 0, 5);
+      const turb = rd('turb', 0, 0, 500) * pk;
+      const sizeVar = rd('sizevar', 0, 0, 100) / 100, colVar = rd('colorvar', 0, 0, 100) / 100;
+      const lifeVarPct = rd('lifevar', 30, 0, 100), lifeVar = lifeVarPct / 100, oldLife = lifeVarPct === 30;
+      const seedK = Math.imul(seed, 0x2545f491);
+      const hsh = seed ? (n => pHash(n ^ seedK)) : pHash;   // Pattern 0 IS the old hash
+      // New per-particle channels, hashed far from the old i*4+k inputs so no particle's new number is a neighbour's old one.
+      const hx = (i, k) => hsh(Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(k, 0x85ebca6b));
+      const hz = (i, j, k) => hsh(Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(j + 7, 0xc2b2ae35) ^ Math.imul(k, 0x27d4eb2d));
 
-      const maxLife = lifetime * 1.3;   // life_i = lifetime*(0.7..1.3) → the longest a particle can live
+      const maxLife = lifetime * (oldLife ? 1.3 : 1 + lifeVar);   // life_i = lifetime*(1 ± variation) → the longest a particle can live
       const keyedRate = FM.isAnimated(p.rate), effectStart = t - tl;
       const rateAt = function (when) {
         let v = FM.evalProp(p.rate, when);
@@ -15390,11 +15758,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       };
       const phaseAt = when => FM.integrateProp(p.rate, effectStart, when, rateAt);
       const windowStart = Math.max(effectStart, t - maxLife);
-      const windowPhase = keyedRate ? phaseAt(windowStart) : 0;
-      const hi = Math.floor(keyedRate ? phaseAt(t) + 1e-9 : tl * rate);
-      if (hi < 0) return;
-      let lo = keyedRate ? Math.ceil(windowPhase - 1e-9) : Math.ceil((tl - maxLife) * rate);
-      if (lo < 0) lo = 0;
+      let windowPhase, hi, lo;
+      if (burst) {   // All at once: particles 0 … Rate-1, every one born at the clip's start, and no more after them
+        if (tl > maxLife) return under();
+        windowPhase = 0; lo = 0; hi = Math.round(keyedRate ? rateAt(effectStart) : rate) - 1;
+      } else {
+        windowPhase = keyedRate ? phaseAt(windowStart) : 0;
+        hi = Math.floor(keyedRate ? phaseAt(t) + 1e-9 : tl * rate);
+        if (hi < 0) return under();
+        lo = keyedRate ? Math.ceil(windowPhase - 1e-9) : Math.ceil((tl - maxLife) * rate);
+        if (lo < 0) lo = 0;
+      }
       const CAP = 2000; let step = 1; const count = hi - lo + 1;
       if (count > CAP) step = Math.ceil(count / CAP);   // thin the loop so we never draw > CAP sprites
 
@@ -15432,22 +15806,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (add) B.globalCompositeOperation = 'lighter';
       B.lineCap = 'round';
       for (let i = lo; i <= hi; i += step) {
-        const bornT = keyedRate ? keyedBirth(i) : i / rate, age = tl - bornT;
+        const bornT = burst ? 0 : (keyedRate ? keyedBirth(i) : i / rate), age = tl - bornT;
         if (age < 0) continue;
-        const life = lifetime * (0.7 + 0.6 * pHash(i * 4 + 2));
-        if (age > life) continue;   // already dead this frame
+        const life = oldLife ? lifetime * (0.7 + 0.6 * hsh(i * 4 + 2)) : lifetime * (1 - lifeVar + 2 * lifeVar * hsh(i * 4 + 2));
+        if (age > life || !(life > 0)) continue;   // already dead this frame (or born dead: Lifetime variation 100 % can reach 0)
         const frac = age / life;    // 0 at birth → 1 at death
-        const size = sizeS + (sizeE - sizeS) * frac;
+        let size = sizeS + (sizeE - sizeS) * frac;
+        if (sizeVar > 0) size *= 1 + sizeVar * (2 * hx(i, 1) - 1);   // 100 % runs from nothing to twice the size
         if (size < 0.35) continue;
         const alpha = opS + (opE - opS) * frac;
         if (alpha <= 0.003) continue;
 
-        const ang = dirR + (pHash(i * 4) - 0.5) * spreadR;
-        const sp = speed * (0.6 + 0.8 * pHash(i * 4 + 1));
+        const ang = dirR + (hsh(i * 4) - 0.5) * spreadR;
+        const sp = speed * (0.6 + 0.8 * hsh(i * 4 + 1));
         const vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp;
 
-        let ox = ox0, oy = oy0;
-        if (needsWorld) {   // parented / behavior-driven emitter: full world-position resolve at birth
+        let ox = ox0, oy = oy0, ex = 0, ey = 0;
+        if (emitter === 4) { ox = hx(i, 2) * W; oy = hx(i, 3) * H; }   // Whole frame: born anywhere on the plate, wherever the layer is
+        else if (needsWorld) {   // parented / behavior-driven emitter: full world-position resolve at birth
           const wp = emitterWorldPos(layer, start + bornT, cx / pk, cy / pk);   /* it works in PROJECT units, so hand it the fallback in those too */
           ox = wp.x * pk; oy = wp.y * pk;
         } else if (!statX || !statY) {
@@ -15455,10 +15831,31 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (!statX) { const v = FM.evalProp(trx, bt); ox = isFinite(v) ? v * pk : cx; }
           if (!statY) { const v = FM.evalProp(trY, bt); oy = isFinite(v) ? v * pk : cy; }
         }
-        const px = ox + vx * age, py = oy + vy * age + 0.5 * gravity * age * age;
+        // Line, Box and Circle place the birth about the emitter: across a level line, inside a box, on the rim of an oval.
+        if (emitter === 1) ex = (hx(i, 2) - 0.5) * ewP;
+        else if (emitter === 2) { ex = (hx(i, 2) - 0.5) * ewP; ey = (hx(i, 3) - 0.5) * ehP; }
+        else if (emitter === 3) { const ea = hx(i, 2) * TAU; ex = Math.cos(ea) * ewP * 0.5; ey = Math.sin(ea) * ehP * 0.5; }
+        let px, py;
+        if (drag > 0) {   // v' = g - k·v: the speed dies away toward the one gravity holds, closed form in age
+          const f = (1 - Math.exp(-drag * age)) / drag;
+          px = ox + ex + vx * f; py = oy + ey + vy * f + gravity / drag * (age - f);
+        } else {
+          px = ox + vx * age; py = oy + vy * age + 0.5 * gravity * age * age;
+          if (ex || ey) { px += ex; py += ey; }
+        }
+        if (turb > 0) {   // each particle wanders on its own smooth noise, more the older it gets, so it still leaves the emitter
+          const s = age * 1.5 + hx(i, 4) * 64, s0 = Math.floor(s), u = s - s0, w = u * u * (3 - 2 * u);
+          const nx = hz(i, s0, 1) + (hz(i, s0 + 1, 1) - hz(i, s0, 1)) * w, ny = hz(i, s0, 2) + (hz(i, s0 + 1, 2) - hz(i, s0, 2)) * w;
+          px += turb * frac * (nx * 2 - 1); py += turb * frac * (ny * 2 - 1);
+        }
         if (!isFinite(px) || !isFinite(py)) continue;
 
-        const col = 'rgb(' + ((cr + dcr * frac) | 0) + ',' + ((cg + dcg * frac) | 0) + ',' + ((cb + dcb * frac) | 0) + ')';
+        let col = 'rgb(' + ((cr + dcr * frac) | 0) + ',' + ((cg + dcg * frac) | 0) + ',' + ((cb + dcb * frac) | 0) + ')';
+        if (colVar > 0) {   // each particle's hue turned by up to ±180° at 100 %, about the grey axis so its brightness holds
+          const a = (2 * hx(i, 5) - 1) * colVar * Math.PI, c = Math.cos(a), k = (1 - c) / 3, q = Math.sin(a) * 0.5773502691896258;
+          const r0 = cr + dcr * frac, g0 = cg + dcg * frac, b0 = cb + dcb * frac, cl = v => (v < 0 ? 0 : (v > 255 ? 255 : v)) | 0;
+          col = 'rgb(' + cl(r0 * (c + k) + g0 * (k - q) + b0 * (k + q)) + ',' + cl(r0 * (k + q) + g0 * (c + k) + b0 * (k - q)) + ',' + cl(r0 * (k - q) + g0 * (k + q) + b0 * (c + k)) + ')';
+        }
         const rad = size * 0.5;
         B.save();
         B.globalAlpha = alpha;
@@ -15469,7 +15866,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const L = size * 0.8;
           B.beginPath(); B.moveTo(-L, 0); B.lineTo(L, 0); B.stroke();
         } else {
-          B.rotate(spinR * age + pHash(i * 4 + 3) * TAU);   // per-particle phase so shapes don't align
+          B.rotate(spinR * age + hsh(i * 4 + 3) * TAU);   // per-particle phase so shapes don't align
           B.fillStyle = col; B.beginPath();
           if (shape === 1) { B.rect(-rad, -rad, size, size); }
           else if (shape === 2) { B.moveTo(0, -rad); B.lineTo(rad * 0.8660254, rad * 0.5); B.lineTo(-rad * 0.8660254, rad * 0.5); }
@@ -15485,6 +15882,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         B.restore();
       }
       B.restore();
+      under();
     },
   };
   Object.setPrototypeOf(CANVAS_FX, null);   // own keys only — see POSTFX

@@ -127152,4 +127152,674 @@
       a.forEach((g, i) => { const h = b[i]; if (g.ch !== h.ch || Math.abs(g.X - h.X) > 1e-6 || Math.abs(g.Y - h.Y) > 1e-6) throw new Error(name + ': glyph ' + i + ' is drawn at ' + say(g) + ' on the lit beat and ' + say(h) + ' on the dark one - the blinking caret moves the text'); });
     });
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 11 — Generators & particles: Particles, Snow & Rain, Starfield, Clouds, Voronoi, Lightning, Roughen Edges ═══
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 11
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). The rule that makes it safe (§0.3): every new key's default is
+   * the old look, because a filter recipe gets every key it does not set from makeInstance, and a saved instance that lacks
+   * a key is filled at render time (queue 784) with the kernel's own fallback. Each item proves both against pins captured
+   * on fc8866f1 (the tree before the batch) BEFORE the first edit.
+   * Two kinds of kernel, two kinds of pin. The pixel generators (Starfield, Clouds, Voronoi, Lightning, Roughen Edges) run on
+   * a typed array through FM._applyPixelFx — no canvas, no rasteriser — so the pin is a hash of the bytes. Particles and Snow
+   * & Rain DRAW on a 2D context; the pin is a hash of every call they make on it, with every argument and the alpha, blend
+   * and style in force at each paint (b11Rec below): the same calls with the same numbers in the same order is the same
+   * picture on any rasteriser, and it is a stricter pin than pixels, which a tiny move can round away. */
+  function b11Plate(W, H) {   // colour ramps that wrap (every hue and level), an oval of layer with a soft rim, and a scatter of holes in it
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, ex = (x + 0.5 - W / 2) / (W * 0.42), ey = (y + 0.5 - H / 2) / (H * 0.42), r = ex * ex + ey * ey;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = r > 1 ? 0 : (r > 0.85 ? 128 : ((x + y) % 23 === 0 ? 0 : 255));
+    }
+    return d;
+  }
+  function b11Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b11Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i] & 255; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  function b11HashStr(s) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i) & 0xffff; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b11Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  const b11Copy = o => JSON.parse(JSON.stringify(o));
+  /* The kernel through FM._applyPixelFx: the same PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`. */
+  function b11Run(type, params, W, H, t, ps, d0) { const d = d0 || b11Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out. (On fc8866f1 makeInstance has none of them, which is how
+     the pins were captured.) */
+  function b11Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Eight hashes per pixel config: two plate sizes, the export (ps 1) and a half-size preview plate (ps 0.5), at two moments. */
+  function b11Shots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b11Hash(b11Run(type, b11Copy(params), Math.round(W * ps), Math.round(H * ps), t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* A RECORDING 2D CONTEXT for the drawn generators. Every call is written down with its arguments; every paint (fill, stroke,
+     drawImage) also with the alpha, blend and style in force, which save/restore keep exactly as a canvas does. `marks` is the
+     same paints as data — where each one landed (the translation in force, or the centre of a drawn image) — for the
+     behaviour tests. */
+  function b11Rec(A) {
+    const log = [], marks = [], stack = [];
+    const R = { log: log, marks: marks, globalAlpha: 1, globalCompositeOperation: 'source-over', fillStyle: '#000000', strokeStyle: '#000000', lineWidth: 1, lineCap: 'butt', filter: 'none', _tx: 0, _ty: 0, _rot: 0 };
+    const keep = ['globalAlpha', 'globalCompositeOperation', 'fillStyle', 'strokeStyle', 'lineWidth', 'lineCap', 'filter', '_tx', '_ty', '_rot'];
+    const arg = a => typeof a === 'number' ? String(a) : (a === A ? 'A' : (a && typeof a === 'object' ? 'img' : String(a)));
+    const put = (m, args) => log.push(m + '(' + Array.prototype.map.call(args, arg).join(',') + ')');
+    ['beginPath', 'moveTo', 'lineTo', 'closePath', 'scale', 'quadraticCurveTo', 'bezierCurveTo', 'clearRect', 'arcTo'].forEach(m => { R[m] = function () { put(m, arguments); }; });
+    R.arc = function (x, y, r) { put('arc', arguments); R._geo = r * 2; };          // the size of the last shape traced, for the marks
+    R.rect = function (x, y, w) { put('rect', arguments); R._geo = w; };
+    R.ellipse = function (x, y, rx) { put('ellipse', arguments); R._geo = rx * 2; };
+    R.translate = function (x, y) { put('translate', arguments); R._tx += x; R._ty += y; };
+    R.rotate = function (a) { put('rotate', arguments); R._rot += a; };
+    R.save = function () { log.push('save'); stack.push(keep.map(k => R[k])); };
+    R.restore = function () { log.push('restore'); const s = stack.pop(); if (s) keep.forEach((k, i) => { R[k] = s[i]; }); };
+    const paint = (m, style, extra) => { log.push(m + ' ' + style + ' a' + R.globalAlpha + ' ' + R.globalCompositeOperation + (m === 'stroke' ? ' w' + R.lineWidth + ' ' + R.lineCap : '')); marks.push(Object.assign({ m: m, x: R._tx, y: R._ty, style: style, alpha: R.globalAlpha, gco: R.globalCompositeOperation, w: R.lineWidth, geo: R._geo, rot: R._rot }, extra || {})); };
+    R.fill = function () { paint('fill', R.fillStyle); };
+    R.stroke = function () { paint('stroke', R.strokeStyle); };
+    R.fillRect = function (x, y, w, h) { put('fillRect', arguments); paint('fill', R.fillStyle, { x: R._tx + x + w / 2, y: R._ty + y + h / 2 }); };
+    R.drawImage = function (img) { put('drawImage', arguments); log.push(' a' + R.globalAlpha + ' ' + R.globalCompositeOperation);
+      marks.push({ m: img === A ? 'layer' : 'image', x: arguments.length >= 5 ? arguments[1] + arguments[3] / 2 : arguments[1], y: arguments.length >= 5 ? arguments[2] + arguments[4] / 2 : arguments[2], size: arguments[3], alpha: R.globalAlpha, gco: R.globalCompositeOperation }); };
+    R.createRadialGradient = R.createLinearGradient = function () { put('gradient', arguments); return { addColorStop: function () { put('stop', arguments); } }; };
+    return R;
+  }
+  /* One frame of a CANVAS_FX generator on a W x H plate at plate scale ps, on the clip's clock tl, into a recording context.
+     The arguments are drawCanvasEffect's: (A, B, W, H, bbox, params, t, tl, layer, ps) — and like it, the colours arrive
+     resolved. */
+  function b11Draw(type, params, W, H, t, tl, layer, ps) {
+    const A = { b11: 'layer' }, R = b11Rec(A);
+    FM._FX_TABLES.CANVAS_FX[type](A, R, W, H, { x: 0, y: 0, w: W, h: H }, b11Copy(params), t, tl, layer || null, ps == null ? 1 : ps);
+    return R;
+  }
+  /* Eight hashes per drawn config: two project sizes, the export (ps 1) and a half-size preview plate (ps 0.5), two moments of a
+     clip that starts at 0.5 s. `lay(PW, PH)` is the layer the effect sits on, in project units. */
+  function b11CanvasShots(type, params, lay) {
+    return [[320, 180], [200, 300]].map(([PW, PH]) => [1, 0.5].map(ps => [1.37, 3.1].map(t => {
+      const layer = lay ? lay(PW, PH) : { start: 0.5, transform: { x: PW * 0.5, y: PH * 0.5 } };
+      return b11HashStr(b11Draw(type, params, Math.round(PW * ps), Math.round(PH * ps), t, t - (layer.start || 0), layer, ps).log.join('\n'));
+    }).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys before the kernel runs (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new
+     instance, and every filter recipe), against the pins. */
+  function b11Pinned(type, NEW, CFG, PIN, shots) {
+    const moved = [], shoot = shots || (p => b11Shots(type, p));
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b11Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      Object.keys(CFG[name]).forEach(k => { pre[k] = CFG[name][k]; });   // a config that sets a new key keeps its own value
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: b11Copy(abs) }).params;
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = shoot(p, name); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default value comes
+     back from the load sanitiser as it was written. A key in FOLLOW is a following colour: makeInstance and the fill leave
+     it absent, which is its old look. */
+  function b11Catalogue(type, NEW, SET, FOLLOW) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    (FOLLOW || []).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0];
+      if (!pd || !pd.follows) throw new Error(type + ' ' + k + ' is not a following row in the catalogue');
+      if (k in inst.params) throw new Error('a new ' + type + ' carries ' + k + ' = ' + inst.params[k] + ' - a following colour must stay absent so it keeps following');
+      const f = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+      if (k in f) throw new Error('the render-time fill gives an absent ' + type + ' ' + k + ' the value ' + f[k] + ' - absent is its old look');
+    });
+    const lay = [{ id: 'l48211' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: b11Copy(SET) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A library filter built on the effect carries every new key at its default (no recipe sets one; on fc8866f1 none of the
+     56 recipes uses any of these seven, and this keeps it honest if one ever does). */
+  function b11Recipes(type, NEW) {
+    const lib = (FM.filters && FM.filters.all ? FM.filters.all() : []) || [];
+    if (lib.length < 40) throw new Error('CONTROL: the filter library lists ' + lib.length + ' recipes - this check sees nothing');
+    lib.forEach(f => {
+      const box = FM.filters.makeInstance(f.id), kids = ((box && box.effects) || []).filter(e => e.type === type);
+      kids.forEach(kid => Object.keys(NEW).forEach(k => { if (kid.params[k] !== NEW[k]) throw new Error('the ' + f.id + ' filter’s ' + type + ' carries ' + k + ' = ' + kid.params[k] + ', not ' + NEW[k] + ' - a library filter would change its look'); }));
+    });
+  }
+  const b11Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b11Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b11Diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+
+  /* 11.1 PARTICLES: Emit from (Point / Line / Box / Circle / Whole frame) with its width and height, All at once, Pattern, Drag,
+     Turbulence, Size / Colour / Lifetime variation, Behind layer. */
+  const B11PT_NEW = { emitter: 0, ew: 50, eh: 50, burst: 0, seed: 0, drag: 0, turb: 0, sizevar: 0, colorvar: 0, lifevar: 30, behind: 0 };
+  const B11PT_CFG = { def: {}, fountain: { rate: 120, lifetime: 3, spread: 60, speed: 600, gravity: 900, shape: 1, blend: 1, spin: 90 },
+    stars: { shape: 3, sizeStart: 30, sizeEnd: 0, opacityEnd: 0.5, gravity: -200, color: '#40c0ff', color2: '#ffffff' }, streak: { shape: 4, speed: 900, spread: 360 },
+    tri: { shape: 2, spin: -200, rate: 15 }, kf: { rate: b11Kf(10, 150) }, moving: { rate: 60 } };
+  const B11PT_LAY = { moving: (PW, PH) => ({ start: 0.5, transform: { x: b11Kf(PW * 0.2, PW * 0.8), y: PH * 0.6 } }) };
+  const B11PT_PIN = {   // fc8866f1, before the edit
+    def: 'c6d1e5f4.db3fd079/01f5aa40.d03d146b 5081934d.47de9063/61ec5646.2fa9006f', fountain: 'c410cf54.f03db758/7dbd6dbb.57a36bb4 6b2ae55d.5c784dfd/f612f77c.1be676ae',
+    stars: '5cf40a3b.4e9fe00b/6612c12e.61eb24a6 4d0fc0c6.a3b3b907/8f0d9493.3cd3e544', streak: '799b4fe8.f3eacca9/9ef42050.5d98e0ff ab901ab7.e7865167/97d7b463.3cb8e37c',
+    tri: '712e6882.3f1e6bb0/2791a7e8.5d035c94 6b33150e.79e850cc/0cc09499.f04766fc', kf: 'ad574ceb.7f3d9e3b/0c64a9d1.3dd69a73 093f2f38.7fc1d769/10cdf618.f420bd16',
+    moving: '8fa96362.ee6efa4f/d4bfd745.8019f82b 2c7e6210.226ae922/f8763c0e.243015ec' };
+  /* One frame of Particles on a 320 x 180 plate from an emitter at (160, 90), `tl` seconds into the clip: the paints only. */
+  function b11Pt(over, tl, layer) {
+    const p = Object.assign(b11Base('particles', {}), over);
+    return b11Draw('particles', p, 320, 180, 0.5 + tl, tl, layer || { start: 0.5, transform: { x: 160, y: 90 } }, 1).marks.filter(m => m.m === 'fill' || m.m === 'stroke');
+  }
+  const b11Span = (ms, k) => { let lo = Infinity, hi = -Infinity; ms.forEach(m => { lo = Math.min(lo, m[k]); hi = Math.max(hi, m[k]); }); return hi - lo; };
+
+  test('482 11.1 Particles - Emit from, its width and height, All at once, Pattern, Drag, Turbulence, the three variations and Behind layer are in the catalogue at defaults that draw the old emitter, and saved and new emitters draw call for call as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('particles', B11PT_NEW, { emitter: 3, ew: 120, eh: 40, burst: 1, seed: 7, drag: 1.5, turb: 200, sizevar: 60, colorvar: 40, lifevar: 0, behind: 1 });
+    const em = b11Row('particles', 'emitter');
+    if (em.type !== 'segment' || (em.options || []).map(o => o[0]).join() !== '0,1,2,3,4') throw new Error('Emit from is not a five-way choice of Point, Line, Box, Circle and Whole frame (' + JSON.stringify(em.options) + ')');
+    const ew = b11Row('particles', 'ew'), eh = b11Row('particles', 'eh');
+    if (ew.overriddenBy !== 'emitter' || String(ew.liveWhen) !== '1,2,3') throw new Error('Emitter width does not say it only counts for a Line, a Box or a Circle (overriddenBy ' + ew.overriddenBy + ', liveWhen ' + ew.liveWhen + ')');
+    if (eh.overriddenBy !== 'emitter' || String(eh.liveWhen) !== '2,3') throw new Error('Emitter height does not say it only counts for a Box or a Circle (overriddenBy ' + eh.overriddenBy + ', liveWhen ' + eh.liveWhen + ')');
+    b11Recipes('particles', B11PT_NEW);
+    const moved = b11Pinned('particles', B11PT_NEW, B11PT_CFG, B11PT_PIN, (p, name) => b11CanvasShots('particles', p, B11PT_LAY[name]));
+    if (moved.length) throw new Error(moved.length + ' Particles frames differ from fc8866f1 at the new defaults - a new control changed an emitter he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.1 Particles - All at once lets Rate particles out together at the clip’s start and none after, and Emit from spreads the births along a line, through a box, round a rim or over the whole frame', { item: '482', budgetMs: 30000 }, function () {
+    /* ALL AT ONCE. CONTROL: one at a time, 0.05 s in at 40/s there are three (born at 0, 0.025 and 0.05). On, all 40 are there,
+       and 3 s in — past the longest life, 2.6 s — they are gone and no more came. */
+    const still = { speed: 0, gravity: 0 };
+    const off = b11Pt(still, 0.05).length, on = b11Pt(Object.assign({ burst: 1 }, still), 0.05).length;
+    if (off !== 3) throw new Error('CONTROL: one at a time, 0.05 s into the clip at 40/s drew ' + off + ' particles, not 3');
+    if (on !== 40) throw new Error('All at once drew ' + on + ' particles at the clip’s start - it should let out all 40 (Rate) together');
+    const late = b11Pt(Object.assign({ burst: 1 }, still), 3).length, lateOff = b11Pt(still, 3).length;
+    if (!(lateOff > 40)) throw new Error('CONTROL: one at a time, 3 s in drew only ' + lateOff + ' particles');
+    if (late !== 0) throw new Error('All at once still drew ' + late + ' particles 3 s in - the burst should have died and nothing come after it');
+    /* EMIT FROM. With no speed or gravity a particle stays where it was born, 1 s of 200/s at 8 s lives. CONTROL: a Point
+       births every one on the emitter at (160, 90). */
+    const born = o => b11Pt(Object.assign({ rate: 200, lifetime: 8, sizeStart: 6, sizeEnd: 6 }, still, o), 1);
+    const pt = born({});
+    if (pt.length < 150 || pt.some(m => m.x !== 160 || m.y !== 90)) throw new Error('CONTROL: a Point emitter births ' + pt.length + ' particles, not all of them on (160, 90)');
+    const line = born({ emitter: 1, ew: 50 });
+    if (line.some(m => m.y !== 90 || Math.abs(m.x - 160) > 80 + 1e-9)) throw new Error('a Line 50 % wide births a particle off the level line through the emitter, or past its ±80 px ends');
+    if (!(b11Span(line, 'x') > 140)) throw new Error('a Line 50 % of a 320 px frame spreads its births over only ' + b11Span(line, 'x').toFixed(1) + ' px - it should be about 160');
+    const box = born({ emitter: 2, ew: 50, eh: 50 });
+    if (box.some(m => Math.abs(m.x - 160) > 80 + 1e-9 || Math.abs(m.y - 90) > 45 + 1e-9)) throw new Error('a Box 50 % x 50 % births a particle outside the 160 x 90 box about the emitter');
+    if (!(b11Span(box, 'x') > 140 && b11Span(box, 'y') > 78)) throw new Error('a Box 50 % x 50 % spreads its births over ' + b11Span(box, 'x').toFixed(1) + ' x ' + b11Span(box, 'y').toFixed(1) + ' px - it should fill about 160 x 90');
+    const ring = born({ emitter: 3, ew: 50, eh: 50 }), off1 = ring.filter(m => Math.abs(Math.pow((m.x - 160) / 80, 2) + Math.pow((m.y - 90) / 45, 2) - 1) > 1e-6);
+    if (off1.length) throw new Error('a Circle 50 % x 50 % births ' + off1.length + ' particles off the rim of its 160 x 90 oval');
+    if (!(b11Span(ring, 'x') > 150 && b11Span(ring, 'y') > 84)) throw new Error('a Circle births only part of its rim (' + b11Span(ring, 'x').toFixed(1) + ' x ' + b11Span(ring, 'y').toFixed(1) + ' px)');
+    const all = born({ emitter: 4 }), moved = b11Pt(Object.assign({ rate: 200, lifetime: 8, sizeStart: 6, sizeEnd: 6, emitter: 4 }, still), 1, { start: 0.5, transform: { x: 30, y: 20 } });
+    if (all.some(m => m.x < 0 || m.x > 320 || m.y < 0 || m.y > 180) || !(b11Span(all, 'x') > 280 && b11Span(all, 'y') > 150)) throw new Error('Whole frame does not spread its births over the whole 320 x 180 frame');
+    if (JSON.stringify(all.map(m => [m.x, m.y])) !== JSON.stringify(moved.map(m => [m.x, m.y]))) throw new Error('Whole frame births in other places when the layer moves - it is the frame, not the layer');
+    /* …and the size is % of the FRAME, the same picture on a half-size preview plate: every birth at half the place. */
+    const half = b11Draw('particles', Object.assign(b11Base('particles', {}), { rate: 200, lifetime: 8, emitter: 2, ew: 50, eh: 50 }, still), 160, 90, 1.5, 1, { start: 0.5, transform: { x: 160, y: 90 } }, 0.5).marks.filter(m => m.m === 'fill');
+    if (half.length !== box.length || half.some((m, j) => Math.abs(m.x * 2 - box[j].x) > 1e-9 || Math.abs(m.y * 2 - box[j].y) > 1e-9)) throw new Error('a Box on a half-size preview plate is not the export’s box at half size');
+  });
+
+  test('482 11.1 Particles - Pattern gives the layer its own particles, Drag slows them toward a stop, Turbulence wanders them off their path, Size, Colour and Lifetime variation vary them one by one, and Behind layer draws the layer over them', { item: '482', budgetMs: 30000 }, function () {
+    const key = ms => JSON.stringify(ms.map(m => [m.x, m.y, m.style, m.alpha, m.geo]));
+    /* PATTERN. CONTROL: Pattern 0 is the emitter with no Pattern at all, every particle in the same place. */
+    const base = { rate: 60, lifetime: 3 }, p0 = b11Pt(base, 1.5), pz = b11Pt(Object.assign({ seed: 0 }, base), 1.5), p7 = b11Pt(Object.assign({ seed: 7 }, base), 1.5);
+    if (key(p0) !== key(pz)) throw new Error('CONTROL: Pattern 0 moved the particles - it should be the old emitter');
+    const same = p7.filter((m, j) => p0[j] && m.x === p0[j].x && m.y === p0[j].y).length;
+    if (!(p7.length > 40) || same > p7.length / 10) throw new Error('Pattern 7 left ' + same + ' of ' + p7.length + ' particles where Pattern 0 has them - it should be a different spray');
+    /* DRAG. Straight up at 600 px/s (±40 %) with no gravity, 3 s after a burst. CONTROL: with no drag the fastest has gone
+       about 840 x 3 px. Drag 2 /s brings each to a stop at its speed / 2, so none is past 840 / 2 px from the emitter. */
+    const up = { burst: 1, speed: 600, spread: 0, gravity: 0, lifetime: 8, sizeStart: 6, sizeEnd: 6 }, far = ms => Math.max.apply(null, ms.map(m => Math.hypot(m.x - 160, m.y - 90)));
+    const free = far(b11Pt(up, 3)), dragged = b11Pt(Object.assign({ drag: 2 }, up), 3);
+    if (!(free > 1400)) throw new Error('CONTROL: with no Drag the fastest particle is only ' + free.toFixed(0) + ' px out after 3 s');
+    if (!(far(dragged) <= 420 + 1e-6 && far(dragged) > 300)) throw new Error('Drag 2 /s left the fastest particle ' + far(dragged).toFixed(1) + ' px out after 3 s - it should coast to a stop short of 420 px');
+    if (dragged.some(m => Math.abs(m.x - 160) > 1e-6 || !(m.y < 90))) throw new Error('Drag turned a particle off its straight-up path');
+    /* …and with gravity it settles to the speed gravity holds (g / k): 3 s more than 6 s falls nearly g/k x 3 further. */
+    const fall = tl => b11Pt({ burst: 1, speed: 0, gravity: 400, drag: 2, lifetime: 9, sizeStart: 6, sizeEnd: 6 }, tl)[0].y;
+    const v = (fall(7) - fall(6));
+    if (Math.abs(v - 200) > 1) throw new Error('Drag 2 /s under 400 px/s² gravity falls ' + v.toFixed(2) + ' px a second once settled - it should fall at 200 (gravity / drag)');
+    /* TURBULENCE. With no speed or gravity a particle sits on the emitter. CONTROL: Turbulence 0 leaves every one there; 200 px
+       wanders them off it, none further than 200 px on either axis. */
+    const calm = b11Pt({ speed: 0, gravity: 0, rate: 80, lifetime: 3 }, 2), rough = b11Pt({ speed: 0, gravity: 0, rate: 80, lifetime: 3, turb: 200 }, 2);
+    if (calm.some(m => m.x !== 160 || m.y !== 90)) throw new Error('CONTROL: Turbulence 0 moved a particle off the emitter');
+    const wandered = rough.filter(m => Math.hypot(m.x - 160, m.y - 90) > 5).length;
+    if (!(wandered > rough.length * 0.6)) throw new Error('Turbulence 200 px moved only ' + wandered + ' of ' + rough.length + ' particles more than 5 px off the emitter');
+    if (rough.some(m => Math.abs(m.x - 160) > 200 || Math.abs(m.y - 90) > 200)) throw new Error('Turbulence 200 px threw a particle more than 200 px off its path');
+    const r2 = b11Pt({ speed: 0, gravity: 0, rate: 80, lifetime: 3, turb: 200 }, 2);
+    if (key(r2) !== key(rough)) throw new Error('Turbulence drew a different frame the second time - it must be the same frame for the same instant');
+    /* SIZE VARIATION. Squares held at 20 px. CONTROL: 0 % draws every one 20 px; 100 % draws them anywhere from nothing to 40. */
+    const sq = { shape: 1, sizeStart: 20, sizeEnd: 20, rate: 80, lifetime: 3 }, s0 = b11Pt(sq, 2), s1 = b11Pt(Object.assign({ sizevar: 100 }, sq), 2);
+    if (s0.some(m => m.geo !== 20)) throw new Error('CONTROL: Size variation 0 drew a square that is not 20 px');
+    const sizes = s1.map(m => m.geo);
+    if (sizes.some(s => !(s >= 0.35 && s <= 40)) || !(Math.max.apply(null, sizes) > 34 && Math.min.apply(null, sizes) < 6)) throw new Error('Size variation 100 % drew squares from ' + Math.min.apply(null, sizes).toFixed(1) + ' to ' + Math.max.apply(null, sizes).toFixed(1) + ' px - it should run from nothing to 40');
+    /* COLOUR VARIATION. One red start and end. CONTROL: 0 % draws them all the one red; 100 % turns their hues every way. */
+    const red = { color: '#ff4040', color2: '#ff4040', rate: 80, lifetime: 3 };
+    const c0 = new Set(b11Pt(red, 2).map(m => m.style)), c1 = new Set(b11Pt(Object.assign({ colorvar: 100 }, red), 2).map(m => m.style));
+    if (c0.size !== 1) throw new Error('CONTROL: Colour variation 0 drew ' + c0.size + ' colours from one red');
+    if (!(c1.size > 20)) throw new Error('Colour variation 100 % drew only ' + c1.size + ' colours');
+    const greenish = Array.from(c1).filter(s => { const v = s.match(/\d+/g).map(Number); return v[1] > v[0] + 40; }).length, blueish = Array.from(c1).filter(s => { const v = s.match(/\d+/g).map(Number); return v[2] > v[0] + 40; }).length;
+    if (!(greenish && blueish)) throw new Error('Colour variation 100 % only nudged the red (' + greenish + ' greenish, ' + blueish + ' bluish) - its hues should turn all the way round');
+    /* LIFETIME VARIATION. A burst fading from 1 to 0 over its life, 1 s into a 2 s life. CONTROL: the old ±30 % gives each its own
+       fade. 0 % gives every particle the same life, so all are half faded at once and all are gone at 2 s. */
+    const fade = { burst: 1, opacityStart: 1, opacityEnd: 0, lifetime: 2, speed: 0, gravity: 0 };
+    const a30 = new Set(b11Pt(fade, 1).map(m => m.alpha)), a0 = b11Pt(Object.assign({ lifevar: 0 }, fade), 1).map(m => m.alpha);
+    if (!(a30.size > 20)) throw new Error('CONTROL: Lifetime variation 30 % faded the burst in only ' + a30.size + ' steps');
+    if (a0.length !== 40 || a0.some(a => a !== 0.5)) throw new Error('Lifetime variation 0 did not fade the whole burst together: ' + Array.from(new Set(a0)).slice(0, 5).join(', '));
+    if (b11Pt(Object.assign({ lifevar: 0 }, fade), 2.001).length !== 0 || !(b11Pt(fade, 2.001).length > 0)) throw new Error('Lifetime variation 0 kept a particle past its 2 s life, or the ±30 % control lost every one');
+    /* BEHIND LAYER. CONTROL: Off draws the layer first and the particles over it; On draws the particles and then the layer. */
+    const order = o => b11Draw('particles', Object.assign(b11Base('particles', {}), o), 320, 180, 1.5, 1, { start: 0.5, transform: { x: 160, y: 90 } }, 1).marks.map(m => m.m === 'layer' ? 'L' : 'p').join('').replace(/p+/g, 'p');
+    if (order({}) !== 'Lp') throw new Error('CONTROL: with Behind layer Off the layer is not drawn first and once (' + order({}) + ')');
+    if (order({ behind: 1 }) !== 'pL') throw new Error('Behind layer did not draw the particles first and the layer once over them (' + order({ behind: 1 }) + ')');
+    const bare = b11Draw('particles', Object.assign(b11Base('particles', {}), { behind: 1 }), 320, 180, 0.5, 0, { start: 0.5, transform: { x: 160, y: 90 } }, 1).marks.filter(m => m.m === 'layer').length;
+    if (bare !== 1) throw new Error('Behind layer at the clip’s first instant drew the layer ' + bare + ' times - it must still draw it once');
+  });
+
+  /* 11.2 SNOW & RAIN: Confetti, Embers, Dust / Ash, Petals and Bubbles; Pattern; Sway. */
+  const B11WX_NEW = { sway: 1, seed: 0 };
+  const B11WX_CFG = { def: {}, rain: { kind: 1 }, heavy: { amount: 900, size: 9, wind: -60, depth: 1 }, rainkf: { kind: 1, speed: b11Kf(2, 0), length: 120 },
+    snowkf: { wind: b11Kf(-50, 80) }, tint: { color: '#a0c0ff', opacity: 0.5 } };
+  const B11WX_PIN = {   // fc8866f1, before the edit
+    def: 'bbdb1462.7d2b64e6/7c703e11.8ddc5bee 6d8a365a.006f1e5b/c0908058.87e5d948', rain: '2441eccd.5e8be3c4/1a557811.3c84d0e5 36c605a6.6ec7c2f1/42b39be4.3c70e0f9',
+    heavy: '1ea123c8.64d17945/19b3bf7f.639a9471 89fa8af6.a129b68e/6acb0af4.a99ccff8', rainkf: 'e4d0b7e0.d7ff22ac/183fc31c.7e08b103 44723915.fc2586f5/35281495.d4a9dc81',
+    snowkf: 'a0b94072.247fa550/5685a643.d02b3a07 671dfd53.4f5a9ce2/1f1c8375.13ca94bc', tint: 'ad64cfcb.e4b28cf7/ea7220fc.d017c92b 3f9dc813.489c80b0/56137f13.d03ecaed' };
+  /* One frame of Snow & Rain on a 320 x 180 plate, `tl` seconds into the clip. */
+  const b11Wx = (over, tl, W, H, ps) => b11Draw('weather', Object.assign(b11Base('weather', {}), over), W || 320, H || 180, 0.5 + tl, tl, { start: 0.5, transform: { x: 160, y: 90 } }, ps == null ? 1 : ps);
+  /* Where each flake is: one paint per flake (an ember's core, after its halo; a bubble's ring). */
+  const b11Flakes = (kind, R) => R.marks.filter(m => m.m !== 'layer').filter((m, j) => kind === 3 ? j % 2 === 1 : (kind === 6 ? m.m === 'stroke' : true));
+  const b11Hue = s => { const v = /^#[0-9a-f]{6}$/i.test(s) ? [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16)) : (String(s).match(/\d+/g) || []).map(Number), r = v[0] / 255, g = v[1] / 255, b = v[2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), c = mx - mn;
+    if (c < 0.08) return -1; let h = mx === r ? ((g - b) / c) % 6 : (mx === g ? (b - r) / c + 2 : (r - g) / c + 4); h *= 60; return h < 0 ? h + 360 : h; };
+
+  test('482 11.2 Snow & Rain - Pattern and Sway are in the catalogue at defaults that draw the old snow and rain, the Type offers Confetti, Embers, Dust, Petals and Bubbles, and saved and new Snow & Rain draw call for call as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('weather', B11WX_NEW, { sway: 2.5, seed: 12, kind: 5 });
+    const kind = b11Row('weather', 'kind');
+    if ((kind.options || []).map(o => o[0]).join() !== '0,1,2,3,4,5,6') throw new Error('Type does not offer Snow, Rain, Confetti, Embers, Dust / Ash, Petals and Bubbles (' + JSON.stringify(kind.options) + ')');
+    const sw = b11Row('weather', 'sway'), col = b11Row('weather', 'color');
+    if (sw.overriddenBy !== 'kind' || String(sw.liveWhen) !== '0,2,3,4,5,6') throw new Error('Sway does not say it is off for Rain, which falls straight (overriddenBy ' + sw.overriddenBy + ', liveWhen ' + sw.liveWhen + ')');
+    if (col.overriddenBy !== 'kind' || String(col.liveWhen) !== '0,1,4,5,6') throw new Error('the Colour row does not say it is off for Confetti and Embers, which bring their own colours (overriddenBy ' + col.overriddenBy + ', liveWhen ' + col.liveWhen + ')');
+    b11Recipes('weather', B11WX_NEW);
+    const moved = b11Pinned('weather', B11WX_NEW, B11WX_CFG, B11WX_PIN, p => b11CanvasShots('weather', p));
+    if (moved.length) throw new Error(moved.length + ' Snow & Rain frames differ from fc8866f1 at the new defaults - a new control changed weather he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.2 Snow & Rain - Confetti falls in at least three colours, Embers and Bubbles rise, Petals and Dust drift down, Pattern gives the layer its own flakes, Sway sets how far snow swings and leaves rain straight', { item: '482', budgetMs: 30000 }, function () {
+    /* CONFETTI'S COLOURS. CONTROL: Rain in one pink draws one hue. Petals in it draw one too (each petal a shade of it). */
+    const hues = R => new Set(b11Flakes(0, R).map(m => b11Hue(m.style)).filter(h => h >= 0).map(h => Math.round(h / 20)));
+    const wet = hues(b11Wx({ kind: 1, color: '#ff80a0' }, 1)), conf = hues(b11Wx({ kind: 2 }, 1));
+    if (wet.size !== 1) throw new Error('CONTROL: Rain in one pink drew ' + wet.size + ' hues');
+    if (conf.size < 3) throw new Error('Confetti drew ' + conf.size + ' hues - it should fall in at least three colours');
+    const pet = hues(b11Wx({ kind: 5, color: '#ff80a0' }, 1));
+    if (pet.size !== 1) throw new Error('Petals in one pink drew ' + pet.size + ' hues - each petal should be a shade of the Colour');
+    /* UP OR DOWN. With no wind, over a twentieth of a second, nearly every flake that did not wrap moves the way its Type goes.
+       CONTROL: snow falls. */
+    const dir = kind => { const a = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, 1)), b = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, 1.05)); let up = 0, down = 0;
+      a.forEach((m, j) => { const d = b[j].y - m.y; if (Math.abs(d) > 20) return; if (d < 0) up++; else if (d > 0) down++; }); return { up: up, down: down, n: a.length }; };
+    const sn = dir(0);
+    if (!(sn.n === 300 && sn.down > 290)) throw new Error('CONTROL: of ' + sn.n + ' snowflakes only ' + sn.down + ' fell');
+    [[2, 'Confetti', 'down'], [5, 'Petals', 'down'], [3, 'Embers', 'up'], [6, 'Bubbles', 'up']].forEach(([k, name, way]) => {
+      const r = dir(k);
+      if (r.n !== 300) throw new Error(name + ' drew ' + r.n + ' pieces, not the 300 of Amount');
+      if (!(r[way] > 270)) throw new Error('only ' + r[way] + ' of 300 ' + name + ' went ' + way + ' (' + r.up + ' up, ' + r.down + ' down)');
+    });
+    const sink = (kind, a, b) => { const p = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, a)), q = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, b)); let s = 0, n = 0; p.forEach((m, j) => { const d = q[j].y - m.y; if (Math.abs(d) < 60) { s += d; n++; } }); return s / n; };
+    const dust = sink(4, 1, 3), snow = sink(0, 1, 3);
+    if (!(dust > 0.5 && dust < snow / 2)) throw new Error('Dust sank ' + dust.toFixed(2) + ' px on average over 2 s against snow’s ' + snow.toFixed(2) + ' - it should sink, slowly');
+    if (b11Wx({ kind: 3 }, 1).marks.filter(m => m.m === 'fill').some(m => m.gco !== 'lighter')) throw new Error('an ember was drawn without adding light');
+    /* PATTERN. CONTROL: Pattern 0 is the snow with no Pattern at all. */
+    const log = o => b11Wx(o, 1).log.join('\n');
+    if (log({}) !== log({ seed: 0 })) throw new Error('CONTROL: Pattern 0 changed the snow');
+    const at = o => b11Flakes(0, b11Wx(o, 1)).map(m => m.x.toFixed(3) + ',' + m.y.toFixed(3));
+    const p0 = at({}), p5 = at({ seed: 5 }), kept = p5.filter((s, j) => s === p0[j]).length;
+    if (kept > 3) throw new Error('Pattern 5 left ' + kept + ' of 300 snowflakes where Pattern 0 has them');
+    /* SWAY. With no wind a snowflake only moves sideways by its sway. CONTROL: Sway 1 swings it; 0 holds it on one line;
+       2 swings it twice as far. */
+    const xs = (o, tl) => b11Flakes(0, b11Wx(Object.assign({ wind: 0 }, o), tl)).map(m => m.x);
+    const x0a = xs({ sway: 0 }, 1), x0b = xs({ sway: 0 }, 2.3), x1 = xs({}, 2.3), x2 = xs({ sway: 2 }, 2.3);
+    if (x0a.some((x, j) => Math.abs(x - x0b[j]) > 1e-9)) throw new Error('Sway 0 still swung a snowflake sideways');
+    const inside = x1.map((x, j) => x0b[j] > 40 && x0b[j] < 280), d1 = x1.map((x, j) => x - x0b[j]), d2 = x2.map((x, j) => x - x0b[j]);
+    if (!(d1.filter((d, j) => inside[j] && Math.abs(d) > 0.5).length > 150)) throw new Error('CONTROL: Sway 1 hardly moved the snow sideways');
+    const off = d2.filter((d, j) => inside[j] && Math.abs(d - 2 * d1[j]) > 1e-6).length;
+    if (off) throw new Error('Sway 2 did not swing ' + off + ' snowflakes exactly twice as far as Sway 1');
+    if (log({ kind: 1 }) !== log({ kind: 1, sway: 3 })) throw new Error('Sway changed the rain - rain falls straight');
+    /* THE SAME FRAME FOR THE SAME INSTANT, and the export's frame at half size on a half-size preview plate. */
+    [2, 3, 4, 5, 6].forEach(k => { if (b11Wx({ kind: k }, 1.7).log.join('\n') !== b11Wx({ kind: k }, 1.7).log.join('\n')) throw new Error('Type ' + k + ' drew a different frame the second time'); });
+    const full = b11Flakes(2, b11Wx({ kind: 2 }, 1.3)), half = b11Flakes(2, b11Wx({ kind: 2 }, 1.3, 160, 90, 0.5));
+    if (half.length !== full.length || half.some((m, j) => Math.abs(m.x * 2 - full[j].x) > 1e-9 || Math.abs(m.y * 2 - full[j].y) > 1e-9)) throw new Error('Confetti on a half-size preview plate is not the export’s confetti at half size');
+  });
+
+  /* 11.3 STARFIELD: Fly-through (with Focus X / Y), Drift X / Y, Glint, Pattern. (Hunt C7b — the stars hashed per PLATE pixel —
+     was fixed by #986 on this tree; its test, "986 C7 … the same stars, not bigger ones somewhere else", stands.) */
+  const B11SF_NEW = { speed: 0, x: 50, y: 50, driftx: 0, drifty: 0, glint: 0, seed: 0 };
+  const B11SF_CFG = { def: {}, big: { size: 3, variation: 0.6, twinkle: 0.5 }, dense: { amount: 1, size: 2 }, kf: { twinklespeed: b11Kf(0.5, 4), twinkle: 0.8 }, sparse: { amount: 0.1, color: '#ffd080' } };
+  const B11SF_PIN = {   // fc8866f1, before the edit
+    def: 'b06aba8d.b06aba8d/b2a9fef4.b2a9fef4 768ac3f5.768ac3f5/553b26cc.553b26cc', big: '5de7f127.a1eaeba8/2cbbf0b4.f4ba8bd0 8ddc9c5d.24d1ba5d/67baa376.8d349140',
+    dense: '9e66cc13.9e66cc13/509c7cd2.509c7cd2 b2b4b148.b2b4b148/8e2c4e15.8e2c4e15', kf: 'af93f1b8.dc42390c/2cbf758f.b7893093 3ca53c30.7c38bc6f/aa30d6a8.056169bb',
+    sparse: '6b12c04c.6b12c04c/80bbcd9a.80bbcd9a b667a93d.b667a93d/1f9ce5c7.1f9ce5c7' };
+  /* Starfield on a W x H project frame at plate scale ps, over a flat dark-blue layer (or d0). */
+  function b11Sf(over, t, ps, W, H, d0) {
+    const s = ps || 1, w = Math.round((W || 160) * s), h = Math.round((H || 120) * s);
+    return b11Run('starfield', Object.assign(b11Base('starfield', {}), { amount: 1 }, over), w, h, t, s, d0 || b11Flat(w, h, [20, 24, 40]));
+  }
+  /* The export averaged down 2 x 2: what a half-size preview plate should show if it is the export shrunk. */
+  function b11Half(d, W, H) {
+    const w = W >> 1, h = H >> 1, o = new Float64Array(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 4; c++) { let s = 0; for (let k = 0; k < 4; k++) s += d[((2 * y + (k >> 1)) * W + 2 * x + (k & 1)) * 4 + c]; o[(y * w + x) * 4 + c] = s / 4; }
+    return o;
+  }
+
+  test('482 11.3 Starfield - Fly-through, its focus, Drift X and Y, Glint and Pattern are in the catalogue at defaults that draw the old still field, and saved and new Starfields draw byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('starfield', B11SF_NEW, { speed: 1.5, x: 30, y: 70, driftx: -120, drifty: 45, glint: 0.7, seed: 21 });
+    ['x', 'y'].forEach(k => { const r = b11Row('starfield', k); if (r.overriddenBy !== 'speed' || r.liveAbove !== 0) throw new Error('Focus ' + k.toUpperCase() + ' does not say it only counts while Fly-through is on (overriddenBy ' + r.overriddenBy + ', liveAbove ' + r.liveAbove + ')'); });
+    b11Recipes('starfield', B11SF_NEW);
+    const moved = b11Pinned('starfield', B11SF_NEW, B11SF_CFG, B11SF_PIN);
+    if (moved.length) throw new Error(moved.length + ' Starfield pictures differ from fc8866f1 at the new defaults - a new control changed a sky he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.3 Starfield - Drift slides the old field and wraps it, Fly-through streams the stars out of the focus, Glint puts spikes on a few, Pattern deals another sky, and a half-size preview is the export averaged down', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, at = (d, x, y) => { const i = (y * W + x) * 4; return d[i] + ',' + d[i + 1] + ',' + d[i + 2] + ',' + d[i + 3]; };
+    /* DRIFT, at the export's scale: Drift X 30 and Drift Y -20 one second in is the still field moved 30 px right and 20 up,
+       every pixel, the ones that left one edge back in at the other. CONTROL: moved 31 px it is not. */
+    const base = { size: 2, variation: 0.6 }, still = b11Sf(base, 1), slid = b11Sf(Object.assign({ driftx: 30, drifty: -20 }, base), 1);
+    const off = (dx, dy) => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (at(slid, x, y) !== at(still, ((x - dx) % W + W) % W, ((y - dy) % H + H) % H)) n++; return n; };
+    if (!(off(31, -20) > 100)) throw new Error('CONTROL: the drifted field matches the still one moved 31 px - this comparison cannot tell a slide');
+    if (off(30, -20) !== 0) throw new Error(off(30, -20) + ' pixels of Drift (30, -20) at 1 s are not the still field moved 30 px right and 20 px up, wrapped');
+    /* PATTERN. CONTROL: Pattern 0 is the old field. Pattern 3 is another sky of the same density. */
+    const lit = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 60) n++; return n; };
+    const p0 = b11Sf({}, 1), p3 = b11Sf({ seed: 3 }, 1);
+    if (!b11Same(b11Sf({ seed: 0 }, 1), p0)) throw new Error('CONTROL: Pattern 0 changed the stars');
+    let both = 0; for (let i = 0; i < p0.length; i += 4) if (p0[i] > 60 && p3[i] > 60) both++;
+    if (!(lit(p3) > lit(p0) * 0.75 && lit(p3) < lit(p0) * 1.25)) throw new Error('Pattern 3 has ' + lit(p3) + ' stars against ' + lit(p0) + ' - another pattern must keep the density');
+    if (both > lit(p0) * 0.2) throw new Error('Pattern 3 kept ' + both + ' of ' + lit(p0) + ' stars where Pattern 0 has them - it should be another sky');
+    /* GLINT. CONTROL: 0 lights the stars alone. 1 lights more, and every pixel it adds sits on a row or a column through a star,
+       no further out than eight stars. */
+    const g0 = b11Sf({ glint: 0 }, 1), g1 = b11Sf({ glint: 1 }, 1);
+    if (!b11Same(g0, p0)) throw new Error('CONTROL: Glint 0 changed the stars');
+    if (!(lit(g1) > lit(g0) * 1.5)) throw new Error('Glint 1 lit ' + lit(g1) + ' pixels against ' + lit(g0) + ' with none - the spikes are missing');
+    const star = (x, y) => x >= 0 && y >= 0 && x < W && y < H && g0[(y * W + x) * 4] > 60;
+    let stray = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (!(g1[(y * W + x) * 4] > 60) || star(x, y)) continue;
+      let ok = false; for (let k = 1; k <= 9 && !ok; k++) ok = star(x - k, y) || star(x + k, y) || star(x, y - k) || star(x, y + k); if (!ok) stray++; }
+    if (stray) throw new Error('Glint lit ' + stray + ' pixels that are not on a spike of a star');
+    /* FLY-THROUGH, where the stars are (FM._sfEachStar, the one place the renderer asks). Over a twentieth of a second at 1x,
+       every star still in its pass is 2^(0.0125) times further from the focus. CONTROL: with it off the stars do not move. */
+    if (typeof FM._sfEachStar !== 'function') throw new Error('FM._sfEachStar (where a moving field’s stars are) is not reachable');
+    const stars = (fly, t) => { const out = []; FM._sfEachStar({ PW: W, PH: H, t: t, thr: 0.03, sz: 1, vari: 0, tw: 0, twPh: null, tws: 1, seed: 0, ox: 0, oy: 0, fly: fly, fx: 40, fy: 70, glint: 0 }, (x, y, side, b, w) => out.push([x + side / 2, y + side / 2, w])); return out; };
+    const s0 = stars(null, 1), s1 = stars(null, 1.05);
+    if (!(s0.length > 400) || s0.some((s, j) => s[0] !== s1[j][0] || s[1] !== s1[j][1])) throw new Error('CONTROL: with Fly-through off the stars moved (or there are only ' + s0.length + ')');
+    const f0 = stars(0.25, 1), f1 = stars(0.2625, 1.05), k = Math.pow(2, 0.0125);
+    let out = 0, jumped = 0;
+    f0.forEach((s, j) => { const r0 = Math.hypot(s[0] - 40, s[1] - 70), r1 = Math.hypot(f1[j][0] - 40, f1[j][1] - 70); if (Math.abs(r1 - r0 * k) < 1e-6 * (1 + r0)) out++; else jumped++; });
+    if (!(out > f0.length * 0.9)) throw new Error('only ' + out + ' of ' + f0.length + ' stars streamed straight out of the focus (' + jumped + ' did not)');
+    if (f0.some(s => !(s[2] >= 0 && s[2] <= 1))) throw new Error('a star’s fly-through fade is outside 0..1');
+    /* …and through the kernel: Fly-through draws a different frame a moment later, and moving the focus moves the picture. */
+    if (b11Same(b11Sf({ speed: 1 }, 1), b11Sf({ speed: 1 }, 1.2))) throw new Error('Fly-through 1 drew the same frame 0.2 s later');
+    if (b11Same(b11Sf({ speed: 1, x: 20 }, 1), b11Sf({ speed: 1, x: 80 }, 1))) throw new Error('Focus X did not move the fly-through');
+    /* A HALF-SIZE PREVIEW IS THE EXPORT AVERAGED DOWN, for a drift that lands between pixels, Fly-through and Pattern: every
+       star is a square in project px at both scales, so the only gap is the byte rounding — MEASURED 0.5 to 0.75 level worst.
+       With Glint, a spike that runs across another star is clamped in the export (light cannot pass the star's colour) and
+       an average of four pixels cannot reproduce a clamp: MEASURED 0.08–0.15 level mean, and 0.1–0.5 % of values more than
+       2 levels off, all where a spike crosses a star. */
+    [[{ driftx: 37.5, drifty: -12.25 }, 1], [{ speed: 1.3, x: 35 }, 1], [{ seed: 9, size: 3, variation: 0.5, twinkle: 0.4 }, 1],
+     [{ driftx: 37.5, drifty: -12.25, glint: 0.8 }, 0], [{ speed: 1.3, x: 35, glint: 0.5 }, 0]].forEach(([o, strict]) => {
+      const full = b11Sf(o, 1.37), half = b11Sf(o, 1.37, 0.5), want = b11Half(full, W, H);
+      let sum = 0, worst = 0, far = 0;
+      for (let i = 0; i < half.length; i++) { const e = Math.abs(half[i] - want[i]); sum += e; if (e > worst) worst = e; if (e > 2) far++; }
+      if (strict ? worst > 1 : (sum / half.length > 0.3 || far > half.length * 0.01)) throw new Error(JSON.stringify(o) + ' on a half-size plate is ' + (sum / half.length).toFixed(3) + ' levels from the export averaged down (worst ' + worst.toFixed(1) + ', ' + far + ' values more than 2 off) - the preview is not the export shrunk');
+    });
+  });
+
+  /* 11.4 CLOUDS: Boil, Octaves, Contrast, Vertical drift. (Hunt C7a — octave cells in PLATE px — was fixed by #986 on this tree;
+     its test, "986 C7 Clouds and Starfield on a reduced preview are the export shrunk", stands.) */
+  const B11CL_NEW = { evolve: 0, detail: 3, contrast: 100, drifty: 0 };
+  const B11CL_CFG = { def: {}, big: { scale: 250, amount: 1 }, small: { scale: 40 }, drift: { drift: 60 }, kf: { drift: b11Kf(-100, 100) }, tint: { color: '#ff8040', amount: 0.4 } };
+  const B11CL_PIN = {   // fc8866f1, before the edit
+    def: 'af43bea5.af43bea5/71ca7621.71ca7621 7f42885c.7f42885c/c5fbf01b.c5fbf01b', big: '5afc4635.5afc4635/a88dcd6f.a88dcd6f c6e47e66.c6e47e66/31e5760a.31e5760a',
+    small: '17fe2370.17fe2370/fe1e9125.fe1e9125 c2e1cf53.c2e1cf53/6c6326bf.6c6326bf', drift: '1a907664.2b78c3fd/69ec1d6c.9e875979 29487d02.fbad62f9/4db234b8.772cc4e1',
+    kf: '101f817c.f96655de/a3e61e33.73140615 3413a235.356585bd/7a5db872.80b37dd1', tint: '11a3f154.11a3f154/b7e3f356.b7e3f356 2d540a68.2d540a68/0f8add7a.0f8add7a' };
+  /* Clouds at full strength over a flat mid-grey 160 x 120 layer at the export's scale: the picture is the cloud field itself. */
+  const b11Cl = (over, t, W, H) => b11Run('clouds', Object.assign(b11Base('clouds', {}), { amount: 1 }, over), W || 160, H || 120, t, 1, b11Flat(W || 160, H || 120, [128, 128, 128]));
+  const b11Grain = (d, W) => { let s = 0, n = 0; for (let i = 4; i < d.length; i += 4) { if ((i / 4) % W === 0) continue; s += Math.abs(d[i] - d[i - 4]); n++; } return s / n; };   // mean step between neighbours: how fine the detail is
+  const b11Avg = d => { let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i]; return s / (d.length / 4); };
+  const b11Sd = d => { let m = 0, n = d.length / 4; for (let i = 0; i < d.length; i += 4) m += d[i]; m /= n; let v = 0; for (let i = 0; i < d.length; i += 4) v += (d[i] - m) * (d[i] - m); return Math.sqrt(v / n); };
+
+  test('482 11.4 Clouds - Boil, Octaves, Contrast and Vertical drift are in the catalogue at defaults that draw the old clouds, and saved and new Clouds draw byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('clouds', B11CL_NEW, { evolve: 1.5, detail: 5, contrast: 180, drifty: -40 });
+    b11Recipes('clouds', B11CL_NEW);
+    const moved = b11Pinned('clouds', B11CL_NEW, B11CL_CFG, B11CL_PIN);
+    if (moved.length) throw new Error(moved.length + ' Clouds pictures differ from fc8866f1 at the new defaults - a new control changed a sky he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.4 Clouds - Boil churns the clouds in place and smoothly from the still ones, Octaves runs from soft blobs to fine wisps, Contrast pulls the grey apart and 0 flattens it, and Vertical drift slides the clouds up exactly', { item: '482', budgetMs: 60000 }, function () {
+    /* BOIL. CONTROL: with no Boil and no Drift the clouds at 0 s and 0.5 s are the same picture. Boil 1 changes them — a
+       little over a hundredth of a second (a churn, not a flicker), a lot over half a second — and at 0 s it is the still sky. */
+    const W = 160, H = 120, mad = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]); return s / (a.length / 4); };
+    if (!b11Same(b11Cl({}, 0), b11Cl({}, 0.5))) throw new Error('CONTROL: still clouds changed between 0 s and 0.5 s');
+    if (!b11Same(b11Cl({ evolve: 1 }, 0), b11Cl({}, 0))) throw new Error('Boil 1 at 0 s is not the still sky it boils from');
+    const b0 = b11Cl({ evolve: 1 }, 0.5), bTiny = b11Cl({ evolve: 1 }, 0.51), bHalf = b11Cl({ evolve: 1 }, 1);
+    if (!(mad(b0, bHalf) > 4)) throw new Error('Boil 1 moved the clouds only ' + mad(b0, bHalf).toFixed(2) + ' levels on average over half a second');
+    if (!(mad(b0, bTiny) < mad(b0, bHalf) / 8)) throw new Error('Boil 1 jumped ' + mad(b0, bTiny).toFixed(2) + ' levels in a hundredth of a second against ' + mad(b0, bHalf).toFixed(2) + ' over half a second - it flickers instead of churning');
+    if (!b11Same(b11Cl({ evolve: 1 }, 0.77), b11Cl({ evolve: 1 }, 0.77))) throw new Error('Boil drew a different frame for the same instant');
+    const kfb = b11Cl({ evolve: b11Kf(0, 2) }, 2), flat1 = b11Cl({ evolve: 1 }, 2);   // 0 → 2 over 2 s has boiled exactly as far as a steady 1
+    if (mad(kfb, flat1) > 0.01) throw new Error('a Boil keyframed 0 → 2 over 2 s is not where a steady Boil 1 is at 2 s - a keyframed Boil must be a rate');
+    /* OCTAVES. How rough the sky is: the mean step between neighbours against the spread of the whole sky. CONTROL: the old
+       three. Every octave added makes it rougher — MEASURED 0.026, 0.033, 0.040, 0.044, 0.048, 0.052 for 1 to 6 — so one is
+       soft blobs and six fine wisps. */
+    const rough = D => { const d = b11Cl(D === 3 ? {} : { detail: D }, 0); return b11Grain(d, W) / b11Sd(d); }, r = [1, 2, 3, 4, 5, 6].map(rough);
+    if (!(r[0] < r[2] * 0.8 && r[5] > r[2] * 1.2) || r.some((v, j) => j && !(v > r[j - 1]))) throw new Error('Octaves 1 to 6 are ' + r.map(v => v.toFixed(4)).join(', ') + ' rough - each layer of detail should make the sky rougher, from soft blobs to fine wisps');
+    const m1 = b11Avg(b11Cl({ detail: 1 }, 0)), m6 = b11Avg(b11Cl({ detail: 6 }, 0)), m3 = b11Avg(b11Cl({}, 0));
+    if (Math.abs(m1 - m3) > 25 || Math.abs(m6 - m3) > 25) throw new Error('Octaves changed how bright the sky is (' + m1.toFixed(0) + ' / ' + m3.toFixed(0) + ' / ' + m6.toFixed(0) + ') - its weights must still sum to one');
+    /* CONTRAST. CONTROL: 100 % is the old spread. 200 % spreads it further; 0 % is one flat grey. */
+    const s100 = b11Sd(b11Cl({}, 0)), s200 = b11Sd(b11Cl({ contrast: 200 }, 0)), flat = b11Cl({ contrast: 0 }, 0);
+    if (!(s100 > 8)) throw new Error('CONTROL: the clouds spread only ' + s100.toFixed(1) + ' levels');
+    if (!(s200 > s100 * 1.6)) throw new Error('Contrast 200 % spread the clouds ' + s200.toFixed(1) + ' levels against ' + s100.toFixed(1) + ' at 100 %');
+    if (b11Sd(flat) > 0.5) throw new Error('Contrast 0 % left ' + b11Sd(flat).toFixed(2) + ' levels of cloud - it should be one flat grey');
+    /* VERTICAL DRIFT. 30 px/s for 1 s is the clouds at 0 s moved 30 px up, every pixel. CONTROL: 29 px is not. */
+    const up = b11Cl({ drifty: 30 }, 1), at0 = b11Cl({ drifty: 30 }, 0);
+    const off = k => { let n = 0; for (let y = 0; y < H - k; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, j = ((y + k) * W + x) * 4; if (up[i] !== at0[j]) n++; } return n; };
+    if (!(off(29) > 100)) throw new Error('CONTROL: the drifted clouds match the still ones moved 29 px - this comparison cannot tell a slide');
+    if (off(30)) throw new Error(off(30) + ' pixels of Vertical drift 30 px/s at 1 s are not the clouds at 0 s moved 30 px up');
+  });
+
+  /* 11.5 VORONOI CELLS: Pattern, Fill (Seed colour / Cell average / Random colour / Original), Wall colour, Randomness. */
+  const B11VO_NEW = { seed: 0, fill: 0, jitter: 1, color: '#000000' };
+  const B11VO_CFG = { def: {}, frozen: { motion: 0 }, big: { cells: 6, edge: 1, wall: 30 }, fine: { cells: 40, edge: 0 }, kf: { speed: b11Kf(0.2, 2) }, alive: { motion: 1, speed: 2 } };
+  const B11VO_PIN = {   // fc8866f1, before the edit
+    def: '9a87c2f9.ee587a73/88c9c1aa.12516bc0 6c9d2daf.a4a70812/d15da09d.49861ebf', frozen: 'da257ab7.da257ab7/188c2495.188c2495 25c491f2.25c491f2/bfb3eaec.bfb3eaec',
+    big: '85b792ac.b07bfcfc/e508e35b.a6b0a053 5f5163ee.1141f785/1d7983a4.7c7070a2', fine: '03dfa3ab.861a4867/9a18a052.96bc0439 c8f7770b.fc01f6f5/324009db.e8d4cd48',
+    kf: '128e9a84.6d43e8a3/3366dc3d.3ad66a5c b66c2f0e.dc30c690/e6f8121b.e2763dcc', alive: '3905fd4e.8be09d4a/26afc190.6e48f4a0 d2b10322.63a25d36/3bf4224a.c68f0c0d' };
+  /* Still cells (Motion 0), 12 across a 144 x 96 layer, over d0 (a flat grey by default). */
+  const b11Vo = (over, d0, t) => b11Run('voronoi', Object.assign(b11Base('voronoi', {}), { cells: 12, motion: 0 }, over), 144, 96, t == null ? 0.5 : t, 1, d0 || b11Flat(144, 96, [128, 128, 128]));
+  const b11Sat = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 40) n++; return n; };
+
+  test('482 11.5 Voronoi - Pattern, Fill, Wall colour and Randomness are in the catalogue at defaults that draw the old cells, and saved and new Voronoi Cells draw byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('voronoi', B11VO_NEW, { seed: 3, fill: 2, jitter: 0.4, color: '#3060ff' });
+    const fill = b11Row('voronoi', 'fill'), wc = b11Row('voronoi', 'color');
+    if (fill.type !== 'segment' || (fill.options || []).map(o => o[0]).join() !== '0,1,2,3') throw new Error('Fill is not a choice of Seed colour, Cell average, Random colour and Original (' + JSON.stringify(fill.options) + ')');
+    if (wc.type !== 'color' || wc.default !== '#000000') throw new Error('there is no Wall colour row defaulting to black (' + wc.type + ', ' + wc.default + ')');
+    b11Recipes('voronoi', B11VO_NEW);
+    const moved = b11Pinned('voronoi', B11VO_NEW, B11VO_CFG, B11VO_PIN);
+    if (moved.length) throw new Error(moved.length + ' Voronoi pictures differ from fc8866f1 at the new defaults - a new control changed cells he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.5 Voronoi - Pattern deals another crackle, Cell average paints a cell the mean under it, Random colour gives each cell its own, Original keeps the picture and draws the walls, Wall colour tints them, and Randomness 0 lines the cells up in squares', { item: '482', budgetMs: 60000 }, function () {
+    const W = 144, H = 96;
+    /* PATTERN. CONTROL: Pattern 0 is the old crackle. Pattern 3 moves most of it. */
+    const ramp = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < W * H; i++) { const x = i % W, y = (i / W) | 0; d[i * 4] = x * 255 / W; d[i * 4 + 1] = y * 255 / H; d[i * 4 + 2] = 90; d[i * 4 + 3] = 255; } return d; };
+    const v0 = b11Vo({}, ramp());
+    if (!b11Same(b11Vo({ seed: 0 }, ramp()), v0)) throw new Error('CONTROL: Pattern 0 changed the cells');
+    if (!(b11Diff(b11Vo({ seed: 3 }, ramp()), v0) > W * H)) throw new Error('Pattern 3 drew nearly the same cells as Pattern 0');
+    /* CELL AVERAGE. On a fine black-and-white check the old cell takes the colour under its seed — black or white and nothing
+       between (CONTROL). Cell average paints each cell the mean of the check under it: greys, and a cell's mean times its
+       pixels is its sum, so the whole picture keeps the check's own mean to within the byte rounding. Only slivers of a cell
+       clipped by the frame edge, a few pixels each, can stray from mid grey (MEASURED 8 of 13,824 pixels). */
+    const check = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < W * H; i++) { const v = ((i % W) + ((i / W) | 0)) % 2 ? 255 : 0; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; } return d; };
+    const sc = b11Vo({ edge: 0 }, check()), av = b11Vo({ edge: 0, fill: 1 }, check());
+    let mid = 0, ends = 0, sum = 0; for (let i = 0; i < sc.length; i += 4) { if (sc[i] !== 0 && sc[i] !== 255) mid++; }
+    if (mid) throw new Error('CONTROL: Seed colour drew ' + mid + ' pixels that are neither black nor white on a black-and-white check');
+    for (let i = 0; i < av.length; i += 4) { if (av[i] < 90 || av[i] > 165) ends++; sum += av[i]; }
+    if (ends > W * H * 0.01 || Math.abs(sum / (W * H) - 127.5) > 0.5) throw new Error('Cell average left ' + ends + ' pixels far from the check’s mid grey and a mean of ' + (sum / (W * H)).toFixed(2) + ' against the check’s 127.5 - a cell should be the mean of what is under it');
+    /* RANDOM COLOUR. CONTROL: Seed colour on a flat grey is grey everywhere. Random colour paints the cells in colours, many. */
+    const grey = b11Vo({ edge: 0 }), rnd = b11Vo({ edge: 0, fill: 2 }), cols = new Set();
+    if (b11Sat(grey)) throw new Error('CONTROL: Seed colour put colour into a flat grey');
+    for (let i = 0; i < rnd.length; i += 4) cols.add(rnd[i] + ',' + rnd[i + 1] + ',' + rnd[i + 2]);
+    if (!(b11Sat(rnd) > W * H * 0.6 && cols.size >= 40)) throw new Error('Random colour drew ' + cols.size + ' colours, ' + b11Sat(rnd) + ' pixels of them rich - every cell should have its own');
+    /* ORIGINAL (WALLS ONLY). With no walls it is the picture untouched; with walls every changed pixel is darker, and the
+       cells' insides are the picture. CONTROL: Seed colour changes the insides of a ramp. */
+    const src = ramp();
+    if (!b11Same(b11Vo({ fill: 3, edge: 0 }, ramp()), src)) throw new Error('Original with Edge 0 changed the picture');
+    const og = b11Vo({ fill: 3, edge: 1 }, ramp()), sd = b11Vo({ fill: 0, edge: 1 }, ramp());
+    let lighter = 0, kept = 0; for (let i = 0; i < og.length; i += 4) { if (og[i] > src[i] || og[i + 1] > src[i + 1] || og[i + 2] > src[i + 2]) lighter++; if (og[i] === src[i] && og[i + 1] === src[i + 1]) kept++; }
+    if (!(b11Diff(sd, src) > W * H)) throw new Error('CONTROL: Seed colour hardly changed the ramp');
+    if (lighter || !(kept > W * H * 0.5) || kept === W * H) throw new Error('Original with walls: ' + lighter + ' pixels lighter than the picture, ' + kept + ' of ' + W * H + ' left as they were - only the walls should darken');
+    /* WALL COLOUR. CONTROL: black walls on grey are darker greys. Red walls are red. */
+    const blk = b11Vo({ edge: 1, wall: 20 }), red = b11Vo({ edge: 1, wall: 20, color: '#ff0000' });
+    if (b11Sat(blk) || !(b11Diff(blk, b11Vo({ edge: 0 })) > 300)) throw new Error('CONTROL: black walls on grey are not darker greys');
+    let redder = 0; for (let i = 0; i < red.length; i += 4) if (red[i] > red[i + 1] + 30 && red[i + 1] === red[i + 2]) redder++;
+    if (!(redder > 300)) throw new Error('Wall colour red tinted only ' + redder + ' wall pixels red');
+    /* RANDOMNESS. With 0 every seed sits mid-cell, so the walls fall on the cell grid: every wall pixel within a wall's width
+       of a grid line. CONTROL: the old scatter puts most of its walls elsewhere. */
+    const G = Math.max(6, W / 12), onGrid = d => { let on = 0, all = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] >= 128) continue; all++; const gx = x % G, gy = y % G; if (Math.min(gx, G - gx) <= 1.5 || Math.min(gy, G - gy) <= 1.5) on++; } return [on, all]; };
+    const sq = onGrid(b11Vo({ jitter: 0, edge: 1, wall: 8 })), sc2 = onGrid(b11Vo({ edge: 1, wall: 8 }));
+    if (!(sc2[1] > 200 && sc2[0] < sc2[1] * 0.7)) throw new Error('CONTROL: ' + sc2[0] + ' of the old scatter’s ' + sc2[1] + ' wall pixels sit on the grid');
+    if (!(sq[1] > 200 && sq[0] === sq[1])) throw new Error('Randomness 0 left ' + (sq[1] - sq[0]) + ' of ' + sq[1] + ' wall pixels off the grid - the cells should be squares');
+  });
+
+  /* 11.6 LIGHTNING (hunt C34): Strike (Down the layer / Point to point) with From and To, Glow, Core, Segments, Draw on. */
+  const B11LI_NEW = { mode: 0, x1: 25, y1: 15, x2: 75, y2: 85, glow: 100, segments: 20, drawon: 0 };
+  const B11LI_CFG = { def: {}, wild: { count: 6, jitter: 2.5, forks: 8, thickness: 3 }, side: { angle: 90 }, seed: { seed: 42, flicker: 0 }, kf: { flicker: b11Kf(2, 20) },
+    thin: { thickness: 0.3, intensity: 0.4, color: '#ffe060' }, tilt: { angle: -135, count: 2 } };
+  const B11LI_PIN = {   // fc8866f1, before the edit
+    def: '962b1d01.d8f55f45/d7563df0.b77d31b6 2a52a220.95e416c3/3f657d28.cc009d9f', wild: '9139d419.6b97f1bd/80bf4edf.93e84c48 9a6d5b49.9456ced1/4d9b9395.c352616a',
+    side: 'e7f856c6.5db26bff/9d0d5530.ab5d6543 b242f4b7.4e525a2c/548575d5.47ff660e', seed: 'e64c7056.e64c7056/a91627f2.a91627f2 5ade3921.5ade3921/a889a7c7.a889a7c7',
+    kf: '779dc22e.47b06d8f/180ec434.d8d20850 a37c9b80.7ec75a1c/1a68005a.3f997471', thin: '2b98b79d.d557e025/f18b6811.5837548d 113a64d7.d66a7533/4b55a6f8.4329cc79',
+    tilt: '3127cec7.0ea5ae9c/9c949b86.02e79eaf 7961610f.2ab53595/12f6a24c.e2e19512' };
+  /* Lightning on a 160 x 120 layer: a flat dark opaque one by default, or d0. */
+  const b11Li = (over, d0) => b11Run('lightning', Object.assign(b11Base('lightning', {}), over), 160, 120, 0.37, 1, d0 || b11Flat(160, 120, [10, 12, 20]));
+  const b11Empty = () => b11Flat(160, 120, [0, 0, 0], 0);
+
+  test('482 11.6 Lightning - Strike, From and To, Glow, Core, Segments and Draw on are in the catalogue at defaults that draw the old bolts, and saved and new Lightning draws byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('lightning', B11LI_NEW, { mode: 1, x1: 5, y1: 50, x2: 95, y2: 40, glow: 250, segments: 44, drawon: 1, color2: '#ff2020' }, ['color2']);
+    ['x1', 'y1', 'x2', 'y2'].forEach(k => { const r = b11Row('lightning', k); if (r.overriddenBy !== 'mode' || r.liveWhen !== 1) throw new Error(k + ' does not say it only counts for Point to point (overriddenBy ' + r.overriddenBy + ', liveWhen ' + r.liveWhen + ')'); });
+    const ang = b11Row('lightning', 'angle');
+    if (ang.overriddenBy !== 'mode' || ang.liveWhen !== 0) throw new Error('Strikes from does not say it is off for Point to point, which places its own ends');
+    b11Recipes('lightning', B11LI_NEW);
+    const moved = b11Pinned('lightning', B11LI_NEW, B11LI_CFG, B11LI_PIN);
+    if (moved.length) throw new Error(moved.length + ' Lightning pictures differ from fc8866f1 at the new defaults - a new control changed bolts he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.6 Lightning - Everywhere strikes an empty layer and raises its alpha, Point to point runs from one point to the other, Core recolours the channel, Glow sets the halo and Segments the kinks', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, lit = (d, a) => { const out = []; for (let i = 0; i < W * H; i++) if (d[i * 4 + 3] > a) out.push([i % W, (i / W) | 0]); return out; };
+    /* EVERYWHERE (C34: it skipped every pixel with no alpha). CONTROL: Layer pixels on an empty layer draws nothing (and no
+       longer throws on it). Everywhere draws the bolts there, its core opaque. On an opaque layer the two are the same. */
+    const none = b11Li({}, b11Empty());
+    if (!b11Same(none, b11Empty())) throw new Error('CONTROL: Layer pixels drew on an empty layer');
+    const ev = b11Li({ drawon: 1 }, b11Empty());   // MEASURED: 781 pixels above alpha 20, 156 above 128
+    if (!(lit(ev, 20).length > 300 && lit(ev, 128).length > 80)) throw new Error('Everywhere on an empty layer lit ' + lit(ev, 20).length + ' pixels (' + lit(ev, 128).length + ' over half opaque) - it should strike the empty frame');
+    if (!b11Same(b11Li({ drawon: 1 }), b11Li({}))) throw new Error('Everywhere on an opaque layer is not the Layer pixels bolt - where the layer is, they must be one picture');
+    /* POINT TO POINT. CONTROL: down the layer, the bolt runs the empty frame's whole height. From (10 %, 10 %) to (90 %, 90 %)
+       it starts on the one point, ends on the other (faded, as every bolt tapers), and keeps to the line between them. */
+    const down = lit(b11Li({ drawon: 1, count: 1, forks: 0 }, b11Empty()), 20), ys = down.map(p => p[1]);
+    if (!(Math.min.apply(null, ys) < 6 && Math.max.apply(null, ys) > H - 7)) throw new Error('CONTROL: down the layer the bolt does not run top to bottom');
+    const pp = lit(b11Li({ drawon: 1, count: 1, forks: 0, mode: 1, x1: 10, y1: 10, x2: 90, y2: 90 }, b11Empty()), 20);
+    const A = [16, 12], B = [144, 108], len = Math.hypot(B[0] - A[0], B[1] - A[1]);
+    const near = (q, r) => pp.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) <= r);
+    if (!near(A, 2) || !near(B, 2)) throw new Error('Point to point does not start on (16, 12) and end on (144, 108) - its ends should be pinned where they were put');
+    const off = pp.filter(p => Math.abs((p[0] - A[0]) * (B[1] - A[1]) - (p[1] - A[1]) * (B[0] - A[0])) / len > len * 0.25 + 3);
+    if (off.length) throw new Error(off.length + ' lit pixels of Point to point stray more than a quarter of its length off the line between the points');
+    if (pp.some(p => p[1] < 8 || p[1] > H - 9)) throw new Error('Point to point still runs to the top or bottom of the frame');
+    /* CORE. CONTROL: with no Core the channel is the bolt colour pushed nearly to white. A red Core makes it red. */
+    const brightest = (d, f) => { let best = -1, at = 0; for (let i = 0; i < d.length; i += 4) { const v = f(d[i], d[i + 1], d[i + 2]); if (v > best) { best = v; at = i; } } return [d[at], d[at + 1], d[at + 2]]; };
+    const wc = brightest(b11Li({ count: 1 }), (r, g, b) => r + g + b), rc = brightest(b11Li({ count: 1, color2: '#ff2020' }), (r, g, b) => r - g);
+    if (!(Math.min(wc[0], wc[1], wc[2]) > 150 && Math.abs(wc[0] - wc[1]) < 40)) throw new Error('CONTROL: with no Core the channel is not near white (' + wc + ')');
+    if (!(rc[0] - rc[1] > 100)) throw new Error('a red Core drew the channel ' + rc + ' - it should be red');
+    /* GLOW. CONTROL: 100 %. 0 % takes the halo away and leaves the core; 300 % spreads it wider. (MEASURED 939, 1206 and 2233
+       changed channels / 3.) */
+    const area = o => b11Diff(b11Li(o), b11Flat(W, H, [10, 12, 20])) / 3;
+    const g0 = area({ glow: 0 }), g1 = area({}), g3 = area({ glow: 300 });
+    if (!(g0 > 50 && g0 < g1 * 0.9 && g3 > g1 * 1.4)) throw new Error('Glow 0, 100 and 300 % lit ' + g0.toFixed(0) + ', ' + g1.toFixed(0) + ' and ' + g3.toFixed(0) + ' pixels - the halo should go and grow while the core stays');
+    /* SEGMENTS. How far the channel wanders sideways, row by row (the brightest pixel of each row, one bolt, no forks). CONTROL:
+       the old 20. 60 kinks it three times as often, so it zigzags much further for the same height (MEASURED 108 px at 20,
+       284 at 60). */
+    const wander = s => { const d = b11Li({ count: 1, forks: 0, segments: s }); let tot = 0, prev = -1; for (let y = 4; y < H - 4; y++) { let best = -1, bx = 0; for (let x = 0; x < W; x++) { const v = d[(y * W + x) * 4]; if (v > best) { best = v; bx = x; } } if (prev >= 0) tot += Math.abs(bx - prev); prev = bx; } return tot; };
+    const w20 = wander(20), w60 = wander(60);
+    if (!b11Same(b11Li({ segments: 20 }), b11Li({}))) throw new Error('CONTROL: Segments 20 is not the old bolt');
+    if (!(w60 > w20 * 1.6)) throw new Error('Segments 60 wandered ' + w60 + ' px down the frame against ' + w20 + ' at 20 - it should kink far more often');
+  });
+
+  /* 11.6 REVIEW. With Core unset the row followed the bolt colour, so it SHOWED #96c8ff while the kernel drew the core 80 % of
+     the way to white (#eaf4ff) — a panel showing a value the kernel is not using. Neither way of making them agree by changing
+     the picture keeps saved bolts: drawing an unset Core in the bolt colour itself moves all 21 pinned frames above, and a real
+     Core defaulting to #eaf4ff is filled into every saved bolt at render time, which moves a saved yellow bolt (the “thin”
+     pin: its own core is 255, 248.8, 223.2) — MEASURED by running the pins against each. So the picture stays and the panel
+     changes: the registry's color2 row carries followMix 0.8, and FM.fxRegistry.followedColour — the one fallback the
+     inspector's following colour rows ask — pushes the followed colour that far to white, as the kernel does. */
+  test('482 11.6 review Lightning - with Core unset the Core row shows the colour the kernel draws down the middle of the bolt (its bolt colour 80 % to white), a red Core makes both red, and Light Leak’s edge row still shows its leak colour', { item: '482', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, W = 160, H = 120;
+    if (typeof R.followedColour !== 'function') throw new Error('FM.fxRegistry.followedColour is missing - the Core row falls back to the bolt colour itself (' + (FM.evalProp(R.makeInstance('lightning').params.color, 0) || '') + ') while the kernel draws it 80 % to white');
+    /* What the row shows: its own value once set; unset, the fallback the inspector's following rows ask for. */
+    const shown = p => p.color2 != null ? p.color2 : R.followedColour('lightning', 'color2', p, 0.37);
+    /* What the kernel draws down the middle: one bolt, no forks, no halo, struck Everywhere on an empty layer, where a pixel the
+       channel alone crosses IS the core colour (unpremultiplied) — the commonest colour of each row's most opaque pixel
+       (MEASURED: 86–89 of 116 rows exactly the core; the rest are whitened where two stamps overlap). The params are filled the
+       way the render fills a saved instance first (queue 784). */
+    const drawn = p => {
+      const q = FM._fillFxParams({ type: 'lightning', enabled: true, params: b11Copy(p) }).params;
+      const d = b11Li(Object.assign(q, { drawon: 1, count: 1, forks: 0, glow: 0, intensity: 1 }), b11Empty()), seen = {};
+      for (let y = 2; y < H - 2; y++) { let best = 0, bi = -1; for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i + 3] > best) { best = d[i + 3]; bi = i; } } if (bi >= 0) { const k = d[bi] + ',' + d[bi + 1] + ',' + d[bi + 2]; seen[k] = (seen[k] || 0) + 1; } }
+      return Object.keys(seen).sort((a, b) => seen[b] - seen[a])[0].split(',').map(Number);
+    };
+    const rgb = hex => { const h = String(hex).replace('#', ''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+    const off = (a, b) => Math.max.apply(null, a.map((v, i) => Math.abs(v - b[i])));
+    const base = () => b11Base('lightning', {}), sansColour = () => { const p = base(); delete p.color; return p; };
+    [['a new bolt', base()], ['a yellow bolt', Object.assign(base(), { color: '#ffe060' })], ['a green bolt', Object.assign(base(), { color: '#30ff80' })], ['a saved bolt with no colour of its own', sansColour()]].forEach(([name, p]) => {
+      if ('color2' in p) throw new Error('CONTROL: ' + name + ' already carries a Core');
+      const s = rgb(shown(p)), d = drawn(p);
+      if (off(s, d) > 2) throw new Error('with Core unset, ' + name + '’s Core row shows ' + s + ' but the kernel draws ' + d + ' down the middle of the bolt');
+    });
+    /* CONTROL: a red Core makes the row and the bolt's middle both that red. */
+    const red = Object.assign(base(), { color2: '#ff2020' }), rs = rgb(shown(red)), rd = drawn(red);
+    if (off(rs, rd) > 2 || !(rd[0] - rd[1] > 150)) throw new Error('a red Core shows ' + rs + ' and draws ' + rd + ' - both should be the red');
+    /* The rows: Core carries the mix; Light Leak's edge (polish 1.2) does not, and still shows its leak colour, or its own default. */
+    const core = b11Row('lightning', 'color2'), edge = b11Row('lightleak', 'color2');
+    if (core.follows !== 'color' || core.followMix !== 0.8) throw new Error('the Core row does not follow the bolt colour with a 0.8 mix (follows ' + core.follows + ', followMix ' + core.followMix + ')');
+    if (!edge.follows || edge.followMix) throw new Error('Light Leak’s edge row changed: follows ' + edge.follows + ', followMix ' + edge.followMix);
+    if (R.followedColour('lightleak', 'color2', { color: '#123456' }, 0) !== '#123456' || R.followedColour('lightleak', 'color2', {}, 0) !== edge.default) throw new Error('Light Leak’s unset edge no longer shows the leak colour (or its own default) - followedColour must answer as the inspector did');
+  });
+
+  /* 11.7 ROUGHEN EDGES (hunt C37's first third: static, one tear for every layer): Boil, Pattern, Complexity, Erode. */
+  const B11RE_NEW = { evolve: 0, seed: 0, complexity: 1, border: 0 };
+  const B11RE_CFG = { def: {}, heavy: { amount: 20, scale: 4 }, wide: { amount: 12, scale: 40 }, kf: { amount: b11Kf(2, 18) }, fine: { amount: 3, scale: 2 } };
+  const B11RE_PIN = {   // fc8866f1, before the edit
+    def: 'f2b0b0b8.f2b0b0b8/ec7d349d.ec7d349d 6cdd2479.6cdd2479/b30d00e1.b30d00e1', heavy: 'ce78cc84.ce78cc84/cd680fd5.cd680fd5 5585bc65.5585bc65/8a2a5608.8a2a5608',
+    wide: '8bbab728.8bbab728/484859cc.484859cc 596c4551.596c4551/e510316d.e510316d', kf: '6f27bdf4.3a70e07d/e6dc6d39.e7e492a5 cd0e2fcc.9f223b68/49d6f421.ab89b774',
+    fine: '30a67461.30a67461/c6bb3c69.c6bb3c69 3fdf69bc.3fdf69bc/0483749d.0483749d' };
+  /* An opaque square, 40..120 x 30..90, in a transparent 160 x 120 layer (or half that on a half-size plate). */
+  function b11Box(s) { const W = Math.round(160 * s), H = Math.round(120 * s), d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = 200; d[i + 1] = 90; d[i + 2] = 60; d[i + 3] = (x >= 40 * s && x < 120 * s && y >= 30 * s && y < 90 * s) ? 255 : 0; } return d; }
+  const b11Re = (over, t, s) => b11Run('roughenedges', Object.assign(b11Base('roughenedges', {}), over), Math.round(160 * (s || 1)), Math.round(120 * (s || 1)), t == null ? 0.37 : t, s || 1, b11Box(s || 1));
+  const b11Alpha = d => { const a = new Uint8Array(d.length / 4); for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3]; return a; };
+  const b11Steps = (d, W) => { let n = 0; for (let i = 4; i < d.length; i += 4) if ((i / 4) % W && (d[i + 3] > 127) !== (d[i - 1] > 127)) n++; return n; };   // how often the edge crosses a row: how torn it is
+
+  test('482 11.7 Roughen Edges - Boil, Pattern, Complexity and Erode are in the catalogue at defaults that tear the old edge, and saved and new Roughen Edges tear byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('roughenedges', B11RE_NEW, { evolve: 2, seed: 77, complexity: 3, border: 6 });
+    if (b11Row('roughenedges', 'border').unit !== 'px') throw new Error('Erode is not declared in px - it is a distance on the picture, and the panel must say so');
+    b11Recipes('roughenedges', B11RE_NEW);
+    const moved = b11Pinned('roughenedges', B11RE_NEW, B11RE_CFG, B11RE_PIN);
+    if (moved.length) throw new Error(moved.length + ' Roughen Edges pictures differ from fc8866f1 at the new defaults - a new control changed an edge he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.7 Roughen Edges - Boil changes the edge between 0 s and 0.5 s smoothly from the still one, Pattern tears another edge, Complexity tears it finer, and Erode takes the layer in by its px on the export and the preview alike', { item: '482', budgetMs: 60000 }, function () {
+    /* BOIL (the backlog's test). CONTROL: with no Boil the edge at 0 s and 0.5 s is the same. Boil 1 changes it, by little over
+       a hundredth of a second, and at 0 s it is the still edge. */
+    const a = o => b11Alpha(o);
+    if (!b11Same(a(b11Re({}, 0)), a(b11Re({}, 0.5)))) throw new Error('CONTROL: a still edge changed between 0 s and 0.5 s');
+    if (!b11Same(a(b11Re({ evolve: 1 }, 0)), a(b11Re({}, 0)))) throw new Error('Boil 1 at 0 s is not the still edge it boils from');
+    const e0 = a(b11Re({ evolve: 1 }, 0)), e5 = a(b11Re({ evolve: 1 }, 0.5)), eTiny = a(b11Re({ evolve: 1 }, 0.01));
+    if (!(b11Diff(e0, e5) > 100)) throw new Error('Boil 1 moved only ' + b11Diff(e0, e5) + ' edge pixels between 0 s and 0.5 s');
+    if (!(b11Diff(e0, eTiny) < b11Diff(e0, e5) / 5)) throw new Error('Boil 1 moved ' + b11Diff(e0, eTiny) + ' edge pixels in a hundredth of a second against ' + b11Diff(e0, e5) + ' in half a second - it should crawl, not jump');
+    /* PATTERN. CONTROL: Pattern 0 is the old tear. */
+    if (!b11Same(b11Re({ seed: 0 }), b11Re({}))) throw new Error('CONTROL: Pattern 0 changed the tear');
+    if (!(b11Diff(a(b11Re({ seed: 5 })), a(b11Re({}))) > 100)) throw new Error('Pattern 5 tore nearly the same edge as Pattern 0');
+    /* COMPLEXITY. CONTROL: 1 is the old tear. Each step adds a finer tear on top, so the edge crosses the rows more often every
+       time (MEASURED 188, 204, 226 and 252 crossings for 1 to 4). */
+    const cx = [1, 2, 3, 4].map(c => b11Steps(b11Re({ amount: 10, scale: 20, complexity: c }), 160));
+    if (!(cx[3] > cx[0] * 1.2) || cx.some((v, j) => j && !(v > cx[j - 1]))) throw new Error('Complexity 1 to 4 crossed the rows ' + cx.join(', ') + ' times - each should tear finer than the one before');
+    /* ERODE. With no tear (Amount 0) it is the square taken in by exactly that many px — CONTROL: Amount 0 with no Erode is the
+       square untouched — and 10 px on a half-size plate is 5 plate px, the same square shrunk. */
+    const sq = (s, k) => { const W = Math.round(160 * s), H = Math.round(120 * s), o = new Uint8Array(W * H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) o[y * W + x] = (x >= 40 * s + k && x < 120 * s - k && y >= 30 * s + k && y < 90 * s - k) ? 255 : 0; return o; };
+    if (!b11Same(a(b11Re({ amount: 0 })), sq(1, 0))) throw new Error('CONTROL: Amount 0 with no Erode changed the square');
+    if (!b11Same(a(b11Re({ amount: 0, border: 6 })), sq(1, 6))) throw new Error('Erode 6 px is not the square taken in by 6 px on every side');
+    if (!b11Same(a(b11Re({ amount: 0, border: 10 }, 0.37, 0.5)), sq(0.5, 5))) throw new Error('Erode 10 px on a half-size plate is not the square taken in by 5 plate px - it must be project px');
+    /* …and with a tear, the eroded edge tears inside the old outline: it covers less. */
+    const cov = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 127) n++; return n; };
+    if (!(cov(b11Re({ border: 8 })) < cov(b11Re({})) * 0.8)) throw new Error('Erode 8 px with the old tear covers ' + cov(b11Re({ border: 8 })) + ' px against ' + cov(b11Re({})) + ' - the torn edge should sit further in');
+  });
 })();
