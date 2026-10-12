@@ -125024,4 +125024,71 @@
     const bag = d => JSON.stringify(Object.entries(b13Colours(d)).sort());
     if (bag(down) !== bag(opq()) || bag(up) !== bag(opq())) throw new Error('a diagonal sort lost or invented pixels - a sort only moves them');
   });
+
+  /* 13.6 DITHER: Method (Ordered / Floyd–Steinberg / Atkinson / Blue noise), Ink and Paper in Mono. */
+  const B13DI_NEW = { method: 0, ink: '#000000', paper: '#ffffff' };
+  const B13DI_CFG = { def: {}, filter: { levels: 2, scale: 2, mono: 1 }, coarse: { matrix: 0 }, fine: { matrix: 2, levels: 3, scale: 3 }, mono: { mono: 1, levels: 6 } };
+  const B13DI_PIN = {   // fc8866f1, before the edit
+    def: '97261836.97261836/97261836.97261836 3759d6ce.3759d6ce/3759d6ce.3759d6ce', filter: '5d99ec14.5d99ec14/a922532d.a922532d f3c9de5d.f3c9de5d/0abada7c.0abada7c',
+    coarse: '8758c407.8758c407/8758c407.8758c407 ac7148f8.ac7148f8/ac7148f8.ac7148f8', fine: '8fbfa90f.8fbfa90f/c519b775.c519b775 a1cd342a.a1cd342a/33fb499a.33fb499a',
+    mono: '58cd4da4.58cd4da4/58cd4da4.58cd4da4 ca524186.ca524186/ca524186.ca524186' };
+
+  test('482 13.6 Dither - Method, Ink and Paper are in the catalogue at defaults that draw the old ordered dither, Method says error diffusion shimmers on video, and saved and new Dithers and the Photocopy recipe draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('dither', B13DI_NEW, { method: 2, ink: '#1a2b3c', paper: '#f0e8d0', mono: 1 });
+    const m = b13Row('dither', 'method'), mx = b13Row('dither', 'matrix'), ink = b13Row('dither', 'ink'), paper = b13Row('dither', 'paper');
+    if ((m.options || []).map(o => o[0]).join() !== '0,1,2,3') throw new Error('Method is not Ordered, Floyd–Steinberg, Atkinson and Blue noise (' + JSON.stringify(m.options) + ')');
+    if (!/shimmers on video/i.test(m.note || '')) throw new Error('Method carries no note that error diffusion shimmers on video (note: ' + JSON.stringify(m.note) + ')');
+    if (mx.overriddenBy !== 'method' || mx.liveWhen !== 0) throw new Error('Pattern does not say it only counts under Method Ordered (overriddenBy ' + mx.overriddenBy + ', liveWhen ' + mx.liveWhen + ')');
+    [ink, paper].forEach(r => { if (r.type !== 'color' || r.overriddenBy !== 'mono' || r.liveWhen !== 1) throw new Error('the ' + r.label + ' row is not a colour that only counts under Output Mono (type ' + r.type + ', overriddenBy ' + r.overriddenBy + ', liveWhen ' + r.liveWhen + ')'); });
+    b13Recipes('dither', B13DI_NEW, ['xerox']);
+    const moved = b13Pinned('dither', B13DI_NEW, B13DI_CFG, B13DI_PIN);
+    if (moved.length) throw new Error(moved.length + ' Dither pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.6 Dither - Floyd–Steinberg on 50 percent grey has no 2x2 period and keeps the tone, Atkinson diffuses differently, Blue noise has no pattern inside its 32 px tile, error diffusion paints whole cells and keeps the average colour, and Ink and Paper recolour Mono', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64;
+    const di = (over, d0, w, h) => b13Run('dither', Object.assign(b13Base('dither', {}), { levels: 2 }, over), w || W, h || H, 0.5, 1, d0);
+    const grey = v => b13Flat(W, H, [v, v, v]);
+    const periodic = (d, P) => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = d[(y * W + x) * 4]; if (a !== d[(y * W + (x + P) % W) * 4] || a !== d[(((y + P) % H) * W + x) * 4]) return false; } return true; };
+    /* FLOYD–STEINBERG. CONTROL: the ordered dither repeats every 2 px on a 50 percent grey (Coarse 2x2 and Classic 4x4 both). */
+    if (!periodic(di({ matrix: 0 }, grey(128)), 2) || !periodic(di({}, grey(128)), 2)) throw new Error('CONTROL: the ordered dither does not repeat every 2 px on mid grey - this fixture cannot tell the methods apart');
+    const fs = di({ method: 1 }, grey(128));
+    if (periodic(fs, 2)) throw new Error('Floyd–Steinberg on 50 percent grey repeats every 2 px - it is drawing a fixed pattern, not diffusing');
+    if (periodic(fs, 4)) throw new Error('Floyd–Steinberg on 50 percent grey repeats every 4 px');
+    [64, 100, 128, 200].forEach(v => { const m = b13Mean(di({ method: 1 }, grey(v)))[0]; if (Math.abs(m - v) > 2) throw new Error('Floyd–Steinberg printed grey ' + v + ' at a mean of ' + m.toFixed(1) + ' - diffusing the error must keep the tone'); });
+    if (!b13Same(fs, di({ method: 1 }, grey(128)))) throw new Error('Floyd–Steinberg draws the same frame differently each time');
+    /* ATKINSON: its own pattern, and no period either. */
+    const atk = di({ method: 2 }, grey(100));
+    if (b13Same(atk, di({ method: 1 }, grey(100)))) throw new Error('Atkinson draws exactly what Floyd–Steinberg draws');
+    if (periodic(atk, 2) || periodic(atk, 4)) throw new Error('Atkinson on a grey repeats every 2 or 4 px');
+    /* BLUE NOISE: the tile is a full ranking of its 1024 cells; at an eighth it spreads over the 4x4 blocks far more evenly than
+       a shuffled tile does (MEASURED: spread 0.64 against 1.28); and the dither has no period of 2, 4, 8 or 16 px but repeats
+       every 32 (its tile) - CONTROL: Classic 4x4 repeats every 4. The tone holds within one level. */
+    const bn = FM._blueNoise13 && FM._blueNoise13();
+    if (!bn || bn.length !== 1024 || new Set(Array.from(bn)).size !== 1024 || Math.max.apply(null, Array.from(bn)) !== 1023) throw new Error('the blue-noise tile is not a ranking of 1024 cells');
+    const blocks = []; for (let by = 0; by < 8; by++) for (let bx = 0; bx < 8; bx++) { let n = 0; for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if (bn[(by * 4 + y) * 32 + bx * 4 + x] < 128) n++; blocks.push(n); }
+    const sd = Math.sqrt(blocks.reduce((s, n) => s + (n - 2) * (n - 2), 0) / 64);
+    if (!(sd < 1)) throw new Error('the blue-noise tile clumps: an eighth of it spreads over the 4x4 blocks with a spread of ' + sd.toFixed(2) + ' (a shuffled tile is about 1.3)');
+    if (!periodic(di({}, grey(100)), 4)) throw new Error('CONTROL: Classic 4x4 does not repeat every 4 px');
+    [64, 100, 128].forEach(v => {
+      const b = di({ method: 3 }, grey(v));
+      [2, 4, 8, 16].forEach(P => { if (periodic(b, P)) throw new Error('Blue noise on grey ' + v + ' repeats every ' + P + ' px - it shows a pattern'); });
+      if (!periodic(b, 32)) throw new Error('Blue noise on grey ' + v + ' does not repeat with its 32 px tile');
+      if (Math.abs(b13Mean(b)[0] - v) > 1) throw new Error('Blue noise printed grey ' + v + ' at a mean of ' + b13Mean(b)[0].toFixed(1));
+    });
+    /* ERROR DIFFUSION ON CELLS: at Cell size 4 every 4x4 cell is one flat colour (the chunky look). In colour at 4 levels every
+       channel is one of the four levels, and the picture's average colour holds within 3 levels. */
+    const src = b13Plate(W, H), cells = di({ method: 1, scale: 4, levels: 4 }, src.slice());
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, j = ((y & ~3) * W + (x & ~3)) * 4; if (cells[i] !== cells[j] || cells[i + 1] !== cells[j + 1] || cells[i + 2] !== cells[j + 2]) throw new Error('Floyd–Steinberg at Cell size 4 broke the cell at ' + (x & ~3) + ',' + (y & ~3) + ' - a cell must be one block'); }
+    const col = di({ method: 1, levels: 4 }, src.slice()), ms = b13Mean(src), mc = b13Mean(col);
+    for (let i = 0; i < col.length; i += 4) for (let c = 0; c < 3; c++) if ([0, 85, 170, 255].indexOf(col[i + c]) < 0) throw new Error('Floyd–Steinberg at 4 levels left a channel at ' + col[i + c]);
+    [0, 1, 2].forEach(c => { if (Math.abs(ms[c] - mc[c]) > 3) throw new Error('Floyd–Steinberg moved the average ' + ['red', 'green', 'blue'][c] + ' from ' + ms[c].toFixed(1) + ' to ' + mc[c].toFixed(1)); });
+    /* INK AND PAPER: in Mono at 2 levels every pixel is the ink or the paper, whatever the method. In Colour they are not read
+       (CONTROL: Colour with Ink set is the old dither). */
+    [0, 1, 2, 3].forEach(method => {
+      const k = Object.keys(b13Colours(di({ mono: 1, method: method, ink: '#1a2b3c', paper: '#f0e8d0' }, grey(110)))).sort().join(' ');
+      if (k !== '240,232,208 26,43,60') throw new Error('Mono with Ink and Paper, Method ' + method + ', printed ' + k + ' - every pixel should be the ink or the paper');
+    });
+    if (!b13Same(di({ ink: '#1a2b3c', paper: '#f0e8d0' }, src.slice()), di({}, src.slice()))) throw new Error('Ink and Paper changed a Colour dither - they only mean something in Mono');
+  });
 })();

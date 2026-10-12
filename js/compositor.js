@@ -208,8 +208,16 @@ window.FM = window.FM || {};
     { type: 'dither', label: 'Dither', params: [
       { key: 'levels', label: 'Levels', min: 2, max: 32, step: 1, def: 4 },
       { key: 'scale', label: 'Cell size', min: 1, max: 64, step: 1, def: 1, unit: 'px' },
-      { key: 'matrix', label: 'Pattern', def: 1, options: [[0, 'Coarse 2×2'], [1, 'Classic 4×4'], [2, 'Fine 8×8']] },
+      { key: 'matrix', label: 'Pattern', def: 1, options: [[0, 'Coarse 2×2'], [1, 'Classic 4×4'], [2, 'Fine 8×8']], overriddenBy: 'method', liveWhen: 0 },   // #482 13.6: only Ordered reads a pattern
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Mono']] },
+      /* #482 polish 13.6. The only method was an ordered (Bayer) pattern, and Mono could only print black on white. Floyd–Steinberg
+         and Atkinson diffuse each pixel's rounding error onto the pixels after it (serpentine, so no diagonal worms) — the
+         organic newspaper-photo look, Atkinson lighter and crisper because it passes on only three quarters of the error; Blue
+         noise is ordered dither with a 32×32 blue-noise threshold (void-and-cluster, built once) instead of a Bayer grid, so
+         there is no visible pattern. Ink and Paper recolour Mono. Ordered with black on white is the old kernel exactly. */
+      { key: 'method', label: 'Method', def: 0, options: [[0, 'Ordered'], [1, 'Floyd–Steinberg'], [2, 'Atkinson'], [3, 'Blue noise']], note: 'Error diffusion (Floyd–Steinberg, Atkinson) shimmers on video' },
+      { key: 'ink', label: 'Ink', swatch: true, def: '#000000', overriddenBy: 'mono', liveWhen: 1 },
+      { key: 'paper', label: 'Paper', swatch: true, def: '#ffffff', overriddenBy: 'mono', liveWhen: 1 },
     ] },
     { type: 'halftone', label: 'Halftone Dots', params: [
       { key: 'size', label: 'Dot pitch', min: 2, max: 120, step: 1, def: 8, unit: 'px' },
@@ -5444,6 +5452,109 @@ window.FM = window.FM || {};
     return k > 255 ? 255 : k;
   }
 
+  /* ═══ DITHER, THE OTHER METHODS (#482 polish 13.6) ════════════════════════════════════════════════════════════════════════
+   * Levels, Cell size, Pattern and Output are the old kernel's, and each method quantises to the old levels (round(v / step)
+   * × step). Ordered reaches here only recoloured; Blue noise is Ordered with a blue-noise threshold. The error-diffusion
+   * methods work on CELLS (one pixel at Cell size 1, else the cell's mean, painted back as a block — the chunky 1-bit look),
+   * SERPENTINE (each row runs the other way, which keeps Floyd–Steinberg from drawing diagonal worms), with a rolling three-row
+   * error buffer rather than a whole-frame float copy. Floyd–Steinberg passes on 7/16 ahead, 3/16 behind-below, 5/16 below and
+   * 1/16 ahead-below; Atkinson 1/8 to six neighbours — three quarters of the error, so highlights and shadows clip cleaner.
+   * Mono quantises luma and, with Ink or Paper set, paints level v as Ink + (Paper − Ink) × v/255. Alpha is left alone. */
+  function dither13(d, W, H, step, sc, mx, mono, method, ink, paper, B, B2) {
+    const one = sc === 1;
+    const monoOut = (i, v) => {
+      if (!ink) { d[i] = v; d[i + 1] = v; d[i + 2] = v; return; }
+      const f = (v < 0 ? 0 : (v > 255 ? 255 : v)) / 255;
+      d[i] = ink[0] + (paper[0] - ink[0]) * f; d[i + 1] = ink[1] + (paper[1] - ink[1]) * f; d[i + 2] = ink[2] + (paper[2] - ink[2]) * f;
+    };
+    if (method !== 1 && method !== 2) {
+      const BN = method === 3 ? blueNoise13() : null;
+      for (let y = 0; y < H; y++) {
+        const gy = one ? y : Math.floor(y / sc);
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, gx = one ? x : Math.floor(x / sc);
+          const n = BN ? (BN[(gy & 31) * 32 + (gx & 31)] + 0.5) / 1024 : (mx === 0 ? B2[gy & 1][gx & 1] / 4 : mx === 2 ? BAYER8[(gy & 7) * 8 + (gx & 7)] : B[gy & 3][gx & 3] / 16);
+          const thr = (n - 0.5) * step;
+          if (mono) monoOut(i, Math.round(Math.round((d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 + thr) / step) * step));
+          else {
+            d[i] = Math.round(Math.round((d[i] + thr) / step) * step);
+            d[i + 1] = Math.round(Math.round((d[i + 1] + thr) / step) * step);
+            d[i + 2] = Math.round(Math.round((d[i + 2] + thr) / step) * step);
+          }
+        }
+      }
+      return;
+    }
+    const gw = one ? W : Math.ceil(W / sc), gh = one ? H : Math.ceil(H / sc), C = mono ? 1 : 3, top = Math.round(255 / step);
+    const row = new Float64Array(gw * C);
+    let E0 = new Float64Array(gw * C), E1 = new Float64Array(gw * C), E2 = new Float64Array(gw * C);
+    for (let gy = 0; gy < gh; gy++) {
+      const y0 = one ? gy : gy * sc, y1 = one ? gy + 1 : Math.min(H, y0 + sc);
+      row.fill(0);
+      for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, k = (one ? x : Math.floor(x / sc)) * C;
+        if (mono) row[k] += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114; else { row[k] += d[i]; row[k + 1] += d[i + 1]; row[k + 2] += d[i + 2]; }
+      }
+      if (!one) for (let gx = 0; gx < gw; gx++) { const n = (y1 - y0) * (Math.min(W, (gx + 1) * sc) - gx * sc); for (let c = 0; c < C; c++) row[gx * C + c] /= n; }
+      const ltr = (gy & 1) === 0, dir = ltr ? 1 : -1;
+      for (let k = 0; k < gw; k++) {
+        const gx = ltr ? k : gw - 1 - k, xa = gx + dir, xb = gx - dir, xc = gx + 2 * dir;
+        for (let c = 0; c < C; c++) {
+          const j = gx * C + c, v = row[j] + E0[j];
+          let qi = Math.round(v / step); qi = qi < 0 ? 0 : (qi > top ? top : qi);
+          const q = Math.round(qi * step), e = v - q;
+          row[j] = q;
+          if (method === 1) {
+            if (xa >= 0 && xa < gw) { E0[xa * C + c] += e * 7 / 16; E1[xa * C + c] += e / 16; }
+            if (xb >= 0 && xb < gw) E1[xb * C + c] += e * 3 / 16;
+            E1[j] += e * 5 / 16;
+          } else {
+            const e8 = e / 8;
+            if (xa >= 0 && xa < gw) { E0[xa * C + c] += e8; E1[xa * C + c] += e8; }
+            if (xc >= 0 && xc < gw) E0[xc * C + c] += e8;
+            if (xb >= 0 && xb < gw) E1[xb * C + c] += e8;
+            E1[j] += e8; E2[j] += e8;
+          }
+        }
+      }
+      for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, k = (one ? x : Math.floor(x / sc)) * C;
+        if (mono) monoOut(i, row[k]); else { d[i] = row[k]; d[i + 1] = row[k + 1]; d[i + 2] = row[k + 2]; }
+      }
+      const r0 = E0; E0 = E1; E1 = E2; E2 = r0; E2.fill(0);
+    }
+  }
+  /* A 32×32 BLUE-NOISE THRESHOLD TILE (#482 polish 13.6), by void-and-cluster (Ulichney 1993): a tenth of the cells from a fixed
+     seed, relaxed by moving the tightest cluster into the largest void until they coincide; those cells ranked tightest-first
+     downward, then every other cell ranked by largest void upward (the tightest cluster of zeros IS the largest void of ones —
+     their energies sum to a constant — so one rule serves both halves). Energy is a toroidal Gaussian, sigma 1.5, cut at 6.
+     Built once, on first use, from fixed numbers: the same tile in the preview, the export and every device. */
+  let _blueNoise13 = null;
+  function blueNoise13() {
+    if (_blueNoise13) return _blueNoise13;
+    const N = 32, S = N * N, R = 6, KW = 2 * R + 1, G = new Float64Array(KW * KW);
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) G[(dy + R) * KW + dx + R] = Math.exp(-(dx * dx + dy * dy) / 4.5);
+    const bit = new Uint8Array(S), E = new Float64Array(S);
+    const splat = (p, sgn) => { const px = p % N, py = (p - px) / N; for (let dy = -R; dy <= R; dy++) { const yy = (py + dy + N) % N; for (let dx = -R; dx <= R; dx++) E[yy * N + (px + dx + N) % N] += sgn * G[(dy + R) * KW + dx + R]; } };
+    const pick = (want, most) => { let b = -1, bv = 0; for (let p = 0; p < S; p++) { if (bit[p] !== want) continue; if (b < 0 || (most ? E[p] > bv : E[p] < bv)) { b = p; bv = E[p]; } } return b; };
+    let s = 0x9e3779b9;
+    const rnd = () => { s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) | 0; return (s >>> 0) / 4294967296; };
+    let ones = 0;
+    while (ones < S / 10) { const p = Math.floor(rnd() * S); if (!bit[p]) { bit[p] = 1; splat(p, 1); ones++; } }
+    for (let it = 0; it < 4 * S; it++) {
+      const c = pick(1, true); bit[c] = 0; splat(c, -1);
+      const v = pick(0, false); bit[v] = 1; splat(v, 1);
+      if (v === c) break;
+    }
+    const rank = new Uint16Array(S), proto = bit.slice(), E0 = E.slice();
+    for (let r = ones - 1; r >= 0; r--) { const c = pick(1, true); bit[c] = 0; splat(c, -1); rank[c] = r; }
+    bit.set(proto); E.set(E0);
+    for (let r = ones; r < S; r++) { const v = pick(0, false); bit[v] = 1; splat(v, 1); rank[v] = r; }
+    _blueNoise13 = rank;
+    return rank;
+  }
+  FM._blueNoise13 = blueNoise13;   // suite seam: the threshold tile, so a test can prove it is a full ranking with no low-frequency clumps
+
   /* A box blur of radius r on a 3-channel float plane, in place, replicating the edge (CRT bloom). */
   function crtBox13(b, W, H, r) {
     const div = 2 * r + 1, tmp = new Float32Array(Math.max(W, H) * 3);
@@ -6440,6 +6551,12 @@ window.FM = window.FM || {};
         const sc = p.scale == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.scale, t)));
         const mx = p.matrix == null ? 1 : (Math.round(FM.evalProp(p.matrix, t)) | 0);
         const mono = p.mono == null ? 0 : (Math.round(FM.evalProp(p.mono, t)) | 0);
+        /* #482 polish 13.6 — Method, Ink, Paper. Ordered with black ink on white paper (or the keys absent, a saved Dither) runs
+           the loop below untouched; anything else takes dither13. Ink and Paper only mean something in Mono. */
+        const method = p.method == null ? 0 : (Math.round(FM.evalProp(p.method, t)) | 0);
+        const ink = p.ink == null ? [0, 0, 0] : hexToRGB(FM.evalProp(p.ink, t)), paper = p.paper == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.paper, t));
+        const recol = !!mono && (ink[0] !== 0 || ink[1] !== 0 || ink[2] !== 0 || paper[0] !== 255 || paper[1] !== 255 || paper[2] !== 255);
+        if (method !== 0 || recol) { dither13(d, W, H, step, sc, mx, mono, method, recol ? ink : null, paper, B, B2); return; }
         const one = sc === 1;
         for (let y = 0; y < H; y++) {
           const gy = one ? y : Math.floor(y / sc);
