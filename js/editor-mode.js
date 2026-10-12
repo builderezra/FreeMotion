@@ -78,7 +78,9 @@ window.FM = window.FM || {};
   function busyReason() {
     if (FM._exporting) return 'export';
     if (FM.voiceRec && FM.voiceRec.isOpen && FM.voiceRec.isOpen()) return 'recording';   // §21 F2: open at all, not only recording (refusal line: "Close the recorder first")
-    if ((FM.spine && FM.spine.running) || body().classList.contains('sm-running')) return 'busy';
+    /* a Simple add still reading its files, or Simple edits queued behind the running one, are a command in flight too (§3.7).
+       Both are only ever non-zero from Simple's own commands, so in Full this answers exactly as before. */
+    if ((FM.spine && (FM.spine.running || FM.spine.reading > 0 || (FM.spine.queue && FM.spine.queue.length))) || body().classList.contains('sm-running')) return 'busy';
     if ((FM.timeline && FM.timeline.gestureLive && FM.timeline.gestureLive()) || (FM.canvasGestureLive && FM.canvasGestureLive())) return 'drag';
     return '';
   }
@@ -141,9 +143,13 @@ window.FM = window.FM || {};
     if (FM.groupContext && FM.exitGroup) { try { FM.exitGroup(true); } catch (e) {} }
     if (opts.from === 'cog') pendingFx = true; else if (!opts.quiet) crossfade();
     if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+    /* THE LISTENERS RUN BEFORE THE REBUILD (queue 980). simple-tools.js's listener redraws the left panel for the editor now on
+       screen, and that refresh can change which keyframes are armed: a clip picked in Simple drops Full's open category to the
+       grid. The timeline reads that once, at build time (FM.kfFocusProps), so it is built after it — the order refreshAll keeps
+       (inspector, then timeline). Built first, the diamonds stayed solid and draggable under an editor that had closed. */
+    listeners.forEach(f => { try { f(mode); } catch (e) {} });
     if (!opts.noRebuild && FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();   // syncProject runs INSIDE a rebuild: no second one
     if (FM._dockSheet) requestAnimationFrame(FM._dockSheet);
-    listeners.forEach(f => { try { f(mode); } catch (e) {} });
     /* focus never falls to <body> (§8.10 item 2): if what held it is gone from view, the cog it came from takes it */
     if (!opts.quiet && (!had || had === document.body || !had.isConnected || !had.getClientRects().length)) {
       const c = ['m-settings', 'btn-settings'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length);
@@ -242,6 +248,11 @@ window.FM = window.FM || {};
       /* PHASE 2 (DESIGN.md §8.3's table). A / D ripple-trim a main clip with the playhead inside it, else the main clip under
          the playhead (selected first); S splits the selected item, else that main clip; Delete and ⌘D on one main clip are
          Simple's delete and duplicate. An overlay, text or caption item keeps Full's own A / D / Delete / ⌘D (no ripple). */
+      /* Phase 2.2 (§8.3): Alt+← / Alt+→ are Move earlier / Move later on one selected main clip (free keys in Full) */
+      if (mode === 'simple' && e.altKey && !(e.metaKey || e.ctrlKey) && (e.code === 'ArrowLeft' || e.code === 'ArrowRight') && FM.spine && FM.spine.cmd && FM.spine.cmd.move) {
+        const sel = FM.selectionIds ? FM.selectionIds() : [];
+        if (sel.length === 1 && FM.spine.read(FM.scene).isMain(sel[0])) { e.preventDefault(); if (!e.repeat) FM.spine.cmd.move(sel[0], e.code === 'ArrowLeft' ? -1 : 1); return true; }
+      }
       if (mode !== 'simple' || e.altKey) return false;
       const mod = e.metaKey || e.ctrlKey;
       const S = FM.spine;

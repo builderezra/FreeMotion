@@ -27,6 +27,10 @@ file passes 400 lines.
    **Suites:** a full suite may use `run_in_background` with timeout = 1.6 × `tools/.suite-seconds` × 1000 (at most 7200000). Only `?only=` slices run in the foreground (timeout ≤ 600000). Never write minutes into prose.
    (This rule used to say "foreground, `timeout: 600000`" — written for a ship a fraction of today's length. On 5 Oct a
    ship started that way was killed at the harness's 10-minute limit.)
+   **No live waiter between ticks (11 Oct):** a background shell — a waiter on a ship log, a slice's `.done` — keeps the
+   session from counting as idle, and the cron fires only when it is idle: 17 minutes of ticks were lost to a waiter whose
+   `.done` never came. So the TICK watches a ship (ship.log and `.last-ship`, every minute). A waiter is only for what the tick
+   cannot see, always with its own deadline AND its own stop condition, and it is stopped (TaskStop) the moment it is not needed.
 7. **Mobile-first:** verify at ~380px before calling any UI change done.
 8. **Surface every open question in the reply.** 28 questions once piled up unasked. Never block
    silently, and never re-ask something he has already answered.

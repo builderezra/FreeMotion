@@ -5685,6 +5685,10 @@ window.FM = window.FM || {};
         FM.timeline.inheritLoopModes();
         if (FM.autoFitDuration) FM.autoFitDuration();
         FM.simpleTimeline.rebuild();
+        /* the empty-start class follows the scene here too (DESIGN §7.3: the playhead shows once any layer exists). buildTracks
+           is its only other writer and Simple never runs it, so the class Full set on an empty project stayed on after Simple's
+           first clips and hid the playhead line until a reload (queue 980, first-user audit item 1). */
+        { const tlPanel = document.getElementById('timeline-panel'); if (tlPanel) tlPanel.classList.toggle('tl-empty-start', isEmptyStart()); }
         fireRebuilt();
         return;
       }
