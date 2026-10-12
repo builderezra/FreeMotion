@@ -127556,4 +127556,51 @@
       });
     });
   });
+
+  /* #1132: "tap on the current open one to close it" keeps every block's bar on screen in both states, so a block flies WITH its
+     bar where it lands. The pair's flight lifted each bar out (absolute at the block's top) for a cross-fade that no longer
+     happens: an opening block's content flew under its own bar and dropped by the bar's height as it landed. Frozen at 90 % of
+     the flight — the content is fully faded in by 60 % — each block's bar and content must already sit where they land. */
+  test('1132 a block opening from all closed flies with its bar already where it lands — its content never passes under the bar and drops on landing — Canvas, Friends and the Editor block, at 380', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atPhoneWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+          const firstContent = function () { return Array.prototype.find.call(card.children, function (c) { return c.id !== 'cv-mini' && c.getClientRects().length && c.getBoundingClientRect().height > 0; }); };
+          const where = function (block, bar, content) {
+            const b = block.getBoundingClientRect(), c = content();
+            if (!c) return null;
+            return { bar: bar.getBoundingClientRect().top - b.top, content: c.getBoundingClientRect().top - b.top };
+          };
+          try {
+            for (const [k, exp, blockId, barId, content] of [
+              ['Canvas', 'cv-mini-exp', null, 'cv-mini', firstContent],
+              ['Friends', 'cv-fr-exp', 'cv-friends', 'cv-fr-bar', function () { return document.getElementById('cv-fr-body'); }],
+              ['the Editor block', 'cv-ed-what', 'cv-editor', 'cv-ed-bar', function () { return document.getElementById('cv-ed-body'); }]]) {
+              document.getElementById('m-settings').click(); await entranceDone(dlg); await sleep(40);
+              if (!dlg.classList.contains('cv-none')) throw new Error('setup: the cog did not open all closed');
+              const block = blockId ? document.getElementById(blockId) : card, bar = document.getElementById(barId);   // the Editor block is built at the cog's open
+              if (!block || !bar) throw new Error('setup: no ' + k + ' block in the cog');
+              document.getElementById(exp).click();
+              const f = flight978(dlg);
+              if (!dlg.classList.contains('cv-flying') || f.length < 2) throw new Error(k + ': opening it did not fly (' + f.length + ' animation(s))');
+              f.forEach(function (a) { a.pause(); a.currentTime = 0.9 * 460; });
+              const mid = where(block, bar, content);
+              f.forEach(function (a) { a.play(); });
+              await land945();
+              const end = where(block, bar, content);
+              if (!mid || !end) throw new Error(k + ': no content to measure (' + (mid ? 'landed' : 'in flight') + ')');
+              if (Math.abs(mid.bar - end.bar) > 2) throw new Error(k + ': in flight its bar sits ' + Math.round(mid.bar) + ' px into the block, landed ' + Math.round(end.bar));
+              if (Math.abs(mid.content - end.content) > 2) throw new Error(k + ': in flight its content starts ' + Math.round(mid.content) + ' px into the block and lands at ' + Math.round(end.content) + ' — it flew under its own bar and dropped as it landed');
+              if (!(end.content >= end.bar + 40)) throw new Error(k + ': CONTROL: landed, the content (' + Math.round(end.content) + ') does not start below the bar (' + Math.round(end.bar) + ') — the open block’s bar is not its header');
+              FM.closeCanvasDialog(); await sleep(60);
+            }
+          } finally {
+            try { flight978(dlg).forEach(function (a) { try { a.finish(); } catch (e) {} }); } catch (e) {}
+            FM.closeCanvasDialog(); await sleep(60);
+          }
+        });
+      });
+    });
+  });
 })();

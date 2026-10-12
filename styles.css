@@ -8781,6 +8781,17 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 #canvas-dialog.cv-bars.cv-pair.cv-fr-big:not(.cv-flying) > #cv-friends > #cv-fr-bar { display: flex; }
 #canvas-dialog.cv-bars.cv-pair.cv-ed-big:not(.cv-flying) > #cv-editor > #cv-ed-bar { display: flex; }
 #canvas-dialog.cv-bars.cv-pair.cv-ed-big > #cv-editor { order: 1; }
+/* THE FLIGHT, WITH BARS THAT STAY. A block's bar is part of its layout in BOTH states now — the whole block closed, its header
+   open — so for the 460 ms it flies where it will land: IN the block. The pair's flight rules (THE FLIGHT above, and a PC's tile
+   flight) lift every bar out for a cross-fade that no longer happens — absolute at the block's top, and on a PC a 176 px column
+   down the block's whole height — so an opening card's content flew under its own bar and dropped 76 px as it landed. Relative,
+   not static: a card he had scrolled shrinks with its bar moved into view (js/app.js sets its `top`). */
+#canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-flying > .export-card > .cv-mini,
+#canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-flying > #cv-friends > #cv-fr-bar,
+#canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-flying > #cv-editor > #cv-ed-bar { display: flex; position: relative; top: 0; right: auto; bottom: auto; left: auto; width: auto; z-index: 2; }
+/* …clipped, not scrolled: the open card's overflow-y: auto (ONE OPEN, above) out-ranked the flight's hidden, so a PC's scrollbar
+   could come and go on the card mid-air and reflow it 15 px narrower */
+#canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-flying > .export-card { overflow: hidden; }
 /* Cancel / Apply stay reachable on the shortest phones, where the open Canvas card scrolls inside its box (320×568, 375×553) */
 #canvas-dialog.cv-bars > .export-card .dialog-actions { position: sticky; bottom: 0; background: var(--panel); margin: 0 -24px; padding: 14px 24px 18px; }
 @media (max-width: 700px) {
@@ -8803,6 +8814,13 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side > #cv-friends { grid-area: fr; order: 0; }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side > #cv-editor { grid-area: ed; order: 0; width: 176px; }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying > * { grid-area: auto; }   /* the v17.36 lesson: no area while flying */
+  /* …and a row bar keeps its 64 px in flight (the tile flight set every bar's height to auto; a tile's is auto anyway) */
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying.cv-none > .export-card > .cv-mini,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying.cv-none > #cv-friends > #cv-fr-bar,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying.cv-fr-big > #cv-friends > #cv-fr-bar,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying.cv-none > #cv-editor > #cv-ed-bar,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying.cv-ed-big > #cv-editor > #cv-ed-bar { height: 64px; }
   /* the slim App row: 176 × 56, the gear, the 38 px end */
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side #cv-app-bar { flex-direction: row; align-items: center; height: 54px; padding: 8px 8px 8px 10px; gap: 8px; }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side #cv-app-bar .cv-mini-ico { width: 30px; height: 30px; }
