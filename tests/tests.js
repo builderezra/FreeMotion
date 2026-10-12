@@ -125019,4 +125019,119 @@
     if (Math.abs(b15At(aV, P.width, xe, ye)[0] - b15At(a0, P.width, xe, ye)[0]) > 2) fails.push('a Vertical blur on an adjustment layer smeared a vertical edge sideways');
     if (fails.length) throw new Error(fails.join(' · '));
   });
+
+  /* MATCH GRADE (#482 15.6). The pin is the OLD algorithm rebuilt from its own canvas steps: the clip and the reference drawn
+     alone on a clear frame, each measured at quarter size (the same downscale onto a willReadFrequently canvas), the transfer
+     worked out and applied to the clip's own pixels. The clip covers the frame opaquely, so that IS the frame — on any machine. */
+  const B15_MG_NEW = { sample: 0, at: 0, smooth: 0, skin: 0 };
+  function b15MgOracle(P, L0, R0, t, amount, mode, rs) {
+    const Q = Object.assign({}, P, { background: null });
+    const cA = b15Draw([L0], t, Q, rs), cR = b15Draw([R0], t, Q, rs), W = cA.width, H = cA.height;
+    const qw = Math.max(1, W >> 2), qh = Math.max(1, H >> 2);
+    const q = document.createElement('canvas'); q.width = qw; q.height = qh;
+    const qc = q.getContext('2d', { willReadFrequently: true });
+    const stats = c => {
+      qc.clearRect(0, 0, qw, qh); qc.drawImage(c, 0, 0, qw, qh);
+      const d = qc.getImageData(0, 0, qw, qh).data, s = [0, 0, 0], s2 = [0, 0, 0]; let n = 0;
+      for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 8) continue; for (let k = 0; k < 3; k++) { s[k] += d[i + k]; s2[k] += d[i + k] * d[i + k]; } n++; }
+      const mean = [0, 0, 0], sd = [0, 0, 0];
+      for (let k = 0; k < 3; k++) { mean[k] = s[k] / n; sd[k] = Math.sqrt(Math.max(0, s2[k] / n - mean[k] * mean[k])); }
+      return { mean: mean, sd: sd };
+    };
+    const A = stats(cA), R = stats(cR), gain = [1, 1, 1], off = [0, 0, 0];
+    for (let k = 0; k < 3; k++) {
+      const g = (mode === 1 || A.sd[k] < 1) ? 1 : Math.max(0.25, Math.min(4, R.sd[k] / A.sd[k])), target = mode === 2 ? A.mean[k] : R.mean[k];
+      gain[k] = 1 + (g - 1) * amount; off[k] = A.mean[k] + (target - A.mean[k]) * amount;
+    }
+    const d = cA.getContext('2d').getImageData(0, 0, W, H).data;
+    for (let i = 0; i < d.length; i += 4) { if (d[i + 3] === 0) continue; for (let k = 0; k < 3; k++) d[i + k] = off[k] + (d[i + k] - A.mean[k]) * gain[k]; }
+    return d;
+  }
+  function b15MgRef(P, keyed) {   // a reference smaller than the frame, whose colour changes over the clip when keyed (a peak at 1.5 s)
+    const R = FM.makeLayer('shape', { name: 'b15 ref', shape: 'rect', x: P.width * 0.4, y: P.height / 2, shapeW: P.width * 0.6, shapeH: P.height * 0.7, fill: '#c04a20', start: 0, duration: 5 });
+    R.fillGradient = { enabled: true, type: 'linear', angle: 90, c0: keyed ? { kf: [{ t: 0, v: '#300810', e: 'linear' }, { t: 1.5, v: '#10c0f0', e: 'linear' }, { t: 3, v: '#300810', e: 'linear' }] } : '#200808', c1: '#f0a050' };
+    return R;
+  }
+  const b15Mg = (R, over) => { const e = FM.fxRegistry.makeInstance('matchgrade'); e.params = Object.assign({ amount: 1, mode: 0 }, over || {}); e.params.source = R.id; return e; };
+
+  test('482 15.6 pin: Match Grade with Measure, Hold at, Smoothing and Protect skin at their defaults is the old live match — the old algorithm rebuilt step by step, saved, filled and new, at full amount, half, Colour only and Contrast only, at two moments and plate scale 1 and 0.5', { item: '482', budgetMs: 120000 }, function () {
+    const P = b15P(), moved = [];
+    const CFG = { full: { amount: 1, mode: 0 }, half: { amount: 0.5, mode: 0 }, colour: { amount: 1, mode: 1 }, contrast: { amount: 1, mode: 2 } };
+    Object.keys(CFG).forEach(n => [0.5, 1.7].forEach(t => [1, 0.5].forEach(rs => {
+      const R = b15MgRef(P, true);
+      const want = b15MgOracle(P, b15Plate(P), R, t, CFG[n].amount, CFG[n].mode, rs);
+      const saved = { type: 'matchgrade', enabled: true, params: Object.assign({ source: R.id }, CFG[n]) };
+      [['absent', saved], ['filled at render time', FM._fillFxParams(b15Copy(saved))], ['present at the defaults', Object.assign(b15Copy(saved), { params: Object.assign({ source: R.id }, CFG[n], B15_MG_NEW) })]].forEach(([how, fx]) => {
+        const L = b15Plate(P); L.effects = [fx];
+        const got = b15Px([L, R], t, P, rs);
+        if (!b15Same(got, want)) moved.push(n + ' at ' + t + ' s, plate scale ' + rs + ', new keys ' + how + ': ' + b15Diff(got, want) + ' off the old match');
+      });
+    })));
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 6).join(' · '));
+    b15Catalogue('matchgrade', Object.assign({ amount: 1 }, B15_MG_NEW), { sample: 1, at: 2.5, smooth: 0.8, skin: 70 });
+  });
+
+  test('482 15.6 Match Grade Hold at time grades every frame with the transfer measured at that one moment — the same picture at 1 s and 2.5 s while the reference changes, equal to Every frame at the held moment — Smoothing averages a window, an edit to the reference re-measures, and Protect skin holds a skin tone back (CONTROL: Every frame changes between 1 s and 2.5 s)', { item: '482', budgetMs: 90000 }, function () {
+    const P = b15P(), fails = [];
+    const R = b15MgRef(P, true);
+    const shot = (over, t, ref) => { const L = b15Plate(P); L.effects = [b15Mg(ref || R, over)]; return b15Px([L, ref || R], t, P); };
+    const e1 = shot({}, 1), e2 = shot({}, 2.5);
+    if (b15Same(e1, e2)) throw new Error('CONTROL: Every frame draws the same at 1 s and 2.5 s although the reference changes - this test cannot see a hold');
+    const h1 = shot({ sample: 1, at: 0.5 }, 1), h2 = shot({ sample: 1, at: 0.5 }, 2.5), e05 = shot({}, 0.5);
+    if (!b15Same(h1, h2)) fails.push('Hold at 0.5 s draws differently at 1 s and 2.5 s (' + b15Diff(h1, h2) + ') - the transfer is not held');
+    if (!b15Same(h1, e05)) fails.push('Hold at 0.5 s is not Every frame at 0.5 s (' + b15Diff(h1, e05) + ')');
+    // an edit to the reference is a new measurement, not the old numbers — the SAME clip, drawn again after the edit
+    const Lk = b15Plate(P), hold = ref => { Lk.effects = [b15Mg(ref, { sample: 1, at: 0.5 })]; return b15Px([Lk, ref], 2.5, P); };
+    const k1 = hold(R), k2 = hold(R);
+    if (!b15Same(k1, k2)) fails.push('CONTROL: the same held grade drawn twice differs (' + b15Diff(k1, k2) + ')');
+    const R2 = b15MgRef(P, true); R2.id = R.id; R2.fillGradient.c1 = '#40ff40';
+    if (b15Same(hold(R2), k1)) fails.push('after the reference was edited the held grade did not change - the old measurement stood in for the new picture');
+    // Smoothing: across the peak at 1.5 s the window's average is gentler than the frame's own, and it is the same every time
+    const s15 = shot({ smooth: 1 }, 1.5), e15 = shot({}, 1.5), s15b = shot({ smooth: 1 }, 1.5);
+    if (b15Same(s15, e15)) fails.push('Smoothing 1 s at the reference’s peak draws exactly Every frame - nothing was averaged');
+    if (!b15Same(s15, s15b)) fails.push('Smoothing drew differently the second time at the same moment');
+    if (!b15Same(shot({ smooth: 0 }, 1.5), e15)) fails.push('CONTROL: Smoothing 0 is not Every frame');
+    // Protect skin: a skin-tone clip graded toward a blue reference barely moves; a blue clip graded toward skin moves the same either way
+    const flat = (fill, refFill, skin) => { const L = b15Flat(P, fill), Rf = b15Flat(P, refFill); Rf.shapeW = P.width * 0.5; L.effects = [b15Mg(Rf, { skin: skin })]; return b15At(b15Px([L, Rf], 0.5, P), P.width, P.width >> 1, P.height >> 1); };
+    const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    const skin0 = [224, 160, 112], sOff = dist(flat('#e0a070', '#2050c0', 0), skin0), sOn = dist(flat('#e0a070', '#2050c0', 100), skin0);
+    if (!(sOff > 150)) fails.push('CONTROL: the match barely moved the skin tone without the guard (' + sOff + ')');
+    if (!(sOn < sOff * 0.25)) fails.push('Protect skin 100 % still moved the skin tone ' + sOn + ' of ' + sOff);
+    const blue0 = [64, 112, 208], bOff = dist(flat('#4070d0', '#e0a070', 0), blue0), bOn = dist(flat('#4070d0', '#e0a070', 100), blue0);
+    if (!(bOff > 100) || Math.abs(bOn - bOff) > 3) fails.push('Protect skin changed how far a blue clip moves (' + bOff + ' -> ' + bOn + ') - it must spare skin only');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('482 15.6 Match Grade Hold at time on a VIDEO reference measures the clip’s decoded frame at that moment, not the frame the element is showing; without decoded frames it measures the frame on screen and asks for them, and the exporter is told to decode them (CONTROL: the frame on screen and the held frame differ)', { item: '482', budgetMs: 60000 }, function () {
+    if (!FM.media || !FM.media.set || !FM.media.get) throw new Error('FM.media is not loaded');
+    const P = b15P(), fails = [];
+    const solid = c => { const cv = document.createElement('canvas'); cv.width = P.width; cv.height = P.height; const g = cv.getContext('2d'); g.fillStyle = c; g.fillRect(0, 0, P.width, P.height); return cv; };
+    const V = FM.makeLayer('video', { name: 'b15 clip', x: P.width / 2, y: P.height / 2, start: 0, duration: 5 });
+    const frames = []; for (let i = 0; i < 50; i++) frames.push(solid(i < 10 ? '#20e040' : '#3050f0'));   // 10 fps: green for the first second, then blue
+    const rec = { kind: 'video', el: solid('#f03020'), width: P.width, height: P.height, frameCache: { fps: 10, effFps: 10, count: 50, frames: frames, decoded: 50, duration: 5 } };   // the element shows red
+    const asked = [], want0 = FM.wantFrameCache, live0 = FM._fxStats.mgLive;
+    FM.wantFrameCache = id => { asked.push(id); };
+    FM.media.set(V.id, rec);
+    try {
+      const shot = (src, over, t) => { const L = b15Plate(P); L.effects = [b15Mg(src, over)]; return b15Px([L, src], t, P); };
+      const asShape = c => b15Flat(P, c);
+      const greenRef = shot(asShape('#20e040'), {}, 2), redRef = shot(asShape('#f03020'), {}, 2);
+      if (b15Same(greenRef, redRef)) throw new Error('CONTROL: matching to green and to red draws the same - this test cannot tell the frames apart');
+      const held = shot(V, { sample: 1, at: 0.5 }, 2);
+      if (!b15Same(held, greenRef)) fails.push('Hold at 0.5 s on a video reference did not measure its decoded frame at 0.5 s (green): ' + b15Diff(held, greenRef) + ' off the green match' + (b15Same(held, redRef) ? ' - it measured the frame on screen' : ''));
+      // no decoded frames: the frame on screen, a note in the stats, and a request for the frames
+      delete rec.frameCache;
+      const live = shot(V, { sample: 1, at: 0.5 }, 2);
+      if (!b15Same(live, redRef)) fails.push('without decoded frames the held match did not fall back to the frame on screen (' + b15Diff(live, redRef) + ' off red)');
+      if (asked.indexOf(V.id) < 0) fails.push('without decoded frames nothing asked for them (FM.wantFrameCache was not called)');
+      if (!(FM._fxStats.mgLive > live0)) fails.push('the fallback to the frame on screen was not counted (FM._fxStats.mgLive)');
+      // the exporter decodes the frames of every clip a held or smoothed Match Grade reads, and of no other
+      const L = b15Plate(P); L.effects = [b15Mg(V, { sample: 1, at: 0.5 })];
+      const L2 = b15Plate(P); L2.effects = [b15Mg(V, {})];
+      const need = FM.matchGradeFrameLayers ? FM.matchGradeFrameLayers({ project: P, layers: [L, V] }) : null, none = FM.matchGradeFrameLayers ? FM.matchGradeFrameLayers({ project: P, layers: [L2, V] }) : null;
+      if (!need || !need[V.id]) fails.push('FM.matchGradeFrameLayers does not name the video a held Match Grade reads - the export would measure the wrong frame');
+      else if (Object.keys(none).length) fails.push('FM.matchGradeFrameLayers names a clip that an Every-frame Match Grade reads - it would decode for nothing');
+    } finally { FM.wantFrameCache = want0; FM.media.remove(V.id); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();

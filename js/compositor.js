@@ -1643,6 +1643,12 @@ window.FM = window.FM || {};
     { type: 'matchgrade', label: 'Match Grade', layer: true, layerLabel: 'Reference layer', desc: 'Pushes this clip\u2019s colour toward another one\u2019s — matches the average tone and the contrast. The quickest way to make two cameras agree; finish by hand with Levels or HSL Bands.', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'mode', label: 'Match', options: [[0, 'Colour + contrast'], [1, 'Colour only'], [2, 'Contrast only']], def: 0 },
+      /* #482 15.6: steadying the match (see mgHeldStats) and sparing skin. Every frame, no smoothing and no skin guard are the
+         old live match, byte for byte. */
+      { key: 'sample', label: 'Measure', options: [[0, 'Every frame'], [1, 'Hold at time']], def: 0 },
+      { key: 'at', label: 'Hold at', min: 0, max: 600, step: 0.1, def: 0, unit: 's', overriddenBy: 'sample', liveWhen: 1, note: 'Seconds into this clip — both clips are measured at that one frame.' },
+      { key: 'smooth', label: 'Smoothing', min: 0, max: 2, step: 0.05, def: 0, unit: 's', overriddenBy: 'sample', liveWhen: 0 },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
 
     /* ---- the FILTER CONTAINER (queue 113, step 3) ----------------------------------------------
@@ -10741,6 +10747,106 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *
    * Statistics are gathered at QUARTER resolution: a mean and a sigma do not need every pixel, and
    * that is the difference between one cheap pass and two full-frame readbacks. */
+  /* ═══ HOLD AT TIME, SMOOTHING, PROTECT SKIN (#482 15.6) ═════════════════════════════════════════════════════════════
+   * Measured afresh every frame, the match breathes: anything that crosses either shot moves both averages and the grade
+   * pumps. Two ways to steady it, both on the statistics, never on the pixels:
+   *   Hold at time — measure both clips at ONE moment (seconds into this clip) and grade every frame with that transfer.
+   *   Smoothing    — measure across a window of that many seconds around the frame (five moments on the project's frame
+   *                  grid) and grade with the average.
+   * Every moment measured is remembered (_mgMemo) under a signature of both layers' saved content and the plate size, so a
+   * scrub or a replay pays nothing twice and an edit to either layer is a different key — the old numbers can never stand
+   * in for the new picture. Stateless: a moment's numbers depend on that moment alone, so preview, export and a scrub agree.
+   * A moment other than the one on screen is drawn with drawLayer at that time (_mgOff). Shapes, text, photos, GIFs and
+   * generated content draw any moment exactly; a VIDEO shows its element's current frame, so for a video the other moment
+   * comes from its decoded frame cache (the one Reverse uses) — asked for here (FM.wantFrameCache, app.js) and built before
+   * an export (exporter prepareCaches, FM.matchGradeFrameLayers). Until a video's frames are decoded the frame on screen is
+   * measured instead (counted in FM._fxStats.mgLive), so a held grade settles the moment its frames arrive.
+   * Protect skin holds the grade back on Vibrance's orange wedge (drawMatchGrade's apply loop). At the defaults — Every
+   * frame, no smoothing, no skin — none of this runs and the old code draws byte for byte. */
+  const _mgMemo = new Map(), _mgAsked = new Map();   // _mgAsked: clip id → when its frames were last asked for
+  let _mgOff = 0;
+  FM._fxStats.mgLive = 0;
+  function mgHash(s) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36) + '.' + s.length.toString(36); }
+  function mgDrawable(L) {   // can this layer be drawn at another moment and show THAT moment?
+    if (!L || L.type === '_flat') return false;   // a flattened group unit is one picture of now
+    if (L.type !== 'video') return true;
+    const m = FM.media && FM.media.get && FM.media.get(L.id);
+    return !!(m && m.frameCache && m.frameCache.count);
+  }
+  function mgAsk(L) {   // once per clip, and again after 15 s if the frames are still not there (an export frees its own copy)
+    if (!L || L.type !== 'video' || !FM.wantFrameCache) return;
+    const now = Date.now(), last = _mgAsked.get(L.id);
+    if (last && now - last < 15000) return;
+    _mgAsked.set(L.id, now);
+    try { FM.wantFrameCache(L.id); } catch (e) {}
+  }
+  const mgOn = v => v != null && (v && typeof v === 'object' ? Array.isArray(v.kf) && v.kf.some(q => q && Number(q.v) > 0) : Number(v) > 0);
+  // which video layers a Match Grade measures at other moments — the exporter decodes their frames first
+  FM.matchGradeFrameLayers = function (scene) {
+    const out = Object.create(null), ls = (scene && scene.layers) || [];
+    const walk = (L, effs) => (effs || []).forEach(e => {
+      if (!e || e.enabled === false) return;
+      if (Array.isArray(e.effects)) { walk(L, e.effects); return; }
+      if (e.type !== 'matchgrade' || !e.params || !(mgOn(e.params.sample) || mgOn(e.params.smooth))) return;
+      if (L.type === 'video') out[L.id] = 1;
+      const R = e.params.source && ls.find(l => l.id === e.params.source);
+      if (R && R.type === 'video') out[R.id] = 1;
+    });
+    ls.forEach(L => walk(L, L.effects));
+    return out;
+  };
+  function mgHeldStats(p, layer, clean, rLayer, t, scene, slot, A0, R0, W, H, OX, OY, PWp, PHp, stats) {
+    const sample = p.sample == null ? 0 : (Math.round(FM.evalProp(p.sample, t)) | 0);
+    let smooth = p.smooth == null ? 0 : FM.evalProp(p.smooth, t); smooth = smooth > 0 ? Math.min(2, smooth) : 0;
+    if (sample !== 1 && !smooth) return null;
+    const fps = (scene && scene.project && scene.project.fps) || 30;
+    let sig = '';
+    try { sig = JSON.stringify([clean, rLayer], FM.jsonReplacer); } catch (e) { return null; }
+    sig = layer.id + '|' + rLayer.id + '|' + W + 'x' + H + '|' + mgHash(sig);
+    const nowF = Math.round(t * fps), live = (A0 && R0) ? { A: A0, R: R0 } : null;
+    const keep = (f, v) => { if (_mgMemo.size > 4000) _mgMemo.clear(); _mgMemo.set(sig + '|' + f, v); };
+    if (live) keep(nowF, live);                     // the frame on screen is a moment the others can use
+    const at = f => {                               // the numbers of frame f: remembered, drawn now, or undefined (not drawable yet)
+      if (f === nowF) return live;
+      const k = sig + '|' + f;
+      if (_mgMemo.has(k)) return _mgMemo.get(k);
+      if (!mgDrawable(layer) || !mgDrawable(rLayer)) { mgAsk(layer); mgAsk(rLayer); return undefined; }
+      const tt = f / fps;
+      _mgOff++;
+      try {
+        const bc = slot.B.getContext('2d'), cc = slot.C.getContext('2d');
+        baseT(bc); bc.clearRect(OX, OY, PWp, PHp); bc.globalAlpha = 1; bc.globalCompositeOperation = 'source-over'; bc.filter = 'none';
+        drawLayer(bc, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), tt, scene);
+        baseT(cc); cc.clearRect(OX, OY, PWp, PHp); cc.globalAlpha = 1; cc.globalCompositeOperation = 'source-over'; cc.filter = 'none';
+        drawLayer(cc, Object.assign({}, rLayer, { blendMode: 'normal', effects: (rLayer.effects || []).filter(e => e.type !== 'matchgrade'), transform: Object.assign({}, rLayer.transform, { opacity: 1 }) }), tt, scene);
+      } finally { _mgOff--; }
+      const a = stats(slot.B), r = stats(slot.C), v = (a && r) ? { A: a, R: r } : null;
+      keep(f, v);
+      return v;
+    };
+    if (sample === 1) {
+      const st = layer.start || 0, du = layer.duration > 0 ? layer.duration : 0;
+      let hold = p.at == null ? 0 : FM.evalProp(p.at, t); hold = Number.isFinite(hold) && hold > 0 ? hold : 0;
+      if (du > 0) hold = Math.min(hold, Math.max(0, du - 1 / fps));   // inside the clip, where it has pixels
+      const got = at(Math.round((st + hold) * fps));
+      if (got === undefined) { FM._fxStats.mgLive++; return null; }   // a video not decoded yet: the frame on screen, for now
+      return got || live;
+    }
+    // Smoothing: the mean of five moments across the window, on the project's frame grid so neighbouring frames share them
+    const acc = { A: { mean: [0, 0, 0], sd: [0, 0, 0] }, R: { mean: [0, 0, 0], sd: [0, 0, 0] } };
+    let n = 0, missing = 0;
+    for (let k = -2; k <= 2; k++) {
+      const f = nowF + Math.round(k * smooth * fps / 4), v = at(f);
+      if (v === undefined) { missing++; continue; }
+      if (!v) continue;
+      for (let c = 0; c < 3; c++) { acc.A.mean[c] += v.A.mean[c]; acc.A.sd[c] += v.A.sd[c]; acc.R.mean[c] += v.R.mean[c]; acc.R.sd[c] += v.R.sd[c]; }
+      n++;
+    }
+    if (missing) FM._fxStats.mgLive++;
+    if (!n) return live;
+    for (let c = 0; c < 3; c++) { acc.A.mean[c] /= n; acc.A.sd[c] /= n; acc.R.mean[c] /= n; acc.R.sd[c] /= n; }
+    return acc;
+  }
   function drawMatchGrade(ctx, layer, t, scene, fx) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -10786,7 +10892,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         for (let k = 0; k < 3; k++) { mean[k] = s[k] / n; sd[k] = Math.sqrt(Math.max(0, s2[k] / n - mean[k] * mean[k])); }
         return { mean: mean, sd: sd };
       };
-      const A = stats(slot.A), R = stats(slot.M);
+      const A0 = stats(slot.A), R0 = stats(slot.M);
+      // #482 15.6: Hold at time and Smoothing measure other moments too; at their defaults this is null and A, R are the live ones
+      const held = mgHeldStats(p, layer, clean, rLayer, t, scene, slot, A0, R0, W, H, OX, OY, PWp, PHp, stats);
+      const A = held ? held.A : A0, R = held ? held.R : R0;
       if (!A || !R) { drawLayer(ctx, clean, t, scene); return; }
       let img;
       try { img = actx.getImageData(0, 0, W, H); } catch (e) { drawLayer(ctx, clean, t, scene); return; }
@@ -10799,7 +10908,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         gain[k] = 1 + (g - 1) * amount;
         off[k] = A.mean[k] + (target - A.mean[k]) * amount;
       }
-      for (let i = 0; i < d.length; i += 4) {
+      FM._mgLastGains = { gain: gain.slice(), off: off.slice(), mean: A.mean.slice() };   // suite seam (#482 15.6): the transfer this frame used
+      let skin = p.skin == null ? 0 : FM.evalProp(p.skin, t); skin = skin > 0 ? Math.min(100, skin) / 100 : 0;
+      if (skin > 0) {   // #482 15.6: Protect skin — the grade held back on Vibrance's orange skin wedge, judged on the clip's own colour
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] === 0) continue;
+          const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2];
+          let w = 1;
+          const mx = r0 > g0 ? (r0 > b0 ? r0 : b0) : (g0 > b0 ? g0 : b0), mn = r0 < g0 ? (r0 < b0 ? r0 : b0) : (g0 < b0 ? g0 : b0);
+          if (mx > 0 && r0 === mx && b0 === mn) { const sw = 1 - Math.abs((g0 - b0) / (mx - mn || 1) - 0.45) / 0.55; if (sw > 0) w = 1 - skin * (sw < 1 ? sw : 1); }
+          d[i] = r0 + (off[0] + (r0 - A.mean[0]) * gain[0] - r0) * w;
+          d[i + 1] = g0 + (off[1] + (g0 - A.mean[1]) * gain[1] - g0) * w;
+          d[i + 2] = b0 + (off[2] + (b0 - A.mean[2]) * gain[2] - b0) * w;
+        }
+      } else for (let i = 0; i < d.length; i += 4) {
         if (d[i + 3] === 0) continue;
         d[i] = off[0] + (d[i] - A.mean[0]) * gain[0];
         d[i + 1] = off[1] + (d[i + 1] - A.mean[1]) * gain[1];
@@ -18116,7 +18238,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // frame-blend slow-mo is on. With frame-blend + speed<1 we cross-dissolve the two
         // nearest source frames so slow motion looks smooth instead of stuttering on dupes.
         const slow = (FM.speedAt ? FM.speedAt(layer, t) : (layer.speed || 1)) < 1;   // ramped speed is an object — raw compare was always false, so frame-blend never engaged on ramps
-        if (m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow))) {
+        if (m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow) || _mgOff > 0)) {   // _mgOff: Match Grade measuring another moment (#482 15.6)
           const local = FM.layerLocalTime(layer, t);
           if (local != null) {
             const fc = m.frameCache, fpos = local * (fc.effFps || fc.fps);   // effFps spans the whole clip even past the 900-frame cap
