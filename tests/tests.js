@@ -124593,4 +124593,233 @@
     const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 14 — Blurs, repetition, 3D: Tilt Shift, Lens Blur, Directional Blur, Backfill, Trail, Tile Grid, Scatter Array, the 3D solids, Card Flip ═══
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 14
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); 14.1 answers hunt C45, 14.3 half of C25, 14.7 C29. The rule that
+   * makes it safe (§0.3): every new key's default is the old look, or carries a `legacy` that is, because a saved instance
+   * that lacks a key is filled at render time (queue 784) with the kernel's own fallback. Each item proves it against
+   * hashes captured on fc8866f1 (the tree before the batch) through the real kernel:
+   *   · PIXEL kernels (Tilt Shift, Lens Blur) on typed arrays through FM._applyPixelFx — bytes, the same on every OS;
+   *   · CANVAS kernels through b14Rec below, a context that RECORDS every call with every number written out in full. The
+   *     same calls in the same order draw the same pixels, so the log's hash pins a canvas kernel byte for byte — and it is
+   *     JavaScript arithmetic, not a rasteriser, so it reads the same on every OS and needs no pinned() table. The same
+   *     record carries where each image lands (the transform applied to its destination) and the clip it lands in, which
+   *     is what the behaviour tests measure on the canvas kernels. */
+  function b14Plate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  }
+  function b14Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b14Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= (typeof d === 'string' ? d.charCodeAt(i) : d[i]); h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b14Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  /* The kernel through FM._applyPixelFx: the PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`. */
+  function b14Run(type, params, W, H, t, ps, d0) { const d = d0 || b14Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out (on fc8866f1 makeInstance has none of them, which is
+     how the pins were captured). */
+  function b14Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Eight hashes per config: two plate sizes, the export (ps 1) and a half-size preview plate (ps 0.5), at two moments. */
+  function b14Shots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b14Hash(b14Run(type, JSON.parse(JSON.stringify(params)), W, H, t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new instance), against the pins. */
+  function b14Pinned(type, NEW, CFG, PIN, shots) {
+    const moved = [];
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b14Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: JSON.parse(JSON.stringify(abs)) }).params;
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = (shots || b14Shots)(type, p); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the
+     render-time fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default
+     value comes back from the load sanitiser as it was written. A key whose old look differs from its new default carries
+     `legacy` instead, and the fill must leave it absent (LEG lists those, with the legacy value). */
+  function b14Catalogue(type, NEW, SET, LEG) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want);
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      if (LEG && k in LEG) {
+        if (pd.legacy !== LEG[k]) throw new Error(type + ' ' + k + ' carries legacy ' + pd.legacy + ', not ' + LEG[k] + ' - a saved ' + type + ' without the key would not draw as it did');
+        const f = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+        if (k in f) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + f[k] + ' - a legacy key must stay absent so the kernel draws the old look');
+        return;
+      }
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l48214' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(SET)) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  const b14Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b14Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b14Mean = d => { const m = [0, 0, 0], n = d.length / 4; for (let i = 0; i < d.length; i += 4) { m[0] += d[i]; m[1] += d[i + 1]; m[2] += d[i + 2]; } return m.map(v => v / n); };
+  /* THE RECORDING CONTEXT. `log` is every call and every property set, numbers in full; `draws` is every drawImage with the
+     device-space box it can paint (its destination under the current transform, cut to the bounding box of every clip in
+     force), its alpha, compositing and filter; `fills` the same for fillRect. Images are named img0, img1… in the order
+     they first appear, so a kernel drawing its own plate and a texture can be told apart. */
+  function b14Rec(W, H) {
+    const log = [], draws = [], fills = [], ids = new Map(), stack = [];
+    let st = { m: [1, 0, 0, 1, 0, 0], clip: [], globalAlpha: 1, globalCompositeOperation: 'source-over', filter: 'none', fillStyle: '#000000', strokeStyle: '#000000', imageSmoothingEnabled: true, imageSmoothingQuality: 'low', lineWidth: 1, lineJoin: 'miter', lineCap: 'butt' };
+    let path = [], sub = null;
+    const tag = o => { if (!ids.has(o)) ids.set(o, 'img' + ids.size); return ids.get(o); };
+    const fmt = v => typeof v === 'number' ? String(v) : typeof v === 'string' ? JSON.stringify(v) : (v && typeof v === 'object') ? (typeof v.a === 'number' && typeof v.f === 'number' ? 'M(' + [v.a, v.b, v.c, v.d, v.e, v.f].join(',') + ')' : tag(v)) : String(v);
+    const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+    const ap = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+    const box = pts => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; pts.forEach(q => { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }); return [x0, y0, x1, y1]; };
+    const cut = b => { st.clip.forEach(c => { const k = box(c); b = [Math.max(b[0], k[0]), Math.max(b[1], k[1]), Math.min(b[2], k[2]), Math.min(b[3], k[3])]; }); return b; };
+    const R = { canvas: { width: W, height: H }, log: log, draws: draws, fills: fills, clips: [] };
+    const rec = (name, args) => { log.push(name + '(' + Array.prototype.map.call(args, fmt).join(',') + ')'); };
+    R.save = function () { rec('save', arguments); stack.push(Object.assign({}, st, { m: st.m.slice(), clip: st.clip.slice() })); };
+    R.restore = function () { rec('restore', arguments); if (stack.length) st = stack.pop(); };
+    R.translate = function (x, y) { rec('translate', arguments); st.m = mul(st.m, [1, 0, 0, 1, x, y]); };
+    R.scale = function (x, y) { rec('scale', arguments); st.m = mul(st.m, [x, 0, 0, y, 0, 0]); };
+    R.rotate = function (a) { rec('rotate', arguments); const c = Math.cos(a), s = Math.sin(a); st.m = mul(st.m, [c, s, -s, c, 0, 0]); };
+    R.transform = function (a, b, c, d, e, f) { rec('transform', arguments); st.m = mul(st.m, [a, b, c, d, e, f]); };
+    R.setTransform = function (a, b, c, d, e, f) { rec('setTransform', arguments); st.m = (a && typeof a === 'object') ? [a.a, a.b, a.c, a.d, a.e, a.f] : (arguments.length ? [a, b, c, d, e, f] : [1, 0, 0, 1, 0, 0]); };
+    R.resetTransform = function () { rec('resetTransform', arguments); st.m = [1, 0, 0, 1, 0, 0]; };
+    R.getTransform = function () { const m = st.m; return { a: m[0], b: m[1], c: m[2], d: m[3], e: m[4], f: m[5] }; };
+    R.beginPath = function () { rec('beginPath', arguments); path = []; sub = null; };
+    R.moveTo = function (x, y) { rec('moveTo', arguments); sub = [ap(st.m, x, y)]; path.push(sub); };
+    R.lineTo = function (x, y) { rec('lineTo', arguments); if (!sub) { sub = []; path.push(sub); } sub.push(ap(st.m, x, y)); };
+    R.closePath = function () { rec('closePath', arguments); };
+    R.rect = function (x, y, w, h) { rec('rect', arguments); path.push([ap(st.m, x, y), ap(st.m, x + w, y), ap(st.m, x + w, y + h), ap(st.m, x, y + h)]); sub = null; };
+    R.clip = function () { rec('clip', arguments); const pts = [].concat.apply([], path); if (pts.length) { st.clip = st.clip.concat([pts]); R.clips.push(pts); } };
+    R.drawImage = function (img) {
+      rec('drawImage', arguments);
+      const a = arguments; let dx, dy, dw, dh;
+      if (a.length >= 9) { dx = a[5]; dy = a[6]; dw = a[7]; dh = a[8]; } else if (a.length >= 5) { dx = a[1]; dy = a[2]; dw = a[3]; dh = a[4]; } else { dx = a[1]; dy = a[2]; dw = img.width; dh = img.height; }
+      const q = [ap(st.m, dx, dy), ap(st.m, dx + dw, dy), ap(st.m, dx + dw, dy + dh), ap(st.m, dx, dy + dh)];
+      draws.push({ img: tag(img), quad: q, box: cut(box(q)), alpha: st.globalAlpha, op: st.globalCompositeOperation, filter: st.filter, src: a.length >= 9 ? [a[1], a[2], a[3], a[4]] : null, m: st.m.slice(), smooth: st.imageSmoothingEnabled });
+    };
+    R.fillRect = function (x, y, w, h) { rec('fillRect', arguments); fills.push({ style: st.fillStyle, alpha: st.globalAlpha, op: st.globalCompositeOperation, box: cut(box([ap(st.m, x, y), ap(st.m, x + w, y), ap(st.m, x + w, y + h), ap(st.m, x, y + h)])) }); };
+    R.fill = function () { rec('fill', arguments); const pts = [].concat.apply([], path); if (pts.length) fills.push({ style: st.fillStyle, alpha: st.globalAlpha, op: st.globalCompositeOperation, box: cut(box(pts)) }); };
+    ['stroke', 'strokeRect', 'clearRect', 'roundRect', 'arc', 'ellipse', 'quadraticCurveTo', 'bezierCurveTo', 'putImageData', 'fillText', 'strokeText', 'setLineDash'].forEach(n => { R[n] = function () { rec(n, arguments); }; });
+    R.getImageData = function (x, y, w, h) { rec('getImageData', arguments); return { data: new Uint8ClampedArray(Math.max(1, w * h) * 4), width: w, height: h }; };
+    R.createImageData = function (w, h) { rec('createImageData', arguments); return { data: new Uint8ClampedArray(Math.max(1, w * h) * 4), width: w, height: h }; };
+    const grad = name => function () { rec(name, arguments); const gid = 'grad' + log.length; return { id: gid, addColorStop: function () { rec(gid + '.addColorStop', arguments); } }; };
+    R.createLinearGradient = grad('createLinearGradient'); R.createRadialGradient = grad('createRadialGradient');
+    R.measureText = function () { return { width: 0 }; };
+    Object.keys(st).forEach(k => { if (k === 'm' || k === 'clip') return; Object.defineProperty(R, k, { get: () => st[k], set: v => { st[k] = v; log.push(k + '=' + (v && typeof v === 'object' && v.id ? v.id : fmt(v))); } }); });
+    R.hash = () => b14Hash(log.join('\n'));
+    return R;
+  }
+  /* A plate the kernels can take as their source A: a real canvas in the browser (a texture is cut from it), and the
+     harness's stand-in elsewhere — the recorder never reads its pixels. */
+  function b14Canvas(W, H) { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; }
+  /* Run a CANVAS_FX kernel into a recorder, exactly as drawCanvasEffect calls it: (A, B, W, H, bb, params, t, tl, layer, ps).
+     ctx.filter is forced OFF for the call (FM._forceNoCtxFilter, queue 661's own switch) so the solids' face shading takes
+     the same branch on every machine — the log must not depend on whether this browser honours ctx.filter. */
+  function b14Cfx(type, params, o) {
+    o = o || {};
+    const W = o.W || 160, H = o.H || 120, bb = o.bb || { x: 0, y: 0, w: W, h: H };
+    const f = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable');
+    const A = o.A || b14Canvas(W, H), B = b14Rec(W, H), was = FM._forceNoCtxFilter;
+    FM._forceNoCtxFilter = true;
+    try { f(A, B, W, H, bb, JSON.parse(JSON.stringify(params)), o.t == null ? 0.5 : o.t, o.tl == null ? 0.5 : o.tl, o.layer || null, o.ps == null ? 1 : o.ps, o.expand, o.scene); }
+    finally { FM._forceNoCtxFilter = was; }
+    return B;
+  }
+  /* Eight log hashes per config, the canvas twin of b14Shots: two plates (the second with the layer's box inside it, off
+     centre), the export and a half-size plate, at two moments (t and the clip's own time move together). */
+  function b14CShots(type, params) {
+    return [[160, 120, null], [200, 150, { x: 30, y: 22, w: 110, h: 80 }]].map(([W, H, bb]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b14Cfx(type, params, { W: W, H: H, bb: bb, ps: ps, t: t, tl: t }).hash()).join('.')).join('/')).join(' ');
+  }
+  /* The union box of every draw of one image (or of all of them): the part of the plate a kernel can have painted. */
+  function b14Reach(R, img) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; R.draws.forEach(q => { if (img && q.img !== img) return; if (q.box[2] <= q.box[0] || q.box[3] <= q.box[1]) return; x0 = Math.min(x0, q.box[0]); y0 = Math.min(y0, q.box[1]); x1 = Math.max(x1, q.box[2]); y1 = Math.max(y1, q.box[3]); }); return { x0: x0, y0: y0, x1: x1, y1: y1, w: x1 - x0, h: y1 - y0 }; }
+
+  /* 14.1 TILT SHIFT (hunt C45): Sharp band, Shape (Linear / Radial) with Focus X, Smoothness, Miniature pop. */
+  const B14TS_NEW = { band: 0, shape: 0, cx: 0.5, passes: 1, pop: 0 };
+  const B14TS_CFG = { def: {}, low: { center: 0.3, softness: 0.8 }, wide: { blur: 2.5, softness: 0.2 }, turned: { angle: 30, center: 0.6 }, steep: { angle: -75, blur: 0.5 }, kf: { center: b14Kf(0.2, 0.8), blur: b14Kf(1, 3) } };
+  const B14TS_PIN = {   // fc8866f1, before the edit (Tilt Shift has no px control, so the half-size plate draws the same bytes)
+    def: 'd77d8c1c.d77d8c1c/d77d8c1c.d77d8c1c b39a1bb4.b39a1bb4/b39a1bb4.b39a1bb4', low: '8d2a551d.8d2a551d/8d2a551d.8d2a551d cf92cf46.cf92cf46/cf92cf46.cf92cf46',
+    wide: '8e7dbdaf.8e7dbdaf/8e7dbdaf.8e7dbdaf e6083acc.e6083acc/e6083acc.e6083acc', turned: '1135d5dd.1135d5dd/1135d5dd.1135d5dd 32a00efb.32a00efb/32a00efb.32a00efb',
+    steep: '001c2a86.001c2a86/001c2a86.001c2a86 091ac36c.091ac36c/091ac36c.091ac36c', kf: '833ad784.9de0dde9/833ad784.9de0dde9 dc9ad0e6.88c736ff/dc9ad0e6.88c736ff' };
+
+  test('482 14.1 Tilt Shift - Sharp band, Shape, Focus X, Smoothness and Miniature pop are in the catalogue at defaults that draw the old blur, and saved and new Tilt Shifts draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b14Catalogue('tiltshift', B14TS_NEW, { band: 20, shape: 1, cx: 0.3, passes: 3, pop: 40 });
+    const shape = b14Row('tiltshift', 'shape'), cx = b14Row('tiltshift', 'cx'), ang = b14Row('tiltshift', 'angle');
+    if (shape.type !== 'segment' || JSON.stringify(shape.options) !== JSON.stringify([[0, 'Linear'], [1, 'Radial']])) throw new Error('Shape is not a Linear / Radial choice (' + shape.type + ' ' + JSON.stringify(shape.options) + ')');
+    if (cx.overriddenBy !== 'shape' || cx.liveWhen !== 1) throw new Error('Focus X does not say it only counts under Radial (overriddenBy ' + cx.overriddenBy + ', liveWhen ' + cx.liveWhen + ')');
+    if (ang.overriddenBy !== 'shape' || ang.liveWhen !== 0) throw new Error('Angle does not say it only counts under Linear (overriddenBy ' + ang.overriddenBy + ', liveWhen ' + ang.liveWhen + ') - a radial focus has nothing to turn');
+    if (b14Row('tiltshift', 'band').unit !== '%' || b14Row('tiltshift', 'pop').unit !== '%') throw new Error('Sharp band and Miniature pop are not declared in per cent');
+    const moved = b14Pinned('tiltshift', B14TS_NEW, B14TS_CFG, B14TS_PIN);
+    if (moved.length) throw new Error(moved.length + ' Tilt Shifts differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+    /* …and the layer path, where the kernel is handed the layer's box and bounds both passes by it (#692): Smoothness 3 there
+       is the unbounded Smoothness 3 inside the box, so the grown bounds of the extra passes reach far enough. */
+    const W = 120, H = 90, bb = { x: 30, y: 25, w: 50, h: 40 }, k = FM._FX_TABLES.PIXEL_FX.tiltshift;
+    const masked = () => { const d = b14Plate(W, H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (x < bb.x || x >= bb.x + bb.w || y < bb.y || y >= bb.y + bb.h) d[(y * W + x) * 4 + 3] = 0; return d; };
+    [{}, { passes: 3 }, { passes: 2, band: 10, pop: 50 }, { shape: 1, cx: 0.4, passes: 3 }].forEach(o => {
+      const P = Object.assign(b14Base('tiltshift', {}), { center: 0.3 }, o), a = masked(), b = masked();
+      k(a, W, H, JSON.parse(JSON.stringify(P)), 0.5, 1, bb); k(b, W, H, JSON.parse(JSON.stringify(P)), 0.5, 1);
+      if (!b14Same(a, b)) throw new Error('Tilt Shift ' + JSON.stringify(o) + ' handed the layer box draws differently from the same blur over the whole plate - the bounded passes do not reach far enough');
+    });
+  });
+
+  test('482 14.1 Tilt Shift - Sharp band 20 keeps every row within 10 percent of the focus exactly as the source, straight and turned, Radial keeps a round spot sharp round Focus X, Smoothness 3 spreads an edge over twice as far, and Miniature pop lifts colour and leaves a grey grey', { item: '482', budgetMs: 60000 }, function () {
+    const W = 80, H = 100, ts = (o, d0) => b14Run('tiltshift', Object.assign(b14Base('tiltshift', {}), { center: 0.5, softness: 0.4 }, o), W, H, 0.5, 1, d0);
+    const src = b14Plate(W, H);
+    const rowSame = (d, y) => { for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] !== src[i] || d[i + 1] !== src[i + 1] || d[i + 2] !== src[i + 2] || d[i + 3] !== src[i + 3]) return false; } return true; };
+    /* SHARP BAND. CONTROL: with no band only the focus row itself is untouched - a row 5 px off it is already blurred. */
+    const none = ts({});
+    if (!rowSame(none, 50)) throw new Error('CONTROL: with no band the focus row is not the source');
+    if (rowSame(none, 45) || rowSame(none, 55)) throw new Error('CONTROL: with no band a row 5 px from the focus is untouched - this fixture cannot show a band');
+    const band = ts({ band: 20 });
+    for (let y = 40; y <= 60; y++) if (!rowSame(band, y)) throw new Error('Sharp band 20 blurred row ' + y + ', ' + Math.abs(y - 50) + ' px (' + Math.abs(y - 50) + ' percent) from the focus - every row within 10 percent should be the source');
+    if (rowSame(band, 64) || rowSame(band, 36)) throw new Error('Sharp band 20 left rows 14 px from the focus sharp too - the blur must start at the band edge');
+    /* …square to a turned band: every pixel within 10 percent of H of the turned line is the source, and one well outside it is not. */
+    const turned = ts({ band: 20, angle: 30 }), ca = Math.cos(Math.PI / 6), sa = Math.sin(Math.PI / 6);
+    let inside = 0, outside = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, dist = Math.abs((y - 50) * ca - (x - W / 2) * sa) / H, same = turned[i] === src[i] && turned[i + 1] === src[i + 1] && turned[i + 2] === src[i + 2];
+      if (dist < 0.099 && src[i + 3] > 0 && !same) throw new Error('Sharp band 20 at Angle 30 blurred (' + x + ', ' + y + '), ' + (dist * 100).toFixed(1) + ' percent of the height from the turned focus line');
+      if (dist < 0.099) inside++; else if (dist > 0.2 && src[i + 3] > 0 && !same) outside++;
+    }
+    if (!inside || outside < 200) throw new Error('the turned band test saw ' + inside + ' pixels inside and only ' + outside + ' blurred outside - it is not measuring a band');
+    /* RADIAL round Focus X 0.25, Focus 0.5, band 20: a spot of radius 10 px round (20, 50) is the source, and the same row
+       at x 70 is blurred. CONTROL: under Linear that far pixel is on the focus row, so it is sharp. */
+    const rad = ts({ shape: 1, cx: 0.25, band: 20 }), lin = ts({ shape: 0, cx: 0.25, band: 20 });
+    for (let y = 40; y <= 60; y++) for (let x = 10; x <= 30; x++) {
+      const i = (y * W + x) * 4; if (Math.hypot(x - 20, y - 50) > 9.9 || src[i + 3] === 0) continue;
+      if (rad[i] !== src[i] || rad[i + 1] !== src[i + 1] || rad[i + 2] !== src[i + 2]) throw new Error('Radial Sharp band 20 blurred (' + x + ', ' + y + '), inside the round sharp spot at Focus X 0.25');
+    }
+    const far = (50 * W + 70) * 4;
+    if (lin[far] !== src[far] || lin[far + 1] !== src[far + 1]) throw new Error('CONTROL: under Linear the pixel at (70, 50) on the focus row is blurred');
+    if (rad[far] === src[far] && rad[far + 1] === src[far + 1] && rad[far + 2] === src[far + 2]) throw new Error('Radial left (70, 50) sharp - 50 px from the focus point it should be blurred, the way Linear never could');
+    /* SMOOTHNESS: a black/white step, focus at the top so row 95 is fully blurred. One box of radius 8 is a 16-step ramp;
+       three boxes reach 24 px each side, of which the outer 5 each side round to 0 or 255 (their weight is under 1 percent),
+       so about 38 in-between values. Measured as the run of in-between values along row 95. */
+    const step = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = x < 40 ? 0 : 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const ramp = d => { let n = 0; for (let x = 0; x < W; x++) { const v = d[(95 * W + x) * 4]; if (v > 2 && v < 253) n++; } return n; };
+    const r1 = ramp(b14Run('tiltshift', Object.assign(b14Base('tiltshift', {}), { center: 0, softness: 1 }), W, H, 0.5, 1, step()));
+    const r3 = ramp(b14Run('tiltshift', Object.assign(b14Base('tiltshift', {}), { center: 0, softness: 1, passes: 3 }), W, H, 0.5, 1, step()));
+    if (r1 < 14 || r1 > 18) throw new Error('CONTROL: one pass ramps over ' + r1 + ' px, not the 16 of a radius-8 box');
+    if (!(r3 > 2 * r1)) throw new Error('Smoothness 3 ramps over ' + r3 + ' px against ' + r1 + ' for one pass - it is not running the blur three times');
+    /* MINIATURE POP: colour moves away from grey (more saturated), a grey stays grey, alpha is untouched; 0 is the default. */
+    const muted = b14Flat(W, H, [150, 120, 100]), greyIn = b14Flat(W, H, [90, 90, 90], 200);
+    const sat = d => { let s = 0; for (let i = 0; i < d.length; i += 4) s += Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]); return s / (d.length / 4); };
+    const p0 = ts({ pop: 0 }, muted.slice()), p100 = ts({ pop: 100 }, muted.slice());
+    if (!b14Same(p0, ts({}, muted.slice()))) throw new Error('CONTROL: Miniature pop 0 is not the default picture');
+    if (!(sat(p100) > sat(p0) * 1.5)) throw new Error('Miniature pop 100 left the colour at ' + sat(p100).toFixed(1) + ' levels of saturation against ' + sat(p0).toFixed(1) + ' - it should be clearly punchier');
+    const g = ts({ pop: 100 }, greyIn);
+    for (let i = 0; i < g.length; i += 4) { if (g[i] !== g[i + 1] || g[i] !== g[i + 2]) throw new Error('Miniature pop tinted a grey (' + g[i] + ',' + g[i + 1] + ',' + g[i + 2] + ')'); if (g[i + 3] !== 200) throw new Error('Miniature pop changed alpha'); }
+  });
 })();

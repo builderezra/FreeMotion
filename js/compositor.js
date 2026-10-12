@@ -630,7 +630,14 @@ window.FM = window.FM || {};
       { key: 'width', label: 'Tonal width', min: 10, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'radius', label: 'Local radius', min: 0, max: 200, step: 1, def: 0, unit: 'px', note: '0 = whole picture · above 0 = area by area, and black stays black' },
       { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 }] },
-    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
+    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°', overriddenBy: 'shape', liveWhen: 0 },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
+      /* #482 polish 14.1 (answers C45). Every default is the old blur byte for byte; no library filter carries a Tilt Shift.
+         Sharp band and Focus X are fractions of the frame, not px, so pxToPlate has nothing to scale. */
+      { key: 'band', label: 'Sharp band', min: 0, max: 50, step: 1, def: 0, unit: '%' },
+      { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Linear'], [1, 'Radial']] },
+      { key: 'cx', label: 'Focus X', min: 0, max: 1, step: 0.02, def: 0.5, overriddenBy: 'shape', liveWhen: 1 },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1 },
+      { key: 'pop', label: 'Miniature pop', min: 0, max: 100, step: 1, def: 0, unit: '%' }] },
     // ---- batch 12 ----
     /* #482 6.3 (his #966: "as much choice as possible"). Distance stopped at 60 px and Softness at one 20 px box, so a long
        poster shadow or a wide soft one could not be made at all. SPREAD is how much of the Softness is solid shadow (a
@@ -7434,62 +7441,103 @@ window.FM = window.FM || {};
          default 1× is the old radius exactly and the param is not a px key pxToPlate would have to learn about. */
       var tsAmt = fparam(p, 'blur', 1, t); tsAmt = tsAmt < 0.25 ? 0.25 : (tsAmt > 4 ? 4 : tsAmt);
       var tsW4=W*4, tsLen=d.length, tsR=Math.max(1, Math.round(8 * tsAmt)), tsWin=tsR*2+1;
+      /* #482 polish 14.1 (answers C45: one box pass, and the picture is sharp on a single line only). SHARP BAND keeps a band
+         of the height he sets fully sharp and starts the ramp at its edges; SHAPE Radial measures the distance from a point —
+         Focus X across, Focus down — instead of from a line, the round "only the subject is in focus" look; SMOOTHNESS runs
+         the box 1-3 times (three boxes are within a few percent of a Gaussian, so the blur stops reading as a smear of
+         squares); MINIATURE POP lifts colour and contrast, the toy-town half of the look. Every default is the old picture
+         byte for byte: band 0 subtracts nothing, Linear takes the old mix loops, Smoothness 1 is the one pass, pop 0 never
+         enters its loop. */
+      var tsBand = fparam(p, 'band', 0, t); tsBand = tsBand < 0 ? 0 : (tsBand > 50 ? 50 : tsBand); var tsHalf = tsBand / 200;   // half the band, as a fraction of H
+      var tsShape = Math.round(fparam(p, 'shape', 0, t)) === 1 ? 1 : 0;
+      var tsCx = fparam(p, 'cx', 0.5, t); tsCx = tsCx < 0 ? 0 : (tsCx > 1 ? 1 : tsCx);
+      var tsPasses = Math.round(fparam(p, 'passes', 1, t)); tsPasses = tsPasses < 1 ? 1 : (tsPasses > 3 ? 3 : tsPasses);
+      var tsPop = fparam(p, 'pop', 0, t); tsPop = tsPop < 0 ? 0 : (tsPop > 100 ? 100 : tsPop);
       var tsPad=tsR+1;
       var tsY0=tsBB?Math.max(0,tsBB.y-tsPad):0, tsY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad):H-1;
       var tsX0=tsBB?Math.max(0,tsBB.x):0,       tsX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1):W-1;
       var tsSrc=fxSrc(d); var tsTmp=new Float32Array(tsLen); var tsBlur=new Float32Array(tsLen);
       var tsx,tsy,tsc,tsi,tsBase,tsRow,tsSum;
-      /* HORIZONTAL, by running sum. The window starts already filled with the clamped left edge, which
-         is what the tap loop's index clamping produced. */
-      for(tsy=tsY0;tsy<=tsY1;tsy++){
-        tsRow=tsy*tsW4;
-        for(tsc=0;tsc<4;tsc++){
-          tsSum=0;
-          for(var tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsj<0?0:(tsj>=W?W-1:tsj); tsSum+=tsSrc[tsRow+tsnx*4+tsc]; }
-          for(tsx=0;tsx<W;tsx++){
-            tsTmp[tsRow+tsx*4+tsc]=tsSum/tsWin;
-            var tsOut=tsx-tsR; if(tsOut<0)tsOut=0; else if(tsOut>=W)tsOut=W-1;
-            var tsIn=tsx+tsR+1; if(tsIn<0)tsIn=0; else if(tsIn>=W)tsIn=W-1;
-            tsSum+=tsSrc[tsRow+tsIn*4+tsc]-tsSrc[tsRow+tsOut*4+tsc];
+      /* ONE BOX PASS from `cur` into tsBlur. Pass j of n must be right (n - j)·(R+1) further out than the box, because the
+         next pass reads that far, so the rows and columns a pass covers grow by `e`; with one pass e is 0 and these are the
+         old bounds. The second and third passes read tsBlur back (the horizontal half has finished with it before the
+         vertical half writes it). */
+      function tsBox(cur, e) {
+        var rY0=tsBB?Math.max(0,tsBB.y-tsPad-e):0, rY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad+e):H-1;
+        var cX0=tsBB?Math.max(0,tsBB.x-e):0,       cX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1+e):W-1;
+        /* HORIZONTAL, by running sum. The window starts already filled with the clamped left edge, which
+           is what the tap loop's index clamping produced. */
+        for(tsy=rY0;tsy<=rY1;tsy++){
+          tsRow=tsy*tsW4;
+          for(tsc=0;tsc<4;tsc++){
+            tsSum=0;
+            for(var tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsj<0?0:(tsj>=W?W-1:tsj); tsSum+=cur[tsRow+tsnx*4+tsc]; }
+            for(tsx=0;tsx<W;tsx++){
+              tsTmp[tsRow+tsx*4+tsc]=tsSum/tsWin;
+              var tsOut=tsx-tsR; if(tsOut<0)tsOut=0; else if(tsOut>=W)tsOut=W-1;
+              var tsIn=tsx+tsR+1; if(tsIn<0)tsIn=0; else if(tsIn>=W)tsIn=W-1;
+              tsSum+=cur[tsRow+tsIn*4+tsc]-cur[tsRow+tsOut*4+tsc];
+            }
+          }
+        }
+        // VERTICAL, the same way down each column.
+        for(tsx=cX0;tsx<=cX1;tsx++){
+          var tsCol=tsx*4;
+          for(tsc=0;tsc<4;tsc++){
+            tsSum=0;
+            for(var tsk=-tsR;tsk<=tsR;tsk++){ var tsny=tsk<0?0:(tsk>=H?H-1:tsk); tsSum+=tsTmp[tsny*tsW4+tsCol+tsc]; }
+            for(tsy=0;tsy<H;tsy++){
+              tsBlur[tsy*tsW4+tsCol+tsc]=tsSum/tsWin;
+              var tsOutY=tsy-tsR; if(tsOutY<0)tsOutY=0; else if(tsOutY>=H)tsOutY=H-1;
+              var tsInY=tsy+tsR+1; if(tsInY<0)tsInY=0; else if(tsInY>=H)tsInY=H-1;
+              tsSum+=tsTmp[tsInY*tsW4+tsCol+tsc]-tsTmp[tsOutY*tsW4+tsCol+tsc];
+            }
           }
         }
       }
-      // VERTICAL, the same way down each column.
-      for(tsx=tsX0;tsx<=tsX1;tsx++){
-        var tsCol=tsx*4;
-        for(tsc=0;tsc<4;tsc++){
-          tsSum=0;
-          for(var tsk=-tsR;tsk<=tsR;tsk++){ var tsny=tsk<0?0:(tsk>=H?H-1:tsk); tsSum+=tsTmp[tsny*tsW4+tsCol+tsc]; }
-          for(tsy=0;tsy<H;tsy++){
-            tsBlur[tsy*tsW4+tsCol+tsc]=tsSum/tsWin;
-            var tsOutY=tsy-tsR; if(tsOutY<0)tsOutY=0; else if(tsOutY>=H)tsOutY=H-1;
-            var tsInY=tsy+tsR+1; if(tsInY<0)tsInY=0; else if(tsInY>=H)tsInY=H-1;
-            tsSum+=tsTmp[tsInY*tsW4+tsCol+tsc]-tsTmp[tsOutY*tsW4+tsCol+tsc];
-          }
-        }
-      }
+      for (var tsP = 1; tsP <= tsPasses; tsP++) tsBox(tsP === 1 ? tsSrc : tsBlur, (tsPasses - tsP) * tsPad);
       var tsLine=tsCenter*H; var tsDenom=0.05+(1-tsSoft)*0.5; if(tsDenom<0.0001)tsDenom=0.0001;
       /* ANGLE (queue 904): the focus band was welded horizontal. It now turns about the point it always passed through — the middle
          of the frame at the Focus height — and the distance from it is measured square to the band, still as a fraction of H so
          Softness means what it did. 0° takes the loop below, untouched. */
       var tsAng = p.angle == null ? 0 : (FM.evalProp(p.angle, t) || 0);
-      if (tsAng % 180 !== 0) { var tsRa = tsAng * Math.PI / 180, tsCa = Math.cos(tsRa), tsSa = Math.sin(tsRa), tsMx = W / 2;
+      if (tsShape === 1) {
+        /* RADIAL (14.1): the distance from the focus point, still as a fraction of H so Softness and Sharp band mean what they
+           mean on a line. Angle has nothing to turn here, and its row says so. */
+        var tsFx = tsCx * W;
+        for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowR = tsy * tsW4, tsDyR = tsy - tsLine;
+          for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowR + tsx * 4; if (d[tsi + 3] <= 0) continue;
+            var tsQr = Math.sqrt((tsx - tsFx) * (tsx - tsFx) + tsDyR * tsDyR) / H; if (tsHalf > 0) tsQr = tsQr > tsHalf ? tsQr - tsHalf : 0;
+            var tsBr = tsQr / tsDenom; if (tsBr > 1) tsBr = 1; var tsIr = 1 - tsBr;
+            d[tsi] = tsSrc[tsi] * tsIr + tsBlur[tsi] * tsBr; d[tsi + 1] = tsSrc[tsi + 1] * tsIr + tsBlur[tsi + 1] * tsBr; d[tsi + 2] = tsSrc[tsi + 2] * tsIr + tsBlur[tsi + 2] * tsBr; } }
+      } else if (tsAng % 180 !== 0) { var tsRa = tsAng * Math.PI / 180, tsCa = Math.cos(tsRa), tsSa = Math.sin(tsRa), tsMx = W / 2;
         for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowA = tsy * tsW4, tsDy = tsy - tsLine;
           for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowA + tsx * 4; if (d[tsi + 3] <= 0) continue;
-            var tsBa = Math.abs(tsDy * tsCa - (tsx - tsMx) * tsSa) / H / tsDenom; if (tsBa > 1) tsBa = 1; var tsIa = 1 - tsBa;
+            var tsQa = Math.abs(tsDy * tsCa - (tsx - tsMx) * tsSa) / H; if (tsHalf > 0) tsQa = tsQa > tsHalf ? tsQa - tsHalf : 0;
+            var tsBa = tsQa / tsDenom; if (tsBa > 1) tsBa = 1; var tsIa = 1 - tsBa;
             d[tsi] = tsSrc[tsi] * tsIa + tsBlur[tsi] * tsBa; d[tsi + 1] = tsSrc[tsi + 1] * tsIa + tsBlur[tsi + 1] * tsBa; d[tsi + 2] = tsSrc[tsi + 2] * tsIa + tsBlur[tsi + 2] * tsBa; } }
-        return; }
-      for(tsy=tsY0;tsy<=tsY1;tsy++){
-        var tsDist=Math.abs(tsy-tsLine)/H; var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
-        var tsInv=1-tsBw; var tsRowI=tsy*tsW4;
-        for(tsx=tsX0;tsx<=tsX1;tsx++){
-          tsi=tsRowI+tsx*4;
-          if(d[tsi+3]>0){
-            d[tsi]=tsSrc[tsi]*tsInv+tsBlur[tsi]*tsBw;
-            d[tsi+1]=tsSrc[tsi+1]*tsInv+tsBlur[tsi+1]*tsBw;
-            d[tsi+2]=tsSrc[tsi+2]*tsInv+tsBlur[tsi+2]*tsBw;
+      } else {
+        for(tsy=tsY0;tsy<=tsY1;tsy++){
+          var tsDist=Math.abs(tsy-tsLine)/H; if (tsHalf > 0) tsDist = tsDist > tsHalf ? tsDist - tsHalf : 0;
+          var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
+          var tsInv=1-tsBw; var tsRowI=tsy*tsW4;
+          for(tsx=tsX0;tsx<=tsX1;tsx++){
+            tsi=tsRowI+tsx*4;
+            if(d[tsi+3]>0){
+              d[tsi]=tsSrc[tsi]*tsInv+tsBlur[tsi]*tsBw;
+              d[tsi+1]=tsSrc[tsi+1]*tsInv+tsBlur[tsi+1]*tsBw;
+              d[tsi+2]=tsSrc[tsi+2]*tsInv+tsBlur[tsi+2]*tsBw;
+            }
           }
         }
+      }
+      /* MINIATURE POP (14.1): saturation up to 1.6x about each pixel's own luma, then contrast up to 1.25x about mid-grey —
+         what makes a tilt-shifted street read as painted toys rather than as a blurry photo. A grey stays grey. */
+      if (tsPop > 0) { var tsK = tsPop / 100, tsSat = 1 + 0.6 * tsK, tsCon = 1 + 0.25 * tsK;
+        for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowP = tsy * tsW4;
+          for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowP + tsx * 4; if (d[tsi + 3] <= 0) continue;
+            var tsPr = d[tsi], tsPg = d[tsi + 1], tsPb = d[tsi + 2], tsPl = 0.299 * tsPr + 0.587 * tsPg + 0.114 * tsPb;
+            d[tsi] = (tsPl + (tsPr - tsPl) * tsSat - 128) * tsCon + 128; d[tsi + 1] = (tsPl + (tsPg - tsPl) * tsSat - 128) * tsCon + 128; d[tsi + 2] = (tsPl + (tsPb - tsPl) * tsSat - 128) * tsCon + 128; } }
       }
     },
     // ---- batch 12 (multi-param + colour) ----
