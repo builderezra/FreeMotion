@@ -124703,4 +124703,29 @@
       });
     });
   });
+
+  /* SU1 #11 (3/3, the PM's call 12 Oct): with clip A selected and the playhead over clip B, the ✂ refused "Move the playhead onto the clip
+     to split" — while S, by DESIGN §8.3's table, splits the main clip under the playhead. The ✂ now follows the same rule. */
+  test('SU1 #11 · at 380 the ✂ with one clip selected and the playhead over another splits the clip under the playhead, as S does', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('B', 3, 4, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const A = v.L('A'), B = v.L('B');
+        FM.selectLayer(A.id); FM.time = 5; await v.idle(); await v.sleep(80);
+        const n0 = v.steps(), count0 = FM.scene.layers.length;
+        document.getElementById('btn-sm-split').click(); await v.idle(); await v.sleep(80);
+        if (FM.scene.layers.length !== count0 + 1) throw new Error('with A selected and the playhead over B, the ✂ made ' + (FM.scene.layers.length - count0) + ' new clip(s) and said ' + v.say());
+        const B2 = FM.scene.layers.find(l => l !== B && l !== A && l.type === 'video');
+        if (!B2 || Math.abs(B2.start - 5) > 1e-6 || Math.abs(B.duration - 2) > 1e-6) throw new Error('the split is not B at 5 s: B ' + B.start + '+' + B.duration + ', new ' + (B2 && B2.start));
+        if (Math.abs(A.duration - 3) > 1e-9 || A.start !== 0) throw new Error('the ✂ changed A, which the playhead is not over');
+        if (v.steps() !== n0 + 1) throw new Error('the split took ' + (v.steps() - n0) + ' steps, not one');
+        if (FM.scene.selectedId === A.id) throw new Error('after splitting B the selection is still A — the tray would act on the clip he did not split');
+        /* CONTROL: with the playhead inside the selected clip, the ✂ splits that clip (unchanged) */
+        FM.selectLayer(A.id); FM.time = 1.5; await v.sleep(60);
+        const c1 = FM.scene.layers.length;
+        document.getElementById('btn-sm-split').click(); await v.idle(); await v.sleep(80);
+        if (FM.scene.layers.length !== c1 + 1 || Math.abs(A.duration - 1.5) > 1e-6) throw new Error('CONTROL: the ✂ with the playhead inside A did not split A (A is ' + A.duration + ' s)');
+      });
+    });
+  });
 })();
