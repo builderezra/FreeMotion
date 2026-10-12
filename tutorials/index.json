@@ -129,22 +129,19 @@
   "file": "simple/02-make-a-first-video-in-simple.md",
   "title": "Make a first video",
   "group": "Start",
-  "mode": "simple",
-  "hidden": true
+  "mode": "simple"
  },
  {
   "file": "simple/03-trim-and-split-in-simple.md",
   "title": "Trim and split",
   "group": "Start",
-  "mode": "simple",
-  "hidden": true
+  "mode": "simple"
  },
  {
   "file": "simple/04-add-text-and-music-in-simple.md",
   "title": "Add text and music",
   "group": "Make",
-  "mode": "simple",
-  "hidden": true
+  "mode": "simple"
  },
  {
   "file": "simple/05-add-an-effect-in-simple.md",
