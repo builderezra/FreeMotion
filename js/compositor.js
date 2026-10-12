@@ -7952,7 +7952,11 @@ window.FM = window.FM || {};
        Amount change the character of the blend rather than its strength. */
     gradientoverlay: function(d, W, H, p, t){
       var ang = FM.evalProp(p.angle, t); if (ang === null || ang === undefined) ang = 0;
-      var amt = FM.evalProp(p.amount, t); if (amt === null || amt === undefined) amt = 0.8;
+      /* An ABSENT Amount is 0.8, the param's `legacy` (#482, answers-1130 f8bf9dea: a new one starts at 0.5, an old save still
+         draws 0.8). Read off the key, not off evalProp: evalProp(undefined) is 0, never null (queue 755), so the old
+         `amt == null` check never fired — and since `legacy` was declared the render-time fill leaves the key absent for the
+         kernel to decide, so a save without Amount drew NOTHING ('482 a new Gradient Overlay starts Gentler…' and '784' red). */
+      var amt = p.amount == null ? 0.8 : FM.evalProp(p.amount, t); if (amt === null || amt === undefined) amt = 0.8;
       if (amt < 0) amt = 0; if (amt > 1) amt = 1;
       var shape = p.shape == null ? 0 : (FM.evalProp(p.shape, t) | 0);
       var blend = p.blend == null ? 0 : (FM.evalProp(p.blend, t) | 0);
