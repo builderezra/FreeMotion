@@ -8851,9 +8851,13 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
      With three auto rows the card's extra height was shared out among them and the tiles stood apart. */
   body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-columns: 176px 360px; grid-template-rows: 1fr auto auto; grid-template-areas: "ed cv" "fr cv" "ap cv"; }
   body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: auto auto 1fr; grid-template-areas: "fr cv" "ed cv" "ap cv"; }
-  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto auto; grid-template-areas: "fr ." "fr ed" "fr cv" "fr ap"; }
+  /* Friends or the Editor open: the small column is the one ABOVE (or under) the cog, so Canvas stays its tile next to the cog —
+     #978: "Canvas always right by the button (so the tail never moves)" — and App settings takes the end FURTHEST from the cog, as
+     it does on the phone and all closed. (The render put App at this column's foot, under Canvas: Canvas then left the cog's line
+     by a row mid-swap and its tail hung into the App row.) */
+  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto auto; grid-template-areas: "fr ." "fr ap" "fr ed" "fr cv"; }
   body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big { grid-template-rows: auto auto auto 1fr; grid-template-areas: "fr cv" "fr ed" "fr ap" "fr ."; }
-  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto auto; grid-template-areas: "ed ." "ed fr" "ed cv" "ed ap"; }
+  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto auto; grid-template-areas: "ed ." "ed ap" "ed fr" "ed cv"; }
   body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big { grid-template-rows: auto auto auto 1fr; grid-template-areas: "ed cv" "ed fr" "ed ap" "ed ."; }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big > #cv-friends, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor { width: 360px; }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big > .export-card, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big > .export-card { width: 176px; }
@@ -8893,7 +8897,7 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
      fixed box whose containing block is the dialog (v17.36's lesson) — was placed INSIDE that area, and 176 px wide. */
   body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: 1fr auto; grid-template-areas: "fr cv" "ap cv"; }
   body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: auto 1fr; grid-template-areas: "fr cv" "ap cv"; }
-  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short.cv-fr-big { grid-template-rows: 1fr auto auto; grid-template-areas: "fr ." "fr cv" "fr ap"; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short.cv-fr-big { grid-template-rows: 1fr auto auto; grid-template-areas: "fr ." "fr ap" "fr cv"; }
   body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short.cv-fr-big { grid-template-rows: auto auto 1fr; grid-template-areas: "fr cv" "fr ap" "fr ."; }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-on.cv-ed-short.cv-ed-short:not(.cv-ed-big) > #cv-editor { grid-area: auto; width: auto; }
 }

@@ -112293,11 +112293,12 @@
           if (!dlg.classList.contains('cv-flying') || f.length < 2) throw new Error('⤢ swapped with no flight (' + f.length + ' animation(s))');
           /* Frozen at three points. Tolerance from measurement: the prototype and this build read every bottom at 556 against a
              line of 556 at these points (553 at 70%, where the easing overshoots); the stacked flight's fault was 193 px.
-             #1132: the small column ends in the App settings row now, so it is Canvas and App that hold the cog's line. */
+             #1132: Canvas holds the cog's line the whole way — it is the block next to the cog, its tail never moves — while App
+             settings flies from the foot of the left column (Canvas open) to the far end of the small column (Friends open). */
           for (const p of [0.1, 0.3, 0.5]) {
             f.forEach(function (a) { a.pause(); a.currentTime = p * 460; });
             const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect(), ar = appB.getBoundingClientRect();
-            if (Math.abs(cr.bottom - line) > 4 || Math.abs(ar.bottom - line) > 4) throw new Error('at ' + Math.round(p * 100) + '% of the swap the pair has left the cog’s line (' + Math.round(line) + '): Canvas ' + R978(cr) + ', App settings ' + R978(ar) + ', Friends ' + R978(frr));
+            if (Math.abs(cr.bottom - line) > 4) throw new Error('at ' + Math.round(p * 100) + '% of the swap Canvas has left the cog’s line (' + Math.round(line) + '): Canvas ' + R978(cr) + ', App settings ' + R978(ar) + ', Friends ' + R978(frr));
             if (!(frr.width > wf0 + 1 && frr.width < 359)) throw new Error('at ' + Math.round(p * 100) + '% Friends is ' + frr.width.toFixed(1) + ' wide (from ' + wf0.toFixed(1) + ' to 360) — its width jumps instead of flying');
           }
           f.forEach(function (a) { a.play(); });
@@ -112306,6 +112307,10 @@
           const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
           if (frr.right > cr.left + 0.5) throw new Error('landed, Friends (' + R978(frr) + ') is not left of Canvas (' + R978(cr) + ')');
           if (cr.width > 200) throw new Error('landed, the Canvas block did not shrink to its tile (' + cr.width.toFixed(1) + ' wide)');
+          /* #1132: landed, Canvas is the tile ON the cog's line and App settings the far end of the small column above it */
+          { const ar = appB.getBoundingClientRect(), er = document.getElementById('cv-editor').getBoundingClientRect();
+            if (Math.abs(cr.bottom - line) > 4) throw new Error('landed, the Canvas tile (' + R978(cr) + ') is not on the cog’s line (' + Math.round(line) + ')');
+            if (!(ar.bottom <= er.top + 0.5 && ar.bottom <= cr.top + 0.5) || ar.top < -0.5) throw new Error('landed, App settings (' + R978(ar) + ') is not the far end of the small column above the Editor tile (' + R978(er) + ') and Canvas (' + R978(cr) + ')'); }
           const sub = document.getElementById('cv-mini-sub').textContent;
           if (sub !== '9:16 · 1080 × 1920 · 30 fps') throw new Error('the Canvas tile reads "' + sub + '"');
           if (card.style.position || fr.style.position || card.style.width || fr.style.width || card.style.left || fr.style.left) throw new Error('the flight left inline styles on the blocks');
@@ -127806,5 +127811,39 @@
     };
     await atPhoneWidth(function () { return check('380'); }, 380);
     await atWideWidth(function () { return check('1280'); }, 1280);
+  });
+
+  /* #1132 on a PC with Friends or the Editor open the small column stands over the cog, so it decides what the tail hangs from.
+     Canvas stays the tile ON the cog's line (#978: "Canvas always right by the button, so the tail never moves") and App settings
+     takes the far end, furthest from the cog — as it is on the phone and all closed. The render had App at this column's foot,
+     under Canvas: Canvas then stood a row off the line and its tail hung into the App row. */
+  test('1132 on a PC with Friends or the Editor open Canvas stays the tile on the cog’s line with the tail at its foot, and App settings is the far end of the small column — at 1280', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      await atWideWidth(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), cog = document.getElementById('btn-settings');
+        try {
+          for (const [k, exp, cls] of [['Friends', 'cv-fr-exp', 'cv-fr-big'], ['the Editor block', 'cv-ed-what', 'cv-ed-big']]) {
+            cog.click(); await entranceDone(dlg); await sleep(60);
+            if (!dlg.classList.contains('cv-none')) throw new Error(k + ': setup: the cog did not open all closed');
+            document.getElementById(exp).click(); await land945();
+            if (!dlg.classList.contains(cls) || !dlg.classList.contains('cv-side')) throw new Error(k + ': setup: it did not open side by side (' + dlg.className + ')');
+            if (!document.body.classList.contains('cv-up')) throw new Error(k + ': setup: at 1280 the pair should hang upward from the cog');
+            const kr = cog.getBoundingClientRect(), cr = card.getBoundingClientRect(), ar = document.getElementById('cv-app').getBoundingClientRect();
+            const or = document.getElementById(cls === 'cv-fr-big' ? 'cv-editor' : 'cv-friends').getBoundingClientRect();   // the small column's other tile
+            if (cr.width > 200) throw new Error(k + ': Canvas is not a tile (' + R978(cr) + ')');
+            if (cr.bottom > kr.top + 0.5 || kr.top - cr.bottom > 12) throw new Error(k + ': the Canvas tile (' + R978(cr) + ') does not stand on the cog (' + R978(kr) + ')');
+            if (Math.abs(cr.right - kr.right) > 12) throw new Error(k + ': the Canvas tile is not lined up with the cog (' + Math.round(cr.right) + ' vs ' + Math.round(kr.right) + ')');
+            const tail = card._popTail;
+            if (!tail || !tail.isConnected || Math.abs(tail.getBoundingClientRect().top - cr.bottom) > 2) throw new Error(k + ': the tail does not hang from the Canvas tile’s foot');
+            const below = [cr, or];
+            if (!below.every(function (r) { return ar.bottom <= r.top + 0.5; })) throw new Error(k + ': App settings (' + R978(ar) + ') is not the far end of the small column, above ' + below.map(R978).join(' / '));
+            if (ar.top < -0.5 || ar.right > innerWidth + 0.5) throw new Error(k + ': App settings is off the screen ' + R978(ar));
+            const at = document.elementFromPoint(ar.left + ar.width / 2, ar.top + ar.height / 2);
+            if (!at || !document.getElementById('cv-app').contains(at)) throw new Error(k + ': App settings is covered by ' + (at && (at.id || at.className)));
+            FM.closeCanvasDialog(); await sleep(60);
+          }
+        } finally { FM.closeCanvasDialog(); await sleep(60); }
+      }, 1280);
+    }); });
   });
 })();
