@@ -124676,4 +124676,31 @@
       });
     });
   });
+
+  /* SU1 #12 (r1, r2): reopening a project in Simple brought back the clip selected when he left it — the last one, off the right of the
+     screen — while Clip 1 sat under the playhead, so the tray and its 🗑 acted on a clip he could not see. A project opens in Simple
+     with nothing selected (the quiet "clips · length" line), as CapCut does. Full restores its selection exactly as before (§0.4). */
+  test('SU1 #12 · at 380 a project reopened in Simple opens with nothing selected, so the tray cannot act on a clip off the screen; Full still restores its selection', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join(',');
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const reopen = async () => { FM.storage.markDirty(); await FM.storage.save(); if (!(await FM.storage.load())) throw new Error('setup: the project did not reopen'); await v.idle(); await v.sleep(200); };
+        FM.time = 0;
+        FM.selectLayer(v.L('C').id); await v.idle(); await v.sleep(100);
+        if (tools().indexOf('delete') < 0) throw new Error('setup: selecting C gave no tray (' + tools() + ')');
+        await reopen();
+        if (!FM.editor.isSimple()) throw new Error('setup: the project reopened in Full, not Simple');
+        const sel = FM.selectionIds ? FM.selectionIds() : [FM.scene.selectedId].filter(Boolean);
+        if (sel.length) throw new Error('reopened in Simple with ' + sel.map(id => (FM.layerById(FM.scene, id) || {}).name).join(', ') + ' still selected — its tray (' + tools() + ') acts on a clip he cannot see, with A under the playhead');
+        if (tools().indexOf('delete') >= 0) throw new Error('reopened in Simple with nothing selected, yet the tray still offers Delete (' + tools() + ')');
+        /* CONTROL — Full: the same reopen restores the selection, exactly as it always has */
+        FM.editor.set('full'); await v.sleep(80);
+        FM.selectLayer(v.L('C').id); await v.sleep(80);
+        await reopen();
+        if (FM.editor.isSimple()) throw new Error('CONTROL: the project reopened in Simple after being set to Full');
+        if (FM.scene.selectedId !== v.L('C').id) throw new Error('CONTROL: reopened in Full, the selection was not restored (' + FM.scene.selectedId + ')');
+      });
+    });
+  });
 })();
