@@ -115,6 +115,10 @@ window.FM = window.FM || {};
     { type: 'mirror', label: 'Mirror', params: [
       { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Left → Right'], [1, 'Right → Left'], [2, 'Top → Bottom'], [3, 'Bottom → Top']] },
       { key: 'position', label: 'Seam', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      /* #482 polish 10.6: the mirror line turns about the seam (+ clockwise), and the folds past the first reflection can be
+         switched off. 0° and On are the old mirror; a saved one without the key is folded (`legacy: 1`). See mirrorAngled. */
+      { key: 'angle', label: 'Reflection angle', min: -180, max: 180, step: 1, def: 0, unit: '°' },
+      { key: 'repeat', label: 'Repeat folds', def: 1, legacy: 1, options: [[0, 'Off'], [1, 'On']] },
     ] },
     { type: 'tint', label: 'Tint', color: true, defColor: '#ff3366', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -248,6 +252,9 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'vertical', label: 'Cross wave', min: 0, max: 100, step: 1, def: 40, unit: '%' },
       { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' },   // queue 904: welded to the horizontal/vertical axes
+      /* #482 polish 10.2: the waves only moved if Phase was keyframed by hand. Wave speed adds to Phase on the clip's clock
+         (wSpeedDeg); 0 is the old still wave. Same row on Circular Ripple and Curl. */
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },
     ] },
     { type: 'ripple', label: 'Circular Ripple', params: [
       { key: 'amount', label: 'Height', min: 0, max: 480, step: 1, def: 22, unit: 'px' },
@@ -255,6 +262,11 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },   // #482 polish 10.2 — + sends the rings outward
+      /* #482 polish 10.2 (C30): the rings ran at full height to the frame's corners. Falloff shrinks them away from the centre,
+         Radius stops them at a distance (% of the half-diagonal). Both 0 is the old ripple. Same rows on Curl. */
+      { key: 'decay', label: 'Falloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'reach', label: 'Radius', min: 0, max: 200, step: 1, def: 0, unit: '%', note: '0 reaches the whole frame' },
     ] },
     { type: 'twirl', label: 'Twirl', params: [
       { key: 'amount', label: 'Twist', min: -360, max: 360, step: 1, def: 140, unit: '°' },
@@ -334,10 +346,17 @@ window.FM = window.FM || {};
     ], layer: true, layerLabel: 'Collide with', layerSelf: 'None', layerOptional: true },   // optional: the frame is the default wall, so no "Needs a setting" badge
     // ---- batch 5 ----
     { type: 'kaleidoscope', label: 'Kaleidoscope', params: [
-      { key: 'segments', label: 'Segments', min: 2, max: 12, step: 1, def: 6 },
+      { key: 'segments', label: 'Segments', min: 2, max: 32, step: 1, def: 6 },   // #482 polish 10.3: was 12 — the kernel never had a ceiling
       { key: 'phase', label: 'Rotation', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      /* #482 polish 10.3: what the wedges look at (see WARP_FX.kaleidoscope.prep). Every default is the old kaleidoscope; a saved
+         one without Mirror wedges is mirrored, which is what `legacy: 1` tells the panel. */
+      { key: 'zoom', label: 'Source zoom', min: 25, max: 400, step: 1, def: 100, unit: '%' },
+      { key: 'srcx', label: 'Source X', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'srcy', label: 'Source Y', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'flow', label: 'Flow', min: -200, max: 200, step: 1, def: 0, unit: 'px/s' },
+      { key: 'mirror', label: 'Mirror wedges', def: 1, legacy: 1, options: [[0, 'Off'], [1, 'On']] },
     ] },
     { type: 'glitch', label: 'Glitch', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -601,6 +620,9 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },   // #482 polish 10.2, as on Wave and Ripple
+      { key: 'decay', label: 'Falloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },          // #482 polish 10.2 (C30), as on Ripple
+      { key: 'reach', label: 'Radius', min: 0, max: 200, step: 1, def: 0, unit: '%', note: '0 reaches the whole frame' },
     ] },
     // ---- batch 10 ----
     { type: 'bumpmap', label: 'Bump Map', params: [
@@ -721,7 +743,13 @@ window.FM = window.FM || {};
       { key: 'radial', label: 'Toward edges', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },
     { type: 'innerglow', label: 'Inner Glow', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
     { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }, { key: 'coloursafe', label: 'Protect colour', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },   // saved/filter instances remain on the original per-channel path
-    { type: 'hextiles', label: 'Hexagon Tiles', param: 'size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
+    /* #482 polish 10.7: a params list now (it was the one-slider shorthand, whose slider was labelled with the effect's own
+       name). Grout and Edge shade at 0 are the old tiles; the Grout colour only shows once there is grout. Same storage key. */
+    { type: 'hextiles', label: 'Hexagon Tiles', color: true, defColor: '#000000', colorLabel: 'Grout colour', colorGate: { by: 'gap', deadAt: 0, deadAtText: '0%' }, params: [
+      { key: 'size', label: 'Tile size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
+      { key: 'gap', label: 'Grout', min: 0, max: 40, step: 1, def: 0, unit: '%' },
+      { key: 'edge', label: 'Edge shade', min: 0, max: 1, step: 0.02, def: 0 },
+    ] },
     /* #482 polish 6.6 (#966 "as much choice as possible"). The streak only ever ran one way along Angle, every bright-ish
        pixel joined it (a mid-tone streaks a little, so a busy picture smeared all over rather than just its lights), and it
        was always the colour of what it smeared. Both ways smears to both sides, Only above is Zoom Streaks' gate (the same
@@ -1387,6 +1415,11 @@ window.FM = window.FM || {};
       { key: 'scale', label: 'Detail', min: 10, max: 400, step: 1, def: 60 },
       { key: 'evolve', label: 'Boil speed', min: 0, max: 5, step: 0.05, def: 1, unit: '×' },   // queue 904: it boiled at a fixed, unstoppable rate
       { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 },
+      /* #482 polish 10.4: it boiled in place, with round swirls only. Flow X / Y carry the whole field (heat haze rising, water
+         drifting) and Stretch widens or heightens its swirls — see tdDomain. 0, 0 and 100 are the old field exactly. */
+      { key: 'flowx', label: 'Flow X', min: -300, max: 300, step: 1, def: 0, unit: 'px/s' },
+      { key: 'flowy', label: 'Flow Y', min: -300, max: 300, step: 1, def: 0, unit: 'px/s' },
+      { key: 'stretch', label: 'Stretch', min: 25, max: 400, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'stretchseg', label: 'Stretch Segment', params: [
       { key: 'y', label: 'Position', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -1446,7 +1479,14 @@ window.FM = window.FM || {};
     // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
     { type: 'displacemap', label: 'Displacement Map', layer: true, layerLabel: 'Map layer', params: [
       { key: 'amount', label: 'Amount', min: -200, max: 200, step: 1, def: 40, unit: 'px' },
-      { key: 'channel', label: 'Channel', def: 0, options: [[0, 'Red→X, Green→Y'], [1, 'Luminance']] },
+      /* #482 polish 10.5: one push along one axis, or a map's alpha as the push (see dispVec). 0 and 1 are the old two. */
+      { key: 'channel', label: 'Channel', def: 0, options: [[0, 'Red→X, Green→Y'], [1, 'Luminance'], [2, 'Luma→X only'], [3, 'Luma→Y only'], [4, 'Alpha→both']] },
+      /* #482 polish 10.5: the up-down push FOLLOWS Amount until he sets it (Wiggle's Vertical amount rule), so a saved map and a
+         new one push both ways alike; dead under Luma→X only, which the row says. Map blur eases the push; Map fit stretches a
+         chosen map layer over this one (no effect without a map layer — the layer then displaces itself). */
+      { key: 'amounty', label: 'Vertical amount', min: -200, max: 200, step: 1, def: 40, unit: 'px', follows: 'amount', overriddenBy: 'channel', liveWhen: [0, 1, 3, 4] },
+      { key: 'smooth', label: 'Map blur', min: 0, max: 40, step: 1, def: 0, unit: 'px' },
+      { key: 'fit', label: 'Map fit', def: 0, options: [[0, 'As placed'], [1, 'Stretch to this layer']], note: 'Needs a Map layer' },
     ] },
     { type: 'polardisplace', label: 'Polar Displacement', layer: true, layerLabel: 'Map layer', params: [
       { key: 'radius', label: 'Radius', min: -200, max: 200, step: 1, def: 40, unit: 'px' },
@@ -8549,7 +8589,21 @@ window.FM = window.FM || {};
       var hxM=Math.ceil(hxSize)+2;
       var hxY0=hxBB?Math.max(0,hxBB.y-hxM):0, hxY1=hxBB?Math.min(H-1,hxBB.y+hxBB.h-1+hxM):H-1;
       var hxX0=hxBB?Math.max(0,hxBB.x-hxM):0, hxX1=hxBB?Math.min(W-1,hxBB.x+hxBB.w-1+hxM):W-1;
-      for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
+      /* GROUT, ITS COLOUR AND EDGE SHADE (#482 polish 10.7). The tiles butted straight into each other, so it read as a blur of
+         hexagons rather than tiles. GROUT (% of the tile size) paints a band that wide along every cell border in the Grout
+         colour; EDGE SHADE darkens each tile toward its border over a quarter of a tile, a bevel. Both need how far a pixel is
+         from its cell's border: the distance to the bisector between its centre and each neighbour's, (d_k² − d²) / 2|c_k − c|,
+         the nearest of them — over a 5×5 of cells, because a border neighbour of the pixel's cell can sit two away from the cell
+         the row/column guess names. A grout pixel keeps its cell's alpha, so a tile off the layer (alpha 0) stays exactly
+         what it was and the #692 skip above stays a skip. Both 0 (an absent key) is the loop below with nothing added. */
+      var hxGap=fparam(p, 'gap', 0, t); if(!(hxGap>0))hxGap=0; if(hxGap>40)hxGap=40;
+      var hxEdge=fparam(p, 'edge', 0, t); if(!(hxEdge>0))hxEdge=0; if(hxEdge>1)hxEdge=1;
+      var hxDeco=hxGap>0||hxEdge>0, hxG2=hxGap/100*hxSize/2, hxBW=0.25*hxSize, hxGc=hxDeco?hexToRGB(p.color||'#000000'):null, hxBCX=0, hxBCY=0;
+      for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); hxBCX=hxCX; hxBCY=hxCY; } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3];
+        if(hxDeco&&hxSrc[hxSi+3]>0){ var hxE=1e9; for(var hxRO3=-2;hxRO3<=2;hxRO3++){ var hxR3=hxRow+hxRO3; var hxCY3=hxR3*hxRowH+hxRowH*0.5; var hxSh3=(hxR3&1)?hxHalf:0; for(var hxCO3=-2;hxCO3<=2;hxCO3++){ var hxCX3=(hxCol+hxCO3)*hxSize+hxSh3+hxHalf; if(hxCX3===hxBCX&&hxCY3===hxBCY)continue; var hxLk=Math.hypot(hxCX3-hxBCX,hxCY3-hxBCY); if(!(hxLk>0))continue; var hxDX3=hxX-hxCX3, hxDY3=hxY-hxCY3; var hxEk=(hxDX3*hxDX3+hxDY3*hxDY3-hxBestDx)/(2*hxLk); if(hxEk<hxE)hxE=hxEk; } }
+          if(hxE<hxG2){ d[hxDi]=hxGc[0]; d[hxDi+1]=hxGc[1]; d[hxDi+2]=hxGc[2]; }   // grout, at the tile's own alpha
+          else if(hxEdge>0){ var hxS=1-(hxE-hxG2)/hxBW; if(hxS>0){ if(hxS>1)hxS=1; var hxMul=1-hxEdge*hxS*hxS; d[hxDi]*=hxMul; d[hxDi+1]*=hxMul; d[hxDi+2]*=hxMul; } } }
+      } } },
     linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<=0)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d);
       /* #482 polish 6.6. BOTH WAYS reads the same taps on the far side too, each side as strong as the one-way streak, so a bright dot
          streaks out both ways along Angle. ONLY ABOVE is Zoom Streaks' gate: a tap's brightness below the cut weighs nothing and the
@@ -10290,7 +10344,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   Object.setPrototypeOf(PIXEL_FX, null);   // own keys only — see POSTFX
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
-  // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Nearest-neighbour sampling.
+  // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Nearest-neighbour sampling, clamped at the
+  // edges — unless the effect's Edges / Smooth sampling say otherwise (#482 polish 10.1, see warpResample).
   // Depth-indexed pool (like _pfPool): stacking two warps re-enters this fn (the inner warp runs
   // inside the outer's drawLayer). Shared singletons made the inner pass composite onto the SAME
   // canvas the outer then read as its source → an un-warped ghost of the layer bled through.
@@ -10418,6 +10473,91 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   function wR(p, t, maxR) { const v = p.radius == null ? 100 : FM.evalProp(p.radius, t); return v === 100 ? maxR : Math.max(1, maxR * (v / 100)); }
+  /* WAVE SPEED (#482 polish 10.2): degrees of phase per second on the clip's own clock `tl`, added to Phase, so Wave, Ripple and
+     Curl travel without keyframing Phase by hand. A keyframed speed is INTEGRATED over the clip (queue 913's rule — speed(now)
+     × time would rescale the whole history every frame and a slow-down would rewind the waves). Absent or 0 → exactly 0, and
+     the callers then leave Phase's own number untouched. `tl` absent (a kernel called without a prep) reads `t`. */
+  function wSpeedDeg(p, t, tl) { return p.speed == null ? 0 : wClipIntegral(p.speed, t, tl); }
+  /* How far a per-second rate has run since the clip began: rate × tl, or its integral when keyframed. Shared by Wave speed
+     (10.2), Kaleidoscope's Flow (10.3) and Turbulent Displace's Flow X / Y (10.4). 0 exactly when the rate is 0. */
+  function wClipIntegral(v, t, tl) {
+    if (tl == null || !isFinite(tl)) tl = t;
+    if (FM.isAnimated(v)) { const n = FM.integrateProp(v, t - tl, t); return isFinite(n) ? n : 0; }
+    const s = FM.evalProp(v, t);
+    return (isFinite(s) && s !== 0) ? s * tl : 0;
+  }
+  /* RADIUS (`reach`, #482 polish 10.2): Ripple and Curl stop at R. Full strength out to three quarters of it, then a smoothstep
+     down to nothing at R, so the edge of the disturbed water is a fade and not a tear. A MATCHED PAIR with gl-warp.js wReach. */
+  function wReach(r, R) { let u = (R - r) / (0.25 * R); u = u < 0 ? 0 : (u > 1 ? 1 : u); return u * u * (3 - 2 * u); }
+
+  /* ═══ EDGES AND SMOOTH SAMPLING, FOR EVERY WARP (#482 polish 10.1, backlog C26) ══════════════════════════════════════════
+   * Every warp was point-sampled with clamped edges: the loop below truncated the mapped point and pinned it inside the plate,
+   * and the shader (js/gl-warp.js) did the same with NEAREST + clamp. So a twirl stair-stepped every edge it bent, and a warp
+   * that reached past the frame smeared the edge pixel outward in streaks — there was no other answer to "what is out there".
+   *   EDGES (`edges`): 0 Stretch — the old clamp; 1 Transparent — nothing out there; 2 Wrap — the far side comes round;
+   *     3 Mirror — the picture reflects at the frame (GL's mirrored repeat: … 2 1 0 | 0 1 2 … W-1 | W-1 …).
+   *   SMOOTH SAMPLING (`smooth`): 0 the old nearest pixel; 1 bilinear across the four pixels round the mapped point, weighted in
+   *     PREMULTIPLIED alpha, so a transparent neighbour fades the alpha without dragging black into the colour.
+   * The point is taken on the PIXEL-INDEX lattice (pixel i sits at i, not i + 0.5) — the lattice the kernels already speak:
+   * the loop walks integer x and y, and an identity map returns them exactly, so an untouched region stays sharp with Smooth
+   * on instead of going soft by half a pixel. Nearest is the floor of that point, which is what the shader has always taken.
+   * ⚠️ Both 0 is the loop as it was, line for line, chosen once per frame and never per pixel: every saved warp is this case
+   * (an absent key reads 0), and it must draw byte for byte and at the old speed. warpResample is a seam for the suite. */
+  function warpSampling(p, t) {
+    const e = p.edges == null ? 0 : (Math.round(FM.evalProp(p.edges, t)) | 0);
+    const s = p.smooth == null ? 0 : (Math.round(FM.evalProp(p.smooth, t)) | 0);
+    return { edges: (e >= 1 && e <= 3) ? e : 0, smooth: s === 1 ? 1 : 0 };
+  }
+  // An integer pixel index → an index inside [0, n-1] under the edge mode, or -1 for "nothing there" (Transparent).
+  function warpIdx(i, n, edges) {
+    if (edges === 1) return (i < 0 || i >= n) ? -1 : i;
+    if (edges === 2) { i %= n; return i < 0 ? i + n : i; }
+    if (edges === 3) { const p2 = 2 * n; i %= p2; if (i < 0) i += p2; return i >= n ? p2 - 1 - i : i; }
+    return i < 0 ? 0 : (i >= n ? n - 1 : i);
+  }
+  function warpResample(src, o, W, H, mapFn, cx, cy, maxR, pr, t, ps, pre, edges, smooth) {
+    if (!edges && !smooth) {
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
+          let sx = m[0] | 0, sy = m[1] | 0;
+          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+          if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+      }
+      return;
+    }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
+        let mx = m[0], my = m[1];
+        if (!isFinite(mx)) mx = 0;   // `NaN | 0` is 0 in the old loop; a non-finite point reads the same pixel here
+        if (!isFinite(my)) my = 0;
+        const di = (y * W + x) * 4, x0 = Math.floor(mx), y0 = Math.floor(my);
+        if (!smooth) {
+          const ix = warpIdx(x0, W, edges), iy = warpIdx(y0, H, edges);
+          if (ix < 0 || iy < 0) { o[di] = 0; o[di + 1] = 0; o[di + 2] = 0; o[di + 3] = 0; continue; }
+          const si = (iy * W + ix) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+          continue;
+        }
+        const fx = mx - x0, fy = my - y0;
+        const ix0 = warpIdx(x0, W, edges), ix1 = warpIdx(x0 + 1, W, edges), iy0 = warpIdx(y0, H, edges), iy1 = warpIdx(y0 + 1, H, edges);
+        let A = 0, R = 0, G = 0, B = 0, w, a, si;
+        // the four taps, each weighted by its share and by its own alpha (premultiplied)
+        if (ix0 >= 0 && iy0 >= 0) { w = (1 - fx) * (1 - fy); si = (iy0 * W + ix0) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (ix1 >= 0 && iy0 >= 0) { w = fx * (1 - fy); si = (iy0 * W + ix1) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (ix0 >= 0 && iy1 >= 0) { w = (1 - fx) * fy; si = (iy1 * W + ix0) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (ix1 >= 0 && iy1 >= 0) { w = fx * fy; si = (iy1 * W + ix1) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (A > 0) { o[di] = R / A; o[di + 1] = G / A; o[di + 2] = B / A; o[di + 3] = A; }
+        else { o[di] = 0; o[di + 1] = 0; o[di + 2] = 0; o[di + 3] = 0; }
+      }
+    }
+  }
+  FM._warpResample = warpResample;   // suite seam (#482 polish 10.1)
+  FM._warpSampling = warpSampling;
 
   function drawWarpEffect(ctx, layer, t, scene, fx, mapFn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
@@ -10446,11 +10586,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         drawLayer(actx, tmp, t, scene);
       }
       const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
+      const samp = warpSampling(pr, t);   // #482 polish 10.1: Edges and Smooth sampling — both 0 is the old sampler
+      /* THE CLIP'S OWN CLOCK, as a 9th argument to every prep (#482 polish 10.2). `t` is project time; a Wave speed or a flow
+         in px/s has to start at the clip's start (and carry across a split — fxTimeOffset), the rule every mover already
+         follows. A prep that does not take it ignores it; a kernel called without a prep (the suite's reference path) reads
+         `t` in its place. */
+      const tl = FM.fxLocalTime ? FM.fxLocalTime(layer, t) : t;
       function uniformsFor(k, params) {
         /* glslPrep first, then prep, then nothing — the same three-way the single-effect path uses.
            A kernel with nothing worth hoisting has no prep at all, and that is not an error. */
-        return (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps)
-                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps) : null)) || {};
+        return (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps, tl)
+                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps, tl) : null)) || {};
       }
       /* ═══ A RUN OF WARPS GOES THROUGH THE GPU IN ONE GO (the oldest entry's own named next step) ══
        * *"A CHAIN OF WARPS DOES NOT YET STAY ON THE GPU… worth roughly another 3x on a stacked layer
@@ -10491,7 +10637,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       let warped = null;
       if (chain) {
         plate(chain.map(c => c.fx));
-        warped = FM.glWarp.runChain(wA, W, H, chain.map(c => ({ body: c.k.glsl, uniforms: uniformsFor(c.k, c.fx.params || {}) })));
+        // each pass carries its OWN Edges and Smooth sampling (#482 polish 10.1) — they are the effect's, not the chain's
+        warped = FM.glWarp.runChain(wA, W, H, chain.map(c => Object.assign({ body: c.k.glsl, uniforms: uniformsFor(c.k, c.fx.params || {}) }, warpSampling(c.fx.params || {}, t))));
         /* A chain that could not run has left the WRONG plate in wA — the inner warps are missing
            from it. Re-render the single-effect plate so the paths below are exactly what they would
            have been had the chain never been attempted. Costs one render on a path that only happens
@@ -10500,7 +10647,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       } else {
         plate([fx]);
       }
-      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps) : null;
+      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps, tl) : null;
       /* ═══ THE GPU PATH (the oldest open item, "Editing lags, and gets bad fast") ══════════════════
        * That entry's own conclusion after three months: the cost is this loop, the gap is ~50x, and no
        * further kernel tuning closes it. A kernel that carries a `.glsl` twin runs as a fragment shader
@@ -10520,22 +10667,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          * A shader still needs those numbers. `glslPrep` is that, and it runs ONLY on this path, so the
          * CPU loop keeps exactly the shape that was measured — the finding above is not quietly undone
          * by the GPU port. */
-        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps) : pre;
-        warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {});
+        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps, tl) : pre;
+        warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {}, samp);
       }
       if (!warped) {
         const src = actx.getImageData(0, 0, W, H).data;
         const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
-        for (let y = 0; y < H; y++) {
-          for (let x = 0; x < W; x++) {
-            const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
-            let sx = m[0] | 0, sy = m[1] | 0;
-            if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
-            if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
-            const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
-            o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
-          }
-        }
+        warpResample(src, o, W, H, mapFn, cx, cy, maxR, pr, t, ps, pre, samp.edges, samp.smooth);   // both 0: the loop that was here, verbatim
         bctx.putImageData(outImg, 0, 0);
         warped = wB;
       }
@@ -11694,6 +11832,101 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     } finally { _dspLvl--; }
   }
 
+  /* ═══ DISPLACEMENT MAP'S RESAMPLE (#482 polish 10.5) ═════════════════════════════════════════════════════════════════════
+   * The loop that was inline in drawDisplaceEffect, as a seam the suite can hold against the old one. What it adds:
+   *   CHANNELS 2 Luma→X only, 3 Luma→Y only (the other axis stays put — a ripple that only runs sideways), 4 Alpha→both (a
+   *     map's own soft edges push, whatever its colour);
+   *   VERTICAL AMOUNT — `amountY`, which the caller passes as Amount while the key is absent;
+   *   MAP BLUR — the PUSH is blurred, not the map's pixels: a transparent map pixel is a push of 0 and blurs as 0, so the field
+   *     eases out at a map's edge instead of the colour of its edge spreading outward at full strength. Two box passes each
+   *     way of radius blur/2 (a tent that reaches `blur` px), on a field of floats.
+   * Blur under 1 px is the old loop exactly — chosen once, never per pixel; channels 0 and 1 with amountY === amount are the old
+   * arithmetic, operation for operation. */
+  const _dv = [0, 0];
+  function dispVec(map, mi, chan) {
+    let dxn = 0, dyn = 0;
+    if (map[mi + 3] !== 0) {
+      if (chan === 1) { const l = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5; dxn = l; dyn = l; }
+      else if (chan === 2) dxn = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5;   // Luma→X only
+      else if (chan === 3) dyn = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5;   // Luma→Y only
+      else if (chan === 4) { const a = map[mi + 3] / 255 - 0.5; dxn = a; dyn = a; }                            // Alpha→both
+      else { dxn = map[mi] / 255 - 0.5; dyn = map[mi + 1] / 255 - 0.5; }   // Red→X, Green→Y
+    }
+    _dv[0] = dxn; _dv[1] = dyn;
+  }
+  function dispBoxH(a, b, W, H, r) {
+    const n = 2 * r + 1;
+    for (let y = 0; y < H; y++) {
+      const row = y * W; let s = 0;
+      for (let k = -r; k <= r; k++) s += a[row + (k < 0 ? 0 : (k >= W ? W - 1 : k))];
+      for (let x = 0; x < W; x++) {
+        b[row + x] = s / n;
+        const ad = x + r + 1, sb = x - r;
+        s += a[row + (ad >= W ? W - 1 : ad)] - a[row + (sb < 0 ? 0 : sb)];
+      }
+    }
+  }
+  function dispBoxV(a, b, W, H, r) {
+    const n = 2 * r + 1;
+    for (let x = 0; x < W; x++) {
+      let s = 0;
+      for (let k = -r; k <= r; k++) s += a[(k < 0 ? 0 : (k >= H ? H - 1 : k)) * W + x];
+      for (let y = 0; y < H; y++) {
+        b[y * W + x] = s / n;
+        const ad = y + r + 1, sb = y - r;
+        s += a[(ad >= H ? H - 1 : ad) * W + x] - a[(sb < 0 ? 0 : sb) * W + x];
+      }
+    }
+  }
+  function displaceResample(src, map, o, W, H, amount, amountY, chan, blur) {
+    if (!(blur >= 1)) {
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const mi = (y * W + x) * 4;
+          dispVec(map, mi, chan);
+          let sx = (x + _dv[0] * 2 * amount) | 0, sy = (y + _dv[1] * 2 * amountY) | 0;
+          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+      }
+      return;
+    }
+    const N = W * H, FX = new Float32Array(N), FY = new Float32Array(N), T = new Float32Array(N);
+    for (let i = 0; i < N; i++) { dispVec(map, i * 4, chan); FX[i] = _dv[0]; FY[i] = _dv[1]; }
+    const r = Math.max(1, Math.round(blur / 2));
+    for (let pass = 0; pass < 2; pass++) { dispBoxH(FX, T, W, H, r); dispBoxV(T, FX, W, H, r); dispBoxH(FY, T, W, H, r); dispBoxV(T, FY, W, H, r); }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        let sx = (x + FX[i] * 2 * amount) | 0, sy = (y + FY[i] * 2 * amountY) | 0;
+        if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+        const di = i * 4, si = (sy * W + sx) * 4;
+        o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+      }
+    }
+  }
+  /* MAP FIT "Stretch to this layer" (#482 polish 10.5): the map layer's own bounds (its alpha box) are stretched over THIS
+     layer's, nearest pixel, so a small map drawn anywhere drives the whole layer and follows it if either moves. Outside this
+     layer's box the fitted map is empty (no push), which is the layer's own transparent margin anyway. Null when either has
+     nothing drawn — the caller keeps the map as placed. */
+  function dispFitMap(map, src, W, H) {
+    const mb = alphaBBoxExact(map, W, H), tb = alphaBBoxExact(src, W, H);
+    if (!mb || !tb) return null;
+    const out = new Uint8ClampedArray(W * H * 4);
+    for (let y = tb.y; y < tb.y + tb.h; y++) {
+      let my = mb.y + Math.floor((y - tb.y + 0.5) * mb.h / tb.h); if (my > mb.y + mb.h - 1) my = mb.y + mb.h - 1;
+      for (let x = tb.x; x < tb.x + tb.w; x++) {
+        let mx = mb.x + Math.floor((x - tb.x + 0.5) * mb.w / tb.w); if (mx > mb.x + mb.w - 1) mx = mb.x + mb.w - 1;
+        const di = (y * W + x) * 4, si = (my * W + mx) * 4;
+        out[di] = map[si]; out[di + 1] = map[si + 1]; out[di + 2] = map[si + 2]; out[di + 3] = map[si + 3];
+      }
+    }
+    return out;
+  }
+  FM._displaceResample = displaceResample;   // suite seams (#482 polish 10.5)
+  FM._dispFitMap = dispFitMap;
+
   function drawDisplaceEffect(ctx, layer, t, scene, fx, polar) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -11736,19 +11969,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // rule drawPixelEffect hands its kernels as `ps`. × 1 on every export.
       const amt = FM.evalProp(pr.amount, t); const amount = (amt == null ? 40 : amt) * ps;
       const chan = Math.round(FM.evalProp(pr.channel, t) || 0);
-      for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
-          const mi = (y * W + x) * 4; let dxn = 0, dyn = 0;
-          if (map[mi + 3] !== 0) {
-            if (chan === 1) { const l = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5; dxn = l; dyn = l; }
-            else { dxn = map[mi] / 255 - 0.5; dyn = map[mi + 1] / 255 - 0.5; }   // Red→X, Green→Y
-          }
-          let sx = (x + dxn * 2 * amount) | 0, sy = (y + dyn * 2 * amount) | 0;
-          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
-          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
-          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
-        }
-      }
+      /* #482 polish 10.5 — Vertical amount (FOLLOWS Amount while it has no value of its own, so a saved map pushes both ways
+         alike, exactly as before), Map blur in px, and Map fit: a map layer stretched over THIS layer's own bounds instead of
+         read where it happens to sit. See displaceResample. */
+      const amountY = pr.amounty == null ? amount : (FM.evalProp(pr.amounty, t) || 0) * ps;
+      let blur = pr.smooth == null ? 0 : (FM.evalProp(pr.smooth, t) || 0); blur = blur < 0 ? 0 : (blur > 40 ? 40 : blur);
+      const fit = pr.fit == null ? 0 : (Math.round(FM.evalProp(pr.fit, t)) | 0);
+      if (fit === 1 && map !== src) map = dispFitMap(map, src, W, H) || map;
+      displaceResample(src, map, o, W, H, amount, amountY, chan, blur * ps);
     } else {
       const rAmt = FM.evalProp(pr.radius, t); const radius = (rAmt == null ? 40 : rAmt) * ps;   // PROJECT px → plate px
       const aAmt = FM.evalProp(pr.angle, t); const angAmt = ((aAmt == null ? 30 : aAmt)) * Math.PI / 180;   // an angle: scale-free
@@ -11791,13 +12019,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * below are per-pixel today as well. `prep` computes exactly the same `Math.sin` of exactly the
        * same argument once per row/column, so the result is BYTE-IDENTICAL, not within a bound. */
       if (pre && !pre.rot) return [x + pre.SX[y], y + pre.SY[x]];
+      /* A TURNED WAVE READS ITS NUMBERS FROM THE PREP (#482 polish 10.2). It used to re-resolve all of them per pixel from the
+         params, and Wave speed needs the clip's clock, which only the prep is handed. Same expressions, same order as the
+         lines below — the prep computes amp, wl, wl2, ph, cross, ca and sa exactly as they do — so a turned wave is unchanged. */
+      if (pre) { const xr = x * pre.ca + y * pre.sa, yr = -x * pre.sa + y * pre.ca;
+        const a1 = pre.amp * Math.sin(yr / pre.wl + pre.ph), a2 = pre.amp * pre.cross * Math.sin(xr / pre.wl2 + pre.ph);
+        return [x + a1 * pre.ca - a2 * pre.sa, y + a1 * pre.sa + a2 * pre.ca]; }
       const k = ps || 1;
       const amp = (FM.evalProp(p.amount, t) || 0) * k;
       // Legacy exactness: wavelength 38 reproduces `y / 38`, and the second axis kept its 46/38
       // ratio (46 = 38 * 1.2105…) so a single control moves both without changing the default look.
       const wl = (p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
       const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
-      const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+      const sd = wSpeedDeg(p, t), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed
+      const ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
       const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
       /* ANGLE (queue 904): the same two sines, in axes turned by the angle — the wave runs along the turned x, the cross wave along the
          turned y — so a flag or banner can wave on a diagonal. 0 is the line below, untouched; a turned wave is not separable, so its
@@ -11812,7 +12047,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     ripple: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
       const C = pre || WARP_FX.ripple.prep(W, H, cx, cy, maxR, p, t, ps);
       const dx = x - C.cx, dy = y - C.cy, r = Math.hypot(dx, dy) || 1e-6;
-      const off = C.amp * Math.sin(r / C.wl - C.ph);   // minus: rising phase sends the rings OUTWARD
+      let off = C.amp * Math.sin(r / C.wl - C.ph);   // minus: rising phase sends the rings OUTWARD
+      if (C.dk > 0) off *= Math.exp(-C.dk * r);        // #482 polish 10.2 Falloff (C30) — 0 skips it, so a saved ripple is untouched
+      if (C.rch > 0) off *= wReach(r, C.rch);          // #482 polish 10.2 Radius — 0 is no limit
       return [x + (dx / r) * off, y + (dy / r) * off];
     },
     _rippleLegacy: function (x, y, W, H, cx, cy, maxR, p, t, ps) {
@@ -11874,8 +12111,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const cx_ = C.cx, cy_ = C.cy, slice = C.slice;
       const dx = x - cx_, dy = y - cy_, r = Math.hypot(dx, dy);
       let a = (Math.atan2(dy, dx) + C.ph) % slice; if (a < 0) a += slice;
-      a = Math.abs(a - C.half);   // fold within the wedge → mirrored kaleidoscope
-      return [reflectInto(cx_ + Math.cos(a) * r, W), reflectInto(cy_ + Math.sin(a) * r, H)];
+      if (C.mir) a = Math.abs(a - C.half);   // fold within the wedge → mirrored kaleidoscope (Mirror wedges Off: repeat it)
+      /* #482 polish 10.3: the radius it reads (Source zoom, Flow) and where from (Source X / Y) — untouched when unset */
+      const rs = (C.iz === 1 && C.fl === 0) ? r : r * C.iz - C.fl;
+      return [reflectInto(C.ox + Math.cos(a) * rs, W), reflectInto(C.oy + Math.sin(a) * rs, H)];
     },
     _kaleidoscopeLegacy: function (x, y, W, H, cx, cy, maxR, p, t) {
       cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy);
@@ -11948,7 +12187,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the same point by different float arithmetic, 42 of 1365 sampled coordinates truncated to a
      * NEIGHBOURING source pixel. A 1-pixel resample across 3% of a warp is a fine price for twirl's
      * 1.89x and a poor one for 1.11x. The `prep` hoist below stays — that part is free and exact. */
-    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
+    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph);
+      if(C.dk>0)cuSw*=Math.exp(-C.dk*cuR); if(C.rch>0)cuSw*=wReach(cuR,C.rch);   /* #482 polish 10.2 Falloff and Radius (C30), as on Ripple — 0 skips each */
+      var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
     /* THE GENUINE PRE-PREP CURL (queue 779) — the kernel as it was before v13.28 hoisted its constants, resolving amount /
      * wavelength / phase per call. It is the reference the tol-0 equality row measures the prepped kernel against.
      * History, because it was got wrong twice: v13.29 added `_curlLegacy` as a copy of the ALREADY-prepped curl, so the
@@ -12170,8 +12411,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var td_sc = fparam(p, 'scale', 60, t); if(td_sc<10)td_sc=10;
       td_a*=(ps||1); td_sc=Math.max(1,td_sc*(ps||1));
       var td_ph=tdPhase(p,t);   // queue 904: Boil speed and Pattern — the same helper the prep uses, so the two cannot drift
-      var td_wx=td_noise(x/td_sc+td_ph, y/td_sc), td_wy=td_noise(x/td_sc, y/td_sc-td_ph*0.8);
-      var td_dx=td_noise(x/td_sc+td_wx+5.2, y/td_sc+td_wy), td_dy=td_noise(x/td_sc-td_wy, y/td_sc+td_wx+1.7);
+      /* #482 polish 10.4: Flow X / Y slide the field (the point it is read at is x - flow·tl), Stretch widens it — the same
+         helper the prep uses. This path has no clip clock, so it reads `t` as one. Unset: x, y and the scale exactly. */
+      var td_d=tdDomain(p,t,undefined,ps), td_x=td_d.ox===0?x:x-td_d.ox, td_y=td_d.oy===0?y:y-td_d.oy, td_scx=td_d.st===100?td_sc:td_sc*td_d.st/100;
+      var td_wx=td_noise(td_x/td_scx+td_ph, td_y/td_sc), td_wy=td_noise(td_x/td_scx, td_y/td_sc-td_ph*0.8);
+      var td_dx=td_noise(td_x/td_scx+td_wx+5.2, td_y/td_sc+td_wy), td_dy=td_noise(td_x/td_scx-td_wy, td_y/td_sc+td_wx+1.7);
       return [x+td_dx*td_a, y+td_dy*td_a];
     },
     // Stretch Segment: grab a horizontal band and pull it vertically — content inside the band is
@@ -12234,6 +12478,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   FM._warpFx = WARP_FX;   // suite seam — same reason as FM._pixelFx: the kernels are module-local,
                           // and a test cannot otherwise check a fast path against its own reference.
 
+  /* EDGES AND SMOOTH SAMPLING ON EVERY WARP'S PANEL (#482 polish 10.1). The driver reads them for every WARP_FX entry (see
+   * warpSampling), so the rows are declared HERE, off this table, rather than copied into 22 catalogue entries: a warp added
+   * later gets them without anyone remembering, and the load sanitiser keeps them because they are in its catalogue row.
+   * Defaults are the old sampler, so every library filter and every saved warp draws as before.
+   * ⚠️ NOT on a warp where the row could not change the picture — a dead control is a defect, not a choice:
+   *   Edges: Kaleidoscope folds every point back inside the frame (reflectInto); Wrap Shift and Tile Shift wrap with their own
+   *   mod; Grid Repeat and Mirror Tile read a fraction of the frame; Stretch Segment only pulls toward its band. None can read
+   *   past the frame, so there is nothing for Edges to decide.
+   *   Smooth: Wrap Shift slides by WHOLE pixels (its prep rounds the shift), so every point lands on a pixel. */
+  const WARP_NO_EDGES = { kaleidoscope: 1, wrapshift: 1, tileshift: 1, gridrepeat: 1, mirrortile: 1, stretchseg: 1 };
+  const WARP_NO_SMOOTH = { wrapshift: 1 };
+  Object.keys(WARP_FX).forEach(type => {
+    const def = FM.EFFECTS.find(d => d && d.type === type);
+    if (!def || !Array.isArray(def.params)) return;
+    const has = k => def.params.some(q => q && q.key === k);
+    if (!WARP_NO_EDGES[type] && !has('edges')) def.params.push({ key: 'edges', label: 'Edges', def: 0, options: [[0, 'Stretch'], [1, 'Transparent'], [2, 'Wrap'], [3, 'Mirror']] });
+    if (!WARP_NO_SMOOTH[type] && !has('smooth')) def.params.push({ key: 'smooth', label: 'Smooth sampling', def: 0, options: [[0, 'Off'], [1, 'On']] });
+  });
+
   /* ═══ TURBULENT DISPLACE: the per-frame half of its noise, hoisted out of the pixel loop.
    * (queue 474 — it was the last effect over 150ms at his 1080×1350, 11 of the top 15 being warps.)
    *
@@ -12261,12 +12524,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * frame constant becoming a multiply by its reciprocal, which is exact for the values involved.
    * These three were the 4th, 5th and 11th dearest effects of 198 (curl 33.9 ms, fractalwarp 28.3,
    * tunnel 21.0, measured at half resolution by `tools/_phoneprobe.py --sweep`). */
-  WARP_FX.curl.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  /* FALLOFF AND RADIUS for Ripple and Curl (#482 polish 10.2, backlog C30 — EFFECTS-PLAN.md listed a falloff as shipped and
+     there was none). Falloff `decay` 0–100 %: the strength × exp(−decay/25 · r/maxR), so 100 leaves e^-4 ≈ 2 % at the frame's
+     half-diagonal. Radius `reach` 0–200 % of that half-diagonal, 0 = no limit (see wReach). Both are folded into two numbers
+     here — `dk` per plate px and `rch` in plate px, both 0 when off — which double as the shader's uniforms. */
+  function wDecayReach(p, t, maxR) {
+    let dc = p.decay == null ? 0 : FM.evalProp(p.decay, t); if (!(dc > 0)) dc = 0; if (dc > 100) dc = 100;
+    let rc = p.reach == null ? 0 : FM.evalProp(p.reach, t); if (!(rc > 0)) rc = 0; if (rc > 200) rc = 200;
+    return { dk: dc > 0 && maxR > 0 ? dc / 25 / maxR : 0, rch: rc > 0 ? maxR * rc / 100 : 0 };
+  }
+  WARP_FX.curl.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     var ccx = wCx(p, t, W, cx), ccy = wCy(p, t, H, cy);
     var amt = fparam(p, 'amount', 0.5, t); if (amt < -1) amt = -1; if (amt > 1) amt = 1;
     var wl = Math.max(1, (p.wavelength == null ? 40 : Math.max(1, FM.evalProp(p.wavelength, t))) * (ps || 1));
-    var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph };
+    var sd = wSpeedDeg(p, t, tl), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed
+    var ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
+    var dr = wDecayReach(p, t, maxR);
+    return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph, dk: dr.dk, rch: dr.rch };
   };
 
   WARP_FX.innerpinch.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -12278,21 +12552,35 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { a: ip_a, cx: ipCx, cy: ipCy, rad: ip_rad };
   };
 
-  WARP_FX.ripple.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  WARP_FX.ripple.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     var k = ps || 1;
     var rcx = wCx(p, t, W, cx), rcy = wCy(p, t, H, cy);
     var amp = (FM.evalProp(p.amount, t) || 0) * k;
     var wl = (p.wavelength == null ? 20 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
-    var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: rcx, cy: rcy, amp: amp, wl: wl, ph: ph };
+    var sd = wSpeedDeg(p, t, tl), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed
+    var ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
+    var dr = wDecayReach(p, t, maxR);   // #482 polish 10.2: Falloff and Radius — maxR is the plate's, so they scale with it
+    return { cx: rcx, cy: rcy, amp: amp, wl: wl, ph: ph, dk: dr.dk, rch: dr.rch };
   };
 
-  WARP_FX.kaleidoscope.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  /* #482 polish 10.3 — what the wedges LOOK AT. They only ever reflected the picture round the centre, at its own size.
+     SOURCE ZOOM magnifies what feeds them (200 % reads half the radius); SOURCE X / Y move the point they read from, as a % of
+     half the frame, so the pattern can be built from any part of the shot; FLOW streams the picture out of the centre (px/s on
+     the clip clock, + outward, − inward), so a still image keeps unfolding; MIRROR WEDGES Off repeats the wedge instead of
+     reflecting it (a pinwheel, seams and all). All folded into the prep — `iz` 1 and `fl` 0 and the origin at the centre when
+     unset — so the kernel and the shader read the same numbers and a saved kaleidoscope is the old arithmetic exactly. */
+  WARP_FX.kaleidoscope.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     var kcx = wCx(p, t, W, cx), kcy = wCy(p, t, H, cy);
     var seg = Math.max(2, Math.round(FM.evalProp(p.segments, t) || 6));
     var slice = Math.PI * 2 / seg;
     var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: kcx, cy: kcy, slice: slice, half: slice / 2, ph: ph };
+    var zm = p.zoom == null ? 100 : FM.evalProp(p.zoom, t); if (!(zm > 0)) zm = 100; if (zm < 25) zm = 25; if (zm > 400) zm = 400;
+    var sx = p.srcx == null ? 0 : (FM.evalProp(p.srcx, t) || 0); if (sx < -100) sx = -100; if (sx > 100) sx = 100;
+    var sy = p.srcy == null ? 0 : (FM.evalProp(p.srcy, t) || 0); if (sy < -100) sy = -100; if (sy > 100) sy = 100;
+    var fl = p.flow == null ? 0 : wClipIntegral(p.flow, t, tl) * (ps || 1);   // project px → plate px
+    var mir = p.mirror == null ? 1 : (Math.round(FM.evalProp(p.mirror, t)) | 0);   // legacy: absent is the mirrored fold
+    return { cx: kcx, cy: kcy, slice: slice, half: slice / 2, ph: ph,
+             iz: zm === 100 ? 1 : 100 / zm, fl: fl, ox: sx === 0 ? kcx : kcx + (sx / 100) * (W / 2), oy: sy === 0 ? kcy : kcy + (sy / 100) * (H / 2), mir: mir !== 0 };
   };
 
   WARP_FX.radialrepeat.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -12343,6 +12631,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'vec2 dxy = xy - vec2(u_cx, u_cy);',
     'float r = max(length(dxy), 1e-6);',
     'float off = u_amp * sin(r / u_wl - u_ph);',
+    'if (u_dk > 0.0) off *= exp(-u_dk * r);',      // #482 polish 10.2 Falloff — the kernel's line, transcribed
+    'if (u_rch > 0.0) off *= wReach(r, u_rch);',   // #482 polish 10.2 Radius (wReach is in gl-warp.js's prelude)
     'return xy + (dxy / r) * off;'
   ].join('\n');
 
@@ -12367,8 +12657,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'vec2 dxy = xy - vec2(u_cx, u_cy);',
     'float r = length(dxy);',
     'float a = mod(atan(dxy.y, dxy.x) + u_ph, u_slice);',
-    'a = abs(a - u_half);',
-    'return vec2(reflectInto(u_cx + cos(a) * r, res.x), reflectInto(u_cy + sin(a) * r, res.y));'
+    'if (u_mir > 0.5) a = abs(a - u_half);',   // #482 polish 10.3 Mirror wedges (the prep's boolean arrives as 1 / 0)
+    'float rs = r * u_iz - u_fl;',              // Source zoom and Flow: r * 1.0 - 0.0 is r exactly when unset
+    'return vec2(reflectInto(u_ox + cos(a) * rs, res.x), reflectInto(u_oy + sin(a) * rs, res.y));'   // Source X / Y
   ].join('\n');
 
   /* GRID REPEAT — tile the frame, with optional per-row stagger and alternate-tile mirroring.
@@ -12567,6 +12858,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'float r = length(dxy);',
     'if (r < 1e-6) return c;',
     'float sw = u_amt * 0.6 * sin(r / u_wl - u_ph);',
+    'if (u_dk > 0.0) sw *= exp(-u_dk * r);',       // #482 polish 10.2 Falloff and Radius, as the kernel
+    'if (u_rch > 0.0) sw *= wReach(r, u_rch);',
     'float a = atan(dxy.y, dxy.x) + sw;',
     'return c + vec2(cos(a), sin(a)) * r;'
   ].join('\n');
@@ -12649,12 +12942,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { a: tnA, ia: 1 - tnA, cx: tnCx, cy: tnCy, rad2: tnRad * tnRad };
   };
 
-  WARP_FX.wave.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  WARP_FX.wave.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     const k = ps || 1;
     const amp = (FM.evalProp(p.amount, t) || 0) * k;
     const wl = (p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
     const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
-    const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+    const sd = wSpeedDeg(p, t, tl), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed, on the clip clock
+    const ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
     const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
     const SX = new Float64Array(H), SY = new Float64Array(W);
     for (let y = 0; y < H; y++) SX[y] = amp * Math.sin(y / wl + ph);          // the x shift, by ROW
@@ -12703,11 +12997,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (p.seed != null) { const sd = Math.round(FM.evalProp(p.seed, t)) | 0; if (sd) ph += sd * 17.31; }
     return ph;
   }
+  /* FLOW X / Y AND STRETCH (#482 polish 10.4). The field only ever boiled in place: there was no wind to carry it, so heat haze
+     or water could not drift, and its swirls were always round. Flow is px/s on the clip clock (integrated when keyframed, like
+     Wave speed) and moves the WHOLE field: the displacement at (x, y) a second later is what it was at (x - flowX, y - flowY).
+     Stretch scales the field across (200 % = swirls twice as wide; 50 % = twice as tall). ox / oy come back in PLATE px; st is
+     the percentage. All three unset are 0, 0 and 100, and both callers then use their old expressions untouched. */
+  function tdDomain(p, t, tl, ps) {
+    var fx = p.flowx == null ? 0 : wClipIntegral(p.flowx, t, tl), fy = p.flowy == null ? 0 : wClipIntegral(p.flowy, t, tl);
+    var st = p.stretch == null ? 100 : FM.evalProp(p.stretch, t); if (!(st > 0)) st = 100; if (st < 25) st = 25; if (st > 400) st = 400;
+    return { ox: fx === 0 ? 0 : fx * (ps || 1), oy: fy === 0 ? 0 : fy * (ps || 1), st: st };
+  }
   function fwPhase(p, t, ev) {
     if (!FM.isAnimated(p.evolve)) return ev === 0 ? 0 : t * ev;   // the old phase, to the bit
     return FM.integrateProp(p.evolve, 0, t, (u) => { const k = FM.evalProp(p.evolve, u); return k < 0 ? 0 : (k > 5 ? 5 : k); });
   }
-  WARP_FX.turbulentdisplace.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  WARP_FX.turbulentdisplace.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     let a = FM.evalProp(p.amount, t);
     if (a == null) a = 30; if (a < 0) a = 0; if (a > 80) a = 80;
     if (a <= 0) return { off: 1 };                       // disabled — the kernel returns the pixel untouched
@@ -12715,11 +13019,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (sc == null) sc = 60; if (sc < 10) sc = 10;
     a *= (ps || 1); sc = Math.max(1, sc * (ps || 1));
     const ph = tdPhase(p, t);
+    /* #482 polish 10.4: Flow X / Y and Stretch (see tdDomain). The lattice is built at the points the field is READ at —
+       x - ox across, y - oy down — with the across scale `scx`; unset, ox and oy are 0 and scx is sc, the old lattice exactly. */
+    const dm = tdDomain(p, t, tl, ps), ox = dm.ox, oy = dm.oy, scx = dm.st === 100 ? sc : sc * dm.st / 100;
 
     /* The step comes from the noise scale, not from the raster: a coarse churn can be sampled coarsely,
        a fine crawl cannot. Capped at 6 because past that the win is already ~36x and the error starts
-       to be worth arguing about; floored at 1, where the lattice is every pixel and this is exact. */
-    let step = Math.floor(sc / (14 * Math.pow(Math.max(a, 1) / 30, 0.25)));
+       to be worth arguing about; floored at 1, where the lattice is every pixel and this is exact.
+       (#482 polish 10.4: the FINER of the two scales once Stretch makes them differ — min(sc, sc) is sc.) */
+    let step = Math.floor(Math.min(sc, scx) / (14 * Math.pow(Math.max(a, 1) / 30, 0.25)));
     if (step < 1) step = 1; else if (step > 8) step = 8;
     /* One cell of MARGIN on every side, because a cubic tap reaches to gx-1 and gx+2. Lattice index k
        holds the sample at pixel (k-1)*step, so the kernel's `gx` indexes straight into the window. */
@@ -12730,16 +13038,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const X = new Float64Array(GW * 5), Y = new Float64Array(GH * 5);
     const Xb = new Float64Array(GW * 5), Yb = new Float64Array(GH * 5);
     for (let gx = 0; gx < GW; gx++) {
-      const i = gx * 5, x = (gx - 1) * step;
-      const u = x / sc + ph;                             // td_wx's u — same expression as the kernel's
+      const i = gx * 5, x = (gx - 1) * step - ox;        // - ox: Flow X (#482 polish 10.4); x - 0 is x
+      const u = x / scx + ph;                            // td_wx's u — same expression as the kernel's (scx: Stretch)
       X[i] = Math.sin(u); X[i + 1] = Math.sin(u * 2.1); X[i + 2] = Math.cos(u * 2.1);
       X[i + 3] = Math.cos(u * 0.5); X[i + 4] = Math.sin(u * 0.5);
-      const ub = x / sc;                                 // td_wy's u
+      const ub = x / scx;                                // td_wy's u
       Xb[i] = Math.sin(ub); Xb[i + 1] = Math.sin(ub * 2.1); Xb[i + 2] = Math.cos(ub * 2.1);
       Xb[i + 3] = Math.cos(ub * 0.5); Xb[i + 4] = Math.sin(ub * 0.5);
     }
     for (let gy = 0; gy < GH; gy++) {
-      const j = gy * 5, y = (gy - 1) * step;
+      const j = gy * 5, y = (gy - 1) * step - oy;        // - oy: Flow Y
       const v = y / sc;                                  // td_wx's v
       Y[j] = Math.cos(v * 1.3); Y[j + 1] = Math.cos(v); Y[j + 2] = Math.sin(v);
       Y[j + 3] = Math.cos(v * 1.7); Y[j + 4] = Math.sin(v * 1.7);
@@ -12760,11 +13068,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        displacement in pixels. `a` is constant over the frame, so interpolating a*d and a*interpolating
        d are the same number. */
     for (let gy = 0; gy < GH; gy++) {
-      const jj = gy * 5, ysc = ((gy - 1) * step) / sc, row = gy * GW;
+      const jj = gy * 5, ysc = ((gy - 1) * step - oy) / sc, row = gy * GW;
       const y0 = Y[jj], y1 = Y[jj + 1], y2 = Y[jj + 2], y3 = Y[jj + 3], y4 = Y[jj + 4];
       const b0 = Yb[jj], b1 = Yb[jj + 1], b2 = Yb[jj + 2], b3 = Yb[jj + 3], b4 = Yb[jj + 4];
       for (let gx = 0; gx < GW; gx++) {
-        const ii = gx * 5, xsc = ((gx - 1) * step) / sc;
+        const ii = gx * 5, xsc = ((gx - 1) * step - ox) / scx;
         const wx = X[ii] * y0 + (X[ii + 1] * y1 + X[ii + 2] * y2) * 0.5 + (X[ii + 3] * y3 + X[ii + 4] * y4) * 0.35;
         const wy = Xb[ii] * b0 + (Xb[ii + 1] * b1 + Xb[ii + 2] * b2) * 0.5 + (Xb[ii + 3] * b3 + Xb[ii + 4] * b4) * 0.35;
         const k = row + gx;
@@ -16369,6 +16677,50 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * plate, which makes source and destination different canvases by construction. */
   const _miPool = [];
   let _miDepth = 0;
+  /* ═══ A TURNED MIRROR LINE (#482 polish 10.6) ═══════════════════════════════════════════════════════════════════════════
+   * The seam point is where it always was — (Seam, middle) for Left/Right, (middle, Seam) for Top/Bottom — and the line turns
+   * about it by the Reflection angle (+ clockwise). `n` is the line's normal pointing into the mirrored side, `u` a point's
+   * distance along it. The kept side is u < 0, out to the frame corner furthest behind the line (`aw`, the kept width — at 0°
+   * exactly the strip the loops below keep). Beyond the line the folds alternate as the strips do: band k = 1, 3… is the kept
+   * side reflected, k = 2, 4… the kept side repeated; Repeat folds Off keeps band 1 only.
+   * A turned strip cannot be cut with drawImage rectangles, so this is a pull: every plate pixel asks where it reads from, and
+   * warpResample (10.1) reads it bilinearly with Transparent edges. The point is the PIXEL CENTRE in project units, so a pixel
+   * and its mirror image land on each other the way the strips' pixels do (pixel 80 ↔ 79 across a seam at 80). The kept side
+   * maps to itself on whole pixels, which a bilinear read copies exactly. Returns false when there is nothing to mirror. */
+  const _miOut = [];
+  function mirrorFold(np, nx, ny, P0x, P0y, aw, rep, LIM) {
+    const ps = np.ps, OX = np.OX, OY = np.OY, FAR = [-1e9, -1e9];   // FAR: off every plate, i.e. transparent
+    return function (x, y) {
+      const px = (x + 0.5) / ps + OX, py = (y + 0.5) / ps + OY;
+      const u = (px - P0x) * nx + (py - P0y) * ny;
+      if (u < 0) return [x, y];
+      const k = Math.floor(u / aw) + 1;
+      if ((!rep && k >= 2) || k > LIM) return FAR;
+      const du = ((k & 1) ? (k - 1) * aw - u : u - k * aw) - u;
+      return [(px + du * nx - OX) * ps - 0.5, (py + du * ny - OY) * ps - 0.5];
+    };
+  }
+  function mirrorAngled(ctx, plate, np, mode, angDeg, rep, ax, ay, W, H, LIM, d) {
+    if (!(mode >= 0 && mode <= 3)) mode = 3;   // the strip code's `else` is Bottom → Top
+    const th = angDeg * Math.PI / 180, c = Math.cos(th), s = Math.sin(th);
+    const n0x = mode === 0 ? 1 : (mode === 1 ? -1 : 0), n0y = mode === 2 ? 1 : (mode === 3 ? -1 : 0);
+    const nx = n0x * c - n0y * s, ny = n0x * s + n0y * c;
+    const P0x = mode <= 1 ? ax : W / 2, P0y = mode <= 1 ? H / 2 : ay;
+    let umin = Infinity, umax = -Infinity;
+    [[0, 0], [W, 0], [0, H], [W, H]].forEach(q => { const u = (q[0] - P0x) * nx + (q[1] - P0y) * ny; if (u < umin) umin = u; if (u > umax) umax = u; });
+    const aw = -umin;
+    if (!(aw >= 0.5) || !(umax > 0)) return false;
+    const Wp = plate.width, Hp = plate.height;
+    if (!_miOut[d]) _miOut[d] = document.createElement('canvas');
+    const B = _miOut[d];
+    if (B.width !== Wp || B.height !== Hp) { B.width = Wp; B.height = Hp; }
+    const bc = B.getContext('2d'), src = plate.getContext('2d').getImageData(0, 0, Wp, Hp).data, img = bc.createImageData(Wp, Hp);
+    warpResample(src, img.data, Wp, Hp, mirrorFold(np, nx, ny, P0x, P0y, aw, rep, LIM), 0, 0, 0, null, 0, np.ps, null, 1, 1);
+    bc.putImageData(img, 0, 0);
+    ctx.drawImage(B, np.OX, np.OY, np.PWp, np.PHp);   // ctx is already at the layer's opacity and blend
+    return true;
+  }
+  FM._mirrorFold = mirrorFold;   // suite seam (#482 polish 10.6)
   function drawMirror(ctx, layer, t, scene, mode, fx, position) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -16408,27 +16760,39 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const ax = W * pos, ay = H * pos, LIM = 64;
     let k;
     const pass = () => ctx.drawImage(_miA, OX, OY, _np.PWp, _np.PHp);   // the plate, back where it came from
+    /* #482 polish 10.6 — REFLECTION ANGLE and REPEAT FOLDS. The mirror line could only be upright or level, and past the first
+       reflection it always mirror-tiled to the frame's edge. Repeat folds Off stops after ONE reflection (the kept strip and
+       its mirror image; beyond that the frame is left empty) — the strips below just stop at two. A turned seam is drawn by
+       mirrorAngled. Angle 0 and Repeat On (an absent key: legacy) are the strip loops exactly as they were. */
+    const mpr = (fx && fx.params) || {};
+    const mAng = mpr.angle == null ? 0 : (FM.evalProp(mpr.angle, t) || 0);
+    const mRep = mpr.repeat == null ? 1 : (Math.round(FM.evalProp(mpr.repeat, t)) | 0);
+    const LIM2 = mRep === 0 ? 2 : LIM;
+    if (mAng !== 0) {
+      if (!mirrorAngled(ctx, _miA, _np, mode, mAng, mRep !== 0, ax, ay, W, H, LIM, _d)) pass();
+      ctx.restore(); return;
+    }
     if (mode === 0) {           // Left → Right
       const aw = ax; if (aw < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; k * aw < W && k < LIM; k++) {
+      for (k = 0; k * aw < W && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(0), sl(aw), sl(H), k * aw, 0, aw, H);
         else { ctx.save(); ctx.translate((k + 1) * aw, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, sx(0), sy(0), sl(aw), sl(H), 0, 0, aw, H); ctx.restore(); }
       }
     } else if (mode === 1) {    // Right → Left
       const aw = W - ax; if (aw < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; ax - k * aw + aw > 0 && k < LIM; k++) {
+      for (k = 0; ax - k * aw + aw > 0 && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(ax), sy(0), sl(aw), sl(H), ax - k * aw, 0, aw, H);
         else { ctx.save(); ctx.translate(ax - k * aw + W, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, sx(ax), sy(0), sl(aw), sl(H), ax, 0, aw, H); ctx.restore(); }
       }
     } else if (mode === 2) {    // Top → Bottom
       const ah = ay; if (ah < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; k * ah < H && k < LIM; k++) {
+      for (k = 0; k * ah < H && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(0), sl(W), sl(ah), 0, k * ah, W, ah);
         else { ctx.save(); ctx.translate(0, (k + 1) * ah); ctx.scale(1, -1); ctx.drawImage(_miA, sx(0), sy(0), sl(W), sl(ah), 0, 0, W, ah); ctx.restore(); }
       }
     } else {                    // Bottom → Top
       const ah = H - ay; if (ah < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; ay - k * ah + ah > 0 && k < LIM; k++) {
+      for (k = 0; ay - k * ah + ah > 0 && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(ay), sl(W), sl(ah), 0, ay - k * ah, W, ah);
         else { ctx.save(); ctx.translate(0, ay - k * ah + H); ctx.scale(1, -1); ctx.drawImage(_miA, sx(0), sy(ay), sl(W), sl(ah), 0, ay, W, ah); ctx.restore(); }
       }

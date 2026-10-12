@@ -127822,4 +127822,715 @@
     const cov = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 127) n++; return n; };
     if (!(cov(b11Re({ border: 8 })) < cov(b11Re({})) * 0.8)) throw new Error('Erode 8 px with the old tear covers ' + cov(b11Re({ border: 8 })) + ' px against ' + cov(b11Re({})) + ' - the torn edge should sit further in');
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 10 — WARPS ═══════════════════════════════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 10
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). Every new key's default is the old look (§0.3), so the library
+   * filters and every saved warp draw as before. These were written where the suite could not be run (a helper worktree, no
+   * browser): every expectation below is derived in the comment beside it, and the kernel-level numbers were checked by
+   * running the kernels themselves under node. */
+  /* A W×H picture as an image layer filling a W×H frame at scale 1, so the warp's plate holds it pixel for pixel. `paint(x, y)`
+     returns [r, g, b, a]. Returns a maker: effects → a fresh layer. */
+  function w10pic(id, W, H, paint, made) {
+    const cv = offscreen(W, H), g = cv.getContext('2d'), img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = paint(x, y), i = (y * W + x) * 4; img.data[i] = c[0]; img.data[i + 1] = c[1]; img.data[i + 2] = c[2]; img.data[i + 3] = c[3]; }
+    g.putImageData(img, 0, 0);
+    if (made) made.push(id);
+    FM.media.set(id, { kind: 'image', el: cv, width: W, height: H, duration: 0 });
+    return fx => { const L = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); L.id = id; L.start = 0; L.duration = 4; L.transform.scale = 1; L.effects = fx || []; return L; };
+  }
+  const w10px = (r, x, y) => { const i = (y * r.w + x) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2], r.d[i + 3]]; };
+  const w10same = (a, b) => { if (a.d.length !== b.d.length) return false; for (let i = 0; i < a.d.length; i++) if (a.d[i] !== b.d[i]) return false; return true; };
+  /* THE SAMPLER AS IT WAS BEFORE 10.1, transcribed from compositor.js drawWarpEffect at fc8866f1: truncate the mapped point,
+     pin it inside the plate, copy that pixel. A warp with no Edges or Smooth sampling key must still be exactly this. */
+  function w10oldSampler(src, W, H, mapFn, p, t, ps, pre) {
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), o = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const m = mapFn(x, y, W, H, cx, cy, maxR, p, t, ps, pre);
+      let sx = m[0] | 0, sy = m[1] | 0;
+      if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+      if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+      const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+      o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+    }
+    return o;
+  }
+  // the warps whose Edges row would be dead (they never read past the frame) — compositor.js WARP_NO_EDGES says why
+  const W10_NO_EDGES = ['kaleidoscope', 'wrapshift', 'tileshift', 'gridrepeat', 'mirrortile', 'stretchseg'];
+
+  /* 10.1 EDGES AND SMOOTH SAMPLING (C26). Every warp was point-sampled and clamped: a twirled hard edge came out as a staircase
+     of its own two colours, and a warp that reached past the frame smeared the edge pixel outward. */
+  test('482 10.1 Every warp - Smooth sampling gives a twirled hard edge in-between shades where today it has only its two, Transparent, Wrap and Mirror fill what Stretch smears, every warp that can use them has both rows at the old sampler, and a warp without them draws byte for byte as before', { item: '482', budgetMs: 90000 }, function () {
+    const bad = [], X = FM._warpFx, R = FM.fxRegistry, made = [], noGL = FM._noGL;
+    if (!X || !X.twirl || !X.wave) throw new Error('FM._warpFx is not reachable');
+    const W = 160, H = 120;   // 19,200 px: under gl-warp's 40,000 px floor, and the GPU is switched off besides — this is the CPU sampler
+    const fx = (type, p) => { const e = R.makeInstance(type); Object.assign(e.params, p || {}); return e; };
+    const mids = r => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] > 8 && r.d[i] < 247) n++; return n; };
+    FM._noGL = true;
+    try {
+      /* 1. THE BACKLOG'S OWN TEST. A hard diagonal of exactly two values (0 and 255, nothing between), twirled at its default
+            140°. The twirl bends the edge into a curve, so the point each output pixel reads lands between pixels all along it.
+            Nearest takes one of the two neighbours — still only 0 and 255. Smooth sampling blends the two across the curve, so
+            every pixel the curve passes through gets an in-between shade: a curve some 200 px long in a 160×120 frame. Under
+            node the kernel itself gave 0 in-between pixels nearest and 248 smoothed on this same picture. */
+      const diag = w10pic('_48210diag', W, H, (x, y) => { const v = (x * H > y * W + 37) ? 255 : 0; return [v, v, v, 255]; }, made);
+      const flat = _986shot([diag([])], 0.5, W, H), near = _986shot([diag([fx('twirl')])], 0.5, W, H), smooth = _986shot([diag([fx('twirl', { smooth: 1 })])], 0.5, W, H);
+      if (mids(flat) !== 0) throw new Error('CONTROL: the diagonal itself has ' + mids(flat) + ' in-between pixels — it is not a hard edge, so in-between shades would prove nothing');
+      let moved = 0; for (let i = 0; i < flat.d.length; i += 4) if (flat.d[i] !== near.d[i]) moved++;
+      if (!(moved > 500)) throw new Error('CONTROL: the twirl moved only ' + moved + ' pixels of the diagonal — the fixture is not warping');
+      if (mids(near) !== 0) throw new Error('CONTROL: the twirl with Smooth sampling Off already has ' + mids(near) + ' in-between pixels — nearest should only ever copy the two source values');
+      if (!(mids(smooth) > 100)) bad.push('Smooth sampling On left the twirled edge with ' + mids(smooth) + ' in-between pixels - it is still a staircase of its own two colours (C26)');
+      /* 2. EDGES. A picture whose red is its own column (R = x) and blue its own row, under a Wave of 30 px with Phase -90 and
+            no Cross wave: on row 0 the wave is a pure shift of exactly -30 (sin(-90°) = -1), so pixel (5, 0) reads column -25,
+            off the left edge. Stretch pins it to column 0 (R 0, as today); Transparent leaves nothing there, so the black frame
+            shows (G 0); Wrap brings round column 160 - 25 = 135; Mirror reflects it to column 24 (… 1 0 | 0 1 …, so -25 → 24).
+            Smooth sampling reads the same: the point is a whole column, so the blend is that one pixel. Pixel (80, 60) reads
+            inside the frame and must not change with Edges at all. */
+      const gp = w10pic('_48210grad', W, H, (x, y) => [x, 200, y, 255], made);
+      const WV = { amount: 30, wavelength: 38, phase: -90, vertical: 0 };
+      const want = { 0: [0, 200, 0], 1: [0, 0, 0], 2: [135, 200, 0], 3: [24, 200, 0] }, names = ['Stretch', 'Transparent', 'Wrap', 'Mirror'];
+      const inside = w10px(_986shot([gp([fx('wave', WV)])], 0.5, W, H), 80, 60);
+      [0, 1].forEach(sm => [0, 1, 2, 3].forEach(e => {
+        const r = _986shot([gp([fx('wave', Object.assign({ edges: e, smooth: sm }, WV))])], 0.5, W, H), got = w10px(r, 5, 0);
+        if (got[0] !== want[e][0] || got[1] !== want[e][1] || got[2] !== want[e][2]) bad.push('Edges ' + names[e] + (sm ? ' with Smooth sampling' : '') + ': the pixel whose wave reads 25 px off the left edge is ' + got.slice(0, 3) + ', not ' + want[e]);
+        if (!sm && w10px(r, 80, 60).join() !== inside.join()) bad.push('Edges ' + names[e] + ' changed a pixel that reads inside the frame: ' + inside + ' -> ' + w10px(r, 80, 60));
+      }));
+      /* 3. THE ROWS. On every warp that can use them, at the old sampler, kept by the load sanitiser — and absent where the row
+            could not change the picture (a dead control is a defect). */
+      const types = Object.keys(X);
+      if (types.length < 20) throw new Error('setup: only ' + types.length + ' warps in FM._warpFx');
+      types.forEach(type => {
+        const ps = R.paramsOf(type) || [], e = ps.filter(q => q.key === 'edges')[0], s = ps.filter(q => q.key === 'smooth')[0], inst = R.makeInstance(type);
+        if (W10_NO_EDGES.indexOf(type) >= 0) { if (e) bad.push(type + ' has an Edges row, but it never reads past the frame, so the row would do nothing'); }
+        else if (!e || e.type !== 'segment' || e.default !== 0 || (e.options || []).map(o => o[1]).join('/') !== 'Stretch/Transparent/Wrap/Mirror') bad.push(type + ' has no Edges row of Stretch / Transparent / Wrap / Mirror defaulting to Stretch (' + JSON.stringify(e) + ')');
+        else if (inst.params.edges !== 0 || FM._fxFillValue(type, 'edges') !== 0) bad.push('a new or a saved ' + type + ' does not start at Edges Stretch');
+        if (type === 'wrapshift') { if (s) bad.push('Wrap Shift has a Smooth sampling row, but it slides by whole pixels, so the row would do nothing'); }
+        else if (!s || s.type !== 'segment' || s.default !== 0 || (s.options || []).length !== 2) bad.push(type + ' has no Smooth sampling row (Off / On, Off by default)');
+        else if (inst.params.smooth !== 0 || FM._fxFillValue(type, 'smooth') !== 0) bad.push('a new or a saved ' + type + ' does not start with Smooth sampling Off');
+      });
+      const lay = [{ id: 'l48210s', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'twirl', enabled: true, params: { amount: 90, edges: 2, smooth: 1 } }] }];
+      FM.storage._sanitizeLayers(lay);
+      const kept = lay[0].effects[0] && lay[0].effects[0].params;
+      if (!kept || kept.edges !== 2 || kept.smooth !== 1) bad.push('a saved Twirl with Edges Wrap and Smooth sampling On comes back from the load sanitiser as ' + JSON.stringify(kept));
+      /* 4. BYTE FOR BYTE. A warp saved before 10.1 has neither key. Every one of the 22, at its own defaults, through the seam the
+            driver now calls, against the sampler transcribed above — exactly equal, on a picture with a hard edge and a soft
+            alpha rim. Then through the whole renderer: a saved Twirl (no keys) and a new one (both at 0) draw the same bytes. */
+      if (typeof FM._warpResample !== 'function' || typeof FM._warpSampling !== 'function') bad.push('FM._warpResample / FM._warpSampling are missing - the sampler is not the one this test measures');
+      else {
+        const w = 64, h = 48, src = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4, d = Math.hypot(x - 30, y - 22); src[i] = (x * 4) & 255; src[i + 1] = x + y > 50 ? 230 : 20; src[i + 2] = (y * 5) & 255; src[i + 3] = d < 18 ? 255 : (d < 21 ? 128 : 0); }
+        types.forEach(type => {
+          const k = X[type], p = R.makeInstance(type).params; delete p.edges; delete p.smooth;
+          const pre = k.prep ? k.prep(w, h, w / 2, h / 2, Math.hypot(w / 2, h / 2), p, 0.7, 1) : null;
+          const ref = w10oldSampler(src, w, h, k, p, 0.7, 1, pre), o = new Uint8ClampedArray(w * h * 4), sm = FM._warpSampling(p, 0.7);
+          if (sm.edges !== 0 || sm.smooth !== 0) bad.push('a saved ' + type + ' with no Edges or Smooth sampling key reads as ' + JSON.stringify(sm));
+          FM._warpResample(src, o, w, h, k, w / 2, h / 2, Math.hypot(w / 2, h / 2), p, 0.7, 1, pre, sm.edges, sm.smooth);
+          let n = 0; for (let i = 0; i < o.length; i++) if (o[i] !== ref[i]) n++;
+          if (n) bad.push('a saved ' + type + ' samples ' + n + ' bytes differently from the old sampler');
+        });
+      }
+      const saved = { type: 'twirl', enabled: true, params: { amount: 140 } };
+      if (!w10same(_986shot([diag([saved])], 0.5, W, H), near)) bad.push('a saved Twirl with no Edges or Smooth sampling key draws differently from a new one at Stretch and Off');
+    } finally {
+      FM._noGL = noGL;
+      made.forEach(id => FM.media.remove(id));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.1 ON THE GPU. The shader is the CPU sampler's matched pair (js/gl-warp.js fmTap), so it must draw what the CPU draws.
+     Same measure and threshold as 'every ported warp draws the same picture on the GPU as on the CPU': a pixel counts only if a
+     channel differs by more than 24, and at most 0.5 % may. CONTROLS: stats prove which path ran; and every case must differ
+     from the same warp at Stretch and Off ON THE GPU, or a shader that ignored both keys would pass by agreeing with a CPU
+     that ignored them too. */
+  test('482 10.1 Every warp - the GPU draws the same Edges and Smooth sampling as the CPU, one warp at a time and as a chain', { item: '482', budgetMs: 120000 }, async function () {
+    if (!FM.glWarp || !FM.glWarp.runChain) throw new Error('FM.glWarp is missing');
+    if (!FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU sampler is UNTESTED: ' + FM.glWarp.stats().reason);
+    const R = FM.fxRegistry, W = 420, H = 420, made = [], keep = { noGL: FM._noGL, noCh: FM._noGLChain }, bad = [];
+    const fx = (type, p) => { const e = R.makeInstance(type); Object.assign(e.params, p || {}); return e; };
+    // colour ramps, a hard checker and a half-transparent band, so a blend has colour, edges and alpha to get wrong
+    const pic = w10pic('_48210gpu', W, H, (x, y) => [Math.round(x * 255 / (W - 1)), ((x >> 5) + (y >> 5)) & 1 ? 230 : 30, Math.round(y * 255 / (H - 1)), (y > 300 && y < 340) ? 128 : 255], made);
+    const shot = (effects, gl, chain) => {
+      FM._noGL = !gl; FM._noGLChain = !chain; FM.glWarp._reset();
+      const r = _986shot([pic(effects)], 0.5, W, H);
+      r.stats = FM.glWarp.stats(); return r;
+    };
+    const big = (a, b) => { let n = 0; for (let i = 0; i < a.d.length; i += 4) { const e = Math.max(Math.abs(a.d[i] - b.d[i]), Math.abs(a.d[i + 1] - b.d[i + 1]), Math.abs(a.d[i + 2] - b.d[i + 2]), Math.abs(a.d[i + 3] - b.d[i + 3])); if (e > 24) n++; } return 100 * n / (a.d.length / 4); };
+    const cases = [
+      ['twirl', { smooth: 1 }], ['twirl', { amount: 300, edges: 1, smooth: 1 }],
+      ['wave', { amount: 60, edges: 1 }], ['wave', { amount: 60, edges: 2 }], ['wave', { amount: 60, edges: 3, smooth: 1 }],
+      ['bulge', { amount: -0.9, edges: 3 }], ['tunnel', { edges: 2, smooth: 1 }], ['ripple', { amount: 40, edges: 1, smooth: 1 }],
+      ['kaleidoscope', { smooth: 1 }]
+    ];
+    try {
+      for (const [type, p] of cases) {
+        const label = type + ' ' + JSON.stringify(p);
+        const cpu = shot([fx(type, p)], false, false);
+        if (cpu.stats.gpu !== 0) throw new Error('FM._noGL did not keep ' + label + ' on the CPU');
+        const gpu = shot([fx(type, p)], true, false);
+        if (!(gpu.stats.gpu > 0)) throw new Error('the GPU path did not run for ' + label + ' (' + gpu.stats.reason + ') - a shader that fails to compile falls back to the CPU and would pass this comparison');
+        const plain = Object.assign({}, p); delete plain.edges; delete plain.smooth;
+        const gpu0 = shot([fx(type, plain)], true, false);
+        if (w10same(gpu, gpu0)) bad.push('CONTROL: on the GPU ' + label + ' draws exactly what the same warp at Stretch and Off draws - the shader ignores the keys');
+        const pct = big(cpu, gpu);
+        if (pct > 0.5) bad.push(label + ': the GPU differs from the CPU on ' + pct.toFixed(3) + ' % of pixels');
+      }
+      /* A CHAIN: each pass carries its own effect's keys. Collapsed into one chain against the same two warps run one at a time
+         on the GPU, and against the CPU. */
+      const two = () => [fx('wave', { amount: 40, edges: 1, smooth: 1 }), fx('twirl', { edges: 3, smooth: 1 })];
+      const per = shot(two(), true, false), ch = shot(two(), true, true), cpu2 = shot(two(), false, false);
+      if (!(ch.stats.chains > 0)) bad.push('the two warps did not chain on the GPU (' + ch.stats.reason + ')');
+      if (per.stats.chains !== 0) throw new Error('FM._noGLChain did not stop the chain');
+      const pc = big(per, ch), pcc = big(cpu2, ch);
+      if (pc > 0.5) bad.push('the chained Wave (Transparent, Smooth) then Twirl (Mirror, Smooth) differs from the same two run one at a time on ' + pc.toFixed(3) + ' % of pixels - a pass is not using its own keys');
+      if (pcc > 0.5) bad.push('the chained pair differs from the CPU on ' + pcc.toFixed(3) + ' % of pixels');
+    } finally {
+      FM._noGL = keep.noGL; FM._noGLChain = keep.noCh; FM.glWarp._reset();
+      made.forEach(id => FM.media.remove(id));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The GPU half of a warp item, shared by 10.2 and 10.3: each case on a 420×420 picture (over gl-warp's size floor) on the CPU
+     and on the GPU, at time t. The measure and the 0.5 % are the ported-warp test's. CONTROLS: stats prove which path ran, and
+     each case must draw differently on the GPU from the same warp without the case's new keys (`plainOf`), or a shader that
+     ignored them would pass by agreeing with a CPU that ignored them too. Returns the failures.
+     `ties(type, params, W, H, t)`, when given, marks the pixels whose read is an EXACT TIE — see W10_KAL_TIES — and those are
+     left out of the comparison (and counted); the 0.5 % is then of the pixels compared, which must be most of the frame. */
+  function w10gpuCases(cases, t, plainOf, ties) {
+    const R = FM.fxRegistry, W = 420, H = 420, made = [], keep = { noGL: FM._noGL, noCh: FM._noGLChain }, bad = [];
+    const fx = (type, p) => { const e = R.makeInstance(type); Object.assign(e.params, p || {}); return e; };
+    const pic = w10pic('_48210gpu2', W, H, (x, y) => [Math.round(x * 255 / (W - 1)), ((x >> 5) + (y >> 5)) & 1 ? 230 : 30, Math.round(y * 255 / (H - 1)), 255], made);
+    const shot = (effects, gl) => { FM._noGL = !gl; FM._noGLChain = true; FM.glWarp._reset(); const r = _986shot([pic(effects)], t, W, H); r.stats = FM.glWarp.stats(); return r; };
+    const big = (a, b, skip) => { let n = 0, m = 0; for (let i = 0, j = 0; i < a.d.length; i += 4, j++) { if (skip && skip[j]) continue; m++; const e = Math.max(Math.abs(a.d[i] - b.d[i]), Math.abs(a.d[i + 1] - b.d[i + 1]), Math.abs(a.d[i + 2] - b.d[i + 2]), Math.abs(a.d[i + 3] - b.d[i + 3])); if (e > 24) n++; } return { pct: 100 * n / m, compared: m }; };
+    try {
+      for (const [type, p] of cases) {
+        const label = type + ' ' + JSON.stringify(p);
+        const cpu = shot([fx(type, p)], false);
+        if (cpu.stats.gpu !== 0) throw new Error('FM._noGL did not keep ' + label + ' on the CPU');
+        const gpu = shot([fx(type, p)], true);
+        if (!(gpu.stats.gpu > 0)) throw new Error('the GPU path did not run for ' + label + ' (' + gpu.stats.reason + ') - a shader that fails to compile falls back to the CPU and would pass this comparison');
+        const gpu0 = shot([fx(type, plainOf(p))], true);
+        if (w10same(gpu, gpu0)) bad.push('CONTROL: on the GPU ' + label + ' draws exactly what it draws without its new keys - the shader ignores them');
+        const skip = ties ? ties(type, fx(type, p).params, W, H, t) : null;
+        const r = big(cpu, gpu, skip);
+        if (skip && !(r.compared >= 0.6 * W * H)) bad.push(label + ': only ' + r.compared + ' of ' + (W * H) + ' pixels are not exact ties - the comparison would say nothing');
+        if (r.pct > 0.5) bad.push(label + ': the GPU differs from the CPU on ' + r.pct.toFixed(3) + ' % of ' + (skip ? 'the ' + r.compared + ' pixels that are not exact ties' : 'pixels'));
+      }
+    } finally {
+      FM._noGL = keep.noGL; FM._noGLChain = keep.noCh; FM.glWarp._reset();
+      made.forEach(id => FM.media.remove(id));
+    }
+    return bad;
+  }
+
+  /* 10.2 WAVE, RIPPLE AND CURL (C30). The waves moved only if Phase was keyframed by hand, and Ripple and Curl ran at full height
+     to the frame's corners — EFFECTS-PLAN.md listed a falloff as shipped and there was none. Measured on the kernels under node
+     (200×200, half-diagonal 141.4): Ripple Height 20, Spacing 6 peaks at 20.0 both near the centre (r 4–44) and toward the corner
+     (the last 40 px of the half-diagonal) today; with Falloff 100, 15.5 and 1.08 — 7 %. Curl's swirl, 0.48 rad at both today,
+     goes to 0.345 and 0.020 (6 %). Radius 50 leaves exactly 0 past 71 px and the centre untouched. */
+  const W10_NEW2 = { wave: { speed: 0 }, ripple: { speed: 0, decay: 0, reach: 0 }, curl: { speed: 0, decay: 0, reach: 0 } };
+  test('482 10.2 Wave, Ripple and Curl - Ripple Falloff 100 leaves the corner under a tenth of the height near the centre where today they match, Curl the same, Radius stops the rings, Wave speed travels all three on the clip clock and a keyframed speed by its integral, and saved ones draw as before', { item: '482', budgetMs: 60000 }, function () {
+    const X = FM._warpFx, R = FM.fxRegistry, bad = [];
+    const W = 200, H = 200, cx = 100, cy = 100, maxR = Math.hypot(cx, cy);
+    const prep = (k, p, t, tl) => X[k].prep(W, H, cx, cy, maxR, p, t, 1, tl);
+    const map = (k, p, t, tl, x, y) => X[k](x, y, W, H, cx, cy, maxR, p, t, 1, prep(k, p, t, tl));
+    /* the largest move over a band of radii along the given angles — a ring's height is its peak, wherever the sine puts it */
+    const band = (k, p, r0, r1, angs, meas) => { let m = 0; const pre = prep(k, p, 0.5, 0.5);
+      angs.forEach(a => { for (let r = r0; r <= r1; r += 0.25) { const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a); m = Math.max(m, meas(x, y, X[k](x, y, W, H, cx, cy, maxR, p, 0.5, 1, pre))); } });
+      return m; };
+    const disp = (x, y, q) => Math.hypot(q[0] - x, q[1] - y);
+    const turn = (x, y, q) => { let d = Math.atan2(q[1] - cy, q[0] - cx) - Math.atan2(y - cy, x - cx); while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return Math.abs(d); };
+    const MID = [0, Math.PI / 4, Math.PI / 2, Math.PI], CORNER = [Math.PI / 4];
+    /* 1. THE ROWS, at the old look, filled at the old look, kept by the load sanitiser */
+    Object.keys(W10_NEW2).forEach(type => Object.keys(W10_NEW2[type]).forEach(k => {
+      const pd = (R.paramsOf(type) || []).filter(q => q.key === k)[0], want = W10_NEW2[type][k];
+      if (!pd) { bad.push(type + ' has no ' + k + ' row'); return; }
+      if (pd.default !== want || R.makeInstance(type).params[k] !== want) bad.push('a new ' + type + ' starts at ' + k + ' ' + R.makeInstance(type).params[k] + ', not ' + want);
+      if (FM._fxFillValue(type, k) !== want) bad.push('a saved ' + type + ' with no ' + k + ' is filled with ' + FM._fxFillValue(type, k));
+    }));
+    const lay = [{ id: 'l48210r', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'ripple', enabled: true, params: { amount: 20, speed: -90, decay: 40, reach: 120 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const kept = lay[0].effects[0].params;
+    if (kept.speed !== -90 || kept.decay !== 40 || kept.reach !== 120) bad.push('a saved Ripple speed, Falloff and Radius come back from the load sanitiser as ' + JSON.stringify(kept));
+    /* 2. FALLOFF — the backlog's test, on Ripple; and Curl's swirl */
+    const RP = { amount: 20, wavelength: 6, phase: 0 }, CP = { amount: 0.8, wavelength: 8, phase: 0 };
+    const r0c = band('ripple', RP, 4, 44, MID, disp), r0k = band('ripple', RP, maxR - 41, maxR - 1, CORNER, disp);
+    if (!(r0c > 18 && r0k > 0.9 * r0c)) throw new Error('CONTROL: without Falloff the ripple should peak alike near the centre and toward the corner (' + r0c.toFixed(2) + ', ' + r0k.toFixed(2) + ')');
+    const r1c = band('ripple', Object.assign({ decay: 100 }, RP), 4, 44, MID, disp), r1k = band('ripple', Object.assign({ decay: 100 }, RP), maxR - 41, maxR - 1, CORNER, disp);
+    if (!(r1k < 0.1 * r1c)) bad.push('Ripple Falloff 100 still lifts the corner ' + r1k.toFixed(2) + ' px against ' + r1c.toFixed(2) + ' near the centre - not under a tenth (C30)');
+    if (!(r1c > 10)) bad.push('Ripple Falloff 100 flattened the rings near the centre too (' + r1c.toFixed(2) + ' px)');
+    const c0c = band('curl', CP, 4, 44, MID, turn), c0k = band('curl', CP, maxR - 41, maxR - 1, CORNER, turn);
+    if (!(c0k > 0.9 * c0c)) throw new Error('CONTROL: without Falloff the curl should swirl alike near the centre and toward the corner (' + c0c.toFixed(3) + ', ' + c0k.toFixed(3) + ')');
+    const c1c = band('curl', Object.assign({ decay: 100 }, CP), 4, 44, MID, turn), c1k = band('curl', Object.assign({ decay: 100 }, CP), maxR - 41, maxR - 1, CORNER, turn);
+    if (!(c1k < 0.1 * c1c && c1c > 0.2)) bad.push('Curl Falloff 100 swirls the corner ' + c1k.toFixed(3) + ' rad against ' + c1c.toFixed(3) + ' near the centre (C30)');
+    /* 3. RADIUS 50 = 70.7 px: nothing at all beyond it, the full ripple inside three quarters of it */
+    const beyond = band('ripple', Object.assign({ reach: 50 }, RP), 71, maxR - 1, [0.3, Math.PI / 4], disp);
+    if (beyond !== 0) bad.push('Ripple Radius 50 still moves pixels ' + beyond.toFixed(3) + ' px beyond it');
+    const inner = band('ripple', Object.assign({ reach: 50 }, RP), 4, 52, MID, disp), inner0 = band('ripple', RP, 4, 52, MID, disp);
+    if (inner !== inner0) bad.push('Ripple Radius 50 changed the rings inside it (' + inner0 + ' -> ' + inner + ')');
+    /* (a turn of 0 still rebuilds the point through cos and sin, so the angle comes back within float error of 0, not 0) */
+    const cb = band('curl', Object.assign({ reach: 50 }, CP), 71, maxR - 1, [0.3, Math.PI / 4], turn);
+    if (!(cb < 1e-9)) bad.push('Curl Radius 50 still swirls ' + cb + ' rad beyond it');
+    /* 4. WAVE SPEED: 90 °/s one second into the clip is Phase 90 at its start, exactly; a speed keyframed 0 → 180 over two
+          seconds has run 180° by then, which is a steady 90 at two seconds; at the clip's first frame it has done nothing */
+    const pts = [[17, 23], [100, 100], [150, 40], [60, 170], [199, 0], [3, 120]];
+    const ramp = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 180, e: 'linear' }] };
+    ['wave', 'ripple', 'curl'].forEach(k => {
+      const base = o => Object.assign({}, k === 'wave' ? { amount: 25, wavelength: 20, vertical: 40 } : (k === 'ripple' ? RP : CP), o);
+      let still = 0, d1 = 0, d2 = 0, d3 = 0;
+      pts.forEach(([x, y]) => {
+        const s0 = map(k, base({}), 0.5, 0.5, x, y), s1 = map(k, base({}), 2.5, 2.5, x, y);
+        still = Math.max(still, Math.abs(s0[0] - s1[0]), Math.abs(s0[1] - s1[1]));
+        const a = map(k, base({ speed: 90 }), 3.7, 1, x, y), b = map(k, base({ phase: 90 }), 3.7, 0, x, y), z = map(k, base({}), 3.7, 1, x, y);
+        d1 = Math.max(d1, Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])); d3 = Math.max(d3, Math.abs(a[0] - z[0]), Math.abs(a[1] - z[1]));
+        const c = map(k, base({ speed: ramp }), 2, 2, x, y), d = map(k, base({ speed: 90 }), 2, 2, x, y);
+        d2 = Math.max(d2, Math.abs(c[0] - d[0]), Math.abs(c[1] - d[1]));
+        const f = map(k, base({ speed: 300 }), 1.2, 0, x, y), g = map(k, base({}), 1.2, 0, x, y);
+        if (f[0] !== g[0] || f[1] !== g[1]) bad.push(k + ': Wave speed moved the waves on the clip\'s first frame');
+      });
+      if (still !== 0) bad.push('CONTROL: ' + k + ' with no Wave speed moved between 0.5 s and 2.5 s');
+      if (!(d3 > 0.5)) bad.push(k + ': Wave speed 90 has not moved the waves one second into the clip (' + d3.toFixed(3) + ' px)');
+      if (d1 !== 0) bad.push(k + ': Wave speed 90 one second in is ' + d1 + ' px from Phase 90 at the start - it should be the same phase exactly');
+      if (d2 > 1e-6) bad.push(k + ': a Wave speed keyframed 0 -> 180 over 2 s is ' + d2 + ' px from a steady 90 at 2 s - it is not integrated');
+    });
+    /* 5. THE CLIP CLOCK, through the renderer: a Ripple with Wave speed on a clip starting at 1 s draws its first frame exactly as
+          one without; half a second later it has moved. */
+    const made = [], noGL = FM._noGL;
+    FM._noGL = true;
+    try {
+      const pic = w10pic('_48210rip', 160, 120, (x, y) => [((x >> 3) + (y >> 3)) & 1 ? 230 : 20, x, y, 255], made);
+      const on = (o, t) => { const e = R.makeInstance('ripple'); Object.assign(e.params, o); const L = pic([e]); L.start = 1; L.duration = 3; return _986shot([L], t, 160, 120); };
+      if (!w10same(on({ speed: 120 }, 1), on({}, 1))) bad.push('a Ripple with Wave speed on a clip that starts at 1 s has already moved on its first frame - it runs on the project clock');
+      if (w10same(on({ speed: 120 }, 1.5), on({}, 1.5))) bad.push('a Ripple with Wave speed 120 draws the same picture as a still one half a second into the clip');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    /* 6. SAVED ONES: a Ripple and a Curl with none of the new keys map every point exactly as the bodies kept from before their
+          preps (FM._warpRef) — the pre-10.2 arithmetic, bit for bit */
+    let off = 0;
+    for (let y = 0; y < H; y += 7) for (let x = 0; x < W; x += 7) {
+      const rp = { amount: 22, wavelength: 20, phase: 30 }, cp = { amount: 0.5, wavelength: 40, phase: 30 };
+      const a = map('ripple', rp, 0.5, 0.5, x, y), b = FM._warpRef.ripple(x, y, W, H, cx, cy, maxR, rp, 0.5, 1);
+      const c = map('curl', cp, 0.5, 0.5, x, y), d = FM._warpRef.curl(x, y, W, H, cx, cy, maxR, cp, 0.5, 1);
+      if (a[0] !== b[0] || a[1] !== b[1] || c[0] !== d[0] || c[1] !== d[1]) off++;
+    }
+    if (off) bad.push(off + ' points of a saved Ripple or Curl map differently from before');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('482 10.2 Wave, Ripple and Curl - the GPU draws Wave speed, Falloff and Radius as the CPU does', { item: '482', budgetMs: 90000 }, async function () {
+    if (!FM.glWarp || !FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU half is UNTESTED: ' + (FM.glWarp && FM.glWarp.stats().reason));
+    const bad = w10gpuCases([
+      ['ripple', { amount: 30, wavelength: 10, decay: 100 }], ['ripple', { amount: 30, wavelength: 10, reach: 60 }], ['ripple', { speed: 300 }],
+      ['curl', { decay: 80, reach: 120 }], ['curl', { speed: -150 }], ['wave', { speed: 200 }]
+    ], 1.3, p => { const q = Object.assign({}, p); delete q.speed; delete q.decay; delete q.reach; return q; });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.3 KALEIDOSCOPE. The wedges could only reflect the picture round the centre, at its own size, and a still picture made a
+     still pattern. On a 200×160 plate with 6 segments: a pixel 20 px right of the centre reads 20 px from the centre at 30°
+     today; Source zoom 200 reads 10 px; Source X 50 puts the centre pixel's read at x 150 (half of the half-width, 50 px over);
+     a pixel at 45° reads at 15° folded, 45° with Mirror wedges Off. */
+  test('482 10.3 Kaleidoscope - Flow 100 changes a still picture between 0 s and 1 s where today the two frames match, Source zoom, Source X and Y and Mirror wedges change what the wedges read, Segments reach 32, and a saved one draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const X = FM._warpFx, R = FM.fxRegistry, bad = [], K = X.kaleidoscope;
+    const W = 200, H = 160, cx = 100, cy = 80, maxR = Math.hypot(cx, cy);
+    const map = (p, t, tl, x, y) => K(x, y, W, H, cx, cy, maxR, p, t, 1, K.prep(W, H, cx, cy, maxR, p, t, 1, tl));
+    const deg = q => Math.atan2(q[1] - cy, q[0] - cx) * 180 / Math.PI;
+    /* 1. THE ROWS */
+    const want = { zoom: 100, srcx: 0, srcy: 0, flow: 0, mirror: 1 };
+    Object.keys(want).forEach(k => {
+      const pd = (R.paramsOf('kaleidoscope') || []).filter(q => q.key === k)[0];
+      if (!pd) { bad.push('Kaleidoscope has no ' + k + ' row'); return; }
+      if (pd.default !== want[k] || R.makeInstance('kaleidoscope').params[k] !== want[k]) bad.push('a new Kaleidoscope starts at ' + k + ' ' + R.makeInstance('kaleidoscope').params[k] + ', not ' + want[k]);
+      if (FM._fxFillValue('kaleidoscope', k) !== want[k]) bad.push('a saved Kaleidoscope with no ' + k + ' draws it as ' + FM._fxFillValue('kaleidoscope', k));
+    });
+    const seg = (R.paramsOf('kaleidoscope') || []).filter(q => q.key === 'segments')[0];
+    if (!seg || seg.max !== 32) bad.push('Segments still stops at ' + (seg && seg.max));
+    const lay = [{ id: 'l48210k', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'kaleidoscope', enabled: true, params: { segments: 24, zoom: 250, srcx: -40, srcy: 30, flow: -80, mirror: 0 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const kp = lay[0].effects[0].params;
+    if (kp.zoom !== 250 || kp.srcx !== -40 || kp.srcy !== 30 || kp.flow !== -80 || kp.mirror !== 0 || kp.segments !== 24) bad.push('a saved Kaleidoscope comes back from the load sanitiser as ' + JSON.stringify(kp));
+    /* 2. FLOW — the backlog's test, on the kernel: every point of a Flow 100 kaleidoscope reads somewhere else a second later */
+    const pts = [[120, 80], [100, 30], [40, 120], [170, 150], [150, 60], [61, 77]];
+    let still = 0, flowed = 0;
+    pts.forEach(([x, y]) => {
+      const a0 = map({}, 0, 0, x, y), a1 = map({}, 1, 1, x, y), f0 = map({ flow: 100 }, 0, 0, x, y), f1 = map({ flow: 100 }, 1, 1, x, y);
+      if (a0[0] !== a1[0] || a0[1] !== a1[1]) still++;
+      if (f0[0] !== a0[0] || f0[1] !== a0[1]) bad.push('Flow 100 already moved the read at 0 s (' + x + ',' + y + ')');
+      if (Math.hypot(f1[0] - f0[0], f1[1] - f0[1]) > 5) flowed++;
+    });
+    if (still) throw new Error('CONTROL: a kaleidoscope with no Flow reads differently at 0 s and 1 s at ' + still + ' points');
+    if (flowed < pts.length) bad.push('Flow 100 moved only ' + flowed + ' of ' + pts.length + ' reads by more than 5 px between 0 s and 1 s - a still picture stays a still pattern');
+    /* 3. WHAT THE WEDGES READ */
+    const d0 = map({}, 0.5, 0.5, 120, 80), dz = map({ zoom: 200 }, 0.5, 0.5, 120, 80);
+    if (Math.abs(Math.hypot(d0[0] - cx, d0[1] - cy) - 20) > 1e-9 || Math.abs(deg(d0) - 30) > 1e-6) throw new Error('CONTROL: the pixel 20 px right of the centre does not read 20 px out at 30° (' + d0 + ')');
+    if (Math.abs(Math.hypot(dz[0] - cx, dz[1] - cy) - 10) > 1e-9) bad.push('Source zoom 200 reads ' + Math.hypot(dz[0] - cx, dz[1] - cy).toFixed(3) + ' px out for a pixel 20 px out, not 10');
+    const s0 = map({ srcx: 50, srcy: -50 }, 0.5, 0.5, 100, 80);
+    if (Math.abs(s0[0] - 150) > 1e-9 || Math.abs(s0[1] - 40) > 1e-9) bad.push('Source X 50 / Y -50 should read the centre pixel from (150, 40), it reads ' + s0);
+    const m1 = map({}, 0.5, 0.5, 100 + 30, 80 + 30), m0 = map({ mirror: 0 }, 0.5, 0.5, 100 + 30, 80 + 30);
+    if (Math.abs(deg(m1) - 15) > 1e-6) throw new Error('CONTROL: the pixel at 45° does not read at 15° folded (' + deg(m1).toFixed(3) + ')');
+    if (Math.abs(deg(m0) - 45) > 1e-6) bad.push('Mirror wedges Off reads the pixel at 45° from ' + deg(m0).toFixed(3) + '°, not 45° - the wedge is still folded');
+    /* 4. SAVED: none of the new keys, every point exactly as the body kept from before its prep (FM._warpRef.kaleidoscope) */
+    let off = 0;
+    [{}, { segments: 9, phase: 40, centerx: 30, centery: 70 }].forEach(p => {
+      for (let y = 0; y < H; y += 5) for (let x = 0; x < W; x += 5) { const a = map(p, 0.5, 0.5, x, y), b = FM._warpRef.kaleidoscope(x, y, W, H, cx, cy, maxR, p, 0.5); if (a[0] !== b[0] || a[1] !== b[1]) off++; }
+    });
+    if (off) bad.push(off + ' points of a saved Kaleidoscope read differently from before');
+    /* 5. THE CLIP CLOCK, through the renderer: Flow 100 on a clip starting at 1 s draws its first frame as one without, and a
+          different picture at 2 s; without Flow the 1 s and 2 s frames are the same (the CONTROL that the picture is still) */
+    const made = [], noGL = FM._noGL;
+    FM._noGL = true;
+    try {
+      const pic = w10pic('_48210kal', 160, 120, (x, y) => [((x >> 3) + (y >> 4)) & 1 ? 230 : 20, x, 255 - y, 255], made);
+      const on = (o, t) => { const e = R.makeInstance('kaleidoscope'); Object.assign(e.params, o); const L = pic([e]); L.start = 1; L.duration = 3; return _986shot([L], t, 160, 120); };
+      if (!w10same(on({}, 1), on({}, 2))) throw new Error('CONTROL: a kaleidoscope with no Flow draws differently at 1 s and 2 s');
+      if (!w10same(on({ flow: 100 }, 1), on({}, 1))) bad.push('Flow 100 on a clip that starts at 1 s has already moved on its first frame - it runs on the project clock');
+      if (w10same(on({ flow: 100 }, 2), on({ flow: 100 }, 1))) bad.push('Flow 100 draws the same picture one second into the clip as at its start');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ⚠️ EXACT TIES, AND WHY THEY ARE LEFT OUT (measured, not assumed). The first browser run failed this test at 1.345 % of pixels
+     for Source X 40 / Y -30 and 0.967 % for Mirror wedges Off. The two paths do NOT disagree about the kaleidoscope: under node,
+     the shader transcribed in float32 maps every pixel to the same source pixel as the kernel for all four cases (0 moved), and
+     with a simulated GPU trig error of up to ±1e-6 rad, 0.0000 % of the NON-tie pixels change by more than 24 levels (0.02 % at
+     1e-5 rad). What differs is the ties. Six wedges fold some of the frame through lattice symmetries — the wedge that maps an
+     offset (dx, dy) to (-dy, -dx), a reflection, is one — so with the centre and the source origin on whole pixels (210; 294 and
+     147 here) a pixel's read is a WHOLE source pixel in exact arithmetic: 29.0 % of the frame by default and for Source X / Y,
+     35.8 % with Mirror wedges Off, 6.1 % at Source zoom 180, 0.4 % with Flow 120. The CPU's float64 lands 1e-13 either side of
+     that whole number and the GPU's float32 and its sin/cos/atan about 1e-4 either side, so `floor` picks one neighbour or the
+     other — a 1-pixel slip, which on this 32-pixel checker is a 200-level jump wherever the tie sits on a square's edge: at most
+     3.8 % of pixels (Source X / Y), 4.6 % (Mirror Off), 0.86 % (zoom 180) if every tie flipped. The browser's 1.345 % and 0.967 %
+     sit inside those bounds, and zoom 180 passed with less than 0.5 % for the same reason (it has a fifth of the ties).
+     Mirror wedges Off adds the other exact tie: a pixel whose angle IS a wedge seam (the centre row, at 0° and 180°), where
+     π mod 60° is 4e-16 on the CPU and can round to a whole wedge on the GPU, so it reads the far side of the seam.
+     So a pixel is left out only when the CPU kernel itself puts its read within 1e-6 px of a whole pixel, or (Mirror Off) its
+     angle within 1e-6 rad of a seam. Everything else is held to the same 0.5 % — a real disagreement moves pixels that are
+     nowhere near a tie — and at least 60 % of the frame must still be compared. */
+  function W10_KAL_TIES(type, params, W, H, t) {
+    const K = FM._warpFx[type], cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+    const pre = K.prep(W, H, cx, cy, maxR, params, t, 1, t);   // the plate is the frame (ps 1) and the clip starts at 0, so tl = t
+    const skip = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const s = K(x, y, W, H, cx, cy, maxR, params, t, 1, pre);
+      let tie = Math.abs(s[0] - Math.round(s[0])) < 1e-6 || Math.abs(s[1] - Math.round(s[1])) < 1e-6;
+      if (!tie && !pre.mir) { const a0 = Math.atan2(y - pre.cy, x - pre.cx) + pre.ph, q = ((a0 % pre.slice) + pre.slice) % pre.slice; tie = Math.min(q, pre.slice - q) < 1e-6; }
+      if (tie) skip[y * W + x] = 1;
+    }
+    return skip;
+  }
+  test('482 10.3 Kaleidoscope - the GPU draws Source zoom, Source X and Y, Flow and Mirror wedges as the CPU does', { item: '482', budgetMs: 90000 }, async function () {
+    if (!FM.glWarp || !FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU half is UNTESTED: ' + (FM.glWarp && FM.glWarp.stats().reason));
+    const bad = w10gpuCases([
+      ['kaleidoscope', { zoom: 180 }], ['kaleidoscope', { srcx: 40, srcy: -30 }], ['kaleidoscope', { flow: 120 }], ['kaleidoscope', { mirror: 0 }]
+    ], 1.3, p => { const q = Object.assign({}, p); ['zoom', 'srcx', 'srcy', 'flow', 'mirror'].forEach(k => delete q[k]); return q; }, W10_KAL_TIES);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.4 TURBULENT DISPLACE. The field boiled in place: with Boil speed 0 it froze, and nothing could carry it anywhere. Flow Y
+     -100 must carry the frozen field 100 px UP in a second — the push at (x, y) one second in is the push that was at (x, y+100)
+     at the start. On the reference path that is the same arithmetic, so it holds to float error; on the fast lattice (step 4 at
+     Amount 30, Detail 60 — 100 is 25 whole cells) it holds too, inside the half-pixel bound the 904 test already gives the
+     lattice. Stretch 200 reads the field at x/2: the swirls are twice as wide. No GPU twin exists for this warp. */
+  test('482 10.4 Turbulent Displace - Flow Y -100 carries the frozen field 100 px up in a second where today it stays put, Flow X carries it across, Stretch 200 makes the swirls twice as wide, on the fast lattice and its reference alike, and a saved one draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._warpFx.turbulentdisplace, R = FM.fxRegistry, bad = [];
+    const W = 240, H = 300, cx = 120, cy = 150, maxR = Math.hypot(cx, cy);
+    const P = o => Object.assign({ amount: 30, scale: 60, evolve: 0 }, o);
+    /* the push at (x, y): through the prep's lattice (what the app draws), or the kernel's own reference path.
+       ⚠️ The lattice lives in ONE grow-only buffer the next prep overwrites (_tdGrid — right for a renderer, which uses a prep
+       and drops it), so each field here keeps its own copy, or every comparison would be a field against itself. */
+    const fast = (p, t, tl) => { const pre = K.prep(W, H, cx, cy, maxR, p, t, 1, tl); if (pre.DX) { pre.DX = Float32Array.from(pre.DX); pre.DY = Float32Array.from(pre.DY); }
+      return (x, y) => { const m = K(x, y, W, H, cx, cy, maxR, p, t, 1, pre); return [m[0] - x, m[1] - y]; }; };
+    const ref = (p, t) => (x, y) => { const m = K(x, y, W, H, cx, cy, maxR, p, t, 1); return [m[0] - x, m[1] - y]; };
+    const far = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const pts = []; for (let y = 5; y < 190; y += 17) for (let x = 50; x < 230; x += 23) pts.push([x, y]);
+    const worst = (f, g, dx, dy) => { let m = 0; pts.forEach(([x, y]) => { m = Math.max(m, far(f(x, y), g(x + dx, y + dy))); }); return m; };
+    /* 1. THE ROWS */
+    const want = { flowx: 0, flowy: 0, stretch: 100 };
+    Object.keys(want).forEach(k => {
+      const pd = (R.paramsOf('turbulentdisplace') || []).filter(q => q.key === k)[0];
+      if (!pd) { bad.push('Turbulent Displace has no ' + k + ' row'); return; }
+      if (pd.default !== want[k] || R.makeInstance('turbulentdisplace').params[k] !== want[k]) bad.push('a new Turbulent Displace starts at ' + k + ' ' + R.makeInstance('turbulentdisplace').params[k]);
+      if (FM._fxFillValue('turbulentdisplace', k) !== want[k]) bad.push('a saved Turbulent Displace with no ' + k + ' draws it as ' + FM._fxFillValue('turbulentdisplace', k));
+    });
+    const lay = [{ id: 'l48210t', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'turbulentdisplace', enabled: true, params: { amount: 30, flowx: 120, flowy: -60, stretch: 250 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const tp = lay[0].effects[0].params;
+    if (tp.flowx !== 120 || tp.flowy !== -60 || tp.stretch !== 250) bad.push('a saved Flow X / Y and Stretch come back from the load sanitiser as ' + JSON.stringify(tp));
+    /* 2. FLOW Y — the backlog's test. CONTROLS: frozen, the field is the same at 0 s and 1 s; and it is not flat (a shift is
+          visible: the push 100 px lower is a different push) */
+    const f0 = fast(P({}), 0, 0), f1 = fast(P({}), 1, 1);
+    if (worst(f0, f1, 0, 0) !== 0) throw new Error('CONTROL: with Boil speed 0 the field still moved between 0 s and 1 s');
+    if (!(worst(f0, f0, 0, 100) > 3)) throw new Error('CONTROL: the push 100 px lower is the same push - the field is too flat to show a shift');
+    const up = fast(P({ flowy: -100 }), 1, 1), up0 = fast(P({ flowy: -100 }), 0, 0);
+    const dUp = worst(up, f0, 0, 100);
+    if (!(dUp <= 0.5)) bad.push('Flow Y -100, one second in, is ' + dUp.toFixed(2) + ' px from the field as it stood 100 px lower at the start - it did not carry the field up 100 px');
+    if (worst(up0, f0, 0, 0) !== 0) bad.push('Flow Y -100 moved the field on the clip\'s first frame');
+    const dUpRef = worst(ref(P({ flowy: -100 }), 1), ref(P({}), 0), 0, 100);
+    if (!(dUpRef <= 1e-9)) bad.push('on the reference path Flow Y -100 one second in is ' + dUpRef + ' px from the field 100 px lower at the start');
+    /* 3. FLOW X 80, half a second in: 40 px to the right */
+    const right = worst(fast(P({ flowx: 80 }), 0.5, 0.5), f0, -40, 0);
+    if (!(right <= 0.5)) bad.push('Flow X 80 half a second in is ' + right.toFixed(2) + ' px from the field 40 px to its left at the start');
+    /* 4. STRETCH 200 reads the field at x/2 — exactly on the reference path; and the swirls really are wider (CONTROL) */
+    const s2 = ref(P({ stretch: 200 }), 0.7), s1 = ref(P({}), 0.7);
+    let dS = 0, moved = 0;
+    pts.forEach(([x, y]) => { const a = s2(x, y), b = s1(x / 2, y); dS = Math.max(dS, far(a, b)); if (far(a, s1(x, y)) > 1) moved++; });
+    if (!(dS <= 1e-9)) bad.push('Stretch 200 at x is ' + dS + ' px from the unstretched field at x/2 - the swirls are not twice as wide');
+    if (!(moved > pts.length / 2)) bad.push('Stretch 200 changed the push at only ' + moved + ' of ' + pts.length + ' points');
+    /* 5. THE LATTICE AGREES WITH ITS REFERENCE under the new controls (the 904 test's bound) */
+    [{ flowx: 70, flowy: -40, stretch: 160 }, { stretch: 40 }, { flowy: 250, evolve: 1.5 }].forEach(o => {
+      const a = fast(P(o), 1.3, 1.3), b = ref(P(o), 1.3), d = worst(a, b, 0, 0);
+      if (!(d <= 0.5)) bad.push('the fast lattice and the reference disagree by ' + d.toFixed(2) + ' px with ' + JSON.stringify(o));
+    });
+    /* 6. SAVED: the reference path with none of the new keys is the formula as it was, transcribed here from fc8866f1 (Boil
+          speed absent = 0.6 per second, no Pattern) — exactly; and the lattice with the keys absent equals the lattice with them
+          spelled out at 0, 0, 100 */
+    const n = (u, v) => Math.sin(u) * Math.cos(v * 1.3) + Math.sin(u * 2.1 + v) * 0.5 + Math.cos(u * 0.5 - v * 1.7) * 0.35;
+    const old = (x, y, t) => { const sc = 60, a = 30, ph = t * 0.6; const wx = n(x / sc + ph, y / sc), wy = n(x / sc, y / sc - ph * 0.8);
+      return [x + n(x / sc + wx + 5.2, y / sc + wy) * a, y + n(x / sc - wy, y / sc + wx + 1.7) * a]; };
+    let offOld = 0;
+    pts.forEach(([x, y]) => { const a = K(x, y, W, H, cx, cy, maxR, { amount: 30, scale: 60 }, 1.3, 1), b = old(x, y, 1.3); if (a[0] !== b[0] || a[1] !== b[1]) offOld++; });
+    if (offOld) bad.push(offOld + ' points of a saved Turbulent Displace push differently from before on the reference path');
+    const sa = fast({ amount: 30, scale: 60 }, 1.3, 1.3), sb = fast({ amount: 30, scale: 60, flowx: 0, flowy: 0, stretch: 100 }, 1.3, 1.3);
+    if (worst(sa, sb, 0, 0) !== 0) bad.push('a saved Turbulent Displace draws differently from one at Flow 0, 0 and Stretch 100');
+    /* 7. THE CLIP CLOCK, through the renderer: Flow Y on a frozen field, on a clip starting at 1 s */
+    const made = [], noGL = FM._noGL;
+    FM._noGL = true;
+    try {
+      const pic = w10pic('_48210tur', 160, 120, (x, y) => [((x >> 3) + (y >> 3)) & 1 ? 230 : 20, x, y, 255], made);
+      const on = (o, t) => { const e = R.makeInstance('turbulentdisplace'); Object.assign(e.params, { evolve: 0 }, o); const L = pic([e]); L.start = 1; L.duration = 3; return _986shot([L], t, 160, 120); };
+      if (!w10same(on({}, 1), on({}, 2))) throw new Error('CONTROL: a frozen Turbulent Displace draws differently at 1 s and 2 s');
+      if (!w10same(on({ flowy: -100 }, 1), on({}, 1))) bad.push('Flow Y on a clip that starts at 1 s has already moved on its first frame - it runs on the project clock');
+      if (w10same(on({ flowy: -100 }, 2), on({ flowy: -100 }, 1))) bad.push('Flow Y -100 draws the same picture one second into the clip as at its start');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.5 DISPLACEMENT MAP. It pushed both ways by one Amount from two fixed channel pairs, read a map layer wherever that layer
+     happened to sit, and a hard edge in the map tore the picture. Each picture below encodes where a pixel came from in its own
+     colours, so the output says exactly which pixel each one read. */
+  test('482 10.5 Displacement Map - Luma to X only moves pixels only sideways, Luma to Y only only up and down, Alpha pushes both ways, Vertical amount follows Amount until set, Map blur takes the tear out of a hard map edge, Stretch to this layer spreads a small map over the whole layer, and a saved one draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const R = FM.fxRegistry, bad = [], made = [], W = 160, H = 120;
+    const fx = p => { const e = R.makeInstance('displacemap'); Object.assign(e.params, p); return e; };
+    /* 1. THE ROWS */
+    const ps = R.paramsOf('displacemap') || [], row = k => ps.filter(q => q.key === k)[0];
+    const ch = row('channel');
+    if (!ch || (ch.options || []).map(o => o[1]).join('|') !== 'Red→X, Green→Y|Luminance|Luma→X only|Luma→Y only|Alpha→both') bad.push('Channel offers ' + JSON.stringify(ch && ch.options));
+    const ay = row('amounty');
+    if (!ay || ay.follows !== 'amount' || ay.default !== 40) bad.push('Displacement Map has no Vertical amount row that follows Amount (' + JSON.stringify(ay) + ')');
+    if ('amounty' in R.makeInstance('displacemap').params) bad.push('a new Displacement Map gets its own Vertical amount, so moving Amount would no longer move both ways');
+    if (!row('smooth') || row('smooth').default !== 0 || R.makeInstance('displacemap').params.smooth !== 0) bad.push('Displacement Map has no Map blur row at 0');
+    if (!row('fit') || row('fit').default !== 0 || R.makeInstance('displacemap').params.fit !== 0) bad.push('Displacement Map has no Map fit row at As placed');
+    const lay = [{ id: 'l48210d', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'displacemap', enabled: true, params: { amount: 30, channel: 3, amounty: -55, smooth: 12, fit: 1 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const dp = lay[0].effects[0].params;
+    if (dp.channel !== 3 || dp.amounty !== -55 || dp.smooth !== 12 || dp.fit !== 1) bad.push('a saved Displacement Map comes back from the load sanitiser as ' + JSON.stringify(dp));
+    const noGL = FM._noGL;
+    try {
+      /* 2. LUMA → X ONLY — the backlog's test. Luma varies along each row; blue is the row (2y). Every output pixel must keep its
+            own row's blue, while plenty have moved sideways. CONTROL: Luminance (both ways) does move rows. */
+      const lumaPic = w10pic('_48210dm1', W, H, (x, y) => { const v = (x * 37) & 255; return [v, v, 2 * y, 255]; }, made);
+      const flat1 = _986shot([lumaPic([])], 0.5, W, H);
+      const rowsOff = r => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (w10px(r, x, y)[2] !== 2 * y) n++; return n; };
+      const moved = (r, b, c) => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i + c] !== b.d[i + c]) n++; return n; };
+      const both = _986shot([lumaPic([fx({ amount: 40, channel: 1 })])], 0.5, W, H);
+      if (!(rowsOff(both) > 1000)) throw new Error('CONTROL: Luminance moved only ' + rowsOff(both) + ' pixels off their row - the fixture cannot see an up-down push');
+      const xo = _986shot([lumaPic([fx({ amount: 40, channel: 2 })])], 0.5, W, H);
+      if (rowsOff(xo) !== 0) bad.push('Luma→X only moved ' + rowsOff(xo) + ' pixels off their own row');
+      if (!(moved(xo, flat1, 0) > 1000)) bad.push('Luma→X only moved only ' + moved(xo, flat1, 0) + ' pixels sideways');
+      /* 3. LUMA → Y ONLY: red is the column (x), luma varies down each column through green. Every pixel keeps its column. */
+      const colPic = w10pic('_48210dm2', W, H, (x, y) => [x, (y * 37) & 255, 0, 255], made);
+      const flat2 = _986shot([colPic([])], 0.5, W, H), yo = _986shot([colPic([fx({ amount: 40, channel: 3 })])], 0.5, W, H);
+      let colsOff = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (w10px(yo, x, y)[0] !== x) colsOff++;
+      if (colsOff !== 0) bad.push('Luma→Y only moved ' + colsOff + ' pixels off their own column');
+      if (!(moved(yo, flat2, 1) > 1000)) bad.push('Luma→Y only moved only ' + moved(yo, flat2, 1) + ' pixels up or down');
+      /* 4. VERTICAL AMOUNT: green 255 pushes down by the whole Amount (y + 0.5·2·40 = y + 40); red 128 pushes sideways by 0.16 px,
+            which the truncation drops. Absent, it follows Amount (row y reads row y + 40); at -40 it reads row y - 40. */
+      const vPic = w10pic('_48210dm3', W, H, (x, y) => [128, 255, 2 * y, 255], made);
+      const v0 = _986shot([vPic([fx({ amount: 40, channel: 0 })])], 0.5, W, H), v1 = _986shot([vPic([fx({ amount: 40, channel: 0, amounty: -40 })])], 0.5, W, H);
+      if (w10px(v0, 50, 30)[2] !== 140) throw new Error('CONTROL: with Vertical amount following Amount, row 30 should read row 70 (blue 140), it reads blue ' + w10px(v0, 50, 30)[2]);
+      if (w10px(v1, 50, 70)[2] !== 60) bad.push('Vertical amount -40 should make row 70 read row 30 (blue 60), it reads blue ' + w10px(v1, 50, 70)[2]);
+      /* 5. MAP BLUR. Target: red is the column. Map (a separate layer, opacity 0 so only the effect sees it): black left of
+            x 80, white right of it, Luma→X only at Amount 20 — the left reads 20 px left, the right 20 px right, so at the seam
+            neighbouring pixels read columns 41 apart: a tear. Blurred 20 px, the push ramps over some 40 px instead; the
+            biggest step between neighbours in a row drops to about 3 columns. */
+      const tgt = w10pic('_48210dm4', W, H, (x, y) => [x, 100, 0, 255], made);
+      const mapMk = w10pic('_48210dm5', W, H, (x, y) => { const v = x < 80 ? 0 : 255; return [v, v, v, 255]; }, made);
+      const shotMap = (mk, p) => { const M = mk([]); M.transform.opacity = 0; const T = tgt([fx(Object.assign({ source: M.id }, p))]); return _986shot([M, T], 0.5, W, H); };
+      const step = r => { let m = 0; for (const y of [10, 60, 110]) for (let x = 1; x < W; x++) m = Math.max(m, Math.abs(w10px(r, x, y)[0] - w10px(r, x - 1, y)[0])); return m; };
+      const hard = step(shotMap(mapMk, { amount: 20, channel: 2 })), soft = step(shotMap(mapMk, { amount: 20, channel: 2, smooth: 20 }));
+      if (!(hard >= 30)) throw new Error('CONTROL: the hard map edge only steps ' + hard + ' columns between neighbours - there is no tear to soften');
+      if (!(soft <= 6)) bad.push('Map blur 20 still steps ' + soft + ' columns between neighbouring pixels at the map edge (' + hard + ' unblurred) - the tear is still there');
+      /* 6. MAP FIT. A 40×30 map in the top-left corner, all red 255 (push right by the whole Amount 20), green 128 (no push down).
+            As placed it drives only that corner: (10, 10) reads column 30, (100, 80) its own column 100. Stretched to this layer
+            (the whole frame) it drives everything: (100, 80) reads column 120. */
+      const small = w10pic('_48210dm6', 40, 30, () => [255, 128, 0, 255], made);
+      const ap = shotMap(small, { amount: 20, channel: 0 }), st = shotMap(small, { amount: 20, channel: 0, fit: 1 });
+      if (w10px(ap, 10, 10)[0] !== 30 || w10px(ap, 100, 80)[0] !== 100) throw new Error('CONTROL: as placed, the corner map should push (10,10) to column 30 and leave (100,80) alone; got ' + w10px(ap, 10, 10)[0] + ' and ' + w10px(ap, 100, 80)[0]);
+      if (w10px(st, 100, 80)[0] !== 120) bad.push('Stretch to this layer left (100, 80) reading column ' + w10px(st, 100, 80)[0] + ', not 120 - the corner map was not spread over the layer');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    /* 7. ALPHA → BOTH, and the old loop. On a synthetic plate through the seam: a map of alpha 255 pushes right and down by
+          Amount whatever its colour (black, which Red→X / Green→Y would read as a push up-left). Then channels 0 and 1 with no
+          Vertical amount and no blur against the loop as it was at fc8866f1, transcribed here — exactly. */
+    if (typeof FM._displaceResample !== 'function') bad.push('FM._displaceResample is missing - the resample is not the one this test measures');
+    else {
+      const w = 64, h = 48, src = new Uint8ClampedArray(w * h * 4), map = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; src[i] = x; src[i + 1] = y; src[i + 2] = 9; src[i + 3] = 255; map[i] = (x * 29 + y * 7) & 255; map[i + 1] = (x * 11 + y * 23) & 255; map[i + 2] = (x * y) & 255; map[i + 3] = x < 6 ? 0 : 255; }
+      const blackOpaque = new Uint8ClampedArray(w * h * 4); for (let i = 3; i < blackOpaque.length; i += 4) blackOpaque[i] = 255;
+      const o4 = new Uint8ClampedArray(w * h * 4); FM._displaceResample(src, blackOpaque, o4, w, h, 10, 10, 4, 0);
+      const pa = (10 * w + 10) * 4;
+      if (o4[pa] !== 20 || o4[pa + 1] !== 20) bad.push('Alpha→both on an opaque black map should push (10,10) to read (20,20), it reads (' + o4[pa] + ',' + o4[pa + 1] + ')');
+      const oldLoop = (chan, amount) => { const o = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const mi = (y * w + x) * 4; let dxn = 0, dyn = 0;
+          if (map[mi + 3] !== 0) {
+            if (chan === 1) { const l = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5; dxn = l; dyn = l; }
+            else { dxn = map[mi] / 255 - 0.5; dyn = map[mi + 1] / 255 - 0.5; }
+          }
+          let sx = (x + dxn * 2 * amount) | 0, sy = (y + dyn * 2 * amount) | 0;
+          if (sx < 0) sx = 0; else if (sx >= w) sx = w - 1; if (sy < 0) sy = 0; else if (sy >= h) sy = h - 1;
+          const di = (y * w + x) * 4, si = (sy * w + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+        return o; };
+      [[0, 40], [1, 40], [0, -73.5], [1, 12.25]].forEach(([chan, amt]) => {
+        const ref = oldLoop(chan, amt), o = new Uint8ClampedArray(w * h * 4);
+        FM._displaceResample(src, map, o, w, h, amt, amt, chan, 0);
+        let n = 0; for (let i = 0; i < o.length; i++) if (o[i] !== ref[i]) n++;
+        if (n) bad.push('a saved Displacement Map (channel ' + chan + ', amount ' + amt + ') samples ' + n + ' bytes differently from before');
+      });
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.6 MIRROR (C39's plate fix shipped with #986 — its own test, '986 C39 Mirror renders its layer on the preview plate', stays).
+     The mirror line could only stand upright or lie level through the Seam, and past the first reflection it always folded on to
+     the frame's edge. On a 160×160 frame, Left → Right at Seam 50 and Reflection angle 45 turns the line about (80, 80) onto the
+     diagonal from the top-right corner to the bottom-left one; pixel centres reflect across it as (x, y) ↔ (159 - y, 159 - x),
+     so the picture must read the same at both. */
+  test('482 10.6 Mirror - Reflection angle 45 gives a picture symmetric about the diagonal through the seam where today it is not, Repeat folds Off stops after one reflection with the line upright or turned, the half-size preview matches the export, and a saved mirror draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const R = FM.fxRegistry, bad = [], made = [], N = 160;
+    const fx = p => { const e = R.makeInstance('mirror'); Object.assign(e.params, p); return e; };
+    /* 1. THE ROWS */
+    const row = k => (R.paramsOf('mirror') || []).filter(q => q.key === k)[0];
+    if (!row('angle') || row('angle').default !== 0 || R.makeInstance('mirror').params.angle !== 0 || FM._fxFillValue('mirror', 'angle') !== 0) bad.push('Mirror has no Reflection angle row at 0 (' + JSON.stringify(row('angle')) + ')');
+    const rp = row('repeat');
+    if (!rp || rp.default !== 1 || rp.legacy !== 1 || R.makeInstance('mirror').params.repeat !== 1) bad.push('Mirror has no Repeat folds row, On by default and for a saved mirror (' + JSON.stringify(rp) + ')');
+    const lay = [{ id: 'l48210m', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'mirror', enabled: true, params: { mode: 2, position: 40, angle: -35, repeat: 0 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const mp = lay[0].effects[0].params;
+    if (mp.angle !== -35 || mp.repeat !== 0) bad.push('a saved Reflection angle and Repeat folds come back from the load sanitiser as ' + JSON.stringify(mp));
+    const noGL = FM._noGL;
+    try {
+      /* 2. THE BACKLOG'S TEST. A picture with no symmetry of its own (red the column, green the row, blue their product). */
+      const pic = w10pic('_48210mi1', N, N, (x, y) => [x, y, (x * y) & 255, 255], made);
+      const asym = (r) => { let n = 0; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { if (Math.abs(x + y - 159) <= 1) continue; const a = w10px(r, x, y), b = w10px(r, 159 - y, 159 - x); if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2]) n++; } return n; };
+      const a0 = _986shot([pic([fx({ mode: 0, position: 50 })])], 0.5, N, N), a45 = _986shot([pic([fx({ mode: 0, position: 50, angle: 45 })])], 0.5, N, N);
+      if (!(asym(a0) > 1000)) throw new Error('CONTROL: the upright mirror is already symmetric about that diagonal at all but ' + asym(a0) + ' pixels');
+      if (asym(a45) !== 0) bad.push('Reflection angle 45 leaves ' + asym(a45) + ' pixels that do not match their mirror image across the diagonal through the seam');
+      let keptOff = 0; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (x + y < 157) { const p = w10px(a45, x, y); if (p[0] !== x || p[1] !== y) keptOff++; }
+      if (keptOff) bad.push('Reflection angle 45 changed ' + keptOff + ' pixels on the kept side of the line');
+      /* 3. REPEAT FOLDS OFF, upright: Seam 30 on 160 keeps columns 0-47 and reflects them onto 48-95; past that it used to repeat
+            (column 130 shows column 34) and now shows nothing — the black frame. Column 70 still shows its reflection (25).
+            (These strips are drawImage copies, so a level either way is allowed rather than assumed away.) */
+      const near = (v, w) => Math.abs(v - w) <= 1;
+      const on = _986shot([pic([fx({ mode: 0, position: 30 })])], 0.5, N, N), off = _986shot([pic([fx({ mode: 0, position: 30, repeat: 0 })])], 0.5, N, N);
+      if (!near(w10px(on, 130, 60)[0], 34) || !near(w10px(on, 70, 60)[0], 25)) throw new Error('CONTROL: with Repeat folds On, columns 130 and 70 should show 34 and 25, they show ' + w10px(on, 130, 60)[0] + ' and ' + w10px(on, 70, 60)[0]);
+      if (w10px(off, 130, 60).slice(0, 3).join() !== '0,0,0') bad.push('Repeat folds Off still fills column 130 with ' + w10px(off, 130, 60).slice(0, 3) + ' past the first reflection');
+      if (!near(w10px(off, 70, 60)[0], 25)) bad.push('Repeat folds Off lost the first reflection (column 70 shows ' + w10px(off, 70, 60)[0] + ', not 25)');
+      /* …and turned 20° at Seam 30 (line through (48, 80)): the kept side reaches 72.5 px behind the line, so (60, 80) is 11.9 px
+         past it — the first reflection, kept either way — and (150, 80) is 96.5 px past it, the second fold: empty when Off. */
+      const ton = _986shot([pic([fx({ mode: 0, position: 30, angle: 20 })])], 0.5, N, N), toff = _986shot([pic([fx({ mode: 0, position: 30, angle: 20, repeat: 0 })])], 0.5, N, N);
+      if (w10px(ton, 150, 80)[3] !== 255 || w10px(ton, 150, 80).slice(0, 3).join() === '0,0,0') throw new Error('CONTROL: turned 20° with Repeat folds On, (150, 80) should show the picture, it shows ' + w10px(ton, 150, 80));
+      if (w10px(toff, 150, 80).slice(0, 3).join() !== '0,0,0') bad.push('turned 20° with Repeat folds Off, (150, 80) past the first reflection still shows ' + w10px(toff, 150, 80).slice(0, 3));
+      if (w10px(toff, 60, 80).join() !== w10px(ton, 60, 80).join()) bad.push('turned 20° with Repeat folds Off, the first reflection at (60, 80) changed: ' + w10px(ton, 60, 80) + ' -> ' + w10px(toff, 60, 80));
+      /* 4. THE PREVIEW IS THE EXPORT for a turned line, on a smooth picture (a bilinear read of a linear ramp is the ramp, on
+            either plate): each 2×2 block of the export, averaged, against the half-size preview's pixel. Top → Bottom at Seam 60,
+            25°: the line passes (80, 96), the kept side reaches 120.8 px behind it and the far side only 91.8 px past it, so every
+            mirrored pixel is the first reflection, p - 2u·n. Compared away from the line, the frame edge, and any pixel whose read
+            lands near or past the frame edge — there a transparent edge meets the picture and the two plate sizes blend that
+            step differently, which is resolution, not a fault. */
+      const ramp = w10pic('_48210mi2', N, N, (x, y) => [x, y, 100, 255], made);
+      const ex = _986shot([ramp([fx({ mode: 2, position: 60, angle: 25 })])], 0.5, N, N), pv = _986shot([ramp([fx({ mode: 2, position: 60, angle: 25 })])], 0.5, N, N, 0.5);
+      const th = 25 * Math.PI / 180, nx = -Math.sin(th), ny = Math.cos(th);   // Top → Bottom's normal (0, 1) turned 25°
+      let worst = 0, seen = 0;
+      for (let y = 4; y < pv.h - 4; y++) for (let x = 4; x < pv.w - 4; x++) {
+        const px0 = 2 * x + 1, py0 = 2 * y + 1, u = (px0 - 80) * nx + (py0 - 96) * ny; if (Math.abs(u) < 4) continue;
+        const rx = u < 0 ? px0 : px0 - 2 * u * nx, ry = u < 0 ? py0 : py0 - 2 * u * ny;
+        if (rx < 8 || ry < 8 || rx > N - 8 || ry > N - 8) continue;
+        seen++;
+        for (let c = 0; c < 3; c++) { const e = (ex.d[((2 * y) * N + 2 * x) * 4 + c] + ex.d[((2 * y) * N + 2 * x + 1) * 4 + c] + ex.d[((2 * y + 1) * N + 2 * x) * 4 + c] + ex.d[((2 * y + 1) * N + 2 * x + 1) * 4 + c]) / 4; worst = Math.max(worst, Math.abs(e - pv.d[(y * pv.w + x) * 4 + c])); }
+      }
+      if (seen < 1500) throw new Error('setup: only ' + seen + ' preview pixels were comparable');
+      if (worst > 3) bad.push('turned 25°, the half-size preview differs from the export by up to ' + worst.toFixed(1) + ' levels away from the line');
+      /* 5. SAVED: no Reflection angle and no Repeat folds is the upright folding mirror — the same bytes as both spelled out at
+            0° and On, and symmetric about the seam column by column (79 ↔ 80) as it has always been. */
+      const sv = _986shot([pic([{ type: 'mirror', enabled: true, params: { mode: 0, position: 50 } }])], 0.5, N, N), ex0 = _986shot([pic([fx({ mode: 0, position: 50, angle: 0, repeat: 1 })])], 0.5, N, N);
+      if (!w10same(sv, ex0)) bad.push('a saved Mirror with no Reflection angle or Repeat folds draws differently from one at 0° and On');
+      let lr = 0; for (let y = 0; y < N; y++) for (let x = 0; x < 80; x++) { const a = w10px(sv, x, y), b = w10px(sv, 159 - x, y); if (a.some((v, i) => Math.abs(v - b[i]) > 1)) lr++; }
+      if (lr) bad.push('a saved Left → Right mirror at Seam 50 is no longer symmetric about its seam at ' + lr + ' pixels');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.7 HEXAGON TILES. The tiles butted into each other with nothing between them. At Tile size 20 the cells sit in rows 15 px
+     apart, alternate rows half a tile over, so on row 0 the centres are (10, 7.5), (30, 7.5)… and the border between two of
+     them is the column x = 20. Grout 20 % is a 4 px band along every border: (20, 8) and (19, 8) are grout, (17, 8) — 3 px
+     from the border — is tile. Edge shade 1 takes a tile to black at its border and leaves it alone 5 px (a quarter tile) in. */
+  test('482 10.7 Hexagon Tiles - Grout 20 paints the cell borders in the Grout colour where today the tiles touch, Edge shade darkens each tile toward its border, the Grout colour row is greyed while Grout is 0, the bounded fast path still skips only what it may, and saved tiles draw as before', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._pixelFx && FM._pixelFx.hextiles, R = FM.fxRegistry, bad = [];
+    if (!K) throw new Error('the Hexagon Tiles kernel is not reachable');
+    const W = 120, H = 96, px = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const flat = (r, g, b, a) => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = a; } return d; };
+    const run = (p, d, bb) => { d = d || flat(255, 0, 0, 255); K(d, W, H, Object.assign({ size: 20 }, p), 0.3, 1, bb); return d; };
+    const isG = q => q[0] === 0 && q[1] === 255 && q[2] === 0;
+    /* 1. THE ROWS: a params list now, Tile size keeps its key and default; Grout, Edge shade and the Grout colour row at the old
+          look; the colour row greyed at Grout 0 (deadAt) */
+    const ps = R.paramsOf('hextiles') || [], row = k => ps.filter(q => q.key === k)[0];
+    if (!row('size') || row('size').default !== 20 || row('size').label !== 'Tile size') bad.push('the Tile size row is ' + JSON.stringify(row('size')));
+    if (!row('gap') || row('gap').default !== 0 || R.makeInstance('hextiles').params.gap !== 0 || FM._fxFillValue('hextiles', 'gap') !== 0) bad.push('Hexagon Tiles has no Grout row at 0');
+    if (!row('edge') || row('edge').default !== 0 || R.makeInstance('hextiles').params.edge !== 0 || FM._fxFillValue('hextiles', 'edge') !== 0) bad.push('Hexagon Tiles has no Edge shade row at 0');
+    const col = row('color');
+    if (!col || col.type !== 'color' || col.default !== '#000000' || col.overriddenBy !== 'gap' || col.deadAt !== 0) bad.push('the Grout colour row is not a black colour row greyed at Grout 0 (' + JSON.stringify(col) + ')');
+    const lay = [{ id: 'l48210h', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'hextiles', enabled: true, params: { size: 30, gap: 15, edge: 0.4, color: '#123456' } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const hp = lay[0].effects[0].params;
+    if (hp.size !== 30 || hp.gap !== 15 || hp.edge !== 0.4 || hp.color !== '#123456') bad.push('saved tiles come back from the load sanitiser as ' + JSON.stringify(hp));
+    /* 2. GROUT — the backlog's test */
+    const g0 = run({ gap: 0, color: '#00ff00' }), g20 = run({ gap: 20, color: '#00ff00' });
+    let n0 = 0, n20 = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (isG(px(g0, x, y))) n0++; if (isG(px(g20, x, y))) n20++; }
+    if (n0 !== 0 || px(g0, 20, 8).join() !== '255,0,0,255') throw new Error('CONTROL: at Grout 0 the red tiles show ' + n0 + ' green pixels, and the border at (20, 8) is ' + px(g0, 20, 8));
+    if (!isG(px(g20, 20, 8)) || !isG(px(g20, 19, 8))) bad.push('Grout 20 left the border between two tiles at (19..20, 8) as ' + px(g20, 19, 8) + ' / ' + px(g20, 20, 8) + ' - not the Grout colour');
+    if (px(g20, 17, 8).join() !== '255,0,0,255' || px(g20, 10, 8).join() !== '255,0,0,255') bad.push('Grout 20 painted inside a tile: (17, 8) is ' + px(g20, 17, 8) + ', the centre (10, 8) ' + px(g20, 10, 8));
+    if (!(n20 > W * H * 0.2 && n20 < W * H * 0.7)) bad.push('Grout 20 painted ' + n20 + ' of ' + (W * H) + ' pixels - not a band along the borders');
+    /* …at the tile's own alpha: a half-transparent layer gets half-transparent grout, and an empty one none at all */
+    const half = run({ gap: 20, color: '#00ff00' }, flat(255, 0, 0, 128)), none = run({ gap: 20, color: '#00ff00' }, flat(0, 0, 0, 0));
+    if (px(half, 20, 8).join() !== '0,255,0,128') bad.push('grout on a half-transparent layer is ' + px(half, 20, 8) + ', not green at alpha 128');
+    if (none.some(v => v !== 0)) bad.push('Grout painted something on an empty layer');
+    /* 3. EDGE SHADE 1: black at the border, untouched a quarter tile in (at the tile's centre and 5 px from the border) */
+    const e1 = run({ edge: 1 });
+    if (!(px(e1, 20, 8)[0] < 10)) bad.push('Edge shade 1 left the tile border at red ' + px(e1, 20, 8)[0]);
+    if (px(e1, 10, 8)[0] !== 255 || px(e1, 15, 8)[0] !== 255) bad.push('Edge shade 1 darkened the tile inside a quarter of its size: centre ' + px(e1, 10, 8)[0] + ', 5 px from the border ' + px(e1, 15, 8)[0]);
+    if (!(px(e1, 18, 8)[0] < px(e1, 16, 8)[0] && px(e1, 16, 8)[0] < 255)) bad.push('Edge shade does not deepen toward the border (' + px(e1, 16, 8)[0] + ' at 4 px, ' + px(e1, 18, 8)[0] + ' at 2 px)');
+    /* 4. THE BOUNDED FAST PATH (#692) is still only a skip with Grout and Edge shade on: a small subject, bounded and not */
+    const subj = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 30; y < 70; y++) for (let x = 40; x < 90; x++) { const i = (y * W + x) * 4; d[i] = 200; d[i + 1] = (x * 7) & 255; d[i + 2] = 90; d[i + 3] = (x < 42 || y < 32) ? 150 : 255; } return d; };
+    const ub = run({ gap: 25, edge: 0.6, color: '#3080ff' }, subj()), bd = run({ gap: 25, edge: 0.6, color: '#3080ff' }, subj(), { x: 40, y: 30, w: 50, h: 40 });
+    let nb = 0; for (let i = 0; i < ub.length; i++) if (ub[i] !== bd[i]) nb++;
+    if (nb) bad.push('with Grout and Edge shade the bounded tiles differ from the unbounded ones in ' + nb + ' bytes - the skip is no longer only a skip');
+    /* 5. SAVED: no Grout, no Edge shade (and no colour) is the kernel as it was at fc8866f1, transcribed here — exactly */
+    const old = (d, size) => {
+      const src = new Uint8ClampedArray(d), rowH = size * 0.75, hf = size * 0.5;
+      for (let y = 0; y < H; y++) { const r = Math.floor(y / rowH), sh = (r & 1) ? hf : 0; for (let x = 0; x < W; x++) {
+        const c = Math.floor((x - sh) / size); let best = 1e9, bx = x, by = y;
+        for (let ro = -1; ro <= 1; ro++) { const r2 = r + ro, cy = r2 * rowH + rowH * 0.5, s2 = (r2 & 1) ? hf : 0; for (let co = -1; co <= 1; co++) { const cx = (c + co) * size + s2 + hf, dx = x - cx, dy = y - cy, dd = dx * dx + dy * dy; if (dd < best) { best = dd; bx = Math.round(cx); by = Math.round(cy); } } }
+        if (bx < 0) bx = 0; else if (bx >= W) bx = W - 1; if (by < 0) by = 0; else if (by >= H) by = H - 1;
+        const si = (by * W + bx) * 4, di = (y * W + x) * 4; d[di] = src[si]; d[di + 1] = src[si + 1]; d[di + 2] = src[si + 2]; d[di + 3] = src[si + 3]; } }
+      return d; };
+    [20, 7, 33].forEach(size => {
+      const a = subj(); K(a, W, H, { size: size }, 0.3, 1);
+      const b = old(subj(), size), c = subj(); K(c, W, H, Object.assign(R.makeInstance('hextiles').params, { size: size }), 0.3, 1);
+      let na = 0, nc = 0; for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) na++; if (c[i] !== b[i]) nc++; }
+      if (na || nc) bad.push('saved tiles at size ' + size + ' draw ' + na + ' bytes (no new keys) / ' + nc + ' bytes (new at their defaults) differently from before');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
