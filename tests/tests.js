@@ -125340,7 +125340,10 @@
         const insp = document.getElementById('inspector-panel'), ir = insp && insp.getBoundingClientRect(), sayB = document.getElementById('sm-say').getBoundingClientRect().bottom;
         if (!ir || ir.height < 1) throw new Error('selecting a clip opened no panel');
         if (ir.top < sayB - 0.5) throw new Error('the docked panel (top ' + Math.round(ir.top) + ') covers the Simple timeline or #sm-say (bottom ' + Math.round(sayB) + ')');
-        if (window.innerHeight - ir.top < 150) throw new Error('the docked panel has only ' + Math.round(window.innerHeight - ir.top) + ' px (under 150) — the stage clamp did not leave it room (panel top ' + Math.round(ir.top) + ', #sm-say bottom ' + Math.round(sayB) + ')');
+        /* the stage clamp's room under #sm-say is held as before; from 2.2 the project tools take the top of it (D10 A: the panel
+           docks under them and never covers them, first-user audit 4), so the panel itself is held to the sheet's own floor */
+        if (window.innerHeight - sayB < 154) throw new Error('only ' + Math.round(window.innerHeight - sayB) + ' px are left under #sm-say (under 154) — the stage clamp did not leave the project tools and the panel room (panel top ' + Math.round(ir.top) + ', #sm-say bottom ' + Math.round(sayB) + ')');
+        if (window.innerHeight - ir.top < 120) throw new Error('the docked panel has only ' + Math.round(window.innerHeight - ir.top) + ' px (under 120, the sheet’s floor in js/mobile.js) (panel top ' + Math.round(ir.top) + ', #sm-say bottom ' + Math.round(sayB) + ')');
         if (document.body.classList.contains('m-editing')) throw new Error('m-editing is on in Simple');
         const notes = document.getElementById('m-notes');
         if (notes && getComputedStyle(notes).visibility !== 'hidden') throw new Error('✎ still shows with something selected in Simple (#171)');
@@ -128555,6 +128558,62 @@
     };
     await atPhoneWidth(() => legs('380'), 380);
     await atWideWidth(() => legs('1280'), 1280);
+  });
+
+  test('simple P2.2 · review More’s panel leaves Clips, Text, Sound and Overlay in reach at 380 (D10 A: that row never goes away), and More pressed again closes it at 380 and 1280 while a double tap only opens it (first-user audit 4)', { item: '980', budgetMs: 90000 }, async function () {
+    /* The phone's sheet docked under #sm-say, the row the project tools sit directly under since 2.2, so it lay over Clips ·
+       Text · Sound · Overlay (a tap on Sound hit the panel's quick row), and More pressed again left it open: only a tap on
+       empty timeline closed it. */
+    smNeedP2();
+    const more = () => smTool('more');
+    const tap = (el, n) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); };
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const insp = document.getElementById('inspector-panel'), fails = [];
+        FM.selectLayer(v.L('A').id); await smSettle(150);
+        if (insp.classList.contains('open')) throw new Error('CONTROL: selecting a clip raised the panel without More');
+        tap(more(), 1); await smSettle(250);
+        if (!insp.classList.contains('open')) throw new Error('CONTROL: More did not raise the panel');
+        const ir = insp.getBoundingClientRect(), btns = Array.from(document.querySelectorAll('#sm-tools .sm-tool'));
+        if (btns.length !== 4) throw new Error('CONTROL: the project tools are ' + btns.map(b => b.dataset.tool));
+        const covered = btns.filter(b => { const r = b.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !(h && b.contains(h)); })
+          .map(b => { const r = b.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return b.dataset.tool + ' under ' + (h ? (h.id || h.tagName) + '.' + String(h.className).split(' ')[0] : 'nothing'); });
+        if (covered.length) fails.push('with More’s panel up a tap on the project tools hits the panel: ' + covered.join(', '));
+        const tb = btns[0].getBoundingClientRect();
+        if (ir.top < Math.min(tb.bottom, innerHeight - 120) - 0.5) fails.push('the panel (top ' + Math.round(ir.top) + ') lies over the project tools (bottom ' + Math.round(tb.bottom) + ', innerHeight ' + innerHeight + ')');
+        if (ir.top > tb.bottom + 8) fails.push('the panel (top ' + Math.round(ir.top) + ') leaves a gap under the project tools (bottom ' + Math.round(tb.bottom) + ')');
+        tap(more(), 1); await smSettle(250);
+        if (insp.classList.contains('open')) fails.push('More pressed again left the panel open (panelFor ' + FM.simpleTools.panelFor() + ')');
+        if (FM.scene.selectedId !== v.L('A').id) fails.push('More closing the panel dropped the selection');
+        tap(more(), 1); await smSettle(250);
+        if (!insp.classList.contains('open')) fails.push('a third press of More did not raise the panel again');
+        /* a double tap from closed opens it and leaves it open (the second click of a double click never closes it) */
+        tap(more(), 1); await smSettle(250);
+        if (insp.classList.contains('open')) throw new Error('CONTROL: More did not close the panel before the double tap (' + fails.join(' · ') + ')');
+        tap(more(), 1); await smSettle(60); tap(more(), 2); await smSettle(250);
+        if (!insp.classList.contains('open')) fails.push('a double tap on More opened the panel and shut it again');
+        /* the grab bar still closes it and More still raises it after that (finding 20) */
+        document.getElementById('insp-grab').click(); await smSettle(250);
+        if (insp.classList.contains('open')) throw new Error('CONTROL: the grab bar did not close the panel');
+        tap(more(), 1); await smSettle(250);
+        if (!insp.classList.contains('open')) fails.push('More did not raise the panel after the grab bar closed it');
+        if (fails.length) throw new Error('380 px: ' + fails.join(' · '));
+      });
+    }, 380);
+    await atWideWidth(async function () {
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const hint = () => !!document.querySelector('#inspector .sm-band-hint');
+        FM.selectLayer(v.L('B').id); await smSettle(150);
+        if (!hint()) throw new Error('CONTROL 1280: the band shows Full’s editor before More');
+        tap(more(), 1); await smSettle(200);
+        if (hint()) throw new Error('CONTROL 1280: More did not open the panel in the band');
+        tap(more(), 1); await smSettle(200);
+        if (!hint()) throw new Error('1280 px: More pressed again left the panel open in the band');
+        if (FM.scene.selectedId !== v.L('B').id) throw new Error('1280 px: More closing the panel dropped the selection');
+        tap(more(), 1); await smSettle(200);
+        if (hint()) throw new Error('1280 px: a third press of More did not open the panel again');
+      });
+    }, 1280);
   });
 
   test('980 2.2 merge: after a Simple visit on a PC, #sm-bar goes back home — Full\u2019s inspector band keeps no Simple element', { item: '980' }, async function () {

@@ -661,9 +661,17 @@ window.FM = window.FM || {};
       if (Math.abs(scroller.scrollLeft - target) > 0.5) scroller.scrollLeft = target;
       lastProg = scroller.scrollLeft;
     },
-    /* The phone sheet docks UNDER #sm-say in Simple (§14.2 mobile row, T19): the sections, the clips, the sound row and any
-       line Simple is saying all stay in view, and none of them moves when the sheet appears. */
-    dockBottom() { const e = sayEl || mainEl; return e ? e.getBoundingClientRect().bottom : 0; },
+    /* The phone sheet docks UNDER #sm-say and the project tools in Simple (§14.2 mobile row, T19, D10 A): the sections, the clips,
+       the sound row, any line Simple is saying and Clips · Text · Sound · Overlay all stay in view, and none of them moves when the
+       sheet appears. */
+    dockBottom() {
+      /* From 2.2 the project tools (#sm-tools) sit directly under #sm-say, and a sheet docked under #sm-say lay over Clips · Text ·
+         Sound · Overlay, the row D10 A says never goes away (first-user audit item 4). Docked under their buttons instead (not
+         under the row's safe-area padding, so no strip of nothing opens between them and the sheet). */
+      const tools = document.getElementById('sm-tools'), btn = tools && tools.getClientRects().length && tools.querySelector('.sm-tool');
+      if (btn) return btn.getBoundingClientRect().bottom;
+      const e = sayEl || mainEl; return e ? e.getBoundingClientRect().bottom : 0;
+    },
     /* Phase 2.2: the + is Append (§3.6): one step that lays the clips end to end BEFORE an end card, which moves along.
        `given` lets the suite hand it files (a picker cannot be driven). */
     pickFiles(given) {
