@@ -128533,4 +128533,691 @@
     });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 14 — Blurs, repetition, 3D: Tilt Shift, Lens Blur, Directional Blur, Backfill, Trail, Tile Grid, Scatter Array, the 3D solids, Card Flip ═══
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 14
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); 14.1 answers hunt C45, 14.3 half of C25, 14.7 C29. The rule that
+   * makes it safe (§0.3): every new key's default is the old look, or carries a `legacy` that is, because a saved instance
+   * that lacks a key is filled at render time (queue 784) with the kernel's own fallback. Each item proves it against
+   * hashes captured on fc8866f1 (the tree before the batch) through the real kernel:
+   *   · PIXEL kernels (Tilt Shift, Lens Blur) on typed arrays through FM._applyPixelFx — bytes, the same on every OS;
+   *   · CANVAS kernels through b14Rec below, a context that RECORDS every call with every number written out in full. The
+   *     same calls in the same order draw the same pixels, so the log's hash pins a canvas kernel byte for byte — and it is
+   *     JavaScript arithmetic, not a rasteriser, so it reads the same on every OS and needs no pinned() table. The same
+   *     record carries where each image lands (the transform applied to its destination) and the clip it lands in, which
+   *     is what the behaviour tests measure on the canvas kernels. */
+  function b14Plate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  }
+  function b14Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b14Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= (typeof d === 'string' ? d.charCodeAt(i) : d[i]); h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b14Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  /* The kernel through FM._applyPixelFx: the PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`. */
+  function b14Run(type, params, W, H, t, ps, d0) { const d = d0 || b14Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out (on fc8866f1 makeInstance has none of them, which is
+     how the pins were captured). */
+  function b14Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Eight hashes per config: two plate sizes, the export (ps 1) and a half-size preview plate (ps 0.5), at two moments. */
+  function b14Shots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b14Hash(b14Run(type, JSON.parse(JSON.stringify(params)), W, H, t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new instance), against the pins. */
+  function b14Pinned(type, NEW, CFG, PIN, shots) {
+    const moved = [];
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b14Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: JSON.parse(JSON.stringify(abs)) }).params;
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = (shots || b14Shots)(type, p); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the
+     render-time fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default
+     value comes back from the load sanitiser as it was written. A key whose old look differs from its new default carries
+     `legacy` instead, and the fill must leave it absent (LEG lists those, with the legacy value). */
+  function b14Catalogue(type, NEW, SET, LEG) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want);
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      if (LEG && k in LEG) {
+        if (pd.legacy !== LEG[k]) throw new Error(type + ' ' + k + ' carries legacy ' + pd.legacy + ', not ' + LEG[k] + ' - a saved ' + type + ' without the key would not draw as it did');
+        const f = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+        if (k in f) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + f[k] + ' - a legacy key must stay absent so the kernel draws the old look');
+        return;
+      }
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l48214' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(SET)) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  const b14Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b14Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b14Mean = d => { const m = [0, 0, 0], n = d.length / 4; for (let i = 0; i < d.length; i += 4) { m[0] += d[i]; m[1] += d[i + 1]; m[2] += d[i + 2]; } return m.map(v => v / n); };
+  /* THE RECORDING CONTEXT. `log` is every call and every property set, numbers in full; `draws` is every drawImage with the
+     device-space box it can paint (its destination under the current transform, cut to the bounding box of every clip in
+     force), its alpha, compositing and filter; `fills` the same for fillRect. Images are named img0, img1… in the order
+     they first appear, so a kernel drawing its own plate and a texture can be told apart. */
+  function b14Rec(W, H) {
+    const log = [], draws = [], fills = [], ids = new Map(), stack = [];
+    let st = { m: [1, 0, 0, 1, 0, 0], clip: [], globalAlpha: 1, globalCompositeOperation: 'source-over', filter: 'none', fillStyle: '#000000', strokeStyle: '#000000', imageSmoothingEnabled: true, imageSmoothingQuality: 'low', lineWidth: 1, lineJoin: 'miter', lineCap: 'butt' };
+    let path = [], sub = null;
+    const tag = o => { if (!ids.has(o)) ids.set(o, 'img' + ids.size); return ids.get(o); };
+    const fmt = v => typeof v === 'number' ? String(v) : typeof v === 'string' ? JSON.stringify(v) : (v && (typeof v === 'object' || typeof v === 'function')) ? (typeof v.a === 'number' && typeof v.f === 'number' ? 'M(' + [v.a, v.b, v.c, v.d, v.e, v.f].join(',') + ')' : tag(v)) : String(v);
+    const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+    const ap = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+    const box = pts => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; pts.forEach(q => { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }); return [x0, y0, x1, y1]; };
+    const cut = b => { st.clip.forEach(c => { const k = box(c); b = [Math.max(b[0], k[0]), Math.max(b[1], k[1]), Math.min(b[2], k[2]), Math.min(b[3], k[3])]; }); return b; };
+    const R = { canvas: { width: W, height: H }, log: log, draws: draws, fills: fills, clips: [] };
+    const rec = (name, args) => { log.push(name + '(' + Array.prototype.map.call(args, fmt).join(',') + ')'); };
+    R.save = function () { rec('save', arguments); stack.push(Object.assign({}, st, { m: st.m.slice(), clip: st.clip.slice() })); };
+    R.restore = function () { rec('restore', arguments); if (stack.length) st = stack.pop(); };
+    R.translate = function (x, y) { rec('translate', arguments); st.m = mul(st.m, [1, 0, 0, 1, x, y]); };
+    R.scale = function (x, y) { rec('scale', arguments); st.m = mul(st.m, [x, 0, 0, y, 0, 0]); };
+    R.rotate = function (a) { rec('rotate', arguments); const c = Math.cos(a), s = Math.sin(a); st.m = mul(st.m, [c, s, -s, c, 0, 0]); };
+    R.transform = function (a, b, c, d, e, f) { rec('transform', arguments); st.m = mul(st.m, [a, b, c, d, e, f]); };
+    R.setTransform = function (a, b, c, d, e, f) { rec('setTransform', arguments); st.m = (a && typeof a === 'object') ? [a.a, a.b, a.c, a.d, a.e, a.f] : (arguments.length ? [a, b, c, d, e, f] : [1, 0, 0, 1, 0, 0]); };
+    R.resetTransform = function () { rec('resetTransform', arguments); st.m = [1, 0, 0, 1, 0, 0]; };
+    R.getTransform = function () { const m = st.m; return { a: m[0], b: m[1], c: m[2], d: m[3], e: m[4], f: m[5] }; };
+    R.beginPath = function () { rec('beginPath', arguments); path = []; sub = null; };
+    R.moveTo = function (x, y) { rec('moveTo', arguments); sub = [ap(st.m, x, y)]; path.push(sub); };
+    R.lineTo = function (x, y) { rec('lineTo', arguments); if (!sub) { sub = []; path.push(sub); } sub.push(ap(st.m, x, y)); };
+    R.closePath = function () { rec('closePath', arguments); };
+    R.rect = function (x, y, w, h) { rec('rect', arguments); path.push([ap(st.m, x, y), ap(st.m, x + w, y), ap(st.m, x + w, y + h), ap(st.m, x, y + h)]); sub = null; };
+    R.clip = function () { rec('clip', arguments); const pts = [].concat.apply([], path); if (pts.length) { st.clip = st.clip.concat([pts]); R.clips.push(pts); } };
+    R.drawImage = function (img) {
+      rec('drawImage', arguments);
+      const a = arguments; let dx, dy, dw, dh;
+      if (a.length >= 9) { dx = a[5]; dy = a[6]; dw = a[7]; dh = a[8]; } else if (a.length >= 5) { dx = a[1]; dy = a[2]; dw = a[3]; dh = a[4]; } else { dx = a[1]; dy = a[2]; dw = img.width; dh = img.height; }
+      const q = [ap(st.m, dx, dy), ap(st.m, dx + dw, dy), ap(st.m, dx + dw, dy + dh), ap(st.m, dx, dy + dh)];
+      draws.push({ img: tag(img), quad: q, box: cut(box(q)), alpha: st.globalAlpha, op: st.globalCompositeOperation, filter: st.filter, src: a.length >= 9 ? [a[1], a[2], a[3], a[4]] : null, m: st.m.slice(), smooth: st.imageSmoothingEnabled });
+    };
+    R.fillRect = function (x, y, w, h) { rec('fillRect', arguments); fills.push({ style: st.fillStyle, alpha: st.globalAlpha, op: st.globalCompositeOperation, box: cut(box([ap(st.m, x, y), ap(st.m, x + w, y), ap(st.m, x + w, y + h), ap(st.m, x, y + h)])) }); };
+    R.fill = function () { rec('fill', arguments); const pts = [].concat.apply([], path); if (pts.length) fills.push({ style: st.fillStyle, alpha: st.globalAlpha, op: st.globalCompositeOperation, box: cut(box(pts)) }); };
+    ['stroke', 'strokeRect', 'clearRect', 'roundRect', 'arc', 'ellipse', 'quadraticCurveTo', 'bezierCurveTo', 'putImageData', 'fillText', 'strokeText', 'setLineDash'].forEach(n => { R[n] = function () { rec(n, arguments); }; });
+    R.getImageData = function (x, y, w, h) { rec('getImageData', arguments); return { data: new Uint8ClampedArray(Math.max(1, w * h) * 4), width: w, height: h }; };
+    R.createImageData = function (w, h) { rec('createImageData', arguments); return { data: new Uint8ClampedArray(Math.max(1, w * h) * 4), width: w, height: h }; };
+    const grad = name => function () { rec(name, arguments); const gid = 'grad' + log.length; return { id: gid, addColorStop: function () { rec(gid + '.addColorStop', arguments); } }; };
+    R.createLinearGradient = grad('createLinearGradient'); R.createRadialGradient = grad('createRadialGradient');
+    R.measureText = function () { return { width: 0 }; };
+    Object.keys(st).forEach(k => { if (k === 'm' || k === 'clip') return; Object.defineProperty(R, k, { get: () => st[k], set: v => { st[k] = v; log.push(k + '=' + (v && typeof v === 'object' && v.id ? v.id : fmt(v))); } }); });
+    R.hash = () => b14Hash(log.join('\n'));
+    return R;
+  }
+  /* A plate the kernels can take as their source A: a real canvas in the browser (a texture is cut from it), and the
+     harness's stand-in elsewhere — the recorder never reads its pixels. */
+  function b14Canvas(W, H) { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; }
+  /* Run a CANVAS_FX kernel into a recorder, exactly as drawCanvasEffect calls it: (A, B, W, H, bb, params, t, tl, layer, ps).
+     ctx.filter is forced OFF for the call (FM._forceNoCtxFilter, queue 661's own switch) so the solids' face shading takes
+     the same branch on every machine — the log must not depend on whether this browser honours ctx.filter. */
+  function b14Cfx(type, params, o) {
+    o = o || {};
+    const W = o.W || 160, H = o.H || 120, bb = o.bb || { x: 0, y: 0, w: W, h: H };
+    const f = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable');
+    const A = o.A || b14Canvas(W, H), B = b14Rec(W, H), was = FM._forceNoCtxFilter;
+    FM._forceNoCtxFilter = true;
+    try { f(A, B, W, H, bb, JSON.parse(JSON.stringify(params)), o.t == null ? 0.5 : o.t, o.tl == null ? 0.5 : o.tl, o.layer || null, o.ps == null ? 1 : o.ps, o.expand, o.scene); }
+    finally { FM._forceNoCtxFilter = was; }
+    return B;
+  }
+  /* Eight log hashes per config, the canvas twin of b14Shots: two plates (the second with the layer's box inside it, off
+     centre), the export and a half-size plate, at two moments (t and the clip's own time move together). */
+  function b14CShots(type, params) {
+    return [[160, 120, null], [200, 150, { x: 30, y: 22, w: 110, h: 80 }]].map(([W, H, bb]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b14Cfx(type, params, { W: W, H: H, bb: bb, ps: ps, t: t, tl: t }).hash()).join('.')).join('/')).join(' ');
+  }
+  /* The union box of every draw of one image (or of all of them): the part of the plate a kernel can have painted. */
+  function b14Reach(R, img) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; R.draws.forEach(q => { if (img && q.img !== img) return; if (q.box[2] <= q.box[0] || q.box[3] <= q.box[1]) return; x0 = Math.min(x0, q.box[0]); y0 = Math.min(y0, q.box[1]); x1 = Math.max(x1, q.box[2]); y1 = Math.max(y1, q.box[3]); }); return { x0: x0, y0: y0, x1: x1, y1: y1, w: x1 - x0, h: y1 - y0 }; }
+
+  /* 14.1 TILT SHIFT (hunt C45): Sharp band, Shape (Linear / Radial) with Focus X, Smoothness, Miniature pop. */
+  const B14TS_NEW = { band: 0, shape: 0, cx: 0.5, passes: 1, pop: 0 };
+  const B14TS_CFG = { def: {}, low: { center: 0.3, softness: 0.8 }, wide: { blur: 2.5, softness: 0.2 }, turned: { angle: 30, center: 0.6 }, steep: { angle: -75, blur: 0.5 }, kf: { center: b14Kf(0.2, 0.8), blur: b14Kf(1, 3) } };
+  const B14TS_PIN = {   // fc8866f1, before the edit (Tilt Shift has no px control, so the half-size plate draws the same bytes)
+    def: 'd77d8c1c.d77d8c1c/d77d8c1c.d77d8c1c b39a1bb4.b39a1bb4/b39a1bb4.b39a1bb4', low: '8d2a551d.8d2a551d/8d2a551d.8d2a551d cf92cf46.cf92cf46/cf92cf46.cf92cf46',
+    wide: '8e7dbdaf.8e7dbdaf/8e7dbdaf.8e7dbdaf e6083acc.e6083acc/e6083acc.e6083acc', turned: '1135d5dd.1135d5dd/1135d5dd.1135d5dd 32a00efb.32a00efb/32a00efb.32a00efb',
+    steep: '001c2a86.001c2a86/001c2a86.001c2a86 091ac36c.091ac36c/091ac36c.091ac36c', kf: '833ad784.9de0dde9/833ad784.9de0dde9 dc9ad0e6.88c736ff/dc9ad0e6.88c736ff' };
+
+  test('482 14.1 Tilt Shift - Sharp band, Shape, Focus X, Smoothness and Miniature pop are in the catalogue at defaults that draw the old blur, and saved and new Tilt Shifts draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b14Catalogue('tiltshift', B14TS_NEW, { band: 20, shape: 1, cx: 0.3, passes: 3, pop: 40 });
+    const shape = b14Row('tiltshift', 'shape'), cx = b14Row('tiltshift', 'cx'), ang = b14Row('tiltshift', 'angle');
+    if (shape.type !== 'segment' || JSON.stringify(shape.options) !== JSON.stringify([[0, 'Linear'], [1, 'Radial']])) throw new Error('Shape is not a Linear / Radial choice (' + shape.type + ' ' + JSON.stringify(shape.options) + ')');
+    if (cx.overriddenBy !== 'shape' || cx.liveWhen !== 1) throw new Error('Focus X does not say it only counts under Radial (overriddenBy ' + cx.overriddenBy + ', liveWhen ' + cx.liveWhen + ')');
+    if (ang.overriddenBy !== 'shape' || ang.liveWhen !== 0) throw new Error('Angle does not say it only counts under Linear (overriddenBy ' + ang.overriddenBy + ', liveWhen ' + ang.liveWhen + ') - a radial focus has nothing to turn');
+    if (b14Row('tiltshift', 'band').unit !== '%' || b14Row('tiltshift', 'pop').unit !== '%') throw new Error('Sharp band and Miniature pop are not declared in per cent');
+    const moved = b14Pinned('tiltshift', B14TS_NEW, B14TS_CFG, B14TS_PIN);
+    if (moved.length) throw new Error(moved.length + ' Tilt Shifts differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+    /* …and the layer path, where the kernel is handed the layer's box and bounds both passes by it (#692): Smoothness 3 there
+       is the unbounded Smoothness 3 inside the box, so the grown bounds of the extra passes reach far enough. */
+    const W = 120, H = 90, bb = { x: 30, y: 25, w: 50, h: 40 }, k = FM._FX_TABLES.PIXEL_FX.tiltshift;
+    const masked = () => { const d = b14Plate(W, H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (x < bb.x || x >= bb.x + bb.w || y < bb.y || y >= bb.y + bb.h) d[(y * W + x) * 4 + 3] = 0; return d; };
+    [{}, { passes: 3 }, { passes: 2, band: 10, pop: 50 }, { shape: 1, cx: 0.4, passes: 3 }].forEach(o => {
+      const P = Object.assign(b14Base('tiltshift', {}), { center: 0.3 }, o), a = masked(), b = masked();
+      k(a, W, H, JSON.parse(JSON.stringify(P)), 0.5, 1, bb); k(b, W, H, JSON.parse(JSON.stringify(P)), 0.5, 1);
+      if (!b14Same(a, b)) throw new Error('Tilt Shift ' + JSON.stringify(o) + ' handed the layer box draws differently from the same blur over the whole plate - the bounded passes do not reach far enough');
+    });
+  });
+
+  test('482 14.1 Tilt Shift - Sharp band 20 keeps every row within 10 percent of the focus exactly as the source, straight and turned, Radial keeps a round spot sharp round Focus X, Smoothness 3 spreads an edge over twice as far, and Miniature pop lifts colour and leaves a grey grey', { item: '482', budgetMs: 60000 }, function () {
+    const W = 80, H = 100, ts = (o, d0) => b14Run('tiltshift', Object.assign(b14Base('tiltshift', {}), { center: 0.5, softness: 0.4 }, o), W, H, 0.5, 1, d0);
+    const src = b14Plate(W, H);
+    const rowSame = (d, y) => { for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] !== src[i] || d[i + 1] !== src[i + 1] || d[i + 2] !== src[i + 2] || d[i + 3] !== src[i + 3]) return false; } return true; };
+    /* SHARP BAND. CONTROL: with no band only the focus row itself is untouched - a row 5 px off it is already blurred. */
+    const none = ts({});
+    if (!rowSame(none, 50)) throw new Error('CONTROL: with no band the focus row is not the source');
+    if (rowSame(none, 45) || rowSame(none, 55)) throw new Error('CONTROL: with no band a row 5 px from the focus is untouched - this fixture cannot show a band');
+    const band = ts({ band: 20 });
+    for (let y = 40; y <= 60; y++) if (!rowSame(band, y)) throw new Error('Sharp band 20 blurred row ' + y + ', ' + Math.abs(y - 50) + ' px (' + Math.abs(y - 50) + ' percent) from the focus - every row within 10 percent should be the source');
+    if (rowSame(band, 64) || rowSame(band, 36)) throw new Error('Sharp band 20 left rows 14 px from the focus sharp too - the blur must start at the band edge');
+    /* …square to a turned band: every pixel within 10 percent of H of the turned line is the source, and one well outside it is not. */
+    const turned = ts({ band: 20, angle: 30 }), ca = Math.cos(Math.PI / 6), sa = Math.sin(Math.PI / 6);
+    let inside = 0, outside = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, dist = Math.abs((y - 50) * ca - (x - W / 2) * sa) / H, same = turned[i] === src[i] && turned[i + 1] === src[i + 1] && turned[i + 2] === src[i + 2];
+      if (dist < 0.099 && src[i + 3] > 0 && !same) throw new Error('Sharp band 20 at Angle 30 blurred (' + x + ', ' + y + '), ' + (dist * 100).toFixed(1) + ' percent of the height from the turned focus line');
+      if (dist < 0.099) inside++; else if (dist > 0.2 && src[i + 3] > 0 && !same) outside++;
+    }
+    if (!inside || outside < 200) throw new Error('the turned band test saw ' + inside + ' pixels inside and only ' + outside + ' blurred outside - it is not measuring a band');
+    /* RADIAL round Focus X 0.25, Focus 0.5, band 20: a spot of radius 10 px round (20, 50) is the source, and the same row
+       at x 70 is blurred. CONTROL: under Linear that far pixel is on the focus row, so it is sharp. */
+    const rad = ts({ shape: 1, cx: 0.25, band: 20 }), lin = ts({ shape: 0, cx: 0.25, band: 20 });
+    for (let y = 40; y <= 60; y++) for (let x = 10; x <= 30; x++) {
+      const i = (y * W + x) * 4; if (Math.hypot(x - 20, y - 50) > 9.9 || src[i + 3] === 0) continue;
+      if (rad[i] !== src[i] || rad[i + 1] !== src[i + 1] || rad[i + 2] !== src[i + 2]) throw new Error('Radial Sharp band 20 blurred (' + x + ', ' + y + '), inside the round sharp spot at Focus X 0.25');
+    }
+    const far = (50 * W + 70) * 4;
+    if (lin[far] !== src[far] || lin[far + 1] !== src[far + 1]) throw new Error('CONTROL: under Linear the pixel at (70, 50) on the focus row is blurred');
+    if (rad[far] === src[far] && rad[far + 1] === src[far + 1] && rad[far + 2] === src[far + 2]) throw new Error('Radial left (70, 50) sharp - 50 px from the focus point it should be blurred, the way Linear never could');
+    /* SMOOTHNESS: a black/white step, focus at the top so row 95 is fully blurred. One box of radius 8 is a 16-step ramp;
+       three boxes reach 24 px each side, of which the outer 5 each side round to 0 or 255 (their weight is under 1 percent),
+       so about 38 in-between values. Measured as the run of in-between values along row 95. */
+    const step = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = x < 40 ? 0 : 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const ramp = d => { let n = 0; for (let x = 0; x < W; x++) { const v = d[(95 * W + x) * 4]; if (v > 2 && v < 253) n++; } return n; };
+    const r1 = ramp(b14Run('tiltshift', Object.assign(b14Base('tiltshift', {}), { center: 0, softness: 1 }), W, H, 0.5, 1, step()));
+    const r3 = ramp(b14Run('tiltshift', Object.assign(b14Base('tiltshift', {}), { center: 0, softness: 1, passes: 3 }), W, H, 0.5, 1, step()));
+    if (r1 < 14 || r1 > 18) throw new Error('CONTROL: one pass ramps over ' + r1 + ' px, not the 16 of a radius-8 box');
+    if (!(r3 > 2 * r1)) throw new Error('Smoothness 3 ramps over ' + r3 + ' px against ' + r1 + ' for one pass - it is not running the blur three times');
+    /* MINIATURE POP: colour moves away from grey (more saturated), a grey stays grey, alpha is untouched; 0 is the default. */
+    const muted = b14Flat(W, H, [150, 120, 100]), greyIn = b14Flat(W, H, [90, 90, 90], 200);
+    const sat = d => { let s = 0; for (let i = 0; i < d.length; i += 4) s += Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]); return s / (d.length / 4); };
+    const p0 = ts({ pop: 0 }, muted.slice()), p100 = ts({ pop: 100 }, muted.slice());
+    if (!b14Same(p0, ts({}, muted.slice()))) throw new Error('CONTROL: Miniature pop 0 is not the default picture');
+    if (!(sat(p100) > sat(p0) * 1.5)) throw new Error('Miniature pop 100 left the colour at ' + sat(p100).toFixed(1) + ' levels of saturation against ' + sat(p0).toFixed(1) + ' - it should be clearly punchier');
+    const g = ts({ pop: 100 }, greyIn);
+    for (let i = 0; i < g.length; i += 4) { if (g[i] !== g[i + 1] || g[i] !== g[i + 2]) throw new Error('Miniature pop tinted a grey (' + g[i] + ',' + g[i + 1] + ',' + g[i + 2] + ')'); if (g[i + 3] !== 200) throw new Error('Miniature pop changed alpha'); }
+  });
+
+  /* 14.2 LENS BLUR: Rotation (of the polygon aperture), Bloom threshold, Anamorphic. */
+  const B14LB_NEW = { rotation: 0, threshold: 60, ratio: 100 };
+  const B14LB_CFG = { def: {}, hex: { blades: 1, radius: 14 }, bloom: { bloom: 150, samples: 24 }, pent: { blades: 2, bloom: 80, radius: 7 }, frac: { radius: 7.5, blades: 3 }, kf: { radius: b14Kf(4, 20), bloom: b14Kf(0, 200) } };
+  const B14LB_PIN = {   // fc8866f1, before the edit
+    def: 'ff7417ab.ff7417ab/d94405c0.d94405c0 3c070c18.3c070c18/ad0c577c.ad0c577c', hex: '53e931c2.53e931c2/fde853b4.fde853b4 6032d16c.6032d16c/b8f6149e.b8f6149e',
+    bloom: '6352c895.6352c895/225e81c2.225e81c2 f9550b8b.f9550b8b/2cff181f.2cff181f', pent: '8f9e6b00.8f9e6b00/4628a16b.4628a16b cb7b5370.cb7b5370/16349247.16349247',
+    frac: '8374feed.8374feed/544e8cfd.544e8cfd 5ae75c58.5ae75c58/10723166.10723166', kf: '1b146071.68c7b51e/0309b37f.8e703f0c c58faf21.073c5af9/714e674c.387b8de6' };
+
+  test('482 14.2 Lens Blur - Rotation, Bloom threshold and Anamorphic are in the catalogue at defaults that draw the old disc, and saved and new Lens Blurs draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b14Catalogue('lensblur', B14LB_NEW, { rotation: 30, threshold: 35, ratio: 50 });
+    const rot = b14Row('lensblur', 'rotation'), thr = b14Row('lensblur', 'threshold'), rat = b14Row('lensblur', 'ratio');
+    if (rot.overriddenBy !== 'blades' || JSON.stringify(rot.liveWhen) !== '[1,2,3]' || rot.unit !== '°') throw new Error('Rotation does not say it only turns a polygon aperture (overriddenBy ' + rot.overriddenBy + ', liveWhen ' + JSON.stringify(rot.liveWhen) + ', unit ' + rot.unit + ')');
+    if (thr.overriddenBy !== 'bloom' || Number(thr.liveAbove) !== 0 || thr.unit !== '%') throw new Error('Bloom threshold does not say it only counts with Highlight bloom on (overriddenBy ' + thr.overriddenBy + ', liveAbove ' + thr.liveAbove + ')');
+    if (rat.min !== 50 || rat.max !== 200 || rat.unit !== '%') throw new Error('Anamorphic is not 50-200 percent (' + rat.min + '..' + rat.max + rat.unit + ')');
+    const moved = b14Pinned('lensblur', B14LB_NEW, B14LB_CFG, B14LB_PIN);
+    if (moved.length) throw new Error(moved.length + ' Lens Blurs differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.2 Lens Blur - Anamorphic 50 makes a dot’s bokeh twice as tall as it is wide and 200 twice as wide, Rotation turns a polygon (a sixth of a turn brings a hexagon back) and leaves a circle alone, and Bloom threshold decides what blooms', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64, lb = (o, d0) => b14Run('lensblur', Object.assign(b14Base('lensblur', {}), { radius: 20, samples: 32, bloom: 0, blades: 0 }, o), W, H, 0.5, 1, d0);
+    /* ANAMORPHIC: a 3x3 white dot on black. The bokeh's size is the lit area less the dot itself. MEASURED on the circle:
+       35 x 35 (ratio 1.00); at 50, 18 x 35 (1.94); at 200, 35 x 17 (0.49). */
+    const dot = () => { const d = b14Flat(W, H, [0, 0, 0]); for (let y = 31; y < 34; y++) for (let x = 31; x < 34; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; } return d; };
+    const ext = d => { let x0 = W, x1 = -1, y0 = H, y1 = -1; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4] > 0) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } return { w: x1 - x0 + 1 - 3, h: y1 - y0 + 1 - 3 }; };
+    const round = ext(lb({}, dot())), tall = ext(lb({ ratio: 50 }, dot())), wide = ext(lb({ ratio: 200 }, dot()));
+    if (Math.abs(round.h / round.w - 1) > 0.1) throw new Error('CONTROL: a round aperture drew a ' + round.w + ' x ' + round.h + ' bokeh - not round, so this fixture cannot judge a squeeze');
+    if (Math.abs(tall.h / tall.w - 2) > 0.2) throw new Error('Anamorphic 50 drew a ' + tall.w + ' x ' + tall.h + ' bokeh (' + (tall.h / tall.w).toFixed(2) + ' times as tall as wide) - it should be twice as tall as it is wide');
+    if (Math.abs(wide.w / wide.h - 2) > 0.2) throw new Error('Anamorphic 200 drew a ' + wide.w + ' x ' + wide.h + ' bokeh - it should be twice as wide as it is tall');
+    if (tall.h !== round.h || wide.w !== round.w) throw new Error('Anamorphic stretched the bokeh past Radius (' + tall.h + ' / ' + wide.w + ' against ' + round.h + ') - it may only squeeze, or the layer bounds stop holding');
+    /* ROTATION, on the textured plate: 30 degrees turns a hexagon into a different picture, one sector (60 hexagon, 72 pentagon,
+       90 square) is the same aperture again, byte for byte, and a circle has nothing to turn. MEASURED: 3909 / 0 of 4096. */
+    const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++; return n; };
+    const pl = o => lb(Object.assign({ radius: 12 }, o));
+    [[1, 60], [2, 72], [3, 90]].forEach(([bl, sector]) => {
+      const r0 = pl({ blades: bl });
+      if (diff(r0, pl({ blades: bl, rotation: 30 })) < W * H / 2) throw new Error('Rotation 30 changed under half the picture on aperture ' + bl + ' - it does not turn the polygon');
+      if (diff(r0, pl({ blades: bl, rotation: sector })) !== 0) throw new Error('Rotation ' + sector + ' on aperture ' + bl + ' is not the unturned polygon - one sector of a regular polygon is the same shape');
+    });
+    if (diff(pl({ blades: 0 }), pl({ blades: 0, rotation: 30 })) !== 0) throw new Error('Rotation changed a round aperture - its row says it only turns a polygon');
+    /* BLOOM THRESHOLD. A light-grey patch (148, luma 0.58 — just under the old threshold) on a dark ground, bloom 300.
+       CONTROL: at the old 60 the patch is below the threshold, so it blooms exactly as with no bloom at all. At 10 it is
+       well above it and spills brighter light round itself (MEASURED: the ring round it 35.5 against 29.3); at 100 nothing
+       anywhere blooms, which is bloom off byte for byte. */
+    const patch = () => { const d = b14Flat(W, H, [20, 20, 20]); for (let y = 26; y < 38; y++) for (let x = 26; x < 38; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 148; } return d; };
+    const ring = d => { let s = 0, n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const e = Math.max(Math.abs(x - 31.5), Math.abs(y - 31.5)); if (e > 9 && e < 15) { s += d[(y * W + x) * 4]; n++; } } return s / n; };
+    const off = lb({ radius: 10 }, patch()), at60 = lb({ radius: 10, bloom: 300 }, patch()), at10 = lb({ radius: 10, bloom: 300, threshold: 10 }, patch());
+    if (diff(off, at60) !== 0) throw new Error('CONTROL: a patch below the old threshold bloomed at 60 - this fixture cannot tell a threshold from none');
+    if (!(ring(at10) > ring(at60) + 4)) throw new Error('Bloom threshold 10 lit the ring round a light-grey patch to ' + ring(at10).toFixed(1) + ' against ' + ring(at60).toFixed(1) + ' at 60 - lowering the threshold should let it bloom');
+    const pt = b14Plate(W, H), all = lb({ radius: 10, bloom: 300, threshold: 100 }, pt.slice()), none = lb({ radius: 10 }, pt.slice());
+    if (!b14Same(all, none)) throw new Error('Bloom threshold 100 with bloom 300 is not bloom off - nothing is brighter than white, so nothing should bloom');
+  });
+
+  /* A canvas that reads its pixels back: true in the browser the suite runs in. (The node harness these tests were proven in
+     before landing has none, so the pixel halves below ran there only in the browser; the recorded halves ran in both.) */
+  const b14RealCanvas = (function () { let ok = null; return function () { if (ok === null) { try { const c = document.createElement('canvas'); c.width = c.height = 2; const g = c.getContext('2d'); g.fillStyle = '#ff0000'; g.fillRect(0, 0, 2, 2); const im = g.getImageData(0, 0, 1, 1); ok = !!(im && im.data && im.data[0] === 255); } catch (e) { ok = false; } } return ok; }; })();
+
+  /* 14.3 DIRECTIONAL BLUR (half of hunt C25): Smear (Both / Behind / Ahead), Frame edges (Fade / Repeat). */
+  const B14MB_NEW = { side: 0, edges: 0 };
+  const B14MB_CFG = { def: {}, long: { distance: 60, samples: 32 }, diag: { angle: 135, distance: 33 }, few: { samples: 4, distance: 7 }, none: { distance: 0.5 }, kf: { distance: b14Kf(5, 40), angle: b14Kf(0, 90) } };
+  const B14MB_PIN = {   // fc8866f1, before the edit (the smear reads neither the box nor the plate size, so both plates log alike)
+    def: 'b4b0281a.b4b0281a/ec57ed9c.ec57ed9c b4b0281a.b4b0281a/ec57ed9c.ec57ed9c', long: '305a6d12.305a6d12/51b0211a.51b0211a 305a6d12.305a6d12/51b0211a.51b0211a',
+    diag: 'f36b5f54.f36b5f54/a8a9458e.a8a9458e f36b5f54.f36b5f54/a8a9458e.a8a9458e', few: '84d2ab16.84d2ab16/c082acac.c082acac 84d2ab16.84d2ab16/c082acac.c082acac',
+    none: 'cebbff2c.cebbff2c/cebbff2c.cebbff2c cebbff2c.cebbff2c/cebbff2c.cebbff2c', kf: '616b0f14.671cbb96/d6726d68.05d71cec 616b0f14.671cbb96/d6726d68.05d71cec' };
+
+  test('482 14.3 Directional Blur - Smear and Frame edges are in the catalogue at defaults that draw the old smear, and saved and new Directional Blurs issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b14Catalogue('motionblur', B14MB_NEW, { side: 1, edges: 1 });
+    const side = b14Row('motionblur', 'side'), edges = b14Row('motionblur', 'edges');
+    if (side.type !== 'segment' || JSON.stringify(side.options.map(o => o[0])) !== '[0,1,2]') throw new Error('Smear is not a three-way Both / Behind / Ahead choice (' + JSON.stringify(side.options) + ')');
+    if (edges.type !== 'segment' || JSON.stringify(edges.options.map(o => o[0])) !== '[0,1]') throw new Error('Frame edges is not a Fade / Repeat choice (' + JSON.stringify(edges.options) + ')');
+    const moved = b14Pinned('motionblur', B14MB_NEW, B14MB_CFG, B14MB_PIN, b14CShots);
+    if (moved.length) throw new Error(moved.length + ' Directional Blurs draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.3 Directional Blur - Behind lays the smear back from the Angle and Ahead toward it, and Repeat keeps a clip that fills the frame as solid at its edge as in its middle', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, mb = (o, extra) => b14Cfx('motionblur', Object.assign({ distance: 20, angle: 0, samples: 9 }, o), Object.assign({ W: W, H: H }, extra || {}));
+    const offs = (R, axis) => R.draws.filter(q => q.img === 'img0').map(q => +q.quad[0][axis].toFixed(6));
+    /* SMEAR. CONTROL: Both spreads the nine taps -10..10 px round the picture. Behind puts them all at or behind it (0..-20
+       along the Angle), Ahead at or ahead of it (0..20); at Angle 90 the same happens down the frame. */
+    const both = offs(mb({}), 0);
+    if (Math.min.apply(null, both) !== -10 || Math.max.apply(null, both) !== 10) throw new Error('CONTROL: Both spread the taps ' + Math.min.apply(null, both) + '..' + Math.max.apply(null, both) + ' px, not -10..10');
+    const behind = offs(mb({ side: 1 }), 0), ahead = offs(mb({ side: 2 }), 0), down = offs(mb({ side: 2, angle: 90 }), 1);
+    if (behind.length !== 9 || Math.max.apply(null, behind) !== 0 || Math.min.apply(null, behind) !== -20) throw new Error('Behind put the taps at ' + behind.join(', ') + ' - they should run from the picture back to 20 px behind it');
+    if (ahead.length !== 9 || Math.min.apply(null, ahead) !== 0 || Math.max.apply(null, ahead) !== 20) throw new Error('Ahead put the taps at ' + ahead.join(', ') + ' - they should run from the picture out to 20 px ahead of it');
+    if (Math.min.apply(null, down) < -1e-9 || Math.abs(Math.max.apply(null, down) - 20) > 1e-9) throw new Error('Ahead at Angle 90 put the taps at ' + down.join(', ') + ' down the frame - they should run 0..20');
+    /* REPEAT, as the calls show it: every tap is drawn from one plate padded past the frame, so every tap covers the whole frame,
+       and the padding is the plate's own outermost pixels carried outward with smoothing off. CONTROL: under Fade a tap shifted
+       right leaves the left edge uncovered. */
+    const fade = mb({ distance: 40 }), rep = mb({ distance: 40, edges: 1 });
+    if (!fade.draws.some(q => q.box[0] > 0.5)) throw new Error('CONTROL: under Fade no tap leaves the left edge uncovered - this cannot show what Repeat fixes');
+    const taps = rep.draws.filter(q => q.op === 'lighter');
+    if (taps.length !== 9) throw new Error('Repeat drew ' + taps.length + ' taps, not 9');
+    taps.forEach(q => { if (q.box[0] > 0 || q.box[1] > 0 || q.box[2] < W || q.box[3] < H) throw new Error('under Repeat a tap covers only ' + q.box.map(v => v.toFixed(1)).join(',') + ' of the ' + W + ' x ' + H + ' frame - its edge would fade'); });
+    if (taps.some(q => q.quad[1][0] - q.quad[0][0] <= W)) throw new Error('under Repeat a tap is still drawn from the bare plate, not one padded past the frame');
+    /* …and in the browser, the pixels: a frame-filling opaque clip blurred 40 px across keeps both edge columns as opaque as
+       its middle under Repeat; under Fade (CONTROL) the edge column is clearly see-through. */
+    if (b14RealCanvas()) {
+      const A = b14Canvas(W, H), ag = A.getContext('2d'); ag.fillStyle = '#3080c0'; ag.fillRect(0, 0, W, H);
+      const alphaAt = (o, x) => { const B = b14Canvas(W, H), g = B.getContext('2d', { willReadFrequently: true }); FM._FX_TABLES.CANVAS_FX.motionblur(A, g, W, H, { x: 0, y: 0, w: W, h: H }, Object.assign({ distance: 40, angle: 0 }, o), 0.5, 0.5, null, 1); return g.getImageData(x, H >> 1, 1, 1).data[3]; };
+      const mid = alphaAt({ edges: 1 }, W >> 1), left = alphaAt({ edges: 1 }, 0), right = alphaAt({ edges: 1 }, W - 1), fadeLeft = alphaAt({}, 0);
+      if (!(fadeLeft < mid - 40)) throw new Error('CONTROL: under Fade the left edge column is ' + fadeLeft + ' opaque against ' + mid + ' in the middle - nothing to repair');
+      if (Math.abs(left - mid) > 1 || Math.abs(right - mid) > 1 || mid < 250) throw new Error('under Repeat the edge columns are ' + left + ' and ' + right + ' opaque against ' + mid + ' in the middle - the edge still fades');
+    }
+  });
+
+  /* 14.4 BACKFILL: Style (Blurred copy / Mirrored edges / Solid colour) with its Colour, Saturation, Vignette. (Its blur already
+     takes the no-ctx.filter path — #986 C24, drawBlurredNoFilter — so that clause of the backlog item was done.) Backfill
+     draws through renderScene, so its pictures are judged in the browser (the fill-behind suite's own fbLayer / fbPix);
+     the Mirrored edges layout is a pure function of the source rect and is checked everywhere through FM._fbMirrorTiles. */
+  const B14FB_NEW = { style: 0, color: '#000000', saturation: 100, vignette: 0 };
+
+  test('482 14.4 Backfill - Style, Colour, Saturation and Vignette are in the catalogue at defaults that draw the old fill, and a saved Backfill fills the frame exactly as one with every new control at its default', { item: '482', budgetMs: 60000 }, function () {
+    b14Catalogue('fillbehind', B14FB_NEW, { style: 2, color: '#ff0000', saturation: 40, vignette: 0.5 });
+    const st = b14Row('fillbehind', 'style'), col = b14Row('fillbehind', 'color');
+    if (st.type !== 'segment' || JSON.stringify(st.options) !== JSON.stringify([[0, 'Blurred copy'], [1, 'Mirrored edges'], [2, 'Solid colour']])) throw new Error('Style is not Blurred copy / Mirrored edges / Solid colour (' + JSON.stringify(st.options) + ')');
+    if (col.type !== 'color' || col.overriddenBy !== 'style' || col.liveWhen !== 2) throw new Error('the Colour row does not say it only counts under Solid colour (type ' + col.type + ', overriddenBy ' + col.overriddenBy + ', liveWhen ' + col.liveWhen + ')');
+    ['blur', 'zoom'].forEach(k => { const r = b14Row('fillbehind', k); if (r.overriddenBy !== 'style' || JSON.stringify(r.liveWhen) !== '[0,1]') throw new Error(k + ' does not say it does nothing under Solid colour (overriddenBy ' + r.overriddenBy + ', liveWhen ' + JSON.stringify(r.liveWhen) + ')'); });
+    if (b14RealCanvas()) {
+      /* THE PICTURE: a Backfill saved without the new keys (they are filled at render time) and one with every new key at its
+         default fill the frame identically, at three settings. */
+      [{ blur: 20, zoom: 1, dim: 0 }, { blur: 60, zoom: 1.15, dim: 22 }, { blur: 0, zoom: 1.4, dim: 50 }].forEach((o, n) => {
+        const make = keys => { const l = fbLayer('_fb14p' + n, 100, 180, fbHalves, Object.assign({}, o, keys)); if (!keys) Object.keys(B14FB_NEW).forEach(k => { delete l.effects[0].params[k]; }); return l; };
+        const saved = fbPix([make(null)]), now = fbPix([make(B14FB_NEW)]);
+        if (fbDiff(saved, now) !== 0) throw new Error('a Backfill saved before Style existed fills the frame differently (' + fbDiff(saved, now) + ' bytes) from one with Style, Saturation and Vignette at their defaults - ' + JSON.stringify(o));
+      });
+    }
+  });
+
+  test('482 14.4 Backfill - Solid colour #ff0000 paints the bars red, Mirrored edges reflects the clip outward into the bars, Saturation 0 greys the fill and Vignette darkens its corners', { item: '482', budgetMs: 90000 }, function () {
+    /* MIRRORED EDGES, as laid out: on a 320 x 240 plate a 96 x 176 source at (112, 32), no zoom, working scale 1. The tile that
+       holds the layer is the layer's own rect, unflipped; its neighbours across are flipped across, the ones above and below
+       flipped down; together they cover the plate with no gap and no overlap. */
+    if (typeof FM._fbMirrorTiles !== 'function') throw new Error('FM._fbMirrorTiles (the Mirrored edges layout) is not reachable');
+    const R = b14Rec(320, 240), src = b14Canvas(320, 240);
+    FM._fbMirrorTiles(R, src, 112, 32, 96, 176, 1, 1, 0, 320, 240);
+    const tiles = R.draws.map(q => ({ x0: Math.round(q.box[0]), y0: Math.round(q.box[1]), x1: Math.round(q.box[2]), y1: Math.round(q.box[3]), fx: q.m[0] < 0, fy: q.m[3] < 0, src: q.src }));
+    const own = tiles.filter(q => q.x0 === 112 && q.y0 === 32 && q.x1 === 208 && q.y1 === 208)[0];
+    if (!own || own.fx || own.fy || JSON.stringify(own.src) !== '[112,32,96,176]') throw new Error('the tile holding the layer is not the layer’s own rect, unflipped: ' + JSON.stringify(own));
+    const left = tiles.filter(q => q.x1 === 112 && q.y0 === 32)[0], above = tiles.filter(q => q.y1 === 32 && q.x0 === 112)[0];
+    if (!left || !left.fx || left.fy) throw new Error('the tile left of the layer is not flipped across: ' + JSON.stringify(left));
+    if (!above || above.fx || !above.fy) throw new Error('the tile above the layer is not flipped down: ' + JSON.stringify(above));
+    let cover = 0, over = 0;
+    for (let y = 0.5; y < 240; y += 4) for (let x = 0.5; x < 320; x += 4) { const n = tiles.filter(q => x >= q.x0 && x < q.x1 && y >= q.y0 && y < q.y1).length; if (n) cover++; if (n > 1) over++; }
+    if (cover !== 80 * 60 || over) throw new Error('the reflections cover ' + cover + ' of 4800 sample points with ' + over + ' overlaps - they must tile the plate exactly');
+    /* …a speck of a layer is never laid out as thousands of tiles. */
+    const R2 = b14Rec(320, 240); FM._fbMirrorTiles(R2, src, 160, 120, 2, 2, 1, 1, 0, 320, 240);
+    if (R2.draws.length > 41 * 41 + 100) throw new Error('a 2 x 2 px layer was reflected into ' + R2.draws.length + ' tiles');
+    /* THE PICTURES, on the fill-behind suite's 100 x 180 clip (green left half, blue right half) in a 320 x 240 frame —
+       pixels through renderScene, which only the browser draws. */
+    if (b14RealCanvas()) b14FillPictures();
+  });
+  function b14FillPictures() {
+    const at = (o, x, y) => fbAt(fbPix([fbLayer('_fb14b', 100, 180, fbHalves, Object.assign({ blur: 20, zoom: 1, dim: 0 }, o))]), x, y);
+    const green = c => c[1] > 120 && c[1] > c[2] + 60, blue = c => c[2] > 120 && c[2] > c[1] + 60;
+    /* SOLID COLOUR. CONTROL: a Blurred copy's left bar is the clip's green half. */
+    if (!green(at({}, 20, 120))) throw new Error('CONTROL: the Blurred copy left bar is rgb(' + at({}, 20, 120).slice(0, 3) + '), not the clip’s green');
+    const red = at({ style: 2, color: '#ff0000' }, 20, 120), redR = at({ style: 2, color: '#ff0000' }, 300, 120);
+    if (!(red[0] >= 250 && red[1] <= 5 && red[2] <= 5) || !(redR[0] >= 250 && redR[1] <= 5)) throw new Error('Solid colour #ff0000 painted the bars rgb(' + red.slice(0, 3) + ') and rgb(' + redR.slice(0, 3) + ') - they should be red');
+    /* MIRRORED EDGES. Unblurred, the bar just left of the clip reflects its left (green) half, and further out the reflection
+       reaches the clip's right (blue) half. CONTROL: the Blurred copy, unblurred, is green there too — cover-scaled. */
+    if (!green(at({ blur: 0 }, 20, 120))) throw new Error('CONTROL: the unblurred Blurred copy is not green at the far left');
+    const mNear = at({ style: 1, blur: 0 }, 100, 120), mFar = at({ style: 1, blur: 0 }, 20, 120);
+    if (!green(mNear) || !blue(mFar)) throw new Error('Mirrored edges drew rgb(' + mNear.slice(0, 3) + ') next to the clip and rgb(' + mFar.slice(0, 3) + ') at the far left - it should reflect the green half next to it and reach the blue half further out');
+    /* SATURATION 0 greys the fill and keeps its brightness. CONTROL: 100 is the green above. */
+    const grey = at({ saturation: 0 }, 20, 120);
+    if (Math.abs(grey[0] - grey[1]) > 3 || Math.abs(grey[1] - grey[2]) > 3 || grey[0] < 60) throw new Error('Saturation 0 left the bar rgb(' + grey.slice(0, 3) + ') - it should be a grey of the green’s brightness');
+    /* VIGNETTE 1 takes the corner nearly to black and leaves the bar beside the clip, inside the clear middle, untouched.
+       CONTROL: without it the corner is as red as the rest. */
+    if (at({ style: 2, color: '#ff0000' }, 2, 2)[0] < 250) throw new Error('CONTROL: a Solid colour corner is not red without Vignette');
+    const vc = at({ style: 2, color: '#ff0000', vignette: 1 }, 2, 2), vm = at({ style: 2, color: '#ff0000', vignette: 1 }, 105, 120);
+    if (!(vc[0] < 60)) throw new Error('Vignette 1 left the corner of the fill rgb(' + vc.slice(0, 3) + ') - it should be nearly black');
+    if (!(vm[0] >= 245)) throw new Error('Vignette 1 darkened the bar beside the clip to rgb(' + vm.slice(0, 3) + ') - the middle of the frame (clear out to 30 percent of the half-diagonal) should stay red');
+  }
+
+  /* 14.5 REPETITION: Trail (Copy size, Copy turn, Copies In front / Behind, Time offset), Tile Grid (Scroll across / down, Gap),
+     Scatter Array (Drift, Spin). Trail and Scatter Array already take the expanded plate (#986 C27), so that clause of the
+     backlog item was done. Tile Grid is a WARP: b14Warp is drawWarpEffect's CPU loop over the real kernel and its prep —
+     including the `null` a Gap sample returns, which the loop writes as transparent. */
+  function b14Warp(type, params, W, H, t, tl, d0) {
+    const f = FM._FX_TABLES.WARP_FX[type], src = d0 || b14Plate(W, H), o = new Uint8ClampedArray(W * H * 4);
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pre = f.prep ? f.prep(W, H, cx, cy, maxR, params, t, 1, tl) : null;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const m = f(x, y, W, H, cx, cy, maxR, params, t, 1, pre);
+      if (m === null) continue;
+      let sx = m[0] | 0, sy = m[1] | 0;
+      if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+      if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+      const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+      o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+    }
+    return o;
+  }
+  function b14WShots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [0.37, 1.9].map(t => b14Hash(b14Warp(type, JSON.parse(JSON.stringify(params)), W, H, t, t))).join('.')).join(' ');
+  }
+  const B14TR_NEW = { scale: 100, rotate: 0, order: 0, delay: 0 }, B14SC_NEW = { drift: 0, spin: 0 }, B14TG_NEW = { scrollx: 0, scrolly: 0, gap: 0 };
+  const B14TR_CFG = { def: {}, many: { count: 8, spacing: 60, angle: 30 }, faded: { fade: 60, count: 5 }, one: { count: 1 }, kf: { spacing: b14Kf(20, 120), angle: b14Kf(0, 90) } };
+  const B14SC_CFG = { def: {}, wide: { spread: 150, count: 20, seed: 7 }, still: { rotate: 0, sizevary: 0, fade: 0 }, kf: { spread: b14Kf(20, 120) } };
+  const B14TG_CFG = { def: {}, rows: { count: 4, rows: 3 }, mirror: { count: 5, mirror: 3 }, brick: { count: 6, stagger: 0.5 }, all: { count: 3, rows: 9, stagger: 1, mirror: 3 }, kf: { count: b14Kf(2, 8) } };
+  const B14TR_PIN = {   // fc8866f1, before the edit (a Trail whose copies all walk off the frame logs its original alone)
+    def: '4b3de749.4b3de749/4b3de749.4b3de749 8b92ff41.8b92ff41/8b92ff41.8b92ff41', many: '23ad3685.23ad3685/23ad3685.23ad3685 bb04c0d9.bb04c0d9/bb04c0d9.bb04c0d9',
+    faded: '967b3461.967b3461/967b3461.967b3461 30975914.30975914/30975914.30975914', one: 'cebbff2c.cebbff2c/cebbff2c.cebbff2c cebbff2c.cebbff2c/cebbff2c.cebbff2c',
+    kf: 'a9c4ad25.cebbff2c/a9c4ad25.cebbff2c bd3272d4.f0ae4135/bd3272d4.f0ae4135' };
+  const B14SC_PIN = {
+    def: 'c9ca2e34.c9ca2e34/c9ca2e34.c9ca2e34 41a284cc.41a284cc/41a284cc.41a284cc', wide: '18b1b423.18b1b423/18b1b423.18b1b423 2e886242.2e886242/2e886242.2e886242',
+    still: '3c1dc7a4.3c1dc7a4/3c1dc7a4.3c1dc7a4 cef96352.cef96352/cef96352.cef96352', kf: 'e7ebd969.9c18d687/e7ebd969.9c18d687 57f87b24.83433de6/57f87b24.83433de6' };
+  const B14TG_PIN = {   // the CPU loop, two plates, two moments
+    def: '42f367f0.42f367f0 90833924.90833924', rows: 'a7755a1a.a7755a1a b9e59a15.b9e59a15', mirror: '567fe4ff.567fe4ff db66bf0d.db66bf0d',
+    brick: '802000a8.802000a8 dccb9c80.dccb9c80', all: '31bc7035.31bc7035 d8138647.d8138647', kf: '42f367f0.515d9a4e 90833924.e95555c5' };
+
+  test('482 14.5 Trail, Tile Grid and Scatter Array - every new control is in the catalogue at a default that draws the old picture, and saved and new ones draw as on fc8866f1 (Tile Grid byte for byte, Trail and Scatter call for call)', { item: '482', budgetMs: 120000 }, function () {
+    b14Catalogue('linearrepeat', B14TR_NEW, { scale: 80, rotate: 10, order: 1, delay: 0.25 });
+    b14Catalogue('scatterarray', B14SC_NEW, { drift: 40, spin: 90 });
+    b14Catalogue('gridrepeat', B14TG_NEW, { scrollx: 50, scrolly: -25, gap: 20 });
+    if (b14Row('scatterarray', 'drift').unit === 'px') throw new Error('Drift is declared in plain px - it is a speed, and pxToPlate must not scale it a second time');
+    const moved = b14Pinned('linearrepeat', B14TR_NEW, B14TR_CFG, B14TR_PIN, b14CShots)
+      .concat(b14Pinned('scatterarray', B14SC_NEW, B14SC_CFG, B14SC_PIN, b14CShots))
+      .concat(b14Pinned('gridrepeat', B14TG_NEW, B14TG_CFG, B14TG_PIN, b14WShots));
+    if (moved.length) throw new Error(moved.length + ' repeats draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.5 Trail - Copy size 80 makes the third copy 0.8³ of the size, Copy turn turns each copy further, Behind draws the copies under the original, and Time offset draws each copy from its own moment, kept inside the clip', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, tr = (o, extra) => b14Cfx('linearrepeat', Object.assign(b14Base('linearrepeat', {}), { count: 4, spacing: 20, angle: 0 }, o), Object.assign({ W: W, H: H }, extra || {}));   // copies 32, 64 and 96 px along
+    const width = q => Math.hypot(q.quad[1][0] - q.quad[0][0], q.quad[1][1] - q.quad[0][1]);
+    const turn = q => Math.atan2(q.quad[1][1] - q.quad[0][1], q.quad[1][0] - q.quad[0][0]) * 180 / Math.PI;
+    /* COPY SIZE. CONTROL: at 100 every copy is the plate's own width. */
+    const plain = tr({});
+    if (plain.draws.length !== 4 || plain.draws.some(q => Math.abs(width(q) - W) > 1e-9)) throw new Error('CONTROL: a plain Trail did not draw the original and three copies at full size (' + plain.draws.map(width).join(', ') + ')');
+    const shrink = tr({ scale: 80 });
+    const w3 = width(shrink.draws[3]);
+    if (Math.abs(w3 / W - 0.512) > 1e-9) throw new Error('Copy size 80 drew the third copy ' + (w3 / W).toFixed(4) + ' of the size - it should be 0.8³ = 0.512');
+    if (Math.abs(width(shrink.draws[0]) - W) > 1e-9) throw new Error('Copy size shrank the original');
+    /* …about its own middle: the third copy's centre is where the plain third copy's is. */
+    const mid = q => [(q.quad[0][0] + q.quad[2][0]) / 2, (q.quad[0][1] + q.quad[2][1]) / 2];
+    if (Math.hypot(mid(shrink.draws[3])[0] - mid(plain.draws[3])[0], mid(shrink.draws[3])[1] - mid(plain.draws[3])[1]) > 1e-6) throw new Error('Copy size moved the third copy - it should shrink about its own middle');
+    /* COPY TURN: copy k is turned k × 10 degrees. */
+    const turned = tr({ rotate: 10 });
+    [0, 10, 20, 30].forEach((want, k) => { if (Math.abs(turn(turned.draws[k]) - want) > 1e-6) throw new Error('Copy turn 10 turned draw ' + k + ' by ' + turn(turned.draws[k]).toFixed(3) + ' degrees, not ' + want); });
+    /* BEHIND. CONTROL: In front draws the original first; Behind draws the furthest copy first and the original last. */
+    const x0 = q => q.quad[0][0];
+    if (x0(plain.draws[0]) !== 0) throw new Error('CONTROL: In front does not draw the original first');
+    const under = tr({ order: 1 });
+    if (under.draws.length !== 4 || x0(under.draws[3]) !== 0 || !(x0(under.draws[0]) > x0(under.draws[1]) && x0(under.draws[1]) > x0(under.draws[2]))) throw new Error('Behind drew at x ' + under.draws.map(x0).join(', ') + ' - the furthest copy should go down first and the original last, on top');
+    /* TIME OFFSET: each copy is drawn from the plate the renderer hands back for its own moment, t + k × offset, held inside
+       the clip (0..10 s here). CONTROL: with no offset no other moment is asked for. */
+    const asked = [], ex = function () { return null; };
+    ex.at = t2 => { asked.push(+t2.toFixed(6)); return b14Canvas(W, H); };
+    const lay = { id: 'l14tr', start: 0, duration: 10 };
+    tr({}, { expand: ex, layer: lay, t: 2 });
+    if (asked.length) throw new Error('CONTROL: a Trail with no Time offset asked for ' + asked.length + ' other moments');
+    const timed = tr({ delay: 0.25 }, { expand: ex, layer: lay, t: 2 });
+    if (asked.join() !== '2.25,2.5,2.75') throw new Error('Time offset 0.25 at 2 s asked for the moments ' + asked.join(', ') + ' - copies 1-3 should show 2.25, 2.5 and 2.75 s');
+    const imgs = timed.draws.map(q => q.img);
+    if (imgs[0] !== 'img0' || new Set(imgs.slice(1)).size !== 3 || imgs.slice(1).indexOf('img0') >= 0) throw new Error('the timed copies are not each drawn from their own plate (' + imgs.join(', ') + ')');
+    asked.length = 0; tr({ delay: -1 }, { expand: ex, layer: lay, t: 0.5 });
+    if (asked.join() !== '0,0,0') throw new Error('Time offset -1 at 0.5 s asked for ' + asked.join(', ') + ' - a copy before the clip starts should hold its first moment');
+  });
+
+  test('482 14.5 Scatter Array - Drift sends every copy off on its own heading at 0.5-1.5 times the speed, the same in project px on a half-size plate, and Spin turns every copy at 0.5-1.5 times the rate', { item: '482', budgetMs: 60000 }, function () {
+    const W = 400, H = 300, bb = { x: 180, y: 135, w: 40, h: 30 };
+    const sc = (o, tl, ps) => { const k = ps || 1; return b14Cfx('scatterarray', Object.assign(b14Base('scatterarray', {}), { count: 10, spread: 60, seed: 3 }, o), { W: W * k, H: H * k, bb: { x: bb.x * k, y: bb.y * k, w: bb.w * k, h: bb.h * k }, t: tl, tl: tl, ps: k }).draws.slice(1); };
+    const mid = q => [(q.quad[0][0] + q.quad[2][0]) / 2, (q.quad[0][1] + q.quad[2][1]) / 2];
+    const ang = q => Math.atan2(q.quad[1][1] - q.quad[0][1], q.quad[1][0] - q.quad[0][0]) * 180 / Math.PI;
+    /* CONTROL: with no Drift and no Spin the scatter is still — the same copies in the same places at 0 s and 2 s. */
+    const a0 = sc({}, 0), a2 = sc({}, 2);
+    if (a0.length !== 9 || a2.length !== 9 || a0.some((q, i) => mid(q)[0] !== mid(a2[i])[0] || ang(q) !== ang(a2[i]))) throw new Error('CONTROL: a still Scatter Array moved between 0 s and 2 s');
+    /* DRIFT 20 px/s for 2 s: every copy is 20-60 px from where it started, the headings differ, and at 0 s nothing moved. */
+    const d0 = sc({ drift: 20 }, 0), d2 = sc({ drift: 20 }, 2);
+    if (d0.some((q, i) => mid(q)[0] !== mid(a0[i])[0] || mid(q)[1] !== mid(a0[i])[1])) throw new Error('Drift moved the copies at 0 s - it should start from the still scatter');
+    const dist = d2.map((q, i) => Math.hypot(mid(q)[0] - mid(d0[i])[0], mid(q)[1] - mid(d0[i])[1]));
+    if (d2.length !== 9 || dist.some(v => v < 20 - 1e-6 || v > 60 + 1e-6)) throw new Error('Drift 20 for 2 s moved the copies ' + dist.map(v => v.toFixed(1)).join(', ') + ' px - each should travel 20-60 px');
+    const heads = d2.map((q, i) => Math.atan2(mid(q)[1] - mid(d0[i])[1], mid(q)[0] - mid(d0[i])[0]));
+    if (Math.max.apply(null, heads) - Math.min.apply(null, heads) < 1.5) throw new Error('Drift sent the copies along nearly one heading (' + heads.map(v => (v * 180 / Math.PI).toFixed(0)).join(', ') + ' degrees) - each should go its own way');
+    /* …in PROJECT px: on a half-size plate every copy travels exactly half as many plate px. */
+    const h0 = sc({ drift: 20 }, 0, 0.5), h2 = sc({ drift: 20 }, 2, 0.5);
+    h2.forEach((q, i) => { const v = Math.hypot(mid(q)[0] - mid(h0[i])[0], mid(q)[1] - mid(h0[i])[1]); if (Math.abs(v - dist[i] / 2) > 1e-6) throw new Error('on a half-size plate copy ' + (i + 1) + ' drifted ' + v.toFixed(3) + ' plate px against ' + dist[i].toFixed(3) + ' on the full plate - the preview would drift twice as far as the export'); });
+    /* SPIN 90 degrees a second for 2 s: every copy has turned 90-270 degrees further, and they do not all turn alike. */
+    const s2 = sc({ spin: 90 }, 2), turns = s2.map((q, i) => ((ang(q) - ang(a2[i])) % 360 + 360) % 360);
+    if (turns.some(v => v < 90 - 1e-6 || v > 270 + 1e-6)) throw new Error('Spin 90 for 2 s turned the copies ' + turns.map(v => v.toFixed(1)).join(', ') + ' degrees - each should turn 90-270');
+    if (Math.max.apply(null, turns) - Math.min.apply(null, turns) < 20) throw new Error('Spin turned every copy alike (' + turns.map(v => v.toFixed(1)).join(', ') + ')');
+  });
+
+  test('482 14.5 Tile Grid - Gap leaves an empty band round every tile with the whole picture shrunk inside it, Scroll across 50 moves the grid half a tile a second on the clip’s own clock, and the shader agrees', { item: '482', budgetMs: 60000 }, async function () {
+    const W = 120, H = 90, grad = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = Math.round(x * 255 / (W - 1)); d[i + 1] = Math.round(y * 255 / (H - 1)); d[i + 2] = 90; d[i + 3] = 255; } return d; };
+    const tg = (o, tl) => b14Warp('gridrepeat', Object.assign(b14Base('gridrepeat', {}), { count: 3 }, o), W, H, tl || 0, tl || 0, grad());
+    const clear = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] === 0) n++; return n; };
+    /* GAP. CONTROL: no gap, no empty pixel. At 20 percent a tile keeps about 80 x 80 percent of its cell, so about 36 percent
+       of the frame is empty. */
+    if (clear(tg({})) !== 0) throw new Error('CONTROL: a gapless grid left ' + clear(tg({})) + ' empty pixels');
+    const gapped = tg({ gap: 20 }), frac = clear(gapped) / (W * H);
+    if (frac < 0.3 || frac > 0.42) throw new Error('Gap 20 left ' + (frac * 100).toFixed(1) + ' percent of the frame empty - about 36 should be');
+    /* …and each tile is the WHOLE picture made smaller, not a crop: across the middle row of the first tile its red runs
+       from near 0 (the picture's left edge) to near 255 (its right edge). */
+    const row = Math.round(H / 6), reds = [];
+    for (let x = 0; x < W / 3; x++) { const i = (row * W + x) * 4; if (gapped[i + 3]) reds.push(gapped[i]); }
+    if (!reds.length || reds[0] > 30 || reds[reds.length - 1] < 225) throw new Error('the first tile runs from red ' + reds[0] + ' to ' + reds[reds.length - 1] + ' - it should hold the whole picture, edge to edge');
+    /* SCROLL ACROSS 50: half a tile (20 px) a second on the clip's clock. At 1 s the picture is the 0 s picture moved 20 px
+       right. CONTROL: with no scroll 1 s is 0 s. */
+    const s0 = tg({ scrollx: 50 }, 0), s1 = tg({ scrollx: 50 }, 1), n1 = tg({}, 1);
+    if (!b14Same(n1, tg({}, 0))) throw new Error('CONTROL: an unscrolled grid changed between 0 s and 1 s');
+    for (let y = 0; y < H; y++) for (let x = 20; x < W; x++) { const a = (y * W + x) * 4, b = (y * W + x - 20) * 4; if (s1[a] !== s0[b] || s1[a + 1] !== s0[b + 1]) throw new Error('Scroll across 50 at 1 s is not the 0 s grid moved 20 px right (at ' + x + ', ' + y + ')'); }
+    if (b14Same(s0, s1)) throw new Error('Scroll across 50 did not move the grid at all');
+    /* THE SHADER TWIN, where WebGL is there to ask: a 420 x 420 Tile Grid with Gap, Scroll, Mirror and Row offset, through
+       the real renderer on the CPU and on the GPU, must agree as closely as every ported warp does (0.5 percent). */
+    if (FM.glWarp && FM.glWarp.available && FM.glWarp.available()) {
+      const S = 420, cv = b14Canvas(S, S), cx = cv.getContext('2d', { willReadFrequently: true }), was = FM._noGL;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 210, y: 210, shapeW: 260, shapeH: 330, fill: '#4fd1ff' }); L.start = 0; L.duration = 3;
+      const fx = FM.fxRegistry.makeInstance('gridrepeat'); Object.assign(fx.params, { count: 3, gap: 15, scrollx: 30, scrolly: -40, mirror: 3, stagger: 0.5 }); L.effects = [fx];
+      const L2 = FM.makeLayer('shape', { shape: 'rect', x: 140, y: 130, shapeW: 110, shapeH: 110, fill: '#ff9a4f' }); L2.start = 0; L2.duration = 3;
+      const sc = scene([L2, L], { project: { width: S, height: S, fps: 30, duration: 3, background: null } });
+      const shot = () => { cx.clearRect(0, 0, S, S); FM.renderScene(cx, sc, 1.3); return cx.getImageData(0, 0, S, S).data; };
+      const differ = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]), Math.abs(a[i + 3] - b[i + 3])) > 24) n++; return n; };
+      try {
+        FM._noGL = true; FM.glWarp._reset(); const cpu = shot();
+        Object.assign(fx.params, { gap: 0, scrollx: 0, scrolly: 0 }); const plainCpu = shot(); Object.assign(fx.params, { gap: 15, scrollx: 30, scrolly: -40 });
+        if (differ(cpu, plainCpu) < S * S * 0.05) throw new Error('setup: Gap and Scroll changed only ' + differ(cpu, plainCpu) + ' pixels of the CPU picture - they are not in the fixture');
+        FM._noGL = false; FM.glWarp._reset(); const gpu = shot(), st = FM.glWarp.stats();
+        if (!(st.gpu > 0)) throw new Error('the GPU path did not run on the Tile Grid (' + st.reason + ') - this would compare the CPU loop with itself');
+        const big = differ(cpu, gpu);
+        if (100 * big / (S * S) > 0.5) throw new Error('the Tile Grid with Gap and Scroll draws a different picture on the GPU: ' + (100 * big / (S * S)).toFixed(3) + ' percent of pixels - the kernel and its shader are a matched pair');
+      } finally { FM._noGL = was; FM.glWarp._reset(); }
+    }
+  });
+
+  /* 14.6 THE 3D SOLIDS: Perspective, Offset X / Y, Auto-spin X / Y / Z on all fifteen. Their pictures are renderMesh's calls —
+     a clip per triangle and the texture drawn through it — so the recorder pins them call for call, and the union of the
+     clips is the silhouette the behaviour test measures. */
+  const B14S3_TYPES = ['cube3d', 'box3d', 'cylinder3d', 'sphere3d', 'ellipsoid3d', 'torus3d', 'ring3d', 'pyramid3d', 'octahedron3d', 'hexprism3d', 'starprism3d', 'starpoly3d', 'heart3d', 'hollowbox3d', 'axiscross3d'];
+  const B14S3_NEW = { persp: 50, offx: 0, offy: 0, spinx: 0, spiny: 0, spinz: 0 };
+  const B14S3_CFG = { def: {}, turned: { rotx: b14Kf(0, 120), roty: 200, rotz: 33 }, lit: { shading: 1, light: 120, size: 140 } };
+  const B14S3_MORE = { box3d: { deep: { depth: 200, rotx: 70, roty: 10 } }, starpoly3d: { spiky: { spike: 6 }, max: { spike: 15, roty: 80 } } };
+  /* Four log hashes per config — two plates (the second with the layer's box off centre), two moments. A solid reads no plate
+     scale, so the half-size plate b14CShots also takes would only double a 15-solid sweep for nothing. */
+  function b14SShots(type, params) {
+    return [[160, 120, null], [200, 150, { x: 30, y: 22, w: 110, h: 80 }]].map(([W, H, bb]) => [0.37, 1.9].map(t => b14Cfx(type, params, { W: W, H: H, bb: bb, t: t, tl: t }).hash()).join('.')).join(' ');
+  }
+  const B14S3_PIN = {   // fc8866f1, before the edit: type -> config -> shots
+    cube3d: { def: 'f97c62eb.f97c62eb 3b103ba3.3b103ba3', turned: '7bd155d1.a671885e 9c075dd6.547c14e0', lit: '85b5749f.85b5749f abc8db17.abc8db17' },
+    box3d: { def: 'ebd877f0.ebd877f0 44cf6ffc.44cf6ffc', turned: 'b38f9616.72fb8365 0d0b0daa.84c402db', lit: '8402084b.8402084b 7f37c321.7f37c321', deep: '8fd937ab.8fd937ab 48930223.48930223' },
+    cylinder3d: { def: 'be4abd7b.be4abd7b c2fc5bf3.c2fc5bf3', turned: '0f57a463.f780f9ba 5c65829d.e76f59e0', lit: '1724f17d.1724f17d 4c16775e.4c16775e' },
+    sphere3d: { def: '04546d24.04546d24 0d1757d5.0d1757d5', turned: 'c4f6860b.3ceacbea 6ec73e8a.9f598161', lit: 'fff90c04.fff90c04 cbee80dd.cbee80dd' },
+    ellipsoid3d: { def: 'b44ae2a0.b44ae2a0 00e64591.00e64591', turned: '343d8149.673191b3 538cac5b.e46655a5', lit: 'df714ced.df714ced 4625b968.4625b968' },
+    torus3d: { def: 'd5d0b5e1.d5d0b5e1 417b9a29.417b9a29', turned: 'f896aa82.e2c90fdc af23b4cb.ca6e8735', lit: '13810cd1.13810cd1 82c29aac.82c29aac' },
+    ring3d: { def: '045ef77e.045ef77e 9527188b.9527188b', turned: '522d72b8.99def365 0d25ec32.8ccc8c69', lit: '4a1a0278.4a1a0278 5ff61222.5ff61222' },
+    pyramid3d: { def: '7c77859a.7c77859a 70564b57.70564b57', turned: 'eceddd41.41073f8b e97fdb59.e364f56a', lit: 'b65780e9.b65780e9 75430ff6.75430ff6' },
+    octahedron3d: { def: 'a451e838.a451e838 72b86ee7.72b86ee7', turned: 'c4183147.5c4b3c87 6c66a62b.2f2d86f5', lit: 'a349afda.a349afda e4e26f76.e4e26f76' },
+    hexprism3d: { def: 'cbd7addf.cbd7addf fc68ce13.fc68ce13', turned: '4912e949.67038f24 3ef345f5.c8a70134', lit: '51aa19e8.51aa19e8 4ffa4eca.4ffa4eca' },
+    starprism3d: { def: 'e00f4160.e00f4160 d5d9e948.d5d9e948', turned: '077e9418.141570ee 73fceeef.d02fb81f', lit: '8511eac6.8511eac6 10082b4c.10082b4c' },
+    starpoly3d: { def: 'e5856909.e5856909 843b13ad.843b13ad', turned: '9930246d.24f51330 825fc9f7.6a57fca1', lit: 'f10c1d57.f10c1d57 942eb45b.942eb45b', spiky: '13c63079.13c63079 3dabcbf0.3dabcbf0', max: '91e7fcf5.91e7fcf5 047e65f8.047e65f8' },
+    heart3d: { def: '6364eee0.6364eee0 430a220a.430a220a', turned: '942a92de.a7697cfa 1ca397de.652f84fc', lit: '001cc4c2.001cc4c2 cc1a1cfe.cc1a1cfe' },
+    hollowbox3d: { def: 'd9e77d10.d9e77d10 c8ae44f6.c8ae44f6', turned: 'ca8b9fdc.5c79dee1 3381ed6c.eb43a826', lit: '6122b697.6122b697 2a01d30a.2a01d30a' },
+    axiscross3d: { def: '80470f55.80470f55 ab51dba4.ab51dba4', turned: 'ac1048be.1ba57fd4 24334ffc.50ad67bd', lit: '4ddda121.4ddda121 437163b4.437163b4' },
+  };
+
+  test('482 14.6 3D solids - Perspective, Offset X and Y and Auto-spin X, Y and Z are on all fifteen solids at defaults that draw the old solid, and saved and new solids issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 180000 }, function () {
+    const moved = [];
+    B14S3_TYPES.forEach(type => {
+      b14Catalogue(type, B14S3_NEW, { persp: 80, offx: -25, offy: 40, spinx: 30, spiny: -90, spinz: 360 });
+      const pin = B14S3_PIN[type];
+      if (!pin) throw new Error('setup: no fc8866f1 pins for ' + type);
+      const cfg = Object.assign({}, B14S3_CFG, B14S3_MORE[type] || {});
+      if (Object.keys(cfg).length !== Object.keys(pin).length) throw new Error('setup: ' + type + ' has ' + Object.keys(cfg).length + ' configs against ' + Object.keys(pin).length + ' pins');
+      [].push.apply(moved, b14Pinned(type, B14S3_NEW, cfg, pin, b14SShots));
+    });
+    if (moved.length) throw new Error(moved.length + ' solids draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+    const per = b14Row('cube3d', 'persp'), sp = b14Row('cube3d', 'spiny');
+    if (per.min !== 0 || per.max !== 100 || sp.unit !== '°/s') throw new Error('Perspective is not 0-100 or Auto-spin is not in degrees a second (' + per.min + '..' + per.max + ', ' + sp.unit + ')');
+  });
+
+  test('482 14.6 3D solids - Auto-spin Y 90 at 1 s on the clip is Rotate Y 90, Perspective 0 is flat and 100 deepens it, Offset X 50 moves the solid half its width, and the Spiked Star keeps its tips at strong perspective', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, solid = (type, o, tl) => b14Cfx(type, Object.assign(b14Base(type, {}), o), { W: W, H: H, tl: tl == null ? 0.5 : tl, t: 3 });
+    /* AUTO-SPIN, on the clip's own clock (tl), not the timeline's (t 3 here throughout). CONTROL: at the clip's first moment it
+       has not turned. */
+    const spun = (o, tl) => solid('cube3d', Object.assign({ rotx: 25, roty: 0, rotz: 0 }, o), tl).hash();
+    if (spun({ spiny: 90 }, 0) !== spun({}, 0)) throw new Error('CONTROL: Auto-spin Y 90 turned the cube at the clip’s first moment');
+    if (spun({ spiny: 90 }, 1) !== spun({ roty: 90 }, 1)) throw new Error('Auto-spin Y 90 at 1 s on the clip does not draw Rotate Y 90');
+    if (spun({ spinx: -45, spinz: 30 }, 2) !== spun({ rotx: 25 - 90, rotz: 60 }, 2)) throw new Error('Auto-spin X -45 and Z 30 at 2 s do not draw Rotate X -65 and Z 60');
+    if (spun({ spiny: 90 }, 1) === spun({}, 1)) throw new Error('Auto-spin Y 90 did not turn the cube at all');
+    /* PERSPECTIVE, face on: the cube's front face sits 0.72 radii toward the eye, so its silhouette is the front face scaled by
+       F / (F - 0.72) — 1 flat (Perspective 0), 3.2 / 2.48 at the old 50, 2 / 1.28 at 100. */
+    if (FM._solidF({}, 0) !== 3.2 || FM._solidF({ persp: 50 }, 0) !== 3.2 || FM._solidF({ persp: 0 }, 0) !== Infinity || FM._solidF({ persp: 100 }, 0) !== 2) throw new Error('Perspective does not map 50 to the old F 3.2, 0 to none and 100 to F 2 (' + [FM._solidF({ persp: 0 }, 0), FM._solidF({ persp: 50 }, 0), FM._solidF({ persp: 100 }, 0)].join(', ') + ')');
+    const face = persp => b14Reach(solid('cube3d', { rotx: 0, roty: 0, rotz: 0, persp: persp })).w - 0.8;   // the clips are grown 0.4 px a side against seams
+    const f0 = face(0), f50 = face(50), f100 = face(100);
+    if (Math.abs(f0 - 2 * 0.72 * 56) > 0.5) throw new Error('CONTROL: flat, the cube’s face is ' + f0.toFixed(2) + ' px across, not 1.44 radii (80.6 px)');
+    if (Math.abs(f50 / f0 - 3.2 / 2.48) > 0.01) throw new Error('at Perspective 50 the face is ' + (f50 / f0).toFixed(3) + ' times its flat size, not the old 3.2 / 2.48 = 1.290');
+    if (Math.abs(f100 / f0 - 2 / 1.28) > 0.01) throw new Error('at Perspective 100 the face is ' + (f100 / f0).toFixed(3) + ' times its flat size, not 2 / 1.28 = 1.563');
+    /* OFFSET X 50: the same solid, half the layer's width to the right. CONTROL: no offset is centred on the layer (face on —
+       turned, perspective makes the near side bigger and the outline lopsided). */
+    const c0 = b14Reach(solid('cube3d', { rotx: 0, roty: 0 })), c1 = b14Reach(solid('cube3d', { rotx: 0, roty: 0, offx: 50, offy: -25 }));
+    if (Math.abs((c0.x0 + c0.x1) / 2 - W / 2) > 1) throw new Error('CONTROL: an unshifted cube is not centred on the layer');
+    if (Math.abs((c1.x0 + c1.x1) / 2 - (c0.x0 + c0.x1) / 2 - 80) > 1e-6 || Math.abs((c1.y0 + c1.y1) / 2 - (c0.y0 + c0.y1) / 2 + 30) > 1e-6 || Math.abs(c1.w - c0.w) > 1e-6) throw new Error('Offset X 50 / Y -25 moved the cube ' + ((c1.x0 + c1.x1 - c0.x0 - c0.x1) / 2).toFixed(2) + ', ' + ((c1.y0 + c1.y1 - c0.y0 - c0.y1) / 2).toFixed(2) + ' px - it should be 80 right and 30 up, the same size');
+    /* THE SPIKED STAR'S CAP, re-derived: at Perspective 100 a tip is magnified no more than the old cap let it be at 50 (1.64
+       times), so the star is no bigger than at 50. MEASURED at Spike 15: 78.3 px across at 100 against 124.9 at 50 — and with
+       the cap left at the old 1.25, 128.8. */
+    const star = persp => b14Reach(solid('starpoly3d', { spike: 15, persp: persp }));
+    const s50 = star(50), s100 = star(100);
+    if (!isFinite(s100.w) || s100.w > s50.w) throw new Error('at Perspective 100 the Spiked Star at Spike 15 is ' + s100.w.toFixed(1) + ' px across against ' + s50.w.toFixed(1) + ' at 50 - its tips are not held back for the stronger perspective');
+    /* The deepest solid at the strongest perspective: a corner 1.73 radii toward an eye 2 away is magnified about 7 times —
+       steep, and meant to be — but every point stays in front of the eye: finite, and the right way round. */
+    const deep = solid('box3d', { depth: 200, persp: 100, rotx: 45, roty: 45 }), box = b14Reach(deep);
+    if (!deep.clips.length || deep.clips.some(c => c.some(q => !isFinite(q[0]) || !isFinite(q[1])))) throw new Error('a Box at Depth 200 and Perspective 100 projects a corner to infinity - it has reached the eye');
+    if (!(box.w < 10 * W)) throw new Error('a Box at Depth 200 and Perspective 100 projects ' + box.w.toFixed(0) + ' px across - a corner has passed the eye');
+  });
+
+  /* 14.7 CARD FLIP (hunt C29: it was an instant mirror, scale(-1)): Flip (how far the card has turned over), Perspective, Back
+     (Mirror / Solid colour / Transparent) with its colour. Flip 180 and Back Mirror take the old lines; anything else is the
+     layer on an 8x8 card through renderMesh, so the recorder shows where it lands. */
+  const B14CF_NEW = { angle: 180, persp: 50, back: 0, color: '#ffffff' };
+  const B14CF_CFG = { def: {}, vert: { mode: 1 }, both: { mode: 2, keep: 1 }, hinge: { pivotx: 20, pivoty: 80, keep: 1 }, kf: { pivotx: b14Kf(0, 100) } };
+  const B14CF_PIN = {   // fc8866f1, before the edit
+    def: '2594485f.2594485f/2594485f.2594485f 9ad7d717.9ad7d717/9ad7d717.9ad7d717', vert: '28b35f85.28b35f85/28b35f85.28b35f85 c100e8c5.c100e8c5/c100e8c5.c100e8c5',
+    both: '4222d50b.4222d50b/4222d50b.4222d50b 50fbf2c5.50fbf2c5/50fbf2c5.50fbf2c5', hinge: '26b9270a.26b9270a/26b9270a.26b9270a 8b1d64dc.8b1d64dc/8b1d64dc.8b1d64dc',
+    kf: '2e0878d3.e833788b/2e0878d3.e833788b 27592ccd.75113819/27592ccd.75113819' };
+
+  test('482 14.7 Card Flip - Flip, Perspective, Back and Back colour are in the catalogue, Flip carrying the old 180 for a saved flip, and saved and new Card Flips issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b14Catalogue('fliplayer', B14CF_NEW, { angle: 75, persp: 20, back: 2, color: '#00ff00' }, { angle: 180 });
+    const back = b14Row('fliplayer', 'back'), col = b14Row('fliplayer', 'color');
+    if (back.type !== 'segment' || JSON.stringify(back.options) !== JSON.stringify([[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent']])) throw new Error('Back is not Mirror / Solid colour / Transparent (' + JSON.stringify(back.options) + ')');
+    if (col.type !== 'color' || col.overriddenBy !== 'back' || col.liveWhen !== 1) throw new Error('Back colour does not say it only counts under Solid colour');
+    const moved = b14Pinned('fliplayer', B14CF_NEW, B14CF_CFG, B14CF_PIN, b14CShots);
+    if (moved.length) throw new Error(moved.length + ' Card Flips draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.7 Card Flip - Flip 90 turns the card edge on to a sliver under 10 percent of its width where it used to be a mirror, 45 shows cos 45 of it, Perspective makes the near edge taller, the hinge stays put, and Back Transparent or a colour replaces the far side', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, cf = (o) => b14Cfx('fliplayer', Object.assign(b14Base('fliplayer', {}), { mode: 0, keep: 0, pivotx: 50, pivoty: 50 }, o), { W: W, H: H });
+    /* CONTROL: at the old 180 the card is the whole plate, mirrored. */
+    const mirror = b14Reach(cf({}));
+    if (Math.abs(mirror.w - W) > 1e-9) throw new Error('CONTROL: a Card Flip at 180 does not cover the plate (' + mirror.w + ' px)');
+    const edge = b14Reach(cf({ angle: 90 }));
+    if (!(edge.w < 0.1 * W)) throw new Error('Flip 90 drew the card ' + edge.w.toFixed(1) + ' px wide on a ' + W + ' px layer - edge on, it should be a sliver under 10 percent');
+    const tilt = b14Reach(cf({ angle: 45, persp: 0 }));
+    if (Math.abs(tilt.w - W * Math.SQRT1_2) > 1.5) throw new Error('Flip 45 with no perspective drew the card ' + tilt.w.toFixed(1) + ' px wide, not cos 45 of ' + W + ' (' + (W * Math.SQRT1_2).toFixed(1) + ')');
+    if (Math.abs(tilt.h - H) > 1.5) throw new Error('Flip 45 with no perspective changed the card’s height to ' + tilt.h.toFixed(1));
+    const deep = b14Reach(cf({ angle: 45, persp: 100 }));
+    if (!(deep.h > tilt.h + 10)) throw new Error('Perspective 100 at Flip 45 left the card ' + deep.h.toFixed(1) + ' px tall against ' + tilt.h.toFixed(1) + ' flat - its near edge should be taller');
+    const down = b14Reach(cf({ mode: 1, angle: 90 }));
+    if (!(down.h < 0.1 * H)) throw new Error('a Vertical Flip 90 drew the card ' + down.h.toFixed(1) + ' px tall - it should be a sliver');
+    const hinged = b14Reach(cf({ angle: 90, pivotx: 0 }));
+    if (!(hinged.x1 < 0.1 * W)) throw new Error('Flip 90 on Hinge X 0 left the card reaching to x ' + hinged.x1.toFixed(1) + ' - it should fold onto its left edge');
+    /* BACK, past edge on (Flip 135). CONTROL: Mirror draws the reversed picture there. */
+    const tex = R => R.draws.filter(q => q.op === 'source-over').length;
+    if (!tex(cf({ angle: 135 }))) throw new Error('CONTROL: Back Mirror at Flip 135 drew nothing');
+    const gone = cf({ angle: 135, back: 2 });
+    if (gone.draws.length || gone.fills.length) throw new Error('Back Transparent at Flip 135 still drew ' + gone.draws.length + ' texture pieces and ' + gone.fills.length + ' fills');
+    const red = cf({ angle: 135, back: 1, color: '#ff0000' }), redBox = (() => { let x0 = Infinity, x1 = -Infinity; red.fills.forEach(f => { x0 = Math.min(x0, f.box[0]); x1 = Math.max(x1, f.box[2]); }); return x1 - x0; })();
+    if (red.draws.length || !red.fills.length || red.fills.some(f => f.style !== '#ff0000')) throw new Error('Back Solid colour #ff0000 at Flip 135 did not paint the far side red (' + red.draws.length + ' texture pieces, fills ' + red.fills.map(f => f.style).join(',') + ')');
+    if (Math.abs(redBox - W * Math.SQRT1_2) > W * 0.15) throw new Error('the red back is ' + redBox.toFixed(1) + ' px wide, not about cos 135 of the card');
+    const front = cf({ angle: 45, back: 1, color: '#ff0000' });
+    if (front.fills.length || !front.draws.length) throw new Error('Back Solid colour painted the FRONT of a card at Flip 45');
+    /* …and in the browser, the pixels: a plate-filling card at Flip 90 lights under 10 percent of the plate; at 180 all of it. */
+    if (b14RealCanvas()) {
+      const A = b14Canvas(W, H), ag = A.getContext('2d'); ag.fillStyle = '#3080c0'; ag.fillRect(0, 0, W, H);
+      const lit = o => { const B = b14Canvas(W, H), g = B.getContext('2d', { willReadFrequently: true }); FM._FX_TABLES.CANVAS_FX.fliplayer(A, g, W, H, { x: 0, y: 0, w: W, h: H }, Object.assign(b14Base('fliplayer', {}), { mode: 0, keep: 0 }, o), 0.5, 0.5, null, 1); const d = g.getImageData(0, 0, W, H).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 20) n++; return n / (W * H); };
+      const at180 = lit({}), at90 = lit({ angle: 90 });
+      if (!(at180 > 0.95)) throw new Error('CONTROL: the mirrored card lights only ' + (at180 * 100).toFixed(1) + ' percent of the plate');
+      if (!(at90 < 0.1)) throw new Error('Flip 90 lights ' + (at90 * 100).toFixed(1) + ' percent of the plate - edge on, it should be a sliver');
+    }
+  });
 })();

@@ -178,6 +178,10 @@
          cannot drift from what the CPU path was handed. */
       'vec2 fmC = res * 0.5;',
       'float fmCx = fmC.x, fmCy = fmC.y, fmMaxR = length(fmC);',
+      /* A SAMPLE THAT IS NOTHING (#482 polish 14.5, Tile Grid's Gap). The CPU twin returns `null` for a pixel that
+         belongs to no tile and drawWarpEffect leaves it transparent; a kernel body says the same by setting this.
+         Nothing else sets it, so every other kernel's picture is untouched. */
+      'bool fmGap = false;',
       'vec2 fmWarp(vec2 xy){',
       body,
       '}',
@@ -192,6 +196,9 @@
          exact centre. MEASURED after this line: bulge's disagreement 0.125% -> 0.000%. */
       '  vec2 xy = floor(vec2(uv.x * res.x, (1.0 - uv.y) * res.y));',
       '  vec2 w = fmWarp(xy);',
+      /* A sample that is nothing (Tile Grid's Gap, #482 polish 14.5) is transparent under every Edges and Smooth setting, as
+         its CPU twin is: warpResample writes a transparent pixel for a null sample before either rule runs (merge of 10.1 + 14.5). */
+      '  if (fmGap) { gl_FragColor = vec4(0.0); return; }',
       /* SMOOTH SAMPLING (#482 polish 10.1): bilinear on the pixel-index lattice — the four texels round w, weighted in
          PREMULTIPLIED alpha (as warpResample does) so a transparent neighbour fades the alpha and leaves the colour alone. */
       '  if (u_fmSmooth > 0.5) {',

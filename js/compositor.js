@@ -450,6 +450,10 @@ window.FM = window.FM || {};
       { key: 'bloom', label: 'Highlight bloom', min: 0, max: 300, step: 5, def: 0, unit: '%' },
       { key: 'samples', label: 'Quality', min: 8, max: 32, step: 1, def: 16, unit: ' taps' },
       { key: 'blades', label: 'Aperture', def: 0, options: [[0, 'Circle'], [1, 'Hexagon'], [2, 'Pentagon'], [3, 'Square']] },
+      /* #482 polish 14.2: each default is the old disc byte for byte (60 was the welded threshold); no library filter carries a Lens Blur. */
+      { key: 'rotation', label: 'Rotation', min: 0, max: 360, step: 1, def: 0, unit: '°', overriddenBy: 'blades', liveWhen: [1, 2, 3] },
+      { key: 'threshold', label: 'Bloom threshold', min: 0, max: 100, step: 1, def: 60, unit: '%', overriddenBy: 'bloom', liveAbove: 0 },
+      { key: 'ratio', label: 'Anamorphic', min: 50, max: 200, step: 5, def: 100, unit: '%', note: 'Below 100 the bokeh is tall, above 100 wide' },
     ] },
     { type: 'dots', label: 'Dots', color: true, defColor: '#ffffff', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Spacing', min: 4, max: 80, step: 1, def: 16, unit: 'px' },
@@ -696,7 +700,10 @@ window.FM = window.FM || {};
     // something that knew the movement would not need to be told the direction. The type id stays
     // 'motionblur' so saved projects, presets and the AI vocabulary all still resolve.
     { type: 'motionblur', label: 'Directional Blur', desc: 'A fixed smear along an angle you choose. It does not read movement — a still clip blurs exactly as much as a moving one.',
-      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' }] },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
+      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
+        /* #482 polish 14.3 (half of C25): both defaults are the old smear byte for byte. */
+        { key: 'side', label: 'Smear', def: 0, options: [[0, 'Both ways'], [1, 'Behind'], [2, 'Ahead']], note: 'Behind trails away from the Angle, like something moving toward it' },
+        { key: 'edges', label: 'Frame edges', def: 0, options: [[0, 'Fade'], [1, 'Repeat']], note: 'Repeat keeps a clip that fills the frame solid to its edge' }] },
     { type: 'colorbalance', label: 'Colour Balance', /* queue 904: Affects — it was one flat offset, no tonal range */ params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }, { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']] },
       /* #482 polish 1.7: a push of red also BRIGHTENED (about +17 levels on a grey ramp at Red 100), and the tonal ranges
          had one fixed width. Keep brightness puts every pixel back at its own luma; Range width is an exponent on the
@@ -717,7 +724,14 @@ window.FM = window.FM || {};
       { key: 'width', label: 'Tonal width', min: 10, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'radius', label: 'Local radius', min: 0, max: 200, step: 1, def: 0, unit: 'px', note: '0 = whole picture · above 0 = area by area, and black stays black' },
       { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 }] },
-    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
+    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°', overriddenBy: 'shape', liveWhen: 0 },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
+      /* #482 polish 14.1 (answers C45). Every default is the old blur byte for byte; no library filter carries a Tilt Shift.
+         Sharp band and Focus X are fractions of the frame, not px, so pxToPlate has nothing to scale. */
+      { key: 'band', label: 'Sharp band', min: 0, max: 50, step: 1, def: 0, unit: '%' },
+      { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Linear'], [1, 'Radial']] },
+      { key: 'cx', label: 'Focus X', min: 0, max: 1, step: 0.02, def: 0.5, overriddenBy: 'shape', liveWhen: 1 },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1 },
+      { key: 'pop', label: 'Miniature pop', min: 0, max: 100, step: 1, def: 0, unit: '%' }] },
     // ---- batch 12 ----
     /* #482 6.3 (his #966: "as much choice as possible"). Distance stopped at 60 px and Softness at one 20 px box, so a long
        poster shadow or a wide soft one could not be made at all. SPREAD is how much of the Softness is solid shadow (a
@@ -822,6 +836,10 @@ window.FM = window.FM || {};
       { key: 'rows', label: 'Rows', min: 0, max: 10, step: 1, def: 0, note: '0 = same as columns' },
       { key: 'mirror', label: 'Mirror', def: 0, options: [[0, 'Off'], [1, 'X'], [2, 'Y'], [3, 'Both']] },
       { key: 'stagger', label: 'Row offset', min: 0, max: 1, step: 0.05, def: 0 },
+      /* #482 polish 14.5: Scroll and Gap, each 0 by default — the old grid byte for byte, on the CPU and in the shader. */
+      { key: 'scrollx', label: 'Scroll across', min: -200, max: 200, step: 5, def: 0, unit: '%/s', note: 'Per cent of a tile a second' },
+      { key: 'scrolly', label: 'Scroll down', min: -200, max: 200, step: 5, def: 0, unit: '%/s' },
+      { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 0, unit: '%' },
     ] },
     /* Queue 123. Ezra: "Linear repeat effect is shit and needs work, currently it just squishes
        horizontally when you do it." It was a one-param pixel warp that crushed the whole picture into
@@ -833,6 +851,11 @@ window.FM = window.FM || {};
       { key: 'spacing', label: 'Spacing', min: 10, max: 300, step: 5, def: 35, legacy: 100, unit: '%' },   // % of the content's own width along the axis — 100 = edge to edge. A NEW Trail starts at 35 (queue 904): at 100 a full-frame clip's copies all land off the frame and the effect looks dead. A saved Trail with no key still draws 100.
       { key: 'angle', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'fade', label: 'Fade out', min: 0, max: 100, step: 1, def: 0, unit: '%' },        // 0 = every copy solid, as before
+      /* #482 polish 14.5: every default is the old trail byte for byte. */
+      { key: 'scale', label: 'Copy size', min: 50, max: 150, step: 1, def: 100, unit: '%', note: 'Each copy this size of the one before' },
+      { key: 'rotate', label: 'Copy turn', min: -45, max: 45, step: 1, def: 0, unit: '°', note: 'Each copy turned this much more' },
+      { key: 'order', label: 'Copies', def: 0, options: [[0, 'In front'], [1, 'Behind']] },
+      { key: 'delay', label: 'Time offset', min: -1, max: 1, step: 0.05, def: 0, unit: 's', note: 'Per copy. Below 0 the copies trail where it was' },
     ] },
     // ---- Scatter Array (queue 484: AM's Scatter Repeat, our name) — copies that are NOT on a grid ----
     { type: 'scatterarray', label: 'Scatter Array', params: [
@@ -842,6 +865,9 @@ window.FM = window.FM || {};
       { key: 'rotate', label: 'Rotate', min: 0, max: 180, step: 1, def: 25, unit: '°' },
       { key: 'fade', label: 'Fade', min: 0, max: 100, step: 1, def: 35, unit: '%' },
       { key: 'seed', label: 'Seed', min: 1, max: 99, step: 1, def: 1 },
+      /* #482 polish 14.5: both 0 by default — the old still scatter byte for byte. */
+      { key: 'drift', label: 'Drift', min: 0, max: 200, step: 1, def: 0, unit: ' px/s' },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
     ] },
     { type: 'radialrepeat', label: 'Ring Array', params: [
       { key: 'count', label: 'Segments', min: 2, max: 16, step: 1, def: 6 },
@@ -1199,6 +1225,12 @@ window.FM = window.FM || {};
       { key: 'keep', label: 'Keep original', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'pivotx', label: 'Hinge X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'pivoty', label: 'Hinge Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      /* #482 polish 14.7 (C29): Flip 180 is the old mirror exactly (and what a saved Card Flip without the key draws), Mirror is
+         its old back, Perspective 50 the solids' old focal length. */
+      { key: 'angle', label: 'Flip', min: 0, max: 360, step: 1, def: 180, legacy: 180, unit: '°', note: '180 = mirrored. Keyframe it to turn the card over' },
+      { key: 'persp', label: 'Perspective', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'back', label: 'Back', def: 0, options: [[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent']] },
+      { key: 'color', label: 'Back colour', swatch: true, def: '#ffffff', overriddenBy: 'back', liveWhen: 1 },
     ] },
     { type: 'rasterextrude', label: 'Depth Push', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
@@ -1542,9 +1574,14 @@ window.FM = window.FM || {};
     // Defaults are meant to look right untouched: a heavy blur, a slight over-zoom so the copy reads
     // as a wash rather than a recognisable second picture, and a dim so the subject stays the subject.
     { type: 'fillbehind', label: 'Backfill', params: [
-      { key: 'blur', label: 'Blur', min: 0, max: 200, step: 1, def: 60, unit: 'px' },
-      { key: 'zoom', label: 'Zoom', min: 1, max: 3, step: 0.05, def: 1.15, unit: '×' },
+      { key: 'blur', label: 'Blur', min: 0, max: 200, step: 1, def: 60, unit: 'px', overriddenBy: 'style', liveWhen: [0, 1] },
+      { key: 'zoom', label: 'Zoom', min: 1, max: 3, step: 0.05, def: 1.15, unit: '×', overriddenBy: 'style', liveWhen: [0, 1] },
       { key: 'dim', label: 'Dim', min: 0, max: 100, step: 1, def: 22, unit: '%' },
+      /* #482 polish 14.4: Style, its Colour, Saturation and Vignette — every default is the old fill (see paintFillBehind). */
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Blurred copy'], [1, 'Mirrored edges'], [2, 'Solid colour']] },
+      { key: 'color', label: 'Colour', swatch: true, def: '#000000', overriddenBy: 'style', liveWhen: 2 },
+      { key: 'saturation', label: 'Saturation', min: 0, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.02, def: 0 },
     ] },
     // ---- batch 30: Particles — deterministic generative emitter (Procedural) ----
     { type: 'particles', label: 'Particles', params: [
@@ -1852,6 +1889,22 @@ window.FM = window.FM || {};
       desc: 'A group of effects that act as one, with a single Strength that fades the whole group in and out.',
       params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01, def: 1 }] },
   ];
+  /* #482 polish 14.6 — THE FIFTEEN 3D SOLIDS share six more controls, appended here once rather than copied into fifteen
+     one-line entries (solidFx reads them for all of them): PERSPECTIVE (50 is the welded focal length the solids always
+     had), OFFSET X / Y (the solid moved by that share of the layer's box), AUTO-SPIN X / Y / Z (degrees a second on the
+     clip's own clock, added to Rotate). Every default is the old solid exactly; no library filter carries a 3D solid. */
+  ['cube3d', 'box3d', 'cylinder3d', 'sphere3d', 'ellipsoid3d', 'torus3d', 'ring3d', 'pyramid3d', 'octahedron3d', 'hexprism3d',
+   'starprism3d', 'starpoly3d', 'heart3d', 'hollowbox3d', 'axiscross3d'].forEach(type => {
+    const def = FM.EFFECTS.filter(d => d.type === type)[0];
+    if (!def) return;
+    def.params.push(
+      { key: 'persp', label: 'Perspective', min: 0, max: 100, step: 1, def: 50, unit: '%', note: '0 = flat, no perspective' },
+      { key: 'offx', label: 'Offset X', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'offy', label: 'Offset Y', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'spinx', label: 'Auto-spin X', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      { key: 'spiny', label: 'Auto-spin Y', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      { key: 'spinz', label: 'Auto-spin Z', min: -360, max: 360, step: 5, def: 0, unit: '°/s' });
+  });
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
   // recompute when the source frame and params are unchanged (static images, paused/scrub
@@ -7718,24 +7771,40 @@ window.FM = window.FM || {};
       var lb_sides=lb_bl===1?6:(lb_bl===2?5:(lb_bl===3?4:0));
       var lb_bloomP=p.bloom==null?0:FM.evalProp(p.bloom,t); if(lb_bloomP<0)lb_bloomP=0; if(lb_bloomP>300)lb_bloomP=300;
       var lb_bloom=lb_bloomP/100, lb_glow=lb_bloomP>0;
+      /* #482 polish 14.2. BLOOM THRESHOLD was the welded 0.6 — the brightness a pixel had to pass before Highlight bloom
+         weighted it — so a dim night street could never bloom and a bright sky bloomed everywhere. ROTATION turns the
+         polygon aperture (a hexagon's points up or its flats up). ANAMORPHIC squeezes the disc across (below 100) or down
+         (above 100): 50 is the tall oval bokeh of an anamorphic lens, twice as tall as it is wide. Each default is the old
+         disc byte for byte: threshold 60 takes the old literal line, rotation 0 the old sector maths, 100 no squeeze. The
+         squeeze only ever shrinks one axis, so no tap reaches past Radius and the bounds below still hold. */
+      var lb_thP=fparam(p, 'threshold', 60, t); lb_thP=lb_thP<0?0:(lb_thP>100?100:lb_thP); var lb_th=lb_thP/100;
+      var lb_rot=fparam(p, 'rotation', 0, t); lb_rot=isFinite(lb_rot)?lb_rot:0; var lb_rotR=lb_rot%360===0?0:lb_rot*Math.PI/180;
+      var lb_ratio=fparam(p, 'ratio', 100, t); lb_ratio=lb_ratio<50?50:(lb_ratio>200?200:lb_ratio);
       var lb_s=fxSrc(d),lb_w4=W*4,lb_ox=new Float64Array(lb_n),lb_oy=new Float64Array(lb_n),lb_k;
       // A pixel's bloom weight depends only on that pixel, so computing it inside the tap loop worked
       // it out once per tap that LANDS on it — N times over, for every pixel in the frame. Lifted to a
       // single pass it is one array read per tap instead of a luma dot product and two multiplies.
       var lb_wt=null;
       if(lb_glow){ lb_wt=new Float32Array(W*H);
+        if(lb_thP===60){
         for(var lb_q=0,lb_pi=0;lb_pi<lb_wt.length;lb_q+=4,lb_pi++){
           var lb_ll=(lb_s[lb_q]*0.299+lb_s[lb_q+1]*0.587+lb_s[lb_q+2]*0.114)/255;
           var lb_hh=lb_ll>0.6?(lb_ll-0.6)*2.5:0;
-          lb_wt[lb_pi]=1+lb_bloom*lb_hh*lb_hh; } }
+          lb_wt[lb_pi]=1+lb_bloom*lb_hh*lb_hh; }
+        } else {   // the same ramp from the threshold he set to white; at 100 nothing passes, so every weight is 1
+          for(var lb_q2=0,lb_pi2=0;lb_pi2<lb_wt.length;lb_q2+=4,lb_pi2++){
+            var lb_ll2=(lb_s[lb_q2]*0.299+lb_s[lb_q2+1]*0.587+lb_s[lb_q2+2]*0.114)/255;
+            var lb_hh2=(lb_th<1&&lb_ll2>lb_th)?(lb_ll2-lb_th)/(1-lb_th):0;
+            lb_wt[lb_pi2]=1+lb_bloom*lb_hh2*lb_hh2; } } }
       // The aperture is baked into the tap offsets, so a polygon costs nothing per pixel. The distance
       // from the centre to an n-gon's edge at angle a is apothem/cos(a within its own sector) — the
       // circumradius at a vertex, the apothem facing an edge. The disc is squeezed inward, never
       // stretched, so a hexagon can never sample further out than the circle it replaces.
       var lb_sec=lb_sides?(Math.PI*2/lb_sides):0, lb_ap=lb_sides?Math.cos(Math.PI/lb_sides):1;
       for(lb_k=0;lb_k<lb_n;lb_k++){ var lb_a=lb_k*2.399963,lb_rd=lb_r*Math.sqrt((lb_k+0.5)/lb_n);
-        if(lb_sides){ var lb_lo=lb_a-Math.floor(lb_a/lb_sec)*lb_sec-lb_sec/2; lb_rd*=lb_ap/Math.cos(lb_lo); }
-        lb_ox[lb_k]=Math.cos(lb_a)*lb_rd;lb_oy[lb_k]=Math.sin(lb_a)*lb_rd; }
+        if(lb_sides){ var lb_aa=lb_rotR?lb_a-lb_rotR:lb_a; var lb_lo=lb_aa-Math.floor(lb_aa/lb_sec)*lb_sec-lb_sec/2; lb_rd*=lb_ap/Math.cos(lb_lo); }
+        lb_ox[lb_k]=Math.cos(lb_a)*lb_rd;lb_oy[lb_k]=Math.sin(lb_a)*lb_rd;
+        if(lb_ratio<100) lb_ox[lb_k]*=lb_ratio/100; else if(lb_ratio>100) lb_oy[lb_k]*=100/lb_ratio; }
       /* SKIP WHAT CANNOT RECEIVE ANY LIGHT (#692). This is a GATHER — each output pixel averages a disc
          of radius lb_r around itself — and it carries no state between pixels, so unlike the running-sum
          blurs BOTH axes can be bounded. Outside the layer's box grown by lb_r, every tap in the disc is
@@ -8405,62 +8474,103 @@ window.FM = window.FM || {};
          default 1× is the old radius exactly and the param is not a px key pxToPlate would have to learn about. */
       var tsAmt = fparam(p, 'blur', 1, t); tsAmt = tsAmt < 0.25 ? 0.25 : (tsAmt > 4 ? 4 : tsAmt);
       var tsW4=W*4, tsLen=d.length, tsR=Math.max(1, Math.round(8 * tsAmt)), tsWin=tsR*2+1;
+      /* #482 polish 14.1 (answers C45: one box pass, and the picture is sharp on a single line only). SHARP BAND keeps a band
+         of the height he sets fully sharp and starts the ramp at its edges; SHAPE Radial measures the distance from a point —
+         Focus X across, Focus down — instead of from a line, the round "only the subject is in focus" look; SMOOTHNESS runs
+         the box 1-3 times (three boxes are within a few percent of a Gaussian, so the blur stops reading as a smear of
+         squares); MINIATURE POP lifts colour and contrast, the toy-town half of the look. Every default is the old picture
+         byte for byte: band 0 subtracts nothing, Linear takes the old mix loops, Smoothness 1 is the one pass, pop 0 never
+         enters its loop. */
+      var tsBand = fparam(p, 'band', 0, t); tsBand = tsBand < 0 ? 0 : (tsBand > 50 ? 50 : tsBand); var tsHalf = tsBand / 200;   // half the band, as a fraction of H
+      var tsShape = Math.round(fparam(p, 'shape', 0, t)) === 1 ? 1 : 0;
+      var tsCx = fparam(p, 'cx', 0.5, t); tsCx = tsCx < 0 ? 0 : (tsCx > 1 ? 1 : tsCx);
+      var tsPasses = Math.round(fparam(p, 'passes', 1, t)); tsPasses = tsPasses < 1 ? 1 : (tsPasses > 3 ? 3 : tsPasses);
+      var tsPop = fparam(p, 'pop', 0, t); tsPop = tsPop < 0 ? 0 : (tsPop > 100 ? 100 : tsPop);
       var tsPad=tsR+1;
       var tsY0=tsBB?Math.max(0,tsBB.y-tsPad):0, tsY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad):H-1;
       var tsX0=tsBB?Math.max(0,tsBB.x):0,       tsX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1):W-1;
       var tsSrc=fxSrc(d); var tsTmp=new Float32Array(tsLen); var tsBlur=new Float32Array(tsLen);
       var tsx,tsy,tsc,tsi,tsBase,tsRow,tsSum;
-      /* HORIZONTAL, by running sum. The window starts already filled with the clamped left edge, which
-         is what the tap loop's index clamping produced. */
-      for(tsy=tsY0;tsy<=tsY1;tsy++){
-        tsRow=tsy*tsW4;
-        for(tsc=0;tsc<4;tsc++){
-          tsSum=0;
-          for(var tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsj<0?0:(tsj>=W?W-1:tsj); tsSum+=tsSrc[tsRow+tsnx*4+tsc]; }
-          for(tsx=0;tsx<W;tsx++){
-            tsTmp[tsRow+tsx*4+tsc]=tsSum/tsWin;
-            var tsOut=tsx-tsR; if(tsOut<0)tsOut=0; else if(tsOut>=W)tsOut=W-1;
-            var tsIn=tsx+tsR+1; if(tsIn<0)tsIn=0; else if(tsIn>=W)tsIn=W-1;
-            tsSum+=tsSrc[tsRow+tsIn*4+tsc]-tsSrc[tsRow+tsOut*4+tsc];
+      /* ONE BOX PASS from `cur` into tsBlur. Pass j of n must be right (n - j)·(R+1) further out than the box, because the
+         next pass reads that far, so the rows and columns a pass covers grow by `e`; with one pass e is 0 and these are the
+         old bounds. The second and third passes read tsBlur back (the horizontal half has finished with it before the
+         vertical half writes it). */
+      function tsBox(cur, e) {
+        var rY0=tsBB?Math.max(0,tsBB.y-tsPad-e):0, rY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad+e):H-1;
+        var cX0=tsBB?Math.max(0,tsBB.x-e):0,       cX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1+e):W-1;
+        /* HORIZONTAL, by running sum. The window starts already filled with the clamped left edge, which
+           is what the tap loop's index clamping produced. */
+        for(tsy=rY0;tsy<=rY1;tsy++){
+          tsRow=tsy*tsW4;
+          for(tsc=0;tsc<4;tsc++){
+            tsSum=0;
+            for(var tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsj<0?0:(tsj>=W?W-1:tsj); tsSum+=cur[tsRow+tsnx*4+tsc]; }
+            for(tsx=0;tsx<W;tsx++){
+              tsTmp[tsRow+tsx*4+tsc]=tsSum/tsWin;
+              var tsOut=tsx-tsR; if(tsOut<0)tsOut=0; else if(tsOut>=W)tsOut=W-1;
+              var tsIn=tsx+tsR+1; if(tsIn<0)tsIn=0; else if(tsIn>=W)tsIn=W-1;
+              tsSum+=cur[tsRow+tsIn*4+tsc]-cur[tsRow+tsOut*4+tsc];
+            }
+          }
+        }
+        // VERTICAL, the same way down each column.
+        for(tsx=cX0;tsx<=cX1;tsx++){
+          var tsCol=tsx*4;
+          for(tsc=0;tsc<4;tsc++){
+            tsSum=0;
+            for(var tsk=-tsR;tsk<=tsR;tsk++){ var tsny=tsk<0?0:(tsk>=H?H-1:tsk); tsSum+=tsTmp[tsny*tsW4+tsCol+tsc]; }
+            for(tsy=0;tsy<H;tsy++){
+              tsBlur[tsy*tsW4+tsCol+tsc]=tsSum/tsWin;
+              var tsOutY=tsy-tsR; if(tsOutY<0)tsOutY=0; else if(tsOutY>=H)tsOutY=H-1;
+              var tsInY=tsy+tsR+1; if(tsInY<0)tsInY=0; else if(tsInY>=H)tsInY=H-1;
+              tsSum+=tsTmp[tsInY*tsW4+tsCol+tsc]-tsTmp[tsOutY*tsW4+tsCol+tsc];
+            }
           }
         }
       }
-      // VERTICAL, the same way down each column.
-      for(tsx=tsX0;tsx<=tsX1;tsx++){
-        var tsCol=tsx*4;
-        for(tsc=0;tsc<4;tsc++){
-          tsSum=0;
-          for(var tsk=-tsR;tsk<=tsR;tsk++){ var tsny=tsk<0?0:(tsk>=H?H-1:tsk); tsSum+=tsTmp[tsny*tsW4+tsCol+tsc]; }
-          for(tsy=0;tsy<H;tsy++){
-            tsBlur[tsy*tsW4+tsCol+tsc]=tsSum/tsWin;
-            var tsOutY=tsy-tsR; if(tsOutY<0)tsOutY=0; else if(tsOutY>=H)tsOutY=H-1;
-            var tsInY=tsy+tsR+1; if(tsInY<0)tsInY=0; else if(tsInY>=H)tsInY=H-1;
-            tsSum+=tsTmp[tsInY*tsW4+tsCol+tsc]-tsTmp[tsOutY*tsW4+tsCol+tsc];
-          }
-        }
-      }
+      for (var tsP = 1; tsP <= tsPasses; tsP++) tsBox(tsP === 1 ? tsSrc : tsBlur, (tsPasses - tsP) * tsPad);
       var tsLine=tsCenter*H; var tsDenom=0.05+(1-tsSoft)*0.5; if(tsDenom<0.0001)tsDenom=0.0001;
       /* ANGLE (queue 904): the focus band was welded horizontal. It now turns about the point it always passed through — the middle
          of the frame at the Focus height — and the distance from it is measured square to the band, still as a fraction of H so
          Softness means what it did. 0° takes the loop below, untouched. */
       var tsAng = p.angle == null ? 0 : (FM.evalProp(p.angle, t) || 0);
-      if (tsAng % 180 !== 0) { var tsRa = tsAng * Math.PI / 180, tsCa = Math.cos(tsRa), tsSa = Math.sin(tsRa), tsMx = W / 2;
+      if (tsShape === 1) {
+        /* RADIAL (14.1): the distance from the focus point, still as a fraction of H so Softness and Sharp band mean what they
+           mean on a line. Angle has nothing to turn here, and its row says so. */
+        var tsFx = tsCx * W;
+        for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowR = tsy * tsW4, tsDyR = tsy - tsLine;
+          for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowR + tsx * 4; if (d[tsi + 3] <= 0) continue;
+            var tsQr = Math.sqrt((tsx - tsFx) * (tsx - tsFx) + tsDyR * tsDyR) / H; if (tsHalf > 0) tsQr = tsQr > tsHalf ? tsQr - tsHalf : 0;
+            var tsBr = tsQr / tsDenom; if (tsBr > 1) tsBr = 1; var tsIr = 1 - tsBr;
+            d[tsi] = tsSrc[tsi] * tsIr + tsBlur[tsi] * tsBr; d[tsi + 1] = tsSrc[tsi + 1] * tsIr + tsBlur[tsi + 1] * tsBr; d[tsi + 2] = tsSrc[tsi + 2] * tsIr + tsBlur[tsi + 2] * tsBr; } }
+      } else if (tsAng % 180 !== 0) { var tsRa = tsAng * Math.PI / 180, tsCa = Math.cos(tsRa), tsSa = Math.sin(tsRa), tsMx = W / 2;
         for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowA = tsy * tsW4, tsDy = tsy - tsLine;
           for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowA + tsx * 4; if (d[tsi + 3] <= 0) continue;
-            var tsBa = Math.abs(tsDy * tsCa - (tsx - tsMx) * tsSa) / H / tsDenom; if (tsBa > 1) tsBa = 1; var tsIa = 1 - tsBa;
+            var tsQa = Math.abs(tsDy * tsCa - (tsx - tsMx) * tsSa) / H; if (tsHalf > 0) tsQa = tsQa > tsHalf ? tsQa - tsHalf : 0;
+            var tsBa = tsQa / tsDenom; if (tsBa > 1) tsBa = 1; var tsIa = 1 - tsBa;
             d[tsi] = tsSrc[tsi] * tsIa + tsBlur[tsi] * tsBa; d[tsi + 1] = tsSrc[tsi + 1] * tsIa + tsBlur[tsi + 1] * tsBa; d[tsi + 2] = tsSrc[tsi + 2] * tsIa + tsBlur[tsi + 2] * tsBa; } }
-        return; }
-      for(tsy=tsY0;tsy<=tsY1;tsy++){
-        var tsDist=Math.abs(tsy-tsLine)/H; var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
-        var tsInv=1-tsBw; var tsRowI=tsy*tsW4;
-        for(tsx=tsX0;tsx<=tsX1;tsx++){
-          tsi=tsRowI+tsx*4;
-          if(d[tsi+3]>0){
-            d[tsi]=tsSrc[tsi]*tsInv+tsBlur[tsi]*tsBw;
-            d[tsi+1]=tsSrc[tsi+1]*tsInv+tsBlur[tsi+1]*tsBw;
-            d[tsi+2]=tsSrc[tsi+2]*tsInv+tsBlur[tsi+2]*tsBw;
+      } else {
+        for(tsy=tsY0;tsy<=tsY1;tsy++){
+          var tsDist=Math.abs(tsy-tsLine)/H; if (tsHalf > 0) tsDist = tsDist > tsHalf ? tsDist - tsHalf : 0;
+          var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
+          var tsInv=1-tsBw; var tsRowI=tsy*tsW4;
+          for(tsx=tsX0;tsx<=tsX1;tsx++){
+            tsi=tsRowI+tsx*4;
+            if(d[tsi+3]>0){
+              d[tsi]=tsSrc[tsi]*tsInv+tsBlur[tsi]*tsBw;
+              d[tsi+1]=tsSrc[tsi+1]*tsInv+tsBlur[tsi+1]*tsBw;
+              d[tsi+2]=tsSrc[tsi+2]*tsInv+tsBlur[tsi+2]*tsBw;
+            }
           }
         }
+      }
+      /* MINIATURE POP (14.1): saturation up to 1.6x about each pixel's own luma, then contrast up to 1.25x about mid-grey —
+         what makes a tilt-shifted street read as painted toys rather than as a blurry photo. A grey stays grey. */
+      if (tsPop > 0) { var tsK = tsPop / 100, tsSat = 1 + 0.6 * tsK, tsCon = 1 + 0.25 * tsK;
+        for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowP = tsy * tsW4;
+          for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowP + tsx * 4; if (d[tsi + 3] <= 0) continue;
+            var tsPr = d[tsi], tsPg = d[tsi + 1], tsPb = d[tsi + 2], tsPl = 0.299 * tsPr + 0.587 * tsPg + 0.114 * tsPb;
+            d[tsi] = (tsPl + (tsPr - tsPl) * tsSat - 128) * tsCon + 128; d[tsi + 1] = (tsPl + (tsPg - tsPl) * tsSat - 128) * tsCon + 128; d[tsi + 2] = (tsPl + (tsPb - tsPl) * tsSat - 128) * tsCon + 128; } }
       }
     },
     // ---- batch 12 (multi-param + colour) ----
@@ -10515,11 +10625,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (edges === 3) { const p2 = 2 * n; i %= p2; if (i < 0) i += p2; return i >= n ? p2 - 1 - i : i; }
     return i < 0 ? 0 : (i >= n ? n - 1 : i);
   }
+  /* A kernel may answer `null` for a pixel that samples nothing — Tile Grid's Gap (#482 polish 14.5) — and that pixel is
+     transparent under every Edges and Smooth setting; its GPU twin sets gl-warp's fmGap. Written as zeros, not skipped, so the
+     seam does not depend on `o` arriving clear (drawWarpEffect's createImageData does). */
   function warpResample(src, o, W, H, mapFn, cx, cy, maxR, pr, t, ps, pre, edges, smooth) {
     if (!edges && !smooth) {
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
+          if (m === null) { const gi = (y * W + x) * 4; o[gi] = 0; o[gi + 1] = 0; o[gi + 2] = 0; o[gi + 3] = 0; continue; }
           let sx = m[0] | 0, sy = m[1] | 0;
           if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
           if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
@@ -10532,6 +10646,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
+        if (m === null) { const gi = (y * W + x) * 4; o[gi] = 0; o[gi + 1] = 0; o[gi + 2] = 0; o[gi + 3] = 0; continue; }   // Tile Grid's Gap
         let mx = m[0], my = m[1];
         if (!isFinite(mx)) mx = 0;   // `NaN | 0` is 0 in the old loop; a non-finite point reads the same pixel here
         if (!isFinite(my)) my = 0;
@@ -10590,8 +10705,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       /* THE CLIP'S OWN CLOCK, as a 9th argument to every prep (#482 polish 10.2). `t` is project time; a Wave speed or a flow
          in px/s has to start at the clip's start (and carry across a split — fxTimeOffset), the rule every mover already
          follows. A prep that does not take it ignores it; a kernel called without a prep (the suite's reference path) reads
-         `t` in its place. */
-      const tl = FM.fxLocalTime ? FM.fxLocalTime(layer, t) : t;
+         `t` in its place. Batch 14 reads the SAME argument (#482 polish 14.5): Tile Grid's Scroll runs on it, so a clip moved
+         along the timeline scrolls from the same place. One list for both: (W, H, cx, cy, maxR, p, t, ps, tl). */
+      const tl =FM.fxLocalTime ? FM.fxLocalTime(layer, t) : t;
       function uniformsFor(k, params) {
         /* glslPrep first, then prep, then nothing — the same three-way the single-effect path uses.
            A kernel with nothing worth hoisting has no prep at all, and that is not an error. */
@@ -10673,7 +10789,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!warped) {
         const src = actx.getImageData(0, 0, W, H).data;
         const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
-        warpResample(src, o, W, H, mapFn, cx, cy, maxR, pr, t, ps, pre, samp.edges, samp.smooth);   // both 0: the loop that was here, verbatim
+        // both 0: the loop that was here, verbatim; a null sample (Tile Grid's Gap, #482 14.5) is transparent on every path
+        warpResample(src, o, W, H, mapFn, cx, cy, maxR, pr, t, ps, pre, samp.edges, samp.smooth);
         bctx.putImageData(outImg, 0, 0);
         warped = wB;
       }
@@ -12262,11 +12379,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * rounding difference flips it down by one every time. A warp whose output lands on integers cannot
      * take reciprocal substitution ANYWHERE, fractions included. Verified movedPixels === 0 as it now
      * stands, against the reference body below. */
+    /* #482 polish 14.5: SCROLL moves the whole grid (C.scx / C.scy, whole plate px, from prep); GAP shrinks each tile into the
+       middle of its cell and leaves the rest EMPTY — the one warp that returns `null`, which drawWarpEffect's loop writes as a
+       transparent pixel (its shader twin sets fmGap). Both 0 by default: x - 0 and y - 0 are x and y, and the old fraction
+       lines run untouched. */
     gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.gridrepeat.prep(W,H,cx,cy,maxR,p,t,ps);
-      var grX=x;
-      if(C.stag>0){ var grRow0=Math.floor(y/C.cellH); if(grRow0&1) grX=x+C.stagCell; }
-      var grIx=Math.floor(grX/C.cellW), grIy=Math.floor(y/C.cellH);
-      var grGx=(grX-grIx*C.cellW)/C.cellW; var grGy=(y-grIy*C.cellH)/C.cellH;
+      var grX=x-C.scx, grY=y-C.scy;
+      if(C.stag>0){ var grRow0=Math.floor(grY/C.cellH); if(grRow0&1) grX=grX+C.stagCell; }
+      var grIx=Math.floor(grX/C.cellW), grIy=Math.floor(grY/C.cellH), grGx, grGy;
+      if(C.gap>0){ var grPx=grX-grIx*C.cellW, grPy=grY-grIy*C.cellH;
+        if(grPx<C.gx0||grPx>C.gx1||grPy<C.gy0||grPy>C.gy1) return null;
+        grGx=(grPx-C.gx0)/(C.gx1-C.gx0); grGy=(grPy-C.gy0)/(C.gy1-C.gy0); }
+      else { grGx=(grX-grIx*C.cellW)/C.cellW; grGy=(grY-grIy*C.cellH)/C.cellH; }
       if(C.mir===1||C.mir===3){ if(grIx&1) grGx=1-grGx; }
       if(C.mir===2||C.mir===3){ if(grIy&1) grGy=1-grGy; }
       return [grGx*W, grGy*H]; },
@@ -12601,8 +12725,22 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var grMir = p.mirror == null ? 0 : (Math.round(FM.evalProp(p.mirror, t)) | 0);
     var grStag = p.stagger == null ? 0 : FM.evalProp(p.stagger, t); if (grStag < 0) grStag = 0; if (grStag > 1) grStag = 1;
     var cellW = W / grCount, cellH = H / grRows;
+    /* #482 polish 14.5 — SCROLL ACROSS / DOWN in per cent of a cell a second, on the clip's own clock (`tl`, which
+       drawWarpEffect hands every prep; a direct caller without it scrolls on t). Taken modulo two cells, so a long clip
+       never grows the offset (and a mirrored grid keeps its parity), and ROUNDED TO WHOLE PLATE PIXELS: the sampler picks
+       whole pixels anyway, and a whole number is exact in the shader's 32-bit floats and in JavaScript alike, so the two
+       twins cut the tiles in the same place. GAP is the share of each cell left empty, as a band round a centred tile; its
+       edges sit half a pixel off the whole-pixel grid (gx0 = floor(…) + 0.5) so no sample ever lands exactly on one —
+       where the twins' last bits differ, a boundary sample is a coin toss between them. */
+    var grClock = (arguments[8] == null) ? t : arguments[8];
+    var grSx = p.scrollx == null ? 0 : (+FM.evalProp(p.scrollx, t) || 0), grSy = p.scrolly == null ? 0 : (+FM.evalProp(p.scrolly, t) || 0);
+    grSx = Math.max(-200, Math.min(200, grSx)); grSy = Math.max(-200, Math.min(200, grSy));
+    var grScx = grSx ? Math.round(((grSx / 100 * grClock) % 2) * cellW) : 0, grScy = grSy ? Math.round(((grSy / 100 * grClock) % 2) * cellH) : 0;
+    var grGap = p.gap == null ? 0 : (+FM.evalProp(p.gap, t) || 0); grGap = Math.max(0, Math.min(40, grGap)) / 100;
+    var grGx0 = Math.floor(grGap / 2 * cellW) + 0.5, grGy0 = Math.floor(grGap / 2 * cellH) + 0.5;
     return { mir: grMir, stag: grStag, cellW: cellW, cellH: cellH,
-             icellW: 1 / cellW, icellH: 1 / cellH, stagCell: grStag * cellW };
+             icellW: 1 / cellW, icellH: 1 / cellH, stagCell: grStag * cellW,
+             scx: grScx, scy: grScy, gap: grGap, gx0: grGx0, gx1: cellW - grGx0, gy0: grGy0, gy1: cellH - grGy0 };
   };
 
   WARP_FX.twirl.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -12665,12 +12803,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* GRID REPEAT — tile the frame, with optional per-row stagger and alternate-tile mirroring.
      ⚠️ `grIx & 1` is an integer parity test and GLSL ES 1.0 has NO integer bitwise operators, so it is
      written as mod(ix, 2.0) >= 0.5 — the same question asked of a float that is already whole. */
+  /* #482 polish 14.5: the twin of the kernel's Scroll and Gap — q is xy less the whole-pixel scroll (xy itself at the default
+     0, exactly), and a sample in the gap sets gl-warp's fmGap, which writes a transparent pixel where the CPU loop writes the
+     `null` the kernel returns. At Gap 0 the old fraction lines run. */
   WARP_FX.gridrepeat.glsl = [
-    'float gx = xy.x;',
-    'if (u_stag > 0.0) { float row0 = floor(xy.y * u_icellH); if (mod(row0, 2.0) >= 0.5) gx = xy.x + u_stagCell; }',
-    'float ix = floor(gx * u_icellW), iy = floor(xy.y * u_icellH);',
-    'float gux = (gx - ix * u_cellW) * u_icellW;',
-    'float guy = (xy.y - iy * u_cellH) * u_icellH;',
+    'vec2 q = xy - vec2(u_scx, u_scy);',
+    'float gx = q.x;',
+    'if (u_stag > 0.0) { float row0 = floor(q.y * u_icellH); if (mod(row0, 2.0) >= 0.5) gx = q.x + u_stagCell; }',
+    'float ix = floor(gx * u_icellW), iy = floor(q.y * u_icellH);',
+    'float gux, guy;',
+    'if (u_gap > 0.0) {',
+    '  float px = gx - ix * u_cellW, py = q.y - iy * u_cellH;',
+    '  if (px < u_gx0 || px > u_gx1 || py < u_gy0 || py > u_gy1) { fmGap = true; return xy; }',
+    '  gux = (px - u_gx0) / (u_gx1 - u_gx0); guy = (py - u_gy0) / (u_gy1 - u_gy0);',
+    '} else {',
+    '  gux = (gx - ix * u_cellW) * u_icellW;',
+    '  guy = (q.y - iy * u_cellH) * u_icellH;',
+    '}',
     'if (u_mir == 1.0 || u_mir == 3.0) { if (mod(ix, 2.0) >= 0.5) gux = 1.0 - gux; }',
     'if (u_mir == 2.0 || u_mir == 3.0) { if (mod(iy, 2.0) >= 0.5) guy = 1.0 - guy; }',
     'return vec2(gux * res.x, guy * res.y);'
@@ -13392,6 +13541,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM, maxM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM);
     expand.shifted = (sx, sy) => renderShiftedPlate(layer, fx, t, scene, ps, W, H, OX - sx / ps, OY - sy / ps);   // the layer moved by (sx, sy) plate px, whatever its size (Drift's Wrap)
+    expand.at = (t2) => renderShiftedPlate(layer, fx, t2, scene, ps, W, H, OX, OY);   // the plate A is, as the layer looks at t2 (#482 14.5, Trail's Time offset)
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, resolveFxColors(fx.params || {}, t), t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
@@ -13525,7 +13675,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const cX = Math.cos(o.rx), sX = Math.sin(o.rx);
     const cY = Math.cos(o.ry), sY = Math.sin(o.ry);
     const cZ = Math.cos(o.rz), sZ = Math.sin(o.rz);
-    const n = verts.length, F = 3.2;   // focal length in solid radii (weak perspective)
+    /* focal length in solid radii (weak perspective). #482 polish 14.6: o.F sets it (the solids' Perspective, Card Flip's);
+       absent it is the old 3.2, and Infinity is no perspective at all (f is 1). The denominator never falls under 0.2 — a
+       vertex level with the eye would project to infinity; nothing at F 3.2 or the solids' F 2 comes within 0.27. */
+    const n = verts.length, F = o.F > 0 ? o.F : 3.2, ortho = F === Infinity;
     const P = new Array(n), RZ = new Float32Array(n), RX3 = new Float32Array(n), RY3 = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       const v = verts[i];
@@ -13534,7 +13687,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       w = x * cY + z * sY; z = -x * sY + z * cY; x = w;         // rotate Y
       w = x * cZ - y * sZ; y = x * sZ + y * cZ; x = w;          // rotate Z
       RX3[i] = x; RY3[i] = y; RZ[i] = z;
-      const f = F / (F - z);                                    // z+ toward viewer
+      const f = ortho ? 1 : F / Math.max(0.2, F - z);           // z+ toward viewer
       P[i] = [o.cx + x * f * o.R, o.cy + y * f * o.R];
     }
     const order = [];
@@ -13562,6 +13715,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const dx = pp[0] - gx, dy = pp[1] - gy, len = Math.hypot(dx, dy) || 1;
         return [pp[0] + dx / len * 0.4, pp[1] + dy / len * 0.4];
       });
+      /* THE FAR SIDE (#482 polish 14.7, Card Flip's Back). o.back 1 (a colour) or 2 (nothing) replaces a triangle seen from
+         behind — wound the other way on screen from how the mesh lays it out (clockwise, y down) — instead of the mirrored
+         texture double-sided drawing shows. Absent (every solid, the page curl, the 3D tilt) nothing here runs. */
+      if (o.back === 1 || o.back === 2) {
+        const wind = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        if (wind < 0) {
+          if (o.back === 2) continue;
+          dctx.save();
+          dctx.beginPath(); dctx.moveTo(pts[0][0], pts[0][1]); dctx.lineTo(pts[1][0], pts[1][1]); dctx.lineTo(pts[2][0], pts[2][1]); dctx.closePath();
+          dctx.fillStyle = '#ffffff'; dctx.fillStyle = o.backColor; dctx.fill();
+          dctx.restore();
+          continue;
+        }
+      }
       const va = verts[tr[0]], vb = verts[tr[1]], vc = verts[tr[2]];
       const u0 = va[3] * tw, v0 = va[4] * th, u1 = vb[3] * tw, v1 = vb[4] * th, u2 = vc[3] * tw, v2 = vc[4] * th;
       const den = u0 * (v1 - v2) + u1 * (v2 - v0) + u2 * (v0 - v1);
@@ -13728,7 +13895,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return pts;
   }
   // octahedron, optionally stellated (a pyramid raised on every face → Star Polyhedron)
-  function bOcta(spike) {
+  function bOcta(spike, tip) {
     const base = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
     const faces = [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]];
     const V = [], T = [];
@@ -13737,8 +13904,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the star outgrew the frame and past ~4.5 its tips crossed the camera and projected to infinity or
      * behind it — 80% of the slider (queue 904, starpoly3d). Past TIP the whole star shrinks so the tips
      * stay at TIP: Spike Length now changes how spiky it is, not how big. Below TIP (the 1.1 default
-     * included) sc is 1 and the mesh is untouched. */
-    const TIP = 1.25, rt = spike ? (1 + spike) / Math.sqrt(3) : 1, sc = rt > TIP ? TIP / rt : 1;
+     * included) sc is 1 and the mesh is untouched. `tip` (#482 14.6) is that cap re-derived for the Perspective in force
+     * (starTip); absent, it is the 1.25 above. */
+    const TIP = tip > 0 ? tip : 1.25, rt = spike ? (1 + spike) / Math.sqrt(3) : 1, sc = rt > TIP ? TIP / rt : 1;
     for (let fi = 0; fi < faces.length; fi++) {
       const f = faces[fi], A = base[f[0]], B = base[f[1]], C = base[f[2]], s = V.length;
       V.push([A[0], A[1], A[2], uv(A)[0], uv(A)[1]], [B[0], B[1], B[2], uv(B)[0], uv(B)[1]], [C[0], C[1], C[2], uv(C)[0], uv(C)[1]]);
@@ -13795,17 +13963,43 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
 
   // ---- the CANVAS_FX catalog ----
-  function solidFx(A, B, W, H, bb, p, t, type, buildMesh, defs) {
-    const rx = fparam(p, 'rotx', defs.rotx, t) * Math.PI / 180;
-    const ry = fparam(p, 'roty', defs.roty, t) * Math.PI / 180;
-    const rz = fparam(p, 'rotz', defs.rotz, t) * Math.PI / 180;
+  /* #482 polish 14.6 — PERSPECTIVE, as renderMesh's focal length F in solid radii. 50 IS the old welded 3.2, returned as that
+     literal; below 50 the strength (1/F) falls in a straight line to none at 0 (F Infinity, a flat orthographic view); above
+     50 it rises to F 2 at 100. Not 1.6 — the deepest solid reaches 1.73 radii toward the camera (Box at Depth 200), and a
+     vertex at or past F would project to infinity or behind the eye. */
+  function solidF(p, t) {
+    let v = Number(fparam(p, 'persp', 50, t)); v = isFinite(v) ? Math.max(0, Math.min(100, v)) : 50;
+    if (v === 50) return 3.2;
+    if (v <= 0) return Infinity;
+    return 1 / (v < 50 ? (v / 50) / 3.2 : 1 / 3.2 + (v - 50) / 50 * (1 / 2 - 1 / 3.2));
+  }
+  FM._solidF = solidF;   // suite seam (#482 14.6)
+  /* The Spiked Star's cap (bOcta's TIP), RE-DERIVED for any F: 1.25 radii at F 3.2 keeps its tips at F / (F - TIP) = 1.64x,
+     so the same ratio, TIP = F × 25/64, keeps them there at any perspective — never more than the 1.25 that keeps the star
+     inside its frame, which is also the whole story with no perspective. */
+  function starTip(F) { return (F === 3.2 || !isFinite(F)) ? 1.25 : Math.min(1.25, F * 0.390625); }
+  /* `tl`, the clip's own clock (14.6): AUTO-SPIN X / Y / Z turn the solid that many degrees a second on it, added to Rotate —
+     so Auto-spin Y 90 at 1 s is Rotate Y 90 exactly. OFFSET X / Y move the solid by that share of the layer's own width /
+     height. Every default leaves the old numbers untouched: a zero spin or offset is never added, and Perspective 50 is
+     the literal 3.2. */
+  function solidFx(A, B, W, H, bb, p, t, type, buildMesh, defs, tl) {
+    const clock = tl == null ? t : tl;
+    let rxD = fparam(p, 'rotx', defs.rotx, t), ryD = fparam(p, 'roty', defs.roty, t), rzD = fparam(p, 'rotz', defs.rotz, t);
+    const spx = fparam(p, 'spinx', 0, t), spy = fparam(p, 'spiny', 0, t), spz = fparam(p, 'spinz', 0, t);
+    if (spx) rxD += spx * clock;
+    if (spy) ryD += spy * clock;
+    if (spz) rzD += spz * clock;
+    const rx = rxD * Math.PI / 180;
+    const ry = ryD * Math.PI / 180;
+    const rz = rzD * Math.PI / 180;
     const size = fparam(p, 'size', defs.size, t) / 100;
     const shading = clamp01(fparam(p, 'shading', defs.shading, t));
+    const F = solidF(p, t), offx = fparam(p, 'offx', 0, t), offy = fparam(p, 'offy', 0, t);
     const tex = extractTex(A, bb);
-    const mesh = buildMesh();
+    const mesh = buildMesh(F);
     renderMesh(B, tex, bb.w, bb.h, mesh.v, mesh.t, {
-      cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: Math.max(bb.w, bb.h) / 2 * size,
-      rx, ry, rz, shading, light: p.light == null ? null : fparam(p, 'light', 53, t),
+      cx: offx ? bb.x + bb.w / 2 + offx / 100 * bb.w : bb.x + bb.w / 2, cy: offy ? bb.y + bb.h / 2 + offy / 100 * bb.h : bb.y + bb.h / 2, R: Math.max(bb.w, bb.h) / 2 * size,
+      rx, ry, rz, shading, light: p.light == null ? null : fparam(p, 'light', 53, t), F: F,
     });
   }
   // ---- Motion Blur (Content) — TEMPORAL blur driven by what moves INSIDE the plate ----
@@ -14098,6 +14292,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       d[i4] = r; d[i4 + 1] = gg; d[i4 + 2] = b;
     }
+  }
+
+  /* THE PLATE WITH ITS EDGES CARRIED OUTWARD (#482 polish 14.3, Directional Blur's Edges: Repeat — half of hunt C25). The
+     plate A drawn at (mx, my) on a canvas mx / my bigger on every side, its outermost columns stretched out to the left and
+     right and then its outermost rows — over the full width, which carries the corners — up and down: Backfill's clamp
+     (paintFillBehind), and what the GPU blur fallback already does at the frame edge. Smoothing is off for the strips so
+     a one-pixel column REPEATS rather than being interpolated. One pooled canvas: the caller blits from it before anything
+     can ask for it again. */
+  let _edgePad = null;
+  function edgePadPlate(A, W, H, mx, my) {
+    if (!_edgePad) _edgePad = document.createElement('canvas');
+    const PW = W + 2 * mx, PH = H + 2 * my;
+    if (_edgePad.width !== PW || _edgePad.height !== PH) { _edgePad.width = PW; _edgePad.height = PH; }
+    const c = _edgePad.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, PW, PH);
+    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.filter = 'none';
+    c.drawImage(A, mx, my);
+    c.imageSmoothingEnabled = false;
+    if (mx > 0) { c.drawImage(_edgePad, mx, my, 1, H, 0, my, mx, H); c.drawImage(_edgePad, mx + W - 1, my, 1, H, mx + W, my, mx, H); }
+    if (my > 0) { c.drawImage(_edgePad, 0, my, PW, 1, 0, 0, PW, my); c.drawImage(_edgePad, 0, my + H - 1, PW, 1, 0, my + H, PW, my); }
+    c.imageSmoothingEnabled = true;
+    return _edgePad;
   }
 
   const CANVAS_FX = {
@@ -15030,15 +15246,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     },
 
     // ---- 3D solids ----
-    cube3d: function (A, B, W, H, bb, p, t) {
-      solidFx(A, B, W, H, bb, p, t, 'cube3d', () => meshFor('cube3d', 'u', () => bBox(0.72, 0.72, 0.72, 3)), { rotx: 25, roty: 35, rotz: 0, size: 70, shading: 0.6 });
+    cube3d: function (A, B, W, H, bb, p, t, tl) {
+      solidFx(A, B, W, H, bb, p, t, 'cube3d', () => meshFor('cube3d', 'u', () => bBox(0.72, 0.72, 0.72, 3)), { rotx: 25, roty: 35, rotz: 0, size: 70, shading: 0.6 }, tl);
     },
-    box3d: function (A, B, W, H, bb, p, t) {
+    box3d: function (A, B, W, H, bb, p, t, tl) {
       const d = fparam(p, 'depth', 60, t) / 100;
       const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;
-      solidFx(A, B, W, H, bb, p, t, 'box3d', () => meshFor('box3d', ax + '|' + ay + '|' + d, () => bBox(ax, ay, d * 0.5, 3)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'box3d', () => meshFor('box3d', ax + '|' + ay + '|' + d, () => bBox(ax, ay, d * 0.5, 3)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
-    cylinder3d: function (A, B, W, H, bb, p, t) {
+    cylinder3d: function (A, B, W, H, bb, p, t, tl) {
       const len = fparam(p, 'length', 150, t) / 100;
       solidFx(A, B, W, H, bb, p, t, 'cylinder3d', () => meshFor('cylinder3d', String(len), () => {
         const side = bParam(function (u, v) {
@@ -15058,71 +15274,72 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           capB.t.push([0, 1 + (i + 1) % capPts.length, 1 + i]);
         }
         return meshMerge([side, capF, capB]);
-      }), { rotx: 20, roty: 0, rotz: 75, size: 70, shading: 0.6 });
+      }), { rotx: 20, roty: 0, rotz: 75, size: 70, shading: 0.6 }, tl);
     },
-    sphere3d: function (A, B, W, H, bb, p, t) {
+    sphere3d: function (A, B, W, H, bb, p, t, tl) {
       solidFx(A, B, W, H, bb, p, t, 'sphere3d', () => meshFor('sphere3d', 'u', () => bParam(function (u, v) {
         const lon = (u - 0.5) * 2 * Math.PI, lat = (v - 0.5) * Math.PI;
         return [Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon)];
-      }, 22, 14)), { rotx: 15, roty: 0, rotz: 0, size: 85, shading: 0.55 });
+      }, 22, 14)), { rotx: 15, roty: 0, rotz: 0, size: 85, shading: 0.55 }, tl);
     },
-    ellipsoid3d: function (A, B, W, H, bb, p, t) {
+    ellipsoid3d: function (A, B, W, H, bb, p, t, tl) {
       /* Height / Depth (queue 904): the axis ratios were welded to 1.15 × 0.62 × 0.62, so the effect named for its
        * shape had one shape. Both are radii in % of the sphere's; 62 / 100 === 0.62, so saved ones are untouched. */
       const ey = fparam(p, 'height', 62, t) / 100, ez = fparam(p, 'depth', 62, t) / 100;
       solidFx(A, B, W, H, bb, p, t, 'ellipsoid3d', () => meshFor('ellipsoid3d', ey + '|' + ez, () => bParam(function (u, v) {
         const lon = (u - 0.5) * 2 * Math.PI, lat = (v - 0.5) * Math.PI;
         return [Math.cos(lat) * Math.sin(lon) * 1.15, Math.sin(lat) * ey, Math.cos(lat) * Math.cos(lon) * ez];
-      }, 22, 14)), { rotx: 25, roty: 0, rotz: 25, size: 85, shading: 0.55 });
+      }, 22, 14)), { rotx: 25, roty: 0, rotz: 25, size: 85, shading: 0.55 }, tl);
     },
-    torus3d: function (A, B, W, H, bb, p, t) {
+    torus3d: function (A, B, W, H, bb, p, t, tl) {
       const thk = Math.min(0.45, fparam(p, 'thickness', 30, t) / 100);
       solidFx(A, B, W, H, bb, p, t, 'torus3d', () => meshFor('torus3d', String(thk), () => bParam(function (u, v) {
         const lon = (u - 0.5) * 2 * Math.PI, tube = v * 2 * Math.PI, R0 = 1 - thk;
         return [(R0 + thk * Math.cos(tube)) * Math.sin(lon), thk * Math.sin(tube), (R0 + thk * Math.cos(tube)) * Math.cos(lon)];
-      }, 26, 12)), { rotx: 55, roty: 10, rotz: 0, size: 85, shading: 0.6 });
+      }, 26, 12)), { rotx: 55, roty: 10, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    ring3d: function (A, B, W, H, bb, p, t) {
+    ring3d: function (A, B, W, H, bb, p, t, tl) {
       const hole = Math.min(0.92, Math.max(0.1, fparam(p, 'hole', 62, t) / 100));
       const d = fparam(p, 'depth', 35, t) / 100;
-      solidFx(A, B, W, H, bb, p, t, 'ring3d', () => meshFor('ring3d', hole + '|' + d, () => bTube(circlePts(1, 24), circlePts(hole, 24), d)), { rotx: 60, roty: 8, rotz: 0, size: 85, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'ring3d', () => meshFor('ring3d', hole + '|' + d, () => bTube(circlePts(1, 24), circlePts(hole, 24), d)), { rotx: 60, roty: 8, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    pyramid3d: function (A, B, W, H, bb, p, t) {
-      solidFx(A, B, W, H, bb, p, t, 'pyramid3d', () => meshFor('pyramid3d', 'u', bPyramid), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 });
+    pyramid3d: function (A, B, W, H, bb, p, t, tl) {
+      solidFx(A, B, W, H, bb, p, t, 'pyramid3d', () => meshFor('pyramid3d', 'u', bPyramid), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 }, tl);
     },
-    octahedron3d: function (A, B, W, H, bb, p, t) {
-      solidFx(A, B, W, H, bb, p, t, 'octahedron3d', () => meshFor('octahedron3d', 'u', () => bOcta(0)), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 });
+    octahedron3d: function (A, B, W, H, bb, p, t, tl) {
+      solidFx(A, B, W, H, bb, p, t, 'octahedron3d', () => meshFor('octahedron3d', 'u', () => bOcta(0)), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 }, tl);
     },
-    hexprism3d: function (A, B, W, H, bb, p, t) {
+    hexprism3d: function (A, B, W, H, bb, p, t, tl) {
       const d = fparam(p, 'depth', 55, t) / 100;
-      solidFx(A, B, W, H, bb, p, t, 'hexprism3d', () => meshFor('hexprism3d', String(d), () => bPrism(circlePts(1, 6), d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'hexprism3d', () => meshFor('hexprism3d', String(d), () => bPrism(circlePts(1, 6), d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
-    starprism3d: function (A, B, W, H, bb, p, t) {
+    starprism3d: function (A, B, W, H, bb, p, t, tl) {
       const n = Math.max(4, Math.min(10, Math.round(fparam(p, 'points', 5, t))));
       const d = fparam(p, 'depth', 40, t) / 100;
       const inr = fparam(p, 'inner', 45, t) / 100;   // queue 904: point sharpness was welded to 0.45; 45 / 100 === 0.45, saved stars untouched
-      solidFx(A, B, W, H, bb, p, t, 'starprism3d', () => meshFor('starprism3d', n + '|' + d + '|' + inr, () => bPrism(starPts(n, inr), d)), { rotx: 25, roty: 30, rotz: 0, size: 85, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'starprism3d', () => meshFor('starprism3d', n + '|' + d + '|' + inr, () => bPrism(starPts(n, inr), d)), { rotx: 25, roty: 30, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    starpoly3d: function (A, B, W, H, bb, p, t) {
+    starpoly3d: function (A, B, W, H, bb, p, t, tl) {
       const spike = fparam(p, 'spike', 1.1, t);
-      solidFx(A, B, W, H, bb, p, t, 'starpoly3d', () => meshFor('starpoly3d', String(spike), () => bOcta(spike)), { rotx: 20, roty: 30, rotz: 0, size: 70, shading: 0.65 });
+      // 14.6: the spike cap follows Perspective (starTip) — at the default 50 it is the old 1.25 and the old cache key
+      solidFx(A, B, W, H, bb, p, t, 'starpoly3d', (F) => { const tip = starTip(F); return meshFor('starpoly3d', tip === 1.25 ? String(spike) : spike + '|' + tip, () => bOcta(spike, tip)); }, { rotx: 20, roty: 30, rotz: 0, size: 70, shading: 0.65 }, tl);
     },
-    heart3d: function (A, B, W, H, bb, p, t) {
+    heart3d: function (A, B, W, H, bb, p, t, tl) {
       const d = fparam(p, 'depth', 45, t) / 100;
-      solidFx(A, B, W, H, bb, p, t, 'heart3d', () => meshFor('heart3d', String(d), () => bPrism(heartPts(28), d)), { rotx: 15, roty: 30, rotz: 0, size: 85, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'heart3d', () => meshFor('heart3d', String(d), () => bPrism(heartPts(28), d)), { rotx: 15, roty: 30, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    hollowbox3d: function (A, B, W, H, bb, p, t) {
+    hollowbox3d: function (A, B, W, H, bb, p, t, tl) {
       const wall = Math.min(0.45, Math.max(0.08, fparam(p, 'wall', 22, t) / 100));
       const d = fparam(p, 'depth', 70, t) / 100;
       const inner = 1 - wall * 2;
       const sq = [[-1, -1], [1, -1], [1, 1], [-1, 1]], si = sq.map(q => [q[0] * inner, q[1] * inner]);
-      solidFx(A, B, W, H, bb, p, t, 'hollowbox3d', () => meshFor('hollowbox3d', wall + '|' + d, () => bTube(sq, si, d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'hollowbox3d', () => meshFor('hollowbox3d', wall + '|' + d, () => bTube(sq, si, d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
-    axiscross3d: function (A, B, W, H, bb, p, t) {
+    axiscross3d: function (A, B, W, H, bb, p, t, tl) {
       const arm = Math.min(0.6, Math.max(0.15, fparam(p, 'arm', 34, t) / 100));
       solidFx(A, B, W, H, bb, p, t, 'axiscross3d', () => meshFor('axiscross3d', String(arm), () => meshMerge([
         bBox(1, arm / 2, arm / 2, 2), bBox(arm / 2, 1, arm / 2, 2), bBox(arm / 2, arm / 2, 1, 2),
-      ])), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      ])), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
     pagecurl: function (A, B, W, H, bb, p, t) {
       const amount = clamp01(fparam(p, 'amount', 0.45, t));
@@ -15145,7 +15362,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
       const py = fy === 50 ? bb.y + bb.h / 2 : bb.y + bb.h * (fy / 100);
       const keep = (p.keep == null ? 0 : (Math.round(FM.evalProp(p.keep, t)) | 0)) === 1;
+      /* #482 polish 14.7 (answers C29: "Card Flip" was an instant mirror). FLIP is how far the card has turned over, about
+         the hinge — Horizontal turns it round the upright through Hinge X, Vertical round the level through Hinge Y, Both
+         round both — so keyframing 0 → 180 turns it over. 180 IS the old mirror and takes the old lines below, exactly; 0 is
+         the layer as it is; anything else is the layer on an 8x8 card through renderMesh, the solids' mapper, with
+         PERSPECTIVE (the solids' scale; 50 is their old focal length) and no shading — a card keeps its own colours. BACK is
+         what the far side shows once it is past edge-on: the picture reversed, as a real card shows ink soaked through
+         (Mirror, and the old flip), a solid colour, or nothing. */
+      const fAng = p.angle == null ? 180 : Number(FM.evalProp(p.angle, t));
+      const a = isFinite(fAng) ? ((fAng % 360) + 360) % 360 : 180;
+      const back = Math.round(fparam(p, 'back', 0, t));
       if (keep) B.drawImage(A, 0, 0);            // the original stays, the reflection joins it
+      if (a !== 180 || back !== 0) {
+        if (a === 0) { B.drawImage(A, 0, 0); return; }
+        const R = Math.max(bb.w, bb.h) / 2, tex = extractTex(A, bb), rad = a * Math.PI / 180;
+        const x0 = (bb.x - px) / R, x1 = (bb.x + bb.w - px) / R, y0 = (bb.y - py) / R, y1 = (bb.y + bb.h - py) / R;
+        const card = bParam((u, v) => [x0 + (x1 - x0) * u, y0 + (y1 - y0) * v, 0], 8, 8);   // the hinge is the origin, so it stays put
+        renderMesh(B, tex, bb.w, bb.h, card.v, card.t, { cx: px, cy: py, R: R, rx: m !== 0 ? rad : 0, ry: m !== 1 ? rad : 0, rz: 0, shading: 0,
+          F: solidF(p, t), back: back === 1 || back === 2 ? back : 0, backColor: typeof p.color === 'string' ? p.color : '#ffffff' });
+        return;
+      }
       B.save();
       B.translate(px, py);
       B.scale(m === 1 ? 1 : -1, m === 0 ? 1 : -1);
@@ -15397,14 +15633,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // QUALITY (queue 904): the tap count was welded at 9, so a 60px smear showed as nine separate ghosts. 9 is the old loop exactly.
       const N = p.samples == null ? 9 : Math.max(4, Math.min(32, Math.round(FM.evalProp(p.samples, t)) || 9)), half = (N - 1) / 2;
       const dx = Math.cos(rad), dy = Math.sin(rad), step = dist / (N - 1);
+      /* #482 polish 14.3 (half of C25). SMEAR Both is the old spread, half the Distance each way; Behind lays every tap
+         back from the picture, away from the Angle, so it trails like something moving toward the Angle; Ahead the other
+         way. EDGES Repeat draws the taps from a copy of the plate whose outermost rows and columns are carried outward past
+         the frame (the Backfill padded-plate trick), so a clip that fills the frame keeps its edge as solid as its middle
+         instead of fading where a shifted tap has nothing to bring in. Both defaults run the old loop untouched. */
+      const side = Math.round(fparam(p, 'side', 0, t)), rep = Math.round(fparam(p, 'edges', 0, t)) === 1;
+      const offAt = side === 1 ? (k => -k * step) : (side === 2 ? (k => k * step) : (k => (k - half) * step));
+      let pad = null, mx = 0, my = 0;
+      if (rep) {
+        let far = 0; for (let k = 0; k < N; k++) far = Math.max(far, Math.abs(offAt(k)));
+        mx = Math.ceil(Math.abs(dx) * far) + 1; my = Math.ceil(Math.abs(dy) * far) + 1;
+        pad = edgePadPlate(A, W, H, mx, my);
+      }
       // additive 'lighter' at 1/N each = true premultiplied MEAN of the N taps — successive-alpha
       // source-over skews partial-coverage edge pixels to full opacity (hard edge, no smear)
       B.save();
       B.globalCompositeOperation = 'lighter';
       B.globalAlpha = 1 / N;
       for (let k = 0; k < N; k++) {
-        const off = (k - half) * step;
-        B.drawImage(A, dx * off, dy * off);
+        const off = offAt(k);
+        if (pad) B.drawImage(pad, dx * off - mx, dy * off - my);
+        else B.drawImage(A, dx * off, dy * off);
       }
       B.restore();
     },
@@ -15429,8 +15679,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const ang = (fparam(p, 'angle', 0, t) || 0) * Math.PI / 180;    // 0° = to the right
       const spread = Math.max(0.05, Math.min(3, (fparam(p, 'spacing', 100, t) || 100) / 100));
       const fade = Math.max(0, Math.min(1, (fparam(p, 'fade', 0, t) || 0) / 100));
-      B.drawImage(A, 0, 0);                                           // the original stays exactly where it is
-      if (n < 2) return;
+      /* #482 polish 14.5. COPY SIZE: each copy is this much the size of the one before (80% makes the third 0.8³ = 51%),
+         about its own middle; COPY TURN: each copy turns this much more than the one before; COPIES Behind draws them
+         under the original, the furthest at the bottom; TIME OFFSET draws copy k as the layer looks k × this many seconds
+         later (or earlier), so a moving title leaves a trail of where it was — each copy from a plate of its own,
+         rendered at that moment and held at the clip's first or last moment past its ends. Every default is the old
+         trail: no scale, no turn, in front, one plate. */
+      const sizeStep = Math.max(0.5, Math.min(1.5, fparam(p, 'scale', 100, t) / 100));
+      const turnStep = Math.max(-45, Math.min(45, fparam(p, 'rotate', 0, t))) * Math.PI / 180;
+      const behind = Math.round(fparam(p, 'order', 0, t)) === 1;
+      const delay = Math.max(-1, Math.min(1, fparam(p, 'delay', 0, t)));
+      const shaped = sizeStep !== 1 || turnStep !== 0;
+      const timed = delay !== 0 && !!expand && typeof expand.at === 'function' && !!layer;
+      if (!behind) B.drawImage(A, 0, 0);                              // the original stays exactly where it is
+      if (n < 2) { if (behind) B.drawImage(A, 0, 0); return; }
       // How far the content reaches along the repeat axis — the honest basis for "one copy over".
       const alongOf = (w, h) => Math.abs(Math.cos(ang)) * w + Math.abs(Math.sin(ang)) * h;
       /* #986 C27: the copies are offsets of the whole layer, so a clip half off the frame repeats as a whole clip —
@@ -15445,11 +15707,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (dx <= -W || dx >= W || dy <= -H || dy >= H) break;
           const a = fade ? 1 - fade * (i / (n - 1)) : 1;
           if (fade && a <= 0.004) break;
-          offs.push([dx, dy, a]);
+          offs.push([dx, dy, a, i]);
         }
         return offs;
       };
-      const mats = (offs) => offs.map(q => new DOMMatrix().translateSelf(q[0], q[1]));
+      const tcx = bb.x + bb.w / 2, tcy = bb.y + bb.h / 2;   // a copy grows and turns about its own middle (14.5)
+      const mats = (offs) => offs.map(q => shaped
+        ? new DOMMatrix().translateSelf(tcx + q[0], tcy + q[1]).rotateSelf(q[3] * turnStep * 180 / Math.PI).scaleSelf(Math.pow(sizeStep, q[3]), Math.pow(sizeStep, q[3])).translateSelf(-tcx, -tcy)
+        : new DOMMatrix().translateSelf(q[0], q[1]));
       let offs = offsAt(alongOf(bb.w, bb.h)), src = null;
       /* …AND "ONE COPY OVER" HAS TO MEAN THE CONTENT THE COPIES DRAW (#986 review). bb is the ON-FRAME alpha box, so a
          clip half off the frame stepped by its visible half while each copy drew the whole clip: at Spacing 100 every
@@ -15457,7 +15722,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          its 11200 visible pixels). Where the layer's own box runs past the plate, and bb reaches that edge (so the
          frame is what cut it), bb is extended to the layer's edge on that side; an in-frame layer keeps bb exactly.
          Used only when the copies really come from the expanded plate — copies of A are copies of what bb measured. */
-      const box = (expand && layer && scene) ? layerAABB(layer, t, scene) : null;
+      const box = (expand && layer && scene && !timed) ? layerAABB(layer, t, scene) : null;   // a timed copy draws from a plate of its own moment (below)
       if (box) {
         const oX = A.__fmOX || 0, oY = A.__fmOY || 0, s = ps > 0 ? ps : 1;
         const px0 = (box.x0 - oX) * s, px1 = (box.x1 - oX) * s, py0 = (box.y0 - oY) * s, py1 = (box.y1 - oY) * s;
@@ -15473,14 +15738,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (s2.cv !== A || !whole.length) { offs = whole; src = s2; }
         }
       }
-      if (!src) src = moverSource(A, W, H, ps, expand, layer, t, scene, mats(offs));
-      for (const q of offs) {
-        if (fade) {
-          B.save(); B.globalAlpha = q[2]; B.drawImage(src.cv, q[0] + src.x, q[1] + src.y); B.restore();
+      if (!src) src = timed ? { cv: A, x: 0, y: 0 } : moverSource(A, W, H, ps, expand, layer, t, scene, mats(offs));
+      /* TIME OFFSET: copy k is the layer at t + k × offset, kept inside the clip's own life so a copy never blinks out
+         past its start or end. The plate is drawn before the next is asked for, so one pooled plate serves them all. */
+      const life0 = (layer && layer.start) || 0, life1 = life0 + Math.max(0, (layer && layer.duration) || 0);
+      const at = k => { let t2 = t + k * delay; if (life1 > life0) t2 = Math.max(life0, Math.min(life1 - 1e-3, t2)); return expand.at(t2); };
+      for (const q of (behind ? offs.slice().reverse() : offs)) {
+        const cv = timed ? at(q[3]) : src.cv;
+        if (!shaped) {
+          if (fade) {
+            B.save(); B.globalAlpha = q[2]; B.drawImage(cv, q[0] + src.x, q[1] + src.y); B.restore();
+          } else {
+            B.drawImage(cv, q[0] + src.x, q[1] + src.y);
+          }
         } else {
-          B.drawImage(src.cv, q[0] + src.x, q[1] + src.y);
+          const s = Math.pow(sizeStep, q[3]);
+          B.save();
+          if (fade) B.globalAlpha = q[2];
+          B.translate(tcx + q[0], tcy + q[1]);
+          if (turnStep) B.rotate(q[3] * turnStep);
+          if (s !== 1) B.scale(s, s);
+          B.translate(-tcx, -tcy);
+          B.drawImage(cv, src.x, src.y);
+          B.restore();
         }
       }
+      if (behind) B.drawImage(A, 0, 0);                               // under Behind the original goes on top
     },
     /* SCATTER ARRAY (queue 484 clause 2 — Alight Motion calls it Scatter Repeat).
        Every repeat this app has is strictly REGULAR — Trail walks a straight line, Tile Grid and Ring
@@ -15498,6 +15781,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const scaleV = Math.max(0, Math.min(100, fparam(p, 'sizevary', 30, t))) / 100;
       const fade = Math.max(0, Math.min(100, fparam(p, 'fade', 35, t))) / 100;
       const seed = Math.round(fparam(p, 'seed', 1, t)) | 0;
+      /* #482 polish 14.5. DRIFT sends every copy off on its own heading at its own speed (half to one and a half times
+         Drift, px a second); SPIN turns every copy at its own rate (half to one and a half times Spin, degrees a second),
+         the same way round. Both run on the clip's own clock and are hashes of the seed like everything else here, so
+         preview, export and scrubbing agree; at 0 neither touches the arithmetic below. Drift is project px, scaled to
+         the plate here — a canvas kernel scales for itself. */
+      const drift = Math.max(0, Math.min(200, fparam(p, 'drift', 0, t))) * (ps > 0 ? ps : 1);
+      const spin = Math.max(-360, Math.min(360, fparam(p, 'spin', 0, t))) * Math.PI / 180;
+      const clock = tl == null ? t : tl;
       B.drawImage(A, 0, 0);                       // the original stays exactly where it is
       if (n < 2) return;
       const hash = function (k) {
@@ -15512,12 +15803,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const reach = Math.max(bb.w, bb.h) * spread;
       const copies = [];   // #986 C27: gathered first so one expanded plate serves every copy
       for (let i = 1; i < n; i++) {
-        const dx = (hash(i * 5) - 0.5) * 2 * reach;
-        const dy = (hash(i * 5 + 1) - 0.5) * 2 * reach;
+        let dx = (hash(i * 5) - 0.5) * 2 * reach;
+        let dy = (hash(i * 5 + 1) - 0.5) * 2 * reach;
         const a = 1 - fade * (hash(i * 5 + 2));
         if (a <= 0.004) continue;
         const sc = 1 + (hash(i * 5 + 3) - 0.5) * 2 * scaleV;
-        const an = (hash(i * 5 + 4) - 0.5) * 2 * rot;
+        let an = (hash(i * 5 + 4) - 0.5) * 2 * rot;
+        if (drift) { const hd = hash(i * 5 + 1000) * 2 * Math.PI, go = drift * (0.5 + hash(i * 5 + 1001)) * clock; dx += Math.cos(hd) * go; dy += Math.sin(hd) * go; }
+        if (spin) an += spin * (0.5 + hash(i * 5 + 1002)) * clock;
         if (cx0 + dx < -bb.w || cx0 + dx > W + bb.w || cy0 + dy < -bb.h || cy0 + dy > H + bb.h) continue;
         copies.push([dx, dy, a, sc <= 0.02 ? 0.02 : sc, an]);
       }
@@ -18548,6 +18841,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     } catch (e) { return false; }     // a hint must never break a render
   };
 
+  /* MIRRORED EDGES (#482 polish 14.4, Backfill's Style). The layer's own source rect, at its own place and size times Zoom, then
+     reflected outward tile by tile — every odd column flipped across, every odd row flipped down — until the plate g is
+     covered. Working units (1/k of the plate), with the frame's origin at (off, off) on g so the blur margin is covered too.
+     Each tile's edges snap to whole working pixels, the way Tiles' cells do, so two reflections meet without an
+     anti-aliased seam; a speck of a layer is drawn no smaller than 1/40 of the plate, so it never asks for thousands of tiles. */
+  function fbMirrorTiles(g, src, sx, sy, sw, sh, zoom, k, off, EW, EH) {
+    const tw = Math.max(sw * zoom / k, EW / 40), th = Math.max(sh * zoom / k, EH / 40);
+    const x0 = off + (sx + sw / 2) / k - tw / 2, y0 = off + (sy + sh / 2) / k - th / 2;
+    const i0 = Math.floor(-x0 / tw), i1 = Math.ceil((EW - x0) / tw) - 1, j0 = Math.floor(-y0 / th), j1 = Math.ceil((EH - y0) / th) - 1;
+    for (let j = j0; j <= j1; j++) {
+      const ya = Math.round(y0 + j * th), yb = Math.round(y0 + (j + 1) * th), fy = (j & 1) !== 0;
+      if (yb <= ya) continue;
+      for (let i = i0; i <= i1; i++) {
+        const xa = Math.round(x0 + i * tw), xb = Math.round(x0 + (i + 1) * tw), fx = (i & 1) !== 0;
+        if (xb <= xa) continue;
+        g.save();
+        g.translate(fx ? xb : xa, fy ? yb : ya);
+        g.scale(fx ? -1 : 1, fy ? -1 : 1);
+        try { g.drawImage(src, sx, sy, sw, sh, 0, 0, xb - xa, yb - ya); } catch (e) {}
+        g.restore();
+      }
+    }
+  }
+  FM._fbMirrorTiles = fbMirrorTiles;   // suite seam (#482 14.4)
   /* Paints ONE layer's Fill Behind backdrop onto ctx — the fill only, never the subject, which
    * draws for itself at its own z afterwards. Returns TRUE when a fill was painted; FALSE when
    * there is nothing to fill (the layer already reaches every edge, or it drew no pixels), which is
@@ -18564,6 +18881,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const blur = Math.max(0, p.blur == null ? 60 : FM.evalProp(p.blur, t));
     const zoom = Math.max(1, p.zoom == null ? 1.15 : FM.evalProp(p.zoom, t));
     const dim = Math.max(0, Math.min(100, p.dim == null ? 22 : FM.evalProp(p.dim, t))) / 100;
+    /* #482 polish 14.4. STYLE: Blurred copy is the old fill; Mirrored edges keeps the layer at its own place and size (times
+       Zoom) and reflects it outward tile by tile until the frame is covered — the bars continue the picture instead of
+       repeating it huge; Solid colour fills them with Colour, no copy at all. SATURATION grades the fill alone (0 is grey
+       bars that stop competing with the subject); VIGNETTE darkens the fill toward the frame's corners. Every default
+       takes the old lines: style 0 draws the old copy, saturation 100 and vignette 0 never enter their passes. */
+    const fbNum = (k, def, lo, hi) => { let v = p[k] == null ? def : Number(FM.evalProp(p[k], t)); if (!isFinite(v)) v = def; return v < lo ? lo : (v > hi ? hi : v); };
+    const fbStyle = Math.round(fbNum('style', 0, 0, 2));
+    const fbSat = fbNum('saturation', 100, 0, 200), fbVig = fbNum('vignette', 0, 0, 1);
+    const fbCol = fbStyle === 2 ? resolveFxColors(p, t).color : null;
     const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const d = _fbDepth++;
     try {
@@ -18666,7 +18992,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const MK = doBlur ? Math.ceil(blurDev * 3 / k) : 0;   // the blur's reach past the frame edge, in working units
       const ox = MK + (W - dw) / 2 / k, oy = MK + (H - dh) / 2 / k;   // the copy's origin on the extended plate
       FM._fbLast = { W: W, H: H, ps: ps, bb: bb, core: { ok: core.ok, x: core.x, y: core.y, w: core.w, h: core.h }, solidSrc: solidSrc, src: { x: sx, y: sy, w: sw, h: sh }, k: k, blurDev: blurDev, mk: MK, m: MK * k, s: s, dw: dw, dh: dh };   // exposed for the tests, like FM._layerCTM
-      if (MK > 0) {
+      if (fbStyle === 2) {
+        /* SOLID COLOUR (14.4): no copy and nothing to blur — the bars are the colour, dimmed, graded and vignetted below like
+           any fill. An unreadable colour leaves black, the letterbox colour, rather than the last fillStyle on this plate. */
+        bctx.filter = 'none'; bctx.fillStyle = '#000000';
+        if (typeof fbCol === 'string' && fbCol) bctx.fillStyle = fbCol;
+        bctx.fillRect(0, 0, CW, CH);
+      } else if (MK > 0) {
         /* EDGE-CLAMP INTO THE MARGIN. Build the copy on a plate that is MK bigger than the frame on
          * every side, then extend its outermost row and column outward to fill that margin, and blur
          * THAT. Clamp rather than mirror because it is continuous by construction — the extension
@@ -18680,7 +19012,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.clearRect(0, 0, EW, EH);
         cctx.globalAlpha = 1; cctx.globalCompositeOperation = 'source-over'; cctx.filter = 'none';
         cctx.imageSmoothingEnabled = true;
-        try { cctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
+        if (fbStyle === 1) fbMirrorTiles(cctx, pA, sx, sy, sw, sh, zoom, k, MK, EW, EH);   // 14.4: the reflections already reach the margin, so there is nothing to clamp
+        else try { cctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
         // ceil/floor, not round: these are the first and last WHOLE pixels the copy covers, so the
         // partly-covered pixel at each end (fractional origin ⇒ a half-alpha edge row) is overwritten
         // by the clamp rather than being clamped FROM. Correct by construction rather than by
@@ -18689,7 +19022,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // blur anyway. It matters when it does not.
         const L = Math.max(0, Math.min(EW, Math.ceil(ox))), R = Math.max(0, Math.min(EW, Math.floor(ox + dw / k)));
         const T = Math.max(0, Math.min(EH, Math.ceil(oy))), B = Math.max(0, Math.min(EH, Math.floor(oy + dh / k)));
-        if (R - L >= 1 && B - T >= 1) {
+        if (fbStyle !== 1 && R - L >= 1 && B - T >= 1) {
           // Smoothing off so a 1px strip stretched across the margin REPEATS rather than being
           // interpolated. Belt-and-braces, measured as such: Chrome clamps a 1px-wide source to its
           // edge anyway, and turning smoothing back on leaves every test in this file green. It stays
@@ -18709,7 +19042,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         } else drawBlurredNoFilter(bctx, pC, +(blurDev / k).toFixed(3), -MK, -MK, pC.width, pC.height);   // #986 C24: a sharp copy behind the clip
       } else {
         bctx.filter = doBlur ? 'blur(' + (blurDev / k).toFixed(3) + 'px)' : 'none';
-        try { bctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
+        if (fbStyle === 1) fbMirrorTiles(bctx, pA, sx, sy, sw, sh, zoom, k, 0, CW, CH);
+        else try { bctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
       }
       /* FLOOR THE FILL IN THE LAYER'S OWN AVERAGE COLOUR. Cover scaling a RECTANGLE guarantees the
        * frame is covered; cover scaling an alpha BOUNDING BOX does not, because a layer that is not
@@ -18720,7 +19054,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * there is, and on the ordinary case — an upright rectangular clip, where the copy already
        * reaches every corner — it is completely hidden, so it costs one tiny blit and changes no
        * pixel. Drawn BEFORE the dim so the floor is dimmed with everything else. */
-      try {
+      if (fbStyle !== 2) try {   // 14.4: a Solid colour fill is opaque edge to edge — there is nothing for a floor to show through
         // 8x8 and averaged HERE, not a 1x1 downscale: a straight shrink to one pixel goes through
         // whatever cheap filter the browser feels like, and on a mostly-transparent subject it came
         // back as rgb(8,8,8) for white text — the un-premultiply falls apart at low coverage. Sixty-
@@ -18741,10 +19075,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           bctx.globalCompositeOperation = 'source-over';
         }
       } catch (e) {}   // tainted canvas: no floor, same as before
+      /* SATURATION (14.4), on the working plate's own pixels rather than a ctx.filter, so it grades on every device (C24's
+         lesson) — the plate is 1/k of the frame, so this is a small pass. Each pixel moves away from (or toward) its own luma. */
+      if (fbSat !== 100) {
+        try {
+          const sim = bctx.getImageData(0, 0, CW, CH), sq = sim.data, sf = fbSat / 100;
+          for (let i = 0; i < sq.length; i += 4) { if (!sq[i + 3]) continue; const sl = 0.299 * sq[i] + 0.587 * sq[i + 1] + 0.114 * sq[i + 2]; sq[i] = sl + (sq[i] - sl) * sf; sq[i + 1] = sl + (sq[i + 1] - sl) * sf; sq[i + 2] = sl + (sq[i + 2] - sl) * sf; }
+          bctx.putImageData(sim, 0, 0);
+        } catch (e) {}   // tainted canvas: ungraded, as before
+      }
       if (dim > 0) {
         bctx.filter = 'none';
         bctx.globalCompositeOperation = 'source-atop';   // darken the FILL, never the empty frame around it
         bctx.fillStyle = 'rgba(0,0,0,' + dim.toFixed(3) + ')';
+        bctx.fillRect(0, 0, CW, CH);
+      }
+      /* VIGNETTE (14.4): the fill darkens toward the frame's corners — clear inside 30% of the half-diagonal, Vignette's
+         share of black at the corners — so the eye stays on the subject. source-atop, like Dim: the fill only. */
+      if (fbVig > 0) {
+        const vR = Math.hypot(CW, CH) / 2, vg = bctx.createRadialGradient(CW / 2, CH / 2, vR * 0.3, CW / 2, CH / 2, vR);
+        vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,' + fbVig.toFixed(3) + ')');
+        bctx.filter = 'none';
+        bctx.globalCompositeOperation = 'source-atop';
+        bctx.fillStyle = vg;
         bctx.fillRect(0, 0, CW, CH);
       }
       /* THE FILL IS A BACKDROP — it is the only thing this function paints, and the subject is NOT
