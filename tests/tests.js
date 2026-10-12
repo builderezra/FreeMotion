@@ -124797,4 +124797,127 @@
     if (fp0 !== null && C.schemaFingerprint() !== fp0) bad.push('setup: the fingerprint did not come back after the legacy was removed');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* 7.2 — THE SWING'S SHAPE. A Tremolo on a steady 0.5 input outputs 0.5 x (1 - d/2 + d/2 x w(t)), so at Depth 1 its output
+     IS the LFO: w = 4 x out - 1, sample for sample (the LFO buffer is read at whole-sample steps at 4 Hz, 48 kHz). Its phase
+     is pinned to scene time (0 at scene 0), so w(t) must be the shape at phase frac(4t). By the maths (js/audio-fx.js
+     LFO_WAVE): Square spends 84 % of its cycle within 0.1 of +-1, a sine 29 % — the backlog's measure, 5 % of the
+     envelope. Random is eight seeded levels a cycle, the same every cycle and in the preview. On the build before there is
+     no shape key (first line) and every shape renders the sine. */
+  const B7_SAW = p => { const u = (p + 0.5) - Math.floor(p + 0.5) - 0.5; return Math.abs(u) <= 0.49 ? u / 0.49 : null; };   // null inside the 2 % fall
+  const B7_MODEL = {
+    1: p => (p < 0.25 ? 4 * p : (p < 0.75 ? 2 - 4 * p : 4 * p - 4)),
+    3: B7_SAW,
+    4: p => { const s = B7_SAW(p); return s === null ? null : -s; },
+  };
+  test('482 7.2 Tremolo - Shape swings it as a Triangle, Square, Saw up, Saw down or Random, Sine is today’s Tremolo, and the preview hears the export', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('tremolo', 'shape');
+    if (!pd) throw new Error('the Tremolo has no Shape (its params are ' + b7Keys('tremolo') + ')');
+    if (!pd.options || pd.options.map(o => o[1]).join('|') !== 'Sine|Triangle|Square|Saw up|Saw down|Random' || pd.def !== 0 || !pd.rebuild || pd.keyframable) throw new Error('Shape is ' + JSON.stringify(pd) + ' - not a rebuild choice of Sine, Triangle, Square, Saw up, Saw down, Random that starts at Sine');
+    const dc = () => 0.5, SR = B3.SR;
+    const lfo = async (shape, live) => { const y = await b3Render(b7Fx('tremolo', { rate: 4, depth: 1, shape: shape }), dc, 1, { live: live }); return Array.from(y, v => 4 * v - 1); };
+    const near = w => { let n = 0; for (const v of w) if (Math.abs(Math.abs(v) - 1) <= 0.1) n++; return n / w.length; };
+    const bad = [];
+    const sine = await lfo(0);
+    let sw = 0; for (let i = 0; i < SR; i++) sw = Math.max(sw, Math.abs(sine[i] - Math.sin(2 * Math.PI * 4 * i / SR)));
+    if (sw > 1e-3) throw new Error('CONTROL: the Sine Tremolo on a steady input is up to ' + sw.toExponential(2) + ' from sin(2 pi 4 t) - the read-back of the LFO is broken');
+    const saved = await b3Render([{ type: 'tremolo', enabled: true, params: { rate: 4, depth: 1 } }], dc, 1);
+    let sv = 0; for (let i = 0; i < SR; i++) sv = Math.max(sv, Math.abs(4 * saved[i] - 1 - sine[i]));
+    if (sv !== 0) bad.push('a Tremolo saved before Shape existed renders up to ' + sv.toExponential(2) + ' away from Shape Sine');
+    if (!(near(sine) < 0.4)) throw new Error('CONTROL: a sine spends ' + (near(sine) * 100).toFixed(1) + ' % of its cycle near its extremes - the measure is broken');
+    const sq = await lfo(2);
+    if (!(near(sq) >= 0.8)) bad.push('Square spends only ' + (near(sq) * 100).toFixed(1) + ' % of its cycle within 5 % of the two extremes (a sine: ' + (near(sine) * 100).toFixed(1) + ' %)');
+    for (const sh of [1, 3, 4]) {
+      const w = await lfo(sh), name = pd.options[sh][1];
+      let worst = 0; for (let i = 0; i < SR; i++) { const p = (4 * i / SR) % 1, m = B7_MODEL[sh](p); if (m !== null) worst = Math.max(worst, Math.abs(w[i] - m)); }
+      if (worst > 0.01) bad.push(name + ' is up to ' + worst.toFixed(3) + ' away from its shape (phase 0 at scene 0)');
+    }
+    const r1 = await lfo(5), rl = await lfo(5, true);
+    const lv = c => [0, 1, 2, 3, 4, 5, 6, 7].map(j => Math.round(r1[Math.round((c + (j + 0.6) / 8) * SR / 4)] * 1000) / 1000);
+    const a = lv(0), b = lv(2);
+    if (new Set(a).size !== 8) bad.push('Random holds ' + new Set(a).size + ' different levels in a cycle (' + a.join(', ') + '), not 8');
+    if (a.join() !== b.join()) bad.push('Random’s third cycle (' + b.join(', ') + ') is not its first (' + a.join(', ') + ') - the pattern is not seeded');
+    let rp = 0; for (let i = 0; i < SR; i++) rp = Math.max(rp, Math.abs(r1[i] - rl[i]));
+    if (rp > 1e-5) bad.push('Random in the preview is up to ' + rp.toExponential(2) + ' from the export');
+    const sql = await lfo(2, true);
+    let qp = 0; for (let i = 0; i < SR; i++) qp = Math.max(qp, Math.abs(sq[i] - sql[i]));
+    if (qp > 1e-5) bad.push('Square in the preview is up to ' + qp.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Tremolo Shape: ' + bad.join('; '));
+  });
+
+  /* 7.2 — TREMOLO STEREO PHASE. At 180° the right channel's swing is half a cycle from the left's: on a steady mono 0.5 at
+     Depth 1, L = 0.25 + 0.25 sin, R = 0.25 - 0.25 sin, so L + R stays 0.5 while L - R swings +-0.5 — the sound rocks between
+     the speakers. At 0 (the default) the two sides are the same samples, as today (one carrier, up-mixed). A rebuild, so it
+     is in the preview's signature. On the build before there is no stereo key (first line). */
+  test('482 7.2 Tremolo - Stereo phase 180 swings the left and right in turn, a mono clip included, and 0 keeps them together as today', { item: '482', budgetMs: 60000 }, async function () {
+    const pd = b7Pd('tremolo', 'stereo');
+    if (!pd) throw new Error('the Tremolo has no Stereo phase (its params are ' + b7Keys('tremolo') + ')');
+    if (pd.label !== 'Stereo phase' || pd.min !== 0 || pd.max !== 180 || pd.def !== 0 || !pd.rebuild || pd.keyframable) throw new Error('Stereo phase is ' + JSON.stringify(pd));
+    const dc = () => 0.5, bad = [];
+    const run = async (st, live) => afx482c(b7Fx('tremolo', { rate: 4, depth: 1, stereo: st }), dc, 1, { chans: 1, live: live });
+    const z = await run(0);
+    let lr = 0; for (let i = 0; i < z[0].length; i++) lr = Math.max(lr, Math.abs(z[0][i] - z[1][i]));
+    if (lr !== 0) throw new Error('CONTROL: at Stereo phase 0 a mono clip comes out with left and right up to ' + lr.toExponential(2) + ' apart');
+    for (const live of [false, true]) {
+      const [L, R] = await run(180, live);
+      let sum = 0, diff = 0; for (let i = 0; i < L.length; i++) { sum = Math.max(sum, Math.abs(L[i] + R[i] - 0.5)); diff = Math.max(diff, Math.abs(L[i] - R[i])); }
+      if (sum > 1e-3) bad.push('at 180° left + right wander up to ' + sum.toFixed(4) + ' from 0.5 (' + (live ? 'preview' : 'export') + ') - the two sides are not in turn');
+      if (!(diff > 0.45)) bad.push('at 180° left and right only ever differ by ' + diff.toFixed(3) + ' (' + (live ? 'preview' : 'export') + ')');
+    }
+    const sig = st => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('tremolo', { stereo: st }); return FM.audioFxLive.signatureOf(l); };
+    if (sig(0) === sig(90)) bad.push('Stereo phase 0 and 90 sign the same, so the preview would not rebuild when it moves');
+    if (bad.length) throw new Error('Tremolo Stereo phase: ' + bad.join('; '));
+  });
+
+  /* 7.2 — THE OTHER FIVE. Auto-Pan, Vibrato, Chorus, Flanger and Phaser take the same Shape. For each: a saved effect (no
+     shape key) renders the very samples of Shape Sine (FNV hash of the float bits), and Square sounds different. Auto-Pan is
+     measured exactly: on a steady mono 0.5 the equal-power panner gives atan2(R, L) = (pan + 1) pi / 4, so its pan can be
+     read back sample by sample — Triangle at Depth 1 must sweep at an even speed, tri(frac(2t)) within 0.01. On the build
+     before Square renders the sine (the key is ignored). */
+  test('482 7.2 Auto-Pan, Vibrato, Chorus, Flanger and Phaser - Shape changes the sweep, Sine is today’s, and Auto-Pan Triangle pans at an even speed', { item: '482', budgetMs: 120000 }, async function () {
+    const bad = [];
+    for (const type of ['autopan', 'vibrato', 'chorus', 'flanger', 'phaser']) {
+      if (!b7Pd(type, 'shape')) { bad.push(type + ' has no Shape (its params are ' + b7Keys(type) + ')'); continue; }
+      const old = [{ type: type, enabled: true, params: {} }];
+      const h0 = hash482c(await afx482c(old, 'noise', 1, { chans: 2 })), hs = hash482c(await afx482c(b7Fx(type, { shape: 0 }), 'noise', 1, { chans: 2 }));
+      const ref = await afx482c(b7Fx(type, { shape: 0, depth: 1 }), 'noise', 1, { chans: 2 }), sq = await afx482c(b7Fx(type, { shape: 2, depth: 1 }), 'noise', 1, { chans: 2 });
+      if (h0 !== hs) bad.push('a ' + type + ' saved before Shape existed renders ' + h0 + ', Shape Sine ' + hs);
+      let d = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ref[c].length; i++) d = Math.max(d, Math.abs(ref[c][i] - sq[c][i]));
+      if (!(d > 1e-3)) bad.push(type + ' sounds the same with Shape Square as with Sine (differ by ' + d.toExponential(2) + ')');
+    }
+    for (const live of [false, true]) {
+      const [L, R] = await afx482c(b7Fx('autopan', { rate: 2, depth: 1, shape: 1 }), () => 0.5, 1, { chans: 1, live: live });
+      let worst = 0; for (let i = 0; i < L.length; i++) { const pan = 4 * Math.atan2(R[i], L[i]) / Math.PI - 1; worst = Math.max(worst, Math.abs(pan - B7_MODEL[1]((2 * i / SR482C) % 1))); }
+      if (worst > 0.01) bad.push('Auto-Pan Triangle pans up to ' + worst.toFixed(3) + ' away from an even sweep (' + (live ? 'preview' : 'export') + ')');
+    }
+    if (bad.length) throw new Error('Shape: ' + bad.join('; '));
+  });
+
+  /* 7.2 — ON SCREEN. Shape is the visual effects' segmented control: six buttons, Sine lit on a new Tremolo, every button
+     inside the panel at both widths (wrapping, never cut off), and a tap writes the option's value in one undo step and moves
+     the preview's signature (so the live chain is rebuilt with the new wave). Stereo phase is a plain slider with no
+     keyframe diamond (it cannot be animated). On the build before the open Tremolo has only Rate and Depth. */
+  test('482 7.2 Tremolo panel - Shape is six buttons that fit at 390 and 1280 px, a tap picks one in one undo step and rebuilds the preview, and Stereo phase is a slider with no keyframe', { item: '482', budgetMs: 120000 }, async function () {
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('tremolo')], 0, async p => {
+      const row = p.seg('Shape');
+      if (!row) throw new Error(p.where + ': the open Tremolo has no Shape buttons' + (p.slider('Shape') ? ' (it is a slider)' : ''));
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      if (btns.map(b => b.textContent).join('|') !== 'Sine|Triangle|Square|Saw up|Saw down|Random') throw new Error(p.where + ': Shape offers ' + btns.map(b => b.textContent).join(', '));
+      if (!btns[0].classList.contains('on') || btns.filter(b => b.classList.contains('on')).length !== 1) throw new Error(p.where + ': a new Tremolo lights ' + btns.filter(b => b.classList.contains('on')).map(b => b.textContent).join(', ') + ', not Sine alone');
+      for (const b of btns) await p.fits(b, 'the Shape button ' + b.textContent);
+      const st = p.slider('Stereo phase');
+      if (!st) throw new Error(p.where + ': no Stereo phase slider');
+      if (st.querySelector('.fx-kf')) throw new Error(p.where + ': Stereo phase offers a keyframe diamond - it cannot be animated');
+      await p.fits(st, 'the Stereo phase row');
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      FM.history.commit();
+      attached(btns[2], 'the Square button').click(); await sleep(150);
+      if (p.layer().audioFx[0].params.shape !== 2) throw new Error(p.where + ': a tap on Square left Shape at ' + p.layer().audioFx[0].params.shape);
+      const on = [].slice.call((p.seg('Shape') || row).querySelectorAll('.fx-seg-btn.on')).map(b => b.textContent);
+      if (on.join() !== 'Square') throw new Error(p.where + ': after the tap the lit button is ' + on.join(', '));
+      if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking Square did not move the preview signature - the live chain keeps the sine');
+      FM.history.undo(); await sleep(150);
+      if (p.layer().audioFx[0].params.shape !== 0) throw new Error(p.where + ': one Undo after the tap leaves Shape at ' + p.layer().audioFx[0].params.shape);
+    });
+  });
 })();

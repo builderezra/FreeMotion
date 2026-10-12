@@ -178,10 +178,32 @@ window.FM = window.FM || {};
   // a real PHASE control, which an oscillator has none of; and `ramp` is an EXACT linear ramp, where an
   // oscillator's sawtooth is a truncated Fourier series that reads 0.424 at quarter-phase (measured)
   // against a true ramp's 0.5 — a warp the granular pitch shifter cannot absorb.
+  /* THE SHAPES (#482 polish 7.2): what the six modulation effects swing by besides a sine. Each runs −1…1, and all but
+     Random start where the sine does — 0 at phase 0, rising, at the top a quarter of the way in (the saws half way) — so a
+     change of Shape keeps the swing's timing and only changes its form. NOTHING JUMPS IN ONE SAMPLE, because a jump in a delay time (Vibrato, Chorus,
+     Flanger) is a click: Square is tanh(6·sin)/tanh 6 (backlog 7.2), whose edges take about 8 % of a cycle; a Saw falls
+     back across 2 % of the cycle (SAW_FALL) instead of resetting at once; Random's eight seeded steps each glide in over the
+     first fifth of the step. Random is the same eight every time, so the preview and every export hear the same pattern. */
+  const RND8 = (function () { const r = rng(0x5eed8); const v = []; for (let i = 0; i < 8; i++) v.push(r() * 2 - 1); return v; })();
+  const SAW_FALL = 0.02;
+  function sawUp(p) {
+    const u = (p + 0.5) - Math.floor(p + 0.5) - 0.5, edge = 0.5 - SAW_FALL / 2;   // u: −½…½, 0 at phase 0
+    if (u >= -edge && u <= edge) return u / edge;                                  // the rise, through 0 at phase 0
+    const d = u > edge ? u - edge : u + 0.5 + SAW_FALL / 2;                       // 0…SAW_FALL into the fall
+    return 1 - 2 * d / SAW_FALL;
+  }
   const LFO_WAVE = {
     sine: p => Math.sin(2 * Math.PI * p),
     ramp: p => p,
     win: p => Math.sin(Math.PI * p),   // w(p)² + w(p+½)² = 1, and exactly 0 where `ramp` resets
+    tri: p => (p < 0.25 ? 4 * p : (p < 0.75 ? 2 - 4 * p : 4 * p - 4)),
+    square: p => Math.tanh(6 * Math.sin(2 * Math.PI * p)) / Math.tanh(6),
+    sawup: sawUp,
+    sawdown: p => -sawUp(p),
+    random: p => {
+      const x = p * 8, j = Math.min(7, Math.floor(x)), f = x - j, prev = RND8[(j + 7) % 8];
+      return f < 0.2 ? prev + (RND8[j] - prev) * (0.5 - 0.5 * Math.cos(Math.PI * f / 0.2)) : RND8[j];
+    },
   };
   const _lfoCache = {};   // "wave|secs|rate" -> AudioBuffer, shared by every LFO of a kind in a context
   function lfoBuffer(ctx, wave, secs) {
@@ -486,6 +508,15 @@ window.FM = window.FM || {};
   function TOGGLE(key, label, def, o) {
     return Object.assign({ key: key, label: label, min: 0, max: 1, step: 1, def: def, unit: '', keyframable: false, toggle: true }, o || {});
   }
+  /* ═══ THE SWING'S SHAPE (#482 polish 7.2) ═════════════════════════════════════════════════════════════════════════════
+   * Tremolo, Auto-Pan, Vibrato, Chorus, Flanger and Phaser could only swing in a sine. Shape picks the LFO's wave (LFO_WAVE):
+   * a Triangle sweeps at an even speed, a Square jumps between two states (a choppy tremolo, a pan that snaps side to side),
+   * a Saw rises (or falls) and resets, Random wanders between eight steps. A rebuild — the wave is the LFO's buffer — and
+   * Sine (0, the default and every saved effect) builds the very buffer it always did, so nothing already made changes. */
+  const LFO_SHAPES = [[0, 'Sine'], [1, 'Triangle'], [2, 'Square'], [3, 'Saw up'], [4, 'Saw down'], [5, 'Random']];
+  const SHAPE_WAVES = ['sine', 'tri', 'square', 'sawup', 'sawdown', 'random'];
+  const SHAPE = () => CHOICE('shape', 'Shape', LFO_SHAPES, 0, { rebuild: true });
+  function waveOf(inst, type) { return SHAPE_WAVES[staticOf(inst, type, 'shape')] || 'sine'; }
   const MIX = def => P('mix', 'Mix', 0, 1, 0.01, def, '', true);
   /* A CONTROL THAT DOES NOTHING WHILE ANOTHER IS AT 0 SAYS SO (#482 3.6 review). A shelf's or a band's corner moves a
      boost or a cut, and at 0 dB there is none: a Bass & Treble whose Bass at is dragged with Bass at 0 plays the clip
@@ -892,11 +923,11 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'autopan', label: 'Auto-Pan (8D)', category: 'space',
-    params: [P('rate', 'Rate', 0.05, 8, 0.01, 0.4, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 1, '', true)],
-    build: function (ctx) {
+    params: [P('rate', 'Rate', 0.05, 8, 0.01, 0.4, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 1, '', true), SHAPE()],
+    build: function (ctx, inst) {
       const s = shop(ctx);
       const p = s.panner(0);   // base stays centred; the LFO swings ±depth around it
-      const lfo = s.lfo(0.4, { key: 'rate' });
+      const lfo = s.lfo(0.4, { key: 'rate', wave: waveOf(inst, 'autopan') });
       const amp = s.gain(1);
       lfo.connect(amp); amp.connect(p.pan);
       return unit({ input: p, output: p, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate, depth: amp.gain } });
@@ -1069,17 +1100,43 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'tremolo', label: 'Tremolo', category: 'dyn',
-    params: [P('rate', 'Rate', 0.1, 20, 0.1, 5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true)],
-    build: function (ctx) {
-      const s = shop(ctx);
-      const carrier = s.gain(1);
-      const lfo = s.lfo(5, { key: 'rate' });
-      const amp = s.gain(0.35);
-      lfo.connect(amp); amp.connect(carrier.gain);
-      // depth 0 → base 1, no swing (unity). depth 1 → base 0.5 ± 0.5, dipping to silence.
+    params: [
+      P('rate', 'Rate', 0.1, 20, 0.1, 5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), SHAPE(),
+      /* #482 polish 7.2. The right channel's swing runs this far round the cycle from the left's: at 180° one side dips while
+         the other swells, so the sound rocks between the speakers instead of pulsing in the middle. A rebuild (an LFO's
+         phase is set when it starts) and not keyframable; 0 (the default, every saved Tremolo) builds today's one carrier. */
+      Object.assign(P('stereo', 'Stereo phase', 0, 180, 5, 0, '°', false), { rebuild: true }),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), wave = waveOf(inst, 'tremolo'), st = staticOf(inst, 'tremolo', 'stereo');
+      if (!(st > 0)) {
+        const carrier = s.gain(1);
+        const lfo = s.lfo(5, { key: 'rate', wave: wave });
+        const amp = s.gain(0.35);
+        lfo.connect(amp); amp.connect(carrier.gain);
+        // depth 0 → base 1, no swing (unity). depth 1 → base 0.5 ± 0.5, dipping to silence.
+        return unit({
+          input: carrier, output: carrier, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate },
+          custom: { depth: multi([[carrier.gain, v => 1 - v / 2], [amp.gain, v => v / 2]]) },
+        });
+      }
+      // STEREO PHASE: a carrier per channel, the right one's LFO started st/360 of a cycle on. A mono clip is up-mixed to
+      // both sides first (a splitter is discrete, so its right output would otherwise be silence — see Stereo Width).
+      const input = s.gain(1), out = s.gain(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
+      const split = s.splitter(2), merge = s.merger(2);
+      const cL = s.gain(1), cR = s.gain(1);
+      const lfoL = s.lfo(5, { key: 'rate', wave: wave }), lfoR = s.lfo(5, { key: 'rate', wave: wave, phase: st / 360 });
+      const aL = s.gain(0.35), aR = s.gain(0.35);
+      lfoL.connect(aL); aL.connect(cL.gain); lfoR.connect(aR); aR.connect(cR.gain);
+      input.connect(split); split.connect(cL, 0); split.connect(cR, 1);
+      cL.connect(merge, 0, 0); cR.connect(merge, 0, 1); merge.connect(out);
       return unit({
-        input: carrier, output: carrier, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate },
-        custom: { depth: multi([[carrier.gain, v => 1 - v / 2], [amp.gain, v => v / 2]]) },
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        custom: {
+          rate: multi([[lfoL.playbackRate, null], [lfoR.playbackRate, null]]),
+          depth: multi([[cL.gain, v => 1 - v / 2], [aL.gain, v => v / 2], [cR.gain, v => 1 - v / 2], [aR.gain, v => v / 2]]),
+        },
       });
     },
   });
@@ -1202,9 +1259,9 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'chorus', label: 'Chorus', category: 'char',
-    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.8, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.5, '', true), MIX(0.5)],
+    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.8, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.5, '', true), SHAPE(), MIX(0.5)],
     build: function (ctx, inst) {
-      const s = shop(ctx);
+      const s = shop(ctx), wave = waveOf(inst, 'chorus');
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.5);
       input.connect(wd.dry).connect(out);
@@ -1214,7 +1271,7 @@ window.FM = window.FM || {};
       for (let i = 0; i < 3; i++) {
         const d = s.delay(0.08);
         d.delayTime.value = bases[i];   // ±4 ms of sweep never pushes these centres negative
-        const lfo = s.lfo(0.8 * rates[i], { key: 'rate', mul: rates[i] });
+        const lfo = s.lfo(0.8 * rates[i], { key: 'rate', mul: rates[i], wave: wave });
         const amp = s.gain(0.5 * 0.004);
         lfo.connect(amp); amp.connect(d.delayTime);
         input.connect(d); d.connect(sum);
@@ -1226,7 +1283,7 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'flanger', label: 'Flanger', category: 'char',
-    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.3, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.6, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.5, '', true), MIX(0.5)],
+    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.3, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.6, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.5, '', true), SHAPE(), MIX(0.5)],
     /* ═══ THE FEEDBACK CAME BACK ONE RENDER QUANTUM LATE (queue 986, hunt C16) ═══════════════════════════════
      * The feedback was a loop through the swept delay itself (d → fb → d). Web Audio only allows a cycle with a
      * DelayNode in it, and an engine pays for the cycle with one render quantum (128 frames) on every trip:
@@ -1250,7 +1307,7 @@ window.FM = window.FM || {};
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.5);
       input.connect(wd.dry).connect(out);
-      const lfo = s.lfo(0.3, { key: 'rate' });
+      const lfo = s.lfo(0.3, { key: 'rate', wave: waveOf(inst, 'flanger') });
       const amp = s.gain(0.6 * 0.003);   // 1–7 ms sweep around 4 ms, the same swing on every delay in the chain
       lfo.connect(amp);
       const fb0 = initNum(inst, 'feedback', 0.5, 0, 0.9);
@@ -1272,7 +1329,7 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'phaser', label: 'Phaser', category: 'char',
-    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.4, '', true)],
+    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.4, '', true), SHAPE()],
     /* ═══ FEEDBACK WAS A FIXED COMB, NOT A SHARPER PHASER (queue 986, hunt C17) ══════════════════════════════
      * The feedback ran round a loop — the four allpasses, then back through a 1 ms DelayNode, because Web Audio
      * mutes a cycle without one — and the engine adds a render quantum to every trip round a cycle. MEASURED at
@@ -1298,7 +1355,7 @@ window.FM = window.FM || {};
       const input = s.gain(1), out = s.gain(1);
       const dry = s.gain(0.5), wet = s.gain(0.5);   // the notches ARE dry + allpass summed — no mix knob
       input.connect(dry).connect(out);
-      const lfo = s.lfo(0.5, { key: 'rate' });
+      const lfo = s.lfo(0.5, { key: 'rate', wave: waveOf(inst, 'phaser') });
       const bases = [200, 400, 800, 1600];
       // each stage sweeps in proportion to its own centre; one amp per stage drives that stage in every copy
       const amps = bases.map(function (b) { const a = s.gain(0.7 * b * 0.7); lfo.connect(a); return a; });
@@ -1321,11 +1378,11 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'vibrato', label: 'Vibrato', category: 'char',
-    params: [P('rate', 'Rate', 0.1, 12, 0.1, 5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.3, '', true)],
-    build: function (ctx) {
+    params: [P('rate', 'Rate', 0.1, 12, 0.1, 5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.3, '', true), SHAPE()],
+    build: function (ctx, inst) {
       const s = shop(ctx);
       const d = s.delay(0.05); d.delayTime.value = 0.005;   // 2–8 ms around a 5 ms centre, 100% wet
-      const lfo = s.lfo(5, { key: 'rate' });
+      const lfo = s.lfo(5, { key: 'rate', wave: waveOf(inst, 'vibrato') });
       const amp = s.gain(0.3 * 0.003);
       lfo.connect(amp); amp.connect(d.delayTime);
       return unit({ input: d, output: d, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate }, custom: { depth: multi([[amp.gain, 0.003]]) } });
