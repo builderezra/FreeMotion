@@ -127400,4 +127400,43 @@
       }, { full: true });
     }, 380);
   });
+
+  /* SU1 #17 (hunt/simple-firstuser, 2/2: 07m-music-full-length.jpg, x3-music-selected-t2.jpg): selecting the music put a 2 px
+     #select-box with its corner dots and rotate knob on the middle of the video. canvas-edit's boxFor outlined every layer but a
+     camera as a picture, and a song has none. Two sounds, the two ways the app makes one: an mp3 added as music (a video layer
+     with Simple's sm.snd and a 0×0 record — layerSize 0×0, so the box is its own 1 px borders) and Extract Audio's twin
+     (audioOnly, opacity 0, a record WITH a picture — a full-frame box round nothing). Red on the old js/canvas-edit.js: both leave
+     the box at display:block with client rects, in Simple and in Full (shared code); boxFor now returns null for a sound and
+     update() hides it. CONTROL: clip A, a picture, shows the box and its knob in both editors, so the fixture can see a box. */
+  test('SU1 #17 · at 380 selecting the music shows no transform box or rotate knob on the video (an mp3, and a sound taken out of a clip), in Simple and in Full; a clip still shows its box', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const box = () => document.getElementById('select-box');
+    const shown = () => { const b = box(); return !!b && getComputedStyle(b).display !== 'none' && b.getClientRects().length > 0; };
+    const knob = () => { const k = document.querySelector('#select-box .sb-rot'); return !!k && k.getClientRects().length > 0; };
+    const size = () => { const r = box() ? box().getBoundingClientRect() : null; return r ? Math.round(r.width) + '×' + Math.round(r.height) : 'no box'; };
+    const pick = async (v, id) => { FM.selectLayer(id); await v.sleep(80); if (FM.canvasEdit && FM.canvasEdit.update) FM.canvasEdit.update(); await v.sleep(40); };
+    const mp3 = (W, H) => { const l = FM.makeLayer('video', { name: 'Song', x: W / 2, y: H / 2, start: 0, duration: 8 }); l.sm = { snd: true, stay: true }; l.muted = false; return l; };
+    const twin = (W, H) => { const l = smSong('Twin', 0, 8, W, H); l.transform.opacity = 0; return l; };
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [mp3(W, H), twin(W, H), smV('A', 0, 6, W, H)], async function (v) {
+        FM.time = 1;
+        if (!box()) throw new Error('setup: canvas-edit made no #select-box');
+        const fails = [];
+        const check = async (where) => {
+          await pick(v, v.L('A').id);
+          if (FM.inspector.ownsCanvas && FM.inspector.ownsCanvas()) { FM.inspector.openCategory('home'); await pick(v, v.L('A').id); }   // a section that owns the canvas hides the box for its own reasons
+          if (!shown() || !knob()) throw new Error('CONTROL in ' + where + ': selecting clip A shows no box or no rotate knob (' + size() + '), so the checks below could not see one either');
+          for (const n of ['Song', 'Twin']) {
+            await pick(v, v.L(n).id);
+            if (FM.scene.selectedId !== v.L(n).id) throw new Error('setup in ' + where + ': ' + n + ' did not take the selection');
+            if (shown() || knob()) fails.push(where + ': selecting ' + (n === 'Song' ? 'the music (an mp3, 0×0 picture)' : 'the sound taken out of a clip (audioOnly, opacity 0)') + ' shows #select-box ' + size() + (knob() ? ' with its rotate knob' : ''));
+          }
+        };
+        await check('Simple');
+        FM.editor.set('full'); await v.sleep(80);
+        await check('Full');
+        if (fails.length) throw new Error('a sound has no picture, yet: ' + fails.join(' · '));
+      }, { media: [{ name: 'Song', rec: smRec(8, 'song.mp3', { width: 0, height: 0 }) }, { name: 'Twin', rec: smRec(8, 'clip.mp4', { width: 320, height: 240 }) }, { name: 'A', rec: smRec(6, 'a.mp4', { width: 320, height: 240 }) }] });
+    }, 380);
+  });
 })();
