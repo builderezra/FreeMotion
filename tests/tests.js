@@ -125553,15 +125553,15 @@
         /* B has a 1 s gap after it, so Close gap joins the tray: the longest main-clip tray there is */
         await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
           FM.selectLayer(v.L('B').id); await v.sleep(120);
-          const tray = document.getElementById('sm-tray');
+          const tray = document.getElementById('sm-tray'), sc = tray.querySelector('.sm-run') || tray;   // SU1 #15: a one-row tray scrolls in its tool strip, beside the pins
           if (!smTool('seam') || !smTool('crop')) throw new Error('CONTROL (' + width + '): the tray is ' + Array.from(tray.querySelectorAll('.sm-tool')).map(b => b.dataset.tool));
-          tray.scrollLeft = 0; await v.sleep(30);
+          sc.scrollLeft = 0; await v.sleep(30);
           if (hits('length')) throw new Error('CONTROL (' + width + '): Length is not reachable: ' + hits('length'));
           if (hits('more')) throw new Error(width + ' px: More cannot be clicked — ' + hits('more'));
           if (hits('delete')) throw new Error(width + ' px: 🗑 cannot be clicked — ' + hits('delete'));
           if (width > 700) {
             tray.dispatchEvent(new WheelEvent('wheel', { deltaY: 600, bubbles: true, cancelable: true })); await v.sleep(30);
-            if (tray.scrollWidth - tray.clientWidth > 1 && Math.abs(tray.scrollLeft - (tray.scrollWidth - tray.clientWidth)) > 1) throw new Error('1280 px: a mouse wheel does not scroll the tray (scrollLeft ' + tray.scrollLeft + ' of ' + (tray.scrollWidth - tray.clientWidth) + ')');
+            if (sc.scrollWidth - sc.clientWidth > 1 && Math.abs(sc.scrollLeft - (sc.scrollWidth - sc.clientWidth)) > 1) throw new Error('1280 px: a mouse wheel does not scroll the tray (scrollLeft ' + sc.scrollLeft + ' of ' + (sc.scrollWidth - sc.clientWidth) + ')');
             ['replace', 'seam'].forEach(id => { if (hits(id)) throw new Error('1280 px: after the wheel, ' + id + ' still cannot be clicked — ' + hits(id)); });
           }
         });
@@ -125966,10 +125966,12 @@
         const tops = new Set(bs.map(b => Math.round(b.getBoundingClientRect().top)));
         if (tops.size !== 1) throw new Error('380: the tools sit on ' + tops.size + ' rows');
         if (Math.abs(say.getBoundingClientRect().height - h1) > 0.5) throw new Error('380: the row grew to ' + say.getBoundingClientRect().height + ' px');
-        const pins = tray.querySelector('.sm-pins');
-        if (!pins || !pins.querySelector('[data-tool="more"]') || !pins.querySelector('[data-tool="delete"]') || getComputedStyle(pins).position !== 'sticky') throw new Error('380: More and Delete are not pinned together at the right end');
-        if (tray.scrollWidth <= tray.clientWidth + 1) throw new Error('380: nine tools fit one phone row without scrolling — the control no longer measures the phone');
-        tray.scrollLeft = 0; await v.sleep(30);
+        /* SU1 #15: the pins sit BESIDE the scrolling tool strip at the tray's right end (they were sticky inside it, and the tools
+           slid under them), so "pinned at the right end" is the pair's own place, and the strip is what scrolls */
+        const pins = tray.querySelector('.sm-pins'), sc = tray.querySelector('.sm-run') || tray;
+        if (!pins || !pins.querySelector('[data-tool="more"]') || !pins.querySelector('[data-tool="delete"]') || Math.abs(pins.getBoundingClientRect().right - tray.getBoundingClientRect().right) > 1) throw new Error('380: More and Delete are not pinned together at the right end');
+        if (sc.scrollWidth <= sc.clientWidth + 1) throw new Error('380: nine tools fit one phone row without scrolling — the control no longer measures the phone');
+        sc.scrollLeft = 0; await v.sleep(30);
         ['length', 'more', 'delete'].forEach(id => { const r = smTool(id).getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
           if (!e || !smTool(id).contains(e)) throw new Error('380: ' + id + ' cannot be pressed'); });
         if (FM.spineWords.tools.bandHintSel !== 'Its tools are below · More opens the rest') throw new Error('380: the phone’s words changed: ' + FM.spineWords.tools.bandHintSel);
@@ -126054,9 +126056,9 @@
         if (rowsNow() !== 2 || words() !== SHORT) throw new Error('CONTROL: 1280×720 at its own band: ' + rowsNow() + ' row(s), “' + words() + '”');
         /* the divider dragged down to 192 (it writes --tl-h on <html>): one row, the rest off the edge — the words say More */
         root.style.setProperty('--tl-h', '192px'); await v.sleep(150);
-        const tray = document.getElementById('sm-tray');
-        if (rowsNow() !== 1 || tray.scrollWidth <= tray.clientWidth + 1) throw new Error('CONTROL: a band at 192 px did not keep one scrolling row (' + rowsNow() + ' row(s), ' + tray.scrollWidth + ' in ' + tray.clientWidth + ')');
-        if (words() !== LONG) throw new Error('a band dragged to 192 px: one row with ' + Math.round(tray.scrollWidth - tray.clientWidth) + ' px of tools off the edge, and the band says “' + words() + '”, want “' + LONG + '”');
+        const tray = document.getElementById('sm-tray'), sc = tray.querySelector('.sm-run') || tray;   // SU1 #15: one row scrolls in its tool strip
+        if (rowsNow() !== 1 || sc.scrollWidth <= sc.clientWidth + 1) throw new Error('CONTROL: a band at 192 px did not keep one scrolling row (' + rowsNow() + ' row(s), ' + sc.scrollWidth + ' in ' + sc.clientWidth + ')');
+        if (words() !== LONG) throw new Error('a band dragged to 192 px: one row with ' + Math.round(sc.scrollWidth - sc.clientWidth) + ' px of tools off the edge, and the band says “' + words() + '”, want “' + LONG + '”');
         /* …and back: the drag flips the rows, and the words with them, with no new selection */
         root.style.removeProperty('--tl-h'); await v.sleep(150);
         if (rowsNow() !== 2 || words() !== SHORT) throw new Error('the band back at its own height: ' + rowsNow() + ' row(s), “' + words() + '”, want two rows and “' + SHORT + '”');
@@ -127161,5 +127163,68 @@
         if (hint()) throw new Error('1280 px: a third press of More did not open the panel again');
       });
     }, 1280);
+  });
+
+  /* SU1 #15 (hunt/simple-firstuser, the PM's call 12 Oct): "Tray tools hidden under the pinned More / Delete. Lift off, Duplicate and
+     Crop sit under the pins (Lift off half-visible), Replace is off-screen, and there is no scroll cue." DESIGN §8.5's fade edge was
+     never built, and the pins were sticky INSIDE the scrolling tray. Measured the way he sees it: the strip is whatever element
+     holds Length (the tray itself on the old code, .sm-run now), and a tool is drawn under a pin when the part of it inside that
+     strip's box meets More's or Delete's box. Red on the old code twice over: the strip is the whole tray, so the tools at its right
+     lie under the pair, and no fade exists at the end where tools are hidden. CONTROL: the strip really overflows at 380 (a main
+     clip's eight tools beside the pins) and really scrolls to its end, so both findings are measured on a tray that scrolls; a
+     title's four tools are the tray that fits. */
+  test('SU1 #15 · at 380 the tray’s tools scroll in a strip that ends where More and Delete begin, with a fade on the edge that hides tools — the end, then the start once scrolled — and none on a tray that fits', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const meet = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
+    const inside = (r, s) => ({ left: Math.max(r.left, s.left), right: Math.min(r.right, s.right), top: Math.max(r.top, s.top), bottom: Math.min(r.bottom, s.bottom) });
+    const fadeAt = side => document.querySelector('#sm-tray .sm-fade-' + side);
+    const shown = f => !!f && parseFloat(getComputedStyle(f).opacity) > 0.9;
+    const pinBoxes = () => ['more', 'delete'].map(id => smTool(id).getBoundingClientRect());
+    const under = run => {   // the strip's own tools whose visible part meets a pin
+      const box = run.getBoundingClientRect(), pins = pinBoxes();
+      return Array.from(run.children).filter(c => c.classList.contains('sm-tool')).filter(b => {
+        const r = inside(b.getBoundingClientRect(), box);
+        return r.right - r.left > 0.5 && pins.some(p => meet(r, p));
+      }).map(b => b.dataset.tool);
+    };
+    const blocked = () => ['more', 'delete'].filter(id => { const b = smTool(id), r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !(e && b.contains(e)); });
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smT('Words', 0.5, 1, W, H), smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        FM.selectLayer(v.L('B').id); await v.idle(); await smSettle(200);
+        if (!smTool('length') || !smTool('more') || !smTool('delete')) throw new Error('CONTROL: a main clip’s tray has no Length, More or Delete: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool));
+        const run = smTool('length').parentElement, fails = [];
+        if (!(run.scrollWidth > run.clientWidth + 1)) throw new Error('CONTROL: a main clip’s tools fit 380 px (' + run.scrollWidth + ' in ' + run.clientWidth + '), so nothing here is hidden and this measures nothing');
+        run.scrollLeft = 0; await smSettle(150);
+        const u0 = under(run);
+        if (u0.length) fails.push('at the start ' + u0.join(', ') + ' lie under More / Delete');
+        if (!shown(fadeAt('e'))) fails.push('no fade at the end while ' + Math.round(run.scrollWidth - run.clientWidth) + ' px of tools are hidden there');
+        if (shown(fadeAt('s'))) fails.push('a fade at the start before anything is scrolled off it');
+        const fe = fadeAt('e');
+        if (fe) {
+          const r = fe.getBoundingClientRect(), b = run.getBoundingClientRect();
+          if (Math.abs(r.right - b.right) > 1 || r.width < 8) fails.push('the end fade is not on the strip’s end edge (' + Math.round(r.left) + '–' + Math.round(r.right) + ', strip ends at ' + Math.round(b.right) + ')');
+          if (pinBoxes().some(p => meet(r, p))) fails.push('the end fade lies over More / Delete');
+          if (getComputedStyle(fe).pointerEvents !== 'none') fails.push('the end fade takes taps');
+        }
+        if (blocked().length) fails.push('with the fade up, ' + blocked().join(' and ') + ' cannot be tapped');
+        const ta = getComputedStyle(run).touchAction;
+        if (!/pan-x|auto|manipulation/.test(ta)) fails.push('the strip does not pan sideways under a finger (touch-action ' + ta + ')');
+        /* at the end: the end fade goes, the start fade shows, and the last tools are clear of the pins */
+        run.scrollLeft = run.scrollWidth; await smSettle(150);
+        if (Math.abs(run.scrollLeft - (run.scrollWidth - run.clientWidth)) > 1) throw new Error('CONTROL: the strip did not scroll to its end (' + run.scrollLeft + ' of ' + (run.scrollWidth - run.clientWidth) + ') · ' + fails.join(' · '));
+        const u1 = under(run);
+        if (u1.length) fails.push('at the end ' + u1.join(', ') + ' lie under More / Delete');
+        if (shown(fadeAt('e'))) fails.push('the end fade stays once the strip is at its end');
+        if (!shown(fadeAt('s'))) fails.push('no fade at the start once tools are scrolled off it');
+        if (blocked().length) fails.push('scrolled to the end, ' + blocked().join(' and ') + ' cannot be tapped');
+        /* a tray that fits: a title's Edit words, Stay put, More, Delete — no fade at all */
+        FM.selectLayer(v.L('Words').id); await v.idle(); await smSettle(200);
+        if (!smTool('editwords')) throw new Error('CONTROL: the title’s tray is ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ' · ' + fails.join(' · '));
+        const run2 = smTool('editwords').parentElement;
+        if (run2.scrollWidth > run2.clientWidth + 1) throw new Error('CONTROL: a title’s tools do not fit 380 px (' + run2.scrollWidth + ' in ' + run2.clientWidth + ') · ' + fails.join(' · '));
+        if (shown(fadeAt('s')) || shown(fadeAt('e'))) fails.push('a fade on a title’s tray, where nothing is hidden');
+        if (fails.length) throw new Error('380 px: ' + fails.join(' · '));
+      });
+    }, 380);
   });
 })();
