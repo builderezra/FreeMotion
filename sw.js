@@ -77,12 +77,16 @@ async function pruneSuperseded(res, c) {
     } catch (_) {}
   }
   if (!live.size) return;                      // parsed nothing → touch nothing
+  /* THE TUTORIALS (#1082) are named by no HTML: js/tutorials.js fetches each lesson with the app's VERSION LABEL as
+     its ?v=, so they are judged against that label instead — a lesson cached by an older release is superseded. */
+  const label = (html.match(/>\s*v(\d+\.\d+)\s*<\/span>/) || [])[1] || null;
   let reqs;
   try { reqs = await c.keys(); } catch (_) { return; }
   await Promise.all(reqs.map((r) => {
     let u;
     try { u = new URL(r.url); } catch (_) { return null; }
     if (!isVersionedAsset(u)) return null;     // index-fallback and the stale marker are not assets
+    if (label && /\/tutorials\//.test(u.pathname)) return u.searchParams.get('v') === label ? null : c.delete(r);
     const want = live.get(u.pathname);
     if (want == null) return null;             // this page never mentions that path — not ours to judge
     return u.searchParams.get('v') === want ? null : c.delete(r);
