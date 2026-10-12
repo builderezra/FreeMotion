@@ -21,7 +21,7 @@ window.FM = window.FM || {};
     insp.insertBefore(grab, insp.firstChild);
 
     function open() { insp.classList.add('open'); btn.classList.add('on'); document.body.classList.add('insp-open'); }
-    function close() { insp.classList.remove('open'); btn.classList.remove('on'); document.body.classList.remove('insp-open'); }
+    function close() { insp.classList.remove('open', 'sm-sheet'); btn.classList.remove('on'); document.body.classList.remove('insp-open'); }   // sm-sheet: SU1 #5, see dockSheet
     function toggle() { insp.classList.contains('open') ? dismiss() : open(); }
 
     // ---------- the sheet's state is DERIVED from the selection, not set by one caller ----------
@@ -178,7 +178,10 @@ window.FM = window.FM || {};
 
     btn.addEventListener('click', toggle);
     grab.addEventListener('click', function () { if (insp._swiped) { insp._swiped = false; return; } dismiss(); });
-    makeSwipeDown(insp, grab, function () { if (isPhone() && document.body.classList.contains('m-editing')) FM.selectLayer(null); else dismiss(); }, function () { return insp; });
+    /* the pull-down only dismisses from the TOP of whatever scrolls: the sheet itself in Full, its body in Simple's docked sheet
+       (SU1 #5, sm-sheet — there the frame never scrolls, so asking it alone would close the sheet on every pull back up) */
+    makeSwipeDown(insp, grab, function () { if (isPhone() && document.body.classList.contains('m-editing')) FM.selectLayer(null); else dismiss(); },
+      function () { return (insp.classList.contains('sm-sheet') && document.getElementById('inspector')) || insp; });
 
     // Every rebuild of the panel re-derives the sheet's state. This is the hook that makes the rule
     // above universal: selectLayer, refreshAll, add-a-shape, paste, duplicate, split, group, undo —
@@ -275,6 +278,11 @@ window.FM = window.FM || {};
       /* SIMPLE MODE P1 (§14.2): in Simple the sheet docks under #sm-say, the row below the Simple timeline, so the sections,
          the clips, the sound and any line stay in view above it (Full docks under its one solo row, which Simple never shows). */
       const smDock = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.simpleTimeline && document.body.classList.contains('sm-has-sel') && (FM.selectionIds ? FM.selectionIds().length === 1 : true));
+      /* SU1 #5 (refers to #980): Simple's docked sheet scrolls its BODY (#inspector), not its frame — styles.css, the
+         `#inspector-panel.sm-sheet` block, says why. Marked here, where the sheet becomes Simple's, and taken off here for Full's
+         sheet and in close(). So on the way INTO Simple, when inspector.js's band keeps Full's sheet scroll (bandKept, queue 980),
+         the sheet is still laid out as Full's; and the CSS also asks for body.ed-simple, so it can never shape Full's sheet. */
+      insp.classList.toggle('sm-sheet', isPhone() && smDock);
       if (isPhone() && smDock) {
         const b = FM.simpleTimeline.dockBottom();
         if (b > 0) { insp.style.top = Math.min(Math.round(b + 4), window.innerHeight - 120) + 'px'; insp.style.maxHeight = 'none'; return; }   // Simple's stage clamp leaves ≥ 200 px here on a screen ≥ 694 px tall; below that its 180 px floor wins (168 px at 380×667)

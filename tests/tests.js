@@ -127439,4 +127439,93 @@
       }, { media: [{ name: 'Song', rec: smRec(8, 'song.mp3', { width: 0, height: 0 }) }, { name: 'Twin', rec: smRec(8, 'clip.mp4', { width: 320, height: 240 }) }, { name: 'A', rec: smRec(6, 'a.mp4', { width: 320, height: 240 }) }] });
     }, 380);
   });
+
+  /* ═══ SU1 #5 (hunt/simple-firstuser: walkthrough, r1, r2, x6 — 09c-more-scrolled.jpg, r2-03-more-panel-after-swipe.jpg) ═══
+     More's sheet, docked under Simple's tray at about 195 px with its third row of cards below the fold, did not scroll when the
+     gesture started on a card or between cards — a finger or a wheel — while a drag from its grab bar did, and the same swipe
+     scrolled a plain 195 px box. Only REAL input can see this (tests/_cdp.py __fmWantInput, as 924 and 976 use it): a WheelEvent
+     or a touch dispatched from script scrolls nothing in any browser. The scroll is read off the sheet AND its body together, so the
+     reading holds whichever of the two scrolls — the sheet on the old tree, its body under styles.css's SU1 #5 block.
+     CONTROL 1 (su1Sheet): the cards really run past the sheet's bottom, so there is something to scroll to.
+     CONTROL 2, the hunt's own (su1PlainBox): a plain scrolling box laid over the sheet's rect takes the same input at the same point
+     and scrolls, so a red is the sheet — not the driver, not the point.
+     RED-FIRST IS THE HUNT'S FINDING, NOT CONFIRMED HERE: on the old tree the card should stay put. These were written in a lane that
+     could not run a browser, so prove.sh's run against HEAD's source is the first real check — if the old tree scrolls too, the
+     hunt's reading did not reproduce under this Chrome and the CSS change has no proof yet. */
+  async function su1Sheet(v) {
+    const insp = document.getElementById('inspector-panel'), body = document.getElementById('inspector');
+    FM.selectLayer(v.L('A').id); await smSettle(150);
+    const more = smTool('more');
+    if (!more) throw new Error('setup: clip A’s tray has no More');
+    more.click(); await smSettle(350);
+    if (!insp.classList.contains('open')) throw new Error('setup: More did not raise the sheet');
+    const pr = insp.getBoundingClientRect();
+    const cards = Array.from(document.querySelectorAll('#inspector .cat-card'));
+    if (!cards.length) throw new Error('setup: More’s sheet shows no category cards');
+    const lastB = Math.max.apply(null, cards.map(c => c.getBoundingClientRect().bottom));
+    if (!(lastB > pr.bottom + 30)) throw new Error('CONTROL: the ' + Math.round(pr.height) + ' px sheet holds every card (the last ends at ' + Math.round(lastB) + ', the sheet at ' + Math.round(pr.bottom) + '), so there is nothing to scroll to and no gesture could prove anything');
+    const card = cards.find(c => { const r = c.getBoundingClientRect(); return r.height > 20 && r.top >= pr.top + 30 && r.bottom <= pr.bottom - 4; });
+    if (!card) throw new Error('setup: no card lies wholly inside the ' + Math.round(pr.height) + ' px sheet');
+    const label = (card.getAttribute('aria-label') || card.textContent || '').trim();
+    const r = card.getBoundingClientRect(), p = { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+    const hit = document.elementFromPoint(p.x, p.y);
+    if (!hit || !card.contains(hit)) throw new Error('setup: the middle of the ' + label + ' card hits ' + (hit ? (hit.id || String(hit.className) || hit.tagName) : 'nothing') + ', not the card');
+    return { insp: insp, body: body, pr: pr, card: card, p: p, label: label, scrolled: () => insp.scrollTop + body.scrollTop };
+  }
+  async function su1PlainBox(pr, send) {
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;left:' + pr.left + 'px;top:' + pr.top + 'px;width:' + pr.width + 'px;height:' + pr.height + 'px;overflow-y:auto;z-index:2147483000;background:#0b1622';
+    const tall = document.createElement('div'); tall.style.height = Math.round(pr.height * 3) + 'px'; box.appendChild(tall);
+    document.body.appendChild(box);
+    try { await smSettle(80); await send(); await smSettle(150); return box.scrollTop; }
+    finally { box.remove(); await smSettle(60); }
+  }
+  test('SU1 #5 · at 380 a real wheel over a card in More’s docked sheet scrolls the sheet, as it scrolls a plain box at the same spot', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await onScreen924(async function () {
+      await atPhoneWidth(async function () {
+        await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+          const s = await su1Sheet(v);
+          const wheel = [{ t: 'mouseMove', x: s.p.x, y: s.p.y, ms: 40 }, { t: 'wheel', x: s.p.x, y: s.p.y, dx: 0, dy: 120, ms: 500 }];
+          const ctl = await su1PlainBox(s.pr, () => realInput924(wheel, 'a wheel over a plain box at the card’s spot'));
+          if (!(ctl > 10)) throw new Error('CONTROL: a real wheel over a plain ' + Math.round(s.pr.height) + ' px box at the card’s spot scrolled it ' + ctl + ' px — the wheel is not reaching this point, so the sheet’s reading would mean nothing');
+          const before = s.scrolled();
+          await realInput924(wheel, 'a wheel over the ' + s.label + ' card in More’s sheet');
+          await smSettle(150);
+          const moved = s.scrolled() - before;
+          if (!(moved > 10)) throw new Error('a real wheel over the ' + s.label + ' card in More’s ' + Math.round(s.pr.height) + ' px sheet scrolled it ' + moved + ' px (sheet ' + s.insp.scrollTop + ', its body ' + s.body.scrollTop + '), where the plain box at the same spot scrolled ' + ctl + ' px');
+          if (!s.insp.classList.contains('open')) throw new Error('the wheel closed More’s sheet');
+        });
+      }, 380);
+    });
+  });
+  test('SU1 #5 · at 380 a real finger swiping up from a card in More’s docked sheet scrolls it, and a swipe back down scrolls it back without closing it, as on a plain box at the same spot', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    needsTouch924();   // NOT RUN HERE before anything changes, where this driver cannot give a real finger (tests/_touch_pass.py runs it)
+    const swipe = (p, dy) => { const st = [{ t: 'touchStart', x: p.x, y: p.y, ms: 50 }]; for (let k = 1; k <= 8; k++) st.push({ t: 'touchMove', x: p.x, y: Math.round(p.y + dy * k / 8), ms: 16 }); st.push({ t: 'touchEnd', x: p.x, y: Math.round(p.y + dy), ms: 0 }); return st; };
+    await onScreen924(async function () {
+      await atPhoneWidth(async function () {
+        await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+          const s = await su1Sheet(v);
+          try {
+            const ctl = await su1PlainBox(s.pr, () => realInput924(swipe(s.p, -112), 'a finger swiping up on a plain box at the card’s spot'));
+            if (!(ctl > 30)) throw new Error('CONTROL: a real finger swiping 112 px up on a plain ' + Math.round(s.pr.height) + ' px box at the card’s spot scrolled it ' + ctl + ' px — the finger is not reaching this point, so the sheet’s reading would mean nothing');
+            const before = s.scrolled();
+            await realInput924(swipe(s.p, -112), 'a finger swiping up from the ' + s.label + ' card in More’s sheet');
+            await smSettle(600);
+            const up = s.scrolled() - before;
+            if (!(up > 30)) throw new Error('a real finger swiping 112 px up from the ' + s.label + ' card in More’s ' + Math.round(s.pr.height) + ' px sheet scrolled it ' + up + ' px (sheet ' + s.insp.scrollTop + ', its body ' + s.body.scrollTop + '), where the plain box at the same spot scrolled ' + ctl + ' px');
+            if (!s.insp.classList.contains('open')) throw new Error('the swipe up closed More’s sheet');
+            /* back down from inside the scrolled sheet: the content comes back and the sheet stays up — the pull-down dismisses only
+               from the TOP of whatever scrolls (js/mobile.js, makeSwipeDown's scroll reader) */
+            const mid = s.scrolled();
+            await realInput924(swipe({ x: s.p.x, y: Math.round(s.pr.top + 50) }, 80), 'a finger swiping down inside the scrolled sheet');
+            await smSettle(600);
+            if (!s.insp.classList.contains('open')) throw new Error('a swipe down inside the scrolled sheet closed it, with ' + mid + ' px of content still above — the pull-down must dismiss only from the top');
+            if (!(s.scrolled() < mid - 10)) throw new Error('a swipe down inside the scrolled sheet did not scroll it back (' + mid + ' → ' + s.scrolled() + ' px)');
+          } finally { try { FM.contextMenu.hide(); } catch (e) {} }
+        });
+      }, 380);
+    });
+  });
 })();

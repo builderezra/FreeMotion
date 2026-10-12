@@ -11876,3 +11876,27 @@ body.sm-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
 #sm-timeline .sm-grip-tail::before { right: 0; }
 .sm-dragtip { position: fixed; z-index: 99990; transform: translateX(-50%); background: #111; color: #fff; font: 600 13px/1 system-ui, sans-serif; padding: 7px 10px; border-radius: 8px; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,.5); white-space: nowrap; }
 .sm-dragtip:empty { display: none; }
+
+/* ═══ SU1 #5 (refers to #980): MORE'S SHEET SCROLLS ITS BODY, NOT ITS FRAME — phone, Simple only ═══════════════════════════
+   hunt/simple-firstuser, 4 sessions at 380×800: docked under the tray the sheet is 195 px (Full's is 317), the third row of
+   cards and most of a category's controls are below the fold, and a swipe that starts on a card or between cards — or a wheel
+   over them — left its scrollTop at 0. Only a drag from the grab bar or the quick row scrolled it; the same swipe scrolled a
+   plain 195 px box in the same browser.
+   NOTHING ON THE CARDS' PATH CANCELS A SCROLL, read line by line (the hunt's candidates): no touch-action on .cat-card,
+   .cat-grid, .cat-wrap or #inspector; no wheel or touch listener on them or the sheet (the only document-level touchmove that
+   cancels is js/simple-timeline.js's, and only while a Simple drag is live); the 480 ms Reset hold (js/inspector.js
+   categoryGrid) and the pull-down (js/mobile.js makeSwipeDown) never cancel a pan; and the scroller does overflow (it scrolls
+   from the grab bar). What sets this sheet apart from the box that scrolled is the scroller itself: the sheet's FRAME is it
+   (`.panel { overflow-y: auto }` above, on the `#inspector-panel` the phone block makes position: fixed, transformed, rounded
+   and shadowed), with a sticky grab bar inside it. That is a difference of structure, not a measured cause — no browser could
+   be run when this was written — so the proof is the two real-input tests (tests/tests.js, SU1 #5: a real wheel, and a real
+   finger where the driver can give one), each with the hunt's own control, a plain box at the same spot that does scroll.
+   The change, as PC's band already does (queue 804) and the easing view (.insp-ease): the frame is a flex column that does
+   not scroll, the grab bar sits above, and #inspector is an ordinary in-flow scroller between them — the shape of the box that
+   scrolled. js/mobile.js puts .sm-sheet on only while Simple's sheet is docked (dockSheet) and the pull-down reads #inspector's
+   scroll then. Full never matches (body.ed-simple), so its sheet is exactly today's (DESIGN §0.4). */
+@media (max-width: 700px) {
+  body.ed-simple #inspector-panel.sm-sheet { display: flex; flex-direction: column; overflow: hidden; }
+  body.ed-simple #inspector-panel.sm-sheet > #insp-grab, body.ed-simple #inspector-panel.sm-sheet > .panel-title { flex: none; }
+  body.ed-simple #inspector-panel.sm-sheet > #inspector { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
