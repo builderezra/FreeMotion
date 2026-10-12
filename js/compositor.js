@@ -6741,11 +6741,14 @@ window.FM = window.FM || {};
       var moGap=p.gap==null?0:FM.evalProp(p.gap,t); if(moGap<0)moGap=0; if(moGap>50)moGap=50;
       var moCen=(p.sample==null?0:(Math.round(FM.evalProp(p.sample,t))|0))===1;
       var moBsY=moAsp===100?moBs:Math.max(2,Math.round(moBs*(moAsp/100)));
-      var moIn=moGap===0?0:Math.round(moBs*(moGap/100)*0.5); for(var moBy=0;moBy<H;moBy+=moBsY){ var moY1=Math.min(moBy+moBsY,H); for(var moBx=0;moBx<W;moBx+=moBs){ var moX1=Math.min(moBx+moBs,W),moSr=0,moSg=0,moSb=0,moSa=0,moN=0; for(var moY=moBy;moY<moY1;moY++){ var moRow=moY*moW4; for(var moX=moBx;moX<moX1;moX++){ var moI=moRow+moX*4; moSr+=moS[moI]; moSg+=moS[moI+1]; moSb+=moS[moI+2]; moSa+=moS[moI+3]; moN++; } } if(moN===0)continue;
+      var moIn=moGap===0?0:Math.round(moBs*(moGap/100)*0.5); for(var moBy=0;moBy<H;moBy+=moBsY){ var moY1=Math.min(moBy+moBsY,H); for(var moBx=0;moBx<W;moBx+=moBs){ var moX1=Math.min(moBx+moBs,W),moSr=0,moSg=0,moSb=0,moSa=0,moN=0; /* #1056 (his answer 11 Oct: "FIX it. Old projects changing is fine"): the colour is an ALPHA-WEIGHTED mean — a see-through
+    pixel's colour (usually black) is not a colour anyone sees, and averaging it in gave every cutout's edge tiles a dark fringe */
+ for(var moY=moBy;moY<moY1;moY++){ var moRow=moY*moW4; for(var moX=moBx;moX<moX1;moX++){ var moI=moRow+moX*4, moA=moS[moI+3]; moSr+=moS[moI]*moA; moSg+=moS[moI+1]*moA; moSb+=moS[moI+2]*moA; moSa+=moA; moN++; } } if(moN===0)continue;
         var moAr,moAg,moAb,moAa;
         if(moCen){ var moCx=Math.min(W-1,moBx+((moX1-moBx)>>1)), moCy=Math.min(H-1,moBy+((moY1-moBy)>>1)), moC=(moCy*W+moCx)*4;
           moAr=moS[moC]; moAg=moS[moC+1]; moAb=moS[moC+2]; moAa=moS[moC+3]; }
-        else { moAr=moSr/moN; moAg=moSg/moN; moAb=moSb/moN; moAa=moSa/moN; }
+        else if(moSa>0){ moAr=moSr/moSa; moAg=moSg/moSa; moAb=moSb/moSa; moAa=moSa/moN; }
+        else { moAr=0; moAg=0; moAb=0; moAa=0; }   // a fully see-through block stays fully see-through
         var moY0=moBy+moIn, moYe=moY1-moIn, moX0=moBx+moIn, moXe=moX1-moIn;   // gap: leave a margin untouched
         for(var moY2=moY0;moY2<moYe;moY2++){ var moRow2=moY2*moW4; for(var moX2=moX0;moX2<moXe;moX2++){ var moJ=moRow2+moX2*4; d[moJ]=moAr; d[moJ+1]=moAg; d[moJ+2]=moAb; d[moJ+3]=moAa; } } } } },
     /* ⚠️ `bb` off `arguments` — `radius` is `unit: 'px'`, so naming the parameters would push this past
