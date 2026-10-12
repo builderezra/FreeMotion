@@ -45,7 +45,19 @@ window.FM = window.FM || {};
      sanitiser now puts `layer.sm`, `project.sm`, an effect's `sm` marker and the plain helper fields (srcW/srcH/srcRev, pick) in
      canonical form. A rev-7 build keeps them untouched, so the two would normalise one project to two documents; the fixture
      below carries each, and SM_V is hashed in. */
-  C.SCHEMA_REV = 9;
+  /* 9 was E1's six new effect types (the note on SCHEMA_FP below).
+     Bumped to 10 by #482 polish batches 7, 8 and 10–15 (#966 for the sound), landed together as fx-all. Every one of them
+     gave effects or audio effects new controls, so an older build's sanitiser would drop keys this one keeps — the same
+     reason batches 1–6 each bumped it. The sound (7, 8): Mix and Output on every audio effect, Shape, Slope, Stages, Voices,
+     Tempo sync and the rest; and the AUDIO tuple in the fingerprint now carries `legacy` (7.1: a control that declares one
+     opens a project saved before it at that value, so two builds whose legacy differ open the same old project differently).
+     The picture: Edges and Smooth sampling on every warp (10), the generators (11), keying, wipes, text, Border Frame, Find
+     Edges and Emboss (12), Stylize (13), the blurs, Backfill, repetition, 3D solids and Card Flip (14), and the Filter,
+     Levels, Match Grade and Gaussian Blur (15).
+     ⚠️ hunt/fix-land-b3 ALSO claims 9 (8 → 9 for Unsharp Mask's Protect colour, pinned 1932349802248846) on a tree that has
+     neither E1 nor these batches. Whichever of it and this lands second must RE-MEASURE SCHEMA_FP on the combined tree —
+     neither number is right for both. */
+  C.SCHEMA_REV = 10;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -256,7 +268,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 5698315735221935;   // E1 (SCHEMA_REV 9): six new effect types (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art); before: Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate`, re-checked on step 1.2 alone   ⚠️ RE-PIN ON THE LANDING TREE (measured on E1's own tree)
+  C.SCHEMA_FP = 4775724801447341;   // fx-all (SCHEMA_REV 10): the effect and audio controls of #482 polish batches 7, 8 and 10–15 (#966 / #482), and the audio tuple's new `legacy` — measured 13 Oct in node on fx-all's own tree (the app's collab-core, storage and registries in a vm; the same harness gives main's 8673617696742561, E1's own 5698315735221935 and fix-land-b3's 1932349802248846 exactly); before: E1 (SCHEMA_REV 9) 5698315735221935, measured on E1's own tree and never re-pinned on e1-land, where it was already stale (land-b3's Unsharp Protect colour, #1116's Soften Skin defaults: e1-land measures 4766772843632923)   ⚠️ hunt/fix-land-b3 also claims SCHEMA_REV 9 (1932349802248846): whichever lands second RE-MEASURES on the combined tree
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *
