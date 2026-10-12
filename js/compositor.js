@@ -90,7 +90,10 @@ window.FM = window.FM || {};
     { type: 'lumakey', label: 'Luma Key', params: [
       { key: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.02, def: 0.25 },
       { key: 'softness', label: 'Edge softness', min: 0, max: 128, step: 1, def: 28 },
-      { key: 'mode', label: 'Removes', def: 0, options: [[0, 'Dark'], [1, 'Bright']] },
+      /* #482 12.2 — Similar removes the brightness AT the threshold (a grey card, a mid-tone backdrop) and keeps both ends;
+         Dissimilar keeps only that band. Tolerance is the band's half-width; Edge softness ramps outside it as before. */
+      { key: 'mode', label: 'Removes', def: 0, options: [[0, 'Dark'], [1, 'Bright'], [2, 'Similar'], [3, 'Dissimilar']] },
+      { key: 'tolerance', label: 'Tolerance', min: 0, max: 0.5, step: 0.01, def: 0.1, overriddenBy: 'mode', liveWhen: [2, 3] },
     ] },
     { type: 'rgbsplit', label: 'RGB Split', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
@@ -281,12 +284,20 @@ window.FM = window.FM || {};
          black-on-white whatever `polarity` says, because the other reading multiplies a picture by its
          own edge map and returns a mostly black frame. */
       { key: 'blend', label: 'Draw as', def: 0, options: [[0, 'Replace the picture'], [1, 'Ink over the picture']] },
+      /* #482 12.6 — Line width in project px (hunt C60 carried on: the same width on a reduced preview as in the export), the
+         two tones of the line map (Lines picks which one the lines are), and lines in the picture's own colours. White,
+         black, 1 px and Off are the old lines. */
+      { key: 'width', label: 'Line width', min: 1, max: 8, step: 0.5, def: 1, unit: 'px' },
+      { key: 'light', label: 'Light colour', swatch: true, def: '#ffffff' },
+      { key: 'dark', label: 'Dark colour', swatch: true, def: '#000000' },
+      { key: 'colour', label: 'Colour edges', def: 0, options: [[0, 'Off'], [1, 'On']], overriddenBy: 'blend', liveWhen: 0 },
     ] },
     { type: 'emboss', label: 'Emboss', params: [
       { key: 'amount', label: 'Depth', min: 0, max: 18, step: 0.05, def: 1 },
       { key: 'angle', label: 'Light angle', min: 0, max: 360, step: 1, def: 135, unit: '°' },
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Grey']] },
       { key: 'blend', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'relief', label: 'Height', min: 1, max: 10, step: 0.5, def: 1, unit: 'px' },   // #482 12.7 (hunt C60 carried on): the relief's reach in project px; 1 = the old 3x3
     ] },
     /* #482 5.8 — GAMMA and WORK IN. Exposure multiplied the sRGB bytes, so +1 stop sent mid-grey 128 to 255 — a camera sends
        it to 176, because light doubles in LINEAR terms. Linear light decodes, multiplies and encodes again; sRGB (the default)
@@ -743,8 +754,11 @@ window.FM = window.FM || {};
        The MAX is deliberately untouched: the entry warns not to just halve it, and a range change would
        silently re-render every project that already uses these. A step change cannot — every value the
        old step could hold is still exactly representable. */
-    { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the edge was a hard 1-bit cut
-    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
+    { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] }] },   // queue 904: the edge was a hard 1-bit cut   // fit, invert: #482 12.3 (hunt C36)
+    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'dir', label: 'Direction', def: 0, options: [[0, 'Clockwise'], [1, 'Anticlockwise'], [2, 'Both ways']] }, { key: 'blades', label: 'Blades', min: 1, max: 12, step: 1, def: 1 },
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] }] },   // dir, blades, fit, invert: #482 12.3 (hunt C36)   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -961,8 +975,14 @@ window.FM = window.FM || {};
       { key: 'unit', label: 'Reveal by', def: 0, options: [[0, 'Letter'], [1, 'Word'], [2, 'Line']] },
       { key: 'dir', label: 'From', def: 0, options: [[0, 'Start'], [1, 'End'], [2, 'Middle']] },
       { key: 'cursor', label: 'Caret', def: 0, options: [[0, 'None'], [1, '/'], [2, '_'], [3, '\u258c']] },
+      /* #482 12.4 \u2014 a typewriter's caret blinks, and usually sits there before the typing starts and after it ends. Blink 0 is
+         the steady caret it has always drawn; Caret when idle: Hide is today's caret, shown only mid-way. (A short label: a
+         segment row's label column is narrow on the phone.) */
+      { key: 'blink', label: 'Caret blink', min: 0, max: 6, step: 0.5, def: 0, unit: 'Hz', overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
+      { key: 'hidecaret', label: 'Caret when idle', def: 1, options: [[0, 'Show'], [1, 'Hide']], overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
     ] },
-    { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }, { key: 'chars', label: 'Scrambles into', def: 1, legacy: 0, options: [[0, 'Any'], [1, 'Match'], [2, 'Digits'], [3, 'Letters']] }] },   // queue 904: the alphabet was one hardcoded CAPS+symbols string
+    { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }, { key: 'chars', label: 'Scrambles into', def: 1, legacy: 0, options: [[0, 'Any'], [1, 'Match'], [2, 'Digits'], [3, 'Letters']] },
+      { key: 'order', label: 'Resolves', def: 0, options: [[0, 'Left to right'], [1, 'Right to left'], [2, 'Random'], [3, 'Centre out']] }] },   // queue 904: the alphabet was one hardcoded CAPS+symbols string   // order: #482 12.4
     /* WORD SPACING AND LINE HEIGHT were named as "still open from that same request" in the oldest
        entry in REQUESTS.md and then left, because they are a LAYOUT change rather than a slider and I
        did not want to bolt them on badly. They are here now.
@@ -992,7 +1012,9 @@ window.FM = window.FM || {};
     ] },
     { type: 'texttransform', label: 'Change Case', /* queue 904: was 'Per-Letter Motion', which promised animation it never does — it converts case */ param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
     { type: 'timecode', label: 'Timecode', params: [
-      { key: 'mode', label: 'Format', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds']] },
+      // #482 12.4: HH:MM:SS:FF (broadcast), Frames (a frame counter) and MM:SS (minutes not wrapped at the hour) join the list
+      { key: 'mode', label: 'Format', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds'], [4, 'HH:MM:SS:FF'], [5, 'Frames'], [6, 'MM:SS']] },
+      { key: 'decimals', label: 'Decimals', min: 0, max: 3, step: 1, def: 1, overriddenBy: 'mode', liveWhen: 3 },   // #482 12.4: Seconds was always one decimal
       { key: 'offset', label: 'Start at', min: 0, max: 3600, step: 1, def: 0, unit: 's' },
       { key: 'dir', label: 'Counts', def: 0, options: [[0, 'Up'], [1, 'Down']] },
       { key: 'source', label: 'Reads', def: 0, options: [[0, 'Clip time'], [1, 'Timeline time']] },
@@ -1067,6 +1089,13 @@ window.FM = window.FM || {};
       { key: 'inset', label: 'Inset', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'radius', label: 'Corner radius', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'opacity', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #482 12.5 — a dashed or dotted frame, a frame that draws itself on (keyframe Draw on 0 → 100), and anti-aliased round
+         corners. Solid, 100 % and Off are the old frame, drawn by the old loops. The kernel scales Dash and Gap by ps itself. */
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Solid'], [1, 'Dashed'], [2, 'Dotted']] },
+      { key: 'dash', label: 'Dash length', min: 2, max: 200, step: 1, def: 20, unit: 'px', overriddenBy: 'style', liveWhen: 1 },
+      { key: 'gap', label: 'Gap', min: 2, max: 200, step: 1, def: 10, unit: 'px', overriddenBy: 'style', liveWhen: [1, 2] },
+      { key: 'progress', label: 'Draw on', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'smooth', label: 'Smooth corners', def: 0, options: [[0, 'Off'], [1, 'On']] },
     ] },
     // ---- batch 21 ----
     { type: 'faded', label: 'Faded Film', params: [
@@ -1568,9 +1597,17 @@ window.FM = window.FM || {};
     { type: 'chromakeypro', label: 'Chroma Key Pro', desc: 'A green screen key that survives uneven lighting: it measures colour only and ignores brightness, so a shadowed corner keys like a lit one. Despill removes the green rim.', params: [
       { key: 'tolerance', label: 'Tolerance', min: 0.02, max: 1, step: 0.02, def: 0.3 },
       { key: 'softness', label: 'Edge softness', min: 0, max: 1, step: 0.02, def: 0.28 },
+      /* #482 12.1 — the matte tools every keyer has. Clip black / Clip white are levels on the matte (a half-keyed shadow
+         goes fully clear, a see-through shirt goes fully solid); Shrink / grow chokes or spreads it in project px. All three
+         at their defaults leave the matte as it was, and the kernel skips them there. */
+      { key: 'clipblack', label: 'Clip black', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'clipwhite', label: 'Clip white', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'shrink', label: 'Shrink / grow', min: -10, max: 10, step: 1, def: 0, unit: 'px' },
       { key: 'despill', label: 'Despill', min: 0, max: 1, step: 0.02, def: 0.7 },
+      // #482 12.1: which channel Despill pulls. Key colour is what it has done since queue 986 (hunt C3), so it is the default.
+      { key: 'spillfrom', label: 'Despill from', def: 0, options: [[0, 'Key colour'], [1, 'Green'], [2, 'Blue']] },
       { key: 'edgedesat', label: 'Edge desaturate', min: 0, max: 1, step: 0.02, def: 0.35 },
-      { key: 'view', label: 'View', options: [[0, 'Result'], [1, 'Matte']], def: 0 },
+      { key: 'view', label: 'View', options: [[0, 'Result'], [1, 'Matte'], [2, 'On grey']], def: 0 },   // On grey: #482 12.1
     ], color: true, defColor: '#00c23c', colorLabel: 'Key colour' },
     // ---- batch 35: Light Wrap — the shot that makes a key look composited rather than pasted ----
     // Every glow here blooms the layer's OWN pixels. This one reads the layers underneath and wraps
@@ -1710,7 +1747,9 @@ window.FM = window.FM || {};
   // recompute when the source frame and params are unchanged (static images, paused/scrub
   // redraws, repeated renders of one frame). Stats exposed for verification.
   FM._chromaKey = function (src, w, h, keyHex, tol, filterStr, soft, spill, slot) { return chromaKey(src, w, h, keyHex, tol, filterStr, soft, spill, slot); };   // suite seam (queue 734; slot: queue 986)
-  FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode, slot) { return lumaKey(src, w, h, threshold, filterStr, soft, mode, slot); };   // suite seam (queue 735; slot: queue 986)
+  FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode, slot, tol) { return lumaKey(src, w, h, threshold, filterStr, soft, mode, slot, tol); };   // suite seam (queue 735; slot: queue 986; tol: #482 12.2)
+  // #482 12.2: the key's per-pixel loop on a bare buffer, with lumaKey's own argument rules — the canvas is only its carrier.
+  FM._lumaKeyPx = function (d, threshold, soft, mode, tol) { const a = lumaKeyArgs(soft, mode, tol); lumaKeyPx(d, (threshold == null ? 0.25 : threshold) * 255, a[0], a[1], a[2] * 255); return d; };
   FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them)
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
   // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
@@ -1779,12 +1818,19 @@ window.FM = window.FM || {};
   // Key out by luminance → transparency (removes dark/black areas below threshold). One canvas + memo per SLOT, as chromaKey.
   const _lkCanvases = [], _lkLasts = [];
   // SOFT and MODE join the cache key for the same reason chromaKey's softness does.
-  function lumaKey(src, w, h, threshold, filterStr, soft, mode, slot) {
-    const tok = srcToken(src);
+  /* [soft, mode, tol] as the key reads them. TOLERANCE (#482 12.2) only means something under Similar / Dissimilar; under Dark
+     and Bright it is normalised to 0, so dragging it there is not a recompute. */
+  function lumaKeyArgs(soft, mode, tol) {
     soft = soft == null ? 28 : soft; mode = mode || 0;
     if (soft <= 0) soft = 0.0001;   // a zero-wide ramp would divide by zero — normalised BEFORE the memo compare (queue 735: the stored 0.0001 never equalled an incoming 0, so Softness 0 recomputed every redraw)
+    tol = (mode === 2 || mode === 3) ? (tol == null ? 0.1 : (tol < 0 ? 0 : (tol > 0.5 ? 0.5 : tol))) : 0;
+    return [soft, mode, tol];
+  }
+  function lumaKey(src, w, h, threshold, filterStr, soft, mode, slot, tol) {
+    const tok = srcToken(src);
+    const la = lumaKeyArgs(soft, mode, tol); soft = la[0]; mode = la[1]; tol = la[2];
     const sl = slot > 0 ? slot | 0 : 0, _lkLast = _lkLasts[sl];
-    if (_lkLast && _lkCanvases[sl] && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode) return _lkCanvases[sl];
+    if (_lkLast && _lkCanvases[sl] && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode && _lkLast.tol === tol) return _lkCanvases[sl];
     if (!_lkCanvases[sl]) _lkCanvases[sl] = document.createElement('canvas');
     const oc = _lkCanvases[sl]; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
@@ -1796,10 +1842,18 @@ window.FM = window.FM || {};
     try { img = octx.getImageData(0, 0, w, h); } catch (e) { return src; }  // tainted-canvas guard
     const d = img.data;
     const t = (threshold == null ? 0.25 : threshold) * 255;
-    // SOFTNESS was welded to 28 luma units, which is a hard edge on a smoke or glow plate — those need
-    // a wide ramp to hand over gradually instead of terminating on a line. MODE was the bigger gap:
-    // the key could only ever remove the DARK end, so a subject shot against WHITE could not be keyed
-    // at all, however the threshold was set. Removing the bright end is the same ramp, mirrored.
+    lumaKeyPx(d, t, soft, mode, tol * 255);
+    octx.putImageData(img, 0, 0);
+    _lkLasts[sl] = { tok, w, h, thr: threshold, filter: filterStr, soft, mode, tol }; FM._fxStats.lkCompute++;
+    oc._fmGen = ++_gen;
+    return oc;
+  }
+  // SOFTNESS was welded to 28 luma units, which is a hard edge on a smoke or glow plate — those need
+  // a wide ramp to hand over gradually instead of terminating on a line. MODE was the bigger gap:
+  // the key could only ever remove the DARK end, so a subject shot against WHITE could not be keyed
+  // at all, however the threshold was set. Removing the bright end is the same ramp, mirrored.
+  // (#482 12.2: the loop moved out of lumaKey unchanged, so FM._lumaKeyPx can run it without a canvas.)
+  function lumaKeyPx(d, t, soft, mode, tol) {
     for (let i = 0; i < d.length; i += 4) {
       const luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
       if (mode === 1) {
@@ -1807,13 +1861,18 @@ window.FM = window.FM || {};
         else if (luma > t - soft) d[i + 3] = Math.round(d[i + 3] * (t - luma) / soft);
         continue;
       }
+      /* SIMILAR / DISSIMILAR (#482 12.2) measure how far the brightness is from the threshold, either way. Similar removes
+         within Tolerance and ramps back in over the softness; Dissimilar is the same band kept and everything else removed. */
+      if (mode === 2 || mode === 3) {
+        const e = luma > t ? luma - t : t - luma;
+        if (mode === 2) { if (e <= tol) d[i + 3] = 0; else if (e < tol + soft) d[i + 3] = Math.round(d[i + 3] * (e - tol) / soft); }
+        else if (e >= tol + soft) d[i + 3] = 0;
+        else if (e > tol) d[i + 3] = Math.round(d[i + 3] * (tol + soft - e) / soft);
+        continue;
+      }
       if (luma <= t) d[i + 3] = 0;
       else if (luma < t + soft) d[i + 3] = Math.round(d[i + 3] * (luma - t) / soft);
     }
-    octx.putImageData(img, 0, 0);
-    _lkLasts[sl] = { tok, w, h, thr: threshold, filter: filterStr, soft, mode }; FM._fxStats.lkCompute++;
-    oc._fmGen = ++_gen;
-    return oc;
   }
 
   // Lift / Gamma / Gain color grading via a 256-entry LUT: out = gain * in^(1/gamma) + lift.
@@ -2655,7 +2714,7 @@ window.FM = window.FM || {};
         st.text = m ? src.slice(0, m.index) + num + src.slice(m.index + m[0].length) : num; return; }   // no number in the layer's text to keep a place for: the number is the text, as before
       st.text = num;
     },
-    textprogress: function (st, p, t) {
+    textprogress: function (st, p, t, info) {   // info: the clip clock for Caret blink (#482 12.4)
       var pr = clamp01(fparam(p, 'progress', 0.5, t));
       // A typewriter that could only run left-to-right one code unit at a time, with no caret.
       // UNIT matters most: a caption revealed character by character flickers half-words on screen,
@@ -2665,6 +2724,20 @@ window.FM = window.FM || {};
       var unit = p.unit == null ? 0 : (Math.round(FM.evalProp(p.unit, t)) | 0);
       var cur = p.cursor == null ? 0 : (Math.round(FM.evalProp(p.cursor, t)) | 0);
       if (dir === 0 && unit === 0 && cur === 0) { st.text = st.text.slice(0, Math.round(st.text.length * pr)); return; }
+      /* BLINK and CARET WHEN IDLE (#482 12.4). Blink counts on the clip's own clock, so the caret is lit on the clip's first
+         frame: on for the first half of each beat, off for the second. Hide (the default, and what a saved Type-On draws)
+         keeps the caret to the mid-way frames; Show leaves it standing before the first letter and after the last, as a real
+         typewriter's does. */
+      var bk = p.blink == null ? 0 : FM.evalProp(p.blink, t); if (!(bk > 0)) bk = 0; if (bk > 6) bk = 6;
+      var hideCur = (p.hidecaret == null ? 1 : (Math.round(FM.evalProp(p.hidecaret, t)) | 0)) !== 0;
+      /* A DARK CARET IS STILL LAID OUT (#482 12.4 review). Taking it out of the string on the off beat moved centred and
+         right-aligned text by half a caret, and the layer's box with it, every beat. So it stays in the string — wrapping,
+         measuring and centring see the same text on both beats — and `st.ghost` tells the painter to leave that one glyph
+         unpainted (paintGhost and its callers). Blink 0 never sets it: the text is the old text and nothing else changes. */
+      var dark = false;
+      if (cur && bk > 0) { var blt = (info && info.localT != null) ? info.localT : t; dark = Math.floor(blt * bk * 2) % 2 !== 0; }
+      var glyph = !cur ? '' : (cur === 1 ? '/' : (cur === 2 ? '_' : '▌'));
+      if (dark) st.ghost = { at: dir === 1 ? 'start' : 'end', ch: glyph };   // dropped again below wherever no caret is written
       var src = st.text, toks, keep;
       if (unit === 2) toks = src.split('\n');
       else if (unit === 1) toks = src.match(/\s+|\S+/g) || [];
@@ -2675,17 +2748,14 @@ window.FM = window.FM || {};
       if (unit === 1) { for (var i = 0; i < toks.length; i++) if (/\S/.test(toks[i])) idx.push(i); }
       else { for (var j = 0; j < toks.length; j++) idx.push(j); }
       var total = idx.length, n = Math.round(total * pr);
-      if (n <= 0) { st.text = ''; return; }
-      if (n >= total) { st.text = src; return; }
+      if (n <= 0) { st.text = hideCur ? '' : glyph; if (hideCur) delete st.ghost; return; }
+      if (n >= total) { st.text = hideCur ? src : (dir === 1 ? glyph + src : src + glyph); if (hideCur) delete st.ghost; return; }
       var lo, hi;                                        // inclusive token-array bounds
       if (dir === 1) { lo = idx[total - n]; hi = toks.length - 1; }
       else if (dir === 2) { var st0 = Math.floor((total - n) / 2); lo = idx[st0]; hi = idx[st0 + n - 1]; }
       else { lo = 0; hi = idx[n - 1]; }
       keep = toks.slice(lo, hi + 1).join(unit === 2 ? '\n' : '');
-      if (cur) {
-        var glyph = cur === 1 ? '/' : (cur === 2 ? '_' : '\u258c');
-        keep = dir === 1 ? glyph + keep : keep + glyph;
-      }
+      if (glyph) keep = dir === 1 ? glyph + keep : keep + glyph;
       st.text = keep;
     },
     textrandomizer: function (st, p, t) {
@@ -2701,9 +2771,21 @@ window.FM = window.FM || {};
         : Math.floor(t * spd);
       var s = st.text, n = Math.floor(s.length * pr), out = '';
       var mode = p.chars == null ? 0 : (Math.round(FM.evalProp(p.chars, t)) | 0);
+      /* RESOLVES (#482 12.4): the order the letters settle in. Left to right is i < n, as it always was. The others rank
+         every position — Right to left from the end, Centre out by distance from the middle (left first on a tie), Random by
+         a fixed hash of the position, so the same letters settle at the same progress on every frame and in the export. */
+      var ord = p.order == null ? 0 : (Math.round(FM.evalProp(p.order, t)) | 0), rank = null;
+      if (ord >= 1 && ord <= 3) {
+        var L = s.length, pos = [];
+        for (var q = 0; q < L; q++) pos.push(q);
+        if (ord === 1) pos.reverse();
+        else if (ord === 3) pos.sort(function (a, b) { var da = Math.abs(a - (L - 1) / 2), db = Math.abs(b - (L - 1) / 2); return da - db || a - b; });
+        else { var hk = function (k) { var h = (k * 2246822519 + 3266489917) >>> 0; h = Math.imul(h ^ (h >>> 15), 2654435761) >>> 0; return (h ^ (h >>> 13)) >>> 0; }; pos.sort(function (a, b) { return hk(a) - hk(b) || a - b; }); }
+        rank = new Array(L); for (var r = 0; r < L; r++) rank[pos[r]] = r;
+      }
       for (var i = 0; i < s.length; i++) {
         var c = s[i];
-        if (i < n || c === ' ' || c === '\n' || c === '\t') { out += c; }
+        if ((rank ? rank[i] < n : i < n) || c === ' ' || c === '\n' || c === '\t') { out += c; }
         else { var h = (i * 2654435761 + frame * 40503) >>> 0; h = (h ^ (h >>> 13)) >>> 0;
           /* WHAT IT SCRAMBLES INTO (queue 904). 'Anything' is the old CAPS + digits + symbols set and is what a saved Scramble with no
              key draws, character for character. 'Match the text' keeps each character's kind — lowercase stays lowercase, a digit
@@ -2810,7 +2892,16 @@ window.FM = window.FM || {};
       if (m === 0) st.text = tpad(mm) + ':' + tpad(ss) + ':' + tpad(ff);
       else if (m === 1) st.text = tpad(hh) + ':' + tpad(mm) + ':' + tpad(ss);
       else if (m === 2) st.text = tpad(ss) + ':' + tpad(ff);
-      else st.text = lt.toFixed(1) + 's';
+      /* #482 12.4: HH:MM:SS:FF is the broadcast timecode; Frames counts every frame from zero; MM:SS keeps counting minutes past
+         the hour (62:05), because it has no hours field to carry them into. */
+      else if (m === 4) st.text = tpad(hh) + ':' + tpad(mm) + ':' + tpad(ss) + ':' + tpad(ff);
+      else if (m === 5) st.text = String(Math.floor(lt * fps));
+      else if (m === 6) st.text = tpad(Math.floor(totalS / 60)) + ':' + tpad(ss);
+      else {
+        // DECIMALS (#482 12.4) on Seconds, which was always one decimal
+        var dec = p.decimals == null ? 1 : Math.round(FM.evalProp(p.decimals, t)); if (!(dec >= 0)) dec = 0; if (dec > 3) dec = 3;
+        st.text = lt.toFixed(dec) + 's';
+      }
     },
   };
   // Own keys only — see POSTFX. This table was MISSED when the other four were cut off, and it is the
@@ -2839,7 +2930,13 @@ window.FM = window.FM || {};
     var fx = layer && layer.effects;
     if (fx && fx.length) {
       var info = { localT: FM.fxLocalTime(layer, t), fps: (scene && scene.project && scene.project.fps) || 30 };   // _clipStart: a flattened group's proxy start is synthetic (t-1)
-      for (var i = 0; i < fx.length; i++) { var e = fx[i]; if (e.enabled === false) continue; var fn = TEXT_FX[e.type]; if (fn) fn(st, e.params || {}, t, info); }
+      for (var i = 0; i < fx.length; i++) { var e = fx[i]; if (e.enabled === false) continue; var fn = TEXT_FX[e.type]; if (!fn) continue;
+        /* A dark caret (st.ghost, #482 12.4 review) names a glyph at one end of the string; an effect further down the stack
+           that rewrites the string and no longer leaves it there has moved or removed it, so the mark is dropped and nothing
+           is left unpainted (Change Case keeps it; Text Reverse does not). */
+        var g0 = st.ghost, s0 = st.text;
+        fn(st, e.params || {}, t, info);
+        if (g0 && st.ghost === g0 && st.text !== s0 && (g0.at === 'end' ? st.text.slice(-1) : st.text.charAt(0)) !== g0.ch) delete st.ghost; }
     }
     return st;
   };
@@ -2980,6 +3077,27 @@ window.FM = window.FM || {};
     const a = ctx.globalAlpha;
     ctx.globalAlpha = a * fa; ctx.fillText(str, x, y); ctx.globalAlpha = a;
   }
+  /* A LINE WITHOUT ITS DARK CARET (#482 12.4 review). Type-On's blinking caret stays in the string on its dark beat (see
+     textprogress), so the line is laid out exactly as on the lit beat; this is what to PAINT instead: the line less that
+     one glyph, LEFT-aligned from where the whole line starts under the context's own alignment (the whole line's measured
+     width decides that, as fillText's centring does on the lit beat) — so every other glyph lands on the x it has when the
+     caret shows. A caret at the start pushes the rest on by its own advance. null when the line does not carry the caret
+     at that end: paint it as it is. */
+  function ghostLine(ctx, line, ghost) {
+    if (!ghost || !line || !ghost.ch) return null;
+    const atEnd = ghost.at !== 'start';
+    if ((atEnd ? line.slice(-1) : line.charAt(0)) !== ghost.ch) return null;
+    const W = ctx.measureText(line).width, al = ctx.textAlign, rest = atEnd ? line.slice(0, -1) : line.slice(1);
+    const x0 = al === 'center' ? -W / 2 : (al === 'right' || al === 'end') ? -W : 0;
+    return { s: rest, x: x0 + (atEnd ? 0 : W - ctx.measureText(rest).width) };
+  }
+  FM._ghostLine = ghostLine;   // suite seam
+  // …and for the paths that place glyph by glyph (a curve, an Animate preset): which character is the dark caret, or -1
+  function ghostIndex(chars, ghost) {
+    if (!ghost || !ghost.ch || !chars.length) return -1;
+    const k = ghost.at === 'start' ? 0 : chars.length - 1;
+    return chars[k] === ghost.ch ? k : -1;
+  }
 
   /* ═══ WHEN EACH LINE ENTERS AND LEAVES (queue 690, fourth hunt) ═══════════════════════════════════════════════════
    * An Animate preset used to be timed from the start and end of the whole LAYER — `t - layer.start` in, and
@@ -3042,7 +3160,7 @@ window.FM = window.FM || {};
   // The regex alone, for the suite: Chrome always has Intl.Segmenter, so the fallback is held against it directly.
   FM._graphemesFallback = function (s) { return String(s == null ? '' : s).match(GRAPHEME_RE) || []; };
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg) {
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost) {   // ghost: Type-On's dark caret (#482 12.4 review)
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -3158,6 +3276,7 @@ window.FM = window.FM || {};
       const prevBase = ctx.textBaseline;
       const done = () => { if (prevLS != null) ctx.letterSpacing = prevLS; if (prevWS != null) ctx.wordSpacing = prevWS; ctx.textAlign = prevAlign; ctx.textBaseline = prevBase; };
       const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
+      const gskip = ghostIndex(chars, ghost);
       const cw = chars.map(c => ctx.measureText(c).width + (c === ' ' ? wsp : 0));
       const tw = cw.reduce((a, b) => a + b, 0) + lsp * Math.max(0, chars.length - 1);
       if (tw <= 0) { done(); return; }
@@ -3197,6 +3316,7 @@ window.FM = window.FM || {};
         if (A.sc !== 1 || A.scx !== 1 || A.scy !== 1) ctx.scale(A.sc * A.scx, A.sc * A.scy);
         const ca = Math.cos(-sign * U.a), sa = Math.sin(-sign * U.a);
         for (let i = rg[0]; i < rg[1]; i++) {
+          if (i === gskip) continue;   // the dark caret keeps its place in the unit and on the arc, unpainted
           const C = arcAt(cMid[i]), rx = C.x - U.x, ry = C.y - U.y;
           ctx.save();
           ctx.translate(rx * ca - ry * sa, rx * sa + ry * ca);   // the character's place, in the unit's own turned frame
@@ -3221,10 +3341,17 @@ window.FM = window.FM || {};
       const sp = parseFloat(ctx.letterSpacing) || 0;   // global spacing is active; measureText over-counts one trailing gap per unit (#5)
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;
+      /* #482 12.4 review: on the caret's line, the unit holding Type-On's dark caret (the last, or the first when typing from
+         the End) is laid out and animated whole and painted without it — the caret alone paints nothing; a word or a line
+         ending in it paints the rest from the same left edge (left-aligned here), shifted by the caret's advance when it leads. */
+      const gU = (ghost && ghost.ch && li === (ghost.at === 'start' ? 0 : lines.length - 1) && units.length) ? (ghost.at === 'start' ? 0 : units.length - 1) : -1;
       units.forEach((u, ui) => {
         const w = widths[ui];
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
         const { alpha, dx, dy, sc, scx, scy, rot, outA } = animFor(ck.n++, ck);
+        let paint = u, px = -wDraw / 2;
+        if (ui === gU && (ghost.at === 'start' ? u.charAt(0) : u.slice(-1)) === ghost.ch) { paint = ghost.at === 'start' ? u.slice(1) : u.slice(0, -1); if (ghost.at === 'start') px += w - ctx.measureText(paint).width; }
+        if (ui === gU && !paint) { x += w; return; }
         ctx.save();
         ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, alpha)) * outA;
         ctx.translate(x + wDraw / 2 + dx, yy + dy);
@@ -3232,8 +3359,8 @@ window.FM = window.FM || {};
         if (sc !== 1 || scx !== 1 || scy !== 1) ctx.scale(sc * scx, sc * scy);
         // the text's own gradient box, seen from where this unit settles (its centre, with no animation offset)
         if (grad) ctx.fillStyle = buildGradient(ctx, grad, { x: gbox.x - (x + wDraw / 2), y: gbox.y - yy, w: gbox.w, h: gbox.h }, t);
-        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(u, -wDraw / 2, 0); }
-        fillTextA(ctx, u, -wDraw / 2, 0, fillA);
+        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
+        fillTextA(ctx, paint, px, 0, fillA);
         ctx.restore();
         x += w;
       });
@@ -3243,8 +3370,10 @@ window.FM = window.FM || {};
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
-  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
+  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
     const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
+    // #482 12.4 review: Type-On's dark caret keeps its place on the arc (it is measured with the rest) and is not painted
+    const gskip = ghostIndex(chars, ghost);
     // Glyphs are drawn one at a time, so neutralise the global letterSpacing during measurement (it
     // would otherwise add a trailing gap to every single-char measureText, inflating the radius/spacing)
     // and add the spacing back explicitly as inter-char advance. No-op when spacing is 0. (#5)
@@ -3277,6 +3406,7 @@ window.FM = window.FM || {};
     let s = 0;
     chars.forEach((ch, i) => {
       const w = widths[i];
+      if (i === gskip) { s += w + sp; return; }
       const a = ((s + w / 2) / tw - 0.5) * aa;
       ctx.save();
       ctx.translate(R * Math.sin(a), sign * (R - R * Math.cos(a)));
@@ -5071,6 +5201,28 @@ window.FM = window.FM || {};
     _sfCand = { cols: cols, rows: rows, n: n, X: X, Y: Y, R: R };
     return _sfCand;
   }
+  /* Chroma Key Pro's Shrink / grow (#482 12.1): a square min (shrink) or max (grow) of radius r over a matte of 0..1 values,
+     one row pass and one column pass, in place. r is at most 10 plate px, so a plain window scan is cheap enough. */
+  function matteMorph12(A, W, H, r, grow) {
+    const T = new Float64Array(A.length);
+    for (let y = 0; y < H; y++) {
+      const row = y * W;
+      for (let x = 0; x < W; x++) {
+        const lo = x - r < 0 ? 0 : x - r, hi = x + r > W - 1 ? W - 1 : x + r;
+        let m = A[row + lo];
+        for (let k = lo + 1; k <= hi; k++) { const v = A[row + k]; if (grow ? v > m : v < m) m = v; }
+        T[row + x] = m;
+      }
+    }
+    for (let x = 0; x < W; x++) {
+      for (let y = 0; y < H; y++) {
+        const lo = y - r < 0 ? 0 : y - r, hi = y + r > H - 1 ? H - 1 : y + r;
+        let m = T[lo * W + x];
+        for (let k = lo + 1; k <= hi; k++) { const v = T[k * W + x]; if (grow ? v > m : v < m) m = v; }
+        A[y * W + x] = m;
+      }
+    }
+  }
   /* ═══ HOW MUCH OF A REDUCED PLATE PIXEL THE EXPORT'S LINE FILLS (#986 batch 2 review) ═══════════════════════════════
    * Find Edges and Emboss on a reduced plate (see Find Edges). `R` holds every plate pixel's raw reading in slot `c` of
    * each 4; `v` is this pixel's, (ux, uy) is the direction across the line with its larger component 1. A reading that
@@ -5972,31 +6124,58 @@ window.FM = window.FM || {};
       const soft = (p.softness == null ? 0.28 : clamp01(FM.evalProp(p.softness, t))) * 180;
       const spill = clamp01(p.despill == null ? 0.7 : FM.evalProp(p.despill, t));
       const eDesat = clamp01(p.edgedesat == null ? 0.35 : FM.evalProp(p.edgedesat, t));
-      const matte = Math.round(FM.evalProp(p.view, t) || 0) === 1;
+      const vw = Math.round(FM.evalProp(p.view, t) || 0), matte = vw === 1, grey = vw === 2;
       const hi = tol + (soft < 1 ? 1 : soft);            // never a zero-width step — that hard-edges the matte
       /* DESPILL PULLS THE KEY'S OWN COLOUR (queue 986, hunt C3). It pulled GREEN whatever the key was, so a BLUE screen
          took the green out of skin and leaves and left its own blue rim on the subject. The spill is the screen's
          strongest channel, the one the basic Chroma Key already reads (chromaKey's `kc`). For a green key this is the
          very same arithmetic: channel 1 against the larger of the other two. */
-      const kc = k[1] >= k[0] && k[1] >= k[2] ? 1 : (k[2] >= k[0] ? 2 : 0);
+      /* DESPILL FROM (#482 12.1): Green or Blue pulls that channel whatever the key colour is — the spill off a teal or
+         cyan-ish screen, or a screen picked with the eyedropper off a shadow, is not always the key's own strongest one. */
+      const sfrom = p.spillfrom == null ? 0 : (Math.round(FM.evalProp(p.spillfrom, t)) | 0);
+      const kc = sfrom === 1 ? 1 : (sfrom === 2 ? 2 : (k[1] >= k[0] && k[1] >= k[2] ? 1 : (k[2] >= k[0] ? 2 : 0)));
       const kc1 = (kc + 1) % 3, kc2 = (kc + 2) % 3;
-      for (let i = 0; i < d.length; i += 4) {
-        const r = d[i], g = d[i + 1], b = d[i + 2];
+      const keyA = (r, g, b) => {
         const cb = -0.169 * r - 0.331 * g + 0.5 * b;
         const cr = 0.5 * r - 0.419 * g - 0.081 * b;
         const dcb = cb - kcb, dcr = cr - kcr;
         const dist = Math.sqrt(dcb * dcb + dcr * dcr);
-        let a;
-        if (dist <= tol) a = 0;
-        else if (dist >= hi) a = 1;
-        else { const u = (dist - tol) / (hi - tol); a = u * u * (3 - 2 * u); }
+        if (dist <= tol) return 0;
+        if (dist >= hi) return 1;
+        const u = (dist - tol) / (hi - tol); return u * u * (3 - 2 * u);
+      };
+      /* #482 12.1 — CLIP BLACK / CLIP WHITE / SHRINK-GROW work on the whole matte first, because a choke needs every
+         neighbour's matte before any pixel can be written. A pixel the LAYER does not cover (alpha 0) is never subject,
+         so it takes the value that leaves its neighbours alone (1 under a shrink, 0 under a grow): a clip smaller than
+         the frame is not eaten from its own edge, and does not grow a rim into it. All three at their defaults: no
+         matte array, and the loop below is the old loop. */
+      const cbk = (p.clipblack == null ? 0 : Math.max(0, Math.min(100, FM.evalProp(p.clipblack, t)))) / 100;
+      const cwh = (p.clipwhite == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.clipwhite, t)))) / 100;
+      let shr = p.shrink == null ? 0 : Math.round(FM.evalProp(p.shrink, t) || 0);   // plate px: pxToPlate has scaled it
+      if (shr < -10) shr = -10; if (shr > 10) shr = 10;
+      let A = null;
+      if (cbk !== 0 || cwh !== 1 || shr !== 0) {
+        A = new Float64Array(W * H);
+        const clip = cbk !== 0 || cwh !== 1, out = shr > 0 ? 0 : 1;
+        for (let i = 0, n = 0; i < d.length; i += 4, n++) {
+          if (d[i + 3] === 0 && shr !== 0) { A[n] = out; continue; }
+          let a = keyA(d[i], d[i + 1], d[i + 2]);
+          if (clip) a = a >= cwh ? 1 : (a <= cbk ? 0 : (a - cbk) / (cwh - cbk));   // white first: Clip black 100 still keeps a solid pixel
+          A[n] = a;
+        }
+        if (shr !== 0) matteMorph12(A, W, H, shr < 0 ? -shr : shr, shr > 0);
+      }
+      for (let i = 0; i < d.length; i += 4) {
+        const a = A ? A[i >> 2] : keyA(d[i], d[i + 1], d[i + 2]);
         /* VIEW: MATTE KEEPS THE LAYER'S OWN ALPHA (#986 C40). It wrote 255 into every pixel it was handed, including
            the transparent ones round a clip smaller than the frame — and the kernel is handed the clip's box PLUS a crop
            margin, so a light-grey opaque band (measured 220,220,220) framed the clip exactly as far as that margin
            reached and no further. Where the layer is solid (every keyed shot) this is the same byte as before. */
         if (matte) { const v = a * 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; continue; }
-        if (a <= 0) { d[i + 3] = 0; continue; }
-        d[i + 3] = d[i + 3] * a;
+        /* VIEW: ON GREY (#482 12.1) — the result laid over mid grey inside the layer, so a fringe or a hole that hides
+           against the shot's own background shows up. Like Matte it keeps the layer's own alpha. */
+        if (a <= 0) { if (grey) { d[i] = 128; d[i + 1] = 128; d[i + 2] = 128; } else d[i + 3] = 0; continue; }
+        if (!grey) d[i + 3] = d[i + 3] * a;
         if (spill > 0) {
           // The key's channel above both neighbours is spill, not colour. Pull it down to their maximum.
           const v = d[i + kc], o1 = d[i + kc1], o2 = d[i + kc2], mx = o1 > o2 ? o1 : o2;
@@ -6008,6 +6187,7 @@ window.FM = window.FM || {};
           const l = 0.299 * rr + 0.587 * gg + 0.114 * bb;
           d[i] = rr + (l - rr) * w; d[i + 1] = gg + (l - gg) * w; d[i + 2] = bb + (l - bb) * w;
         }
+        if (grey && a < 1) { const g0 = 128 * (1 - a); d[i] = d[i] * a + g0; d[i + 1] = d[i + 1] * a + g0; d[i + 2] = d[i + 2] * a + g0; }
       }
     },
     /* HSL Bands — the CapCut/Lightroom HSL panel: retune ONE colour band and leave the rest alone.
@@ -6685,13 +6865,37 @@ window.FM = window.FM || {};
      * grain (±4) is 14 / 19 at Amount 1, better than either before. */
     edge: function (d, W, H, p, t, ps) {
       const k = FM.evalProp(p.amount, t) || 1, s = fxSrc(d), w4 = W * 4;
-      const shrink = ps > 0 && ps < 1 ? ps : 1;
+      /* LINE WIDTH (#482 12.6), in project px: the Sobel reads its neighbours that far out, so a hard edge draws a line twice
+         that wide at full strength. On a plate where the reach is a pixel or more it is read there directly, between pixels
+         when it is fractional (ST below); where it is under a pixel, the reduced-plate machinery above takes it, with the
+         reach's share of a plate pixel as the shrink — at Width 1 that share is ps, which is exactly what it always was. */
+      let lw = p.width == null ? 1 : FM.evalProp(p.width, t); if (!(lw >= 1)) lw = 1; if (lw > 8) lw = 8;
+      const sg = lw === 1 ? 1 : (ps > 0 ? ps : 1) * lw;
+      const shrink = lw === 1 ? (ps > 0 && ps < 1 ? ps : 1) : (sg < 1 ? sg : 1), ST = sg > 1 ? sg : 0;
+      let ay = null;
+      if (ST) {
+        const Y = new Float64Array(W * H);
+        for (let j = 0, n = 0; n < W * H; j += 4, n++) Y[n] = s[j] * 0.299 + s[j + 1] * 0.587 + s[j + 2] * 0.114;
+        ay = (fx, fy) => {   // the luma at a point between pixels, the plate's edge held
+          fx = fx < 0 ? 0 : (fx > W - 1 ? W - 1 : fx); fy = fy < 0 ? 0 : (fy > H - 1 ? H - 1 : fy);
+          const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = x0 < W - 1 ? x0 + 1 : x0, y1 = y0 < H - 1 ? y0 + 1 : y0, tx = fx - x0, ty = fy - y0;
+          return (Y[y0 * W + x0] * (1 - tx) + Y[y0 * W + x1] * tx) * (1 - ty) + (Y[y1 * W + x0] * (1 - tx) + Y[y1 * W + x1] * tx) * ty;
+        };
+      }
+      /* LIGHT and DARK COLOURS, COLOUR EDGES (#482 12.6). The line map was white and black only. Light and Dark repaint it —
+         whichever Lines says is the line: White on black draws Light lines on Dark, Black on white the reverse — and under
+         Ink the line is drawn in Dark and the paper multiplied by Light. Colour edges draws each line in the picture's own
+         colour over the background tone. White, black and Off are the old lines below, untouched. */
+      const LT = p.light == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.light, t)), DK = p.dark == null ? [0, 0, 0] : hexToRGB(FM.evalProp(p.dark, t));
+      const cedge = (p.colour == null ? 0 : (Math.round(FM.evalProp(p.colour, t)) | 0)) === 1;
+      const tone = !(LT[0] === 255 && LT[1] === 255 && LT[2] === 255 && DK[0] === 0 && DK[1] === 0 && DK[2] === 0);
       const thrP = p.threshold == null ? 0 : FM.evalProp(p.threshold, t);
       const thr = Math.max(0, Math.min(100, thrP)) / 100 * 255;
       const inv = (p.polarity == null ? 0 : (Math.round(FM.evalProp(p.polarity, t)) | 0)) === 1;
       const mixP = p.mix == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.mix, t)));
       const mix = mixP / 100, full = mixP === 100;
       const ink = (p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0)) === 1;   // queue 813
+      const paint = tone || (cedge && !ink);
       /* A reduced plate reads every pixel's Sobel FIRST — [raw reading, gx, gy] — because the fill test (#986 batch 2
          review) looks at the readings two plate pixels out. ps 1 never builds it and runs the loop below as it was. */
       let RAW = null;
@@ -6726,6 +6930,13 @@ window.FM = window.FM || {};
               if (thr > 0 && pk < thr) pk = 0;
               mag = pk * fill;
             }
+          } else if (ay) {
+            // #482 12.6: the taps ST plate px out
+            const tl = ay(x - ST, y - ST), tc = ay(x, y - ST), tr = ay(x + ST, y - ST), ml = ay(x - ST, y), mr = ay(x + ST, y);
+            const bl = ay(x - ST, y + ST), bc = ay(x, y + ST), br = ay(x + ST, y + ST);
+            const gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl), gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr);
+            mag = Math.min(255, Math.hypot(gx, gy) * k);
+            if (thr > 0 && mag < thr) mag = 0;
           } else {
           const tl = s[i - w4 - 4] * 0.299 + s[i - w4 - 3] * 0.587 + s[i - w4 - 2] * 0.114;
           const tc = s[i - w4] * 0.299 + s[i - w4 + 1] * 0.587 + s[i - w4 + 2] * 0.114;
@@ -6744,6 +6955,20 @@ window.FM = window.FM || {};
           // POLARITY: the effect could only ever draw glowing white lines on black. Ink on paper — the
           // way line art is actually drawn — was simply unreachable.
           if (inv) mag = 255 - mag;
+          if (paint) {   // #482 12.6 (see LT / DK above)
+            if (ink) {
+              const v = (inv ? mag : 255 - mag) / 255;   // 1 on paper, 0 on a line
+              for (let c = 0; c < 3; c++) { const tn = (DK[c] + (LT[c] - DK[c]) * v) / 255; d[i + c] = s[i + c] * (1 - mix * (1 - tn)); }
+            } else {
+              for (let c = 0; c < 3; c++) {
+                let o;
+                if (cedge) { const bg = inv ? LT[c] : DK[c]; o = bg + (s[i + c] - bg) * (inv ? 255 - mag : mag) / 255; }
+                else o = DK[c] + (LT[c] - DK[c]) * mag / 255;
+                d[i + c] = full ? o : s[i + c] + (o - s[i + c]) * mix;
+              }
+            }
+            continue;
+          }
           if (ink) {
             // queue 813: multiply. `ml` is 1 on paper and 0 on a line; `mix` sets how black the line gets.
             const ml = 1 - mix * (1 - (inv ? mag : 255 - mag) / 255);
@@ -6757,7 +6982,13 @@ window.FM = window.FM || {};
     },
     emboss: function (d, W, H, p, t, ps) {   // ps: #986 C60, see Find Edges above
       const k = (FM.evalProp(p.amount, t) == null ? 1 : FM.evalProp(p.amount, t)), s = fxSrc(d), w4 = W * 4;
-      const shrink = ps > 0 && ps < 1 ? ps : 1;
+      /* HEIGHT (#482 12.7), in project px: the kernel reads its neighbours that far out, so the lit and shaded bands either
+         side of an edge widen with it — Find Edges' Line width, the same three regimes (see there): a reach of a plate pixel
+         or more read directly, between pixels when fractional (EM below); under one, the reduced-plate machinery with the
+         reach's share as the shrink. Height 1 is the old kernel exactly. */
+      let rl = p.relief == null ? 1 : FM.evalProp(p.relief, t); if (!(rl >= 1)) rl = 1; if (rl > 10) rl = 10;
+      const sg = rl === 1 ? 1 : (ps > 0 ? ps : 1) * rl;
+      const shrink = rl === 1 ? (ps > 0 && ps < 1 ? ps : 1) : (sg < 1 ? sg : 1), EM = sg > 1 ? sg : 0;
       // THE KERNEL GENERALISES EXACTLY, which is worth stating because it is why this is a real angle
       // control and not a second effect wearing the same name. The legacy weights are
       //     -2 -1  0        and the weight of the neighbour at offset (dx,dy) is precisely dx*1 + dy*1:
@@ -6802,9 +7033,30 @@ window.FM = window.FM || {};
         const e = A * k * shrink / fill;
         return 128 + (e < -128 ? -128 : (e > 127 ? 127 : e)) * fill;
       };
+      // #482 12.7: channel c of plane A (stride n per pixel) between pixels, the plate's edge held; mono reads a luma plane
+      let LUM = null;
+      if (EM && mono) { LUM = new Float64Array(W * H); for (let j = 0, n = 0; n < W * H; j += 4, n++) LUM[n] = s[j] * 0.299 + s[j + 1] * 0.587 + s[j + 2] * 0.114; }
+      const at12 = (A, n, c, fx, fy) => {
+        fx = fx < 0 ? 0 : (fx > W - 1 ? W - 1 : fx); fy = fy < 0 ? 0 : (fy > H - 1 ? H - 1 : fy);
+        const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = x0 < W - 1 ? x0 + 1 : x0, y1 = y0 < H - 1 ? y0 + 1 : y0, tx = fx - x0, ty = fy - y0;
+        return (A[(y0 * W + x0) * n + c] * (1 - tx) + A[(y0 * W + x1) * n + c] * tx) * (1 - ty) + (A[(y1 * W + x0) * n + c] * (1 - tx) + A[(y1 * W + x1) * n + c] * tx) * ty;
+      };
       for (let y = 1; y < H - 1; y++) {
         for (let x = 1; x < W - 1; x++) {
           const i = (y * W + x) * 4;
+          if (EM) {   // #482 12.7: the same weights, EM plate px out
+            for (let c = 0; c < (mono ? 1 : 3); c++) {
+              let acc = 0;
+              for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                const w = def135 ? (dx + dy) : (dx * Lx + dy * Ly);
+                if (w !== 0) acc += (mono ? at12(LUM, 1, 0, x + dx * EM, y + dy * EM) : at12(s, 4, c, x + dx * EM, y + dy * EM)) * w;
+              }
+              const v = 128 + acc * k;
+              if (mono) { for (let cc = 0; cc < 3; cc++) d[i + cc] = allIn ? v : s[i + cc] + (v - s[i + cc]) * bl; }
+              else d[i + c] = allIn ? v : s[i + c] + (v - s[i + c]) * bl;
+            }
+            continue;
+          }
           if (plain) { for (let c = 0; c < 3; c++) { const j = i + c; d[j] = RAW ? red(x, y, c) : 128 + (s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2) * k; } continue; }
           // MONO runs the kernel over LUMINANCE once instead of per channel. Per channel is what puts
           // colour fringing on the relief; a clean grey metal stamp was unreachable.
@@ -8277,17 +8529,37 @@ window.FM = window.FM || {};
       var bd_pos = function(bx, by){ return bd_dir === 1 ? bx / bd_nx : bd_dir === 2 ? 1 - bx / bd_nx : bd_dir === 3 ? by / bd_ny : 1 - by / bd_ny; };
       var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); if(bd_seed) bd_h = bd_h ^ Math.imul(bd_seed, 0x9e3779b1); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_dir){ bd_r = bd_pos(bd_bx, bd_by)*0.7 + bd_r*0.3; } if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
     // ---- batch 14 (matte / mask / key) ----
-    wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; if(wp_prog<=0){ for(var wp_z=3;wp_z<d.length;wp_z+=4)d[wp_z]=0; return; } if(wp_prog>=1)return; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
+    wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; /* INVERT (#482 12.3) keeps what the wipe would hide: Progress then reads as how much is HIDDEN, so 0 shows everything and 1
+         nothing — the way out of a shot. Off is the old wipe untouched. */
+      var wp_flip = (p.invert == null ? 0 : (Math.round(FM.evalProp(p.invert, t)) | 0)) === 1;
+      if(wp_prog<=0){ if(wp_flip) return; for(var wp_z=3;wp_z<d.length;wp_z+=4)d[wp_z]=0; return; } if(wp_prog>=1){ if(wp_flip){ for(var wp_z1=3;wp_z1<d.length;wp_z1+=4)d[wp_z1]=0; } return; } var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad);
+      /* FIT TO LAYER (#482 12.3, hunt C36): the wipe was measured across the FRAME from the frame's centre, so on a title that
+         fills a corner of the frame Progress 0.5 showed all of it or none of it. Layer measures across the layer's own box
+         (what it covers on this plate) from that box's centre, so 0 to 1 sweeps exactly the title. Frame is the old maths. */
+      var wp_cx = W*0.5; var wp_cy = H*0.5, wp_bw = W, wp_bh = H;
+      if((p.fit == null ? 0 : (Math.round(FM.evalProp(p.fit, t)) | 0)) === 1){ var wp_bb = alphaBox12(d, W, H); if(!wp_bb) return; wp_cx = wp_bb.x + wp_bb.w*0.5; wp_cy = wp_bb.y + wp_bb.h*0.5; wp_bw = wp_bb.w; wp_bh = wp_bb.h; }
+      var wp_den = Math.abs(wp_bw*wp_dx)+Math.abs(wp_bh*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
       /* EDGE SOFTNESS (queue 904), in project px (pxToPlate scales it). The feather is centred on the edge and multiplies the alpha, so
          a diagonal wipe is a clean gradient instead of stair-steps. 0 takes the old 1-bit cut between the exact endpoints. */
       var wp_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
       if(wp_sf > 0){ for(var wq_y=0; wq_y<H; wq_y++){ var wq_row = wq_y*W; var wq_py = (wq_y-wp_cy)*wp_dy; for(var wq_x=0; wq_x<W; wq_x++){ var wq_proj = ((wq_x-wp_cx)*wp_dx + wq_py)*wp_inv + 0.5;
-          var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
-      for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
-    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; if(rw_prog<=0){ for(var rw_z=3;rw_z<d.length;rw_z+=4)d[rw_z]=0; return; } if(rw_prog>=1)return; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = wCx(p, t, W, W/2), rw_cy = wCy(p, t, H, H/2);   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */
+          var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wp_flip) wq_c = 1 - wq_c; if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
+      for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_flip ? wp_proj <= wp_prog : wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
+    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; var rw_flip = (p.invert == null ? 0 : (Math.round(FM.evalProp(p.invert, t)) | 0)) === 1;   /* INVERT (#482 12.3): see Wipe */
+      if(rw_prog<=0){ if(rw_flip) return; for(var rw_z=3;rw_z<d.length;rw_z+=4)d[rw_z]=0; return; } if(rw_prog>=1){ if(rw_flip){ for(var rw_z1=3;rw_z1<d.length;rw_z1+=4)d[rw_z1]=0; } return; } var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx, rw_cy;
+      /* FIT TO LAYER (#482 12.3): Centre X / Y are a % of the layer's own box instead of the frame, so the default pivot is the
+         middle of the title rather than the middle of the frame. */
+      if((p.fit == null ? 0 : (Math.round(FM.evalProp(p.fit, t)) | 0)) === 1){ var rw_bb = alphaBox12(d, W, H); if(!rw_bb) return; rw_cx = rw_bb.x + wCx(p, t, rw_bb.w, rw_bb.w/2); rw_cy = rw_bb.y + wCy(p, t, rw_bb.h, rw_bb.h/2); }
+      else { rw_cx = wCx(p, t, W, W/2); rw_cy = wCy(p, t, H, H/2); }   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */
       /* EDGE SOFTNESS (queue 904): both edges of the swept wedge are feathered over an ARC of that many px at each pixel's radius,
          centred on the edge. A full sweep (progress 1) has no edge — it returns untouched rather than feathering the start seam. */
       var rw_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
+      /* DIRECTION and BLADES (#482 12.3, hunt C36: it was clockwise only). Anticlockwise sweeps the other way from Start, Both
+         ways opens from the Start line in both directions at once, and Blades splits the circle into that many wedges that
+         sweep together, like a fan. Clockwise with one blade and Invert off runs the two loops below, as it always did. */
+      var rw_dir = p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0);
+      var rw_n = p.blades == null ? 1 : Math.round(FM.evalProp(p.blades, t) || 1); if(rw_n < 1) rw_n = 1; if(rw_n > 12) rw_n = 12;
+      if(rw_dir !== 0 || rw_n !== 1 || rw_flip) return radialWipe12(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip);
       if(rw_sf > 0){ if(rw_prog >= 1) return; if(rw_prog <= 0){ for(var rz=3; rz<d.length; rz+=4) d[rz]=0; return; } for(var rq_y=0; rq_y<H; rq_y++){ var rq_dy = rq_y - rw_cy; for(var rq_x=0; rq_x<W; rq_x++){ var rq_dx = rq_x - rw_cx;
           var rq_f = (Math.atan2(rq_dy, rq_dx) - rw_startRad) % rw_TAU; if(rq_f<0) rq_f += rw_TAU; rq_f /= rw_TAU;
           var rq_arc = rw_TAU*Math.sqrt(rq_dx*rq_dx + rq_dy*rq_dy);
@@ -9228,7 +9500,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var bdIn=p.inset==null?0:FM.evalProp(p.inset,t); if(bdIn<0)bdIn=0; if(bdIn>200)bdIn=200;
       var bdRad=p.radius==null?0:FM.evalProp(p.radius,t); if(bdRad<0)bdRad=0; if(bdRad>200)bdRad=200;
       var bdOp=p.opacity==null?100:FM.evalProp(p.opacity,t); if(bdOp<0)bdOp=0; if(bdOp>100)bdOp=100; if(bdOp<=0)return;
-      if(bdIn===0&&bdRad===0&&bdOp===100){
+      // #482 12.5: Style, Draw on, Smooth corners — any of them off its default goes to border12 below
+      var bdSty=p.style==null?0:(Math.round(FM.evalProp(p.style,t))|0);
+      var bdDraw=p.progress==null?100:FM.evalProp(p.progress,t); if(!(bdDraw>0))return; if(bdDraw>100)bdDraw=100;
+      var bdSm=(p.smooth==null?0:(Math.round(FM.evalProp(p.smooth,t))|0))===1;
+      var bdNew=(bdSty===1||bdSty===2)||bdDraw<100||bdSm;
+      if(bdIn===0&&bdRad===0&&bdOp===100&&!bdNew){
         for(var y=y0;y<y1;y++){ var ey=(y<y0+w||y>=y1-w); var row=y*W*4; for(var x=x0;x<x1;x++){ if(ey||x<x0+w||x>=x1-w){ var i=row+x*4; d[i]=cr; d[i+1]=cg; d[i+2]=cb; if(d[i+3]<255)d[i+3]=255; } } }
         return;
       }
@@ -9237,6 +9514,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var bmx=Math.floor(Math.min(bx1-bx0,by1-by0)/2); var bw=w>bmx?bmx:w; if(bw<1) return;
       var br=Math.round(bdRad*(ps||1)); var brMax=Math.floor(Math.min(bx1-bx0,by1-by0)/2); if(br>brMax)br=brMax;
       var bk=bdOp/100;
+      if(bdNew){
+        var bdDash=p.dash==null?20:FM.evalProp(p.dash,t); if(!(bdDash>=2))bdDash=2; if(bdDash>200)bdDash=200;
+        var bdGap=p.gap==null?10:FM.evalProp(p.gap,t); if(!(bdGap>=2))bdGap=2; if(bdGap>200)bdGap=200;
+        return border12(d,W,H,bx0,by0,bx1,by1,bw,br,bk,cr,cg,cb,bdSty,bdDash*(ps||1),bdGap*(ps||1),bdDraw/100,bdSm);
+      }
       /* Rounded corners come from a distance test against the inner corner circles, which is the same
          idea as the round stroke in round 21 — inside the outer radius and outside the inner one is
          the band, and everything else is left alone. */
@@ -9750,6 +10032,102 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   function wCx(p, t, W, cx) { const v = p.centerx == null ? 50 : FM.evalProp(p.centerx, t); return v === 50 ? cx : W * (v / 100); }
   function wCy(p, t, H, cy) { const v = p.centery == null ? 50 : FM.evalProp(p.centery, t); return v === 50 ? cy : H * (v / 100); }
+  /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
+     the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
+  function alphaBox12(d, W, H) {
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let y = 0; y < H; y++) { const row = y * W * 4; for (let x = 0; x < W; x++) { if (d[row + x * 4 + 3] === 0) continue; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+    return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  }
+  /* Border Frame's Style, Draw on and Smooth corners (#482 12.5), on the frame the old general loop draws — the same band
+     ([bx0,bx1) x [by0,by1), bw wide, corner radius br, the same integer corner test) at strength bk. Each band pixel finds
+     where it sits along the frame: s, the distance round the band's CENTRE LINE clockwise from the top edge's left end, and
+     nrm, how far off that line it is. Dashed keeps (s mod (dash + gap)) < dash; Dotted draws round dots as wide as the band,
+     one every (band + gap); Draw on keeps s below that share of the whole way round (a dot whole or not at all). Smooth
+     corners gives the round corners' two edges, and the dots, half a pixel of coverage either side instead of a hard step. */
+  function border12(d, W, H, bx0, by0, bx1, by1, bw, br, bk, cr, cg, cb, sty, dash, gap, draw, smooth) {
+    const h = bw / 2, L = bx0 + h, T = by0 + h, R = bx1 - h, B = by1 - h, rc = Math.max(0, br - h);
+    const lt = Math.max(0, R - L - 2 * rc), lr = Math.max(0, B - T - 2 * rc), qa = Math.PI / 2 * rc;
+    const s1 = lt, s2 = s1 + qa, s3 = s2 + lr, s4 = s3 + qa, s5 = s4 + lt, s6 = s5 + qa, s7 = s6 + lr, P = s7 + qa;
+    const lim = draw >= 1 ? Infinity : draw * P, per = sty === 1 ? dash + gap : bw + gap;   // 100 %: every pixel, the seam's included
+    const clamp01 = v => (v < 0 ? 0 : (v > 1 ? 1 : v));
+    for (let y = by0; y < by1; y++) {
+      for (let x = bx0; x < bx1; x++) {
+        let cov, dxc = 0, dyc = 0;
+        if (br > 0) {
+          if (x < bx0 + br) dxc = bx0 + br - x; else if (x >= bx1 - br) dxc = x - (bx1 - br - 1);
+          if (y < by0 + br) dyc = by0 + br - y; else if (y >= by1 - br) dyc = y - (by1 - br - 1);
+        }
+        if (br > 0 && dxc > 0 && dyc > 0) {
+          const dd = Math.sqrt(dxc * dxc + dyc * dyc);
+          if (smooth) cov = clamp01(br + 0.5 - dd) * clamp01(dd - (br - bw) + 0.5);
+          else cov = dd > br ? 0 : (dd > br - bw ? 1 : 0);
+        } else cov = (y < by0 + bw || y >= by1 - bw || x < bx0 + bw || x >= bx1 - bw) ? 1 : 0;
+        if (cov <= 0) continue;
+        const px = x + 0.5, py = y + 0.5;
+        let s, nrm;
+        const arc = (cx, cy, s0, a0) => { let a = Math.atan2(py - cy, px - cx); if (a < a0 - 1e-9) a += 2 * Math.PI; s = s0 + rc * Math.max(0, Math.min(Math.PI / 2, a - a0)); nrm = Math.abs(Math.hypot(px - cx, py - cy) - rc); };
+        if (px < L + rc && py < T + rc) arc(L + rc, T + rc, s7, Math.PI);
+        else if (px > R - rc && py < T + rc) arc(R - rc, T + rc, s1, -Math.PI / 2);
+        else if (px > R - rc && py > B - rc) arc(R - rc, B - rc, s3, 0);
+        else if (px < L + rc && py > B - rc) arc(L + rc, B - rc, s5, Math.PI / 2);
+        else {
+          nrm = Infinity;
+          if (px >= L + rc && px <= R - rc) {
+            const dt = Math.abs(py - T), db = Math.abs(py - B);
+            if (dt <= db) { nrm = dt; s = px - (L + rc); } else { nrm = db; s = s4 + (R - rc - px); }
+          }
+          if (py >= T + rc && py <= B - rc) {
+            const dl = Math.abs(px - L), dr = Math.abs(px - R);
+            if (dr < nrm && dr <= dl) { nrm = dr; s = s2 + (py - (T + rc)); }
+            else if (dl < nrm) { nrm = dl; s = s6 + (B - rc - py); }
+          }
+          if (nrm === Infinity) continue;
+        }
+        if (sty === 2) {
+          const k = Math.round((s - h) / per), along = s - (k * per + h);
+          if (k * per + h >= lim) continue;
+          const dist = Math.sqrt(along * along + nrm * nrm);
+          cov *= smooth ? clamp01(h + 0.5 - dist) : (dist <= h ? 1 : 0);
+          if (cov <= 0) continue;
+        } else {
+          if (s >= lim) continue;
+          if (sty === 1 && (s % per) >= dash) continue;
+        }
+        const a = cov * bk, i = (y * W + x) * 4;
+        if (a >= 1) { d[i] = cr; d[i + 1] = cg; d[i + 2] = cb; if (d[i + 3] < 255) d[i + 3] = 255; }
+        else { d[i] = d[i] + (cr - d[i]) * a; d[i + 1] = d[i + 1] + (cg - d[i + 1]) * a; d[i + 2] = d[i + 2] + (cb - d[i + 2]) * a; if (d[i + 3] < 255) d[i + 3] = d[i + 3] + (255 - d[i + 3]) * a; }
+      }
+    }
+  }
+  /* Radial Wipe with a Direction, Blades or Invert (#482 12.3). f is how far round from Start a pixel sits, 0..1, in the way
+     the wedge grows; the wedge keeps f <= progress. Anticlockwise measures the other way round; Blades repeats the sweep in
+     n equal sectors; Both ways folds each sector about its Start line, so the wedge opens both ways at half the angle each.
+     Edge softness is the old feather — an arc of that many px at each pixel's radius — over the arc one unit of f spans
+     there, and with Both ways the only edge is at progress (the Start line is the middle of the wedge, not an edge). */
+  function radialWipe12(d, W, H, prog, startRad, cx, cy, sf, dir, n, flip) {
+    const TAU = Math.PI * 2, per = n * (dir === 2 ? 2 : 1);
+    for (let y = 0; y < H; y++) {
+      const dy = y - cy;
+      for (let x = 0; x < W; x++) {
+        const dx = x - cx;
+        let f = (Math.atan2(dy, dx) - startRad) % TAU; if (f < 0) f += TAU; f /= TAU;
+        if (dir === 1) f = f > 0 ? 1 - f : 0;
+        if (n > 1) { f *= n; f -= Math.floor(f); }
+        if (dir === 2) f = 2 * (f < 0.5 ? f : 1 - f);
+        const i = (y * W + x) * 4 + 3;
+        if (sf > 0) {
+          const sd = dir === 2 ? prog - f : (f <= prog ? Math.min(f, prog - f) : -Math.min(f - prog, 1 - f));
+          let c = sd * (TAU * Math.sqrt(dx * dx + dy * dy) / per) / sf + 0.5;
+          if (flip) c = 1 - c;
+          if (c >= 1) continue;
+          d[i] = c <= 0 ? 0 : d[i] * c;
+          continue;
+        }
+        if (flip ? f <= prog : f > prog) d[i] = 0;
+      }
+    }
+  }
   function wR(p, t, maxR) { const v = p.radius == null ? 100 : FM.evalProp(p.radius, t); return v === 100 ? maxR : Math.max(1, maxR * (v / 100)); }
 
   function drawWarpEffect(ctx, layer, t, scene, fx, mapFn) {
@@ -17259,7 +17637,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (textSpacingOK().letter) a.letterSpacing = te.letterSpacing + 'px';
       if (textSpacingOK().word) a.wordSpacing = (te.wordSpacing || 0) + 'px';
       const lines = FM.textLines(a, layer, textSrc), lh = (layer.fontSize || 96) * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
-      lines.forEach((ln, i) => a.fillText(ln, 0, i * lh - total / 2));
+      lines.forEach((ln, i) => {
+        // Type-On's dark caret is not on screen, so it is not in the footprint either (#482 12.4 review, ghostLine)
+        const gl = (te.ghost && i === (te.ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(a, ln, te.ghost) : null;
+        if (gl) { const pa = a.textAlign; a.textAlign = 'left'; a.fillText(gl.s, gl.x, i * lh - total / 2); a.textAlign = pa; return; }
+        a.fillText(ln, 0, i * lh - total / 2);
+      });
     } else {
       // footprint = the VISIBLE frame (crop), not the full source — else Copy Background on a cropped
       // clip covers the whole frame instead of just the crop.
@@ -18112,8 +18495,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // The curve the EFFECTS resolved, not the layer's raw field (queue 664) — resolved ONCE here so the animated
       // path gets it too; it used to be computed inside the static branch only (queue 904, textcurve).
       const curve = (_tEff && _tEff.curve != null) ? _tEff.curve : (layer.textCurve || 0);
+      const ghost = _tEff && _tEff.ghost;   // Type-On's dark caret: laid out, not painted (#482 12.4 review, ghostLine)
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
@@ -18128,9 +18512,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
         // `curve` is resolved above the branch (queue 664, 904). Identical when no curve effect is present,
         // because applyTextEffects seeds it from exactly the layer's own field.
-        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol);   // text on a curve
+        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost);   // text on a curve
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;
+          const gl = (ghost && i === (ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(ctx, line, ghost) : null;
+          if (gl) {   // the caret's line on its dark beat: the rest, where it stands when the caret is lit
+            const pa = ctx.textAlign; ctx.textAlign = 'left';
+            if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(gl.s, gl.x, yy); ctx.restore(); }
+            fillTextA(ctx, gl.s, gl.x, yy, textFillAlpha(layer));
+            ctx.textAlign = pa;
+            return;
+          }
           if (drawStroke) {
             // strokeText centres on the glyph edge (half hidden by the fill on top). Outside/inside →
             // double the width so the visible outline ≈ bw; center → native width. (Inside on glyphs
@@ -18426,7 +18818,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const thr = p.threshold == null ? 0.25 : FM.evalProp(p.threshold, t);
           const lksoft = p.softness == null ? 28 : Math.max(0, Math.min(128, FM.evalProp(p.softness, t)));
           const lkm = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
-          src = lumaKey(src, w, h, thr, keyed ? 'none' : keyFilter, lksoft, lkm, n); keyed = true;
+          const lktol = p.tolerance == null ? 0.1 : FM.evalProp(p.tolerance, t);   // #482 12.2: Similar / Dissimilar's band
+          src = lumaKey(src, w, h, thr, keyed ? 'none' : keyFilter, lksoft, lkm, n, lktol); keyed = true;
         }
         if (keyed) ctx.filter = 'none';                   // filter already applied to the keyed source
         try {

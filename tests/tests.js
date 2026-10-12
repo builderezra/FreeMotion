@@ -126534,4 +126534,622 @@
     for (let i = 0; i < src.length; i += 4) { if (!src[i + 3] || sel[i] !== 0) continue; black++; if (out[i] !== src[i] || out[i + 1] !== src[i + 1] || out[i + 2] !== src[i + 2]) throw new Error('Show selection painted pixel ' + (i / 4) + ' black, but the band changed it'); }
     if (!(black > 100 && black < W * H - 100)) throw new Error('CONTROL: Show selection painted ' + black + ' of ' + (W * H) + ' pixels black - the fixture does not straddle the band');
   });
+  /* ═══ #482 / #966 POLISH BATCH 12 — Keying, wipes, text, drawing: Chroma Key Pro, Luma Key, Wipe and Radial Wipe, Type-On,
+   * Scramble Text and Timecode, Border Frame, Find Edges, Emboss ═══════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 12
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); 12.3 answers hunt C36, 12.6/12.7 take C60 on to a width. The rule
+   * that makes it safe (§0.3): every new key's default is the old look, because a filter recipe gets every key it does not set
+   * from makeInstance, and a saved instance that lacks a key is filled at render time (queue 784) with the kernel's own
+   * fallback. Each item proves both against hashes captured on fc8866f1 (the tree before the batch) BEFORE the first edit.
+   * Pixel kernels run on typed arrays and text effects on strings — no canvas, no font, no rasteriser — so the bytes are the
+   * same on every OS and the pins are plain literals rather than pinned() tables. */
+  function b12Plate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  }
+  function b12Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b12Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  function b12StrHash(s) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b12Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  /* The kernel through FM._applyPixelFx: the same PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`, so a kernel that leaves its px params to the dispatcher is scaled as on a layer. */
+  function b12Run(type, params, W, H, t, ps, d0) { const d = d0 || b12Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out. (On fc8866f1 makeInstance has none of them, which is how
+     the pins were captured.) */
+  function b12Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Twelve hashes per config: two plate sizes; the export (ps 1), a half-size preview and his phone's 0.28 plate; two moments. */
+  function b12Shots(run, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5, 0.28].map(ps => [0.37, 1.9].map(t => b12Hash(run(JSON.parse(JSON.stringify(params)), W, H, t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys before the kernel runs (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new
+     instance, and every filter recipe), against the pins. `shots` turns params into the pinned string. A param set already
+     shot (filled is usually present, key for key) is not shot twice. */
+  function b12Pinned(type, NEW, CFG, PIN, shots) {
+    const moved = [];
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b12Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: JSON.parse(JSON.stringify(abs)) }).params;
+      const seen = {};
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const key = JSON.stringify(Object.keys(p).sort().map(k => [k, p[k]])); const got = key in seen ? seen[key] : (seen[key] = shots(p)); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  const b12PixelShots = type => p => b12Shots((q, W, H, t, ps) => b12Run(type, q, W, H, t, ps), p);
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default value comes
+     back from the load sanitiser as it was written. */
+  function b12Catalogue(type, NEW, SET, layerType) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l48212' + type, type: layerType || 'shape', shape: 'rect', text: 'Hi', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(SET)) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A library filter built on the effect carries every new key at its default (no recipe sets one). */
+  function b12Recipes(type, NEW, ids) {
+    ids.forEach(id => {
+      const box = FM.filters.makeInstance(id), kid = box && (box.effects || []).filter(e => e.type === type)[0];
+      if (!kid) throw new Error('CONTROL: the ' + id + ' filter has no ' + type + ' in it any more - this check sees nothing');
+      Object.keys(NEW).forEach(k => { if (kid.params[k] !== NEW[k]) throw new Error('the ' + id + ' filter’s ' + type + ' carries ' + k + ' = ' + kid.params[k] + ', not ' + NEW[k] + ' - a library filter would change its look'); });
+    });
+  }
+  const b12Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b12Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b12Alpha = d => { const a = []; for (let i = 3; i < d.length; i += 4) a.push(d[i]); return a; };
+  /* Text effects run on strings: every config over a spread of texts, progresses and moments, joined and hashed. */
+  const B12_TEXTS = ['Hello brave new world', 'two lines\nof caption text', 'a', '', 'Mixed CASE 2026 & co!'];
+  function b12TextShots(type) {
+    return p => {
+      const out = [];
+      B12_TEXTS.forEach(s => [0, 0.21, 0.5, 0.87, 1].forEach(pr => [[0.37, 0.37], [1.9, 1.3], [12.5, 3.2]].forEach(([t, lt]) => {
+        const q = JSON.parse(JSON.stringify(p)); if (q.progress === undefined) q.progress = pr;
+        const st = { text: s, letterSpacing: 7 }; FM.TEXT_FX[type](st, q, t, { localT: lt, fps: 30 }); out.push(st.text);
+      })));
+      return b12StrHash(out.join('\u0001'));
+    };
+  }
+  const B12_TIMES = [[12.5, 12.5, 30], [3725.5, 3725.5, 30], [0.04, 0.04, 24], [59.999, 59.999, 25], [7.3, 2.1, 29.97], [100.25, 0, 60]];
+  function b12TimecodeShots(p) {
+    const out = [];
+    B12_TIMES.forEach(([t, lt, fps]) => { const st = { text: 'x', letterSpacing: 0 }; FM.TEXT_FX.timecode(st, JSON.parse(JSON.stringify(p)), t, { localT: lt, fps: fps }); out.push(st.text); });
+    return out.join(' | ');
+  }
+
+  /* 12.1 CHROMA KEY PRO: Clip black, Clip white, Shrink / grow, Despill from, and a View that lays the key over grey. (Hunt C3,
+     which the backlog files under this item, was fixed by queue 986: Despill already pulls the key colour, and '986 C3 …'
+     pins it. Despill from keeps that as its default and adds Green and Blue.) */
+  const B12CK_NEW = { clipblack: 0, clipwhite: 100, shrink: 0, spillfrom: 0 };
+  const B12CK_CFG = { def: {}, blue: { color: '#1e3cff', tolerance: 0.5, despill: 1 }, matte: { view: 1 }, hard: { softness: 0, despill: 0, edgedesat: 0 },
+    kf: { tolerance: b12Kf(0.1, 0.6), despill: b12Kf(1, 0) }, teal: { color: '#30b0a0', softness: 0.6, edgedesat: 1 } };
+  const B12CK_PIN = {   // fc8866f1, before the edit
+    def: 'b3dd5d60.b3dd5d60/b3dd5d60.b3dd5d60/b3dd5d60.b3dd5d60 6423ecd1.6423ecd1/6423ecd1.6423ecd1/6423ecd1.6423ecd1',
+    blue: '1b2f8aca.1b2f8aca/1b2f8aca.1b2f8aca/1b2f8aca.1b2f8aca 7b2ed0dc.7b2ed0dc/7b2ed0dc.7b2ed0dc/7b2ed0dc.7b2ed0dc',
+    matte: 'd4220b7e.d4220b7e/d4220b7e.d4220b7e/d4220b7e.d4220b7e 34a516f1.34a516f1/34a516f1.34a516f1/34a516f1.34a516f1',
+    hard: '70eb43a7.70eb43a7/70eb43a7.70eb43a7/70eb43a7.70eb43a7 d4cc567a.d4cc567a/d4cc567a.d4cc567a/d4cc567a.d4cc567a',
+    kf: 'b80ed3fd.aa234a3d/b80ed3fd.aa234a3d/b80ed3fd.aa234a3d 51d8e11d.74468ea5/51d8e11d.74468ea5/51d8e11d.74468ea5',
+    teal: '543a0342.543a0342/543a0342.543a0342/543a0342.543a0342 41e2d002.41e2d002/41e2d002.41e2d002/41e2d002.41e2d002' };
+
+  test('482 12.1 Chroma Key Pro - Clip black, Clip white, Shrink / grow and Despill from are in the catalogue at defaults that key the old matte, View offers On grey, and saved and new keys come out byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('chromakeypro', B12CK_NEW, { clipblack: 20, clipwhite: 80, shrink: -3, spillfrom: 2, view: 2 });
+    if (b12Row('chromakeypro', 'shrink').unit !== 'px') throw new Error('Shrink / grow is not declared in px - it is a width on the picture, so a reduced preview must scale it');
+    const vw = b12Row('chromakeypro', 'view');
+    if ((vw.options || []).map(o => o[0] + ':' + o[1]).join() !== '0:Result,1:Matte,2:On grey') throw new Error('View is not Result / Matte / On grey (' + JSON.stringify(vw.options) + ')');
+    const moved = b12Pinned('chromakeypro', B12CK_NEW, B12CK_CFG, B12CK_PIN, b12PixelShots('chromakeypro'));
+    if (moved.length) throw new Error(moved.length + ' Chroma Key Pro results differ from fc8866f1 at the new defaults - a new control changed a key he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.1 Chroma Key Pro - Clip black and Clip white re-level the matte, Shrink and Grow move the edge by project px (not past the layer’s own edge), Despill from Green or Blue pulls that channel whatever the key, and On grey lays the key over grey', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64, KEY = [0, 194, 60], SUBJ = [230, 120, 40];
+    const P = o => Object.assign({ color: '#00c23c', tolerance: 0.3, softness: 0.28, despill: 0, edgedesat: 0, view: 0 }, o);
+    const ck = (o, d0, ps) => b12Run('chromakeypro', P(o), W, H, 0.5, ps, d0);
+    /* CLIP. A ramp from the key colour to the subject across each row, so every matte level turns up. CONTROL: under the
+       defaults the Matte view has levels between clear and solid on both sides of 30 % and 70 %. Clip black 30 / white 70 must
+       then be exactly the level map: at or below 0.3 clear, at or above 0.7 solid, linear in between (a byte either way). */
+    const ramp = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, f = x / (W - 1); for (let c = 0; c < 3; c++) d[i + c] = Math.round(KEY[c] + (SUBJ[c] - KEY[c]) * f); d[i + 3] = 255; } return d; };
+    const m0 = ck({ view: 1 }, ramp()), mc = ck({ view: 1, clipblack: 30, clipwhite: 70 }, ramp());
+    let lo = 0, mid = 0, hi = 0;
+    for (let i = 0; i < m0.length; i += 4) { const v = m0[i] / 255; if (v > 0 && v <= 0.3) lo++; else if (v > 0.3 && v < 0.7) mid++; else if (v >= 0.7 && v < 1) hi++; }
+    if (!(lo && mid && hi)) throw new Error('CONTROL: the ramp’s matte has ' + lo + ' / ' + mid + ' / ' + hi + ' pixels in the three bands - the fixture cannot see the clip');
+    for (let i = 0; i < m0.length; i += 4) {
+      const v = m0[i] / 255, want = v >= 0.7 ? 255 : (v <= 0.3 ? 0 : (v - 0.3) / 0.4 * 255);
+      if (Math.abs(mc[i] - want) > 1.5) throw new Error('Clip black 30 / Clip white 70 turned a matte of ' + v.toFixed(3) + ' into ' + mc[i] + ', not ' + want.toFixed(1) + ' (pixel ' + (i / 4) + ')');
+    }
+    /* SHRINK / GROW. A 20 px subject square on the screen. CONTROL: 400 solid pixels. Shrink 3 leaves the 14 px square and Grow 3
+       makes it 26 px; the matte is a hard step here, so the counts are exact. */
+    const block = (x0, y0, n) => { const d = b12Flat(W, H, KEY); for (let y = y0; y < y0 + n; y++) for (let x = x0; x < x0 + n; x++) { const i = (y * W + x) * 4; d[i] = SUBJ[0]; d[i + 1] = SUBJ[1]; d[i + 2] = SUBJ[2]; } return d; };
+    const solid = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] === 255) n++; return n; };
+    const n0 = solid(ck({}, block(20, 20, 20))), nS = solid(ck({ shrink: -3 }, block(20, 20, 20))), nG = solid(ck({ shrink: 3 }, block(20, 20, 20)));
+    if (n0 !== 400) throw new Error('CONTROL: the subject square keys to ' + n0 + ' solid pixels, not 400');
+    if (nS !== 196) throw new Error('Shrink 3 px left ' + nS + ' solid pixels of a 20 px square, not 196 (a 14 px square)');
+    if (nG !== 676) throw new Error('Grow 3 px made ' + nG + ' solid pixels from a 20 px square, not 676 (a 26 px square)');
+    /* …in project px: Shrink 4 on a half-size preview plate is Shrink 2 at full size, on the same plate, byte for byte. */
+    if (!b12Same(ck({ shrink: -4 }, block(20, 20, 20), 0.5), ck({ shrink: -2 }, block(20, 20, 20), 1))) throw new Error('Shrink 4 px on a half-size preview is not Shrink 2 px on the full plate - the choke does not follow the preview’s scale');
+    /* …and never past the layer’s own edge. The left half is not the layer at all (alpha 0), and carries the WORST colour
+       under it: the screen’s beside a subject (a choke that read it would eat 3 columns off the subject), the subject’s beside
+       a screen (a spread that read it would grow a 3-column rim onto the screen). */
+    const half = (under, over) => { const d = b12Flat(W, H, over); for (let y = 0; y < H; y++) for (let x = 0; x < 32; x++) { const i = (y * W + x) * 4; d[i] = under[0]; d[i + 1] = under[1]; d[i + 2] = under[2]; d[i + 3] = 0; } return d; };
+    const hS = ck({ shrink: -3 }, half(KEY, SUBJ)), hG = ck({ shrink: 3 }, half(SUBJ, KEY));
+    if (solid(hS) !== 32 * 64) throw new Error('Shrink ate into a subject from the side where the LAYER ends (' + solid(hS) + ' solid pixels, not ' + 32 * 64 + ') - only the key’s own matte may be choked');
+    if (solid(hG) !== 0) throw new Error('Grow spread a rim onto the keyed screen from where the layer is not (' + solid(hG) + ' solid pixels, not 0)');
+    /* DESPILL FROM. CONTROL: on a BLUE screen, Key colour leaves a leaf’s green alone (queue 986). Green takes it down to the
+       larger of the other two, as despill does; on a GREEN screen, Blue pulls a blue rim that Key colour leaves. */
+    const px = (rgb, o) => { const d = b12Flat(1, 1, rgb); FM._FX_TABLES.PIXEL_FX.chromakeypro(d, 1, 1, P(Object.assign({ tolerance: 0.1, softness: 0, despill: 1 }, o)), 0); return Array.from(d); };
+    const LEAF = [60, 140, 50], SPILL = [150, 150, 200];
+    if (px(LEAF, { color: '#1e3cff' }).join() !== '60,140,50,255') throw new Error('CONTROL: a blue-screen key with Despill from Key colour changed a leaf: ' + px(LEAF, { color: '#1e3cff' }));
+    if (px(LEAF, { color: '#1e3cff', spillfrom: 1 }).join() !== '60,60,50,255') throw new Error('Despill from Green on a blue-screen key left a leaf at ' + px(LEAF, { color: '#1e3cff', spillfrom: 1 }) + ', not 60,60,50');
+    if (px(SPILL, {}).join() !== '150,150,200,255') throw new Error('CONTROL: a green-screen key with Despill from Key colour changed a blue-rim pixel: ' + px(SPILL, {}));
+    if (px(SPILL, { spillfrom: 2 }).join() !== '150,150,150,255') throw new Error('Despill from Blue on a green-screen key left a blue-rim pixel at ' + px(SPILL, { spillfrom: 2 }) + ', not 150,150,150');
+    /* ON GREY. CONTROL: Result clears the screen pixel. On grey keeps the layer’s alpha, paints the screen mid grey and leaves
+       the subject alone; a half-keyed pixel is its colour over grey by its matte. */
+    const b = block(20, 20, 20), res = ck({}, b.slice()), gr = ck({ view: 2 }, b.slice());
+    if (res[3] !== 0) throw new Error('CONTROL: Result left the screen at alpha ' + res[3]);
+    if (Array.from(gr.slice(0, 4)).join() !== '128,128,128,255') throw new Error('On grey drew the keyed-out screen as ' + Array.from(gr.slice(0, 4)) + ', not solid mid grey');
+    const c = ((30 * W) + 30) * 4;
+    if (Array.from(gr.slice(c, c + 4)).join() !== SUBJ.concat(255).join()) throw new Error('On grey changed the subject: ' + Array.from(gr.slice(c, c + 4)));
+    const rm = ck({ view: 1 }, ramp()), rg = ck({ view: 2 }, ramp()), rr = ck({}, ramp());
+    for (let i = 0; i < rm.length; i += 4) {
+      const a = rm[i] / 255; if (!(a > 0.05 && a < 0.95)) continue;
+      for (let ch = 0; ch < 3; ch++) { const want = rr[i + ch] * a + 128 * (1 - a); if (Math.abs(rg[i + ch] - want) > 1.5) throw new Error('On grey drew a half-keyed pixel (matte ' + a.toFixed(2) + ') channel ' + ch + ' as ' + rg[i + ch] + ', not ' + want.toFixed(1) + ' (its colour over grey)'); }
+      if (rg[i + 3] !== 255) throw new Error('On grey changed a solid layer’s alpha to ' + rg[i + 3]);
+    }
+  });
+
+  /* 12.2 LUMA KEY: Similar and Dissimilar, with a Tolerance. The key runs on a canvas in the media path (it is media-only), so
+     its loop is reached through FM._lumaKeyPx — the same loop, on a bare buffer, with lumaKey’s own argument rules — and one
+     check proves the canvas function draws exactly what the loop does. The pins were captured on fc8866f1 by running the OLD
+     lumaKey on a byte-exact stand-in canvas: they are what its loop wrote. */
+  const b12LumaArgs = (p, t) => [p.threshold == null ? 0.25 : FM.evalProp(p.threshold, t), p.softness == null ? 28 : Math.max(0, Math.min(128, FM.evalProp(p.softness, t))), p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0), p.tolerance == null ? 0.1 : Math.max(0, Math.min(0.5, FM.evalProp(p.tolerance, t)))];
+  const b12LumaShots = p => [[97, 61], [160, 120]].map(([W, H]) => [0.37, 1.9].map(t => { const d = b12Plate(W, H), a = b12LumaArgs(p, t); FM._lumaKeyPx(d, a[0], a[1], a[2], a[3]); return b12Hash(d); }).join('.')).join(' ');
+  const B12LK_NEW = { tolerance: 0.1 };
+  const B12LK_CFG = { def: {}, bright: { mode: 1 }, nosoft: { softness: 0 }, wide: { threshold: 0.6, softness: 100 }, kf: { threshold: b12Kf(0.1, 0.9) } };
+  const B12LK_PIN = {   // fc8866f1, before the edit
+    def: '14f1ca77.14f1ca77 934092dc.934092dc', bright: 'dc9cce9d.dc9cce9d a08cd47f.a08cd47f', nosoft: 'cf80c9c4.cf80c9c4 955dbb39.955dbb39',
+    wide: 'f6b0f488.f6b0f488 f8e785b8.f8e785b8', kf: '10380d2c.b68c2f8e ed43efad.4bec84dc' };
+
+  test('482 12.2 Luma Key - Removes offers Similar and Dissimilar, Tolerance is in the catalogue and only live under them, and saved and new Dark and Bright keys key byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    if (typeof FM._lumaKeyPx !== 'function') throw new Error('FM._lumaKeyPx (the Luma Key loop on a bare buffer) is not reachable');
+    b12Catalogue('lumakey', B12LK_NEW, { mode: 3, tolerance: 0.35 }, 'image');
+    const md = b12Row('lumakey', 'mode'), tl = b12Row('lumakey', 'tolerance');
+    if ((md.options || []).map(o => o[0] + ':' + o[1]).join() !== '0:Dark,1:Bright,2:Similar,3:Dissimilar') throw new Error('Removes is not Dark / Bright / Similar / Dissimilar (' + JSON.stringify(md.options) + ')');
+    if (tl.overriddenBy !== 'mode' || JSON.stringify(tl.liveWhen) !== '[2,3]') throw new Error('Tolerance does not say it only counts under Similar and Dissimilar (overriddenBy ' + tl.overriddenBy + ', liveWhen ' + JSON.stringify(tl.liveWhen) + ')');
+    const moved = b12Pinned('lumakey', B12LK_NEW, B12LK_CFG, B12LK_PIN, b12LumaShots);
+    if (moved.length) throw new Error(moved.length + ' Luma Key mattes differ from fc8866f1 - a new control changed a key he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.2 Luma Key - Similar at 0.5 removes mid grey and keeps black and white, Dissimilar keeps only mid grey, Tolerance widens the band, and the canvas key draws what the loop does and redraws when only Tolerance moves', { item: '482', budgetMs: 60000 }, function () {
+    const W = 256, H = 2;
+    const ramp = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = x; d[i + 1] = x; d[i + 2] = x; d[i + 3] = 255; } return d; };
+    const key = (mode, tol) => b12Alpha(FM._lumaKeyPx(ramp(), 0.5, 28, mode, tol)).slice(0, W);
+    /* CONTROL: Dark at 0.5 cannot keep both ends - it clears black along with every shadow. */
+    const dark = key(0, 0.1);
+    if (!(dark[0] === 0 && dark[100] === 0 && dark[255] === 255)) throw new Error('CONTROL: Removes Dark at 0.5 gave black ' + dark[0] + ', a dark grey ' + dark[100] + ', white ' + dark[255]);
+    const sim = key(2, 0.1), dis = key(3, 0.1);
+    if (!(sim[0] === 255 && sim[255] === 255 && sim[128] === 0)) throw new Error('Similar at 0.5 gave black ' + sim[0] + ', mid grey ' + sim[128] + ', white ' + sim[255] + ' - it should clear mid grey and keep both ends');
+    if (!(dis[0] === 0 && dis[255] === 0 && dis[128] === 255)) throw new Error('Dissimilar at 0.5 gave black ' + dis[0] + ', mid grey ' + dis[128] + ', white ' + dis[255] + ' - it should keep only mid grey');
+    /* The band is Tolerance either side of 127.5, exactly: 0.1 is 25.5 levels (102..153, 52 levels), 0.3 is 76.5 (51..204, 154). */
+    const clear = a => a.filter(v => v === 0).length;
+    if (clear(sim) !== 52) throw new Error('Similar with Tolerance 0.1 cleared ' + clear(sim) + ' levels, not the 52 within 25.5 of the threshold');
+    if (clear(key(2, 0.3)) !== 154) throw new Error('Similar with Tolerance 0.3 cleared ' + clear(key(2, 0.3)) + ' levels, not 154 - Tolerance does not widen the band');
+    for (let x = 0; x < W; x++) if (sim[x] + dis[x] < 254 || sim[x] + dis[x] > 256) throw new Error('Similar and Dissimilar are not each other’s opposite at level ' + x + ' (' + sim[x] + ' + ' + dis[x] + ')');
+    /* THE CANVAS KEY IS THAT LOOP: the media path’s lumaKey on a canvas holding the same ramp gives the same alpha, and a change
+       of Tolerance alone redraws it (the memo must know Tolerance, or dragging it would show nothing). */
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d'), img = g.createImageData(W, H); img.data.set(ramp()); g.putImageData(img, 0, 0);
+    const viaCanvas = tol => b12Alpha(FM._lumaKey(cv, W, H, 0.5, 'none', 28, 2, 9, tol).getContext('2d').getImageData(0, 0, W, H).data).slice(0, W);
+    const c1 = viaCanvas(0.1);
+    if (c1.join() !== sim.join()) throw new Error('the canvas Luma Key under Similar differs from FM._lumaKeyPx - the media path is not running this loop');
+    const c3 = viaCanvas(0.3);
+    if (clear(c3) !== 154) throw new Error('moving only Tolerance from 0.1 to 0.3 left the canvas key clearing ' + clear(c3) + ' levels - the cache handed back the old key');
+  });
+
+  /* 12.3 WIPE and RADIAL WIPE (hunt C36): Fit to Frame / Layer and Invert on both; Direction and Blades on Radial Wipe. What
+     queue 904 / 690 already pin stays as it is: Progress is how much is REVEALED (0 shows nothing, 1 everything), and Edge
+     softness and the centre are untouched. Invert is the one place Progress reads the other way, by asking. */
+  const B12WP_NEW = { fit: 0, invert: 0 }, B12RW_NEW = { dir: 0, blades: 1, fit: 0, invert: 0 };
+  const B12WP_CFG = { def: {}, angled: { progress: 0.3, angle: 30 }, back: { progress: 0.7, angle: 200 }, soft: { softness: 12, angle: 75 }, kf: { progress: b12Kf(0, 1) }, zero: { progress: 0 }, one: { progress: 1 } };
+  const B12WP_PIN = {   // fc8866f1, before the edit
+    def: 'bedb6589.bedb6589/bedb6589.bedb6589/bedb6589.bedb6589 6fe25d58.6fe25d58/6fe25d58.6fe25d58/6fe25d58.6fe25d58',
+    angled: '93670ad4.93670ad4/93670ad4.93670ad4/93670ad4.93670ad4 1cc8f9f0.1cc8f9f0/1cc8f9f0.1cc8f9f0/1cc8f9f0.1cc8f9f0',
+    back: '55c42c61.55c42c61/55c42c61.55c42c61/55c42c61.55c42c61 af00a0f1.af00a0f1/af00a0f1.af00a0f1/af00a0f1.af00a0f1',
+    soft: '4e63e974.4e63e974/0f931e8b.0f931e8b/589c3f99.589c3f99 00921aa1.00921aa1/635deb98.635deb98/938d8188.938d8188',
+    kf: '848091a5.01d08205/848091a5.01d08205/848091a5.01d08205 3eda5d05.9bbb8cd9/3eda5d05.9bbb8cd9/3eda5d05.9bbb8cd9',
+    zero: 'bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd b666af65.b666af65/b666af65.b666af65/b666af65.b666af65',
+    one: '3ef7846d.3ef7846d/3ef7846d.3ef7846d/3ef7846d.3ef7846d 60f20f35.60f20f35/60f20f35.60f20f35/60f20f35.60f20f35' };
+  const B12RW_CFG = { def: {}, quarter: { progress: 0.3, start: 90 }, off: { centerx: 20, centery: 70, progress: 0.6 }, soft: { softness: 12, start: 45 }, kf: { progress: b12Kf(0, 1) }, zero: { progress: 0 }, softzero: { progress: 0, softness: 10 } };
+  const B12RW_PIN = {   // fc8866f1, before the edit
+    def: '4fe12e80.4fe12e80/4fe12e80.4fe12e80/4fe12e80.4fe12e80 23fa9b60.23fa9b60/23fa9b60.23fa9b60/23fa9b60.23fa9b60',
+    quarter: '9282f180.9282f180/9282f180.9282f180/9282f180.9282f180 405731cc.405731cc/405731cc.405731cc/405731cc.405731cc',
+    off: '48ba9204.48ba9204/48ba9204.48ba9204/48ba9204.48ba9204 e8bde605.e8bde605/e8bde605.e8bde605/e8bde605.e8bde605',
+    soft: 'be3d836f.be3d836f/6be2ca5d.6be2ca5d/c59141b5.c59141b5 a984c675.a984c675/c67a73c1.c67a73c1/da30fc89.da30fc89',
+    kf: '8b2a3ffd.20af2b9c/8b2a3ffd.20af2b9c/8b2a3ffd.20af2b9c cfe1aacc.864c9b51/cfe1aacc.864c9b51/cfe1aacc.864c9b51',
+    zero: 'bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd b666af65.b666af65/b666af65.b666af65/b666af65.b666af65',
+    softzero: 'bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd b666af65.b666af65/b666af65.b666af65/b666af65.b666af65' };
+
+  test('482 12.3 Wipe and Radial Wipe - Fit to and Invert, and Radial Wipe’s Direction and Blades, are in the catalogue at defaults that wipe the old way, and saved and new wipes cut byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('wipe', B12WP_NEW, { fit: 1, invert: 1 });
+    b12Catalogue('radialwipe', B12RW_NEW, { dir: 2, blades: 5, fit: 1, invert: 1 });
+    const opts = (type, key) => (b12Row(type, key).options || []).map(o => o[1]).join(' / ');
+    if (opts('radialwipe', 'dir') !== 'Clockwise / Anticlockwise / Both ways') throw new Error('Radial Wipe Direction is ' + opts('radialwipe', 'dir'));
+    if (opts('wipe', 'fit') !== 'Frame / Layer' || opts('radialwipe', 'fit') !== 'Frame / Layer') throw new Error('Fit to is not Frame / Layer on both wipes');
+    const bl = b12Row('radialwipe', 'blades');
+    if (bl.min !== 1 || bl.max !== 12 || bl.step !== 1) throw new Error('Blades is not a whole number from 1 to 12 (' + bl.min + '..' + bl.max + ' step ' + bl.step + ')');
+    const moved = b12Pinned('wipe', B12WP_NEW, B12WP_CFG, B12WP_PIN, b12PixelShots('wipe')).concat(b12Pinned('radialwipe', B12RW_NEW, B12RW_CFG, B12RW_PIN, b12PixelShots('radialwipe')));
+    if (moved.length) throw new Error(moved.length + ' wipes differ from fc8866f1 at the new defaults - a new control changed a wipe he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.3 Wipe and Radial Wipe - Fit to Layer wipes a 100 px title by half at Progress 0.5, Invert keeps exactly what the wipe hides, Anticlockwise and Both ways sweep the other way and both ways, and Blades cut that many wedges', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES.PIXEL_FX, W = 400, H = 100;
+    /* A 100 x 40 title in the left of a 400 x 100 frame: x 20..119, y 10..49. */
+    const title = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 10; y < 50; y++) for (let x = 20; x < 120; x++) { const i = (y * W + x) * 4; d[i] = 240; d[i + 1] = 200; d[i + 2] = 40; d[i + 3] = 255; } return d; };
+    const run = (type, p) => { const d = title(); K[type](d, W, H, Object.assign({ softness: 0 }, p), 0, 1); return d; };
+    const shown = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+    const at = (d, x, y) => d[(y * W + x) * 4 + 3];
+    /* FIT. CONTROL: measured across the FRAME, Progress 0.5 keeps the whole title (it sits left of the frame’s middle). Fit to
+       Layer measures across the title: columns 20..70 of its 100 stay (proj = (x - 69.5)/100 + 0.5 <= 0.5), 51 x 40. */
+    if (shown(run('wipe', { progress: 0.5, angle: 0 })) !== 4000) throw new Error('CONTROL: a frame-fitted wipe at 0.5 did not keep the whole left-hand title (' + shown(run('wipe', { progress: 0.5, angle: 0 })) + ' of 4000)');
+    const fl = shown(run('wipe', { progress: 0.5, angle: 0, fit: 1 }));
+    if (fl !== 2040) throw new Error('Wipe Fit to Layer at Progress 0.5 kept ' + fl + ' of the title’s 4000 pixels, not 2040 (its left half)');
+    if (shown(run('wipe', { progress: 0.26, angle: 90, fit: 1 })) !== 1100) throw new Error('Wipe Fit to Layer at 0.26 straight down kept ' + shown(run('wipe', { progress: 0.26, angle: 90, fit: 1 })) + ' pixels, not the title’s top 11 rows (1100: (y - 29.5)/40 + 0.5 <= 0.26)');
+    [['wipe', {}], ['radialwipe', {}]].forEach(([type]) => {
+      if (shown(run(type, { progress: 0, fit: 1 })) !== 0 || shown(run(type, { progress: 1, fit: 1 })) !== 4000) throw new Error(type + ' Fit to Layer does not show nothing at 0 and everything at 1');
+    });
+    /* Radial, fitted: the pivot is the title’s middle (69.5, 29.5). CONTROL: on the frame, Progress 0.5 from 0 degrees keeps
+       the half BELOW the frame’s centre row 50, where the title is not. Fitted, it keeps the title’s own lower half. */
+    if (shown(run('radialwipe', { progress: 0.5, start: 0 })) !== 0) throw new Error('CONTROL: a frame-fitted Radial Wipe at 0.5 kept part of a title above the frame’s centre');
+    const rf = shown(run('radialwipe', { progress: 0.5, start: 0, fit: 1 }));
+    if (Math.abs(rf - 2000) > 100) throw new Error('Radial Wipe Fit to Layer at 0.5 kept ' + rf + ' of the title’s 4000 pixels, not about half');
+    /* INVERT keeps what the wipe hides — every pixel exactly once between the two, on both wipes, hard and soft — and turns
+       Progress round: 0 shows everything, 1 nothing. */
+    const T0 = title();
+    [['wipe', { progress: 0.19, angle: 30 }], ['radialwipe', { progress: 0.37, start: 20, fit: 1 }], ['radialwipe', { progress: 0.6, dir: 2, blades: 3, fit: 1 }], ['wipe', { progress: 0.5, fit: 1, angle: 10 }]].forEach(([type, p]) => {
+      const a = run(type, p), b = run(type, Object.assign({ invert: 1 }, p));
+      for (let i = 3; i < a.length; i += 4) if ((a[i] > 0) === (b[i] > 0) && T0[i] > 0) throw new Error(type + ' ' + JSON.stringify(p) + ': pixel ' + (i >> 2) + ' is ' + (a[i] ? 'kept' : 'hidden') + ' with Invert off AND on');
+      const sa = run(type, Object.assign({ softness: 15 }, p)), sb = run(type, Object.assign({ softness: 15, invert: 1 }, p));
+      let partial = 0;
+      for (let i = 3; i < sa.length; i += 4) { if (T0[i] === 0) continue; if (sa[i] > 0 && sa[i] < 255) partial++; if (Math.abs(sa[i] + sb[i] - 255) > 1) throw new Error(type + ' soft ' + JSON.stringify(p) + ': pixel ' + (i >> 2) + ' is ' + sa[i] + ' plain and ' + sb[i] + ' inverted - they should add up to the layer'); }
+      if (partial < 20) throw new Error('CONTROL: the soft ' + type + ' has only ' + partial + ' partly shown pixels on the title');
+      if (shown(run(type, Object.assign({}, p, { progress: 0, invert: 1 }))) !== 4000 || shown(run(type, Object.assign({}, p, { progress: 1, invert: 1 }))) !== 0) throw new Error(type + ' Invert does not show everything at 0 and nothing at 1');
+    });
+    /* DIRECTION, on a full square plate about its middle so every angle is there. Screen y runs down, so clockwise from 0
+       degrees passes through the bottom-right first. Progress 0.25 from Start 0: */
+    const S = 81, sq = () => b12Flat(S, S, [200, 200, 200]);
+    const rs = p => { const d = sq(); K.radialwipe(d, S, S, Object.assign({ softness: 0, start: 0, centerx: 50, centery: 50 }, p), 0, 1); return d; };
+    const sa = (d, deg) => { const r = 30, x = Math.round(40.5 + r * Math.cos(deg * Math.PI / 180)), y = Math.round(40.5 + r * Math.sin(deg * Math.PI / 180)); return d[(y * S + x) * 4 + 3] > 0 ? 1 : 0; };
+    const pat = (d, list) => list.map(g => sa(d, g)).join('');
+    const ANG = [10, 80, 100, 170, 190, 260, 280, 350];
+    if (pat(rs({ progress: 0.25 }), ANG) !== '11000000') throw new Error('CONTROL: Clockwise 0.25 kept ' + pat(rs({ progress: 0.25 }), ANG) + ' at ' + ANG + ' degrees, not the quarter from 0 to 90');
+    if (pat(rs({ progress: 0.25, dir: 1 }), ANG) !== '00000011') throw new Error('Anticlockwise 0.25 kept ' + pat(rs({ progress: 0.25, dir: 1 }), ANG) + ' at ' + ANG + ' degrees, not the quarter from 0 back to 270');
+    if (pat(rs({ progress: 0.5, dir: 2 }), ANG) !== '11000011') throw new Error('Both ways 0.5 kept ' + pat(rs({ progress: 0.5, dir: 2 }), ANG) + ' at ' + ANG + ' degrees, not the half either side of Start (270..90)');
+    /* BLADES: four wedges, each keeping the first half of its quarter at Progress 0.5 — 0..45, 90..135, 180..225, 270..315. */
+    const B = [20, 70, 110, 160, 200, 250, 290, 340];
+    if (pat(rs({ progress: 0.5 }), B) !== '11110000') throw new Error('CONTROL: one blade at 0.5 kept ' + pat(rs({ progress: 0.5 }), B));
+    if (pat(rs({ progress: 0.5, blades: 4 }), B) !== '10101010') throw new Error('Blades 4 at 0.5 kept ' + pat(rs({ progress: 0.5, blades: 4 }), B) + ' at ' + B + ' degrees, not the first half of every quarter');
+    if (pat(rs({ progress: 0.5, blades: 4, dir: 2 }), [10, 35, 55, 80, 100, 125, 145, 170]) !== '10011001') throw new Error('Blades 4 Both ways at 0.5 kept ' + pat(rs({ progress: 0.5, blades: 4, dir: 2 }), [10, 35, 55, 80, 100, 125, 145, 170]) + ' - each quarter should open both ways from its start line');
+    /* …and the area each keeps is the Progress share of the frame, whichever way it sweeps. */
+    [{ dir: 1 }, { dir: 2 }, { blades: 5 }, { blades: 12, dir: 2 }, { blades: 3, dir: 1 }].forEach(o => {
+      const share = shown(rs(Object.assign({ progress: 0.3 }, o))) / (S * S);
+      if (Math.abs(share - 0.3) > 0.03) throw new Error('Radial Wipe ' + JSON.stringify(o) + ' at Progress 0.3 shows ' + (share * 100).toFixed(1) + ' % of the frame, not about 30 %');
+      const soft = rs(Object.assign({ progress: 0.3, softness: 8 }, o)); let part = 0; for (let i = 3; i < soft.length; i += 4) if (soft[i] > 0 && soft[i] < 200) part++;
+      if (part < 40) throw new Error('Radial Wipe ' + JSON.stringify(o) + ' with Edge softness 8 has only ' + part + ' feathered pixels');
+      if (shown(rs(Object.assign({ progress: 0, softness: 8 }, o))) !== 0 || shown(rs(Object.assign({ progress: 1, softness: 8 }, o))) !== S * S) throw new Error('Radial Wipe ' + JSON.stringify(o) + ' does not show nothing at 0 and everything at 1');
+    });
+    /* Both ways opens FROM the Start line, so the line is the middle of the wedge, not an edge: feathered, it stays solid there
+       (CONTROL: Clockwise, where Start is an edge, feathers it to about half). */
+    const startA = o => { const d = rs(Object.assign({ progress: 0.3, softness: 8 }, o)); return d[(40 * S + 70) * 4 + 3]; };
+    if (!(startA({}) > 60 && startA({}) < 200)) throw new Error('CONTROL: a soft Clockwise wipe does not feather its Start line (alpha ' + startA({}) + ')');
+    if (startA({ dir: 2 }) !== 255) throw new Error('a soft Both ways wipe feathered its Start line to ' + startA({ dir: 2 }) + ' - the line is the middle of the wedge');
+  });
+
+  /* 12.4 TEXT: Type-On’s Caret blink and Caret when idle, Scramble Text’s Resolves order, Timecode’s HH:MM:SS:FF,
+     Frames and MM:SS formats and Seconds’ Decimals. Text effects run on strings, so they are driven through FM.TEXT_FX
+     directly: every config over five texts, five progresses and three moments, hashed (Timecode’s readouts are pinned as
+     the strings themselves). */
+  const B12TO_NEW = { blink: 0, hidecaret: 1 }, B12SC_NEW = { order: 0 }, B12TC_NEW = { decimals: 1 };
+  const B12TO_CFG = { def: {}, word: { unit: 1 }, end: { dir: 1 }, middle: { dir: 2, unit: 1 }, caret: { cursor: 1 }, caretend: { cursor: 3, dir: 1 }, line: { unit: 2, cursor: 2 }, kf: { progress: b12Kf(0, 1), cursor: 2 } };
+  const B12TO_PIN = { def: 'bb01c625', word: 'da63f4cd', end: 'bd105359', middle: '0890250e', caret: '3ed9a5ec', caretend: 'f629e081', line: '7a3bc3e6', kf: '8aac375e' };   // fc8866f1
+  const B12SC_CFG = { any: { chars: 0 }, match: { chars: 1 }, digits: { chars: 2, speed: 30 }, letters: { chars: 3 }, still: { speed: 0 }, kf: { speed: b12Kf(0, 20) } };
+  const B12SC_PIN = { any: '5caa0236', match: '93c4fcfb', digits: '4f47a76d', letters: '30b11ddf', still: 'c104def1', kf: 'f2a99233' };   // fc8866f1
+  const B12TC_CFG = { m0: { mode: 0 }, m1: { mode: 1 }, m2: { mode: 2 }, m3: { mode: 3 }, off: { mode: 1, offset: 3600 }, down: { mode: 0, dir: 1, offset: 30 }, timeline: { mode: 3, source: 1 } };
+  const B12TC_PIN = {   // fc8866f1: the readouts at (t, clip time, fps) = (12.5, 12.5, 30) (3725.5, 3725.5, 30) (0.04, 0.04, 24) (59.999, 59.999, 25) (7.3, 2.1, 29.97) (100.25, 0, 60)
+    m0: '00:12:15 | 02:05:15 | 00:00:00 | 00:59:24 | 00:02:02 | 00:00:00', m1: '00:00:12 | 01:02:05 | 00:00:00 | 00:00:59 | 00:00:02 | 00:00:00',
+    m2: '12:15 | 05:15 | 00:00 | 59:24 | 02:02 | 00:00', m3: '12.5s | 3725.5s | 0.0s | 60.0s | 2.1s | 0.0s',
+    off: '01:00:12 | 02:02:05 | 01:00:00 | 01:00:59 | 01:00:02 | 01:00:00', down: '00:17:15 | 00:00:00 | 00:29:23 | 00:00:00 | 00:27:26 | 00:30:00',
+    timeline: '12.5s | 3725.5s | 0.0s | 60.0s | 7.3s | 100.3s' };
+
+  test('482 12.4 Text - Caret blink, Caret when idle, Resolves and Decimals are in the catalogue at defaults that write the old text, Timecode offers HH:MM:SS:FF, Frames and MM:SS, and saved and new Type-On, Scramble Text and Timecode write character for character as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b12Catalogue('textprogress', B12TO_NEW, { blink: 2.5, hidecaret: 0, cursor: 2 }, 'text');
+    b12Catalogue('textrandomizer', B12SC_NEW, { order: 3 }, 'text');
+    b12Catalogue('timecode', B12TC_NEW, { decimals: 3, mode: 6 }, 'text');
+    const gated = (type, key, want) => { const r = b12Row(type, key); if (r.overriddenBy !== want[0] || JSON.stringify(r.liveWhen) !== JSON.stringify(want[1])) throw new Error(type + ' ' + key + ' is not gated to ' + want[0] + ' ' + JSON.stringify(want[1]) + ' (overriddenBy ' + r.overriddenBy + ', liveWhen ' + JSON.stringify(r.liveWhen) + ')'); };
+    gated('textprogress', 'blink', ['cursor', [1, 2, 3]]); gated('textprogress', 'hidecaret', ['cursor', [1, 2, 3]]); gated('timecode', 'decimals', ['mode', 3]);
+    const fm = (b12Row('timecode', 'mode').options || []).map(o => o[0] + ':' + o[1]).join();
+    if (fm !== '0:MM:SS:FF,1:HH:MM:SS,2:SS:FF,3:Seconds,4:HH:MM:SS:FF,5:Frames,6:MM:SS') throw new Error('Timecode Format is ' + fm);
+    if ((b12Row('textrandomizer', 'order').options || []).map(o => o[1]).join(' / ') !== 'Left to right / Right to left / Random / Centre out') throw new Error('Scramble Text Resolves is ' + JSON.stringify(b12Row('textrandomizer', 'order').options));
+    const moved = b12Pinned('textprogress', B12TO_NEW, B12TO_CFG, B12TO_PIN, b12TextShots('textprogress'))
+      .concat(b12Pinned('textrandomizer', B12SC_NEW, B12SC_CFG, B12SC_PIN, b12TextShots('textrandomizer')))
+      .concat(b12Pinned('timecode', B12TC_NEW, B12TC_CFG, B12TC_PIN, b12TimecodeShots));
+    if (moved.length) throw new Error(moved.length + ' text effects write differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.4 Text - the Type-On caret blinks on the clip’s clock and can stand before and after the typing, Scramble resolves right to left, from the centre or at random (the same letters on every frame), and Timecode reads 01:02:05:15 at 3725.5 s and 30 fps', { item: '482', budgetMs: 60000 }, function () {
+    const run = (type, p, s, t, lt, fps) => { const st = { text: s, letterSpacing: 0 }; FM.TEXT_FX[type](st, p, t, { localT: lt == null ? t : lt, fps: fps || 30 }); return st.text; };
+    const S = 'Hello brave new world';
+    const to = (o, lt) => run('textprogress', Object.assign({ progress: 0.5, cursor: 2 }, o), S, 9.0, lt);
+    /* BLINK. CONTROL: with no blink the caret is there at every moment. At 2 Hz it is lit for the first quarter second of each
+       half second on the CLIP’s clock (0.1 s in: lit; 0.3 s in: dark), whatever the timeline says (t is 9.0 throughout). */
+    const half = S.slice(0, Math.round(S.length * 0.5));
+    /* A DARK caret stays in the string (so the layout does not move — see the next test) and is marked for the painter to
+       skip: `dk` writes the text and, when there is one, the mark. */
+    const dk = (o, lt) => { const st = { text: S, letterSpacing: 0 }; FM.TEXT_FX.textprogress(st, Object.assign({ progress: 0.5, cursor: 2 }, o), 9.0, { localT: lt, fps: 30 }); return st.text + (st.ghost ? ' [dark ' + st.ghost.at + ' ' + st.ghost.ch + ']' : ''); };
+    if (dk({}, 0.1) !== half + '_' || dk({}, 0.3) !== half + '_') throw new Error('CONTROL: the steady caret reads ' + JSON.stringify(dk({}, 0.1)) + ' / ' + JSON.stringify(dk({}, 0.3)));
+    if (dk({ blink: 2 }, 0.1) !== half + '_') throw new Error('Caret blink 2 Hz at 0.1 s into the clip wrote ' + JSON.stringify(dk({ blink: 2 }, 0.1)) + ' - the caret should be lit');
+    if (dk({ blink: 2 }, 0.3) !== half + '_ [dark end _]') throw new Error('Caret blink 2 Hz at 0.3 s into the clip wrote ' + JSON.stringify(dk({ blink: 2 }, 0.3)) + ' - the caret should be laid out and marked dark');
+    if (dk({ blink: 2 }, 0.6) !== half + '_') throw new Error('Caret blink 2 Hz at 0.6 s wrote ' + JSON.stringify(dk({ blink: 2 }, 0.6)) + ' - it should be lit again');
+    if (dk({ blink: 2, dir: 1 }, 0.3) !== '_' + S.slice(S.length - Math.round(S.length * 0.5)) + ' [dark start _]') throw new Error('a dark caret typing from the End is marked ' + JSON.stringify(dk({ blink: 2, dir: 1 }, 0.3)) + ' - it leads the text');
+    if (dk({ blink: 2, progress: 1 }, 0.3) !== S) throw new Error('a finished Type-On with the idle caret hidden wrote ' + JSON.stringify(dk({ blink: 2, progress: 1 }, 0.3)) + ' - no caret, so nothing to mark');
+    /* CARET WHEN IDLE. CONTROL: Hide (a saved Type-On) shows no caret before the first letter or after the last. Show leaves
+       it standing there — at the end of the text, or at its start when typing from the End. */
+    if (to({ progress: 0 }, 0.1) !== '' || to({ progress: 1 }, 0.1) !== S) throw new Error('CONTROL: the default caret shows before or after the typing');
+    if (to({ progress: 0, hidecaret: 0 }, 0.1) !== '_') throw new Error('Caret when idle Show at Progress 0 wrote ' + JSON.stringify(to({ progress: 0, hidecaret: 0 }, 0.1)) + ', not the caret alone');
+    if (to({ progress: 1, hidecaret: 0 }, 0.1) !== S + '_') throw new Error('Caret when idle Show at Progress 1 wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0 }, 0.1)));
+    if (to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1) !== '_' + S) throw new Error('Caret when idle Show typing from the End wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1)) + ' - the caret leads');
+    if (dk({ progress: 1, hidecaret: 0, blink: 2 }, 0.3) !== S + '_ [dark end _]') throw new Error('a standing caret does not blink with the rest: ' + JSON.stringify(dk({ progress: 1, hidecaret: 0, blink: 2 }, 0.3)));
+    /* RESOLVES. Ten letters at Progress 0.3: three have settled. A position has SETTLED when it shows its own letter on every one
+       of six frames (a scrambling one changes from frame to frame). */
+    const T10 = 'ABCDEFGHIJ';
+    const settled = o => { const outs = [0.3, 0.71, 1.12, 1.9, 2.4, 3.05].map(t => run('textrandomizer', Object.assign({ progress: 0.3, speed: 12, chars: 3 }, o), T10, t)); const k = []; for (let i = 0; i < 10; i++) if (outs.every(x => x[i] === T10[i])) k.push(i); return k.join(','); };
+    if (settled({}) !== '0,1,2') throw new Error('CONTROL: Left to right settled positions ' + settled({}) + ', not 0,1,2');
+    if (settled({ order: 1 }) !== '7,8,9') throw new Error('Right to left settled positions ' + settled({ order: 1 }) + ', not 7,8,9');
+    if (settled({ order: 3 }) !== '3,4,5') throw new Error('Centre out settled positions ' + settled({ order: 3 }) + ', not 3,4,5 (the middle pair, then the left of the next pair)');
+    const rnd = settled({ order: 2 });
+    if (rnd.split(',').length !== 3 || rnd === '0,1,2' || rnd === '7,8,9') throw new Error('Random settled positions ' + rnd + ' - it should be three positions, not a run from either end');
+    /* …and a settled letter stays settled as Progress grows, in every order. */
+    [0, 1, 2, 3].forEach(ord => { let had = []; for (let k = 0; k <= 10; k++) { const now = settled({ order: ord, progress: k / 10 }).split(',').filter(Boolean); if (now.length !== k) throw new Error('Resolves ' + ord + ' at Progress ' + (k / 10) + ' has ' + now.length + ' settled letters, not ' + k); had.forEach(i => { if (now.indexOf(i) < 0) throw new Error('Resolves ' + ord + ': position ' + i + ' unsettled again at Progress ' + (k / 10)); }); had = now; } });
+    /* TIMECODE. CONTROL: MM:SS:FF wraps at the hour. */
+    const tc = (o, sec, fps) => run('timecode', o, 'x', sec, sec, fps);
+    if (tc({ mode: 0 }, 3725.5, 30) !== '02:05:15') throw new Error('CONTROL: MM:SS:FF at 3725.5 s reads ' + tc({ mode: 0 }, 3725.5, 30));
+    if (tc({ mode: 4 }, 3725.5, 30) !== '01:02:05:15') throw new Error('HH:MM:SS:FF at 3725.5 s and 30 fps reads ' + tc({ mode: 4 }, 3725.5, 30) + ', not 01:02:05:15');
+    if (tc({ mode: 5 }, 12.5, 30) !== '375' || tc({ mode: 5 }, 2, 24) !== '48') throw new Error('Frames reads ' + tc({ mode: 5 }, 12.5, 30) + ' at 12.5 s / 30 fps and ' + tc({ mode: 5 }, 2, 24) + ' at 2 s / 24 fps, not 375 and 48');
+    if (tc({ mode: 6 }, 3725.5, 30) !== '62:05' || tc({ mode: 6 }, 65, 30) !== '01:05') throw new Error('MM:SS reads ' + tc({ mode: 6 }, 3725.5, 30) + ' at 3725.5 s and ' + tc({ mode: 6 }, 65, 30) + ' at 65 s, not 62:05 and 01:05');
+    if (tc({ mode: 3 }, 12.5, 30) !== '12.5s') throw new Error('CONTROL: Seconds reads ' + tc({ mode: 3 }, 12.5, 30));
+    if (tc({ mode: 3, decimals: 0 }, 12.25, 30) !== '12s' || tc({ mode: 3, decimals: 3 }, 12.5, 30) !== '12.500s') throw new Error('Seconds with Decimals 0 / 3 reads ' + tc({ mode: 3, decimals: 0 }, 12.25, 30) + ' / ' + tc({ mode: 3, decimals: 3 }, 12.5, 30));
+    if (tc({ mode: 4, dir: 1, offset: 3600 }, 1.5, 30) !== '00:59:58:15') throw new Error('HH:MM:SS:FF counting down from an hour reads ' + tc({ mode: 4, dir: 1, offset: 3600 }, 1.5, 30) + ' at 1.5 s');
+  });
+
+  /* 12.5 BORDER FRAME: Style (Solid / Dashed / Dotted) with Dash length and Gap, Draw on, Smooth corners. Pinned on the frame
+     (the adjustment path, no box) and on a layer's box (the per-layer path hands the kernel bb), at three plate scales. */
+  const B12BF_NEW = { style: 0, dash: 20, gap: 10, progress: 100, smooth: 0 };
+  const B12BF_CFG = { def: {}, wide: { width: 30 }, inset: { inset: 6 }, round: { radius: 12 }, faint: { opacity: 50 }, all: { radius: 20, inset: 3, opacity: 70, width: 14 }, kf: { width: b12Kf(2, 40) } };
+  const B12BF_PIN = {   // fc8866f1, before the edit: the frame | the box x 9, y 7, w W-23, h H-15
+    def: 'be7a6497.be7a6497/e8873f5f.e8873f5f/8f1e6cc1.8f1e6cc1 34d5a679.34d5a679/c0bbec45.c0bbec45/49edff49.49edff49 | b2540121.b2540121/98c2b705.98c2b705/9d0f42a5.9d0f42a5 68ce5a25.68ce5a25/495056e3.495056e3/6d74f546.6d74f546',
+    wide: '74237ae9.74237ae9/bcc8db3f.bcc8db3f/6db9b99e.6db9b99e 1dfadfad.1dfadfad/f84bd8fd.f84bd8fd/11949431.11949431 | d9bc5685.d9bc5685/485ccf20.485ccf20/d11b68f9.d11b68f9 d8ec31e2.d8ec31e2/f683840a.f683840a/a97ace36.a97ace36',
+    inset: '17aa32c4.17aa32c4/14160db6.14160db6/61c5894c.61c5894c f5fc56d4.f5fc56d4/2e1250cd.2e1250cd/206cf23a.206cf23a | 2d0fb85c.2d0fb85c/da89fa09.da89fa09/c8a86961.c8a86961 e802ed7f.e802ed7f/6aa307e9.6aa307e9/0cb368f6.0cb368f6',
+    round: '7084f1b9.7084f1b9/0e593d55.0e593d55/461e7760.461e7760 9fe12850.9fe12850/c118114c.c118114c/5b33dd11.5b33dd11 | 38525180.38525180/cb523705.cb523705/1ea52011.1ea52011 8c0f4a6c.8c0f4a6c/4f567f22.4f567f22/37dc6b9e.37dc6b9e',
+    faint: '866e70bd.866e70bd/d865ab98.d865ab98/bd9a61dd.bd9a61dd c5ca140b.c5ca140b/a384d79a.a384d79a/92a61b82.92a61b82 | af34e3a4.af34e3a4/43d357d1.43d357d1/f2dc50db.f2dc50db ca028749.ca028749/8843dd83.8843dd83/f25c3841.f25c3841',
+    all: 'f18ee7bb.f18ee7bb/4b603593.4b603593/17cca31e.17cca31e c02ccf94.c02ccf94/4c5b03db.4c5b03db/5125581f.5125581f | 62176669.62176669/972575f3.972575f3/5de14c5f.5de14c5f 9c133599.9c133599/4c3587a0.4c3587a0/fd7e60c0.fd7e60c0',
+    kf: '83252f4a.74237ae9/e8873f5f.29fbc8ae/8f1e6cc1.3c717721 5e448ca1.9b2c02ed/c0bbec45.249882bf/49edff49.96228ee5 | 037f6355.d9bc5685/98c2b705.42de46ec/9d0f42a5.f4c1cb21 ddeb0ac6.f817693f/495056e3.281018e9/6d74f546.30d146c2' };
+  const b12BorderShots = p => b12Shots((q, W, H, t, ps) => b12Run('border', q, W, H, t, ps), p) + ' | ' +
+    b12Shots((q, W, H, t, ps) => { const d = b12Plate(W, H); FM._FX_TABLES.PIXEL_FX.border(d, W, H, q, t, ps, { x: 9, y: 7, w: W - 23, h: H - 15 }); return d; }, p);
+
+  test('482 12.5 Border Frame - Style, Dash length, Gap, Draw on and Smooth corners are in the catalogue at defaults that draw the old frame, and saved and new frames draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('border', B12BF_NEW, { style: 2, dash: 40, gap: 6, progress: 35, smooth: 1 });
+    ['dash', 'gap'].forEach(k => { if (b12Row('border', k).unit !== 'px') throw new Error('Border Frame ' + k + ' is not declared in px'); });
+    if (JSON.stringify(b12Row('border', 'dash').liveWhen) !== '1' || JSON.stringify(b12Row('border', 'gap').liveWhen) !== '[1,2]') throw new Error('Dash length is not gated to Dashed, or Gap to Dashed and Dotted');
+    const moved = b12Pinned('border', B12BF_NEW, B12BF_CFG, B12BF_PIN, b12BorderShots);
+    if (moved.length) throw new Error(moved.length + ' Border Frames differ from fc8866f1 at the new defaults - a new control changed a frame he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.5 Border Frame - Draw on 50 leaves half the frame undrawn from where it starts, Dashed and Dotted break the band into dashes and round dots sized in project px, and Smooth corners anti-aliases a round corner and nothing else', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES.PIXEL_FX.border, GREY = [40, 40, 40];
+    const bf = (o, ps) => { const s = ps || 1, W = Math.round(200 * s), H = Math.round(120 * s), d = b12Flat(W, H, GREY);
+      K(d, W, H, Object.assign({ color: '#ffffff', width: 10, inset: 0, radius: 0, opacity: 100 }, o), 0, s, { x: Math.round(20 * s), y: Math.round(10 * s), w: Math.round(160 * s), h: Math.round(100 * s) }); return { d: d, W: W, H: H }; };
+    const white = r => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] === 255) n++; return n; };
+    const isW = (r, x, y) => r.d[(y * r.W + x) * 4] === 255;
+    /* CONTROL: the solid frame is the whole 10 px band round the 160 x 100 box: 160 x 100 - 140 x 80 = 4800 pixels. */
+    const n0 = white(bf({}));
+    if (n0 !== 4800) throw new Error('CONTROL: the solid frame draws ' + n0 + ' pixels, not 4800');
+    /* DRAW ON: the band is drawn clockwise from the top edge’s left end. At 50 about half of it; the top edge and the right are
+       there, the bottom’s left end and the left side are not. At 0 nothing, at 100 all of it. */
+    const half = bf({ progress: 50 }), nh = white(half);
+    if (Math.abs(nh - 2400) > 150) throw new Error('Draw on 50 drew ' + nh + ' of the frame’s 4800 pixels, not about half');
+    if (!(isW(half, 100, 14) && isW(half, 174, 60)) || isW(half, 40, 104) || isW(half, 24, 60)) throw new Error('Draw on 50 drew the wrong half: top ' + isW(half, 100, 14) + ', right ' + isW(half, 174, 60) + ', bottom-left ' + isW(half, 40, 104) + ', left ' + isW(half, 24, 60));
+    if (white(bf({ progress: 0 })) !== 0) throw new Error('Draw on 0 still drew ' + white(bf({ progress: 0 })) + ' pixels');
+    if (!b12Same(bf({ progress: 100, style: 0 }).d, bf({}).d)) throw new Error('Draw on 100 is not the plain frame');
+    let prev = -1; for (let q = 0; q <= 100; q += 10) { const n = white(bf({ progress: q })); if (n < prev) throw new Error('Draw on went backwards: ' + n + ' pixels at ' + q + ' after ' + prev); prev = n; }
+    /* DASHED, 20 on / 10 off: along the middle of the top edge the runs of white are 20 and the gaps 10. On a half-size plate
+       they are 10 and 5 - the dashes are project px. */
+    const runs = (r, y, x0, x1) => { const out = []; let c = null, n = 0; for (let x = x0; x < x1; x++) { const w = isW(r, x, y); if (w === c) n++; else { if (c !== null) out.push((c ? '+' : '-') + n); c = w; n = 1; } } return out.slice(1, -1); };
+    const r1 = runs(bf({ style: 1 }), 15, 22, 178), r2 = runs(bf({ style: 1 }, 0.5), 7, 11, 89);
+    const bad1 = r1.filter(v => !(v === '+20' || v === '-10')), bad2 = r2.filter(v => !(v === '+10' || v === '-5'));
+    if (r1.length < 6 || bad1.length) throw new Error('Dashed 20 / 10 along the top edge runs ' + r1.join(' ') + ' - not 20 on, 10 off');
+    if (r2.length < 6 || bad2.length) throw new Error('Dashed 20 / 10 on a half-size plate runs ' + r2.join(' ') + ' - not 10 on, 5 off');
+    const nd = white(bf({ style: 1 })) / n0;
+    if (Math.abs(nd - 2 / 3) > 0.05) throw new Error('Dashed 20 / 10 drew ' + (nd * 100).toFixed(1) + ' % of the band, not about two thirds');
+    /* DOTTED: round dots as wide as the band, one every band + gap (10 + 10). A dot’s middle is drawn and its bounding square’s
+       corner is not (it is round), and about pi/4 x 10/20 of the band is ink. */
+    const dot = bf({ style: 2 }), nt = white(dot) / n0;
+    if (Math.abs(nt - Math.PI / 8) > 0.06) throw new Error('Dotted drew ' + (nt * 100).toFixed(1) + ' % of the band, not about ' + (Math.PI / 8 * 100).toFixed(1) + ' %');
+    const tops = runs(dot, 15, 22, 178);
+    if (tops.length < 6 || tops.some(v => !(v === '+9' || v === '+10' || v === '+11' || v === '-9' || v === '-10' || v === '-11'))) throw new Error('Dotted along the top edge runs ' + tops.join(' ') + ' - not dots 10 wide 10 apart');
+    let cx = -1; for (let x = 60; x < 120; x++) if (isW(dot, x, 15) && !isW(dot, x - 1, 15)) { cx = x + 5; break; }
+    if (!(cx > 0 && isW(dot, cx, 11) && isW(dot, cx, 18) && !isW(dot, cx - 5, 10) && !isW(dot, cx + 4, 19))) throw new Error('a dot is not round: middle column ' + isW(dot, cx, 11) + '/' + isW(dot, cx, 18) + ', square corners ' + isW(dot, cx - 5, 10) + '/' + isW(dot, cx + 4, 19));
+    /* SMOOTH CORNERS. CONTROL: a hard round corner (radius 30) has no pixel between the layer and the frame. Smoothed, its
+       edges carry part-covered pixels, and only there: square corners smoothed are the old frame byte for byte. */
+    const mids = r => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] > 40 && r.d[i] < 255) n++; return n; };
+    if (mids(bf({ radius: 30 })) !== 0) throw new Error('CONTROL: the hard round corner already has ' + mids(bf({ radius: 30 })) + ' part-covered pixels');
+    const sm = bf({ radius: 30, smooth: 1 });
+    if (mids(sm) < 40) throw new Error('Smooth corners on a 30 px radius left only ' + mids(sm) + ' part-covered pixels - the corner is still stair-stepped');
+    for (let y = 0; y < sm.H; y++) for (let x = 0; x < sm.W; x++) { const v = sm.d[(y * sm.W + x) * 4]; if (v > 40 && v < 255 && x > 60 && x < 140) throw new Error('Smooth corners softened a straight edge at ' + x + ',' + y); }
+    if (!b12Same(bf({ smooth: 1, opacity: 99.999 }).d, bf({ opacity: 99.999 }).d)) throw new Error('Smooth corners changed a frame with square corners');
+  });
+
+  /* 12.6 FIND EDGES (hunt C60 carried on): Line width in project px, Light and Dark colours, Colour edges. */
+  const B12FE_NEW = { width: 1, light: '#ffffff', dark: '#000000', colour: 0 };
+  const B12FE_CFG = { def: {}, inv: { polarity: 1 }, gate: { threshold: 30 }, mix: { mix: 60 }, ink: { blend: 1 }, comic: { amount: 1.2, polarity: 1, blend: 1, mix: 70, threshold: 16 }, blueprint: { amount: 9, threshold: 6 }, kf: { amount: b12Kf(0.5, 6) } };
+  const B12FE_PIN = {   // fc8866f1, before the edit
+    def: 'ae167b92.ae167b92/1b974162.1b974162/8e1295a6.8e1295a6 740339d0.740339d0/fb728c5d.fb728c5d/9a549657.9a549657',
+    inv: '73802b77.73802b77/5e4e8a1f.5e4e8a1f/c830f5bb.c830f5bb 1e28e360.1e28e360/554a05b4.554a05b4/3fa75127.3fa75127',
+    gate: '54a6daf3.54a6daf3/953e3f4b.953e3f4b/303fcc8e.303fcc8e a51e9d81.a51e9d81/ecdfd4f9.ecdfd4f9/9399bbeb.9399bbeb',
+    mix: 'e92cdbda.e92cdbda/20598068.20598068/7fc9030a.7fc9030a 31ff669d.31ff669d/1d593d2f.1d593d2f/61847bc4.61847bc4',
+    ink: '668b2ed5.668b2ed5/5d012bab.5d012bab/1b5158b8.1b5158b8 89d4461f.89d4461f/b8f5002e.b8f5002e/14611705.14611705',
+    comic: '632956a7.632956a7/52212598.52212598/a7b3abb6.a7b3abb6 815e3ed5.815e3ed5/e7841be0.e7841be0/a3c16bd0.a3c16bd0',
+    blueprint: '938fe356.938fe356/f194a888.f194a888/078a9367.078a9367 02c80d26.02c80d26/d64e9ce0.d64e9ce0/b7ea0d4d.b7ea0d4d',
+    kf: '55dcb48c.d328a00f/71818ec3.872bd1ab/3df0f1a7.a4375942 a4b7d3ad.3d03bd42/fbd66cf4.63663d3d/fcded7ac.d9f5e8c9' };
+
+  test('482 12.6 Find Edges - Line width, Light colour, Dark colour and Colour edges are in the catalogue at defaults that draw the old lines, and saved and new Find Edges and the Comic Ink and Blueprint recipes draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('edge', B12FE_NEW, { width: 3.5, light: '#ffcc00', dark: '#102040', colour: 1 });
+    if (b12Row('edge', 'width').unit !== 'px') throw new Error('Line width is not declared in px - it is a width on the picture');
+    if (b12Row('edge', 'light').type !== 'color' || b12Row('edge', 'dark').type !== 'color') throw new Error('Light colour and Dark colour are not colour rows');
+    if (b12Row('edge', 'colour').overriddenBy !== 'blend' || b12Row('edge', 'colour').liveWhen !== 0) throw new Error('Colour edges is not gated to Draw as Replace the picture');
+    b12Recipes('edge', B12FE_NEW, ['comic', 'blueprint']);
+    const moved = b12Pinned('edge', B12FE_NEW, B12FE_CFG, B12FE_PIN, b12PixelShots('edge'));
+    if (moved.length) throw new Error(moved.length + ' Find Edges pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.6 Find Edges - a 3 px line weighs three 1 px lines and the same on the export, a half-size preview and his phone’s 0.28 plate, Light and Dark repaint the lines and the paper either way round and under Ink, and Colour edges draws each line in the picture’s own colour', { item: '482', budgetMs: 60000 }, function () {
+    /* WIDTH. A 300 x 50 project with a step of 30 levels at x 150 (100 | 130), as each plate holds it (the step falls between
+       plate pixels at every scale used). A hard step reads 4 x 30 x 1.5 = 180 on every pixel the Sobel's reach crosses, so
+       the export's line weighs 2 x Width x 180 (summed over a row, in project px). */
+    const plate = ps => { const W = Math.round(300 * ps), H = Math.round(50 * ps), d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = (x + 0.5) / ps < 150 ? 100 : 130; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return { d: d, W: W, H: H }; };
+    const weigh = (o, ps) => { const P = plate(ps); b12Run('edge', Object.assign(b12Base('edge', {}), o), P.W, P.H, 0.5, ps, P.d); const y = P.H >> 1; let en = 0; for (let x = 1; x < P.W - 1; x++) en += P.d[(y * P.W + x) * 4] / ps; return en; };
+    if (weigh({}, 1) !== 360) throw new Error('CONTROL: the 1 px export line weighs ' + weigh({}, 1) + ', not 2 x 180');
+    if (weigh({ width: 3 }, 1) !== 1080) throw new Error('Line width 3 in the export weighs ' + weigh({ width: 3 }, 1) + ', not 3 x 360 (a line 6 px wide at 180)');
+    /* …and it sits ON the edge: the line’s centre of weight is at project x 150 on every plate (a reach rounded to whole pixels
+       would draw the right weight half a plate pixel to one side). */
+    const centre = (o, ps) => { const P = plate(ps); b12Run('edge', Object.assign(b12Base('edge', {}), o), P.W, P.H, 0.5, ps, P.d); const y = P.H >> 1; let m = 0, n = 0; for (let x = 1; x < P.W - 1; x++) { const v = P.d[(y * P.W + x) * 4]; m += (x + 0.5) * v; n += v; } return m / n / ps; };
+    [[3, 0.5, 0.03], [3, 0.28, 0.12], [8, 0.28, 0.12], [2, 0.5, 0.03], [1.5, 0.28, 0.12]].forEach(([w, ps, tol]) => {
+      const ex = weigh({ width: w }, 1), pv = weigh({ width: w }, ps);
+      if (Math.abs(pv / ex - 1) > tol) throw new Error('Line width ' + w + ' on a ' + ps + ' plate weighs ' + pv.toFixed(0) + ' against ' + ex.toFixed(0) + ' in the export (x' + (pv / ex).toFixed(2) + ') - the width is not in project px');
+      const c = centre({ width: w }, ps);
+      if (Math.abs(c - 150) > 0.5) throw new Error('Line width ' + w + ' on a ' + ps + ' plate is centred at project x ' + c.toFixed(2) + ', not on the edge at 150');
+    });
+    /* …and it is the reach in project px: Width 4 on a half-size plate is Width 2 on the full one, on the same plate, byte for byte. */
+    const same = (ps, w) => { const P = plate(1); b12Run('edge', Object.assign(b12Base('edge', {}), { width: w }), P.W, P.H, 0.5, ps, P.d); return P.d; };
+    if (!b12Same(same(0.5, 4), same(1, 2))) throw new Error('Line width 4 on a half-size plate is not Line width 2 on the full plate');
+    /* LIGHT and DARK. A hard 0 | 255 edge clamps the line at full strength. CONTROL: white lines on black. */
+    const W = 40, H = 10, at = (d, x) => Array.from(d.slice(((H >> 1) * W + x) * 4, ((H >> 1) * W + x) * 4 + 3)).join(',');
+    const hard = (a, b) => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { const x = (i >> 2) % W, c = x < 20 ? a : b; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; } return d; };
+    const fe = (o, a, b) => b12Run('edge', Object.assign(b12Base('edge', {}), o), W, H, 0.5, 1, hard(a || [0, 0, 0], b || [255, 255, 255]));
+    const BK = [0, 0, 0], WH = [255, 255, 255];
+    if (at(fe({}), 5) !== '0,0,0' || at(fe({}), 19) !== '255,255,255') throw new Error('CONTROL: the plain map is ' + at(fe({}), 5) + ' on the flat and ' + at(fe({}), 19) + ' on the line');
+    const C = { light: '#ff3020', dark: '#102040' };
+    if (at(fe(C), 5) !== '16,32,64' || at(fe(C), 19) !== '255,48,32') throw new Error('Light #ff3020 / Dark #102040 drew the flat as ' + at(fe(C), 5) + ' and the line as ' + at(fe(C), 19) + ' - Light lines on Dark');
+    const Ci = Object.assign({ polarity: 1 }, C);
+    if (at(fe(Ci), 5) !== '255,48,32' || at(fe(Ci), 19) !== '16,32,64') throw new Error('Black on white with the same colours drew the flat as ' + at(fe(Ci), 5) + ' and the line as ' + at(fe(Ci), 19) + ' - Dark lines on Light');
+    /* UNDER INK the line is drawn in Dark and the paper keeps the picture (Light white). CONTROL: plain ink is black. */
+    const G1 = [100, 100, 100], G2 = [160, 160, 160];
+    if (at(fe({ blend: 1 }, G1, G2), 19) !== '0,0,0' || at(fe({ blend: 1 }, G1, G2), 5) !== '100,100,100') throw new Error('CONTROL: plain ink drew ' + at(fe({ blend: 1 }, G1, G2), 19) + ' on the line and ' + at(fe({ blend: 1 }, G1, G2), 5) + ' on the paper');
+    if (at(fe({ blend: 1, dark: '#0000ff' }, G1, G2), 19) !== '0,0,100' || at(fe({ blend: 1, dark: '#0000ff' }, G1, G2), 5) !== '100,100,100') throw new Error('Ink with a blue Dark drew ' + at(fe({ blend: 1, dark: '#0000ff' }, G1, G2), 19) + ' on the line - the ink should be blue over the picture, and the paper untouched');
+    /* COLOUR EDGES. A red | blue step (lumas 59.8 | 22.8, read 4 x 37 x 1.5 = 222). CONTROL: off, the line is grey. On, each side
+       of the line is drawn in its own colour at the line’s strength over the Dark tone. */
+    const RD = [200, 0, 0], BL = [0, 0, 200];
+    const g = at(fe({}, RD, BL), 19).split(',');
+    if (!(g[0] === g[1] && g[1] === g[2] && +g[0] > 150)) throw new Error('CONTROL: the plain line across red | blue is not a grey line (' + g + ')');
+    if (at(fe({ colour: 1 }, RD, BL), 19) !== '174,0,0' || at(fe({ colour: 1 }, RD, BL), 20) !== '0,0,174') throw new Error('Colour edges drew the line as ' + at(fe({ colour: 1 }, RD, BL), 19) + ' | ' + at(fe({ colour: 1 }, RD, BL), 20) + ', not red then blue');
+    if (at(fe({ colour: 1 }, RD, BL), 5) !== '0,0,0') throw new Error('Colour edges painted the flat ' + at(fe({ colour: 1 }, RD, BL), 5));
+    if (at(fe({ colour: 1, polarity: 1 }, RD, BL), 5) !== '255,255,255' || at(fe({ colour: 1, polarity: 1 }, RD, BL), 19) !== '207,33,33') throw new Error('Colour edges on Black on white drew the paper ' + at(fe({ colour: 1, polarity: 1 }, RD, BL), 5) + ' and the line ' + at(fe({ colour: 1, polarity: 1 }, RD, BL), 19));
+  });
+
+  /* 12.7 EMBOSS (hunt C60 carried on): Height, the relief's reach in project px. */
+  const B12EM_NEW = { relief: 1 };
+  const B12EM_CFG = { def: {}, angle: { angle: 45 }, mono: { mono: 1 }, mix: { blend: 50 }, deep: { amount: 3, angle: 200 }, kf: { amount: b12Kf(0.5, 4) } };
+  const B12EM_PIN = {   // fc8866f1, before the edit
+    def: '97026225.97026225/4d441dbf.4d441dbf/3e22d802.3e22d802 1d0e57e5.1d0e57e5/edd86a59.edd86a59/08622cc7.08622cc7',
+    angle: '39ee5ee3.39ee5ee3/d09abe2a.d09abe2a/5c3b2455.5c3b2455 48e3cb85.48e3cb85/cb0781a4.cb0781a4/cbd6461d.cbd6461d',
+    mono: 'c36352a0.c36352a0/3f10cb7e.3f10cb7e/e23d08e8.e23d08e8 59bbe1e2.59bbe1e2/16060d21.16060d21/64ac9485.64ac9485',
+    mix: '3cb7e4d5.3cb7e4d5/080956bb.080956bb/df67fb34.df67fb34 ccf179fd.ccf179fd/ef595fca.ef595fca/8c638e6c.8c638e6c',
+    deep: '612d67a6.612d67a6/e9862c2f.e9862c2f/2048f46f.2048f46f 75b2ca00.75b2ca00/0cd9491d.0cd9491d/f6770701.f6770701',
+    kf: 'b9304a0e.1a35c95d/8c1d23d3.963b8221/1ef0d28b.86666055 59e123f5.05d8ab48/82c95c59.68dc7160/eca9a11b.efd6f45f' };
+
+  test('482 12.7 Emboss - Height is in the catalogue in px at a default that draws the old relief, and saved and new Embosses draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('emboss', B12EM_NEW, { relief: 4.5 });
+    const r = b12Row('emboss', 'relief');
+    if (r.unit !== 'px' || r.min !== 1 || r.max !== 10) throw new Error('Height is not a 1 to 10 px control (' + r.min + '..' + r.max + ' ' + r.unit + ')');
+    const moved = b12Pinned('emboss', B12EM_NEW, B12EM_CFG, B12EM_PIN, b12PixelShots('emboss'));
+    if (moved.length) throw new Error(moved.length + ' Emboss pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.7 Emboss - Height 4 widens the lit band of an edge four times over Height 1, and the relief weighs the same in the export, a half-size preview and his phone’s 0.28 plate', { item: '482', budgetMs: 60000 }, function () {
+    /* The Find Edges fixture: a 300 x 50 project, a step of 30 levels at x 150 as each plate holds it. The default light
+       (135 degrees) reads a vertical step as 3 x 30 = 90 above the flat 128 on every pixel the kernel’s reach crosses. */
+    const plate = ps => { const W = Math.round(300 * ps), H = Math.round(50 * ps), d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = (x + 0.5) / ps < 150 ? 100 : 130; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return { d: d, W: W, H: H }; };
+    const em = (o, ps) => { const P = plate(ps); b12Run('emboss', Object.assign(b12Base('emboss', {}), o), P.W, P.H, 0.5, ps, P.d); return P; };
+    const row = P => { const y = P.H >> 1, out = []; for (let x = 1; x < P.W - 1; x++) out.push(P.d[(y * P.W + x) * 4]); return out; };
+    const lit = (o, ps) => row(em(o, ps)).filter(v => v !== 128).length;
+    const weigh = (o, ps) => row(em(o, ps)).reduce((a, v) => a + Math.abs(v - 128), 0) / ps;
+    const centre = (o, ps) => { let m = 0, n = 0; row(em(o, ps)).forEach((v, k) => { const e = Math.abs(v - 128); m += (k + 1.5) * e; n += e; }); return m / n / ps; };
+    /* CONTROL: Height 1 lights 2 pixels at 218, weighing 180. Height 4 lights 8, weighing 720. */
+    if (lit({}, 1) !== 2 || weigh({}, 1) !== 180) throw new Error('CONTROL: Height 1 lights ' + lit({}, 1) + ' pixels weighing ' + weigh({}, 1) + ', not 2 and 180');
+    if (lit({ relief: 4 }, 1) !== 8 || weigh({ relief: 4 }, 1) !== 720) throw new Error('Height 4 lights ' + lit({ relief: 4 }, 1) + ' pixels weighing ' + weigh({ relief: 4 }, 1) + ', not 8 and 720 - the band did not widen');
+    [[4, 0.5, 0.03], [4, 0.28, 0.12], [10, 0.28, 0.12], [2, 0.28, 0.12], [3, 0.5, 0.03]].forEach(([h, ps, tol]) => {
+      const ex = weigh({ relief: h }, 1), pv = weigh({ relief: h }, ps);
+      if (Math.abs(pv / ex - 1) > tol) throw new Error('Height ' + h + ' on a ' + ps + ' plate weighs ' + pv.toFixed(0) + ' against ' + ex.toFixed(0) + ' in the export (x' + (pv / ex).toFixed(2) + ') - the height is not in project px');
+      if (Math.abs(centre({ relief: h }, ps) - 150) > 0.5) throw new Error('Height ' + h + ' on a ' + ps + ' plate is centred at project x ' + centre({ relief: h }, ps).toFixed(2) + ', not on the edge');
+    });
+    /* …through Grey and at another light angle too: Height 3 moves the picture against Height 1, and stays flat on a flat. */
+    [{ mono: 1 }, { angle: 30 }, { mono: 1, angle: 250, blend: 60 }].forEach(o => {
+      if (b12Same(em(Object.assign({ relief: 3 }, o), 1).d, em(o, 1).d)) throw new Error('Height 3 drew the same picture as Height 1 under ' + JSON.stringify(o));
+      const f = b12Flat(30, 10, [90, 140, 200]); b12Run('emboss', Object.assign(b12Base('emboss', {}), { relief: 3 }, o), 30, 10, 0.5, 1, f);
+      const want = o.mono ? null : (o.blend ? null : '128,128,128');
+      if (want && Array.from(f.slice((5 * 30 + 15) * 4, (5 * 30 + 15) * 4 + 3)).join() !== want) throw new Error('Height 3 put relief on a flat picture under ' + JSON.stringify(o) + ': ' + Array.from(f.slice((5 * 30 + 15) * 4, (5 * 30 + 15) * 4 + 3)));
+    });
+  });
+
+  /* 12.4 review — A BLINKING CARET MUST NOT MOVE THE TEXT. Taking the caret out of the string on its dark beat re-centred
+     the rest: centred text jumped half a caret sideways every beat (right-aligned a whole caret), and the layer's box with
+     it. The caret now stays in the string and only its painting is skipped. Read through the RENDERER: FM.renderScene on a
+     canvas whose fillText is watched, each call turned into one origin per glyph — its x from the call's alignment, the
+     width of the string before that glyph (measureText, the canvas's own metric) and the transform in force — so every
+     paint path is covered as the app runs it: a line, two lines, from the End (the caret leads), on a curve, and under an
+     Animate preset by word and by character (Fade: it moves nothing, so a moved glyph can only be the caret's doing). */
+  test('482 12.4 Text - a blinking Type-On caret does not move centred or right-aligned text: every other glyph is drawn at the same place on a lit and a dark beat, on one line or two, from the End, on a curve and under an Animate preset, and only the caret comes and goes', { item: '482', budgetMs: 60000 }, function () {
+    const PW = 640, PH = 240;
+    const glyphs = (o, t) => {
+      const L = FM.makeLayer('text', { text: 'Hello brave new world', x: PW / 2, y: PH / 2, start: 0, duration: 4 });
+      L.start = 0; L.duration = 4; Object.assign(L, o.layer || {});
+      const e = FM.fxRegistry.makeInstance('textprogress'); Object.assign(e.params, { progress: 0.5, cursor: 2, blink: 2 }, o.fx || {}); L.effects = [e];
+      const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+      const x = cv.getContext('2d'), out = [], f0 = x.fillText;
+      x.fillText = function (s, X, Y) {
+        const m = x.getTransform(), str = String(s), W = x.measureText(str).width, al = x.textAlign;
+        const x0 = X - (al === 'center' ? W / 2 : (al === 'right' || al === 'end') ? W : 0);
+        let k = 0;
+        for (const ch of str) { const gx = x0 + x.measureText(str.slice(0, k)).width; out.push({ ch: ch, X: m.a * gx + m.c * Y + m.e, Y: m.b * gx + m.d * Y + m.f }); k += ch.length; }
+        return f0.apply(x, arguments);
+      };
+      FM.renderScene(x, { project: { width: PW, height: PH, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return out;
+    };
+    const say = g => g.ch + '@' + g.X.toFixed(3) + ',' + g.Y.toFixed(3);
+    [['centred text', {}], ['right-aligned text', { layer: { align: 'right' } }], ['centred text typed from the End', { fx: { dir: 1 } }],
+     ['centred text on two lines', { layer: { text: 'Hello brave\nnew world' }, fx: { progress: 0.75 } }], ['centred text on a curve', { layer: { textCurve: 50 } }],
+     ['centred text under Fade by word', { layer: { textAnim: { preset: 'fade', unit: 'word' } } }], ['centred text under Fade by character', { layer: { textAnim: { preset: 'fade', unit: 'char' } } }]].forEach(([name, o]) => {
+      /* 2 Hz on the clip's clock: lit 0.1 s in, dark 0.3 s in. CONTROL: the caret really is drawn on the lit beat and not on
+         the dark one — and nothing else is drawn on either beat that the other lacks. */
+      const lit = glyphs(o, 0.1), dark = glyphs(o, 0.3);
+      const nLit = lit.filter(g => g.ch === '_').length, nDark = dark.filter(g => g.ch === '_').length;
+      if (nLit !== 1 || nDark !== 0) throw new Error('CONTROL: ' + name + ' draws ' + nLit + ' caret(s) on the lit beat and ' + nDark + ' on the dark one - it should be one and none');
+      const a = lit.filter(g => g.ch !== '_'), b = dark;
+      if (a.length !== b.length || a.length < 8) throw new Error(name + ': ' + a.length + ' other glyphs on the lit beat, ' + b.length + ' on the dark one');
+      a.forEach((g, i) => { const h = b[i]; if (g.ch !== h.ch || Math.abs(g.X - h.X) > 1e-6 || Math.abs(g.Y - h.Y) > 1e-6) throw new Error(name + ': glyph ' + i + ' is drawn at ' + say(g) + ' on the lit beat and ' + say(h) + ' on the dark one - the blinking caret moves the text'); });
+    });
+  });
 })();
