@@ -1355,8 +1355,21 @@ window.FM = window.FM || {};
       { key: 'forks', label: 'Branches', min: 0, max: 8, step: 1, def: 3 },
       { key: 'flicker', label: 'Flicker', min: 0, max: 24, step: 1, def: 8, unit: '/s' },
       { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 },
-      { key: 'angle', label: 'Strikes from', min: -180, max: 180, step: 1, def: 0, unit: '°' },   // queue 904: it could only strike straight down
-    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour' },
+      { key: 'angle', label: 'Strikes from', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'mode', liveWhen: 0 },   // queue 904: it could only strike straight down
+      /* #482 polish 11.6 (hunt C34: it only ever struck down the layer, and only where the layer was). Strike Point to point
+         runs every bolt between two points you place (% of the frame), its ends pinned and its body bowed; Glow is the halo
+         round the core; Core is the core's own colour (ABSENT it is the bolt colour pushed 80 % to white, as it always was);
+         Segments is how many kinks the channel has; Draw on Everywhere lights empty frame too, raising its alpha. Down the
+         layer, 100 %, no Core, 20 and Layer pixels are the old bolts, byte for byte. */
+      { key: 'mode', label: 'Strike', def: 0, options: [[0, 'Down the layer'], [1, 'Point to point']] },
+      { key: 'x1', label: 'From X', min: 0, max: 100, step: 1, def: 25, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'y1', label: 'From Y', min: 0, max: 100, step: 1, def: 15, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'x2', label: 'To X', min: 0, max: 100, step: 1, def: 75, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'y2', label: 'To Y', min: 0, max: 100, step: 1, def: 85, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'glow', label: 'Glow', min: 0, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'segments', label: 'Segments', min: 8, max: 60, step: 1, def: 20 },
+      { key: 'drawon', label: 'Draw on', def: 0, options: [[0, 'Layer pixels'], [1, 'Everywhere']] },
+    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour', color2: true, defColor2: '#eaf4ff', color2Label: 'Core', color2Follows: 'color' },
     // ---- batch 29: Displacement maps — warp this layer by ANOTHER layer's pixels (the "Map layer").
     // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
     { type: 'displacemap', label: 'Displacement Map', layer: true, layerLabel: 'Map layer', params: [
@@ -9256,7 +9269,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const col = hexToRGB(p.color) || [150, 200, 255];
       // The core is the layer's colour pushed most of the way to white. A real bolt's channel is
       // blown out; the tint lives in the glow around it, which is what this keeps.
-      const core = [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
+      // …unless a Core colour is set (#482 polish 11.6): absent, it follows the bolt colour as above.
+      const core = p.color2 ? hexToRGB(p.color2) : [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
+      /* #482 polish 11.6 — Strike, Glow, Segments, Draw on. Each default is a no-op on the old arithmetic: Glow 100 % multiplies
+         the halo by exactly 1, 20 segments is the old 20, and Down the layer / Layer pixels take the old branches. */
+      const p2p = Math.round(_num(p.mode, 0)) === 1, every = Math.round(_num(p.drawon, 0)) === 1;
+      const glow = Math.max(0, Math.min(4, _num(p.glow, 100) / 100)), glowR = 0.5 + 0.5 * glow;
+      const SEGN = Math.max(8, Math.min(60, Math.round(_num(p.segments, 20))));
       // Flicker is strikes per second. A keyed rate accumulates its strikes, so easing it to zero
       // holds the last bolt instead of jumping back to the first; plain rates keep their old phase.
       const phase = FM.isAnimated(p.flicker)
@@ -9281,7 +9300,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          pixel is scaled by the alpha ALREADY THERE, so nothing is painted outside the layer's coverage.
          Scaling by the existing alpha (rather than merely clipping to the box) is what makes it strike the
          SHAPE — a bolt across a circle stops at the circle, not at its bounding square. */
-      const bb = alphaBBox(d, W, H);
+      // An empty layer has no box at all (alphaBBox is null), and reading `.w` off it threw before anything drew; it strikes
+      // the whole frame instead, which on Layer pixels lights nothing and on Everywhere (#482 polish 11.6) is the point.
+      const bb = alphaBBox(d, W, H) || { x: 0, y: 0, w: 0, h: 0 };
       const BX = bb.w > 2 ? bb.x : 0, BY = bb.h > 2 ? bb.y : 0;
       const BW = bb.w > 2 ? bb.w : W, BH = bb.h > 2 ? bb.h : H;
       const unit = Math.max(1, Math.min(BW, BH));
@@ -9301,6 +9322,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             if (g <= 0.004) continue;
             const i = (y * W + x) * 4;
             const a0 = d[i + 3];
+            if (every) {                           // EVERYWHERE (#482 polish 11.6): the light is screened into the layer where
+              const A0 = a0 / 255, A = A0 + (1 - A0) * g;   // there is one, and over empty frame it IS the bolt, at alpha g
+              if (!(A > 0)) continue;
+              for (let c = 0; c < 3; c++) d[i + c] = ((255 - (255 - d[i + c]) * (1 - rgb[c] / 255 * g)) * A0 + rgb[c] * g * (1 - A0)) / A;
+              d[i + 3] = A * 255;
+              continue;
+            }
             if (!a0) continue;                     // outside the layer: not ours to light (queue 403)
             g *= a0 / 255;                         // …and fade with the layer's own edge, so it strikes the SHAPE
             d[i]     = 255 - (255 - d[i])     * (1 - rgb[0] / 255 * g);
@@ -9312,7 +9340,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
       /* STRIKES FROM (queue 904): the whole bolt — channel and forks — is turned about the middle of the layer's box, so 0 is the
          old straight-down strike exactly (the rotation is skipped), 90 strikes from the right, -90 from the left, 180 from below. */
-      const angD = _num(p.angle, 0), rotOn = (angD % 360) !== 0, rA = -angD * Math.PI / 180, rCos = Math.cos(rA), rSin = Math.sin(rA);
+      const angD = _num(p.angle, 0), rotOn = !p2p && (angD % 360) !== 0, rA = -angD * Math.PI / 180, rCos = Math.cos(rA), rSin = Math.sin(rA);   // point to point places its own ends
       const RCX = BX + BW / 2, RCY = BY + BH / 2;
       // Walk a path, stamping along it. `taper` fades width and brightness toward the far end, which
       // is what makes a fork read as dying out rather than as being cut off.
@@ -9327,21 +9355,31 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             let x = a[0] + (b[0] - a[0]) * (k / steps);
             let y = a[1] + (b[1] - a[1]) * (k / steps);
             if (rotOn) { const ux = x - RCX, uy = y - RCY; x = RCX + ux * rCos - uy * rSin; y = RCY + ux * rSin + uy * rCos; }
-            stamp(x, y, unit * 0.016 * wScale * thick * taper, 0.16 * intensity * aScale * taper, col);
+            if (glow > 0) stamp(x, y, unit * 0.016 * wScale * thick * taper * glowR, 0.16 * intensity * aScale * taper * glow, col);   // the halo: Glow scales its strength and, half as much, its reach
             stamp(x, y, unit * 0.0035 * wScale * thick * taper + 0.6, 0.95 * intensity * aScale * taper, core);
           }
         }
       };
 
+      // POINT TO POINT (#482 polish 11.6): the two ends in % of the frame, the channel's kinks across the line between them
+      const X1 = _num(p.x1, 25) / 100 * W, Y1 = _num(p.y1, 15) / 100 * H, X2 = _num(p.x2, 75) / 100 * W, Y2 = _num(p.y2, 85) / 100 * H;
+      const pdx = X2 - X1, pdy = Y2 - Y1, plen = Math.max(1, Math.hypot(pdx, pdy)), pnx = -pdy / plen, pny = pdx / plen;
       for (let b = 0; b < n; b++) {
         const seed = (b * 131 + phase * 977 + seed0 * 7919) | 0;
         const startX = BX + (0.12 + 0.76 * rnd(seed, 1)) * BW;
         const lean = (rnd(seed, 2) - 0.5) * BW * 0.4;
-        const SEGS = 20;
+        const SEGS = SEGN;
         const main = [];
-        for (let s = 0; s <= SEGS; s++) {
+        const kink = s => rnd(seed, s <= 20 ? 10 + s : 1000 + s);   // past the old 20, channels clear of the forks' own
+        if (p2p) {   // the lean becomes a bow, and both ends stay where they were put
+          const bow = (rnd(seed, 2) - 0.5) * plen * 0.4;
+          for (let s = 0; s <= SEGS; s++) {
+            const f = s / SEGS, off = bow * 4 * f * (1 - f) + (s === 0 || s === SEGS ? 0 : (kink(s) - 0.5) * plen * 0.1 * jag);
+            main.push([X1 + pdx * f + pnx * off, Y1 + pdy * f + pny * off]);
+          }
+        } else for (let s = 0; s <= SEGS; s++) {
           const f = s / SEGS;
-          main.push([startX + lean * f + (rnd(seed, 10 + s) - 0.5) * BW * 0.1 * jag, BY + BH * f]);
+          main.push([startX + lean * f + (kink(s) - 0.5) * BW * 0.1 * jag, BY + BH * f]);
         }
         draw(main, 1, 1);
 
@@ -9355,6 +9393,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const fp = [main[at]];
           for (let s = 1; s <= len; s++) {
             const prev = fp[s - 1];
+            if (p2p) {   // a fork leaves sideways and runs on toward the far end, as one does down the layer
+              const side = dir * plen * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05) * jag, on = (plen / SEGS) * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7);
+              fp.push([prev[0] + pnx * side + pdx / plen * on, prev[1] + pny * side + pdy / plen * on]);
+              continue;
+            }
             fp.push([prev[0] + dir * BW * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05) * jag,
                      prev[1] + (BH / SEGS) * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7)]);
           }

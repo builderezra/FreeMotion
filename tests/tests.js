@@ -125113,4 +125113,66 @@
     if (!(sc2[1] > 200 && sc2[0] < sc2[1] * 0.7)) throw new Error('CONTROL: ' + sc2[0] + ' of the old scatter’s ' + sc2[1] + ' wall pixels sit on the grid');
     if (!(sq[1] > 200 && sq[0] === sq[1])) throw new Error('Randomness 0 left ' + (sq[1] - sq[0]) + ' of ' + sq[1] + ' wall pixels off the grid - the cells should be squares');
   });
+
+  /* 11.6 LIGHTNING (hunt C34): Strike (Down the layer / Point to point) with From and To, Glow, Core, Segments, Draw on. */
+  const B11LI_NEW = { mode: 0, x1: 25, y1: 15, x2: 75, y2: 85, glow: 100, segments: 20, drawon: 0 };
+  const B11LI_CFG = { def: {}, wild: { count: 6, jitter: 2.5, forks: 8, thickness: 3 }, side: { angle: 90 }, seed: { seed: 42, flicker: 0 }, kf: { flicker: b11Kf(2, 20) },
+    thin: { thickness: 0.3, intensity: 0.4, color: '#ffe060' }, tilt: { angle: -135, count: 2 } };
+  const B11LI_PIN = {   // fc8866f1, before the edit
+    def: '962b1d01.d8f55f45/d7563df0.b77d31b6 2a52a220.95e416c3/3f657d28.cc009d9f', wild: '9139d419.6b97f1bd/80bf4edf.93e84c48 9a6d5b49.9456ced1/4d9b9395.c352616a',
+    side: 'e7f856c6.5db26bff/9d0d5530.ab5d6543 b242f4b7.4e525a2c/548575d5.47ff660e', seed: 'e64c7056.e64c7056/a91627f2.a91627f2 5ade3921.5ade3921/a889a7c7.a889a7c7',
+    kf: '779dc22e.47b06d8f/180ec434.d8d20850 a37c9b80.7ec75a1c/1a68005a.3f997471', thin: '2b98b79d.d557e025/f18b6811.5837548d 113a64d7.d66a7533/4b55a6f8.4329cc79',
+    tilt: '3127cec7.0ea5ae9c/9c949b86.02e79eaf 7961610f.2ab53595/12f6a24c.e2e19512' };
+  /* Lightning on a 160 x 120 layer: a flat dark opaque one by default, or d0. */
+  const b11Li = (over, d0) => b11Run('lightning', Object.assign(b11Base('lightning', {}), over), 160, 120, 0.37, 1, d0 || b11Flat(160, 120, [10, 12, 20]));
+  const b11Empty = () => b11Flat(160, 120, [0, 0, 0], 0);
+
+  test('482 11.6 Lightning - Strike, From and To, Glow, Core, Segments and Draw on are in the catalogue at defaults that draw the old bolts, and saved and new Lightning draws byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('lightning', B11LI_NEW, { mode: 1, x1: 5, y1: 50, x2: 95, y2: 40, glow: 250, segments: 44, drawon: 1, color2: '#ff2020' }, ['color2']);
+    ['x1', 'y1', 'x2', 'y2'].forEach(k => { const r = b11Row('lightning', k); if (r.overriddenBy !== 'mode' || r.liveWhen !== 1) throw new Error(k + ' does not say it only counts for Point to point (overriddenBy ' + r.overriddenBy + ', liveWhen ' + r.liveWhen + ')'); });
+    const ang = b11Row('lightning', 'angle');
+    if (ang.overriddenBy !== 'mode' || ang.liveWhen !== 0) throw new Error('Strikes from does not say it is off for Point to point, which places its own ends');
+    b11Recipes('lightning', B11LI_NEW);
+    const moved = b11Pinned('lightning', B11LI_NEW, B11LI_CFG, B11LI_PIN);
+    if (moved.length) throw new Error(moved.length + ' Lightning pictures differ from fc8866f1 at the new defaults - a new control changed bolts he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.6 Lightning - Everywhere strikes an empty layer and raises its alpha, Point to point runs from one point to the other, Core recolours the channel, Glow sets the halo and Segments the kinks', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, lit = (d, a) => { const out = []; for (let i = 0; i < W * H; i++) if (d[i * 4 + 3] > a) out.push([i % W, (i / W) | 0]); return out; };
+    /* EVERYWHERE (C34: it skipped every pixel with no alpha). CONTROL: Layer pixels on an empty layer draws nothing (and no
+       longer throws on it). Everywhere draws the bolts there, its core opaque. On an opaque layer the two are the same. */
+    const none = b11Li({}, b11Empty());
+    if (!b11Same(none, b11Empty())) throw new Error('CONTROL: Layer pixels drew on an empty layer');
+    const ev = b11Li({ drawon: 1 }, b11Empty());   // MEASURED: 781 pixels above alpha 20, 156 above 128
+    if (!(lit(ev, 20).length > 300 && lit(ev, 128).length > 80)) throw new Error('Everywhere on an empty layer lit ' + lit(ev, 20).length + ' pixels (' + lit(ev, 128).length + ' over half opaque) - it should strike the empty frame');
+    if (!b11Same(b11Li({ drawon: 1 }), b11Li({}))) throw new Error('Everywhere on an opaque layer is not the Layer pixels bolt - where the layer is, they must be one picture');
+    /* POINT TO POINT. CONTROL: down the layer, the bolt runs the empty frame's whole height. From (10 %, 10 %) to (90 %, 90 %)
+       it starts on the one point, ends on the other (faded, as every bolt tapers), and keeps to the line between them. */
+    const down = lit(b11Li({ drawon: 1, count: 1, forks: 0 }, b11Empty()), 20), ys = down.map(p => p[1]);
+    if (!(Math.min.apply(null, ys) < 6 && Math.max.apply(null, ys) > H - 7)) throw new Error('CONTROL: down the layer the bolt does not run top to bottom');
+    const pp = lit(b11Li({ drawon: 1, count: 1, forks: 0, mode: 1, x1: 10, y1: 10, x2: 90, y2: 90 }, b11Empty()), 20);
+    const A = [16, 12], B = [144, 108], len = Math.hypot(B[0] - A[0], B[1] - A[1]);
+    const near = (q, r) => pp.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) <= r);
+    if (!near(A, 2) || !near(B, 2)) throw new Error('Point to point does not start on (16, 12) and end on (144, 108) - its ends should be pinned where they were put');
+    const off = pp.filter(p => Math.abs((p[0] - A[0]) * (B[1] - A[1]) - (p[1] - A[1]) * (B[0] - A[0])) / len > len * 0.25 + 3);
+    if (off.length) throw new Error(off.length + ' lit pixels of Point to point stray more than a quarter of its length off the line between the points');
+    if (pp.some(p => p[1] < 8 || p[1] > H - 9)) throw new Error('Point to point still runs to the top or bottom of the frame');
+    /* CORE. CONTROL: with no Core the channel is the bolt colour pushed nearly to white. A red Core makes it red. */
+    const brightest = (d, f) => { let best = -1, at = 0; for (let i = 0; i < d.length; i += 4) { const v = f(d[i], d[i + 1], d[i + 2]); if (v > best) { best = v; at = i; } } return [d[at], d[at + 1], d[at + 2]]; };
+    const wc = brightest(b11Li({ count: 1 }), (r, g, b) => r + g + b), rc = brightest(b11Li({ count: 1, color2: '#ff2020' }), (r, g, b) => r - g);
+    if (!(Math.min(wc[0], wc[1], wc[2]) > 150 && Math.abs(wc[0] - wc[1]) < 40)) throw new Error('CONTROL: with no Core the channel is not near white (' + wc + ')');
+    if (!(rc[0] - rc[1] > 100)) throw new Error('a red Core drew the channel ' + rc + ' - it should be red');
+    /* GLOW. CONTROL: 100 %. 0 % takes the halo away and leaves the core; 300 % spreads it wider. (MEASURED 939, 1206 and 2233
+       changed channels / 3.) */
+    const area = o => b11Diff(b11Li(o), b11Flat(W, H, [10, 12, 20])) / 3;
+    const g0 = area({ glow: 0 }), g1 = area({}), g3 = area({ glow: 300 });
+    if (!(g0 > 50 && g0 < g1 * 0.9 && g3 > g1 * 1.4)) throw new Error('Glow 0, 100 and 300 % lit ' + g0.toFixed(0) + ', ' + g1.toFixed(0) + ' and ' + g3.toFixed(0) + ' pixels - the halo should go and grow while the core stays');
+    /* SEGMENTS. How far the channel wanders sideways, row by row (the brightest pixel of each row, one bolt, no forks). CONTROL:
+       the old 20. 60 kinks it three times as often, so it zigzags much further for the same height (MEASURED 108 px at 20,
+       284 at 60). */
+    const wander = s => { const d = b11Li({ count: 1, forks: 0, segments: s }); let tot = 0, prev = -1; for (let y = 4; y < H - 4; y++) { let best = -1, bx = 0; for (let x = 0; x < W; x++) { const v = d[(y * W + x) * 4]; if (v > best) { best = v; bx = x; } } if (prev >= 0) tot += Math.abs(bx - prev); prev = bx; } return tot; };
+    const w20 = wander(20), w60 = wander(60);
+    if (!b11Same(b11Li({ segments: 20 }), b11Li({}))) throw new Error('CONTROL: Segments 20 is not the old bolt');
+    if (!(w60 > w20 * 1.6)) throw new Error('Segments 60 wandered ' + w60 + ' px down the frame against ' + w20 + ' at 20 - it should kink far more often');
+  });
 })();
