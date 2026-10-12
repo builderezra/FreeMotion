@@ -1644,6 +1644,9 @@ window.FM = window.FM || {};
     { type: 'filter', label: 'Filter', hidden: true,
       desc: 'A group of effects that act as one, with a single Strength that fades the whole group in and out.',
       params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01, def: 1 },
+        /* OVER-DRIVE (#482 15.3): Strength past 100 %. The same cross-fade carried on past the filtered picture —
+           out = A + (B − A) · Strength · (1 + Over-drive), clamped — so 100 % doubles whatever the filter does. 0 is the old fade. */
+        { key: 'boost', label: 'Over-drive', min: 0, max: 100, step: 1, def: 0, unit: '%' },
         /* TONAL RANGE and PROTECT SKIN (#482 15.1, his #966 "as much choice as possible"). Strength fades the whole group
            evenly; these let it act on the shadows, the midtones or the highlights only, and hold it back on skin. Judged on
            the picture WITHOUT the filter, and applied as a per-pixel weight on Strength's cross-fade (drawFilterContainer).
@@ -4531,12 +4534,15 @@ window.FM = window.FM || {};
     const wf = TINT_W[range > 0 && range < TINT_W.length ? range : 0];
     let soft = p.rangesoft == null ? 100 : FM.evalProp(p.rangesoft, t); if (!(soft >= 10)) soft = 10; if (soft > 200) soft = 200;
     let skin = p.skin == null ? 0 : FM.evalProp(p.skin, t); skin = skin > 0 ? Math.min(100, skin) / 100 : 0;
-    if (!wf && !skin) return null;
-    return { wf: wf, ex: wf && soft !== 100 ? 100 / soft : 1, skin: skin };
+    // Over-drive (#482 15.3): Strength past 100 % — the weight is multiplied by 1 + Over-drive, and the result clamped
+    let boost = p.boost == null ? 0 : FM.evalProp(p.boost, t); boost = boost > 0 ? Math.min(100, boost) / 100 : 0;
+    if (!wf && !skin && !boost) return null;
+    return { wf: wf, ex: wf && soft !== 100 ? 100 / soft : 1, skin: skin, over: 1 + boost };
   }
   // a, b: straight RGBA of the two plates (without / with the children). The mix lands in a. k is Strength.
   function fcMixPixels(a, b, k, o) {
     const wf = o.wf, ex = o.ex, skin = o.skin;
+    if (o.over > 1) k *= o.over;   // #482 15.3: past the filtered picture — clamped below, per channel
     for (let i = 0; i < a.length; i += 4) {
       const ar = a[i], ag = a[i + 1], ab = a[i + 2], aa = a[i + 3];
       let w = k;
@@ -4622,7 +4628,7 @@ window.FM = window.FM || {};
     const s = clamp01(fx.params && fx.params.strength != null ? FM.evalProp(fx.params.strength, t) : 1);
 
     if (s <= 0 || !kids.length) return drawLayer(ctx, asLayer(rest), t, scene);
-    const pxo = _fcDepth < FC_MAX_DEPTH ? fcPixelOpts(fx, t) : null;   // #482 15.1: a range or skin guard mixes per pixel, at any Strength
+    const pxo = _fcDepth < FC_MAX_DEPTH ? fcPixelOpts(fx, t) : null;   // #482 15.1/15.3: a range, a skin guard or Over-drive mixes per pixel, at any Strength
     if (!pxo && (s >= 1 || _fcDepth >= FC_MAX_DEPTH)) return drawLayer(ctx, asLayer(spliced), t, scene);
 
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
@@ -18590,7 +18596,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const e = effs[i];
       if (!adjLiveBox(e) || !adjKids(e, t).length) continue;
       const s = adjStrength(e, t);
-      if (s > 0 && (s < 1 || fcPixelOpts(e, t))) { fi = i; fs = s; break; }   // #482 15.1: a range or skin guard mixes per pixel at full Strength too
+      if (s > 0 && (s < 1 || fcPixelOpts(e, t))) { fi = i; fs = s; break; }   // #482 15.1/15.3: a range, skin guard or Over-drive mixes per pixel at full Strength too
     }
     if (fi < 0) { applyAdjustment(ctx, layer, t, scene, adjFlatten(effs, t), P.M); return P.M; }
     const box = effs[fi];

@@ -124824,4 +124824,39 @@
       if (lib.params.warmth !== 0 || lib.params.strength !== 1) throw new Error('CONTROL: a library filter lands with warmth ' + lib.params.warmth + ', strength ' + lib.params.strength);
     } finally { FM.effectPresets.remove(p.id); }
   });
+
+  test('482 15.3 pin: the Filter’s Over-drive at 0 leaves every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    b15FilterPins({ boost: 0 }, { boost: 50 });
+  });
+
+  test('482 15.3 the Filter’s Over-drive 100 % doubles what the filter does to the mid-tones (|out − A| ≈ 2 |B − A|), Strength 0.5 with Over-drive 100 % is the filter at full Strength, and it clamps rather than wraps (CONTROL: Over-drive 0 is the filter at full Strength)', { item: '482', budgetMs: 60000 }, function () {
+    const P = b15P(), W = P.width, H = P.height;
+    const kids = () => [b15Fx('temperature', { amount: 30 })];
+    const run = box => { const L = b15Plate(P); L.effects = box ? [box] : []; return b15Px([L], 0.5, P); };
+    const A = run(null), B = run(b15Box({ strength: 1 }, kids()));
+    const B0 = run(b15Box({ strength: 1, boost: 0 }, kids())), O = run(b15Box({ strength: 1, boost: 100 }, kids())), H5 = run(b15Box({ strength: 0.5, boost: 100 }, kids()));
+    if (!b15Same(B0, B)) throw new Error('CONTROL: Over-drive 0 is not the filter at full Strength (' + b15Diff(B0, B) + ')');
+    let moved = 0, n = 0, bad = 0, worst = '';
+    for (let i = 0; i < A.length; i += 4) {
+      const L = (A[i] * 0.299 + A[i + 1] * 0.587 + A[i + 2] * 0.114) / 255;
+      if (L < 0.3 || L > 0.7) continue;                                  // mid-tones: nothing near a clamp
+      for (let c = 0; c < 3; c++) {
+        const d1 = B[i + c] - A[i + c], d2 = O[i + c] - A[i + c];
+        if (Math.abs(d1) < 4) continue;
+        n++; if (Math.abs(d2) > Math.abs(d1) * 1.5) moved++;
+        if (Math.abs(d2 - 2 * d1) > 1.5) { bad++; if (!worst) worst = 'channel ' + c + ': A ' + A[i + c] + ', filter ' + B[i + c] + ', over-driven ' + O[i + c]; }
+      }
+    }
+    if (n < 50) throw new Error('CONTROL: only ' + n + ' mid-tone channels are moved by the filter - nothing to measure');
+    const fails = [];
+    if (bad > n * 0.02) fails.push(bad + ' of ' + n + ' mid-tone channels are not twice the filter’s move (' + worst + ')');
+    if (moved < n * 0.95) fails.push('only ' + moved + ' of ' + n + ' mid-tone channels moved further than the filter does');
+    let off = 0; for (let i = 0; i < H5.length; i++) if (Math.abs(H5[i] - B[i]) > 1) off++;
+    if (off) fails.push('Strength 0.5 with Over-drive 100 % is ' + off + ' bytes off the filter at full Strength');
+    // it clamps: a filter that pushes the highlights up, over-driven, sits at 255 rather than wrapping round to dark
+    const hot = run(b15Box({ strength: 1, boost: 100 }, [b15Fx('brightness', { amount: 1.6 })]));
+    const xb = W - 1, y = H >> 1, ib = (y * W + xb) * 4;
+    if (!(hot[ib] >= 250)) fails.push('an over-driven brightening left the white end at ' + hot[ib] + ' - it wrapped or clamped low');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 })();
