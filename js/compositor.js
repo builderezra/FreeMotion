@@ -1107,6 +1107,12 @@ window.FM = window.FM || {};
       { key: 'keep', label: 'Keep original', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'pivotx', label: 'Hinge X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'pivoty', label: 'Hinge Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      /* #482 polish 14.7 (C29): Flip 180 is the old mirror exactly (and what a saved Card Flip without the key draws), Mirror is
+         its old back, Perspective 50 the solids' old focal length. */
+      { key: 'angle', label: 'Flip', min: 0, max: 360, step: 1, def: 180, legacy: 180, unit: '°', note: '180 = mirrored. Keyframe it to turn the card over' },
+      { key: 'persp', label: 'Perspective', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'back', label: 'Back', def: 0, options: [[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent']] },
+      { key: 'color', label: 'Back colour', swatch: true, def: '#ffffff', overriddenBy: 'back', liveWhen: 1 },
     ] },
     { type: 'rasterextrude', label: 'Depth Push', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
@@ -12266,6 +12272,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const dx = pp[0] - gx, dy = pp[1] - gy, len = Math.hypot(dx, dy) || 1;
         return [pp[0] + dx / len * 0.4, pp[1] + dy / len * 0.4];
       });
+      /* THE FAR SIDE (#482 polish 14.7, Card Flip's Back). o.back 1 (a colour) or 2 (nothing) replaces a triangle seen from
+         behind — wound the other way on screen from how the mesh lays it out (clockwise, y down) — instead of the mirrored
+         texture double-sided drawing shows. Absent (every solid, the page curl, the 3D tilt) nothing here runs. */
+      if (o.back === 1 || o.back === 2) {
+        const wind = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        if (wind < 0) {
+          if (o.back === 2) continue;
+          dctx.save();
+          dctx.beginPath(); dctx.moveTo(pts[0][0], pts[0][1]); dctx.lineTo(pts[1][0], pts[1][1]); dctx.lineTo(pts[2][0], pts[2][1]); dctx.closePath();
+          dctx.fillStyle = '#ffffff'; dctx.fillStyle = o.backColor; dctx.fill();
+          dctx.restore();
+          continue;
+        }
+      }
       const va = verts[tr[0]], vb = verts[tr[1]], vc = verts[tr[2]];
       const u0 = va[3] * tw, v0 = va[4] * th, u1 = vb[3] * tw, v1 = vb[4] * th, u2 = vc[3] * tw, v2 = vc[4] * th;
       const den = u0 * (v1 - v2) + u1 * (v2 - v0) + u2 * (v0 - v1);
@@ -13841,7 +13861,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
       const py = fy === 50 ? bb.y + bb.h / 2 : bb.y + bb.h * (fy / 100);
       const keep = (p.keep == null ? 0 : (Math.round(FM.evalProp(p.keep, t)) | 0)) === 1;
+      /* #482 polish 14.7 (answers C29: "Card Flip" was an instant mirror). FLIP is how far the card has turned over, about
+         the hinge — Horizontal turns it round the upright through Hinge X, Vertical round the level through Hinge Y, Both
+         round both — so keyframing 0 → 180 turns it over. 180 IS the old mirror and takes the old lines below, exactly; 0 is
+         the layer as it is; anything else is the layer on an 8x8 card through renderMesh, the solids' mapper, with
+         PERSPECTIVE (the solids' scale; 50 is their old focal length) and no shading — a card keeps its own colours. BACK is
+         what the far side shows once it is past edge-on: the picture reversed, as a real card shows ink soaked through
+         (Mirror, and the old flip), a solid colour, or nothing. */
+      const fAng = p.angle == null ? 180 : Number(FM.evalProp(p.angle, t));
+      const a = isFinite(fAng) ? ((fAng % 360) + 360) % 360 : 180;
+      const back = Math.round(fparam(p, 'back', 0, t));
       if (keep) B.drawImage(A, 0, 0);            // the original stays, the reflection joins it
+      if (a !== 180 || back !== 0) {
+        if (a === 0) { B.drawImage(A, 0, 0); return; }
+        const R = Math.max(bb.w, bb.h) / 2, tex = extractTex(A, bb), rad = a * Math.PI / 180;
+        const x0 = (bb.x - px) / R, x1 = (bb.x + bb.w - px) / R, y0 = (bb.y - py) / R, y1 = (bb.y + bb.h - py) / R;
+        const card = bParam((u, v) => [x0 + (x1 - x0) * u, y0 + (y1 - y0) * v, 0], 8, 8);   // the hinge is the origin, so it stays put
+        renderMesh(B, tex, bb.w, bb.h, card.v, card.t, { cx: px, cy: py, R: R, rx: m !== 0 ? rad : 0, ry: m !== 1 ? rad : 0, rz: 0, shading: 0,
+          F: solidF(p, t), back: back === 1 || back === 2 ? back : 0, backColor: typeof p.color === 'string' ? p.color : '#ffffff' });
+        return;
+      }
       B.save();
       B.translate(px, py);
       B.scale(m === 1 ? 1 : -1, m === 0 ? 1 : -1);

@@ -125225,4 +125225,59 @@
     if (!deep.clips.length || deep.clips.some(c => c.some(q => !isFinite(q[0]) || !isFinite(q[1])))) throw new Error('a Box at Depth 200 and Perspective 100 projects a corner to infinity - it has reached the eye');
     if (!(box.w < 10 * W)) throw new Error('a Box at Depth 200 and Perspective 100 projects ' + box.w.toFixed(0) + ' px across - a corner has passed the eye');
   });
+
+  /* 14.7 CARD FLIP (hunt C29: it was an instant mirror, scale(-1)): Flip (how far the card has turned over), Perspective, Back
+     (Mirror / Solid colour / Transparent) with its colour. Flip 180 and Back Mirror take the old lines; anything else is the
+     layer on an 8x8 card through renderMesh, so the recorder shows where it lands. */
+  const B14CF_NEW = { angle: 180, persp: 50, back: 0, color: '#ffffff' };
+  const B14CF_CFG = { def: {}, vert: { mode: 1 }, both: { mode: 2, keep: 1 }, hinge: { pivotx: 20, pivoty: 80, keep: 1 }, kf: { pivotx: b14Kf(0, 100) } };
+  const B14CF_PIN = {   // fc8866f1, before the edit
+    def: '2594485f.2594485f/2594485f.2594485f 9ad7d717.9ad7d717/9ad7d717.9ad7d717', vert: '28b35f85.28b35f85/28b35f85.28b35f85 c100e8c5.c100e8c5/c100e8c5.c100e8c5',
+    both: '4222d50b.4222d50b/4222d50b.4222d50b 50fbf2c5.50fbf2c5/50fbf2c5.50fbf2c5', hinge: '26b9270a.26b9270a/26b9270a.26b9270a 8b1d64dc.8b1d64dc/8b1d64dc.8b1d64dc',
+    kf: '2e0878d3.e833788b/2e0878d3.e833788b 27592ccd.75113819/27592ccd.75113819' };
+
+  test('482 14.7 Card Flip - Flip, Perspective, Back and Back colour are in the catalogue, Flip carrying the old 180 for a saved flip, and saved and new Card Flips issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b14Catalogue('fliplayer', B14CF_NEW, { angle: 75, persp: 20, back: 2, color: '#00ff00' }, { angle: 180 });
+    const back = b14Row('fliplayer', 'back'), col = b14Row('fliplayer', 'color');
+    if (back.type !== 'segment' || JSON.stringify(back.options) !== JSON.stringify([[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent']])) throw new Error('Back is not Mirror / Solid colour / Transparent (' + JSON.stringify(back.options) + ')');
+    if (col.type !== 'color' || col.overriddenBy !== 'back' || col.liveWhen !== 1) throw new Error('Back colour does not say it only counts under Solid colour');
+    const moved = b14Pinned('fliplayer', B14CF_NEW, B14CF_CFG, B14CF_PIN, b14CShots);
+    if (moved.length) throw new Error(moved.length + ' Card Flips draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.7 Card Flip - Flip 90 turns the card edge on to a sliver under 10 percent of its width where it used to be a mirror, 45 shows cos 45 of it, Perspective makes the near edge taller, the hinge stays put, and Back Transparent or a colour replaces the far side', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, cf = (o) => b14Cfx('fliplayer', Object.assign(b14Base('fliplayer', {}), { mode: 0, keep: 0, pivotx: 50, pivoty: 50 }, o), { W: W, H: H });
+    /* CONTROL: at the old 180 the card is the whole plate, mirrored. */
+    const mirror = b14Reach(cf({}));
+    if (Math.abs(mirror.w - W) > 1e-9) throw new Error('CONTROL: a Card Flip at 180 does not cover the plate (' + mirror.w + ' px)');
+    const edge = b14Reach(cf({ angle: 90 }));
+    if (!(edge.w < 0.1 * W)) throw new Error('Flip 90 drew the card ' + edge.w.toFixed(1) + ' px wide on a ' + W + ' px layer - edge on, it should be a sliver under 10 percent');
+    const tilt = b14Reach(cf({ angle: 45, persp: 0 }));
+    if (Math.abs(tilt.w - W * Math.SQRT1_2) > 1.5) throw new Error('Flip 45 with no perspective drew the card ' + tilt.w.toFixed(1) + ' px wide, not cos 45 of ' + W + ' (' + (W * Math.SQRT1_2).toFixed(1) + ')');
+    if (Math.abs(tilt.h - H) > 1.5) throw new Error('Flip 45 with no perspective changed the card’s height to ' + tilt.h.toFixed(1));
+    const deep = b14Reach(cf({ angle: 45, persp: 100 }));
+    if (!(deep.h > tilt.h + 10)) throw new Error('Perspective 100 at Flip 45 left the card ' + deep.h.toFixed(1) + ' px tall against ' + tilt.h.toFixed(1) + ' flat - its near edge should be taller');
+    const down = b14Reach(cf({ mode: 1, angle: 90 }));
+    if (!(down.h < 0.1 * H)) throw new Error('a Vertical Flip 90 drew the card ' + down.h.toFixed(1) + ' px tall - it should be a sliver');
+    const hinged = b14Reach(cf({ angle: 90, pivotx: 0 }));
+    if (!(hinged.x1 < 0.1 * W)) throw new Error('Flip 90 on Hinge X 0 left the card reaching to x ' + hinged.x1.toFixed(1) + ' - it should fold onto its left edge');
+    /* BACK, past edge on (Flip 135). CONTROL: Mirror draws the reversed picture there. */
+    const tex = R => R.draws.filter(q => q.op === 'source-over').length;
+    if (!tex(cf({ angle: 135 }))) throw new Error('CONTROL: Back Mirror at Flip 135 drew nothing');
+    const gone = cf({ angle: 135, back: 2 });
+    if (gone.draws.length || gone.fills.length) throw new Error('Back Transparent at Flip 135 still drew ' + gone.draws.length + ' texture pieces and ' + gone.fills.length + ' fills');
+    const red = cf({ angle: 135, back: 1, color: '#ff0000' }), redBox = (() => { let x0 = Infinity, x1 = -Infinity; red.fills.forEach(f => { x0 = Math.min(x0, f.box[0]); x1 = Math.max(x1, f.box[2]); }); return x1 - x0; })();
+    if (red.draws.length || !red.fills.length || red.fills.some(f => f.style !== '#ff0000')) throw new Error('Back Solid colour #ff0000 at Flip 135 did not paint the far side red (' + red.draws.length + ' texture pieces, fills ' + red.fills.map(f => f.style).join(',') + ')');
+    if (Math.abs(redBox - W * Math.SQRT1_2) > W * 0.15) throw new Error('the red back is ' + redBox.toFixed(1) + ' px wide, not about cos 135 of the card');
+    const front = cf({ angle: 45, back: 1, color: '#ff0000' });
+    if (front.fills.length || !front.draws.length) throw new Error('Back Solid colour painted the FRONT of a card at Flip 45');
+    /* …and in the browser, the pixels: a plate-filling card at Flip 90 lights under 10 percent of the plate; at 180 all of it. */
+    if (b14RealCanvas()) {
+      const A = b14Canvas(W, H), ag = A.getContext('2d'); ag.fillStyle = '#3080c0'; ag.fillRect(0, 0, W, H);
+      const lit = o => { const B = b14Canvas(W, H), g = B.getContext('2d', { willReadFrequently: true }); FM._FX_TABLES.CANVAS_FX.fliplayer(A, g, W, H, { x: 0, y: 0, w: W, h: H }, Object.assign(b14Base('fliplayer', {}), { mode: 0, keep: 0 }, o), 0.5, 0.5, null, 1); const d = g.getImageData(0, 0, W, H).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 20) n++; return n / (W * H); };
+      const at180 = lit({}), at90 = lit({ angle: 90 });
+      if (!(at180 > 0.95)) throw new Error('CONTROL: the mirrored card lights only ' + (at180 * 100).toFixed(1) + ' percent of the plate');
+      if (!(at90 < 0.1)) throw new Error('Flip 90 lights ' + (at90 * 100).toFixed(1) + ' percent of the plate - edge on, it should be a sliver');
+    }
+  });
 })();

@@ -516,7 +516,7 @@ window.FM = window.FM || {};
     hollowbox3d: 'A box with no front, so you can see inside it.',
     axiscross3d: 'Three bars crossing at right angles — a 3D plus sign, good as a scene axis.',
     pagecurl: 'Peels a corner of the layer up like a page turning, with the back lit.',
-    fliplayer: 'Mirrors the layer horizontally, vertically, or both.',
+    fliplayer: 'Turns the layer over like a card, horizontally, vertically or both. At 180° it is a mirror; keyframe Flip from 0 to 180 to watch it turn.',   // #482 polish 14.7 (C29)
     rasterextrude: 'Extrudes the layer back into depth, so flat art becomes a solid slab with shaded sides.',
   };
 
