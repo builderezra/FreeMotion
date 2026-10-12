@@ -124916,4 +124916,85 @@
     const full = b11Flakes(2, b11Wx({ kind: 2 }, 1.3)), half = b11Flakes(2, b11Wx({ kind: 2 }, 1.3, 160, 90, 0.5));
     if (half.length !== full.length || half.some((m, j) => Math.abs(m.x * 2 - full[j].x) > 1e-9 || Math.abs(m.y * 2 - full[j].y) > 1e-9)) throw new Error('Confetti on a half-size preview plate is not the export’s confetti at half size');
   });
+
+  /* 11.3 STARFIELD: Fly-through (with Focus X / Y), Drift X / Y, Glint, Pattern. (Hunt C7b — the stars hashed per PLATE pixel —
+     was fixed by #986 on this tree; its test, "986 C7 … the same stars, not bigger ones somewhere else", stands.) */
+  const B11SF_NEW = { speed: 0, x: 50, y: 50, driftx: 0, drifty: 0, glint: 0, seed: 0 };
+  const B11SF_CFG = { def: {}, big: { size: 3, variation: 0.6, twinkle: 0.5 }, dense: { amount: 1, size: 2 }, kf: { twinklespeed: b11Kf(0.5, 4), twinkle: 0.8 }, sparse: { amount: 0.1, color: '#ffd080' } };
+  const B11SF_PIN = {   // fc8866f1, before the edit
+    def: 'b06aba8d.b06aba8d/b2a9fef4.b2a9fef4 768ac3f5.768ac3f5/553b26cc.553b26cc', big: '5de7f127.a1eaeba8/2cbbf0b4.f4ba8bd0 8ddc9c5d.24d1ba5d/67baa376.8d349140',
+    dense: '9e66cc13.9e66cc13/509c7cd2.509c7cd2 b2b4b148.b2b4b148/8e2c4e15.8e2c4e15', kf: 'af93f1b8.dc42390c/2cbf758f.b7893093 3ca53c30.7c38bc6f/aa30d6a8.056169bb',
+    sparse: '6b12c04c.6b12c04c/80bbcd9a.80bbcd9a b667a93d.b667a93d/1f9ce5c7.1f9ce5c7' };
+  /* Starfield on a W x H project frame at plate scale ps, over a flat dark-blue layer (or d0). */
+  function b11Sf(over, t, ps, W, H, d0) {
+    const s = ps || 1, w = Math.round((W || 160) * s), h = Math.round((H || 120) * s);
+    return b11Run('starfield', Object.assign(b11Base('starfield', {}), { amount: 1 }, over), w, h, t, s, d0 || b11Flat(w, h, [20, 24, 40]));
+  }
+  /* The export averaged down 2 x 2: what a half-size preview plate should show if it is the export shrunk. */
+  function b11Half(d, W, H) {
+    const w = W >> 1, h = H >> 1, o = new Float64Array(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 4; c++) { let s = 0; for (let k = 0; k < 4; k++) s += d[((2 * y + (k >> 1)) * W + 2 * x + (k & 1)) * 4 + c]; o[(y * w + x) * 4 + c] = s / 4; }
+    return o;
+  }
+
+  test('482 11.3 Starfield - Fly-through, its focus, Drift X and Y, Glint and Pattern are in the catalogue at defaults that draw the old still field, and saved and new Starfields draw byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('starfield', B11SF_NEW, { speed: 1.5, x: 30, y: 70, driftx: -120, drifty: 45, glint: 0.7, seed: 21 });
+    ['x', 'y'].forEach(k => { const r = b11Row('starfield', k); if (r.overriddenBy !== 'speed' || r.liveAbove !== 0) throw new Error('Focus ' + k.toUpperCase() + ' does not say it only counts while Fly-through is on (overriddenBy ' + r.overriddenBy + ', liveAbove ' + r.liveAbove + ')'); });
+    b11Recipes('starfield', B11SF_NEW);
+    const moved = b11Pinned('starfield', B11SF_NEW, B11SF_CFG, B11SF_PIN);
+    if (moved.length) throw new Error(moved.length + ' Starfield pictures differ from fc8866f1 at the new defaults - a new control changed a sky he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.3 Starfield - Drift slides the old field and wraps it, Fly-through streams the stars out of the focus, Glint puts spikes on a few, Pattern deals another sky, and a half-size preview is the export averaged down', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, at = (d, x, y) => { const i = (y * W + x) * 4; return d[i] + ',' + d[i + 1] + ',' + d[i + 2] + ',' + d[i + 3]; };
+    /* DRIFT, at the export's scale: Drift X 30 and Drift Y -20 one second in is the still field moved 30 px right and 20 up,
+       every pixel, the ones that left one edge back in at the other. CONTROL: moved 31 px it is not. */
+    const base = { size: 2, variation: 0.6 }, still = b11Sf(base, 1), slid = b11Sf(Object.assign({ driftx: 30, drifty: -20 }, base), 1);
+    const off = (dx, dy) => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (at(slid, x, y) !== at(still, ((x - dx) % W + W) % W, ((y - dy) % H + H) % H)) n++; return n; };
+    if (!(off(31, -20) > 100)) throw new Error('CONTROL: the drifted field matches the still one moved 31 px - this comparison cannot tell a slide');
+    if (off(30, -20) !== 0) throw new Error(off(30, -20) + ' pixels of Drift (30, -20) at 1 s are not the still field moved 30 px right and 20 px up, wrapped');
+    /* PATTERN. CONTROL: Pattern 0 is the old field. Pattern 3 is another sky of the same density. */
+    const lit = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 60) n++; return n; };
+    const p0 = b11Sf({}, 1), p3 = b11Sf({ seed: 3 }, 1);
+    if (!b11Same(b11Sf({ seed: 0 }, 1), p0)) throw new Error('CONTROL: Pattern 0 changed the stars');
+    let both = 0; for (let i = 0; i < p0.length; i += 4) if (p0[i] > 60 && p3[i] > 60) both++;
+    if (!(lit(p3) > lit(p0) * 0.75 && lit(p3) < lit(p0) * 1.25)) throw new Error('Pattern 3 has ' + lit(p3) + ' stars against ' + lit(p0) + ' - another pattern must keep the density');
+    if (both > lit(p0) * 0.2) throw new Error('Pattern 3 kept ' + both + ' of ' + lit(p0) + ' stars where Pattern 0 has them - it should be another sky');
+    /* GLINT. CONTROL: 0 lights the stars alone. 1 lights more, and every pixel it adds sits on a row or a column through a star,
+       no further out than eight stars. */
+    const g0 = b11Sf({ glint: 0 }, 1), g1 = b11Sf({ glint: 1 }, 1);
+    if (!b11Same(g0, p0)) throw new Error('CONTROL: Glint 0 changed the stars');
+    if (!(lit(g1) > lit(g0) * 1.5)) throw new Error('Glint 1 lit ' + lit(g1) + ' pixels against ' + lit(g0) + ' with none - the spikes are missing');
+    const star = (x, y) => x >= 0 && y >= 0 && x < W && y < H && g0[(y * W + x) * 4] > 60;
+    let stray = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (!(g1[(y * W + x) * 4] > 60) || star(x, y)) continue;
+      let ok = false; for (let k = 1; k <= 9 && !ok; k++) ok = star(x - k, y) || star(x + k, y) || star(x, y - k) || star(x, y + k); if (!ok) stray++; }
+    if (stray) throw new Error('Glint lit ' + stray + ' pixels that are not on a spike of a star');
+    /* FLY-THROUGH, where the stars are (FM._sfEachStar, the one place the renderer asks). Over a twentieth of a second at 1x,
+       every star still in its pass is 2^(0.0125) times further from the focus. CONTROL: with it off the stars do not move. */
+    if (typeof FM._sfEachStar !== 'function') throw new Error('FM._sfEachStar (where a moving field’s stars are) is not reachable');
+    const stars = (fly, t) => { const out = []; FM._sfEachStar({ PW: W, PH: H, t: t, thr: 0.03, sz: 1, vari: 0, tw: 0, twPh: null, tws: 1, seed: 0, ox: 0, oy: 0, fly: fly, fx: 40, fy: 70, glint: 0 }, (x, y, side, b, w) => out.push([x + side / 2, y + side / 2, w])); return out; };
+    const s0 = stars(null, 1), s1 = stars(null, 1.05);
+    if (!(s0.length > 400) || s0.some((s, j) => s[0] !== s1[j][0] || s[1] !== s1[j][1])) throw new Error('CONTROL: with Fly-through off the stars moved (or there are only ' + s0.length + ')');
+    const f0 = stars(0.25, 1), f1 = stars(0.2625, 1.05), k = Math.pow(2, 0.0125);
+    let out = 0, jumped = 0;
+    f0.forEach((s, j) => { const r0 = Math.hypot(s[0] - 40, s[1] - 70), r1 = Math.hypot(f1[j][0] - 40, f1[j][1] - 70); if (Math.abs(r1 - r0 * k) < 1e-6 * (1 + r0)) out++; else jumped++; });
+    if (!(out > f0.length * 0.9)) throw new Error('only ' + out + ' of ' + f0.length + ' stars streamed straight out of the focus (' + jumped + ' did not)');
+    if (f0.some(s => !(s[2] >= 0 && s[2] <= 1))) throw new Error('a star’s fly-through fade is outside 0..1');
+    /* …and through the kernel: Fly-through draws a different frame a moment later, and moving the focus moves the picture. */
+    if (b11Same(b11Sf({ speed: 1 }, 1), b11Sf({ speed: 1 }, 1.2))) throw new Error('Fly-through 1 drew the same frame 0.2 s later');
+    if (b11Same(b11Sf({ speed: 1, x: 20 }, 1), b11Sf({ speed: 1, x: 80 }, 1))) throw new Error('Focus X did not move the fly-through');
+    /* A HALF-SIZE PREVIEW IS THE EXPORT AVERAGED DOWN, for a drift that lands between pixels, Fly-through and Pattern: every
+       star is a square in project px at both scales, so the only gap is the byte rounding — MEASURED 0.5 to 0.75 level worst.
+       With Glint, a spike that runs across another star is clamped in the export (light cannot pass the star's colour) and
+       an average of four pixels cannot reproduce a clamp: MEASURED 0.08–0.15 level mean, and 0.1–0.5 % of values more than
+       2 levels off, all where a spike crosses a star. */
+    [[{ driftx: 37.5, drifty: -12.25 }, 1], [{ speed: 1.3, x: 35 }, 1], [{ seed: 9, size: 3, variation: 0.5, twinkle: 0.4 }, 1],
+     [{ driftx: 37.5, drifty: -12.25, glint: 0.8 }, 0], [{ speed: 1.3, x: 35, glint: 0.5 }, 0]].forEach(([o, strict]) => {
+      const full = b11Sf(o, 1.37), half = b11Sf(o, 1.37, 0.5), want = b11Half(full, W, H);
+      let sum = 0, worst = 0, far = 0;
+      for (let i = 0; i < half.length; i++) { const e = Math.abs(half[i] - want[i]); sum += e; if (e > worst) worst = e; if (e > 2) far++; }
+      if (strict ? worst > 1 : (sum / half.length > 0.3 || far > half.length * 0.01)) throw new Error(JSON.stringify(o) + ' on a half-size plate is ' + (sum / half.length).toFixed(3) + ' levels from the export averaged down (worst ' + worst.toFixed(1) + ', ' + far + ' values more than 2 off) - the preview is not the export shrunk');
+    });
+  });
 })();

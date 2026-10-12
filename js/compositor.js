@@ -529,6 +529,16 @@ window.FM = window.FM || {};
       { key: 'variation', label: 'Brightness spread', min: 0, max: 1, step: 0.05, def: 0 },
       { key: 'twinkle', label: 'Twinkle', min: 0, max: 1, step: 0.05, def: 0 },
       { key: 'twinklespeed', label: 'Twinkle speed', min: 0.1, max: 5, step: 0.1, def: 1, unit: '×', overriddenBy: 'twinkle', liveAbove: 0 },   // queue 904: the rate was a fixed 3 rad/s — and it does nothing while Twinkle is 0
+      /* #482 polish 11.3. The stars could only sit still. Fly-through streams them out of a focus point, the warp-speed
+         look; Drift slides the whole field (it wraps, so it never runs out); Glint gives a few of the stars four fading
+         spikes; Pattern gives the layer its own sky. All 0 is the old field, byte for byte. */
+      { key: 'speed', label: 'Fly-through', min: 0, max: 5, step: 0.05, def: 0, unit: '×' },
+      { key: 'x', label: 'Focus X', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'speed', liveAbove: 0 },
+      { key: 'y', label: 'Focus Y', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'speed', liveAbove: 0 },
+      { key: 'driftx', label: 'Drift X', min: -300, max: 300, step: 5, def: 0, unit: 'px/s' },
+      { key: 'drifty', label: 'Drift Y', min: -300, max: 300, step: 5, def: 0, unit: 'px/s' },
+      { key: 'glint', label: 'Glint', min: 0, max: 1, step: 0.05, def: 0 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ] },
     { type: 'curl', label: 'Curl', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -5110,6 +5120,125 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ═══ A STARFIELD THAT DRIFTS, FLIES THROUGH, GLINTS, OR HAS ITS OWN PATTERN (#482 polish 11.3) ═══════════════════════
+   * Each of these places stars somewhere other than their cell, so they are laid down the way starfieldReduced lays them:
+   * as squares in PROJECT pixels, each covering whatever share of each plate pixel it covers. That is the same arithmetic
+   * at every plate scale, so a reduced preview is the export averaged down (at ps 1 a square on whole pixels is the old
+   * block exactly). The stars are still the old cells (same hash, size, brightness and twinkle) — Pattern only mixes a
+   * number into the hash, with its own cached candidate list (four patterns deep), and 0 never comes here.
+   *   · DRIFT moves every star by (Drift X, Drift Y) × t project px. The field WRAPS on its own cell grid, so stars that
+   *     leave one edge come back at the other and a drift never runs out of sky.
+   *   · FLY-THROUGH is an endless zoom about the focus: the stars are dealt into three depths, each depth's field grows
+   *     from 1× to 2× about the focus and starts again, a third of a pass apart, fading in from nothing and out to nothing
+   *     (sin of the pass), dealt to a new spot in the field each pass so no star comes round twice. The nearer a star is to
+   *     the edge, the faster it streams outward and the bigger it grows — the warp-speed look. 1× is a pass every 4 s.
+   *   · GLINT gives a fifth of the stars four spikes that fade along their length, eight stars long at 1.
+   * sfEachStar is the one place a star's position is decided; the renderer and the suite both read it. */
+  const _sfSeeded = [];                                    // seeded candidate lists, most recent first
+  function sfCandidatesFor(seed, cols, rows) {
+    if (!seed) return sfCandidates(cols, rows);
+    let k = 0, had = null;
+    for (; k < _sfSeeded.length; k++) if (_sfSeeded[k].seed === seed) { had = _sfSeeded[k]; break; }
+    if (had && cols <= had.cols && rows <= had.rows) { if (k) { _sfSeeded.splice(k, 1); _sfSeeded.unshift(had); } return had; }
+    if (had) { cols = Math.max(cols, had.cols); rows = Math.max(rows, had.rows); _sfSeeded.splice(k, 1); }
+    const sk = Math.imul(seed, 0x2545f491);
+    let cap = Math.ceil(cols * rows * 0.035) + 64, n = 0;
+    let X = new Int32Array(cap), Y = new Int32Array(cap), R = new Float64Array(cap);
+    for (let cy = 0; cy < rows; cy++) for (let cx = 0; cx < cols; cx++) {
+      let h = (cx * 374761393 + cy * 668265263 + sk) | 0; h = (h ^ (h >>> 13)) * 1274126177; h = h ^ (h >>> 16);
+      const r = (h >>> 0) / 4294967295;
+      if (!(r < 0.03)) continue;
+      if (n >= cap) { cap *= 2; const x2 = new Int32Array(cap), y2 = new Int32Array(cap), r2 = new Float64Array(cap); x2.set(X); y2.set(Y); r2.set(R); X = x2; Y = y2; R = r2; }
+      X[n] = cx; Y[n] = cy; R[n] = r; n++;
+    }
+    const c = { seed: seed, cols: cols, rows: rows, n: n, X: X, Y: Y, R: R };
+    _sfSeeded.unshift(c); if (_sfSeeded.length > 4) _sfSeeded.pop();
+    return c;
+  }
+  /* o: PW/PH the frame in project px, t, thr, sz, vari, tw, twPh, tws (the kernel's own), seed, ox/oy (the drift so far, project
+     px), fly (passes so far, or null when Fly-through is off), fx/fy (the focus, project px). fn(x, y, side, b, w, r, Pw, Ph):
+     the square's corner and side in project px, its brightness, its weight (the fly-through fade), its hash, the wrap. */
+  function sfEachStar(o, fn) {
+    const sz = o.sz, cols = Math.ceil(o.PW / sz), rows = Math.ceil(o.PH / sz), C = sfCandidatesFor(o.seed, cols, rows);
+    const Pw = cols * sz, Ph = rows * sz, wrapP = (v, P) => ((v % P) + P) % P;
+    for (let k = 0; k < C.n; k++) {
+      const cy = C.Y[k];
+      if (cy >= rows) break;                                // the list ascends by row
+      const cx = C.X[k];
+      if (cx >= cols) continue;
+      const r = C.R[k];
+      if (!(r < o.thr)) continue;                           // the kernel's own density test
+      let b = 1;                                            // brightness: the kernel's arithmetic, line for line
+      if (o.vari > 0) { let hv = ((cx * 83492791) ^ (cy * 2654435761)) >>> 0; hv = (hv ^ (hv >>> 15)) >>> 0; b *= 1 - o.vari * ((hv >>> 8) / 16777216) * 0.9; }
+      if (o.tw > 0) { let ht = ((cx * 40503) ^ (cy * 12289)) | 0; ht = (ht ^ (ht >>> 13)) * 1274126177 | 0; ht = (ht ^ (ht >>> 16)) >>> 0;
+        b *= 1 - o.tw * 0.5 * (1 - Math.sin((o.twPh === null ? o.t * 3 * o.tws : o.twPh) + (ht / 4294967295) * 6.283)); }
+      if (b < 0) b = 0;
+      let x = cx * sz + o.ox, y = cy * sz + o.oy, side = sz, w = 1;
+      if (o.fly !== null) {
+        let hl = ((cx * 2246822519) ^ (cy * 3266489917)) | 0; hl = Math.imul(hl ^ (hl >>> 15), 0x2c1b3c6d); hl = (hl ^ (hl >>> 12)) >>> 0;
+        const L = hl % 3, ph = o.fly + L / 3, pass = Math.floor(ph), f = ph - pass;
+        let hc = Math.imul(pass * 3 + L + 1, 0x9e3779b1); hc ^= hc >>> 15; hc = Math.imul(hc, 0x85ebca6b); hc ^= hc >>> 13;
+        x = wrapP(x + ((hc >>> 0) % cols) * sz, Pw); y = wrapP(y + (Math.imul(hc, 0xc2b2ae35) >>> 0) % rows * sz, Ph);
+        const s = Math.pow(2, f);
+        side = sz * s; x = o.fx + (x + sz / 2 - o.fx) * s - side / 2; y = o.fy + (y + sz / 2 - o.fy) * s - side / 2;
+        w = Math.sin(Math.PI * f);
+      } else { x = wrapP(x, Pw); y = wrapP(y, Ph); }
+      fn(x, y, side, b, w, r, Pw, Ph);
+    }
+  }
+  FM._sfEachStar = sfEachStar;                             // suite seam: where every star of a moving field is
+  function starfieldMoving(d, W, H, ps, col, o) {
+    const N = W * H;
+    if (!_sfCov || _sfCov.length < N) { _sfCov = new Float32Array(N); _sfAcc = new Float32Array(N); }
+    const cov = _sfCov, acc = _sfAcc;
+    cov.fill(0, 0, N); acc.fill(0, 0, N);
+    const splat = (X0, Y0, w0, h0, a, b) => {            // a project-px rectangle at weight a and brightness b
+      const x0 = X0 * ps, x1 = (X0 + w0) * ps, y0 = Y0 * ps, y1 = (Y0 + h0) * ps;
+      const px0 = Math.max(0, Math.floor(x0)), px1 = Math.min(W - 1, Math.ceil(x1) - 1), py0 = Math.max(0, Math.floor(y0)), py1 = Math.min(H - 1, Math.ceil(y1) - 1);
+      for (let py = py0; py <= py1; py++) {
+        const oy = Math.min(y1, py + 1) - Math.max(y0, py);
+        if (!(oy > 0)) continue;
+        for (let px = px0; px <= px1; px++) {
+          const ox = Math.min(x1, px + 1) - Math.max(x0, px);
+          if (!(ox > 0)) continue;
+          const wgt = ox * oy * a, j = py * W + px;
+          cov[j] += wgt; acc[j] += wgt * b;
+        }
+      }
+    };
+    const gl = o.glint, glThr = o.thr * 0.2;
+    sfEachStar(o, (x, y, side, b, w, r, Pw, Ph) => {
+      if (!(w > 0)) return;
+      splat(x, y, side, side, w, b);
+      if (o.fly === null) {                                 // a star across the wrap shows on both edges
+        if (x + side > Pw) splat(x - Pw, y, side, side, w, b);
+        if (y + side > Ph) splat(x, y - Ph, side, side, w, b);
+        if (x + side > Pw && y + side > Ph) splat(x - Pw, y - Ph, side, side, w, b);
+      }
+      if (gl > 0 && r < glThr) {
+        const L = gl * 8 * side, len = L / 8, th = side < 1 ? side : 1, cx = x + side / 2, cy = y + side / 2;
+        for (let q = 0; q < 8; q++) {
+          const a = gl * w * 0.9 * (1 - (q + 0.5) / 8), s0 = side / 2 + q * len;
+          splat(cx + s0, cy - th / 2, len, th, a, b); splat(cx - s0 - len, cy - th / 2, len, th, a, b);
+          splat(cx - th / 2, cy + s0, th, len, a, b); splat(cx - th / 2, cy - s0 - len, th, len, a, b);
+        }
+      }
+    });
+    for (let j = 0; j < N; j++) {
+      let f = cov[j];
+      if (!(f > 0)) continue;
+      const i = j * 4, a0 = d[i + 3] / 255;
+      if (a0 <= 0) continue;                                // a star only where the layer is, as ever
+      let s = acc[j];
+      if (f > 1) { s /= f; f = 1; }
+      const keep = (1 - f) * a0, A = f + keep;
+      d[i] = (col[0] * s + d[i] * keep) / A;
+      d[i + 1] = (col[1] * s + d[i + 1] * keep) / A;
+      d[i + 2] = (col[2] * s + d[i + 2] * keep) / A;
+      d[i + 3] = A * 255;
+    }
+  }
+
   /* ═══ HIGHLIGHTS & SHADOWS: THE CONTROLS A REAL ONE HAS (#482 polish 5.2, answers C47) ══════════════════════════════
    * The old kernel adds sh·(1−L)² + hi·L² levels to every channel — one curve for the whole picture, and an ADD, so at
    * +50 Shadows pure black came out 60/60/60: the milky blacks of C47. 17 library filters are built on it, so at the
@@ -7053,6 +7182,20 @@ window.FM = window.FM || {};
          clip on every frame, so a ramp played as a burst of frantic flicker. Unkeyframed: the old phase, to the bit. */
       var sf_twPh=FM.isAnimated(sf_p.twinklespeed)?3*FM.integrateProp(sf_p.twinklespeed,0,sf_t,function(u){ var k=FM.evalProp(sf_p.twinklespeed,u); return !(k>0.1)?0.1:(k>5?5:k); }):null;
       var sf_plain=sf_szP===1&&sf_tw===0&&sf_var===0;
+      /* #482 polish 11.3: Fly-through, Drift, Glint and Pattern lay the stars down in project px (starfieldMoving). With all four
+         at 0 nothing here is used, so every saved field is the code below, byte for byte. */
+      var sf_fly=sf_p.speed==null?0:FM.evalProp(sf_p.speed,sf_t); if(!(sf_fly>0))sf_fly=0; if(sf_fly>5)sf_fly=5;
+      var sf_dx=sf_p.driftx==null?0:FM.evalProp(sf_p.driftx,sf_t), sf_dy=sf_p.drifty==null?0:FM.evalProp(sf_p.drifty,sf_t); if(!isFinite(sf_dx))sf_dx=0; if(!isFinite(sf_dy))sf_dy=0;
+      var sf_gl=sf_p.glint==null?0:FM.evalProp(sf_p.glint,sf_t); if(!(sf_gl>0))sf_gl=0; if(sf_gl>1)sf_gl=1;
+      var sf_sd=sf_p.seed==null?0:Math.round(FM.evalProp(sf_p.seed,sf_t)); if(!(sf_sd>0))sf_sd=0; if(sf_sd>999)sf_sd=999;
+      var sf_flyK=FM.isAnimated(sf_p.speed), sf_dxK=FM.isAnimated(sf_p.driftx), sf_dyK=FM.isAnimated(sf_p.drifty);
+      if(sf_fly>0||sf_flyK||sf_dx!==0||sf_dy!==0||sf_dxK||sf_dyK||sf_gl>0||sf_sd>0){
+        var sf_mps=(sf_ps>0&&sf_ps<1)?sf_ps:1, sf_fxp=sf_p.x==null?50:FM.evalProp(sf_p.x,sf_t), sf_fyp=sf_p.y==null?50:FM.evalProp(sf_p.y,sf_t);
+        starfieldMoving(sf_d,sf_W,sf_H,sf_mps,sf_col,{ PW:sf_W/sf_mps, PH:sf_H/sf_mps, t:sf_t, thr:sf_thr, sz:sf_szP, vari:sf_var, tw:sf_tw, twPh:sf_twPh, tws:sf_tws, seed:sf_sd,
+          ox:sf_dxK?FM.integrateProp(sf_p.driftx,0,sf_t):sf_dx*sf_t, oy:sf_dyK?FM.integrateProp(sf_p.drifty,0,sf_t):sf_dy*sf_t,   // a keyframed drift is a speed: its distance so far
+          fly:(sf_fly>0||sf_flyK)?(sf_flyK?0.25*FM.integrateProp(sf_p.speed,0,sf_t,function(u){ var k=FM.evalProp(sf_p.speed,u); return k>0?(k<5?k:5):0; }):sf_fly*sf_t*0.25):null,
+          fx:sf_fxp/100*sf_W/sf_mps, fy:sf_fyp/100*sf_H/sf_mps, glint:sf_gl });
+        return; }
       if(sf_ps>0&&sf_ps<1){ starfieldReduced(sf_d,sf_W,sf_H,sf_ps,sf_t,sf_thr,sf_szP,sf_col,sf_plain,sf_var,sf_tw,sf_twPh,sf_tws); return; }   // #986 C7b: a reduced plate shows the export's stars, shrunk (Star size is project px here — pxToPlate leaves a 6-argument kernel alone)
       for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue;
         var sf_cx=sf_szP===1?sf_x:Math.floor(sf_x/sf_szP), sf_cy=sf_szP===1?sf_y:Math.floor(sf_y/sf_szP);
