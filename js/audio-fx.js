@@ -462,6 +462,26 @@ window.FM = window.FM || {};
      filter with a +1.25 dB bump (the node's own default Q of 1) at Feedback 0.9 is a loop gain of 1.04 at the
      bump, and the repeats would grow into a howl instead of dying away. */
   const BUTTERWORTH_DB = 20 * Math.log10(Math.SQRT1_2);
+  /* Mid/side width on a stereo signal (Reverb's Width, #482 3.4; Ping-Pong's, 8.3): L = M + w·S, R = M − w·S. The M/S sum is
+     NOT exact at w = 1 in floats ((L+R)/2 + (L−R)/2 can land an ulp off L), so a caller switches it in with a bypass pair.
+     The splitter is discrete, so the input is up-mixed to two channels first, as the Stereo Width effect does. */
+  function msWidth(s, w0) {
+    const msIn = s.gain(1);
+    msIn.channelCount = 2; msIn.channelCountMode = 'explicit'; msIn.channelInterpretation = 'speakers';
+    const split = s.splitter(2), merge = s.merger(2);
+    const mid = s.gain(0.5);
+    split.connect(mid, 0); split.connect(mid, 1);
+    const sP = s.gain(0.5), sN = s.gain(-0.5), side = s.gain(1);
+    split.connect(sP, 0); split.connect(sN, 1); sP.connect(side); sN.connect(side);
+    const wG = s.gain(w0), wN = s.gain(-1);
+    side.connect(wG); wG.connect(wN);
+    mid.connect(merge, 0, 0); wG.connect(merge, 0, 0);
+    mid.connect(merge, 0, 1); wN.connect(merge, 0, 1);
+    msIn.connect(split);
+    return { input: msIn, output: merge, w: wG };
+  }
+  // A value written at once or ramped to, onto one AudioParam (a setter that works one out from several keys).
+  function put(ap, x, when, ramp) { if (ramp) ap.linearRampToValueAtTime(x, when); else ap.setValueAtTime(x, when); }
 
   /* A FEEDBACK LOOP, UNROLLED (queue 986, hunts C16/C17). A loop's k-th time round is weighted fb^(k−1); these
      are the factors `multi` schedules onto the taps, and how many trips round each effect keeps (see Flanger and
@@ -811,22 +831,9 @@ window.FM = window.FM || {};
       const hc = bypassPair(s, wetBus, lp, lp, hc0 < 20000);
       const hp = s.biquad('highpass', lc0, BUTTERWORTH_DB);
       const lc = bypassPair(s, hc.out, hp, hp, lc0 > 20);
-      /* Width is mid/side on the wet: L = M + w·S, R = M − w·S. The M/S sum is NOT exact at w = 1 in floats
-         ((L+R)/2 + (L−R)/2 can land an ulp off L), which is exactly why it too is switched in by a pair. The
-         splitter is discrete, so the wet is up-mixed to two channels first, as the Stereo Width effect does. */
-      const msIn = s.gain(1);
-      msIn.channelCount = 2; msIn.channelCountMode = 'explicit'; msIn.channelInterpretation = 'speakers';
-      const split = s.splitter(2), merge = s.merger(2);
-      const mid = s.gain(0.5);
-      split.connect(mid, 0); split.connect(mid, 1);
-      const sP = s.gain(0.5), sN = s.gain(-0.5), side = s.gain(1);
-      split.connect(sP, 0); split.connect(sN, 1); sP.connect(side); sN.connect(side);
-      const wG = s.gain(w0), wN = s.gain(-1);
-      side.connect(wG); wG.connect(wN);
-      mid.connect(merge, 0, 0); wG.connect(merge, 0, 0);
-      mid.connect(merge, 0, 1); wN.connect(merge, 0, 1);
-      msIn.connect(split);
-      const wp = bypassPair(s, lc.out, msIn, merge, w0 < 1);
+      // Width is mid/side on the wet (msWidth), switched in by a pair because the M/S sum is not exact at w = 1.
+      const ms = msWidth(s, w0), wG = ms.w;
+      const wp = bypassPair(s, lc.out, ms.input, ms.output, w0 < 1);
       pre.out.connect(conv); conv.connect(convG); convG.connect(wetBus);
       wp.out.connect(wd.wet); wd.wet.connect(out);
       let size = initNum(inst, 'size', 0.5, 0, 1), decay = initNum(inst, 'decay', 2, 0.1, 8);
@@ -1023,25 +1030,60 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'pingpong', label: 'Ping-Pong Delay', category: 'space',
-    params: [P('time', 'Time', 0.01, 1.5, 0.01, 0.3, 's', true), P('feedback', 'Feedback', 0, 0.85, 0.01, 0.4, '', true), MIX(0.35)],
+    params: [P('time', 'Time', 0.01, 1.5, 0.01, 0.3, 's', true), P('feedback', 'Feedback', 0, 0.85, 0.01, 0.4, '', true),
+      /* #482 polish 8.3. Right-side timing stretches (or shortens) the right side's half of every bounce, so the echoes stop
+         landing on an even left-right-left grid — at 1.5 the first right echo comes 2.5 × Time after the sound instead of
+         2 ×. Tone takes the top off each side's line, so every bounce is darker than the one before (the Echo's Tone, 3.3);
+         Width folds the bounces from full left-right towards the middle (Reverb's Width, 3.4). Every default is today's
+         Ping-Pong: the right line at 1 × is today's line (a longer twin takes over off 1, a bypass pair — a delay's length
+         changes how it rounds, the Pitch Shift lesson), Tone 20000 and Width 1 are bypass pairs. */
+      P('offset', 'Right-side timing', 0.5, 2, 0.01, 1, '×', true),
+      P('tone', 'Tone', 500, 20000, 10, 20000, 'Hz', true),
+      P('width', 'Width', 0, 1, 0.01, 1, '', true),
+      MIX(0.35)],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.35);
       input.connect(wd.dry).connect(out);
-      const dL = s.delay(1.7), dR = s.delay(1.7);
-      dL.delayTime.value = 0.3; dR.delayTime.value = 0.3;
+      const off0 = initNum(inst, 'offset', 1, 0.5, 2), tone0 = initNum(inst, 'tone', 20000, 500, 20000), w0 = initNum(inst, 'width', 1, 0, 1);
+      const dL = s.delay(1.7), dR = s.delay(1.7), dR2 = s.delay(3.2);
+      dL.delayTime.value = 0.3; dR.delayTime.value = 0.3; dR2.delayTime.value = 0.3 * off0;
       const xL = s.gain(0.4), xR = s.gain(0.4);   // each cross-feed is one tap, so a round trip = feedback²
       const merge = s.merger(2);
       input.connect(dL);
-      dL.connect(xR).connect(dR);
-      dR.connect(xL).connect(dL);
-      dL.connect(merge, 0, 0);
-      dR.connect(merge, 0, 1);
-      merge.connect(wd.wet); wd.wet.connect(out);
+      /* THE LOOP (8.3): dL → [Tone] → left out, and → xR → the right line (today's, or the twin when Right-side timing is off
+         1) → [Tone] → right out, and → xL → dL. Each Tone sits on a line's output, so the first echo is darkened too and a
+         drag is heard at Feedback 0 (the Echo's rule). */
+      const lpL = s.biquad('lowpass', tone0, BUTTERWORTH_DB), lpR = s.biquad('lowpass', tone0, BUTTERWORTH_DB);
+      const tL = bypassPair(s, dL, lpL, lpL, tone0 < 20000);
+      tL.out.connect(merge, 0, 0); tL.out.connect(xR);
+      xR.connect(dR); xR.connect(dR2);
+      const offOn = Math.abs(off0 - 1) > 1e-9;
+      const rOff = s.gain(offOn ? 0 : 1), rOn = s.gain(offOn ? 1 : 0), rSum = s.gain(1);
+      dR.connect(rOff); rOff.connect(rSum); dR2.connect(rOn); rOn.connect(rSum);
+      const tR = bypassPair(s, rSum, lpR, lpR, tone0 < 20000);
+      tR.out.connect(merge, 0, 1); tR.out.connect(xL); xL.connect(dL);
+      const ms = msWidth(s, w0);
+      const wp = bypassPair(s, merge, ms.input, ms.output, w0 < 1);
+      wp.out.connect(wd.wet); wd.wet.connect(out);
+      /* Time and Right-side timing both drive the twin (Time × it), so each setter works it out from both read at the SAME
+         scene moment (sceneT), the Compressor's Auto makeup rule: whichever writes last at a moment writes the same number. */
+      const pT = paramOf('pingpong', 'time'), pO = paramOf('pingpong', 'offset');
+      const at = (pd, sceneT) => valueAt(inst, pd, isFinite(sceneT) ? sceneT : 0);
+      const offSwitch = pairTargets({ gOn: rOn, gOff: rOff }, v => Math.abs(v - 1) > 1e-9)[0];
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
-        custom: { time: multi([[dL.delayTime, null], [dR.delayTime, null]]), feedback: multi([[xL.gain, null], [xR.gain, null]]), mix: wd.set },
+        custom: {
+          time: function (v, when, ramp, sceneT) {
+            put(dL.delayTime, v, when, ramp); put(dR.delayTime, v, when, ramp); put(dR2.delayTime, v * at(pO, sceneT), when, ramp);
+          },
+          offset: function (v, when, ramp, sceneT) { put(dR2.delayTime, at(pT, sceneT) * v, when, ramp); offSwitch(v, when, ramp); },
+          feedback: multi([[xL.gain, null], [xR.gain, null]]),
+          tone: multi([[lpL.frequency, null], [lpR.frequency, null]].concat(pairTargets(tL, v => v < 20000), pairTargets(tR, v => v < 20000))),
+          width: multi([[ms.w.gain, null]].concat(pairTargets(wp, v => v < 1))),
+          mix: wd.set,
+        },
       });
     },
   }, {

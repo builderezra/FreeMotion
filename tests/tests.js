@@ -125521,4 +125521,65 @@
     } finally { try { if (before == null) localStorage.removeItem(K); else localStorage.setItem(K, before); } catch (e) {} }
     if (bad.length) throw new Error('Presets: ' + bad.join(' · '));
   });
+
+  /* 8.3 — PING-PONG: RIGHT-SIDE TIMING, TONE, WIDTH. Read on a click (a mono clip, Mix 1, Feedback 0.5, Time 0.1 s = 4800
+     frames). The sound goes into the left line only, so the left answers first and the right one hop later; Right-side
+     timing stretches the right line, so at 1.5 the first right echo lands Time x 0.5 = 2400 frames later than at 1 (the
+     backlog's "today at time" counted the right line alone: on the build before the right answers one left hop in, at the
+     same frame whatever the key says), at half the left's level, and the next left echo moves by the same 2400. Measured
+     against the same render at 1, not against a predicted frame: the engine adds a render quantum where it cuts a loop
+     (queue 986, C16), and that is not this item's business. Tone 2000 Hz is a Butterworth lowpass on each line's output: a
+     click's first echo keeps less than -15 dB of its energy above 8 kHz (one pass, -23 dB by the maths; a flat click keeps
+     -1.8), and each bounce goes through it again, so the second left echo (three passes) is at least 20 dB darker still.
+     Width 0 folds both sides to their middle: left and right the same samples. On the build before none of these keys exist
+     (first line). CONTROL: a saved Ping-Pong is today's graph sample for sample (b3SameAsToday). */
+  test('482 8.3 Ping-Pong - Right-side timing moves the right echoes, Tone darkens every bounce, Width folds it to the middle, and a saved Ping-Pong is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const W = { offset: ['Right-side timing', 0.5, 2, 1], tone: ['Tone', 500, 20000, 20000], width: ['Width', 0, 1, 1] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('pingpong', k), w = W[k];
+      if (!pd) throw new Error('the Ping-Pong has no ' + w[0] + ' (its params are ' + b7Keys('pingpong') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !pd.keyframable) throw new Error('Ping-Pong ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'pingpong', enabled: true, params: { time: 0.3, feedback: 0.4, mix: 0.35 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.offset !== 1 || op.tone !== 20000 || op.width !== 1) throw new Error('a Ping-Pong saved before these controls opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const input = oac.createGain(), out = oac.createGain(), dry = oac.createGain(), wet = oac.createGain();
+      dry.gain.setValueAtTime(1 - 0.35, 0); wet.gain.setValueAtTime(0.35, 0);
+      input.connect(dry).connect(out);
+      const dL = oac.createDelay(1.7), dR = oac.createDelay(1.7), xL = oac.createGain(), xR = oac.createGain(), merge = oac.createChannelMerger(2);
+      dL.delayTime.setValueAtTime(0.3, 0); dR.delayTime.setValueAtTime(0.3, 0); xL.gain.setValueAtTime(0.4, 0); xR.gain.setValueAtTime(0.4, 0);
+      input.connect(dL); dL.connect(xR).connect(dR); dR.connect(xL).connect(dL);
+      dL.connect(merge, 0, 0); dR.connect(merge, 0, 1); merge.connect(wet); wet.connect(out);
+      return { input: input, output: out };
+    };
+    const same = await b3SameAsToday([{ type: 'pingpong', enabled: true, params: op }], today, 'a saved Ping-Pong');
+    if (same.length) throw new Error('CONTROL: a saved Ping-Pong is not today’s sound - ' + same.join('; '));
+    const click = (t, i) => (i === 0 ? 1 : 0), bad = [];
+    const near = (y, f) => { let s = 0; for (let i = f - 2; i <= f + 2; i++) s += Math.abs(y[i] || 0); return s; };
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const run = p => afx482c(b7Fx('pingpong', Object.assign({ time: 0.1, feedback: 0.5, mix: 1 }, p)), click, 0.5, { chans: 1, live: live });
+      const [L1, R1] = await run({}), [L, R] = await run({ offset: 1.5 });
+      const l1 = b8First(L1, 0, 1e-3), r1 = b8First(R1, 0, 1e-3), l2 = b8First(L1, l1 + 1000, 1e-3);
+      if (l1 !== 4800 || !(r1 >= 9600 && r1 < 9600 + 400) || !(l2 > r1)) throw new Error('CONTROL: today’s Ping-Pong answers a click on the left at frame ' + l1 + ', the right at ' + r1 + ', the left again at ' + l2 + ' (' + path + ') - want 4800, then the right one hop on, then the left');
+      const r = b8First(R, 0, 1e-3), lb = b8First(L, l1 + 1000, 1e-3);
+      if (Math.abs(r - r1 - 2400) > 1) bad.push('at Right-side timing 1.5 the first right echo is at frame ' + r + ', ' + (r - r1) + ' after where it is at 1 - want 2400 (Time x 0.5) (' + path + ')');
+      if (Math.abs(near(R, r) - 0.5) > 0.01) bad.push('at Right-side timing 1.5 the first right echo is ' + near(R, r).toFixed(4) + ', not 0.5 (' + path + ')');
+      if (Math.abs(lb - l2 - 2400) > 1 || Math.abs(near(L, lb) - 0.25) > 0.01) bad.push('at Right-side timing 1.5 the second left echo is at frame ' + lb + ' (' + (lb - l2) + ' after where it is at 1), ' + near(L, lb).toFixed(4) + ' - want 2400 later at 0.25 (' + path + ')');
+    }
+    const hf = (y, f) => band482c(y, f - 16, 1024, 8000, 24000) - band482c(y, f - 16, 1024, 0, 24000);
+    const [T0] = await afx482c(b7Fx('pingpong', { time: 0.1, feedback: 0.5, mix: 1 }), click, 0.5, { chans: 1 });
+    const [T2] = await afx482c(b7Fx('pingpong', { time: 0.1, feedback: 0.5, mix: 1, tone: 2000 }), click, 0.5, { chans: 1 });
+    const h0 = hf(T0, b8First(T0, 0, 1e-3)), f1 = b8First(T2, 0, 1e-4), h1 = hf(T2, f1), f3 = b8First(T2, f1 + 1000, 1e-5), h3 = hf(T2, f3);
+    if (!(h0 > -3)) throw new Error('CONTROL: an untouched first echo of a click keeps only ' + h0.toFixed(1) + ' dB of its energy above 8 kHz - the measure is broken');
+    if (!(h1 < -15)) bad.push('at Tone 2000 the first echo keeps ' + h1.toFixed(1) + ' dB of its energy above 8 kHz');
+    if (!(h3 < h1 - 20)) bad.push('at Tone 2000 the second left echo (three passes) keeps ' + h3.toFixed(1) + ' dB above 8 kHz, the first ' + h1.toFixed(1) + ' - each bounce is not darker');
+    const [WL, WR] = await afx482c(b7Fx('pingpong', { time: 0.1, feedback: 0.5, mix: 1, width: 0 }), click, 0.5, { chans: 1 });
+    let lr = 0, any = 0; for (let i = 0; i < WL.length; i++) { lr = Math.max(lr, Math.abs(WL[i] - WR[i])); any = Math.max(any, Math.abs(WL[i])); }
+    if (!(any > 0.1)) throw new Error('CONTROL: at Width 0 the Ping-Pong is silent');
+    if (lr !== 0) bad.push('at Width 0 left and right differ by up to ' + lr.toExponential(2) + ' - not folded to the middle');
+    if (bad.length) throw new Error('Ping-Pong: ' + bad.join('; '));
+  });
 })();
