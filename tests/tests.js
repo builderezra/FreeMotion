@@ -124593,4 +124593,170 @@
     const bad = cases.filter(c => f(c[0], c[1]) !== c[2]).map(c => 'summary(' + c[0] + ', ' + c[1] + ') = “' + f(c[0], c[1]) + '”, want “' + c[2] + '”');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 13 — Stylize depth: Halftone, CRT, VHS Tape, Scanlines, Pixel Sort, Dither, HSL Bands ═══════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 13
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); 13.1 also answers hunt C32. The rule that makes it safe (§0.3):
+   * every new key's default is the old look, because a filter recipe gets every key it does not set from makeInstance, and a
+   * saved instance that lacks a key is filled at render time (queue 784) with the kernel's own fallback. Each item proves
+   * both against hashes of its kernel captured on fc8866f1 (the tree before the batch) BEFORE the first edit, on the fixture
+   * below, through FM._applyPixelFx. These are kernels on typed arrays — no canvas, no font, no rasteriser — so the bytes are
+   * the same on every OS and the pins are plain literals rather than pinned() tables. */
+  function b13Plate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  }
+  function b13Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b13Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b13Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  /* The kernel through FM._applyPixelFx: the same PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`, so a kernel that leaves its px params to the dispatcher is scaled as on a layer. */
+  function b13Run(type, params, W, H, t, ps, d0) { const d = d0 || b13Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out. (On fc8866f1 makeInstance has none of them, which is how
+     the pins were captured.) */
+  function b13Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Eight hashes per config: two plate sizes, the export (ps 1) and a half-size preview plate (ps 0.5), at two moments. */
+  function b13Shots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b13Hash(b13Run(type, JSON.parse(JSON.stringify(params)), W, H, t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance) and PRESENT at their defaults (a new instance, and every filter
+     recipe), against the pins. */
+  function b13Pinned(type, NEW, CFG, PIN) {
+    const moved = [];
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b13Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      [['absent', abs], ['present', pre]].forEach(([how, p]) => { const got = b13Shots(type, p); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default value comes
+     back from the load sanitiser as it was written. */
+  function b13Catalogue(type, NEW, SET) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l48213' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(SET)) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A library filter built on the effect carries every new key at its default (no recipe sets one). */
+  function b13Recipes(type, NEW, ids) {
+    ids.forEach(id => {
+      const box = FM.filters.makeInstance(id), kid = box && (box.effects || []).filter(e => e.type === type)[0];
+      if (!kid) throw new Error('CONTROL: the ' + id + ' filter has no ' + type + ' in it any more - this check sees nothing');
+      Object.keys(NEW).forEach(k => { if (kid.params[k] !== NEW[k]) throw new Error('the ' + id + ' filter’s ' + type + ' carries ' + k + ' = ' + kid.params[k] + ', not ' + NEW[k] + ' - a library filter would change its look'); });
+    });
+  }
+  const b13Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b13Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b13Colours = d => { const m = {}; for (let i = 0; i < d.length; i += 4) { const k = d[i] + ',' + d[i + 1] + ',' + d[i + 2]; m[k] = (m[k] || 0) + 1; } return m; };
+  const b13Mean = d => { const m = [0, 0, 0], n = d.length / 4; for (let i = 0; i < d.length; i += 4) { m[0] += d[i]; m[1] += d[i + 1]; m[2] += d[i + 2]; } return m.map(v => v / n); };
+
+  /* 13.1 HALFTONE (hunt C32): Print (Mono / Colour dots / CMYK), Ink, Paper, Smooth dots, Sample, Mix. */
+  const B13HT_NEW = { mode: 0, ink: '#000000', paper: '#ffffff', aa: 0, sample: 0, mix: 1 };
+  const B13HT_CFG = { def: {}, poster: { size: 6 }, riso: { size: 40 }, turned: { size: 9, angle: 45, gain: 1.2, shape: 2 }, odd: { size: 5, angle: 30, shape: 1 }, kf: { size: b13Kf(4, 12) } };
+  const B13HT_PIN = {   // fc8866f1, before the edit
+    def: '75f98955.75f98955/52966ff5.52966ff5 d3f9063c.d3f9063c/649be5bd.649be5bd', poster: '6838882c.6838882c/6566f04c.6566f04c 597db0ec.597db0ec/1cae4145.1cae4145',
+    riso: 'd05a00e4.d05a00e4/22cb472c.22cb472c ac42a55d.ac42a55d/1453347d.1453347d', turned: '22503145.22503145/87bdd0b4.87bdd0b4 ec41eff5.ec41eff5/b559abc4.b559abc4',
+    odd: '8e990d9d.8e990d9d/424eae7c.424eae7c 7c9eb5e5.7c9eb5e5/ad03985c.ad03985c', kf: 'c97d3e1c.ba60d9ad/6566f04c.6838882c 39cbb554.b0c62484/1cae4145.597db0ec' };
+
+  test('482 13.1 Halftone - Print, Ink, Paper, Smooth dots, Sample and Mix are in the catalogue at defaults that print the old dots, and saved and new Halftones and the Poster Print and Risograph recipes print byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('halftone', B13HT_NEW, { mode: 2, ink: '#2040a0', paper: '#f0e0c0', aa: 1.5, sample: 1, mix: 0.6 });
+    const ink = b13Row('halftone', 'ink'), paper = b13Row('halftone', 'paper');
+    if (ink.type !== 'color' || ink.overriddenBy !== 'mode' || ink.liveWhen !== 0) throw new Error('the Ink row does not say it only counts under Print Mono (type ' + ink.type + ', overriddenBy ' + ink.overriddenBy + ', liveWhen ' + ink.liveWhen + ')');
+    if (paper.type !== 'color' || paper.overriddenBy) throw new Error('the Paper row is not a plain colour row live in every Print (type ' + paper.type + ', overriddenBy ' + paper.overriddenBy + ')');
+    if (b13Row('halftone', 'aa').unit !== 'px') throw new Error('Smooth dots is not declared in px - it is a width on the picture, and the panel must say so');
+    b13Recipes('halftone', B13HT_NEW, ['poster', 'riso']);
+    const moved = b13Pinned('halftone', B13HT_NEW, B13HT_CFG, B13HT_PIN);
+    if (moved.length) throw new Error(moved.length + ' Halftone prints differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+    /* THE GENERAL PRINT AT THE OLD SETTINGS IS THE OLD PRINT: every non-default setting runs FM._halftone13, so its lattice,
+       centre, distance and radius must be the old loop's, straight and turned, round, square and diamond. */
+    if (typeof FM._halftone13 !== 'function') throw new Error('FM._halftone13 (the general print) is not reachable');
+    [[8, 0, 1.45, 0], [9, 45, 1.2, 2], [5, 30, 1.45, 1], [7, 0, 2, 1], [12, 75, 0.9, 0]].forEach(([size, angle, gain, shape]) => {
+      const want = b13Run('halftone', { size: size, angle: angle, gain: gain, shape: shape }, 97, 61, 0.5, 1), d = b13Plate(97, 61);
+      FM._halftone13(d, d.slice(), 97, 61, size, size / 2, angle, gain, shape, { mode: 0, aa: 0, avg: false, mix: 1, ink: [0, 0, 0], paper: [255, 255, 255] });
+      if (!b13Same(d, want)) throw new Error('the general print at pitch ' + size + ', angle ' + angle + ', gain ' + gain + ', shape ' + shape + ' with black ink on white paper is not the old print - its lattice has drifted from the old loop');
+    });
+  });
+
+  test('482 13.1 Halftone - Colour dots print a red picture in red dots where Mono prints black ones, CMYK builds it from coloured screens and a grey from black alone, Smooth dots soften the edge and keep the tone, Cell average stops one pixel deciding a dot, Ink and Paper recolour Mono, and Mix fades back', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64, red = [220, 40, 40], grey = [128, 128, 128];
+    const ht = (over, rgb, d0, ps) => b13Run('halftone', Object.assign(b13Base('halftone', {}), { size: 8, angle: 0, gain: 1.45, shape: 0 }, over), W, H, 0.5, ps, d0 || b13Flat(W, H, rgb));
+    const keys = m => Object.keys(m).sort().join(' ');
+    /* COLOUR DOTS. CONTROL: Mono prints a flat red picture in black dots on white - no red anywhere, which is the complaint. */
+    const mono = b13Colours(ht({}, red)), cd = b13Colours(ht({ mode: 1 }, red));
+    if (keys(mono) !== '0,0,0 255,255,255') throw new Error('CONTROL: Mono printed a flat red picture in ' + keys(mono) + ' - it should be black dots on white');
+    if (keys(cd) !== '220,40,40 255,255,255') throw new Error('Colour dots printed a flat red picture in ' + keys(cd) + ' - the dots should be the picture’s own red on white paper');
+    if (cd['220,40,40'] !== mono['0,0,0']) throw new Error('Colour dots inked ' + cd['220,40,40'] + ' pixels where Mono inks ' + mono['0,0,0'] + ' - Print must change what colour the dots are, not how big they are');
+    /* CMYK: a red is magenta and yellow (so it reads red), a cyan reads cyan, and a neutral grey takes black ink only. */
+    const cmR = b13Mean(ht({ mode: 2 }, red)), cmC = b13Mean(ht({ mode: 2 }, [40, 200, 220])), cmG = ht({ mode: 2 }, grey);
+    if (!(cmR[0] > cmR[1] + 60 && cmR[0] > cmR[2] + 60)) throw new Error('CMYK printed a flat red picture as ' + cmR.map(v => v.toFixed(0)) + ' on average - its magenta and yellow screens should make it red');
+    if (!(cmC[1] > cmC[0] + 40 && cmC[2] > cmC[0] + 40)) throw new Error('CMYK printed a flat cyan picture as ' + cmC.map(v => v.toFixed(0)) + ' on average - it should read cyan');
+    let blackDots = 0;
+    for (let i = 0; i < cmG.length; i += 4) { if (cmG[i] !== cmG[i + 1] || cmG[i] !== cmG[i + 2]) throw new Error('CMYK printed a neutral grey with coloured ink (' + cmG[i] + ',' + cmG[i + 1] + ',' + cmG[i + 2] + ') - a grey is black ink only'); if (cmG[i] < 128) blackDots++; }
+    if (!blackDots) throw new Error('CMYK printed a mid grey with no black dots at all');
+    /* SMOOTH DOTS. CONTROL: the hard print has nothing between ink and paper. 1.5 px puts the edge between them and keeps the
+       tone: the half-coverage contour stays at the old radius, so across nine greys it stays within 15 levels of the hard print
+       (MEASURED 2.2-11.9) and on average no further from the true area of the dot (pi R² of the cell) than the hard print, which
+       counts whole pixel centres (MEASURED mean error 5.8 against the hard print's 8.6) - and it prints no speck on white. */
+    const hard = ht({}, grey), soft = ht({ aa: 1.5 }, grey);
+    const mid = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 0 && d[i] < 255) n++; return n; };
+    if (mid(hard)) throw new Error('CONTROL: the hard print has ' + mid(hard) + ' pixels between ink and paper');
+    if (!(mid(soft) > W * H * 0.1)) throw new Error('Smooth dots 1.5 px left only ' + mid(soft) + ' edge pixels between ink and paper - the edge is still hard');
+    let errH = 0, errS = 0;
+    [10, 40, 70, 100, 128, 150, 180, 210, 240].forEach(v => {
+      const R = (1 - v / 255) * 4 * 1.45, area = 255 * (1 - Math.min(1, Math.PI * R * R / 64));
+      const mh = b13Mean(ht({}, [v, v, v]))[0], ms = b13Mean(ht({ aa: 1.5 }, [v, v, v]))[0];
+      if (Math.abs(mh - ms) > 15) throw new Error('Smooth dots moved the printed tone of grey ' + v + ' from ' + mh.toFixed(1) + ' to ' + ms.toFixed(1) + ' - a softer edge must not lighten or darken the picture');
+      errH += Math.abs(mh - area); errS += Math.abs(ms - area);
+    });
+    if (errS > errH) throw new Error('Smooth dots strays further from the true dot area (mean ' + (errS / 9).toFixed(1) + ' levels) than the hard print (' + (errH / 9).toFixed(1) + ')');
+    const white = ht({ aa: 2 }, [255, 255, 255]);
+    for (let i = 0; i < white.length; i += 4) if (white[i] !== 255) throw new Error('Smooth dots 2 px printed a speck (' + white[i] + ') on white paper at pixel ' + (i / 4));
+    /* …and it is a width on the picture: 2 px on a half-size plate is 1 px at the half pitch, byte for byte. */
+    const a = b13Run('halftone', Object.assign(b13Base('halftone', {}), { size: 16, aa: 2 }), W, H, 0.5, 0.5, b13Flat(W, H, grey));
+    const b = b13Run('halftone', Object.assign(b13Base('halftone', {}), { size: 8, aa: 1 }), W, H, 0.5, 1, b13Flat(W, H, grey));
+    if (!b13Same(a, b)) throw new Error('Smooth dots 2 px on a half-size plate is not Smooth dots 1 px at the half pitch - the edge does not shrink with the preview plate');
+    /* CELL AVERAGE (C32's shimmer). CONTROL: under Centre the cell [16,24)² is toned by the ONE pixel at (20,20) - a black
+       pixel there prints a full black dot, and the same pixel moved one to the right prints none. That flip is what made
+       the dots jump on footage. Under Cell average the cell is 63/64 white wherever the pixel sits: the same speck of a dot. */
+    const speck = (x, y) => { const d = b13Flat(W, H, [255, 255, 255]), i = (y * W + x) * 4; d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; return d; };
+    const inkIn = d => { let n = 0; for (let y = 16; y < 24; y++) for (let x = 16; x < 24; x++) if (d[(y * W + x) * 4] < 128) n++; return n; };
+    const cOn = inkIn(ht({}, null, speck(20, 20))), cOff = inkIn(ht({}, null, speck(21, 20)));
+    if (!(cOn > 30 && cOff === 0)) throw new Error('CONTROL: under Centre one black pixel at the cell centre printed ' + cOn + ' ink pixels and one pixel over ' + cOff + ' - this fixture does not show the flip');
+    const aOn = inkIn(ht({ sample: 1 }, null, speck(20, 20))), aOff = inkIn(ht({ sample: 1 }, null, speck(21, 20)));
+    if (aOn > 1 || aOn !== aOff) throw new Error('Cell average still lets one pixel decide a dot: ' + aOn + ' ink pixels with it at the centre, ' + aOff + ' one pixel over');
+    /* …and the cell table is the lattice's own cells on a turned screen and for every Print: a flat picture averages to itself. */
+    [{}, { angle: 30 }, { angle: 45, shape: 2 }, { mode: 1, angle: 20 }, { mode: 2 }, { mode: 2, angle: 10 }].forEach(o => {
+      const c = ht(o, [90, 140, 200]), v = ht(Object.assign({ sample: 1 }, o), [90, 140, 200]);
+      if (!b13Same(c, v)) throw new Error('Cell average on a flat picture prints differently from Centre (' + JSON.stringify(o) + ') - the cell table does not match the screen it averages');
+    });
+    /* INK AND PAPER recolour Mono: every pixel is the ink or the paper, and both are there. */
+    const ip = b13Colours(ht({ ink: '#2040a0', paper: '#f0e0c0' }, grey));
+    if (keys(ip) !== '240,224,192 32,64,160') throw new Error('Mono with a blue Ink on cream Paper printed ' + keys(ip) + ' - every pixel should be the ink or the paper');
+    if (keys(b13Colours(ht({ mode: 1, ink: '#2040a0' }, red))) !== '220,40,40 255,255,255') throw new Error('Ink changed a Colour dots print - the dots there are the picture’s own colours');
+    /* MIX: 0 is the picture untouched; 0.5 is halfway from the picture to the print (128 to 0 is 64, 128 to 255 is 191.5,
+       which the byte rounds to 192). */
+    const src = b13Plate(W, H);
+    if (!b13Same(ht({ mix: 0 }, null, src.slice()), src)) throw new Error('Mix 0 still prints over the picture');
+    const half = b13Colours(ht({ mix: 0.5 }, grey));
+    if (keys(half) !== '192,192,192 64,64,64') throw new Error('Mix 0.5 on a mid grey gave ' + keys(half) + ' - halfway between the picture and the print is 64 and 192');
+  });
 })();

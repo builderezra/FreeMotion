@@ -210,6 +210,19 @@ window.FM = window.FM || {};
       { key: 'angle', label: 'Screen angle', min: 0, max: 90, step: 1, def: 0, unit: '°' },
       { key: 'gain', label: 'Ink gain', min: 0.5, max: 2.5, step: 0.05, def: 1.45, unit: '×' },
       { key: 'shape', label: 'Dot shape', def: 0, options: [[0, 'Round'], [1, 'Square'], [2, 'Diamond']] },
+      /* #482 polish 13.1 (hunt C32). Every dot was black on white, hard-edged, and toned by ONE pixel at the cell's centre — so
+         a dot flipped size whenever that one pixel did (the shimmer on video), and the Poster Print filter could not print the
+         colour its description promises. Print: Colour dots ink each dot in its cell's own colour; CMYK lays four screens
+         (cyan 15°, magenta 75°, yellow 0°, black 45°, all turned by Screen angle) and mixes them like ink on paper. Ink and
+         Paper recolour Mono (Ink does nothing under the colour prints, which ink with the picture). Smooth dots fades the dot
+         edge over that many px. Sample Cell average tones each dot by its whole cell. Mix fades back to the picture. Every
+         default is the old print, so the kernel runs its old loop untouched there. */
+      { key: 'mode', label: 'Print', def: 0, options: [[0, 'Mono'], [1, 'Colour dots'], [2, 'CMYK']] },
+      { key: 'ink', label: 'Ink', swatch: true, def: '#000000', overriddenBy: 'mode', liveWhen: 0 },
+      { key: 'paper', label: 'Paper', swatch: true, def: '#ffffff' },
+      { key: 'aa', label: 'Smooth dots', min: 0, max: 2, step: 0.1, def: 0, unit: 'px' },
+      { key: 'sample', label: 'Sample', def: 0, options: [[0, 'Centre'], [1, 'Cell average']] },
+      { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
     ] },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
     { type: 'wave', label: 'Wave', params: [
@@ -5204,6 +5217,89 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ═══ HALFTONE, THE GENERAL PRINT (#482 polish 13.1, hunt C32) ═════════════════════════════════════════════════════════
+   * The Halftone kernel hands everything that is not its old black-on-white print to here. Each screen is the old lattice
+   * exactly — the same rotation, the same cell, the same centre, the same distance, the same dot radius
+   * (1 − tone) × pitch/2 × Ink gain — so a screen differs from the old print only in what it inks:
+   *   · Mono        — Ink on Paper (the old print is black on white).
+   *   · Colour dots — each dot in its own cell's colour, on Paper.
+   *   · CMYK        — four screens at cyan +15°, magenta +75°, yellow +0° and black +45° from Screen angle (the classic set,
+   *                   so no two screens beat into a moire), separated by grey-component replacement (K = 1 − max(R,G,B),
+   *                   C = (max − R) / max, and so on), each multiplied down from Paper the way ink absorbs light.
+   * Smooth dots (`aa`, PLATE px — the kernel has scaled it) fades the dot edge across that width instead of a hard step, and
+   * fades a dot smaller than the ramp in proportion to its size, or a white cell would print a half-grey speck at its centre.
+   * Cell average (`avg`) tones a dot by the alpha-weighted mean of ITS cell — every pixel whose lattice cell it is, on a
+   * turned screen too — instead of the one pixel at the centre, which is what made the dots jump on moving footage. Mix fades
+   * the print back to the picture. Alpha is left alone, as the old print leaves it. */
+  function halftone13(d, s, W, H, size, r2, ang, gain, shape, o) {
+    const scr = o.mode === 2 ? [15, 75, 0, 45] : [0], nS = scr.length, aa = o.aa, ink = o.ink, paper = o.paper, mix = o.mix, colour = o.mode === 1;
+    const L = scr.map(function (off) {
+      const a = ang + off, rot = ((a % 360) + 360) % 360 !== 0, rad = a * Math.PI / 180;
+      const q = { rot: rot, ca: rot ? Math.cos(rad) : 1, sa: rot ? Math.sin(rad) : 0, u0: 0, v0: 0, nu: 1, nv: 1, tab: null };
+      if (!o.avg) return q;
+      // the cell a pixel belongs to, spelled exactly as the loop below spells it (so the table and the loop agree)
+      const cu = (x, y) => Math.floor((q.rot ? x * q.ca + y * q.sa : x) / size), cv = (x, y) => Math.floor((q.rot ? -x * q.sa + y * q.ca : y) / size);
+      let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+      [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]].forEach(c => { const a1 = cu(c[0], c[1]), b1 = cv(c[0], c[1]); if (a1 < u0) u0 = a1; if (a1 > u1) u1 = a1; if (b1 < v0) v0 = b1; if (b1 > v1) v1 = b1; });
+      const nu = u1 - u0 + 1, nv = v1 - v0 + 1, tab = new Float64Array(nu * nv * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, w = s[i + 3]; if (!w) continue;
+        const k = ((cv(x, y) - v0) * nu + (cu(x, y) - u0)) * 4;
+        tab[k] += s[i] * w; tab[k + 1] += s[i + 1] * w; tab[k + 2] += s[i + 2] * w; tab[k + 3] += w;
+      }
+      for (let k = 0; k < tab.length; k += 4) { const w = tab[k + 3]; if (w > 0) { tab[k] /= w; tab[k + 1] /= w; tab[k + 2] /= w; } }
+      q.u0 = u0; q.v0 = v0; q.nu = nu; q.nv = nv; q.tab = tab;
+      return q;
+    });
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        let oR = paper[0], oG = paper[1], oB = paper[2];
+        for (let k = 0; k < nS; k++) {
+          const q = L[k];
+          let dx, dy, fu, fv, sr, sg, sb, ccx, ccy;
+          if (q.rot) {
+            const u = x * q.ca + y * q.sa, v2 = -x * q.sa + y * q.ca;
+            fu = Math.floor(u / size); fv = Math.floor(v2 / size);
+            const cx0 = fu * size + r2, cy0 = fv * size + r2;
+            dx = u - cx0; dy = v2 - cy0;
+            if (!q.tab) { ccx = Math.min(W - 1, Math.max(0, Math.round(cx0 * q.ca - cy0 * q.sa))); ccy = Math.min(H - 1, Math.max(0, Math.round(cx0 * q.sa + cy0 * q.ca))); }
+          } else {
+            fu = Math.floor(x / size); fv = Math.floor(y / size);
+            dx = x - (fu * size + r2); dy = y - (fv * size + r2);
+            if (!q.tab) { ccx = Math.min(W - 1, fu * size + (size >> 1)); ccy = Math.min(H - 1, fv * size + (size >> 1)); }
+          }
+          if (q.tab) {
+            let ku = fu - q.u0, kv = fv - q.v0;
+            ku = ku < 0 ? 0 : (ku >= q.nu ? q.nu - 1 : ku); kv = kv < 0 ? 0 : (kv >= q.nv ? q.nv - 1 : kv);
+            const c = (kv * q.nu + ku) * 4; sr = q.tab[c]; sg = q.tab[c + 1]; sb = q.tab[c + 2];
+          } else { const ci = (ccy * W + ccx) * 4; sr = s[ci]; sg = s[ci + 1]; sb = s[ci + 2]; }
+          const dist = shape === 1 ? Math.max(Math.abs(dx), Math.abs(dy)) : shape === 2 ? Math.abs(dx) + Math.abs(dy) : Math.hypot(dx, dy);
+          let tone;
+          if (nS === 1) tone = 1 - (sr * 0.299 + sg * 0.587 + sb * 0.114) / 255;
+          else {
+            const mx = sr > sg ? (sr > sb ? sr : sb) : (sg > sb ? sg : sb);
+            tone = k === 3 ? 1 - mx / 255 : (mx > 0 ? (mx - (k === 0 ? sr : (k === 1 ? sg : sb))) / mx : 0);
+          }
+          const R = tone * r2 * gain;
+          let cov;
+          if (aa === 0) cov = dist < R ? 1 : 0;
+          else { cov = (R - dist) / aa + 0.5; cov = cov < 0 ? 0 : (cov > 1 ? 1 : cov); const z = 2 * R / aa; if (z < 1) cov *= z; }
+          if (nS === 1) {
+            const cr = colour ? sr : ink[0], cg = colour ? sg : ink[1], cb = colour ? sb : ink[2];
+            oR = paper[0] + (cr - paper[0]) * cov; oG = paper[1] + (cg - paper[1]) * cov; oB = paper[2] + (cb - paper[2]) * cov;
+          } else {
+            const f = 1 - cov;
+            if (k === 0) oR *= f; else if (k === 1) oG *= f; else if (k === 2) oB *= f; else { oR *= f; oG *= f; oB *= f; }
+          }
+        }
+        if (mix < 1) { oR = s[i] + (oR - s[i]) * mix; oG = s[i + 1] + (oG - s[i + 1]) * mix; oB = s[i + 2] + (oB - s[i + 2]) * mix; }
+        d[i] = oR; d[i + 1] = oG; d[i + 2] = oB;
+      }
+    }
+  }
+  FM._halftone13 = halftone13;   // suite seam: the general print, so a test can prove it draws the old print at the old settings
+
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
@@ -6169,6 +6265,24 @@ window.FM = window.FM || {};
       let gain = p.gain == null ? 1.45 : FM.evalProp(p.gain, t);
       if (gain < 0.5) gain = 0.5; if (gain > 2.5) gain = 2.5;
       const shape = p.shape == null ? 0 : (Math.round(FM.evalProp(p.shape, t)) | 0);
+      /* #482 polish 13.1 (C32) — Print, Ink, Paper, Smooth dots, Sample, Mix. At their defaults (or absent, a saved Halftone)
+         the loop below runs untouched; anything else takes halftone13 further down. Smooth dots is project px, scaled to the
+         plate here because this kernel takes `ps` itself (pxToPlate leaves a 6-argument kernel alone). */
+      const ht13 = {
+        mode: p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0),
+        aa: p.aa == null ? 0 : FM.evalProp(p.aa, t),
+        avg: (p.sample == null ? 0 : (Math.round(FM.evalProp(p.sample, t)) | 0)) === 1,
+        mix: p.mix == null ? 1 : FM.evalProp(p.mix, t),
+        ink: p.ink == null ? [0, 0, 0] : hexToRGB(FM.evalProp(p.ink, t)),
+        paper: p.paper == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.paper, t)),
+      };
+      ht13.aa = !(ht13.aa > 0) ? 0 : (ht13.aa > 2 ? 2 : ht13.aa) * (ps || 1);
+      ht13.mix = !(ht13.mix > 0) ? 0 : (ht13.mix > 1 ? 1 : ht13.mix);
+      if (ht13.mode !== 0 || ht13.aa !== 0 || ht13.avg || ht13.mix !== 1 || ht13.ink[0] !== 0 || ht13.ink[1] !== 0 || ht13.ink[2] !== 0
+          || ht13.paper[0] !== 255 || ht13.paper[1] !== 255 || ht13.paper[2] !== 255) {
+        halftone13(d, s, W, H, size, r2, ang, gain, shape, ht13);
+        return;
+      }
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const i = (y * W + x) * 4;
