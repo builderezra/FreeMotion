@@ -257,6 +257,13 @@ window.FM = window.FM || {};
          black-on-white whatever `polarity` says, because the other reading multiplies a picture by its
          own edge map and returns a mostly black frame. */
       { key: 'blend', label: 'Draw as', def: 0, options: [[0, 'Replace the picture'], [1, 'Ink over the picture']] },
+      /* #482 12.6 — Line width in project px (hunt C60 carried on: the same width on a reduced preview as in the export), the
+         two tones of the line map (Lines picks which one the lines are), and lines in the picture's own colours. White,
+         black, 1 px and Off are the old lines. */
+      { key: 'width', label: 'Line width', min: 1, max: 8, step: 0.5, def: 1, unit: 'px' },
+      { key: 'light', label: 'Light colour', swatch: true, def: '#ffffff' },
+      { key: 'dark', label: 'Dark colour', swatch: true, def: '#000000' },
+      { key: 'colour', label: 'Colour edges', def: 0, options: [[0, 'Off'], [1, 'On']], overriddenBy: 'blend', liveWhen: 0 },
     ] },
     { type: 'emboss', label: 'Emboss', params: [
       { key: 'amount', label: 'Depth', min: 0, max: 18, step: 0.05, def: 1 },
@@ -6353,13 +6360,37 @@ window.FM = window.FM || {};
      * grain (±4) is 14 / 19 at Amount 1, better than either before. */
     edge: function (d, W, H, p, t, ps) {
       const k = FM.evalProp(p.amount, t) || 1, s = fxSrc(d), w4 = W * 4;
-      const shrink = ps > 0 && ps < 1 ? ps : 1;
+      /* LINE WIDTH (#482 12.6), in project px: the Sobel reads its neighbours that far out, so a hard edge draws a line twice
+         that wide at full strength. On a plate where the reach is a pixel or more it is read there directly, between pixels
+         when it is fractional (ST below); where it is under a pixel, the reduced-plate machinery above takes it, with the
+         reach's share of a plate pixel as the shrink — at Width 1 that share is ps, which is exactly what it always was. */
+      let lw = p.width == null ? 1 : FM.evalProp(p.width, t); if (!(lw >= 1)) lw = 1; if (lw > 8) lw = 8;
+      const sg = lw === 1 ? 1 : (ps > 0 ? ps : 1) * lw;
+      const shrink = lw === 1 ? (ps > 0 && ps < 1 ? ps : 1) : (sg < 1 ? sg : 1), ST = sg > 1 ? sg : 0;
+      let ay = null;
+      if (ST) {
+        const Y = new Float64Array(W * H);
+        for (let j = 0, n = 0; n < W * H; j += 4, n++) Y[n] = s[j] * 0.299 + s[j + 1] * 0.587 + s[j + 2] * 0.114;
+        ay = (fx, fy) => {   // the luma at a point between pixels, the plate's edge held
+          fx = fx < 0 ? 0 : (fx > W - 1 ? W - 1 : fx); fy = fy < 0 ? 0 : (fy > H - 1 ? H - 1 : fy);
+          const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = x0 < W - 1 ? x0 + 1 : x0, y1 = y0 < H - 1 ? y0 + 1 : y0, tx = fx - x0, ty = fy - y0;
+          return (Y[y0 * W + x0] * (1 - tx) + Y[y0 * W + x1] * tx) * (1 - ty) + (Y[y1 * W + x0] * (1 - tx) + Y[y1 * W + x1] * tx) * ty;
+        };
+      }
+      /* LIGHT and DARK COLOURS, COLOUR EDGES (#482 12.6). The line map was white and black only. Light and Dark repaint it —
+         whichever Lines says is the line: White on black draws Light lines on Dark, Black on white the reverse — and under
+         Ink the line is drawn in Dark and the paper multiplied by Light. Colour edges draws each line in the picture's own
+         colour over the background tone. White, black and Off are the old lines below, untouched. */
+      const LT = p.light == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.light, t)), DK = p.dark == null ? [0, 0, 0] : hexToRGB(FM.evalProp(p.dark, t));
+      const cedge = (p.colour == null ? 0 : (Math.round(FM.evalProp(p.colour, t)) | 0)) === 1;
+      const tone = !(LT[0] === 255 && LT[1] === 255 && LT[2] === 255 && DK[0] === 0 && DK[1] === 0 && DK[2] === 0);
       const thrP = p.threshold == null ? 0 : FM.evalProp(p.threshold, t);
       const thr = Math.max(0, Math.min(100, thrP)) / 100 * 255;
       const inv = (p.polarity == null ? 0 : (Math.round(FM.evalProp(p.polarity, t)) | 0)) === 1;
       const mixP = p.mix == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.mix, t)));
       const mix = mixP / 100, full = mixP === 100;
       const ink = (p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0)) === 1;   // queue 813
+      const paint = tone || (cedge && !ink);
       /* A reduced plate reads every pixel's Sobel FIRST — [raw reading, gx, gy] — because the fill test (#986 batch 2
          review) looks at the readings two plate pixels out. ps 1 never builds it and runs the loop below as it was. */
       let RAW = null;
@@ -6394,6 +6425,13 @@ window.FM = window.FM || {};
               if (thr > 0 && pk < thr) pk = 0;
               mag = pk * fill;
             }
+          } else if (ay) {
+            // #482 12.6: the taps ST plate px out
+            const tl = ay(x - ST, y - ST), tc = ay(x, y - ST), tr = ay(x + ST, y - ST), ml = ay(x - ST, y), mr = ay(x + ST, y);
+            const bl = ay(x - ST, y + ST), bc = ay(x, y + ST), br = ay(x + ST, y + ST);
+            const gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl), gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr);
+            mag = Math.min(255, Math.hypot(gx, gy) * k);
+            if (thr > 0 && mag < thr) mag = 0;
           } else {
           const tl = s[i - w4 - 4] * 0.299 + s[i - w4 - 3] * 0.587 + s[i - w4 - 2] * 0.114;
           const tc = s[i - w4] * 0.299 + s[i - w4 + 1] * 0.587 + s[i - w4 + 2] * 0.114;
@@ -6412,6 +6450,20 @@ window.FM = window.FM || {};
           // POLARITY: the effect could only ever draw glowing white lines on black. Ink on paper — the
           // way line art is actually drawn — was simply unreachable.
           if (inv) mag = 255 - mag;
+          if (paint) {   // #482 12.6 (see LT / DK above)
+            if (ink) {
+              const v = (inv ? mag : 255 - mag) / 255;   // 1 on paper, 0 on a line
+              for (let c = 0; c < 3; c++) { const tn = (DK[c] + (LT[c] - DK[c]) * v) / 255; d[i + c] = s[i + c] * (1 - mix * (1 - tn)); }
+            } else {
+              for (let c = 0; c < 3; c++) {
+                let o;
+                if (cedge) { const bg = inv ? LT[c] : DK[c]; o = bg + (s[i + c] - bg) * (inv ? 255 - mag : mag) / 255; }
+                else o = DK[c] + (LT[c] - DK[c]) * mag / 255;
+                d[i + c] = full ? o : s[i + c] + (o - s[i + c]) * mix;
+              }
+            }
+            continue;
+          }
           if (ink) {
             // queue 813: multiply. `ml` is 1 on paper and 0 on a line; `mix` sets how black the line gets.
             const ml = 1 - mix * (1 - (inv ? mag : 255 - mag) / 255);

@@ -124628,13 +124628,15 @@
   }
   /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
      instance's absent keys before the kernel runs (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new
-     instance, and every filter recipe), against the pins. `shots` turns params into the pinned string. */
+     instance, and every filter recipe), against the pins. `shots` turns params into the pinned string. A param set already
+     shot (filled is usually present, key for key) is not shot twice. */
   function b12Pinned(type, NEW, CFG, PIN, shots) {
     const moved = [];
     Object.keys(CFG).forEach(name => {
       const abs = Object.assign(b12Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
       const filled = FM._fillFxParams({ type: type, enabled: true, params: JSON.parse(JSON.stringify(abs)) }).params;
-      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = shots(p); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+      const seen = {};
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const key = JSON.stringify(Object.keys(p).sort().map(k => [k, p[k]])); const got = key in seen ? seen[key] : (seen[key] = shots(p)); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
     });
     return moved;
   }
@@ -125051,5 +125053,72 @@
     if (mids(sm) < 40) throw new Error('Smooth corners on a 30 px radius left only ' + mids(sm) + ' part-covered pixels - the corner is still stair-stepped');
     for (let y = 0; y < sm.H; y++) for (let x = 0; x < sm.W; x++) { const v = sm.d[(y * sm.W + x) * 4]; if (v > 40 && v < 255 && x > 60 && x < 140) throw new Error('Smooth corners softened a straight edge at ' + x + ',' + y); }
     if (!b12Same(bf({ smooth: 1, opacity: 99.999 }).d, bf({ opacity: 99.999 }).d)) throw new Error('Smooth corners changed a frame with square corners');
+  });
+
+  /* 12.6 FIND EDGES (hunt C60 carried on): Line width in project px, Light and Dark colours, Colour edges. */
+  const B12FE_NEW = { width: 1, light: '#ffffff', dark: '#000000', colour: 0 };
+  const B12FE_CFG = { def: {}, inv: { polarity: 1 }, gate: { threshold: 30 }, mix: { mix: 60 }, ink: { blend: 1 }, comic: { amount: 1.2, polarity: 1, blend: 1, mix: 70, threshold: 16 }, blueprint: { amount: 9, threshold: 6 }, kf: { amount: b12Kf(0.5, 6) } };
+  const B12FE_PIN = {   // fc8866f1, before the edit
+    def: 'ae167b92.ae167b92/1b974162.1b974162/8e1295a6.8e1295a6 740339d0.740339d0/fb728c5d.fb728c5d/9a549657.9a549657',
+    inv: '73802b77.73802b77/5e4e8a1f.5e4e8a1f/c830f5bb.c830f5bb 1e28e360.1e28e360/554a05b4.554a05b4/3fa75127.3fa75127',
+    gate: '54a6daf3.54a6daf3/953e3f4b.953e3f4b/303fcc8e.303fcc8e a51e9d81.a51e9d81/ecdfd4f9.ecdfd4f9/9399bbeb.9399bbeb',
+    mix: 'e92cdbda.e92cdbda/20598068.20598068/7fc9030a.7fc9030a 31ff669d.31ff669d/1d593d2f.1d593d2f/61847bc4.61847bc4',
+    ink: '668b2ed5.668b2ed5/5d012bab.5d012bab/1b5158b8.1b5158b8 89d4461f.89d4461f/b8f5002e.b8f5002e/14611705.14611705',
+    comic: '632956a7.632956a7/52212598.52212598/a7b3abb6.a7b3abb6 815e3ed5.815e3ed5/e7841be0.e7841be0/a3c16bd0.a3c16bd0',
+    blueprint: '938fe356.938fe356/f194a888.f194a888/078a9367.078a9367 02c80d26.02c80d26/d64e9ce0.d64e9ce0/b7ea0d4d.b7ea0d4d',
+    kf: '55dcb48c.d328a00f/71818ec3.872bd1ab/3df0f1a7.a4375942 a4b7d3ad.3d03bd42/fbd66cf4.63663d3d/fcded7ac.d9f5e8c9' };
+
+  test('482 12.6 Find Edges - Line width, Light colour, Dark colour and Colour edges are in the catalogue at defaults that draw the old lines, and saved and new Find Edges and the Comic Ink and Blueprint recipes draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('edge', B12FE_NEW, { width: 3.5, light: '#ffcc00', dark: '#102040', colour: 1 });
+    if (b12Row('edge', 'width').unit !== 'px') throw new Error('Line width is not declared in px - it is a width on the picture');
+    if (b12Row('edge', 'light').type !== 'color' || b12Row('edge', 'dark').type !== 'color') throw new Error('Light colour and Dark colour are not colour rows');
+    if (b12Row('edge', 'colour').overriddenBy !== 'blend' || b12Row('edge', 'colour').liveWhen !== 0) throw new Error('Colour edges is not gated to Draw as Replace the picture');
+    b12Recipes('edge', B12FE_NEW, ['comic', 'blueprint']);
+    const moved = b12Pinned('edge', B12FE_NEW, B12FE_CFG, B12FE_PIN, b12PixelShots('edge'));
+    if (moved.length) throw new Error(moved.length + ' Find Edges pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.6 Find Edges - a 3 px line weighs three 1 px lines and the same on the export, a half-size preview and his phone’s 0.28 plate, Light and Dark repaint the lines and the paper either way round and under Ink, and Colour edges draws each line in the picture’s own colour', { item: '482', budgetMs: 60000 }, function () {
+    /* WIDTH. A 300 x 50 project with a step of 30 levels at x 150 (100 | 130), as each plate holds it (the step falls between
+       plate pixels at every scale used). A hard step reads 4 x 30 x 1.5 = 180 on every pixel the Sobel's reach crosses, so
+       the export's line weighs 2 x Width x 180 (summed over a row, in project px). */
+    const plate = ps => { const W = Math.round(300 * ps), H = Math.round(50 * ps), d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = (x + 0.5) / ps < 150 ? 100 : 130; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return { d: d, W: W, H: H }; };
+    const weigh = (o, ps) => { const P = plate(ps); b12Run('edge', Object.assign(b12Base('edge', {}), o), P.W, P.H, 0.5, ps, P.d); const y = P.H >> 1; let en = 0; for (let x = 1; x < P.W - 1; x++) en += P.d[(y * P.W + x) * 4] / ps; return en; };
+    if (weigh({}, 1) !== 360) throw new Error('CONTROL: the 1 px export line weighs ' + weigh({}, 1) + ', not 2 x 180');
+    if (weigh({ width: 3 }, 1) !== 1080) throw new Error('Line width 3 in the export weighs ' + weigh({ width: 3 }, 1) + ', not 3 x 360 (a line 6 px wide at 180)');
+    /* …and it sits ON the edge: the line’s centre of weight is at project x 150 on every plate (a reach rounded to whole pixels
+       would draw the right weight half a plate pixel to one side). */
+    const centre = (o, ps) => { const P = plate(ps); b12Run('edge', Object.assign(b12Base('edge', {}), o), P.W, P.H, 0.5, ps, P.d); const y = P.H >> 1; let m = 0, n = 0; for (let x = 1; x < P.W - 1; x++) { const v = P.d[(y * P.W + x) * 4]; m += (x + 0.5) * v; n += v; } return m / n / ps; };
+    [[3, 0.5, 0.03], [3, 0.28, 0.12], [8, 0.28, 0.12], [2, 0.5, 0.03], [1.5, 0.28, 0.12]].forEach(([w, ps, tol]) => {
+      const ex = weigh({ width: w }, 1), pv = weigh({ width: w }, ps);
+      if (Math.abs(pv / ex - 1) > tol) throw new Error('Line width ' + w + ' on a ' + ps + ' plate weighs ' + pv.toFixed(0) + ' against ' + ex.toFixed(0) + ' in the export (x' + (pv / ex).toFixed(2) + ') - the width is not in project px');
+      const c = centre({ width: w }, ps);
+      if (Math.abs(c - 150) > 0.5) throw new Error('Line width ' + w + ' on a ' + ps + ' plate is centred at project x ' + c.toFixed(2) + ', not on the edge at 150');
+    });
+    /* …and it is the reach in project px: Width 4 on a half-size plate is Width 2 on the full one, on the same plate, byte for byte. */
+    const same = (ps, w) => { const P = plate(1); b12Run('edge', Object.assign(b12Base('edge', {}), { width: w }), P.W, P.H, 0.5, ps, P.d); return P.d; };
+    if (!b12Same(same(0.5, 4), same(1, 2))) throw new Error('Line width 4 on a half-size plate is not Line width 2 on the full plate');
+    /* LIGHT and DARK. A hard 0 | 255 edge clamps the line at full strength. CONTROL: white lines on black. */
+    const W = 40, H = 10, at = (d, x) => Array.from(d.slice(((H >> 1) * W + x) * 4, ((H >> 1) * W + x) * 4 + 3)).join(',');
+    const hard = (a, b) => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { const x = (i >> 2) % W, c = x < 20 ? a : b; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; } return d; };
+    const fe = (o, a, b) => b12Run('edge', Object.assign(b12Base('edge', {}), o), W, H, 0.5, 1, hard(a || [0, 0, 0], b || [255, 255, 255]));
+    const BK = [0, 0, 0], WH = [255, 255, 255];
+    if (at(fe({}), 5) !== '0,0,0' || at(fe({}), 19) !== '255,255,255') throw new Error('CONTROL: the plain map is ' + at(fe({}), 5) + ' on the flat and ' + at(fe({}), 19) + ' on the line');
+    const C = { light: '#ff3020', dark: '#102040' };
+    if (at(fe(C), 5) !== '16,32,64' || at(fe(C), 19) !== '255,48,32') throw new Error('Light #ff3020 / Dark #102040 drew the flat as ' + at(fe(C), 5) + ' and the line as ' + at(fe(C), 19) + ' - Light lines on Dark');
+    const Ci = Object.assign({ polarity: 1 }, C);
+    if (at(fe(Ci), 5) !== '255,48,32' || at(fe(Ci), 19) !== '16,32,64') throw new Error('Black on white with the same colours drew the flat as ' + at(fe(Ci), 5) + ' and the line as ' + at(fe(Ci), 19) + ' - Dark lines on Light');
+    /* UNDER INK the line is drawn in Dark and the paper keeps the picture (Light white). CONTROL: plain ink is black. */
+    const G1 = [100, 100, 100], G2 = [160, 160, 160];
+    if (at(fe({ blend: 1 }, G1, G2), 19) !== '0,0,0' || at(fe({ blend: 1 }, G1, G2), 5) !== '100,100,100') throw new Error('CONTROL: plain ink drew ' + at(fe({ blend: 1 }, G1, G2), 19) + ' on the line and ' + at(fe({ blend: 1 }, G1, G2), 5) + ' on the paper');
+    if (at(fe({ blend: 1, dark: '#0000ff' }, G1, G2), 19) !== '0,0,100' || at(fe({ blend: 1, dark: '#0000ff' }, G1, G2), 5) !== '100,100,100') throw new Error('Ink with a blue Dark drew ' + at(fe({ blend: 1, dark: '#0000ff' }, G1, G2), 19) + ' on the line - the ink should be blue over the picture, and the paper untouched');
+    /* COLOUR EDGES. A red | blue step (lumas 59.8 | 22.8, read 4 x 37 x 1.5 = 222). CONTROL: off, the line is grey. On, each side
+       of the line is drawn in its own colour at the line’s strength over the Dark tone. */
+    const RD = [200, 0, 0], BL = [0, 0, 200];
+    const g = at(fe({}, RD, BL), 19).split(',');
+    if (!(g[0] === g[1] && g[1] === g[2] && +g[0] > 150)) throw new Error('CONTROL: the plain line across red | blue is not a grey line (' + g + ')');
+    if (at(fe({ colour: 1 }, RD, BL), 19) !== '174,0,0' || at(fe({ colour: 1 }, RD, BL), 20) !== '0,0,174') throw new Error('Colour edges drew the line as ' + at(fe({ colour: 1 }, RD, BL), 19) + ' | ' + at(fe({ colour: 1 }, RD, BL), 20) + ', not red then blue');
+    if (at(fe({ colour: 1 }, RD, BL), 5) !== '0,0,0') throw new Error('Colour edges painted the flat ' + at(fe({ colour: 1 }, RD, BL), 5));
+    if (at(fe({ colour: 1, polarity: 1 }, RD, BL), 5) !== '255,255,255' || at(fe({ colour: 1, polarity: 1 }, RD, BL), 19) !== '207,33,33') throw new Error('Colour edges on Black on white drew the paper ' + at(fe({ colour: 1, polarity: 1 }, RD, BL), 5) + ' and the line ' + at(fe({ colour: 1, polarity: 1 }, RD, BL), 19));
   });
 })();
