@@ -125797,4 +125797,84 @@
     if (b8Sig('autopan', { realism: 0.3 }) !== b8Sig('autopan', { realism: 0.8 })) bad.push('Realism 0.3 and 0.8 sign differently - every drag of Realism would rebuild the chain');
     if (bad.length) throw new Error('Auto-Pan: ' + bad.join('; '));
   });
+
+  /* 8.7 — TEMPO SYNC. Time = (60 / Tempo) x 4 x the note's share of a bar, a rate one swing per that time. Echo at 120 BPM:
+     1/8 is 0.25 s, so a click's first echo lands at frame 12000 (the backlog's test; today, Tempo ignored, at the default
+     0.35 s, frame 16800 - the CONTROL at Tempo 0), 1/8 dotted 0.375 s (18000), 1/8 triplet 1/6 s (8000), 1/16 0.125 s
+     (6000). Ping-Pong 120 BPM 1/4: its first (left) echo at 0.5 s (24000). Tremolo 120 BPM 1/8 = 4 Hz: on a steady 0.5 at
+     Depth 1 the output IS the swing (the 7.2 measure), so it must be sin(2 pi 4 t) - and, in an export that starts at scene
+     1.3 s, sin(2 pi 4 (t + 1.3)): the swing starts where the synced rate puts it on scene time, not where the Rate slider
+     would (5 Hz puts it half a cycle elsewhere). Auto-Pan 120 BPM 1/2 = 1 Hz: the pan read back (atan2, as 8.6) is
+     sin(2 pi t). Tempo is not a rebuild (0 and 120 sign the same). On the build before the keys do not exist (first line). */
+  test('482 8.7 Tempo sync - Echo, Ping-Pong, Tremolo and Auto-Pan take their time or rate from Tempo and Note, on scene time, and Tempo 0 is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const NOTES = '1/1|1/2|1/4|1/8|1/8·|1/8T|1/16';
+    for (const [type, key] of [['delay', 'time'], ['pingpong', 'time'], ['tremolo', 'rate'], ['autopan', 'rate']]) {
+      const bpm = b7Pd(type, 'bpm'), note = b7Pd(type, 'note'), k = b7Pd(type, key);
+      if (!bpm || !note) throw new Error(type + ' has no Tempo or no Note (its params are ' + b7Keys(type) + ')');
+      if (bpm.label !== 'Tempo' || bpm.min !== 0 || bpm.max !== 240 || bpm.def !== 0 || bpm.keyframable || bpm.rebuild) throw new Error(type + ' Tempo is ' + JSON.stringify(bpm));
+      if (!note.options || note.options.map(o => o[1]).join('|') !== NOTES || note.def !== 2 || note.keyframable) throw new Error(type + ' Note is ' + JSON.stringify(note));
+      if (k.overriddenBy !== 'bpm' || k.liveWhen !== 0) throw new Error(type + ' ' + key + ' does not say it is not used while Tempo is on (' + JSON.stringify(k) + ')');
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'delay', enabled: true, params: { time: 0.35, feedback: 0.35, mix: 0.35 } }, { type: 'tremolo', enabled: true, params: { rate: 5, depth: 0.7 } }] }];
+    FM.storage._sanitizeLayers(old);
+    old[0].audioFx.forEach(f => { if (f.params.bpm !== 0 || f.params.note !== 2) throw new Error('a saved ' + f.type + ' opens with Tempo ' + f.params.bpm + ' and Note ' + f.params.note + ', not 0 and 1/4'); });
+    const click = (t, i) => (i === 0 ? 1 : 0), bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const echo = async p => b8First(await b3Render(b7Fx('delay', Object.assign({ feedback: 0 }, p)), click, 0.5, { live: live }), 100, 1e-3);
+      const e0 = await echo({});
+      if (e0 !== 16800) throw new Error('CONTROL: at Tempo 0 the Echo’s first echo is at frame ' + e0 + ', not 16800 (0.35 s) (' + path + ')');
+      for (const [note, want] of [[3, 12000], [4, 18000], [5, 8000], [6, 6000]]) {
+        const got = await echo({ bpm: 120, note: note });
+        if (Math.abs(got - want) > 1) bad.push('Echo at 120 BPM, Note ' + NOTES.split('|')[note] + ' first echoes at frame ' + got + ', not ' + want + ' (' + path + ')');
+      }
+      const [PL] = await afx482c(b7Fx('pingpong', { bpm: 120, note: 2, mix: 1 }), click, 0.6, { chans: 1, live: live });
+      if (b8First(PL, 0, 1e-3) !== 24000) bad.push('Ping-Pong at 120 BPM, 1/4 first echoes at frame ' + b8First(PL, 0, 1e-3) + ', not 24000 (' + path + ')');
+      for (const at of [0, 1.3]) {
+        const [T] = await afx482c(b7Fx('tremolo', { bpm: 120, note: 3, depth: 1 }), () => 0.5, 1, { chans: 1, live: live, anchor: at });
+        let w = 0; for (let i = 0; i < T.length; i++) w = Math.max(w, Math.abs(4 * T[i] - 1 - Math.sin(2 * Math.PI * 4 * (i / SR482C + at))));
+        if (w > 2e-3) bad.push('a Tremolo at 120 BPM, 1/8 swings up to ' + w.toFixed(4) + ' away from sin(2 pi 4 t) from scene ' + at + ' s (' + path + ')');
+      }
+      const [AL, AR] = await afx482c(b7Fx('autopan', { bpm: 120, note: 1 }), () => 0.5, 1, { chans: 1, live: live });
+      let pw = 0; for (let i = 0; i < AL.length; i++) pw = Math.max(pw, Math.abs(4 * Math.atan2(AR[i], AL[i]) / Math.PI - 1 - Math.sin(2 * Math.PI * i / SR482C)));
+      if (pw > 0.01) bad.push('an Auto-Pan at 120 BPM, 1/2 pans up to ' + pw.toFixed(3) + ' away from sin(2 pi t) (' + path + ')');
+    }
+    if (b8Sig('tremolo', { bpm: 0 }) !== b8Sig('tremolo', { bpm: 120 })) bad.push('Tempo 0 and 120 sign differently - a drag of Tempo would rebuild the chain');
+    if (bad.length) throw new Error('Tempo sync: ' + bad.join('; '));
+  });
+
+  /* 8.7 — ON SCREEN: the open Echo shows Tempo (a slider reading 0BPM, no keyframe diamond) and Note (seven buttons, 1/4 lit)
+     inside the panel at 390 and 1280 px. At Tempo 0 Note is greyed "Not used when Tempo is Off" and nothing is worked out;
+     typing 120 into Tempo greys Time "Only used when Tempo is Off", wakes Note, and shows "= 500 ms" under it at once; a tap
+     on 1/8 shows "= 250 ms", one undo step. On the build before the open Echo has no Tempo row. */
+  test('482 8.7 Echo panel - Tempo and Note fit at 390 and 1280 px, Tempo greys Time, and the panel shows the time the note works out to', { item: '482', budgetMs: 150000 }, async function () {
+    const tag = r => { const t = r && r.querySelector('.fx-ovr-tag'); return r && r.classList.contains('fx-overridden') && t ? t.textContent : ''; };
+    const readout = p => { const r = p.open().querySelector('.afx-readout'); return r && r.style.display !== 'none' ? r.textContent : ''; };
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('delay')], 0, async p => {
+      const tr = p.slider('Tempo');
+      if (!tr) throw new Error(p.where + ': the open Echo has no Tempo row');
+      await p.fits(tr, 'the Tempo row');
+      const tv = tr.querySelector('.fx-scrub-val');
+      if (!tv || tv.value !== '0BPM') throw new Error(p.where + ': a new Echo reads Tempo ' + (tv && tv.value) + ', not 0BPM');
+      if (tr.querySelector('.fx-kf')) throw new Error(p.where + ': Tempo offers a keyframe diamond - it is static');
+      const nr = p.seg('Note');
+      if (!nr) throw new Error(p.where + ': the open Echo has no Note buttons');
+      const btns = [].slice.call(nr.querySelectorAll('.fx-seg-btn'));
+      if (btns.map(b => b.textContent).join('|') !== '1/1|1/2|1/4|1/8|1/8·|1/8T|1/16' || !btns[2].classList.contains('on')) throw new Error(p.where + ': Note offers ' + btns.map(b => b.textContent + (b.classList.contains('on') ? ' (lit)' : '')).join(', '));
+      for (const b of btns) await p.fits(b, 'the Note button ' + b.textContent);
+      if (tag(nr) !== 'Not used when Tempo is Off') throw new Error(p.where + ': at Tempo 0 Note says “' + tag(nr) + '”');
+      if (tag(p.slider('Time')) || readout(p)) throw new Error(p.where + ': at Tempo 0 Time says “' + tag(p.slider('Time')) + '” and the readout “' + readout(p) + '”');
+      FM.history.commit();
+      tv.value = '120'; tv.dispatchEvent(new Event('change')); await sleep(120);
+      if (p.layer().audioFx[0].params.bpm !== 120) throw new Error(p.where + ': typing 120 left Tempo at ' + p.layer().audioFx[0].params.bpm);
+      if (tag(p.slider('Time')) !== 'Only used when Tempo is Off') throw new Error(p.where + ': at Tempo 120 Time says “' + tag(p.slider('Time')) + '”');
+      if (tag(p.seg('Note'))) throw new Error(p.where + ': at Tempo 120 Note still says “' + tag(p.seg('Note')) + '”');
+      if (readout(p) !== '= 500 ms') throw new Error(p.where + ': at 120 BPM, 1/4 the readout says “' + readout(p) + '”, not = 500 ms');
+      FM.history.commit();
+      attached([].slice.call(p.seg('Note').querySelectorAll('.fx-seg-btn'))[3], 'the 1/8 button').click(); await sleep(150);
+      if (p.layer().audioFx[0].params.note !== 3 || readout(p) !== '= 250 ms') throw new Error(p.where + ': after 1/8 Note is ' + p.layer().audioFx[0].params.note + ' and the readout “' + readout(p) + '”');
+      FM.history.undo(); await sleep(150);
+      if (p.layer().audioFx[0].params.note !== 2) throw new Error(p.where + ': one Undo after 1/8 leaves Note at ' + p.layer().audioFx[0].params.note);
+    });
+  });
 })();

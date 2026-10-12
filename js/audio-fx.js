@@ -328,7 +328,8 @@ window.FM = window.FM || {};
         n.loop = true;
         n.playbackRate.value = hz * secs;
         nodes.push(n); oscs.push(n);
-        lfos.push({ n: n, hz: hz, key: spec.key || null, mul: spec.mul || 1, phase: spec.phase || 0 });
+        // spec.hzOf(rateFor): the rate when it is not simply a param's value — a rate synced to a tempo (#482 8.7).
+        lfos.push({ n: n, hz: hz, key: spec.key || null, mul: spec.mul || 1, phase: spec.phase || 0, hzOf: spec.hzOf || null });
         return n;
       },
       // A looping seeded noise (#482 7.4). Armed like an LFO of one cycle per `secs`, so it starts at the place in the
@@ -389,7 +390,7 @@ window.FM = window.FM || {};
         const list = o.lfos || [];
         for (let i = 0; i < list.length; i++) {
           const l = list[i];
-          const hz = l.key ? rateFor(l.key) * l.mul : l.hz;
+          const hz = l.hzOf ? l.hzOf(rateFor) * l.mul : (l.key ? rateFor(l.key) * l.mul : l.hz);
           const cyc = (isFinite(hz) ? hz : 0) * sceneAtStart + l.phase;
           const ph = isFinite(cyc) ? cyc - Math.floor(cyc) : 0;
           try { l.n.start(l.n.context.currentTime, ph * l.n.buffer.duration); } catch (e) {}
@@ -636,6 +637,51 @@ window.FM = window.FM || {};
   const SHAPE = () => CHOICE('shape', 'Shape', LFO_SHAPES, 0, { rebuild: true });
   function waveOf(inst, type) { return SHAPE_WAVES[staticOf(inst, type, 'shape')] || 'sine'; }
   const MIX = def => P('mix', 'Mix', 0, 1, 0.01, def, '', true);
+  /* ═══ TEMPO SYNC (#482 polish 8.7) ══════════════════════════════════════════════════════════════════════════════════════
+   * An echo that repeats on the beat, a tremolo that pulses in time: Tempo (BPM, 0 = off) and Note set the Echo's and the
+   * Ping-Pong's Time, and the Tremolo's and the Auto-Pan's Rate, as (60 / BPM) × 4 × the note's share of a whole note
+   * (one bar of four beats), a rate being one swing per that time — 120 BPM, 1/8 is 0.25 s, or 4 Hz. While Tempo is on,
+   * Time / Rate is not used and says so; the panel shows what the note works out to under the Note buttons (`readout`),
+   * kept to the control's own range (an Echo stops at 2 s). Not keyframable (the backlog: static only) and not a rebuild:
+   * the synced value rides the same AudioParam the slider drives, so a drag never rebuilds, and an LFO's starting phase
+   * reads the synced rate (shop.lfo hzOf), so the beat lands where scene time says, export and preview alike. Tempo 0 (the
+   * default, and every saved effect) is today's Time / Rate. Any Tempo above 0 syncs. */
+  const NOTES = [[0, '1/1'], [1, '1/2'], [2, '1/4'], [3, '1/8'], [4, '1/8·'], [5, '1/8T'], [6, '1/16']];
+  const NOTE_OF_BAR = [1, 1 / 2, 1 / 4, 1 / 8, 3 / 16, 1 / 12, 1 / 16];   // 1/8· dotted, 1/8T a triplet
+  // The synced time in seconds, or null while Tempo is off.
+  function syncSecs(inst, type) {
+    const bpm = staticOf(inst, type, 'bpm');
+    return bpm > 0 ? (60 / bpm) * 4 * NOTE_OF_BAR[staticOf(inst, type, 'note')] : null;
+  }
+  /* Tempo and Note for an effect whose `key` is a time ('s', lo…hi seconds) or a rate ('Hz'). The Note row carries the
+     readout the panel shows under it; Time / Rate is marked as switched off while Tempo is on. */
+  function TEMPO(type, key, lo, hi) {
+    const rate = key === 'rate';
+    const readout = function (inst) {
+      const s = syncSecs(inst, type);
+      if (s == null) return '';
+      const raw = rate ? 1 / s : s, v = clamp(raw, lo, hi), lim = Math.abs(v - raw) > 1e-9 ? ' (as far as it goes)' : '';
+      return '= ' + (rate ? v.toFixed(2) + ' Hz' : (v < 1 ? Math.round(v * 1000) + ' ms' : v.toFixed(2) + ' s')) + lim;
+    };
+    return [P('bpm', 'Tempo', 0, 240, 1, 0, 'BPM', false),
+      CHOICE('note', 'Note', NOTES, 2, { overriddenBy: 'bpm', deadAt: 0, deadAtText: 'Off', readout: readout, readoutBy: ['bpm'] })];
+  }
+  const SYNCED = p => Object.assign(p, { overriddenBy: 'bpm', liveWhen: 0, liveWhenText: 'Off' });
+  /* The setters of a synced key and of Tempo and Note: each works out the value from all three read at the same scene
+     moment (the Compressor's Auto makeup rule) and hands it to write(value, when, ramp, sceneT). `now(sceneT)` is that
+     value, for a setter of another key that needs it (Ping-Pong's Right-side timing). */
+  function tempoSync(inst, type, key, lo, hi, write) {
+    const pd = paramOf(type, key), rate = key === 'rate';
+    const now = function (sceneT, own) {
+      const s = syncSecs(inst, type);
+      if (s != null) return clamp(rate ? 1 / s : s, lo, hi);
+      return own !== undefined ? own : valueAt(inst, pd, isFinite(sceneT) ? sceneT : 0);
+    };
+    const o = { now: now, hzOf: rf => { const s = syncSecs(inst, type); return s != null ? clamp(1 / s, lo, hi) : rf(key); } };
+    o[key] = function (v, when, ramp, sceneT) { write(now(sceneT, v), when, ramp, sceneT); };
+    o.bpm = o.note = function (v, when, ramp, sceneT) { write(now(sceneT), when, ramp, sceneT); };
+    return o;
+  }
   /* A CONTROL THAT DOES NOTHING WHILE ANOTHER IS AT 0 SAYS SO (#482 3.6 review). A shelf's or a band's corner moves a
      boost or a cut, and at 0 dB there is none: a Bass & Treble whose Bass at is dragged with Bass at 0 plays the clip
      bit for bit (measured on noise through the export chain) — and 0 dB is the default of every new and every saved
@@ -990,7 +1036,8 @@ window.FM = window.FM || {};
   }, {
     type: 'delay', label: 'Echo / Delay', category: 'space',
     params: [
-      P('time', 'Time', 0.01, 2, 0.01, 0.35, 's', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.35, '', true),
+      SYNCED(P('time', 'Time', 0.01, 2, 0.01, 0.35, 's', true)), ...TEMPO('delay', 'time', 0.01, 2),   // Tempo, Note: #482 8.7
+      P('feedback', 'Feedback', 0, 0.9, 0.01, 0.35, '', true),
       /* #482 polish 3.3, his #966 steer (*"this is the complex version we want as much choice as possible"*). Every
          repeat used to be a perfect copy of the one before, so a long Feedback piled up into a bright metallic smear.
          Tone and Low cut sit INSIDE the loop, so each trip round loses a little more top (or bottom) — the way a
@@ -1030,10 +1077,12 @@ window.FM = window.FM || {};
       const tap = low.out;                  // every repeat, darkened and thinned: it goes round again and out
       tap.connect(fb); fb.connect(d); fb.connect(dw);
       tap.connect(wd.wet); wd.wet.connect(out);
+      // Time, or the Tempo and Note it is synced to (#482 8.7), onto both lines.
+      const ts = tempoSync(inst, 'delay', 'time', 0.01, 2, (x, when, ramp) => { put(d.delayTime, x, when, ramp); put(dw.delayTime, x, when, ramp); });
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { feedback: fb.gain },
         custom: {
-          time: multi([[d.delayTime, null], [dw.delayTime, null]]),
+          time: ts.time, bpm: ts.bpm, note: ts.note,
           tone: multi([[lp.frequency, null]].concat(pairTargets(tone, v => v < 20000))),
           lowcut: multi([[hp.frequency, null]].concat(pairTargets(low, v => v > 20))),
           wobble: multi([[wAmp.gain, 0.002]].concat(pairTargets({ gOn: wOn, gOff: wOff }, v => v > 0))),
@@ -1043,7 +1092,8 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'pingpong', label: 'Ping-Pong Delay', category: 'space',
-    params: [P('time', 'Time', 0.01, 1.5, 0.01, 0.3, 's', true), P('feedback', 'Feedback', 0, 0.85, 0.01, 0.4, '', true),
+    params: [SYNCED(P('time', 'Time', 0.01, 1.5, 0.01, 0.3, 's', true)), ...TEMPO('pingpong', 'time', 0.01, 1.5),   // Tempo, Note: #482 8.7
+      P('feedback', 'Feedback', 0, 0.85, 0.01, 0.4, '', true),
       /* #482 polish 8.3. Right-side timing stretches (or shortens) the right side's half of every bounce, so the echoes stop
          landing on an even left-right-left grid — at 1.5 the first right echo comes 2.5 × Time after the sound instead of
          2 ×. Tone takes the top off each side's line, so every bounce is darker than the one before (the Echo's Tone, 3.3);
@@ -1080,18 +1130,20 @@ window.FM = window.FM || {};
       const ms = msWidth(s, w0);
       const wp = bypassPair(s, merge, ms.input, ms.output, w0 < 1);
       wp.out.connect(wd.wet); wd.wet.connect(out);
-      /* Time and Right-side timing both drive the twin (Time × it), so each setter works it out from both read at the SAME
-         scene moment (sceneT), the Compressor's Auto makeup rule: whichever writes last at a moment writes the same number. */
-      const pT = paramOf('pingpong', 'time'), pO = paramOf('pingpong', 'offset');
-      const at = (pd, sceneT) => valueAt(inst, pd, isFinite(sceneT) ? sceneT : 0);
+      /* Time (or the Tempo it is synced to, 8.7) and Right-side timing both drive the twin (Time × it), so each setter works
+         it out from both read at the SAME scene moment (sceneT), the Compressor's Auto makeup rule: whichever writes last at
+         a moment writes the same number. */
+      const pO = paramOf('pingpong', 'offset');
       const offSwitch = pairTargets({ gOn: rOn, gOff: rOff }, v => Math.abs(v - 1) > 1e-9)[0];
+      const ts = tempoSync(inst, 'pingpong', 'time', 0.01, 1.5, function (t, when, ramp, sceneT) {
+        put(dL.delayTime, t, when, ramp); put(dR.delayTime, t, when, ramp);
+        put(dR2.delayTime, t * valueAt(inst, pO, isFinite(sceneT) ? sceneT : 0), when, ramp);
+      });
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
         custom: {
-          time: function (v, when, ramp, sceneT) {
-            put(dL.delayTime, v, when, ramp); put(dR.delayTime, v, when, ramp); put(dR2.delayTime, v * at(pO, sceneT), when, ramp);
-          },
-          offset: function (v, when, ramp, sceneT) { put(dR2.delayTime, at(pT, sceneT) * v, when, ramp); offSwitch(v, when, ramp); },
+          time: ts.time, bpm: ts.bpm, note: ts.note,
+          offset: function (v, when, ramp, sceneT) { put(dR2.delayTime, ts.now(sceneT) * v, when, ramp); offSwitch(v, when, ramp); },
           feedback: multi([[xL.gain, null], [xR.gain, null]]),
           tone: multi([[lpL.frequency, null], [lpR.frequency, null]].concat(pairTargets(tL, v => v < 20000), pairTargets(tR, v => v < 20000))),
           width: multi([[ms.w.gain, null]].concat(pairTargets(wp, v => v < 1))),
@@ -1158,7 +1210,8 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'autopan', label: 'Auto-Pan (8D)', category: 'space',
-    params: [P('rate', 'Rate', 0.05, 8, 0.01, 0.4, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 1, '', true), SHAPE(),
+    params: [SYNCED(P('rate', 'Rate', 0.05, 8, 0.01, 0.4, 'Hz', true)), ...TEMPO('autopan', 'rate', 0.05, 8),   // Tempo, Note: #482 8.7
+      P('depth', 'Depth', 0, 1, 0.01, 1, '', true), SHAPE(),
       /* #482 polish 8.6. Centre moves the middle of the swing (−1 left … +1 right), so the sound can circle off to one side;
          the swing is clipped at the speaker it reaches. Realism is what makes "8D" sound like it goes round the head rather
          than from ear to ear: while the sound is behind, its top is taken off (two lowpasses dipping from 20 kHz to 4 kHz,
@@ -1171,25 +1224,30 @@ window.FM = window.FM || {};
     ],
     build: function (ctx, inst) {
       const s = shop(ctx), wave = waveOf(inst, 'autopan');
+      // Rate, or the Tempo and Note it is synced to (#482 8.7), onto every LFO's rate — and into where each one starts.
+      const rates = [], ts = tempoSync(inst, 'autopan', 'rate', 0.05, 8, (x, when, ramp) => rates.forEach(ap => put(ap, x, when, ramp)));
       const p = s.panner(0);   // base stays centred (Centre moves it); the LFO swings ±depth around it
-      const lfo = s.lfo(0.4, { key: 'rate', wave: wave });
+      const lfo = s.lfo(0.4, { key: 'rate', wave: wave, hzOf: ts.hzOf });
+      rates.push(lfo.playbackRate);
       const amp = s.gain(1);
       lfo.connect(amp); amp.connect(p.pan);
+      const custom = { rate: ts.rate, bpm: ts.bpm, note: ts.note };
       if (!inUse(inst.params && inst.params.realism)) {
-        return unit({ input: p, output: p, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate, depth: amp.gain, centre: p.pan } });
+        return unit({ input: p, output: p, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { depth: amp.gain, centre: p.pan }, custom: custom });
       }
       // REALISM (8.6): in → two lowpasses (detuned down while behind) → the panner → out, plus in → a small room → out.
       const input = s.gain(1), out = s.gain(1), r0 = initNum(inst, 'realism', 0, 0, 1);
       const lp1 = s.biquad('lowpass', 20000, BUTTERWORTH_DB), lp2 = s.biquad('lowpass', 20000, BUTTERWORTH_DB);
-      const back = s.lfo(0.4, { key: 'rate', wave: 'back:' + wave, phase: 0.25 });
+      const back = s.lfo(0.4, { key: 'rate', wave: 'back:' + wave, phase: 0.25, hzOf: ts.hzOf });
+      rates.push(back.playbackRate);
       const bd = s.gain(-AUTOPAN_BEHIND_CENTS * r0);
       back.connect(bd); bd.connect(lp1.detune); bd.connect(lp2.detune);
       input.connect(lp1); lp1.connect(lp2); lp2.connect(p); p.connect(out);
       const room = s.convolver(); room.buffer = impulse(ctx, 0.35, 1.2);
       const send = s.gain(AUTOPAN_ROOM * r0);
       input.connect(room); room.connect(send); send.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { depth: amp.gain, centre: p.pan },
-        custom: { rate: multi([[lfo.playbackRate, null], [back.playbackRate, null]]), realism: multi([[bd.gain, -AUTOPAN_BEHIND_CENTS], [send.gain, AUTOPAN_ROOM]]) } });
+      custom.realism = multi([[bd.gain, -AUTOPAN_BEHIND_CENTS], [send.gain, AUTOPAN_ROOM]]);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { depth: amp.gain, centre: p.pan }, custom: custom });
     },
   });
 
@@ -1362,7 +1420,8 @@ window.FM = window.FM || {};
   }, {
     type: 'tremolo', label: 'Tremolo', category: 'dyn',
     params: [
-      P('rate', 'Rate', 0.1, 20, 0.1, 5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), SHAPE(),
+      SYNCED(P('rate', 'Rate', 0.1, 20, 0.1, 5, 'Hz', true)), ...TEMPO('tremolo', 'rate', 0.1, 20),   // Tempo, Note: #482 8.7
+      P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), SHAPE(),
       /* #482 polish 7.2. The right channel's swing runs this far round the cycle from the left's: at 180° one side dips while
          the other swells, so the sound rocks between the speakers instead of pulsing in the middle. A rebuild (an LFO's
          phase is set when it starts) and not keyframable; 0 (the default, every saved Tremolo) builds today's one carrier. */
@@ -1370,15 +1429,18 @@ window.FM = window.FM || {};
     ],
     build: function (ctx, inst) {
       const s = shop(ctx), wave = waveOf(inst, 'tremolo'), st = staticOf(inst, 'tremolo', 'stereo');
+      // Rate, or the Tempo and Note it is synced to (#482 8.7), onto every LFO's rate — and into where each one starts.
+      const rates = [], ts = tempoSync(inst, 'tremolo', 'rate', 0.1, 20, (x, when, ramp) => rates.forEach(ap => put(ap, x, when, ramp)));
       if (!(st > 0)) {
         const carrier = s.gain(1);
-        const lfo = s.lfo(5, { key: 'rate', wave: wave });
+        const lfo = s.lfo(5, { key: 'rate', wave: wave, hzOf: ts.hzOf });
+        rates.push(lfo.playbackRate);
         const amp = s.gain(0.35);
         lfo.connect(amp); amp.connect(carrier.gain);
         // depth 0 → base 1, no swing (unity). depth 1 → base 0.5 ± 0.5, dipping to silence.
         return unit({
-          input: carrier, output: carrier, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate },
-          custom: { depth: multi([[carrier.gain, v => 1 - v / 2], [amp.gain, v => v / 2]]) },
+          input: carrier, output: carrier, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+          custom: { rate: ts.rate, bpm: ts.bpm, note: ts.note, depth: multi([[carrier.gain, v => 1 - v / 2], [amp.gain, v => v / 2]]) },
         });
       }
       // STEREO PHASE: a carrier per channel, the right one's LFO started st/360 of a cycle on. A mono clip is up-mixed to
@@ -1387,7 +1449,8 @@ window.FM = window.FM || {};
       input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
       const split = s.splitter(2), merge = s.merger(2);
       const cL = s.gain(1), cR = s.gain(1);
-      const lfoL = s.lfo(5, { key: 'rate', wave: wave }), lfoR = s.lfo(5, { key: 'rate', wave: wave, phase: st / 360 });
+      const lfoL = s.lfo(5, { key: 'rate', wave: wave, hzOf: ts.hzOf }), lfoR = s.lfo(5, { key: 'rate', wave: wave, phase: st / 360, hzOf: ts.hzOf });
+      rates.push(lfoL.playbackRate, lfoR.playbackRate);
       const aL = s.gain(0.35), aR = s.gain(0.35);
       lfoL.connect(aL); aL.connect(cL.gain); lfoR.connect(aR); aR.connect(cR.gain);
       input.connect(split); split.connect(cL, 0); split.connect(cR, 1);
@@ -1395,7 +1458,7 @@ window.FM = window.FM || {};
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
         custom: {
-          rate: multi([[lfoL.playbackRate, null], [lfoR.playbackRate, null]]),
+          rate: ts.rate, bpm: ts.bpm, note: ts.note,
           depth: multi([[cL.gain, v => 1 - v / 2], [aL.gain, v => v / 2], [cR.gain, v => 1 - v / 2], [aR.gain, v => v / 2]]),
         },
       });
@@ -2203,10 +2266,10 @@ window.FM = window.FM || {};
       ['Cathedral', { size: 1, decay: 6.5, predelay: 0.06, highcut: 6000, lowcut: 60, width: 1, mix: 0.4 }],
       ['Plate', { size: 0.55, decay: 1.8, predelay: 0.01, highcut: 14000, lowcut: 200, width: 0.9, mix: 0.3 }],
     ],
-    delay: [
-      ['Slapback', { time: 0.09, feedback: 0.1, tone: 20000, lowcut: 20, wobble: 0, mix: 0.3 }],
-      ['Tape', { time: 0.35, feedback: 0.45, tone: 4500, lowcut: 150, wobble: 0.4, mix: 0.35 }],
-      ['Canyon', { time: 1.2, feedback: 0.6, tone: 6000, lowcut: 100, wobble: 0, mix: 0.4 }],
+    delay: [   // Tempo 0 in each: a preset's Time is meant to be heard, not overridden by a tempo set earlier (8.7)
+      ['Slapback', { time: 0.09, bpm: 0, feedback: 0.1, tone: 20000, lowcut: 20, wobble: 0, mix: 0.3 }],
+      ['Tape', { time: 0.35, bpm: 0, feedback: 0.45, tone: 4500, lowcut: 150, wobble: 0.4, mix: 0.35 }],
+      ['Canyon', { time: 1.2, bpm: 0, feedback: 0.6, tone: 6000, lowcut: 100, wobble: 0, mix: 0.4 }],
     ],
     compressor: [
       ['Voice', { threshold: -20, ratio: 3, attack: 0.01, release: 0.15, knee: 6 }],

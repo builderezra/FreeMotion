@@ -1266,7 +1266,8 @@ window.FM = window.FM || {};
         }
         return String(v);
       }).join(' or ');
-      why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + lbl;
+      // liveWhenText (#482 polish 8.7): a word for the live value where its number would say nothing ("Tempo is Off").
+      why = 'Only used when ' + ((ctrl && ctrl.label) || p.overriddenBy) + ' is ' + (p.liveWhenText != null ? p.liveWhenText : lbl);
       /* EVERY OPTION BUT ONE (#482 2.3 review): "Only used when Rhythm is Steady or Double hit or Build-up" was a 382 px
          pill that cannot wrap, cut off at '…OR BUIL' on the phone and '…OR DOU' on the PC — in the DEFAULT state of every
          Flash (darken). Three or more live options with one that ignores the row: name that one instead. */
@@ -2407,14 +2408,15 @@ window.FM = window.FM || {};
     /* A CHOICE OR AN ON/OFF (#482 polish 7.1): `options` is a segmented control and `toggle` a tick box, the visual rows'
        own (fxSegment / fxToggle) — this bridge made every audio param a range, so there was no way to offer one. `legacy`
        rides every kind, so an absent key shows what the kernel plays (audio-fx.js valueAt). */
+    // deadAtText / liveWhenText (#482 polish 8.7): the Tempo gate reads "Off", not "0".
     if (p.options) return { type: 'segment', key: p.key, label: p.label, options: p.options, default: p.def, legacy: p.legacy, keyframable: false,
-      overriddenBy: p.overriddenBy || '', liveWhen: p.liveWhen, deadAt: p.deadAt, note: p.note || '', sets: p.sets };   // sets: #482 7.4
+      overriddenBy: p.overriddenBy || '', liveWhen: p.liveWhen, deadAt: p.deadAt, deadAtText: p.deadAtText, liveWhenText: p.liveWhenText, note: p.note || '', sets: p.sets };   // sets: #482 7.4
     if (p.toggle) return { type: 'toggle', key: p.key, label: p.label, default: p.def, legacy: p.legacy, keyframable: false, note: p.note || '' };
     // overriddenBy/deadAt ride along since the #482 3.6 review: this bridge used to drop them, so no audio row could say
     // "Not used when Bass is 0" however the effect declared it.
     // alsoGate (#482 polish 8.5): Vocal Remove's Keep bass below is dead in Centre only AND while Keep Bass is 0.
     return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, legacy: p.legacy, unit: p.unit, keyframable: p.keyframable,
-      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt, liveWhen: p.liveWhen, liveAbove: p.liveAbove, alsoGate: p.alsoGate };
+      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt, deadAtText: p.deadAtText, liveWhen: p.liveWhen, liveWhenText: p.liveWhenText, liveAbove: p.liveAbove, alsoGate: p.alsoGate };
   }
   /* A per-PARAM warning, shown only once the param is actually animated. Reverb's Size and Decay are the
      only two that carry one, and it is the warning Ezra asked for by name — *"if audio key frames break
@@ -2590,7 +2592,7 @@ window.FM = window.FM || {};
       if (reg.meter === 'reduction') body.appendChild(reductionMeter(layer, fx));
       // A control another control switches off says so, as the visual rows do (#482 3.6 review). markOverridden reads
       // the controller's label and default, so it gets the bridged descriptors, not the audio registry's own.
-      const areg = { params: reg.params.map(afxParam) }, rows = {};
+      const areg = { params: reg.params.map(afxParam) }, rows = {}, readouts = {};
       reg.params.forEach(p => {
         const ap = afxParam(p);
         let row;
@@ -2612,9 +2614,17 @@ window.FM = window.FM || {};
         if (ap.type !== 'toggle') markOverridden(row, fx, ap, areg);
         body.appendChild(row);
         if (ap.type === 'segment' && ap.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', ap.note));
+        /* WHAT IT WORKS OUT TO (#482 polish 8.7): a control whose value is a musical note shows the time or rate it gives at
+           the tempo set ("= 250 ms"), under its row; empty, and hidden, while Tempo is off. Re-read as Tempo moves (below). */
+        if (p.readout) {
+          const rd = el('div', 'fx-tog-note fx-range-note afx-readout');
+          const upd = () => { const t = p.readout(fx); rd.textContent = t; rd.style.display = t ? '' : 'none'; };
+          upd(); body.appendChild(rd); readouts[p.key] = upd;
+        }
         const w = afxWarnFor(reg, fx, p);
         if (w) body.appendChild(el('div', 'insp-hint afx-kf-warn', w));
       });
+      reg.params.forEach(p => (p.readoutBy || []).forEach(k => { if (rows[k] && readouts[p.key]) rows[k].addEventListener('fx-range-set', readouts[p.key]); }));
       // Both gates re-read when either controller moves (#482 polish 8.5's alsoGate, as the visual rows wire it).
       reg.params.forEach(p => {
         [p.overriddenBy, p.alsoGate && p.alsoGate.by].forEach(k => {
