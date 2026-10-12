@@ -1504,7 +1504,19 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'phaser', label: 'Phaser', category: 'char',
-    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.4, '', true), SHAPE()],
+    params: [
+      P('rate', 'Rate', 0.05, 5, 0.01, 0.5, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.7, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.4, '', true), SHAPE(),
+      /* #482 polish 7.6. Stages is how many allpasses the sound goes through (each a 2nd-order allpass, so each adds one
+         notch: 4 is today's four, 8 a denser, more liquid sweep, 2 a gentle one); Centre moves the whole sweep up or down
+         (the four stages at 200–1600 Hz × Centre); Mix was welded at half and half — it is the depth of the notches, 0.5
+         the deepest; Stereo phase starts the right channel's sweep that far round the cycle from the left's, so the swirl
+         moves across the speakers. Every default is today's Phaser: four stages at 200/400/800/1600 Hz, Centre ×1 (a
+         gain of exactly 1 on every sweep), Mix 0.5 (the same 0.5 / 0.5 pair), Stereo 0 (one chain for both sides). */
+      CHOICE('stages', 'Stages', [[2, '2'], [4, '4'], [6, '6'], [8, '8']], 4, { rebuild: true }),
+      P('centre', 'Centre', 0.25, 4, 0.01, 1, '×', true),
+      MIX(0.5),
+      Object.assign(P('stereo', 'Stereo phase', 0, 180, 5, 0, '°', false), { rebuild: true }),
+    ],
     /* ═══ FEEDBACK WAS A FIXED COMB, NOT A SHARPER PHASER (queue 986, hunt C17) ══════════════════════════════
      * The feedback ran round a loop — the four allpasses, then back through a 1 ms DelayNode, because Web Audio
      * mutes a cycle without one — and the engine adds a render quantum to every trip round a cycle. MEASURED at
@@ -1526,30 +1538,54 @@ window.FM = window.FM || {};
      * Feedback 0 is the first copy alone — the same four nodes, the same wiring — so it renders sample-for-sample
      * what it did at 768c83d0, and Feedback schedules as real gains, keyframed or not. */
     build: function (ctx, inst) {
-      const s = shop(ctx);
+      const s = shop(ctx), wave = waveOf(inst, 'phaser');
       const input = s.gain(1), out = s.gain(1);
-      const dry = s.gain(0.5), wet = s.gain(0.5);   // the notches ARE dry + allpass summed — no mix knob
-      input.connect(dry).connect(out);
-      const lfo = s.lfo(0.5, { key: 'rate', wave: waveOf(inst, 'phaser') });
-      const bases = [200, 400, 800, 1600];
-      // each stage sweeps in proportion to its own centre; one amp per stage drives that stage in every copy
-      const amps = bases.map(function (b) { const a = s.gain(0.7 * b * 0.7); lfo.connect(a); return a; });
-      const depthT = bases.map(function (b, i) { return [amps[i].gain, b * 0.7]; });
-      const fb0 = initNum(inst, 'feedback', 0.4, 0, 0.9);
-      const sum = s.gain(1), tapT = [];
-      let prev = input;
-      for (let k = 0; k < PHASE_PASSES; k++) {
-        bases.forEach(function (b, i) {
-          const ap = s.biquad('allpass', b, 1);
-          amps[i].connect(ap.frequency);
-          prev.connect(ap); prev = ap;
+      const wd = wetDry(s, inst, 'mix', 0.5);   // the notches ARE dry + allpass summed: 0.5 / 0.5 is today's pair exactly
+      input.connect(wd.dry).connect(out);
+      const n = staticOf(inst, 'phaser', 'stages'), st = staticOf(inst, 'phaser', 'stereo');
+      // Four stages are today's literal centres; any other count spreads the same 200–1600 Hz span evenly in octaves.
+      const bases = n === 4 ? [200, 400, 800, 1600] : Array.from({ length: n }, (_, i) => 200 * Math.pow(8, i / (n - 1)));
+      const c0 = initNum(inst, 'centre', 1, 0.25, 4), fb0 = initNum(inst, 'feedback', 0.4, 0, 0.9);
+      const rateT = [], depthT = [], centreT = [], tapT = [];
+      /* One swept chain fed from `src` with its own LFO (`phase` round the cycle). Each stage sweeps in proportion to its
+         own centre: one amp per stage (Depth) then one gain (Centre, exactly 1 by default) drives that stage in every pass. */
+      const lane = function (src, phase) {
+        const lfo = s.lfo(0.5, { key: 'rate', wave: wave, phase: phase });
+        rateT.push([lfo.playbackRate, null]);
+        const amps = bases.map(function (b) {
+          const a = s.gain(0.7 * b * 0.7), cg = s.gain(c0);
+          lfo.connect(a); a.connect(cg);
+          depthT.push([a.gain, b * 0.7]); centreT.push([cg.gain, null]);
+          return cg;
         });
-        const g = s.gain(Math.pow(fb0, k));   // pass k+1 carries fb^k
-        prev.connect(g); g.connect(sum);
-        if (k) tapT.push([g.gain, powOf(k)]);
+        const sum = s.gain(1);
+        let prev = src;
+        for (let k = 0; k < PHASE_PASSES; k++) {
+          bases.forEach(function (b, i) {
+            const ap = s.biquad('allpass', b * c0, 1);
+            amps[i].connect(ap.frequency);
+            centreT.push([ap.frequency, b]);
+            prev.connect(ap); prev = ap;
+          });
+          const g = s.gain(Math.pow(fb0, k));   // pass k+1 carries fb^k
+          prev.connect(g); g.connect(sum);
+          if (k) tapT.push([g.gain, powOf(k)]);
+        }
+        return sum;
+      };
+      if (!(st > 0)) lane(input, 0).connect(wd.wet);
+      else {
+        // STEREO PHASE: a chain per channel (a mono clip up-mixed to both first — a splitter is discrete).
+        const up = s.gain(1);
+        up.channelCount = 2; up.channelCountMode = 'explicit'; up.channelInterpretation = 'speakers';
+        const split = s.splitter(2), merge = s.merger(2), gl = s.gain(1), gr = s.gain(1);
+        input.connect(up); up.connect(split); split.connect(gl, 0); split.connect(gr, 1);
+        lane(gl, 0).connect(merge, 0, 0); lane(gr, st / 360).connect(merge, 0, 1);
+        merge.connect(wd.wet);
       }
-      sum.connect(wet); wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate }, custom: { depth: multi(depthT), feedback: multi(tapT) } });
+      wd.wet.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        custom: { rate: multi(rateT), depth: multi(depthT), feedback: multi(tapT), centre: multi(centreT), mix: wd.set } });
     },
   }, {
     type: 'vibrato', label: 'Vibrato', category: 'char',

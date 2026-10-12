@@ -125204,4 +125204,49 @@
       });
     }
   });
+
+  /* 7.6 — PHASER: STAGES, CENTRE, MIX, STEREO PHASE (touches C17). Each stage is a 2nd-order allpass, whose phase turns a full
+     360 degrees, so dry + wet has one notch per stage: by the spec's allpass formulas (Q 1, 48 kHz) 2 stages notch at 189 /
+     1698 Hz, 4 (today) at 139 / 373 / 857 / 2292, 8 at 84 ... 3739 — eight. (The backlog's "8 gives 4, today 2" counted
+     first-order stages; this counts what the build is.) Centre x2 lifts every notch an octave (278 / 749 / 1715 / 4520).
+     Mix 0 is the clip untouched, Mix 1 the allpass alone, which has no notch. Stereo phase 180 sweeps the two sides apart; 0
+     keeps them the same samples. Read at Depth 0 and Feedback 0, where the response holds still: an impulse through the
+     app's chain, its magnitude by direct DFT on a 1 % log grid (a notch there reads 30 dB down or more by the maths), notches
+     = local minima under -20 dB. On the build before none of these keys exist (first line) and every render has four. */
+  test('482 7.6 Phaser - Stages sets how many notches (one a stage), Centre moves them, Mix sets their depth, Stereo phase sweeps the sides apart, and a saved Phaser is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const W = { stages: ['Stages', 2, 8, 4, false], centre: ['Centre', 0.25, 4, 1, true], mix: ['Mix', 0, 1, 0.5, true], stereo: ['Stereo phase', 0, 180, 0, false] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('phaser', k), w = W[k];
+      if (!pd) throw new Error('the Phaser has no ' + w[0] + ' (its params are ' + b7Keys('phaser') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Phaser ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'phaser', enabled: true, params: { rate: 0.5, depth: 0.7, feedback: 0.4 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.stages !== 4 || op.centre !== 1 || op.mix !== 0.5 || op.stereo !== 0) throw new Error('a Phaser saved before these controls opens with ' + JSON.stringify(op));
+    const hs = hash482c(await afx482c([{ type: 'phaser', enabled: true, params: { rate: 0.5, depth: 0.7, feedback: 0.4 } }], 'noise', 1, { chans: 2 })), hn = hash482c(await afx482c(b7Fx('phaser'), 'noise', 1, { chans: 2 }));
+    if (hs !== hn) throw new Error('CONTROL: a saved Phaser renders ' + hs + ' and a new one ' + hn);
+    const freqs = []; for (let f = 40; f <= 16000; f *= 1.01) freqs.push(f);
+    const resp = async p => {
+      const y = await afx986(b7Fx('phaser', Object.assign({ depth: 0, feedback: 0 }, p)), t => (Math.round(t * 48000) === 0 ? 1 : 0), 0.5);
+      return freqs.map(f => { let re = 0, im = 0; const w = 2 * Math.PI * f / 48000; for (let i = 0; i < 12000; i++) { re += y[i] * Math.cos(w * i); im -= y[i] * Math.sin(w * i); } return 20 * Math.log10(Math.max(1e-9, Math.hypot(re, im))); });
+    };
+    const notches = r => { const o = []; for (let i = 1; i < r.length - 1; i++) if (r[i] < r[i - 1] && r[i] <= r[i + 1] && r[i] < -20) o.push(Math.round(freqs[i])); return o; };
+    const bad = [], n4 = notches(await resp({}));
+    if (n4.length !== 4) throw new Error('CONTROL: today’s four stages notch at ' + (n4.join(', ') || 'nowhere') + ' Hz - not four notches, so the measure is broken');
+    const n2 = notches(await resp({ stages: 2 })), n8 = notches(await resp({ stages: 8 })), c2 = notches(await resp({ centre: 2 }));
+    if (n2.length !== 2) bad.push('Stages 2 notches at ' + n2.join(', ') + ' Hz - not two notches');
+    if (n8.length !== 8) bad.push('Stages 8 notches at ' + n8.join(', ') + ' Hz - not eight notches');
+    if (c2.length !== 4 || c2.some((f, i) => Math.abs(f / (2 * n4[i]) - 1) > 0.05)) bad.push('Centre x2 notches at ' + c2.join(', ') + ' Hz where x1 notches at ' + n4.join(', ') + ' - not an octave up');
+    const m1 = notches(await resp({ mix: 1 }));
+    if (m1.length) bad.push('Mix 1 (the allpass alone) still notches at ' + m1.join(', ') + ' Hz');
+    const nz = SIG482C.noise(24000, 0), m0 = await afx986(b7Fx('phaser', { mix: 0 }), (t) => nz[Math.round(t * 48000)] || 0, 0.5);
+    let mz = 0; for (let i = 0; i < 24000; i++) mz = Math.max(mz, Math.abs(m0[i] - nz[i]));
+    if (mz !== 0) bad.push('Mix 0 is up to ' + mz.toExponential(2) + ' away from the clip untouched');
+    const lr = async st => { const r = await afx482c(b7Fx('phaser', { depth: 1, stereo: st }), 'noise', 1, { chans: 1 }); let d = 0; for (let i = 0; i < r[0].length; i++) d = Math.max(d, Math.abs(r[0][i] - r[1][i])); return d; };
+    const s0 = await lr(0), s180 = await lr(180);
+    if (s0 !== 0) bad.push('CONTROL: at Stereo phase 0 a mono clip comes out with left and right up to ' + s0.toExponential(2) + ' apart');
+    if (!(s180 > 0.01)) bad.push('at Stereo phase 180 left and right differ by only ' + s180.toExponential(2) + ' - the sweep is not moved across the sides');
+    if (bad.length) throw new Error('Phaser: ' + bad.join('; '));
+  });
 })();
