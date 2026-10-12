@@ -11765,6 +11765,10 @@ body.ed-simple #sm-timeline { display: flex; }
 #sm-say .sm-say-b[aria-disabled="true"] { opacity: .55; }
 #sm-say .sm-say-b + .sm-say-b { margin-left: -2px; }
 #sm-say .sm-say-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* SU1 (unconfirmed, r2-06a-mp4-1s.jpg): a line that must be read whole — a file that would not load, by its name and why — wraps instead of
+   trailing off in an ellipsis (js/simple-timeline.js sayLine opts.wrap): up to 3 lines in the phone's 52 px row (3 × 15.6 px), 2 in PC's 40. */
+#sm-say.sm-say-wrap .sm-say-t { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+@media (min-width: 701px) { #sm-say.sm-say-wrap .sm-say-t { -webkit-line-clamp: 2; } }
 @media (max-width: 700px) { #sm-say.sm-say-has-b { padding-right: 56px; } }   /* §3.12 rule 5: 🗑's 56 px stay free of buttons */
 .sm-item.sm-pulse { animation: sm-pulse .6s ease; }
 @keyframes sm-pulse { 0% { box-shadow: inset 0 0 0 2px #fff, 0 0 0 0 rgba(255,255,255,.7); } 100% { box-shadow: inset 0 0 0 2px #fff, 0 0 0 10px rgba(255,255,255,0); } }

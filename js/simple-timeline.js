@@ -96,7 +96,7 @@ window.FM = window.FM || {};
      a line, which would then never time out (rule 1b: never while focus is inside it). */
   let raisedBy = null, lastPtr = -1e9;
   function clearSay() {
-    clearTimeout(sayT); const ln = lineOf(); if (ln) ln.textContent = ''; if (sayEl) sayEl.classList.remove('sm-saying', 'sm-say-has-b');
+    clearTimeout(sayT); const ln = lineOf(); if (ln) ln.textContent = ''; if (sayEl) sayEl.classList.remove('sm-saying', 'sm-say-has-b', 'sm-say-wrap');
     if (raisedBy != null) {
       const tr = document.getElementById('sm-tray'), ae = document.activeElement;
       if (tr && (!ae || ae === document.body || (sayEl && sayEl.contains(ae)))) {
@@ -125,7 +125,9 @@ window.FM = window.FM || {};
   }
   /* THE LINE (§3.12). opts.live: screen readers and a pulse only, the row is not taken. Otherwise the row shows the text
      and at most two real buttons, which ignore every press until 400 ms have passed AND the press that raised the line
-     has been let go (rule 5), reading aria-disabled meanwhile; a line with buttons stays 10 s, one without 4 s. */
+     has been let go (rule 5), reading aria-disabled meanwhile; a line with buttons stays 10 s, one without 4 s.
+     SU1 (unconfirmed, r2-06a-mp4-1s.jpg): opts.ms keeps a line that must be read whole longer (a file that would not load: its name and
+     why, 10 s), and opts.wrap lets it run onto a second (phone: third) line instead of trailing off in an ellipsis (styles.css .sm-say-wrap). */
   function sayLine(text, opts) {
     opts = opts || {};
     if (opts.live) { if (liveEl) liveEl.textContent = text; pulse(opts.pulse); return; }
@@ -133,7 +135,7 @@ window.FM = window.FM || {};
     const ln = lineOf();
     const tr = document.getElementById('sm-tray'), ae = document.activeElement;
     if (tr && ae && tr.contains(ae) && !ptrDown && performance.now() - lastPtr > 500) raisedBy = (ae.dataset && ae.dataset.tool) || '';
-    ln.textContent = ''; sayEl.classList.add('sm-saying');
+    ln.textContent = ''; sayEl.classList.add('sm-saying'); sayEl.classList.toggle('sm-say-wrap', !!opts.wrap);
     const tx = el('span', 'sm-say-t', text); tx.title = opts.title || text; ln.appendChild(tx);
     const btns = (opts.buttons || []).slice(0, 2);
     if (opts.full && !btns.length) btns.push({ label: (W().lines || {}).openFull || 'Open in Full', fn: () => { if (FM.editor) FM.editor.request('full', { hop: true }); } });   // a hop: the guard, no memory (R1)
@@ -151,7 +153,7 @@ window.FM = window.FM || {};
     if (btns.length) setTimeout(function arm() { if (!sayEl.isConnected || !sayEl.querySelector('.sm-say-b')) return; if (!armed()) { setTimeout(arm, 60); return; } sayEl.querySelectorAll('.sm-say-b').forEach(b => b.setAttribute('aria-disabled', 'false')); }, 400);
     /* #sm-say is itself the polite status region (rule 1b) and reads the text with its buttons; #sm-live is for live-only lines.
        Writing the row's text there too made a screen reader read every refusal and every Undo line twice (review finding 29). */
-    armClear(btns.length ? 10000 : 4000);
+    armClear(opts.ms > 0 ? opts.ms : (btns.length ? 10000 : 4000));
   }
 
   let laterRAF = 0;

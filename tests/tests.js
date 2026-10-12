@@ -127604,4 +127604,46 @@
       }, { pps: 60 });
     }, 380);
   });
+
+  /* A FILE THAT WOULD NOT LOAD (r2-06a-mp4-1s.jpg): adding an MP4 this Chromium could not decode said only “Nothing could be added”, with no
+     name and no reason, for under 5 s. S.readPicked (js/spine-edit.js) only COUNTED a file media.js refused, the refusal’s line is the bare
+     words-file string, and a line with no buttons stays 4 s. Now it names the file and why, may wrap rather than trail off, and stays 10 s;
+     two name the count and the first; a pick that adds the rest says which did not go in (the old visible row said nothing at all there: the
+     success line is screen-reader only). 4 KB of noise typed video/mp4 takes the SAME path as his H.264 file on a Chromium without H.264:
+     the video element raises an error before its metadata (media.js loadVideoFile’s error listener). Red on the old code at every check: the
+     line reads “Nothing could be added”, is gone at 6 s, and says nothing for the mixed pick. CONTROLS: this browser’s loader really refuses
+     the fixture; a refused add writes nothing; the PNG beside a bad file still goes in, as one step. */
+  test('SU1 unconfirmed · at 380 a file the browser can’t play is named on Simple’s line with the reason, whole and long enough to read; two name the count and the first; a pick that adds the rest says which did not go in', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const junk = (name, type) => { const b = new Uint8Array(4096); for (let i = 0; i < b.length; i++) b[i] = (i * 37 + 11) & 255; return new File([b], name, { type: type || 'video/mp4' }); };
+    const shown = () => { const t = document.querySelector('#sm-say .sm-say-t'); return t ? { text: t.textContent, cut: t.scrollWidth > t.clientWidth + 1 || t.scrollHeight > t.clientHeight + 1 } : { text: '', cut: false }; };
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('A', 0, 3, W, H)], async function (v) {
+        let why = '';
+        try { const r = await FM.loadVideoFile(junk('probe.mp4')); if (r && FM.letGoMedia) FM.letGoMedia(r); } catch (e) { why = String((e && e.message) || e); }
+        if (!why) throw new Error('CONTROL: this browser loaded 4 KB of noise as a video, so it cannot stand in for a file it can’t play');
+        const fails = [], c0 = FM.scene.layers.length, n0 = v.steps();
+        await FM.spine.cmd.append([junk('holiday.mp4')]); await v.idle(); await v.sleep(60);
+        if (FM.scene.layers.length !== c0 || v.steps() !== n0) throw new Error('CONTROL: a refused file wrote something (' + (FM.scene.layers.length - c0) + ' layer(s), ' + (v.steps() - n0) + ' step(s))');
+        const one = shown();
+        if (one.text.indexOf('holiday.mp4') < 0) fails.push('one file: the line does not name it (“' + one.text + '”)');
+        if (!/can’t play/.test(one.text) || !/format/.test(one.text)) fails.push('one file: the line gives no reason (“' + one.text + '”)');
+        if (one.cut) fails.push('one file: the line is cut off at 380 (“' + one.text + '”)');
+        await v.sleep(6000);
+        if (v.say().indexOf('holiday.mp4') < 0) fails.push('one file: 6 s later the line is gone (it reads “' + v.say() + '”)');
+        FM.simpleTimeline.clearSay();
+        await FM.spine.cmd.append([junk('holiday.mp4'), junk('beach.mov', 'video/quicktime')]); await v.idle(); await v.sleep(60);
+        const two = shown().text;
+        if (FM.scene.layers.length !== c0) throw new Error('CONTROL: two refused files wrote something · ' + fails.join(' · '));
+        if (!/^2 files/.test(two) || two.indexOf('holiday.mp4') < 0) fails.push('two files: the line does not give the count and the first (“' + two + '”)');
+        FM.simpleTimeline.clearSay();
+        const png = await q921png([200, 60, 40], 'sun.png'), n1 = v.steps();
+        await FM.spine.cmd.append([png, junk('holiday.mp4')]); await v.idle(); await v.sleep(60);
+        if (FM.scene.layers.length !== c0 + 1 || v.steps() !== n1 + 1) throw new Error('CONTROL: the picture beside the bad file did not go in as one step (' + (FM.scene.layers.length - c0) + ' layer(s), ' + (v.steps() - n1) + ' step(s); the line reads “' + v.say() + '”) · ' + fails.join(' · '));
+        const mixed = shown().text;
+        if (mixed.indexOf('holiday.mp4') < 0 || !/Added clip/.test(mixed)) fails.push('a pick that added the picture: the line does not say which file did not go in (“' + mixed + '”)');
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    }, 380);
+  });
 })();

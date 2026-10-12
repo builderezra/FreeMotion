@@ -1213,8 +1213,9 @@ window.FM = window.FM || {};
   function refuse(kind, o, R) {
     o = o || {};
     const full = { label: line('openFull'), fn: () => { if (FM.editor && FM.editor.request) FM.editor.request('full', { hop: true }); } };   // a hop: no editor memory (Phase 1 review R1)
-    let text = '', buttons = [];
+    let text = '', buttons = [], long = false;
     switch (kind) {
+      case 'cantAdd': text = line('cantAdd', o.failed || []); long = true; break;   // SU1: which file and why, read whole (readPicked)
       case 'locked': text = lockedLine(o.ids || [], R, byIdMap()); if (o.retry) buttons = [{ label: line('doAnyway'), fn: o.retry }]; break;
       case 'live': {
         const C = FM.collab, s = C && C.session;
@@ -1258,7 +1259,7 @@ window.FM = window.FM || {};
       default: text = line(kind) || line('failed');
         if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow' || kind === 'speedBlock' || kind === 'replaceBlock' || kind === 'cameraRest') buttons = [full];
     }
-    S.say(text, { buttons: buttons, refusal: kind, ids: o.ids });
+    S.say(text, Object.assign({ buttons: buttons, refusal: kind, ids: o.ids }, long ? { ms: 10000, wrap: true } : {}));
     S.lastRefusal = kind;
     return false;
   }
@@ -1437,7 +1438,7 @@ window.FM = window.FM || {};
       S.say((text || live || line('moved0')) + ' · ' + line('movedTexts', n), { buttons: [{ label: line('keepOnMusic'), fn: () => { FM.history.undo(); plan.rerun(); } }, { label: line('undo'), fn: () => FM.history.undo() }] });
       return;
     }
-    if (text) S.say(text, { buttons: plan.sayUndo ? [{ label: line('undo'), fn: () => FM.history.undo() }] : [] });
+    if (text) S.say(text, Object.assign({ buttons: plan.sayUndo ? [{ label: line('undo'), fn: () => FM.history.undo() }] : [] }, plan.sayLong ? { ms: 10000, wrap: true } : {}));   // sayLong: SU1, a file of the pick that did not go in
     else if (live) S.say(live, { live: true, pulse: plan.pulse });
   }
 
@@ -1518,21 +1519,40 @@ window.FM = window.FM || {};
   /* Read the picked files BEFORE the runner (§3.7: no picker and no long decode inside a step that a refusal could undo):
      the records, in pick order, with the length each clip will get. Sound files are kept apart: they never enter the clip
      row (§7.3), they go in as music. */
+  /* SU1, unconfirmed (hunt/simple-firstuser r2-06a-mp4-1s.jpg): an MP4 this browser could not decode was only COUNTED here, and the line
+     said "Nothing could be added" for 4 s, with no name and no reason. Each file that does not go in is now kept in `failed` as
+     { name, why }, why being 'type' (not a video, photo or sound), 'video' / 'sound' / 'picture' (the browser raised an error opening it:
+     media.js loadVideoFile / loadImageFile reject) or 'read' (it never said how long it is: loadVideoFile's 20 s timeout, read by its
+     message). spine-words.js cantAdd says them. A file let go because he switched projects is not the file's fault and is not listed. */
   S.readPicked = async function (files) {
-    const pickedIn = FM.startedIn ? FM.startedIn() : null, out = { clips: [], sounds: [], skipped: 0 };
+    const pickedIn = FM.startedIn ? FM.startedIn() : null, out = { clips: [], sounds: [], skipped: 0, failed: [] };
     for (const f of files || []) {
-      const k = mediaKindOf(f);
+      const k = mediaKindOf(f), name = String((f && f.name) || '').trim();
+      const failed = why => { out.skipped++; out.failed.push({ name: name, why: why }); };
+      const whyOf = e => /never reported its size or length/.test(String((e && e.message) || '')) ? 'read' : k === 'image' ? 'picture' : k === 'audio' ? 'sound' : 'video';
+      if (!k) { failed('type'); continue; }
       try {
-        const rec = k === 'image' ? await FM.loadImageFile(f) : (k === 'video' || k === 'audio') ? await FM.loadVideoFile(f) : null;
-        if (!rec) { out.skipped++; continue; }
+        const rec = k === 'image' ? await FM.loadImageFile(f) : await FM.loadVideoFile(f);
+        if (!rec) { failed(whyOf(null)); continue; }
         if (FM.stillIn && !FM.stillIn(pickedIn)) { FM.letGoMedia(rec); out.skipped++; continue; }
         const picture = rec.kind === 'image' || (rec.width > 0 && rec.height > 0);
         const len = rec.kind === 'video' ? Math.max(0.1, rec.duration || 5) : FM.defaultLayerDuration();
         (picture ? out.clips : out.sounds).push({ rec: rec, len: len });
-      } catch (e) { out.skipped++; if (FM.reportError) FM.reportError('reading “' + (f && f.name) + '”', e); }
+      } catch (e) { failed(whyOf(e)); if (FM.reportError) FM.reportError('reading “' + (f && f.name) + '”', e); }
     }
     return out;
   };
+  /* …and how the four add commands say them: with nothing else to add the command refuses with the file's own line; with something added the
+     line says what went in, then what did not. Ten seconds and allowed to wrap (refuse / speakDone pass `long`), so a name and its reason can
+     be read whole on a phone. */
+  const failedOf = picked => (picked && Array.isArray(picked.failed)) ? picked.failed : [];
+  const refuseAdd = picked => failedOf(picked).length ? refusePlan('cantAdd', { failed: failedOf(picked) }) : refusePlan('nothingAdded');
+  function sayFailed(plan, picked) {
+    const f = failedOf(picked);
+    if (!f.length) return;
+    plan.say = (plan.say || plan.live || '') + ' · ' + line('cantAddAlso', f);
+    plan.sayLong = true;
+  }
   function addRecs(recs, at, pickB, map) {
     const made = [];
     let t = at;
@@ -1587,7 +1607,7 @@ window.FM = window.FM || {};
      a plain clips-only Append works with a friend in. Cues or a window that cross the track end refuse until 2.4. */
   S.planAppend = function (R, picked) {
     const map = byIdMap(), clips = picked.clips;
-    if (!clips.length && !picked.sounds.length) return refusePlan('nothingAdded');
+    if (!clips.length && !picked.sounds.length) return refuseAdd(picked);
     const T = R.main.some(e => !e.slot) ? R.trackEnd : 0;
     const sum = clips.reduce((a, c) => a + c.len, 0);
     const rd = clips.length ? riderPlan(R, map, tmShift(T, sum)) : null;   // §3.10 rule 3e: the camera and the track's keys ride the Append map whenever clips are added
@@ -1618,6 +1638,7 @@ window.FM = window.FM || {};
     });
     plan.time = T;
     plan.live = clips.length > 1 ? line('addedN', clips.length) : line('added1');
+    sayFailed(plan, picked);
     return plan;
   };
   /* INSERT at the cut j (Clips › After Clip N): the new clips go in there, everything from j on moves along by their
@@ -1655,6 +1676,7 @@ window.FM = window.FM || {};
     });
     plan.time = at;
     plan.live = clips.length > 1 ? line('addedN', clips.length) : line('added1');
+    sayFailed(plan, picked);
     return plan;
   };
 
@@ -1921,7 +1943,7 @@ window.FM = window.FM || {};
   };
   S.planAddOverlay = function (R, picked) {
     const items = picked.clips;
-    if (!items.length) return refusePlan('nothingAdded');
+    if (!items.length) return refuseAdd(picked);
     const plan = newPlan('Add overlay'); plan.arranges = false; plan.adopts = false;
     plan.pre.push(async () => {
       const keepRow = addRowMark();
@@ -1943,11 +1965,12 @@ window.FM = window.FM || {};
       plan.selectId = made.length ? made[0].id : null;
     });
     plan.live = line('overlayAdded');
+    sayFailed(plan, picked);
     return plan;
   };
   S.planAddMusic = function (R, picked) {
     const items = picked.sounds.concat(picked.clips.filter(c => c.rec.kind === 'video'));
-    if (!items.length) return refusePlan('nothingAdded');
+    if (!items.length) return refuseAdd(picked);
     const plan = newPlan('Add music'); plan.arranges = false; plan.adopts = false;
     plan.pre.push(async () => {
       const keepRow = addRowMark();
@@ -1964,6 +1987,7 @@ window.FM = window.FM || {};
       plan.selectId = made.length ? made[0].id : null;
     });
     plan.live = line('musicAdded');
+    sayFailed(plan, picked);
     return plan;
   };
 
