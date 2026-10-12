@@ -281,7 +281,9 @@ window.FM = window.FM || {};
        `type === 'range'`, so the AI vocabulary is unaffected by this. */
     /* `colorGate` (#482 polish 6.2): the first colour row gated like color3's — Light and Soft Glow's Glow colour does nothing
        while Colour from is Source colour, so the row greys out and says why. Set on those two only. */
-    if (def.color) { const c1 = { key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: true }; if (def.colorGate) { c1.overriddenBy = def.colorGate.by; c1.liveWhen = def.colorGate.when; } out.push(c1); }
+    /* …or dead at one value of a SLIDER (#482 polish 10.7, Hexagon Tiles' Grout colour does nothing while Grout is 0): `deadAt`,
+       the audio rows' gate, which markOverridden already judges over every keyframe. */
+    if (def.color) { const c1 = { key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: true }; if (def.colorGate) { c1.overriddenBy = def.colorGate.by; c1.liveWhen = def.colorGate.when; if (def.colorGate.deadAt !== undefined) { c1.deadAt = def.colorGate.deadAt; c1.deadAtText = def.colorGate.deadAtText; } } out.push(c1); }
     /* `follows` (#482 polish 1.2, Light Leak's Leak edge): a colour that, ABSENT, is the colour it names. makeInstance leaves it
        out so a new instance keeps following, and the inspector's row shows the followed colour until he picks one. */
     if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '' });

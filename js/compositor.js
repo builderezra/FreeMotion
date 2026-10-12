@@ -678,7 +678,13 @@ window.FM = window.FM || {};
       { key: 'radial', label: 'Toward edges', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },
     { type: 'innerglow', label: 'Inner Glow', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
     { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }, { key: 'coloursafe', label: 'Protect colour', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },   // saved/filter instances remain on the original per-channel path
-    { type: 'hextiles', label: 'Hexagon Tiles', param: 'size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
+    /* #482 polish 10.7: a params list now (it was the one-slider shorthand, whose slider was labelled with the effect's own
+       name). Grout and Edge shade at 0 are the old tiles; the Grout colour only shows once there is grout. Same storage key. */
+    { type: 'hextiles', label: 'Hexagon Tiles', color: true, defColor: '#000000', colorLabel: 'Grout colour', colorGate: { by: 'gap', deadAt: 0, deadAtText: '0%' }, params: [
+      { key: 'size', label: 'Tile size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
+      { key: 'gap', label: 'Grout', min: 0, max: 40, step: 1, def: 0, unit: '%' },
+      { key: 'edge', label: 'Edge shade', min: 0, max: 1, step: 0.02, def: 0 },
+    ] },
     /* #482 polish 6.6 (#966 "as much choice as possible"). The streak only ever ran one way along Angle, every bright-ish
        pixel joined it (a mid-tone streaks a little, so a busy picture smeared all over rather than just its lights), and it
        was always the colour of what it smeared. Both ways smears to both sides, Only above is Zoom Streaks' gate (the same
@@ -7652,7 +7658,21 @@ window.FM = window.FM || {};
       var hxM=Math.ceil(hxSize)+2;
       var hxY0=hxBB?Math.max(0,hxBB.y-hxM):0, hxY1=hxBB?Math.min(H-1,hxBB.y+hxBB.h-1+hxM):H-1;
       var hxX0=hxBB?Math.max(0,hxBB.x-hxM):0, hxX1=hxBB?Math.min(W-1,hxBB.x+hxBB.w-1+hxM):W-1;
-      for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
+      /* GROUT, ITS COLOUR AND EDGE SHADE (#482 polish 10.7). The tiles butted straight into each other, so it read as a blur of
+         hexagons rather than tiles. GROUT (% of the tile size) paints a band that wide along every cell border in the Grout
+         colour; EDGE SHADE darkens each tile toward its border over a quarter of a tile, a bevel. Both need how far a pixel is
+         from its cell's border: the distance to the bisector between its centre and each neighbour's, (d_k² − d²) / 2|c_k − c|,
+         the nearest of them — over a 5×5 of cells, because a border neighbour of the pixel's cell can sit two away from the cell
+         the row/column guess names. A grout pixel keeps its cell's alpha, so a tile off the layer (alpha 0) stays exactly
+         what it was and the #692 skip above stays a skip. Both 0 (an absent key) is the loop below with nothing added. */
+      var hxGap=fparam(p, 'gap', 0, t); if(!(hxGap>0))hxGap=0; if(hxGap>40)hxGap=40;
+      var hxEdge=fparam(p, 'edge', 0, t); if(!(hxEdge>0))hxEdge=0; if(hxEdge>1)hxEdge=1;
+      var hxDeco=hxGap>0||hxEdge>0, hxG2=hxGap/100*hxSize/2, hxBW=0.25*hxSize, hxGc=hxDeco?hexToRGB(p.color||'#000000'):null, hxBCX=0, hxBCY=0;
+      for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); hxBCX=hxCX; hxBCY=hxCY; } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3];
+        if(hxDeco&&hxSrc[hxSi+3]>0){ var hxE=1e9; for(var hxRO3=-2;hxRO3<=2;hxRO3++){ var hxR3=hxRow+hxRO3; var hxCY3=hxR3*hxRowH+hxRowH*0.5; var hxSh3=(hxR3&1)?hxHalf:0; for(var hxCO3=-2;hxCO3<=2;hxCO3++){ var hxCX3=(hxCol+hxCO3)*hxSize+hxSh3+hxHalf; if(hxCX3===hxBCX&&hxCY3===hxBCY)continue; var hxLk=Math.hypot(hxCX3-hxBCX,hxCY3-hxBCY); if(!(hxLk>0))continue; var hxDX3=hxX-hxCX3, hxDY3=hxY-hxCY3; var hxEk=(hxDX3*hxDX3+hxDY3*hxDY3-hxBestDx)/(2*hxLk); if(hxEk<hxE)hxE=hxEk; } }
+          if(hxE<hxG2){ d[hxDi]=hxGc[0]; d[hxDi+1]=hxGc[1]; d[hxDi+2]=hxGc[2]; }   // grout, at the tile's own alpha
+          else if(hxEdge>0){ var hxS=1-(hxE-hxG2)/hxBW; if(hxS>0){ if(hxS>1)hxS=1; var hxMul=1-hxEdge*hxS*hxS; d[hxDi]*=hxMul; d[hxDi+1]*=hxMul; d[hxDi+2]*=hxMul; } } }
+      } } },
     linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<=0)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d);
       /* #482 polish 6.6. BOTH WAYS reads the same taps on the far side too, each side as strong as the one-way streak, so a bright dot
          streaks out both ways along Angle. ONLY ABOVE is Zoom Streaks' gate: a tap's brightness below the cut weighs nothing and the

@@ -125209,4 +125209,66 @@
     } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* 10.7 HEXAGON TILES. The tiles butted into each other with nothing between them. At Tile size 20 the cells sit in rows 15 px
+     apart, alternate rows half a tile over, so on row 0 the centres are (10, 7.5), (30, 7.5)… and the border between two of
+     them is the column x = 20. Grout 20 % is a 4 px band along every border: (20, 8) and (19, 8) are grout, (17, 8) — 3 px
+     from the border — is tile. Edge shade 1 takes a tile to black at its border and leaves it alone 5 px (a quarter tile) in. */
+  test('482 10.7 Hexagon Tiles - Grout 20 paints the cell borders in the Grout colour where today the tiles touch, Edge shade darkens each tile toward its border, the Grout colour row is greyed while Grout is 0, the bounded fast path still skips only what it may, and saved tiles draw as before', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._pixelFx && FM._pixelFx.hextiles, R = FM.fxRegistry, bad = [];
+    if (!K) throw new Error('the Hexagon Tiles kernel is not reachable');
+    const W = 120, H = 96, px = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const flat = (r, g, b, a) => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = a; } return d; };
+    const run = (p, d, bb) => { d = d || flat(255, 0, 0, 255); K(d, W, H, Object.assign({ size: 20 }, p), 0.3, 1, bb); return d; };
+    const isG = q => q[0] === 0 && q[1] === 255 && q[2] === 0;
+    /* 1. THE ROWS: a params list now, Tile size keeps its key and default; Grout, Edge shade and the Grout colour row at the old
+          look; the colour row greyed at Grout 0 (deadAt) */
+    const ps = R.paramsOf('hextiles') || [], row = k => ps.filter(q => q.key === k)[0];
+    if (!row('size') || row('size').default !== 20 || row('size').label !== 'Tile size') bad.push('the Tile size row is ' + JSON.stringify(row('size')));
+    if (!row('gap') || row('gap').default !== 0 || R.makeInstance('hextiles').params.gap !== 0 || FM._fxFillValue('hextiles', 'gap') !== 0) bad.push('Hexagon Tiles has no Grout row at 0');
+    if (!row('edge') || row('edge').default !== 0 || R.makeInstance('hextiles').params.edge !== 0 || FM._fxFillValue('hextiles', 'edge') !== 0) bad.push('Hexagon Tiles has no Edge shade row at 0');
+    const col = row('color');
+    if (!col || col.type !== 'color' || col.default !== '#000000' || col.overriddenBy !== 'gap' || col.deadAt !== 0) bad.push('the Grout colour row is not a black colour row greyed at Grout 0 (' + JSON.stringify(col) + ')');
+    const lay = [{ id: 'l48210h', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'hextiles', enabled: true, params: { size: 30, gap: 15, edge: 0.4, color: '#123456' } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const hp = lay[0].effects[0].params;
+    if (hp.size !== 30 || hp.gap !== 15 || hp.edge !== 0.4 || hp.color !== '#123456') bad.push('saved tiles come back from the load sanitiser as ' + JSON.stringify(hp));
+    /* 2. GROUT — the backlog's test */
+    const g0 = run({ gap: 0, color: '#00ff00' }), g20 = run({ gap: 20, color: '#00ff00' });
+    let n0 = 0, n20 = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (isG(px(g0, x, y))) n0++; if (isG(px(g20, x, y))) n20++; }
+    if (n0 !== 0 || px(g0, 20, 8).join() !== '255,0,0,255') throw new Error('CONTROL: at Grout 0 the red tiles show ' + n0 + ' green pixels, and the border at (20, 8) is ' + px(g0, 20, 8));
+    if (!isG(px(g20, 20, 8)) || !isG(px(g20, 19, 8))) bad.push('Grout 20 left the border between two tiles at (19..20, 8) as ' + px(g20, 19, 8) + ' / ' + px(g20, 20, 8) + ' - not the Grout colour');
+    if (px(g20, 17, 8).join() !== '255,0,0,255' || px(g20, 10, 8).join() !== '255,0,0,255') bad.push('Grout 20 painted inside a tile: (17, 8) is ' + px(g20, 17, 8) + ', the centre (10, 8) ' + px(g20, 10, 8));
+    if (!(n20 > W * H * 0.2 && n20 < W * H * 0.7)) bad.push('Grout 20 painted ' + n20 + ' of ' + (W * H) + ' pixels - not a band along the borders');
+    /* …at the tile's own alpha: a half-transparent layer gets half-transparent grout, and an empty one none at all */
+    const half = run({ gap: 20, color: '#00ff00' }, flat(255, 0, 0, 128)), none = run({ gap: 20, color: '#00ff00' }, flat(0, 0, 0, 0));
+    if (px(half, 20, 8).join() !== '0,255,0,128') bad.push('grout on a half-transparent layer is ' + px(half, 20, 8) + ', not green at alpha 128');
+    if (none.some(v => v !== 0)) bad.push('Grout painted something on an empty layer');
+    /* 3. EDGE SHADE 1: black at the border, untouched a quarter tile in (at the tile's centre and 5 px from the border) */
+    const e1 = run({ edge: 1 });
+    if (!(px(e1, 20, 8)[0] < 10)) bad.push('Edge shade 1 left the tile border at red ' + px(e1, 20, 8)[0]);
+    if (px(e1, 10, 8)[0] !== 255 || px(e1, 15, 8)[0] !== 255) bad.push('Edge shade 1 darkened the tile inside a quarter of its size: centre ' + px(e1, 10, 8)[0] + ', 5 px from the border ' + px(e1, 15, 8)[0]);
+    if (!(px(e1, 18, 8)[0] < px(e1, 16, 8)[0] && px(e1, 16, 8)[0] < 255)) bad.push('Edge shade does not deepen toward the border (' + px(e1, 16, 8)[0] + ' at 4 px, ' + px(e1, 18, 8)[0] + ' at 2 px)');
+    /* 4. THE BOUNDED FAST PATH (#692) is still only a skip with Grout and Edge shade on: a small subject, bounded and not */
+    const subj = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 30; y < 70; y++) for (let x = 40; x < 90; x++) { const i = (y * W + x) * 4; d[i] = 200; d[i + 1] = (x * 7) & 255; d[i + 2] = 90; d[i + 3] = (x < 42 || y < 32) ? 150 : 255; } return d; };
+    const ub = run({ gap: 25, edge: 0.6, color: '#3080ff' }, subj()), bd = run({ gap: 25, edge: 0.6, color: '#3080ff' }, subj(), { x: 40, y: 30, w: 50, h: 40 });
+    let nb = 0; for (let i = 0; i < ub.length; i++) if (ub[i] !== bd[i]) nb++;
+    if (nb) bad.push('with Grout and Edge shade the bounded tiles differ from the unbounded ones in ' + nb + ' bytes - the skip is no longer only a skip');
+    /* 5. SAVED: no Grout, no Edge shade (and no colour) is the kernel as it was at fc8866f1, transcribed here — exactly */
+    const old = (d, size) => {
+      const src = new Uint8ClampedArray(d), rowH = size * 0.75, hf = size * 0.5;
+      for (let y = 0; y < H; y++) { const r = Math.floor(y / rowH), sh = (r & 1) ? hf : 0; for (let x = 0; x < W; x++) {
+        const c = Math.floor((x - sh) / size); let best = 1e9, bx = x, by = y;
+        for (let ro = -1; ro <= 1; ro++) { const r2 = r + ro, cy = r2 * rowH + rowH * 0.5, s2 = (r2 & 1) ? hf : 0; for (let co = -1; co <= 1; co++) { const cx = (c + co) * size + s2 + hf, dx = x - cx, dy = y - cy, dd = dx * dx + dy * dy; if (dd < best) { best = dd; bx = Math.round(cx); by = Math.round(cy); } } }
+        if (bx < 0) bx = 0; else if (bx >= W) bx = W - 1; if (by < 0) by = 0; else if (by >= H) by = H - 1;
+        const si = (by * W + bx) * 4, di = (y * W + x) * 4; d[di] = src[si]; d[di + 1] = src[si + 1]; d[di + 2] = src[si + 2]; d[di + 3] = src[si + 3]; } }
+      return d; };
+    [20, 7, 33].forEach(size => {
+      const a = subj(); K(a, W, H, { size: size }, 0.3, 1);
+      const b = old(subj(), size), c = subj(); K(c, W, H, Object.assign(R.makeInstance('hextiles').params, { size: size }), 0.3, 1);
+      let na = 0, nc = 0; for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) na++; if (c[i] !== b[i]) nc++; }
+      if (na || nc) bad.push('saved tiles at size ' + size + ' draw ' + na + ' bytes (no new keys) / ' + nc + ' bytes (new at their defaults) differently from before');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
