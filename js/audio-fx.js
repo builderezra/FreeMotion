@@ -92,6 +92,10 @@ window.FM = window.FM || {};
      reasons are at the Limiter). 1 dB above where its 20:1 line puts a full-scale sound (0.95·C), and never above full
      scale: exactly 0 dBFS at the default -1 dB ceiling. */
   function limHoldLin(ceilingDb) { return dbToLin(Math.min(0, (1 - 1 / 20) * Math.min(0, ceilingDb) + 1)); }
+  /* How late a DynamicsCompressorNode's output is: floor(0.006 × rate) frames, never more than 1023 (the Compressor's note on
+     its untouched path says how it was measured). The Compressor's dry copy and, since #482 polish 8.1, the Limiter's Mix
+     wait this long, so a blend of the two lines up instead of combing. */
+  function lookaheadSecs(ctx) { return Math.min(1023, Math.floor(0.006 * ctx.sampleRate)) / ctx.sampleRate; }
   // A WaveShaper that is the identity inside ±1 and holds ±1 outside it: a hard clip, no oversampling, no delay.
   const HARD_CLIP = new Float32Array([-1, 1]);
 
@@ -1141,7 +1145,7 @@ window.FM = window.FM || {};
          rate, so a Mac on a 192 kHz interface heard it). So the untouched copy is delayed by the same frames,
          cap included, and the two line up at every rate. */
       const lag = s.delay(0.05);
-      lag.delayTime.value = Math.min(1023, Math.floor(0.006 * ctx.sampleRate)) / ctx.sampleRate;
+      lag.delayTime.value = lookaheadSecs(ctx);
       const wd = wetDry(s, inst, 'mix', 1);
       if (autoMakeup) {   // today's graph, node for node
         input.connect(c); c.connect(wd.wet); wd.wet.connect(out);
@@ -1171,6 +1175,8 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
+    // Its Mix (#482 polish 8.1) blends a dry copy held back by the node's look-ahead, as the Compressor's is (mixOutput).
+    dryLag: lookaheadSecs,
     params: [
       P('ceiling', 'Ceiling', -24, 0, 0.5, -1, 'dB', true),
       /* #482 polish 3.8. Input gain pushes the sound INTO the ceiling (louder, with the peaks held at it);
@@ -1947,6 +1953,67 @@ window.FM = window.FM || {};
         },
       });
     },
+  });
+
+  /* ═══ MIX AND OUTPUT ON EVERY EFFECT (#482 polish 8.1) ══════════════════════════════════════════════════════════════
+   * Thirteen effects could be blended with the untouched sound and two could set their own level; the rest were all or
+   * nothing at whatever level they came out. So every effect now ends in Output (−24…+12 dB, a gain after everything,
+   * the Compressor's own control) and blends through Mix (0–1, untouched sound under the effect), both keyframable.
+   * The effects that already have them keep their own — their Mix sits inside the effect, and the Compressor's ±24 dB and
+   * the Distortion's −24…+6 dB Output keep their ranges, so nothing saved is clamped. Two do not get one: Gain / Boost,
+   * whose one control IS its output (a Mix on a gain is only another gain), and Vocal Remove's Mix, which is its Amount.
+   * HOW: around the effect's own build, never inside it (mixOutput): in → [the effect → wet] + [dry] → out, out's gain the
+   * Output. The defaults are today's sound exactly: Mix 1 is wet × 1 + dry × 0 and Output 0 dB is × 1 (x·1 + y·0 = x in
+   * IEEE floats), so a saved effect — the sanitiser fills both keys with def — renders the samples it always did. Three
+   * gains and a sum for an effect that gains a Mix, one gain for an effect that only gains Output.
+   * A DRY COPY THAT ARRIVES EARLY COMBS. Blending a sound with a copy of itself a few ms late notches it every 1 / (the
+   * gap); the Limiter's node looks ahead 6 ms, so its Mix holds the dry copy back by the same frames (`dryLag`), exactly as
+   * the Compressor's own Mix does. (Clip at ceiling's 4× oversampling adds a few frames of its own to the limited copy.)
+   * Vibrato's 5 ms line is not lined up on purpose: a Vibrato blended with the dry sound IS a chorus, which is the point of
+   * turning its Mix down. */
+  const OUTPUT_P = () => P('output', 'Output', -24, 12, 0.5, 0, 'dB', true);
+  const NO_MIX = { gain: 1, vocalremove: 1 }, NO_OUTPUT = { gain: 1 };
+  function mixOutput(ctx, inst, d, u, addMix, addOut) {
+    if (!u) return u;
+    const nodes = [];
+    const g = v => { const n = ctx.createGain(); n.gain.value = v; nodes.push(n); return n; };
+    const out = g(addOut ? dbToLin(initNum(inst, 'output', 0, -24, 12)) : 1);
+    let input = u.input, mixSet = null;
+    if (addMix) {
+      const m0 = initNum(inst, 'mix', 1, 0, 1);
+      const inG = g(1), wet = g(m0), dry = g(1 - m0);
+      inG.connect(u.input); u.output.connect(wet); wet.connect(out);
+      let from = inG;
+      if (d.dryLag) { const lag = ctx.createDelay(0.05); lag.delayTime.value = d.dryLag(ctx); nodes.push(lag); inG.connect(lag); from = lag; }
+      from.connect(dry); dry.connect(out);
+      input = inG;
+      mixSet = multi([[wet.gain, null], [dry.gain, x => 1 - x]]);
+    } else u.output.connect(out);
+    const own = key => (addMix && key === 'mix') || (addOut && key === 'output');
+    const drive = function (key, v, when, ramp) {
+      if (key === 'mix') { mixSet(v, when, ramp); return; }
+      const x = dbToLin(v);
+      if (ramp) out.gain.linearRampToValueAtTime(x, when); else out.gain.setValueAtTime(x, when);
+    };
+    return {
+      input: input, output: out, window: u.window, meter: u.meter, arm: u.arm,
+      param: function (key) { return own(key) ? null : u.param(key); },
+      set: function (key, v, when, sceneT) { if (own(key)) drive(key, v, when, false); else u.set(key, v, when, sceneT); },
+      ramp: function (key, v, when, sceneT) { if (own(key)) drive(key, v, when, true); else u.ramp(key, v, when, sceneT); },
+      dispose: function () { u.dispose(); nodes.forEach(n => { try { n.disconnect(); } catch (e) {} }); },
+    };
+  }
+  DEFS.forEach(function (d) {
+    const has = k => d.params.some(p => p.key === k);
+    const addMix = !has('mix') && !NO_MIX[d.type], addOut = !has('output') && !NO_OUTPUT[d.type];
+    if (addOut) {   // just above Mix where the effect has one, as on the Compressor and the Distortion
+      const mi = d.params.findIndex(p => p.key === 'mix');
+      if (mi >= 0) d.params.splice(mi, 0, OUTPUT_P()); else d.params.push(OUTPUT_P());
+    }
+    if (addMix) d.params.push(MIX(1));
+    if (!addMix && !addOut) return;
+    const build = d.build;
+    d.build = function (ctx, inst) { return mixOutput(ctx, inst, d, build.call(d, ctx, inst), addMix, addOut); };
   });
 
   /* ---- registry ---- */

@@ -125365,4 +125365,101 @@
       if (!p.seg('Shape')) throw new Error(p.where + ': the open Chorus has no Shape buttons');
     });
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 8 — AUDIO: MIX, PRESETS, SPACE ═══════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 8
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). Built on batch 7's mechanisms (a choice, an on/off, `rebuild`,
+   * `rebuildIf`, `legacy`, `sets`) and measured the same way: through FM.buildAudioFxChain on an OfflineAudioContext, the
+   * builder both the export (schedule) and the preview (applyAt) use, with batch 3 / 7's helpers (b3Render, afx482c,
+   * b3SameAsToday, b7Panel, b7Amp). None of these were run before landing (written in a worktree with no browser): every
+   * threshold is reasoned from the maths it names, and each test says what it expects on the build before. */
+  const b8Sig = (type, p) => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx(type, p); return FM.audioFxLive.signatureOf(l); };
+  // The first sample at or after `from` whose size passes `thr`, or -1.
+  const b8First = (y, from, thr) => { for (let i = from || 0; i < y.length; i++) if (Math.abs(y[i]) > thr) return i; return -1; };
+
+  /* 8.1 — MIX AND OUTPUT EVERYWHERE. Every effect but Gain / Boost (whose one control is its output) ends in Output, and every
+     one but Gain and Vocal Remove (whose Amount is its mix) blends through Mix; both keyframable. Output is -24 to +12 dB
+     at 0 on the 24 that gain it, and the Compressor (+-24) and Distortion (-24 to +6) keep their own. A 3-Band EQ at Mix 0 is
+     wet x 0 + dry x 1, so it hands back the clip's very samples (the backlog's test; on the build before the key is ignored
+     and the EQ'd sound comes out). Output +6 dB is the same samples times 10^(6/20). CONTROL: a saved 3-Band EQ, Pan and
+     Low-Pass (no mix or output key) render sample for sample what today's graphs do (b3SameAsToday). On the build before the
+     3-Band EQ has neither key (first line). */
+  test('482 8.1 Audio effects - every effect ends in Output and blends through Mix, a 3-Band EQ at Mix 0 is the clip untouched, Output is a plain gain, and a saved effect is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const reg = FM.audioFxRegistry, bad = [];
+    const NOMIX = ['gain', 'vocalremove'], NOOUT = ['gain'], OWN = { compressor: [-24, 24], distortion: [-24, 6] };
+    reg.all().forEach(d => {
+      const out = b7Pd(d.type, 'output'), mix = b7Pd(d.type, 'mix');
+      if (NOOUT.indexOf(d.type) < 0) {
+        const r = OWN[d.type] || [-24, 12];
+        if (!out) bad.push(d.label + ' has no Output (its params are ' + b7Keys(d.type) + ')');
+        else if (out.label !== 'Output' || out.min !== r[0] || out.max !== r[1] || out.def !== 0 || !out.keyframable || out.unit !== 'dB') bad.push(d.label + ' Output is ' + JSON.stringify(out));
+      } else if (out) bad.push(d.label + ' has an Output beside its own gain');
+      if (NOMIX.indexOf(d.type) < 0) {
+        if (!mix) bad.push(d.label + ' has no Mix (its params are ' + b7Keys(d.type) + ')');
+        else if (mix.label !== 'Mix' || mix.min !== 0 || mix.max !== 1 || !mix.keyframable) bad.push(d.label + ' Mix is ' + JSON.stringify(mix));
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    const old = [{ type: 'video', audioFx: [{ type: 'eq3', enabled: true, params: { low: 6, mid: -4, high: 3, midFreq: 1500 } }, { type: 'pan', enabled: true, params: { pan: 0.4 } }, { type: 'lowpass', enabled: true, params: { freq: 2500, q: 4 } }] }];
+    FM.storage._sanitizeLayers(old);
+    old[0].audioFx.forEach(f => { if (f.params.mix !== 1 || f.params.output !== 0) bad.push('a saved ' + f.type + ' opens with Mix ' + f.params.mix + ' and Output ' + f.params.output + ', not 1 and 0'); });
+    const bq = (oac, type, f, q, gn) => { const b = oac.createBiquadFilter(); b.type = type; b.frequency.setValueAtTime(f, 0); if (q != null) b.Q.setValueAtTime(q, 0); if (gn != null) b.gain.setValueAtTime(gn, 0); return b; };
+    const TODAY = {
+      eq3: oac => { const lo = bq(oac, 'lowshelf', 250, null, 6), mid = bq(oac, 'peaking', 1500, 1, -4), hi = bq(oac, 'highshelf', 4000, null, 3); lo.connect(mid); mid.connect(hi); return { input: lo, output: hi }; },
+      pan: oac => { const p = oac.createStereoPanner(); p.pan.setValueAtTime(0.4, 0); return { input: p, output: p }; },
+      lowpass: oac => { const b = bq(oac, 'lowpass', 2500, 4); return { input: b, output: b }; },
+    };
+    for (const f of old[0].audioFx) { const same = await b3SameAsToday([f], TODAY[f.type], 'a saved ' + f.type); if (same.length) throw new Error('CONTROL: ' + same.join('; ')); }
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const n = SR482C, src = [SIG482C.noise(n, 0), SIG482C.noise(n, 1)];
+      const m0 = await afx482c(b7Fx('eq3', { low: 9, mid: -6, high: 4, mix: 0 }), 'noise', 1, { chans: 2, live: live });
+      const m1 = await afx482c(b7Fx('eq3', { low: 9, mid: -6, high: 4 }), 'noise', 1, { chans: 2, live: live });
+      let d0 = 0, d1 = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) { if (m0[c][i] !== src[c][i]) d0++; d1 = Math.max(d1, Math.abs(m1[c][i] - src[c][i])); }
+      if (!(d1 > 0.01)) throw new Error('CONTROL: a 3-Band EQ at +9 / -6 / +4 dB leaves noise within ' + d1.toExponential(2) + ' of itself (' + path + ')');
+      if (d0) bad.push('a 3-Band EQ at Mix 0 changes ' + d0 + ' samples of the clip (' + path + ') - want it untouched');
+      const p0 = await afx482c(b7Fx('pan', { pan: -0.3 }), 'noise', 1, { chans: 2, live: live }), p6 = await afx482c(b7Fx('pan', { pan: -0.3, output: 6 }), 'noise', 1, { chans: 2, live: live });
+      const g = Math.fround(Math.pow(10, 6 / 20));
+      let w = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) w = Math.max(w, Math.abs(p6[c][i] - p0[c][i] * g));
+      if (w > 1e-6) bad.push('a Pan at Output +6 dB is up to ' + w.toExponential(2) + ' away from the same Pan times 10^(6/20) (' + path + ')');
+    }
+    const lv = (y, a, b) => b3Db(b3Rms(y, a, b));
+    const kfo = await b3Render(b7Fx('lowpass', { freq: 8000, output: { kf: [{ t: 0, v: -24 }, { t: 1, v: 0 }, { t: 2, v: 0 }] } }), B3_SIGNALS.noise, 2), st0 = await b3Render(b7Fx('lowpass', { freq: 8000 }), B3_SIGNALS.noise, 2);
+    if (Math.abs(lv(kfo, 1.4, 1.9) - lv(st0, 1.4, 1.9)) > 0.05) bad.push('Output keyframed -24 -> 0 dB ends ' + (lv(kfo, 1.4, 1.9) - lv(st0, 1.4, 1.9)).toFixed(2) + ' dB from a static 0');
+    if (!(lv(st0, 0, 0.05) - lv(kfo, 0, 0.05) > 18)) bad.push('Output keyframed -24 -> 0 dB starts only ' + (lv(st0, 0, 0.05) - lv(kfo, 0, 0.05)).toFixed(2) + ' dB down');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 8.1 — A LIMITER'S MIX LINES UP. The Limiter's node looks ahead 6 ms (288 frames at 48 kHz, the Compressor's note), so a
+     dry copy blended in un-delayed would comb. Its Mix holds the dry copy back by the same frames: a quiet click (-40 dBFS,
+     far under the ceiling, so the limiter passes it at its own level - queue 986's C2 fix) comes out ONCE, at frame 288, at
+     its full 0.01, with nothing before it. Without the lag it would come out as two halves, at frame 0 and 288. On the build
+     before the Limiter has no Mix (first line). CONTROL: at Mix 1 the click comes out at frame 288. */
+  test('482 8.1 Limiter - Mix blends a dry copy held back by the look-ahead, so a click comes out once, at its own level', { item: '482', budgetMs: 60000 }, async function () {
+    if (!b7Pd('limiter', 'mix')) throw new Error('the Limiter has no Mix (its params are ' + b7Keys('limiter') + ')');
+    const click = (t, i) => (i === 0 ? 0.01 : 0), bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const a = await b3Render(b7Fx('limiter', {}), click, 0.05, { live: live }), h = await b3Render(b7Fx('limiter', { mix: 0.5 }), click, 0.05, { live: live });
+      if (Math.abs(a[288] - 0.01) > 0.0002 || b8First(a, 0, 1e-6) !== 288) throw new Error('CONTROL: at Mix 1 a -40 dBFS click leaves the Limiter first at frame ' + b8First(a, 0, 1e-6) + ' and is ' + a[288].toExponential(3) + ' at 288 (' + path + ')');
+      if (b8First(h, 0, 1e-6) !== 288) bad.push('at Mix 0.5 the click first comes out at frame ' + b8First(h, 0, 1e-6) + ', not 288 (' + path + ') - the dry copy is not held back');
+      if (Math.abs(h[288] - 0.01) > 0.0002) bad.push('at Mix 0.5 the click is ' + h[288].toExponential(3) + ' at frame 288, not 0.01 (' + path + ')');
+    }
+    if (bad.length) throw new Error('Limiter Mix: ' + bad.join('; '));
+  });
+
+  /* 8.1 — ON SCREEN: the open 3-Band EQ shows Output and Mix as sliders inside the panel at 390 and 1280 px, reading 0.0dB and
+     1.00 on a new one, each with a keyframe diamond. On the build before it shows the EQ's seven rows only. */
+  test('482 8.1 Audio panel - the open 3-Band EQ shows Output and Mix, inside the panel at 390 and 1280 px, each keyframable', { item: '482', budgetMs: 120000 }, async function () {
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('eq3')], 0, async p => {
+      for (const [label, want] of [['Output', '0.0dB'], ['Mix', '1.00']]) {
+        const r = p.slider(label);
+        if (!r) throw new Error(p.where + ': the open 3-Band EQ has no ' + label + ' row');
+        await p.fits(r, 'the ' + label + ' row');
+        const v = r.querySelector('.fx-scrub-val');
+        if (!v || v.value !== want) throw new Error(p.where + ': a new 3-Band EQ ' + label + ' reads ' + (v && v.value) + ', not ' + want);
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + label + ' has no keyframe diamond');
+      }
+    });
+  });
 })();
