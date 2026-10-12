@@ -125046,4 +125046,95 @@
       if (p.layer().audioFx[0].params.curve !== 0) throw new Error(p.where + ': one Undo leaves Type at ' + p.layer().audioFx[0].params.curve);
     });
   });
+
+  /* 7.4 — TELEPHONE: THE LINE'S EDGES, ITS GRIT AND ITS HISS. The band was fixed at 300-3400 Hz (Q-1 biquads) and the bite at
+     tanh 1.8. On a quiet tone (0.05, where the bite is nearly a straight line) the band's response is the whole story: a
+     2.5 kHz tone sits about +0.5 dB under a 3400 Hz High cut and about -8 dB under 1500 (0.74 octave past a 12 dB/oct
+     corner) — the backlog asks for 6 dB; a 300 Hz tone under a 1000 Hz Low cut is 1.7 octaves below it, about -20 dB. Grit
+     is the curve: a 0.5 sine at 1 kHz has no 3rd harmonic at Grit 0 (a straight line; the band is linear) and a strong one at
+     100 (tanh 6). Noise is a seeded hiss: silence in gives exactly silence at Noise 0, a hiss at 1 (about -25 dBFS by the
+     maths, so anything over -40), 6 dB less at 0.5, the same samples in the preview, and the same hiss at the same scene
+     moment in an export that starts later (the buffer is armed at scene time). On the build before none of these keys
+     exist (first line). CONTROL: a saved Telephone is today's graph, sample for sample. */
+  test('482 7.4 Telephone - Low cut and High cut move the band, Grit sets the bite, Noise adds a seeded hiss on scene time, each keyframable, and a saved Telephone is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const W = { lowcut: ['Low cut', 100, 1000, 300], highcut: ['High cut', 1500, 8000, 3400], grit: ['Grit', 0, 100, 30], noise: ['Noise', 0, 1, 0] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('telephone', k), w = W[k];
+      if (!pd) throw new Error('the Telephone has no ' + w[0] + ' (its params are ' + b7Keys('telephone') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !pd.keyframable) throw new Error('Telephone ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'telephone', enabled: true, params: { mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.lowcut !== 300 || op.highcut !== 3400 || op.grit !== 30 || op.noise !== 0 || op.style !== 0) throw new Error('a Telephone saved before these controls opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const hp = oac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 300; hp.Q.value = 1;
+      const lp = oac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3400; lp.Q.value = 1;
+      const n = 4096, c = new Float32Array(n); for (let i = 0; i < n; i++) c[i] = Math.tanh(1.8 * ((i / (n - 1)) * 2 - 1)) / Math.tanh(1.8);
+      const sh = oac.createWaveShaper(); sh.curve = c; sh.oversample = '2x';
+      hp.connect(lp); lp.connect(sh); return { input: hp, output: sh };
+    };
+    const same = await b3SameAsToday([{ type: 'telephone', enabled: true, params: op }], today, 'a saved Telephone');
+    if (same.length) throw new Error('CONTROL: a saved Telephone is not today’s sound - ' + same.join('; '));
+    const bad = [], lv = (y, a, b) => b3Db(b3Rms(y, a == null ? 0.5 : a, b == null ? 1 : b));
+    const tel = p => b7Fx('telephone', p);
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const t25 = b3Sine(0.05, 2500), t300 = b3Sine(0.05, 300);
+      const hiA = lv(await b3Render(tel({}), t25, 1, { live: live })), hiB = lv(await b3Render(tel({ highcut: 1500 }), t25, 1, { live: live }));
+      if (!(hiA - hiB >= 6)) bad.push('High cut 1500 takes only ' + (hiA - hiB).toFixed(1) + ' dB off a 2.5 kHz tone (' + path + ')');
+      const loA = lv(await b3Render(tel({}), t300, 1, { live: live })), loB = lv(await b3Render(tel({ lowcut: 1000 }), t300, 1, { live: live }));
+      if (!(loA - loB >= 6)) bad.push('Low cut 1000 takes only ' + (loA - loB).toFixed(1) + ' dB off a 300 Hz tone (' + path + ')');
+    }
+    const hkf = await b3Render(tel({ highcut: { kf: [{ t: 0, v: 3400 }, { t: 1, v: 1500 }, { t: 2, v: 1500 }] } }), b3Sine(0.05, 2500), 2), hst = await b3Render(tel({ highcut: 1500 }), b3Sine(0.05, 2500), 2);
+    if (Math.abs(lv(hkf, 1.4, 1.9) - lv(hst, 1.4, 1.9)) > 0.3) bad.push('High cut keyframed 3400 -> 1500 ends ' + (lv(hkf, 1.4, 1.9) - lv(hst, 1.4, 1.9)).toFixed(2) + ' dB from a static 1500');
+    const s1k = b3Sine(0.5, 1000), h3 = async p => { const y = await b3Render(tel(p), s1k, 1); return b7Amp(y, 24000, 24000, 3000) - b7Amp(y, 24000, 24000, 1000); };
+    const g0 = await h3({ grit: 0 }), g30 = await h3({}), g100 = await h3({ grit: 100 });
+    if (!(g0 < -60)) throw new Error('CONTROL: at Grit 0 a 1 kHz sine has a 3rd harmonic ' + g0.toFixed(1) + ' dB under it - a straight line makes none, the measure is broken');
+    if (!(g100 - g0 >= 30 && g100 > g30)) bad.push('Grit 100 gives a 3rd harmonic ' + g100.toFixed(1) + ' dB under the tone (Grit 30: ' + g30.toFixed(1) + ', Grit 0: ' + g0.toFixed(1) + ')');
+    const gkf = await h3({ grit: { kf: [{ t: 0, v: 100 }, { t: 1, v: 100 }] } });
+    if (Math.abs(gkf - g100) > 1) bad.push('a keyframed Grit held at 100 gives a 3rd harmonic of ' + gkf.toFixed(1) + ' dB where a static 100 gives ' + g100.toFixed(1));
+    const quiet = () => 0;
+    const n0 = await b3Render(tel({}), quiet, 1);
+    let z = 0; for (let i = 0; i < n0.length; i++) z = Math.max(z, Math.abs(n0[i]));
+    if (z !== 0) throw new Error('CONTROL: silence through a Telephone at Noise 0 comes out up to ' + z.toExponential(2));
+    const n1 = await b3Render(tel({ noise: 1 }), quiet, 1), nh = await b3Render(tel({ noise: 0.5 }), quiet, 1), n1l = await b3Render(tel({ noise: 1 }), quiet, 1, { live: true }), n1b = await b3Render(tel({ noise: 1 }), quiet, 1);
+    if (!(lv(n1) > -40)) bad.push('Noise 1 puts a hiss of only ' + lv(n1).toFixed(1) + ' dBFS on silence');
+    if (Math.abs(lv(n1) - lv(nh) - 6) > 1.5) bad.push('Noise 0.5 is ' + (lv(n1) - lv(nh)).toFixed(2) + ' dB under Noise 1, not about 6 (the bite bends it a little)');
+    let nl = 0, nb = 0; for (let i = 0; i < n1.length; i++) { nl = Math.max(nl, Math.abs(n1[i] - n1l[i])); nb = Math.max(nb, Math.abs(n1[i] - n1b[i])); }
+    if (nb !== 0) bad.push('two renders of the same Noise differ by up to ' + nb.toExponential(2) + ' - the hiss is not seeded');
+    if (nl > 1e-6) bad.push('the preview’s hiss is up to ' + nl.toExponential(2) + ' from the export’s');
+    const whole = await afx482c(tel({ noise: 1 }), quiet, 2, { chans: 1 }), part = await afx482c(tel({ noise: 1 }), quiet, 1, { chans: 1, anchor: 1 });
+    let sc = 0; for (let i = Math.round(0.05 * SR482C); i < part[0].length; i++) sc = Math.max(sc, Math.abs(part[0][i] - whole[0][i + SR482C]));
+    if (sc > 1e-4) bad.push('an export that starts at 1 s hears a hiss up to ' + sc.toExponential(2) + ' from the one the whole render has there - it is not on scene time');
+    if (bad.length) throw new Error('Telephone: ' + bad.join('; '));
+  });
+
+  /* 7.4 — STYLE. Five starting points as the visual effects' segmented buttons: a tap writes Style AND the four values under
+     it (Megaphone: 500-2800 Hz, Grit 70, Noise 0) in one undo step, and the sliders show them at once; Phone (the default)
+     lit on a new Telephone, every button inside the panel at both widths. On the build before the open Telephone has
+     only Mix. */
+  test('482 7.4 Telephone panel - Style is five buttons that fit at 390 and 1280 px, and Megaphone writes its band, Grit and Noise in one undo step', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('telephone', 'style');
+    if (!pd) throw new Error('the Telephone has no Style (its params are ' + b7Keys('telephone') + ')');
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('telephone')], 0, async p => {
+      const row = p.seg('Style');
+      if (!row) throw new Error(p.where + ': the open Telephone has no Style buttons');
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      if (btns.map(b => b.textContent).join('|') !== 'Phone|Radio|Megaphone|Walkie-talkie|Old radio') throw new Error(p.where + ': Style offers ' + btns.map(b => b.textContent).join(', '));
+      if (!btns[0].classList.contains('on')) throw new Error(p.where + ': a new Telephone does not light Phone');
+      for (const b of btns) await p.fits(b, 'the Style button ' + b.textContent);
+      FM.history.commit();
+      attached(btns[2], 'the Megaphone button').click(); await sleep(150);
+      const pr = p.layer().audioFx[0].params;
+      if (pr.style !== 2 || pr.lowcut !== 500 || pr.highcut !== 2800 || pr.grit !== 70 || pr.noise !== 0) throw new Error(p.where + ': Megaphone wrote ' + JSON.stringify(pr));
+      for (const [label, want] of [['Low cut', '500Hz'], ['High cut', '2800Hz'], ['Grit', '70']]) {
+        const r = p.slider(label), v = r && r.querySelector('.fx-scrub-val');
+        if (!v || v.value !== want) throw new Error(p.where + ': after Megaphone the ' + label + ' slider reads ' + (v && v.value) + ', not ' + want);
+      }
+      FM.history.undo(); await sleep(150);
+      const back = p.layer().audioFx[0].params;
+      if (back.style !== 0 || back.lowcut !== 300 || back.highcut !== 3400 || back.grit !== 30) throw new Error(p.where + ': one Undo after Megaphone leaves ' + JSON.stringify(back));
+    });
+  });
 })();

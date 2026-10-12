@@ -1333,6 +1333,9 @@ window.FM = window.FM || {};
       b.addEventListener('click', () => {
         const v = parseFloat(opt[0]);
         fx.params[p.key] = isNaN(v) ? opt[0] : v;   // never write NaN — it reads back as "not this option, and not any other"
+        /* A choice that SETS other controls (#482 polish 7.4: Telephone's Style writes its Low cut, High cut, Grit and Noise):
+           written in the same tap, so it is one undo step and the sliders under it show the new values at once. */
+        if (p.sets && p.sets[fx.params[p.key]]) Object.assign(fx.params, p.sets[fx.params[p.key]]);
         if (after) { after(); return; }
         FM.requestRender(); FM.inspector.refresh(); if (FM.history) FM.history.commit();
       });
@@ -2405,7 +2408,7 @@ window.FM = window.FM || {};
        own (fxSegment / fxToggle) — this bridge made every audio param a range, so there was no way to offer one. `legacy`
        rides every kind, so an absent key shows what the kernel plays (audio-fx.js valueAt). */
     if (p.options) return { type: 'segment', key: p.key, label: p.label, options: p.options, default: p.def, legacy: p.legacy, keyframable: false,
-      overriddenBy: p.overriddenBy || '', liveWhen: p.liveWhen, deadAt: p.deadAt, note: p.note || '' };
+      overriddenBy: p.overriddenBy || '', liveWhen: p.liveWhen, deadAt: p.deadAt, note: p.note || '', sets: p.sets };   // sets: #482 7.4
     if (p.toggle) return { type: 'toggle', key: p.key, label: p.label, default: p.def, legacy: p.legacy, keyframable: false, note: p.note || '' };
     // overriddenBy/deadAt ride along since the #482 3.6 review: this bridge used to drop them, so no audio row could say
     // "Not used when Bass is 0" however the effect declared it.

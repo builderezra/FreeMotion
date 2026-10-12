@@ -181,6 +181,26 @@ window.FM = window.FM || {};
     return curveFrom(x => { const q = Math.round(x / step) * step; return k < 1e-3 ? q : Math.tanh(k * q) / norm; }, 8192);
   }
   const BITE = curveFrom(x => Math.tanh(1.8 * x) / Math.tanh(1.8));   // the little bit of grit that sells a phone line
+  /* Telephone's Grit (#482 polish 7.4): the same curve with k = 0.06 × Grit, so Grit 30 IS the bite above (and returns that
+     very array: 30 × 6 / 100 is exactly 1.8, but the build must not depend on it). 0 is a straight line. */
+  function gritCurve(grit) {
+    const g = clamp(grit, 0, 100);
+    if (g === 30) return BITE;
+    const k = g * 6 / 100;
+    if (k < 1e-3) return curveFrom(x => x);
+    const n = Math.tanh(k);
+    return curveFrom(x => Math.tanh(k * x) / n);
+  }
+  /* Seeded white noise for an effect's hiss (#482 polish 7.4, Telephone's Noise), one buffer per (length, seed, rate),
+     looped and started at the scene time's place in it (shop.noise), so the preview and every export hear the same hiss. */
+  const _noiseCache = {};
+  function noiseBuffer(ctx, secs, seed) {
+    const sr = ctx.sampleRate, key = secs + '|' + seed + '|' + sr;
+    if (_noiseCache[key]) return _noiseCache[key];
+    const len = Math.max(2, Math.round(sr * secs)), buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0), r = rng(seed);
+    for (let i = 0; i < len; i++) d[i] = r() * 2 - 1;
+    return (_noiseCache[key] = buf);
+  }
 
   /* ---- reverb impulse ---- */
   // Deterministic noise: a Math.random IR would differ between the preview build and the export build,
@@ -296,6 +316,16 @@ window.FM = window.FM || {};
         n.playbackRate.value = hz * secs;
         nodes.push(n); oscs.push(n);
         lfos.push({ n: n, hz: hz, key: spec.key || null, mul: spec.mul || 1, phase: spec.phase || 0 });
+        return n;
+      },
+      // A looping seeded noise (#482 7.4). Armed like an LFO of one cycle per `secs`, so it starts at the place in the
+      // buffer that scene time implies: the hiss an export from 1:00 hears is the hiss the whole render has there.
+      noise: function (secs, seed) {
+        const n = ctx.createBufferSource();
+        n.buffer = noiseBuffer(ctx, secs, seed);
+        n.loop = true;
+        nodes.push(n); oscs.push(n);
+        lfos.push({ n: n, hz: 1 / n.buffer.duration, key: null, mul: 1, phase: 0 });
         return n;
       },
     };
@@ -643,17 +673,60 @@ window.FM = window.FM || {};
     filterDef('notch', 'Notch', 'notch', 40, 12000, 1000, 0.1, 30, 8),
   {
     type: 'telephone', label: 'Telephone', category: 'eq',
-    params: [MIX(1)],
+    /* ═══ WHICH LINE (#482 polish 7.4) ═══════════════════════════════════════════════════════════════════════════════
+     * One sound, a phone: a fixed 300–3400 Hz band and a fixed bite. Low cut and High cut are the band's two edges (the
+     * same Q-1 biquads, now with their own sliders), Grit is the bite (k = 0.06 × Grit, so 30 is today's tanh 1.8, a
+     * keyframed Grit cross-fading a bank of curves like Distortion's Drive) and Noise is a seeded hiss mixed in ahead of
+     * the band, so it is narrowed and bitten like the voice. Style is a set of starting points: a tap writes the four
+     * values below it (inspector.js fxSegment `sets`) and the sound is those four — the kernel reads nothing else from
+     * it, so moving a slider afterwards is heard at once. Every default is today's Telephone: Phone writes the numbers
+     * the build always used, Noise 0 is a gain of 0 into the band (x + 0 = x).
+     * The backlog's Walkie-talkie also wants a squelch — a burst of noise as a transmission ends — which is a gate on the
+     * voice's level, not one of these four; it is not built (the batch report says so). */
+    params: [
+      CHOICE('style', 'Style', [[0, 'Phone'], [1, 'Radio'], [2, 'Megaphone'], [3, 'Walkie-talkie'], [4, 'Old radio']], 0, { sets: {
+        0: { lowcut: 300, highcut: 3400, grit: 30, noise: 0 },
+        1: { lowcut: 150, highcut: 5000, grit: 20, noise: 0 },
+        2: { lowcut: 500, highcut: 2800, grit: 70, noise: 0 },
+        3: { lowcut: 400, highcut: 2600, grit: 55, noise: 0.1 },
+        4: { lowcut: 200, highcut: 4000, grit: 25, noise: 0.35 },
+      } }),
+      P('lowcut', 'Low cut', 100, 1000, 1, 300, 'Hz', true),
+      P('highcut', 'High cut', 1500, 8000, 10, 3400, 'Hz', true),
+      P('grit', 'Grit', 0, 100, 1, 30, '', true),
+      P('noise', 'Noise', 0, 1, 0.01, 0, '', true),
+      MIX(1),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
-      const hp = s.biquad('highpass', 300, 1);
-      const lp = s.biquad('lowpass', 3400, 1);
-      const bite = s.shaper(BITE, '2x');
+      const hp = s.biquad('highpass', initNum(inst, 'lowcut', 300, 100, 1000), 1);
+      const lp = s.biquad('lowpass', initNum(inst, 'highcut', 3400, 1500, 8000), 1);
+      let grit = initNum(inst, 'grit', 30, 0, 100);
+      const bite = s.shaper(gritCurve(grit), '2x');
+      const bg = s.gain(1);              // the static bite's own level, so a keyframed Grit's bank can take over
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
-      input.connect(hp); hp.connect(lp); lp.connect(bite); bite.connect(wd.wet); wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, custom: { mix: wd.set } });
+      input.connect(hp); hp.connect(lp); lp.connect(bite); bite.connect(bg); bg.connect(wd.wet); wd.wet.connect(out);
+      const hiss = s.noise(2, 0x7e1e), nG = s.gain(initNum(inst, 'noise', 0, 0, 1) * 0.12);   // Noise 1 ≈ −25 dBFS of hiss in the band
+      hiss.connect(nG); nG.connect(hp);
+      const bank = curveBank(s, lp, wd.wet, gritCurve, 0, 100, 12, '2x');
+      return unit({
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        params: { lowcut: hp.frequency, highcut: lp.frequency },
+        custom: {
+          grit: function (v, when, ramp) {
+            v = clamp(v, 0, 100);
+            if (!FM.isAnimated(inst.params && inst.params.grit)) {   // see the note on distortion's drive
+              if (v !== grit) { grit = v; bite.curve = gritCurve(v); }
+              return;
+            }
+            bank.at(v, when, ramp, bg.gain);
+          },
+          noise: multi([[nG.gain, 0.12]]),
+          mix: wd.set,
+        },
+      });
     },
   });
 
