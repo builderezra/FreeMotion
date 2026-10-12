@@ -817,7 +817,14 @@ window.FM = window.FM || {};
       { key: 'ghosts', label: 'Ghosts', min: 0, max: 8, step: 1, def: 0 },
       { key: 'halo', label: 'Ring', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'streak', label: 'Anamorphic streak', min: 0, max: 1, step: 0.02, def: 0 }] },
-    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }] },
+    /* #482 polish 11.7 (hunt C37: static, one tear for every layer). Boil makes the tear crawl; Pattern gives the layer its
+       own tear; Complexity adds finer tears on top of the big ones; Erode eats the layer in by that many px before tearing,
+       so the torn edge sits inside the old outline. Boil 0, Pattern 0, 1 and 0 are the old edge, byte for byte. */
+    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' },
+      { key: 'evolve', label: 'Boil', min: 0, max: 5, step: 0.05, def: 0, unit: '×' },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'complexity', label: 'Complexity', min: 1, max: 4, step: 1, def: 1 },
+      { key: 'border', label: 'Erode', min: 0, max: 20, step: 1, def: 0, unit: 'px' }] },
     { type: 'hexarray', label: 'Honeycomb', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 8, max: 80, step: 1, def: 24, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 0.02, max: 0.5, step: 0.01, def: 0.12 },
@@ -8217,7 +8224,29 @@ window.FM = window.FM || {};
           if(lfSA>0){ var lfsy2=lfDY*lfDY; if(lfsy2<lfSD2*9){ var lfsv=lfSA*(190*lfS1A*Math.exp(-lfsy2/lfSD1)+55*lfS2A*Math.exp(-lfsy2/lfSD2))*Math.exp(-(lfDX<0?-lfDX:lfDX)/lfSL); lfEr+=lfRR*lfsv/255; lfEg+=lfRG*lfsv/255; lfEb+=lfRB*lfsv/255; } }
         }
         if(lfAmt<=0&&!(lfEr>0||lfEg>0||lfEb>0)) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } if(lfX){ lfAddR+=lfEr; lfAddG+=lfEg; lfAddB+=lfEb; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
-    roughenedges: function(d,W,H,p,t,ps){ var re_ps=(ps>0)?ps:1; var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt))*re_ps; var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl))*re_ps; if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
+    roughenedges: function(d,W,H,p,t,ps){ var re_ps=(ps>0)?ps:1; var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt))*re_ps; var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl))*re_ps; var re_br=p.border==null?0:FM.evalProp(p.border,t); if(!(re_br>0))re_br=0; if(re_br>20)re_br=20; re_br=Math.round(re_br*re_ps); if(re_amt<=0&&re_br<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; }
+      /* #482 polish 11.7. PATTERN moves both noise channels to numbers of their own (0 keeps the old 11 and 29). BOIL walks the
+         noise through time slices, smoothly (slice 0 IS the still noise, so a boiling edge at 0 s is the old one; a keyframed
+         Boil is a rate). COMPLEXITY adds octaves ON TOP of the old tear, each twice as fine at 0.6 of the strength (scaled back
+         into range they would flatten the big tear, and the fine ones would round away under a whole-pixel shift). ERODE
+         takes the layer's alpha in by that many PROJECT px (a min over the square, the plate edge repeated) before the tear
+         reads it — the torn edge moves inside the old outline. Complexity 1 with no Boil is the old noise, call for call. */
+      var re_sd=p.seed==null?0:Math.round(FM.evalProp(p.seed,t)); if(!(re_sd>0))re_sd=0; if(re_sd>999)re_sd=999; var re_sx0=11+re_sd*101, re_sy0=29+re_sd*101;
+      var re_ev=p.evolve==null?0:FM.evalProp(p.evolve,t); if(!(re_ev>0))re_ev=0; if(re_ev>5)re_ev=5; var re_z=FM.isAnimated(p.evolve)?FM.integrateProp(p.evolve,0,t,function(u){ var k=FM.evalProp(p.evolve,u); return k>0?(k<5?k:5):0; }):re_ev*t; if(!isFinite(re_z))re_z=0;
+      var re_zi=Math.floor(re_z), re_zf=re_z-re_zi; re_zf=re_zf*re_zf*(3-2*re_zf);
+      var re_C=p.complexity==null?1:Math.round(FM.evalProp(p.complexity,t)); if(!(re_C>=1))re_C=1; if(re_C>4)re_C=4;
+      function re_field(fx,fy,sd){ if(re_C===1&&re_z===0)return re_noise(fx,fy,sd); var s=0.5, w=1, f=1;
+        for(var o=0;o<re_C;o++){ var so=sd+o*7, v=re_noise(fx*f,fy*f,so+re_zi*1009); if(re_z!==0)v+=(re_noise(fx*f,fy*f,so+(re_zi+1)*1009)-v)*re_zf; s+=(v-0.5)*w; w*=0.6; f*=2; }
+        return s<0?0:(s>1?1:s); }
+      var re_A=null;
+      if(re_br>0){ var re_n=Math.max(W,H)+2*re_br, re_P=new Uint8Array(re_n), re_G=new Uint8Array(re_n), re_Hm=new Uint8Array(re_n), re_k=2*re_br+1; re_A=new Uint8Array(W*H); var re_T=new Uint8Array(W*H);
+        // van Herk / Gil-Werman: the min over every window of 2r+1 in three passes of a line, the line padded with its own end values
+        var re_min=function(src,dst,n,at,step){ var m=n+2*re_br, j; for(j=0;j<m;j++){ var q=j-re_br; q=q<0?0:(q>=n?n-1:q); re_P[j]=src(at+q*step); }
+          for(j=0;j<m;j++)re_G[j]=(j%re_k===0)?re_P[j]:Math.min(re_G[j-1],re_P[j]); for(j=m-1;j>=0;j--)re_Hm[j]=(j===m-1||(j+1)%re_k===0)?re_P[j]:Math.min(re_Hm[j+1],re_P[j]);
+          for(j=0;j<n;j++)dst[at+j*step]=Math.min(re_Hm[j],re_G[j+2*re_br]); };
+        for(var re_r=0;re_r<H;re_r++)re_min(function(i){ return re_s[i*4+3]; },re_T,W,re_r*W,1);
+        for(var re_c=0;re_c<W;re_c++)re_min(function(i){ return re_T[i]; },re_A,H,re_c,W); }
+      for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_field(re_fx,re_fy,re_sx0)*2-1)*re_amt; var re_dy=(re_field(re_fx,re_fy,re_sy0)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_A?re_A[re_sy*W+re_sx]:re_s[(re_sy*W+re_sx)*4+3]; } } },
     /* ⚠️ THE CLAMP IS IN PLATE PIXELS (queue 913). pxToPlate has already multiplied `size` by the plate scale, so the
        catalogue's 8..80 has to be too — `arguments[5]`, because naming `ps` would lift the arity past pxToPlate's check
        and silently drop the scaling (#691). Clamping at a flat 8 turned the default 24 (6.72 plate px at the 28%

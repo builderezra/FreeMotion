@@ -125175,4 +125175,52 @@
     if (!b11Same(b11Li({ segments: 20 }), b11Li({}))) throw new Error('CONTROL: Segments 20 is not the old bolt');
     if (!(w60 > w20 * 1.6)) throw new Error('Segments 60 wandered ' + w60 + ' px down the frame against ' + w20 + ' at 20 - it should kink far more often');
   });
+
+  /* 11.7 ROUGHEN EDGES (hunt C37's first third: static, one tear for every layer): Boil, Pattern, Complexity, Erode. */
+  const B11RE_NEW = { evolve: 0, seed: 0, complexity: 1, border: 0 };
+  const B11RE_CFG = { def: {}, heavy: { amount: 20, scale: 4 }, wide: { amount: 12, scale: 40 }, kf: { amount: b11Kf(2, 18) }, fine: { amount: 3, scale: 2 } };
+  const B11RE_PIN = {   // fc8866f1, before the edit
+    def: 'f2b0b0b8.f2b0b0b8/ec7d349d.ec7d349d 6cdd2479.6cdd2479/b30d00e1.b30d00e1', heavy: 'ce78cc84.ce78cc84/cd680fd5.cd680fd5 5585bc65.5585bc65/8a2a5608.8a2a5608',
+    wide: '8bbab728.8bbab728/484859cc.484859cc 596c4551.596c4551/e510316d.e510316d', kf: '6f27bdf4.3a70e07d/e6dc6d39.e7e492a5 cd0e2fcc.9f223b68/49d6f421.ab89b774',
+    fine: '30a67461.30a67461/c6bb3c69.c6bb3c69 3fdf69bc.3fdf69bc/0483749d.0483749d' };
+  /* An opaque square, 40..120 x 30..90, in a transparent 160 x 120 layer (or half that on a half-size plate). */
+  function b11Box(s) { const W = Math.round(160 * s), H = Math.round(120 * s), d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = 200; d[i + 1] = 90; d[i + 2] = 60; d[i + 3] = (x >= 40 * s && x < 120 * s && y >= 30 * s && y < 90 * s) ? 255 : 0; } return d; }
+  const b11Re = (over, t, s) => b11Run('roughenedges', Object.assign(b11Base('roughenedges', {}), over), Math.round(160 * (s || 1)), Math.round(120 * (s || 1)), t == null ? 0.37 : t, s || 1, b11Box(s || 1));
+  const b11Alpha = d => { const a = new Uint8Array(d.length / 4); for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3]; return a; };
+  const b11Steps = (d, W) => { let n = 0; for (let i = 4; i < d.length; i += 4) if ((i / 4) % W && (d[i + 3] > 127) !== (d[i - 1] > 127)) n++; return n; };   // how often the edge crosses a row: how torn it is
+
+  test('482 11.7 Roughen Edges - Boil, Pattern, Complexity and Erode are in the catalogue at defaults that tear the old edge, and saved and new Roughen Edges tear byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('roughenedges', B11RE_NEW, { evolve: 2, seed: 77, complexity: 3, border: 6 });
+    if (b11Row('roughenedges', 'border').unit !== 'px') throw new Error('Erode is not declared in px - it is a distance on the picture, and the panel must say so');
+    b11Recipes('roughenedges', B11RE_NEW);
+    const moved = b11Pinned('roughenedges', B11RE_NEW, B11RE_CFG, B11RE_PIN);
+    if (moved.length) throw new Error(moved.length + ' Roughen Edges pictures differ from fc8866f1 at the new defaults - a new control changed an edge he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.7 Roughen Edges - Boil changes the edge between 0 s and 0.5 s smoothly from the still one, Pattern tears another edge, Complexity tears it finer, and Erode takes the layer in by its px on the export and the preview alike', { item: '482', budgetMs: 60000 }, function () {
+    /* BOIL (the backlog's test). CONTROL: with no Boil the edge at 0 s and 0.5 s is the same. Boil 1 changes it, by little over
+       a hundredth of a second, and at 0 s it is the still edge. */
+    const a = o => b11Alpha(o);
+    if (!b11Same(a(b11Re({}, 0)), a(b11Re({}, 0.5)))) throw new Error('CONTROL: a still edge changed between 0 s and 0.5 s');
+    if (!b11Same(a(b11Re({ evolve: 1 }, 0)), a(b11Re({}, 0)))) throw new Error('Boil 1 at 0 s is not the still edge it boils from');
+    const e0 = a(b11Re({ evolve: 1 }, 0)), e5 = a(b11Re({ evolve: 1 }, 0.5)), eTiny = a(b11Re({ evolve: 1 }, 0.01));
+    if (!(b11Diff(e0, e5) > 100)) throw new Error('Boil 1 moved only ' + b11Diff(e0, e5) + ' edge pixels between 0 s and 0.5 s');
+    if (!(b11Diff(e0, eTiny) < b11Diff(e0, e5) / 5)) throw new Error('Boil 1 moved ' + b11Diff(e0, eTiny) + ' edge pixels in a hundredth of a second against ' + b11Diff(e0, e5) + ' in half a second - it should crawl, not jump');
+    /* PATTERN. CONTROL: Pattern 0 is the old tear. */
+    if (!b11Same(b11Re({ seed: 0 }), b11Re({}))) throw new Error('CONTROL: Pattern 0 changed the tear');
+    if (!(b11Diff(a(b11Re({ seed: 5 })), a(b11Re({}))) > 100)) throw new Error('Pattern 5 tore nearly the same edge as Pattern 0');
+    /* COMPLEXITY. CONTROL: 1 is the old tear. Each step adds a finer tear on top, so the edge crosses the rows more often every
+       time (MEASURED 188, 204, 226 and 252 crossings for 1 to 4). */
+    const cx = [1, 2, 3, 4].map(c => b11Steps(b11Re({ amount: 10, scale: 20, complexity: c }), 160));
+    if (!(cx[3] > cx[0] * 1.2) || cx.some((v, j) => j && !(v > cx[j - 1]))) throw new Error('Complexity 1 to 4 crossed the rows ' + cx.join(', ') + ' times - each should tear finer than the one before');
+    /* ERODE. With no tear (Amount 0) it is the square taken in by exactly that many px — CONTROL: Amount 0 with no Erode is the
+       square untouched — and 10 px on a half-size plate is 5 plate px, the same square shrunk. */
+    const sq = (s, k) => { const W = Math.round(160 * s), H = Math.round(120 * s), o = new Uint8Array(W * H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) o[y * W + x] = (x >= 40 * s + k && x < 120 * s - k && y >= 30 * s + k && y < 90 * s - k) ? 255 : 0; return o; };
+    if (!b11Same(a(b11Re({ amount: 0 })), sq(1, 0))) throw new Error('CONTROL: Amount 0 with no Erode changed the square');
+    if (!b11Same(a(b11Re({ amount: 0, border: 6 })), sq(1, 6))) throw new Error('Erode 6 px is not the square taken in by 6 px on every side');
+    if (!b11Same(a(b11Re({ amount: 0, border: 10 }, 0.37, 0.5)), sq(0.5, 5))) throw new Error('Erode 10 px on a half-size plate is not the square taken in by 5 plate px - it must be project px');
+    /* …and with a tear, the eroded edge tears inside the old outline: it covers less. */
+    const cov = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 127) n++; return n; };
+    if (!(cov(b11Re({ border: 8 })) < cov(b11Re({})) * 0.8)) throw new Error('Erode 8 px with the old tear covers ' + cov(b11Re({ border: 8 })) + ' px against ' + cov(b11Re({})) + ' - the torn edge should sit further in');
+  });
 })();
