@@ -88,9 +88,13 @@ window.FM = window.FM || {};
     if (m === undefined) m = layer && FM.media.get(layer.id);
     // 'L|' is the level stage an iPhone needs below 100% (queue 690): a gain with no limiter, see makeLevelStage.
     let s = needsBoost(layer) ? 'B|' : (needsLevel(layer, m) ? 'L|' : '');
+    /* …and the values of the controls that change the graph itself (#482 polish 7.1: a curve, a voice count, Auto makeup —
+       a param declared `rebuild` in js/audio-fx.js). Those cannot ride applyAt, so without this the preview kept playing
+       the old graph until something else rebuilt it. '' for every effect without one, so its signature is unchanged. */
+    const R = FM.audioFxRegistry;
     for (let i = 0; i < fx.length; i++) {
       const f = fx[i]; if (!f) continue;
-      s += f.type + (f.enabled === false ? '0' : '1') + '|';
+      s += f.type + (f.enabled === false ? '0' : '1') + (R && R.rebuildKey ? R.rebuildKey(f) : '') + '|';
     }
     return s;
   }
@@ -503,6 +507,7 @@ window.FM = window.FM || {};
 
     // Exposed so the invariant above can be asserted without standing up a real audio graph.
     isChainCurrent(m, layer) { return chainIsCurrent(m, layer); },
+    signatureOf(layer) { return signature(layer, null); },   // #482 7.1: what a rebuild is decided on (null = no media rec, no level stage)
 
     syncAll() {
       const layers = (FM.scene && FM.scene.layers) || [];

@@ -1212,7 +1212,10 @@ window.FM = window.FM || {};
         if (typeof v === 'number' && isFinite(v)) params[pd.key] = Math.max(pd.min, Math.min(pd.max, v));
         else {
           const kfp = pd.keyframable !== false ? safeKfProp(v, pd.min, pd.max) : null;
-          params[pd.key] = kfp || pd.def;
+          /* A key the file does not carry (a project saved before the control existed) is filled with `legacy` where the
+             control declares one — the sound that effect made before it — and with `def` otherwise (#482 polish 7.1). The
+             kernel falls back the same way (audio-fx.js valueAt), so the two cannot disagree. */
+          params[pd.key] = kfp || (pd.legacy !== undefined ? pd.legacy : pd.def);
         }
       });
       // enabled !== false is the engine's own "on" test (layerHasAudioFx / buildAudioFxChain); an

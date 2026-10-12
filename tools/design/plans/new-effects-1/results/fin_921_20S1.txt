@@ -1,0 +1,25 @@
+1280 Regression 24/24 ✓Pending 0/0 built
+   ok  921 S1 paths: escape round trip, and __proto__ / _x / a numeric segment are refused
+   ok  921 S1 a key no path can name is dropped by canon and clone too, not just by the diff
+   ok  921 S1 canon and eq speak JSON, not JavaScript: NaN, -0, undefined, key order
+   ok  921 S1 clone() is a copy all the way down: past the depth ceiling it cannot alias the original
+   ok  921 S1 diff then apply reproduces the target exactly, and the step inverse gets back, over 200 seede
+   ok  921 S1 the diff stops at the path grammar ceiling instead of emitting an op no peer can apply
+   ok  921 S1 the LIS reorder emits the minimal number of moves, and the exact order
+   ok  921 S1 an anchor is resolved against the base the op actually lands on: a two-layer paste and an und
+   ok  921 S1 keyed arrays: two peers adding an effect at once both survive, and a removal beats a child wr
+   ok  921 S1 stampIds fills a missing uid, re-stamps a duplicate on the later copy, and never touches an i
+   ok  921 S1 the host role filter, exhaustively: role x op x path
+   ok  921 S1 a comment is validated against §17.1 before it lands: a nested reply cannot forge identity, a
+   ok  921 S1 lease refusal, CAS, the li anchor fallback and a forced delete
+   ok  921 S1 a queued li or ai over an element that is back is a CLASH, not a silent overwrite
+   ok  921 S1 the host sanitises on a CLONE: the fix goes out and every live array keeps its identity
+   ok  921 S1 the host repairs a parent cycle and a repeated id, on a clone, as ordinary ops
+   ok  921 S1 a whole-layer write is structural too, so the parent-cycle repair does not depend on how the 
+   ok  921 S1 hostile input: prototype keys, a 10 MB string, an https fillImage, 6000 ops and HTML in a nam
+   ok  921 S1 an op may not rewrite or delete the key that addresses it: no duplicate ids, no unaddressable
+   ok  921 S1 the diagnostics ring is bounded, and an ack names the batch that carries its ops or null
+   ok  921 S1 the sanitiser is a fixed point on the kitchen sink, on every registered effect and on the ope
+   ok  921 S1 the schema fingerprint gate
+   ok  921 S1 an extra uid changes no effect comparison, no picture and no sanitiser answer
+   ok  921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, 

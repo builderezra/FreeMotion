@@ -1,0 +1,13 @@
+=== M7_censor_ignores_scale
+   baseline green ✅ (1 named title(s) ran and passed)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+=== M8_glitter_ignores_scale
+→ baseline: these titles were proven green on this exact tree already (cached)
+❌ SURVIVED — the mutation broke the code and every named test ran and still passed.
+   The assertion is DEAD (or the named tests do not cover this code).
+=== M9_fast_bbox
+→ baseline: these titles were proven green on this exact tree already (cached)
+✅ CAUGHT:
+FAILE1 preview equals export — popart: on the pixels it touches, half-size differs from the downscaled full-size by a mean 24.1 levels | popart: half-size differs from the downscaled full-size by a mean 11.8 levels and 9.35% of pixels by more than 40 (preview would not match export)
+ALLDONE

@@ -110,6 +110,8 @@ window.FM = window.FM || {};
     // batch 40 (queue 911, Snow & Rain). It shipped written into batch 33's line above, and this object's ORDER is
     // the NEW row (FX_FEATURED reads it backwards), so the newest effect never appeared there (queue 913).
     weather: 'proc',
+    // batch 41 (hunt/new-effects-1, E1): six beginner favourites
+    huecycle: 'color', softskin: 'blur', oilpaint: 'stylize', glitter: 'stylize', censor: 'blur', popart: 'color',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -242,12 +244,12 @@ window.FM = window.FM || {};
         // The UI needs it so the highlighted button matches what actually draws.
         // overriddenBy/liveWhen ride a SEGMENT too since queue 904 (Tiles' Repeat is dead in Grid) — this copy is a
         // whitelist, and a field not named here is silently dropped, which is how liveWhen was lost once already.
-        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, note: pp.note || '' });   // note: queue 904 (Number Roll)
+        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, note: pp.note || '', showWhen: pp.showWhen });   // note: queue 904 (Number Roll)   // showWhen: #482 15.5 (rowShown)
         // A RANGE carries `legacy` for the same reason a segment does: an absent key renders at the
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
         // Radius as 8 on an instance the kernel is drawing at 3.
-        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '', alsoGate: pp.alsoGate });   // alsoGate: #482 6.3 review (a second control that switches this one off)   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '', alsoGate: pp.alsoGate, adjNo: pp.adjNo ? 1 : 0, showWhen: pp.showWhen });   // alsoGate: #482 6.3 review (a second control that switches this one off)   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904   // adjNo: #482 15.2 (see deadRowWhy)   // showWhen: #482 15.5 (see rowShown)
         /* `follows` on a SLIDER (#482 polish 2.1, Wiggle's Vertical amount) is the colour rule of polish 1.2: ABSENT, the value
            is the slider it names. makeInstance and the render-time fill both skip it, and the inspector shows the followed
            value until he moves this one — this copy is a whitelist, so a field not named here would simply not exist. */
@@ -279,10 +281,14 @@ window.FM = window.FM || {};
        `type === 'range'`, so the AI vocabulary is unaffected by this. */
     /* `colorGate` (#482 polish 6.2): the first colour row gated like color3's — Light and Soft Glow's Glow colour does nothing
        while Colour from is Source colour, so the row greys out and says why. Set on those two only. */
-    if (def.color) { const c1 = { key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: true }; if (def.colorGate) { c1.overriddenBy = def.colorGate.by; c1.liveWhen = def.colorGate.when; } out.push(c1); }
+    /* …or dead at one value of a SLIDER (#482 polish 10.7, Hexagon Tiles' Grout colour does nothing while Grout is 0): `deadAt`,
+       the audio rows' gate, which markOverridden already judges over every keyframe. */
+    if (def.color) { const c1 = { key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: true }; if (def.colorGate) { c1.overriddenBy = def.colorGate.by; c1.liveWhen = def.colorGate.when; if (def.colorGate.deadAt !== undefined) { c1.deadAt = def.colorGate.deadAt; c1.deadAtText = def.colorGate.deadAtText; } } out.push(c1); }
     /* `follows` (#482 polish 1.2, Light Leak's Leak edge): a colour that, ABSENT, is the colour it names. makeInstance leaves it
        out so a new instance keeps following, and the inspector's row shows the followed colour until he picks one. */
-    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '' });
+    /* `followMix` (#482 polish 11.6 review): a following colour the kernel draws pushed that far toward white — Lightning's Core
+       is its bolt colour 80 % to white — so the row can SHOW what is drawn while it has no value of its own (followedColour). */
+    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '', followMix: def.color2FollowMix || 0 });
     /* A THIRD COLOUR THAT BELONGS BETWEEN THE OTHER TWO, AND ONLY COUNTS IN ONE MODE (#482 5.6, Gradient Map's Midtones).
        `color3After` puts the row after the colour it names, so the panel reads Shadows, Midtones, Highlights rather than
        ending on the middle one; `color3Gate` is overriddenBy/liveWhen for a colour row, so Midtones greys out and says why
@@ -514,7 +520,7 @@ window.FM = window.FM || {};
     hollowbox3d: 'A box with no front, so you can see inside it.',
     axiscross3d: 'Three bars crossing at right angles — a 3D plus sign, good as a scene axis.',
     pagecurl: 'Peels a corner of the layer up like a page turning, with the back lit.',
-    fliplayer: 'Mirrors the layer horizontally, vertically, or both.',
+    fliplayer: 'Turns the layer over like a card, horizontally, vertically or both. At 180° it is a mirror; keyframe Flip from 0 to 180 to watch it turn.',   // #482 polish 14.7 (C29)
     rasterextrude: 'Extrudes the layer back into depth, so flat art becomes a solid slab with shaded sides.',
   };
 
@@ -562,7 +568,13 @@ window.FM = window.FM || {};
     wiggle:            ['random jitter', 'jitter'],
     starfield:         ['simple starfield', 'stars'],
     lightning:         ['energy beam', 'laser beam', 'bolt'],
-    weather:           ['snow', 'rain', 'weather', 'snowfall', 'rainfall', 'storm'],
+    weather:           ['snow', 'rain', 'weather', 'snowfall', 'rainfall', 'storm', 'confetti', 'embers', 'ash', 'dust', 'petals', 'blossom', 'bubbles'],   // #482 polish 11.2: its new Types find it too
+    huecycle:          ['rainbow', 'disco', 'strobe', 'colour flash', 'color cycle', 'hue cycle', 'colour change'],
+    softskin:          ['beauty', 'smooth', 'face', 'skin', 'retouch', 'blemish', 'airbrush'],
+    oilpaint:          ['painting', 'painterly', 'art', 'brush', 'watercolour', 'oil'],
+    glitter:           ['sparkle', 'shine', 'star', 'twinkle', 'glitter', 'bling'],
+    censor:            ['blur face', 'hide', 'mosaic', 'privacy', 'number plate', 'pixelate box', 'black bar', 'redact'],
+    popart:            ['warhol', 'four colour', 'grid', 'comic', 'pop art', 'poster', 'collage'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
@@ -651,6 +663,24 @@ window.FM = window.FM || {};
     allIncludingHidden: function () { return (FM.EFFECTS || []).map(d => REG[d.type]); },
     categories: function () { return FM.FX_CATEGORIES; },
     paramsOf: function (id) { return (REG[id] && REG[id].params) || []; },
+    /* WHAT A FOLLOWING ROW SHOWS while it has no value of its own (#482 polish 11.6 review). The inspector asks this and nothing
+       else, so the swatch is the colour the kernel draws: the colour it follows (that row's own value, or its default when it
+       has none — it is filled with that at render time), pushed `followMix` of the way to white where the kernel does that
+       (Lightning's Core). A row without followMix answers exactly what the inspector answered before: the followed value, or
+       this row's default (Light Leak's edge, polish 1.2). */
+    followedColour: function (id, key, params, t) {
+      const rows = this.paramsOf(id), row = rows.filter(q => q && q.key === key)[0];
+      if (!row) return undefined;
+      if (!row.follows) return row.default;
+      const lead = params ? params[row.follows] : undefined;
+      if (!row.followMix) return FM.evalProp(lead, t) || row.default;
+      const leadRow = rows.filter(q => q && q.key === row.follows)[0];
+      let hex = lead == null ? (leadRow && leadRow.default) : FM.evalProp(lead, t);
+      hex = String(hex || row.default).replace('#', '');
+      if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+      const m = row.followMix;
+      return '#' + [0, 2, 4].map(i => { const c = parseInt(hex.slice(i, i + 2), 16) || 0, v = Math.round(c + (255 - c) * m); return (v < 16 ? '0' : '') + v.toString(16); }).join('');
+    },
     // THE single creation path — returns exactly ONE instance (kills the duplicate-add bug by design).
     makeInstance: function (id) {
       const e = REG[id]; if (!e) return null;
@@ -683,6 +713,24 @@ window.FM = window.FM || {};
         return Object.assign({}, fx, { effects: kept });
       }
       return this.supportsLayer(fx.type, layer) ? fx : null;
+    },
+    /* A CONTROL THAT CANNOT ACT ON THIS LAYER SAYS SO (#482 15.2). A Filter's Grain, Vignette and Sharpen finish sliders are
+       effects an adjustment layer cannot run (ADJ_OK: they read where a pixel sits, or its neighbours), so on one their rows
+       carry the "does nothing here" pill with this sentence; the compositor skips them there (fcFinish `adj`). null = it works. */
+    deadRowWhy: function (pd, layer) {
+      if (pd && pd.adjNo && layer && layer.type === 'adjustment') return 'An adjustment layer grades colour only — ' + (pd.label || 'this') + ' needs a clip’s own pixels, so on an adjustment layer this slider does nothing. It works on a filter on a clip.';
+      return null;
+    },
+    /* A ROW ANOTHER CONTROL SELECTS (#482 15.5). Levels' Channel picks which of its four sets of sliders the panel shows — the
+       others are not dead (every set applies at once), only out of view, so the row is left out rather than greyed. An ABSENT
+       selector reads as its legacy value, else its default, exactly as the segment's own highlighted button does. */
+    rowShown: function (fx, pd) {
+      const w = pd && pd.showWhen;
+      if (!w || !w.key) return true;
+      const ctrl = (this.paramsOf(fx && fx.type) || []).filter(q => q && q.key === w.key)[0];
+      const raw = fx && fx.params ? fx.params[w.key] : undefined;
+      const cur = Number(raw == null ? (ctrl ? (ctrl.legacy != null ? ctrl.legacy : ctrl.default) : undefined) : FM.evalProp(raw, FM.time || 0));
+      return Array.isArray(w.is) ? w.is.indexOf(cur) >= 0 : cur === Number(w.is);
     },
     supportsLayer: function (id, layer) {
       const e = REG[id];

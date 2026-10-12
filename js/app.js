@@ -1717,6 +1717,16 @@ window.FM = window.FM || {};
     render();
   };
 
+  /* MATCH GRADE MEASURES OTHER MOMENTS (#482 15.6). Hold at time and Smoothing read a clip at moments other than the one on
+     screen, and a video's element only holds the one on screen — so the compositor asks for the clip's decoded frames, the
+     same preview cache Reverse builds (ensureReverseCache: downscaled, byte-capped, its own "Preparing frames…" toast), and
+     measures the frame on screen until they arrive. Asked once per clip per session; the export decodes its own copy first
+     (exporter prepareCaches). */
+  FM.wantFrameCache = function (layerId) {
+    const L = FM.layerById ? FM.layerById(FM.scene, layerId) : null;
+    if (L && L.type === 'video' && FM.ensureReverseCache) FM.ensureReverseCache(L).catch(function () {});
+  };
+
   // Quantize to the project frame grid — EVERYTHING user-placed (playhead, keyframes, markers,
   // splits) lives on an exact frame, like AM. Playback itself stays smooth (tick bypasses setTime).
   FM.snapFrame = function (t) { const f = FM.scene.project.fps || 30; return Math.round(t * f) / f; };
