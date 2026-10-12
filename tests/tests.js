@@ -127764,4 +127764,40 @@
       }, 1280);
     }); });
   });
+
+  /* #1132 clause 3, his words: "where it says simple and full to switch when you haven't expanded yet should just have icons so it
+     feels less cluttered" — the D16 A pair he already chose (kit.js 'quick': a row of clips; 'full': staggered layer bars), drawn at
+     20 px, the knob sliding one 40 px half. Asked in BOTH editors (cog T12 asks Full only): the knob sits behind the icon of the
+     editor he is in, and that icon is the editor's own. */
+  test('1132 the small switch’s two icons are drawn at 20 px and its knob sits behind the icon of the editor he is in — Full, then Simple — at 380 and 1280', { item: '1132', budgetMs: 90000 }, async function () {
+    const check = async function (label) {
+      await smCog(async function (c) {
+        FM.closeCanvasDialog(); await c.sleep(60);
+        await c.open({ block: 'none' });
+        if (c.big() !== 'none') throw new Error(label + ': setup: the cog did not open all closed');
+        for (const m of ['full', 'simple']) {
+          if (FM.editor.mode() !== m) { FM.editor.set(m, { quiet: true }); await c.sleep(80); await c.land(); }
+          if (FM.editor.mode() !== m) throw new Error(label + ': setup: could not put the ' + m + ' editor on');
+          const sw = document.querySelector('#cv-ed-bar .ed-sw:not(.big)');
+          if (!sw || !sw.getClientRects().length) throw new Error(label + ': no small switch on screen in ' + m);
+          if (sw.dataset.mode !== m) throw new Error(label + ': in ' + m + ' the switch says ' + sw.dataset.mode);
+          const lit = sw.querySelector(m === 'simple' ? '.ed-l-s' : '.ed-l-f'), dim = sw.querySelector(m === 'simple' ? '.ed-l-f' : '.ed-l-s');
+          const svgs = [lit && lit.querySelector('svg'), dim && dim.querySelector('svg')];
+          if (!svgs[0] || !svgs[1]) throw new Error(label + ': a half of the small switch has no icon — it still shows “' + sw.textContent.trim() + '”');
+          svgs.forEach(function (s) {
+            const r = s.getBoundingClientRect();
+            if (Math.abs(r.width - 20) > 0.5 || Math.abs(r.height - 20) > 0.5) throw new Error(label + ': an icon in the switch is ' + r.width.toFixed(1) + '×' + r.height.toFixed(1) + ', not 20 px');
+          });
+          const ys = Array.prototype.map.call(svgs[0].querySelectorAll('rect'), function (r) { return r.getAttribute('y'); });
+          const ownIcon = m === 'simple' ? (ys.length === 3 && new Set(ys).size === 1) : (ys.length === 3 && new Set(ys).size === 3);
+          if (!ownIcon) throw new Error(label + ': in ' + m + ' the lit half does not show ' + (m === 'simple' ? 'Simple’s row of clips' : 'Full’s staggered layers') + ' (rects at y ' + ys.join(',') + ')');
+          const k = sw.querySelector('.ed-k').getBoundingClientRect(), lr = lit.getBoundingClientRect(), dr = dim.getBoundingClientRect();
+          const cx = k.left + k.width / 2;
+          if (!(k.width > 0) || !(cx > lr.left && cx < lr.right) || (cx > dr.left && cx < dr.right)) throw new Error(label + ': in ' + m + ' the knob (' + R978(k) + ') is not behind its own icon (' + R978(lr) + '; the other ' + R978(dr) + ')');
+        }
+      });
+    };
+    await atPhoneWidth(function () { return check('380'); }, 380);
+    await atWideWidth(function () { return check('1280'); }, 1280);
+  });
 })();
