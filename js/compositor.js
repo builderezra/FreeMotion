@@ -384,6 +384,10 @@ window.FM = window.FM || {};
       { key: 'bloom', label: 'Highlight bloom', min: 0, max: 300, step: 5, def: 0, unit: '%' },
       { key: 'samples', label: 'Quality', min: 8, max: 32, step: 1, def: 16, unit: ' taps' },
       { key: 'blades', label: 'Aperture', def: 0, options: [[0, 'Circle'], [1, 'Hexagon'], [2, 'Pentagon'], [3, 'Square']] },
+      /* #482 polish 14.2: each default is the old disc byte for byte (60 was the welded threshold); no library filter carries a Lens Blur. */
+      { key: 'rotation', label: 'Rotation', min: 0, max: 360, step: 1, def: 0, unit: '°', overriddenBy: 'blades', liveWhen: [1, 2, 3] },
+      { key: 'threshold', label: 'Bloom threshold', min: 0, max: 100, step: 1, def: 60, unit: '%', overriddenBy: 'bloom', liveAbove: 0 },
+      { key: 'ratio', label: 'Anamorphic', min: 50, max: 200, step: 5, def: 100, unit: '%', note: 'Below 100 the bokeh is tall, above 100 wide' },
     ] },
     { type: 'dots', label: 'Dots', color: true, defColor: '#ffffff', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Spacing', min: 4, max: 80, step: 1, def: 16, unit: 'px' },
@@ -6775,24 +6779,40 @@ window.FM = window.FM || {};
       var lb_sides=lb_bl===1?6:(lb_bl===2?5:(lb_bl===3?4:0));
       var lb_bloomP=p.bloom==null?0:FM.evalProp(p.bloom,t); if(lb_bloomP<0)lb_bloomP=0; if(lb_bloomP>300)lb_bloomP=300;
       var lb_bloom=lb_bloomP/100, lb_glow=lb_bloomP>0;
+      /* #482 polish 14.2. BLOOM THRESHOLD was the welded 0.6 — the brightness a pixel had to pass before Highlight bloom
+         weighted it — so a dim night street could never bloom and a bright sky bloomed everywhere. ROTATION turns the
+         polygon aperture (a hexagon's points up or its flats up). ANAMORPHIC squeezes the disc across (below 100) or down
+         (above 100): 50 is the tall oval bokeh of an anamorphic lens, twice as tall as it is wide. Each default is the old
+         disc byte for byte: threshold 60 takes the old literal line, rotation 0 the old sector maths, 100 no squeeze. The
+         squeeze only ever shrinks one axis, so no tap reaches past Radius and the bounds below still hold. */
+      var lb_thP=fparam(p, 'threshold', 60, t); lb_thP=lb_thP<0?0:(lb_thP>100?100:lb_thP); var lb_th=lb_thP/100;
+      var lb_rot=fparam(p, 'rotation', 0, t); lb_rot=isFinite(lb_rot)?lb_rot:0; var lb_rotR=lb_rot%360===0?0:lb_rot*Math.PI/180;
+      var lb_ratio=fparam(p, 'ratio', 100, t); lb_ratio=lb_ratio<50?50:(lb_ratio>200?200:lb_ratio);
       var lb_s=fxSrc(d),lb_w4=W*4,lb_ox=new Float64Array(lb_n),lb_oy=new Float64Array(lb_n),lb_k;
       // A pixel's bloom weight depends only on that pixel, so computing it inside the tap loop worked
       // it out once per tap that LANDS on it — N times over, for every pixel in the frame. Lifted to a
       // single pass it is one array read per tap instead of a luma dot product and two multiplies.
       var lb_wt=null;
       if(lb_glow){ lb_wt=new Float32Array(W*H);
+        if(lb_thP===60){
         for(var lb_q=0,lb_pi=0;lb_pi<lb_wt.length;lb_q+=4,lb_pi++){
           var lb_ll=(lb_s[lb_q]*0.299+lb_s[lb_q+1]*0.587+lb_s[lb_q+2]*0.114)/255;
           var lb_hh=lb_ll>0.6?(lb_ll-0.6)*2.5:0;
-          lb_wt[lb_pi]=1+lb_bloom*lb_hh*lb_hh; } }
+          lb_wt[lb_pi]=1+lb_bloom*lb_hh*lb_hh; }
+        } else {   // the same ramp from the threshold he set to white; at 100 nothing passes, so every weight is 1
+          for(var lb_q2=0,lb_pi2=0;lb_pi2<lb_wt.length;lb_q2+=4,lb_pi2++){
+            var lb_ll2=(lb_s[lb_q2]*0.299+lb_s[lb_q2+1]*0.587+lb_s[lb_q2+2]*0.114)/255;
+            var lb_hh2=(lb_th<1&&lb_ll2>lb_th)?(lb_ll2-lb_th)/(1-lb_th):0;
+            lb_wt[lb_pi2]=1+lb_bloom*lb_hh2*lb_hh2; } } }
       // The aperture is baked into the tap offsets, so a polygon costs nothing per pixel. The distance
       // from the centre to an n-gon's edge at angle a is apothem/cos(a within its own sector) — the
       // circumradius at a vertex, the apothem facing an edge. The disc is squeezed inward, never
       // stretched, so a hexagon can never sample further out than the circle it replaces.
       var lb_sec=lb_sides?(Math.PI*2/lb_sides):0, lb_ap=lb_sides?Math.cos(Math.PI/lb_sides):1;
       for(lb_k=0;lb_k<lb_n;lb_k++){ var lb_a=lb_k*2.399963,lb_rd=lb_r*Math.sqrt((lb_k+0.5)/lb_n);
-        if(lb_sides){ var lb_lo=lb_a-Math.floor(lb_a/lb_sec)*lb_sec-lb_sec/2; lb_rd*=lb_ap/Math.cos(lb_lo); }
-        lb_ox[lb_k]=Math.cos(lb_a)*lb_rd;lb_oy[lb_k]=Math.sin(lb_a)*lb_rd; }
+        if(lb_sides){ var lb_aa=lb_rotR?lb_a-lb_rotR:lb_a; var lb_lo=lb_aa-Math.floor(lb_aa/lb_sec)*lb_sec-lb_sec/2; lb_rd*=lb_ap/Math.cos(lb_lo); }
+        lb_ox[lb_k]=Math.cos(lb_a)*lb_rd;lb_oy[lb_k]=Math.sin(lb_a)*lb_rd;
+        if(lb_ratio<100) lb_ox[lb_k]*=lb_ratio/100; else if(lb_ratio>100) lb_oy[lb_k]*=100/lb_ratio; }
       /* SKIP WHAT CANNOT RECEIVE ANY LIGHT (#692). This is a GATHER — each output pixel averages a disc
          of radius lb_r around itself — and it carries no state between pixels, so unlike the running-sum
          blurs BOTH axes can be bounded. Outside the layer's box grown by lb_r, every tap in the disc is

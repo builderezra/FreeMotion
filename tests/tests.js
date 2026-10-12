@@ -124822,4 +124822,56 @@
     const g = ts({ pop: 100 }, greyIn);
     for (let i = 0; i < g.length; i += 4) { if (g[i] !== g[i + 1] || g[i] !== g[i + 2]) throw new Error('Miniature pop tinted a grey (' + g[i] + ',' + g[i + 1] + ',' + g[i + 2] + ')'); if (g[i + 3] !== 200) throw new Error('Miniature pop changed alpha'); }
   });
+
+  /* 14.2 LENS BLUR: Rotation (of the polygon aperture), Bloom threshold, Anamorphic. */
+  const B14LB_NEW = { rotation: 0, threshold: 60, ratio: 100 };
+  const B14LB_CFG = { def: {}, hex: { blades: 1, radius: 14 }, bloom: { bloom: 150, samples: 24 }, pent: { blades: 2, bloom: 80, radius: 7 }, frac: { radius: 7.5, blades: 3 }, kf: { radius: b14Kf(4, 20), bloom: b14Kf(0, 200) } };
+  const B14LB_PIN = {   // fc8866f1, before the edit
+    def: 'ff7417ab.ff7417ab/d94405c0.d94405c0 3c070c18.3c070c18/ad0c577c.ad0c577c', hex: '53e931c2.53e931c2/fde853b4.fde853b4 6032d16c.6032d16c/b8f6149e.b8f6149e',
+    bloom: '6352c895.6352c895/225e81c2.225e81c2 f9550b8b.f9550b8b/2cff181f.2cff181f', pent: '8f9e6b00.8f9e6b00/4628a16b.4628a16b cb7b5370.cb7b5370/16349247.16349247',
+    frac: '8374feed.8374feed/544e8cfd.544e8cfd 5ae75c58.5ae75c58/10723166.10723166', kf: '1b146071.68c7b51e/0309b37f.8e703f0c c58faf21.073c5af9/714e674c.387b8de6' };
+
+  test('482 14.2 Lens Blur - Rotation, Bloom threshold and Anamorphic are in the catalogue at defaults that draw the old disc, and saved and new Lens Blurs draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b14Catalogue('lensblur', B14LB_NEW, { rotation: 30, threshold: 35, ratio: 50 });
+    const rot = b14Row('lensblur', 'rotation'), thr = b14Row('lensblur', 'threshold'), rat = b14Row('lensblur', 'ratio');
+    if (rot.overriddenBy !== 'blades' || JSON.stringify(rot.liveWhen) !== '[1,2,3]' || rot.unit !== '°') throw new Error('Rotation does not say it only turns a polygon aperture (overriddenBy ' + rot.overriddenBy + ', liveWhen ' + JSON.stringify(rot.liveWhen) + ', unit ' + rot.unit + ')');
+    if (thr.overriddenBy !== 'bloom' || Number(thr.liveAbove) !== 0 || thr.unit !== '%') throw new Error('Bloom threshold does not say it only counts with Highlight bloom on (overriddenBy ' + thr.overriddenBy + ', liveAbove ' + thr.liveAbove + ')');
+    if (rat.min !== 50 || rat.max !== 200 || rat.unit !== '%') throw new Error('Anamorphic is not 50-200 percent (' + rat.min + '..' + rat.max + rat.unit + ')');
+    const moved = b14Pinned('lensblur', B14LB_NEW, B14LB_CFG, B14LB_PIN);
+    if (moved.length) throw new Error(moved.length + ' Lens Blurs differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.2 Lens Blur - Anamorphic 50 makes a dot’s bokeh twice as tall as it is wide and 200 twice as wide, Rotation turns a polygon (a sixth of a turn brings a hexagon back) and leaves a circle alone, and Bloom threshold decides what blooms', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64, lb = (o, d0) => b14Run('lensblur', Object.assign(b14Base('lensblur', {}), { radius: 20, samples: 32, bloom: 0, blades: 0 }, o), W, H, 0.5, 1, d0);
+    /* ANAMORPHIC: a 3x3 white dot on black. The bokeh's size is the lit area less the dot itself. MEASURED on the circle:
+       35 x 35 (ratio 1.00); at 50, 18 x 35 (1.94); at 200, 35 x 17 (0.49). */
+    const dot = () => { const d = b14Flat(W, H, [0, 0, 0]); for (let y = 31; y < 34; y++) for (let x = 31; x < 34; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; } return d; };
+    const ext = d => { let x0 = W, x1 = -1, y0 = H, y1 = -1; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4] > 0) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } return { w: x1 - x0 + 1 - 3, h: y1 - y0 + 1 - 3 }; };
+    const round = ext(lb({}, dot())), tall = ext(lb({ ratio: 50 }, dot())), wide = ext(lb({ ratio: 200 }, dot()));
+    if (Math.abs(round.h / round.w - 1) > 0.1) throw new Error('CONTROL: a round aperture drew a ' + round.w + ' x ' + round.h + ' bokeh - not round, so this fixture cannot judge a squeeze');
+    if (Math.abs(tall.h / tall.w - 2) > 0.2) throw new Error('Anamorphic 50 drew a ' + tall.w + ' x ' + tall.h + ' bokeh (' + (tall.h / tall.w).toFixed(2) + ' times as tall as wide) - it should be twice as tall as it is wide');
+    if (Math.abs(wide.w / wide.h - 2) > 0.2) throw new Error('Anamorphic 200 drew a ' + wide.w + ' x ' + wide.h + ' bokeh - it should be twice as wide as it is tall');
+    if (tall.h !== round.h || wide.w !== round.w) throw new Error('Anamorphic stretched the bokeh past Radius (' + tall.h + ' / ' + wide.w + ' against ' + round.h + ') - it may only squeeze, or the layer bounds stop holding');
+    /* ROTATION, on the textured plate: 30 degrees turns a hexagon into a different picture, one sector (60 hexagon, 72 pentagon,
+       90 square) is the same aperture again, byte for byte, and a circle has nothing to turn. MEASURED: 3909 / 0 of 4096. */
+    const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++; return n; };
+    const pl = o => lb(Object.assign({ radius: 12 }, o));
+    [[1, 60], [2, 72], [3, 90]].forEach(([bl, sector]) => {
+      const r0 = pl({ blades: bl });
+      if (diff(r0, pl({ blades: bl, rotation: 30 })) < W * H / 2) throw new Error('Rotation 30 changed under half the picture on aperture ' + bl + ' - it does not turn the polygon');
+      if (diff(r0, pl({ blades: bl, rotation: sector })) !== 0) throw new Error('Rotation ' + sector + ' on aperture ' + bl + ' is not the unturned polygon - one sector of a regular polygon is the same shape');
+    });
+    if (diff(pl({ blades: 0 }), pl({ blades: 0, rotation: 30 })) !== 0) throw new Error('Rotation changed a round aperture - its row says it only turns a polygon');
+    /* BLOOM THRESHOLD. A light-grey patch (148, luma 0.58 — just under the old threshold) on a dark ground, bloom 300.
+       CONTROL: at the old 60 the patch is below the threshold, so it blooms exactly as with no bloom at all. At 10 it is
+       well above it and spills brighter light round itself (MEASURED: the ring round it 35.5 against 29.3); at 100 nothing
+       anywhere blooms, which is bloom off byte for byte. */
+    const patch = () => { const d = b14Flat(W, H, [20, 20, 20]); for (let y = 26; y < 38; y++) for (let x = 26; x < 38; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 148; } return d; };
+    const ring = d => { let s = 0, n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const e = Math.max(Math.abs(x - 31.5), Math.abs(y - 31.5)); if (e > 9 && e < 15) { s += d[(y * W + x) * 4]; n++; } } return s / n; };
+    const off = lb({ radius: 10 }, patch()), at60 = lb({ radius: 10, bloom: 300 }, patch()), at10 = lb({ radius: 10, bloom: 300, threshold: 10 }, patch());
+    if (diff(off, at60) !== 0) throw new Error('CONTROL: a patch below the old threshold bloomed at 60 - this fixture cannot tell a threshold from none');
+    if (!(ring(at10) > ring(at60) + 4)) throw new Error('Bloom threshold 10 lit the ring round a light-grey patch to ' + ring(at10).toFixed(1) + ' against ' + ring(at60).toFixed(1) + ' at 60 - lowering the threshold should let it bloom');
+    const pt = b14Plate(W, H), all = lb({ radius: 10, bloom: 300, threshold: 100 }, pt.slice()), none = lb({ radius: 10 }, pt.slice());
+    if (!b14Same(all, none)) throw new Error('Bloom threshold 100 with bloom 300 is not bloom off - nothing is brighter than white, so nothing should bloom');
+  });
 })();
