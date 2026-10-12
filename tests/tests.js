@@ -125751,4 +125751,50 @@
       if (t !== 'Not used when Keep Bass is 0') throw new Error(p.where + ': with Keep Bass at 0 Keep bass below says “' + t + '”');
     });
   });
+
+  /* 8.6 — AUTO-PAN 8D: CENTRE, REALISM. On a steady mono 0.5 the equal-power panner gives atan2(R, L) = (pan + 1) pi / 4, so
+     the pan is read back sample by sample (the 7.2 test's measure). A saved Auto-Pan sweeps depth x sin(2 pi rate t) as today
+     (CONTROL); Centre 0.5 with Depth 0.4 sweeps 0.5 + 0.4 sin, within 0.01, in the export and the preview. Realism: on noise
+     at 0.5 Hz (one turn in 2 s, scene-pinned: the front half of the turn is t in 0-0.5 and 1.5-2 s, the back half 0.5-1.5),
+     while behind the sound goes through two lowpasses dipping from 20 kHz to 4 kHz, held at 4 kHz over the middle two
+     thirds of the back half. Simulated with the spec's biquad formulas (per-sample detune, the same noise and frames), the
+     energy above 5 kHz of the two halves differs by 10.9 dB (Realism 0.5: 5.4; the backlog: at least 6 at 1, today
+     equal); the small room under it is about 25 dB down (a normalised 1.2 s room at 0.15) and moves neither half by much.
+     At Realism 0 the panner keeps L^2 + R^2
+     equal to the input's, so the halves differ by noise only (CONTROL: under 1 dB). Realism is a rebuild across 0 / in use
+     (rebuildIf): 0 and 0.3 sign differently, 0.3 and 0.8 the same. On the build before neither key exists (first line). */
+  test('482 8.6 Auto-Pan - Centre moves the middle of the swing, Realism darkens the sound behind the head, and a saved Auto-Pan sweeps as today', { item: '482', budgetMs: 120000 }, async function () {
+    const ce = b7Pd('autopan', 'centre'), re = b7Pd('autopan', 'realism');
+    if (!ce || !re) throw new Error('the Auto-Pan has no Centre or no Realism (its params are ' + b7Keys('autopan') + ')');
+    if (ce.label !== 'Centre' || ce.min !== -1 || ce.max !== 1 || ce.def !== 0 || !ce.keyframable) throw new Error('Centre is ' + JSON.stringify(ce));
+    if (re.label !== 'Realism' || re.min !== 0 || re.max !== 1 || re.def !== 0 || !re.keyframable || !re.rebuild) throw new Error('Realism is ' + JSON.stringify(re));
+    const old = [{ type: 'video', audioFx: [{ type: 'autopan', enabled: true, params: { rate: 2, depth: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.centre !== 0 || op.realism !== 0) throw new Error('an Auto-Pan saved before these controls opens with ' + JSON.stringify(op));
+    const panOf = async (fx, live) => { const [L, R] = await afx482c(fx, () => 0.5, 1, { chans: 1, live: live }); return Float32Array.from(L, (l, i) => 4 * Math.atan2(R[i], l) / Math.PI - 1); };
+    const off = (pan, want) => { let w = 0; for (let i = 0; i < pan.length; i++) w = Math.max(w, Math.abs(pan[i] - want(i / SR482C))); return w; };
+    const bad = [];
+    const sv = off(await panOf([{ type: 'autopan', enabled: true, params: op }]), t => Math.sin(2 * Math.PI * 2 * t));
+    if (sv > 0.01) throw new Error('CONTROL: a saved Auto-Pan sweeps up to ' + sv.toFixed(3) + ' away from sin(2 pi 2 t)');
+    for (const live of [false, true]) {
+      const c = off(await panOf(b7Fx('autopan', { rate: 2, depth: 0.4, centre: 0.5 }), live), t => 0.5 + 0.4 * Math.sin(2 * Math.PI * 2 * t));
+      if (c > 0.01) bad.push('Centre 0.5 at Depth 0.4 sweeps up to ' + c.toFixed(3) + ' away from 0.5 + 0.4 sin (' + (live ? 'preview' : 'export') + ')');
+    }
+    const halves = async realism => {
+      const [L, R] = await afx482c(b7Fx('autopan', { rate: 0.5, depth: 1, realism: realism }), 'noise', 2, { chans: 1 });
+      let front = 0, back = 0;
+      for (let f = 0; f + 2048 <= L.length; f += 2048) {
+        const q = (0.5 * (f + 1024) / SR482C) % 1, e = Math.pow(10, band482c(L, f, 2048, 5000, 24000) / 10) + Math.pow(10, band482c(R, f, 2048, 5000, 24000) / 10);
+        if (q >= 0.25 && q < 0.75) back += e; else front += e;
+      }
+      return 10 * Math.log10(front / back);
+    };
+    const d0 = await halves(0), d1 = await halves(1);
+    if (Math.abs(d0) > 1) throw new Error('CONTROL: at Realism 0 the energy above 5 kHz differs by ' + d0.toFixed(2) + ' dB between the front and back halves of a turn');
+    if (!(d1 >= 6)) bad.push('at Realism 1 the energy above 5 kHz is only ' + d1.toFixed(2) + ' dB higher in the front half of a turn than the back');
+    if (b8Sig('autopan', { realism: 0 }) === b8Sig('autopan', { realism: 0.3 })) bad.push('Realism 0 and 0.3 sign the same - the preview would not build the behind-the-head path');
+    if (b8Sig('autopan', { realism: 0.3 }) !== b8Sig('autopan', { realism: 0.8 })) bad.push('Realism 0.3 and 0.8 sign differently - every drag of Realism would rebuild the chain');
+    if (bad.length) throw new Error('Auto-Pan: ' + bad.join('; '));
+  });
 })();

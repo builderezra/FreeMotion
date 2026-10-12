@@ -275,6 +275,15 @@ window.FM = window.FM || {};
       return f < 0.2 ? prev + (RND8[j] - prev) * (0.5 - 0.5 * Math.cos(Math.PI * f / 0.2)) : RND8[j];
     },
   };
+  /* HOW FAR BEHIND (#482 polish 8.6, Auto-Pan's Realism). `back:<shape>` turns a pan swing into how far behind the listener
+     the sound is: started a quarter of a cycle on, it reads the swing's other axis — for a sine pan sin(2πp) that is
+     −cos(2πp), 0 straight ahead, 1 straight behind — and doubles and clips it to 0…1, so the sound is fully "behind" from a
+     third of the way round to two thirds and untouched across the front half. */
+  function waveFn(name) {
+    if (name.indexOf('back:') !== 0) return LFO_WAVE[name];
+    const f = LFO_WAVE[name.slice(5)] || LFO_WAVE.sine;
+    return p => Math.min(1, Math.max(0, -2 * f(p)));
+  }
   const _lfoCache = {};   // "wave|secs|rate" -> AudioBuffer, shared by every LFO of a kind in a context
   function lfoBuffer(ctx, wave, secs) {
     const sr = ctx.sampleRate;
@@ -282,7 +291,7 @@ window.FM = window.FM || {};
     if (_lfoCache[key]) return _lfoCache[key];
     const len = Math.max(2, Math.round(sr * secs));
     const buf = ctx.createBuffer(1, len, sr);
-    const d = buf.getChannelData(0), fn = LFO_WAVE[wave];
+    const d = buf.getChannelData(0), fn = waveFn(wave);
     for (let i = 0; i < len; i++) d[i] = fn(i / len);   // i/len, not i/(len−1): sample `len` must BE sample 0
     const keys = Object.keys(_lfoCache);
     if (keys.length > 12) delete _lfoCache[keys[0]];
@@ -490,8 +499,12 @@ window.FM = window.FM || {};
   /* Chorus Feedback (#482 7.8), unrolled the same way: 8 passes, so at its 0.6 maximum what is left out is 0.6^8 (1.7 %,
      −35 dB). */
   const CHORUS_TAPS = 8;
-  // Whether a Chorus builds its stereo Spread path: Spread in use at all — above 0, or keyframed (#482 7.8, rebuildIf).
-  function chorusSpreadOn(raw) { return (FM.isAnimated(raw) || (typeof raw === 'number' && raw > 0)) ? 1 : 0; }
+  /* Auto-Pan's Realism (#482 8.6): fully behind, the two lowpasses sit log2(20000 / 4000) octaves under 20 kHz (2786 cents),
+     and the room is mixed in at Realism × 0.15. */
+  const AUTOPAN_BEHIND_CENTS = 1200 * Math.log2(20000 / 4000), AUTOPAN_ROOM = 0.15;
+  /* Whether a control is in use at all — above 0, or keyframed (#482 7.8, rebuildIf): a Chorus builds its stereo Spread path
+     only then, and an Auto-Pan its Realism (8.6). */
+  function inUse(raw) { return (FM.isAnimated(raw) || (typeof raw === 'number' && raw > 0)) ? 1 : 0; }
   function powOf(k) { return function (v) { return Math.pow(v, k); }; }
 
   // A param's value at scene time t, guarded at every step: a missing/NaN/animated-object read falls back
@@ -1145,14 +1158,38 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'autopan', label: 'Auto-Pan (8D)', category: 'space',
-    params: [P('rate', 'Rate', 0.05, 8, 0.01, 0.4, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 1, '', true), SHAPE()],
+    params: [P('rate', 'Rate', 0.05, 8, 0.01, 0.4, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 1, '', true), SHAPE(),
+      /* #482 polish 8.6. Centre moves the middle of the swing (−1 left … +1 right), so the sound can circle off to one side;
+         the swing is clipped at the speaker it reaches. Realism is what makes "8D" sound like it goes round the head rather
+         than from ear to ear: while the sound is behind, its top is taken off (two lowpasses dipping from 20 kHz to 4 kHz,
+         the head's shadow), driven by a second scene-pinned LFO a quarter-cycle on from the pan (waveFn `back:`), and a
+         little room is mixed in under it (Realism × 0.15 of a short reverb, the backlog's number). Both defaults are
+         today's Auto-Pan: Centre 0 is the pan's own value, and Realism builds nothing until it is in use (rebuildIf, the
+         Chorus Spread rule) — 20 kHz is not a lowpass that leaves a sound exactly alone. */
+      P('centre', 'Centre', -1, 1, 0.01, 0, '', true),
+      Object.assign(P('realism', 'Realism', 0, 1, 0.01, 0, '', true), { rebuild: true, rebuildIf: inUse }),
+    ],
     build: function (ctx, inst) {
-      const s = shop(ctx);
-      const p = s.panner(0);   // base stays centred; the LFO swings ±depth around it
-      const lfo = s.lfo(0.4, { key: 'rate', wave: waveOf(inst, 'autopan') });
+      const s = shop(ctx), wave = waveOf(inst, 'autopan');
+      const p = s.panner(0);   // base stays centred (Centre moves it); the LFO swings ±depth around it
+      const lfo = s.lfo(0.4, { key: 'rate', wave: wave });
       const amp = s.gain(1);
       lfo.connect(amp); amp.connect(p.pan);
-      return unit({ input: p, output: p, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate, depth: amp.gain } });
+      if (!inUse(inst.params && inst.params.realism)) {
+        return unit({ input: p, output: p, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate, depth: amp.gain, centre: p.pan } });
+      }
+      // REALISM (8.6): in → two lowpasses (detuned down while behind) → the panner → out, plus in → a small room → out.
+      const input = s.gain(1), out = s.gain(1), r0 = initNum(inst, 'realism', 0, 0, 1);
+      const lp1 = s.biquad('lowpass', 20000, BUTTERWORTH_DB), lp2 = s.biquad('lowpass', 20000, BUTTERWORTH_DB);
+      const back = s.lfo(0.4, { key: 'rate', wave: 'back:' + wave, phase: 0.25 });
+      const bd = s.gain(-AUTOPAN_BEHIND_CENTS * r0);
+      back.connect(bd); bd.connect(lp1.detune); bd.connect(lp2.detune);
+      input.connect(lp1); lp1.connect(lp2); lp2.connect(p); p.connect(out);
+      const room = s.convolver(); room.buffer = impulse(ctx, 0.35, 1.2);
+      const send = s.gain(AUTOPAN_ROOM * r0);
+      input.connect(room); room.connect(send); send.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { depth: amp.gain, centre: p.pan },
+        custom: { rate: multi([[lfo.playbackRate, null], [back.playbackRate, null]]), realism: multi([[bd.gain, -AUTOPAN_BEHIND_CENTS], [send.gain, AUTOPAN_ROOM]]) } });
     },
   });
 
@@ -1522,7 +1559,7 @@ window.FM = window.FM || {};
          no stereo path at all — Spread is a rebuild across the line between 0 and in use (rebuildIf), because the spread
          path is stereo, and a mono Chorus turning stereo would change how an effect after it (a Pan) treats the sound. */
       Object.assign(P('voices', 'Voices', 1, 6, 1, 3, '', false), { rebuild: true }),
-      Object.assign(P('spread', 'Spread', 0, 1, 0.01, 0, '', true), { rebuild: true, rebuildIf: chorusSpreadOn }),
+      Object.assign(P('spread', 'Spread', 0, 1, 0.01, 0, '', true), { rebuild: true, rebuildIf: inUse }),
       P('feedback', 'Feedback', 0, 0.6, 0.01, 0, '', true),
       MIX(0.5),
     ],
@@ -1531,7 +1568,7 @@ window.FM = window.FM || {};
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.5);
       input.connect(wd.dry).connect(out);
-      const N = Math.round(staticOf(inst, 'chorus', 'voices')), spreadOn = chorusSpreadOn(inst.params && inst.params.spread);
+      const N = Math.round(staticOf(inst, 'chorus', 'voices')), spreadOn = inUse(inst.params && inst.params.spread);
       const sum = s.gain(1 / N);
       // The first three are today's voices, in today's order; three more for Voices 4–6.
       const rates = [1, 1.31, 0.77, 1.13, 0.89, 1.21], bases = [0.015, 0.021, 0.027, 0.018, 0.024, 0.030];
