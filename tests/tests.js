@@ -124765,13 +124765,15 @@
   /* The GPU half of a warp item, shared by 10.2 and 10.3: each case on a 420×420 picture (over gl-warp's size floor) on the CPU
      and on the GPU, at time t. The measure and the 0.5 % are the ported-warp test's. CONTROLS: stats prove which path ran, and
      each case must draw differently on the GPU from the same warp without the case's new keys (`plainOf`), or a shader that
-     ignored them would pass by agreeing with a CPU that ignored them too. Returns the failures. */
-  function w10gpuCases(cases, t, plainOf) {
+     ignored them would pass by agreeing with a CPU that ignored them too. Returns the failures.
+     `ties(type, params, W, H, t)`, when given, marks the pixels whose read is an EXACT TIE — see W10_KAL_TIES — and those are
+     left out of the comparison (and counted); the 0.5 % is then of the pixels compared, which must be most of the frame. */
+  function w10gpuCases(cases, t, plainOf, ties) {
     const R = FM.fxRegistry, W = 420, H = 420, made = [], keep = { noGL: FM._noGL, noCh: FM._noGLChain }, bad = [];
     const fx = (type, p) => { const e = R.makeInstance(type); Object.assign(e.params, p || {}); return e; };
     const pic = w10pic('_48210gpu2', W, H, (x, y) => [Math.round(x * 255 / (W - 1)), ((x >> 5) + (y >> 5)) & 1 ? 230 : 30, Math.round(y * 255 / (H - 1)), 255], made);
     const shot = (effects, gl) => { FM._noGL = !gl; FM._noGLChain = true; FM.glWarp._reset(); const r = _986shot([pic(effects)], t, W, H); r.stats = FM.glWarp.stats(); return r; };
-    const big = (a, b) => { let n = 0; for (let i = 0; i < a.d.length; i += 4) { const e = Math.max(Math.abs(a.d[i] - b.d[i]), Math.abs(a.d[i + 1] - b.d[i + 1]), Math.abs(a.d[i + 2] - b.d[i + 2]), Math.abs(a.d[i + 3] - b.d[i + 3])); if (e > 24) n++; } return 100 * n / (a.d.length / 4); };
+    const big = (a, b, skip) => { let n = 0, m = 0; for (let i = 0, j = 0; i < a.d.length; i += 4, j++) { if (skip && skip[j]) continue; m++; const e = Math.max(Math.abs(a.d[i] - b.d[i]), Math.abs(a.d[i + 1] - b.d[i + 1]), Math.abs(a.d[i + 2] - b.d[i + 2]), Math.abs(a.d[i + 3] - b.d[i + 3])); if (e > 24) n++; } return { pct: 100 * n / m, compared: m }; };
     try {
       for (const [type, p] of cases) {
         const label = type + ' ' + JSON.stringify(p);
@@ -124781,8 +124783,10 @@
         if (!(gpu.stats.gpu > 0)) throw new Error('the GPU path did not run for ' + label + ' (' + gpu.stats.reason + ') - a shader that fails to compile falls back to the CPU and would pass this comparison');
         const gpu0 = shot([fx(type, plainOf(p))], true);
         if (w10same(gpu, gpu0)) bad.push('CONTROL: on the GPU ' + label + ' draws exactly what it draws without its new keys - the shader ignores them');
-        const pct = big(cpu, gpu);
-        if (pct > 0.5) bad.push(label + ': the GPU differs from the CPU on ' + pct.toFixed(3) + ' % of pixels');
+        const skip = ties ? ties(type, fx(type, p).params, W, H, t) : null;
+        const r = big(cpu, gpu, skip);
+        if (skip && !(r.compared >= 0.6 * W * H)) bad.push(label + ': only ' + r.compared + ' of ' + (W * H) + ' pixels are not exact ties - the comparison would say nothing');
+        if (r.pct > 0.5) bad.push(label + ': the GPU differs from the CPU on ' + r.pct.toFixed(3) + ' % of ' + (skip ? 'the ' + r.compared + ' pixels that are not exact ties' : 'pixels'));
       }
     } finally {
       FM._noGL = keep.noGL; FM._noGLChain = keep.noCh; FM.glWarp._reset();
@@ -124956,11 +124960,40 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ⚠️ EXACT TIES, AND WHY THEY ARE LEFT OUT (measured, not assumed). The first browser run failed this test at 1.345 % of pixels
+     for Source X 40 / Y -30 and 0.967 % for Mirror wedges Off. The two paths do NOT disagree about the kaleidoscope: under node,
+     the shader transcribed in float32 maps every pixel to the same source pixel as the kernel for all four cases (0 moved), and
+     with a simulated GPU trig error of up to ±1e-6 rad, 0.0000 % of the NON-tie pixels change by more than 24 levels (0.02 % at
+     1e-5 rad). What differs is the ties. Six wedges fold some of the frame through lattice symmetries — the wedge that maps an
+     offset (dx, dy) to (-dy, -dx), a reflection, is one — so with the centre and the source origin on whole pixels (210; 294 and
+     147 here) a pixel's read is a WHOLE source pixel in exact arithmetic: 29.0 % of the frame by default and for Source X / Y,
+     35.8 % with Mirror wedges Off, 6.1 % at Source zoom 180, 0.4 % with Flow 120. The CPU's float64 lands 1e-13 either side of
+     that whole number and the GPU's float32 and its sin/cos/atan about 1e-4 either side, so `floor` picks one neighbour or the
+     other — a 1-pixel slip, which on this 32-pixel checker is a 200-level jump wherever the tie sits on a square's edge: at most
+     3.8 % of pixels (Source X / Y), 4.6 % (Mirror Off), 0.86 % (zoom 180) if every tie flipped. The browser's 1.345 % and 0.967 %
+     sit inside those bounds, and zoom 180 passed with less than 0.5 % for the same reason (it has a fifth of the ties).
+     Mirror wedges Off adds the other exact tie: a pixel whose angle IS a wedge seam (the centre row, at 0° and 180°), where
+     π mod 60° is 4e-16 on the CPU and can round to a whole wedge on the GPU, so it reads the far side of the seam.
+     So a pixel is left out only when the CPU kernel itself puts its read within 1e-6 px of a whole pixel, or (Mirror Off) its
+     angle within 1e-6 rad of a seam. Everything else is held to the same 0.5 % — a real disagreement moves pixels that are
+     nowhere near a tie — and at least 60 % of the frame must still be compared. */
+  function W10_KAL_TIES(type, params, W, H, t) {
+    const K = FM._warpFx[type], cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+    const pre = K.prep(W, H, cx, cy, maxR, params, t, 1, t);   // the plate is the frame (ps 1) and the clip starts at 0, so tl = t
+    const skip = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const s = K(x, y, W, H, cx, cy, maxR, params, t, 1, pre);
+      let tie = Math.abs(s[0] - Math.round(s[0])) < 1e-6 || Math.abs(s[1] - Math.round(s[1])) < 1e-6;
+      if (!tie && !pre.mir) { const a0 = Math.atan2(y - pre.cy, x - pre.cx) + pre.ph, q = ((a0 % pre.slice) + pre.slice) % pre.slice; tie = Math.min(q, pre.slice - q) < 1e-6; }
+      if (tie) skip[y * W + x] = 1;
+    }
+    return skip;
+  }
   test('482 10.3 Kaleidoscope - the GPU draws Source zoom, Source X and Y, Flow and Mirror wedges as the CPU does', { item: '482', budgetMs: 90000 }, async function () {
     if (!FM.glWarp || !FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU half is UNTESTED: ' + (FM.glWarp && FM.glWarp.stats().reason));
     const bad = w10gpuCases([
       ['kaleidoscope', { zoom: 180 }], ['kaleidoscope', { srcx: 40, srcy: -30 }], ['kaleidoscope', { flow: 120 }], ['kaleidoscope', { mirror: 0 }]
-    ], 1.3, p => { const q = Object.assign({}, p); ['zoom', 'srcx', 'srcy', 'flow', 'mirror'].forEach(k => delete q[k]); return q; });
+    ], 1.3, p => { const q = Object.assign({}, p); ['zoom', 'srcx', 'srcy', 'flow', 'mirror'].forEach(k => delete q[k]); return q; }, W10_KAL_TIES);
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
