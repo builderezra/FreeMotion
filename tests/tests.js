@@ -127030,4 +127030,209 @@
     for (let k = 0; k < old.length; k++) if (old[k] !== at8[k]) throw new Error('a save with no Amount does not draw what 0.8 draws — old projects moved');
     if (at5.every(function (v, k) { return v === at8[k]; })) throw new Error('CONTROL: 0.5 and 0.8 draw the same, so nothing above was measured');
   });
+
+  /* #482 BATCH 4 — THE FILTERS TAB, LAYOUT A (decided 11 Oct under his rule: "two rows, everything showing"). Strength before
+     Add (4.1), ◐ hold to compare (4.2), search and Your filters (4.3), Add to all clips (4.5). Every test drives the real tab
+     on a blue rectangle over red, which Teal & Orange and Noir both visibly change. */
+  async function filtersTab482(fn, opts) {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, selIds0 = FM.scene.selectedIds;
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter;   // tile thumbnails leak into later tests (see queue 554's)
+    if (realMount) FM.fxThumbs.mountFilter = function () {};
+    try {
+      if (homeWasOpen) FM.home.close();
+      const P = FM.scene.project;
+      FM.scene.layers.length = 0;
+      const bg = Object.assign(FM.makeLayer('shape', { name: 'bg482', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: '#e8443f' }), { start: 0, duration: 4, effects: [] });
+      const L = Object.assign(FM.makeLayer('shape', { name: 'look482', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width * 0.7, shapeH: P.height * 0.7, fill: '#3060c0' }), { start: 0, duration: 4, effects: [] });
+      const extra = (opts && opts.layers) ? opts.layers(P) : [];
+      FM.scene.layers.push.apply(FM.scene.layers, [L].concat(extra, [bg]));
+      FM.selectLayer(L.id); FM.refreshAll(); if (FM.history) FM.history.commit();
+      await sleep(300);
+      FM.inspector.openCategory('effects'); await sleep(250);
+      FM.inspector.openFxTab('filters'); await sleep(450);
+      await fn({ L: L, bg: bg, extra: extra, panel: document.getElementById('inspector-panel'), sleep: sleep });
+    } finally {
+      FM._fxCompare = null;
+      if (realMount) FM.fxThumbs.mountFilter = realMount;
+      if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedIds = selIds0;
+      try { FM.selectLayer(sel0); } catch (e) {}
+      FM.refreshAll();
+      await new Promise(r => setTimeout(r, 150));
+      if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
+    }
+  }
+  const render482 = () => { const P = FM.scene.project, c = offscreen(160, Math.round(160 * P.height / P.width)), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, FM.scene, 0.5); return g.getImageData(0, 0, c.width, c.height).data; };
+  const diff482 = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 3 || Math.abs(a[i + 1] - b[i + 1]) > 3 || Math.abs(a[i + 2] - b[i + 2]) > 3) n++; return n; };
+
+  test('482 4.1 the Filters bar has a Strength: the pick previews at it, Add lands the filter at it, and nothing in the bar is cut off', { item: '482', budgetMs: 60000 }, async function () {
+    await filtersTab482(async function (o) {
+      const tile = o.panel.querySelector('.flt-tile[data-fltid="tealorange"]');
+      if (!tile) throw new Error('setup: no Teal & Orange tile on the Filters tab');
+      const base = render482();
+      tile.click(); await o.sleep(300);
+      const full = render482();
+      if (diff482(base, full) < 500) throw new Error('CONTROL: picking Teal & Orange changed only ' + diff482(base, full) + ' px — the fixture is not grading, so nothing below would be measured');
+      const box = o.panel.querySelector('.flt-commit .flt-str-val');
+      if (!box) throw new Error('the Filters bar has no Strength — a pick can only land at full strength and be turned down after (#482 4.1)');
+      if (!/^100\s*%$/.test(box.value)) throw new Error('the Strength starts at "' + box.value + '", not 100%');
+      /* nothing in the two lines runs past its edge at this width (the fallback shortens the words until it fits) */
+      // (not the strip itself: its ruler is meant to run past its window, behind overflow:hidden)
+      const cut = [].slice.call(o.panel.querySelectorAll('.flt-commit .flt-line, .flt-commit .flt-line > :not(.fx-scrub)')).filter(e => e.offsetParent && e.scrollWidth > e.clientWidth + 1);
+      if (cut.length) throw new Error('the Filters bar is cut off at ' + innerWidth + ' px: ' + cut.map(e => e.className + ' "' + (e.textContent || e.value || '').trim() + '"').join(', '));
+      const barR = o.panel.querySelector('.flt-commit').getBoundingClientRect();
+      const out = [].slice.call(o.panel.querySelectorAll('.flt-commit .flt-line > *')).filter(e => e.offsetParent && e.getBoundingClientRect().right > barR.right + 1);
+      if (out.length) throw new Error('part of the bar hangs past its right edge: ' + out.map(e => e.className).join(', '));
+      box.value = '40'; box.dispatchEvent(new Event('change')); await o.sleep(250);
+      const pv = (FM._fxPreview && FM._fxPreview.list) || [];
+      if (pv.length !== 1 || !(Math.abs(((pv[0].params || {}).strength) - 0.4) < 1e-9)) throw new Error('at 40% the previewed filter carries strength ' + (pv[0] && pv[0].params && pv[0].params.strength) + ', not 0.4');
+      const at40 = render482();
+      const dB = diff482(base, at40), dF = diff482(full, at40);
+      if (!(dB > 200 && dF > 200)) throw new Error('at 40% the canvas is not between the original and the full look (' + dB + ' px from the original, ' + dF + ' from 100%)');
+      o.panel.querySelector('.flt-commit .fxb-commit-go').click(); await o.sleep(400);
+      const got = (o.L.effects || [])[0];
+      if (!got || !FM.isFxContainer(got)) throw new Error('Add put no filter on the layer');
+      if (!(Math.abs(FM.evalProp(got.params.strength, 0) - 0.4) < 1e-9)) throw new Error('the filter landed at strength ' + JSON.stringify(got.params.strength) + ' — it was previewed at 40%, and Add must land it there');
+    });
+  });
+
+  test('482 4.2 holding the ◐ shows the layer with no filters — its own and the picked — lets go cleanly, writes nothing, and an export never sees it', { item: '482', budgetMs: 60000 }, async function () {
+    await filtersTab482(async function (o) {
+      const plain = render482();
+      const noir = FM.fxRegistry.fitToLayer(FM.filters.makeInstance('noir'), o.L);
+      if (!noir) throw new Error('setup: Noir does not suit a shape layer');
+      o.L.effects.push(noir); FM.inspector.refresh(); await o.sleep(350);
+      const own = render482();
+      if (diff482(plain, own) < 500) throw new Error('CONTROL: Noir on the layer changed only ' + diff482(plain, own) + ' px');
+      const tile = o.panel.querySelector('.flt-tile[data-fltid="tealorange"]');
+      if (!tile) throw new Error('setup: no Teal & Orange tile');
+      tile.click(); await o.sleep(300);
+      const picked = render482();
+      if (diff482(own, picked) < 300) throw new Error('CONTROL: the Teal & Orange pick changed only ' + diff482(own, picked) + ' px over Noir');
+      const cmp = o.panel.querySelector('.flt-commit .flt-cmp');
+      if (!cmp) throw new Error('the Filters bar has no ◐ to hold (#482 4.2)');
+      const json0 = JSON.stringify(o.L.effects);
+      cmp.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 7, pointerType: 'touch' }));
+      await o.sleep(200);
+      try {
+        const held = render482();
+        if (diff482(plain, held) > 20) throw new Error('while the ◐ is held the frame is not the original — ' + diff482(plain, held) + ' px differ from the layer with no filters (' + diff482(own, held) + ' from Noir alone)');
+        if (!document.querySelector('.flt-cmp-tag')) throw new Error('nothing on the canvas says it is showing the original while the ◐ is held');
+        FM._exporting = true;
+        let exp; try { exp = render482(); } finally { FM._exporting = false; }
+        if (diff482(own, exp) > 20 || diff482(plain, exp) < 500) throw new Error('an export rendered while the ◐ was held is not the project as saved (' + diff482(own, exp) + ' px from Noir alone, ' + diff482(plain, exp) + ' from no filters)');
+      } finally {
+        cmp.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 7, pointerType: 'touch' }));
+        await o.sleep(200);
+      }
+      const after = render482();
+      if (diff482(picked, after) > 20) throw new Error('letting go of the ◐ did not bring the look back (' + diff482(picked, after) + ' px from before the hold)');
+      if (FM._fxCompare) throw new Error('letting go left the compare switched on: ' + JSON.stringify(FM._fxCompare));
+      if (document.querySelector('.flt-cmp-tag')) throw new Error('the "Original" tag stayed on the canvas after letting go');
+      if (JSON.stringify(o.L.effects) !== json0) throw new Error('holding the ◐ wrote to the layer');
+      /* …and the same ◐ on the open filter row, once it is added */
+      o.panel.querySelector('.flt-commit .fxb-commit-go').click(); await o.sleep(450);
+      const rowCmp = document.querySelector('#inspector-panel .fx-list .fx-row.fx-open .flt-cmp');
+      if (!rowCmp) throw new Error('the open filter row has no ◐ beside its Strength (#482 4.2)');
+      rowCmp.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 8, pointerType: 'mouse' }));
+      await o.sleep(200);
+      const held2 = render482();
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 8, pointerType: 'mouse' }));   // let go ANYWHERE ends it
+      await o.sleep(200);
+      if (diff482(plain, held2) > 20) throw new Error('holding the ◐ on the open filter row did not show the original (' + diff482(plain, held2) + ' px differ)');
+      if (FM._fxCompare) throw new Error('a pointer let go away from the row ◐ left the compare on');
+    });
+  });
+
+  test('482 4.3 Search filters finds a look by its name or an effect inside it, stands in for the rows while there is text, and gives them back when cleared', { item: '482', budgetMs: 60000 }, async function () {
+    await filtersTab482(async function (o) {
+      const q = o.panel.querySelector('.flt-top .flt-q');
+      if (!q) throw new Error('the Filters tab has no Search filters field beside Empty filter (#482 4.3)');
+      const type = async (v) => { q.value = v; q.dispatchEvent(new Event('input', { bubbles: true })); await o.sleep(200); };
+      const libRows = () => [].slice.call(o.panel.querySelectorAll('.flt-rail')).filter(r => r.offsetParent && !r.closest('.flt-results')).length;
+      const hits = () => [].slice.call(o.panel.querySelectorAll('.flt-results .flt-tile[data-fltid]')).filter(t => t.offsetParent).map(t => t.dataset.fltid);
+      const n0 = libRows();
+      if (n0 < 3) throw new Error('CONTROL: only ' + n0 + ' filter rows showing before any search');
+      await type('teal');
+      if (hits().indexOf('tealorange') < 0) throw new Error('"teal" did not find Teal & Orange — results [' + hits().join(', ') + ']');
+      if (libRows() !== 0) throw new Error(libRows() + ' library rows still show under the results — the results should stand in for them');
+      const f = FM.filters.get('tealorange');
+      const lab = (f.effects || []).map(c => (FM.fxRegistry.get(c.type) || {}).label).filter(l => l && !/teal|orange/i.test(l) && !/teal|orange/i.test(f.desc || ''))[0];
+      if (lab) {
+        await type(lab.toLowerCase());
+        if (hits().indexOf('tealorange') < 0) throw new Error('searching "' + lab + '", an effect inside Teal & Orange, did not find it');
+      }
+      await type('zzqx nothing');
+      if (!o.panel.querySelector('.flt-results .flt-none')) throw new Error('a search that matches nothing says nothing');
+      await type('teal');
+      o.panel.querySelector('.flt-results .flt-tile[data-fltid="tealorange"]').click(); await o.sleep(250);
+      if (!FM._fxPreview || (FM._fxPreview.list || []).length !== 1) throw new Error('picking a look from the results did not preview it');
+      o.panel.querySelector('.flt-top .flt-q-x').click(); await o.sleep(200);
+      if (libRows() !== n0) throw new Error('clearing the search brought back ' + libRows() + ' rows, not ' + n0);
+      if (hits().length) throw new Error('the results are still showing after the search was cleared');
+      if (!o.panel.querySelector('.flt-tile.is-picked[data-fltid="tealorange"]')) throw new Error('the pick made from the results is not marked in the rows');
+    });
+  });
+
+  test('482 4.3 a filter he saved is listed under Your filters, picks like any look, and is deleted from its tile', { item: '482', budgetMs: 60000 }, async function () {
+    let id = null; const realConfirm = window.confirm;
+    try {
+      await filtersTab482(async function (o) {
+        const box = FM.filters.makeInstance('vhs');
+        box.params = box.params || {}; box.params.strength = 0.85;
+        const p = FM.effectPresets.capture(box, 'Retro tape 482');
+        if (!p || !FM.effectPresets.save(p)) throw new Error('setup: could not save a filter preset');
+        id = p.id;
+        FM.inspector.refresh(); await o.sleep(400);
+        const lab = [].slice.call(o.panel.querySelectorAll('.insp-sub-label')).filter(n => n.offsetParent && /^Your filters$/.test((n.textContent || '').trim()))[0];
+        if (!lab) throw new Error('a saved filter is not listed — there is no "Your filters" row (#482 4.3, queue 986 C9)');
+        const tile = o.panel.querySelector('.flt-tile[data-fltid="' + id + '"]');
+        if (!tile) throw new Error('"Your filters" has no tile for the saved filter');
+        if (!/Retro tape 482/.test(tile.textContent || '')) throw new Error('the tile does not carry the name he saved it under: "' + (tile.textContent || '').trim() + '"');
+        tile.click(); await o.sleep(250);
+        const pv = (FM._fxPreview && FM._fxPreview.list) || [];
+        if (pv.length !== 1 || pv[0].name !== 'Retro tape 482') throw new Error('picking his filter previewed [' + pv.map(b => b.name).join(', ') + ']');
+        o.panel.querySelector('.flt-commit .fxb-commit-clear').click(); await o.sleep(200);
+        window.confirm = () => true;
+        const r = tile.getBoundingClientRect();
+        tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 10, clientY: r.top + 10 }));
+        await o.sleep(250);
+        const menuEl = document.getElementById('ctx-menu');
+        const menu = (menuEl && !menuEl.classList.contains('hidden') && menuEl.getBoundingClientRect().width > 10) ? menuEl : null;
+        const del = menu ? [].slice.call(menu.querySelectorAll('.ctx-item')).filter(i => /Delete/.test(i.textContent || ''))[0] : null;
+        if (!del) throw new Error('holding his filter offered no Delete');
+        del.click(); await o.sleep(350);
+        if ((FM.filters.custom() || []).some(f => f.id === id)) throw new Error('Delete left the saved filter in place');
+        if (o.panel.querySelector('.flt-tile[data-fltid="' + id + '"]')) throw new Error('the deleted filter still has a tile');
+        id = null;
+      });
+    } finally {
+      window.confirm = realConfirm;
+      if (id && FM.effectPresets) FM.effectPresets.remove(id);
+      if (FM.contextMenu && FM.contextMenu.hide) { try { FM.contextMenu.hide(); } catch (e) {} }
+    }
+  });
+
+  test('482 4.5 Add to all clips puts the picked filter on every photo and video clip in one step, and one undo takes them all off', { item: '482', budgetMs: 60000 }, async function () {
+    await filtersTab482(async function (o) {
+      const tile = o.panel.querySelector('.flt-tile[data-fltid="tealorange"]');
+      if (!tile) throw new Error('setup: no Teal & Orange tile');
+      tile.click(); await o.sleep(300);
+      const all = o.panel.querySelector('.flt-commit .flt-all');
+      if (!all || !all.offsetParent) throw new Error('with two photo clips there is no "Add to all clips" (#482 4.5)');
+      if (!/\b2\b/.test(all.textContent || '')) throw new Error('the button says "' + all.textContent + '" — there are 2 photo clips');
+      all.click(); await o.sleep(450);
+      const ids = o.extra.map(l => l.id);
+      const on = () => ids.map(id => ((FM.layerById(FM.scene, id) || {}).effects || []).filter(e => FM.isFxContainer(e)).map(e => e.name).join('+'));
+      if (on().some(s => s !== 'Teal & Orange')) throw new Error('after Add to all the clips carry [' + on().join(' | ') + '], not Teal & Orange each');
+      if ((FM.layerById(FM.scene, o.L.id).effects || []).length) throw new Error('the shape he was on got the filter too — it is not a photo or video clip');
+      FM.history.undo(); await o.sleep(350);
+      if (on().some(s => s !== '')) throw new Error('one undo left [' + on().join(' | ') + '] — Add to all must be one step');
+    }, { layers: function (P) {
+      return [1, 2].map(k => Object.assign(FM.makeLayer('image', { name: 'clip482 ' + k, x: P.width / 2, y: P.height / 2 }), { start: 0, duration: 4, effects: [] }));
+    } });
+  });
 })();
