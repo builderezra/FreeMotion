@@ -3643,11 +3643,25 @@ window.FM = window.FM || {};
          tail (both 914) — so on the phone, where these ARE the keys, all five were still broken. Disabled state
          is evaluated at BUILD but the panel does not rebuild on scrub, so the buttons stay live and the body
          re-checks the CURRENT playhead (clipCutTargets). */
-      row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { cls: 'qr-trim' }, () => { FM.timeline.clipOp('trimStart'); }));
+      row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { cls: 'qr-trim' }, () => { trimToPlayhead('trimStart'); }));
       row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { cls: 'qr-trim' }, () => { FM.timeline.clipOp('split'); }));
-      row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { cls: 'qr-trim' }, () => { FM.timeline.clipOp('trimEnd'); }));
+      row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { cls: 'qr-trim' }, () => { trimToPlayhead('trimEnd'); }));
     }
     return row;
+  }
+  /* SU1 #6, THE GAP HALF (queue 980; the first-user audit at 380×800, hunt/simple-firstuser D8 A): in Simple, More opens THIS
+     panel, and its Trim end to playhead left a black gap where Simple "never makes gaps" — 2.5 s and 1.5 s in his two tries.
+     The button ran Full's D body (js/timeline.js clipTrimEnd), which shortens the clip where it stands and moves nothing after
+     it. In Simple, for ONE selected clip of the clip row, the two trims are Simple's own A / D instead (FM.spine.cmd.trimHead /
+     trimTail, js/spine-edit.js — the commands the keys and the grips already use): the row closes up behind the cut, it is one
+     undo step, and a locked or too-short clip refuses with Simple's own line. An overlay, a title or a sound has no row to
+     close, so it keeps the plain trim, as its A / D keys do (js/editor-mode.js onKey). Full is exactly today's: isSimple() is
+     false whenever Simple is not on screen (DESIGN §0.4). */
+  function trimToPlayhead(name) {
+    const S = FM.spine, ids = FM.selectionIds ? FM.selectionIds() : [];
+    if (FM.editor && FM.editor.isSimple && FM.editor.isSimple() && S && S.cmd && S.read && ids.length === 1 && S.read(FM.scene).isMain(ids[0]))
+      return name === 'trimEnd' ? S.cmd.trimTail(ids[0]) : S.cmd.trimHead(ids[0]);
+    return FM.timeline.clipOp(name);
   }
 
   // Multi-select bar (AM): Group leads; then trim/split/delete acting on EVERY selected clip; then

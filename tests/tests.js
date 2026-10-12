@@ -127227,4 +127227,49 @@
       });
     }, 380);
   });
+
+  /* SU1 #6, the gap half (hunt/simple-firstuser D8 A, the PM's call 12 Oct): in Simple, More opens Full's panel, and its quick row's
+     Trim end to playhead shortened the clip where it stood and left the next one waiting after a black gap (2.5 s and 1.5 s in his
+     two tries) — though Simple never makes gaps. Driven as he did it: B selected with the playhead inside it, More, the button.
+     Red on the old inspector.js: the button ran Full's D body, so B ends at 4.5 while C still starts at 6 — the gap assertion fails
+     and the CONTROL that B was trimmed to the playhead passes, so it fails on the gap and nothing else. The Full half is the
+     control that the same button with Simple off still trims B alone and leaves C where it was (today's Full, DESIGN §0.4). */
+  test('SU1 #6 · at 380 the panel’s Trim end to playhead on a clip in Simple closes the row up behind the cut, one step and no gap, while in Full the same button still trims the clip alone', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const qr = title => Array.from(document.querySelectorAll('#inspector .quick-row .qr-btn')).find(b => b.title === title) || null;
+    const build = (W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)];
+    await atPhoneWidth(async function () {
+      await smP2(build, async function (v) {
+        if (!FM.editor.isSimple()) throw new Error('setup: the project is not in Simple');
+        FM.time = 4.5; FM.selectLayer(v.L('B').id); await v.idle(); await smSettle(150);
+        smTool('more').click(); await smSettle(250);
+        const trim = qr('Trim end to playhead');
+        if (!trim) throw new Error('CONTROL: More did not open a panel with Trim end to playhead (panel for ' + FM.simpleTools.panelFor() + '; quick row: ' + Array.from(document.querySelectorAll('#inspector .quick-row .qr-btn')).map(b => b.title).join(', ') + ')');
+        const n0 = v.steps();
+        trim.click(); await v.idle(); await smSettle(150);
+        const A = v.L('A'), B = v.L('B'), C = v.L('C');
+        if (B.start !== 3 || Math.abs(B.duration - 1.5) > 1e-6) throw new Error('CONTROL: the button did not trim B to the playhead (B is ' + B.start + ' + ' + B.duration + ' s; it said “' + v.say() + '”)');
+        if (Math.abs(C.start - (B.start + B.duration)) > 1e-6) throw new Error('Trim end to playhead in Simple left a ' + (C.start - B.start - B.duration).toFixed(2) + ' s gap: B ends at ' + (B.start + B.duration) + ', C still starts at ' + C.start);
+        const gaps = FM.spine.read(FM.scene).main.filter(e => e.seam && e.seam.kind === 'gap');
+        if (gaps.length) throw new Error('the clip row has ' + gaps.length + ' gap(s) after the trim');
+        if (A.start !== 0 || Math.abs(A.duration - 3) > 1e-9) throw new Error('the trim of B moved A (' + A.start + ' + ' + A.duration + ')');
+        if (v.steps() !== n0 + 1) throw new Error('the trim took ' + (v.steps() - n0) + ' undo steps, not one');
+      });
+    }, 380);
+    /* CONTROL — Full: the same button trims B where it stands and leaves C at 6, exactly as before */
+    await atPhoneWidth(async function () {
+      await smP2(build, async function (v) {
+        if (FM.editor.isSimple()) FM.editor.set('full');
+        if (FM.editor.isSimple()) throw new Error('CONTROL: could not leave Simple for the Full half');
+        FM.time = 4.5; FM.selectLayer(v.L('B').id); await smSettle(150);
+        FM.inspector.refresh(); await smSettle(60);
+        const trim = qr('Trim end to playhead');
+        if (!trim) throw new Error('CONTROL (Full): the panel has no Trim end to playhead (' + Array.from(document.querySelectorAll('#inspector .quick-row .qr-btn')).map(b => b.title).join(', ') + ')');
+        trim.click(); await smSettle(150);
+        const B = v.L('B'), C = v.L('C');
+        if (Math.abs(B.duration - 1.5) > 1e-6) throw new Error('CONTROL (Full): the button did not trim B to the playhead (' + B.duration + ' s)');
+        if (C.start !== 6) throw new Error('Full’s Trim end to playhead moved C to ' + C.start + ' — Full must not change (DESIGN §0.4)');
+      }, { full: true });
+    }, 380);
+  });
 })();
