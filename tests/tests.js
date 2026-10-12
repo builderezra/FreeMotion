@@ -124892,4 +124892,75 @@
     ], 1.3, p => { const q = Object.assign({}, p); delete q.speed; delete q.decay; delete q.reach; return q; });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* 10.3 KALEIDOSCOPE. The wedges could only reflect the picture round the centre, at its own size, and a still picture made a
+     still pattern. On a 200×160 plate with 6 segments: a pixel 20 px right of the centre reads 20 px from the centre at 30°
+     today; Source zoom 200 reads 10 px; Source X 50 puts the centre pixel's read at x 150 (half of the half-width, 50 px over);
+     a pixel at 45° reads at 15° folded, 45° with Mirror wedges Off. */
+  test('482 10.3 Kaleidoscope - Flow 100 changes a still picture between 0 s and 1 s where today the two frames match, Source zoom, Source X and Y and Mirror wedges change what the wedges read, Segments reach 32, and a saved one draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const X = FM._warpFx, R = FM.fxRegistry, bad = [], K = X.kaleidoscope;
+    const W = 200, H = 160, cx = 100, cy = 80, maxR = Math.hypot(cx, cy);
+    const map = (p, t, tl, x, y) => K(x, y, W, H, cx, cy, maxR, p, t, 1, K.prep(W, H, cx, cy, maxR, p, t, 1, tl));
+    const deg = q => Math.atan2(q[1] - cy, q[0] - cx) * 180 / Math.PI;
+    /* 1. THE ROWS */
+    const want = { zoom: 100, srcx: 0, srcy: 0, flow: 0, mirror: 1 };
+    Object.keys(want).forEach(k => {
+      const pd = (R.paramsOf('kaleidoscope') || []).filter(q => q.key === k)[0];
+      if (!pd) { bad.push('Kaleidoscope has no ' + k + ' row'); return; }
+      if (pd.default !== want[k] || R.makeInstance('kaleidoscope').params[k] !== want[k]) bad.push('a new Kaleidoscope starts at ' + k + ' ' + R.makeInstance('kaleidoscope').params[k] + ', not ' + want[k]);
+      if (FM._fxFillValue('kaleidoscope', k) !== want[k]) bad.push('a saved Kaleidoscope with no ' + k + ' draws it as ' + FM._fxFillValue('kaleidoscope', k));
+    });
+    const seg = (R.paramsOf('kaleidoscope') || []).filter(q => q.key === 'segments')[0];
+    if (!seg || seg.max !== 32) bad.push('Segments still stops at ' + (seg && seg.max));
+    const lay = [{ id: 'l48210k', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'kaleidoscope', enabled: true, params: { segments: 24, zoom: 250, srcx: -40, srcy: 30, flow: -80, mirror: 0 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const kp = lay[0].effects[0].params;
+    if (kp.zoom !== 250 || kp.srcx !== -40 || kp.srcy !== 30 || kp.flow !== -80 || kp.mirror !== 0 || kp.segments !== 24) bad.push('a saved Kaleidoscope comes back from the load sanitiser as ' + JSON.stringify(kp));
+    /* 2. FLOW — the backlog's test, on the kernel: every point of a Flow 100 kaleidoscope reads somewhere else a second later */
+    const pts = [[120, 80], [100, 30], [40, 120], [170, 150], [150, 60], [61, 77]];
+    let still = 0, flowed = 0;
+    pts.forEach(([x, y]) => {
+      const a0 = map({}, 0, 0, x, y), a1 = map({}, 1, 1, x, y), f0 = map({ flow: 100 }, 0, 0, x, y), f1 = map({ flow: 100 }, 1, 1, x, y);
+      if (a0[0] !== a1[0] || a0[1] !== a1[1]) still++;
+      if (f0[0] !== a0[0] || f0[1] !== a0[1]) bad.push('Flow 100 already moved the read at 0 s (' + x + ',' + y + ')');
+      if (Math.hypot(f1[0] - f0[0], f1[1] - f0[1]) > 5) flowed++;
+    });
+    if (still) throw new Error('CONTROL: a kaleidoscope with no Flow reads differently at 0 s and 1 s at ' + still + ' points');
+    if (flowed < pts.length) bad.push('Flow 100 moved only ' + flowed + ' of ' + pts.length + ' reads by more than 5 px between 0 s and 1 s - a still picture stays a still pattern');
+    /* 3. WHAT THE WEDGES READ */
+    const d0 = map({}, 0.5, 0.5, 120, 80), dz = map({ zoom: 200 }, 0.5, 0.5, 120, 80);
+    if (Math.abs(Math.hypot(d0[0] - cx, d0[1] - cy) - 20) > 1e-9 || Math.abs(deg(d0) - 30) > 1e-6) throw new Error('CONTROL: the pixel 20 px right of the centre does not read 20 px out at 30° (' + d0 + ')');
+    if (Math.abs(Math.hypot(dz[0] - cx, dz[1] - cy) - 10) > 1e-9) bad.push('Source zoom 200 reads ' + Math.hypot(dz[0] - cx, dz[1] - cy).toFixed(3) + ' px out for a pixel 20 px out, not 10');
+    const s0 = map({ srcx: 50, srcy: -50 }, 0.5, 0.5, 100, 80);
+    if (Math.abs(s0[0] - 150) > 1e-9 || Math.abs(s0[1] - 40) > 1e-9) bad.push('Source X 50 / Y -50 should read the centre pixel from (150, 40), it reads ' + s0);
+    const m1 = map({}, 0.5, 0.5, 100 + 30, 80 + 30), m0 = map({ mirror: 0 }, 0.5, 0.5, 100 + 30, 80 + 30);
+    if (Math.abs(deg(m1) - 15) > 1e-6) throw new Error('CONTROL: the pixel at 45° does not read at 15° folded (' + deg(m1).toFixed(3) + ')');
+    if (Math.abs(deg(m0) - 45) > 1e-6) bad.push('Mirror wedges Off reads the pixel at 45° from ' + deg(m0).toFixed(3) + '°, not 45° - the wedge is still folded');
+    /* 4. SAVED: none of the new keys, every point exactly as the body kept from before its prep (FM._warpRef.kaleidoscope) */
+    let off = 0;
+    [{}, { segments: 9, phase: 40, centerx: 30, centery: 70 }].forEach(p => {
+      for (let y = 0; y < H; y += 5) for (let x = 0; x < W; x += 5) { const a = map(p, 0.5, 0.5, x, y), b = FM._warpRef.kaleidoscope(x, y, W, H, cx, cy, maxR, p, 0.5); if (a[0] !== b[0] || a[1] !== b[1]) off++; }
+    });
+    if (off) bad.push(off + ' points of a saved Kaleidoscope read differently from before');
+    /* 5. THE CLIP CLOCK, through the renderer: Flow 100 on a clip starting at 1 s draws its first frame as one without, and a
+          different picture at 2 s; without Flow the 1 s and 2 s frames are the same (the CONTROL that the picture is still) */
+    const made = [], noGL = FM._noGL;
+    FM._noGL = true;
+    try {
+      const pic = w10pic('_48210kal', 160, 120, (x, y) => [((x >> 3) + (y >> 4)) & 1 ? 230 : 20, x, 255 - y, 255], made);
+      const on = (o, t) => { const e = R.makeInstance('kaleidoscope'); Object.assign(e.params, o); const L = pic([e]); L.start = 1; L.duration = 3; return _986shot([L], t, 160, 120); };
+      if (!w10same(on({}, 1), on({}, 2))) throw new Error('CONTROL: a kaleidoscope with no Flow draws differently at 1 s and 2 s');
+      if (!w10same(on({ flow: 100 }, 1), on({}, 1))) bad.push('Flow 100 on a clip that starts at 1 s has already moved on its first frame - it runs on the project clock');
+      if (w10same(on({ flow: 100 }, 2), on({ flow: 100 }, 1))) bad.push('Flow 100 draws the same picture one second into the clip as at its start');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('482 10.3 Kaleidoscope - the GPU draws Source zoom, Source X and Y, Flow and Mirror wedges as the CPU does', { item: '482', budgetMs: 90000 }, async function () {
+    if (!FM.glWarp || !FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU half is UNTESTED: ' + (FM.glWarp && FM.glWarp.stats().reason));
+    const bad = w10gpuCases([
+      ['kaleidoscope', { zoom: 180 }], ['kaleidoscope', { srcx: 40, srcy: -30 }], ['kaleidoscope', { flow: 120 }], ['kaleidoscope', { mirror: 0 }]
+    ], 1.3, p => { const q = Object.assign({}, p); ['zoom', 'srcx', 'srcy', 'flow', 'mirror'].forEach(k => delete q[k]); return q; });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

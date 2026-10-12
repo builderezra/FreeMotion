@@ -304,10 +304,17 @@ window.FM = window.FM || {};
     ], layer: true, layerLabel: 'Collide with', layerSelf: 'None', layerOptional: true },   // optional: the frame is the default wall, so no "Needs a setting" badge
     // ---- batch 5 ----
     { type: 'kaleidoscope', label: 'Kaleidoscope', params: [
-      { key: 'segments', label: 'Segments', min: 2, max: 12, step: 1, def: 6 },
+      { key: 'segments', label: 'Segments', min: 2, max: 32, step: 1, def: 6 },   // #482 polish 10.3: was 12 — the kernel never had a ceiling
       { key: 'phase', label: 'Rotation', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      /* #482 polish 10.3: what the wedges look at (see WARP_FX.kaleidoscope.prep). Every default is the old kaleidoscope; a saved
+         one without Mirror wedges is mirrored, which is what `legacy: 1` tells the panel. */
+      { key: 'zoom', label: 'Source zoom', min: 25, max: 400, step: 1, def: 100, unit: '%' },
+      { key: 'srcx', label: 'Source X', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'srcy', label: 'Source Y', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'flow', label: 'Flow', min: -200, max: 200, step: 1, def: 0, unit: 'px/s' },
+      { key: 'mirror', label: 'Mirror wedges', def: 1, legacy: 1, options: [[0, 'Off'], [1, 'On']] },
     ] },
     { type: 'glitch', label: 'Glitch', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -9302,11 +9309,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      Curl travel without keyframing Phase by hand. A keyframed speed is INTEGRATED over the clip (queue 913's rule — speed(now)
      × time would rescale the whole history every frame and a slow-down would rewind the waves). Absent or 0 → exactly 0, and
      the callers then leave Phase's own number untouched. `tl` absent (a kernel called without a prep) reads `t`. */
-  function wSpeedDeg(p, t, tl) {
-    if (p.speed == null) return 0;
+  function wSpeedDeg(p, t, tl) { return p.speed == null ? 0 : wClipIntegral(p.speed, t, tl); }
+  /* How far a per-second rate has run since the clip began: rate × tl, or its integral when keyframed. Shared by Wave speed
+     (10.2), Kaleidoscope's Flow (10.3) and Turbulent Displace's Flow X / Y (10.4). 0 exactly when the rate is 0. */
+  function wClipIntegral(v, t, tl) {
     if (tl == null || !isFinite(tl)) tl = t;
-    if (FM.isAnimated(p.speed)) { const v = FM.integrateProp(p.speed, t - tl, t); return isFinite(v) ? v : 0; }
-    const s = FM.evalProp(p.speed, t);
+    if (FM.isAnimated(v)) { const n = FM.integrateProp(v, t - tl, t); return isFinite(n) ? n : 0; }
+    const s = FM.evalProp(v, t);
     return (isFinite(s) && s !== 0) ? s * tl : 0;
   }
   /* RADIUS (`reach`, #482 polish 10.2): Ripple and Curl stop at R. Full strength out to three quarters of it, then a smoothstep
@@ -10844,8 +10853,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const cx_ = C.cx, cy_ = C.cy, slice = C.slice;
       const dx = x - cx_, dy = y - cy_, r = Math.hypot(dx, dy);
       let a = (Math.atan2(dy, dx) + C.ph) % slice; if (a < 0) a += slice;
-      a = Math.abs(a - C.half);   // fold within the wedge → mirrored kaleidoscope
-      return [reflectInto(cx_ + Math.cos(a) * r, W), reflectInto(cy_ + Math.sin(a) * r, H)];
+      if (C.mir) a = Math.abs(a - C.half);   // fold within the wedge → mirrored kaleidoscope (Mirror wedges Off: repeat it)
+      /* #482 polish 10.3: the radius it reads (Source zoom, Flow) and where from (Source X / Y) — untouched when unset */
+      const rs = (C.iz === 1 && C.fl === 0) ? r : r * C.iz - C.fl;
+      return [reflectInto(C.ox + Math.cos(a) * rs, W), reflectInto(C.oy + Math.sin(a) * rs, H)];
     },
     _kaleidoscopeLegacy: function (x, y, W, H, cx, cy, maxR, p, t) {
       cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy);
@@ -11291,12 +11302,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { cx: rcx, cy: rcy, amp: amp, wl: wl, ph: ph, dk: dr.dk, rch: dr.rch };
   };
 
-  WARP_FX.kaleidoscope.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  /* #482 polish 10.3 — what the wedges LOOK AT. They only ever reflected the picture round the centre, at its own size.
+     SOURCE ZOOM magnifies what feeds them (200 % reads half the radius); SOURCE X / Y move the point they read from, as a % of
+     half the frame, so the pattern can be built from any part of the shot; FLOW streams the picture out of the centre (px/s on
+     the clip clock, + outward, − inward), so a still image keeps unfolding; MIRROR WEDGES Off repeats the wedge instead of
+     reflecting it (a pinwheel, seams and all). All folded into the prep — `iz` 1 and `fl` 0 and the origin at the centre when
+     unset — so the kernel and the shader read the same numbers and a saved kaleidoscope is the old arithmetic exactly. */
+  WARP_FX.kaleidoscope.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     var kcx = wCx(p, t, W, cx), kcy = wCy(p, t, H, cy);
     var seg = Math.max(2, Math.round(FM.evalProp(p.segments, t) || 6));
     var slice = Math.PI * 2 / seg;
     var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: kcx, cy: kcy, slice: slice, half: slice / 2, ph: ph };
+    var zm = p.zoom == null ? 100 : FM.evalProp(p.zoom, t); if (!(zm > 0)) zm = 100; if (zm < 25) zm = 25; if (zm > 400) zm = 400;
+    var sx = p.srcx == null ? 0 : (FM.evalProp(p.srcx, t) || 0); if (sx < -100) sx = -100; if (sx > 100) sx = 100;
+    var sy = p.srcy == null ? 0 : (FM.evalProp(p.srcy, t) || 0); if (sy < -100) sy = -100; if (sy > 100) sy = 100;
+    var fl = p.flow == null ? 0 : wClipIntegral(p.flow, t, tl) * (ps || 1);   // project px → plate px
+    var mir = p.mirror == null ? 1 : (Math.round(FM.evalProp(p.mirror, t)) | 0);   // legacy: absent is the mirrored fold
+    return { cx: kcx, cy: kcy, slice: slice, half: slice / 2, ph: ph,
+             iz: zm === 100 ? 1 : 100 / zm, fl: fl, ox: sx === 0 ? kcx : kcx + (sx / 100) * (W / 2), oy: sy === 0 ? kcy : kcy + (sy / 100) * (H / 2), mir: mir !== 0 };
   };
 
   WARP_FX.radialrepeat.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -11373,8 +11396,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'vec2 dxy = xy - vec2(u_cx, u_cy);',
     'float r = length(dxy);',
     'float a = mod(atan(dxy.y, dxy.x) + u_ph, u_slice);',
-    'a = abs(a - u_half);',
-    'return vec2(reflectInto(u_cx + cos(a) * r, res.x), reflectInto(u_cy + sin(a) * r, res.y));'
+    'if (u_mir > 0.5) a = abs(a - u_half);',   // #482 polish 10.3 Mirror wedges (the prep's boolean arrives as 1 / 0)
+    'float rs = r * u_iz - u_fl;',              // Source zoom and Flow: r * 1.0 - 0.0 is r exactly when unset
+    'return vec2(reflectInto(u_ox + cos(a) * rs, res.x), reflectInto(u_oy + sin(a) * rs, res.y));'   // Source X / Y
   ].join('\n');
 
   /* GRID REPEAT — tile the frame, with optional per-row stagger and alternate-tile mirroring.
