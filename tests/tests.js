@@ -127474,4 +127474,50 @@
       });
     });
   });
+
+  /* #1132 clause 6 ON A PC, his words: "you should be able to tap on the current open one to close it". The phone half is '1132
+     the open block keeps its bar as a header with ⤡…'; on a PC each block opens out of the closed column (P1) into the side-by-side
+     pair, keeps its bar as a ROW header across the open block, and its ⤡ flies everything back to the column it opened from. */
+  test('1132 on a PC each block opens out of the closed column with its bar as a row header and ⤡ — a click on it flies back to the same closed column, focus on its ⤢ — at 1280', { item: '1132', budgetMs: 90000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atWideWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog'), cog = document.getElementById('btn-settings');
+          const COL = ['cv-mini', 'cv-fr-bar', 'cv-ed-bar', 'cv-app-bar'];
+          const column = function () { return COL.map(function (id) { return document.getElementById(id).getBoundingClientRect(); }); };
+          try {
+            if (!cog || !(cog.getBoundingClientRect().width > 0)) throw new Error('setup: no PC cog at 1280');
+            cog.click(); await entranceDone(dlg); await sleep(60);
+            if (!dlg.classList.contains('cv-none') || !document.body.classList.contains('cv-anchored')) throw new Error('setup: the cog did not open all closed, hung off the cog (' + dlg.className + ')');
+            const col0 = column();
+            for (const [k, id, bar, cls] of [['Canvas', 'cv-mini-exp', 'cv-mini', null], ['Friends', 'cv-fr-exp', 'cv-fr-bar', 'cv-fr-big'], ['the Editor block', 'cv-ed-what', 'cv-ed-bar', 'cv-ed-big']]) {
+              const btn = document.getElementById(id), barEl = document.getElementById(bar);
+              btn.focus(); btn.click(); await land945();
+              const isOpen = cls ? dlg.classList.contains(cls) : !/\bcv-(none|fr-big|ed-big)\b/.test(dlg.className);
+              if (!isOpen) throw new Error(k + ': its ⤢ did not open it (' + dlg.className + ')');
+              if (!dlg.classList.contains('cv-side')) throw new Error(k + ': open at 1280 the blocks are not side by side');
+              const br = barEl.getBoundingClientRect(), blk = barEl.parentNode.getBoundingClientRect();
+              if (!(br.width > 300 && br.height >= 44 && br.height <= 70)) throw new Error(k + ': open, its bar is not a row header across the block (' + R978(br) + ' in ' + R978(blk) + ')');
+              if (Math.abs(br.top - blk.top) > 2) throw new Error(k + ': open, its bar is not the top of its block (' + R978(br) + ' in ' + R978(blk) + ')');
+              if (br.top < -0.5 || br.bottom > innerHeight + 0.5) throw new Error(k + ': open, its header is off the screen ' + R978(br));
+              if (btn.getAttribute('aria-expanded') !== 'true' || !/^Close /.test(btn.getAttribute('aria-label') || '') || btn.querySelector('path').getAttribute('d') !== COL1132) throw new Error(k + ': open, its button is not the ⤡ that closes it (' + btn.getAttribute('aria-label') + ')');
+              const r = btn.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              if (!at || !btn.contains(at)) throw new Error(k + ': its ⤡ is covered by ' + (at && (at.id || at.className)));
+              btn.focus(); btn.click();
+              if (!dlg.classList.contains('cv-flying')) throw new Error(k + ': closing it did not fly');
+              await land945();
+              if (!dlg.classList.contains('cv-none')) throw new Error(k + ': a click on its ⤡ did not close it (' + dlg.className + ')');
+              const col = column();
+              col.forEach(function (c, i) {
+                const o = col0[i];
+                if (Math.abs(c.left - o.left) > 1 || Math.abs(c.top - o.top) > 1 || Math.abs(c.width - o.width) > 1 || Math.abs(c.height - o.height) > 1) throw new Error(k + ': closed again, the column is not the one the cog opened (#' + COL[i] + ' ' + R978(c) + ', was ' + R978(o) + ')');
+              });
+              if (btn.querySelector('path').getAttribute('d') !== EXP1132 || btn.getAttribute('aria-expanded') !== 'false') throw new Error(k + ': closed again, its button is not ⤢');
+              if (document.activeElement !== btn) throw new Error(k + ': after closing, focus is on ' + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + ', not its ⤢');
+            }
+          } finally { FM.closeCanvasDialog(); await sleep(60); }
+        }, 1280);
+      });
+    });
+  });
 })();
