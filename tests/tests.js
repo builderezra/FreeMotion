@@ -125091,4 +125091,54 @@
     });
     if (!b13Same(di({ ink: '#1a2b3c', paper: '#f0e8d0' }, src.slice()), di({}, src.slice()))) throw new Error('Ink and Paper changed a Colour dither - they only mean something in Mono');
   });
+
+  /* 13.7 HSL BANDS: Ignore greys below, Lightness from / to, Show selection. */
+  const B13HSL_NEW = { satgate: 33, lumlow: 0, lumhigh: 100, view: 0 };
+  const B13HSL_CFG = { def: {}, red: { band: 0, hue: -30 }, custom: { band: 8, centre: 20, width: 60, sat: -50, lum: 30 }, green: { band: 3, range: 2.5, lum: -40 }, zero: { hue: 0, sat: 0, lum: 0 } };
+  const B13HSL_PIN = {   // fc8866f1, before the edit
+    def: 'f662dd15.f662dd15/f662dd15.f662dd15 926e1158.926e1158/926e1158.926e1158', red: 'b6b7670d.b6b7670d/b6b7670d.b6b7670d b20602e1.b20602e1/b20602e1.b20602e1',
+    custom: '4b923ab0.4b923ab0/4b923ab0.4b923ab0 407d0007.407d0007/407d0007.407d0007', green: '8ad5ee1b.8ad5ee1b/8ad5ee1b.8ad5ee1b 516db2b5.516db2b5/516db2b5.516db2b5',
+    zero: '3ef7846d.3ef7846d/3ef7846d.3ef7846d 60f20f35.60f20f35/60f20f35.60f20f35' };
+
+  test('482 13.7 HSL Bands - Ignore greys below, Lightness from and to, and Show selection are in the catalogue at defaults that retune the old band, Show selection says it reaches the export, and saved and new bands draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('hslbands', B13HSL_NEW, { satgate: 10, lumlow: 20, lumhigh: 60, view: 1 });
+    if (!/export/i.test(b13Row('hslbands', 'view').note || '')) throw new Error('Show selection does not say it shows in the export too (note: ' + JSON.stringify(b13Row('hslbands', 'view').note) + ')');
+    ['satgate', 'lumlow', 'lumhigh'].forEach(k => { if (b13Row('hslbands', k).unit !== '%') throw new Error('HSL Bands ' + k + ' is not in %'); });
+    const moved = b13Pinned('hslbands', B13HSL_NEW, B13HSL_CFG, B13HSL_PIN);
+    if (moved.length) throw new Error(moved.length + ' HSL Bands pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.7 HSL Bands - Lightness to 50 leaves a bright blue untouched and still retunes a dark one, Lightness from 50 the reverse, Ignore greys below takes more or less of a greyish blue, and Show selection paints what the band catches', { item: '482', budgetMs: 60000 }, function () {
+    const one = (rgb, over) => { const d = b13Flat(1, 1, rgb); b13Run('hslbands', Object.assign(b13Base('hslbands', {}), over), 1, 1, 0.5, 1, d); return [d[0], d[1], d[2]]; };
+    const bright = [100, 150, 255], dark = [20, 40, 120], dull = [120, 130, 160];
+    const moved = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    /* LIGHTNESS. CONTROL: the default Blue band (Hue +45, Saturation +40) retunes both blues. */
+    if (!(moved(one(bright, {}), bright) > 10 && moved(one(dark, {}), dark) > 10)) throw new Error('CONTROL: the default Blue band does not retune both blues (' + one(bright, {}) + ' / ' + one(dark, {}) + ')');
+    if (one(bright, { lumhigh: 50 }).join() !== bright.join()) throw new Error('Lightness to 50 still retuned a bright blue (lightness 0.70): ' + bright + ' -> ' + one(bright, { lumhigh: 50 }));
+    if (one(dark, { lumhigh: 50 }).join() !== one(dark, {}).join()) throw new Error('Lightness to 50 changed how a dark blue (lightness 0.27) is retuned - it is inside the range and must take the whole change');
+    if (one(dark, { lumlow: 50 }).join() !== dark.join()) throw new Error('Lightness from 50 still retuned a dark blue: ' + dark + ' -> ' + one(dark, { lumlow: 50 }));
+    if (one(bright, { lumlow: 50 }).join() !== one(bright, {}).join()) throw new Error('Lightness from 50 changed how a bright blue is retuned');
+    const edge = moved(one(bright, { lumhigh: 67 }), bright);
+    if (!(edge > 0 && edge < moved(one(bright, {}), bright))) throw new Error('a blue just past Lightness to (within the 5 percent feather) took ' + edge + ' of the change - it should take part of it');
+    /* IGNORE GREYS BELOW, on a greyish blue (HSL saturation 0.17): 0 takes it whole, 33 (the old gate) half or so, 100 least. A
+       grey is never touched, gate or none. */
+    const m0 = moved(one(dull, { satgate: 0 }), dull), m33 = moved(one(dull, {}), dull), m100 = moved(one(dull, { satgate: 100 }), dull);
+    if (!(m0 > m33 && m33 > m100 && m100 > 0)) throw new Error('Ignore greys below 0 / 33 / 100 moved a greyish blue by ' + m0 + ' / ' + m33 + ' / ' + m100 + ' - a lower gate must take more of it');
+    if (one(dull, { satgate: 33 }).join() !== one(dull, {}).join()) throw new Error('Ignore greys below 33 is not the old gate');
+    if (one([128, 128, 128], { satgate: 0 }).join() !== '128,128,128') throw new Error('Ignore greys below 0 moved a pure grey');
+    /* SHOW SELECTION: pure blue is the band's centre (white), red and grey are outside it (black), even with the band set to
+       change nothing; a transparent pixel is left alone. */
+    const view = (rgb, over) => one(rgb, Object.assign({ view: 1 }, over || {}));
+    if (view([0, 0, 255]).join() !== '255,255,255') throw new Error('Show selection painted pure blue (the Blue band’s centre) ' + view([0, 0, 255]) + ', not white');
+    if (view([255, 0, 0]).join() !== '0,0,0' || view([128, 128, 128]).join() !== '0,0,0') throw new Error('Show selection painted red ' + view([255, 0, 0]) + ' and grey ' + view([128, 128, 128]) + ' - outside the band is black');
+    if (view([0, 0, 255], { hue: 0, sat: 0, lum: 0 }).join() !== '255,255,255') throw new Error('Show selection drew nothing while the band changes nothing - it must still show what the band catches');
+    if (view(bright, { lumhigh: 50 }).join() !== '0,0,0') throw new Error('Show selection does not leave out a blue that Lightness to excludes');
+    const clear = b13Flat(1, 1, [0, 0, 255], 0); b13Run('hslbands', Object.assign(b13Base('hslbands', {}), { view: 1 }), 1, 1, 0.5, 1, clear);
+    if (Array.from(clear).join() !== '0,0,255,0') throw new Error('Show selection painted a transparent pixel');
+    /* …and what it shows is what the band changes: on the colour fixture, every pixel it paints black is left untouched. */
+    const W = 97, H = 61, src = b13Plate(W, H), sel = b13Run('hslbands', Object.assign(b13Base('hslbands', {}), { view: 1 }), W, H, 0.5, 1, src.slice()), out = b13Run('hslbands', b13Base('hslbands', {}), W, H, 0.5, 1, src.slice());
+    let black = 0;
+    for (let i = 0; i < src.length; i += 4) { if (!src[i + 3] || sel[i] !== 0) continue; black++; if (out[i] !== src[i] || out[i + 1] !== src[i + 1] || out[i + 2] !== src[i + 2]) throw new Error('Show selection painted pixel ' + (i / 4) + ' black, but the band changed it'); }
+    if (!(black > 100 && black < W * H - 100)) throw new Error('CONTROL: Show selection painted ' + black + ' of ' + (W * H) + ' pixels black - the fixture does not straddle the band');
+  });
 })();

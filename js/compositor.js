@@ -1540,6 +1540,15 @@ window.FM = window.FM || {};
       { key: 'range', label: 'Range', min: 0.2, max: 3, step: 0.05, def: 1 },
       { key: 'centre', label: 'Custom centre', min: 0, max: 359, step: 1, def: 200, unit: '°', overriddenBy: 'band', liveWhen: 8 },
       { key: 'width', label: 'Custom width', min: 5, max: 120, step: 1, def: 30, unit: '°', overriddenBy: 'band', liveWhen: 8 },
+      /* #482 polish 13.7. The saturation gate was a fixed S × 3 (a pixel at a third saturation or more takes the whole change),
+         every brightness of the band was retuned, and there was no way to see what the band had caught. Ignore greys below sets
+         that gate (33 is a third: the old S × 3 exactly; 0 takes even near-greys whole); Lightness from / to keep the change to
+         a band of lightness, with a 5% feather past each end; Show selection paints what the band catches, white = all of the
+         change, black = none. Every default is the old band. */
+      { key: 'satgate', label: 'Ignore greys below', min: 0, max: 100, step: 1, def: 33, unit: '%' },
+      { key: 'lumlow', label: 'Lightness from', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'lumhigh', label: 'Lightness to', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'view', label: 'Show selection', options: [[0, 'Off'], [1, 'On']], def: 0, note: 'It shows in the export too — turn it off when done' },
     ] },
     // ---- batch 34: the scan bar + a key that survives bad lighting ----
     // Time Warp Scan — a bar crosses the frame and everything it has passed stays frozen at the
@@ -6018,7 +6027,15 @@ window.FM = window.FM || {};
       const hueSh = (p.hue == null ? 45 : FM.evalProp(p.hue, t));
       const satAdj = (p.sat == null ? 40 : FM.evalProp(p.sat, t)) / 100;
       const lumAdj = (p.lum == null ? 0 : FM.evalProp(p.lum, t)) / 100;
-      if (hueSh === 0 && satAdj === 0 && lumAdj === 0) return;
+      /* #482 polish 13.7 — Ignore greys below (the gate's multiplier: 33 % is a third, the old × 3 exactly; 0 means no gate),
+         Lightness from / to (a 5% feather past each end), Show selection (paints the weight: it draws even when the band
+         changes nothing, so the early return waits for it). */
+      const sg = p.satgate == null ? 33 : FM.evalProp(p.satgate, t);
+      const gm = sg === 33 ? 3 : (sg > 0 ? 100 / sg : 0);
+      const llo = (p.lumlow == null ? 0 : FM.evalProp(p.lumlow, t)) / 100, lhi = (p.lumhigh == null ? 100 : FM.evalProp(p.lumhigh, t)) / 100;
+      const lwin = llo > 0 || lhi < 1;
+      const view = (p.view == null ? 0 : (Math.round(FM.evalProp(p.view, t)) | 0)) === 1;
+      if (hueSh === 0 && satAdj === 0 && lumAdj === 0 && !view) return;
       const cut = halfW * 1.6;
       for (let i = 0; i < d.length; i += 4) {
         if (d[i + 3] === 0) continue;
@@ -6026,19 +6043,24 @@ window.FM = window.FM || {};
         const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
         const mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
         const dl = mx - mn;
-        if (dl === 0) continue;                       // pure neutral — no band owns it
+        if (dl === 0) { if (view) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } continue; }   // pure neutral — no band owns it
         let h;
         if (mx === r) h = 60 * (((g - b) / dl) % 6);
         else if (mx === g) h = 60 * ((b - r) / dl + 2);
         else h = 60 * ((r - g) / dl + 4);
         if (h < 0) h += 360;
         let dh = Math.abs(h - centre); if (dh > 180) dh = 360 - dh;
-        if (dh > cut) continue;                       // the early-out that keeps this cheap
+        if (dh > cut) { if (view) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } continue; }   // the early-out that keeps this cheap
         const L = (mx + mn) / 2;
         const S = L > 0.5 ? dl / (2 - mx - mn) : dl / (mx + mn);
         // smoothstep on hue distance, then gate by saturation so neutrals stay put
         const u = dh >= halfW ? 0 : 1 - dh / halfW;
-        let w = u * u * (3 - 2 * u) * (S * 3 > 1 ? 1 : S * 3);
+        let w = u * u * (3 - 2 * u) * (gm === 0 ? 1 : (S * gm > 1 ? 1 : S * gm));
+        if (lwin) {
+          if (L < llo) w *= llo - L >= 0.05 ? 0 : 1 - (llo - L) / 0.05;
+          else if (L > lhi) w *= L - lhi >= 0.05 ? 0 : 1 - (L - lhi) / 0.05;
+        }
+        if (view) { const v = w * 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; continue; }
         if (w <= 0.002) continue;
         let nh = h + hueSh * w; nh = ((nh % 360) + 360) % 360;
         let ns = S * (1 + satAdj * w); if (ns < 0) ns = 0; else if (ns > 1) ns = 1;
