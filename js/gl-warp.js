@@ -155,6 +155,10 @@
          cannot drift from what the CPU path was handed. */
       'vec2 fmC = res * 0.5;',
       'float fmCx = fmC.x, fmCy = fmC.y, fmMaxR = length(fmC);',
+      /* A SAMPLE THAT IS NOTHING (#482 polish 14.5, Tile Grid's Gap). The CPU twin returns `null` for a pixel that
+         belongs to no tile and drawWarpEffect leaves it transparent; a kernel body says the same by setting this.
+         Nothing else sets it, so every other kernel's picture is untouched. */
+      'bool fmGap = false;',
       'vec2 fmWarp(vec2 xy){',
       body,
       '}',
@@ -169,6 +173,7 @@
          exact centre. MEASURED after this line: bulge's disagreement 0.125% -> 0.000%. */
       '  vec2 xy = floor(vec2(uv.x * res.x, (1.0 - uv.y) * res.y));',
       '  vec2 s = floor(fmWarp(xy));',
+      '  if (fmGap) { gl_FragColor = vec4(0.0); return; }',
       '  s = clamp(s, vec2(0.0), res - vec2(1.0));',
       /* ⚠️ WHERE ROW 0 OF THE SOURCE TEXTURE LIVES DEPENDS ON HOW IT GOT THERE, and getting this
          wrong flips the picture rather than breaking it — the failure looks like a wrong effect, not

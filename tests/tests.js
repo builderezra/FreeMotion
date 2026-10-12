@@ -124995,4 +124995,154 @@
     if (!(vc[0] < 60)) throw new Error('Vignette 1 left the corner of the fill rgb(' + vc.slice(0, 3) + ') - it should be nearly black');
     if (!(vm[0] >= 245)) throw new Error('Vignette 1 darkened the bar beside the clip to rgb(' + vm.slice(0, 3) + ') - the middle of the frame (clear out to 30 percent of the half-diagonal) should stay red');
   }
+
+  /* 14.5 REPETITION: Trail (Copy size, Copy turn, Copies In front / Behind, Time offset), Tile Grid (Scroll across / down, Gap),
+     Scatter Array (Drift, Spin). Trail and Scatter Array already take the expanded plate (#986 C27), so that clause of the
+     backlog item was done. Tile Grid is a WARP: b14Warp is drawWarpEffect's CPU loop over the real kernel and its prep —
+     including the `null` a Gap sample returns, which the loop writes as transparent. */
+  function b14Warp(type, params, W, H, t, tl, d0) {
+    const f = FM._FX_TABLES.WARP_FX[type], src = d0 || b14Plate(W, H), o = new Uint8ClampedArray(W * H * 4);
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pre = f.prep ? f.prep(W, H, cx, cy, maxR, params, t, 1, tl) : null;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const m = f(x, y, W, H, cx, cy, maxR, params, t, 1, pre);
+      if (m === null) continue;
+      let sx = m[0] | 0, sy = m[1] | 0;
+      if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+      if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+      const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+      o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+    }
+    return o;
+  }
+  function b14WShots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [0.37, 1.9].map(t => b14Hash(b14Warp(type, JSON.parse(JSON.stringify(params)), W, H, t, t))).join('.')).join(' ');
+  }
+  const B14TR_NEW = { scale: 100, rotate: 0, order: 0, delay: 0 }, B14SC_NEW = { drift: 0, spin: 0 }, B14TG_NEW = { scrollx: 0, scrolly: 0, gap: 0 };
+  const B14TR_CFG = { def: {}, many: { count: 8, spacing: 60, angle: 30 }, faded: { fade: 60, count: 5 }, one: { count: 1 }, kf: { spacing: b14Kf(20, 120), angle: b14Kf(0, 90) } };
+  const B14SC_CFG = { def: {}, wide: { spread: 150, count: 20, seed: 7 }, still: { rotate: 0, sizevary: 0, fade: 0 }, kf: { spread: b14Kf(20, 120) } };
+  const B14TG_CFG = { def: {}, rows: { count: 4, rows: 3 }, mirror: { count: 5, mirror: 3 }, brick: { count: 6, stagger: 0.5 }, all: { count: 3, rows: 9, stagger: 1, mirror: 3 }, kf: { count: b14Kf(2, 8) } };
+  const B14TR_PIN = {   // fc8866f1, before the edit (a Trail whose copies all walk off the frame logs its original alone)
+    def: '4b3de749.4b3de749/4b3de749.4b3de749 8b92ff41.8b92ff41/8b92ff41.8b92ff41', many: '23ad3685.23ad3685/23ad3685.23ad3685 bb04c0d9.bb04c0d9/bb04c0d9.bb04c0d9',
+    faded: '967b3461.967b3461/967b3461.967b3461 30975914.30975914/30975914.30975914', one: 'cebbff2c.cebbff2c/cebbff2c.cebbff2c cebbff2c.cebbff2c/cebbff2c.cebbff2c',
+    kf: 'a9c4ad25.cebbff2c/a9c4ad25.cebbff2c bd3272d4.f0ae4135/bd3272d4.f0ae4135' };
+  const B14SC_PIN = {
+    def: 'c9ca2e34.c9ca2e34/c9ca2e34.c9ca2e34 41a284cc.41a284cc/41a284cc.41a284cc', wide: '18b1b423.18b1b423/18b1b423.18b1b423 2e886242.2e886242/2e886242.2e886242',
+    still: '3c1dc7a4.3c1dc7a4/3c1dc7a4.3c1dc7a4 cef96352.cef96352/cef96352.cef96352', kf: 'e7ebd969.9c18d687/e7ebd969.9c18d687 57f87b24.83433de6/57f87b24.83433de6' };
+  const B14TG_PIN = {   // the CPU loop, two plates, two moments
+    def: '42f367f0.42f367f0 90833924.90833924', rows: 'a7755a1a.a7755a1a b9e59a15.b9e59a15', mirror: '567fe4ff.567fe4ff db66bf0d.db66bf0d',
+    brick: '802000a8.802000a8 dccb9c80.dccb9c80', all: '31bc7035.31bc7035 d8138647.d8138647', kf: '42f367f0.515d9a4e 90833924.e95555c5' };
+
+  test('482 14.5 Trail, Tile Grid and Scatter Array - every new control is in the catalogue at a default that draws the old picture, and saved and new ones draw as on fc8866f1 (Tile Grid byte for byte, Trail and Scatter call for call)', { item: '482', budgetMs: 120000 }, function () {
+    b14Catalogue('linearrepeat', B14TR_NEW, { scale: 80, rotate: 10, order: 1, delay: 0.25 });
+    b14Catalogue('scatterarray', B14SC_NEW, { drift: 40, spin: 90 });
+    b14Catalogue('gridrepeat', B14TG_NEW, { scrollx: 50, scrolly: -25, gap: 20 });
+    if (b14Row('scatterarray', 'drift').unit === 'px') throw new Error('Drift is declared in plain px - it is a speed, and pxToPlate must not scale it a second time');
+    const moved = b14Pinned('linearrepeat', B14TR_NEW, B14TR_CFG, B14TR_PIN, b14CShots)
+      .concat(b14Pinned('scatterarray', B14SC_NEW, B14SC_CFG, B14SC_PIN, b14CShots))
+      .concat(b14Pinned('gridrepeat', B14TG_NEW, B14TG_CFG, B14TG_PIN, b14WShots));
+    if (moved.length) throw new Error(moved.length + ' repeats draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.5 Trail - Copy size 80 makes the third copy 0.8³ of the size, Copy turn turns each copy further, Behind draws the copies under the original, and Time offset draws each copy from its own moment, kept inside the clip', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, tr = (o, extra) => b14Cfx('linearrepeat', Object.assign(b14Base('linearrepeat', {}), { count: 4, spacing: 20, angle: 0 }, o), Object.assign({ W: W, H: H }, extra || {}));   // copies 32, 64 and 96 px along
+    const width = q => Math.hypot(q.quad[1][0] - q.quad[0][0], q.quad[1][1] - q.quad[0][1]);
+    const turn = q => Math.atan2(q.quad[1][1] - q.quad[0][1], q.quad[1][0] - q.quad[0][0]) * 180 / Math.PI;
+    /* COPY SIZE. CONTROL: at 100 every copy is the plate's own width. */
+    const plain = tr({});
+    if (plain.draws.length !== 4 || plain.draws.some(q => Math.abs(width(q) - W) > 1e-9)) throw new Error('CONTROL: a plain Trail did not draw the original and three copies at full size (' + plain.draws.map(width).join(', ') + ')');
+    const shrink = tr({ scale: 80 });
+    const w3 = width(shrink.draws[3]);
+    if (Math.abs(w3 / W - 0.512) > 1e-9) throw new Error('Copy size 80 drew the third copy ' + (w3 / W).toFixed(4) + ' of the size - it should be 0.8³ = 0.512');
+    if (Math.abs(width(shrink.draws[0]) - W) > 1e-9) throw new Error('Copy size shrank the original');
+    /* …about its own middle: the third copy's centre is where the plain third copy's is. */
+    const mid = q => [(q.quad[0][0] + q.quad[2][0]) / 2, (q.quad[0][1] + q.quad[2][1]) / 2];
+    if (Math.hypot(mid(shrink.draws[3])[0] - mid(plain.draws[3])[0], mid(shrink.draws[3])[1] - mid(plain.draws[3])[1]) > 1e-6) throw new Error('Copy size moved the third copy - it should shrink about its own middle');
+    /* COPY TURN: copy k is turned k × 10 degrees. */
+    const turned = tr({ rotate: 10 });
+    [0, 10, 20, 30].forEach((want, k) => { if (Math.abs(turn(turned.draws[k]) - want) > 1e-6) throw new Error('Copy turn 10 turned draw ' + k + ' by ' + turn(turned.draws[k]).toFixed(3) + ' degrees, not ' + want); });
+    /* BEHIND. CONTROL: In front draws the original first; Behind draws the furthest copy first and the original last. */
+    const x0 = q => q.quad[0][0];
+    if (x0(plain.draws[0]) !== 0) throw new Error('CONTROL: In front does not draw the original first');
+    const under = tr({ order: 1 });
+    if (under.draws.length !== 4 || x0(under.draws[3]) !== 0 || !(x0(under.draws[0]) > x0(under.draws[1]) && x0(under.draws[1]) > x0(under.draws[2]))) throw new Error('Behind drew at x ' + under.draws.map(x0).join(', ') + ' - the furthest copy should go down first and the original last, on top');
+    /* TIME OFFSET: each copy is drawn from the plate the renderer hands back for its own moment, t + k × offset, held inside
+       the clip (0..10 s here). CONTROL: with no offset no other moment is asked for. */
+    const asked = [], ex = function () { return null; };
+    ex.at = t2 => { asked.push(+t2.toFixed(6)); return b14Canvas(W, H); };
+    const lay = { id: 'l14tr', start: 0, duration: 10 };
+    tr({}, { expand: ex, layer: lay, t: 2 });
+    if (asked.length) throw new Error('CONTROL: a Trail with no Time offset asked for ' + asked.length + ' other moments');
+    const timed = tr({ delay: 0.25 }, { expand: ex, layer: lay, t: 2 });
+    if (asked.join() !== '2.25,2.5,2.75') throw new Error('Time offset 0.25 at 2 s asked for the moments ' + asked.join(', ') + ' - copies 1-3 should show 2.25, 2.5 and 2.75 s');
+    const imgs = timed.draws.map(q => q.img);
+    if (imgs[0] !== 'img0' || new Set(imgs.slice(1)).size !== 3 || imgs.slice(1).indexOf('img0') >= 0) throw new Error('the timed copies are not each drawn from their own plate (' + imgs.join(', ') + ')');
+    asked.length = 0; tr({ delay: -1 }, { expand: ex, layer: lay, t: 0.5 });
+    if (asked.join() !== '0,0,0') throw new Error('Time offset -1 at 0.5 s asked for ' + asked.join(', ') + ' - a copy before the clip starts should hold its first moment');
+  });
+
+  test('482 14.5 Scatter Array - Drift sends every copy off on its own heading at 0.5-1.5 times the speed, the same in project px on a half-size plate, and Spin turns every copy at 0.5-1.5 times the rate', { item: '482', budgetMs: 60000 }, function () {
+    const W = 400, H = 300, bb = { x: 180, y: 135, w: 40, h: 30 };
+    const sc = (o, tl, ps) => { const k = ps || 1; return b14Cfx('scatterarray', Object.assign(b14Base('scatterarray', {}), { count: 10, spread: 60, seed: 3 }, o), { W: W * k, H: H * k, bb: { x: bb.x * k, y: bb.y * k, w: bb.w * k, h: bb.h * k }, t: tl, tl: tl, ps: k }).draws.slice(1); };
+    const mid = q => [(q.quad[0][0] + q.quad[2][0]) / 2, (q.quad[0][1] + q.quad[2][1]) / 2];
+    const ang = q => Math.atan2(q.quad[1][1] - q.quad[0][1], q.quad[1][0] - q.quad[0][0]) * 180 / Math.PI;
+    /* CONTROL: with no Drift and no Spin the scatter is still — the same copies in the same places at 0 s and 2 s. */
+    const a0 = sc({}, 0), a2 = sc({}, 2);
+    if (a0.length !== 9 || a2.length !== 9 || a0.some((q, i) => mid(q)[0] !== mid(a2[i])[0] || ang(q) !== ang(a2[i]))) throw new Error('CONTROL: a still Scatter Array moved between 0 s and 2 s');
+    /* DRIFT 20 px/s for 2 s: every copy is 20-60 px from where it started, the headings differ, and at 0 s nothing moved. */
+    const d0 = sc({ drift: 20 }, 0), d2 = sc({ drift: 20 }, 2);
+    if (d0.some((q, i) => mid(q)[0] !== mid(a0[i])[0] || mid(q)[1] !== mid(a0[i])[1])) throw new Error('Drift moved the copies at 0 s - it should start from the still scatter');
+    const dist = d2.map((q, i) => Math.hypot(mid(q)[0] - mid(d0[i])[0], mid(q)[1] - mid(d0[i])[1]));
+    if (d2.length !== 9 || dist.some(v => v < 20 - 1e-6 || v > 60 + 1e-6)) throw new Error('Drift 20 for 2 s moved the copies ' + dist.map(v => v.toFixed(1)).join(', ') + ' px - each should travel 20-60 px');
+    const heads = d2.map((q, i) => Math.atan2(mid(q)[1] - mid(d0[i])[1], mid(q)[0] - mid(d0[i])[0]));
+    if (Math.max.apply(null, heads) - Math.min.apply(null, heads) < 1.5) throw new Error('Drift sent the copies along nearly one heading (' + heads.map(v => (v * 180 / Math.PI).toFixed(0)).join(', ') + ' degrees) - each should go its own way');
+    /* …in PROJECT px: on a half-size plate every copy travels exactly half as many plate px. */
+    const h0 = sc({ drift: 20 }, 0, 0.5), h2 = sc({ drift: 20 }, 2, 0.5);
+    h2.forEach((q, i) => { const v = Math.hypot(mid(q)[0] - mid(h0[i])[0], mid(q)[1] - mid(h0[i])[1]); if (Math.abs(v - dist[i] / 2) > 1e-6) throw new Error('on a half-size plate copy ' + (i + 1) + ' drifted ' + v.toFixed(3) + ' plate px against ' + dist[i].toFixed(3) + ' on the full plate - the preview would drift twice as far as the export'); });
+    /* SPIN 90 degrees a second for 2 s: every copy has turned 90-270 degrees further, and they do not all turn alike. */
+    const s2 = sc({ spin: 90 }, 2), turns = s2.map((q, i) => ((ang(q) - ang(a2[i])) % 360 + 360) % 360);
+    if (turns.some(v => v < 90 - 1e-6 || v > 270 + 1e-6)) throw new Error('Spin 90 for 2 s turned the copies ' + turns.map(v => v.toFixed(1)).join(', ') + ' degrees - each should turn 90-270');
+    if (Math.max.apply(null, turns) - Math.min.apply(null, turns) < 20) throw new Error('Spin turned every copy alike (' + turns.map(v => v.toFixed(1)).join(', ') + ')');
+  });
+
+  test('482 14.5 Tile Grid - Gap leaves an empty band round every tile with the whole picture shrunk inside it, Scroll across 50 moves the grid half a tile a second on the clip’s own clock, and the shader agrees', { item: '482', budgetMs: 60000 }, async function () {
+    const W = 120, H = 90, grad = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = Math.round(x * 255 / (W - 1)); d[i + 1] = Math.round(y * 255 / (H - 1)); d[i + 2] = 90; d[i + 3] = 255; } return d; };
+    const tg = (o, tl) => b14Warp('gridrepeat', Object.assign(b14Base('gridrepeat', {}), { count: 3 }, o), W, H, tl || 0, tl || 0, grad());
+    const clear = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] === 0) n++; return n; };
+    /* GAP. CONTROL: no gap, no empty pixel. At 20 percent a tile keeps about 80 x 80 percent of its cell, so about 36 percent
+       of the frame is empty. */
+    if (clear(tg({})) !== 0) throw new Error('CONTROL: a gapless grid left ' + clear(tg({})) + ' empty pixels');
+    const gapped = tg({ gap: 20 }), frac = clear(gapped) / (W * H);
+    if (frac < 0.3 || frac > 0.42) throw new Error('Gap 20 left ' + (frac * 100).toFixed(1) + ' percent of the frame empty - about 36 should be');
+    /* …and each tile is the WHOLE picture made smaller, not a crop: across the middle row of the first tile its red runs
+       from near 0 (the picture's left edge) to near 255 (its right edge). */
+    const row = Math.round(H / 6), reds = [];
+    for (let x = 0; x < W / 3; x++) { const i = (row * W + x) * 4; if (gapped[i + 3]) reds.push(gapped[i]); }
+    if (!reds.length || reds[0] > 30 || reds[reds.length - 1] < 225) throw new Error('the first tile runs from red ' + reds[0] + ' to ' + reds[reds.length - 1] + ' - it should hold the whole picture, edge to edge');
+    /* SCROLL ACROSS 50: half a tile (20 px) a second on the clip's clock. At 1 s the picture is the 0 s picture moved 20 px
+       right. CONTROL: with no scroll 1 s is 0 s. */
+    const s0 = tg({ scrollx: 50 }, 0), s1 = tg({ scrollx: 50 }, 1), n1 = tg({}, 1);
+    if (!b14Same(n1, tg({}, 0))) throw new Error('CONTROL: an unscrolled grid changed between 0 s and 1 s');
+    for (let y = 0; y < H; y++) for (let x = 20; x < W; x++) { const a = (y * W + x) * 4, b = (y * W + x - 20) * 4; if (s1[a] !== s0[b] || s1[a + 1] !== s0[b + 1]) throw new Error('Scroll across 50 at 1 s is not the 0 s grid moved 20 px right (at ' + x + ', ' + y + ')'); }
+    if (b14Same(s0, s1)) throw new Error('Scroll across 50 did not move the grid at all');
+    /* THE SHADER TWIN, where WebGL is there to ask: a 420 x 420 Tile Grid with Gap, Scroll, Mirror and Row offset, through
+       the real renderer on the CPU and on the GPU, must agree as closely as every ported warp does (0.5 percent). */
+    if (FM.glWarp && FM.glWarp.available && FM.glWarp.available()) {
+      const S = 420, cv = b14Canvas(S, S), cx = cv.getContext('2d', { willReadFrequently: true }), was = FM._noGL;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 210, y: 210, shapeW: 260, shapeH: 330, fill: '#4fd1ff' }); L.start = 0; L.duration = 3;
+      const fx = FM.fxRegistry.makeInstance('gridrepeat'); Object.assign(fx.params, { count: 3, gap: 15, scrollx: 30, scrolly: -40, mirror: 3, stagger: 0.5 }); L.effects = [fx];
+      const L2 = FM.makeLayer('shape', { shape: 'rect', x: 140, y: 130, shapeW: 110, shapeH: 110, fill: '#ff9a4f' }); L2.start = 0; L2.duration = 3;
+      const sc = scene([L2, L], { project: { width: S, height: S, fps: 30, duration: 3, background: null } });
+      const shot = () => { cx.clearRect(0, 0, S, S); FM.renderScene(cx, sc, 1.3); return cx.getImageData(0, 0, S, S).data; };
+      const differ = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]), Math.abs(a[i + 3] - b[i + 3])) > 24) n++; return n; };
+      try {
+        FM._noGL = true; FM.glWarp._reset(); const cpu = shot();
+        Object.assign(fx.params, { gap: 0, scrollx: 0, scrolly: 0 }); const plainCpu = shot(); Object.assign(fx.params, { gap: 15, scrollx: 30, scrolly: -40 });
+        if (differ(cpu, plainCpu) < S * S * 0.05) throw new Error('setup: Gap and Scroll changed only ' + differ(cpu, plainCpu) + ' pixels of the CPU picture - they are not in the fixture');
+        FM._noGL = false; FM.glWarp._reset(); const gpu = shot(), st = FM.glWarp.stats();
+        if (!(st.gpu > 0)) throw new Error('the GPU path did not run on the Tile Grid (' + st.reason + ') - this would compare the CPU loop with itself');
+        const big = differ(cpu, gpu);
+        if (100 * big / (S * S) > 0.5) throw new Error('the Tile Grid with Gap and Scroll draws a different picture on the GPU: ' + (100 * big / (S * S)).toFixed(3) + ' percent of pixels - the kernel and its shader are a matched pair');
+      } finally { FM._noGL = was; FM.glWarp._reset(); }
+    }
+  });
 })();

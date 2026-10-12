@@ -740,6 +740,10 @@ window.FM = window.FM || {};
       { key: 'rows', label: 'Rows', min: 0, max: 10, step: 1, def: 0, note: '0 = same as columns' },
       { key: 'mirror', label: 'Mirror', def: 0, options: [[0, 'Off'], [1, 'X'], [2, 'Y'], [3, 'Both']] },
       { key: 'stagger', label: 'Row offset', min: 0, max: 1, step: 0.05, def: 0 },
+      /* #482 polish 14.5: Scroll and Gap, each 0 by default — the old grid byte for byte, on the CPU and in the shader. */
+      { key: 'scrollx', label: 'Scroll across', min: -200, max: 200, step: 5, def: 0, unit: '%/s', note: 'Per cent of a tile a second' },
+      { key: 'scrolly', label: 'Scroll down', min: -200, max: 200, step: 5, def: 0, unit: '%/s' },
+      { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 0, unit: '%' },
     ] },
     /* Queue 123. Ezra: "Linear repeat effect is shit and needs work, currently it just squishes
        horizontally when you do it." It was a one-param pixel warp that crushed the whole picture into
@@ -751,6 +755,11 @@ window.FM = window.FM || {};
       { key: 'spacing', label: 'Spacing', min: 10, max: 300, step: 5, def: 35, legacy: 100, unit: '%' },   // % of the content's own width along the axis — 100 = edge to edge. A NEW Trail starts at 35 (queue 904): at 100 a full-frame clip's copies all land off the frame and the effect looks dead. A saved Trail with no key still draws 100.
       { key: 'angle', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'fade', label: 'Fade out', min: 0, max: 100, step: 1, def: 0, unit: '%' },        // 0 = every copy solid, as before
+      /* #482 polish 14.5: every default is the old trail byte for byte. */
+      { key: 'scale', label: 'Copy size', min: 50, max: 150, step: 1, def: 100, unit: '%', note: 'Each copy this size of the one before' },
+      { key: 'rotate', label: 'Copy turn', min: -45, max: 45, step: 1, def: 0, unit: '°', note: 'Each copy turned this much more' },
+      { key: 'order', label: 'Copies', def: 0, options: [[0, 'In front'], [1, 'Behind']] },
+      { key: 'delay', label: 'Time offset', min: -1, max: 1, step: 0.05, def: 0, unit: 's', note: 'Per copy. Below 0 the copies trail where it was' },
     ] },
     // ---- Scatter Array (queue 484: AM's Scatter Repeat, our name) — copies that are NOT on a grid ----
     { type: 'scatterarray', label: 'Scatter Array', params: [
@@ -760,6 +769,9 @@ window.FM = window.FM || {};
       { key: 'rotate', label: 'Rotate', min: 0, max: 180, step: 1, def: 25, unit: '°' },
       { key: 'fade', label: 'Fade', min: 0, max: 100, step: 1, def: 35, unit: '%' },
       { key: 'seed', label: 'Seed', min: 1, max: 99, step: 1, def: 1 },
+      /* #482 polish 14.5: both 0 by default — the old still scatter byte for byte. */
+      { key: 'drift', label: 'Drift', min: 0, max: 200, step: 1, def: 0, unit: ' px/s' },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
     ] },
     { type: 'radialrepeat', label: 'Ring Array', params: [
       { key: 'count', label: 'Segments', min: 2, max: 16, step: 1, def: 6 },
@@ -9390,11 +9402,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         drawLayer(actx, tmp, t, scene);
       }
       const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
+      /* The clip's own clock rides every prep as a trailing argument (#482 polish 14.5): Tile Grid's Scroll runs on it, so a
+         clip moved along the timeline scrolls from the same place. Every other prep ignores it. */
+      const tl = FM.fxLocalTime ? FM.fxLocalTime(layer, t) : t;
       function uniformsFor(k, params) {
         /* glslPrep first, then prep, then nothing — the same three-way the single-effect path uses.
            A kernel with nothing worth hoisting has no prep at all, and that is not an error. */
-        return (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps)
-                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps) : null)) || {};
+        return (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps, tl)
+                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps, tl) : null)) || {};
       }
       /* ═══ A RUN OF WARPS GOES THROUGH THE GPU IN ONE GO (the oldest entry's own named next step) ══
        * *"A CHAIN OF WARPS DOES NOT YET STAY ON THE GPU… worth roughly another 3x on a stacked layer
@@ -9444,7 +9459,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       } else {
         plate([fx]);
       }
-      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps) : null;
+      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps, tl) : null;
       /* ═══ THE GPU PATH (the oldest open item, "Editing lags, and gets bad fast") ══════════════════
        * That entry's own conclusion after three months: the cost is this loop, the gap is ~50x, and no
        * further kernel tuning closes it. A kernel that carries a `.glsl` twin runs as a fragment shader
@@ -9464,7 +9479,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          * A shader still needs those numbers. `glslPrep` is that, and it runs ONLY on this path, so the
          * CPU loop keeps exactly the shape that was measured — the finding above is not quietly undone
          * by the GPU port. */
-        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps) : pre;
+        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps, tl) : pre;
         warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {});
       }
       if (!warped) {
@@ -9473,6 +9488,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         for (let y = 0; y < H; y++) {
           for (let x = 0; x < W; x++) {
             const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
+            if (m === null) continue;   // a sample that is nothing — Tile Grid's Gap (#482 14.5); createImageData is already transparent
             let sx = m[0] | 0, sy = m[1] | 0;
             if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
             if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
@@ -10965,11 +10981,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * rounding difference flips it down by one every time. A warp whose output lands on integers cannot
      * take reciprocal substitution ANYWHERE, fractions included. Verified movedPixels === 0 as it now
      * stands, against the reference body below. */
+    /* #482 polish 14.5: SCROLL moves the whole grid (C.scx / C.scy, whole plate px, from prep); GAP shrinks each tile into the
+       middle of its cell and leaves the rest EMPTY — the one warp that returns `null`, which drawWarpEffect's loop writes as a
+       transparent pixel (its shader twin sets fmGap). Both 0 by default: x - 0 and y - 0 are x and y, and the old fraction
+       lines run untouched. */
     gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.gridrepeat.prep(W,H,cx,cy,maxR,p,t,ps);
-      var grX=x;
-      if(C.stag>0){ var grRow0=Math.floor(y/C.cellH); if(grRow0&1) grX=x+C.stagCell; }
-      var grIx=Math.floor(grX/C.cellW), grIy=Math.floor(y/C.cellH);
-      var grGx=(grX-grIx*C.cellW)/C.cellW; var grGy=(y-grIy*C.cellH)/C.cellH;
+      var grX=x-C.scx, grY=y-C.scy;
+      if(C.stag>0){ var grRow0=Math.floor(grY/C.cellH); if(grRow0&1) grX=grX+C.stagCell; }
+      var grIx=Math.floor(grX/C.cellW), grIy=Math.floor(grY/C.cellH), grGx, grGy;
+      if(C.gap>0){ var grPx=grX-grIx*C.cellW, grPy=grY-grIy*C.cellH;
+        if(grPx<C.gx0||grPx>C.gx1||grPy<C.gy0||grPy>C.gy1) return null;
+        grGx=(grPx-C.gx0)/(C.gx1-C.gx0); grGy=(grPy-C.gy0)/(C.gy1-C.gy0); }
+      else { grGx=(grX-grIx*C.cellW)/C.cellW; grGy=(grY-grIy*C.cellH)/C.cellH; }
       if(C.mir===1||C.mir===3){ if(grIx&1) grGx=1-grGx; }
       if(C.mir===2||C.mir===3){ if(grIy&1) grGy=1-grGy; }
       return [grGx*W, grGy*H]; },
@@ -11257,8 +11280,22 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var grMir = p.mirror == null ? 0 : (Math.round(FM.evalProp(p.mirror, t)) | 0);
     var grStag = p.stagger == null ? 0 : FM.evalProp(p.stagger, t); if (grStag < 0) grStag = 0; if (grStag > 1) grStag = 1;
     var cellW = W / grCount, cellH = H / grRows;
+    /* #482 polish 14.5 — SCROLL ACROSS / DOWN in per cent of a cell a second, on the clip's own clock (`tl`, which
+       drawWarpEffect hands every prep; a direct caller without it scrolls on t). Taken modulo two cells, so a long clip
+       never grows the offset (and a mirrored grid keeps its parity), and ROUNDED TO WHOLE PLATE PIXELS: the sampler picks
+       whole pixels anyway, and a whole number is exact in the shader's 32-bit floats and in JavaScript alike, so the two
+       twins cut the tiles in the same place. GAP is the share of each cell left empty, as a band round a centred tile; its
+       edges sit half a pixel off the whole-pixel grid (gx0 = floor(…) + 0.5) so no sample ever lands exactly on one —
+       where the twins' last bits differ, a boundary sample is a coin toss between them. */
+    var grClock = (arguments[8] == null) ? t : arguments[8];
+    var grSx = p.scrollx == null ? 0 : (+FM.evalProp(p.scrollx, t) || 0), grSy = p.scrolly == null ? 0 : (+FM.evalProp(p.scrolly, t) || 0);
+    grSx = Math.max(-200, Math.min(200, grSx)); grSy = Math.max(-200, Math.min(200, grSy));
+    var grScx = grSx ? Math.round(((grSx / 100 * grClock) % 2) * cellW) : 0, grScy = grSy ? Math.round(((grSy / 100 * grClock) % 2) * cellH) : 0;
+    var grGap = p.gap == null ? 0 : (+FM.evalProp(p.gap, t) || 0); grGap = Math.max(0, Math.min(40, grGap)) / 100;
+    var grGx0 = Math.floor(grGap / 2 * cellW) + 0.5, grGy0 = Math.floor(grGap / 2 * cellH) + 0.5;
     return { mir: grMir, stag: grStag, cellW: cellW, cellH: cellH,
-             icellW: 1 / cellW, icellH: 1 / cellH, stagCell: grStag * cellW };
+             icellW: 1 / cellW, icellH: 1 / cellH, stagCell: grStag * cellW,
+             scx: grScx, scy: grScy, gap: grGap, gx0: grGx0, gx1: cellW - grGx0, gy0: grGy0, gy1: cellH - grGy0 };
   };
 
   WARP_FX.twirl.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -11318,12 +11355,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* GRID REPEAT — tile the frame, with optional per-row stagger and alternate-tile mirroring.
      ⚠️ `grIx & 1` is an integer parity test and GLSL ES 1.0 has NO integer bitwise operators, so it is
      written as mod(ix, 2.0) >= 0.5 — the same question asked of a float that is already whole. */
+  /* #482 polish 14.5: the twin of the kernel's Scroll and Gap — q is xy less the whole-pixel scroll (xy itself at the default
+     0, exactly), and a sample in the gap sets gl-warp's fmGap, which writes a transparent pixel where the CPU loop writes the
+     `null` the kernel returns. At Gap 0 the old fraction lines run. */
   WARP_FX.gridrepeat.glsl = [
-    'float gx = xy.x;',
-    'if (u_stag > 0.0) { float row0 = floor(xy.y * u_icellH); if (mod(row0, 2.0) >= 0.5) gx = xy.x + u_stagCell; }',
-    'float ix = floor(gx * u_icellW), iy = floor(xy.y * u_icellH);',
-    'float gux = (gx - ix * u_cellW) * u_icellW;',
-    'float guy = (xy.y - iy * u_cellH) * u_icellH;',
+    'vec2 q = xy - vec2(u_scx, u_scy);',
+    'float gx = q.x;',
+    'if (u_stag > 0.0) { float row0 = floor(q.y * u_icellH); if (mod(row0, 2.0) >= 0.5) gx = q.x + u_stagCell; }',
+    'float ix = floor(gx * u_icellW), iy = floor(q.y * u_icellH);',
+    'float gux, guy;',
+    'if (u_gap > 0.0) {',
+    '  float px = gx - ix * u_cellW, py = q.y - iy * u_cellH;',
+    '  if (px < u_gx0 || px > u_gx1 || py < u_gy0 || py > u_gy1) { fmGap = true; return xy; }',
+    '  gux = (px - u_gx0) / (u_gx1 - u_gx0); guy = (py - u_gy0) / (u_gy1 - u_gy0);',
+    '} else {',
+    '  gux = (gx - ix * u_cellW) * u_icellW;',
+    '  guy = (q.y - iy * u_cellH) * u_icellH;',
+    '}',
     'if (u_mir == 1.0 || u_mir == 3.0) { if (mod(ix, 2.0) >= 0.5) gux = 1.0 - gux; }',
     'if (u_mir == 2.0 || u_mir == 3.0) { if (mod(iy, 2.0) >= 0.5) guy = 1.0 - guy; }',
     'return vec2(gux * res.x, guy * res.y);'
@@ -12028,6 +12076,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM, maxM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM);
     expand.shifted = (sx, sy) => renderShiftedPlate(layer, fx, t, scene, ps, W, H, OX - sx / ps, OY - sy / ps);   // the layer moved by (sx, sy) plate px, whatever its size (Drift's Wrap)
+    expand.at = (t2) => renderShiftedPlate(layer, fx, t2, scene, ps, W, H, OX, OY);   // the plate A is, as the layer looks at t2 (#482 14.5, Trail's Time offset)
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, resolveFxColors(fx.params || {}, t), t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
@@ -14043,8 +14092,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const ang = (fparam(p, 'angle', 0, t) || 0) * Math.PI / 180;    // 0° = to the right
       const spread = Math.max(0.05, Math.min(3, (fparam(p, 'spacing', 100, t) || 100) / 100));
       const fade = Math.max(0, Math.min(1, (fparam(p, 'fade', 0, t) || 0) / 100));
-      B.drawImage(A, 0, 0);                                           // the original stays exactly where it is
-      if (n < 2) return;
+      /* #482 polish 14.5. COPY SIZE: each copy is this much the size of the one before (80% makes the third 0.8³ = 51%),
+         about its own middle; COPY TURN: each copy turns this much more than the one before; COPIES Behind draws them
+         under the original, the furthest at the bottom; TIME OFFSET draws copy k as the layer looks k × this many seconds
+         later (or earlier), so a moving title leaves a trail of where it was — each copy from a plate of its own,
+         rendered at that moment and held at the clip's first or last moment past its ends. Every default is the old
+         trail: no scale, no turn, in front, one plate. */
+      const sizeStep = Math.max(0.5, Math.min(1.5, fparam(p, 'scale', 100, t) / 100));
+      const turnStep = Math.max(-45, Math.min(45, fparam(p, 'rotate', 0, t))) * Math.PI / 180;
+      const behind = Math.round(fparam(p, 'order', 0, t)) === 1;
+      const delay = Math.max(-1, Math.min(1, fparam(p, 'delay', 0, t)));
+      const shaped = sizeStep !== 1 || turnStep !== 0;
+      const timed = delay !== 0 && !!expand && typeof expand.at === 'function' && !!layer;
+      if (!behind) B.drawImage(A, 0, 0);                              // the original stays exactly where it is
+      if (n < 2) { if (behind) B.drawImage(A, 0, 0); return; }
       // How far the content reaches along the repeat axis — the honest basis for "one copy over".
       const alongOf = (w, h) => Math.abs(Math.cos(ang)) * w + Math.abs(Math.sin(ang)) * h;
       /* #986 C27: the copies are offsets of the whole layer, so a clip half off the frame repeats as a whole clip —
@@ -14059,11 +14120,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (dx <= -W || dx >= W || dy <= -H || dy >= H) break;
           const a = fade ? 1 - fade * (i / (n - 1)) : 1;
           if (fade && a <= 0.004) break;
-          offs.push([dx, dy, a]);
+          offs.push([dx, dy, a, i]);
         }
         return offs;
       };
-      const mats = (offs) => offs.map(q => new DOMMatrix().translateSelf(q[0], q[1]));
+      const tcx = bb.x + bb.w / 2, tcy = bb.y + bb.h / 2;   // a copy grows and turns about its own middle (14.5)
+      const mats = (offs) => offs.map(q => shaped
+        ? new DOMMatrix().translateSelf(tcx + q[0], tcy + q[1]).rotateSelf(q[3] * turnStep * 180 / Math.PI).scaleSelf(Math.pow(sizeStep, q[3]), Math.pow(sizeStep, q[3])).translateSelf(-tcx, -tcy)
+        : new DOMMatrix().translateSelf(q[0], q[1]));
       let offs = offsAt(alongOf(bb.w, bb.h)), src = null;
       /* …AND "ONE COPY OVER" HAS TO MEAN THE CONTENT THE COPIES DRAW (#986 review). bb is the ON-FRAME alpha box, so a
          clip half off the frame stepped by its visible half while each copy drew the whole clip: at Spacing 100 every
@@ -14071,7 +14135,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          its 11200 visible pixels). Where the layer's own box runs past the plate, and bb reaches that edge (so the
          frame is what cut it), bb is extended to the layer's edge on that side; an in-frame layer keeps bb exactly.
          Used only when the copies really come from the expanded plate — copies of A are copies of what bb measured. */
-      const box = (expand && layer && scene) ? layerAABB(layer, t, scene) : null;
+      const box = (expand && layer && scene && !timed) ? layerAABB(layer, t, scene) : null;   // a timed copy draws from a plate of its own moment (below)
       if (box) {
         const oX = A.__fmOX || 0, oY = A.__fmOY || 0, s = ps > 0 ? ps : 1;
         const px0 = (box.x0 - oX) * s, px1 = (box.x1 - oX) * s, py0 = (box.y0 - oY) * s, py1 = (box.y1 - oY) * s;
@@ -14087,14 +14151,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (s2.cv !== A || !whole.length) { offs = whole; src = s2; }
         }
       }
-      if (!src) src = moverSource(A, W, H, ps, expand, layer, t, scene, mats(offs));
-      for (const q of offs) {
-        if (fade) {
-          B.save(); B.globalAlpha = q[2]; B.drawImage(src.cv, q[0] + src.x, q[1] + src.y); B.restore();
+      if (!src) src = timed ? { cv: A, x: 0, y: 0 } : moverSource(A, W, H, ps, expand, layer, t, scene, mats(offs));
+      /* TIME OFFSET: copy k is the layer at t + k × offset, kept inside the clip's own life so a copy never blinks out
+         past its start or end. The plate is drawn before the next is asked for, so one pooled plate serves them all. */
+      const life0 = (layer && layer.start) || 0, life1 = life0 + Math.max(0, (layer && layer.duration) || 0);
+      const at = k => { let t2 = t + k * delay; if (life1 > life0) t2 = Math.max(life0, Math.min(life1 - 1e-3, t2)); return expand.at(t2); };
+      for (const q of (behind ? offs.slice().reverse() : offs)) {
+        const cv = timed ? at(q[3]) : src.cv;
+        if (!shaped) {
+          if (fade) {
+            B.save(); B.globalAlpha = q[2]; B.drawImage(cv, q[0] + src.x, q[1] + src.y); B.restore();
+          } else {
+            B.drawImage(cv, q[0] + src.x, q[1] + src.y);
+          }
         } else {
-          B.drawImage(src.cv, q[0] + src.x, q[1] + src.y);
+          const s = Math.pow(sizeStep, q[3]);
+          B.save();
+          if (fade) B.globalAlpha = q[2];
+          B.translate(tcx + q[0], tcy + q[1]);
+          if (turnStep) B.rotate(q[3] * turnStep);
+          if (s !== 1) B.scale(s, s);
+          B.translate(-tcx, -tcy);
+          B.drawImage(cv, src.x, src.y);
+          B.restore();
         }
       }
+      if (behind) B.drawImage(A, 0, 0);                               // under Behind the original goes on top
     },
     /* SCATTER ARRAY (queue 484 clause 2 — Alight Motion calls it Scatter Repeat).
        Every repeat this app has is strictly REGULAR — Trail walks a straight line, Tile Grid and Ring
@@ -14112,6 +14194,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const scaleV = Math.max(0, Math.min(100, fparam(p, 'sizevary', 30, t))) / 100;
       const fade = Math.max(0, Math.min(100, fparam(p, 'fade', 35, t))) / 100;
       const seed = Math.round(fparam(p, 'seed', 1, t)) | 0;
+      /* #482 polish 14.5. DRIFT sends every copy off on its own heading at its own speed (half to one and a half times
+         Drift, px a second); SPIN turns every copy at its own rate (half to one and a half times Spin, degrees a second),
+         the same way round. Both run on the clip's own clock and are hashes of the seed like everything else here, so
+         preview, export and scrubbing agree; at 0 neither touches the arithmetic below. Drift is project px, scaled to
+         the plate here — a canvas kernel scales for itself. */
+      const drift = Math.max(0, Math.min(200, fparam(p, 'drift', 0, t))) * (ps > 0 ? ps : 1);
+      const spin = Math.max(-360, Math.min(360, fparam(p, 'spin', 0, t))) * Math.PI / 180;
+      const clock = tl == null ? t : tl;
       B.drawImage(A, 0, 0);                       // the original stays exactly where it is
       if (n < 2) return;
       const hash = function (k) {
@@ -14126,12 +14216,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const reach = Math.max(bb.w, bb.h) * spread;
       const copies = [];   // #986 C27: gathered first so one expanded plate serves every copy
       for (let i = 1; i < n; i++) {
-        const dx = (hash(i * 5) - 0.5) * 2 * reach;
-        const dy = (hash(i * 5 + 1) - 0.5) * 2 * reach;
+        let dx = (hash(i * 5) - 0.5) * 2 * reach;
+        let dy = (hash(i * 5 + 1) - 0.5) * 2 * reach;
         const a = 1 - fade * (hash(i * 5 + 2));
         if (a <= 0.004) continue;
         const sc = 1 + (hash(i * 5 + 3) - 0.5) * 2 * scaleV;
-        const an = (hash(i * 5 + 4) - 0.5) * 2 * rot;
+        let an = (hash(i * 5 + 4) - 0.5) * 2 * rot;
+        if (drift) { const hd = hash(i * 5 + 1000) * 2 * Math.PI, go = drift * (0.5 + hash(i * 5 + 1001)) * clock; dx += Math.cos(hd) * go; dy += Math.sin(hd) * go; }
+        if (spin) an += spin * (0.5 + hash(i * 5 + 1002)) * clock;
         if (cx0 + dx < -bb.w || cx0 + dx > W + bb.w || cy0 + dy < -bb.h || cy0 + dy > H + bb.h) continue;
         copies.push([dx, dy, a, sc <= 0.02 ? 0.02 : sc, an]);
       }
