@@ -894,6 +894,13 @@ window.FM = window.FM || {};
   }
   FM._scrubGesture = scrubGesture;
 
+  /* Where a value in a row's gap lands (#482 batch 8 review; fxScrubber `offUntil`): 0 is Off and nothing rests in 1…gap−1.
+     Coming down from the gap's top or above → 0; otherwise (coming up from Off, or typed: `from` null) → the gap's top. */
+  function offGapSnap(gap, v, from) {
+    if (!(v > 0 && v < gap)) return v;
+    return (from != null && from >= gap) ? 0 : gap;
+  }
+  FM._offGapSnap = offGapSnap;   // suite seam
   // re-scrolls the ruler (call after a typed value).
   function tickStrip(o) {
     const strip = el('div', 'fx-scrub');
@@ -991,10 +998,17 @@ window.FM = window.FM || {};
       const before = cur;
       cur = Math.max(o.min, Math.min(o.max, cur - dx * q / TICK));
       const grid = scrubGrid(fine, o.step, q);
-      const v = Math.max(o.min, Math.min(o.max, o.min + Math.round((cur - o.min) / grid) * grid));   // land ON a notch (the grid can overshoot an off-grid max)
+      let v = Math.max(o.min, Math.min(o.max, o.min + Math.round((cur - o.min) / grid) * grid));   // land ON a notch (the grid can overshoot an off-grid max)
+      /* A ROW WITH A GAP (#482 batch 8 review: Tempo, Keep bass centred — 0 is Off, nothing rests in 1–39). o.snap moves a
+         value that lands in the gap across it, judged against where the row stood; the ruler's own position jumps with it,
+         or the next notch would land back in the gap and the value would flick between the two ends. */
+      if (o.snap) { const s = o.snap(v, lastApplied != null ? lastApplied : o.read()); if (s !== v) { v = s; cur = s; } }
       if (v !== lastApplied) { lastApplied = v; o.apply(v); sync(v); }
       return Math.abs(cur - before) > 1e-9;   // false at a wall → the glide stops rather than spinning
     };
+    /* Suite seam: one drag of the ruler, moved by each of `dxs` screen px in turn — starting as a pointerdown does (re-read the
+       value, nothing applied yet). Synthetic pointer drags are unreliable on this control (queue 455's note). */
+    strip._drag = dxs => { cur = o.read(); lastApplied = null; dxs.forEach(dx => applyDx(dx, false)); };
     const glide = attachGlide(strip, applyDx, () => { o.release(); });
     /* DIRECTIONAL LOCK on touch (v6.19). Ezra: "sometimes when scrolling through an effect with lots
      * of sliders it doesn't let me scroll up because I placed my finger on the slider, which is
@@ -1161,11 +1175,19 @@ window.FM = window.FM || {};
        the pill's INSET, not the pill: there is nothing to select until it has a value. Only where its neighbours are pills. */
     if (!nameEl.classList.contains('kf-selectable') && fx.params && fx.params[p.key] == null && layer && Object.keys(fx.params).some(k => kfInScope(layer, 'fx:' + k))) nameEl.classList.add('kf-inset');
     row.appendChild(nameEl);
-    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.setAttribute('aria-label', p.label || p.key); valBox.value = read().toFixed(prec) + (p.unit || ''); typeInBox(valBox, p.min);
+    /* 0 IS OFF, AND NOTHING RESTS IN THE GAP (#482 batch 8 review). `offUntil` (Tempo 40, Keep bass centred 40): the box says
+       Off at 0, and a value in 1…offUntil−1 lands across the gap — on offUntil when it comes up from below or is typed (a
+       typed number other than 0 asks for that setting, as near as it goes; type 0 or "off" for Off), on 0 when it comes down
+       from offUntil or above. A slider's NOTE (queue 904, Tile Grid's "0 = same as columns") explains a special value under
+       the row; this one has a word for it in the box instead, so it needs no line. */
+    const gap = p.offUntil > 0 ? p.offUntil : 0;
+    const shown = v => (gap && v === 0 ? 'Off' : v.toFixed(prec) + (p.unit || ''));
+    const valBox = el('input', 'fx-scrub-val'); valBox.type = 'text'; valBox.setAttribute('aria-label', p.label || p.key); valBox.value = shown(read()); typeInBox(valBox, p.min);
     function apply(v, commit) {
       v = Math.max(p.min, Math.min(p.max, Math.round(v / p.step) * p.step));
+      if (gap) v = offGapSnap(gap, v, null);   // a typed value; the ruler has already moved its own across (o.snap)
       FM.setProp(fx.params, p.key, v, FM.time);
-      valBox.value = v.toFixed(prec) + (p.unit || '');
+      valBox.value = shown(v);
       FM.requestRender();
       if (commit && FM.history) FM.history.commit();
       row.dispatchEvent(new CustomEvent('fx-range-set'));   // a slider that follows this one re-reads it (#482 polish 2.1)
@@ -1173,14 +1195,18 @@ window.FM = window.FM || {};
     const strip = tickStrip({
       min: p.min, max: p.max, step: p.step, unit: p.unit, dflt: p.default, read: read, q: p.q,
       apply: v => apply(v, false),
+      snap: gap ? (v, from) => offGapSnap(gap, v, from) : null,
       // animated param: rebuild timeline + inspector so the just-made keyframe is visible/selectable (afterFx includes commit)
       release: () => { if (FM.isAnimated(fx.params[p.key])) afterFx(); else if (FM.history) FM.history.commit(); },
     });
-    valBox.addEventListener('change', () => { const v = parseFloat(valBox.value); if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = read().toFixed(prec) + (p.unit || ''); });
+    valBox.addEventListener('change', () => {
+      const v = (gap && /^\s*off\s*$/i.test(valBox.value)) ? 0 : parseFloat(valBox.value);
+      if (!isNaN(v)) { apply(v, true); strip._sync(read()); } else valBox.value = shown(read());
+    });
     valBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') valBox.blur(); });
     row.appendChild(strip); row.appendChild(valBox);
     // A following slider with no value of its own shows its leader's new value the moment the leader moves.
-    if (followed) row._resync = () => { if (fx.params[p.key] != null) return; strip._sync(read()); valBox.value = read().toFixed(prec) + (p.unit || ''); };
+    if (followed) row._resync = () => { if (fx.params[p.key] != null) return; strip._sync(read()); valBox.value = shown(read()); };
     return row;
   }
 
@@ -2416,7 +2442,8 @@ window.FM = window.FM || {};
     // "Not used when Bass is 0" however the effect declared it.
     // alsoGate (#482 polish 8.5): Vocal Remove's Keep bass below is dead in Centre only AND while Keep Bass is 0.
     return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, legacy: p.legacy, unit: p.unit, keyframable: p.keyframable,
-      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt, deadAtText: p.deadAtText, liveWhen: p.liveWhen, liveWhenText: p.liveWhenText, liveAbove: p.liveAbove, alsoGate: p.alsoGate };
+      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt, deadAtText: p.deadAtText, liveWhen: p.liveWhen, liveWhenText: p.liveWhenText, liveAbove: p.liveAbove, alsoGate: p.alsoGate,
+      offUntil: p.offUntil };   // batch 8 review: 0 = Off, nothing rests below this (Tempo, Keep bass centred)
   }
   /* A per-PARAM warning, shown only once the param is actually animated. Reverb's Size and Decay are the
      only two that carry one, and it is the warning Ezra asked for by name — *"if audio key frames break

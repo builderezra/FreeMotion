@@ -645,13 +645,16 @@ window.FM = window.FM || {};
    * kept to the control's own range (an Echo stops at 2 s). Not keyframable (the backlog: static only) and not a rebuild:
    * the synced value rides the same AudioParam the slider drives, so a drag never rebuilds, and an LFO's starting phase
    * reads the synced rate (shop.lfo hzOf), so the beat lands where scene time says, export and preview alike. Tempo 0 (the
-   * default, and every saved effect) is today's Time / Rate. Any Tempo above 0 syncs. */
+   * default, and every saved effect) is today's Time / Rate. Any Tempo above 0 syncs, and the panel only offers 40–240. */
   const NOTES = [[0, '1/1'], [1, '1/2'], [2, '1/4'], [3, '1/8'], [4, '1/8·'], [5, '1/8T'], [6, '1/16']];
   const NOTE_OF_BAR = [1, 1 / 2, 1 / 4, 1 / 8, 3 / 16, 1 / 12, 1 / 16];   // 1/8· dotted, 1/8T a triplet
-  // The synced time in seconds, or null while Tempo is off.
+  /* Tempo is 0 (Off) or 40–240 (batch 8 review): `offUntil` makes the panel say Off at 0 and never rest in 1–39 — a value
+     moved into that gap lands on 40 coming up (or typed) and on Off coming down (inspector.js offGapSnap). */
+  const TEMPO_MIN = 40;
+  // The synced time in seconds, or null while Tempo is off. A file carrying 1–39 (the panel cannot) plays it at 40.
   function syncSecs(inst, type) {
     const bpm = staticOf(inst, type, 'bpm');
-    return bpm > 0 ? (60 / bpm) * 4 * NOTE_OF_BAR[staticOf(inst, type, 'note')] : null;
+    return bpm > 0 ? (60 / Math.max(TEMPO_MIN, bpm)) * 4 * NOTE_OF_BAR[staticOf(inst, type, 'note')] : null;
   }
   /* Tempo and Note for an effect whose `key` is a time ('s', lo…hi seconds) or a rate ('Hz'). The Note row carries the
      readout the panel shows under it; Time / Rate is marked as switched off while Tempo is on. */
@@ -663,7 +666,7 @@ window.FM = window.FM || {};
       const raw = rate ? 1 / s : s, v = clamp(raw, lo, hi), lim = Math.abs(v - raw) > 1e-9 ? ' (as far as it goes)' : '';
       return '= ' + (rate ? v.toFixed(2) + ' Hz' : (v < 1 ? Math.round(v * 1000) + ' ms' : v.toFixed(2) + ' s')) + lim;
     };
-    return [P('bpm', 'Tempo', 0, 240, 1, 0, 'BPM', false),
+    return [Object.assign(P('bpm', 'Tempo', 0, 240, 1, 0, 'BPM', false), { offUntil: TEMPO_MIN }),
       CHOICE('note', 'Note', NOTES, 2, { overriddenBy: 'bpm', deadAt: 0, deadAtText: 'Off', readout: readout, readoutBy: ['bpm'] })];
   }
   const SYNCED = p => Object.assign(p, { overriddenBy: 'bpm', liveWhen: 0, liveWhenText: 'Off' });
@@ -1157,11 +1160,11 @@ window.FM = window.FM || {};
       /* #482 polish 8.4. Widening pushes the bass apart too, and wide bass is what makes a mix sound hollow on a phone
          speaker and lopsided in headphones. Keep bass centred takes the difference between the sides (S) away below the
          frequency given — two Butterworth highpasses on S, 24 dB an octave, so 60 Hz under a 150 Hz setting keeps 1/40 of
-         its width — and leaves everything above it as wide as Width says. 0 is off; 1–39 act as 40 Hz, the lowest it
-         reaches. Auto trim turns the sound down as Width goes past 1 by √(2 / (1 + Width²)), which holds the level of an
+         its width — and leaves everything above it as wide as Width says. 0 is Off, then 40–300 Hz: the panel says Off at 0
+         and never rests in 1–39 (`offUntil`, the batch 8 review; a file that carries one plays it at 40). Auto trim turns the sound down as Width goes past 1 by √(2 / (1 + Width²)), which holds the level of an
          ordinary stereo sound (left and right unrelated) where it was: at 2 it would otherwise come out 4 dB louder. Both
          default to today's Width: Keep bass centred 0 is a bypass pair, Auto trim Off builds nothing (a rebuild). */
-      P('monobass', 'Keep bass centred', 0, 300, 1, 0, 'Hz', true),
+      Object.assign(P('monobass', 'Keep bass centred', 0, 300, 1, 0, 'Hz', true), { offUntil: 40 }),
       TOGGLE('trim', 'Auto trim', 0, { rebuild: true, note: 'Turns the sound down as it gets wider, so wider is not also louder.' }),
     ],
     build: function (ctx, inst) {
@@ -1339,6 +1342,10 @@ window.FM = window.FM || {};
     type: 'limiter', label: 'Limiter', category: 'dyn',
     // Its Mix (#482 polish 8.1) blends a dry copy held back by the node's look-ahead, as the Compressor's is (mixOutput).
     dryLag: lookaheadSecs,
+    /* …and its Output only turns it down (batch 8 review): above 0 dB it would lift a limited sound past the Ceiling the
+       effect exists to hold. Capped, not moved before the ceiling (that would be Input gain again), and Output only came
+       with 8.1, so no saved Limiter carries a value above 0. */
+    outputMax: 0,
     params: [
       P('ceiling', 'Ceiling', -24, 0, 0.5, -1, 'dB', true),
       /* #482 polish 3.8. Input gain pushes the sound INTO the ceiling (louder, with the peaks held at it);
@@ -2157,7 +2164,8 @@ window.FM = window.FM || {};
    * nothing at whatever level they came out. So every effect now ends in Output (−24…+12 dB, a gain after everything,
    * the Compressor's own control) and blends through Mix (0–1, untouched sound under the effect), both keyframable.
    * The effects that already have them keep their own — their Mix sits inside the effect, and the Compressor's ±24 dB and
-   * the Distortion's −24…+6 dB Output keep their ranges, so nothing saved is clamped. Two do not get one: Gain / Boost,
+   * the Distortion's −24…+6 dB Output keep their ranges, so nothing saved is clamped; the Limiter's stops at 0 dB
+   * (`outputMax`, batch 8 review — above it Output would undo the Ceiling). Two do not get one: Gain / Boost,
    * whose one control IS its output (a Mix on a gain is only another gain), and Vocal Remove's Mix, which is its Amount.
    * HOW: around the effect's own build, never inside it (mixOutput): in → [the effect → wet] + [dry] → out, out's gain the
    * Output. The defaults are today's sound exactly: Mix 1 is wet × 1 + dry × 0 and Output 0 dB is × 1 (x·1 + y·0 = x in
@@ -2168,13 +2176,15 @@ window.FM = window.FM || {};
    * the Compressor's own Mix does. (Clip at ceiling's 4× oversampling adds a few frames of its own to the limited copy.)
    * Vibrato's 5 ms line is not lined up on purpose: a Vibrato blended with the dry sound IS a chorus, which is the point of
    * turning its Mix down. */
-  const OUTPUT_P = () => P('output', 'Output', -24, 12, 0.5, 0, 'dB', true);
+  // `outputMax` (batch 8 review): the Limiter's stops at 0 dB, so it cannot lift a sound past its own Ceiling.
+  const outMax = d => (typeof d.outputMax === 'number' ? d.outputMax : 12);
+  const OUTPUT_P = d => P('output', 'Output', -24, outMax(d), 0.5, 0, 'dB', true);
   const NO_MIX = { gain: 1, vocalremove: 1 }, NO_OUTPUT = { gain: 1 };
   function mixOutput(ctx, inst, d, u, addMix, addOut) {
     if (!u) return u;
     const nodes = [];
     const g = v => { const n = ctx.createGain(); n.gain.value = v; nodes.push(n); return n; };
-    const out = g(addOut ? dbToLin(initNum(inst, 'output', 0, -24, 12)) : 1);
+    const out = g(addOut ? dbToLin(initNum(inst, 'output', 0, -24, outMax(d))) : 1);
     let input = u.input, mixSet = null;
     if (addMix) {
       const m0 = initNum(inst, 'mix', 1, 0, 1);
@@ -2205,7 +2215,7 @@ window.FM = window.FM || {};
     const addMix = !has('mix') && !NO_MIX[d.type], addOut = !has('output') && !NO_OUTPUT[d.type];
     if (addOut) {   // just above Mix where the effect has one, as on the Compressor and the Distortion
       const mi = d.params.findIndex(p => p.key === 'mix');
-      if (mi >= 0) d.params.splice(mi, 0, OUTPUT_P()); else d.params.push(OUTPUT_P());
+      if (mi >= 0) d.params.splice(mi, 0, OUTPUT_P(d)); else d.params.push(OUTPUT_P(d));
     }
     if (addMix) d.params.push(MIX(1));
     if (!addMix && !addOut) return;

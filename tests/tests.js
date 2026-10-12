@@ -125386,7 +125386,8 @@
      3-Band EQ has neither key (first line). */
   test('482 8.1 Audio effects - every effect ends in Output and blends through Mix, a 3-Band EQ at Mix 0 is the clip untouched, Output is a plain gain, and a saved effect is today’s', { item: '482', budgetMs: 150000 }, async function () {
     const reg = FM.audioFxRegistry, bad = [];
-    const NOMIX = ['gain', 'vocalremove'], NOOUT = ['gain'], OWN = { compressor: [-24, 24], distortion: [-24, 6] };
+    // limiter: its Output only turns it down (the batch 8 review's cap at 0 dB, so it cannot undo its own Ceiling)
+    const NOMIX = ['gain', 'vocalremove'], NOOUT = ['gain'], OWN = { compressor: [-24, 24], distortion: [-24, 6], limiter: [-24, 0] };
     reg.all().forEach(d => {
       const out = b7Pd(d.type, 'output'), mix = b7Pd(d.type, 'mix');
       if (NOOUT.indexOf(d.type) < 0) {
@@ -125638,7 +125639,7 @@
     if (bad.length) throw new Error('Stereo Width: ' + bad.join('; '));
   });
 
-  /* 8.4 — ON SCREEN: Auto trim is a tick box (clear on a new Stereo Width) and Keep bass centred a slider reading 0Hz with a
+  /* 8.4 — ON SCREEN: Auto trim is a tick box (clear on a new Stereo Width) and Keep bass centred a slider reading Off with a
      keyframe diamond, both inside the panel at 390 and 1280 px; a tap ticks Auto trim in one undo step. On the build before
      the open Stereo Width shows Width, Output and Mix only. */
   test('482 8.4 Stereo Width panel - Auto trim is a tick box and Keep bass centred a slider, inside the panel at 390 and 1280 px', { item: '482', budgetMs: 120000 }, async function () {
@@ -125647,7 +125648,7 @@
       if (!r) throw new Error(p.where + ': the open Stereo Width has no Keep bass centred row');
       await p.fits(r, 'the Keep bass centred row');
       const v = r.querySelector('.fx-scrub-val');
-      if (!v || v.value !== '0Hz') throw new Error(p.where + ': a new Stereo Width reads Keep bass centred ' + (v && v.value) + ', not 0Hz');
+      if (!v || v.value !== 'Off') throw new Error(p.where + ': a new Stereo Width reads Keep bass centred ' + (v && v.value) + ', not Off');   // 'Off', not '0Hz': the batch 8 review
       if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': Keep bass centred has no keyframe diamond');
       if (p.slider('Auto trim')) throw new Error(p.where + ': Auto trim is drawn as a slider');
       const t = p.tog('Auto trim');
@@ -125843,7 +125844,7 @@
     if (bad.length) throw new Error('Tempo sync: ' + bad.join('; '));
   });
 
-  /* 8.7 — ON SCREEN: the open Echo shows Tempo (a slider reading 0BPM, no keyframe diamond) and Note (seven buttons, 1/4 lit)
+  /* 8.7 — ON SCREEN: the open Echo shows Tempo (a slider reading Off, no keyframe diamond) and Note (seven buttons, 1/4 lit)
      inside the panel at 390 and 1280 px. At Tempo 0 Note is greyed "Not used when Tempo is Off" and nothing is worked out;
      typing 120 into Tempo greys Time "Only used when Tempo is Off", wakes Note, and shows "= 500 ms" under it at once; a tap
      on 1/8 shows "= 250 ms", one undo step. On the build before the open Echo has no Tempo row. */
@@ -125855,7 +125856,7 @@
       if (!tr) throw new Error(p.where + ': the open Echo has no Tempo row');
       await p.fits(tr, 'the Tempo row');
       const tv = tr.querySelector('.fx-scrub-val');
-      if (!tv || tv.value !== '0BPM') throw new Error(p.where + ': a new Echo reads Tempo ' + (tv && tv.value) + ', not 0BPM');
+      if (!tv || tv.value !== 'Off') throw new Error(p.where + ': a new Echo reads Tempo ' + (tv && tv.value) + ', not Off');   // 'Off', not '0BPM': the batch 8 review
       if (tr.querySelector('.fx-kf')) throw new Error(p.where + ': Tempo offers a keyframe diamond - it is static');
       const nr = p.seg('Note');
       if (!nr) throw new Error(p.where + ': the open Echo has no Note buttons');
@@ -125916,5 +125917,73 @@
     if (!(d > 0.01)) bad.push('a drum loop at +7 st sounds the same at Grain 30 as at 100 (differ by ' + d.toExponential(2) + ')');
     if (b8Sig('pitch', { grain: 100 }) === b8Sig('pitch', { grain: 30 })) bad.push('Grain 100 and 30 sign the same - the preview would not rebuild');
     if (bad.length) throw new Error('Pitch Shift Grain: ' + bad.join('; '));
+  });
+
+  /* ═══ BATCH 8 REVIEW — three small calls, decided under his "decide obvious yeses yourself" ════════════════════════════
+   * TEMPO AND KEEP BASS CENTRED: 0 is Off and the value box says Off; nothing rests between 1 and 39. The rule
+   * (inspector.js offGapSnap, a row's `offUntil`): a value that lands in the gap goes across it - to 40 when it comes up from
+   * Off or is typed (a typed number other than 0 asks for that setting, as near as it goes; 0 or "off" types Off), to Off
+   * when it comes down from 40 or above. The ruler is driven through strip._drag (one drag, each entry a move in screen px;
+   * a notch is 7 px and both rows step by 1, so one notch is 1 BPM / 1 Hz) because synthetic pointer drags are unreliable on
+   * it (queue 455). Two notches up from Off in ONE drag land on 41, not back in the gap and so on Off: the ruler's own
+   * position jumps across with the value. A file that carries Tempo 20 (the panel cannot set it) plays it at 40: an Echo at
+   * 20 BPM, 1/8, first echoes at 0.75 s (frame 36000), not 1.5 s. On the build before, the boxes read 0BPM / 0Hz (first
+   * check) and a typed 20 stays at 20. */
+  test('482 8 review - Tempo and Keep bass centred say Off at 0 and never rest between 1 and 39: a typed 20 lands on 40, a push up from Off lands on 40, a push down from 40 lands on Off', { item: '482', budgetMs: 150000 }, async function () {
+    for (const [type, label, key, unit] of [['delay', 'Tempo', 'bpm', 'BPM'], ['width', 'Keep bass centred', 'monobass', 'Hz']]) {
+      await b7Panel(() => [FM.audioFxRegistry.makeInstance(type)], 0, async p => {
+        const row = () => p.slider(label), box = () => row() && row().querySelector('.fx-scrub-val'), val = () => p.layer().audioFx[0].params[key];
+        const type1 = async s => { const b = box(); b.value = s; b.dispatchEvent(new Event('change')); await sleep(60); };
+        if (!row()) throw new Error(p.where + ': the open ' + type + ' has no ' + label + ' row');
+        if (box().value !== 'Off') throw new Error(p.where + ': ' + label + ' at 0 reads ' + box().value + ', not Off');
+        await type1('20');
+        if (val() !== 40 || box().value !== '40' + unit) throw new Error(p.where + ': a typed 20 leaves ' + label + ' at ' + val() + ' (' + box().value + ') - want 40, outside the gap');
+        await type1('off');
+        if (val() !== 0 || box().value !== 'Off') throw new Error(p.where + ': typing off leaves ' + label + ' at ' + val() + ' (' + box().value + ')');
+        const strip = row().querySelector('.fx-scrub');
+        if (!strip || typeof strip._drag !== 'function') throw new Error(p.where + ': the ' + label + ' ruler has no _drag seam');
+        strip._drag([-7]);
+        if (val() !== 40 || box().value !== '40' + unit) throw new Error(p.where + ': one notch up from Off leaves ' + label + ' at ' + val() + ' (' + box().value + ') - want 40');
+        await type1('0');
+        strip._drag([-7, -7]);
+        if (val() !== 41) throw new Error(p.where + ': two notches up from Off in one drag leave ' + label + ' at ' + val() + ' - want 41 (the ruler has to jump the gap with the value)');
+        strip._drag([7, 7]);
+        if (val() !== 0 || box().value !== 'Off') throw new Error(p.where + ': two notches down from 41 leave ' + label + ' at ' + val() + ' (' + box().value + ') - want Off (40, then across the gap)');
+      });
+    }
+    const snap = FM._offGapSnap, bad = [];
+    for (const [v, from, want] of [[5, 0, 40], [39, 40, 0], [20, null, 40], [39, 120, 0], [0, 40, 0], [40, 0, 40], [41, 40, 41]]) if (snap(40, v, from) !== want) bad.push(v + ' from ' + from + ' lands on ' + snap(40, v, from) + ', not ' + want);
+    if (bad.length) throw new Error('the gap rule: ' + bad.join('; '));
+    const e20 = b8First(await b3Render(b7Fx('delay', { bpm: 20, note: 3, feedback: 0 }), (t, i) => (i === 0 ? 1 : 0), 0.8), 100, 1e-3);
+    if (e20 !== 36000) throw new Error('an Echo saved at Tempo 20, 1/8 first echoes at frame ' + e20 + ' - want 36000 (played at 40 BPM, 0.75 s)');
+  });
+
+  /* THE LIMITER'S OUTPUT ONLY TURNS IT DOWN. Output (8.1) is a gain after everything, so +12 dB on a Limiter lifted a sound
+     12 dB past the Ceiling the effect exists to hold. Capped at 0 dB (`outputMax`) rather than moved in front of the
+     ceiling (that is Input gain again); Output only came with 8.1, so no saved Limiter carries more. With Clip at ceiling a
+     full-scale sine then peaks within 0.15 dB of the ceiling (the 7.1 test's margin) at Output's top, and without it Output's
+     top is never louder than Output 0 (the node's own 20:1 overshoot is the Limiter's, not Output's). On the build before
+     the top is +12 and the sine peaks 12 dB over (first loop). CONTROL: a saved Limiter is today's graph sample for sample. */
+  test('482 8 review - the Limiter’s Output only turns it down, so a full-scale sine with Clip at ceiling and Output at its top stays at the ceiling, and a saved Limiter is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('limiter', 'output');
+    if (!pd) throw new Error('the Limiter has no Output (its params are ' + b7Keys('limiter') + ')');
+    const old = [{ type: 'video', audioFx: [{ type: 'limiter', enabled: true, params: { ceiling: -9 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.output !== 0) throw new Error('a saved Limiter opens with Output ' + op.output);
+    const today = oac => { const c = oac.createDynamicsCompressor(); c.ratio.value = 20; c.knee.value = 0; c.attack.value = 0.001; c.release.value = 0.05; c.threshold.value = -9; const g = oac.createGain(); g.gain.value = FM._hardKneeMakeupCancel(-9, 20); c.connect(g); return { input: c, output: g }; };
+    const same = await b3SameAsToday([{ type: 'limiter', enabled: true, params: op }], today, 'a saved Limiter');
+    if (same.length) throw new Error('CONTROL: a saved Limiter is not today’s sound - ' + same.join('; '));
+    const bad = [], full = b3Sine(1);
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const pk = async p => b3Db(b3Peak(await b3Render(b7Fx('limiter', p), full, 1, { live: live }), 0.3, 1));
+      for (const C of [-12, -6]) {
+        const top = await pk({ ceiling: C, clip: 1, output: pd.max }), o0 = await pk({ ceiling: C, output: 0 }), oTop = await pk({ ceiling: C, output: pd.max });
+        if (!(top <= C + 0.15)) bad.push('with Clip at ceiling and Output at its top (' + pd.max + ' dB) a full-scale sine under a ' + C + ' dB ceiling peaks at ' + top.toFixed(2) + ' dBFS (' + path + ')');
+        if (!(oTop <= o0 + 0.01)) bad.push('Output at its top (' + pd.max + ' dB) lifts a limited full-scale sine from ' + o0.toFixed(2) + ' to ' + oTop.toFixed(2) + ' dBFS under a ' + C + ' dB ceiling (' + path + ')');
+      }
+    }
+    if (bad.length) throw new Error('Limiter Output: ' + bad.join('; '));
   });
 })();
