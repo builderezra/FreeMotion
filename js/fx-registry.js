@@ -284,7 +284,9 @@ window.FM = window.FM || {};
     if (def.color) { const c1 = { key: 'color',  label: def.colorLabel  || 'Colour',   type: 'color', default: def.defColor  || '#ffffff', keyframable: true }; if (def.colorGate) { c1.overriddenBy = def.colorGate.by; c1.liveWhen = def.colorGate.when; } out.push(c1); }
     /* `follows` (#482 polish 1.2, Light Leak's Leak edge): a colour that, ABSENT, is the colour it names. makeInstance leaves it
        out so a new instance keeps following, and the inspector's row shows the followed colour until he picks one. */
-    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '' });
+    /* `followMix` (#482 polish 11.6 review): a following colour the kernel draws pushed that far toward white — Lightning's Core
+       is its bolt colour 80 % to white — so the row can SHOW what is drawn while it has no value of its own (followedColour). */
+    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '', followMix: def.color2FollowMix || 0 });
     /* A THIRD COLOUR THAT BELONGS BETWEEN THE OTHER TWO, AND ONLY COUNTS IN ONE MODE (#482 5.6, Gradient Map's Midtones).
        `color3After` puts the row after the colour it names, so the panel reads Shadows, Midtones, Highlights rather than
        ending on the middle one; `color3Gate` is overriddenBy/liveWhen for a colour row, so Midtones greys out and says why
@@ -659,6 +661,24 @@ window.FM = window.FM || {};
     allIncludingHidden: function () { return (FM.EFFECTS || []).map(d => REG[d.type]); },
     categories: function () { return FM.FX_CATEGORIES; },
     paramsOf: function (id) { return (REG[id] && REG[id].params) || []; },
+    /* WHAT A FOLLOWING ROW SHOWS while it has no value of its own (#482 polish 11.6 review). The inspector asks this and nothing
+       else, so the swatch is the colour the kernel draws: the colour it follows (that row's own value, or its default when it
+       has none — it is filled with that at render time), pushed `followMix` of the way to white where the kernel does that
+       (Lightning's Core). A row without followMix answers exactly what the inspector answered before: the followed value, or
+       this row's default (Light Leak's edge, polish 1.2). */
+    followedColour: function (id, key, params, t) {
+      const rows = this.paramsOf(id), row = rows.filter(q => q && q.key === key)[0];
+      if (!row) return undefined;
+      if (!row.follows) return row.default;
+      const lead = params ? params[row.follows] : undefined;
+      if (!row.followMix) return FM.evalProp(lead, t) || row.default;
+      const leadRow = rows.filter(q => q && q.key === row.follows)[0];
+      let hex = lead == null ? (leadRow && leadRow.default) : FM.evalProp(lead, t);
+      hex = String(hex || row.default).replace('#', '');
+      if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+      const m = row.followMix;
+      return '#' + [0, 2, 4].map(i => { const c = parseInt(hex.slice(i, i + 2), 16) || 0, v = Math.round(c + (255 - c) * m); return (v < 16 ? '0' : '') + v.toString(16); }).join('');
+    },
     // THE single creation path — returns exactly ONE instance (kills the duplicate-add bug by design).
     makeInstance: function (id) {
       const e = REG[id]; if (!e) return null;

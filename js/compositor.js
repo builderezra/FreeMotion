@@ -1376,7 +1376,7 @@ window.FM = window.FM || {};
       { key: 'glow', label: 'Glow', min: 0, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'segments', label: 'Segments', min: 8, max: 60, step: 1, def: 20 },
       { key: 'drawon', label: 'Draw on', def: 0, options: [[0, 'Layer pixels'], [1, 'Everywhere']] },
-    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour', color2: true, defColor2: '#eaf4ff', color2Label: 'Core', color2Follows: 'color' },
+    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour', color2: true, defColor2: '#eaf4ff', color2Label: 'Core', color2Follows: 'color', color2FollowMix: 0.8 },   // review: unset, the Core row SHOWS the bolt colour 80 % to white — what the kernel draws (fxRegistry.followedColour)
     // ---- batch 29: Displacement maps — warp this layer by ANOTHER layer's pixels (the "Map layer").
     // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
     { type: 'displacemap', label: 'Displacement Map', layer: true, layerLabel: 'Map layer', params: [
@@ -9302,7 +9302,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const col = hexToRGB(p.color) || [150, 200, 255];
       // The core is the layer's colour pushed most of the way to white. A real bolt's channel is
       // blown out; the tint lives in the glow around it, which is what this keeps.
-      // …unless a Core colour is set (#482 polish 11.6): absent, it follows the bolt colour as above.
+      // …unless a Core colour is set (#482 polish 11.6): absent, it follows the bolt colour as above. The 0.8 is the catalogue's
+      // color2FollowMix, which is how the Core row shows this very colour while it is unset (fxRegistry.followedColour).
       const core = p.color2 ? hexToRGB(p.color2) : [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
       /* #482 polish 11.6 — Strike, Glow, Segments, Draw on. Each default is a no-op on the old arithmetic: Glow 100 % multiplies
          the halo by exactly 1, 20 segments is the old 20, and Down the layer / Layer pixels take the old branches. */

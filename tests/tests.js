@@ -125176,6 +125176,46 @@
     if (!(w60 > w20 * 1.6)) throw new Error('Segments 60 wandered ' + w60 + ' px down the frame against ' + w20 + ' at 20 - it should kink far more often');
   });
 
+  /* 11.6 REVIEW. With Core unset the row followed the bolt colour, so it SHOWED #96c8ff while the kernel drew the core 80 % of
+     the way to white (#eaf4ff) — a panel showing a value the kernel is not using. Neither way of making them agree by changing
+     the picture keeps saved bolts: drawing an unset Core in the bolt colour itself moves all 21 pinned frames above, and a real
+     Core defaulting to #eaf4ff is filled into every saved bolt at render time, which moves a saved yellow bolt (the “thin”
+     pin: its own core is 255, 248.8, 223.2) — MEASURED by running the pins against each. So the picture stays and the panel
+     changes: the registry's color2 row carries followMix 0.8, and FM.fxRegistry.followedColour — the one fallback the
+     inspector's following colour rows ask — pushes the followed colour that far to white, as the kernel does. */
+  test('482 11.6 review Lightning - with Core unset the Core row shows the colour the kernel draws down the middle of the bolt (its bolt colour 80 % to white), a red Core makes both red, and Light Leak’s edge row still shows its leak colour', { item: '482', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, W = 160, H = 120;
+    if (typeof R.followedColour !== 'function') throw new Error('FM.fxRegistry.followedColour is missing - the Core row falls back to the bolt colour itself (' + (FM.evalProp(R.makeInstance('lightning').params.color, 0) || '') + ') while the kernel draws it 80 % to white');
+    /* What the row shows: its own value once set; unset, the fallback the inspector's following rows ask for. */
+    const shown = p => p.color2 != null ? p.color2 : R.followedColour('lightning', 'color2', p, 0.37);
+    /* What the kernel draws down the middle: one bolt, no forks, no halo, struck Everywhere on an empty layer, where a pixel the
+       channel alone crosses IS the core colour (unpremultiplied) — the commonest colour of each row's most opaque pixel
+       (MEASURED: 86–89 of 116 rows exactly the core; the rest are whitened where two stamps overlap). The params are filled the
+       way the render fills a saved instance first (queue 784). */
+    const drawn = p => {
+      const q = FM._fillFxParams({ type: 'lightning', enabled: true, params: b11Copy(p) }).params;
+      const d = b11Li(Object.assign(q, { drawon: 1, count: 1, forks: 0, glow: 0, intensity: 1 }), b11Empty()), seen = {};
+      for (let y = 2; y < H - 2; y++) { let best = 0, bi = -1; for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i + 3] > best) { best = d[i + 3]; bi = i; } } if (bi >= 0) { const k = d[bi] + ',' + d[bi + 1] + ',' + d[bi + 2]; seen[k] = (seen[k] || 0) + 1; } }
+      return Object.keys(seen).sort((a, b) => seen[b] - seen[a])[0].split(',').map(Number);
+    };
+    const rgb = hex => { const h = String(hex).replace('#', ''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+    const off = (a, b) => Math.max.apply(null, a.map((v, i) => Math.abs(v - b[i])));
+    const base = () => b11Base('lightning', {}), sansColour = () => { const p = base(); delete p.color; return p; };
+    [['a new bolt', base()], ['a yellow bolt', Object.assign(base(), { color: '#ffe060' })], ['a green bolt', Object.assign(base(), { color: '#30ff80' })], ['a saved bolt with no colour of its own', sansColour()]].forEach(([name, p]) => {
+      if ('color2' in p) throw new Error('CONTROL: ' + name + ' already carries a Core');
+      const s = rgb(shown(p)), d = drawn(p);
+      if (off(s, d) > 2) throw new Error('with Core unset, ' + name + '’s Core row shows ' + s + ' but the kernel draws ' + d + ' down the middle of the bolt');
+    });
+    /* CONTROL: a red Core makes the row and the bolt's middle both that red. */
+    const red = Object.assign(base(), { color2: '#ff2020' }), rs = rgb(shown(red)), rd = drawn(red);
+    if (off(rs, rd) > 2 || !(rd[0] - rd[1] > 150)) throw new Error('a red Core shows ' + rs + ' and draws ' + rd + ' - both should be the red');
+    /* The rows: Core carries the mix; Light Leak's edge (polish 1.2) does not, and still shows its leak colour, or its own default. */
+    const core = b11Row('lightning', 'color2'), edge = b11Row('lightleak', 'color2');
+    if (core.follows !== 'color' || core.followMix !== 0.8) throw new Error('the Core row does not follow the bolt colour with a 0.8 mix (follows ' + core.follows + ', followMix ' + core.followMix + ')');
+    if (!edge.follows || edge.followMix) throw new Error('Light Leak’s edge row changed: follows ' + edge.follows + ', followMix ' + edge.followMix);
+    if (R.followedColour('lightleak', 'color2', { color: '#123456' }, 0) !== '#123456' || R.followedColour('lightleak', 'color2', {}, 0) !== edge.default) throw new Error('Light Leak’s unset edge no longer shows the leak colour (or its own default) - followedColour must answer as the inspector did');
+  });
+
   /* 11.7 ROUGHEN EDGES (hunt C37's first third: static, one tear for every layer): Boil, Pattern, Complexity, Erode. */
   const B11RE_NEW = { evolve: 0, seed: 0, complexity: 1, border: 0 };
   const B11RE_CFG = { def: {}, heavy: { amount: 20, scale: 4 }, wide: { amount: 12, scale: 40 }, kf: { amount: b11Kf(2, 18) }, fine: { amount: 3, scale: 2 } };
