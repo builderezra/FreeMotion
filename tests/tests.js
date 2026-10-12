@@ -126997,4 +126997,35 @@
     }));
   });
 
+
+  /* SU1 #9 (hunt/simple-firstuser, 3/3): after typing a title in Simple and pressing ✓, the timeline still named it “Text” until he
+     deselected and reselected it. The tray half (an overlay's tools under a new text) is the verify medium-tray test above; this is
+     the label half. Driven as he does it: the Text tool, the field, the ✓. */
+  test('SU1 #9 · at 380 a title typed in Simple is named by its words on the timeline as soon as its ✓ is pressed, and keeps Edit words', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join(',');
+    const label = id => { const n = document.querySelector('.sm-item[data-id="' + id + '"] .sm-name'); return n ? n.textContent : '(no item)'; };
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        FM.time = 1;
+        smTool('text').click(); await v.idle(); await v.sleep(150);
+        const t = FM.layerById(FM.scene, FM.scene.selectedId);
+        if (!t || t.type !== 'text') throw new Error('setup: Text did not add and select a text (it said “' + v.say() + '”)');
+        const input = document.getElementById('te-input');
+        if (!input) throw new Error('setup: the Text tool did not open the words field');
+        input.value = 'My Summer Trip'; input.dispatchEvent(new Event('input', { bubbles: true })); await v.sleep(80);
+        const done = Array.from(document.querySelectorAll('.te-done')).find(b => b.getClientRects().length);
+        if (!done) throw new Error('setup: the words field has no ✓ on screen');
+        done.click(); await v.idle(); await v.sleep(200);
+        if (FM.layerById(FM.scene, t.id).text !== 'My Summer Trip') throw new Error('setup: the ✓ did not keep the words (text is “' + FM.layerById(FM.scene, t.id).text + '”)');
+        const after = label(t.id);
+        if (FM.scene.selectedId === t.id && tools() !== 'editwords,stay,more,delete') throw new Error('after the ✓ the tray is ' + tools() + ', want Edit words, Stay put, More, Delete');
+        /* CONTROL: deselect and reselect, which SU1 found puts it right — so the timeline CAN name it by its words */
+        FM.selectLayer(null); await v.sleep(80); FM.selectLayer(t.id); await v.idle(); await v.sleep(120);
+        const fixed = label(t.id);
+        if (fixed.indexOf('My Summer Trip') < 0) throw new Error('CONTROL: even after reselecting, the timeline names the title ' + fixed);
+        if (after !== fixed) throw new Error('after the ✓ the timeline still names the title ' + after + ' — it said ' + fixed + ' only once he reselected it');
+      });
+    });
+  });
 })();
