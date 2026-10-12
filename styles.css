@@ -8873,6 +8873,20 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
      header stays; the explanation under it scrolls (#cv-ed-body is min-height 0, overflow auto). */
   body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px); }
   body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px); }
+  /* STACKED (no room beside the button — 978's fall-back, DESIGN §6.3; the plan: "In the stacked (narrow) layout, App settings is
+     the last small item away from the cog"): App settings is the block FURTHEST from the button — it is the one door that leaves
+     the cog — so Canvas (all closed) or the open block still stands on the button; its order 2 put it BETWEEN the stack and the
+     button whenever the stack opened upward. 360 wide like the blocks it stacks with (unset, it shrank to its words). And each
+     open block's cap gives up one more bar (66 + 10). */
+  #canvas-dialog.cv-bars.cv-pair:not(.cv-side) > #cv-app { width: 360px; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair:not(.cv-side) > #cv-app { order: -4; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair:not(.cv-side) > #cv-app { order: 4; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair.cv-ed-on:not(.cv-side):not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card,
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-fr-big:not(.cv-side) > #cv-friends,
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px - 228px); }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair.cv-ed-on:not(.cv-side):not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card,
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-fr-big:not(.cv-side) > #cv-friends,
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px - 228px); }
   /* SHORT SCREENS (D24 B, cv-ed-short — his phone sideways): the Editor is the pill on the cog's own row, not a grid item, so the
      templates above lose their "ed" row and the pill keeps its own place and size. With an "ed" area in the template the pill — a
      fixed box whose containing block is the dialog (v17.36's lesson) — was placed INSIDE that area, and 176 px wide. */

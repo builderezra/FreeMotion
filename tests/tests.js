@@ -127719,4 +127719,49 @@
       });
     }); });
   });
+
+  /* #1132 on a PC with no room beside its button (978's stacked fall-back; the plan: "In the stacked (narrow) layout, App settings
+     is the last small item away from the cog"): App settings is the block furthest from the button, all closed and with Canvas
+     open, so Canvas stands on the button — above it or below it — and the App bar is as wide as the blocks it stacks with.
+     Stand-in buttons with their right edge at 430 (under the 562 side by side needs), as 978's stacked test places them. */
+  test('1132 with no room beside its button the stack keeps App settings furthest from it — Canvas stands on the button all closed and open, above it or below it — and the App bar is as wide as the cards', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      await atWideWidth(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const made = [];
+        const mk = function (top) {
+          const b = document.createElement('button');
+          b.type = 'button'; b.textContent = '·';
+          b.style.cssText = 'position:fixed;left:400px;top:' + top + 'px;width:30px;height:30px;z-index:1';
+          document.body.appendChild(b); made.push(b); return b;
+        };
+        try {
+          for (const [dir, top] of [['upward', 600], ['downward', 60]]) {
+            const src = mk(top), sr = src.getBoundingClientRect(), up = dir === 'upward';
+            for (const st of ['none', 'canvas']) {
+              FM.openCanvasDialog({ block: st, from: src }); await entranceDone(dlg); await land945();
+              const where = dir + ', ' + (st === 'none' ? 'all closed' : 'Canvas open');
+              if (dlg.classList.contains('cv-side') || !document.body.classList.contains('cv-anchored')) throw new Error(where + ': setup: not the stacked fall-back hung off the button (' + dlg.className + ')');
+              if (document.body.classList.contains('cv-up') !== up) throw new Error(where + ': setup: the stack opened the other way');
+              const ids = ['canvas', 'cv-friends', 'cv-editor', 'cv-app'];
+              const rs = ids.map(function (id) { return (id === 'canvas' ? dlg.querySelector('.export-card') : document.getElementById(id)).getBoundingClientRect(); });
+              const cv = rs[0], ap = rs[3];
+              const nearest = up ? rs.every(function (r) { return cv.bottom >= r.bottom - 0.5; }) : rs.every(function (r) { return cv.top <= r.top + 0.5; });
+              const furthest = up ? rs.every(function (r) { return ap.top <= r.top + 0.5; }) : rs.every(function (r) { return ap.bottom >= r.bottom - 0.5; });
+              if (!furthest) throw new Error(where + ': App settings is not the block furthest from the button (' + ids.map(function (id, i) { return id + ' ' + R978(rs[i]); }).join(' / ') + ')');
+              if (!nearest) throw new Error(where + ': Canvas is not the block next to the button (' + ids.map(function (id, i) { return id + ' ' + R978(rs[i]); }).join(' / ') + ')');
+              const gap = up ? sr.top - cv.bottom : cv.top - sr.bottom;
+              if (gap < -0.5 || gap > 12) throw new Error(where + ': Canvas does not stand on the button — ' + Math.round(gap) + ' px from it (' + R978(cv) + ' and the button ' + R978(sr) + ')');
+              if (Math.abs(ap.width - cv.width) > 1) throw new Error(where + ': the App settings bar is ' + Math.round(ap.width) + ' px wide in a stack of ' + Math.round(cv.width) + ' px blocks');
+              rs.forEach(function (r, i) { if (r.top < -0.5 || r.left < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) throw new Error(where + ': ' + ids[i] + ' is off the screen ' + R978(r)); });
+              FM.closeCanvasDialog(); await sleep(60);
+            }
+          }
+        } finally {
+          FM.closeCanvasDialog();
+          made.forEach(function (b) { b.remove(); });
+        }
+      }, 1280);
+    }); });
+  });
 })();
