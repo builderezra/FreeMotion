@@ -1784,7 +1784,18 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'vocalremove', label: 'Vocal Remove', category: 'char',
-    params: [P('amount', 'Amount', 0, 1, 0.01, 1, '', true), P('bassKeep', 'Keep Bass', 0, 1, 0.01, 1, '', true)],
+    params: [P('amount', 'Amount', 0, 1, 0.01, 1, '', true), Object.assign(P('bassKeep', 'Keep Bass', 0, 1, 0.01, 1, '', true), { overriddenBy: 'mode', liveWhen: 0 }),
+      /* #482 polish 8.5. Cancelling the centre takes the kick and the bass with the voice, so the build hands back the sum of
+         the two sides under 180 Hz — Keep bass below moves that line (60–400 Hz: up to 400 keeps a bass guitar's body, a
+         voice's lowest notes come back with it). Keep highs hands back the shared sound above 8 kHz the same way (cymbals and
+         air, which a cancel also hollows out; a voice has little up there). Mode turns it round: Centre only keeps what both
+         speakers share — mostly the voice, but also anything else mixed to the middle, so it is labelled approximate. Every
+         default is today's Vocal Remove: 180 Hz is the line it always used, Keep highs 0 adds a gain of 0, Remove vocals
+         is today's graph (Mode is a rebuild). In Centre only the three keep controls do nothing, and say so. */
+      Object.assign(P('bassFreq', 'Keep bass below', 60, 400, 1, 180, 'Hz', true), { overriddenBy: 'mode', liveWhen: 0, alsoGate: { by: 'bassKeep', deadAt: 0 } }),
+      Object.assign(P('highKeep', 'Keep highs', 0, 1, 0.01, 0, '', true), { overriddenBy: 'mode', liveWhen: 0 }),
+      CHOICE('mode', 'Mode', [[0, 'Remove vocals'], [1, 'Centre only']], 0, { rebuild: true, note: 'Centre only is approximate: it keeps what both speakers share, which is mostly the voice, but also the bass and anything else mixed to the middle.' }),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1797,17 +1808,27 @@ window.FM = window.FM || {};
       input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
       const split = s.splitter(2);
       input.connect(split);
+      if (staticOf(inst, 'vocalremove', 'mode') === 1) {
+        // CENTRE ONLY (8.5): (L + R) / 2, up-mixed to both channels — a sound panned hard to one side comes out at half.
+        const mid = s.gain(0.5);
+        split.connect(mid, 0); split.connect(mid, 1);
+        mid.connect(wd.wet); wd.wet.connect(out);
+        return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, custom: { amount: wd.set } });
+      }
       const sP = s.gain(1), sN = s.gain(-1), side = s.gain(1);
       split.connect(sP, 0); split.connect(sN, 1);
       sP.connect(side); sN.connect(side);            // L − R cancels the centred lead
       const mono = s.gain(0.5);
       split.connect(mono, 0); split.connect(mono, 1);
-      const lp = s.biquad('lowpass', 180, 0.5);
+      const lp = s.biquad('lowpass', initNum(inst, 'bassFreq', 180, 60, 400), 0.5);
       const bass = s.gain(1);
       mono.connect(lp); lp.connect(bass);            // hand the kick/bass back — the cancel eats them too
       side.connect(wd.wet); bass.connect(wd.wet);    // mono result, up-mixed to both channels
+      // Keep highs (8.5): the shared sound above 8 kHz, added at its own gain (0 by default: + 0, today's sum).
+      const hp = s.biquad('highpass', 8000, BUTTERWORTH_DB), highs = s.gain(initNum(inst, 'highKeep', 0, 0, 1));
+      mono.connect(hp); hp.connect(highs); highs.connect(wd.wet);
       wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { bassKeep: bass.gain }, custom: { amount: wd.set } });
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, params: { bassKeep: bass.gain, bassFreq: lp.frequency, highKeep: highs.gain }, custom: { amount: wd.set } });
     },
   }, {
     type: 'pitch', label: 'Pitch Shift', category: 'char',

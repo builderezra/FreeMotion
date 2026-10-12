@@ -2412,8 +2412,9 @@ window.FM = window.FM || {};
     if (p.toggle) return { type: 'toggle', key: p.key, label: p.label, default: p.def, legacy: p.legacy, keyframable: false, note: p.note || '' };
     // overriddenBy/deadAt ride along since the #482 3.6 review: this bridge used to drop them, so no audio row could say
     // "Not used when Bass is 0" however the effect declared it.
+    // alsoGate (#482 polish 8.5): Vocal Remove's Keep bass below is dead in Centre only AND while Keep Bass is 0.
     return { type: 'range', key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, default: p.def, legacy: p.legacy, unit: p.unit, keyframable: p.keyframable,
-      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt, liveWhen: p.liveWhen, liveAbove: p.liveAbove };
+      overriddenBy: p.overriddenBy || '', deadAt: p.deadAt, liveWhen: p.liveWhen, liveAbove: p.liveAbove, alsoGate: p.alsoGate };
   }
   /* A per-PARAM warning, shown only once the param is actually animated. Reverb's Size and Decay are the
      only two that carry one, and it is the warning Ezra asked for by name — *"if audio key frames break
@@ -2584,7 +2585,8 @@ window.FM = window.FM || {};
     wrap.appendChild(head);
     if (expanded) {
       const body = el('div', 'fx-ed-body');
-      if (AFX_MONO_HINT[fx.type] && layerIsMono(layer)) body.appendChild(el('div', 'insp-hint', AFX_MONO_HINT[fx.type]));
+      // …not in Vocal Remove's Centre only (#482 polish 8.5), which hands a mono clip back whole.
+      if (AFX_MONO_HINT[fx.type] && layerIsMono(layer) && !(fx.type === 'vocalremove' && fx.params && fx.params.mode === 1)) body.appendChild(el('div', 'insp-hint', AFX_MONO_HINT[fx.type]));
       if (reg.meter === 'reduction') body.appendChild(reductionMeter(layer, fx));
       // A control another control switches off says so, as the visual rows do (#482 3.6 review). markOverridden reads
       // the controller's label and default, so it gets the bridged descriptors, not the audio registry's own.
@@ -2613,9 +2615,12 @@ window.FM = window.FM || {};
         const w = afxWarnFor(reg, fx, p);
         if (w) body.appendChild(el('div', 'insp-hint afx-kf-warn', w));
       });
+      // Both gates re-read when either controller moves (#482 polish 8.5's alsoGate, as the visual rows wire it).
       reg.params.forEach(p => {
-        const lead = p.overriddenBy && rows[p.overriddenBy];
-        if (lead) lead.addEventListener('fx-range-set', () => regate(rows[p.key], fx, afxParam(p), areg));
+        [p.overriddenBy, p.alsoGate && p.alsoGate.by].forEach(k => {
+          const lead = k && rows[k];
+          if (lead) lead.addEventListener('fx-range-set', () => regate(rows[p.key], fx, afxParam(p), areg));
+        });
       });
       if (!reg.params.length) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
       // One plain line about how the effect behaves, under its sliders (#482 3.5: Pitch Shift's late copy, hunt C20).

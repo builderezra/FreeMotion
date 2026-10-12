@@ -125661,4 +125661,94 @@
       if (p.layer().audioFx[0].params.trim !== 0) throw new Error(p.where + ': one Undo after the tap leaves Auto trim at ' + p.layer().audioFx[0].params.trim);
     });
   });
+
+  /* 8.5 — VOCAL REMOVE: KEEP BASS BELOW, KEEP HIGHS, MODE. A centred tone (left = right) has no side, so all that leaves a
+     Vocal Remove is what it hands back. Bass: the sum of the sides through its lowpass (Q 0.5 dB): a 300 Hz tone comes out
+     at 1 / |(1 - r^2) + j r / 1.059| of itself - under a 180 Hz line (r = 1.67) -7.5 dB (CONTROL: more than 6 down, the
+     backlog's "today it is cancelled"), under 400 Hz (r = 0.75) +1.6 dB (the backlog: within 6 dB). Highs: a centred 12 kHz
+     tone is gone at Keep highs 0 (the 180 Hz lowpass, -70 dB or so; CONTROL under -40) and comes back within 3 dB at 1 (an
+     8 kHz Butterworth highpass, -0.5 dB at 12 kHz). Centre only is (L + R) / 2: a centred tone passes at its own level, a
+     pure side tone (left = -right) cancels to nothing (CONTROL: Remove vocals hands that tone back, louder). On the build
+     before none of these keys exist (first line). CONTROL: a saved Vocal Remove is today's graph sample for sample. */
+  test('482 8.5 Vocal Remove - Keep bass below moves the bass line, Keep highs hands the top back, Centre only keeps the middle, and a saved Vocal Remove is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const W = { bassFreq: ['Keep bass below', 60, 400, 180], highKeep: ['Keep highs', 0, 1, 0] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('vocalremove', k), w = W[k];
+      if (!pd) throw new Error('Vocal Remove has no ' + w[0] + ' (its params are ' + b7Keys('vocalremove') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !pd.keyframable) throw new Error('Vocal Remove ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const md = b7Pd('vocalremove', 'mode');
+    if (!md || !md.options || md.options.map(o => o[1]).join('|') !== 'Remove vocals|Centre only' || md.def !== 0 || !md.rebuild || md.keyframable) throw new Error('Vocal Remove Mode is ' + JSON.stringify(md));
+    const old = [{ type: 'video', audioFx: [{ type: 'vocalremove', enabled: true, params: { amount: 1, bassKeep: 0.8 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.bassFreq !== 180 || op.highKeep !== 0 || op.mode !== 0) throw new Error('a Vocal Remove saved before these controls opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const g = v => { const n = oac.createGain(); n.gain.value = v; return n; };
+      const input = g(1), out = g(1), dry = g(0), wet = g(1);
+      dry.gain.setValueAtTime(0, 0); wet.gain.setValueAtTime(1, 0);
+      input.connect(dry).connect(out);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
+      const split = oac.createChannelSplitter(2); input.connect(split);
+      const sP = g(1), sN = g(-1), side = g(1); split.connect(sP, 0); split.connect(sN, 1); sP.connect(side); sN.connect(side);
+      const mono = g(0.5); split.connect(mono, 0); split.connect(mono, 1);
+      const lp = oac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 180; lp.Q.value = 0.5;
+      const bass = g(1); bass.gain.setValueAtTime(0.8, 0);
+      mono.connect(lp); lp.connect(bass); side.connect(wet); bass.connect(wet); wet.connect(out);
+      return { input: input, output: out };
+    };
+    const same = await b3SameAsToday([{ type: 'vocalremove', enabled: true, params: op }], today, 'a saved Vocal Remove');
+    if (same.length) throw new Error('CONTROL: a saved Vocal Remove is not today’s sound - ' + same.join('; '));
+    const bad = [], tone = (f, side) => (t, i, c) => (side && c ? -0.5 : 0.5) * Math.sin(2 * Math.PI * f * t);
+    const lvl = async (p, f, side, live) => { const [L] = await afx482c(b7Fx('vocalremove', p), tone(f, side), 1, { chans: 2, live: live }); return b7Amp(L, 24000, 24000, f) - b3Db(0.5); };
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const b180 = await lvl({}, 300, false, live), b400 = await lvl({ bassFreq: 400 }, 300, false, live);
+      if (!(b180 < -6)) throw new Error('CONTROL: a centred 300 Hz tone leaves today’s Vocal Remove at ' + b180.toFixed(1) + ' dB - not cancelled below the 180 Hz line (' + path + ')');
+      if (!(b400 > -6)) bad.push('Keep bass below 400 Hz leaves a centred 300 Hz tone at ' + b400.toFixed(1) + ' dB - want within 6 dB (' + path + ')');
+      const h0 = await lvl({}, 12000, false, live), h1 = await lvl({ highKeep: 1 }, 12000, false, live);
+      if (!(h0 < -40)) throw new Error('CONTROL: a centred 12 kHz tone leaves a Vocal Remove at ' + h0.toFixed(1) + ' dB with Keep highs 0 (' + path + ')');
+      if (Math.abs(h1) > 3) bad.push('Keep highs 1 hands a centred 12 kHz tone back at ' + h1.toFixed(1) + ' dB - want within 3 dB (' + path + ')');
+      const c1 = await lvl({ mode: 1 }, 1000, false, live), s1 = await lvl({ mode: 1 }, 1000, true, live), s0 = await lvl({}, 1000, true, live);
+      if (!(s0 > -1)) throw new Error('CONTROL: Remove vocals leaves a side tone at ' + s0.toFixed(1) + ' dB (' + path + ')');
+      if (Math.abs(c1) > 0.1) bad.push('Centre only passes a centred 1 kHz tone at ' + c1.toFixed(2) + ' dB, not its own level (' + path + ')');
+      if (!(s1 < -100)) bad.push('Centre only leaves a pure side tone at ' + s1.toFixed(1) + ' dB - it should cancel (' + path + ')');
+    }
+    if (b8Sig('vocalremove', { mode: 0 }) === b8Sig('vocalremove', { mode: 1 })) bad.push('Remove vocals and Centre only sign the same - the preview would not rebuild');
+    if (bad.length) throw new Error('Vocal Remove: ' + bad.join('; '));
+  });
+
+  /* 8.5 — ON SCREEN: Mode is two buttons (Remove vocals lit on a new one) with the "approximate" note under them, Keep bass
+     below and Keep highs are sliders, all inside the panel at 390 and 1280 px. Centre only greys the three keep controls
+     ("Only used when Mode is Remove vocals") in one undo step; Keep bass below also greys while Keep Bass is 0 ("Not used
+     when Keep Bass is 0"). On the build before the open Vocal Remove shows Amount and Keep Bass only. */
+  test('482 8.5 Vocal Remove panel - Mode is two buttons with its note, Centre only greys the keep controls, and Keep bass below says when Keep Bass is 0', { item: '482', budgetMs: 150000 }, async function () {
+    const tag = r => { const t = r && r.querySelector('.fx-ovr-tag'); return r && r.classList.contains('fx-overridden') && t ? t.textContent : ''; };
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('vocalremove')], 0, async p => {
+      const row = p.seg('Mode');
+      if (!row) throw new Error(p.where + ': the open Vocal Remove has no Mode buttons');
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      if (btns.map(b => b.textContent).join('|') !== 'Remove vocals|Centre only' || !btns[0].classList.contains('on')) throw new Error(p.where + ': Mode offers ' + btns.map(b => b.textContent + (b.classList.contains('on') ? ' (lit)' : '')).join(', '));
+      for (const b of btns) await p.fits(b, 'the Mode button ' + b.textContent);
+      if (!/approximate/.test(p.open().textContent)) throw new Error(p.where + ': no note says Centre only is approximate');
+      for (const label of ['Keep bass below', 'Keep highs']) {
+        const r = p.slider(label);
+        if (!r) throw new Error(p.where + ': no ' + label + ' row');
+        await p.fits(r, 'the ' + label + ' row');
+        if (tag(r)) throw new Error(p.where + ': ' + label + ' is greyed on a new Vocal Remove (' + tag(r) + ')');
+      }
+      FM.history.commit();
+      attached(btns[1], 'the Centre only button').click(); await sleep(150);
+      if (p.layer().audioFx[0].params.mode !== 1) throw new Error(p.where + ': a tap on Centre only left Mode at ' + p.layer().audioFx[0].params.mode);
+      for (const label of ['Keep Bass', 'Keep bass below', 'Keep highs']) {
+        if (tag(p.slider(label)) !== 'Only used when Mode is Remove vocals') throw new Error(p.where + ': in Centre only ' + label + ' says “' + tag(p.slider(label)) + '”');
+      }
+      FM.history.undo(); await sleep(150);
+      if (p.layer().audioFx[0].params.mode !== 0) throw new Error(p.where + ': one Undo leaves Mode at ' + p.layer().audioFx[0].params.mode);
+    });
+    await b7Panel(() => b7Fx('vocalremove', { bassKeep: 0 }), 0, async p => {
+      const t = tag(p.slider('Keep bass below'));
+      if (t !== 'Not used when Keep Bass is 0') throw new Error(p.where + ': with Keep Bass at 0 Keep bass below says “' + t + '”');
+    });
+  });
 })();
