@@ -4772,6 +4772,10 @@ window.FM = window.FM || {};
     return _fxScratch;
   }
   FM._fxScratchInfo = function () { return { bytes: _fxScratch ? _fxScratch.length : 0 }; };   // suite seam
+  /* Plate-sized scratch the #482 batch 11 generators keep between frames instead of allocating each one (Voronoi's Cell
+     average map and Roughen Edges' Erode are 4–8 MB a frame at 1080x1920). One per key, grown only; callers index [0, W*H). */
+  const _genBufs = Object.create(null);
+  function genScratch(key, Type, n) { let b = _genBufs[key]; if (!b || !(b instanceof Type) || b.length < n) b = _genBufs[key] = new Type(n); return b; }
 
   // Glow kernels run synchronously and fill both planes before reading them; Dark Glow
   // clears its sparse first plane. Sharing avoids 8 bytes of allocation per plate pixel.
@@ -8239,7 +8243,7 @@ window.FM = window.FM || {};
         for(var o=0;o<re_C;o++){ var so=sd+o*7, v=re_noise(fx*f,fy*f,so+re_zi*1009); if(re_z!==0)v+=(re_noise(fx*f,fy*f,so+(re_zi+1)*1009)-v)*re_zf; s+=(v-0.5)*w; w*=0.6; f*=2; }
         return s<0?0:(s>1?1:s); }
       var re_A=null;
-      if(re_br>0){ var re_n=Math.max(W,H)+2*re_br, re_P=new Uint8Array(re_n), re_G=new Uint8Array(re_n), re_Hm=new Uint8Array(re_n), re_k=2*re_br+1; re_A=new Uint8Array(W*H); var re_T=new Uint8Array(W*H);
+      if(re_br>0){ var re_n=Math.max(W,H)+2*re_br, re_P=new Uint8Array(re_n), re_G=new Uint8Array(re_n), re_Hm=new Uint8Array(re_n), re_k=2*re_br+1; re_A=genScratch('reA',Uint8Array,W*H); var re_T=genScratch('reT',Uint8Array,W*H);
         // van Herk / Gil-Werman: the min over every window of 2r+1 in three passes of a line, the line padded with its own end values
         var re_min=function(src,dst,n,at,step){ var m=n+2*re_br, j; for(j=0;j<m;j++){ var q=j-re_br; q=q<0?0:(q>=n?n-1:q); re_P[j]=src(at+q*step); }
           for(j=0;j<m;j++)re_G[j]=(j%re_k===0)?re_P[j]:Math.min(re_G[j-1],re_P[j]); for(j=m-1;j>=0;j--)re_Hm[j]=(j===m-1||(j+1)%re_k===0)?re_P[j]:Math.min(re_Hm[j+1],re_P[j]);
@@ -9179,7 +9183,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           var vcQ=vcLl<0.5?vcLl*(1+vcSs):vcLl+vcSs-vcLl*vcSs, vcP=2*vcLl-vcQ;
           for(var vck=0;vck<3;vck++){ var vcT=vcHh+(1-vck)/3; vcT-=Math.floor(vcT); vcRC[vcIdx*3+vck]=255*(vcT<1/6?vcP+(vcQ-vcP)*6*vcT:(vcT<0.5?vcQ:(vcT<2/3?vcP+(vcQ-vcP)*(2/3-vcT)*6:vcP))); } }
       }
-      var vcCell=vcFill===1?new Int32Array(W*H).fill(-1):null, vcWallF=vcFill===1?new Float32Array(W*H):null, vcSum=vcFill===1?new Float64Array(vcGX*vcGY*4):null;
+      var vcCell=vcFill===1?genScratch('vcCell',Int32Array,W*H).fill(-1,0,W*H):null, vcWallF=vcFill===1?genScratch('vcWall',Float32Array,W*H):null, vcSum=vcFill===1?new Float64Array(vcGX*vcGY*4):null;
       for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy, vcB=0; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcJ=(vccy+1)*vcGX+(vccx+1), vcpx=vcPX[vcJ], vcpy=vcPY[vcJ]; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; vcB=vcJ; } else if(vcdd<vcD2){ vcD2=vcdd; } }
         var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1), vcIsWall=vcE>0 && vcEw<vcG*vcWall;
         if(vcFill===1){ var vcPi=vcRow+vcx; vcCell[vcPi]=vcB; vcWallF[vcPi]=vcIsWall?1-vcE*(1-vcEw/(vcG*vcWall)):1; vcSum[vcB*4]+=vcS[vci]; vcSum[vcB*4+1]+=vcS[vci+1]; vcSum[vcB*4+2]+=vcS[vci+2]; vcSum[vcB*4+3]++; continue; }
