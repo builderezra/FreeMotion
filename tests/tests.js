@@ -127520,4 +127520,40 @@
       });
     });
   });
+
+  /* #1132: the swap hands keyboard focus to the ⤢ of the block that became small (queue 945). From ALL CLOSED nothing becomes
+     small, and the swap blurs whatever had focus first — so a block opened from the closed column dropped focus on <body>. It
+     stays on the button he pressed, which is the open block's ⤡ now. CONTROL: a swap between two open blocks still hands focus to
+     the one that closed. */
+  test('1132 a block opened from all closed keeps keyboard focus on the button that opened it — its ⤡ now — and a swap between two blocks still hands focus to the one that closed, at 380', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atPhoneWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog');
+          const who = function () { const a = document.activeElement; return a ? (a.id ? '#' + a.id : a.tagName) : 'nothing'; };
+          try {
+            document.getElementById('m-settings').click(); await entranceDone(dlg); await sleep(40);
+            if (!dlg.classList.contains('cv-none')) throw new Error('setup: the cog did not open all closed');
+            for (const [k, id] of [['Canvas', 'cv-mini-exp'], ['Friends', 'cv-fr-exp'], ['the Editor block', 'cv-ed-what']]) {
+              const b = document.getElementById(id);
+              b.focus();
+              if (document.activeElement !== b) throw new Error('setup: #' + id + ' cannot take focus');
+              b.click(); await land945();
+              if (dlg.classList.contains('cv-none')) throw new Error('setup: ' + k + '’s ⤢ did not open it');
+              if (document.activeElement !== b) throw new Error('opening ' + k + ' from all closed left keyboard focus on ' + who() + ' — it belongs on the button he pressed, its ⤡ now');
+              b.click(); await land945();
+              if (!dlg.classList.contains('cv-none')) throw new Error('setup: ' + k + '’s ⤡ did not close it');
+              if (document.activeElement !== b) throw new Error('closing ' + k + ' left keyboard focus on ' + who() + ', not its ⤢');
+            }
+            /* CONTROL: Canvas open, then Friends' ⤢ — focus goes to the Canvas ⤢, the block that closed (as before #1132) */
+            const ce = document.getElementById('cv-mini-exp'), fe = document.getElementById('cv-fr-exp');
+            ce.focus(); ce.click(); await land945();
+            fe.focus(); fe.click(); await land945();
+            if (!dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: setup: Friends did not open from Canvas');
+            if (document.activeElement !== ce) throw new Error('CONTROL: after Canvas → Friends focus is on ' + who() + ', not the Canvas ⤢');
+          } finally { FM.closeCanvasDialog(); await sleep(60); }
+        });
+      });
+    });
+  });
 })();

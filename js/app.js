@@ -8627,11 +8627,13 @@ window.FM = window.FM || {};
         const ae = document.activeElement;
         const hadExp = !!(ae && cvDialog.contains(ae) && ((ae.classList && ae.classList.contains('cv-mini-exp')) || ae.id === 'cv-ed-what'));
         if (ae && cvDialog.contains(ae) && ae.blur) ae.blur();   // an input left focused keeps iOS's keyboard up under the flight
-        /* focus goes to the expand control of the block that just became small (Simple mode P1: three blocks, so by name) */
+        /* focus goes to the expand control of the block that just became small (Simple mode P1: three blocks, so by name).
+           #1132: from ALL CLOSED nothing became small — the block he opened keeps it, on the button he pressed (its ⤡ now, the
+           header's). Without this the blur above left it on <body>, and the keyboard had to start again from the top. */
         const EXP = { canvas: 'cv-mini-exp', friends: 'cv-fr-exp', editor: 'cv-ed-what' };
         const refocus = () => {
           if (!hadExp) return;
-          const b = document.getElementById(EXP[from]);
+          const b = document.getElementById(EXP[from === 'none' ? to : from]);
           if (b && b.focus) { try { b.focus({ preventScroll: true }); } catch (e) {} }
         };
         const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -8655,7 +8657,6 @@ window.FM = window.FM || {};
         if (cardShrinks && st) { cvCard.scrollTop = st; if (cvMini) cvMini.style.top = st + 'px'; }
         const DUR = 460, EASE = 'cubic-bezier(.2,.85,.25,1.06)';
         const anim = (node, frames, o) => { if (node && node.animate) cvFlight.push(node.animate(frames, Object.assign({ duration: DUR, fill: 'both' }, o || {}))); };
-        const BAR = new Map([[cvCard, cvMini], [cvFr, cvFrBar]]); if (cvEd) BAR.set(cvEd, cvEdBar);
         const CONTENT = b => b === cvCard ? Array.prototype.filter.call(cvCard.children, k => k !== cvMini) : b === cvFr ? [cvFrBody] : [cvEdBody];
         blocks.forEach((b, i) => {
           /* `left` and `width` fly too (#978): side by side on a PC the line between the blocks slides, so each block's width
