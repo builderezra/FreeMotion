@@ -1,0 +1,23 @@
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+await sleep(400);
+const W = 720, H = 1280;
+await FM.projects.create({ name: 'Release 2.3 shots', width: W, height: H });
+const mkV = (name, start, dur, o) => { const l = FM.makeLayer('video', Object.assign({ name: name, x: W / 2, y: H / 2, start: start, duration: dur }, {})); l.srcW = W; l.srcH = H; l.srcRev = 0; l.muted = false; return Object.assign(l, o || {}); };
+const mkP = (name, start, dur, o) => { const l = mkV(name, start, dur, o); l.type = 'image'; return l; };
+const mkT = (name, start, dur) => FM.makeLayer('text', { name: name, text: name, x: W / 2, y: H * 0.2, start: start, duration: dur });
+const clipColors = ['#2f6fed', '#e0913f', '#2bbfa8', '#a35cd6'];
+const build = (kind) => {
+  const A = mkV('Beach', 0, 4), B = mkV('Hike', 4, 6, { volume: { kf: [{ t: 4, v: 1, e: 'linear' }, { t: 10, v: 0.4, e: 'linear' }] } }), C = mkV('Sunset', 10, 3), Pic = mkP('Photo', 13, 3);
+  [A, B, C, Pic].forEach((l, i) => { l.clipColor = clipColors[i]; });
+  const title = mkT('Summer trip', 4.5, 1.5), song = mkV('Song', 0, 16); song.audioOnly = true; song.name = 'Song'; song.sm = { stay: true };
+  return [song, title, Pic, C, B, A];
+};
+const rec = (dur) => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 36; const f = new File([new Uint8Array(64)], 'clip.mp4', { type: 'video/mp4' }); f._dur = dur; return { kind: 'video', el: cv, file: f, width: W, height: H, duration: dur, hasAudio: true, waveform: null }; };
+const lv = FM.loadVideoFile; FM.loadVideoFile = async f => Object.assign(rec((f && f._dur) || 10), { file: f });
+await FM.storage.applyScene({ project: { name: 'Release 2.3 shots', width: W, height: H, fps: 30, duration: 0, background: '#000000' }, layers: build(), selectedId: null, selectedIds: [] });
+FM.history.reset(); FM.selectLayer(null); FM.time = 0;
+FM.scene.layers.forEach(l => { if (l.type === 'video' && !l.audioOnly) FM.media.set(l.id, rec(12)); });
+FM.editor.set('simple'); FM.refreshAll(); await sleep(500);
+const L = n => FM.scene.layers.find(l => l.name === n);
+const tool = id => document.querySelector('#sm-tray .sm-tool[data-tool="' + id + '"]');
