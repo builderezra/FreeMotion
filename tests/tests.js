@@ -124569,6 +124569,43 @@
     }, 380);
   });
 
+  test('simple P2.2 · review the time readout reads the playhead after Clips adds clips and after the tray’s Delete moves it, at 380 and 1280 (DESIGN §8.3: the pill is Full’s #time-readout; first-user audit 10, S10a)', { item: '980', budgetMs: 90000 }, async function () {
+    /* The runner put FM.time back to plan.time and moved the line, but never wrote the pill: after Clips laid three clips down
+       from 0 it read the LAST clip's start (00:08:00 with the playhead at 0:00), and after Delete it kept the old time, until
+       the next scrub. Judged against what the pill itself writes for FM.time (FM.updateReadout), so the format is the app's. */
+    smNeedP2();
+    const files = await Promise.all(['#ff0000', '#00ff00', '#0000ff'].map(c => smPng(c)));
+    const ro = () => document.getElementById('time-readout').textContent;
+    const pill = () => { const got = ro(); FM.updateReadout(); return { got: got, want: ro() }; };
+    const legs = async function (width) {
+      const fails = [];
+      await smP2(() => [], async function (v) {
+        FM.setTime(0); await smSettle(60);
+        const seen = await smPicker(files, async function () { smTool('clips').click(); await v.idle(); });
+        await smSettle(150);
+        const clips = FM.scene.layers.filter(l => l.sm && l.sm.main).sort((a, b) => a.start - b.start);
+        if (seen.n !== 1 || clips.length !== 3) throw new Error('setup ' + width + ': Clips added ' + clips.length + ' clip(s) through ' + seen.n + ' picker(s) (it said “' + v.say() + '”)');
+        if (Math.abs(FM.time) > 1e-6 || !(clips[2].start > 1)) throw new Error('CONTROL ' + width + ': after Clips the playhead is at ' + FM.time + ' and the last clip starts at ' + clips[2].start + ', so a stale pill could not show');
+        const p = pill();
+        if (p.got !== p.want) fails.push(width + ', after Clips: the playhead is at ' + FM.time + ' s and the pill reads ' + p.got + ', want ' + p.want);
+      });
+      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        FM.setTime(4.5); FM.selectLayer(v.L('B').id); await smSettle(150);
+        const p0 = pill();
+        if (p0.got !== p0.want) throw new Error('CONTROL ' + width + ': the pill reads ' + p0.got + ' at 4.5 s, want ' + p0.want);
+        const del = smTool('delete');
+        if (!del) throw new Error('CONTROL ' + width + ': no 🗑 in the tray for clip B');
+        del.click(); await v.idle(); await smSettle(100);
+        if (v.L('B') || Math.abs(FM.time - 4.5) < 1e-6) throw new Error('CONTROL ' + width + ': the tray’s Delete did not take B and move the playhead (B ' + !!v.L('B') + ', time ' + FM.time + ', it said “' + v.say() + '”)');
+        const p = pill();
+        if (p.got !== p.want) fails.push(width + ', after Delete: the playhead is at ' + FM.time + ' s and the pill reads ' + p.got + ', want ' + p.want);
+      });
+      if (fails.length) throw new Error(fails.join(' · '));
+    };
+    await atPhoneWidth(() => legs('380'), 380);
+    await atWideWidth(() => legs('1280'), 1280);
+  });
+
   test('980 2.2 merge: after a Simple visit on a PC, #sm-bar goes back home — Full\u2019s inspector band keeps no Simple element', { item: '980' }, async function () {
     /* The PM's merge-day note (7 Oct): place() parked #sm-bar at the bottom of #inspector-panel on a PC and nothing moved it
        back, so Full's band kept it after Simple closed. Leaving Simple runs no sync() in Full (app.js calls it only in Simple),
