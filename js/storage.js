@@ -911,6 +911,12 @@ window.FM = window.FM || {};
       // Restore the full multi-selection (filtered to layers that still exist), not just one. (#20)
       const liveIds = new Set(FM.scene.layers.map(l => l.id));
       FM.scene.selectedIds = (Array.isArray(scene.selectedIds) ? scene.selectedIds : (scene.selectedId ? [scene.selectedId] : [])).filter(id => liveIds.has(id));
+      /* …EXCEPT A PROJECT THAT OPENS IN SIMPLE, which opens with nothing selected (SU1 #12). The selection he left behind is
+         usually the last clip he touched, off the right of the screen when the playhead comes back to 0:00 — and Simple's tray,
+         🗑 included, acted on it while a different clip sat under the playhead. With nothing selected the tray shows the quiet
+         "clips · length" line instead (DESIGN §8.2), as CapCut opens a project. Full restores the selection exactly as before
+         (§0.4): homeFor is the same answer editor-mode.js uses to choose the editor this project opens in. */
+      if (FM.editor && FM.editor.homeFor && FM.editor.homeFor(boundId) === 'simple') { FM.scene.selectedId = null; FM.scene.selectedIds = []; }
       await hydrateSceneMedia();
       if (FM.resizeCanvas) FM.resizeCanvas();
       if (FM.refreshAll) FM.refreshAll();
