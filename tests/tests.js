@@ -44438,6 +44438,12 @@
          back in, so the panel already has the way out. Narrowing the range would not help: at 95% the wedge still misses
          this fixture's layer entirely. The opposite ends (centre at 0%) keep the layer, and are not listed. */
       'radialwipe:centery=max': 1, 'radialrepeat:centerx=max': 1, 'radialrepeat:centery=max': 1,
+      /* RADIAL WIPE AT PROGRESS 0 is wipe:progress=min's twin (land-b3 ce7768ac, "Fix hard wipe zero-progress visibility"):
+         Progress is how much of the layer is REVEALED, so 0 is nothing — '904: … 0 / 1 progress still show nothing / everything'
+         and '690 hard Wipe and Radial Wipe fully hide the first frame' both pin it. It was never listed only because the old
+         kernel leaked a one-pixel line along the start ray at 0, enough to pass this sweep; ce7768ac closed that leak. Making 0
+         fully visible instead would contradict both tests and jump from the whole layer at 0 to almost none at 0.005. */
+      'radialwipe:progress=min': 1,
       /* SHADOW ONLY (#482 6.3) is the layer swapped for its shadow — by design. The shadow is black by default and this
          fixture's ground is black, so the swap reads as nothing; on any other ground it is the shadow, and '482 6.3 Drop
          Shadow - Spread grows…' proves it is drawn. */
