@@ -125049,4 +125049,68 @@
     if (!(off(29) > 100)) throw new Error('CONTROL: the drifted clouds match the still ones moved 29 px - this comparison cannot tell a slide');
     if (off(30)) throw new Error(off(30) + ' pixels of Vertical drift 30 px/s at 1 s are not the clouds at 0 s moved 30 px up');
   });
+
+  /* 11.5 VORONOI CELLS: Pattern, Fill (Seed colour / Cell average / Random colour / Original), Wall colour, Randomness. */
+  const B11VO_NEW = { seed: 0, fill: 0, jitter: 1, color: '#000000' };
+  const B11VO_CFG = { def: {}, frozen: { motion: 0 }, big: { cells: 6, edge: 1, wall: 30 }, fine: { cells: 40, edge: 0 }, kf: { speed: b11Kf(0.2, 2) }, alive: { motion: 1, speed: 2 } };
+  const B11VO_PIN = {   // fc8866f1, before the edit
+    def: '9a87c2f9.ee587a73/88c9c1aa.12516bc0 6c9d2daf.a4a70812/d15da09d.49861ebf', frozen: 'da257ab7.da257ab7/188c2495.188c2495 25c491f2.25c491f2/bfb3eaec.bfb3eaec',
+    big: '85b792ac.b07bfcfc/e508e35b.a6b0a053 5f5163ee.1141f785/1d7983a4.7c7070a2', fine: '03dfa3ab.861a4867/9a18a052.96bc0439 c8f7770b.fc01f6f5/324009db.e8d4cd48',
+    kf: '128e9a84.6d43e8a3/3366dc3d.3ad66a5c b66c2f0e.dc30c690/e6f8121b.e2763dcc', alive: '3905fd4e.8be09d4a/26afc190.6e48f4a0 d2b10322.63a25d36/3bf4224a.c68f0c0d' };
+  /* Still cells (Motion 0), 12 across a 144 x 96 layer, over d0 (a flat grey by default). */
+  const b11Vo = (over, d0, t) => b11Run('voronoi', Object.assign(b11Base('voronoi', {}), { cells: 12, motion: 0 }, over), 144, 96, t == null ? 0.5 : t, 1, d0 || b11Flat(144, 96, [128, 128, 128]));
+  const b11Sat = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 40) n++; return n; };
+
+  test('482 11.5 Voronoi - Pattern, Fill, Wall colour and Randomness are in the catalogue at defaults that draw the old cells, and saved and new Voronoi Cells draw byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('voronoi', B11VO_NEW, { seed: 3, fill: 2, jitter: 0.4, color: '#3060ff' });
+    const fill = b11Row('voronoi', 'fill'), wc = b11Row('voronoi', 'color');
+    if (fill.type !== 'segment' || (fill.options || []).map(o => o[0]).join() !== '0,1,2,3') throw new Error('Fill is not a choice of Seed colour, Cell average, Random colour and Original (' + JSON.stringify(fill.options) + ')');
+    if (wc.type !== 'color' || wc.default !== '#000000') throw new Error('there is no Wall colour row defaulting to black (' + wc.type + ', ' + wc.default + ')');
+    b11Recipes('voronoi', B11VO_NEW);
+    const moved = b11Pinned('voronoi', B11VO_NEW, B11VO_CFG, B11VO_PIN);
+    if (moved.length) throw new Error(moved.length + ' Voronoi pictures differ from fc8866f1 at the new defaults - a new control changed cells he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.5 Voronoi - Pattern deals another crackle, Cell average paints a cell the mean under it, Random colour gives each cell its own, Original keeps the picture and draws the walls, Wall colour tints them, and Randomness 0 lines the cells up in squares', { item: '482', budgetMs: 60000 }, function () {
+    const W = 144, H = 96;
+    /* PATTERN. CONTROL: Pattern 0 is the old crackle. Pattern 3 moves most of it. */
+    const ramp = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < W * H; i++) { const x = i % W, y = (i / W) | 0; d[i * 4] = x * 255 / W; d[i * 4 + 1] = y * 255 / H; d[i * 4 + 2] = 90; d[i * 4 + 3] = 255; } return d; };
+    const v0 = b11Vo({}, ramp());
+    if (!b11Same(b11Vo({ seed: 0 }, ramp()), v0)) throw new Error('CONTROL: Pattern 0 changed the cells');
+    if (!(b11Diff(b11Vo({ seed: 3 }, ramp()), v0) > W * H)) throw new Error('Pattern 3 drew nearly the same cells as Pattern 0');
+    /* CELL AVERAGE. On a fine black-and-white check the old cell takes the colour under its seed — black or white and nothing
+       between (CONTROL). Cell average paints each cell the mean of the check under it: greys, and a cell's mean times its
+       pixels is its sum, so the whole picture keeps the check's own mean to within the byte rounding. Only slivers of a cell
+       clipped by the frame edge, a few pixels each, can stray from mid grey (MEASURED 8 of 13,824 pixels). */
+    const check = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < W * H; i++) { const v = ((i % W) + ((i / W) | 0)) % 2 ? 255 : 0; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; } return d; };
+    const sc = b11Vo({ edge: 0 }, check()), av = b11Vo({ edge: 0, fill: 1 }, check());
+    let mid = 0, ends = 0, sum = 0; for (let i = 0; i < sc.length; i += 4) { if (sc[i] !== 0 && sc[i] !== 255) mid++; }
+    if (mid) throw new Error('CONTROL: Seed colour drew ' + mid + ' pixels that are neither black nor white on a black-and-white check');
+    for (let i = 0; i < av.length; i += 4) { if (av[i] < 90 || av[i] > 165) ends++; sum += av[i]; }
+    if (ends > W * H * 0.01 || Math.abs(sum / (W * H) - 127.5) > 0.5) throw new Error('Cell average left ' + ends + ' pixels far from the check’s mid grey and a mean of ' + (sum / (W * H)).toFixed(2) + ' against the check’s 127.5 - a cell should be the mean of what is under it');
+    /* RANDOM COLOUR. CONTROL: Seed colour on a flat grey is grey everywhere. Random colour paints the cells in colours, many. */
+    const grey = b11Vo({ edge: 0 }), rnd = b11Vo({ edge: 0, fill: 2 }), cols = new Set();
+    if (b11Sat(grey)) throw new Error('CONTROL: Seed colour put colour into a flat grey');
+    for (let i = 0; i < rnd.length; i += 4) cols.add(rnd[i] + ',' + rnd[i + 1] + ',' + rnd[i + 2]);
+    if (!(b11Sat(rnd) > W * H * 0.6 && cols.size >= 40)) throw new Error('Random colour drew ' + cols.size + ' colours, ' + b11Sat(rnd) + ' pixels of them rich - every cell should have its own');
+    /* ORIGINAL (WALLS ONLY). With no walls it is the picture untouched; with walls every changed pixel is darker, and the
+       cells' insides are the picture. CONTROL: Seed colour changes the insides of a ramp. */
+    const src = ramp();
+    if (!b11Same(b11Vo({ fill: 3, edge: 0 }, ramp()), src)) throw new Error('Original with Edge 0 changed the picture');
+    const og = b11Vo({ fill: 3, edge: 1 }, ramp()), sd = b11Vo({ fill: 0, edge: 1 }, ramp());
+    let lighter = 0, kept = 0; for (let i = 0; i < og.length; i += 4) { if (og[i] > src[i] || og[i + 1] > src[i + 1] || og[i + 2] > src[i + 2]) lighter++; if (og[i] === src[i] && og[i + 1] === src[i + 1]) kept++; }
+    if (!(b11Diff(sd, src) > W * H)) throw new Error('CONTROL: Seed colour hardly changed the ramp');
+    if (lighter || !(kept > W * H * 0.5) || kept === W * H) throw new Error('Original with walls: ' + lighter + ' pixels lighter than the picture, ' + kept + ' of ' + W * H + ' left as they were - only the walls should darken');
+    /* WALL COLOUR. CONTROL: black walls on grey are darker greys. Red walls are red. */
+    const blk = b11Vo({ edge: 1, wall: 20 }), red = b11Vo({ edge: 1, wall: 20, color: '#ff0000' });
+    if (b11Sat(blk) || !(b11Diff(blk, b11Vo({ edge: 0 })) > 300)) throw new Error('CONTROL: black walls on grey are not darker greys');
+    let redder = 0; for (let i = 0; i < red.length; i += 4) if (red[i] > red[i + 1] + 30 && red[i + 1] === red[i + 2]) redder++;
+    if (!(redder > 300)) throw new Error('Wall colour red tinted only ' + redder + ' wall pixels red');
+    /* RANDOMNESS. With 0 every seed sits mid-cell, so the walls fall on the cell grid: every wall pixel within a wall's width
+       of a grid line. CONTROL: the old scatter puts most of its walls elsewhere. */
+    const G = Math.max(6, W / 12), onGrid = d => { let on = 0, all = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] >= 128) continue; all++; const gx = x % G, gy = y % G; if (Math.min(gx, G - gx) <= 1.5 || Math.min(gy, G - gy) <= 1.5) on++; } return [on, all]; };
+    const sq = onGrid(b11Vo({ jitter: 0, edge: 1, wall: 8 })), sc2 = onGrid(b11Vo({ edge: 1, wall: 8 }));
+    if (!(sc2[1] > 200 && sc2[0] < sc2[1] * 0.7)) throw new Error('CONTROL: ' + sc2[0] + ' of the old scatter’s ' + sc2[1] + ' wall pixels sit on the grid');
+    if (!(sq[1] > 200 && sq[0] === sq[1])) throw new Error('Randomness 0 left ' + (sq[1] - sq[0]) + ' of ' + sq[1] + ' wall pixels off the grid - the cells should be squares');
+  });
 })();

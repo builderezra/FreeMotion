@@ -1294,7 +1294,15 @@ window.FM = window.FM || {};
       { key: 'motion', label: 'Motion', min: 0, max: 1, step: 0.02, def: 0.4, legacy: 0 },   // queue 756: an instance saved before motion existed is frozen (0), and the inspector says so
       { key: 'speed', label: 'Speed', min: 0, max: 2, step: 0.02, def: 0.5 },
       { key: 'wall', label: 'Wall thickness', min: 1, max: 40, step: 1, def: 8, unit: '%' },   // queue 904: was welded to 8% of the cell — Edge only ever set how DARK
-    ] },
+      /* #482 polish 11.5. Every Voronoi was the same crackle, each cell took the colour under its seed, the walls could only
+         darken, and the seeds were always scattered as far as they go. Pattern deals another crackle; Fill paints a cell its
+         seed's colour (as ever), the average of the picture under it, a random colour of its own, or leaves the picture alone
+         and draws only the walls; Wall colour is what the walls fade to (black is the old darkening); Randomness 0 lines the
+         seeds up into a grid of squares. Pattern 0, Seed colour, black and 1 are the old cells, byte for byte. */
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'fill', label: 'Fill', def: 0, options: [[0, 'Seed colour'], [1, 'Cell average'], [2, 'Random colour'], [3, 'Original (walls only)']] },
+      { key: 'jitter', label: 'Randomness', min: 0, max: 1, step: 0.02, def: 1 },
+    ], color: true, defColor: '#000000', colorLabel: 'Wall colour' },
     { type: 'tunnel', label: 'Tunnel', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'radius', label: 'Mouth size', min: 5, max: 100, step: 1, def: 30, unit: '%' },
@@ -9082,7 +9090,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.
-    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcWall=(p.wall==null?8:FM.evalProp(p.wall,t))/100; if(!(vcWall>=0.01))vcWall=0.01; if(vcWall>0.4)vcWall=0.4;   /* queue 904: the wall was a fixed 8% of the cell; 8/100 === 0.08 exactly, so a saved instance is byte-identical */ var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
+    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcWall=(p.wall==null?8:FM.evalProp(p.wall,t))/100; if(!(vcWall>=0.01))vcWall=0.01; if(vcWall>0.4)vcWall=0.4;   /* queue 904: the wall was a fixed 8% of the cell; 8/100 === 0.08 exactly, so a saved instance is byte-identical */ var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); var vcSdK=(p.seed==null?0:Math.max(0,Math.min(999,Math.round(FM.evalProp(p.seed,t))||0)))*17.17; /* #482 polish 11.5 Pattern: a number added to every seed's hash, nothing at 0 */ function vcH(ix,iy,k){ var a=ix*127.1+iy*311.7+k*74.7; if(vcSdK)a+=vcSdK; var n=Math.sin(a)*43758.5453; return n-Math.floor(n); }
       /* MOTION (queue 350). Ezra: "Voronoi cells needs the ability to make them move, and I want it to
          actually move in a cool way and not just a drag it up and down, like they're alive."
          "Not just a drag it up and down" rules out the cheap answer — scrolling the whole field, which
@@ -9109,12 +9117,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var vcR=vcM*0.34, vcW=(FM.isAnimated(p.speed)?FM.integrateProp(p.speed,0,vcTime,function(u){ var k=FM.evalProp(p.speed,u); return k<0?0:(k>2?2:k); }):vcTime*vcSp)*6.2831853, vcTAU=6.2831853;
       var vcGX=Math.ceil(W/vcG)+2, vcGY=Math.ceil(H/vcG)+2;
       var vcPX=new Float64Array(vcGX*vcGY), vcPY=new Float64Array(vcGX*vcGY);
+      /* #482 polish 11.5 (Pattern is mixed into vcH above). RANDOMNESS pulls each seed toward the middle of its cell — 0 is a
+         grid of squares, 1 the old scatter, kept as the very same number. FILL: Seed colour is the old cell; Cell average
+         paints each cell the mean of the picture under it (a second pass, once every cell is summed); Random colour gives each
+         cell a rich colour of its own from its own hash; Original (walls only) leaves the picture and draws just the walls.
+         WALL COLOUR is what a wall fades to: black (or none, a saved instance) is the old multiply, exactly. */
+      var vcJt=p.jitter==null?1:FM.evalProp(p.jitter,t); if(!(vcJt>=0))vcJt=0; if(vcJt>1)vcJt=1;
+      var vcFill=p.fill==null?0:(Math.round(FM.evalProp(p.fill,t))|0); if(vcFill<0||vcFill>3)vcFill=0;
+      var vcWc=p.color?hexToRGB(p.color):null; if(vcWc&&!vcWc[0]&&!vcWc[1]&&!vcWc[2])vcWc=null;
+      var vcRC=vcFill===2?new Uint8ClampedArray(vcGX*vcGY*3):null;
+      function vcWallAt(o,f){ if(vcWc){ var g=1-f; d[o]=d[o]*f+vcWc[0]*g; d[o+1]=d[o+1]*f+vcWc[1]*g; d[o+2]=d[o+2]*f+vcWc[2]*g; } else { d[o]*=f; d[o+1]*=f; d[o+2]*=f; } }
       for(var vcgy=0;vcgy<vcGY;vcgy++)for(var vcgx=0;vcgx<vcGX;vcgx++){
         var vcCx=vcgx-1, vcCy=vcgy-1, vcIdx=vcgy*vcGX+vcgx;
         var vcOx=vcH(vcCx,vcCy,1), vcOy=vcH(vcCx,vcCy,2);
+        if(vcJt!==1){ vcOx=0.5+(vcOx-0.5)*vcJt; vcOy=0.5+(vcOy-0.5)*vcJt; }
         if(vcR){ vcOx+=vcR*Math.cos(vcW+vcH(vcCx,vcCy,3)*vcTAU); vcOy+=vcR*Math.sin(vcW*0.73+vcH(vcCx,vcCy,4)*vcTAU); }
         vcPX[vcIdx]=(vcCx+vcOx)*vcG; vcPY[vcIdx]=(vcCy+vcOy)*vcG;
-      } for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcJ=(vccy+1)*vcGX+(vccx+1), vcpx=vcPX[vcJ], vcpy=vcPY[vcJ]; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; } else if(vcdd<vcD2){ vcD2=vcdd; } } var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1); if(vcE>0 && vcEw<vcG*vcWall){ var vcF=1-vcE*(1-vcEw/(vcG*vcWall)); d[vci]*=vcF; d[vci+1]*=vcF; d[vci+2]*=vcF; } } } },
+        if(vcRC){ var vcHh=vcH(vcCx,vcCy,5), vcSs=0.55+0.35*vcH(vcCx,vcCy,6), vcLl=0.4+0.25*vcH(vcCx,vcCy,7);   // any hue, fairly rich, mid-light (HSL)
+          var vcQ=vcLl<0.5?vcLl*(1+vcSs):vcLl+vcSs-vcLl*vcSs, vcP=2*vcLl-vcQ;
+          for(var vck=0;vck<3;vck++){ var vcT=vcHh+(1-vck)/3; vcT-=Math.floor(vcT); vcRC[vcIdx*3+vck]=255*(vcT<1/6?vcP+(vcQ-vcP)*6*vcT:(vcT<0.5?vcQ:(vcT<2/3?vcP+(vcQ-vcP)*(2/3-vcT)*6:vcP))); } }
+      }
+      var vcCell=vcFill===1?new Int32Array(W*H).fill(-1):null, vcWallF=vcFill===1?new Float32Array(W*H):null, vcSum=vcFill===1?new Float64Array(vcGX*vcGY*4):null;
+      for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy, vcB=0; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcJ=(vccy+1)*vcGX+(vccx+1), vcpx=vcPX[vcJ], vcpy=vcPY[vcJ]; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; vcB=vcJ; } else if(vcdd<vcD2){ vcD2=vcdd; } }
+        var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1), vcIsWall=vcE>0 && vcEw<vcG*vcWall;
+        if(vcFill===1){ var vcPi=vcRow+vcx; vcCell[vcPi]=vcB; vcWallF[vcPi]=vcIsWall?1-vcE*(1-vcEw/(vcG*vcWall)):1; vcSum[vcB*4]+=vcS[vci]; vcSum[vcB*4+1]+=vcS[vci+1]; vcSum[vcB*4+2]+=vcS[vci+2]; vcSum[vcB*4+3]++; continue; }
+        if(vcFill===0){ var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } }
+        else if(vcFill===2){ d[vci]=vcRC[vcB*3]; d[vci+1]=vcRC[vcB*3+1]; d[vci+2]=vcRC[vcB*3+2]; }
+        if(vcIsWall){ var vcF=1-vcE*(1-vcEw/(vcG*vcWall)); vcWallAt(vci,vcF); } } }
+      if(vcFill===1) for(var vcq=0;vcq<W*H;vcq++){ var vcb=vcCell[vcq]; if(vcb<0)continue; var vcn=vcSum[vcb*4+3], vco=vcq*4; d[vco]=vcSum[vcb*4]/vcn; d[vco+1]=vcSum[vcb*4+1]/vcn; d[vco+2]=vcSum[vcb*4+2]/vcn; if(vcWallF[vcq]!==1)vcWallAt(vco,vcWallF[vcq]); } },
     // ---- batch 27: Remove Object — content-aware fill of a rectangular region (watermark/subtitle
     // removal). Patch = ffmpeg-delogo: each region pixel is the 1/distance-weighted mix of the four
     // border samples just OUTSIDE the rect — all four channels incl. alpha, so on a transparent plate
