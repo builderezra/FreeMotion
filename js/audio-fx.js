@@ -2062,6 +2062,51 @@ window.FM = window.FM || {};
   };
   DEFS.forEach(d => { d.tags = TAGS[d.type] || []; });
 
+  /* ═══ STARTING POINTS INSIDE AN EFFECT (#482 polish 8.2) ═══════════════════════════════════════════════════════════════
+   * The backlog's table: a few named settings per effect, each a set of values written in ONE go — the rule Telephone's
+   * Style already follows (fxSegment `sets`: one tap, one undo step). Each names every control that shapes the character,
+   * so the result does not depend on what was set before; Output is never in one, so a preset does not jump the level.
+   * The numbers are reasoned, not yet heard (a small room is short and close, a cathedral long and late; a slapback is
+   * one quick repeat): Ezra hears them and adjusts before they ship. THE CHIPS THAT OFFER THEM ARE NOT BUILT:
+   * a new row of buttons at the top of an open effect is drawn and picked first (#545); this is the half they will call
+   * (FM.audioFxPresets.apply) and "Save as my preset" (FM.audioFxPresets.save / mine). One table, read in one place. */
+  const PRESETS = {
+    reverb: [
+      ['Small room', { size: 0.25, decay: 0.6, predelay: 0.005, highcut: 9000, lowcut: 120, width: 0.7, mix: 0.2 }],
+      ['Bathroom', { size: 0.15, decay: 1.2, predelay: 0.002, highcut: 12000, lowcut: 150, width: 0.6, mix: 0.35 }],
+      ['Hall', { size: 0.75, decay: 2.8, predelay: 0.03, highcut: 8000, lowcut: 80, width: 1, mix: 0.3 }],
+      ['Cathedral', { size: 1, decay: 6.5, predelay: 0.06, highcut: 6000, lowcut: 60, width: 1, mix: 0.4 }],
+      ['Plate', { size: 0.55, decay: 1.8, predelay: 0.01, highcut: 14000, lowcut: 200, width: 0.9, mix: 0.3 }],
+    ],
+    delay: [
+      ['Slapback', { time: 0.09, feedback: 0.1, tone: 20000, lowcut: 20, wobble: 0, mix: 0.3 }],
+      ['Tape', { time: 0.35, feedback: 0.45, tone: 4500, lowcut: 150, wobble: 0.4, mix: 0.35 }],
+      ['Canyon', { time: 1.2, feedback: 0.6, tone: 6000, lowcut: 100, wobble: 0, mix: 0.4 }],
+    ],
+    compressor: [
+      ['Voice', { threshold: -20, ratio: 3, attack: 0.01, release: 0.15, knee: 6 }],
+      ['Glue', { threshold: -12, ratio: 2, attack: 0.03, release: 0.3, knee: 10 }],
+      ['Squash', { threshold: -35, ratio: 10, attack: 0.002, release: 0.1, knee: 3 }],
+    ],
+    eq3: [
+      ['Voice clarity', { low: -4, mid: 3, high: 3, lowFreq: 120, midFreq: 3000, midWidth: 1.2, highFreq: 8000 }],
+      ['Bass boost', { low: 6, mid: 0, high: 0, lowFreq: 100, midFreq: 1000, midWidth: 1, highFreq: 4000 }],
+      ['De-mud', { low: 0, mid: -5, high: 1, lowFreq: 250, midFreq: 350, midWidth: 1.2, highFreq: 6000 }],
+    ],
+    distortion: [   // Auto level on in all three, so picking one changes the grit and not the volume (batch 7, C19)
+      ['Warm', { drive: 15, curve: 2, tone: 8000, autogain: 1 }],
+      ['Crunch', { drive: 45, curve: 1, tone: 6000, autogain: 1 }],
+      ['Fuzz', { drive: 80, curve: 3, tone: 5000, autogain: 1 }],
+    ],
+    pitch: [
+      ['Chipmunk', { semitones: 7, cents: 0 }],
+      ['Helium', { semitones: 12, cents: 0 }],
+      ['Deep', { semitones: -5, cents: 0 }],
+      ['Monster', { semitones: -12, cents: 0 }],
+    ],
+  };
+  DEFS.forEach(d => { d.presets = PRESETS[d.type] || []; });
+
   FM.AUDIO_EFFECTS = DEFS;
   DEFS.forEach(d => { REG[d.type] = d; });
   FM.AFX_CATEGORIES = CATEGORY_ORDER
@@ -2102,6 +2147,69 @@ window.FM = window.FM || {};
       }
       return s;
     },
+    // The shipped starting points of one effect (#482 polish 8.2), as fresh copies: [{ name, params }].
+    presetsOf: function (id) { return ((REG[id] && REG[id].presets) || []).map(p => ({ name: p[0], params: Object.assign({}, p[1]) })); },
+  };
+
+  /* ═══ APPLYING ONE, AND THE ONES HE SAVES (#482 polish 8.2) ═══════════════════════════════════════════════════════════
+   * apply(inst, preset) writes a preset's values into an effect in one go and returns the keys it wrote (null if nothing
+   * fitted): each value is read the way the chain reads it (valueAt — clamped into its range, a choice snapped to an
+   * option, an on/off to 0/1), so a preset from an older build or a hand-edited store cannot put a value on an effect that
+   * the effect cannot play; a key the effect does not have is skipped. A keyframed control it names is replaced by the
+   * plain value, as Telephone's Style replaces its four. The caller commits once (afterAudioFx), so it is one undo step.
+   * "Save as my preset" keeps the effect's plain values under a name, per effect, in localStorage (fx-presets.js's
+   * pattern): a keyframed control is left out — a starting point is one setting, not a move. Every read re-checks the
+   * store (type, name, keys, numbers), because anything can be in localStorage. */
+  const AFX_PRESET_KEY = 'fm.afx.userpresets', AFX_PRESET_MAX = 120;
+  function cleanValues(type, raw) {
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    ((REG[type] && REG[type].params) || []).forEach(p => {
+      if (!Object.prototype.hasOwnProperty.call(raw, p.key)) return;
+      const v = raw[p.key];
+      if (typeof v === 'number' && isFinite(v)) out[p.key] = valueAt({ params: { [p.key]: v } }, p, 0);
+    });
+    return out;
+  }
+  function readMine() {
+    let a = [];
+    try { a = JSON.parse(localStorage.getItem(AFX_PRESET_KEY) || '[]'); } catch (e) { a = []; }
+    return Array.isArray(a) ? a : [];
+  }
+  FM.audioFxPresets = {
+    apply: function (inst, preset) {
+      if (!inst || !REG[inst.type] || !preset) return null;
+      const vals = cleanValues(inst.type, preset.params), keys = Object.keys(vals);
+      if (!keys.length) return null;
+      if (!inst.params || typeof inst.params !== 'object') inst.params = {};
+      keys.forEach(k => { inst.params[k] = vals[k]; });
+      return keys;
+    },
+    // His saved ones for one effect, newest first, each checked: [{ name, params }].
+    mine: function (id) {
+      if (!REG[id]) return [];
+      return readMine().filter(x => x && x.type === id && typeof x.name === 'string' && x.name.trim())
+        .map(x => ({ name: x.name.trim().slice(0, 40), params: cleanValues(id, x.params) }))
+        .filter(x => Object.keys(x.params).length);
+    },
+    // Saves `inst`'s plain values as `name` (replacing one of the same name on the same effect). True only if it is on disk.
+    save: function (inst, name) {
+      const nm = String(name || '').trim().slice(0, 40);
+      if (!inst || !REG[inst.type] || !nm) return false;
+      const params = cleanValues(inst.type, inst.params);
+      if (!Object.keys(params).length) return false;
+      // The raw list, not mine(): an entry this build cannot read (an effect it does not have) is kept, never dropped.
+      const arr = readMine().filter(x => !(x && x.type === inst.type && typeof x.name === 'string' && x.name.trim() === nm)).slice(0, AFX_PRESET_MAX - 1);
+      arr.unshift({ type: inst.type, name: nm, params: params });
+      try { localStorage.setItem(AFX_PRESET_KEY, JSON.stringify(arr)); return true; }
+      catch (e) { if (FM.toast) FM.toast('Storage full — preset not saved', 3200); return false; }
+    },
+    remove: function (id, name) {
+      const nm = String(name || '').trim();
+      const arr = readMine().filter(x => !(x && x.type === id && typeof x.name === 'string' && x.name.trim() === nm));
+      try { localStorage.setItem(AFX_PRESET_KEY, JSON.stringify(arr)); return true; } catch (e) { return false; }
+    },
+    _storageKey: AFX_PRESET_KEY,   // suite seam
   };
 
   // Unknown types are excluded here as well as in buildAudioFxChain, so "has effects" can never disagree

@@ -125462,4 +125462,63 @@
       }
     });
   });
+
+  /* 8.2 — PRESETS, THE HALF THAT NEEDS NO PICTURE. The chips at the top of an open effect are a new row of buttons, so they are
+     drawn and picked first (#545) and are not built; this checks what they will call. The backlog's table, in its order:
+     Reverb Small room / Bathroom / Hall / Cathedral / Plate, Echo Slapback / Tape / Canyon, Compressor Voice / Glue / Squash,
+     3-Band EQ Voice clarity / Bass boost / De-mud, Distortion Warm / Crunch / Fuzz, Pitch Chipmunk / Helium / Deep /
+     Monster; every value inside its control (a choice one of its options), none touching Output. Applying one writes ALL its
+     values in one call (one commit, one undo step for the chip that calls it) - the backlog's test: Echo -> Slapback is time
+     0.09 and feedback 0.1, over a keyframed Time, with Output left alone. A value from outside is read as the chain reads it
+     (clamped, snapped). Saved ones: kept per effect, newest first, plain values only, every read re-checked, and an entry
+     this build cannot read is never dropped by a save. On the build before there is no presetsOf (first line). */
+  test('482 8.2 Audio presets - each effect in the backlog’s table carries its starting points, applying one writes all its values in one go (Echo Slapback: 90 ms, 0.1), and a preset he saves comes back checked', { item: '482', budgetMs: 30000 }, function () {
+    const reg = FM.audioFxRegistry, AP = FM.audioFxPresets;
+    if (!reg.presetsOf || !AP || !AP.apply) throw new Error('no audio presets: FM.audioFxRegistry.presetsOf / FM.audioFxPresets.apply are missing');
+    const WANT = { reverb: 'Small room|Bathroom|Hall|Cathedral|Plate', delay: 'Slapback|Tape|Canyon', compressor: 'Voice|Glue|Squash', eq3: 'Voice clarity|Bass boost|De-mud', distortion: 'Warm|Crunch|Fuzz', pitch: 'Chipmunk|Helium|Deep|Monster' };
+    const bad = [];
+    Object.keys(WANT).forEach(type => {
+      const ps = reg.presetsOf(type), names = ps.map(p => p.name).join('|');
+      if (names !== WANT[type]) bad.push(type + ' offers ' + (names || 'nothing') + ', not ' + WANT[type]);
+      ps.forEach(pr => {
+        Object.keys(pr.params).forEach(k => {
+          const pd = b7Pd(type, k), v = pr.params[k];
+          if (!pd) { bad.push(type + ' ' + pr.name + ' sets ' + k + ', a control it does not have'); return; }
+          if (k === 'output') bad.push(type + ' ' + pr.name + ' sets Output - a preset must not jump the level');
+          if (!(v >= pd.min && v <= pd.max) || (pd.options && !pd.options.some(o => o[0] === v))) bad.push(type + ' ' + pr.name + ' sets ' + k + ' to ' + v + ', which the control cannot hold');
+        });
+        const inst = reg.makeInstance(type), got = AP.apply(inst, pr);
+        if (!got || got.length !== Object.keys(pr.params).length) bad.push(type + ' ' + pr.name + ' wrote ' + JSON.stringify(got) + ' of ' + Object.keys(pr.params).join(', '));
+        Object.keys(pr.params).forEach(k => { if (inst.params[k] !== pr.params[k]) bad.push(type + ' ' + pr.name + ' left ' + k + ' at ' + JSON.stringify(inst.params[k]) + ', not ' + pr.params[k]); });
+      });
+    });
+    const echo = reg.makeInstance('delay');
+    echo.params.time = { kf: [{ t: 0, v: 0.2 }, { t: 1, v: 0.8 }] }; echo.params.output = -6;
+    const slap = reg.presetsOf('delay').filter(p => p.name === 'Slapback')[0];
+    if (!slap) throw new Error('the Echo has no Slapback');
+    AP.apply(echo, slap);
+    if (echo.params.time !== 0.09 || echo.params.feedback !== 0.1) bad.push('Echo -> Slapback leaves time ' + JSON.stringify(echo.params.time) + ' and feedback ' + echo.params.feedback + ', not 0.09 and 0.1');
+    if (echo.params.output !== -6) bad.push('Slapback moved the Echo’s Output to ' + echo.params.output);
+    const dist = reg.makeInstance('distortion');
+    AP.apply(dist, { name: 'from outside', params: { drive: 400, curve: 2.6, autogain: 0.7, nope: 3, tone: 'loud' } });
+    if (dist.params.drive !== 100 || dist.params.curve !== 3 || dist.params.autogain !== 1 || 'nope' in dist.params || dist.params.tone !== 20000) bad.push('a preset from outside left a Distortion at ' + JSON.stringify(dist.params) + ' - want drive 100, Type 3, Auto level 1, Tone untouched, no stray key');
+    if (AP.apply(reg.makeInstance('delay'), { name: 'empty', params: { nothing: 1 } }) !== null) bad.push('a preset with nothing the Echo has still reports writing something');
+    const K = AP._storageKey;
+    let before = null; try { before = localStorage.getItem(K); } catch (e) {}
+    try {
+      localStorage.setItem(K, JSON.stringify([{ type: 'nosuch', name: 'Alien', params: { a: 1 } }, { type: 'delay', name: 'Bent', params: { time: 'x', feedback: 5, extra: 2 } }, 'junk']));
+      const mine = reg.makeInstance('delay');
+      mine.params.time = 0.5; mine.params.feedback = 0.7; mine.params.mix = { kf: [{ t: 0, v: 0.2 }, { t: 1, v: 0.6 }] };
+      if (!AP.save(mine, ' Long one ')) bad.push('saving a tuned Echo returned false');
+      const got = AP.mine('delay'), lo = got.filter(p => p.name === 'Long one')[0], bent = got.filter(p => p.name === 'Bent')[0];
+      if (!lo || lo.params.time !== 0.5 || lo.params.feedback !== 0.7 || 'mix' in lo.params) bad.push('a saved Echo comes back as ' + JSON.stringify(lo) + ' - want time 0.5, feedback 0.7 and no keyframed Mix');
+      if (!got.length || got[0].name !== 'Long one') bad.push('the newest saved preset is not first (' + got.map(p => p.name).join(', ') + ')');
+      if (!bent || bent.params.feedback !== 0.9 || 'time' in bent.params || 'extra' in bent.params) bad.push('a bent entry in the store reads back as ' + JSON.stringify(bent) + ' - want feedback clamped to 0.9, no time, no stray key');
+      const raw = JSON.parse(localStorage.getItem(K) || '[]');
+      if (!raw.some(x => x && x.type === 'nosuch')) bad.push('saving dropped an entry this build cannot read');
+      AP.remove('delay', 'Long one');
+      if (AP.mine('delay').some(p => p.name === 'Long one')) bad.push('a removed preset is still listed');
+    } finally { try { if (before == null) localStorage.removeItem(K); else localStorage.setItem(K, before); } catch (e) {} }
+    if (bad.length) throw new Error('Presets: ' + bad.join(' · '));
+  });
 })();
