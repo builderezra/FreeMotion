@@ -124672,8 +124672,10 @@
     return [['absent', absent], ['filled at render time', filled], ['present at the defaults', present]];
   }
   const B15_FC_NEW = { range: 0, rangesoft: 100, skin: 0 };
-
-  test('482 15.1 pin: the Filter’s Tonal range, Range width and Protect skin at their defaults leave every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+  /* The Filter's new keys NEW at their defaults leave every filter as it was: saved (absent), filled and new (present), at
+     Strength 0.35 / 0.5 / 1 against the old filter's oracle, at plate scale 1 and 0.5, on a see-through card, on an adjustment
+     layer, and every library filter — then the catalogue, with SET as the saved non-default values the load sanitiser must keep. */
+  function b15FilterPins(NEW, SET) {
     const P = b15P(), moved = [], px0 = FM._fxStats.fcPixel;
     // (no blur among them: a blur pulls the frame's edge in from transparent, the plates stop being opaque there, and the
     // oracle's two frames over the background are then no longer the container's two plates)
@@ -124682,18 +124684,18 @@
       // the oracle: s < 1 is the old cross-fade; s = 1 is the children standing where the filter stood
       const want = s < 1 ? b15Xfade(P, [b15Plate(P)], [Object.assign(b15Plate(P), { effects: KIDS[kn]() })], s, 0.5, rs)
                          : b15Px([Object.assign(b15Plate(P), { effects: KIDS[kn]() })], 0.5, P, rs);
-      b15Variants(b15Box({ strength: s }, KIDS[kn]()), B15_FC_NEW).forEach(([how, box]) => {
+      b15Variants(b15Box({ strength: s }, KIDS[kn]()), NEW).forEach(([how, box]) => {
         const L = b15Plate(P); L.effects = [box];
         const got = b15Px([L], 0.5, P, rs);
         if (!b15Same(got, want)) moved.push(kn + ' at Strength ' + s + ', plate scale ' + rs + ', new keys ' + how + ': ' + b15Diff(got, want) + ' off the old filter');
       });
       // …and on a see-through card over the plate, where the three must agree with each other
-      const card = b15Variants(b15Box({ strength: s }, KIDS[kn]()), B15_FC_NEW).map(([how, box]) => { const C = b15Card(); C.effects = [box]; return [how, b15Px([C, b15Plate(P)], 0.5, P, rs)]; });
+      const card = b15Variants(b15Box({ strength: s }, KIDS[kn]()), NEW).map(([how, box]) => { const C = b15Card(); C.effects = [box]; return [how, b15Px([C, b15Plate(P)], 0.5, P, rs)]; });
       card.slice(1).forEach(([how, d]) => { if (!b15Same(d, card[0][1])) moved.push('card, ' + kn + ' at Strength ' + s + ', plate scale ' + rs + ': new keys ' + how + ' draw ' + b15Diff(d, card[0][1]) + ' off the saved filter'); });
     })));
     // a filter on an adjustment layer (#986 C1): the grade below at Strength 0.6 and 1
     [0.6, 1].forEach(s => {
-      const pics = b15Variants(b15Box({ strength: s }, KIDS.posterize()), B15_FC_NEW).map(([how, box]) => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [box]; return [how, b15Px([A, b15Plate(P)], 0.5, P)]; });
+      const pics = b15Variants(b15Box({ strength: s }, KIDS.posterize()), NEW).map(([how, box]) => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [box]; return [how, b15Px([A, b15Plate(P)], 0.5, P)]; });
       pics.slice(1).forEach(([how, d]) => { if (!b15Same(d, pics[0][1])) moved.push('adjustment layer at Strength ' + s + ': new keys ' + how + ' draw ' + b15Diff(d, pics[0][1]) + ' off the saved filter'); });
     });
     // every library filter: makeInstance gives the new keys at their defaults (no recipe sets one), and the picture is the one without them
@@ -124701,9 +124703,9 @@
     if (lib.length < 40) throw new Error('CONTROL: the filter library lists ' + lib.length + ' recipes - this check sees nothing');
     lib.forEach(f => {
       const box = FM.filters.makeInstance(f.id);
-      Object.keys(B15_FC_NEW).forEach(k => { if (box.params[k] !== B15_FC_NEW[k]) undeclared.push('the ' + f.id + ' filter carries ' + k + ' = ' + box.params[k]); });
-      Object.assign(box.params, B15_FC_NEW);
-      const old = b15Copy(box); Object.keys(B15_FC_NEW).forEach(k => { delete old.params[k]; });
+      Object.keys(NEW).forEach(k => { if (box.params[k] !== NEW[k]) undeclared.push('the ' + f.id + ' filter carries ' + k + ' = ' + box.params[k]); });
+      Object.assign(box.params, NEW);
+      const old = b15Copy(box); Object.keys(NEW).forEach(k => { delete old.params[k]; });
       const La = b15Plate(P); La.effects = [old]; const Lb = b15Plate(P); Lb.effects = [box];
       const a = b15Px([La], 0.7, P), b = b15Px([Lb], 0.7, P);
       if (!b15Same(a, b)) moved.push('the ' + f.id + ' filter draws ' + b15Diff(b, a) + ' off its old look');
@@ -124712,7 +124714,11 @@
     if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 8).join(' · '));
     // last, so a tree without the keys still shows the pictures held first
     if (undeclared.length) throw new Error(undeclared.length + ' library filters lack the new keys: ' + undeclared.slice(0, 4).join(' · '));
-    b15Catalogue('filter', B15_FC_NEW, { range: 3, rangesoft: 150, skin: 60 });
+    b15Catalogue('filter', NEW, SET);
+  }
+
+  test('482 15.1 pin: the Filter’s Tonal range, Range width and Protect skin at their defaults leave every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    b15FilterPins(B15_FC_NEW, { range: 3, rangesoft: 150, skin: 60 });
   });
 
   test('482 15.1 the Filter’s Tonal range: Highlights leaves a black pixel unfiltered and inverts a white one, Shadows the reverse, Range width widens it, Protect skin holds a skin tone back, and it works on an adjustment layer (CONTROL: All inverts both ends)', { item: '482', budgetMs: 60000 }, function () {
@@ -124746,5 +124752,76 @@
     const adj = b15Px([A, b15Plate(P)], 0.5, P);
     if (Math.abs(r(adj, xd) - r(bare, xd)) > 2 || !(r(bare, xb) - r(adj, xb) > 150)) fails.push('on an adjustment layer Highlights gave ' + r(adj, xd) + ' / ' + r(adj, xb) + ' at the black / white ends (want ' + r(bare, xd) + ' kept, ' + r(bare, xb) + ' inverted)');
     if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  const B15_FC_FIN = { warmth: 0, fade: 0, grain: 0, vignette: 0, sharpen: 0 };
+  test('482 15.2 pin: the Filter’s finish sliders — Warmth, Fade, Grain, Vignette, Sharpen — at 0 leave every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    b15FilterPins(B15_FC_FIN, { warmth: -40, fade: 30, grain: 50, vignette: 0.6, sharpen: 1.5 });
+  });
+
+  test('482 15.2 a Filter’s Warmth warms the frame and leaves its effects list exactly as it was; Fade lifts the blacks, Sharpen, Vignette and Grain each change the picture, a filter with nothing in it but a finish works, and on an adjustment layer Warmth and Fade grade while Grain says it does nothing there (CONTROL: the finish at 0 is the filter’s own look)', { item: '482', budgetMs: 60000 }, function () {
+    const P = b15P(), W = P.width, H = P.height, y = H >> 1, xm = W >> 1;
+    const kids = () => [b15Fx('contrast', { amount: 1.1 })];
+    const run = (box, plate) => { const L = plate || b15Plate(P, '#202020', '#e0e0e0'); L.effects = box ? [box] : []; return b15Px([L], 0.5, P); };
+    const at = (d, x, yy) => b15At(d, W, x, yy == null ? y : yy);
+    const own = run(b15Box({ strength: 1 }, kids())), flat = (() => { const L = b15Plate(P, '#202020', '#e0e0e0'); L.effects = kids(); return b15Px([L], 0.5, P); })();
+    if (!b15Same(own, flat)) throw new Error('CONTROL: a filter at Strength 1 with its finish at 0 is not its own children (' + b15Diff(own, flat) + ')');
+    const fails = [];
+    // Warmth: redder and less blue at the centre, cooler when negative — and the filter's effects list is untouched
+    const box = b15Box({ strength: 1, warmth: 50 }, kids()), before = JSON.stringify(box.effects), n = box.effects.length, kid0 = box.effects[0];
+    const warm = run(box), cool = run(b15Box({ strength: 1, warmth: -50 }, kids()));
+    const c0 = at(own, xm), cw = at(warm, xm), cc = at(cool, xm);
+    if (!(cw[0] - c0[0] > 6 && c0[2] - cw[2] > 6)) fails.push('Warmth 50 did not warm the centre (rgb ' + c0.slice(0, 3) + ' -> ' + cw.slice(0, 3) + ')');
+    if (!(cc[2] - c0[2] > 6 && c0[0] - cc[0] > 6)) fails.push('Warmth -50 did not cool the centre (rgb ' + c0.slice(0, 3) + ' -> ' + cc.slice(0, 3) + ')');
+    if (box.effects.length !== n || box.effects[0] !== kid0 || JSON.stringify(box.effects) !== before) fails.push('the finish was written into the filter’s effects (' + n + ' -> ' + box.effects.length + ')');
+    if (/temperature/.test(JSON.stringify(box, FM.jsonReplacer))) fails.push('the finish’s Colour Temperature reaches the saved filter: ' + JSON.stringify(box, FM.jsonReplacer).slice(0, 200));
+    // Fade lifts the darkest pixel
+    const faded = run(b15Box({ strength: 1, fade: 60 }, kids()));
+    if (!(at(faded, 0)[0] - at(own, 0)[0] > 10)) fails.push('Fade 60 did not lift the blacks (' + at(own, 0)[0] + ' -> ' + at(faded, 0)[0] + ')');
+    // Vignette darkens a corner and leaves the centre
+    const vig = run(b15Box({ strength: 1, vignette: 0.8 }, kids()));
+    if (!(at(own, W - 1, 0)[0] - at(vig, W - 1, 0)[0] > 10)) fails.push('Vignette 0.8 did not darken the corner (' + at(own, W - 1, 0)[0] + ' -> ' + at(vig, W - 1, 0)[0] + ')');
+    if (Math.abs(at(vig, xm)[0] - at(own, xm)[0]) > 8) fails.push('Vignette 0.8 moved the centre ' + at(own, xm)[0] + ' -> ' + at(vig, xm)[0]);
+    // Grain speckles the frame
+    const grain = run(b15Box({ strength: 1, grain: 80 }, kids()));
+    let gn = 0; for (let i = 0; i < own.length; i += 4) if (own[i] !== grain[i]) gn++;
+    if (gn < W * H * 0.1) fails.push('Grain 80 changed only ' + gn + ' of ' + W * H + ' pixels');
+    // Sharpen hardens the edges a posterised plate has (CONTROL: the same filter without it)
+    const pk = () => [b15Fx('posterize', { levels: 3 })];
+    const soft = run(b15Box({ strength: 1 }, pk())), sharp = run(b15Box({ strength: 1, sharpen: 3 }, pk()));
+    if (b15Same(soft, sharp)) fails.push('Sharpen 3 changed nothing on a posterised ramp');
+    // a filter with no effects in it, only a finish
+    const empty = run(b15Box({ strength: 1, warmth: 60 }, [])), bare = run(null);
+    if (!(at(empty, xm)[0] - at(bare, xm)[0] > 6)) fails.push('an empty filter with Warmth 60 did not warm the frame (' + at(bare, xm)[0] + ' -> ' + at(empty, xm)[0] + ')');
+    // on an adjustment layer: Warmth and Fade grade the layer below; Grain cannot run there, and its row says so
+    const adjRun = over => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [b15Box(Object.assign({ strength: 1 }, over), [])]; return b15Px([A, b15Plate(P, '#202020', '#e0e0e0')], 0.5, P); };
+    const aw = adjRun({ warmth: 60 }), af = adjRun({ fade: 60 }), ag = adjRun({ grain: 80 });
+    if (!(at(aw, xm)[0] - at(bare, xm)[0] > 6)) fails.push('on an adjustment layer Warmth 60 did not warm the frame below (' + at(bare, xm)[0] + ' -> ' + at(aw, xm)[0] + ')');
+    if (!(at(af, 0)[0] - at(bare, 0)[0] > 10)) fails.push('on an adjustment layer Fade 60 did not lift the blacks below');
+    if (!b15Same(ag, bare)) fails.push('on an adjustment layer Grain changed the frame (' + b15Diff(ag, bare) + ') - it is meant to be skipped there, and its row to say so');
+    const rows = FM.fxRegistry.paramsOf('filter'), row = k => rows.filter(q => q.key === k)[0] || {};
+    const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }), S = b15Flat(P, '#808080');
+    ['grain', 'vignette', 'sharpen'].forEach(k => {
+      if (!FM.fxRegistry.deadRowWhy || !FM.fxRegistry.deadRowWhy(row(k), A)) fails.push('the Filter’s ' + k + ' row does not say it does nothing on an adjustment layer');
+      else if (FM.fxRegistry.deadRowWhy(row(k), S)) fails.push('the Filter’s ' + k + ' row says it does nothing on a clip');
+    });
+    if (FM.fxRegistry.deadRowWhy && (FM.fxRegistry.deadRowWhy(row('warmth'), A) || FM.fxRegistry.deadRowWhy(row('fade'), A))) fails.push('Warmth or Fade says it does nothing on an adjustment layer, where it grades');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('482 15.2 a saved filter keeps its finish: Save this effect as preset, then picking it from the Filters tab lands the Strength, Tonal range, Warmth and Fade it was saved with (CONTROL: a library filter lands at the defaults)', { item: '482', budgetMs: 30000 }, function () {
+    if (!FM.effectPresets || !FM.effectPresets.capture || !FM.effectPresets.save) throw new Error('FM.effectPresets is not loaded');
+    const box = b15Box({ strength: 0.8, range: 3, warmth: 40, fade: 20 }, [b15Fx('contrast', { amount: 1.2 })]);
+    const p = FM.effectPresets.capture(box, 'b15 finish zq');
+    if (!p || !FM.effectPresets.save(p)) throw new Error('could not save the filter as a preset');
+    try {
+      const got = FM.filters.makeInstance(p.id);
+      if (!got) throw new Error('the saved filter does not resolve from the Filters tab');
+      const want = { strength: 0.8, range: 3, warmth: 40, fade: 20 }, bad = Object.keys(want).filter(k => got.params[k] !== want[k]);
+      if (bad.length) throw new Error('the saved filter lands with ' + bad.map(k => k + ' ' + got.params[k] + ' (saved ' + want[k] + ')').join(', '));
+      if (!got.effects || got.effects.length !== 1 || got.effects[0].type !== 'contrast') throw new Error('the saved filter lost its children');
+      const lib = FM.filters.makeInstance(FM.filters.all()[0].id);
+      if (lib.params.warmth !== 0 || lib.params.strength !== 1) throw new Error('CONTROL: a library filter lands with warmth ' + lib.params.warmth + ', strength ' + lib.params.strength);
+    } finally { FM.effectPresets.remove(p.id); }
   });
 })();

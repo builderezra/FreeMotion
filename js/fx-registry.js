@@ -249,7 +249,7 @@ window.FM = window.FM || {};
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
         // Radius as 8 on an instance the kernel is drawing at 3.
-        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '', alsoGate: pp.alsoGate });   // alsoGate: #482 6.3 review (a second control that switches this one off)   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '', alsoGate: pp.alsoGate, adjNo: pp.adjNo ? 1 : 0 });   // alsoGate: #482 6.3 review (a second control that switches this one off)   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904   // adjNo: #482 15.2 (see deadRowWhy)
         /* `follows` on a SLIDER (#482 polish 2.1, Wiggle's Vertical amount) is the colour rule of polish 1.2: ABSENT, the value
            is the slider it names. makeInstance and the render-time fill both skip it, and the inspector shows the followed
            value until he moves this one — this copy is a whitelist, so a field not named here would simply not exist. */
@@ -691,6 +691,13 @@ window.FM = window.FM || {};
         return Object.assign({}, fx, { effects: kept });
       }
       return this.supportsLayer(fx.type, layer) ? fx : null;
+    },
+    /* A CONTROL THAT CANNOT ACT ON THIS LAYER SAYS SO (#482 15.2). A Filter's Grain, Vignette and Sharpen finish sliders are
+       effects an adjustment layer cannot run (ADJ_OK: they read where a pixel sits, or its neighbours), so on one their rows
+       carry the "does nothing here" pill with this sentence; the compositor skips them there (fcFinish `adj`). null = it works. */
+    deadRowWhy: function (pd, layer) {
+      if (pd && pd.adjNo && layer && layer.type === 'adjustment') return 'An adjustment layer grades colour only — ' + (pd.label || 'this') + ' needs a clip’s own pixels, so on an adjustment layer this slider does nothing. It works on a filter on a clip.';
+      return null;
     },
     supportsLayer: function (id, layer) {
       const e = REG[id];

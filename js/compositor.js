@@ -1651,6 +1651,15 @@ window.FM = window.FM || {};
         { key: 'range', label: 'Tonal range', def: 0, options: [[0, 'All'], [1, 'Shadows'], [2, 'Midtones'], [3, 'Highlights']] },
         { key: 'rangesoft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
         { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+        /* FINISH (#482 15.2): five sliders that finish the look without opening the group. Each is an ordinary effect added
+           after the children AT RENDER TIME (fcFinish) and never written into the filter's effects. 0 adds nothing, so every
+           saved filter and the library draw as they did. `adjNo`: an adjustment layer grades colour only (fx-registry ADJ_OK),
+           and these three read where a pixel sits or its neighbours — the row says it does nothing there. */
+        { key: 'warmth', label: 'Warmth', min: -100, max: 100, step: 1, def: 0 },
+        { key: 'fade', label: 'Fade', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+        { key: 'grain', label: 'Grain', min: 0, max: 100, step: 1, def: 0, unit: '%', adjNo: 1 },
+        { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.02, def: 0, adjNo: 1 },
+        { key: 'sharpen', label: 'Sharpen', min: 0, max: 3, step: 0.05, def: 0, adjNo: 1 },
       ] },
   ];
 
@@ -4551,6 +4560,44 @@ window.FM = window.FM || {};
     }
   }
   FM._fcMixPixels = fcMixPixels; FM._fcPixelOpts = fcPixelOpts;   // suite seams (#482 15.1)
+  /* ═══ A FILTER'S FINISH (#482 15.2) ═════════════════════════════════════════════════════════════════════════════════
+   * Warmth, Fade, Grain, Vignette and Sharpen on the filter itself. Each is an ordinary effect appended after the filter's
+   * own children AT RENDER TIME and never written into fx.effects — so the child list, the save and every path that walks a
+   * filter's children see exactly what they did:
+   *   Warmth   → Colour Temperature with Method White balance (it multiplies, so black stays black: a finish must not tint
+   *              the blacks the way Shift does), Temperature = Warmth
+   *   Fade     → Faded Film at Amount Fade/100, no colour loss and no warm cast: milky blacks and a softer contrast
+   *   Sharpen  → Sharpen, Amount = Sharpen        Vignette → Vignette, Amount = Vignette        Grain → Film Grain, Amount = Grain
+   * every other control at a new instance's defaults. In that order — colour, tone, detail, then the vignette and the grain
+   * laid over the finished picture, the order a finish goes down. A slider at 0 adds no effect at all, so a filter whose
+   * finish is untouched builds the very stack it always did. The instances are kept on the filter (`_fin` — the underscore
+   * keeps them out of every save) so a kernel's own memo survives from frame to frame. On an adjustment layer (`adj`) only
+   * Warmth and Fade can run: the other three read where a pixel sits or its neighbours (fx-registry ADJ_OK), and their rows
+   * say so (FM.fxRegistry.deadRowWhy). */
+  const FC_FINISH = [
+    ['warmth', 'temperature', v => ({ amount: v, method: 1 }), true],
+    ['fade', 'faded', v => ({ amount: v / 100, desat: 0, tone: 0 }), true],
+    ['sharpen', 'sharpen', v => ({ amount: v }), false],
+    ['vignette', 'vignette', v => ({ amount: v }), false],
+    ['grain', 'filmgrain', v => ({ amount: v }), false],
+  ];
+  function fcFinish(fx, t, adj) {
+    const p = (fx && fx.params) || {};
+    let out = null;
+    for (let i = 0; i < FC_FINISH.length; i++) {
+      const f = FC_FINISH[i];
+      if (p[f[0]] == null || (adj && !f[3])) continue;
+      const v = FM.evalProp(p[f[0]], t);
+      if (!(Number.isFinite(v) && v !== 0)) continue;
+      const kept = fx._fin || (fx._fin = Object.create(null));
+      let e = kept[f[0]];
+      if (!e) { e = FM.fxRegistry.makeInstance(f[1]); if (!e) continue; kept[f[0]] = e; }
+      Object.assign(e.params, f[2](v));
+      (out || (out = [])).push(e);
+    }
+    return out;
+  }
+  FM._fcFinish = fcFinish;   // suite seam (#482 15.2)
   const _fcPool = [];
   let _fcDepth = 0;
   const FC_MAX_DEPTH = 4;   // capped, unlike the older pools — see FILTERS-DESIGN.md §3
@@ -4567,7 +4614,9 @@ window.FM = window.FM || {};
      * effects, so a switched-off child renders nothing either way. What this buys is the case where
      * EVERY child is off — kids is then empty, which takes the cheap early-out below instead of
      * building a spliced stack and walking it to draw the same pixels. */
-    const kids = (Array.isArray(fx.effects) ? fx.effects : []).filter(e => e && e.enabled !== false && e.type !== FM.FX_CONTAINER);
+    const own = (Array.isArray(fx.effects) ? fx.effects : []).filter(e => e && e.enabled !== false && e.type !== FM.FX_CONTAINER);
+    const fin = fcFinish(fx, t, false);   // #482 15.2: the finish sliders, after the children — never saved into fx.effects
+    const kids = fin ? own.concat(fin) : own;
     const spliced = idx < 0 ? rest.concat(kids) : all.slice(0, idx).concat(kids, all.slice(idx + 1));
     const asLayer = list => Object.assign({}, layer, { effects: list });
     const s = clamp01(fx.params && fx.params.strength != null ? FM.evalProp(fx.params.strength, t) : 1);
@@ -18515,14 +18564,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * filter included, opacity not) into the canvas `into` rather than onto ctx. A plain call is unchanged. */
   const _adjFcPool = [];
   const adjLiveBox = (e) => !!(e && FM.isFxContainer && FM.isFxContainer(e) && e.enabled !== false);
-  const adjKids = (e) => (e.effects || []).filter(k => k && k.enabled !== false && k.type !== FM.FX_CONTAINER);
+  const adjKids = (e, t) => {   // …plus the finish sliders an adjustment layer can run, Warmth and Fade (#482 15.2, fcFinish)
+    const k = (e.effects || []).filter(c => c && c.enabled !== false && c.type !== FM.FX_CONTAINER);
+    const fin = fcFinish(e, t, true);
+    return fin ? k.concat(fin) : k;
+  };
   const adjStrength = (e, t) => clamp01(e.params && e.params.strength != null ? FM.evalProp(e.params.strength, t) : 1);
   function adjFlatten(effs, t) {                   // every container opened at full strength or dropped
     const out = [];
     for (const e of effs) {
       if (!(FM.isFxContainer && FM.isFxContainer(e))) { out.push(e); continue; }
       if (e.enabled === false) continue;
-      const k = adjKids(e);
+      const k = adjKids(e, t);
       if (k.length && adjStrength(e, t) > 0) for (const c of k) out.push(c);
     }
     return out;
@@ -18535,14 +18588,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let fi = -1, fs = 1;
     if (depth < FC_MAX_DEPTH) for (let i = 0; i < effs.length; i++) {
       const e = effs[i];
-      if (!adjLiveBox(e) || !adjKids(e).length) continue;
+      if (!adjLiveBox(e) || !adjKids(e, t).length) continue;
       const s = adjStrength(e, t);
       if (s > 0 && (s < 1 || fcPixelOpts(e, t))) { fi = i; fs = s; break; }   // #482 15.1: a range or skin guard mixes per pixel at full Strength too
     }
     if (fi < 0) { applyAdjustment(ctx, layer, t, scene, adjFlatten(effs, t), P.M); return P.M; }
     const box = effs[fi];
     const rest = effs.slice(0, fi).concat(effs.slice(fi + 1));
-    const spliced = effs.slice(0, fi).concat(adjKids(box), effs.slice(fi + 1));
+    const spliced = effs.slice(0, fi).concat(adjKids(box, t), effs.slice(fi + 1));
     const a = P.A.getContext('2d');
     a.setTransform(1, 0, 0, 1, 0, 0); a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
     a.clearRect(0, 0, cw, ch); a.drawImage(adjFilterPlate(ctx, layer, t, scene, rest, depth + 1), 0, 0);   // the grade as if the filter were not there
@@ -18562,7 +18615,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return P.M;
   }
   function applyAdjustmentFilters(ctx, layer, t, scene, own) {
-    const frac = own.some(e => adjLiveBox(e) && adjKids(e).length && (s => s > 0 && (s < 1 || !!fcPixelOpts(e, t)))(adjStrength(e, t)));
+    const frac = own.some(e => adjLiveBox(e) && adjKids(e, t).length && (s => s > 0 && (s < 1 || !!fcPixelOpts(e, t)))(adjStrength(e, t)));
     if (!frac) { applyAdjustment(ctx, layer, t, scene, adjFlatten(own, t)); return; }
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;

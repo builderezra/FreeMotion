@@ -1303,7 +1303,11 @@ window.FM = window.FM || {};
      NOT greyed, unlike a mode gate: the value is still stored and draws on a browser that can, so a project made on an
      old phone still looks right on the PC. Per control, never per effect — Line height works everywhere, and a false
      warning is the same defect as a false reassurance. */
-  function markUnsupported(row, p) {
+  function markUnsupported(row, p, layer) {
+    /* …and a control this LAYER cannot carry out (#482 15.2): a Filter's Grain, Vignette and Sharpen on an adjustment layer.
+       Same pill; the registry says when and why (FM.fxRegistry.deadRowWhy). */
+    const why = FM.fxRegistry && FM.fxRegistry.deadRowWhy ? FM.fxRegistry.deadRowWhy(p, layer) : null;
+    if (why) { const pt = el('span', 'fx-dead-tag', 'does nothing here'); pt.title = why; row.appendChild(pt); return; }
     if (!p.needs || !FM.textSpacingOK) return;
     const ok = FM.textSpacingOK();
     if (!ok || ok[p.needs] !== false) return;
@@ -1828,7 +1832,7 @@ window.FM = window.FM || {};
           // Dim and lock a slider whose value is currently being overridden by a tick box above it,
           // and say WHICH one — a greyed control with no explanation just reads as broken.
           markOverridden(row, fx, p, reg);
-          markUnsupported(row, p);
+          markUnsupported(row, p, layer);
           body.appendChild(row);
           // A slider's NOTE (queue 904): the only way to say what a special value means — Tile Grid's Rows 0 is 'same as columns'.
           if (p.note) body.appendChild(el('div', 'fx-tog-note fx-range-note', p.note));
